@@ -1,0 +1,77 @@
+# Do **not** use this yml for production. It is not up-to-date.
+# Use https://docs.postmill.com/installation/docker-compose
+# This is only for the dev enviroment
+#
+# Profiles:
+#   default (no --profile): postgres + redis only — enough for `pnpm run dev:minimal`
+#   --profile jobs:         also starts the Inngest dev server (requires USE_INNGEST=true)
+#   --profile tools:        also starts pgAdmin
+#   --profile jobs --profile tools: everything
+
+services:
+  postmill-postgres:
+    # ref: https://hub.docker.com/_/postgres
+    image: postgres:17-alpine # 17.0
+    container_name: postmill-postgres
+    restart: always
+    environment:
+      POSTGRES_PASSWORD: postmill-local-pwd
+      POSTGRES_USER: postmill-local
+      POSTGRES_DB: postmill-db-local
+    volumes:
+      - postgres-volume:/var/lib/postgresql/data
+    ports:
+      - 5432:5432
+    networks:
+      - postmill-network
+
+  postmill-redis:
+    # ref: https://hub.docker.com/_/redis
+    image: redis:7-alpine
+    container_name: postmill-redis
+    restart: always
+    ports:
+      - 6379:6379
+    networks:
+      - postmill-network
+
+  inngest:
+    # ref: https://hub.docker.com/r/inngest/inngest
+    image: inngest/inngest:latest
+    container_name: postmill-inngest
+    # Only start when explicitly requested; background jobs are not needed for
+    # core local development.
+    profiles:
+      - jobs
+    restart: unless-stopped
+    # Discover the backend's Inngest handler over the Docker network. The dev server
+    # keeps retrying until the backend is up, so start order doesn't matter.
+    command: inngest dev -u http://postmill-app:3000/api/inngest
+    ports:
+      - 8288:8288 # dev server UI + event API
+    networks:
+      - postmill-network
+
+  postmill-pg-admin:
+    # ref: https://hub.docker.com/r/dpage/pgadmin4/tags
+    image: dpage/pgadmin4:latest
+    container_name: postmill-pg-admin
+    # Convenience UI only — not required for local development.
+    profiles:
+      - tools
+    restart: unless-stopped
+    ports:
+      - 8081:80
+    environment:
+      PGADMIN_DEFAULT_EMAIL: admin@admin.com
+      PGADMIN_DEFAULT_PASSWORD: admin
+    networks:
+      - postmill-network
+
+volumes:
+  postgres-volume:
+    external: false
+
+networks:
+  postmill-network:
+    external: false

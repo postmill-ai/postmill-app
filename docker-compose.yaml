@@ -1,0 +1,134 @@
+# ⚠️  UPGRADING FROM A POSTIZ-BRANDED COMPOSE?
+# This file renames Docker volumes (postiz-* -> postmill-*) and the Postgres
+# role/database (postiz-user/postiz-db-local -> postmill-user/postmill-db-local).
+# A fresh install needs no action. An EXISTING install must migrate its data, or
+# it will come up empty (old volumes are not mounted, and the renamed Postgres
+# role/db won't exist on the already-initialized volume). See the migration
+# steps in docs/operations-guide/upgrading.md before running `docker compose up`.
+#
+# IMPORTANT (v3.7.1): Channel provider credentials and AI provider config are
+# no longer read from environment variables. Configure them per-organization
+# in-app via Settings → Channels and Settings → AI respectively.
+services:
+  postmill:
+    image: ghcr.io/postmill-ai/postmill-app:latest
+    container_name: postmill
+    restart: always
+    environment:
+      # === Required Settings
+      MAIN_URL: 'http://localhost:4007'
+      FRONTEND_URL: 'http://localhost:4007'
+      NEXT_PUBLIC_BACKEND_URL: 'http://localhost:4007/api'
+      JWT_SECRET: 'random string that is unique to every install - just type random characters here!'
+      DATABASE_URL: 'postgresql://postmill-user:postmill-password@postmill-postgres:5432/postmill-db-local'
+      # Redis is now an external endpoint (e.g. Upstash). Set a redis:// or rediss:// URL.
+      REDIS_URL: '${REDIS_URL}'
+      BACKEND_INTERNAL_URL: 'http://localhost:3000'
+      IS_GENERAL: 'true'
+      DISABLE_REGISTRATION: 'false'
+
+      # === Storage Settings
+      UPLOAD_DIRECTORY: '/uploads'
+      MEDIA_UPLOAD_MAX_BYTES: '1073741824'
+
+      # === Login / SSO providers (used for user authentication, not channel posting)
+      # GITHUB_CLIENT_ID: ''
+      # GITHUB_CLIENT_SECRET: ''
+
+      # === Channel provider credentials are now configured per-org via Settings → Channels.
+
+      # === OAuth & Authentik Settings
+      # NEXT_PUBLIC_POSTMILL_OAUTH_DISPLAY_NAME: 'Authentik'
+      # NEXT_PUBLIC_POSTMILL_OAUTH_LOGO_URL: 'https://raw.githubusercontent.com/walkxcode/dashboard-icons/master/png/authentik.png'
+      # POSTMILL_GENERIC_OAUTH: 'false'
+      # POSTMILL_OAUTH_AUTH_URL: 'https://auth.example.com/application/o/authorize'
+      # POSTMILL_OAUTH_TOKEN_URL: 'https://auth.example.com/application/o/token'
+      # POSTMILL_OAUTH_USERINFO_URL: 'https://authentik.example.com/application/o/userinfo'
+      # POSTMILL_OAUTH_CLIENT_ID: ''
+      # POSTMILL_OAUTH_CLIENT_SECRET: ''
+      # POSTMILL_OAUTH_SCOPE: "openid profile email"  # Optional: uncomment to override default scope
+
+      # === Sentry
+
+      # NEXT_PUBLIC_SENTRY_DSN: 'http://spotlight:8969/stream'
+      # SENTRY_SPOTLIGHT: '1'
+
+      # === Misc Settings
+      NEXT_PUBLIC_DISCORD_SUPPORT: ''
+      # Designer image editor — no external key needed
+      # API_LIMIT: unset = 600 req/hr global throttle. Do NOT set it to 30: the
+      # SPA fires 15-30 API calls per page navigation, so 30/hr 429s normal use.
+
+      # === Payment / Stripe Settings
+      STRIPE_PUBLISHABLE_KEY: ''
+      STRIPE_SECRET_KEY: ''
+      STRIPE_SIGNING_KEY: ''
+
+      # === Email Settings (v3.8.1+)
+      # EMAIL_PROVIDER: ""
+      # EMAIL_API_KEY: ""
+      # EMAIL_FROM_ADDRESS: ""
+      # EMAIL_FROM_NAME: ""
+      # EMAIL_WEBHOOK_SECRET: ""
+      # EMAIL_MAILGUN_DOMAIN: ""
+      # EMAIL_REGION: "us"
+      # EMAIL_SES_ACCESS_KEY_ID: ""
+      # EMAIL_SES_SECRET_ACCESS_KEY: ""
+      # EMAIL_SMTP_HOST: ""
+      # EMAIL_SMTP_PORT: "587"
+      # EMAIL_SMTP_SECURE: "false"
+      # EMAIL_SMTP_USER: ""
+      # EMAIL_SMTP_PASS: ""
+      # EMAIL_LOG_RETENTION_DAYS: "90"
+
+    volumes:
+      - postmill-config:/config/
+      - postmill-uploads:/uploads/
+    ports:
+      - "4007:5000"
+    networks:
+      - postmill-network
+    depends_on:
+      postmill-postgres:
+        condition: service_healthy
+
+  postmill-postgres:
+    image: postgres:17-alpine
+    container_name: postmill-postgres
+    restart: always
+    environment:
+      POSTGRES_PASSWORD: postmill-password
+      POSTGRES_USER: postmill-user
+      POSTGRES_DB: postmill-db-local
+    volumes:
+      - postgres-volume:/var/lib/postgresql/data
+    networks:
+      - postmill-network
+    healthcheck:
+      test: pg_isready -U postmill-user -d postmill-db-local
+      interval: 10s
+      timeout: 3s
+      retries: 3
+  # For Application Monitoring / Debugging
+  spotlight:
+    pull_policy: always
+    container_name: spotlight
+    ports:
+      - 8969:8969/tcp
+    image: ghcr.io/getsentry/spotlight:latest
+    networks:
+      - postmill-network
+
+volumes:
+  postgres-volume:
+    external: false
+
+  postmill-config:
+    external: false
+
+  postmill-uploads:
+    external: false
+
+networks:
+  postmill-network:
+    external: false

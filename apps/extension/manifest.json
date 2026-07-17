@@ -1,0 +1,29 @@
+{
+  "manifest_version": 3,
+  "name": "Postmill",
+  "version": "2.0.0",
+  "description": "Postmill browser extension for social media scheduling",
+  "icons": {
+    "32": "icon-32.png",
+    "128": "icon-128.png"
+  },
+  "permissions": [
+    "cookies",
+    "alarms",
+    "storage"
+  ],
+  "host_permissions": [
+    "*://*.skool.com/*"
+  ],
+  "background": {
+    "service_worker": "background.js",
+    "type": "module"
+  },
+  "externally_connectable": {
+    "matches": [
+      "http://localhost/*",
+      "https://localhost/*",
+      "https://*.postmill.ai/*"
+    ]
+  }
+}

@@ -1,0 +1,162 @@
+---
+name: Test
+
+on:
+  push:
+  merge_group:
+  pull_request:
+
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      security-events: write
+
+    strategy:
+      matrix:
+        node-version: ['22.12.0']
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Use Node.js ${{ matrix.node-version }}
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node-version }}
+
+      - name: Install pnpm
+        uses: pnpm/action-setup@v2
+        with:
+          run_install: false
+
+      - name: Get pnpm store directory
+        shell: bash
+        run: |
+          echo "STORE_PATH=$(pnpm store path --silent)" >> $GITHUB_ENV
+
+      - name: Setup pnpm cache
+        uses: actions/cache@v4
+        with:
+          path: |
+            ${{ env.STORE_PATH }}
+            ${{ github.workspace }}/.next/cache
+          key: ${{ runner.os }}-pnpm-${{ hashFiles('**/pnpm-lock.yaml') }}-${{ hashFiles('**/*.js', '**/*.jsx', '**/*.ts', '**/*.tsx') }}
+          restore-keys: |
+            ${{ runner.os }}-pnpm-${{ hashFiles('**/pnpm-lock.yaml') }}-
+
+      - name: Install native dependencies for node-canvas
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libcairo2-dev libjpeg-dev libpango1.0-dev libgif-dev build-essential g++ libpixman-1-dev
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Lint
+        run: pnpm exec eslint . --report-unused-disable-directives
+
+  test:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+
+    services:
+      postgres:
+        image: postgres:17-alpine
+        env:
+          POSTGRES_USER: postmill-local
+          POSTGRES_PASSWORD: postmill-local-pwd
+          POSTGRES_DB: postmill-db-local
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postmill-local"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    strategy:
+      matrix:
+        node-version: ['22.12.0']
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Use Node.js ${{ matrix.node-version }}
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node-version }}
+
+      - name: Install pnpm
+        uses: pnpm/action-setup@v2
+        with:
+          run_install: false
+
+      - name: Install native dependencies for node-canvas
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libcairo2-dev libjpeg-dev libpango1.0-dev libgif-dev build-essential g++ libpixman-1-dev
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Run tests (Vitest)
+        run: pnpm run test
+
+      - name: Coverage gates (Vitest --coverage)
+        run: pnpm run test:coverage
+
+      - name: Run integration tests (Vitest + Postgres)
+        env:
+          TEST_DATABASE_ADMIN_URL: postgresql://postmill-local:postmill-local-pwd@localhost:5432/postgres
+          DATABASE_URL: postgresql://postmill-local:postmill-local-pwd@localhost:5432/postmill-db-local
+        run: pnpm run test:int
+
+      - name: Migration drift check (committed migrations fully represent the schema)
+        env:
+          DATABASE_URL: postgresql://postmill-local:postmill-local-pwd@localhost:5432/postmill-db-local
+        run: |
+          # Apply the committed migrations (0_init + any new ones) to the empty CI DB.
+          # The deployed migrations must reconstruct the full schema — a schema.prisma
+          # edit committed WITHOUT a matching migration leaves the DB behind and is caught
+          # by the drift diff below. (Runtime-only mastra_* tables live outside the Prisma
+          # schema and the app never boots in CI, so they cannot show up as drift.)
+          pnpm run prisma-migrate-deploy-safe
+          # `migrate diff --exit-code` returns 2 when the deployed DB and the schema diverge,
+          # 0 when in sync. A migration-less schema edit makes this exit 2. Any non-zero exit
+          # fails the job (CI run uses bash -e).
+          pnpm exec prisma migrate diff \
+            --from-url "$DATABASE_URL" \
+            --to-schema-datamodel libraries/nestjs-libraries/src/database/prisma/schema.prisma \
+            --exit-code
+
+      - name: Destructive schema guard (vs origin/main)
+        # The guard blocks DROP/rename/NOT-NULL-without-default by default. When a branch
+        # carries reviewed, expand/contract-planned destructive changes, set the repository
+        # variable ALLOW_DESTRUCTIVE_SCHEMA=true (Settings → Secrets and variables → Actions
+        # → Variables) to acknowledge them. Unset (the default) keeps the guard enforcing.
+        env:
+          ALLOW_DESTRUCTIVE_SCHEMA: ${{ vars.ALLOW_DESTRUCTIVE_SCHEMA }}
+        run: |
+          # Ensure origin/main is available even on shallow forks.
+          git fetch --no-tags --depth=1 origin main || true
+          # Extract main's schema (the baseline) into a temp file; on the very first
+          # commit to main (no origin/main yet) there is nothing to diff against.
+          if git show origin/main:libraries/nestjs-libraries/src/database/prisma/schema.prisma \
+              > /tmp/main-schema.prisma 2>/dev/null; then
+            pnpm exec prisma migrate diff \
+              --from-schema-datamodel /tmp/main-schema.prisma \
+              --to-schema-datamodel libraries/nestjs-libraries/src/database/prisma/schema.prisma \
+              --script > /tmp/pending.sql
+            node scripts/schema-destructive-guard.mjs --file /tmp/pending.sql
+          else
+            echo "origin/main schema not found — skipping destructive guard (first push to main)."
+          fi
+
+      - name: Studio descriptor metadata drift gate
+        run: node scripts/generate-studio-descriptor-registry.mjs --check

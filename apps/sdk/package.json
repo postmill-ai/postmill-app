@@ -1,0 +1,46 @@
+{
+  "name": "@postmill-ai/postmill-sdk",
+  "version": "1.0.0",
+  "description": "Official Node SDK for Postmill — schedule posts, manage channels, and drive the public API.",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "publishConfig": {
+    "access": "public"
+  },
+  "scripts": {
+    "build": "tsup",
+    "test": "vitest run",
+    "release": "tsup && pnpm publish --access public",
+    "release:dry": "tsup && pnpm publish --access public --dry-run --no-git-checks"
+  },
+  "files": [
+    "dist"
+  ],
+  "keywords": [
+    "social media",
+    "scheduling tool",
+    "social media scheduling tool",
+    "postmill",
+    "social media scheduling",
+    "sdk"
+  ],
+  "author": "REAA Technologies",
+  "license": "AGPL-3.0",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/postmill-ai/postmill-app.git"
+  },
+  "homepage": "https://postmill.ai",
+  "bugs": {
+    "url": "https://github.com/postmill-ai/postmill-app/issues"
+  },
+  "devDependencies": {
+    "@types/node": "^22.13.0",
+    "tsup": "^8.5.1",
+    "typescript": "5.5.4",
+    "vitest": "^4.1.0"
+  },
+  "engines": {
+    "node": ">=22.12.0 <23.0.0"
+  }
+}

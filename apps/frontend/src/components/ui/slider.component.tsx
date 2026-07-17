@@ -1,0 +1,75 @@
+'use client';
+
+import { FC, ReactNode, useCallback, useState } from 'react';
+import clsx from 'clsx';
+import {
+  ChevronLeftIcon,
+  ChevronRightIcon,
+} from '@gitroom/frontend/components/ui/icons';
+import { useT } from '@gitroom/react/translation/get.transation.service.client';
+
+export const SliderComponent: FC<{
+  className: string;
+  list: ReactNode[];
+}> = ({ className, list }) => {
+  const t = useT();
+  const [show, setShow] = useState(0);
+
+  const goToPrevious = useCallback(() => {
+    setShow((prev) => (prev > 0 ? prev - 1 : prev));
+  }, []);
+
+  const goToNext = useCallback(() => {
+    setShow((prev) => (prev < list.length - 1 ? prev + 1 : prev));
+  }, [list.length]);
+
+  const canGoPrevious = show > 0;
+  const canGoNext = show < list.length - 1;
+
+  return (
+    <div className={clsx(className, 'relative')}>
+      {list[show]}
+
+      {/* Left Arrow */}
+      {canGoPrevious && (
+        <button
+          onClick={goToPrevious}
+          className="absolute top-[50%] start-[10px] -translate-y-[50%] flex items-center justify-center w-8 h-8 rounded-full bg-black/60 hover:bg-black/80 text-white transition-colors backdrop-blur-sm cursor-pointer"
+          aria-label={t('previous_slide', 'Previous slide')}
+        >
+          <ChevronLeftIcon size={18} />
+        </button>
+      )}
+
+      {/* Right Arrow */}
+      {canGoNext && (
+        <button
+          onClick={goToNext}
+          className="absolute top-[50%] end-[10px] -translate-y-[50%] flex items-center justify-center w-8 h-8 rounded-full bg-black/60 hover:bg-black/80 text-white transition-colors backdrop-blur-sm cursor-pointer"
+          aria-label={t('next_slide', 'Next slide')}
+        >
+          <ChevronRightIcon size={18} />
+        </button>
+      )}
+
+      {/* Pagination Dots */}
+      {list.length > 1 && (
+        <div className="absolute bottom-[10px] left-[50%] -translate-x-[50%] flex gap-2">
+          {list.map((child, index) => (
+            <button
+              key={(child as any)?.key ?? index}
+              onClick={() => setShow(index)}
+              className={clsx(
+                'w-2 h-2 rounded-full transition-colors cursor-pointer',
+                index === show
+                  ? 'bg-white'
+                  : 'bg-transparent border border-white'
+              )}
+              aria-label={t('go_to_slide_number', 'Go to slide {{number}}', { number: index + 1 })}
+            />
+          ))}
+        </div>
+      )}
+    </div>
+  );
+};

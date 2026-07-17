@@ -1,0 +1,109 @@
+packages:
+  - apps/*
+  - libraries/*
+  - libraries/providers/*
+
+overrides:
+  # @reaatech/structured-repair-core declares a zod ^3.23.0 peer but was resolving
+  # to zod 4.x, breaking type/runtime compatibility with workspace zod 3.x schemas.
+  '@reaatech/structured-repair-core>zod': '^3.25.76'
+  next: 16.2.7
+  react: 19.2.7
+  react-dom: 19.2.7
+  '@types/react': 19.1.8
+  '@types/react-dom': 19.1.6
+  # Security overrides — see dev/PACKAGE_UPGRADE.md §4. Both parents are at their
+  # latest and pin the vulnerable version *exactly*, so there is no upgrade-the-parent
+  # path; these patched ranges are the only way to close the high advisories.
+  # protobufjs <=7.5.5: 4 high GHSAs. Constrained to the 7.x patch line for
+  #   API compatibility with consumers that use protobufjs 7.x.
+  protobufjs: '>=7.5.6 <8'
+  # rollup <2.80.0: high path-traversal, pinned exactly by @crxjs/vite-plugin@2.4.0.
+  rollup: '>=2.80.0'
+  # form-data <2.5.6: critical unsafe-random boundary (GHSA-fjxv-7rqg-78g4) + high CRLF
+  # injection (GHSA-hmw2-7cc7-3qxx), pulled by node-telegram-bot-api@0.66.0 ->
+  # @cypress/request-promise -> request@2.88.2 (pins form-data ~2.3.2). Widen from <2.5.4 to
+  # <2.5.6 since GHSA-hmw2 expanded the affected range. Same major, API-compatible.
+  'form-data@<2.5.6': '>=2.5.6 <3'
+  # form-data >=3.0.0 <3.0.5: high CRLF injection (GHSA-hmw2-7cc7-3qxx), pulled by
+  # transloadit@3.1.0. Bump vulnerable 3.x to patched 3.0.x (same major).
+  'form-data@>=3.0.0 <3.0.5': '>=3.0.5 <4'
+  # form-data >=4.0.0 <4.0.6: high CRLF injection (GHSA-hmw2-7cc7-3qxx), pulled as a
+  # direct dependency. Bump vulnerable 4.x to patched 4.0.x (same major).
+  'form-data@>=4.0.0 <4.0.6': '>=4.0.6 <5'
+  # fast-xml-parser <4.5.4: critical entity-encoding bypass + high DoS (GHSA-m7jm-9gc2-mpf2),
+  # pulled by @aws-sdk/client-sesv2@3.800.0 -> @aws-sdk/core@3.799.0 (pins 4.4.1). Bump the
+  # vulnerable 4.x to patched 4.5.x (same major, API-compatible); newer aws-sdk paths use 5.x.
+  'fast-xml-parser@<4.5.4': '>=4.5.4 <5'
+  # esbuild <0.28.1: high missing binary integrity verification in Deno module enables remote
+  # code execution via NPM_CONFIG_REGISTRY (GHSA-gv7w-rqvm-qjhr), pulled by terser-webpack-plugin,
+  # vite, and @prisma/config. Bump vulnerable <0.28.1 to patched 0.28.x (same major).
+  'esbuild@<0.28.1': '>=0.28.1 <0.29'
+  # hono <4.12.25: high CORS middleware reflects any origin when `origin` defaults to wildcard
+  # (GHSA-88fw-hqm2-52qc), pulled by @copilotkit/runtime and @modelcontextprotocol/sdk.
+  # Bump to patched 4.12.x (same major).
+  'hono@<4.12.25': '>=4.12.25 <5'
+  # multer <2.2.0: high DoS via deeply nested field names (GHSA-72gw-mp4g-v24j), pulled by
+  # @nestjs/platform-express. Bump to patched 2.2.x (same major).
+  'multer@<2.2.0': '>=2.2.0 <3'
+  # nodemailer <=9.0.0: high raw-option bypass of disableFileAccess/disableUrlAccess enabling
+  # SSRF (GHSA-p6gq-j5cr-w38f), direct dependency. Bump to patched 9.0.x (same major).
+  'nodemailer@<=9.0.0': '>=9.0.1 <10'
+  # piscina <=4.9.2: high prototype-pollution gadget → RCE (GHSA-x9g3-xrwr-cwfg), pulled by
+  # @swc/cli. Bump to patched 4.9.x (same major).
+  'piscina@<=4.9.2': '>=4.9.3 <5'
+  # undici <6.27.0: high WebSocket fragment-count DoS (GHSA-vxpw-j846-p89q), pulled by
+  # @qdrant/js-client-rest (pins ~6.26). Bump vulnerable <6.27.0 to patched 6.27.x (same major).
+  'undici@<6.27.0': '>=6.27.0 <7'
+  # undici >=7.0.0 <7.28.0: high WebSocket DoS (GHSA-vxpw-j846-p89q) and SOCKS5
+  # cross-origin request routing (GHSA-hm92-r4w5-c3mj), pulled by jsdom@29.1 via vitest.
+  # Bump vulnerable 7.x to patched 7.28.x (same major).
+  'undici@>=7.0.0 <7.28.0': '>=7.28.0 <8'
+  # undici >=8.0.0 <8.5.0: high WebSocket DoS (GHSA-vxpw-j846-p89q, GHSA-38rv-x7px-6hhq) and
+  # TLS cert validation bypass (GHSA-vmh5-mc38-953g), direct dependency. Bump to patched 8.5.x.
+  'undici@>=8.0.0 <8.5.0': '>=8.5.0 <9'
+  # ws <8.21.0: high memory-exhaustion DoS from tiny fragments (GHSA-96hv-2xvq-fx4p), pulled by
+  # @toruslabs/solana-embed -> socket.io-client -> engine.io-client. Bump to patched 8.21.x.
+  'ws@<8.21.0': '>=8.21.0 <9'
+  # happy-dom <20.0.0: critical VM-context-escape RCE (GHSA-96g7-g7g9-jxw8), pulled transitively
+  # via vitest's optional peer. Bump vulnerable <20 to patched 20.x (same DOM API).
+  'happy-dom@<20.0.0': '>=20.0.0 <21'
+  # glob >=10.2.0 <10.5.0: high command injection via -c/--cmd (GHSA-5j98-mcp5-4vw2),
+  # pulled by @nestjs/cli. Bump to patched 10.5.x.
+  'glob@>=10.2.0 <10.5.0': '>=10.5.0'
+  # picomatch >=4.0.0 <4.0.4: high ReDoS via extglob quantifiers (GHSA-c2c7-rcm5-vvqj),
+  # pulled by @angular-devkit/core. Bump to patched 4.0.x.
+  'picomatch@>=4.0.0 <4.0.4': '>=4.0.4'
+  # tmp <0.2.6: high path traversal via unsanitized prefix/postfix (GHSA-ph9p-34f9-6g65),
+  # pulled by external-editor via inquirer. Bump to patched 0.2.x.
+  'tmp@<0.2.6': '>=0.2.6'
+  # langsmith <0.6.0: high public prompt pull deserializes untrusted manifests
+  # (GHSA-3644-q5cj-c5c7), pulled by older @langchain/core paths. Bump to patched 0.6+.
+  langsmith: '>=0.6.0'
+
+onlyBuiltDependencies:
+  - bcrypt
+  - '@sentry-internal/node-cpu-profiler'
+  - canvas
+
+allowBuilds:
+  '@google/genai': true
+  '@nestjs/core': false
+  '@parcel/watcher': true
+  '@prisma/client': true
+  '@prisma/engines': true
+  '@scarf/scarf': false
+  '@sentry-internal/node-cpu-profiler': true
+  '@sentry/cli': true
+  '@swc/core': true
+  bcrypt: true
+  bufferutil: true
+  canvas: true
+  core-js: false
+  core-js-pure: false
+  esbuild: true
+  prisma: true
+  protobufjs: false
+  sharp: true
+  unrs-resolver: true
+  utf-8-validate: true

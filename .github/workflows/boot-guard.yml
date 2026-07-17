@@ -1,0 +1,180 @@
+---
+# Boot Guard — prevents the v3.5.9 class of failures from shipping again.
+#
+# v3.5.9 went out fully broken: the lockfile had drifted from package.json
+# (node-telegram-bot-api pinned to an ESM-only 1.0.0-rc.0), and the backend
+# crash-looped on boot through six chained DI/route/workflow errors.
+# Every one of them COMPILED fine — the existing Build workflow (plain `pnpm install`,
+# `pnpm run build`) passed and the image was tagged and deployed without ever booting.
+#
+# This guard adds the two checks that would have caught it:
+#   1. lockfile-drift  — `pnpm install --frozen-lockfile` fails on drift (the #1 root cause)
+#   2. backend-boot    — actually boots the backend against ephemeral Postgres+Redis and
+#                        asserts it binds and answers (401, not a 502/crash-loop)
+
+name: Boot Guard
+
+on:
+  push:
+  merge_group:
+  pull_request:
+
+jobs:
+  lockfile-drift:
+    # Catches #1: package.json/pnpm-lock.yaml drift. A plain `pnpm install` (as in build.yml)
+    # silently tolerates drift; --frozen-lockfile does not.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Use Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22.12.0'
+
+      - name: Install pnpm
+        uses: pnpm/action-setup@v2
+        with:
+          run_install: false
+
+      - name: Install native dependencies for node-canvas
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libcairo2-dev libjpeg-dev libpango1.0-dev libgif-dev build-essential g++ libpixman-1-dev
+
+      - name: Assert lockfile matches package.json (frozen install)
+        run: pnpm install --frozen-lockfile
+
+      - name: Assert no drift after re-resolution
+        run: |
+          pnpm install --lockfile-only
+          if ! git diff --exit-code pnpm-lock.yaml; then
+            echo "::error::pnpm-lock.yaml drifts from package.json. Run 'pnpm install --lockfile-only' and commit the result."
+            exit 1
+          fi
+
+  backend-boot:
+    # Catches #1-#4: backend boot crashes (telegram ESM, ProviderHealthService DI,
+    # IdempotencyFactory, path-to-regexp wildcards). Compiling is not booting.
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:15
+        env:
+          POSTGRES_USER: postiz
+          POSTGRES_PASSWORD: postiz
+          POSTGRES_DB: postiz
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postiz"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+      redis:
+        image: redis:7
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    env:
+      DATABASE_URL: postgresql://postiz:postiz@localhost:5432/postiz
+      REDIS_URL: redis://localhost:6379
+      JWT_SECRET: ci-boot-guard-not-a-real-secret
+      FRONTEND_URL: http://localhost:4200
+      MAIN_URL: http://localhost:4200
+      NEXT_PUBLIC_BACKEND_URL: http://localhost:3000
+      BACKEND_INTERNAL_URL: http://localhost:3000
+      # Dev toggle: skip helmet/HSTS/CSRF so a plain-HTTP curl reaches the API.
+      NOT_SECURED: 'true'
+      INNGEST_DEV: '1'
+      PORT: '3000'
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Use Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22.12.0'
+
+      - name: Install pnpm
+        uses: pnpm/action-setup@v2
+        with:
+          run_install: false
+
+      - name: Install native dependencies for node-canvas
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libcairo2-dev libjpeg-dev libpango1.0-dev libgif-dev build-essential g++ libpixman-1-dev
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Apply migrations to the ephemeral DB
+        run: pnpm run prisma-migrate-deploy-safe
+
+      - name: Build backend
+        run: pnpm run build:backend
+
+      - name: Boot backend and assert it answers (not a 502/crash-loop)
+        run: |
+          node apps/backend/dist/apps/backend/src/main.js > backend-boot.log 2>&1 &
+          BACKEND_PID=$!
+
+          # Poll up to ~60s for the backend to bind and answer. A booting Nest app
+          # returns 401 on the auth-guarded /user/self; a crash-loop never binds, so
+          # curl keeps returning 000 (connection refused) until we time out.
+          status=000
+          for i in $(seq 1 30); do
+            if ! kill -0 "$BACKEND_PID" 2>/dev/null; then
+              echo "::error::backend process exited during boot"
+              cat backend-boot.log
+              exit 1
+            fi
+            status=$(curl -s -o /dev/null -w '%{http_code}' http://localhost:3000/user/self || true)
+            if [ "$status" != "000" ]; then
+              break
+            fi
+            sleep 2
+          done
+
+          if [ "$status" = "000" ]; then
+            kill "$BACKEND_PID" 2>/dev/null || true
+            echo "::error::backend never bound :3000 (crash-loop / boot blocker). See log:"
+            cat backend-boot.log
+            exit 1
+          fi
+          if [ "$status" -ge 500 ]; then
+            kill "$BACKEND_PID" 2>/dev/null || true
+            echo "::error::backend returned $status (server error on boot). See log:"
+            cat backend-boot.log
+            exit 1
+          fi
+          echo "Boot OK: backend bound and returned $status (expected 401 unauthenticated)."
+
+          # Reuse the already-booted backend to assert the Inngest handler is served.
+          # GET /api/inngest returns 200 (introspection) in dev mode (INNGEST_DEV=1).
+          inngest_status=$(curl -s -o /dev/null -w '%{http_code}' http://localhost:3000/api/inngest || true)
+          kill "$BACKEND_PID" 2>/dev/null || true
+
+          echo "Inngest endpoint responded with HTTP $inngest_status"
+          if [ "$inngest_status" != "200" ]; then
+            echo "::error::/api/inngest did not return 200 (got $inngest_status). See log:"
+            cat backend-boot.log
+            exit 1
+          fi
+          echo "Inngest OK: /api/inngest served HTTP 200."
+
+      - name: Upload boot log on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: backend-boot-log
+          path: backend-boot.log

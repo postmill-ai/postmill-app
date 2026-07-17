@@ -1,0 +1,16 @@
+{
+  "name": "postmill-e2e",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "test": "playwright test",
+    "test:headed": "playwright test --headed",
+    "test:audit": "playwright test --config playwright.audit.config.ts",
+    "report": "playwright show-report"
+  },
+  "devDependencies": {
+    "@axe-core/playwright": "4.10.1",
+    "@playwright/test": "1.58.2",
+    "axe-core": "4.10.2"
+  }
+}

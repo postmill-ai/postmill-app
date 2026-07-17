@@ -1,0 +1,943 @@
+{
+  "compilerOptions": {
+    "rootDir": ".",
+    "sourceMap": true,
+    "declaration": false,
+    "moduleResolution": "node",
+    "emitDecoratorMetadata": true,
+    "strictPropertyInitialization": false,
+    "experimentalDecorators": true,
+    "noPropertyAccessFromIndexSignature": false,
+    "esModuleInterop": true,
+    "allowSyntheticDefaultImports": true,
+    "forceConsistentCasingInFileNames": true,
+    "importHelpers": true,
+    "target": "es2015",
+    "module": "esnext",
+    "lib": [
+      "es2020",
+      "dom"
+    ],
+    "skipLibCheck": true,
+    "skipDefaultLibCheck": true,
+    "baseUrl": ".",
+    "incremental": true,
+    "strictNullChecks": false,
+    "noImplicitAny": true,
+    "strictBindCallApply": false,
+    "noFallthroughCasesInSwitch": true,
+    "strict": true,
+    "paths": {
+      "@langchain/langgraph/prebuilt": [
+        "node_modules/@langchain/langgraph/dist/prebuilt/index.d.ts"
+      ],
+      "@gitroom/backend/*": [
+        "apps/backend/src/*"
+      ],
+      "@gitroom/frontend/*": [
+        "apps/frontend/src/*"
+      ],
+      "@gitroom/helpers/*": [
+        "libraries/helpers/src/*"
+      ],
+      "@gitroom/nestjs-libraries/*": [
+        "libraries/nestjs-libraries/src/*"
+      ],
+      "@gitroom/react/*": [
+        "libraries/react-shared-libraries/src/*"
+      ],
+      "@gitroom/plugins/*": [
+        "libraries/plugins/src/*"
+      ],
+      "@gitroom/extension/*": [
+        "apps/extension/src/*"
+      ],
+      "@gitroom/provider-kernel": [
+        "libraries/providers/kernel/src"
+      ],
+      "@gitroom/provider-kernel/*": [
+        "libraries/providers/kernel/src/*"
+      ],
+      "@gitroom/provider-adobe-stock": [
+        "libraries/providers/adobe-stock/src"
+      ],
+      "@gitroom/provider-adobe-stock/*": [
+        "libraries/providers/adobe-stock/src/*"
+      ],
+      "@gitroom/provider-anthropic": [
+        "libraries/providers/anthropic/src"
+      ],
+      "@gitroom/provider-anthropic/*": [
+        "libraries/providers/anthropic/src/*"
+      ],
+      "@gitroom/provider-azure": [
+        "libraries/providers/azure/src"
+      ],
+      "@gitroom/provider-azure/*": [
+        "libraries/providers/azure/src/*"
+      ],
+      "@gitroom/provider-backblaze-b2": [
+        "libraries/providers/backblaze-b2/src"
+      ],
+      "@gitroom/provider-backblaze-b2/*": [
+        "libraries/providers/backblaze-b2/src/*"
+      ],
+      "@gitroom/provider-bedrock": [
+        "libraries/providers/bedrock/src"
+      ],
+      "@gitroom/provider-bedrock/*": [
+        "libraries/providers/bedrock/src/*"
+      ],
+      "@gitroom/provider-bitdeer": [
+        "libraries/providers/bitdeer/src"
+      ],
+      "@gitroom/provider-bitdeer/*": [
+        "libraries/providers/bitdeer/src/*"
+      ],
+      "@gitroom/provider-bitly": [
+        "libraries/providers/bitly/src"
+      ],
+      "@gitroom/provider-bitly/*": [
+        "libraries/providers/bitly/src/*"
+      ],
+      "@gitroom/provider-black-forest-labs": [
+        "libraries/providers/black-forest-labs/src"
+      ],
+      "@gitroom/provider-black-forest-labs/*": [
+        "libraries/providers/black-forest-labs/src/*"
+      ],
+      "@gitroom/provider-blink": [
+        "libraries/providers/blink/src"
+      ],
+      "@gitroom/provider-blink/*": [
+        "libraries/providers/blink/src/*"
+      ],
+      "@gitroom/provider-bluesky": [
+        "libraries/providers/bluesky/src"
+      ],
+      "@gitroom/provider-bluesky/*": [
+        "libraries/providers/bluesky/src/*"
+      ],
+      "@gitroom/provider-cleanuri": [
+        "libraries/providers/cleanuri/src"
+      ],
+      "@gitroom/provider-cleanuri/*": [
+        "libraries/providers/cleanuri/src/*"
+      ],
+      "@gitroom/provider-cloudflare-r2": [
+        "libraries/providers/cloudflare-r2/src"
+      ],
+      "@gitroom/provider-cloudflare-r2/*": [
+        "libraries/providers/cloudflare-r2/src/*"
+      ],
+      "@gitroom/provider-cohere": [
+        "libraries/providers/cohere/src"
+      ],
+      "@gitroom/provider-cohere/*": [
+        "libraries/providers/cohere/src/*"
+      ],
+      "@gitroom/provider-custom-proxy": [
+        "libraries/providers/custom-proxy/src"
+      ],
+      "@gitroom/provider-custom-proxy/*": [
+        "libraries/providers/custom-proxy/src/*"
+      ],
+      "@gitroom/provider-cuttly": [
+        "libraries/providers/cuttly/src"
+      ],
+      "@gitroom/provider-cuttly/*": [
+        "libraries/providers/cuttly/src/*"
+      ],
+      "@gitroom/provider-cyberghost": [
+        "libraries/providers/cyberghost/src"
+      ],
+      "@gitroom/provider-cyberghost/*": [
+        "libraries/providers/cyberghost/src/*"
+      ],
+      "@gitroom/provider-deepgram": [
+        "libraries/providers/deepgram/src"
+      ],
+      "@gitroom/provider-deepgram/*": [
+        "libraries/providers/deepgram/src/*"
+      ],
+      "@gitroom/provider-deepinfra": [
+        "libraries/providers/deepinfra/src"
+      ],
+      "@gitroom/provider-deepinfra/*": [
+        "libraries/providers/deepinfra/src/*"
+      ],
+      "@gitroom/provider-deepseek": [
+        "libraries/providers/deepseek/src"
+      ],
+      "@gitroom/provider-deepseek/*": [
+        "libraries/providers/deepseek/src/*"
+      ],
+      "@gitroom/provider-devto": [
+        "libraries/providers/devto/src"
+      ],
+      "@gitroom/provider-devto/*": [
+        "libraries/providers/devto/src/*"
+      ],
+      "@gitroom/provider-did": [
+        "libraries/providers/did/src"
+      ],
+      "@gitroom/provider-did/*": [
+        "libraries/providers/did/src/*"
+      ],
+      "@gitroom/provider-digitalocean-spaces": [
+        "libraries/providers/digitalocean-spaces/src"
+      ],
+      "@gitroom/provider-digitalocean-spaces/*": [
+        "libraries/providers/digitalocean-spaces/src/*"
+      ],
+      "@gitroom/provider-discord": [
+        "libraries/providers/discord/src"
+      ],
+      "@gitroom/provider-discord/*": [
+        "libraries/providers/discord/src/*"
+      ],
+      "@gitroom/provider-dribbble": [
+        "libraries/providers/dribbble/src"
+      ],
+      "@gitroom/provider-dribbble/*": [
+        "libraries/providers/dribbble/src/*"
+      ],
+      "@gitroom/provider-dub": [
+        "libraries/providers/dub/src"
+      ],
+      "@gitroom/provider-dub/*": [
+        "libraries/providers/dub/src/*"
+      ],
+      "@gitroom/provider-elevenlabs": [
+        "libraries/providers/elevenlabs/src"
+      ],
+      "@gitroom/provider-elevenlabs/*": [
+        "libraries/providers/elevenlabs/src/*"
+      ],
+      "@gitroom/provider-empty": [
+        "libraries/providers/empty/src"
+      ],
+      "@gitroom/provider-empty/*": [
+        "libraries/providers/empty/src/*"
+      ],
+      "@gitroom/provider-envato": [
+        "libraries/providers/envato/src"
+      ],
+      "@gitroom/provider-envato/*": [
+        "libraries/providers/envato/src/*"
+      ],
+      "@gitroom/provider-expressvpn": [
+        "libraries/providers/expressvpn/src"
+      ],
+      "@gitroom/provider-expressvpn/*": [
+        "libraries/providers/expressvpn/src/*"
+      ],
+      "@gitroom/provider-facebook": [
+        "libraries/providers/facebook/src"
+      ],
+      "@gitroom/provider-facebook/*": [
+        "libraries/providers/facebook/src/*"
+      ],
+      "@gitroom/provider-fal": [
+        "libraries/providers/fal/src"
+      ],
+      "@gitroom/provider-fal/*": [
+        "libraries/providers/fal/src/*"
+      ],
+      "@gitroom/provider-fireworks": [
+        "libraries/providers/fireworks/src"
+      ],
+      "@gitroom/provider-fireworks/*": [
+        "libraries/providers/fireworks/src/*"
+      ],
+      "@gitroom/provider-gateway": [
+        "libraries/providers/gateway/src"
+      ],
+      "@gitroom/provider-gateway/*": [
+        "libraries/providers/gateway/src/*"
+      ],
+      "@gitroom/provider-generic": [
+        "libraries/providers/generic/src"
+      ],
+      "@gitroom/provider-generic/*": [
+        "libraries/providers/generic/src/*"
+      ],
+      "@gitroom/provider-genviral": [
+        "libraries/providers/genviral/src"
+      ],
+      "@gitroom/provider-genviral/*": [
+        "libraries/providers/genviral/src/*"
+      ],
+      "@gitroom/provider-github": [
+        "libraries/providers/github/src"
+      ],
+      "@gitroom/provider-github/*": [
+        "libraries/providers/github/src/*"
+      ],
+      "@gitroom/provider-gmb": [
+        "libraries/providers/gmb/src"
+      ],
+      "@gitroom/provider-gmb/*": [
+        "libraries/providers/gmb/src/*"
+      ],
+      "@gitroom/provider-gmihub": [
+        "libraries/providers/gmihub/src"
+      ],
+      "@gitroom/provider-gmihub/*": [
+        "libraries/providers/gmihub/src/*"
+      ],
+      "@gitroom/provider-google": [
+        "libraries/providers/google/src"
+      ],
+      "@gitroom/provider-google/*": [
+        "libraries/providers/google/src/*"
+      ],
+      "@gitroom/provider-google-ai": [
+        "libraries/providers/google-ai/src"
+      ],
+      "@gitroom/provider-google-ai/*": [
+        "libraries/providers/google-ai/src/*"
+      ],
+      "@gitroom/provider-groq": [
+        "libraries/providers/groq/src"
+      ],
+      "@gitroom/provider-groq/*": [
+        "libraries/providers/groq/src/*"
+      ],
+      "@gitroom/provider-hashnode": [
+        "libraries/providers/hashnode/src"
+      ],
+      "@gitroom/provider-hashnode/*": [
+        "libraries/providers/hashnode/src/*"
+      ],
+      "@gitroom/provider-hedra": [
+        "libraries/providers/hedra/src"
+      ],
+      "@gitroom/provider-hedra/*": [
+        "libraries/providers/hedra/src/*"
+      ],
+      "@gitroom/provider-hetzner": [
+        "libraries/providers/hetzner/src"
+      ],
+      "@gitroom/provider-hetzner/*": [
+        "libraries/providers/hetzner/src/*"
+      ],
+      "@gitroom/provider-heygen": [
+        "libraries/providers/heygen/src"
+      ],
+      "@gitroom/provider-heygen/*": [
+        "libraries/providers/heygen/src/*"
+      ],
+      "@gitroom/provider-hideme": [
+        "libraries/providers/hideme/src"
+      ],
+      "@gitroom/provider-hideme/*": [
+        "libraries/providers/hideme/src/*"
+      ],
+      "@gitroom/provider-higgsfield": [
+        "libraries/providers/higgsfield/src"
+      ],
+      "@gitroom/provider-higgsfield/*": [
+        "libraries/providers/higgsfield/src/*"
+      ],
+      "@gitroom/provider-hotspotshield": [
+        "libraries/providers/hotspotshield/src"
+      ],
+      "@gitroom/provider-hotspotshield/*": [
+        "libraries/providers/hotspotshield/src/*"
+      ],
+      "@gitroom/provider-ideogram": [
+        "libraries/providers/ideogram/src"
+      ],
+      "@gitroom/provider-ideogram/*": [
+        "libraries/providers/ideogram/src/*"
+      ],
+      "@gitroom/provider-idrive-e2": [
+        "libraries/providers/idrive-e2/src"
+      ],
+      "@gitroom/provider-idrive-e2/*": [
+        "libraries/providers/idrive-e2/src/*"
+      ],
+      "@gitroom/provider-instagram": [
+        "libraries/providers/instagram/src"
+      ],
+      "@gitroom/provider-instagram/*": [
+        "libraries/providers/instagram/src/*"
+      ],
+      "@gitroom/provider-instagram-standalone": [
+        "libraries/providers/instagram-standalone/src"
+      ],
+      "@gitroom/provider-instagram-standalone/*": [
+        "libraries/providers/instagram-standalone/src/*"
+      ],
+      "@gitroom/provider-ipvanish": [
+        "libraries/providers/ipvanish/src"
+      ],
+      "@gitroom/provider-ipvanish/*": [
+        "libraries/providers/ipvanish/src/*"
+      ],
+      "@gitroom/provider-isgd": [
+        "libraries/providers/isgd/src"
+      ],
+      "@gitroom/provider-isgd/*": [
+        "libraries/providers/isgd/src/*"
+      ],
+      "@gitroom/provider-kick": [
+        "libraries/providers/kick/src"
+      ],
+      "@gitroom/provider-kick/*": [
+        "libraries/providers/kick/src/*"
+      ],
+      "@gitroom/provider-lemmy": [
+        "libraries/providers/lemmy/src"
+      ],
+      "@gitroom/provider-lemmy/*": [
+        "libraries/providers/lemmy/src/*"
+      ],
+      "@gitroom/provider-leonardo": [
+        "libraries/providers/leonardo/src"
+      ],
+      "@gitroom/provider-leonardo/*": [
+        "libraries/providers/leonardo/src/*"
+      ],
+      "@gitroom/provider-lightning": [
+        "libraries/providers/lightning/src"
+      ],
+      "@gitroom/provider-lightning/*": [
+        "libraries/providers/lightning/src/*"
+      ],
+      "@gitroom/provider-linkedin": [
+        "libraries/providers/linkedin/src"
+      ],
+      "@gitroom/provider-linkedin/*": [
+        "libraries/providers/linkedin/src/*"
+      ],
+      "@gitroom/provider-linkedin-page": [
+        "libraries/providers/linkedin-page/src"
+      ],
+      "@gitroom/provider-linkedin-page/*": [
+        "libraries/providers/linkedin-page/src/*"
+      ],
+      "@gitroom/provider-linkly": [
+        "libraries/providers/linkly/src"
+      ],
+      "@gitroom/provider-linkly/*": [
+        "libraries/providers/linkly/src/*"
+      ],
+      "@gitroom/provider-linode": [
+        "libraries/providers/linode/src"
+      ],
+      "@gitroom/provider-linode/*": [
+        "libraries/providers/linode/src/*"
+      ],
+      "@gitroom/provider-listmonk": [
+        "libraries/providers/listmonk/src"
+      ],
+      "@gitroom/provider-listmonk/*": [
+        "libraries/providers/listmonk/src/*"
+      ],
+      "@gitroom/provider-lnkify": [
+        "libraries/providers/lnkify/src"
+      ],
+      "@gitroom/provider-lnkify/*": [
+        "libraries/providers/lnkify/src/*"
+      ],
+      "@gitroom/provider-local": [
+        "libraries/providers/local/src"
+      ],
+      "@gitroom/provider-local/*": [
+        "libraries/providers/local/src/*"
+      ],
+      "@gitroom/provider-ltx": [
+        "libraries/providers/ltx/src"
+      ],
+      "@gitroom/provider-ltx/*": [
+        "libraries/providers/ltx/src/*"
+      ],
+      "@gitroom/provider-luma": [
+        "libraries/providers/luma/src"
+      ],
+      "@gitroom/provider-luma/*": [
+        "libraries/providers/luma/src/*"
+      ],
+      "@gitroom/provider-magnific": [
+        "libraries/providers/magnific/src"
+      ],
+      "@gitroom/provider-magnific/*": [
+        "libraries/providers/magnific/src/*"
+      ],
+      "@gitroom/provider-mailgun": [
+        "libraries/providers/mailgun/src"
+      ],
+      "@gitroom/provider-mailgun/*": [
+        "libraries/providers/mailgun/src/*"
+      ],
+      "@gitroom/provider-mastodon": [
+        "libraries/providers/mastodon/src"
+      ],
+      "@gitroom/provider-mastodon/*": [
+        "libraries/providers/mastodon/src/*"
+      ],
+      "@gitroom/provider-medialocker": [
+        "libraries/providers/medialocker/src"
+      ],
+      "@gitroom/provider-medialocker/*": [
+        "libraries/providers/medialocker/src/*"
+      ],
+      "@gitroom/provider-medium": [
+        "libraries/providers/medium/src"
+      ],
+      "@gitroom/provider-medium/*": [
+        "libraries/providers/medium/src/*"
+      ],
+      "@gitroom/provider-meta-llama": [
+        "libraries/providers/meta-llama/src"
+      ],
+      "@gitroom/provider-meta-llama/*": [
+        "libraries/providers/meta-llama/src/*"
+      ],
+      "@gitroom/provider-mewe": [
+        "libraries/providers/mewe/src"
+      ],
+      "@gitroom/provider-mewe/*": [
+        "libraries/providers/mewe/src/*"
+      ],
+      "@gitroom/provider-minimax": [
+        "libraries/providers/minimax/src"
+      ],
+      "@gitroom/provider-minimax/*": [
+        "libraries/providers/minimax/src/*"
+      ],
+      "@gitroom/provider-mistral": [
+        "libraries/providers/mistral/src"
+      ],
+      "@gitroom/provider-mistral/*": [
+        "libraries/providers/mistral/src/*"
+      ],
+      "@gitroom/provider-moltbook": [
+        "libraries/providers/moltbook/src"
+      ],
+      "@gitroom/provider-moltbook/*": [
+        "libraries/providers/moltbook/src/*"
+      ],
+      "@gitroom/provider-mozillavpn": [
+        "libraries/providers/mozillavpn/src"
+      ],
+      "@gitroom/provider-mozillavpn/*": [
+        "libraries/providers/mozillavpn/src/*"
+      ],
+      "@gitroom/provider-mullvad": [
+        "libraries/providers/mullvad/src"
+      ],
+      "@gitroom/provider-mullvad/*": [
+        "libraries/providers/mullvad/src/*"
+      ],
+      "@gitroom/provider-nordvpn": [
+        "libraries/providers/nordvpn/src"
+      ],
+      "@gitroom/provider-nordvpn/*": [
+        "libraries/providers/nordvpn/src/*"
+      ],
+      "@gitroom/provider-nostr": [
+        "libraries/providers/nostr/src"
+      ],
+      "@gitroom/provider-nostr/*": [
+        "libraries/providers/nostr/src/*"
+      ],
+      "@gitroom/provider-openai": [
+        "libraries/providers/openai/src"
+      ],
+      "@gitroom/provider-openai/*": [
+        "libraries/providers/openai/src/*"
+      ],
+      "@gitroom/provider-openrouter": [
+        "libraries/providers/openrouter/src"
+      ],
+      "@gitroom/provider-openrouter/*": [
+        "libraries/providers/openrouter/src/*"
+      ],
+      "@gitroom/provider-owly": [
+        "libraries/providers/owly/src"
+      ],
+      "@gitroom/provider-owly/*": [
+        "libraries/providers/owly/src/*"
+      ],
+      "@gitroom/provider-peertube": [
+        "libraries/providers/peertube/src"
+      ],
+      "@gitroom/provider-peertube/*": [
+        "libraries/providers/peertube/src/*"
+      ],
+      "@gitroom/provider-perplexity": [
+        "libraries/providers/perplexity/src"
+      ],
+      "@gitroom/provider-perplexity/*": [
+        "libraries/providers/perplexity/src/*"
+      ],
+      "@gitroom/provider-pia": [
+        "libraries/providers/pia/src"
+      ],
+      "@gitroom/provider-pia/*": [
+        "libraries/providers/pia/src/*"
+      ],
+      "@gitroom/provider-pinterest": [
+        "libraries/providers/pinterest/src"
+      ],
+      "@gitroom/provider-pinterest/*": [
+        "libraries/providers/pinterest/src/*"
+      ],
+      "@gitroom/provider-pixelfed": [
+        "libraries/providers/pixelfed/src"
+      ],
+      "@gitroom/provider-pixelfed/*": [
+        "libraries/providers/pixelfed/src/*"
+      ],
+      "@gitroom/provider-pixelme": [
+        "libraries/providers/pixelme/src"
+      ],
+      "@gitroom/provider-pixelme/*": [
+        "libraries/providers/pixelme/src/*"
+      ],
+      "@gitroom/provider-postmark": [
+        "libraries/providers/postmark/src"
+      ],
+      "@gitroom/provider-postmark/*": [
+        "libraries/providers/postmark/src/*"
+      ],
+      "@gitroom/provider-protonvpn": [
+        "libraries/providers/protonvpn/src"
+      ],
+      "@gitroom/provider-protonvpn/*": [
+        "libraries/providers/protonvpn/src/*"
+      ],
+      "@gitroom/provider-purevpn": [
+        "libraries/providers/purevpn/src"
+      ],
+      "@gitroom/provider-purevpn/*": [
+        "libraries/providers/purevpn/src/*"
+      ],
+      "@gitroom/provider-qwen": [
+        "libraries/providers/qwen/src"
+      ],
+      "@gitroom/provider-qwen/*": [
+        "libraries/providers/qwen/src/*"
+      ],
+      "@gitroom/provider-rebrandly": [
+        "libraries/providers/rebrandly/src"
+      ],
+      "@gitroom/provider-rebrandly/*": [
+        "libraries/providers/rebrandly/src/*"
+      ],
+      "@gitroom/provider-recraft": [
+        "libraries/providers/recraft/src"
+      ],
+      "@gitroom/provider-recraft/*": [
+        "libraries/providers/recraft/src/*"
+      ],
+      "@gitroom/provider-reddit": [
+        "libraries/providers/reddit/src"
+      ],
+      "@gitroom/provider-reddit/*": [
+        "libraries/providers/reddit/src/*"
+      ],
+      "@gitroom/provider-reelfarm": [
+        "libraries/providers/reelfarm/src"
+      ],
+      "@gitroom/provider-reelfarm/*": [
+        "libraries/providers/reelfarm/src/*"
+      ],
+      "@gitroom/provider-replicate": [
+        "libraries/providers/replicate/src"
+      ],
+      "@gitroom/provider-replicate/*": [
+        "libraries/providers/replicate/src/*"
+      ],
+      "@gitroom/provider-replug": [
+        "libraries/providers/replug/src"
+      ],
+      "@gitroom/provider-replug/*": [
+        "libraries/providers/replug/src/*"
+      ],
+      "@gitroom/provider-resend": [
+        "libraries/providers/resend/src"
+      ],
+      "@gitroom/provider-resend/*": [
+        "libraries/providers/resend/src/*"
+      ],
+      "@gitroom/provider-runway": [
+        "libraries/providers/runway/src"
+      ],
+      "@gitroom/provider-runway/*": [
+        "libraries/providers/runway/src/*"
+      ],
+      "@gitroom/provider-s3": [
+        "libraries/providers/s3/src"
+      ],
+      "@gitroom/provider-s3/*": [
+        "libraries/providers/s3/src/*"
+      ],
+      "@gitroom/provider-s3-compatible": [
+        "libraries/providers/s3-compatible/src"
+      ],
+      "@gitroom/provider-s3-compatible/*": [
+        "libraries/providers/s3-compatible/src/*"
+      ],
+      "@gitroom/provider-scaleway": [
+        "libraries/providers/scaleway/src"
+      ],
+      "@gitroom/provider-scaleway/*": [
+        "libraries/providers/scaleway/src/*"
+      ],
+      "@gitroom/provider-sendgrid": [
+        "libraries/providers/sendgrid/src"
+      ],
+      "@gitroom/provider-sendgrid/*": [
+        "libraries/providers/sendgrid/src/*"
+      ],
+      "@gitroom/provider-ses": [
+        "libraries/providers/ses/src"
+      ],
+      "@gitroom/provider-ses/*": [
+        "libraries/providers/ses/src/*"
+      ],
+      "@gitroom/provider-shortio": [
+        "libraries/providers/shortio/src"
+      ],
+      "@gitroom/provider-shortio/*": [
+        "libraries/providers/shortio/src/*"
+      ],
+      "@gitroom/provider-siliconflow": [
+        "libraries/providers/siliconflow/src"
+      ],
+      "@gitroom/provider-siliconflow/*": [
+        "libraries/providers/siliconflow/src/*"
+      ],
+      "@gitroom/provider-skool": [
+        "libraries/providers/skool/src"
+      ],
+      "@gitroom/provider-skool/*": [
+        "libraries/providers/skool/src/*"
+      ],
+      "@gitroom/provider-slack": [
+        "libraries/providers/slack/src"
+      ],
+      "@gitroom/provider-slack/*": [
+        "libraries/providers/slack/src/*"
+      ],
+      "@gitroom/provider-smtp": [
+        "libraries/providers/smtp/src"
+      ],
+      "@gitroom/provider-smtp/*": [
+        "libraries/providers/smtp/src/*"
+      ],
+      "@gitroom/provider-sniply": [
+        "libraries/providers/sniply/src"
+      ],
+      "@gitroom/provider-sniply/*": [
+        "libraries/providers/sniply/src/*"
+      ],
+      "@gitroom/provider-stability": [
+        "libraries/providers/stability/src"
+      ],
+      "@gitroom/provider-stability/*": [
+        "libraries/providers/stability/src/*"
+      ],
+      "@gitroom/provider-storj": [
+        "libraries/providers/storj/src"
+      ],
+      "@gitroom/provider-storj/*": [
+        "libraries/providers/storj/src/*"
+      ],
+      "@gitroom/provider-suno": [
+        "libraries/providers/suno/src"
+      ],
+      "@gitroom/provider-suno/*": [
+        "libraries/providers/suno/src/*"
+      ],
+      "@gitroom/provider-surfshark": [
+        "libraries/providers/surfshark/src"
+      ],
+      "@gitroom/provider-surfshark/*": [
+        "libraries/providers/surfshark/src/*"
+      ],
+      "@gitroom/provider-switchy": [
+        "libraries/providers/switchy/src"
+      ],
+      "@gitroom/provider-switchy/*": [
+        "libraries/providers/switchy/src/*"
+      ],
+      "@gitroom/provider-t2m": [
+        "libraries/providers/t2m/src"
+      ],
+      "@gitroom/provider-t2m/*": [
+        "libraries/providers/t2m/src/*"
+      ],
+      "@gitroom/provider-tavus": [
+        "libraries/providers/tavus/src"
+      ],
+      "@gitroom/provider-tavus/*": [
+        "libraries/providers/tavus/src/*"
+      ],
+      "@gitroom/provider-telegram": [
+        "libraries/providers/telegram/src"
+      ],
+      "@gitroom/provider-telegram/*": [
+        "libraries/providers/telegram/src/*"
+      ],
+      "@gitroom/provider-threads": [
+        "libraries/providers/threads/src"
+      ],
+      "@gitroom/provider-threads/*": [
+        "libraries/providers/threads/src/*"
+      ],
+      "@gitroom/provider-tiktok": [
+        "libraries/providers/tiktok/src"
+      ],
+      "@gitroom/provider-tiktok/*": [
+        "libraries/providers/tiktok/src/*"
+      ],
+      "@gitroom/provider-tinycc": [
+        "libraries/providers/tinycc/src"
+      ],
+      "@gitroom/provider-tinycc/*": [
+        "libraries/providers/tinycc/src/*"
+      ],
+      "@gitroom/provider-tinyurl": [
+        "libraries/providers/tinyurl/src"
+      ],
+      "@gitroom/provider-tinyurl/*": [
+        "libraries/providers/tinyurl/src/*"
+      ],
+      "@gitroom/provider-tly": [
+        "libraries/providers/tly/src"
+      ],
+      "@gitroom/provider-tly/*": [
+        "libraries/providers/tly/src/*"
+      ],
+      "@gitroom/provider-togetherai": [
+        "libraries/providers/togetherai/src"
+      ],
+      "@gitroom/provider-togetherai/*": [
+        "libraries/providers/togetherai/src/*"
+      ],
+      "@gitroom/provider-tumblr": [
+        "libraries/providers/tumblr/src"
+      ],
+      "@gitroom/provider-tumblr/*": [
+        "libraries/providers/tumblr/src/*"
+      ],
+      "@gitroom/provider-tunnelbear": [
+        "libraries/providers/tunnelbear/src"
+      ],
+      "@gitroom/provider-tunnelbear/*": [
+        "libraries/providers/tunnelbear/src/*"
+      ],
+      "@gitroom/provider-twitch": [
+        "libraries/providers/twitch/src"
+      ],
+      "@gitroom/provider-twitch/*": [
+        "libraries/providers/twitch/src/*"
+      ],
+      "@gitroom/provider-vecteezy": [
+        "libraries/providers/vecteezy/src"
+      ],
+      "@gitroom/provider-vecteezy/*": [
+        "libraries/providers/vecteezy/src/*"
+      ],
+      "@gitroom/provider-vertex": [
+        "libraries/providers/vertex/src"
+      ],
+      "@gitroom/provider-vertex/*": [
+        "libraries/providers/vertex/src/*"
+      ],
+      "@gitroom/provider-vgd": [
+        "libraries/providers/vgd/src"
+      ],
+      "@gitroom/provider-vgd/*": [
+        "libraries/providers/vgd/src/*"
+      ],
+      "@gitroom/provider-vk": [
+        "libraries/providers/vk/src"
+      ],
+      "@gitroom/provider-vk/*": [
+        "libraries/providers/vk/src/*"
+      ],
+      "@gitroom/provider-vultr": [
+        "libraries/providers/vultr/src"
+      ],
+      "@gitroom/provider-vultr/*": [
+        "libraries/providers/vultr/src/*"
+      ],
+      "@gitroom/provider-vyprvpn": [
+        "libraries/providers/vyprvpn/src"
+      ],
+      "@gitroom/provider-vyprvpn/*": [
+        "libraries/providers/vyprvpn/src/*"
+      ],
+      "@gitroom/provider-wallet": [
+        "libraries/providers/wallet/src"
+      ],
+      "@gitroom/provider-wallet/*": [
+        "libraries/providers/wallet/src/*"
+      ],
+      "@gitroom/provider-wan": [
+        "libraries/providers/wan/src"
+      ],
+      "@gitroom/provider-wan/*": [
+        "libraries/providers/wan/src/*"
+      ],
+      "@gitroom/provider-wasabi": [
+        "libraries/providers/wasabi/src"
+      ],
+      "@gitroom/provider-wasabi/*": [
+        "libraries/providers/wasabi/src/*"
+      ],
+      "@gitroom/provider-whop": [
+        "libraries/providers/whop/src"
+      ],
+      "@gitroom/provider-whop/*": [
+        "libraries/providers/whop/src/*"
+      ],
+      "@gitroom/provider-windscribe": [
+        "libraries/providers/windscribe/src"
+      ],
+      "@gitroom/provider-windscribe/*": [
+        "libraries/providers/windscribe/src/*"
+      ],
+      "@gitroom/provider-wordpress": [
+        "libraries/providers/wordpress/src"
+      ],
+      "@gitroom/provider-wordpress/*": [
+        "libraries/providers/wordpress/src/*"
+      ],
+      "@gitroom/provider-wrapcast": [
+        "libraries/providers/wrapcast/src"
+      ],
+      "@gitroom/provider-wrapcast/*": [
+        "libraries/providers/wrapcast/src/*"
+      ],
+      "@gitroom/provider-x": [
+        "libraries/providers/x/src"
+      ],
+      "@gitroom/provider-x/*": [
+        "libraries/providers/x/src/*"
+      ],
+      "@gitroom/provider-xai": [
+        "libraries/providers/xai/src"
+      ],
+      "@gitroom/provider-xai/*": [
+        "libraries/providers/xai/src/*"
+      ],
+      "@gitroom/provider-youtube": [
+        "libraries/providers/youtube/src"
+      ],
+      "@gitroom/provider-youtube/*": [
+        "libraries/providers/youtube/src/*"
+      ]
+    }
+  },
+  "exclude": [
+    "node_modules",
+    "tmp"
+  ]
+}

@@ -1,0 +1,154 @@
+:root {
+  .dark {
+    --new-back-drop: #000;
+    --new-settings: #242323;
+    --new-border: #252525;
+    --new-bgColor: #0e0e0e;
+    --new-bgColorInner: #1a1919;
+    --studio-bg: #0a0f1f;
+    --studio-border: #2a3450;
+    --new-sep: #454444;
+    --new-bgLineColor: #212121;
+    --new-textItemFocused: #1a1919;
+    --new-textItemBlur: #999999;
+    --new-boxFocused: #fff;
+    --new-textColor: 255 255 255;
+    --new-blockSeparator: #272626;
+    --new-btn-simple: #313030;
+    --new-btn-text: #ffffff;
+    --new-btn-primary: #2b5cd3;
+    /* Accessible accent text for subtle btnPrimary/15 chips (a11y: text-btnPrimary fails
+       AA ~3.3:1 on the tinted-over-dark bg). Lighter blue → ~5.9:1 on dark chip surfaces. */
+    --new-btn-primary-accent: #6d95ec;
+    /* Theme-aware danger/error text (a11y: text-dangerText is only ~2.5:1 on the light bg).
+       Dark: light red (readable on dark surfaces + dark-red chips). */
+    --new-danger-text: #f87171;
+    --new-ai-btn: #1d9bf0;
+    --new-promo: #aa0fa4;
+    --new-badge: #d6006e;
+    --new-priority-high: #f97066;
+    --new-priority-medium: #ffac30;
+    --new-priority-low: #1d9bf0;
+    --new-gray: #8c8c8c;
+    --new-input-text: #64748b;
+    --new-modal-custom: #000000;
+    --new-box-hover: #201f1f;
+    --new-table-border: #2b2b2b;
+    --new-table-header: #1e1d1d;
+    --new-table-text: #9c9c9c;
+    --new-table-text-focused: #1d9bf0;
+    /* Semantic up/down metric colors — vibrant on dark surfaces (pass AA on dark). */
+    --positive: #32d583;
+    --negative: #f97066;
+    --heading-accent: #4f9fe8;
+    --heading-h1: #b3bdd0;
+    --new-small-strips: #191818;
+    --new-big-strips: #161515;
+    --new-col-color: #2c2b2b;
+    --new-menu-dots: #696868;
+    --new-menu-hover: #fff;
+    --menu-shadow: 0 8px 30px 0 rgba(0, 0, 0, 0.5);
+    --popup-color: rgba(65, 64, 66, 0.3);
+    --border-preview: transparent;
+    --preview-box-shadow: none;
+    --linkedin-border: #2e3438;
+    --linkedin-bg: #1b1f23;
+    --linkedin-text: #c6c7c8;
+    --facebook-bg: #242526;
+    --facebook-bg-comment: #333334;
+    --instagram-bg: #0b1014;
+    --tiktok-item-bg: #2a2a2a;
+    --tiktok-item-icon-bg: #FFF;
+    --youtube-bg: #0F0F0F;
+    --youtube-button: #F1F1F1;
+    --youtube-action-color: #272727;
+    --youtube-svg-border: #A0A0A0;
+  }
+  .light {
+    --new-back-drop: #1a2744;
+    --new-settings: #eceef1;
+    --new-sep: #d5d9dd;
+    --new-border: #eaecee;
+    --new-bgColor: #f0f2f4;
+    --new-bgColorInner: #ffffff;
+    --studio-bg: #d4e0f0;
+    --studio-border: #aebdd4;
+    --new-bgLineColor: #d6deea;
+    --new-textItemFocused: #1f47a8;
+    --new-textItemBlur: #63676c;
+    --new-boxFocused: #e3ecfb;
+    --new-textColor: 14 14 14;
+    --new-blockSeparator: #f2f2f4;
+    --new-btn-simple: #eceef1;
+    --new-btn-text: #0e0e0e;
+    --new-btn-primary: #2b5cd3;
+    /* Accessible accent text for subtle btnPrimary/15 chips in light mode: darker blue →
+       ~5.7:1 on the light tinted chip bg (plain btnPrimary is ~4.2:1 there). */
+    --new-btn-primary-accent: #1e47b8;
+    /* Light: deep red — passes on the page bg, white cards, AND the light-pink bg-red-900/20
+       danger chips (a lighter red would fail on those). */
+    --new-danger-text: #a01212;
+    --new-ai-btn: #1d9bf0;
+    --new-promo: #aa0fa4;
+    --new-badge: #d6006e;
+    --new-priority-high: #f97066;
+    --new-priority-medium: #ffac30;
+    --new-priority-low: #1d9bf0;
+    --new-gray: #8c8c8c;
+    --new-input-text: #64748b;
+    --new-modal-custom: transparent;
+    --new-box-hover: #f4f6f8;
+    --new-table-border: #e7e9eb;
+    --new-table-header: #f5f7f9;
+    --new-table-text: #595d63;
+    --new-table-text-focused: #0e6ba8;
+    /* Semantic up/down metric colors — darkened for AA as text on light surfaces
+       (green-700 / red-700). White-on-solid and tint/border uses only gain contrast. */
+    --positive: #15803d;
+    --negative: #b91c1c;
+    --heading-accent: #2f53a8;
+    --heading-h1: var(--new-btn-primary);
+    --new-small-strips: #191818;
+    --new-big-strips: #f5f7f9;
+    --new-col-color: #eff1f3;
+    --new-menu-dots: #696868;
+    --new-menu-hover: #000;
+    --menu-shadow: -22px 83px 24px 0 rgba(55, 52, 75, 0),
+      -14px 53px 22px 0 rgba(55, 52, 75, 0.01),
+      -8px 30px 19px 0 rgba(55, 52, 75, 0.05),
+      -3px 13px 14px 0 rgba(55, 52, 75, 0.09),
+      -1px 3px 8px 0 rgba(55, 52, 75, 0.1);
+    --popup-color: rgba(55, 37, 97, 0.2);
+    --border-preview: #f1f0f3;
+    --preview-box-shadow: 0 386px 108px 0 rgba(38, 32, 64, 0),
+      0 247px 99px 0 rgba(38, 32, 64, 0.01),
+      0 139px 83px 0 rgba(38, 32, 64, 0.03),
+      0 62px 62px 0 rgba(38, 32, 64, 0.04), 0 15px 34px 0 rgba(38, 32, 64, 0.05);
+    --linkedin-border: #e9e5df;
+    --linkedin-bg: #fff;
+    --linkedin-text: #707070;
+    --facebook-bg: #fff;
+    --facebook-bg-comment: #f6f6f6;
+    --instagram-bg: #fff;
+    --tiktok-item-bg: #EEF1F0;
+    --tiktok-item-icon-bg: #454645;
+    --youtube-bg: #FFF;
+    --youtube-button: #000;
+    --youtube-action-color: #F1F1F1;
+    --youtube-svg-border: #1A1A1A;
+  }
+}
+
+:root {
+  --chart-1: #2b5cd3;
+  --chart-2: #32d583;
+  --chart-3: #1d9bf0;
+  --chart-4: #f97066;
+  --chart-5: #ffac30;
+  --chart-6: #8b90ff;
+  --chart-7: #1d9bf0;
+  --chart-8: #e4b895;
+  --chart-muted: #71767b;
+  --positive: #32d583;
+  --negative: #f97066;
+}

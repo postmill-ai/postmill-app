@@ -1,0 +1,24 @@
+{
+  "name": "postmill-extension",
+  "version": "2.0.0",
+  "description": "Postmill browser extension for cookie-based platform authentication",
+  "license": "AGPL-3.0",
+  "scripts": {
+    "build": "rm -rf dist && vite build && cp manifest.json dist/manifest.json && cd dist && zip -r ../extension.zip .",
+    "dev": "rm -rf dist && HOT_RELOAD_EXTENSION_VITE_PORT=8081 NODE_ENV=development dotenv -e ../../.env -- vite build --config vite.config.chrome.ts --mode development --watch",
+    "test": "vitest run"
+  },
+  "type": "module",
+  "devDependencies": {
+    "@crxjs/vite-plugin": "^2.4.0",
+    "dotenv-cli": "^8.0.0",
+    "hot-reload-extension-vite": "^1.0.13",
+    "postcss": "^8.5.10",
+    "vite": "^6.4.2",
+    "vite-tsconfig-paths": "^5.1.4",
+    "vitest": "^4.1.0"
+  },
+  "engines": {
+    "node": ">=22.12.0 <23.0.0"
+  }
+}

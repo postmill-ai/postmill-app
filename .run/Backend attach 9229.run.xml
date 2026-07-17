@@ -1,0 +1,11 @@
+<component name="ProjectRunConfigurationManager">
+  <!--
+    Attach the debugger to an already-running backend.
+    Start it first with:  BACKEND_INSPECT=1 pnpm run dev:backend
+    (dev.cjs then passes --inspect=127.0.0.1:9229 to the node --watch runtime).
+    Use this when you want hot-reload in the terminal but debug from the IDE.
+  -->
+  <configuration default="false" name="Backend attach (9229)" type="NodeJSAttachConfigurationType" port="9229" address="localhost">
+    <method v="2" />
+  </configuration>
+</component>

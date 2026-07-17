@@ -1,0 +1,44 @@
+'use client';
+
+import {
+  PostComment,
+  withProvider,
+} from '@gitroom/frontend/components/composer/providers/high.order.provider';
+import { FC } from 'react';
+import { MeweDto } from '@gitroom/nestjs-libraries/dtos/posts/providers-settings/mewe.dto';
+import { MeweGroupSelect } from '@gitroom/frontend/components/composer/providers/mewe/mewe.group.select';
+import { useSettings } from '@gitroom/frontend/components/launches/helpers/use.values';
+import { Select } from '@gitroom/react/form/select';
+import { useWatch } from 'react-hook-form';
+import { useT } from '@gitroom/react/translation/get.transation.service.client';
+
+const MeweComponent: FC = () => {
+  const form = useSettings();
+  const t = useT();
+  const postType = useWatch({ control: form.control, name: 'postType' });
+
+  return (
+    <div>
+      <Select
+        label={t('post_to', 'Post To')}
+        {...form.register('postType')}
+      >
+        <option value="timeline">{t('my_timeline', 'My Timeline')}</option>
+        <option value="group">{t('group', 'Group')}</option>
+      </Select>
+      {postType === 'group' && (
+        <MeweGroupSelect {...form.register('group')} />
+      )}
+    </div>
+  );
+};
+
+export default withProvider({
+  postComment: PostComment.POST,
+  comments: false,
+  minimumCharacters: [],
+  SettingsComponent: MeweComponent,
+  CustomPreviewComponent: undefined,
+  dto: MeweDto,
+  maximumCharacters: 63206,
+});

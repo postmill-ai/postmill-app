@@ -1,0 +1,21 @@
+# Dependencies
+node_modules/
+
+# Auth state — contains the test account's session cookie/JWT. NEVER commit.
+.auth/
+
+# Test artifacts / outputs
+playwright-report/
+test-results/
+results-*.json
+endpoints.json
+*.png
+test-output.log
+fixtures/
+
+# Local npm lockfile (this is a standalone Playwright project, deps pinned in package.json)
+package-lock.json
+
+# Stale generated report (superseded by docs/v3.5.10.md as the authority)
+COMPREHENSIVE-TEST-REPORT.md
+

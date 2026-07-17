@@ -1,0 +1,59 @@
+# Live-reload app container. Use TOGETHER with docker-compose.dev.yaml (which provides
+# postgres, redis, etc.):
+#
+#   docker compose -f docker-compose.dev.yaml -f docker-compose.dev-app.yaml up
+#
+# The whole repo is bind-mounted into the container and the backend/frontend run in watch
+# mode, so host edits hot-reload. node_modules are kept in named volumes so the host's
+# macOS-arm64 modules never shadow the Linux ones built inside the container.
+services:
+  postmill-app:
+    build:
+      context: .
+      dockerfile: Dockerfile.dev-live
+    container_name: postmill-app
+    # The entrypoint exits if any watcher dies (e.g. OOM during a heavy route
+    # compile) — auto-restart instead of leaving the stack dead.
+    restart: unless-stopped
+    working_dir: /app
+    command: ["bash", "/app/var/docker/dev-entrypoint.sh"]
+    environment:
+      # Frontend runs on the HOST (pnpm run dev:frontend). Turbopack needs 5-6.5 GB of
+      # NATIVE memory (not bounded by --max-old-space-size) which, next to the ~3 GB
+      # backend watcher, overflows the ~10.7 GB Docker VM and crash-loops the container.
+      # Keeping it on the host = a lean, stable backend-only container.
+      START_FRONTEND: "false"
+    ports:
+      - "3000:3000"   # backend (NestJS REST API)
+    volumes:
+      - .:/app
+      # Mask every workspace node_modules with a named volume (Linux-built, never the host's).
+      - app-node-modules-root:/app/node_modules
+      - app-node-modules-backend:/app/apps/backend/node_modules
+      - app-node-modules-commands:/app/apps/commands/node_modules
+      - app-node-modules-extension:/app/apps/extension/node_modules
+      - app-node-modules-frontend:/app/apps/frontend/node_modules
+      - app-node-modules-sdk:/app/apps/sdk/node_modules
+      - app-node-modules-helpers:/app/libraries/helpers/node_modules
+      - app-node-modules-nestjs:/app/libraries/nestjs-libraries/node_modules
+      - app-node-modules-react-shared:/app/libraries/react-shared-libraries/node_modules
+      # Keep Next.js build cache off the bind mount for speed.
+      - app-frontend-next:/app/apps/frontend/.next
+      - postmill-uploads:/uploads
+    networks:
+      - postmill-network
+    depends_on:
+      - postmill-postgres
+
+volumes:
+  app-node-modules-root:
+  app-node-modules-backend:
+  app-node-modules-commands:
+  app-node-modules-extension:
+  app-node-modules-frontend:
+  app-node-modules-sdk:
+  app-node-modules-helpers:
+  app-node-modules-nestjs:
+  app-node-modules-react-shared:
+  app-frontend-next:
+  postmill-uploads:

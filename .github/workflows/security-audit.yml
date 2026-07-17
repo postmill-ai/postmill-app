@@ -1,0 +1,104 @@
+---
+name: Security Audit
+
+on:
+  pull_request:
+  schedule:
+    - cron: '0 0 * * 0'
+
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Install pnpm
+        uses: pnpm/action-setup@v2
+        with:
+          run_install: false
+
+      - name: Use Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22.12.0'
+
+      - name: Install native dependencies for node-canvas
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libcairo2-dev libjpeg-dev libpango1.0-dev libgif-dev build-essential g++ libpixman-1-dev
+
+      - name: Install dependencies
+        run: pnpm install
+
+      - name: Run pnpm audit (high/critical only)
+        # npm retired the quick/fallback audit endpoints pnpm calls (HTTP 410),
+        # so `pnpm audit` errors with ERR_PNPM_AUDIT_BAD_RESPONSE regardless of
+        # the dependency tree. Tolerate ONLY that endpoint outage (as a warning)
+        # — any real high/critical advisory still fails the job. Restore the
+        # hard gate once pnpm supports the bulk advisory endpoint.
+        run: |
+          set +e
+          OUT=$(pnpm audit --audit-level=high 2>&1)
+          CODE=$?
+          echo "$OUT"
+          if [ "$CODE" -ne 0 ] && echo "$OUT" | grep -q "ERR_PNPM_AUDIT_BAD_RESPONSE"; then
+            echo "::warning::pnpm audit endpoint unavailable (npm retired the quick-audit endpoint); treating as non-blocking."
+            exit 0
+          fi
+          exit "$CODE"
+
+      - name: Check for reintroduced channel env reads
+        run: |
+          if grep -rn 'getEnvOr(' libraries/nestjs-libraries/src/integrations/social/; then
+            echo "ERROR: getEnvOr() must not be used in social providers. Use getOrgCredential or clientInformation instead."
+            exit 1
+          fi
+          for VAR in X_API_KEY X_API_SECRET LINKEDIN_CLIENT_ID LINKEDIN_CLIENT_SECRET REDDIT_CLIENT_ID REDDIT_CLIENT_SECRET FACEBOOK_APP_ID FACEBOOK_APP_SECRET INSTAGRAM_APP_ID INSTAGRAM_APP_SECRET THREADS_APP_ID THREADS_APP_SECRET YOUTUBE_CLIENT_ID YOUTUBE_CLIENT_SECRET TIKTOK_CLIENT_ID TIKTOK_CLIENT_SECRET PINTEREST_CLIENT_ID PINTEREST_CLIENT_SECRET DRIBBBLE_CLIENT_ID DRIBBBLE_CLIENT_SECRET DISCORD_CLIENT_ID DISCORD_CLIENT_SECRET DISCORD_BOT_TOKEN_ID SLACK_ID SLACK_SECRET MASTODON_CLIENT_ID MASTODON_CLIENT_SECRET MASTODON_URL MEWE_APP_ID MEWE_API_KEY MEWE_HOST KICK_CLIENT_ID KICK_SECRET TWITCH_CLIENT_ID TWITCH_CLIENT_SECRET VK_ID WHOP_CLIENT_ID TUMBLR_CLIENT_ID TUMBLR_CLIENT_SECRET TELEGRAM_TOKEN GOOGLE_GMB_CLIENT_ID GOOGLE_GMB_CLIENT_SECRET NEYNAR_CLIENT_ID NEYNAR_SECRET_KEY; do
+            if grep -rn "process\.env\.$VAR" libraries/nestjs-libraries/src/integrations/social/; then
+              echo "ERROR: process.env.$VAR must not be read in social providers. Use DB-backed config instead."
+              exit 1
+            fi
+          done
+
+      - name: Check for env var reads in short-linking adapters
+        run: |
+          if grep -rn 'process\.env' libraries/nestjs-libraries/src/short-linking/adapters/ 2>/dev/null; then
+            echo "ERROR: Short-link adapters must not read process.env for credentials"
+            exit 1
+          fi
+          echo "OK: No process.env reads in adapters"
+
+      - name: Check for bare fetch() in short-linking adapters
+        run: |
+          if grep -rn '[^a-zA-Z]fetch(' libraries/nestjs-libraries/src/short-linking/adapters/ 2>/dev/null | grep -v 'safeFetch' | grep -v 'node_modules'; then
+            echo "ERROR: Short-link adapters must use safeFetch, not bare fetch()"
+            exit 1
+          fi
+          echo "OK: No bare fetch() in adapters"
+
+      - name: Check for removed legacy email env vars
+        run: |
+          for VAR in RESEND_API_KEY EMAIL_HOST EMAIL_PORT EMAIL_SECURE EMAIL_USER EMAIL_PASS; do
+            if grep -rn "$VAR" --include='*.ts' --include='*.js' --include='*.yaml' --include='*.yml' --include='.env*' libraries/ apps/ 2>/dev/null | grep -v 'node_modules' | grep -v '\.spec\.' | grep -v 'security-audit\.yml' | grep -v 'CHANGELOG\.md' | grep -v 'changes-from-upstream'; then
+              echo "ERROR: Legacy env var $VAR must not be used. Use the standardized EMAIL_* scheme instead."
+              exit 1
+            fi
+          done
+          echo "OK: No legacy email env vars found"
+
+      - name: Check for removed legacy storage env vars
+        run: |
+          for VAR in CLOUDFLARE_ACCOUNT_ID CLOUDFLARE_ACCESS_KEY CLOUDFLARE_SECRET_ACCESS_KEY CLOUDFLARE_BUCKETNAME CLOUDFLARE_BUCKET_URL CLOUDFLARE_REGION STORAGE_PROVIDER; do
+            if grep -rn "process\.env\.$VAR" --include='*.ts' --include='*.js' libraries/ apps/ 2>/dev/null | grep -v 'node_modules' | grep -v '\.spec\.' | grep -v 'security-audit\.yml' | grep -v 'configuration\.checker\.ts' | grep -v 'CHANGELOG\.md' | grep -v 'changes-from-upstream'; then
+              echo "ERROR: Removed legacy storage env var $VAR must not be read. Use per-tenant StorageService instead."
+              exit 1
+            fi
+          done
+          if grep -rn "from.*upload\.factory\|from.*r2\.uploader\|from.*cloudflare\.storage" --include='*.ts' libraries/ apps/ 2>/dev/null | grep -v 'node_modules' | grep -v '\.spec\.' | grep -v 'security-audit\.yml'; then
+            echo "ERROR: Deleted module (upload.factory / r2.uploader / cloudflare.storage) must not be imported."
+            exit 1
+          fi
+          echo "OK: No legacy storage env vars or imports found"

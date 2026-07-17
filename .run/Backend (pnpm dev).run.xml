@@ -1,0 +1,20 @@
+<component name="ProjectRunConfigurationManager">
+  <!--
+    Run/Debug the backend with hot-reload + WebStorm's debugger.
+    Hit DEBUG (not Run) and WebStorm injects its inspector into the node children
+    spawned by dev.cjs (nest build --watch + the node --watch runtime) and
+    auto-attaches to them, so breakpoints land in the .ts source (sourcemaps on).
+    Env (incl. .env.dev.local localhost DB/Redis override) is loaded by the
+    `dev` script's dotenv wrapper.
+  -->
+  <configuration default="false" name="Backend (pnpm dev)" type="js.build_tools.npm">
+    <package-json value="$PROJECT_DIR$/apps/backend/package.json" />
+    <command value="run" />
+    <scripts>
+      <script value="dev" />
+    </scripts>
+    <node-interpreter value="project" />
+    <envs />
+    <method v="2" />
+  </configuration>
+</component>

@@ -1,0 +1,48 @@
+# Render-worker image for the Podman video-render path.
+#
+# Same build as Dockerfile.dev (whole repo at /app so the monorepo's @gitroom/* runtime
+# resolution + node_modules symlinks are intact) but: installs distro Chromium + FFmpeg,
+# skips puppeteer's bundled-Chromium download, and uses the compiled render-worker CLI as
+# the entrypoint. The container reads /work/job.json and writes the artifact to /work/out.
+#
+# Build (on the Podman host):
+#   podman build -f Containerfile.render -t localhost/postmill-render:latest .
+# Then set VIDEO_RENDER_PODMAN_ENABLED=true (+ VIDEO_RENDER_IMAGE if not the default).
+FROM node:22.20-bookworm-slim
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    g++ \
+    make \
+    python3-pip \
+    bash \
+    chromium \
+    ffmpeg \
+    fonts-liberation \
+    fonts-dejavu-core \
+    ca-certificates \
+&& rm -rf /var/lib/apt/lists/*
+
+# Use the distro Chromium (honoured by ChromiumFrameCaptureService via PUPPETEER_EXECUTABLE_PATH)
+# and skip puppeteer's ~300 MB bundled-Chromium download during install.
+ENV PUPPETEER_SKIP_DOWNLOAD=1
+ENV PUPPETEER_EXECUTABLE_PATH=/usr/bin/chromium
+ENV NODE_ENV=production
+
+RUN npm --no-update-notifier --no-fund --global install pnpm@10.6.1
+
+# Unprivileged user — Chromium/FFmpeg renders must NOT run as root. /work is the per-render
+# mount (job.json in, artifact out); it's owned by the render user.
+RUN addgroup --system render \
+ && adduser --system --ingroup render --home /app --shell /usr/sbin/nologin render \
+ && mkdir -p /work \
+ && chown -R render:render /work
+
+WORKDIR /app
+COPY --chown=render:render . /app
+
+RUN pnpm install
+RUN NODE_OPTIONS="--max-old-space-size=4096" pnpm run build:backend
+
+USER render
+
+ENTRYPOINT ["node", "/app/dist/apps/backend/src/media-render-worker.js"]

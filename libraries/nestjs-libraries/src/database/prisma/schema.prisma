@@ -1,0 +1,1939 @@
+generator client {
+  provider = "prisma-client-js"
+  runtime  = "nodejs"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model Organization {
+  id                  String               @id @default(uuid())
+  name                String
+  description         String?
+  apiKey              String?
+  paymentId           String?
+  streakSince         DateTime?
+  createdAt           DateTime             @default(now())
+  updatedAt           DateTime             @updatedAt
+  setupCompletedAt    DateTime?            // null = onboarding wizard not finished; additive, nullable
+  allowTrial          Boolean              @default(false)
+  isTrailing          Boolean              @default(false)
+  shortlink           ShortLinkPreference  @default(ASK)
+  autoPost            AutoPost[]
+  Comments            Comments[]
+  credits             Credits[]
+  customers           Customer[]
+  errors              Errors[]
+  Integration         Integration[]
+  files               File[]
+  notifications       Notifications[]
+  notificationDigestQueues NotificationDigestQueue[]
+  plugs               Plugs[]
+  post                Post[]               @relation("organization")
+  socialComments      SocialComment[]
+  watchedAccounts     WatchedAccount[]
+  campaigns           Campaign[]
+  sets                Sets[]
+  signatures          Signatures[]
+  subscription        Subscription?
+  tags                Tags[]
+  usedCodes           UsedCodes[]
+  users               UserOrganization[]
+  webhooks            Webhooks[]
+  oauthApp            OAuthApp[]
+  oauthAuthorizations OAuthAuthorization[]
+  aiOrgProviderConfigs AIOrgProviderConfig[]
+  orgDefaultModels    OrgDefaultModel[]
+  aiBrandProfiles     AIBrandProfile[]
+  aiPromptTemplates   AIPromptTemplate[]
+  aiSpendLogs         AISpendLog[]     // only includes rows where organizationId IS NOT null (nullable FK means null-org rows are excluded from back-relation)
+  aiMediaJobs         AIMediaJob[]
+  aiPromptLibraryItems AIPromptLibraryItem[]
+  aiContentIndexes    AIContentIndex[]
+  multipartUploads    MultipartUpload[]
+  localStorageQuotaBytes BigInt @default(5368709120) // 5 GB default
+  fileFolders         FileFolder[]
+  storageProviders    StorageProviderConfig[]
+  orgProviderConfigs  OrgProviderConfiguration[]
+  mediaProviderConfigs MediaProviderConfig[]
+  contentPackConfigs   ContentPackConfig[]
+  activeContentPackIdentifier String? // null = free default; pointer to the active premium content pack identifier
+  auditLogs           AuditLog[]
+  orgShortLinkConfigs  OrgShortLinkConfig[]
+  shortLinks           ShortLink[]
+  shortLinkSnapshots   ShortLinkSnapshot[]
+  orgVpnConfigs        OrgVpnConfig[]
+  apiKeys              ApiKey[]
+  roles                AppRole[]
+  designs              Design[]
+  designTemplates      DesignTemplate[]
+  aiDesignerSessions   AiDesignerSession[]
+
+  @@index([apiKey])
+  @@index([streakSince])
+  @@index([paymentId])
+}
+
+model Tags {
+  id           String       @id @default(uuid())
+  name         String
+  color        String
+  orgId        String
+  deletedAt    DateTime?
+  createdAt    DateTime     @default(now())
+  updatedAt    DateTime     @updatedAt
+  organization Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  posts        TagsPosts[]
+
+  @@index([orgId])
+  @@index([deletedAt])
+}
+
+model TagsPosts {
+  postId    String
+  tagId     String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  post      Post     @relation(fields: [postId], references: [id])
+  tag       Tags     @relation(fields: [tagId], references: [id])
+
+  @@id([postId, tagId])
+  @@unique([postId, tagId])
+}
+
+model User {
+  id                    String               @id @default(uuid())
+  email                 String
+  password              String?
+  providerName          Provider
+  isSuperAdmin          Boolean              @default(false)
+  providerId            String?
+  createdAt             DateTime             @default(now())
+  updatedAt             DateTime             @updatedAt
+  lastReadNotifications DateTime             @default(now())
+  inviteId              String?
+  activated             Boolean              @default(true)
+  lastOnline            DateTime             @default(now())
+  ip                    String?
+  agent                 String?
+  tosAcceptedAt         DateTime?
+  tosVersion            String?
+  comments              Comments[]
+  organizations         UserOrganization[]
+  oauthAuthorizations   OAuthAuthorization[]
+  commentReads          PostCommentRead[]
+  assignedComments      SocialComment[]
+  aiSettingsAudits      AISettingsAudit[]
+  aiSpendLogs           AISpendLog[]
+  aiMediaJobs           AIMediaJob[]
+  apiKeys               ApiKey[]
+  profile               UserProfile?
+  sessions              Session[]
+  designs               Design[]
+  notificationReads     NotificationRead[]
+  notificationPreference NotificationPreference?
+  notificationDigestQueues NotificationDigestQueue[]
+  pushTokens            PushToken[]
+  aiDesignerSessions    AiDesignerSession[]
+
+  @@unique([email, providerName])
+  @@index([lastReadNotifications])
+  @@index([inviteId])
+  @@index([lastOnline])
+}
+
+model UsedCodes {
+  id           String       @id @default(uuid())
+  code         String
+  orgId        String
+  createdAt    DateTime     @default(now())
+  updatedAt    DateTime     @updatedAt
+  organization Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+
+  @@index([code])
+}
+
+model UserOrganization {
+  id             String       @id @default(uuid())
+  userId         String
+  organizationId String
+  disabled       Boolean      @default(false)
+  roleId         String?
+  roleRef        AppRole?     @relation(fields: [roleId], references: [id])
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  user           User         @relation(fields: [userId], references: [id])
+
+  @@unique([userId, organizationId])
+  @@index([disabled])
+  @@index([roleId])
+}
+
+
+
+model File {
+  id                 String              @id @default(uuid())
+  name               String
+  originalName       String?
+  path               String
+  organizationId     String
+  createdAt          DateTime            @default(now())
+  updatedAt          DateTime            @updatedAt
+  deletedAt          DateTime?
+  fileSize           Int                 @default(0)
+  type               String              @default("image")
+  thumbnail          String?
+  alt                String?
+  thumbnailTimestamp Int?
+  folderId           String?
+  tags               String?    // JSON: string[]
+  description        String?
+  metadata           Json?
+  folder             FileFolder? @relation(fields: [folderId], references: [id])
+  organization       Organization        @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  userProfiles       UserProfile[]
+  oauthApps          OAuthApp[]
+  designPreviews     Design[]
+  designTemplateThumbnails DesignTemplate[]
+  signatures         Signatures[]
+
+  @@index([name])
+  @@index([organizationId])
+  @@index([type])
+  @@index([folderId])
+}
+
+
+
+model Credits {
+  id             String       @id @default(uuid())
+  organizationId String
+  credits        Int
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+  type           String       @default("ai_images")
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@index([organizationId])
+  @@index([createdAt])
+}
+
+model Subscription {
+  id                String           @id @default(cuid())
+  organizationId    String           @unique
+  subscriptionTier  SubscriptionTier
+  identifier        String?
+  cancelAt          DateTime?
+  period            String          @default("MONTHLY")
+  totalChannels     Int
+  isLifetime        Boolean          @default(false)
+  gracePeriodEnd    DateTime?
+  extraStorageGb    Int              @default(0)
+  extraVideoExports Int              @default(0)
+  pendingTier       SubscriptionTier?
+  createdAt         DateTime         @default(now())
+  updatedAt         DateTime         @updatedAt
+  deletedAt         DateTime?
+  organization      Organization     @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@index([organizationId])
+  @@index([deletedAt])
+}
+
+model StripeEvent {
+  id          String   @id // the Stripe event.id
+  type        String
+  processedAt DateTime @default(now())
+}
+
+model Customer {
+  id           String        @id @default(uuid())
+  name         String
+  orgId        String
+  createdAt    DateTime      @default(now())
+  updatedAt    DateTime      @updatedAt
+  deletedAt    DateTime?
+  organization Organization  @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  integrations Integration[]
+
+  @@unique([orgId, name, deletedAt])
+}
+
+model Integration {
+  id                    String                 @id @default(cuid())
+  internalId            String
+  organizationId        String
+  name                  String
+  picture               String?
+  providerIdentifier    String
+  type                  String
+  token                 String
+  disabled              Boolean                @default(false)
+  tokenExpiration       DateTime?
+  refreshToken          String?
+  profile               String?
+  deletedAt             DateTime?
+  createdAt             DateTime               @default(now())
+  updatedAt             DateTime?              @updatedAt
+  inBetweenSteps        Boolean                @default(false)
+  refreshNeeded         Boolean                @default(false)
+  postingTimes          String                 @default("[{\"time\":120}, {\"time\":400}, {\"time\":700}]")
+  customInstanceDetails String?
+  customerId            String?
+  rootInternalId        String?
+  additionalSettings    String?                @default("[]")
+  providerConfigId      String?
+  providerVersion       String                 @default("v1")
+  customer              Customer?              @relation(fields: [customerId], references: [id])
+  organization          Organization           @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  providerConfig        OrgProviderConfiguration? @relation(fields: [providerConfigId], references: [id], onDelete: SetNull)
+  webhooks              Webhooks[]
+  plugs                 Plugs[]
+  posts                     Post[]
+  analyticsSnapshots        AnalyticsSnapshot[]
+  postAnalyticsSnapshots    PostAnalyticsSnapshot[]
+  analyticsAnomalies        AnalyticsAnomaly[]
+  analyticsAlertRules       AnalyticsAlertRule[]
+  socialComments            SocialComment[]
+
+  @@unique([organizationId, internalId])
+  @@index([rootInternalId])
+  @@index([organizationId])
+  @@index([providerIdentifier])
+  @@index([updatedAt])
+  @@index([createdAt])
+  @@index([deletedAt])
+  @@index([customerId])
+  @@index([inBetweenSteps])
+  @@index([refreshNeeded])
+  @@index([disabled])
+  @@index([providerConfigId])
+  @@index([organizationId, providerIdentifier, disabled])
+}
+
+model AnalyticsSnapshot {
+  id              String   @id @default(uuid())
+  organizationId  String
+  integrationId   String
+  integration     Integration @relation(fields: [integrationId], references: [id], onDelete: Cascade)
+  metric          String
+  value           Float
+  date            DateTime @db.Date
+  createdAt       DateTime @default(now())
+
+  @@unique([integrationId, metric, date])
+  @@index([organizationId, integrationId, date])
+  @@index([organizationId, metric, date])
+}
+
+model PostAnalyticsSnapshot {
+  id              String   @id @default(uuid())
+  organizationId  String
+  postId          String
+  post            Post     @relation(fields: [postId], references: [id], onDelete: Cascade)
+  integrationId   String
+  integration     Integration @relation(fields: [integrationId], references: [id], onDelete: Cascade)
+  metric          String
+  value           Float
+  date            DateTime @db.Date
+  createdAt       DateTime @default(now())
+
+  @@unique([postId, metric, date])
+  @@index([organizationId, postId, date])
+  @@index([integrationId, date])
+  @@index([organizationId, integrationId, date])
+}
+
+// Detected metric anomalies (spikes/drops) — a persisted ledger so Inngest
+// retries are idempotent (unique key), cooldown/dedup works, and the dashboard
+// Alerts strip has a source. Written by the daily sweep's detect-anomalies step.
+model AnalyticsAnomaly {
+  id              String   @id @default(uuid())
+  organizationId  String
+  integrationId   String
+  integration     Integration @relation(fields: [integrationId], references: [id], onDelete: Cascade)
+  metric          String
+  date            DateTime @db.Date
+  value           Float
+  baseline        Float
+  deviation       Float    // signed ratio
+  direction       String   // 'spike' | 'drop'
+  topPostId       String?  // root-cause hint (4.9): dominant post on the anomalous day
+  ruleId          String?  // 7.3: set when a user-defined AnalyticsAlertRule fired this row
+  notifiedAt      DateTime?
+  dismissedAt     DateTime?
+  createdAt       DateTime @default(now())
+
+  @@unique([integrationId, metric, date])
+  @@index([organizationId, createdAt])
+  @@index([ruleId])
+}
+
+// User-defined alert rules (7.3). integrationId null = any channel. Evaluated
+// daily inside the detect-anomalies step; a fired rule writes an AnalyticsAnomaly
+// row (with ruleId) reusing the same ledger/notification plumbing.
+model AnalyticsAlertRule {
+  id              String   @id @default(uuid())
+  organizationId  String
+  integrationId   String?  // null = any channel
+  // Cascade like AnalyticsAnomaly: deleting a channel deletes its scoped rules
+  // (a dangling rule would silently never fire; SetNull would silently widen
+  // the rule to every channel).
+  integration     Integration? @relation(fields: [integrationId], references: [id], onDelete: Cascade)
+  metric          String
+  comparator      String   // 'gte' | 'lte' | 'change_pct'
+  threshold       Float
+  direction       String   @default("up") // for change_pct: 'up' | 'down'
+  enabled         Boolean  @default(true)
+  lastFiredAt     DateTime?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@index([organizationId, enabled])
+  @@index([integrationId])
+}
+
+// Org-level public share dashboard config (7.6). One row per org; token is a
+// CSPRNG 64-hex string minted/rotated on demand (the campaign share pattern).
+model AnalyticsShare {
+  id              String   @id @default(uuid())
+  organizationId  String   @unique
+  token           String   @unique
+  enabled         Boolean  @default(false)
+  config          Json?    // { integrations?: string[], rangePreset?: string }
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+}
+
+// DEPRECATED (v3.6.0): ProviderConfiguration is replaced by OrgProviderConfiguration (above).
+// Keep model for backward-compatible db-push; drop after migration helper runs.
+model ProviderConfiguration {
+  id                String   @id @default(cuid())
+  identifier        String
+  version           String   @default("v1")
+  name              String
+  enabled           Boolean  @default(false)
+  clientId          String?
+  clientSecret      String?
+  redirectUri       String?
+  scopes            String?
+  additionalConfig  String?
+  setupInstructions String?
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  @@unique([identifier, version])
+  @@index([enabled])
+}
+
+// Platform-wide (super-admin curated) list of "featured" providers. A provider
+// present here is surfaced at the top of its domain's provider-configuration
+// list (below the tenant's configured providers, above the alphabetized rest),
+// ordered by sortOrder, with a gold-star "Featured" badge. Keyed by
+// (domain, providerId) because providerId is only unique within a domain;
+// version-agnostic (a provider is featured regardless of adapter version).
+model FeaturedProvider {
+  id         String   @id @default(cuid())
+  domain     String
+  providerId String
+  sortOrder  Int      @default(0)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  @@unique([domain, providerId])
+  @@index([domain, sortOrder])
+}
+
+model Signatures {
+  id             String       @id @default(uuid())
+  organizationId String
+  name           String?
+  content        String
+  autoAdd        Boolean
+  channels       String[]     @default([])
+  usageCount     Int          @default(0)
+  pictureId      String?
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+  deletedAt      DateTime?
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  picture        File?        @relation(fields: [pictureId], references: [id])
+
+  @@index([createdAt])
+  @@index([organizationId])
+  @@index([deletedAt])
+}
+
+model Comments {
+  id             String       @id @default(uuid())
+  content        String
+  organizationId String
+  postId         String
+  userId         String
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+  deletedAt      DateTime?
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  post           Post         @relation(fields: [postId], references: [id])
+  user           User         @relation(fields: [userId], references: [id])
+
+  @@index([createdAt])
+  @@index([organizationId])
+  @@index([userId])
+  @@index([postId])
+  @@index([deletedAt])
+}
+
+model Post {
+  id                         String                    @id @default(cuid())
+  state                      State                     @default(QUEUE)
+  publishDate                DateTime
+  organizationId             String
+  integrationId              String
+  content                    String
+  delay                      Int                       @default(0)
+  group                      String
+  title                      String?
+  description                String?
+  parentPostId               String?
+  releaseId                  String?
+  releaseURL                 String?
+  settings                   String?
+  image                      String?
+  creationMethod             CreationMethod            @default(UNKNOWN)
+  intervalInDays             Int?
+  error                      String?
+  createdAt                  DateTime                  @default(now())
+  updatedAt                  DateTime                  @updatedAt
+  deletedAt                  DateTime?
+  comments                   Comments[]
+  errors                     Errors[]
+  integration                Integration               @relation(fields: [integrationId], references: [id])
+  organization               Organization              @relation("organization", fields: [organizationId], references: [id], onDelete: Cascade)
+  parentPost                 Post?                     @relation("parentPostId", fields: [parentPostId], references: [id])
+  childrenPost               Post[]                    @relation("parentPostId")
+  tags                       TagsPosts[]
+  lastViews                  Float?
+  lastLikes                  Float?
+  lastComments               Float?
+  commentCount               Int                       @default(0)
+  campaignId                 String?
+  campaign                   Campaign?                 @relation(fields: [campaignId], references: [id])
+  approvalStatus             String?                   // campaign draft approval: pending|approved|rejected
+  approvedById               String?
+  approvedAt                 DateTime?
+  brandId                    String?
+  brand                      AIBrandProfile?          @relation(fields: [brandId], references: [id])
+  analyticsSnapshots         PostAnalyticsSnapshot[]
+  socialComments             SocialComment[]
+  commentReads               PostCommentRead[]
+
+  @@index([group])
+  @@index([deletedAt])
+  @@index([publishDate])
+  @@index([state])
+  @@index([organizationId])
+  @@index([parentPostId])
+  @@index([campaignId])
+  @@index([intervalInDays])
+  @@index([creationMethod])
+  @@index([createdAt])
+  @@index([updatedAt])
+  @@index([releaseURL])
+  @@index([integrationId])
+  @@index([commentCount])
+  @@index([organizationId, state, publishDate])
+  @@index([releaseId])
+  @@index([approvedById])
+  @@index([brandId])
+}
+
+model SocialComment {
+  id                      String    @id @default(uuid())
+  organizationId          String
+  postId                  String
+  integrationId           String
+  platformCommentId       String
+  parentPlatformCommentId String?
+  authorId                String
+  authorName              String
+  authorUsername          String?
+  authorPicture           String?
+  content                 String
+  likeCount               Int       @default(0)
+  replyCount              Int       @default(0)
+  likedByMe               Boolean   @default(false)
+  isOwn                   Boolean   @default(false)
+  platformCreatedAt       DateTime
+  raw                     String?
+  status                  String?   @default("needs_reply")
+  assigneeId              String?
+  createdAt               DateTime  @default(now())
+  updatedAt               DateTime  @updatedAt
+  deletedAt               DateTime?
+
+  post         Post         @relation(fields: [postId], references: [id], onDelete: Cascade)
+  integration  Integration  @relation(fields: [integrationId], references: [id], onDelete: Cascade)
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  assignee     User?        @relation(fields: [assigneeId], references: [id])
+
+  @@unique([integrationId, platformCommentId])
+  @@index([postId])
+  @@index([organizationId, postId])
+  @@index([parentPlatformCommentId])
+  @@index([platformCreatedAt])
+  @@index([deletedAt])
+  @@index([postId, deletedAt, isOwn, platformCreatedAt])
+  @@index([status])
+  @@index([assigneeId])
+  @@index([organizationId, platformCreatedAt])
+  @@index([authorId])
+}
+
+model PostCommentRead {
+  id            String   @id @default(uuid())
+  userId        String
+  postId        String
+  lastReadAt    DateTime
+  lastReadCount Int      @default(0)
+  updatedAt     DateTime @updatedAt
+
+  user  User @relation(fields: [userId], references: [id])
+  post  Post @relation(fields: [postId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, postId])
+  @@index([postId])
+  @@index([userId])
+}
+
+model Notifications {
+  id             String       @id @default(uuid())
+  organizationId String
+  type           String       @default("general")
+  title          String?
+  content        String
+  link           String?
+  metadata       Json?
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+  deletedAt      DateTime?
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  reads          NotificationRead[]
+
+  @@index([organizationId, createdAt])
+  @@index([organizationId, type])
+  @@index([deletedAt])
+}
+
+model NotificationRead {
+  id             String        @id @default(uuid())
+  notificationId String
+  userId         String
+  readAt         DateTime      @default(now())
+  notification   Notifications @relation(fields: [notificationId], references: [id], onDelete: Cascade)
+  user           User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([notificationId, userId])
+  @@index([userId, readAt])
+}
+
+model NotificationPreference {
+  id              String @id @default(uuid())
+  userId          String @unique
+  masters         Json   @default("{\"email\":true,\"push\":true,\"inApp\":true}")
+  categories      Json   @default("{\"post_published\":{\"email\":true,\"push\":false,\"inApp\":true},\"post_failed\":{\"email\":true,\"push\":true,\"inApp\":true},\"channels\":{\"email\":true,\"push\":true,\"inApp\":true},\"comments\":{\"email\":true,\"push\":false,\"inApp\":true},\"budget\":{\"email\":true,\"push\":false,\"inApp\":true},\"media\":{\"email\":false,\"push\":false,\"inApp\":true},\"announcements\":{\"email\":true,\"push\":false,\"inApp\":true},\"streak\":{\"email\":true,\"push\":false,\"inApp\":true}}")
+  digestFrequency String @default("instant")
+  user            User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+}
+
+model NotificationDigestQueue {
+  id             String   @id @default(uuid())
+  userId         String
+  organizationId String
+  title          String
+  message        String
+  html           String?
+  category       String
+  createdAt      DateTime @default(now())
+  user           User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@index([userId, createdAt])
+  @@index([organizationId, createdAt])
+}
+
+model PushToken {
+  id         String   @id @default(uuid())
+  userId     String
+  token      String   @unique
+  platform   String
+  deviceName String?
+  active     Boolean  @default(true)
+  lastUsedAt DateTime @default(now())
+  createdAt  DateTime @default(now())
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, active])
+}
+
+
+model Plugs {
+  id             String       @id @default(uuid())
+  organizationId String
+  plugFunction   String
+  data           String
+  integrationId  String
+  activated      Boolean      @default(true)
+  integration    Integration  @relation(fields: [integrationId], references: [id])
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@unique([plugFunction, integrationId])
+  @@index([organizationId])
+}
+
+model PopularPosts {
+  id        String   @id @default(uuid())
+  category  String
+  topic     String
+  content   String
+  hook      String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model Webhooks {
+  id             String        @id @default(uuid())
+  name           String
+  organizationId String
+  url            String
+  deletedAt      DateTime?
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime      @updatedAt
+  integrations   Integration[]
+  organization   Organization  @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@index([organizationId])
+  @@index([deletedAt])
+}
+
+model AutoPost {
+  id              String       @id @default(uuid())
+  organizationId  String
+  title           String
+  content         String?
+  onSlot          Boolean
+  syncLast        Boolean
+  url             String
+  lastUrl         String
+  active          Boolean
+  addPicture      Boolean
+  generateContent Boolean
+  integrations    String
+  deletedAt       DateTime?
+  createdAt       DateTime     @default(now())
+  updatedAt       DateTime     @updatedAt
+  organization    Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@index([deletedAt])
+  @@index([organizationId])
+}
+
+model Sets {
+  id             String       @id @default(uuid())
+  organizationId String
+  name           String
+  content        String
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@index([organizationId])
+}
+
+model Errors {
+  id             String       @id @default(uuid())
+  message        String
+  platform       String
+  organizationId String
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+  postId         String
+  body           String       @default("{}")
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  post           Post         @relation(fields: [postId], references: [id])
+
+  @@index([organizationId])
+  @@index([createdAt])
+  @@index([postId])
+}
+
+model Mentions {
+  name      String
+  username  String
+  platform  String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  image     String
+
+  @@id([name, username, platform, image])
+  @@index([createdAt])
+}
+
+model FileFolder {
+  id                String        @id @default(uuid())
+  organizationId    String
+  parentId          String?
+  name              String
+  description       String?
+  tags              String?       // JSON: string[]
+  color             String?
+  storageProviderId String?       // foreign key to StorageProviderConfig (mounted cloud root)
+  createdAt         DateTime      @default(now())
+  updatedAt         DateTime      @updatedAt
+  parent            FileFolder?   @relation("FolderTree", fields: [parentId], references: [id])
+  children          FileFolder[]  @relation("FolderTree")
+  files             File[]
+  storageProvider   StorageProviderConfig? @relation(fields: [storageProviderId], references: [id])
+  organization      Organization  @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@index([organizationId])
+  @@index([parentId])
+  @@index([storageProviderId])
+}
+
+// ── v3.6.0: Storage provider config (per-tenant) ──
+enum StorageProviderType {
+  LOCAL
+  S3
+  CLOUDFLARE_R2
+  BACKBLAZE_B2
+  IDRIVE_E2
+  WASABI
+  DIGITALOCEAN_SPACES
+  HETZNER
+  STORJ
+  SCALEWAY
+  VULTR
+  LINODE
+  S3_COMPATIBLE
+  MEDIALOCKER
+}
+
+model StorageProviderConfig {
+  id               String              @id @default(cuid())
+  organizationId   String
+  type             StorageProviderType
+  version          String              @default("v1")
+  name             String              // display name (e.g. "My R2 Bucket")
+  credentials      String?             // encrypted JSON; schema varies by type
+  region           String?
+  bucket           String?
+  endpoint         String?             // custom endpoint (R2, B2, IDrive)
+  publicUrl        String?             // base CDN/public URL
+  mounted          Boolean             @default(false)
+  quotaBytes       BigInt?             // null = org default
+  lastHealthCheck  DateTime?           // last successful testConnection
+  lastHealthError  String?             // error message from last failed testConnection
+  defaultFolderId  String?             // default folder for uploads to this provider
+  accountFingerprint String?
+  createdAt        DateTime            @default(now())
+  updatedAt        DateTime            @updatedAt
+  organization     Organization        @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  folders          FileFolder[]
+  mediaProviderConfigs MediaProviderConfig[]
+
+  @@unique([organizationId, accountFingerprint])
+  @@index([organizationId])
+  @@index([organizationId, mounted])
+  @@index([organizationId, type, version])
+  @@index([defaultFolderId])
+}
+
+// ── v3.6.0: Per-tenant channel provider OAuth credentials (replaces ProviderConfiguration) ──
+model OrgProviderConfiguration {
+  id               String       @id @default(cuid())
+  organizationId   String
+  identifier       String       // 'linkedin', 'x', 'discord', 'slack', etc.
+  name             String       // human readable, e.g. "LinkedIn"
+  enabled          Boolean      @default(false)
+  clientId         String?      // AES-GCM encrypted
+  clientSecret     String?      // AES-GCM encrypted
+  additionalConfig String?      // AES-GCM encrypted JSON (Discord bot token, Slack signing secret, etc.)
+  redirectUri      String?      // if null, platform default is used
+  scopes           String?
+  setupNotes       String?      // per-provider instructions for the admin
+  vpnSelection     String?      // JSON { enabled, identifier, regionId, vpnVersion } — optional VPN egress (not secret)
+  version          String       @default("v1")
+  createdAt        DateTime     @default(now())
+  updatedAt        DateTime     @updatedAt
+  organization     Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  integrations     Integration[]
+
+  // Many named credential sets per provider per org; the name disambiguates them.
+  @@unique([organizationId, identifier, name, version])
+  @@index([organizationId])
+  @@index([organizationId, identifier])
+}
+
+// ── v3.6.0: DB-backed audit log for credential & storage mutations ──
+model AuditLog {
+  id               String   @id @default(cuid())
+  organizationId   String
+  userId           String?
+  action           String   // 'create', 'update', 'delete', 'mount', 'unmount'
+  entity           String   // 'storage_provider', 'channel_provider'
+  entityId         String?  // provider config ID or provider identifier
+  entityName       String?  // display name
+  details          String?  // JSON-encoded context (never credentials)
+  createdAt        DateTime @default(now())
+  organization     Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@index([organizationId])
+  @@index([organizationId, createdAt(sort: Desc)])
+  @@index([organizationId, entity])
+}
+
+/// The underlying table does not contain a valid unique identifier and can therefore currently not be handled by Prisma Client.
+model mastra_ai_spans {
+  traceId      String
+  spanId       String
+  parentSpanId String?
+  name         String
+  scope        Json?
+  spanType     String
+  attributes   Json?
+  metadata     Json?
+  links        Json?
+  input        Json?
+  output       Json?
+  error        Json?
+  startedAt    DateTime  @db.Timestamp(6)
+  endedAt      DateTime? @db.Timestamp(6)
+  createdAt    DateTime  @db.Timestamp(6)
+  updatedAt    DateTime? @db.Timestamp(6)
+  isEvent      Boolean
+  startedAtZ   DateTime? @default(now()) @db.Timestamptz(6)
+  endedAtZ     DateTime? @default(now()) @db.Timestamptz(6)
+  createdAtZ   DateTime? @default(now()) @db.Timestamptz(6)
+  updatedAtZ   DateTime? @default(now()) @db.Timestamptz(6)
+
+  @@index([name], map: "public_mastra_ai_spans_name_idx")
+  @@index([parentSpanId, startedAt(sort: Desc)], map: "public_mastra_ai_spans_parentspanid_startedat_idx")
+  @@index([spanType, startedAt(sort: Desc)], map: "public_mastra_ai_spans_spantype_startedat_idx")
+  @@index([traceId, startedAt(sort: Desc)], map: "public_mastra_ai_spans_traceid_startedat_idx")
+  @@ignore
+}
+
+/// The underlying table does not contain a valid unique identifier and can therefore currently not be handled by Prisma Client.
+model mastra_evals {
+  input         String
+  output        String
+  result        Json
+  agent_name    String
+  metric_name   String
+  instructions  String
+  test_info     Json?
+  global_run_id String
+  run_id        String
+  created_at    DateTime  @db.Timestamp(6)
+  createdAt     DateTime? @db.Timestamp(6)
+  created_atZ   DateTime? @default(now()) @db.Timestamptz(6)
+  createdAtZ    DateTime? @default(now()) @db.Timestamptz(6)
+
+  @@index([agent_name, created_at(sort: Desc)], map: "public_mastra_evals_agent_name_created_at_idx")
+  @@ignore
+}
+
+model mastra_messages {
+  id         String    @id
+  thread_id  String
+  content    String
+  role       String
+  type       String
+  createdAt  DateTime  @db.Timestamp(6)
+  resourceId String?
+  createdAtZ DateTime? @default(now()) @db.Timestamptz(6)
+
+  @@index([thread_id, createdAt(sort: Desc)], map: "public_mastra_messages_thread_id_createdat_idx")
+}
+
+model mastra_resources {
+  id            String    @id
+  workingMemory String?
+  metadata      Json?
+  createdAt     DateTime  @db.Timestamp(6)
+  updatedAt     DateTime  @db.Timestamp(6)
+  createdAtZ    DateTime? @default(now()) @db.Timestamptz(6)
+  updatedAtZ    DateTime? @default(now()) @db.Timestamptz(6)
+}
+
+model mastra_scorers {
+  id                   String    @id
+  scorerId             String
+  traceId              String?
+  runId                String
+  scorer               Json
+  preprocessStepResult Json?
+  extractStepResult    Json?
+  analyzeStepResult    Json?
+  score                Float
+  reason               String?
+  metadata             Json?
+  preprocessPrompt     String?
+  extractPrompt        String?
+  generateScorePrompt  String?
+  generateReasonPrompt String?
+  analyzePrompt        String?
+  reasonPrompt         String?
+  input                Json
+  output               Json
+  additionalContext    Json?
+  runtimeContext       Json?
+  entityType           String?
+  entity               Json?
+  entityId             String?
+  source               String
+  resourceId           String?
+  threadId             String?
+  createdAt            DateTime  @db.Timestamp(6)
+  updatedAt            DateTime  @db.Timestamp(6)
+  createdAtZ           DateTime? @default(now()) @db.Timestamptz(6)
+  updatedAtZ           DateTime? @default(now()) @db.Timestamptz(6)
+  spanId               String?
+
+  @@index([traceId, spanId, createdAt(sort: Desc)], map: "public_mastra_scores_trace_id_span_id_created_at_idx")
+}
+
+model mastra_threads {
+  id         String    @id
+  resourceId String
+  title      String
+  metadata   String?
+  createdAt  DateTime  @db.Timestamp(6)
+  updatedAt  DateTime  @db.Timestamp(6)
+  createdAtZ DateTime? @default(now()) @db.Timestamptz(6)
+  updatedAtZ DateTime? @default(now()) @db.Timestamptz(6)
+
+  @@index([resourceId, createdAt(sort: Desc)], map: "public_mastra_threads_resourceid_createdat_idx")
+}
+
+model mastra_traces {
+  id           String    @id
+  parentSpanId String?
+  name         String
+  traceId      String
+  scope        String
+  kind         Int
+  attributes   Json?
+  status       Json?
+  events       Json?
+  links        Json?
+  other        String?
+  startTime    BigInt
+  endTime      BigInt
+  createdAt    DateTime  @db.Timestamp(6)
+  createdAtZ   DateTime? @default(now()) @db.Timestamptz(6)
+
+  @@index([name, startTime(sort: Desc)], map: "public_mastra_traces_name_starttime_idx")
+}
+
+model mastra_workflow_snapshot {
+  workflow_name String
+  run_id        String
+  resourceId    String?
+  snapshot      String
+  createdAt     DateTime  @db.Timestamp(6)
+  updatedAt     DateTime  @db.Timestamp(6)
+  createdAtZ    DateTime? @default(now()) @db.Timestamptz(6)
+  updatedAtZ    DateTime? @default(now()) @db.Timestamptz(6)
+
+  @@unique([workflow_name, run_id], map: "public_mastra_workflow_snapshot_workflow_name_run_id_key")
+}
+
+model OAuthApp {
+  id             String               @id @default(uuid())
+  organizationId String
+  name           String
+  description    String?
+  pictureId      String?
+  redirectUrl    String
+  clientId       String               @unique
+  clientSecret   String
+  createdAt      DateTime             @default(now())
+  updatedAt      DateTime             @updatedAt
+  deletedAt      DateTime?
+  organization   Organization         @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  picture        File?                @relation(fields: [pictureId], references: [id])
+  authorizations OAuthAuthorization[]
+
+  @@unique([organizationId, deletedAt])
+  @@index([clientId])
+  @@index([organizationId])
+  @@index([deletedAt])
+}
+
+model OAuthAuthorization {
+  id                    String       @id @default(uuid())
+  oauthAppId            String
+  userId                String
+  organizationId        String
+  accessToken           String?
+  authorizationCode     String?
+  codeExpiresAt         DateTime?
+  redirectUri           String?      // exact redirect URI used in authorize request
+  codeChallenge         String?      // PKCE: S256 hash of code_verifier
+  codeChallengeMethod   String?      // PKCE: "S256"
+  scope                 String?      // requested scopes
+  tokenExpiresAt        DateTime?    // access token expiry
+  refreshToken          String?      // refresh token (encrypted)
+  refreshTokenExpiresAt DateTime?    // refresh token expiry
+  revokedAt             DateTime?
+  createdAt             DateTime     @default(now())
+  updatedAt             DateTime     @updatedAt
+  oauthApp              OAuthApp     @relation(fields: [oauthAppId], references: [id])
+  user                  User         @relation(fields: [userId], references: [id])
+  organization          Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@unique([oauthAppId, userId, organizationId])
+  @@index([accessToken])
+  @@index([authorizationCode])
+  @@index([oauthAppId])
+  @@index([userId])
+  @@index([organizationId])
+  @@index([revokedAt])
+}
+
+// DEPRECATED (v3.6.0): AIProviderConfig is replaced by AIOrgProviderConfig (per-tenant, see below).
+// Keep model for backward-compatible db-push; drop after migration helper runs.
+model AIProviderConfig {
+  id            String   @id @default(cuid())
+  identifier    String
+  version       String   @default("v1")
+  enabled       Boolean  @default(false)
+  credentials   String?
+  defaultModel  String?
+  reasoningModel String?
+  extraConfig   String?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  @@unique([identifier, version])
+  @@index([enabled])
+}
+
+// DEPRECATED (v3.6.0): Active provider selection is now per-tenant via AIOrgProviderConfig.
+// Kept for scope models, fallback config, telemetry, and governance toggles.
+model AISystemSettings {
+  id                   String   @id
+  activeProvider       String?
+  activeModel          String?
+  scopeModels          String?
+  fallbackProvider     String?
+  fallbackImageProvider String?
+  guardrailSettings    String?
+  budgetSettings       String?
+  rateLimitSettings    String?
+  observability        String?
+  mcpSettings          String?
+  ragSettings          String?
+  cacheSettings        String?
+  routingSettings      String?
+  secretSettings       String?
+  updatedAt            DateTime @updatedAt
+
+  @@index([activeProvider])
+}
+
+// Cost-control spend ledger
+model AISpendLog {
+  id             String       @id @default(cuid())
+  organizationId String?
+  userId         String?
+  provider       String
+  model          String
+  scope          String
+  inputTokens    Int          @default(0)
+  outputTokens   Int          @default(0)
+  costUsd        Float        @default(0)
+  createdAt      DateTime     @default(now())
+
+  organization   Organization? @relation(fields: [organizationId], references: [id])
+  user           User?         @relation(fields: [userId], references: [id])
+
+  @@index([organizationId, scope, createdAt])
+  @@index([organizationId, createdAt])
+  @@index([provider, createdAt])
+  @@index([scope, createdAt])
+  @@index([userId, createdAt])
+}
+
+// Per-org provider config (BYOK scaffold — v3.4.0 stub, v3.5 active, v3.6 full)
+model AIOrgProviderConfig {
+  id             String       @id @default(cuid())
+  organizationId String
+  identifier     String
+  version        String       @default("v1")
+  enabled        Boolean      @default(false)
+  isActive       Boolean      @default(false) // only one can be active per org
+  credentials    String?
+  defaultModel   String?
+  reasoningModel String?
+  extraConfig    String?
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@unique([organizationId, identifier, version])
+  @@index([organizationId])
+  @@index([enabled])
+  @@index([organizationId, isActive])
+}
+
+model OrgDefaultModel {
+  id             String       @id @default(cuid())
+  organizationId String
+  domain         String       // 'ai' | 'media'
+  category       String       // e.g. 'high-reasoning' | 'text-to-image'
+  providerId     String       // resolved provider identifier (e.g. 'openai')
+  version        String       @default("v1")
+  model          String?      // model id; null allowed for action-only providers
+  settings       String?      // JSON: per-category tunables (non-secret)
+  updatedAt      DateTime     @updatedAt
+  createdAt      DateTime     @default(now())
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@unique([organizationId, domain, category])
+  @@index([organizationId, domain])
+}
+
+model OrgShortLinkConfig {
+  id             String   @id @default(cuid())
+  organizationId String
+  identifier     String
+  version        String   @default("v1")
+  enabled        Boolean  @default(false)
+  isActive       Boolean  @default(false)
+  credentials    String?
+  customDomain   String?
+  name           String?
+  accountFingerprint String?
+  extraConfig    String?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@unique([organizationId, identifier, version, accountFingerprint])
+  @@index([organizationId])
+  @@index([organizationId, isActive])
+}
+
+model ShortLink {
+  id             String   @id @default(cuid())
+  organizationId String
+  provider       String
+  providerVersion String  @default("v1")
+  shortUrl       String
+  originalUrl    String
+  providerLinkId String?
+  postId         String?
+  createdAt      DateTime @default(now())
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  snapshots      ShortLinkSnapshot[]
+
+  @@unique([organizationId, shortUrl])
+  @@index([organizationId, provider])
+  @@index([organizationId, createdAt])
+  @@index([postId])
+}
+
+model ShortLinkSnapshot {
+  id             String       @id @default(cuid())
+  organizationId String
+  shortLinkId    String
+  clicks         Float
+  date           DateTime     @db.Date
+  createdAt      DateTime     @default(now())
+  shortLink      ShortLink    @relation(fields: [shortLinkId], references: [id], onDelete: Cascade)
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@unique([shortLinkId, date])
+  @@index([organizationId, date])
+}
+
+// ── v3.8.8: Per-user API keys ──
+model ApiKey {
+  id             String       @id @default(uuid())
+  organizationId String
+  userId         String
+  name           String
+  hashedKey      String       @unique
+  prefix         String
+  lastUsedAt     DateTime?
+  expiresAt      DateTime?
+  revokedAt      DateTime?
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  user           User         @relation(fields: [userId], references: [id])
+
+  @@index([organizationId])
+  @@index([userId])
+  @@index([hashedKey])
+}
+
+// ── v3.8.10: App-level RBAC role. Org-scoped when organizationId is set; NULL = system/template ──
+model AppRole {
+  id             String           @id @default(uuid())
+  organizationId String?
+  key            String
+  name           String
+  description    String?
+  isSystem       Boolean          @default(false)
+  createdAt      DateTime         @default(now())
+  updatedAt      DateTime         @updatedAt
+  organization   Organization?    @relation(fields: [organizationId], references: [id])
+  permissions    AppRolePermission[]
+  memberships    UserOrganization[]
+
+  @@unique([organizationId, key])
+  @@index([organizationId])
+}
+
+// ── v3.8.10: Fine-grained capability ──
+model Permission {
+  id          String           @id @default(uuid())
+  resource    String
+  action      String
+  description String?
+  roles       AppRolePermission[]
+
+  @@unique([resource, action])
+  @@index([resource])
+}
+
+// ── v3.8.10: Join table for roles ↔ permissions ──
+model AppRolePermission {
+  roleId       String
+  permissionId String
+  role         AppRole    @relation(fields: [roleId], references: [id], onDelete: Cascade)
+  permission   Permission @relation(fields: [permissionId], references: [id], onDelete: Cascade)
+
+  @@id([roleId, permissionId])
+  @@index([permissionId])
+}
+
+// ── v3.8.10: 1:1 profile split from User ──
+model UserProfile {
+  id                String   @id @default(uuid())
+  userId            String   @unique
+  name              String?
+  lastName          String?
+  bio               String?
+  avatarUrl         String?
+  pictureId         String?
+  timezone          String?  // IANA tz
+  // DEPRECATED (Notifications V2): superseded by NotificationPreference.categories
+  // (post_published / post_failed / streak email toggles). Retained for one release
+  // as an expand-contract step so BackfillService can copy any opt-OUT into the new
+  // preference rows before these columns are dropped in the follow-up release.
+  // No runtime code reads these — do NOT add new readers.
+  sendSuccessEmails Boolean  @default(true)
+  sendFailureEmails Boolean  @default(true)
+  sendStreakEmails  Boolean  @default(true)
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+  user              User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  picture           File?    @relation(fields: [pictureId], references: [id])
+
+  @@index([pictureId])
+}
+
+// ── v3.8.10: Login session backing refresh-token rotation ──
+model Session {
+  id                String    @id @default(uuid())
+  userId            String
+  tokenHash         String    @unique
+  previousTokenHash String? // last rotated-out hash — reuse of it revokes the session
+  userAgent         String?
+  ip                String?
+  createdAt         DateTime  @default(now())
+  lastUsedAt        DateTime  @default(now())
+  expiresAt         DateTime
+  revokedAt         DateTime?
+  user              User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([expiresAt])
+  @@index([previousTokenHash])
+}
+
+// ── v3.8.10: Platform-wide login provider config ──
+model AuthProviderConfig {
+  id            String   @id @default(uuid())
+  provider      Provider
+  version       String   @default("v1")
+  enabled       Boolean  @default(false)
+  clientId      String?
+  clientSecret  String?
+  authUrl       String?
+  tokenUrl      String?
+  userInfoUrl   String?
+  scopes        String?  @default("openid profile email")
+  displayName   String?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  @@unique([provider, version])
+}
+
+// ── v3.8.10: Per-org media provider config ──
+model MediaProviderConfig {
+  id                  String         @id @default(uuid())
+  organizationId      String
+  identifier          String
+  version             String         @default("v1")
+  enabled             Boolean        @default(false)
+  isActive            Boolean        @default(false) // the org's Primary media provider (call-time default); only one per org
+  credentials         String?        // encrypted
+  storageProviderId   String?        // null = LOCAL
+  storageRootFolderId String?        // root folder in storage
+  accountFingerprint  String?
+  extraConfig         String?
+  createdAt           DateTime       @default(now())
+  updatedAt           DateTime       @updatedAt
+  organization        Organization   @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  storageProvider     StorageProviderConfig? @relation(fields: [storageProviderId], references: [id])
+
+  @@unique([organizationId, identifier, version])
+  @@index([organizationId])
+  @@index([organizationId, isActive])
+  @@index([storageProviderId])
+  @@index([storageRootFolderId])
+}
+
+// ── v3.9.0: Per-organization VPN provider config ──
+model OrgVpnConfig {
+  id              String   @id @default(uuid())
+  organizationId  String
+  identifier      String
+  version         String   @default("v1")
+  name            String?
+  credentials     String?  // encrypted JSON
+  regions         String?  // JSON string[] of enabled proxy-region ids
+  enabled         Boolean  @default(false)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  organization    Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@unique([organizationId, identifier, version])
+  @@index([organizationId])
+}
+
+// ── v3.x: Per-organization premium content pack (BYOK) ──
+model ContentPackConfig {
+  id             String   @id @default(cuid())
+  organizationId String
+  identifier     String   // e.g. 'magnific'
+  version        String   @default("v1")
+  credentials    String?  // encrypted JSON
+  extraConfig    Json?    // provider-specific non-secret config
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@unique([organizationId, identifier, version])
+  @@index([organizationId])
+}
+
+// Per-org brand voice / custom instructions + localization
+model AIBrandProfile {
+  id                String       @id @default(cuid())
+  organizationId    String
+  instructions      String?
+  language          String?
+  platformInstructions Json?    @default("{}")
+  // Per-language datasets: { [lang]: { instructions, overrides: { [channelId]: string } } }.
+  // `language` is the active language; instructions/platformInstructions mirror its profile.
+  languageProfiles  Json?        @default("{}")
+  enabled           Boolean      @default(true)
+  name              String?
+  isDefault         Boolean      @default(false)
+  slug              String?
+  logoFileIds       Json?        @default("[]")
+  palette           Json?        @default("[]")
+  fontFamilies      Json?        @default("[]")
+  customFonts       Json?        @default("[]")
+  introFileId       String?
+  outroFileId       String?
+  enforcement       Json?        @default("{}")
+  // Attached brand assets — [{ fileId, url, caption }] (logos, reference imagery, etc.).
+  assets            Json?        @default("[]")
+  createdAt         DateTime     @default(now())
+  updatedAt         DateTime     @updatedAt
+
+  organization      Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  posts             Post[]
+
+  @@index([organizationId])
+}
+
+// Editable prompt templates — NOT seeded; in-code PROMPT_CONSTANTS is canonical
+model AIPromptTemplate {
+  id             String        @id @default(cuid())
+  organizationId String?
+  globalKey      String?       @unique
+  key            String
+  content        String
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime      @updatedAt
+
+  organization   Organization? @relation(fields: [organizationId], references: [id])
+
+  @@unique([organizationId, key])
+  @@index([organizationId, key])
+  @@index([key])
+}
+
+// Append-only audit of AI-settings changes
+model AISettingsAudit {
+  id        String   @id @default(cuid())
+  userId    String?
+  action    String
+  detail    String?
+  createdAt DateTime @default(now())
+
+  user      User?    @relation(fields: [userId], references: [id])
+
+  @@index([createdAt])
+  @@index([userId, createdAt])
+  @@index([action, createdAt])
+}
+
+// Media pipeline jobs/artifacts
+model AIMediaJob {
+  id             String       @id @default(cuid())
+  organizationId String
+  userId         String?
+  provider       String
+  operation      String
+  status         String       @default("pending")
+  artifactUrl    String?
+  provenance     String?
+  costUsd        Float        @default(0)
+  creditType     String?
+  error          String?
+  folderId    String?
+  model       String?
+  // Provider-framework version pin. Renamed from the former `versionId String?`
+  // under db push (drop+create). Loss-free: no production caller ever populated
+  // `versionId` (it was an unused optional param) — verified NULL everywhere — so
+  // no backfill is required; existing rows default to "v1".
+  version     String       @default("v1")
+  inputJson   String?
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  user           User?        @relation(fields: [userId], references: [id])
+
+  @@index([organizationId, createdAt])
+  @@index([organizationId, status, createdAt])
+  // §6.2: the polling sweep selects pending/processing jobs across ALL orgs ordered by
+  // createdAt (no org filter), which the org-prefixed index above can't serve.
+  @@index([status, createdAt])
+  @@index([userId, createdAt])
+  @@index([provider, createdAt])
+  @@index([folderId])
+}
+
+// Org prompt library — user-created reusable prompts
+model AIPromptLibraryItem {
+  id             String       @id @default(cuid())
+  organizationId String
+  title          String
+  content        String
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@index([organizationId])
+  @@index([organizationId, createdAt])
+}
+
+// RAG index — metadata + BM25-text row for each indexed chunk.
+// Embeddings live in a SEPARATE out-of-band side table AIContentEmbedding
+// created via raw SQL (§3.6). NEVER store vector here — Prisma-managed
+// tables get DROPPED by prisma db push --accept-data-loss.
+model AIContentIndex {
+  id             String       @id @default(cuid())
+  organizationId String
+  sourceType     String
+  sourceId       String
+  chunkIndex     Int          @default(0)
+  contentHash    String
+  chunk          String?
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@unique([organizationId, sourceType, sourceId, chunkIndex])
+  @@index([organizationId])
+  @@index([organizationId, updatedAt])
+  @@index([organizationId, sourceType, sourceId])
+  @@index([contentHash])
+}
+
+enum State {
+  QUEUE
+  PUBLISHED
+  ERROR
+  DRAFT
+  PUBLISHING
+}
+
+enum SubscriptionTier {
+  STARTER
+  PRO
+  TEAM
+  AGENCY
+}
+
+enum Provider {
+  LOCAL
+  GITHUB
+  GOOGLE
+  FARCASTER
+  WALLET
+  GENERIC
+}
+
+enum CreationMethod {
+  UNKNOWN
+  WEB
+  MCP
+  API
+  AUTOPOST
+  CLI
+}
+
+enum ShortLinkPreference {
+  ASK
+  YES
+  NO
+}
+
+enum AnnouncementColor {
+  INFO
+  WARNING
+  ERROR
+}
+
+model Announcement {
+  id          String            @id @default(uuid())
+  title       String
+  description String
+  color       AnnouncementColor @default(INFO)
+  createdAt   DateTime          @default(now())
+}
+
+// Multipart upload ledger — tracks ownership and state of multipart uploads
+model MultipartUpload {
+  id             String   @id @default(uuid())
+  organizationId String
+  uploadId       String
+  key            String
+  fileName       String?
+  fileHash       String?
+  expectedMime   String?
+  totalSize      Int?
+  partCount      Int      @default(0)
+  state          String   @default("created") // created | uploading | completed | failed | aborted
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@unique([organizationId, uploadId])
+  @@index([organizationId, state])
+  @@index([uploadId])
+  @@index([organizationId, uploadId, state])
+}
+
+model WatchedAccount {
+  id             String   @id @default(uuid())
+  organizationId String
+  provider       String
+  handle         String
+  displayName    String?
+  enabled        Boolean  @default(true)
+  lastError      String?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+  deletedAt      DateTime?
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  metrics        WatchedAccountMetric[]
+
+  @@unique([organizationId, provider, handle])
+  @@index([organizationId])
+  @@index([deletedAt])
+}
+
+model WatchedAccountMetric {
+  id               String   @id @default(uuid())
+  watchedAccountId String
+  metric           String
+  value            Float
+  capturedAt       DateTime @default(now())
+  watchedAccount   WatchedAccount @relation(fields: [watchedAccountId], references: [id], onDelete: Cascade)
+
+  @@index([watchedAccountId, metric, capturedAt])
+}
+
+model Campaign {
+  id             String   @id @default(uuid())
+  organizationId String
+  name           String
+  color          String?
+  description    String?
+  startDate      DateTime?
+  endDate        DateTime?
+  archived       Boolean  @default(false)
+  createdById    String?              // user who created the campaign
+  client         String?              // optional: which client this campaign is for
+  project        String?              // optional: which project this campaign belongs to
+  tags           Json?                // optional: string[] of free-form tags
+  goals          Json?                // [{ metric, target }] targets shown vs progress on the dashboard
+  shareToken     String?  @unique     // CSPRNG token for the public read-only client report link
+  shareEnabled   Boolean  @default(false)
+  utmEnabled     Boolean  @default(false) // auto-append utm_campaign/source to links in this campaign's posts
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+  deletedAt      DateTime?
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  posts          Post[]
+  designs        Design[]
+  items          CampaignItem[]
+  notes          CampaignNote[]
+
+  @@index([organizationId])
+  @@index([deletedAt])
+  @@index([createdById])
+}
+
+// Jira-style internal "Discussion" thread on a campaign: org members post rich-HTML
+// notes (with embedded image/video) to talk about the campaign. Distinct from the
+// synced social SocialComment feature. One level of threading via parentId.
+model CampaignNote {
+  id             String    @id @default(uuid())
+  campaignId     String
+  organizationId String
+  createdById    String
+  parentId       String?               // one-level threaded replies (parent must be top-level)
+  content        String                // sanitized rich HTML
+  mentions       Json?                 // string[] of mentioned userIds
+  pinned         Boolean   @default(false)
+  resolvedAt     DateTime?
+  resolvedById   String?
+  editedAt       DateTime?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+  deletedAt      DateTime?
+  campaign       Campaign               @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+  parent         CampaignNote?          @relation("NoteThread", fields: [parentId], references: [id], onDelete: Cascade)
+  replies        CampaignNote[]         @relation("NoteThread")
+  reactions      CampaignNoteReaction[]
+
+  @@index([campaignId, deletedAt])
+  @@index([organizationId])
+  @@index([parentId])
+  @@index([createdById])
+  @@index([resolvedById])
+}
+
+model CampaignNoteReaction {
+  id        String       @id @default(uuid())
+  noteId    String
+  userId    String
+  emoji     String
+  createdAt DateTime     @default(now())
+  note      CampaignNote @relation(fields: [noteId], references: [id], onDelete: Cascade)
+
+  @@unique([noteId, userId, emoji])
+  @@index([noteId])
+}
+
+// Polymorphic association: tags a campaign onto any of the 8 non-post entity types
+// (posts use Post.campaignId). entityType+entityId identify the tagged row; no FK to
+// the source tables (orphans are skipped on read and reaped by the purge cron).
+model CampaignItem {
+  id             String             @id @default(uuid())
+  campaignId     String
+  organizationId String
+  entityType     CampaignEntityType
+  entityId       String
+  createdById    String?
+  createdAt      DateTime           @default(now())
+  campaign       Campaign           @relation(fields: [campaignId], references: [id])
+
+  @@unique([campaignId, entityType, entityId])
+  @@index([organizationId, entityType, entityId])
+  @@index([campaignId, entityType])
+}
+
+enum CampaignEntityType {
+  POST
+  INTEGRATION
+  ORG_VPN_CONFIG
+  AI_ORG_PROVIDER_CONFIG
+  AI_BRAND_PROFILE
+  STORAGE_PROVIDER_CONFIG
+  FILE
+  SETS
+  SIGNATURES
+}
+
+// Editable design documents — one per org-scoped design
+model Design {
+  id              String        @id @default(cuid())
+  organizationId  String
+  name            String
+  doc             Json
+  width           Int           @default(1080)
+  height          Int           @default(1080)
+  previewDataUrl  String?
+  previewFileId   String?
+  createdById     String
+  campaignId      String?
+  deletedAt       DateTime?
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+
+  organization    Organization  @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  createdBy       User          @relation(fields: [createdById], references: [id])
+  campaign        Campaign?     @relation(fields: [campaignId], references: [id])
+  previewFile     File?         @relation(fields: [previewFileId], references: [id])
+
+  @@index([organizationId])
+  @@index([createdById])
+  @@index([campaignId])
+  @@index([deletedAt])
+}
+
+// Design templates — system-seeded or org-saved — for the Templates panel
+model DesignTemplate {
+  id              String        @id @default(cuid())
+  organizationId  String?
+  name            String
+  category        String
+  doc             Json
+  thumbnailFileId String?
+  isSystem        Boolean       @default(false)
+  deletedAt       DateTime?
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+
+  organization    Organization? @relation(fields: [organizationId], references: [id])
+  thumbnailFile   File?         @relation(fields: [thumbnailFileId], references: [id])
+
+  @@index([organizationId])
+  @@index([category])
+  @@index([deletedAt])
+}
+
+// AI Designer sessions — persistent chat threads that drive headless design generation
+model AiDesignerSession {
+  id              String   @id @default(cuid())
+  organizationId  String
+  userId          String
+  mode            String   // 'chat' | 'prompt'
+  format          String   @default("image") // 'image' in this plan; 'video' reserved
+  config          Json     // { channels[], customSizes[], savePath, brandProfileId?, variants, referenceFileIds[] }
+  brief           Json?    // Design Brief (partial during intake, accepted after) + questionsAsked[]
+  state           String   @default("intake") // intake|planning|awaiting_plan|executing|delivered|revising
+  activeDesignIds Json?    // string[] of Design ids (one per variant)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @default(now()) @updatedAt
+
+  organization    Organization       @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  user            User               @relation(fields: [userId], references: [id])
+  messages        AiDesignerMessage[]
+
+  // (organizationId, userId) also serves organizationId-only lookups (left
+  // prefix); userId alone backs deleteUser teardown, updatedAt the prune cron.
+  @@index([organizationId, userId])
+  @@index([userId])
+  @@index([updatedAt])
+}
+
+// AI Designer messages — persisted chat + form/plan/media/progress payloads
+model AiDesignerMessage {
+  id        String   @id @default(cuid())
+  sessionId String
+  seq       Int      // per-session monotonic
+  role      String   // 'user' | 'assistant' | 'system' | 'agent'
+  agent     String?  // which sub-agent emitted it
+  kind      String   // 'text' | 'markdown' | 'form' | 'media' | 'progress' | 'plan'
+  replyTo   String?  // user reply targets this message id
+  content   Json     // renderer payload
+  createdAt DateTime @default(now())
+
+  session AiDesignerSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+
+  // The (sessionId, seq) unique also serves sessionId-only lookups (left prefix).
+  @@unique([sessionId, seq])
+}
+
+model EmailLog {
+  id                String    @id @default(cuid())
+  provider          String
+  toAddress         String
+  fromAddress       String
+  subject           String
+  replyTo           String?
+  providerMessageId String?
+  status            String    @default("queued")
+  error             String?
+  organizationId    String?
+  sentAt            DateTime  @default(now())
+  deliveredAt       DateTime?
+  updatedAt         DateTime  @updatedAt
+
+  @@index([provider, providerMessageId])
+  @@index([sentAt])
+  @@index([status])
+}
+
+model MigrationLedger {
+  id         String   @id @default(cuid())
+  key        String   @unique
+  appliedAt  DateTime @default(now())
+  durationMs Int?
+  note       String?
+
+  @@index([appliedAt])
+}
+
+// One row per Inngest cron function (upsert on functionId), recording the latest run's
+// timing/status for the /health endpoint. Bounded — never grows with run count.
+model InngestFunctionRun {
+  id          String    @id @default(cuid())
+  functionId  String    @unique
+  startedAt   DateTime  @default(now())
+  completedAt DateTime?
+  durationMs  Int?
+  status      String    @default("running") // running | completed | failed
+  error       String?
+  updatedAt   DateTime  @updatedAt
+
+  @@index([updatedAt])
+}

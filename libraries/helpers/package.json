@@ -1,0 +1,23 @@
+{
+  "name": "@gitroom/helpers",
+  "version": "1.0.0",
+  "private": true,
+  "dependencies": {
+    "bcrypt": "^6.0.0",
+    "dotenv": "^16.5.0",
+    "evp_bytestokey": "^1.0.3",
+    "isomorphic-dompurify": "^3.15.0",
+    "tldts": "^6.1.47",
+    "twitter-text": "^3.1.0",
+    "next-plausible": "^3.12.0"
+  },
+  "scripts": {
+    "test": "vitest run"
+  },
+  "devDependencies": {
+    "vitest": "^4.1.0"
+  },
+  "engines": {
+    "node": ">=22.12.0 <23.0.0"
+  }
+}

@@ -1,0 +1,4048 @@
+# WARNING: This file is manually maintained and likely out of date.
+# The NestJS Swagger decorators (@ApiTags, @ApiOperation, etc.) on the
+# controllers auto-generate the spec at build time. Regenerate it from
+# decorators rather than editing this file by hand. The stale
+# `/media/upload-server` and `/media/save-media` entries have been removed
+# (the routes now live under `/files/*`). New `/media/stock/*` routes are
+# also absent here.
+
+openapi: 3.1.0
+
+info:
+  title: Postmill API
+  version: 3.4.0
+  description: |
+    Comprehensive OpenAPI description of the **Postmill** backend (NestJS) as it exists in
+    `postmill-ai/postmill-app`.
+
+    Postmill schedules social-media and chat posts to 28+ channels, with a calendar, analytics, team
+    management, a media library, and — in this fork — a pluggable multi-provider **AI layer**,
+    **Analytics v2** persisted dashboards, **social comments** sync/moderation, admin-configurable
+    **channel OAuth credentials**, and an OAuth2 authorization-code provider.
+
+    ## Surfaces & authentication
+
+    There are three distinct authentication surfaces:
+
+    1. **Dashboard API** (the bulk of routes). Requires a Postmill user session JWT supplied either as
+       the `auth` **cookie** or the `auth` **request header**. The active organization is selected
+       with the `showorg` cookie/header. Many routes are further gated by RBAC policies
+       (`@CheckPolicies`) or by `isSuperAdmin`.
+    2. **Public integration API** (`/public/v1/*`). Requires an organization **API key** (or a
+       `pos_`-prefixed OAuth access token) in the `Authorization` header. Intended for
+       n8n/Zapier/CLI/3rd-party automation.
+    3. **Unauthenticated routes** — registration/login, the OAuth2 authorization/token endpoints,
+       Stripe & enterprise webhooks, the social-connect OAuth callback, health/monitor, and public
+       post previews. These validate their own signed payloads or are intentionally open.
+
+    > **Servers** are illustrative. The backend listens on `PORT` (default `3000`) and applies **no**
+    > global route prefix — controller paths are mounted at the root.
+
+    ## Rate limiting
+    A global throttler allows `API_LIMIT` (default **600**) requests/hour per client (Redis-backed,
+    proxy-aware). Some routes apply tighter per-route throttles (e.g. AI provider connection tests).
+
+  contact:
+    name: Postmill (gitroom)
+    url: https://postiz.com
+  license:
+    name: AGPL-3.0
+    url: https://www.gnu.org/licenses/agpl-3.0.en.html
+
+servers:
+  - url: http://localhost:3000
+    description: Local development
+  - url: https://api.postiz.example.com
+    description: Self-hosted production (example)
+
+tags:
+  - name: Auth
+    description: Registration, login, password reset, social OAuth login, activation.
+  - name: User
+    description: Current user, organizations, impersonation, API key rotation, subscription view.
+  - name: Posts
+    description: Create / schedule / list / delete posts, tags, drafts, AI generator (streaming).
+  - name: Social Comments
+    description: "Fork addition: synced platform comments, replies, likes, read-state, assignment."
+  - name: Integrations
+    description: Connect & manage social channels, plugs, mentions, provider tool invocation.
+  - name: Media
+    description: Media library, uploads (server / R2 multipart), AI image & video generation.
+  - name: Analytics V2
+    description: "Fork addition: persisted multi-channel analytics dashboard, exports."
+  - name: AI Settings
+    description: "Fork addition: super-admin AI provider, governance, scope, RAG & media config."
+  - name: AI User
+    description: "Fork addition: per-org AI utilities — repurpose, translate, variants, usage, brand."
+  - name: AI Moderation
+    description: "Fork addition: guardrail input/output moderation."
+  - name: Channel Config
+    description: "Fork addition: super-admin per-provider OAuth client credentials."
+  - name: Billing
+    description: Stripe subscriptions, trials, discounts, charges, lifetime codes.
+  - name: Settings
+    description: Team members and shortlink preference.
+  - name: Webhooks
+    description: "Org webhooks CRUD and test send. Event types: post.published, comment.new, comment.reply, analytics.snapshot_complete."
+  - name: Campaigns
+    description: "Fork addition: campaign folders grouping posts/assets/analytics/comments."
+  - name: Provider Capabilities
+    description: "Fork addition: per-provider capability matrix (comments / first-comment / poll / analytics)."
+  - name: Autopost
+    description: RSS/URL-driven automatic posting rules.
+  - name: Signatures
+    description: Post signatures.
+  - name: Sets
+    description: Reusable channel/setting sets.
+  - name: Notifications
+    description: In-app notifications.
+  - name: OAuth
+    description: OAuth2 authorization-code provider (authorize / approve / token).
+  - name: OAuth App
+    description: Manage your org's OAuth application (client) credentials.
+  - name: Approved Apps
+    description: User-granted OAuth app authorizations.
+  - name: Announcements
+    description: Product announcements (read public; write super-admin).
+  - name: Admin
+    description: Super-admin error log and stats.
+  - name: Copilot
+    description: CopilotKit / Mastra chat & agent runtime endpoints.
+  - name: Enterprise
+    description: Signed server-to-server enterprise/SaaS provisioning webhooks.
+  - name: Stripe
+    description: Stripe webhook receiver.
+  - name: Public
+    description: Unauthenticated public endpoints (post preview, tracking, media stream).
+  - name: Monitor
+    description: Health/queue probes.
+  - name: Public API
+    description: "API-key authenticated `/public/v1` automation API (n8n/Zapier/CLI)."
+
+security:
+  - cookieAuth: []
+  - authHeader: []
+
+paths:
+  # ===================================================================== ROOT / HEALTH
+  /:
+    get:
+      tags: [Monitor]
+      summary: Liveness root
+      operationId: getRoot
+      security: []
+      responses:
+        '200':
+          description: App is running
+          content:
+            text/plain:
+              schema: { type: string, example: App is running! }
+
+  /monitor/queue/{name}:
+    get:
+      tags: [Monitor]
+      summary: Queue health probe
+      operationId: getQueueHealth
+      security: []
+      parameters:
+        - $ref: '#/components/parameters/QueueName'
+      responses:
+        '200':
+          description: Queue health
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status: { type: string, example: success }
+                  message: { type: string, example: Queue posts is healthy. }
+
+  # ===================================================================== AUTH
+  /auth/can-register:
+    get:
+      tags: [Auth]
+      summary: Whether local registration is open
+      operationId: canRegister
+      security: []
+      responses:
+        '200':
+          description: Registration flag
+          content:
+            application/json:
+              schema:
+                type: object
+                properties: { register: { type: boolean } }
+              example: { register: true }
+
+  /auth/register:
+    post:
+      tags: [Auth]
+      summary: Register a new user / organization
+      operationId: register
+      security: []
+      description: |
+        On success sets the `auth` (and possibly `showorg`) cookie. If email activation is required
+        (`LOCAL` provider + an email provider configured) returns `{ activate: true }` and an
+        `activate: true` response header instead of a session.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/CreateOrgUserDto' }
+      responses:
+        '200':
+          description: Registered (session cookie set) or activation required
+          headers:
+            Set-Cookie: { $ref: '#/components/headers/SetAuthCookie' }
+            onboarding: { schema: { type: string }, description: Present (`true`) for a brand-new user }
+            activate: { schema: { type: string }, description: Present (`true`) when email activation is required }
+          content:
+            application/json:
+              schema:
+                oneOf:
+                  - type: object
+                    properties: { register: { type: boolean, example: true } }
+                  - type: object
+                    properties: { activate: { type: boolean, example: true } }
+        '400':
+          description: Registration failed (message in body)
+          content:
+            text/plain: { schema: { type: string } }
+
+  /auth/login:
+    post:
+      tags: [Auth]
+      summary: Log in
+      operationId: login
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/LoginUserDto' }
+      responses:
+        '200':
+          description: "Logged in; `auth` cookie set, `reload: true` header returned"
+          headers:
+            Set-Cookie: { $ref: '#/components/headers/SetAuthCookie' }
+            reload: { schema: { type: string }, description: '`true`' }
+          content:
+            application/json:
+              schema:
+                type: object
+                properties: { login: { type: boolean, example: true } }
+        '400':
+          description: Invalid credentials (message in body)
+          content:
+            text/plain: { schema: { type: string } }
+
+  /auth/forgot:
+    post:
+      tags: [Auth]
+      summary: Request a password-reset email
+      operationId: forgotPassword
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ForgotPasswordDto' }
+      responses:
+        '200':
+          description: Always returns a boolean (does not reveal account existence)
+          content:
+            application/json:
+              schema: { type: object, properties: { forgot: { type: boolean } } }
+
+  /auth/forgot-return:
+    post:
+      tags: [Auth]
+      summary: Complete a password reset
+      operationId: forgotReturn
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ForgotReturnPasswordDto' }
+      responses:
+        '200':
+          description: Reset result
+          content:
+            application/json:
+              schema: { type: object, properties: { reset: { type: boolean } } }
+
+  /auth/resend-activation:
+    post:
+      tags: [Auth]
+      summary: Resend the activation email
+      operationId: resendActivation
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ResendActivationDto' }
+      responses:
+        '200':
+          description: Result
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { type: boolean }
+                  message: { type: string }
+
+  /auth/activate:
+    post:
+      tags: [Auth]
+      summary: Activate an account with an emailed code
+      operationId: activate
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [code]
+              properties:
+                code: { type: string }
+                datafast_visitor_id: { type: string }
+      responses:
+        '200':
+          description: Activation result; sets `auth` cookie when successful
+          headers:
+            Set-Cookie: { $ref: '#/components/headers/SetAuthCookie' }
+          content:
+            application/json:
+              schema: { type: object, properties: { can: { type: boolean } } }
+
+  /auth/oauth/{provider}:
+    get:
+      tags: [Auth]
+      summary: Begin social OAuth login
+      operationId: oauthLink
+      security: []
+      parameters:
+        - $ref: '#/components/parameters/AuthProvider'
+      responses:
+        '200':
+          description: Provider-specific authorization URL / payload
+          content:
+            application/json:
+              schema: { type: object, additionalProperties: true }
+
+  /auth/oauth/{provider}/exists:
+    post:
+      tags: [Auth]
+      summary: Complete social OAuth login (exchange code)
+      operationId: oauthExists
+      security: []
+      parameters:
+        - $ref: '#/components/parameters/AuthProvider'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                code: { type: string }
+                redirect_uri: { type: string }
+      responses:
+        '200':
+          description: "Returns a one-time token, or sets the session cookie and returns `{ login: true }`"
+          headers:
+            Set-Cookie: { $ref: '#/components/headers/SetAuthCookie' }
+          content:
+            application/json:
+              schema:
+                oneOf:
+                  - type: object
+                    properties: { token: { type: string } }
+                  - type: object
+                    properties: { login: { type: boolean } }
+
+  /auth/oauth-mobile-callback:
+    get:
+      tags: [Auth]
+      summary: Mobile deep-link OAuth callback
+      operationId: oauthMobileCallback
+      security: []
+      parameters:
+        - { name: code, in: query, schema: { type: string } }
+        - { name: state, in: query, schema: { type: string } }
+      responses:
+        '302':
+          description: Redirects to the mobile app scheme (`MOBILE_APP_SCHEME`).
+
+  # ===================================================================== USER
+  /user/self:
+    get:
+      tags: [User]
+      summary: Current user + active organization context
+      operationId: getSelf
+      responses:
+        '200':
+          description: The authenticated user, enriched with org/tier/role
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/SelfUser' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+
+  /user/personal:
+    get:
+      tags: [User]
+      summary: Get personal profile
+      operationId: getPersonal
+      responses:
+        '200': { description: Personal info, content: { application/json: { schema: { type: object, additionalProperties: true } } } }
+    post:
+      tags: [User]
+      summary: Update personal profile
+      operationId: changePersonal
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/UserDetailDto' }
+      responses:
+        '200': { description: Updated, content: { application/json: { schema: { type: object, additionalProperties: true } } } }
+
+  /user/impersonate:
+    get:
+      tags: [User]
+      summary: Search users to impersonate (super-admin)
+      operationId: getImpersonate
+      parameters:
+        - { name: name, in: query, required: true, schema: { type: string } }
+      responses:
+        '200': { description: Matching users, content: { application/json: { schema: { type: array, items: { type: object, additionalProperties: true } } } } }
+        '400': { $ref: '#/components/responses/Unauthorized400' }
+    post:
+      tags: [User]
+      summary: Start impersonating a user (super-admin)
+      operationId: setImpersonate
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { type: object, required: [id], properties: { id: { type: string } } }
+      responses:
+        '200': { description: Impersonation cookie set }
+        '400': { $ref: '#/components/responses/Unauthorized400' }
+
+  /user/email-notifications:
+    get:
+      tags: [User]
+      summary: Get email notification preferences
+      operationId: getEmailNotifications
+      responses:
+        '200': { description: Preferences, content: { application/json: { schema: { $ref: '#/components/schemas/EmailNotificationsDto' } } } }
+    post:
+      tags: [User]
+      summary: Update email notification preferences
+      operationId: updateEmailNotifications
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/EmailNotificationsDto' }
+      responses:
+        '200': { description: Updated }
+
+  /user/api-key/rotate:
+    post:
+      tags: [User]
+      summary: Rotate the organization API key (admin)
+      operationId: rotateApiKey
+      responses:
+        '200':
+          description: New API key
+          content:
+            application/json:
+              schema: { type: object, additionalProperties: true }
+
+  /user/subscription:
+    get:
+      tags: [User]
+      summary: Current subscription (admin)
+      operationId: getSubscription
+      responses:
+        '200':
+          description: Subscription or undefined
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  subscription: { $ref: '#/components/schemas/Subscription' }
+
+  /user/subscription/tiers:
+    get:
+      tags: [User]
+      summary: Available subscription tiers/packages (admin)
+      operationId: getTiers
+      responses:
+        '200': { description: Packages, content: { application/json: { schema: { type: object, additionalProperties: true } } } }
+
+  /user/organizations:
+    get:
+      tags: [User]
+      summary: Organizations the user belongs to
+      operationId: getOrgs
+      responses:
+        '200': { description: Organizations, content: { application/json: { schema: { type: array, items: { $ref: '#/components/schemas/Organization' } } } } }
+
+  /user/join-org:
+    post:
+      tags: [User]
+      summary: Join an organization via signed invite cookie
+      operationId: joinOrg
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { type: object, properties: { org: { type: string, description: Signed org-invite token } } }
+      responses:
+        '200': { description: Joined org id (or null), content: { application/json: { schema: { type: object, properties: { id: { type: [string, 'null'] } } } } } }
+
+  /user/change-org:
+    post:
+      tags: [User]
+      summary: Switch the active organization
+      operationId: changeOrg
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { type: object, required: [id], properties: { id: { type: string } } }
+      responses:
+        '200': { description: '`showorg` cookie set' }
+
+  /user/logout:
+    post:
+      tags: [User]
+      summary: Log out (clears auth cookies)
+      operationId: logout
+      responses:
+        '200': { description: Logged out }
+
+  /user/agent-media-sso:
+    get:
+      tags: [User]
+      summary: Get an Agent Media SSO URL
+      operationId: agentMediaSso
+      responses:
+        '200': { description: SSO URL, content: { application/json: { schema: { type: object, properties: { url: { type: string } } } } } }
+        '400': { description: Agent Media SSO not configured }
+
+  /user/t:
+    post:
+      tags: [User]
+      summary: Track an analytics event (authenticated)
+      operationId: trackEventUser
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/TrackEventBody' }
+      responses:
+        '200': { description: Tracking id, content: { application/json: { schema: { type: object, properties: { track: { type: string } } } } } }
+
+  # ===================================================================== POSTS
+  /posts:
+    get:
+      tags: [Posts]
+      summary: Calendar posts within a date range
+      operationId: getPosts
+      parameters:
+        - { name: startDate, in: query, required: true, schema: { type: string, format: date-time } }
+        - { name: endDate, in: query, required: true, schema: { type: string, format: date-time } }
+        - { name: customer, in: query, required: false, schema: { type: string } }
+      responses:
+        '200':
+          description: Minified posts for the calendar
+          content:
+            application/json:
+              schema: { type: array, items: { $ref: '#/components/schemas/CalendarPost' } }
+    post:
+      tags: [Posts]
+      summary: Create / schedule / draft a post group
+      operationId: createPost
+      description: |
+        Server-side validates every channel's content & settings. Non-draft posts that fail
+        validation return a structured `400` (see `PostValidationError`).
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/CreatePostDto' }
+      responses:
+        '200':
+          description: Created post group
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/CreatePostResult' }
+        '400': { $ref: '#/components/responses/PostValidation' }
+        '406': { $ref: '#/components/responses/SubscriptionRequired' }
+
+  /posts/valid:
+    post:
+      tags: [Posts]
+      summary: Validate a post group without saving
+      operationId: validatePosts
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                posts: { type: array, items: { $ref: '#/components/schemas/Post' } }
+      responses:
+        '200': { description: Per-channel validation results, content: { application/json: { schema: { type: array, items: { $ref: '#/components/schemas/PostValidationItem' } } } } }
+
+  /posts/list:
+    get:
+      tags: [Posts]
+      summary: Paginated post list (table view)
+      operationId: getPostsList
+      parameters:
+        - { name: page, in: query, schema: { type: integer, minimum: 0, default: 0 } }
+        - { name: limit, in: query, schema: { type: integer, minimum: 1, maximum: 100, default: 20 } }
+        - { name: customer, in: query, schema: { type: string } }
+        - { name: state, in: query, schema: { type: string, enum: [all, scheduled, draft, published], default: all } }
+      responses:
+        '200': { description: Paginated posts (with stats & unread comment counts), content: { application/json: { schema: { type: object, additionalProperties: true } } } }
+
+  /posts/old:
+    get:
+      tags: [Posts]
+      summary: Posts older than a date
+      operationId: getOldPosts
+      parameters: [{ name: date, in: query, required: true, schema: { type: string, format: date-time } }]
+      responses:
+        '200': { description: Posts, content: { application/json: { schema: { type: array, items: { type: object, additionalProperties: true } } } } }
+
+  /posts/find-slot:
+    get:
+      tags: [Posts]
+      summary: Find the next free scheduling slot
+      operationId: findSlot
+      responses:
+        '200': { description: Next free datetime, content: { application/json: { schema: { type: object, properties: { date: { type: string, format: date-time } } } } } }
+
+  /posts/find-slot/{id}:
+    get:
+      tags: [Posts]
+      summary: Find the next free slot for a channel
+      operationId: findSlotIntegration
+      parameters: [{ $ref: '#/components/parameters/PathId' }]
+      responses:
+        '200': { description: Next free datetime, content: { application/json: { schema: { type: object, properties: { date: { type: string, format: date-time } } } } } }
+
+  /posts/should-shortlink:
+    post:
+      tags: [Posts]
+      summary: Whether content should be short-linked
+      operationId: shouldShortlink
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { type: object, properties: { messages: { type: array, items: { type: string } } } }
+      responses:
+        '200': { description: Result, content: { application/json: { schema: { type: object, properties: { ask: { type: boolean } } } } } }
+
+  /posts/separate-posts:
+    post:
+      tags: [Posts]
+      summary: Split content into multiple posts by length
+      operationId: separatePosts
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { type: object, properties: { content: { type: string }, len: { type: integer } } }
+      responses:
+        '200': { description: Split posts, content: { application/json: { schema: { type: object, additionalProperties: true } } } }
+
+  /posts/preflight:
+    post:
+      tags: [Posts]
+      summary: Content QA preflight (warnings + blocking validation, no post created)
+      operationId: postsPreflight
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: '#/components/schemas/CreatePostDto' } } }
+      responses:
+        '200': { description: Preflight results (warnings and blocking validation), content: { application/json: { schema: { type: object, additionalProperties: true } } } }
+
+  /posts/bulk:
+    post:
+      tags: [Posts]
+      summary: Bulk / CSV scheduling (per-row success/warnings/errors)
+      operationId: postsBulk
+      requestBody:
+        required: true
+        content: { application/json: { schema: { type: object, additionalProperties: true } } }
+      responses:
+        '200': { description: Per-row results, content: { application/json: { schema: { type: object, additionalProperties: true } } } }
+
+  /posts/tags:
+    get:
+      tags: [Posts]
+      summary: List tags
+      operationId: getTags
+      responses:
+        '200': { description: Tags, content: { application/json: { schema: { type: object, properties: { tags: { type: array, items: { $ref: '#/components/schemas/Tag' } } } } } } }
+    post:
+      tags: [Posts]
+      summary: Create a tag
+      operationId: createTag
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: '#/components/schemas/CreateTagDto' } } }
+      responses:
+        '200': { description: Created tag, content: { application/json: { schema: { $ref: '#/components/schemas/Tag' } } } }
+
+  /posts/tags/{id}:
+    put:
+      tags: [Posts]
+      summary: Edit a tag
+      operationId: editTag
+      parameters: [{ $ref: '#/components/parameters/PathId' }]
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: '#/components/schemas/CreateTagDto' } } }
+      responses: { '200': { description: Updated tag } }
+    delete:
+      tags: [Posts]
+      summary: Delete a tag
+      operationId: deleteTag
+      parameters: [{ $ref: '#/components/parameters/PathId' }]
+      responses: { '200': { description: Deleted } }
+
+  /posts/generator/draft:
+    post:
+      tags: [Posts]
+      summary: Persist AI-generated posts as drafts
+      operationId: generatePostsDraft
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: '#/components/schemas/CreateGeneratedPostsDto' } } }
+      responses: { '200': { description: Created drafts } }
+
+  /posts/generator:
+    post:
+      tags: [Posts]
+      summary: Stream an AI-generated post plan (NDJSON)
+      operationId: generatePosts
+      description: Streams newline-delimited JSON events from the LangGraph agent.
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: '#/components/schemas/GeneratorDto' } } }
+      responses:
+        '200':
+          description: NDJSON stream of agent events
+          content:
+            application/json:
+              schema: { type: string, description: One JSON object per line }
+
+  /posts/group/{group}:
+    get:
+      tags: [Posts]
+      summary: Get all posts in a group
+      operationId: getPostsByGroup
+      parameters: [{ $ref: '#/components/parameters/PathGroup' }]
+      responses: { '200': { description: Posts in group, content: { application/json: { schema: { type: array, items: { type: object, additionalProperties: true } } } } } }
+
+  /posts/group/{group}/debug-export:
+    get:
+      tags: [Posts]
+      summary: Debug export of a post group (super-admin)
+      operationId: getPostGroupDebugExport
+      parameters: [{ $ref: '#/components/parameters/PathGroup' }]
+      responses:
+        '200': { description: Debug export, content: { application/json: { schema: { type: object, additionalProperties: true } } } }
+        '403': { $ref: '#/components/responses/Forbidden' }
+
+  /posts/{id}:
+    get:
+      tags: [Posts]
+      summary: Get a single post
+      operationId: getPost
+      parameters: [{ $ref: '#/components/parameters/PathUuid' }]
+      responses: { '200': { description: Post, content: { application/json: { schema: { type: object, additionalProperties: true } } } } }
+
+  /posts/{id}/statistics:
+    get:
+      tags: [Posts]
+      summary: Get post statistics
+      operationId: getStatistics
+      parameters: [{ $ref: '#/components/parameters/PathId' }]
+      responses: { '200': { description: Statistics, content: { application/json: { schema: { type: object, additionalProperties: true } } } } }
+
+  /posts/{id}/missing:
+    get:
+      tags: [Posts]
+      summary: Get missing content for a post
+      operationId: getMissingContent
+      parameters: [{ $ref: '#/components/parameters/PathId' }]
+      responses: { '200': { description: Missing content, content: { application/json: { schema: { type: object, additionalProperties: true } } } } }
+
+  /posts/{id}/release-id:
+    put:
+      tags: [Posts]
+      summary: Set the external release id of a post
+      operationId: updateReleaseId
+      parameters: [{ $ref: '#/components/parameters/PathId' }]
+      requestBody:
+        required: true
+        content: { application/json: { schema: { type: object, properties: { releaseId: { type: string } } } } }
+      responses: { '200': { description: Updated } }
+
+  /posts/{id}/comments:
+    post:
+      tags: [Posts]
+      summary: Add an internal comment to a post
+      operationId: createComment
+      parameters: [{ $ref: '#/components/parameters/PathId' }]
+      requestBody:
+        required: true
+        content: { application/json: { schema: { type: object, properties: { comment: { type: string } } } } }
+      responses: { '200': { description: Created comment } }
+
+  /posts/{id}/date:
+    put:
+      tags: [Posts]
+      summary: Change a post's date (reschedule)
+      operationId: changeDate
+      parameters: [{ $ref: '#/components/parameters/PathId' }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                date: { type: string, format: date-time }
+                action: { type: string, enum: [schedule, update], default: schedule }
+      responses: { '200': { description: Updated } }
+
+  /posts/{group}:
+    delete:
+      tags: [Posts]
+      summary: Delete a post group
+      operationId: deletePost
+      parameters: [{ $ref: '#/components/parameters/PathGroup' }]
+      responses: { '200': { description: Deleted } }
+
+  # ===================================================================== SOCIAL COMMENTS (fork)
+  /posts/inbox:
+    get:
+      tags: [Social Comments]
+      summary: Cross-channel comment inbox
+      operationId: getCommentInbox
+      parameters:
+        - { name: status, in: query, schema: { type: string } }
+        - { name: assigneeId, in: query, schema: { type: string } }
+        - { name: cursor, in: query, schema: { type: string } }
+        - { name: unreadOnly, in: query, schema: { type: string, enum: ['true', 'false'] } }
+      responses: { '200': { description: Inbox page } }
+
+  /posts/inbox/unread-count:
+    get:
+      tags: [Social Comments]
+      summary: Org-wide inbox unread count
+      operationId: getInboxUnreadCount
+      responses: { '200': { description: Unread count } }
+
+  /posts/inbox/bulk-read:
+    post:
+      tags: [Social Comments]
+      summary: Bulk mark comments as read
+      operationId: inboxBulkRead
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { type: object, required: [commentIds], properties: { commentIds: { type: array, items: { type: string } } } }
+      responses: { '200': { description: Marked } }
+
+  /posts/{id}/social-comments:
+    get:
+      tags: [Social Comments]
+      summary: List synced platform comments for a post
+      operationId: getSocialComments
+      parameters:
+        - { $ref: '#/components/parameters/PathUuid' }
+        - { name: cursor, in: query, required: false, schema: { type: string } }
+      responses:
+        '200':
+          description: Paginated comments with per-user read state
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/SocialCommentsPage' }
+    post:
+      tags: [Social Comments]
+      summary: Reply to the post itself
+      operationId: addSocialComment
+      parameters: [{ $ref: '#/components/parameters/PathUuid' }]
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: '#/components/schemas/ReplyCommentDto' } } }
+      responses: { '200': { description: Reply result, content: { application/json: { schema: { type: object, additionalProperties: true } } } } }
+
+  /posts/{id}/social-comments/read:
+    post:
+      tags: [Social Comments]
+      summary: Mark all of a post's comments as read
+      operationId: markCommentsRead
+      parameters: [{ $ref: '#/components/parameters/PathUuid' }]
+      responses: { '200': { description: Marked read } }
+
+  /posts/{id}/social-comments/unread-count:
+    get:
+      tags: [Social Comments]
+      summary: Unread comment count for a post
+      operationId: getUnreadCommentCount
+      parameters: [{ $ref: '#/components/parameters/PathUuid' }]
+      responses:
+        '200': { description: Count, content: { application/json: { schema: { type: object, additionalProperties: true } } } }
+
+  /posts/{id}/social-comments/{commentId}/reply:
+    post:
+      tags: [Social Comments]
+      summary: Reply to a specific comment
+      operationId: replyToComment
+      parameters:
+        - { $ref: '#/components/parameters/PathUuid' }
+        - { $ref: '#/components/parameters/PathCommentId' }
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: '#/components/schemas/ReplyCommentDto' } } }
+      responses: { '200': { description: Reply result } }
+
+  /posts/{id}/social-comments/{commentId}/like:
+    post:
+      tags: [Social Comments]
+      summary: Like / unlike a comment
+      operationId: likeComment
+      parameters:
+        - { $ref: '#/components/parameters/PathUuid' }
+        - { $ref: '#/components/parameters/PathCommentId' }
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: '#/components/schemas/LikeCommentDto' } } }
+      responses: { '200': { description: Like result } }
+
+  /posts/{id}/social-comments/{commentId}/status:
+    post:
+      tags: [Social Comments]
+      summary: Update a comment's moderation status
+      operationId: updateCommentStatus
+      parameters:
+        - { $ref: '#/components/parameters/PathUuid' }
+        - { $ref: '#/components/parameters/PathCommentId' }
+      requestBody:
+        required: true
+        content: { application/json: { schema: { type: object, properties: { status: { type: string } } } } }
+      responses: { '200': { description: Updated } }
+
+  /posts/{id}/social-comments/{commentId}/assign:
+    post:
+      tags: [Social Comments]
+      summary: Assign a comment to a team member
+      operationId: assignComment
+      parameters:
+        - { $ref: '#/components/parameters/PathUuid' }
+        - { $ref: '#/components/parameters/PathCommentId' }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties: { assigneeId: { type: [string, 'null'], description: User id, or null to unassign } }
+      responses: { '200': { description: Assigned } }
+
+  # ===================================================================== CAMPAIGNS (fork)
+  /campaigns:
+    get:
+      tags: [Campaigns]
+      summary: List campaigns
+      operationId: listCampaigns
+      responses: { '200': { description: Campaigns } }
+    post:
+      tags: [Campaigns]
+      summary: Create a campaign
+      operationId: createCampaign
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name]
+              properties:
+                name: { type: string }
+                color: { type: string }
+                description: { type: string }
+                startDate: { type: string, format: date-time }
+                endDate: { type: string, format: date-time }
+      responses: { '200': { description: Created } }
+
+  /campaigns/{id}:
+    get:
+      tags: [Campaigns]
+      summary: Get a campaign
+      operationId: getCampaign
+      parameters: [{ $ref: '#/components/parameters/PathId' }]
+      responses: { '200': { description: Campaign } }
+    put:
+      tags: [Campaigns]
+      summary: Update a campaign
+      operationId: updateCampaign
+      parameters: [{ $ref: '#/components/parameters/PathId' }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                name: { type: string }
+                color: { type: string }
+                description: { type: string }
+                startDate: { type: string, format: date-time }
+                endDate: { type: string, format: date-time }
+                archived: { type: boolean }
+      responses: { '200': { description: Updated } }
+    delete:
+      tags: [Campaigns]
+      summary: Delete a campaign
+      operationId: deleteCampaign
+      parameters: [{ $ref: '#/components/parameters/PathId' }]
+      responses: { '200': { description: Deleted, content: { application/json: { schema: { $ref: '#/components/schemas/SuccessFlag' } } } } }
+
+  # ===================================================================== PROVIDER CAPABILITIES (fork)
+  /provider-capabilities:
+    get:
+      tags: [Provider Capabilities]
+      summary: Provider capability matrix (comments / first-comment / poll / analytics)
+      operationId: getProviderCapabilities
+      responses: { '200': { description: Capability matrix } }
+
+  /admin/provider-capabilities:
+    get:
+      tags: [Provider Capabilities]
+      summary: Provider capability matrix (super-admin)
+      operationId: getAdminProviderCapabilities
+      responses:
+        '200': { description: Capability matrix }
+        '400': { description: Unauthorized (not super-admin) }
+
+  # ===================================================================== INTEGRATIONS
+  /integrations:
+    get:
+      tags: [Integrations]
+      summary: List all available social providers (catalog)
+      operationId: listAllIntegrations
+      security: []
+      responses:
+        '200': { description: Provider catalog, content: { application/json: { schema: { type: array, items: { type: object, additionalProperties: true } } } } }
+    delete:
+      tags: [Integrations]
+      summary: Delete a connected channel (and its posts)
+      operationId: deleteChannel
+      requestBody:
+        required: true
+        content: { application/json: { schema: { type: object, required: [id], properties: { id: { type: string } } } } }
+      responses: { '200': { description: Deleted } }
+
+  /integrations/list:
+    get:
+      tags: [Integrations]
+      summary: List the org's connected channels
+      operationId: getIntegrationList
+      responses:
+        '200':
+          description: Connected channels
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  integrations: { type: array, items: { $ref: '#/components/schemas/IntegrationListItem' } }
+
+  /integrations/customers:
+    get:
+      tags: [Integrations]
+      summary: List customers/groups
+      operationId: getCustomers
+      responses: { '200': { description: Customers, content: { application/json: { schema: { type: array, items: { type: object, additionalProperties: true } } } } } }
+
+  /integrations/social/{integration}:
+    get:
+      tags: [Integrations]
+      summary: Begin connecting a social channel (get auth URL)
+      operationId: getIntegrationUrl
+      parameters:
+        - { name: integration, in: path, required: true, schema: { type: string } }
+        - { name: refresh, in: query, schema: { type: string } }
+        - { name: externalUrl, in: query, schema: { type: string } }
+        - { name: redirectUrl, in: query, schema: { type: string } }
+        - { name: onboarding, in: query, schema: { type: string } }
+      responses:
+        '200':
+          description: "Authorization URL (or `{ err: true }`)"
+          content:
+            application/json:
+              schema:
+                oneOf:
+                  - type: object
+                    properties: { url: { type: string } }
+                  - type: object
+                    properties: { err: { type: boolean } }
+
+  /integrations/provider/{id}/connect:
+    post:
+      tags: [Integrations]
+      summary: Save a provider page/account (two-step providers)
+      operationId: saveProviderPage
+      parameters: [{ $ref: '#/components/parameters/PathId' }]
+      requestBody:
+        required: true
+        content: { application/json: { schema: { type: object, additionalProperties: true } } }
+      responses: { '200': { description: Saved } }
+
+  /integrations/{identifier}/internal-plugs:
+    get:
+      tags: [Integrations]
+      summary: Get a provider's internal plugs
+      operationId: getInternalPlugs
+      parameters: [{ name: identifier, in: path, required: true, schema: { type: string } }]
+      responses: { '200': { description: Internal plugs, content: { application/json: { schema: { type: object, additionalProperties: true } } } } }
+
+  /integrations/{id}:
+    get:
+      tags: [Integrations]
+      summary: Get a single channel (for ordering)
+      operationId: getSingleIntegration
+      parameters:
+        - { $ref: '#/components/parameters/PathId' }
+        - { name: order, in: query, schema: { type: string } }
+      responses: { '200': { description: Channel, content: { application/json: { schema: { type: object, additionalProperties: true } } } } }
+
+  /integrations/{id}/group:
+    put:
+      tags: [Integrations]
+      summary: Update a channel's group
+      operationId: updateIntegrationGroup
+      parameters: [{ $ref: '#/components/parameters/PathId' }]
+      requestBody:
+        required: true
+        content: { application/json: { schema: { type: object, properties: { group: { type: string } } } } }
+      responses: { '200': { description: Updated } }
+
+  /integrations/{id}/customer-name:
+    put:
+      tags: [Integrations]
+      summary: Update a channel's customer name
+      operationId: updateOnCustomerName
+      parameters: [{ $ref: '#/components/parameters/PathId' }]
+      requestBody:
+        required: true
+        content: { application/json: { schema: { type: object, properties: { name: { type: string } } } } }
+      responses: { '200': { description: Updated } }
+
+  /integrations/{id}/settings:
+    post:
+      tags: [Integrations]
+      summary: Update provider additional settings (JSON string)
+      operationId: updateProviderSettings
+      parameters: [{ $ref: '#/components/parameters/PathId' }]
+      requestBody:
+        required: true
+        content: { application/json: { schema: { type: object, properties: { additionalSettings: { type: string } } } } }
+      responses: { '200': { description: Updated } }
+
+  /integrations/{id}/nickname:
+    post:
+      tags: [Integrations]
+      summary: Change a channel's nickname/picture
+      operationId: setNickname
+      parameters: [{ $ref: '#/components/parameters/PathId' }]
+      requestBody:
+        required: true
+        content: { application/json: { schema: { type: object, properties: { name: { type: string }, picture: { type: string } } } } }
+      responses: { '200': { description: Updated } }
+
+  /integrations/{id}/time:
+    post:
+      tags: [Integrations]
+      summary: Set posting times for a channel
+      operationId: setTime
+      parameters: [{ $ref: '#/components/parameters/PathId' }]
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: '#/components/schemas/IntegrationTimeDto' } } }
+      responses: { '200': { description: Updated } }
+
+  /integrations/mentions:
+    post:
+      tags: [Integrations]
+      summary: Resolve @-mentions for a channel
+      operationId: mentions
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: '#/components/schemas/IntegrationFunctionDto' } } }
+      responses: { '200': { description: Mention candidates, content: { application/json: { schema: { type: array, items: { type: object, additionalProperties: true } } } } } }
+
+  /integrations/function:
+    post:
+      tags: [Integrations]
+      summary: Invoke a provider function
+      operationId: functionIntegration
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: '#/components/schemas/IntegrationFunctionDto' } } }
+      responses: { '200': { description: Function result, content: { application/json: { schema: {} } } } }
+
+  /integrations/disable:
+    post:
+      tags: [Integrations]
+      summary: Disable a channel
+      operationId: disableChannel
+      requestBody:
+        required: true
+        content: { application/json: { schema: { type: object, required: [id], properties: { id: { type: string } } } } }
+      responses: { '200': { description: Disabled } }
+
+  /integrations/enable:
+    post:
+      tags: [Integrations]
+      summary: Enable a channel
+      operationId: enableChannel
+      requestBody:
+        required: true
+        content: { application/json: { schema: { type: object, required: [id], properties: { id: { type: string } } } } }
+      responses: { '200': { description: Enabled } }
+
+  /integrations/plug/list:
+    get:
+      tags: [Integrations]
+      summary: List all plugs
+      operationId: getPlugList
+      responses: { '200': { description: Plugs, content: { application/json: { schema: { type: object, properties: { plugs: { type: array, items: { type: object, additionalProperties: true } } } } } } } }
+
+  /integrations/{id}/plugs:
+    get:
+      tags: [Integrations]
+      summary: Get plugs for a channel
+      operationId: getPlugsByIntegrationId
+      parameters: [{ $ref: '#/components/parameters/PathId' }]
+      responses: { '200': { description: Plugs } }
+    post:
+      tags: [Integrations]
+      summary: Create/update a plug for a channel
+      operationId: postPlugsByIntegrationId
+      parameters: [{ $ref: '#/components/parameters/PathId' }]
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: '#/components/schemas/PlugDto' } } }
+      responses: { '200': { description: Saved } }
+
+  /integrations/plugs/{id}/activate:
+    put:
+      tags: [Integrations]
+      summary: Toggle a plug's activation
+      operationId: changePlugActivation
+      parameters: [{ $ref: '#/components/parameters/PathId' }]
+      requestBody:
+        required: true
+        content: { application/json: { schema: { type: object, properties: { status: { type: boolean } } } } }
+      responses: { '200': { description: Toggled } }
+
+  /integrations/telegram/updates:
+    get:
+      tags: [Integrations]
+      summary: Resolve a Telegram bot chat id
+      operationId: getTelegramUpdates
+      parameters:
+        - { name: word, in: query, required: true, schema: { type: string } }
+        - { name: id, in: query, schema: { type: integer } }
+      responses: { '200': { description: Bot id info, content: { application/json: { schema: { type: object, additionalProperties: true } } } } }
+
+  /integrations/moltbook/register:
+    post:
+      tags: [Integrations]
+      summary: Register a Moltbook agent
+      operationId: moltbookRegister
+      requestBody:
+        required: true
+        content: { application/json: { schema: { type: object, properties: { name: { type: string }, description: { type: string } } } } }
+      responses:
+        '200':
+          description: API key / claim url
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  apiKey: { type: string }
+                  claimUrl: { type: string }
+                  verificationCode: { type: string }
+                  error: { type: string }
+
+  /integrations/moltbook/status:
+    get:
+      tags: [Integrations]
+      summary: Check Moltbook agent claim status
+      operationId: moltbookStatus
+      parameters: [{ name: apiKey, in: query, required: true, schema: { type: string } }]
+      responses: { '200': { description: Claimed flag, content: { application/json: { schema: { type: object, properties: { claimed: { type: boolean } } } } } } }
+
+  /integrations/social-connect/{integration}:
+    post:
+      tags: [Integrations]
+      summary: OAuth callback — finalize a social connection
+      operationId: connectSocialMedia
+      security: []
+      description: Called by the front-end after the provider redirects back with `code`+`state`.
+      parameters: [{ name: integration, in: path, required: true, schema: { type: string } }]
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: '#/components/schemas/ConnectIntegrationDto' } } }
+      responses:
+        '200': { description: Connected channel (secrets stripped), content: { application/json: { schema: { type: object, additionalProperties: true } } } }
+        '412': { description: Trial restriction — channel previously connected }
+
+  /integrations/public/provider/{id}/connect:
+    post:
+      tags: [Integrations]
+      summary: OAuth callback — save provider page (no session)
+      operationId: saveProviderPagePublic
+      security: []
+      parameters: [{ $ref: '#/components/parameters/PathId' }]
+      requestBody:
+        required: true
+        content: { application/json: { schema: { type: object, properties: { state: { type: string } }, additionalProperties: true } } }
+      responses: { '200': { description: Saved } }
+
+  /integrations/extension-refresh:
+    post:
+      tags: [Integrations]
+      summary: Refresh a Chrome-extension channel's cookies
+      operationId: extensionRefresh
+      security: []
+      requestBody:
+        required: true
+        content: { application/json: { schema: { type: object, properties: { jwt: { type: string }, cookies: { type: string } } } } }
+      responses:
+        '200': { description: Result, content: { application/json: { schema: { type: object, properties: { success: { type: boolean }, reason: { type: string } } } } } }
+        '401': { description: Invalid token }
+        '404': { description: Integration not found }
+
+  # ===================================================================== MEDIA
+  /media:
+    get:
+      tags: [Media]
+      summary: List media library
+      operationId: getMedia
+      parameters:
+        - { name: page, in: query, required: true, schema: { type: integer } }
+        - { name: search, in: query, schema: { type: string } }
+      responses: { '200': { description: Media items, content: { application/json: { schema: { type: object, additionalProperties: true } } } } }
+
+  /media/{id}:
+    delete:
+      tags: [Media]
+      summary: Delete a media item
+      operationId: deleteMedia
+      parameters: [{ $ref: '#/components/parameters/PathId' }]
+      responses: { '200': { description: Deleted } }
+
+  /media/upload-simple:
+    post:
+      tags: [Media]
+      summary: Upload a file; optionally don't persist
+      operationId: uploadSimple
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              properties:
+                file: { type: string, format: binary }
+                preventSave: { type: string, enum: ['true', 'false'], default: 'false' }
+      responses: { '200': { description: 'Saved media or `{ path }`', content: { application/json: { schema: { type: object, additionalProperties: true } } } } }
+
+  /media/{endpoint}:
+    post:
+      tags: [Media]
+      summary: R2 multipart upload proxy
+      operationId: uploadFileR2
+      description: |
+        Proxies Cloudflare R2 multipart-upload sub-operations (e.g. `create-multipart-upload`,
+        `complete-multipart-upload`). On completion, also saves the file to the library.
+      parameters: [{ name: endpoint, in: path, required: true, schema: { type: string } }]
+      responses: { '200': { description: R2 response (and `saved` on completion) } }
+
+  /media/information:
+    post:
+      tags: [Media]
+      summary: Save media alt text / thumbnail metadata
+      operationId: saveMediaInformation
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: '#/components/schemas/SaveMediaInformationDto' } } }
+      responses: { '200': { description: Saved } }
+
+  /media/generate-image:
+    post:
+      tags: [Media]
+      summary: Generate an AI image (base64)
+      operationId: generateImage
+      requestBody:
+        required: true
+        content: { application/json: { schema: { type: object, properties: { prompt: { type: string } } } } }
+      responses:
+        '200':
+          description: Base64 PNG data URI (or false if out of credits)
+          content:
+            application/json:
+              schema:
+                oneOf:
+                  - type: object
+                    properties: { output: { type: string, example: 'data:image/png;base64,iVBORw0KG...' } }
+                  - type: boolean
+
+  /media/generate-image-with-prompt:
+    post:
+      tags: [Media]
+      summary: Generate an AI image and save it to the library
+      operationId: generateImageFromText
+      requestBody:
+        required: true
+        content: { application/json: { schema: { type: object, properties: { prompt: { type: string } } } } }
+      responses: { '200': { description: Saved media (or false), content: { application/json: { schema: { type: object, additionalProperties: true } } } } }
+
+  /media/remove-background:
+    post:
+      tags: [Media]
+      summary: Remove an image background (AI, credit-checked)
+      operationId: removeBackground
+      requestBody:
+        required: true
+        content: { application/json: { schema: { type: object, required: [imageUrl], properties: { imageUrl: { type: string, format: uri } } } } }
+      responses: { '200': { description: Resulting image URL, content: { application/json: { schema: { type: object, properties: { url: { type: string } } } } } } }
+
+  /media/inpaint:
+    post:
+      tags: [Media]
+      summary: Inpaint / magic-edit an image (AI, credit-checked)
+      operationId: inpaintImage
+      requestBody:
+        required: true
+        content: { application/json: { schema: { type: object, required: [imageUrl, maskUrl, prompt], properties: { imageUrl: { type: string, format: uri }, maskUrl: { type: string, format: uri }, prompt: { type: string } } } } }
+      responses: { '200': { description: Resulting image URL, content: { application/json: { schema: { type: object, properties: { url: { type: string } } } } } } }
+
+  /media/upscale:
+    post:
+      tags: [Media]
+      summary: Upscale an image (AI, credit-checked)
+      operationId: upscaleImage
+      requestBody:
+        required: true
+        content: { application/json: { schema: { type: object, required: [imageUrl], properties: { imageUrl: { type: string, format: uri }, scale: { type: number, minimum: 1, maximum: 8 } } } } }
+      responses: { '200': { description: Resulting image URL, content: { application/json: { schema: { type: object, properties: { url: { type: string } } } } } } }
+
+  /media/designs/render:
+    post:
+      tags: [Media]
+      summary: Server-side render a design document to PNG or PDF
+      operationId: renderDesign
+      requestBody:
+        required: true
+        content: { application/json: { schema: { type: object, required: [doc], properties: { doc: { type: object }, pageIndex: { type: integer }, format: { type: string, enum: [png, pdf] }, pixelRatio: { type: number }, transparent: { type: boolean } } } } }
+      responses: { '200': { description: Rendered image/pdf, content: { image/png: { schema: { type: string, format: binary } }, application/pdf: { schema: { type: string, format: binary } } } } }
+
+  /media/designs/bulk-generate:
+    post:
+      tags: [Media]
+      summary: Data-driven bulk design generation ({{variables}} per row)
+      operationId: bulkGenerateDesigns
+      requestBody:
+        required: true
+        content: { application/json: { schema: { type: object, required: [doc, rows], properties: { doc: { type: object }, rows: { type: array, items: { type: object, additionalProperties: { type: string } } }, format: { type: string } } } } }
+      responses: { '200': { description: Base64 image data URLs, content: { application/json: { schema: { type: object, properties: { images: { type: array, items: { type: string } }, truncated: { type: boolean }, totalRows: { type: integer } } } } } } }
+
+  /media/generate-video:
+    post:
+      tags: [Media]
+      summary: Generate a video
+      operationId: generateVideo
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: '#/components/schemas/VideoDto' } } }
+      responses: { '200': { description: Video generation result } }
+
+  /media/generate-video/{type}/allowed:
+    get:
+      tags: [Media]
+      summary: Whether a video type is allowed for the org
+      operationId: generateVideoAllowed
+      parameters: [{ name: type, in: path, required: true, schema: { type: string } }]
+      responses: { '200': { description: Allowed flag } }
+
+  /media/video-options:
+    get:
+      tags: [Media]
+      summary: List available video generators
+      operationId: getVideoOptions
+      responses: { '200': { description: Video options } }
+
+  /media/video/function:
+    post:
+      tags: [Media]
+      summary: Invoke a video-generator function
+      operationId: videoFunction
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: '#/components/schemas/VideoFunctionDto' } } }
+      responses: { '200': { description: Function result } }
+
+  # ===================================================================== ANALYTICS V2 (fork)
+  /analytics/v2/overview:
+    get:
+      tags: [Analytics V2]
+      summary: Cross-channel analytics overview
+      operationId: analyticsOverview
+      parameters:
+        - { $ref: '#/components/parameters/From' }
+        - { $ref: '#/components/parameters/To' }
+        - { $ref: '#/components/parameters/IntegrationsCsv' }
+        - { $ref: '#/components/parameters/Compare' }
+      responses:
+        '200': { description: Overview, content: { application/json: { schema: { type: object, additionalProperties: true } } } }
+        '400': { $ref: '#/components/responses/BadRequest' }
+
+  /analytics/v2/channel/{integrationId}:
+    get:
+      tags: [Analytics V2]
+      summary: Per-channel analytics
+      operationId: analyticsChannel
+      parameters:
+        - { name: integrationId, in: path, required: true, schema: { type: string } }
+        - { $ref: '#/components/parameters/From' }
+        - { $ref: '#/components/parameters/To' }
+        - { $ref: '#/components/parameters/Compare' }
+      responses: { '200': { description: Channel analytics, content: { application/json: { schema: { type: object, additionalProperties: true } } } } }
+
+  /analytics/v2/channel/{integrationId}/metric/{metric}:
+    get:
+      tags: [Analytics V2]
+      summary: Per-channel single-metric series
+      operationId: analyticsChannelMetric
+      parameters:
+        - { name: integrationId, in: path, required: true, schema: { type: string } }
+        - { name: metric, in: path, required: true, schema: { type: string } }
+        - { $ref: '#/components/parameters/From' }
+        - { $ref: '#/components/parameters/To' }
+        - { $ref: '#/components/parameters/Compare' }
+      responses: { '200': { description: Metric series } }
+
+  /analytics/v2/posts:
+    get:
+      tags: [Analytics V2]
+      summary: Post-level analytics, sortable & paginated
+      operationId: analyticsPosts
+      parameters:
+        - { $ref: '#/components/parameters/From' }
+        - { $ref: '#/components/parameters/To' }
+        - { $ref: '#/components/parameters/IntegrationsCsv' }
+        - { name: sort, in: query, schema: { type: string } }
+        - { name: dir, in: query, schema: { type: string, enum: [asc, desc], default: desc } }
+        - { name: page, in: query, schema: { type: integer, default: 1 } }
+        - { name: limit, in: query, schema: { type: integer, default: 25 } }
+      responses: { '200': { description: Paginated post analytics } }
+
+  /analytics/v2/post/{postId}:
+    get:
+      tags: [Analytics V2]
+      summary: Single-post analytics detail (KPI header)
+      operationId: analyticsPostDetail
+      parameters:
+        - { name: postId, in: path, required: true, schema: { type: string, format: uuid } }
+        - { name: date, in: query, schema: { type: string } }
+      responses: { '200': { description: Post detail with live fallback for un-snapshotted posts } }
+
+  /analytics/v2/metric/{metric}:
+    get:
+      tags: [Analytics V2]
+      summary: Cross-channel single-metric detail
+      operationId: analyticsMetric
+      parameters:
+        - { name: metric, in: path, required: true, schema: { type: string } }
+        - { $ref: '#/components/parameters/From' }
+        - { $ref: '#/components/parameters/To' }
+        - { $ref: '#/components/parameters/IntegrationsCsv' }
+        - { $ref: '#/components/parameters/Compare' }
+      responses: { '200': { description: Metric detail } }
+
+  /analytics/v2/day:
+    get:
+      tags: [Analytics V2]
+      summary: Single-day metric breakdown
+      operationId: analyticsDay
+      parameters:
+        - { name: date, in: query, required: true, schema: { type: string } }
+        - { name: metric, in: query, required: true, schema: { type: string } }
+        - { $ref: '#/components/parameters/IntegrationsCsv' }
+      responses: { '200': { description: Day detail } }
+
+  /analytics/v2/best-time:
+    get:
+      tags: [Analytics V2]
+      summary: Best-time-to-post heatmap (structured day×hour engagement)
+      operationId: analyticsBestTime
+      parameters:
+        - { $ref: '#/components/parameters/IntegrationsCsv' }
+      responses:
+        '200':
+          description: Heatmap data
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  heatmap:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        day: { type: integer }
+                        hour: { type: integer }
+                        engagement: { type: number }
+                        postCount: { type: integer }
+                        avgEngagement: { type: number }
+                  bestSlots:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        day: { type: integer }
+                        hour: { type: integer }
+                        avgEngagement: { type: number }
+
+  /analytics/v2/recommendations:
+    get:
+      tags: [Analytics V2]
+      summary: Prioritized analytics recommendations (action cards)
+      operationId: analyticsRecommendations
+      responses: { '200': { description: Recommendation cards } }
+
+  /analytics/v2/watchlist:
+    get:
+      tags: [Analytics V2]
+      summary: List watched (competitor) accounts
+      operationId: analyticsWatchlistList
+      responses: { '200': { description: Watched accounts } }
+    post:
+      tags: [Analytics V2]
+      summary: Add a watched account
+      operationId: analyticsWatchlistAdd
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [provider, handle]
+              properties:
+                provider: { type: string }
+                handle: { type: string }
+                displayName: { type: string }
+      responses: { '200': { description: Created } }
+
+  /analytics/v2/watchlist/{id}:
+    put:
+      tags: [Analytics V2]
+      summary: Update a watched account
+      operationId: analyticsWatchlistUpdate
+      parameters: [{ $ref: '#/components/parameters/PathId' }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                displayName: { type: string }
+                enabled: { type: boolean }
+      responses: { '200': { description: Updated } }
+    delete:
+      tags: [Analytics V2]
+      summary: Remove a watched account
+      operationId: analyticsWatchlistDelete
+      parameters: [{ $ref: '#/components/parameters/PathId' }]
+      responses: { '200': { description: Deleted, content: { application/json: { schema: { $ref: '#/components/schemas/SuccessFlag' } } } } }
+
+  /analytics/v2/export:
+    get:
+      tags: [Analytics V2]
+      summary: Export analytics as CSV or JSON
+      operationId: analyticsExport
+      parameters:
+        - { $ref: '#/components/parameters/From' }
+        - { $ref: '#/components/parameters/To' }
+        - { $ref: '#/components/parameters/IntegrationsCsv' }
+        - { name: format, in: query, schema: { type: string, enum: [json, csv], default: json } }
+        - { $ref: '#/components/parameters/Compare' }
+      responses:
+        '200':
+          description: Export file (attachment)
+          content:
+            application/json: { schema: { type: object, additionalProperties: true } }
+            text/csv: { schema: { type: string } }
+
+  # ===================================================================== AI SETTINGS (fork, super-admin)
+  /admin/ai-settings/providers:
+    get:
+      tags: [AI Settings]
+      summary: List AI providers + DB config status
+      operationId: aiListProviders
+      responses:
+        '200': { description: Providers, content: { application/json: { schema: { type: array, items: { $ref: '#/components/schemas/AiProviderSummary' } } } } }
+        '403': { $ref: '#/components/responses/Forbidden' }
+
+  /admin/ai-settings/providers/{identifier}:
+    get:
+      tags: [AI Settings]
+      summary: Get a provider's config + available models
+      operationId: aiGetProvider
+      parameters: [{ $ref: '#/components/parameters/PathIdentifier' }]
+      responses:
+        '200': { description: Provider config, content: { application/json: { schema: { $ref: '#/components/schemas/AiProviderDetail' } } } }
+        '400': { $ref: '#/components/responses/BadRequest' }
+    put:
+      tags: [AI Settings]
+      summary: Create/update a provider config
+      operationId: aiSaveProvider
+      parameters: [{ $ref: '#/components/parameters/PathIdentifier' }]
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: '#/components/schemas/AiSaveProviderDto' } } }
+      responses:
+        '200': { description: Saved, content: { application/json: { schema: { type: object, properties: { identifier: { type: string }, enabled: { type: boolean }, updatedAt: { type: string, format: date-time } } } } } }
+
+  /admin/ai-settings/providers/{identifier}/test:
+    post:
+      tags: [AI Settings]
+      summary: Test a provider's credentials
+      operationId: aiTestProvider
+      description: Rate-limited to 10/min. Uses stored credentials if none supplied.
+      parameters: [{ $ref: '#/components/parameters/PathIdentifier' }]
+      requestBody:
+        content: { application/json: { schema: { type: object, properties: { credentials: { type: object, additionalProperties: { type: string } } } } } }
+      responses:
+        '200': { description: Validation result, content: { application/json: { schema: { type: object, additionalProperties: true } } } }
+        '429': { $ref: '#/components/responses/RateLimited' }
+
+  /admin/ai-settings/providers/{id}/preview:
+    post:
+      tags: [AI Settings]
+      summary: Run a one-shot generation preview through a provider
+      operationId: aiPreviewProvider
+      parameters: [{ $ref: '#/components/parameters/PathId' }]
+      requestBody:
+        content: { application/json: { schema: { type: object, properties: { prompt: { type: string } } } } }
+      responses:
+        '200': { description: Generated text, content: { application/json: { schema: { type: object, properties: { text: { type: string } } } } } }
+        '429': { description: Budget exceeded }
+
+  /admin/ai-settings/active:
+    put:
+      tags: [AI Settings]
+      summary: Set the globally active provider+model
+      operationId: aiSetActive
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { type: object, required: [provider, model], properties: { provider: { type: string }, model: { type: string } } }
+      responses: { '200': { description: Active set } }
+
+  /admin/ai-settings/governance:
+    get:
+      tags: [AI Settings]
+      summary: Get governance settings
+      operationId: aiGetGovernance
+      responses: { '200': { description: Governance, content: { application/json: { schema: { $ref: '#/components/schemas/AiGovernance' } } } } }
+    put:
+      tags: [AI Settings]
+      summary: Update governance settings
+      operationId: aiSaveGovernance
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: '#/components/schemas/AiGovernance' } } }
+      responses: { '200': { description: Saved, content: { application/json: { schema: { $ref: '#/components/schemas/SuccessFlag' } } } } }
+
+  /admin/ai-settings/spend:
+    get:
+      tags: [AI Settings]
+      summary: List AI spend logs
+      operationId: aiGetSpend
+      parameters:
+        - { name: scope, in: query, schema: { type: string } }
+        - { name: provider, in: query, schema: { type: string } }
+        - { name: offset, in: query, schema: { type: integer } }
+        - { name: limit, in: query, schema: { type: integer, default: 100, maximum: 1000 } }
+      responses: { '200': { description: Spend logs, content: { application/json: { schema: { type: array, items: { $ref: '#/components/schemas/AiSpendLog' } } } } } }
+
+  /admin/ai-settings/spend/summary:
+    get:
+      tags: [AI Settings]
+      summary: Aggregate spend summary
+      operationId: aiGetSpendSummary
+      responses: { '200': { description: Summary, content: { application/json: { schema: { type: array, items: { type: object, additionalProperties: true } } } } } }
+
+  /admin/ai-settings/audit:
+    get:
+      tags: [AI Settings]
+      summary: AI settings audit log
+      operationId: aiGetAudit
+      responses: { '200': { description: Audit entries, content: { application/json: { schema: { type: array, items: { type: object, additionalProperties: true } } } } } }
+
+  /admin/ai-settings/health:
+    get:
+      tags: [AI Settings]
+      summary: AI configuration & provider health
+      operationId: aiGetHealth
+      responses:
+        '200':
+          description: Health
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  hasActiveConfig: { type: boolean }
+                  activeProvider: { type: [string, 'null'] }
+                  activeModel: { type: [string, 'null'] }
+                  envFallback: { type: boolean }
+                  providerHealth: { type: object, additionalProperties: true }
+
+  /admin/ai-settings/rag:
+    get:
+      tags: [AI Settings]
+      summary: Get RAG settings
+      operationId: aiGetRag
+      responses: { '200': { description: RAG settings } }
+    put:
+      tags: [AI Settings]
+      summary: Update RAG settings
+      operationId: aiSaveRag
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [ragSettings]
+              properties:
+                ragSettings:
+                  type: object
+                  properties: { vectorStore: { type: string, enum: [pgvector, qdrant] } }
+                  additionalProperties: true
+      responses:
+        '200': { description: Saved, content: { application/json: { schema: { $ref: '#/components/schemas/SuccessFlag' } } } }
+        '400': { description: Invalid vectorStore }
+
+  /admin/ai-settings/rag/backfill:
+    post:
+      tags: [AI Settings]
+      summary: Trigger a RAG backfill for an org
+      operationId: aiRagBackfill
+      requestBody:
+        required: true
+        content: { application/json: { schema: { type: object, required: [organizationId], properties: { organizationId: { type: string } } } } }
+      responses:
+        '200': { description: Backfill result (status completed/failed), content: { application/json: { schema: { type: object, additionalProperties: true } } } }
+
+  /admin/ai-settings/media-providers:
+    get:
+      tags: [AI Settings]
+      summary: List media-capable AI providers
+      operationId: aiListMediaProviders
+      responses: { '200': { description: Media providers, content: { application/json: { schema: { type: array, items: { type: object, additionalProperties: true } } } } } }
+
+  /admin/ai-settings/media-providers/{id}:
+    put:
+      tags: [AI Settings]
+      summary: Configure a media provider's operations
+      operationId: aiSaveMediaProvider
+      parameters: [{ $ref: '#/components/parameters/PathId' }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                enabled: { type: boolean }
+                operations: { type: array, items: { type: string } }
+                c2paAvailable: { type: boolean }
+      responses: { '200': { description: Saved, content: { application/json: { schema: { type: object, additionalProperties: true } } } } }
+
+  /admin/ai-settings/secret-settings:
+    put:
+      tags: [AI Settings]
+      summary: Merge encrypted secret settings
+      operationId: aiUpdateSecretSettings
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [secretSettings]
+              properties: { secretSettings: { type: object, additionalProperties: { type: string } } }
+      responses: { '200': { description: Saved, content: { application/json: { schema: { $ref: '#/components/schemas/SuccessFlag' } } } } }
+
+  /admin/ai-settings/org-providers/{orgId}:
+    get:
+      tags: [AI Settings]
+      summary: List per-org provider configs
+      operationId: aiListOrgProviders
+      parameters: [{ name: orgId, in: path, required: true, schema: { type: string } }]
+      responses: { '200': { description: Org provider configs, content: { application/json: { schema: { type: array, items: { type: object, additionalProperties: true } } } } } }
+
+  /admin/ai-settings/org-providers/{orgId}/{identifier}:
+    put:
+      tags: [AI Settings]
+      summary: Upsert a per-org provider config
+      operationId: aiUpsertOrgProvider
+      parameters:
+        - { name: orgId, in: path, required: true, schema: { type: string } }
+        - { $ref: '#/components/parameters/PathIdentifier' }
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: '#/components/schemas/AiSaveProviderDto' } } }
+      responses: { '200': { description: Saved } }
+    delete:
+      tags: [AI Settings]
+      summary: Delete a per-org provider config
+      operationId: aiDeleteOrgProvider
+      parameters:
+        - { name: orgId, in: path, required: true, schema: { type: string } }
+        - { $ref: '#/components/parameters/PathIdentifier' }
+      responses: { '200': { description: Deleted, content: { application/json: { schema: { $ref: '#/components/schemas/SuccessFlag' } } } } }
+
+  # ===================================================================== AI USER (fork)
+  /ai/usage:
+    get:
+      tags: [AI User]
+      summary: Org AI usage & budget remaining
+      operationId: aiUsage
+      responses:
+        '200':
+          description: Usage
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  byScope: { type: array, items: { type: object, additionalProperties: true } }
+                  totalSpendUsd: { type: number }
+                  budget: { type: [object, 'null'], additionalProperties: true }
+
+  /ai/brand-profile:
+    get:
+      tags: [AI User]
+      summary: Get the org brand profile
+      operationId: aiGetBrandProfile
+      responses: { '200': { description: Brand profile } }
+    put:
+      tags: [AI User]
+      summary: Upsert the org brand profile
+      operationId: aiUpsertBrandProfile
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: '#/components/schemas/BrandProfileDto' } } }
+      responses: { '200': { description: Saved } }
+
+  /ai/prompt-templates:
+    get:
+      tags: [AI User]
+      summary: List prompt templates
+      operationId: aiGetPromptTemplates
+      responses: { '200': { description: Templates } }
+    put:
+      tags: [AI User]
+      summary: Upsert a prompt template
+      operationId: aiUpsertPromptTemplate
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { type: object, required: [key, content], properties: { key: { type: string }, content: { type: string } } }
+      responses: { '200': { description: Saved } }
+
+  /ai/prompt-templates/{key}:
+    delete:
+      tags: [AI User]
+      summary: Delete a prompt template
+      operationId: aiDeletePromptTemplate
+      parameters: [{ name: key, in: path, required: true, schema: { type: string } }]
+      responses: { '200': { description: Deleted, content: { application/json: { schema: { $ref: '#/components/schemas/SuccessFlag' } } } } }
+
+  /ai/prompt-library:
+    get:
+      tags: [AI User]
+      summary: List prompt-library items
+      operationId: aiGetPromptLibrary
+      responses: { '200': { description: Items } }
+    post:
+      tags: [AI User]
+      summary: Create a prompt-library item
+      operationId: aiCreatePromptLibraryItem
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { type: object, required: [title, content], properties: { title: { type: string }, content: { type: string } } }
+      responses: { '200': { description: Created } }
+
+  /ai/prompt-library/{id}:
+    delete:
+      tags: [AI User]
+      summary: Delete a prompt-library item
+      operationId: aiDeletePromptLibraryItem
+      parameters: [{ $ref: '#/components/parameters/PathId' }]
+      responses: { '200': { description: Deleted, content: { application/json: { schema: { $ref: '#/components/schemas/SuccessFlag' } } } } }
+
+  /ai/media:
+    post:
+      tags: [AI User]
+      summary: Create an AI media (image) job
+      operationId: aiCreateMediaJob
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { type: object, required: [operation, prompt], properties: { operation: { type: string }, prompt: { type: string } } }
+      responses:
+        '200': { description: Generated media url, content: { application/json: { schema: { type: object, properties: { url: { type: string } } } } } }
+        '503': { description: Media pipeline not wired }
+
+  /ai/search:
+    get:
+      tags: [AI User]
+      summary: Semantic (RAG) search over org content
+      operationId: aiSearch
+      parameters:
+        - { name: query, in: query, required: true, schema: { type: string } }
+        - { name: limit, in: query, schema: { type: integer, minimum: 1, default: 10 } }
+      responses:
+        '200': { description: Search results }
+        '503': { description: Semantic search unavailable }
+
+  /ai/hashtags:
+    post:
+      tags: [AI User]
+      summary: Generate platform-aware hashtags
+      operationId: aiHashtags
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { type: object, required: [content, platform], properties: { content: { type: string }, platform: { type: string } } }
+      responses:
+        '200': { description: Generated hashtags, content: { application/json: { schema: { type: object, properties: { hashtags: { type: array, items: { type: string } } } } } } }
+
+  /ai/comment-reply:
+    post:
+      tags: [AI User]
+      summary: Draft an AI reply, or analyze sentiment / summarize a comment thread
+      operationId: aiCommentReply
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [commentId, postContent]
+              properties:
+                commentId: { type: string }
+                postContent: { type: string }
+                action: { type: string, enum: [reply, sentiment, summary], default: reply }
+      responses:
+        '200':
+          description: "Reply suggestion (action=reply), per-comment sentiment (action=sentiment), or thread summary (action=summary)"
+          content:
+            application/json: { schema: { type: object, additionalProperties: true } }
+
+  /ai/compliance:
+    post:
+      tags: [AI User]
+      summary: Check content compliance & brand safety
+      operationId: aiCompliance
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { type: object, required: [content], properties: { content: { type: string }, platform: { type: string } } }
+      responses:
+        '200':
+          description: Compliance result
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  passed: { type: boolean }
+                  violations:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        type: { type: string }
+                        severity: { type: string, enum: [high, medium, low] }
+                        description: { type: string }
+                  suggestions: { type: array, items: { type: string } }
+
+  /ai/brand-memory/index:
+    post:
+      tags: [AI User]
+      summary: Index top-performing posts into RAG brand memory
+      operationId: aiBrandMemoryIndex
+      responses: { '200': { description: Index result } }
+
+  /ai/brand-memory/search:
+    post:
+      tags: [AI User]
+      summary: Search brand memory
+      operationId: aiBrandMemorySearch
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { type: object, required: [prompt], properties: { prompt: { type: string } } }
+      responses:
+        '200': { description: Hits, content: { application/json: { schema: { type: object, properties: { hits: { type: array, items: { type: object, additionalProperties: true } } } } } } }
+
+  /ai/best-time:
+    post:
+      tags: [AI User]
+      summary: AI best-time-to-post suggestion
+      operationId: aiBestTime
+      responses:
+        '200':
+          description: Suggestion
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  suggestion: { type: string }
+                  hasAnalyticsData: { type: boolean }
+
+  /ai/repurpose:
+    post:
+      tags: [AI User]
+      summary: Repurpose content for multiple platforms
+      operationId: aiRepurpose
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [content, platforms]
+              properties:
+                content: { type: string }
+                platforms: { type: array, items: { type: string } }
+      responses:
+        '200':
+          description: Per-platform repurposed content
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  platforms:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        platform: { type: string }
+                        content: { type: string }
+                        note: { type: string }
+
+  /ai/translate:
+    post:
+      tags: [AI User]
+      summary: Translate content into locales
+      operationId: aiTranslate
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [content, locales]
+              properties:
+                content: { type: string }
+                locales: { type: array, items: { type: string } }
+      responses:
+        '200':
+          description: Translations
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  translations:
+                    type: array
+                    items:
+                      type: object
+                      properties: { locale: { type: string }, text: { type: string } }
+
+  /ai/variants:
+    post:
+      tags: [AI User]
+      summary: Generate A/B content variants
+      operationId: aiVariants
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [content]
+              properties:
+                content: { type: string }
+                count: { type: integer, minimum: 1, default: 3 }
+      responses:
+        '200':
+          description: Variants
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  variants:
+                    type: array
+                    items:
+                      type: object
+                      properties: { tone: { type: string }, content: { type: string } }
+
+  /ai/moderate:
+    post:
+      tags: [AI Moderation]
+      summary: Run guardrail moderation on content
+      operationId: aiModerate
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: '#/components/schemas/ModerateRequest' } } }
+      responses:
+        '200': { description: Moderation result, content: { application/json: { schema: { $ref: '#/components/schemas/ModerateResponse' } } } }
+
+  # ===================================================================== CHANNEL CONFIG (fork, super-admin)
+  /admin/channel-configs:
+    get:
+      tags: [Channel Config]
+      summary: List provider OAuth configs
+      operationId: listChannelConfigs
+      responses:
+        '200': { description: Provider configs, content: { application/json: { schema: { type: array, items: { $ref: '#/components/schemas/ChannelConfigSummary' } } } } }
+        '403': { $ref: '#/components/responses/Forbidden' }
+
+  /admin/channel-configs/{identifier}:
+    get:
+      tags: [Channel Config]
+      summary: Get a provider's OAuth config
+      operationId: getChannelConfig
+      parameters: [{ $ref: '#/components/parameters/PathIdentifier' }]
+      responses: { '200': { description: Config, content: { application/json: { schema: { type: object, additionalProperties: true } } } } }
+    put:
+      tags: [Channel Config]
+      summary: Create/update a provider's OAuth config
+      operationId: saveChannelConfig
+      parameters: [{ $ref: '#/components/parameters/PathIdentifier' }]
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: '#/components/schemas/ChannelConfigSaveDto' } } }
+      responses:
+        '200': { description: Saved, content: { application/json: { schema: { type: object, additionalProperties: true } } } }
+        '400': { $ref: '#/components/responses/BadRequest' }
+    delete:
+      tags: [Channel Config]
+      summary: Delete a provider's OAuth config
+      operationId: deleteChannelConfig
+      parameters: [{ $ref: '#/components/parameters/PathIdentifier' }]
+      responses: { '200': { description: Deleted, content: { application/json: { schema: { $ref: '#/components/schemas/SuccessFlag' } } } } }
+
+  # ===================================================================== SETTINGS
+  /settings/team:
+    get:
+      tags: [Settings]
+      summary: List team members
+      operationId: getTeam
+      responses: { '200': { description: Team, content: { application/json: { schema: { type: array, items: { type: object, additionalProperties: true } } } } } }
+    post:
+      tags: [Settings]
+      summary: Invite a team member
+      operationId: inviteTeamMember
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: '#/components/schemas/AddTeamMemberDto' } } }
+      responses: { '200': { description: Invited } }
+
+  /settings/team/{id}:
+    delete:
+      tags: [Settings]
+      summary: Remove a team member
+      operationId: deleteTeamMember
+      parameters: [{ $ref: '#/components/parameters/PathId' }]
+      responses: { '200': { description: Removed } }
+
+  /settings/shortlink:
+    get:
+      tags: [Settings]
+      summary: Get shortlink preference
+      operationId: getShortlinkPreference
+      responses: { '200': { description: Preference } }
+    post:
+      tags: [Settings]
+      summary: Update shortlink preference (admin)
+      operationId: updateShortlinkPreference
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: '#/components/schemas/ShortlinkPreferenceDto' } } }
+      responses: { '200': { description: Updated } }
+
+  # ===================================================================== BILLING
+  /billing:
+    get:
+      tags: [Billing]
+      summary: Current subscription
+      operationId: getCurrentBilling
+      responses: { '200': { description: Subscription, content: { application/json: { schema: { $ref: '#/components/schemas/Subscription' } } } } }
+
+  /billing/check/{id}:
+    get:
+      tags: [Billing]
+      summary: Check a subscription/session status
+      operationId: billingCheck
+      parameters: [{ $ref: '#/components/parameters/PathId' }]
+      responses: { '200': { description: Status } }
+
+  /billing/check-discount:
+    get:
+      tags: [Billing]
+      summary: Check for an available win-back discount
+      operationId: checkDiscount
+      responses: { '200': { description: Coupon offer or false } }
+
+  /billing/apply-discount:
+    post:
+      tags: [Billing]
+      summary: Apply a win-back discount
+      operationId: applyDiscount
+      responses: { '200': { description: Applied } }
+
+  /billing/finish-trial:
+    post:
+      tags: [Billing]
+      summary: End the trial early
+      operationId: finishTrial
+      responses: { '200': { description: Finished } }
+
+  /billing/is-trial-finished:
+    get:
+      tags: [Billing]
+      summary: Whether the trial is over
+      operationId: isTrialFinished
+      responses: { '200': { description: Result, content: { application/json: { schema: { type: object, properties: { finished: { type: boolean } } } } } } }
+
+  /billing/embedded:
+    post:
+      tags: [Billing]
+      summary: Create an embedded checkout
+      operationId: embeddedCheckout
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: '#/components/schemas/BillingSubscribeDto' } } }
+      responses: { '200': { description: Checkout session } }
+
+  /billing/subscribe:
+    post:
+      tags: [Billing]
+      summary: Subscribe to a plan
+      operationId: subscribe
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: '#/components/schemas/BillingSubscribeDto' } } }
+      responses: { '200': { description: Subscription/checkout result } }
+
+  /billing/prorate:
+    post:
+      tags: [Billing]
+      summary: Preview proration for a plan change
+      operationId: prorate
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: '#/components/schemas/BillingSubscribeDto' } } }
+      responses: { '200': { description: Proration } }
+
+  /billing/portal:
+    get:
+      tags: [Billing]
+      summary: Get a Stripe billing-portal link
+      operationId: billingPortal
+      responses: { '200': { description: Portal URL, content: { application/json: { schema: { type: object, properties: { portal: { type: string } } } } } } }
+
+  /billing/cancel:
+    post:
+      tags: [Billing]
+      summary: Cancel subscription (with feedback)
+      operationId: cancelBilling
+      requestBody:
+        required: true
+        content: { application/json: { schema: { type: object, properties: { feedback: { type: string } } } } }
+      responses: { '200': { description: Set to cancel } }
+
+  /billing/lifetime:
+    post:
+      tags: [Billing]
+      summary: Redeem a lifetime deal code
+      operationId: lifetime
+      requestBody:
+        required: true
+        content: { application/json: { schema: { type: object, required: [code], properties: { code: { type: string } } } } }
+      responses: { '200': { description: Redeemed } }
+
+  /billing/charges:
+    get:
+      tags: [Billing]
+      summary: List charges (super-admin)
+      operationId: getCharges
+      responses:
+        '200': { description: Charges }
+        '400': { $ref: '#/components/responses/Unauthorized400' }
+
+  /billing/refund-charges:
+    post:
+      tags: [Billing]
+      summary: Refund charges (super-admin)
+      operationId: refundCharges
+      requestBody:
+        required: true
+        content: { application/json: { schema: { type: object, properties: { chargeIds: { type: array, items: { type: string } } } } } }
+      responses:
+        '200': { description: Refunded }
+        '400': { $ref: '#/components/responses/Unauthorized400' }
+
+  /billing/cancel-subscription:
+    post:
+      tags: [Billing]
+      summary: Cancel subscription immediately (super-admin)
+      operationId: cancelSubscriptionAdmin
+      responses:
+        '200': { description: Cancelled }
+        '400': { $ref: '#/components/responses/Unauthorized400' }
+
+  /billing/add-subscription:
+    post:
+      tags: [Billing]
+      summary: Manually add a subscription (super-admin)
+      operationId: addSubscription
+      requestBody:
+        required: true
+        content: { application/json: { schema: { type: object, properties: { subscription: { type: string } } } } }
+      responses: { '200': { description: Added } }
+
+  # ===================================================================== WEBHOOKS
+  /webhooks:
+    get:
+      tags: [Webhooks]
+      summary: List webhooks
+      operationId: getWebhooks
+      responses: { '200': { description: Webhooks } }
+    post:
+      tags: [Webhooks]
+      summary: Create a webhook
+      operationId: createWebhook
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: '#/components/schemas/WebhooksDto' } } }
+      responses: { '200': { description: Created } }
+    put:
+      tags: [Webhooks]
+      summary: Update a webhook
+      operationId: updateWebhook
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: '#/components/schemas/UpdateWebhookDto' } } }
+      responses: { '200': { description: Updated } }
+
+  /webhooks/{id}:
+    delete:
+      tags: [Webhooks]
+      summary: Delete a webhook
+      operationId: deleteWebhook
+      parameters: [{ $ref: '#/components/parameters/PathId' }]
+      responses: { '200': { description: Deleted } }
+
+  /webhooks/send:
+    post:
+      tags: [Webhooks]
+      summary: Test-send a webhook payload
+      operationId: sendWebhook
+      parameters: [{ name: url, in: query, required: true, schema: { type: string, format: uri } }]
+      requestBody:
+        content: { application/json: { schema: { type: object, additionalProperties: true } } }
+      responses: { '200': { description: Sent, content: { application/json: { schema: { type: object, properties: { send: { type: boolean } } } } } } }
+
+  # ===================================================================== AUTOPOST
+  /autopost:
+    get:
+      tags: [Autopost]
+      summary: List autopost rules
+      operationId: getAutoposts
+      responses: { '200': { description: Autoposts } }
+    post:
+      tags: [Autopost]
+      summary: Create an autopost rule
+      operationId: createAutopost
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: '#/components/schemas/AutopostDto' } } }
+      responses: { '200': { description: Created } }
+
+  /autopost/{id}:
+    put:
+      tags: [Autopost]
+      summary: Update an autopost rule
+      operationId: updateAutopost
+      parameters: [{ $ref: '#/components/parameters/PathId' }]
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: '#/components/schemas/AutopostDto' } } }
+      responses: { '200': { description: Updated } }
+    delete:
+      tags: [Autopost]
+      summary: Delete an autopost rule
+      operationId: deleteAutopost
+      parameters: [{ $ref: '#/components/parameters/PathId' }]
+      responses: { '200': { description: Deleted } }
+
+  /autopost/{id}/active:
+    post:
+      tags: [Autopost]
+      summary: Toggle an autopost rule active
+      operationId: changeAutopostActive
+      parameters: [{ $ref: '#/components/parameters/PathId' }]
+      requestBody:
+        required: true
+        content: { application/json: { schema: { type: object, properties: { active: { type: boolean } } } } }
+      responses: { '200': { description: Toggled } }
+
+  /autopost/send:
+    post:
+      tags: [Autopost]
+      summary: Load and parse an RSS/XML feed
+      operationId: autopostSend
+      parameters: [{ name: url, in: query, required: true, schema: { type: string, format: uri } }]
+      responses: { '200': { description: Parsed feed } }
+
+  # ===================================================================== SIGNATURES
+  /signatures:
+    get:
+      tags: [Signatures]
+      summary: List signatures
+      operationId: getSignatures
+      responses: { '200': { description: Signatures } }
+    post:
+      tags: [Signatures]
+      summary: Create a signature
+      operationId: createSignature
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: '#/components/schemas/SignatureDto' } } }
+      responses: { '200': { description: Created } }
+
+  /signatures/default:
+    get:
+      tags: [Signatures]
+      summary: Get the default signature
+      operationId: getDefaultSignature
+      responses: { '200': { description: 'Default signature (or {})' } }
+
+  /signatures/{id}:
+    put:
+      tags: [Signatures]
+      summary: Update a signature
+      operationId: updateSignature
+      parameters: [{ $ref: '#/components/parameters/PathId' }]
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: '#/components/schemas/SignatureDto' } } }
+      responses: { '200': { description: Updated } }
+    delete:
+      tags: [Signatures]
+      summary: Delete a signature
+      operationId: deleteSignature
+      parameters: [{ $ref: '#/components/parameters/PathId' }]
+      responses: { '200': { description: Deleted } }
+
+  # ===================================================================== SETS
+  /sets:
+    get:
+      tags: [Sets]
+      summary: List sets
+      operationId: getSets
+      responses: { '200': { description: Sets } }
+    post:
+      tags: [Sets]
+      summary: Create a set
+      operationId: createSet
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: '#/components/schemas/SetsDto' } } }
+      responses: { '200': { description: Created } }
+    put:
+      tags: [Sets]
+      summary: Update a set
+      operationId: updateSet
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: '#/components/schemas/UpdateSetsDto' } } }
+      responses: { '200': { description: Updated } }
+
+  /sets/{id}:
+    delete:
+      tags: [Sets]
+      summary: Delete a set
+      operationId: deleteSet
+      parameters: [{ $ref: '#/components/parameters/PathId' }]
+      responses: { '200': { description: Deleted } }
+
+  # ===================================================================== NOTIFICATIONS
+  /notifications:
+    get:
+      tags: [Notifications]
+      summary: Main-page notification count
+      operationId: notificationsMain
+      responses: { '200': { description: Count } }
+
+  /notifications/list:
+    get:
+      tags: [Notifications]
+      summary: List notifications
+      operationId: notificationsList
+      responses: { '200': { description: Notifications } }
+
+  # ===================================================================== OAUTH (provider)
+  /oauth/authorize:
+    get:
+      tags: [OAuth]
+      summary: Validate an OAuth2 authorization request
+      operationId: oauthAuthorizeInfo
+      security: []
+      parameters:
+        - { name: client_id, in: query, required: true, schema: { type: string } }
+        - { name: response_type, in: query, required: true, schema: { type: string, enum: [code] } }
+        - { name: state, in: query, schema: { type: string } }
+      responses:
+        '200':
+          description: App info to render the consent screen
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  app: { type: object, additionalProperties: true }
+                  state: { type: string }
+    post:
+      tags: [OAuth]
+      summary: Approve or deny an OAuth2 authorization (authenticated)
+      operationId: oauthApprove
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: '#/components/schemas/ApproveOAuthDto' } } }
+      responses:
+        '200': { description: Redirect URL with code or error, content: { application/json: { schema: { type: object, properties: { redirect: { type: string } } } } } }
+
+  /oauth/token:
+    post:
+      tags: [OAuth]
+      summary: Exchange an authorization code for a token
+      operationId: oauthToken
+      security: []
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: '#/components/schemas/TokenExchangeDto' } } }
+      responses:
+        '200': { description: Access token, content: { application/json: { schema: { type: object, additionalProperties: true } } } }
+        '400': { description: unsupported_grant_type }
+
+  # ===================================================================== OAUTH APP
+  /user/oauth-app:
+    get:
+      tags: [OAuth App]
+      summary: Get the org's OAuth app
+      operationId: getOAuthApp
+      responses: { '200': { description: OAuth app } }
+    post:
+      tags: [OAuth App]
+      summary: Create an OAuth app
+      operationId: createOAuthApp
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: '#/components/schemas/CreateOAuthAppDto' } } }
+      responses: { '200': { description: Created } }
+    put:
+      tags: [OAuth App]
+      summary: Update the OAuth app
+      operationId: updateOAuthApp
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: '#/components/schemas/UpdateOAuthAppDto' } } }
+      responses: { '200': { description: Updated } }
+    delete:
+      tags: [OAuth App]
+      summary: Delete the OAuth app
+      operationId: deleteOAuthApp
+      responses: { '200': { description: Deleted } }
+
+  /user/oauth-app/rotate-secret:
+    post:
+      tags: [OAuth App]
+      summary: Rotate the OAuth app client secret
+      operationId: rotateOAuthSecret
+      responses: { '200': { description: New secret } }
+
+  # ===================================================================== APPROVED APPS
+  /user/approved-apps:
+    get:
+      tags: [Approved Apps]
+      summary: List apps the user has authorized
+      operationId: listApprovedApps
+      responses: { '200': { description: Approved apps } }
+
+  /user/approved-apps/{id}:
+    delete:
+      tags: [Approved Apps]
+      summary: Revoke an app authorization
+      operationId: revokeApprovedApp
+      parameters: [{ $ref: '#/components/parameters/PathId' }]
+      responses: { '200': { description: Revoked } }
+
+  # ===================================================================== ANNOUNCEMENTS
+  /announcements:
+    get:
+      tags: [Announcements]
+      summary: List announcements
+      operationId: getAnnouncements
+      responses: { '200': { description: Announcements } }
+    post:
+      tags: [Announcements]
+      summary: Create an announcement (super-admin)
+      operationId: createAnnouncement
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: '#/components/schemas/AnnouncementDto' } } }
+      responses:
+        '200': { description: Created }
+        '400': { $ref: '#/components/responses/Unauthorized400' }
+
+  /announcements/{id}:
+    delete:
+      tags: [Announcements]
+      summary: Delete an announcement (super-admin)
+      operationId: deleteAnnouncement
+      parameters: [{ $ref: '#/components/parameters/PathId' }]
+      responses:
+        '200': { description: Deleted }
+        '400': { $ref: '#/components/responses/Unauthorized400' }
+
+  # ===================================================================== ADMIN
+  /admin/errors:
+    get:
+      tags: [Admin]
+      summary: List captured errors (super-admin)
+      operationId: adminListErrors
+      parameters:
+        - { name: page, in: query, schema: { type: integer, default: 0 } }
+        - { name: limit, in: query, schema: { type: integer, default: 20 } }
+        - { name: platform, in: query, schema: { type: string } }
+        - { name: email, in: query, schema: { type: string } }
+        - { name: unknownFirst, in: query, schema: { type: string } }
+      responses:
+        '200': { description: Errors }
+        '400': { $ref: '#/components/responses/Unauthorized400' }
+
+  /admin/errors/platforms:
+    get:
+      tags: [Admin]
+      summary: List error platforms (super-admin)
+      operationId: adminListPlatforms
+      responses: { '200': { description: Platforms } }
+
+  /admin/stats:
+    get:
+      tags: [Admin]
+      summary: Admin stats over a date range (super-admin)
+      operationId: adminStats
+      parameters:
+        - { name: from, in: query, schema: { type: string, format: date } }
+        - { name: to, in: query, schema: { type: string, format: date } }
+        - { name: unknownOnly, in: query, schema: { type: string } }
+      responses: { '200': { description: Stats } }
+
+  # ===================================================================== COPILOT
+  /copilot/chat:
+    post:
+      tags: [Copilot]
+      summary: CopilotKit chat runtime (GraphQL-over-HTTP)
+      operationId: copilotChat
+      description: |
+        Proxies the CopilotKit Node HTTP runtime. Body/response follow the CopilotKit GQL protocol.
+        Short-circuits with `500` if no AI provider (admin config or `OPENAI_API_KEY`) is available.
+      requestBody:
+        content: { application/json: { schema: { type: object, additionalProperties: true } } }
+      responses:
+        '200': { description: CopilotKit runtime response }
+        '422': { description: AI provider not configured }
+
+  /copilot/agent:
+    post:
+      tags: [Copilot]
+      summary: Mastra agent runtime (CopilotKit)
+      operationId: copilotAgent
+      requestBody:
+        content: { application/json: { schema: { type: object, additionalProperties: true } } }
+      responses:
+        '200': { description: Agent runtime response }
+        '422': { description: AI provider not configured }
+
+  /copilot/credits:
+    get:
+      tags: [Copilot]
+      summary: Remaining AI credits
+      operationId: copilotCredits
+      parameters:
+        - { name: type, in: query, schema: { type: string, enum: [ai_images, ai_videos], default: ai_images } }
+      responses: { '200': { description: Credits } }
+
+  /copilot/list:
+    get:
+      tags: [Copilot]
+      summary: List chat threads
+      operationId: copilotList
+      parameters: [{ name: perPage, in: query, schema: { type: integer, default: 50 } }]
+      responses:
+        '200':
+          description: Threads
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  threads:
+                    type: array
+                    items:
+                      type: object
+                      properties: { id: { type: string }, title: { type: string } }
+
+  /copilot/{thread}/list:
+    get:
+      tags: [Copilot]
+      summary: List messages in a thread
+      operationId: copilotThreadList
+      parameters: [{ name: thread, in: path, required: true, schema: { type: string } }]
+      responses: { '200': { description: Messages } }
+
+  # ===================================================================== ENTERPRISE (signed webhooks)
+  /enterprise/create-user:
+    post:
+      tags: [Enterprise]
+      summary: Provision an enterprise user (signed JWT params)
+      operationId: enterpriseCreateUser
+      security: []
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: '#/components/schemas/SignedParams' } } }
+      responses: { '200': { description: Result } }
+
+  /enterprise/url:
+    post:
+      tags: [Enterprise]
+      summary: Get a social-connect URL (signed JWT params)
+      operationId: enterpriseUrl
+      security: []
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: '#/components/schemas/SignedParams' } } }
+      responses: { '200': { description: Auth URL (string) } }
+
+  /enterprise/delete-channel:
+    post:
+      tags: [Enterprise]
+      summary: Delete a channel (signed JWT params)
+      operationId: enterpriseDeleteChannel
+      security: []
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: '#/components/schemas/SignedParams' } } }
+      responses: { '200': { description: Result, content: { application/json: { schema: { $ref: '#/components/schemas/SuccessFlag' } } } } }
+
+  # ===================================================================== STRIPE WEBHOOK
+  /stripe:
+    post:
+      tags: [Stripe]
+      summary: Stripe webhook receiver
+      operationId: stripeWebhook
+      security: []
+      description: Validates the `stripe-signature` header against `STRIPE_SIGNING_KEY`.
+      requestBody:
+        required: true
+        content: { application/json: { schema: { type: object, additionalProperties: true } } }
+      responses:
+        '200': { description: Acknowledged, content: { application/json: { schema: { type: object, properties: { ok: { type: boolean } } } } } }
+        '500': { $ref: '#/components/responses/ServerError' }
+
+  # ===================================================================== PUBLIC (unauthenticated)
+  /public/agent:
+    post:
+      tags: [Public]
+      summary: Insert a post via the agent API key
+      operationId: publicAgent
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { type: object, properties: { text: { type: string }, apiKey: { type: string } } }
+      responses: { '200': { description: Created (or empty if key invalid) } }
+
+  /public/posts/{id}:
+    get:
+      tags: [Public]
+      summary: Public preview of a post thread
+      operationId: publicPostPreview
+      security: []
+      parameters: [{ $ref: '#/components/parameters/PathId' }]
+      responses: { '200': { description: Post thread (sanitized integration info), content: { application/json: { schema: { type: array, items: { type: object, additionalProperties: true } } } } } }
+
+  /public/posts/{id}/comments:
+    get:
+      tags: [Public]
+      summary: Public comments of a post
+      operationId: publicPostComments
+      security: []
+      parameters: [{ $ref: '#/components/parameters/PathId' }]
+      responses: { '200': { description: Comments, content: { application/json: { schema: { type: object, properties: { comments: { type: array, items: { type: object, additionalProperties: true } } } } } } } }
+
+  /public/t:
+    post:
+      tags: [Public]
+      summary: Track an event (anonymous)
+      operationId: publicTrack
+      security: []
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: '#/components/schemas/TrackEventBody' } } }
+      responses: { '200': { description: Tracking id } }
+
+  /public/modify-subscription:
+    post:
+      tags: [Public]
+      summary: Modify a subscription via a signed token
+      operationId: publicModifySubscription
+      security: []
+      requestBody:
+        required: true
+        content: { application/json: { schema: { type: object, properties: { params: { type: string, description: Signed JWT } } } } }
+      responses: { '200': { description: Result, content: { application/json: { schema: { $ref: '#/components/schemas/SuccessFlag' } } } } }
+
+  /public/stream:
+    get:
+      tags: [Public]
+      summary: Proxy-stream an mp4 (SSRF-guarded, range-aware)
+      operationId: publicStream
+      security: []
+      parameters: [{ name: url, in: query, required: true, schema: { type: string, format: uri } }]
+      responses:
+        '200': { description: Streamed video, content: { video/mp4: { schema: { type: string, format: binary } } } }
+        '206': { description: Partial content (range) }
+        '400': { description: Invalid or blocked URL }
+
+  # ===================================================================== PUBLIC API (/public/v1) — apiKey
+  /public/v1/upload:
+    post:
+      tags: [Public API]
+      summary: Upload a media file
+      operationId: publicApiUpload
+      security: [{ apiKey: [] }]
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              properties: { file: { type: string, format: binary } }
+      responses:
+        '200': { description: Saved media, content: { application/json: { schema: { $ref: '#/components/schemas/Media' } } } }
+        '400': { description: No file / unsupported type }
+        '401': { $ref: '#/components/responses/PublicUnauthorized' }
+
+  /public/v1/upload-from-url:
+    post:
+      tags: [Public API]
+      summary: Upload media from a public URL (SSRF-guarded)
+      operationId: publicApiUploadFromUrl
+      security: [{ apiKey: [] }]
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: '#/components/schemas/UploadDto' } } }
+      responses:
+        '200': { description: Saved media, content: { application/json: { schema: { $ref: '#/components/schemas/Media' } } } }
+        '400': { description: Failed to fetch / unsupported type }
+
+  /public/v1/find-slot/{id}:
+    get:
+      tags: [Public API]
+      summary: Find next free slot for a channel
+      operationId: publicApiFindSlot
+      security: [{ apiKey: [] }]
+      parameters: [{ $ref: '#/components/parameters/PathId' }]
+      responses: { '200': { description: Next free datetime, content: { application/json: { schema: { type: object, properties: { date: { type: string, format: date-time } } } } } } }
+
+  /public/v1/posts:
+    get:
+      tags: [Public API]
+      summary: List posts in a date range
+      operationId: publicApiGetPosts
+      security: [{ apiKey: [] }]
+      parameters:
+        - { name: startDate, in: query, required: true, schema: { type: string, format: date-time } }
+        - { name: endDate, in: query, required: true, schema: { type: string, format: date-time } }
+        - { name: customer, in: query, schema: { type: string } }
+      responses: { '200': { description: Posts, content: { application/json: { schema: { type: object, properties: { posts: { type: array, items: { type: object, additionalProperties: true } } } } } } } }
+    post:
+      tags: [Public API]
+      summary: Create a post
+      operationId: publicApiCreatePost
+      security: [{ apiKey: [] }]
+      description: |
+        Same validation as the dashboard. Supports `creationMethod` `CLI`|`API` (defaults to `API`).
+        If `RESTRICT_UPLOAD_DOMAINS` is set, all media must be hosted on that domain.
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: '#/components/schemas/CreatePostDto' } } }
+      responses:
+        '200': { description: Created, content: { application/json: { schema: { $ref: '#/components/schemas/CreatePostResult' } } } }
+        '400': { $ref: '#/components/responses/PostValidation' }
+
+  /public/v1/posts/{id}:
+    delete:
+      tags: [Public API]
+      summary: Delete a post by id (deletes its group)
+      operationId: publicApiDeletePost
+      security: [{ apiKey: [] }]
+      parameters: [{ $ref: '#/components/parameters/PathId' }]
+      responses: { '200': { description: Deleted } }
+
+  /public/v1/posts/group/{group}:
+    delete:
+      tags: [Public API]
+      summary: Delete a post group
+      operationId: publicApiDeletePostGroup
+      security: [{ apiKey: [] }]
+      parameters: [{ $ref: '#/components/parameters/PathGroup' }]
+      responses: { '200': { description: Deleted } }
+
+  /public/v1/posts/{id}/missing:
+    get:
+      tags: [Public API]
+      summary: Get missing content for a post
+      operationId: publicApiMissing
+      security: [{ apiKey: [] }]
+      parameters: [{ $ref: '#/components/parameters/PathId' }]
+      responses: { '200': { description: Missing content } }
+
+  /public/v1/posts/{id}/status:
+    put:
+      tags: [Public API]
+      summary: Change a post's status
+      operationId: publicApiChangeStatus
+      security: [{ apiKey: [] }]
+      parameters: [{ $ref: '#/components/parameters/PathId' }]
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: '#/components/schemas/ChangePostStatusDto' } } }
+      responses: { '200': { description: Updated } }
+
+  /public/v1/posts/{id}/release-id:
+    put:
+      tags: [Public API]
+      summary: Set the external release id of a post
+      operationId: publicApiReleaseId
+      security: [{ apiKey: [] }]
+      parameters: [{ $ref: '#/components/parameters/PathId' }]
+      requestBody:
+        required: true
+        content: { application/json: { schema: { type: object, properties: { releaseId: { type: string } } } } }
+      responses: { '200': { description: Updated } }
+
+  /public/v1/is-connected:
+    get:
+      tags: [Public API]
+      summary: API-key connectivity check
+      operationId: publicApiIsConnected
+      security: [{ apiKey: [] }]
+      responses: { '200': { description: Connected, content: { application/json: { schema: { type: object, properties: { connected: { type: boolean } } } } } } }
+
+  /public/v1/groups:
+    get:
+      tags: [Public API]
+      summary: List customer groups
+      operationId: publicApiGroups
+      security: [{ apiKey: [] }]
+      responses:
+        '200':
+          description: Groups
+          content:
+            application/json:
+              schema: { type: array, items: { type: object, properties: { id: { type: string }, name: { type: string } } } }
+
+  /public/v1/integrations:
+    get:
+      tags: [Public API]
+      summary: List connected channels
+      operationId: publicApiIntegrations
+      security: [{ apiKey: [] }]
+      parameters: [{ name: group, in: query, schema: { type: string } }]
+      responses:
+        '200':
+          description: Channels
+          content:
+            application/json:
+              schema: { type: array, items: { $ref: '#/components/schemas/PublicIntegration' } }
+
+  /public/v1/integrations/{id}:
+    delete:
+      tags: [Public API]
+      summary: Delete a channel
+      operationId: publicApiDeleteChannel
+      security: [{ apiKey: [] }]
+      parameters: [{ $ref: '#/components/parameters/PathId' }]
+      responses: { '200': { description: Deleted } }
+
+  /public/v1/integration-settings/{id}:
+    get:
+      tags: [Public API]
+      summary: Get a channel's posting rules, max length, settings & tools
+      operationId: publicApiIntegrationSettings
+      security: [{ apiKey: [] }]
+      parameters: [{ $ref: '#/components/parameters/PathId' }]
+      responses:
+        '200': { description: Settings, content: { application/json: { schema: { type: object, properties: { output: { type: object, additionalProperties: true } } } } } }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /public/v1/integration-trigger/{id}:
+    post:
+      tags: [Public API]
+      summary: Invoke a channel provider tool/method
+      operationId: publicApiIntegrationTrigger
+      security: [{ apiKey: [] }]
+      parameters: [{ $ref: '#/components/parameters/PathId' }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [methodName]
+              properties:
+                methodName: { type: string }
+                data: { type: object, additionalProperties: { type: string } }
+      responses:
+        '200': { description: Tool output, content: { application/json: { schema: { type: object, properties: { output: {} } } } } }
+        '401': { description: Channel disconnected (expired token) }
+        '404': { description: Integration / tool not found }
+
+  /public/v1/social/{integration}:
+    get:
+      tags: [Public API]
+      summary: Begin connecting a channel (get auth URL)
+      operationId: publicApiSocial
+      security: [{ apiKey: [] }]
+      parameters:
+        - { name: integration, in: path, required: true, schema: { type: string } }
+        - { name: refresh, in: query, schema: { type: string } }
+      responses:
+        '200': { description: Auth URL, content: { application/json: { schema: { type: object, properties: { url: { type: string } } } } } }
+        '400': { description: Integration not allowed / requires external URL }
+
+  /public/v1/notifications:
+    get:
+      tags: [Public API]
+      summary: List notifications (paginated)
+      operationId: publicApiNotifications
+      security: [{ apiKey: [] }]
+      parameters: [{ name: page, in: query, schema: { type: integer, default: 0 } }]
+      responses: { '200': { description: Notifications } }
+
+  /public/v1/generate-video:
+    post:
+      tags: [Public API]
+      summary: Generate a video
+      operationId: publicApiGenerateVideo
+      security: [{ apiKey: [] }]
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: '#/components/schemas/VideoDto' } } }
+      responses: { '200': { description: Result } }
+
+  /public/v1/video/function:
+    post:
+      tags: [Public API]
+      summary: Invoke a video-generator function
+      operationId: publicApiVideoFunction
+      security: [{ apiKey: [] }]
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: '#/components/schemas/VideoFunctionDto' } } }
+      responses: { '200': { description: Result } }
+
+  /public/v1/analytics/{integration}:
+    get:
+      tags: [Public API]
+      summary: Legacy single-channel analytics (n8n/Zapier compatible)
+      operationId: publicApiAnalytics
+      security: [{ apiKey: [] }]
+      description: '**Legacy** route — response shape is intentionally frozen for compatibility.'
+      parameters:
+        - { name: integration, in: path, required: true, schema: { type: string } }
+        - { name: date, in: query, schema: { type: string } }
+      responses: { '200': { description: Analytics } }
+
+  /public/v1/analytics/post/{postId}:
+    get:
+      tags: [Public API]
+      summary: Legacy single-post analytics
+      operationId: publicApiPostAnalytics
+      security: [{ apiKey: [] }]
+      parameters:
+        - { name: postId, in: path, required: true, schema: { type: string } }
+        - { name: date, in: query, schema: { type: string, description: Numeric (days) } }
+      responses: { '200': { description: Post analytics } }
+
+  /public/v1/analytics/overview:
+    get:
+      tags: [Public API]
+      summary: Analytics v2 overview (public)
+      operationId: publicApiAnalyticsOverview
+      security: [{ apiKey: [] }]
+      parameters:
+        - { $ref: '#/components/parameters/From' }
+        - { $ref: '#/components/parameters/To' }
+        - { $ref: '#/components/parameters/IntegrationsCsv' }
+        - { $ref: '#/components/parameters/Compare' }
+      responses: { '200': { description: Overview } }
+
+components:
+  securitySchemes:
+    cookieAuth:
+      type: apiKey
+      in: cookie
+      name: auth
+      description: Session JWT in the `auth` cookie (dashboard API).
+    authHeader:
+      type: apiKey
+      in: header
+      name: auth
+      description: Session JWT in the `auth` header (alternative to the cookie).
+    apiKey:
+      type: apiKey
+      in: header
+      name: Authorization
+      description: |
+        Organization **API key** or a `pos_`-prefixed OAuth access token, sent **raw** (no `Bearer`
+        prefix) in the `Authorization` header. Used by `/public/v1/*`.
+
+  parameters:
+    PathId:
+      name: id
+      in: path
+      required: true
+      schema: { type: string }
+    PathUuid:
+      name: id
+      in: path
+      required: true
+      schema: { type: string, format: uuid }
+    PathGroup:
+      name: group
+      in: path
+      required: true
+      schema: { type: string }
+    PathCommentId:
+      name: commentId
+      in: path
+      required: true
+      schema: { type: string, format: uuid }
+    PathIdentifier:
+      name: identifier
+      in: path
+      required: true
+      schema: { type: string }
+    PathProvider:
+      name: provider
+      in: path
+      required: true
+      schema: { type: string }
+    AuthProvider:
+      name: provider
+      in: path
+      required: true
+      schema: { type: string, enum: [LOCAL, GITHUB, GOOGLE, FARCASTER, WALLET, GENERIC] }
+    QueueName:
+      name: name
+      in: path
+      required: true
+      schema: { type: string }
+    From:
+      name: from
+      in: query
+      required: true
+      schema: { type: string, format: date }
+      description: Range start (inclusive). ISO date.
+    To:
+      name: to
+      in: query
+      required: true
+      schema: { type: string, format: date }
+      description: Range end (inclusive). ISO date.
+    IntegrationsCsv:
+      name: integrations
+      in: query
+      required: false
+      schema: { type: string }
+      description: Comma-separated channel ids to filter by.
+    Compare:
+      name: compare
+      in: query
+      required: false
+      schema: { type: string, enum: ['true', 'false'] }
+      description: When `true`, include comparison against the previous period.
+
+  headers:
+    SetAuthCookie:
+      description: Sets the `auth` session cookie (and possibly `showorg`).
+      schema: { type: string }
+
+  responses:
+    BadRequest:
+      description: Validation error
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+    Unauthorized400:
+      description: Not authorized (super-admin only) — returned as HTTP 400 by these routes
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+    Forbidden:
+      description: Forbidden (insufficient permissions / not a super-admin)
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+    NotFound:
+      description: Resource not found
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+    ServerError:
+      description: Internal server error
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+    RateLimited:
+      description: Too many requests (throttled)
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+    SubscriptionRequired:
+      description: An active subscription is required for this action
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+    PublicUnauthorized:
+      description: Missing/invalid API key or no subscription
+      content:
+        application/json:
+          schema:
+            type: object
+            properties: { msg: { type: string, example: Invalid API key } }
+    PostValidation:
+      description: Per-channel post validation failure
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/PostValidationError' }
+
+  schemas:
+    # ---------- Common ----------
+    Error:
+      type: object
+      properties:
+        statusCode: { type: integer, example: 400 }
+        message:
+          oneOf:
+            - { type: string }
+            - { type: array, items: { type: string } }
+          example: Bad Request
+        error: { type: string, example: Bad Request }
+    SuccessFlag:
+      type: object
+      properties:
+        success: { type: boolean, example: true }
+    PostValidationError:
+      type: object
+      description: Structured per-channel validation failure (PostValidationExceptionFilter).
+      properties:
+        provider: { type: string, example: twitter }
+        name: { type: string, example: My Twitter }
+        error: { type: string, example: post is too long, please fix it }
+
+    # ---------- Auth DTOs ----------
+    CreateOrgUserDto:
+      type: object
+      required: [provider, company]
+      properties:
+        email: { type: string, format: email, description: Required unless using a provider token }
+        password: { type: string, minLength: 3, maxLength: 64, description: Required unless using a provider token }
+        provider: { type: string, enum: [LOCAL, GITHUB, GOOGLE, FARCASTER, WALLET, GENERIC] }
+        providerToken: { type: string, description: Required unless using email+password }
+        company: { type: string, minLength: 3, maxLength: 128 }
+        datafast_visitor_id: { type: string }
+      example:
+        email: jane@example.com
+        password: s3cretpw
+        provider: LOCAL
+        company: Acme Inc
+    LoginUserDto:
+      type: object
+      required: [provider, email]
+      properties:
+        email: { type: string, format: email }
+        password: { type: string, minLength: 3 }
+        provider: { type: string, enum: [LOCAL, GITHUB, GOOGLE, FARCASTER, WALLET, GENERIC] }
+        providerToken: { type: string }
+        datafast_visitor_id: { type: string }
+      example: { email: jane@example.com, password: s3cretpw, provider: LOCAL }
+    ForgotPasswordDto:
+      type: object
+      required: [email]
+      properties: { email: { type: string, format: email } }
+    ForgotReturnPasswordDto:
+      type: object
+      required: [password, repeatPassword, token]
+      properties:
+        password: { type: string, minLength: 3 }
+        repeatPassword: { type: string }
+        token: { type: string, minLength: 5 }
+    ResendActivationDto:
+      type: object
+      required: [email]
+      properties: { email: { type: string, format: email } }
+
+    # ---------- User ----------
+    SelfUser:
+      type: object
+      properties:
+        id: { type: string }
+        email: { type: string, format: email }
+        orgId: { type: string }
+        totalChannels: { type: integer }
+        tier: { type: string, example: FREE }
+        role: { type: string, example: SUPERADMIN }
+        isLifetime: { type: boolean }
+        admin: { type: boolean }
+        impersonate: { type: boolean }
+        isTrailing: { type: boolean }
+        allowTrial: { type: boolean }
+        streakSince: { type: [string, 'null'], format: date-time }
+        publicApi: { type: string, description: Org API key (only for ADMIN/SUPERADMIN) }
+      additionalProperties: true
+    UserDetailDto:
+      type: object
+      required: [fullname]
+      properties:
+        fullname: { type: string, minLength: 3 }
+        bio: { type: string }
+        picture: { $ref: '#/components/schemas/MediaRef' }
+    EmailNotificationsDto:
+      type: object
+      required: [sendSuccessEmails, sendFailureEmails, sendStreakEmails]
+      properties:
+        sendSuccessEmails: { type: boolean }
+        sendFailureEmails: { type: boolean }
+        sendStreakEmails: { type: boolean }
+    TrackEventBody:
+      type: object
+      properties:
+        tt: { type: string, description: Track enum value }
+        fbclid: { type: string }
+        additional: { type: object, additionalProperties: true }
+    Organization:
+      type: object
+      additionalProperties: true
+      properties:
+        id: { type: string }
+        name: { type: string }
+        apiKey: { type: string }
+    Subscription:
+      type: object
+      additionalProperties: true
+      properties:
+        id: { type: string }
+        subscriptionTier: { type: string, example: PRO }
+        totalChannels: { type: integer }
+        isLifetime: { type: boolean }
+        period: { type: string, enum: [MONTHLY, YEARLY] }
+
+    # ---------- Posts ----------
+    MediaRef:
+      type: object
+      properties:
+        id: { type: string }
+        path: { type: string }
+      additionalProperties: true
+    PostContent:
+      type: object
+      required: [content, image]
+      properties:
+        content: { type: string, description: Sanitized post content }
+        id: { type: string }
+        delay: { type: integer, description: Delay (ms) for thread items }
+        image:
+          type: array
+          items: { $ref: '#/components/schemas/MediaRef' }
+    Post:
+      type: object
+      required: [integration, value]
+      properties:
+        type: { type: string }
+        integration:
+          type: object
+          required: [id]
+          properties: { id: { type: string } }
+        value:
+          type: array
+          minItems: 1
+          items: { $ref: '#/components/schemas/PostContent' }
+        group: { type: string }
+        settings:
+          type: object
+          description: Provider-specific settings (discriminated by `__type`).
+          additionalProperties: true
+    CreatePostDto:
+      type: object
+      required: [type, shortLink, date, tags, posts]
+      properties:
+        type: { type: string, enum: [draft, schedule, now, update] }
+        order: { type: string }
+        shortLink: { type: boolean }
+        inter: { type: number }
+        date: { type: string, format: date-time }
+        tags:
+          type: array
+          items:
+            type: object
+            properties: { value: { type: string }, label: { type: string } }
+        posts:
+          type: array
+          minItems: 1
+          items: { $ref: '#/components/schemas/Post' }
+      example:
+        type: schedule
+        shortLink: false
+        date: '2026-06-10T14:00:00.000Z'
+        tags: []
+        posts:
+          - integration: { id: clt_integration_123 }
+            value:
+              - content: 'Hello from the Postmill API 👋'
+                image: []
+            settings: { __type: twitter }
+    CreatePostResult:
+      type: object
+      additionalProperties: true
+      properties:
+        id: { type: string }
+        group: { type: string }
+    PostValidationItem:
+      type: object
+      additionalProperties: true
+      properties:
+        identifier: { type: string }
+        name: { type: string }
+        valid: { type: boolean }
+        emptyContent: { type: boolean }
+        tooLong: { type: boolean }
+        settingsError: { type: string }
+        errors:
+          oneOf:
+            - { type: boolean }
+            - { type: string }
+    CalendarPost:
+      type: object
+      additionalProperties: true
+      properties:
+        id: { type: string }
+        content: { type: string }
+        publishDate: { type: string, format: date-time }
+        state: { type: string, example: QUEUE }
+        integration: { type: object, additionalProperties: true }
+    Tag:
+      type: object
+      properties:
+        id: { type: string }
+        name: { type: string }
+        color: { type: string }
+    CreateTagDto:
+      type: object
+      required: [name, color]
+      properties:
+        name: { type: string }
+        color: { type: string, example: '#ff0000' }
+    GeneratorDto:
+      type: object
+      required: [research, isPicture, format, tone]
+      properties:
+        research: { type: string, minLength: 10 }
+        isPicture: { type: boolean }
+        format: { type: string, enum: [one_short, one_long, thread_short, thread_long] }
+        tone: { type: string, enum: [personal, company] }
+    CreateGeneratedPostsDto:
+      type: object
+      required: [posts, week, year]
+      properties:
+        posts:
+          type: array
+          minItems: 1
+          items:
+            type: object
+            required: [list]
+            properties:
+              list:
+                type: array
+                minItems: 1
+                items:
+                  type: object
+                  properties: { post: { type: string } }
+        week: { type: integer }
+        year: { type: integer }
+        url: { type: string }
+        postId: { type: string }
+    ChangePostStatusDto:
+      type: object
+      required: [status]
+      properties:
+        status: { type: string, enum: [draft, schedule] }
+
+    # ---------- Social comments ----------
+    ReplyCommentDto:
+      type: object
+      required: [message]
+      properties:
+        message: { type: string, maxLength: 10000 }
+    LikeCommentDto:
+      type: object
+      required: [like]
+      properties:
+        like: { type: boolean }
+    SocialComment:
+      type: object
+      additionalProperties: true
+      properties:
+        id: { type: string, format: uuid }
+        content: { type: string }
+        authorName: { type: string }
+        status: { type: string, example: open }
+        assigneeId: { type: [string, 'null'] }
+        read: { type: boolean }
+        createdAt: { type: string, format: date-time }
+    SocialCommentsPage:
+      type: object
+      properties:
+        comments:
+          type: array
+          items: { $ref: '#/components/schemas/SocialComment' }
+        nextCursor: { type: [string, 'null'] }
+      additionalProperties: true
+
+    # ---------- Integrations ----------
+    IntegrationListItem:
+      type: object
+      additionalProperties: true
+      properties:
+        id: { type: string }
+        internalId: { type: string }
+        name: { type: string }
+        identifier: { type: string, example: twitter }
+        picture: { type: string }
+        disabled: { type: boolean }
+        editor: { type: string }
+        type: { type: string }
+        refreshNeeded: { type: boolean }
+        customer: { type: [object, 'null'], additionalProperties: true }
+        time: { type: array, items: { type: object, additionalProperties: true } }
+    PublicIntegration:
+      type: object
+      properties:
+        id: { type: string }
+        name: { type: string }
+        identifier: { type: string }
+        picture: { type: string }
+        disabled: { type: boolean }
+        profile: { type: string }
+        customer:
+          type: [object, 'null']
+          properties: { id: { type: string }, name: { type: string } }
+    ConnectIntegrationDto:
+      type: object
+      required: [state, code, timezone]
+      properties:
+        state: { type: string }
+        code: { type: string }
+        timezone: { type: string }
+        refresh: { type: string }
+    IntegrationTimeDto:
+      type: object
+      required: [time]
+      properties:
+        time:
+          type: array
+          items:
+            type: object
+            required: [time]
+            properties: { time: { type: number, description: Minutes from midnight } }
+    IntegrationFunctionDto:
+      type: object
+      required: [name, id]
+      properties:
+        name: { type: string, description: Provider method name }
+        id: { type: string, description: Integration id }
+        data: { description: Arbitrary payload passed to the provider method }
+    PlugDto:
+      type: object
+      required: [func, fields]
+      properties:
+        func: { type: string }
+        fields:
+          type: array
+          items:
+            type: object
+            required: [name, value]
+            properties: { name: { type: string }, value: { type: string } }
+
+    # ---------- Media ----------
+    Media:
+      type: object
+      additionalProperties: true
+      properties:
+        id: { type: string }
+        name: { type: string }
+        path: { type: string }
+        organizationId: { type: string }
+        type: { type: string }
+        alt: { type: string }
+        thumbnail: { type: string }
+    SaveMediaInformationDto:
+      type: object
+      required: [id, alt]
+      properties:
+        id: { type: string }
+        alt: { type: string }
+        thumbnail: { type: string, format: uri }
+        thumbnailTimestamp: { type: number }
+    VideoDto:
+      type: object
+      required: [type, output]
+      properties:
+        type: { type: string, description: One of the registered video generator identifiers }
+        output: { type: string, enum: [vertical, horizontal] }
+        customParams: { description: Generator-specific params }
+    VideoFunctionDto:
+      type: object
+      required: [identifier, functionName]
+      properties:
+        identifier: { type: string }
+        functionName: { type: string }
+        params: { description: Function params }
+    UploadDto:
+      type: object
+      required: [url]
+      properties:
+        url: { type: string, format: uri, description: Public HTTPS URL (SSRF-validated) }
+
+    # ---------- AI ----------
+    AiProviderSummary:
+      type: object
+      properties:
+        identifier: { type: string, example: openai }
+        name: { type: string, example: OpenAI }
+        type: { type: string }
+        capabilities: { type: object, additionalProperties: true }
+        privacy: { type: object, additionalProperties: true }
+        enabled: { type: boolean }
+        isConfigured: { type: boolean }
+        credentialFields:
+          type: array
+          items: { type: object, additionalProperties: true }
+    AiProviderDetail:
+      allOf:
+        - $ref: '#/components/schemas/AiProviderSummary'
+        - type: object
+          properties:
+            defaultModel: { type: string }
+            imageModel: { type: string }
+            extraConfig: { type: [object, 'null'], additionalProperties: true }
+            models: { type: array, items: { type: object, additionalProperties: true } }
+    AiSaveProviderDto:
+      type: object
+      properties:
+        enabled: { type: boolean }
+        credentials:
+          type: object
+          additionalProperties: { type: string }
+          example: { apiKey: sk-... }
+        defaultModel: { type: string, example: gpt-4o-mini }
+        imageModel: { type: string, example: dall-e-3 }
+        extraConfig: { type: object, additionalProperties: true }
+    AiGovernance:
+      type: object
+      description: All fields are free-form JSON objects (stored as JSON strings server-side).
+      properties:
+        guardrailSettings: { type: [object, 'null'], additionalProperties: true }
+        budgetSettings:
+          type: [object, 'null']
+          additionalProperties: true
+          properties:
+            monthlyCap: { type: [number, 'null'] }
+            dailyCap: { type: [number, 'null'] }
+        rateLimitSettings: { type: [object, 'null'], additionalProperties: true }
+        observability: { type: [object, 'null'], additionalProperties: true }
+        mcpSettings: { type: [object, 'null'], additionalProperties: true }
+        ragSettings: { type: [object, 'null'], additionalProperties: true }
+        scopeModels: { type: [object, 'null'], additionalProperties: true }
+        fallbackProvider: { type: [string, 'null'] }
+        fallbackImageProvider: { type: [string, 'null'] }
+    AiSpendLog:
+      type: object
+      additionalProperties: true
+      properties:
+        id: { type: string }
+        organizationId: { type: [string, 'null'] }
+        provider: { type: string }
+        model: { type: string }
+        scope: { type: string, example: utility }
+        inputTokens: { type: integer }
+        outputTokens: { type: integer }
+        costUsd: { type: number }
+        createdAt: { type: string, format: date-time }
+    BrandProfileDto:
+      type: object
+      properties:
+        instructions: { type: string }
+        language: { type: string, example: en }
+        enabled: { type: boolean }
+    ModerateRequest:
+      type: object
+      required: [content]
+      properties:
+        content: { type: string }
+        orgId: { type: string }
+        direction: { type: string, enum: [output, input], default: output }
+        checkImage: { type: boolean }
+        imageUrl: { type: string }
+    ModerateResponse:
+      type: object
+      required: [passed]
+      properties:
+        passed: { type: boolean }
+        warnings: { type: array, items: { type: string } }
+        redactedContent: { type: string }
+
+    # ---------- Channel config ----------
+    ChannelConfigSummary:
+      type: object
+      properties:
+        identifier: { type: string }
+        name: { type: string }
+        description: { type: string }
+        enabled: { type: boolean }
+        isConfigured: { type: boolean }
+        setupInstructions: { type: string }
+        additionalConfig: { type: string }
+        isExternal: { type: boolean }
+        isWeb3: { type: boolean }
+        isChromeExtension: { type: boolean }
+        customFields: { type: boolean }
+        scopes: { type: string }
+    ChannelConfigSaveDto:
+      type: object
+      required: [enabled]
+      properties:
+        enabled: { type: boolean }
+        clientId: { type: string }
+        clientSecret: { type: string }
+        redirectUri: { type: string }
+        scopes: { type: string }
+        additionalConfig: { type: string, description: Must be valid JSON }
+        setupInstructions: { type: string }
+
+    # ---------- Settings / billing ----------
+    AddTeamMemberDto:
+      type: object
+      required: [role, sendEmail]
+      properties:
+        email: { type: string, format: email, description: Required when sendEmail is true }
+        role: { type: string, enum: [USER, ADMIN] }
+        sendEmail: { type: boolean }
+    ShortlinkPreferenceDto:
+      type: object
+      required: [shortlink]
+      properties:
+        shortlink: { type: string, description: ShortLinkPreference enum value }
+    BillingSubscribeDto:
+      type: object
+      required: [period, billing]
+      properties:
+        period: { type: string, enum: [MONTHLY, YEARLY] }
+        billing: { type: string, enum: [STANDARD, PRO, TEAM, ULTIMATE] }
+        utm: { type: string }
+        dub: { type: string }
+        datafast_session_id: { type: string }
+        datafast_visitor_id: { type: string }
+
+    # ---------- Webhooks / autopost ----------
+    WebhookIntegrationRef:
+      type: object
+      required: [id]
+      properties: { id: { type: string } }
+    WebhooksDto:
+      type: object
+      required: [name, url, integrations]
+      properties:
+        id: { type: string }
+        name: { type: string }
+        url: { type: string, format: uri, description: Public HTTPS URL (SSRF-validated) }
+        integrations:
+          type: array
+          items: { $ref: '#/components/schemas/WebhookIntegrationRef' }
+    UpdateWebhookDto:
+      allOf:
+        - $ref: '#/components/schemas/WebhooksDto'
+        - type: object
+          required: [id]
+    AutopostDto:
+      type: object
+      required: [title, onSlot, syncLast, url, active, addPicture, generateContent]
+      properties:
+        title: { type: string }
+        content: { type: string }
+        lastUrl: { type: string }
+        onSlot: { type: boolean }
+        syncLast: { type: boolean }
+        url: { type: string, format: uri, description: Public HTTPS URL (SSRF-validated) }
+        active: { type: boolean }
+        addPicture: { type: boolean }
+        generateContent: { type: boolean }
+        integrations:
+          type: array
+          items:
+            type: object
+            required: [id]
+            properties: { id: { type: string } }
+
+    # ---------- Sets / signatures ----------
+    SetsDto:
+      type: object
+      required: [name, content]
+      properties:
+        id: { type: string }
+        name: { type: string }
+        content: { type: string }
+    UpdateSetsDto:
+      type: object
+      required: [id, name, content]
+      properties:
+        id: { type: string }
+        name: { type: string }
+        content: { type: string }
+    SignatureDto:
+      type: object
+      required: [content, autoAdd]
+      properties:
+        content: { type: string }
+        autoAdd: { type: boolean }
+
+    # ---------- OAuth ----------
+    ApproveOAuthDto:
+      type: object
+      required: [client_id, action]
+      properties:
+        client_id: { type: string }
+        state: { type: string }
+        action: { type: string, enum: [approve, deny] }
+    TokenExchangeDto:
+      type: object
+      required: [grant_type, code, client_id, client_secret]
+      properties:
+        grant_type: { type: string, enum: [authorization_code] }
+        code: { type: string }
+        client_id: { type: string }
+        client_secret: { type: string }
+    CreateOAuthAppDto:
+      type: object
+      required: [name, redirectUrl]
+      properties:
+        name: { type: string, maxLength: 100 }
+        description: { type: string, maxLength: 500 }
+        pictureId: { type: string }
+        redirectUrl: { type: string, format: uri }
+    UpdateOAuthAppDto:
+      type: object
+      properties:
+        name: { type: string, maxLength: 100 }
+        description: { type: string, maxLength: 500 }
+        pictureId: { type: string }
+        redirectUrl: { type: string, format: uri }
+
+    # ---------- Announcements / enterprise ----------
+    AnnouncementDto:
+      type: object
+      required: [title, description]
+      properties:
+        title: { type: string }
+        description: { type: string }
+        color: { type: string, enum: [INFO, WARNING, ERROR] }
+    SignedParams:
+      type: object
+      required: [params]
+      properties:
+        params: { type: string, description: A signed JWT carrying the operation payload. }

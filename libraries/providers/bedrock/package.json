@@ -1,0 +1,19 @@
+{
+  "name": "@gitroom/provider-bedrock",
+  "version": "1.0.0",
+  "private": true,
+  "main": "src/index.ts",
+  "types": "src/index.ts",
+  "dependencies": {
+    "@ai-sdk/amazon-bedrock": "^2.0.0",
+    "@gitroom/provider-kernel": "workspace:*",
+    "@langchain/core": "^1.1.48"
+  },
+  "license": "AGPL-3.0",
+  "engines": {
+    "node": ">=22.12.0 <23.0.0"
+  },
+  "scripts": {
+    "test": "vitest run"
+  }
+}
