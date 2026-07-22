@@ -46,6 +46,14 @@ export class SocialCommentsRepository {
       }
     }
 
+    if (filters.sentiment) {
+      where.sentiment = filters.sentiment;
+    }
+
+    if (filters.priority) {
+      where.priority = filters.priority;
+    }
+
     if (filters.cursor) {
       if (!dayjs(filters.cursor).isValid()) throw new BadRequestException('Invalid cursor format');
       where.platformCreatedAt = { lt: new Date(filters.cursor) };
@@ -73,6 +81,20 @@ export class SocialCommentsRepository {
 
     const hasMore = comments.length > pageSize;
     const items = hasMore ? comments.slice(0, pageSize) : comments;
+
+    // Optional high-priority-first ordering within the returned page. Cursor
+    // pagination stays anchored to platformCreatedAt; this only reorders the
+    // visible slice so the most urgent unresolved comments surface first.
+    if (filters.sortBy === 'priority' && filters.status !== 'handled') {
+      const priorityRank: Record<string, number> = { high: 0, medium: 1, low: 2 };
+      items.sort((a, b) => {
+        const rankA = a.priority != null ? priorityRank[a.priority] ?? 3 : 3;
+        const rankB = b.priority != null ? priorityRank[b.priority] ?? 3 : 3;
+        if (rankA !== rankB) return rankA - rankB;
+        return b.platformCreatedAt.getTime() - a.platformCreatedAt.getTime();
+      });
+    }
+
     // nextCursor is derived from the last RETURNED item, so it's correct by
     // construction for any pageSize (no more skipped items 26-50).
     const nextCursor = hasMore && items.length
@@ -111,6 +133,23 @@ export class SocialCommentsRepository {
       },
       orderBy: [{ platformCreatedAt: 'desc' }, { id: 'desc' }],
       take: limit + 1,
+    });
+  }
+
+  // Comments that need sync-time sentiment classification. The `sentiment IS NULL`
+  // condition is the idempotency guard: retries of the same sync only classify rows
+  // that were missed or failed previously.
+  getUnclassifiedComments(orgId: string, postId: string, limit = 100) {
+    return this._socialComment.model.socialComment.findMany({
+      where: {
+        postId,
+        organizationId: orgId,
+        deletedAt: null,
+        isOwn: false,
+        sentiment: null,
+      },
+      orderBy: [{ platformCreatedAt: 'desc' }, { id: 'desc' }],
+      take: limit,
     });
   }
 
@@ -155,6 +194,8 @@ export class SocialCommentsRepository {
       // Only overwrite fields the caller actually provided. A partial update
       // (e.g. a like toggle that passes only likeCount/likedByMe) must not reset
       // replyCount/isOwn/etc. to their defaults and clobber synced data.
+      // Sentiment/priority are intentionally omitted: they are set once by the
+      // sync-time classifier and must survive subsequent upserts on retries.
       update: {
         authorName: data.authorName,
         authorUsername: data.authorUsername,
@@ -230,6 +271,37 @@ export class SocialCommentsRepository {
       where: { id: commentId, organizationId },
       data: { assigneeId },
     });
+  }
+
+  /**
+   * Persist sentiment/priority/confidence for a batch of comments. Used by the
+   * sync-time classifier; the `sentiment IS NULL` guard in the selection query
+   * provides idempotency on Inngest retries.
+   */
+  async updateSentimentForIds(
+    organizationId: string,
+    updates: Array<{
+      id: string;
+      sentiment: string;
+      priority: string;
+      sentimentConfidence: number;
+    }>
+  ) {
+    if (!updates.length) return { count: 0 };
+
+    let count = 0;
+    for (const u of updates) {
+      const result = await this._socialComment.model.socialComment.updateMany({
+        where: { id: u.id, organizationId },
+        data: {
+          sentiment: u.sentiment,
+          priority: u.priority,
+          sentimentConfidence: u.sentimentConfidence,
+        },
+      });
+      count += result.count;
+    }
+    return { count };
   }
 
   async isOrganizationMember(userId: string, orgId: string): Promise<boolean> {

@@ -1,8 +1,11 @@
 import {
   BadRequestException,
   Injectable,
+  Logger,
+  Optional,
   UnprocessableEntityException,
 } from '@nestjs/common';
+import { z } from 'zod';
 import { mapWithConcurrency } from '@gitroom/nestjs-libraries/utils/concurrency';
 import { GuardrailService } from '@gitroom/nestjs-libraries/ai/governance/guardrail.service';
 import { GuardrailViolation } from '@gitroom/nestjs-libraries/ai/governance/errors';
@@ -26,6 +29,8 @@ import {
   SocialCommentDTO,
 } from '@gitroom/nestjs-libraries/integrations/social/social.integrations.interface';
 import { Post, Integration } from '@prisma/client';
+import { DefaultsResolutionService } from '@gitroom/nestjs-libraries/ai/defaults/defaults-resolution.service';
+import { AIModelProvider } from '@gitroom/nestjs-libraries/ai/ai-model.provider';
 
 const CommentStatus = {
   NEEDS_REPLY: 'needs_reply',
@@ -46,10 +51,16 @@ export interface InboxFilterOptions {
   // Page size (1-50); absent → 50 (REST default). The MCP inbox tool threads a
   // smaller value so its nextCursor points at the last item it actually returns.
   limit?: number;
+  sentiment?: 'positive' | 'neutral' | 'negative';
+  priority?: 'high' | 'medium' | 'low';
+  // Optional high-priority-first ordering for unresolved worklists.
+  sortBy?: 'priority';
 }
 
 @Injectable()
 export class SocialCommentsService {
+  private readonly _logger = new Logger(SocialCommentsService.name);
+
   constructor(
     private _socialCommentsRepository: SocialCommentsRepository,
     private _postsService: PostsService,
@@ -59,6 +70,10 @@ export class SocialCommentsService {
     private _webhooksService: WebhooksService,
     private _orgProviderConfigManager: OrgProviderConfigManager,
     private _guardrails: GuardrailService,
+    @Optional()
+    private _defaultsResolution?: DefaultsResolutionService,
+    @Optional()
+    private _aiModelProvider?: AIModelProvider,
   ) {}
 
   // The org's output guardrail is ALWAYS enforced on outward replies — enforcement
@@ -196,6 +211,9 @@ export class SocialCommentsService {
       campaignIds,
       integrationIds,
       limit: query.limit,
+      sentiment: query.sentiment,
+      priority: query.priority,
+      sortBy: query.sortBy,
     };
   }
 
@@ -597,6 +615,169 @@ export class SocialCommentsService {
 
     const count = await this._socialCommentsRepository.countComments(post.id, orgId);
     await this._postsService.updateCommentCount(post.id, count, orgId);
+  }
+
+  private readonly _classificationSchema = z.object({
+    comments: z.array(
+      z.object({
+        platformCommentId: z.string(),
+        sentiment: z.enum(['positive', 'neutral', 'negative']),
+        priority: z.enum(['high', 'medium', 'low']),
+        confidence: z.number().min(0).max(1),
+      })
+    ),
+  });
+
+  /**
+   * Classify unclassified, non-own comments on a post using the org's configured
+   * low-reasoning AI default. The whole operation is best-effort: any failure is
+   * logged and swallowed so sync can never fail because of classification.
+   *
+   * Idempotency comes from selecting only rows where sentiment IS NULL; a retry
+   * will simply skip already-classified comments.
+   */
+  async classifyPostComments(orgId: string, post: Post & { integration: Integration }): Promise<void> {
+    if (!this._defaultsResolution || !this._aiModelProvider) {
+      return;
+    }
+
+    try {
+      const resolved = await this._defaultsResolution.resolve('ai', 'low_reasoning', orgId);
+      if (!resolved || !resolved.model) {
+        return;
+      }
+
+      const candidates = await this._socialCommentsRepository.getUnclassifiedComments(
+        orgId,
+        post.id,
+        100,
+      );
+      if (!candidates.length) {
+        return;
+      }
+
+      const batches = this._buildClassificationBatches(candidates);
+      const allResults: Array<{ id: string; sentiment: string; priority: string; sentimentConfidence: number }> = [];
+
+      for (const batch of batches) {
+        const result = await this._classifyBatch(orgId, resolved, post, batch);
+        if (result) {
+          for (const r of result) {
+            const match = candidates.find((c) => c.platformCommentId === r.platformCommentId);
+            if (match) {
+              allResults.push({
+                id: match.id,
+                sentiment: r.sentiment,
+                priority: r.priority,
+                sentimentConfidence: r.confidence,
+              });
+            }
+          }
+        }
+      }
+
+      if (allResults.length) {
+        await this._socialCommentsRepository.updateSentimentForIds(orgId, allResults);
+      }
+    } catch (err: unknown) {
+      // Classification must never break sync.
+      const message = err instanceof Error ? err.message : String(err);
+      this._logger.warn(`classifyPostComments failed for post ${post.id}: ${message}`);
+    }
+  }
+
+  private _buildClassificationBatches(
+    comments: Array<{ id: string; platformCommentId: string; content: string }>,
+    maxBatchSize = 25,
+    maxCharsPerComment = 1000,
+    maxCumulativeChars = 28000,
+  ): Array<Array<{ id: string; platformCommentId: string; content: string }>> {
+    const batches: Array<Array<{ id: string; platformCommentId: string; content: string }>> = [];
+    let current: Array<{ id: string; platformCommentId: string; content: string }> = [];
+    let currentChars = 0;
+
+    for (const comment of comments) {
+      const truncated = comment.content.slice(0, maxCharsPerComment);
+      const commentChars = truncated.length;
+
+      if (
+        current.length >= maxBatchSize ||
+        (currentChars + commentChars > maxCumulativeChars && current.length > 0)
+      ) {
+        batches.push(current);
+        current = [];
+        currentChars = 0;
+      }
+
+      current.push({ ...comment, content: truncated });
+      currentChars += commentChars;
+    }
+
+    if (current.length) {
+      batches.push(current);
+    }
+
+    return batches;
+  }
+
+  private async _classifyBatch(
+    orgId: string,
+    resolved: {
+      providerId: string;
+      version: string;
+      model?: string;
+    },
+    post: Post & { integration: Integration },
+    batch: Array<{ platformCommentId: string; content: string }>,
+  ): Promise<Array<{ platformCommentId: string; sentiment: string; priority: string; confidence: number }> | null> {
+    const prompt = this._buildClassificationPrompt(post, batch);
+
+    const result = await this._aiModelProvider!.generateObjectWithModel(
+      orgId,
+      resolved.providerId,
+      resolved.version,
+      resolved.model,
+      {
+        system: `You are a comment triage assistant. Classify each comment for sentiment and priority.
+
+Sentiment: positive, neutral, or negative.
+Priority rubric:
+- high: negative sentiment, question, complaint, urgency, or escalation signal
+- medium: neutral engagement that still needs attention
+- low: simple positive feedback that needs no action
+
+Return valid JSON matching the requested schema.`,
+        prompt,
+        schema: this._classificationSchema,
+      },
+    );
+
+    const parsed = this._classificationSchema.safeParse(result);
+    if (!parsed.success) {
+      return null;
+    }
+
+    return parsed.data.comments.map((c) => ({
+      platformCommentId: c.platformCommentId,
+      sentiment: c.sentiment,
+      priority: c.priority,
+      confidence: c.confidence,
+    }));
+  }
+
+  private _buildClassificationPrompt(
+    post: Post,
+    batch: Array<{ platformCommentId: string; content: string }>,
+  ): string {
+    const postPreview = post.content?.slice(0, 500) ?? '';
+    const commentsJson = JSON.stringify(
+      batch.map((c) => ({
+        platformCommentId: c.platformCommentId,
+        content: c.content,
+      }))
+    );
+
+    return `Post content:\n${postPreview}\n\nClassify the following comments:\n${commentsJson}`;
   }
 
   async syncInbox(orgId: string): Promise<{ synced: boolean; timestamp: string }> {

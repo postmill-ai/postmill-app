@@ -1,5 +1,6 @@
 import {
   IsBoolean,
+  IsEnum,
   IsISO8601,
   IsNumber,
   IsOptional,
@@ -37,4 +38,16 @@ export class GetInboxDto {
   @IsNumber()
   @Transform(({ value }) => (value ? parseInt(value, 10) : undefined))
   limit?: number;
+
+  @IsOptional()
+  @IsEnum(['positive', 'neutral', 'negative'])
+  sentiment?: 'positive' | 'neutral' | 'negative';
+
+  @IsOptional()
+  @IsEnum(['high', 'medium', 'low'])
+  priority?: 'high' | 'medium' | 'low';
+
+  @IsOptional()
+  @IsEnum(['priority'])
+  sortBy?: 'priority';
 }

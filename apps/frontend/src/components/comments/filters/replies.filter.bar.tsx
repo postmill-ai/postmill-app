@@ -23,6 +23,10 @@ interface RepliesFilterBarProps {
   onAssigneeChange: (id?: string) => void;
   unreadOnly: boolean;
   onUnreadChange: (value: boolean) => void;
+  sentiment?: string;
+  onSentimentChange: (sentiment?: string) => void;
+  priority?: string;
+  onPriorityChange: (priority?: string) => void;
 }
 
 interface Chip {
@@ -54,6 +58,10 @@ export const RepliesFilterBar: FC<RepliesFilterBarProps> = ({
   onAssigneeChange,
   unreadOnly,
   onUnreadChange,
+  sentiment,
+  onSentimentChange,
+  priority,
+  onPriorityChange,
 }) => {
   const t = useT();
   const [open, setOpen] = useState(false);
@@ -73,6 +81,26 @@ export const RepliesFilterBar: FC<RepliesFilterBarProps> = ({
       { label: t('comment_inbox.filter_needs_reply', 'Needs Reply'), value: 'needs_reply' },
       { label: t('comment_inbox.filter_handled', 'Handled'), value: 'handled' },
       { label: t('comment_inbox.filter_ignored', 'Ignored'), value: 'ignored' },
+    ],
+    [t]
+  );
+
+  const sentimentOptions = useMemo(
+    () => [
+      { label: t('comment_inbox.filter_all', 'All'), value: undefined as string | undefined },
+      { label: t('sentiment_positive', 'Positive'), value: 'positive' },
+      { label: t('sentiment_neutral', 'Neutral'), value: 'neutral' },
+      { label: t('sentiment_negative', 'Negative'), value: 'negative' },
+    ],
+    [t]
+  );
+
+  const priorityOptions = useMemo(
+    () => [
+      { label: t('comment_inbox.filter_all', 'All'), value: undefined as string | undefined },
+      { label: t('priority_high', 'High'), value: 'high' },
+      { label: t('priority_medium', 'Medium'), value: 'medium' },
+      { label: t('priority_low', 'Low'), value: 'low' },
     ],
     [t]
   );
@@ -111,6 +139,14 @@ export const RepliesFilterBar: FC<RepliesFilterBarProps> = ({
         onClear: () => onUnreadChange(false),
       });
     }
+    if (sentiment) {
+      const label = sentimentOptions.find((o) => o.value === sentiment)?.label || sentiment;
+      list.push({ key: 'sentiment', label, onClear: () => onSentimentChange(undefined) });
+    }
+    if (priority) {
+      const label = priorityOptions.find((o) => o.value === priority)?.label || priority;
+      list.push({ key: 'priority', label, onClear: () => onPriorityChange(undefined) });
+    }
     return list;
   }, [
     status,
@@ -119,6 +155,10 @@ export const RepliesFilterBar: FC<RepliesFilterBarProps> = ({
     selectedCampaigns,
     assigneeId,
     unreadOnly,
+    sentiment,
+    priority,
+    sentimentOptions,
+    priorityOptions,
     integrations,
     campaigns,
     teamMembers,
@@ -127,6 +167,8 @@ export const RepliesFilterBar: FC<RepliesFilterBarProps> = ({
     onCampaignsChange,
     onAssigneeChange,
     onUnreadChange,
+    onSentimentChange,
+    onPriorityChange,
     t,
   ]);
 
@@ -138,7 +180,9 @@ export const RepliesFilterBar: FC<RepliesFilterBarProps> = ({
     onCampaignsChange([]);
     onAssigneeChange(undefined);
     onUnreadChange(false);
-  }, [onStatusChange, onChannelsChange, onCampaignsChange, onAssigneeChange, onUnreadChange]);
+    onSentimentChange(undefined);
+    onPriorityChange(undefined);
+  }, [onStatusChange, onChannelsChange, onCampaignsChange, onAssigneeChange, onUnreadChange, onSentimentChange, onPriorityChange]);
 
   const drawer = (
     <div
@@ -211,6 +255,48 @@ export const RepliesFilterBar: FC<RepliesFilterBarProps> = ({
               <div className="relative w-[44px] h-[24px] shrink-0 bg-newTableBorder peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:start-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-[20px] after:w-[20px] after:transition-all peer-checked:bg-btnPrimary" />
               {t('comment_inbox.filter_unread_only', 'Unread only')}
             </label>
+          </Section>
+
+          {/* Sentiment */}
+          <Section title={t('filter_sentiment', 'Sentiment')}>
+            <div className="flex flex-wrap gap-[8px]">
+              {sentimentOptions.map((opt) => (
+                <button
+                  key={opt.label}
+                  type="button"
+                  onClick={() => onSentimentChange(opt.value)}
+                  className={clsx(
+                    'px-[12px] py-[6px] text-[13px] font-[500] rounded-[8px] border transition-colors',
+                    sentiment === opt.value
+                      ? 'bg-[#2B5CD3] text-white border-[#2B5CD3]'
+                      : 'bg-newBgColorInner text-newTableText border-newTableBorder hover:text-textColor'
+                  )}
+                >
+                  {opt.label}
+                </button>
+              ))}
+            </div>
+          </Section>
+
+          {/* Priority */}
+          <Section title={t('filter_priority', 'Priority')}>
+            <div className="flex flex-wrap gap-[8px]">
+              {priorityOptions.map((opt) => (
+                <button
+                  key={opt.label}
+                  type="button"
+                  onClick={() => onPriorityChange(opt.value)}
+                  className={clsx(
+                    'px-[12px] py-[6px] text-[13px] font-[500] rounded-[8px] border transition-colors',
+                    priority === opt.value
+                      ? 'bg-[#2B5CD3] text-white border-[#2B5CD3]'
+                      : 'bg-newBgColorInner text-newTableText border-newTableBorder hover:text-textColor'
+                  )}
+                >
+                  {opt.label}
+                </button>
+              ))}
+            </div>
           </Section>
 
           {/* Channels */}

@@ -41,6 +41,16 @@ export class CommentsActivity {
 
       try {
         await this._socialCommentsService.syncComments(orgId, post);
+        // Best-effort sentiment/priority classification on the just-synced batch.
+        // A failure here is logged and swallowed so sync never fails.
+        try {
+          await this._socialCommentsService.classifyPostComments(orgId, post);
+        } catch (classifyErr: any) {
+          this.logger.warn(
+            `CommentsActivity: classification failed for post ${post.id}:`,
+            { error: classifyErr?.message }
+          );
+        }
       } catch (err: any) {
         this.logger.error(
           `CommentsActivity: Error syncing comments for post ${post.id}:`,

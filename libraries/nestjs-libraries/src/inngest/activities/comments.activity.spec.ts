@@ -49,6 +49,7 @@ describe('CommentsActivity', () => {
     providerConfigManager = { ensureFresh: vi.fn().mockResolvedValue(undefined) };
     socialCommentsService = {
       syncComments: vi.fn().mockResolvedValue(undefined),
+      classifyPostComments: vi.fn().mockResolvedValue(undefined),
       getPublishedPostsForSync: vi.fn().mockResolvedValue([]),
       getPostsWithRecentComments: vi.fn().mockResolvedValue([]),
       findCommentsToPrune: vi.fn().mockResolvedValue([]),
@@ -148,6 +149,28 @@ describe('CommentsActivity', () => {
 
       expect(socialCommentsService.syncComments).toHaveBeenCalledTimes(2);
       expect(Logger.prototype.error).toHaveBeenCalled();
+    });
+
+    it('calls classifyPostComments after a successful sync and swallows classification errors', async () => {
+      socialCommentsService.getPublishedPostsForSync.mockResolvedValue([
+        makePost({ id: 'p1' }),
+      ]);
+      socialCommentsService.classifyPostComments.mockRejectedValueOnce(
+        new Error('classify boom'),
+      );
+
+      await activity.syncPostComments('org-1', 30);
+
+      expect(socialCommentsService.syncComments).toHaveBeenCalledWith(
+        'org-1',
+        expect.objectContaining({ id: 'p1' }),
+      );
+      expect(socialCommentsService.classifyPostComments).toHaveBeenCalledWith(
+        'org-1',
+        expect.objectContaining({ id: 'p1' }),
+      );
+      // Activity must not throw even though classification failed.
+      expect(Logger.prototype.error).not.toHaveBeenCalled();
     });
   });
 

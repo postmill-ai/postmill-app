@@ -9,6 +9,8 @@ export interface InboxFilters {
   assigneeId?: string;
   integrationId?: string;
   unreadOnly: boolean;
+  sentiment?: 'positive' | 'neutral' | 'negative';
+  priority?: 'high' | 'medium' | 'low';
 }
 
 export interface ChannelOption {
@@ -42,6 +44,20 @@ export const CommentInboxFilters: FC<CommentInboxFiltersProps> = ({
   const toggleUnreadOnly = useCallback(() => {
     onChange({ ...filters, unreadOnly: !filters.unreadOnly });
   }, [filters, onChange]);
+
+  const setSentiment = useCallback(
+    (sentiment: string | undefined) => {
+      onChange({ ...filters, sentiment: sentiment as InboxFilters['sentiment'] });
+    },
+    [filters, onChange]
+  );
+
+  const setPriority = useCallback(
+    (priority: string | undefined) => {
+      onChange({ ...filters, priority: priority as InboxFilters['priority'] });
+    },
+    [filters, onChange]
+  );
 
   return (
     <div className="flex items-center gap-[12px] flex-wrap">
@@ -79,6 +95,26 @@ export const CommentInboxFilters: FC<CommentInboxFiltersProps> = ({
           ))}
         </select>
       )}
+      <select
+        value={filters.sentiment || ''}
+        onChange={(e) => setSentiment(e.target.value || undefined)}
+        className="bg-newBgColorInner border border-newTableBorder rounded-[6px] px-[10px] py-[4px] text-[13px] text-newTableText outline-none"
+      >
+        <option value="">{t('filter_sentiment', 'All sentiments')}</option>
+        <option value="positive">{t('sentiment_positive', 'Positive')}</option>
+        <option value="neutral">{t('sentiment_neutral', 'Neutral')}</option>
+        <option value="negative">{t('sentiment_negative', 'Negative')}</option>
+      </select>
+      <select
+        value={filters.priority || ''}
+        onChange={(e) => setPriority(e.target.value || undefined)}
+        className="bg-newBgColorInner border border-newTableBorder rounded-[6px] px-[10px] py-[4px] text-[13px] text-newTableText outline-none"
+      >
+        <option value="">{t('filter_priority', 'All priorities')}</option>
+        <option value="high">{t('priority_high', 'High')}</option>
+        <option value="medium">{t('priority_medium', 'Medium')}</option>
+        <option value="low">{t('priority_low', 'Low')}</option>
+      </select>
       {teamMembers && teamMembers.length > 0 && (
         <select
           value={filters.assigneeId || ''}
