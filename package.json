@@ -44,7 +44,7 @@
     "test:int": "vitest run --root libraries/nestjs-libraries --config vitest-integration.config.ts"
   },
   "dependencies": {
-    "axios": "^1.17.0",
+    "axios": "^1.18.0",
     "bufferutil": "^4.0.8",
     "class-validator": "^0.14.1",
     "clsx": "^2.1.0",
@@ -107,6 +107,29 @@
     "prettier": "^2.6.2",
     "ts-node": "10.9.2",
     "typescript": "5.5.4"
+  },
+  "pnpm": {
+    "overrides": {
+      "@opentelemetry/propagator-jaeger@<2.9.0": "^2.9.0",
+      "axios@>=1.15.2 <1.18.0": "^1.18.0",
+      "brace-expansion@1": "~1.1.16",
+      "brace-expansion@2": "~2.1.2",
+      "brace-expansion@>=3.0.0 <5.0.7": "^5.0.7",
+      "fast-uri@>=3.0.0 <3.1.4": "^3.1.4",
+      "fast-xml-parser@>=4.0.0-beta.3 <4.5.5": "^4.5.5",
+      "form-data@<2.5.6": "^2.5.6",
+      "happy-dom@<20.8.9": "^20.8.9",
+      "immutable@5": "^5.1.8",
+      "js-yaml@>=4.0.0 <4.3.0": "^4.3.0",
+      "langsmith@<0.6.0": "^0.6.0",
+      "multer@>=1.0.0 <2.2.0": "^2.2.0",
+      "nodemailer@<=9.0.0": "^9.0.1",
+      "protobufjs@>=8.0.0 <8.4.1": "^8.4.1",
+      "rollup@<2.80.0": "^2.80.0",
+      "sharp@<0.35.0": "^0.35.0",
+      "svgo@3": "^3.3.4",
+      "ws@>=8.0.0 <8.21.0": "^8.21.0"
+    }
   },
   "volta": {
     "node": "22.12.0"
