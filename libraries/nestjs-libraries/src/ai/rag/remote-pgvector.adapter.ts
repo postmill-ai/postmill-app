@@ -1,3 +1,4 @@
+import { escapeIdentifier } from 'pg';
 import { VectorStoreAdapter, RagHit } from './vector-store.adapter';
 
 interface RemotePgConfig {
@@ -36,21 +37,20 @@ export class RemotePgVectorStoreAdapter implements VectorStoreAdapter {
   }
 
   private _connectionString: string;
-  private _escapeIdent: ((name: string) => string) | null = null;
 
   private async _getPool(): Promise<any> {
     if (this._pool) return this._pool;
     const pg: any = await import('pg');
     const Pool = pg.Pool || pg.default?.Pool;
-    this._escapeIdent = pg.escapeIdentifier || pg.default?.escapeIdentifier || null;
     this._pool = new Pool({ connectionString: this._connectionString, max: 4 });
     return this._pool;
   }
 
-  // Quoted identifier via pg's escapeIdentifier; the constructor-validated name
-  // makes the fallback quoting safe.
+  // Quoted via pg's escapeIdentifier (statically imported — it's a pure string
+  // helper; only the Pool stays lazy). Constructor validation already restricts
+  // the name to a plain identifier; this is defense in depth.
   private _ident(name: string): string {
-    return this._escapeIdent ? this._escapeIdent(name) : `"${name}"`;
+    return escapeIdentifier(name);
   }
 
   private async _ensureTable(): Promise<void> {
