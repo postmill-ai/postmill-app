@@ -52,7 +52,14 @@ export class CampaignNoteService {
 
   // A note is empty if, after stripping tags, there is no text AND no embedded media.
   private _isEmpty(html: string): boolean {
-    const text = html.replace(/<[^>]*>/g, '').replace(/&nbsp;/g, ' ').trim();
+    // Strip to a fixpoint so split tag fragments can't survive a single pass.
+    let stripped = html;
+    let prev: string;
+    do {
+      prev = stripped;
+      stripped = stripped.replace(/<[^>]*>/g, '');
+    } while (stripped !== prev);
+    const text = stripped.replace(/&nbsp;/g, ' ').trim();
     return !text && !/<(img|video)\b/i.test(html);
   }
 
