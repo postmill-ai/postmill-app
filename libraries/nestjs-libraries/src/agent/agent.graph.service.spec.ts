@@ -278,7 +278,7 @@ describe('AgentGraphService', () => {
     it('creates a graph invocation with streamEvents', async () => {
       const result = await service.start('org-99', body);
 
-      expect(budget.checkBudget).toHaveBeenCalledWith('agent', 'org-99');
+      expect(budget.checkBudget).toHaveBeenCalledWith('agent', 'org-99', 'openai');
       expect(Array.isArray(result)).toBe(true);
     });
 
@@ -438,46 +438,12 @@ describe('AgentGraphService', () => {
     });
   });
 
-  // 1.2 — real spend attribution + one coherent 'agent' scope.
-  describe('spend attribution (1.2)', () => {
-    it('records spend under the real provider/model and scope "agent"', async () => {
-      const cb = (service as any)._spendCallback('org-x', {
-        providerId: 'openai',
-        modelId: 'gpt-x',
-      });
-      await cb.handleLLMEnd({
-        llmOutput: { tokenUsage: { promptTokens: 10, completionTokens: 5 } },
-      });
-
-      expect(budget.recordSpend).toHaveBeenCalledWith(
-        expect.objectContaining({
-          organizationId: 'org-x',
-          provider: 'openai',
-          model: 'gpt-x',
-          scope: 'agent',
-          inputTokens: 10,
-          outputTokens: 5,
-          costUsd: 0,
-        })
-      );
-    });
-
-    it('falls back to the "generator" sentinel when attribution is absent', async () => {
-      const cb = (service as any)._spendCallback('org-y');
-      await cb.handleLLMEnd({
-        llmOutput: { usage: { input_tokens: 3, output_tokens: 2 } },
-      });
-
-      expect(budget.recordSpend).toHaveBeenCalledWith(
-        expect.objectContaining({
-          provider: 'generator',
-          model: 'generator',
-          scope: 'agent',
-        })
-      );
-    });
-
-    it('resolves attribution once via resolveConfigForScope in start()', async () => {
+  // 1.2 — the run resolves its primary provider once so the start() gate targets
+  // the right provider cap. Spend recording itself lives in the langchain model
+  // wrapper (AIModelProvider._wrapLangchainModelWithBudget) — recording here too
+  // would double-log tokens/cost into AISpendLog.
+  describe('gate resolution (1.2)', () => {
+    it('resolves the provider once via resolveConfigForScope in start()', async () => {
       await service.start('org-99', {
         research: 'x',
         isPicture: false,

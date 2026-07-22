@@ -314,11 +314,11 @@ export class AiSettingsService {
     const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
     const startOfDay = new Date(now.getFullYear(), now.getMonth(), now.getDate());
 
-    const [summary, monthSummary, daySummary, settings] = await Promise.all([
+    const [summary, monthSummary, daySummary, providerConfigs] = await Promise.all([
       this.getSpendSummary(organizationId),
       this.getSpendSummary(organizationId, startOfMonth),
       this.getSpendSummary(organizationId, startOfDay),
-      this.getSystemSettings(),
+      this.getOrgProviderConfigs(organizationId),
     ]);
 
     const totalSpend = summary.reduce(
@@ -334,29 +334,85 @@ export class AiSettingsService {
       0,
     );
 
-    const budgetSettings = settings?.budgetSettings
-      ? this._tryParseJson(settings.budgetSettings)
-      : null;
+    // Build scope-level summary (getSpendSummary now groups by scope + provider).
+    const scopeMap = new Map<
+      string,
+      { costUsd: number; inputTokens: number; outputTokens: number }
+    >();
+    for (const row of summary) {
+      const current = scopeMap.get(row.scope) ?? {
+        costUsd: 0,
+        inputTokens: 0,
+        outputTokens: 0,
+      };
+      current.costUsd += row._sum?.costUsd || 0;
+      current.inputTokens += row._sum?.inputTokens || 0;
+      current.outputTokens += row._sum?.outputTokens || 0;
+      scopeMap.set(row.scope, current);
+    }
+    const byScope = Array.from(scopeMap.entries()).map(([scope, sums]) => ({
+      scope,
+      _sum: sums,
+    }));
+
+    // Build provider-level summary using active provider configs as the cap source.
+    const providerMonthMap = new Map<
+      string,
+      { costUsd: number; inputTokens: number; outputTokens: number }
+    >();
+    for (const row of monthSummary) {
+      const current = providerMonthMap.get(row.provider) ?? {
+        costUsd: 0,
+        inputTokens: 0,
+        outputTokens: 0,
+      };
+      current.costUsd += row._sum?.costUsd || 0;
+      current.inputTokens += row._sum?.inputTokens || 0;
+      current.outputTokens += row._sum?.outputTokens || 0;
+      providerMonthMap.set(row.provider, current);
+    }
+
+    const providerDayMap = new Map<
+      string,
+      { costUsd: number; inputTokens: number; outputTokens: number }
+    >();
+    for (const row of daySummary) {
+      const current = providerDayMap.get(row.provider) ?? {
+        costUsd: 0,
+        inputTokens: 0,
+        outputTokens: 0,
+      };
+      current.costUsd += row._sum?.costUsd || 0;
+      current.inputTokens += row._sum?.inputTokens || 0;
+      current.outputTokens += row._sum?.outputTokens || 0;
+      providerDayMap.set(row.provider, current);
+    }
+
+    const activeConfigs = (providerConfigs ?? []).filter((c: any) => c.isActive);
+    const byProvider = activeConfigs.map((config: any) => {
+      const monthly = providerMonthMap.get(config.identifier)?.costUsd ?? 0;
+      const daily = providerDayMap.get(config.identifier)?.costUsd ?? 0;
+      const monthlyCap = config.budgetMonthlyCap ?? null;
+      const dailyCap = config.budgetDailyCap ?? null;
+      return {
+        provider: config.identifier,
+        monthlySpendUsd: monthly,
+        dailySpendUsd: daily,
+        monthlyCap,
+        dailyCap,
+        remainingMonthly:
+          monthlyCap != null ? Math.max(0, monthlyCap - monthly) : null,
+        remainingDaily:
+          dailyCap != null ? Math.max(0, dailyCap - daily) : null,
+      };
+    });
 
     return {
-      byScope: summary,
+      byScope,
+      byProvider,
       totalSpendUsd: totalSpend,
       monthlySpendUsd: monthlySpend,
       dailySpendUsd: dailySpend,
-      budget: budgetSettings
-        ? {
-            monthlyCap: budgetSettings.monthlyCap ?? null,
-            dailyCap: budgetSettings.dailyCap ?? null,
-            remainingMonthly:
-              budgetSettings.monthlyCap != null
-                ? Math.max(0, budgetSettings.monthlyCap - monthlySpend)
-                : null,
-            remainingDaily:
-              budgetSettings.dailyCap != null
-                ? Math.max(0, budgetSettings.dailyCap - dailySpend)
-                : null,
-          }
-        : null,
     };
   }
 

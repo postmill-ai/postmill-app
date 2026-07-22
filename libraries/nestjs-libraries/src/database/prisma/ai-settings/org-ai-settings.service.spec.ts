@@ -37,6 +37,10 @@ const mockDefaultsSeed = {
   seedUnset: vi.fn().mockResolvedValue(undefined),
 };
 
+const mockAiSettings = {
+  createAuditLog: vi.fn().mockResolvedValue(undefined),
+};
+
 vi.mock('./org-ai-settings.repository', () => ({
   OrgAiSettingsRepository: vi.fn(() => mockRepo),
 }));
@@ -92,7 +96,7 @@ describe('OrgAiSettingsService.upsert auto-activation', () => {
       mockResolution as any,
       mockKernel as any,
       mockDefaultsSeed as any,
-      undefined,
+      mockAiSettings as any,
     );
   });
 
@@ -284,7 +288,7 @@ describe('OrgAiSettingsService reads/mutations', () => {
       mockResolution as any,
       mockKernel as any,
       mockDefaultsSeed as any,
-      undefined,
+      mockAiSettings as any,
     );
   });
 
@@ -555,6 +559,186 @@ describe('OrgAiSettingsService reads/mutations', () => {
       // exercises the `latest?.manifest.version ?? DEFAULT_VERSION` fallback
       await service.getByIdentifier('org-1', 'openai');
       expect(mockRepo.getByIdentifier).toHaveBeenCalledWith('org-1', 'openai', 'v1');
+    });
+  });
+
+  describe('budget fields', () => {
+    it('persists budget columns through upsert', async () => {
+      mockRepo.getByOrg.mockResolvedValue([{ id: 'cfg-1', identifier: 'openai' }]);
+      mockRepo.getByIdentifier.mockResolvedValue({
+        identifier: 'openai',
+        version: 'v1',
+        budgetMonthlyCap: null,
+        budgetDailyCap: null,
+        budgetAlertThresholdPct: null,
+      });
+      mockRepo.upsert.mockResolvedValue({ id: 'cfg-1' });
+
+      await service.upsert('org-1', 'openai', {
+        credentials: { apiKey: 'sk' },
+        budgetMonthlyCap: 100,
+        budgetDailyCap: 10,
+        budgetAlertThresholdPct: 0.85,
+      });
+
+      const payload = mockRepo.upsert.mock.calls[0][2];
+      expect(payload).toMatchObject({
+        budgetMonthlyCap: 100,
+        budgetDailyCap: 10,
+        budgetAlertThresholdPct: 0.85,
+      });
+    });
+
+    it('writes an audit log when a budget column changes', async () => {
+      mockRepo.getByOrg.mockResolvedValue([{ id: 'cfg-1', identifier: 'openai' }]);
+      mockRepo.getByIdentifier.mockResolvedValue({
+        identifier: 'openai',
+        version: 'v1',
+        budgetMonthlyCap: 50,
+        budgetDailyCap: 5,
+        budgetAlertThresholdPct: 0.8,
+      });
+      mockRepo.upsert.mockResolvedValue({
+        identifier: 'openai',
+        version: 'v1',
+        budgetMonthlyCap: 100,
+        budgetDailyCap: 5,
+        budgetAlertThresholdPct: 0.9,
+      });
+
+      await service.upsert('org-1', 'openai', {
+        budgetMonthlyCap: 100,
+        budgetAlertThresholdPct: 0.9,
+      });
+
+      expect(mockAiSettings.createAuditLog).toHaveBeenCalledTimes(1);
+      const call = mockAiSettings.createAuditLog.mock.calls[0][0];
+      expect(call.action).toBe('provider_budget_updated');
+      const detail = JSON.parse(call.detail);
+      expect(detail).toMatchObject({
+        organizationId: 'org-1',
+        identifier: 'openai',
+        version: 'v1',
+        changes: {
+          budgetMonthlyCap: { old: 50, new: 100 },
+          budgetAlertThresholdPct: { old: 0.8, new: 0.9 },
+        },
+      });
+      // unchanged field must not appear in the audit
+      expect(detail.changes).not.toHaveProperty('budgetDailyCap');
+    });
+
+    it('does not write an audit log when budget columns are unchanged', async () => {
+      mockRepo.getByOrg.mockResolvedValue([{ id: 'cfg-1', identifier: 'openai' }]);
+      mockRepo.getByIdentifier.mockResolvedValue({
+        identifier: 'openai',
+        version: 'v1',
+        budgetMonthlyCap: 100,
+        budgetDailyCap: 10,
+        budgetAlertThresholdPct: 0.85,
+      });
+      mockRepo.upsert.mockResolvedValue({
+        identifier: 'openai',
+        version: 'v1',
+        budgetMonthlyCap: 100,
+        budgetDailyCap: 10,
+        budgetAlertThresholdPct: 0.85,
+      });
+
+      await service.upsert('org-1', 'openai', {
+        budgetMonthlyCap: 100,
+      });
+
+      expect(mockAiSettings.createAuditLog).not.toHaveBeenCalled();
+    });
+
+    it('setActive copies budget from the previously active row when target is null', async () => {
+      mockKernel.latestActive.mockReturnValue({ manifest: { version: 'v1' } });
+      mockRepo.getByIdentifier.mockResolvedValue({
+        identifier: 'openai',
+        version: 'v1',
+        credentials: 'enc:{"apiKey":"sk-x"}',
+        budgetMonthlyCap: null,
+        budgetDailyCap: null,
+        budgetAlertThresholdPct: null,
+      });
+      mockRepo.getActive.mockResolvedValue({
+        identifier: 'openai',
+        version: 'v2',
+        budgetMonthlyCap: 250,
+        budgetDailyCap: 25,
+        budgetAlertThresholdPct: 0.88,
+      });
+      mockRepo.upsert.mockResolvedValue({ ok: true });
+      mockRepo.setActive.mockResolvedValue({ ok: true });
+
+      await service.setActive('org-1', 'openai');
+
+      expect(mockRepo.upsert).toHaveBeenCalledWith(
+        'org-1',
+        'openai',
+        {
+          budgetMonthlyCap: 250,
+          budgetDailyCap: 25,
+          budgetAlertThresholdPct: 0.88,
+        },
+        'v1',
+      );
+      expect(mockRepo.setActive).toHaveBeenCalledWith('org-1', 'openai', 'v1');
+    });
+
+    it('setActive does not overwrite budget already present on the target row', async () => {
+      mockKernel.latestActive.mockReturnValue({ manifest: { version: 'v1' } });
+      mockRepo.getByIdentifier.mockResolvedValue({
+        identifier: 'openai',
+        version: 'v1',
+        credentials: 'enc:{"apiKey":"sk-x"}',
+        budgetMonthlyCap: 75,
+        budgetDailyCap: 7,
+        budgetAlertThresholdPct: 0.75,
+      });
+      mockRepo.getActive.mockResolvedValue({
+        identifier: 'openai',
+        version: 'v2',
+        budgetMonthlyCap: 250,
+        budgetDailyCap: 25,
+        budgetAlertThresholdPct: 0.88,
+      });
+      mockRepo.setActive.mockResolvedValue({ ok: true });
+
+      await service.setActive('org-1', 'openai');
+
+      // No intermediate budget upsert because every column is already set.
+      expect(mockRepo.upsert).not.toHaveBeenCalled();
+      expect(mockRepo.setActive).toHaveBeenCalledWith('org-1', 'openai', 'v1');
+    });
+
+    it('exposes budget fields in getProviders', async () => {
+      mockKernel.listManifests.mockReturnValue([{ providerId: 'openai', version: 'v1' }]);
+      mockResolution.resolveAI.mockReturnValue(adapter);
+      mockRepo.getByOrg.mockResolvedValue([
+        {
+          identifier: 'openai',
+          enabled: true,
+          isActive: true,
+          credentials: 'enc:{"apiKey":"sk"}',
+          defaultModel: 'gpt-4',
+          reasoningModel: 'o1',
+          version: 'v1',
+          budgetMonthlyCap: 100,
+          budgetDailyCap: 10,
+          budgetAlertThresholdPct: 0.85,
+          createdAt: null,
+          updatedAt: null,
+        },
+      ]);
+
+      const res = await service.getProviders('org-1');
+      expect(res[0]).toMatchObject({
+        budgetMonthlyCap: 100,
+        budgetDailyCap: 10,
+        budgetAlertThresholdPct: 0.85,
+      });
     });
   });
 });

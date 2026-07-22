@@ -303,16 +303,16 @@ describe('AiSettingsRepository', () => {
   });
 
   describe('getSpendSummary', () => {
-    it('aggregates cost and tokens grouped by scope for a given org', async () => {
+    it('aggregates cost and tokens grouped by scope and provider for a given org', async () => {
       const summary = [
-        { scope: 'chat', _sum: { costUsd: 0.05, inputTokens: 300, outputTokens: 150 } },
+        { scope: 'chat', provider: 'openai', _sum: { costUsd: 0.05, inputTokens: 300, outputTokens: 150 } },
       ];
       mockSpendLog.groupBy.mockResolvedValue(summary);
 
       const result = await repository.getSpendSummary('org1');
 
       expect(mockSpendLog.groupBy).toHaveBeenCalledWith({
-        by: ['scope'],
+        by: ['scope', 'provider'],
         where: { organizationId: 'org1' },
         _sum: { costUsd: true, inputTokens: true, outputTokens: true },
       });
@@ -323,7 +323,7 @@ describe('AiSettingsRepository', () => {
       await repository.getSpendSummary(undefined);
 
       expect(mockSpendLog.groupBy).toHaveBeenCalledWith({
-        by: ['scope'],
+        by: ['scope', 'provider'],
         where: {},
         _sum: { costUsd: true, inputTokens: true, outputTokens: true },
       });

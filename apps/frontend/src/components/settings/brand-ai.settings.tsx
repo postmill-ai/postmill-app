@@ -47,8 +47,19 @@ interface BudgetInfo {
   remainingDaily: number | null;
 }
 
+interface ProviderUsage {
+  provider: string;
+  monthlySpendUsd: number;
+  dailySpendUsd: number;
+  monthlyCap: number | null;
+  dailyCap: number | null;
+  remainingMonthly: number | null;
+  remainingDaily: number | null;
+}
+
 interface UsageResponse {
   byScope: ScopeSummary[];
+  byProvider: ProviderUsage[];
   totalSpendUsd: number;
   budget: BudgetInfo | null;
 }
@@ -477,6 +488,95 @@ export const UsageSection = () => {
         {(!data?.byScope || data.byScope.length === 0) && (
           <div className="text-[12px] text-newTableText">
             {t('no_spend_data', 'No spend data yet')}
+          </div>
+        )}
+      </div>
+
+      <div className="flex flex-col gap-[12px]">
+        <div className="text-[14px]">{t('spend_by_provider', 'Spend by Provider')}</div>
+        {data?.byProvider?.map((provider) => {
+          const monthlySpend = provider.monthlySpendUsd || 0;
+          const dailySpend = provider.dailySpendUsd || 0;
+          const monthlyCap = provider.monthlyCap;
+          const dailyCap = provider.dailyCap;
+          const monthlyWidth =
+            monthlyCap != null && monthlyCap > 0
+              ? Math.min(100, (monthlySpend / monthlyCap) * 100)
+              : 0;
+          const dailyWidth =
+            dailyCap != null && dailyCap > 0
+              ? Math.min(100, (dailySpend / dailyCap) * 100)
+              : 0;
+          return (
+            <div
+              key={provider.provider}
+              className="flex flex-col gap-[8px] bg-newTableHeader border border-newTableBorder rounded-[8px] p-[12px]"
+            >
+              <div className="text-[13px] font-medium capitalize">
+                {provider.provider}
+              </div>
+
+              <div className="flex flex-col gap-[4px]">
+                <div className="flex justify-between text-[12px]">
+                  <span className="text-newTableText">
+                    {t('ai_budget_monthly_cap', 'Monthly cap')}
+                  </span>
+                  <span className="text-textColor">
+                    ${monthlySpend.toFixed(4)}
+                    {monthlyCap != null
+                      ? ` / $${monthlyCap.toFixed(2)} (${t('remaining', 'remaining')}: $${provider.remainingMonthly?.toFixed(4)})`
+                      : ` (${t('no_cap', 'no cap')})`}
+                  </span>
+                </div>
+                {monthlyCap != null && (
+                  <div className="flex-1 h-[8px] bg-newTableBorder rounded-[4px] overflow-hidden">
+                    <div
+                      className={`h-full rounded-[4px] transition-all ${
+                        monthlyWidth >= 100
+                          ? 'bg-[var(--negative,#f97066)]'
+                          : monthlyWidth >= 80
+                            ? 'bg-amber-500'
+                            : 'bg-btnPrimary'
+                      }`}
+                      style={{ width: `${monthlyWidth}%` }}
+                    />
+                  </div>
+                )}
+              </div>
+
+              <div className="flex flex-col gap-[4px]">
+                <div className="flex justify-between text-[12px]">
+                  <span className="text-newTableText">
+                    {t('ai_budget_daily_cap', 'Daily cap')}
+                  </span>
+                  <span className="text-textColor">
+                    ${dailySpend.toFixed(4)}
+                    {dailyCap != null
+                      ? ` / $${dailyCap.toFixed(2)} (${t('remaining', 'remaining')}: $${provider.remainingDaily?.toFixed(4)})`
+                      : ` (${t('no_cap', 'no cap')})`}
+                  </span>
+                </div>
+                {dailyCap != null && (
+                  <div className="flex-1 h-[8px] bg-newTableBorder rounded-[4px] overflow-hidden">
+                    <div
+                      className={`h-full rounded-[4px] transition-all ${
+                        dailyWidth >= 100
+                          ? 'bg-[var(--negative,#f97066)]'
+                          : dailyWidth >= 80
+                            ? 'bg-amber-500'
+                            : 'bg-btnPrimary'
+                      }`}
+                      style={{ width: `${dailyWidth}%` }}
+                    />
+                  </div>
+                )}
+              </div>
+            </div>
+          );
+        })}
+        {(!data?.byProvider || data.byProvider.length === 0) && (
+          <div className="text-[12px] text-newTableText">
+            {t('no_provider_spend_data', 'No provider spend data yet')}
           </div>
         )}
       </div>

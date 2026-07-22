@@ -51,6 +51,22 @@ export class UpsertOrgAiConfigDto {
   reasoningModel?: string;
 
   @IsOptional()
+  @IsNumber()
+  @Min(0)
+  budgetMonthlyCap?: number;
+
+  @IsOptional()
+  @IsNumber()
+  @Min(0)
+  budgetDailyCap?: number;
+
+  @IsOptional()
+  @IsNumber()
+  @Min(0)
+  @Max(1)
+  budgetAlertThresholdPct?: number;
+
+  @IsOptional()
   @IsString()
   version?: string;
 

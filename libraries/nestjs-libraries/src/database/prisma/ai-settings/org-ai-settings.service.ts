@@ -16,6 +16,7 @@ import { ProviderKernel, DEFAULT_VERSION } from '@gitroom/provider-kernel';
 import { isSafePublicHttpsUrl } from '@gitroom/nestjs-libraries/dtos/webhooks/webhook.url.validator';
 import { bustDefaultsCatalogCache } from '@gitroom/nestjs-libraries/ai/defaults/defaults-cache';
 import { DefaultsSeedService } from '@gitroom/nestjs-libraries/ai/defaults/defaults-seed.service';
+import { AiSettingsService } from '@gitroom/nestjs-libraries/database/prisma/ai-settings/ai-settings.service';
 
 @Injectable()
 export class OrgAiSettingsService {
@@ -28,6 +29,7 @@ export class OrgAiSettingsService {
     @Inject(PROVIDER_KERNEL) private _kernel: ProviderKernel,
     @Inject(forwardRef(() => DefaultsSeedService))
     private _defaultsSeed: DefaultsSeedService,
+    private _aiSettings: AiSettingsService,
     @Optional() private _credentialLink?: ProviderCredentialLinkService,
   ) {}
 
@@ -73,6 +75,9 @@ export class OrgAiSettingsService {
         isConfigured,
         defaultModel: dbConfig?.defaultModel || '',
         reasoningModel: dbConfig?.reasoningModel || '',
+        budgetMonthlyCap: dbConfig?.budgetMonthlyCap ?? null,
+        budgetDailyCap: dbConfig?.budgetDailyCap ?? null,
+        budgetAlertThresholdPct: dbConfig?.budgetAlertThresholdPct ?? null,
         version: dbConfig?.version ?? 'v1',
         createdAt: dbConfig?.createdAt || null,
         updatedAt: dbConfig?.updatedAt || null,
@@ -99,6 +104,9 @@ export class OrgAiSettingsService {
       isActive: config.isActive,
       defaultModel: config.defaultModel,
       reasoningModel: config.reasoningModel,
+      budgetMonthlyCap: config.budgetMonthlyCap ?? null,
+      budgetDailyCap: config.budgetDailyCap ?? null,
+      budgetAlertThresholdPct: config.budgetAlertThresholdPct ?? null,
       credentials: decrypted,
     };
   }
@@ -123,6 +131,9 @@ export class OrgAiSettingsService {
       isActive: config.isActive,
       defaultModel: config.defaultModel || '',
       reasoningModel: config.reasoningModel || '',
+      budgetMonthlyCap: config.budgetMonthlyCap ?? null,
+      budgetDailyCap: config.budgetDailyCap ?? null,
+      budgetAlertThresholdPct: config.budgetAlertThresholdPct ?? null,
       credentials: decrypted,
     };
   }
@@ -136,6 +147,9 @@ export class OrgAiSettingsService {
       credentials?: Record<string, string>;
       defaultModel?: string;
       reasoningModel?: string;
+      budgetMonthlyCap?: number;
+      budgetDailyCap?: number;
+      budgetAlertThresholdPct?: number;
       extraConfig?: Record<string, unknown> | string;
       version?: string;
     },
@@ -162,6 +176,8 @@ export class OrgAiSettingsService {
     const isFirstProvider =
       !!payload.credentials && (await this._repository.getByOrg(orgId)).length === 0;
 
+    const existing = await this._repository.getByIdentifier(orgId, identifier, version);
+
     const encryptedCredentials = payload.credentials
       ? this._encryption.encrypt(JSON.stringify(payload.credentials))
       : undefined;
@@ -175,6 +191,8 @@ export class OrgAiSettingsService {
       credentials: encryptedCredentials,
       extraConfig,
     }, version);
+
+    await this._auditBudgetChange(orgId, identifier, version, existing, result);
 
     // §11.4 auto-config: OpenAI/MiniMax AI credentials live-link to the media surface.
     if (data.credentials && this._credentialLink) {
@@ -222,6 +240,34 @@ export class OrgAiSettingsService {
     const decrypted = this._decryptCredentials(config.credentials);
     if (!this._hasRequiredCredentials(adapter, decrypted)) {
       throw new Error(`Provider "${identifier}" is not fully configured. Fill in all required credential fields first.`);
+    }
+
+    // D3: provider-scoped budgets copy from the previously active row when the new
+    // row's budget columns are null. This keeps a version activation from silently
+    // dropping an org's configured cap.
+    const previousActive = await this._repository.getActive(orgId);
+    const shouldCopyBudget =
+      previousActive &&
+      (previousActive.identifier !== identifier || previousActive.version !== resolvedVersion);
+
+    if (shouldCopyBudget) {
+      const budgetUpdates: {
+        budgetMonthlyCap?: number | null;
+        budgetDailyCap?: number | null;
+        budgetAlertThresholdPct?: number | null;
+      } = {};
+      if (config.budgetMonthlyCap == null && previousActive.budgetMonthlyCap != null) {
+        budgetUpdates.budgetMonthlyCap = previousActive.budgetMonthlyCap;
+      }
+      if (config.budgetDailyCap == null && previousActive.budgetDailyCap != null) {
+        budgetUpdates.budgetDailyCap = previousActive.budgetDailyCap;
+      }
+      if (config.budgetAlertThresholdPct == null && previousActive.budgetAlertThresholdPct != null) {
+        budgetUpdates.budgetAlertThresholdPct = previousActive.budgetAlertThresholdPct;
+      }
+      if (Object.keys(budgetUpdates).length > 0) {
+        await this._repository.upsert(orgId, identifier, budgetUpdates, resolvedVersion);
+      }
     }
 
     const result = await this._repository.setActive(orgId, identifier, resolvedVersion);
@@ -292,6 +338,40 @@ export class OrgAiSettingsService {
     if (!safe) {
       throw new BadRequestException(
         'Base URL must be a public HTTPS URL (private, loopback, and non-HTTPS hosts are not allowed)',
+      );
+    }
+  }
+
+  private async _auditBudgetChange(
+    orgId: string,
+    identifier: string,
+    version: string,
+    before: { budgetMonthlyCap?: number | null; budgetDailyCap?: number | null; budgetAlertThresholdPct?: number | null } | null,
+    after: { budgetMonthlyCap?: number | null; budgetDailyCap?: number | null; budgetAlertThresholdPct?: number | null },
+  ): Promise<void> {
+    const changed: Record<string, { old: number | null; new: number | null }> = {};
+    for (const field of ['budgetMonthlyCap', 'budgetDailyCap', 'budgetAlertThresholdPct'] as const) {
+      const oldVal = before?.[field] ?? null;
+      const newVal = after[field] ?? null;
+      if (oldVal !== newVal) {
+        changed[field] = { old: oldVal, new: newVal };
+      }
+    }
+    if (Object.keys(changed).length === 0) return;
+
+    try {
+      await this._aiSettings.createAuditLog({
+        action: 'provider_budget_updated',
+        detail: JSON.stringify({
+          organizationId: orgId,
+          identifier,
+          version,
+          changes: changed,
+        }),
+      });
+    } catch (err) {
+      this._logger.warn(
+        `Failed to write AI settings audit log for budget change: ${err instanceof Error ? err.message : String(err)}`,
       );
     }
   }

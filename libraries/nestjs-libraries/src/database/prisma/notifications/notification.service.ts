@@ -390,15 +390,16 @@ export class NotificationService {
     });
   }
 
-  async notifyBudgetThreshold(orgId: string, scope: string, usagePct: number) {
+  async notifyBudgetThreshold(orgId: string, scope: string, usagePct: number, provider?: string) {
+    const providerLabel = provider ? `provider "${provider}"` : 'your AI budget';
     const title = `AI budget alert: ${usagePct.toFixed(0)}% used`;
-    const message = `Your AI budget for "${scope}" has reached ${usagePct.toFixed(0)}% of the cap. Review your usage in AI settings.`;
+    const message = `Your AI budget for ${providerLabel}${scope ? ` (${scope})` : ''} has reached ${usagePct.toFixed(0)}% of the cap. Review your usage in AI settings.`;
     await this.notify({
       orgId,
       category: 'budget',
       title,
       message,
-      metadata: { scope, usagePct },
+      metadata: { scope, usagePct, provider },
       channels: { email: true, push: false, inApp: true },
     });
   }

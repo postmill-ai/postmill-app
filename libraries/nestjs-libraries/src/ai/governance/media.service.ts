@@ -28,7 +28,7 @@ import {
 // `moduleRef.get(...)` at call-time, so the runtime class is `require`d inside the methods.
 import type { SlideService } from '@gitroom/nestjs-libraries/media/slide/slide.service';
 import type { CaptionService } from '@gitroom/nestjs-libraries/media/caption/caption.service';
-import { CapabilityNotAvailable } from './errors';
+import { BudgetExceeded, CapabilityNotAvailable } from './errors';
 import type { MediaOperation } from '@gitroom/nestjs-libraries/ai/governance/media-operation.types';
 import {
   AI_MEDIA_CATEGORIES,
@@ -369,6 +369,14 @@ export class AiMediaService {
       return JSON.parse(decrypted) as Record<string, string>;
     } catch {
       return null;
+    }
+  }
+
+  private async _assertMediaBudget(orgId: string | undefined, providerId: string): Promise<void> {
+    if (!this._budget) return;
+    const check = await this._budget.checkBudget('media', orgId, providerId);
+    if (!check.allowed) {
+      throw new BudgetExceeded(check.reason || 'Budget exceeded', 'media', orgId);
     }
   }
 
@@ -933,6 +941,7 @@ export class AiMediaService {
     const candidates = await this._resolveForOperation(options?.orgId, 'image', options?.sourceUrl);
 
     for (const candidate of candidates) {
+      await this._assertMediaBudget(options?.orgId, candidate.adapter.identifier);
       try {
         const result = await candidate.adapter.generateImage(prompt, {
           credentials: candidate.credentials,
@@ -969,9 +978,14 @@ export class AiMediaService {
     }
     const url = await model.generate(prompt, { size });
 
+    const aiConfig = await this._aiModelProvider.resolveConfigForScope('utility', options?.orgId);
+    if (!aiConfig) {
+      throw new CapabilityNotAvailable('Image generation is not available on the current AI provider', 'image');
+    }
     await this._persistJob({
       operation: 'image',
-      provider: 'ai-media',
+      provider: aiConfig.providerId,
+      model: aiConfig.modelId,
       orgId: options?.orgId,
       userId: options?.userId,
       artifactUrl: url,
@@ -1018,6 +1032,8 @@ export class AiMediaService {
 
     let lastError: Error | undefined;
     for (const candidate of candidates) {
+      await this._assertMediaBudget(options?.orgId, candidate.adapter.identifier);
+
       const method =
         operation === 'video'
           ? candidate.adapter.generateVideo.bind(candidate.adapter)
@@ -1132,6 +1148,7 @@ export class AiMediaService {
 
     for (const candidate of candidates) {
       if (!candidate.adapter.textToSpeech) continue;
+      await this._assertMediaBudget(options?.orgId, candidate.adapter.identifier);
       try {
         const result = await candidate.adapter.textToSpeech(text, {
           credentials: candidate.credentials,
@@ -1166,6 +1183,7 @@ export class AiMediaService {
 
     for (const candidate of candidates) {
       if (!candidate.adapter.speechToText) continue;
+      await this._assertMediaBudget(options?.orgId, candidate.adapter.identifier);
       try {
         const text = await candidate.adapter.speechToText(audio, {
           credentials: candidate.credentials,
@@ -1212,6 +1230,7 @@ export class AiMediaService {
 
     for (const candidate of candidates) {
       if (!candidate.adapter.speechToTextWords) continue;
+      await this._assertMediaBudget(options?.orgId, candidate.adapter.identifier);
       try {
         const result = await candidate.adapter.speechToTextWords(audio, {
           credentials: candidate.credentials,
@@ -1247,6 +1266,7 @@ export class AiMediaService {
 
     for (const candidate of candidates) {
       if (!candidate.adapter.upscaleImage) continue;
+      await this._assertMediaBudget(options?.orgId, candidate.adapter.identifier);
       try {
         const result = await candidate.adapter.upscaleImage(imageUrl, {
           credentials: candidate.credentials,
@@ -1276,6 +1296,7 @@ export class AiMediaService {
 
     for (const candidate of candidates) {
       if (!candidate.adapter.removeBackground) continue;
+      await this._assertMediaBudget(options?.orgId, candidate.adapter.identifier);
       try {
         const result = await candidate.adapter.removeBackground(imageUrl, {
           credentials: candidate.credentials,
@@ -1311,6 +1332,7 @@ export class AiMediaService {
 
     for (const candidate of candidates) {
       if (!candidate.adapter.inpaintImage) continue;
+      await this._assertMediaBudget(options?.orgId, candidate.adapter.identifier);
       try {
         const result = await candidate.adapter.inpaintImage(imageUrl, maskUrl, prompt, {
           credentials: candidate.credentials,
@@ -1343,6 +1365,7 @@ export class AiMediaService {
 
     for (const candidate of candidates) {
       if (!candidate.adapter.upscaleVideo) continue;
+      await this._assertMediaBudget(options?.orgId, candidate.adapter.identifier);
       try {
         const submission = await candidate.adapter.upscaleVideo(videoUrl, {
           credentials: candidate.credentials,
@@ -1385,6 +1408,7 @@ export class AiMediaService {
 
     for (const candidate of candidates) {
       if (!candidate.adapter.removeVideoBackground) continue;
+      await this._assertMediaBudget(options?.orgId, candidate.adapter.identifier);
       try {
         const submission = await candidate.adapter.removeVideoBackground(videoUrl, {
           credentials: candidate.credentials,

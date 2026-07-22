@@ -9,6 +9,8 @@ const mockOrgAiGetActiveProvider = vi.fn();
 const mockOrgAiGetProviders = vi.fn();
 const mockOrgAiDelete = vi.fn();
 const mockOrgAiTestConnection = vi.fn();
+const mockOrgAiGetBudget = vi.fn();
+const mockOrgAiUpdateBudget = vi.fn();
 
 vi.mock(
   '@gitroom/nestjs-libraries/database/prisma/ai-settings/org-ai-settings.service',
@@ -20,6 +22,8 @@ vi.mock(
       getProviders = mockOrgAiGetProviders;
       delete = mockOrgAiDelete;
       testConnection = mockOrgAiTestConnection;
+      getBudget = mockOrgAiGetBudget;
+      updateBudget = mockOrgAiUpdateBudget;
     },
   }),
 );
@@ -124,6 +128,33 @@ describe('OrgAiSettingsController — provider config + cache invalidation', () 
       apiKey: 'candidate',
     });
     expect(result).toEqual({ valid: true });
+  });
+
+  it('GET /settings/ai/budget returns the legacy budget shape (monthlyCap/dailyCap)', async () => {
+    mockOrgAiGetBudget.mockResolvedValue({
+      monthlyCap: 100,
+      dailyCap: 10,
+      alertThresholdPct: 0.8,
+    });
+    controller = makeController();
+
+    const result = await controller.getBudget(org);
+
+    expect(mockOrgAiGetBudget).toHaveBeenCalledWith('org-1');
+    expect(result).toEqual({
+      monthlyCap: 100,
+      dailyCap: 10,
+      alertThresholdPct: 0.8,
+    });
+  });
+
+  it('GET /settings/ai/budget returns an empty object when no budget is configured', async () => {
+    mockOrgAiGetBudget.mockResolvedValue(null);
+    controller = makeController();
+
+    const result = await controller.getBudget(org);
+
+    expect(result).toEqual({});
   });
 });
 

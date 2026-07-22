@@ -34,6 +34,12 @@ import { AiSettingsManager } from '@gitroom/nestjs-libraries/ai/ai-settings.mana
 import { AiSettingsService } from '@gitroom/nestjs-libraries/database/prisma/ai-settings/ai-settings.service';
 import { NotificationService } from '@gitroom/nestjs-libraries/database/prisma/notifications/notification.service';
 
+const mockFindFirstProviderConfig = vi.fn().mockResolvedValue(null);
+const mockOrgProviderRepo = {
+  model: {
+    aIOrgProviderConfig: { findFirst: mockFindFirstProviderConfig },
+  },
+};
 const mockSpendLogRepo = { model: { aISpendLog: { groupBy: mockGroupBy } } };
 const mockNotificationService = { notifyBudgetThreshold: vi.fn().mockResolvedValue(undefined) };
 
@@ -44,6 +50,7 @@ describe('BudgetService', () => {
     return new BudgetService(
       new (AiSettingsManager as any)(),
       new (AiSettingsService as any)(),
+      mockOrgProviderRepo as any,
       mockSpendLogRepo as any,
       mockNotificationService as any,
     );
@@ -51,8 +58,9 @@ describe('BudgetService', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
-    mockGroupBy.mockResolvedValue([]);
-    mockGetSettings.mockResolvedValue(null);
+    mockGroupBy.mockReset().mockResolvedValue([]);
+    mockFindFirstProviderConfig.mockReset().mockResolvedValue(null);
+    mockGetSettings.mockReset().mockResolvedValue(null);
     service = freshService();
   });
 
@@ -109,6 +117,83 @@ describe('BudgetService', () => {
       service = freshService();
       const result = await service.checkBudget('utility');
       expect(result.allowed).toBe(true);
+    });
+
+    it('returns allowed:true when provider cap is null', async () => {
+      mockFindFirstProviderConfig.mockResolvedValue({
+        identifier: 'openai',
+        budgetMonthlyCap: null,
+        budgetDailyCap: null,
+        budgetAlertThresholdPct: null,
+      });
+
+      const result = await service.checkBudget('utility', 'org-1', 'openai');
+      expect(result.allowed).toBe(true);
+    });
+
+    it('returns allowed:false when provider monthly cap is exhausted', async () => {
+      mockFindFirstProviderConfig.mockResolvedValue({
+        identifier: 'openai',
+        budgetMonthlyCap: 10,
+        budgetDailyCap: null,
+        budgetAlertThresholdPct: null,
+      });
+      mockGroupBy
+        .mockResolvedValueOnce([
+          { organizationId: 'org-1', provider: 'openai', _sum: { costUsd: 10 } },
+        ])
+        .mockResolvedValueOnce([
+          { organizationId: 'org-1', provider: 'openai', _sum: { costUsd: 1 } },
+        ]);
+
+      const result = await service.checkBudget('utility', 'org-1', 'openai');
+      expect(result.allowed).toBe(false);
+      expect(result.reason).toBe('provider_budget_exceeded');
+      expect(result.provider).toBe('openai');
+    });
+
+    it('returns allowed:false when provider daily cap is exhausted', async () => {
+      mockFindFirstProviderConfig.mockResolvedValue({
+        identifier: 'openai',
+        budgetMonthlyCap: null,
+        budgetDailyCap: 5,
+        budgetAlertThresholdPct: null,
+      });
+      mockGroupBy
+        .mockResolvedValueOnce([
+          { organizationId: 'org-1', provider: 'openai', _sum: { costUsd: 1 } },
+        ])
+        .mockResolvedValueOnce([
+          { organizationId: 'org-1', provider: 'openai', _sum: { costUsd: 5 } },
+        ]);
+
+      const result = await service.checkBudget('utility', 'org-1', 'openai');
+      expect(result.allowed).toBe(false);
+      expect(result.provider).toBe('openai');
+    });
+
+    it('does not block a different provider when one provider cap is exhausted', async () => {
+      mockFindFirstProviderConfig.mockImplementation((args: any) => {
+        const caps =
+          args.where.identifier === 'openai'
+            ? { budgetMonthlyCap: 10, budgetDailyCap: null }
+            : { budgetMonthlyCap: null, budgetDailyCap: null };
+        return Promise.resolve({ identifier: args.where.identifier, ...caps });
+      });
+      mockGroupBy
+        .mockResolvedValueOnce([
+          { organizationId: 'org-1', provider: 'openai', _sum: { costUsd: 10 } },
+        ])
+        .mockResolvedValueOnce([
+          { organizationId: 'org-1', provider: 'openai', _sum: { costUsd: 1 } },
+        ]);
+
+      const openai = await service.checkBudget('utility', 'org-1', 'openai');
+      expect(openai.allowed).toBe(false);
+
+      // The cache keyed by org+provider must not bleed across providers.
+      const anthropic = await service.checkBudget('utility', 'org-1', 'anthropic');
+      expect(anthropic.allowed).toBe(true);
     });
   });
 
@@ -522,6 +607,118 @@ describe('BudgetService', () => {
           costUsd: 80,
         }),
       ).resolves.toBeUndefined();
+    });
+
+    it('fires provider-scoped monthly alerts independently per provider', async () => {
+      mockFindFirstProviderConfig.mockImplementation((args: any) => {
+        return Promise.resolve({
+          identifier: args.where.identifier,
+          budgetMonthlyCap: 100,
+          budgetDailyCap: null,
+          budgetAlertThresholdPct: 0.8,
+        });
+      });
+      mockGetSettings.mockResolvedValue({ budgetSettings: {} });
+      service = freshService();
+
+      await service.recordSpend({
+        organizationId: 'org-1',
+        provider: 'openai',
+        model: 'gpt-4.1',
+        scope: 'utility',
+        inputTokens: 0,
+        outputTokens: 0,
+        costUsd: 80,
+      });
+
+      await service.recordSpend({
+        organizationId: 'org-1',
+        provider: 'anthropic',
+        model: 'claude-3',
+        scope: 'utility',
+        inputTokens: 0,
+        outputTokens: 0,
+        costUsd: 80,
+      });
+
+      expect(mockNotificationService.notifyBudgetThreshold).toHaveBeenCalledTimes(2);
+      expect(mockNotificationService.notifyBudgetThreshold).toHaveBeenCalledWith(
+        'org-1',
+        'utility',
+        80,
+        'openai',
+      );
+      expect(mockNotificationService.notifyBudgetThreshold).toHaveBeenCalledWith(
+        'org-1',
+        'utility',
+        80,
+        'anthropic',
+      );
+    });
+
+    it('fires a provider-scoped daily-cap alert when exceeded', async () => {
+      mockFindFirstProviderConfig.mockResolvedValue({
+        identifier: 'openai',
+        budgetMonthlyCap: null,
+        budgetDailyCap: 10,
+        budgetAlertThresholdPct: null,
+      });
+      mockGetSettings.mockResolvedValue({ budgetSettings: {} });
+      service = freshService();
+
+      await service.recordSpend({
+        organizationId: 'org-1',
+        provider: 'openai',
+        model: 'gpt-4.1',
+        scope: 'utility',
+        inputTokens: 0,
+        outputTokens: 0,
+        costUsd: 10,
+      });
+
+      expect(mockNotificationService.notifyBudgetThreshold).toHaveBeenCalledWith(
+        'org-1',
+        'daily_cap',
+        100,
+        'openai',
+      );
+    });
+
+    it('logs and skips tracking when the provider accumulator map overflows', async () => {
+      const warn = vi.fn();
+      (service as any)._logger.warn = warn;
+
+      // Initialize the accumulator.
+      await service.recordSpend({
+        organizationId: 'org-1',
+        provider: 'seed',
+        model: 'gpt-4.1',
+        scope: 'utility',
+        inputTokens: 0,
+        outputTokens: 0,
+        costUsd: 0.001,
+      });
+
+      const providerMonthly = (service as any)._spendAccum.providerMonthly;
+      // Fill the map up to its size limit (seed + 49,999 other keys).
+      for (let i = 0; i < 49_999; i++) {
+        providerMonthly.set(`org::p${i}`, 0);
+      }
+
+      await service.recordSpend({
+        organizationId: 'org-1',
+        provider: 'new',
+        model: 'gpt-4.1',
+        scope: 'utility',
+        inputTokens: 0,
+        outputTokens: 0,
+        costUsd: 0.001,
+      });
+
+      expect(warn).toHaveBeenCalledWith(
+        expect.stringContaining('provider map size'),
+      );
+      expect(providerMonthly.has('org-1::new')).toBe(false);
     });
   });
 });

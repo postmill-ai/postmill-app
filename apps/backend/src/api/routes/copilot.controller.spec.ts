@@ -161,6 +161,13 @@ vi.mock('@gitroom/nestjs-libraries/ai/governance/telemetry.service', () => ({
   },
 }));
 
+vi.mock('@gitroom/nestjs-libraries/ai/governance/budget.service', () => ({
+  BudgetService: class {
+    checkBudget = vi.fn().mockResolvedValue({ allowed: true });
+    recordSpend = vi.fn().mockResolvedValue(undefined);
+  },
+}));
+
 vi.mock('@gitroom/nestjs-libraries/feature-flags', () => ({
   FeatureFlagsService: class {
     isDisabled = vi.fn().mockReturnValue(false);
@@ -190,6 +197,7 @@ import { MastraService } from '@gitroom/nestjs-libraries/chat/mastra.service';
 import { AIModelProvider } from '@gitroom/nestjs-libraries/ai/ai-model.provider';
 import { GuardrailService } from '@gitroom/nestjs-libraries/ai/governance/guardrail.service';
 import { TelemetryService } from '@gitroom/nestjs-libraries/ai/governance/telemetry.service';
+import { BudgetService } from '@gitroom/nestjs-libraries/ai/governance/budget.service';
 import { FeatureFlagsService } from '@gitroom/nestjs-libraries/feature-flags';
 import { RequestContext } from '@mastra/core/di';
 
@@ -218,12 +226,14 @@ describe('CopilotController', () => {
 
     const guardrailService = new (GuardrailService as any)();
     const telemetryService = new (TelemetryService as any)();
+    const budgetService = new (BudgetService as any)();
     const featureFlagsService = new (FeatureFlagsService as any)();
     controller = new CopilotController(
       mastraService,
       aiModelProvider,
       guardrailService,
       telemetryService,
+      budgetService,
       featureFlagsService,
     );
   });

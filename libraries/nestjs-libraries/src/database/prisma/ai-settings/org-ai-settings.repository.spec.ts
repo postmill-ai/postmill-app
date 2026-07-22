@@ -97,6 +97,25 @@ describe('OrgAiSettingsRepository', () => {
     expect(arg.update).toMatchObject({ enabled: true, credentials: 'enc' });
   });
 
+  it('upsert passes provider budget columns through to create and update', () => {
+    repository.upsert('org1', 'openai', {
+      budgetMonthlyCap: 100,
+      budgetDailyCap: 10,
+      budgetAlertThresholdPct: 0.85,
+    });
+    const arg = (providerConfig.upsert as any).mock.calls[0][0];
+    expect(arg.create).toMatchObject({
+      budgetMonthlyCap: 100,
+      budgetDailyCap: 10,
+      budgetAlertThresholdPct: 0.85,
+    });
+    expect(arg.update).toMatchObject({
+      budgetMonthlyCap: 100,
+      budgetDailyCap: 10,
+      budgetAlertThresholdPct: 0.85,
+    });
+  });
+
   it('delete uses default version', () => {
     repository.delete('org1', 'openai');
     expect(providerConfig.delete).toHaveBeenCalledWith({

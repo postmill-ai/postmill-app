@@ -4,6 +4,8 @@ import { ioRedis } from '@gitroom/nestjs-libraries/redis/redis.service';
 import { AiSettingsManager } from '../ai-settings.manager';
 import type { AIModelProvider } from '../ai-model.provider';
 import type { AIScope } from '../ai-provider.interface';
+import { BudgetService } from './budget.service';
+import { BudgetExceeded } from './errors';
 
 /**
  * Semantic response cache (plan §6.1 #15, decision table #29) — OPT-IN, OFF BY DEFAULT.
@@ -49,7 +51,10 @@ export class SemanticCacheService {
   // owns the embedding-model resolution and is the only caller that needs the semantic tier.
   private _modelProvider: AIModelProvider | null = null;
 
-  constructor(private readonly _aiSettingsManager: AiSettingsManager) {}
+  constructor(
+    private readonly _aiSettingsManager: AiSettingsManager,
+    private readonly _budget: BudgetService,
+  ) {}
 
   /**
    * Wire the embedding tier. Called once by AIModelProvider after construction.
@@ -170,6 +175,15 @@ export class SemanticCacheService {
     text: string,
   ): Promise<number[] | null> {
     if (!this._modelProvider) return null;
+
+    const cfg = await this._modelProvider.resolveConfigForScope(scope as AIScope, orgId);
+    if (!cfg) return null;
+
+    const budgetCheck = await this._budget.checkBudget(scope, orgId, cfg.providerId);
+    if (!budgetCheck.allowed) {
+      throw new BudgetExceeded(budgetCheck.reason || 'Budget exceeded', String(scope), orgId);
+    }
+
     let model: any;
     try {
       model = await this._modelProvider.embeddingModel(scope as AIScope, orgId);
@@ -180,7 +194,9 @@ export class SemanticCacheService {
     try {
       const result = await model.doEmbed({ values: [text] });
       const embedding = result?.embeddings?.[0];
-      return Array.isArray(embedding) && embedding.length > 0 ? embedding : null;
+      if (!Array.isArray(embedding) || embedding.length === 0) return null;
+
+      return embedding;
     } catch {
       return null;
     }

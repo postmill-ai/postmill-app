@@ -48,11 +48,20 @@ interface OrgProviderInfo {
   defaultModel: string;
   reasoningModel: string;
   capabilities: AICapabilities;
+  budgetMonthlyCap: number | null;
+  budgetDailyCap: number | null;
+  budgetAlertThresholdPct: number | null;
 }
 
 interface OrgConfigResponse {
   providers: OrgProviderInfo[];
 }
+
+const parseOptionalNumber = (value: unknown): number | undefined => {
+  if (value === '' || value == null) return undefined;
+  const parsed = typeof value === 'number' ? value : parseFloat(String(value));
+  return Number.isFinite(parsed) && parsed >= 0 ? parsed : undefined;
+};
 
 interface ProviderInfo {
   identifier: string;
@@ -171,7 +180,27 @@ export const aiDescriptor: ProviderSurfaceDescriptor<AiMeta> = {
   },
 
   form: {
-    extraFields: [],
+    extraFields: [
+      {
+        type: 'text',
+        key: 'budgetMonthlyCap',
+        label: 'Monthly budget cap',
+        placeholder: 'e.g. 100',
+      },
+      {
+        type: 'text',
+        key: 'budgetDailyCap',
+        label: 'Daily budget cap',
+        placeholder: 'e.g. 10',
+      },
+      {
+        type: 'text',
+        key: 'budgetAlertThresholdPct',
+        label: 'Alert threshold',
+        placeholder: 'e.g. 0.8',
+        help: 'Enter a value between 0 and 1 (e.g. 0.8 for 80%).',
+      },
+    ],
     // Base URL is not a user setting — every AI adapter defaults its own
     // canonical endpoint (see OpenAICompatibleAdapter / gateway). Hide it.
     credentialFieldsFromMeta: (m) =>
@@ -180,7 +209,24 @@ export const aiDescriptor: ProviderSurfaceDescriptor<AiMeta> = {
     buildBody: (state) => ({
       credentials: state.credentials,
       version: state.version || undefined,
+      budgetMonthlyCap: parseOptionalNumber(state.extra.budgetMonthlyCap),
+      budgetDailyCap: parseOptionalNumber(state.extra.budgetDailyCap),
+      budgetAlertThresholdPct: parseOptionalNumber(
+        state.extra.budgetAlertThresholdPct,
+      ),
     }),
     buildTestBody: (state) => ({ credentials: state.credentials }),
+    seedState: (meta) => ({
+      extra: {
+        budgetMonthlyCap:
+          meta?.budgetMonthlyCap != null ? String(meta.budgetMonthlyCap) : '',
+        budgetDailyCap:
+          meta?.budgetDailyCap != null ? String(meta.budgetDailyCap) : '',
+        budgetAlertThresholdPct:
+          meta?.budgetAlertThresholdPct != null
+            ? String(meta.budgetAlertThresholdPct)
+            : '',
+      },
+    }),
   },
 };

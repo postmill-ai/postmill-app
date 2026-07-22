@@ -1,5 +1,17 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
+const mockBudgetService = {
+  checkBudget: vi.fn().mockResolvedValue({ allowed: true }),
+  recordSpend: vi.fn().mockResolvedValue(undefined),
+};
+
+vi.mock('@gitroom/nestjs-libraries/ai/governance/budget.service', () => ({
+  BudgetService: class {
+    checkBudget = mockBudgetService.checkBudget;
+    recordSpend = mockBudgetService.recordSpend;
+  },
+}));
+
 const store = new Map<string, string>();
 const mockGet = vi.fn(async (key: string) => store.get(key) ?? null);
 const mockSet = vi.fn(async (key: string, value: string, _ex?: string, _ttl?: number) => {
@@ -18,7 +30,18 @@ import { SemanticCacheService } from './semantic-cache.service';
 
 function createService(settings: any) {
   const manager = { getSettings: vi.fn().mockResolvedValue(settings) } as any;
-  return { service: new SemanticCacheService(manager), manager };
+  const budget = mockBudgetService as any;
+  return { service: new SemanticCacheService(manager, budget), manager };
+}
+
+function createMockModelProvider(doEmbed: any) {
+  return {
+    embeddingModel: vi.fn().mockResolvedValue({ doEmbed }),
+    resolveConfigForScope: vi.fn().mockResolvedValue({
+      providerId: 'openai',
+      modelId: 'text-embedding-3-small',
+    }),
+  } as any;
 }
 
 describe('SemanticCacheService', () => {
@@ -144,9 +167,7 @@ describe('SemanticCacheService', () => {
         .mockResolvedValueOnce({ embeddings: [[1, 0, 0]] })
         // lookup call (similar prompt) — same vector ⇒ cosine 1.0
         .mockResolvedValueOnce({ embeddings: [[1, 0, 0]] });
-      service.setModelProvider({
-        embeddingModel: vi.fn().mockResolvedValue({ doEmbed }),
-      } as any);
+      service.setModelProvider(createMockModelProvider(doEmbed));
 
       await service.set('org-1', 'utility', 'how do I reset my password', 'use the reset link');
       const hit = await service.get('org-1', 'utility', 'a totally different wording string');
@@ -159,9 +180,7 @@ describe('SemanticCacheService', () => {
         .fn()
         .mockResolvedValueOnce({ embeddings: [[1, 0, 0]] })
         .mockResolvedValueOnce({ embeddings: [[0, 1, 0]] }); // orthogonal ⇒ cosine 0
-      service.setModelProvider({
-        embeddingModel: vi.fn().mockResolvedValue({ doEmbed }),
-      } as any);
+      service.setModelProvider(createMockModelProvider(doEmbed));
 
       await service.set('org-1', 'utility', 'prompt one', 'resp');
       const hit = await service.get('org-1', 'utility', 'unrelated longer prompt text');
@@ -174,9 +193,7 @@ describe('SemanticCacheService', () => {
         .fn()
         .mockResolvedValueOnce({ embeddings: [[1, 0, 0]] }) // store ok
         .mockRejectedValueOnce(new Error('embed failed')); // lookup fails
-      service.setModelProvider({
-        embeddingModel: vi.fn().mockResolvedValue({ doEmbed }),
-      } as any);
+      service.setModelProvider(createMockModelProvider(doEmbed));
       await service.set('org-1', 'utility', 'stored prompt', 'resp');
       const hit = await service.get('org-1', 'utility', 'a different surface text');
       expect(hit).toBeNull();
@@ -185,9 +202,7 @@ describe('SemanticCacheService', () => {
     it('tolerates a corrupt embedding index in Redis', async () => {
       const { service } = createService(settings);
       const doEmbed = vi.fn().mockResolvedValue({ embeddings: [[1, 0, 0]] });
-      service.setModelProvider({
-        embeddingModel: vi.fn().mockResolvedValue({ doEmbed }),
-      } as any);
+      service.setModelProvider(createMockModelProvider(doEmbed));
       // Pre-seed a corrupt embed index for this org/scope.
       const embedKey = (service as any)._embedKey('org-1', 'utility');
       store.set(embedKey, 'not-json{');
@@ -201,9 +216,7 @@ describe('SemanticCacheService', () => {
     it('keeps the embedding index per (org, scope) — no cross-org semantic leak', async () => {
       const { service } = createService(settings);
       const doEmbed = vi.fn().mockResolvedValue({ embeddings: [[1, 0, 0]] });
-      service.setModelProvider({
-        embeddingModel: vi.fn().mockResolvedValue({ doEmbed }),
-      } as any);
+      service.setModelProvider(createMockModelProvider(doEmbed));
 
       await service.set('org-A', 'utility', 'shared', 'A-resp');
       // org-B with an identical embedding vector must NOT read org-A's index.

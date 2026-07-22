@@ -35,7 +35,9 @@ vi.mock('@gitroom/nestjs-libraries/providers/provider-resolution.service', () =>
           listModels: vi.fn().mockResolvedValue([]),
           validateCredentials: vi.fn().mockResolvedValue({ ok: true }),
           createLanguageModel: vi.fn().mockReturnValue(mockLanguageModel),
-          createLangchainModel: vi.fn().mockReturnValue({}),
+          createLangchainModel: vi.fn().mockReturnValue({
+            invoke: vi.fn().mockResolvedValue({ usage_metadata: { input_tokens: 5, output_tokens: 7 } }),
+          }),
           createImageModel: vi.fn().mockReturnValue({ doGenerate: vi.fn().mockResolvedValue({ images: ['b64-image-data'] }) }),
           createEmbeddingModel: vi.fn().mockReturnValue({}),
           createSpeechModel: vi.fn().mockReturnValue({}),
@@ -353,6 +355,21 @@ describe('AIModelProvider', () => {
     it('returns a langchain model', async () => {
       const model = await provider.langchainModel('generator', 'org-123');
       expect(model).toBeDefined();
+    });
+
+    it('records usage after invoke via the budget wrapper', async () => {
+      (budget.recordSpend as any).mockClear();
+      const model = await provider.langchainModel('utility', 'org-123');
+      const result = await model.invoke([{ role: 'user', content: 'hi' }]);
+      expect(result).toBeDefined();
+      expect(budget.checkBudget).toHaveBeenCalledWith('utility', 'org-123', 'openai');
+      expect(budget.recordSpend).toHaveBeenCalledTimes(1);
+      const spend = (budget.recordSpend as any).mock.calls[0][0];
+      expect(spend.inputTokens).toBe(5);
+      expect(spend.outputTokens).toBe(7);
+      expect(spend.provider).toBe('openai');
+      expect(spend.model).toBe('gpt-4.1');
+      expect(spend.scope).toBe('utility');
     });
   });
 
@@ -852,7 +869,7 @@ describe('AIModelProvider', () => {
         prompt: 'Hello',
       });
 
-      expect(budget.checkBudget).toHaveBeenCalledWith('utility', 'org-123');
+      expect(budget.checkBudget).toHaveBeenCalledWith('utility', 'org-123', 'openai');
       expect(guardrails.checkInput).toHaveBeenCalledWith('Hello', { orgId: 'org-123' });
       expect(telemetry.startSpan).toHaveBeenCalled();
       expect(guardrails.checkOutput).toHaveBeenCalled();
@@ -873,7 +890,7 @@ describe('AIModelProvider', () => {
         prompt: 'Extract data',
       });
 
-      expect(budget.checkBudget).toHaveBeenCalledWith('utility', 'org-123');
+      expect(budget.checkBudget).toHaveBeenCalledWith('utility', 'org-123', 'openai');
       expect(guardrails.checkInput).toHaveBeenCalledWith('Extract data', { orgId: 'org-123' });
       expect(telemetry.startSpan).toHaveBeenCalled();
       expect(guardrails.checkOutput).toHaveBeenCalled();
@@ -984,11 +1001,13 @@ describe('AIModelProvider', () => {
       });
 
       expect(result.content?.[0]?.text).toBe('Generated response');
-      expect(budget.checkBudget).toHaveBeenCalledWith('agent', 'org-123');
+      expect(budget.checkBudget).toHaveBeenCalledWith('agent', 'org-123', 'openai');
       expect(guardrails.checkInput).toHaveBeenCalledWith('Hello', { orgId: 'org-123' });
       expect(guardrails.checkOutput).toHaveBeenCalledWith('Generated response', { orgId: 'org-123' });
       expect(health.recordSuccess).toHaveBeenCalledWith('openai');
-      expect(budget.recordSpend).toHaveBeenCalled();
+      // Usage must be recorded exactly once (by the budget wrapper applied in
+      // languageModel()); the governance wrapper must not double-record.
+      expect(budget.recordSpend).toHaveBeenCalledTimes(1);
     });
 
     it('proxy doGenerate rejects when the input guardrails reject', async () => {
@@ -1004,6 +1023,59 @@ describe('AIModelProvider', () => {
           prompt: [{ role: 'user', content: [{ type: 'text', text: 'bad' }] }],
         }),
       ).rejects.toThrow(GuardrailViolation);
+    });
+  });
+
+  describe('provider-scoped budget enforcement', () => {
+    it('blocks the capped provider but still allows a different provider', async () => {
+      (budget.checkBudget as any).mockImplementation(
+        async (_scope: string, _orgId: string, provider: string) => ({
+          allowed: provider !== 'openai',
+          reason: provider === 'openai' ? 'provider_budget_exceeded' : undefined,
+        }),
+      );
+
+      (resolution.resolveAI as any).mockImplementation((id: string) => {
+        if (id === 'openai') {
+          return {
+            identifier: 'openai',
+            credentialFields: [{ key: 'apiKey', required: true }],
+            createLanguageModel: vi.fn().mockReturnValue(mockLanguageModel),
+          };
+        }
+        if (id === 'anthropic') {
+          return {
+            identifier: 'anthropic',
+            credentialFields: [{ key: 'apiKey', required: true }],
+            createLanguageModel: vi.fn().mockReturnValue({
+              doGenerate: vi.fn().mockResolvedValue({
+                content: [{ type: 'text', text: 'Anthropic response' }],
+                usage: { inputTokens: 1, outputTokens: 1 },
+              }),
+            }),
+          };
+        }
+        return undefined;
+      });
+
+      mockGetByIdentifier.mockResolvedValue({
+        credentials: { apiKey: 'sk-test' },
+      });
+
+      await expect(
+        provider.generateTextWithModel('org-123', 'openai', 'v1', 'gpt-4.1', {
+          prompt: 'Hello',
+        }),
+      ).rejects.toThrow(BudgetExceeded);
+
+      const anthropicResult = await provider.generateTextWithModel(
+        'org-123',
+        'anthropic',
+        'v1',
+        'claude-sonnet',
+        { prompt: 'Hello' },
+      );
+      expect(anthropicResult).toBe('Anthropic response');
     });
   });
 });

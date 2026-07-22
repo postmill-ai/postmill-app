@@ -108,7 +108,7 @@ export class AiSettingsRepository {
 
   getSpendSummary(organizationId?: string, since?: Date) {
     return this._aiSpendLog.model.aISpendLog.groupBy({
-      by: ['scope'],
+      by: ['scope', 'provider'],
       where: {
         ...(organizationId ? { organizationId } : {}),
         ...(since ? { createdAt: { gte: since } } : {}),
