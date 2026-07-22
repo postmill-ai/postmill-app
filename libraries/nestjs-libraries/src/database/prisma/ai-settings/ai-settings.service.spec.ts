@@ -580,35 +580,45 @@ describe('AiSettingsService', () => {
   });
 
   describe('getUsageSummary', () => {
-    it('aggregates total/monthly/daily spend and derives remaining budget', async () => {
+    it('aggregates total/monthly/daily spend and derives per-provider remaining budget', async () => {
       mockRepo.getSpendSummary
-        .mockResolvedValueOnce([{ _sum: { costUsd: 5 }, scope: 'generator' }])
-        .mockResolvedValueOnce([{ _sum: { costUsd: 2 }, scope: 'generator' }])
-        .mockResolvedValueOnce([{ _sum: { costUsd: 0.5 }, scope: 'generator' }]);
-      mockRepo.getSystemSettings.mockResolvedValue({
-        budgetSettings: JSON.stringify({ monthlyCap: 10, dailyCap: 1 }),
-      });
+        .mockResolvedValueOnce([{ _sum: { costUsd: 5 }, scope: 'generator', provider: 'openai' }])
+        .mockResolvedValueOnce([{ _sum: { costUsd: 2 }, scope: 'generator', provider: 'openai' }])
+        .mockResolvedValueOnce([{ _sum: { costUsd: 0.5 }, scope: 'generator', provider: 'openai' }]);
+      mockRepo.getOrgProviderConfigs.mockResolvedValue([
+        { identifier: 'openai', isActive: true, budgetMonthlyCap: 10, budgetDailyCap: 1 },
+      ]);
 
       const result = await service.getUsageSummary('org1');
 
       expect(result.totalSpendUsd).toBe(5);
       expect(result.monthlySpendUsd).toBe(2);
       expect(result.dailySpendUsd).toBe(0.5);
-      expect(result.budget).toEqual({
-        monthlyCap: 10,
-        dailyCap: 1,
-        remainingMonthly: 8,
-        remainingDaily: 0.5,
-      });
+      expect(result.byScope).toEqual([
+        { scope: 'generator', _sum: { costUsd: 5, inputTokens: 0, outputTokens: 0 } },
+      ]);
+      expect(result.byProvider).toEqual([
+        {
+          provider: 'openai',
+          monthlySpendUsd: 2,
+          dailySpendUsd: 0.5,
+          monthlyCap: 10,
+          dailyCap: 1,
+          remainingMonthly: 8,
+          remainingDaily: 0.5,
+        },
+      ]);
+      expect(result.budget).toBeUndefined();
     });
 
-    it('returns null budget when no settings exist', async () => {
+    it('returns empty provider list when no active provider configs exist', async () => {
       mockRepo.getSpendSummary.mockResolvedValue([]);
-      mockRepo.getSystemSettings.mockResolvedValue(null);
+      mockRepo.getOrgProviderConfigs.mockResolvedValue([]);
 
       const result = await service.getUsageSummary('org1');
 
-      expect(result.budget).toBeNull();
+      expect(result.byProvider).toEqual([]);
+      expect(result.budget).toBeUndefined();
     });
   });
 

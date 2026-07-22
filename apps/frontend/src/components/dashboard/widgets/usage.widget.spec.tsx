@@ -131,6 +131,7 @@ describe('UsageWidget', () => {
     mockedUseAiUsage.mockReturnValue({
       data: {
         byScope: [],
+        byProvider: [],
         totalSpendUsd: 52.5,
         monthlySpendUsd: 12.5,
         dailySpendUsd: 3.25,
@@ -179,6 +180,7 @@ describe('UsageWidget', () => {
     mockedUseAiUsage.mockReturnValue({
       data: {
         byScope: [],
+        byProvider: [],
         totalSpendUsd: 1,
         monthlySpendUsd: 1,
         dailySpendUsd: 1,
@@ -272,6 +274,7 @@ describe('UsageWidget', () => {
     mockedUseAiUsage.mockReturnValue({
       data: {
         byScope: [],
+        byProvider: [],
         totalSpendUsd: 0,
         monthlySpendUsd: 0,
         dailySpendUsd: 0,
@@ -285,5 +288,42 @@ describe('UsageWidget', () => {
 
     expect(screen.getByText('AI spend')).toBeTruthy();
     expect(container.querySelector('.animate-pulse')).toBeTruthy();
+  });
+
+  it('renders per-provider spend bars when byProvider is populated', () => {
+    mockedUseUsage.mockReturnValue({
+      data: { billingEnabled: false },
+      isLoading: false,
+      error: undefined,
+    });
+    mockedUseAiUsage.mockReturnValue({
+      data: {
+        byScope: [],
+        byProvider: [
+          {
+            provider: 'openai',
+            monthlySpendUsd: 30,
+            dailySpendUsd: 5,
+            monthlyCap: 50,
+            dailyCap: 10,
+            remainingMonthly: 20,
+            remainingDaily: 5,
+          },
+        ],
+        totalSpendUsd: 30,
+        monthlySpendUsd: 30,
+        dailySpendUsd: 5,
+        budget: null,
+      },
+      isLoading: false,
+      error: undefined,
+    });
+
+    render(<UsageWidget />);
+
+    expect(screen.getByText('Spend by Provider')).toBeTruthy();
+    expect(screen.getByText('openai')).toBeTruthy();
+    expect(screen.getByText('30 / 50')).toBeTruthy();
+    expect(screen.getByText('5 / 10')).toBeTruthy();
   });
 });

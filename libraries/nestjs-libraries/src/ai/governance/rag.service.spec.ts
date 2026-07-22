@@ -80,6 +80,15 @@ const mockEmbeddingModel = {
 
 const mockAiModelProvider = {
   embeddingModel: vi.fn().mockResolvedValue(mockEmbeddingModel),
+  resolveConfigForScope: vi.fn().mockResolvedValue({
+    providerId: 'openai',
+    modelId: 'text-embedding-3-small',
+  }),
+};
+
+const mockBudgetService = {
+  checkBudget: vi.fn().mockResolvedValue({ allowed: true }),
+  recordSpend: vi.fn().mockResolvedValue(undefined),
 };
 
 const mockAiSettingsManager = {
@@ -111,6 +120,8 @@ function createService() {
     mockRepo as any,
     mockAiModelProvider as any,
     mockAiSettingsManager as any,
+    {} as any,
+    mockBudgetService as any,
   );
 }
 
@@ -977,7 +988,7 @@ describe('RagService', () => {
       ]);
       const service = createService();
       await service.backfill('org-1', 'admin-9');
-      expect(mockCreateSpendLog).toHaveBeenCalledWith(
+      expect(mockBudgetService.recordSpend).toHaveBeenCalledWith(
         expect.objectContaining({ scope: 'backfill', organizationId: 'org-1', userId: 'admin-9' }),
       );
     });

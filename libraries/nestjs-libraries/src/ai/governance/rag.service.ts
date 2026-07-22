@@ -4,6 +4,8 @@ import { AiSettingsService } from '@gitroom/nestjs-libraries/database/prisma/ai-
 import { AiRagRepository } from '@gitroom/nestjs-libraries/database/prisma/ai-rag/ai-rag.repository';
 import { AIModelProvider } from '../ai-model.provider';
 import { AiSettingsManager } from '../ai-settings.manager';
+import { BudgetService } from './budget.service';
+import { BudgetExceeded } from './errors';
 import { ioRedis } from '@gitroom/nestjs-libraries/redis/redis.service';
 import { PgVectorStoreAdapter } from '../rag/pgvector.adapter';
 import { QdrantVectorStoreAdapter } from '../rag/qdrant.adapter';
@@ -66,6 +68,7 @@ export class RagService implements OnModuleInit, OnModuleDestroy {
     private _aiModelProvider: AIModelProvider,
     private _aiSettingsManager: AiSettingsManager,
     private _pgVectorAdapter: PgVectorStoreAdapter,
+    private _budget: BudgetService,
   ) {}
 
   private _ragSettingsCache: { value: RagSettings; expiry: number } | null = null;
@@ -329,18 +332,17 @@ export class RagService implements OnModuleInit, OnModuleDestroy {
     embeddedCount: number,
   ): Promise<void> {
     if (embeddedCount === 0) return;
-    const createSpendLog = (this._aiSettings as any)?.createSpendLog;
-    if (typeof createSpendLog !== 'function') return;
     try {
       const rag = await this._getRagSettings();
       const tokens = chunks.reduce((sum, c) => sum + Math.ceil((c?.length ?? 0) / 4), 0);
       // Embedding pricing ~ $0.00002 / 1k tokens (text-embedding-3-small order of magnitude).
       const costUsd = (tokens / 1000) * 0.00002;
-      await createSpendLog.call(this._aiSettings, {
+      const cfg = await this._aiModelProvider.resolveConfigForScope('utility', organizationId);
+      await this._budget.recordSpend({
         organizationId,
         userId,
-        provider: 'embedding',
-        model: rag.embeddingDimension ? `embedding-${rag.embeddingDimension}` : 'embedding',
+        provider: cfg?.providerId,
+        model: cfg?.modelId ?? (rag.embeddingDimension ? `embedding-${rag.embeddingDimension}` : 'embedding'),
         scope,
         inputTokens: tokens,
         outputTokens: 0,
@@ -621,6 +623,12 @@ export class RagService implements OnModuleInit, OnModuleDestroy {
 
     const chunks = this._chunkText(content);
     if (chunks.length === 0) return 0;
+
+    const cfg = await this._aiModelProvider.resolveConfigForScope('utility', organizationId);
+    const budgetCheck = await this._budget.checkBudget('backfill', organizationId, cfg?.providerId);
+    if (!budgetCheck.allowed) {
+      throw new BudgetExceeded(budgetCheck.reason || 'Budget exceeded', 'backfill', organizationId);
+    }
 
     const allContent = chunks.join('\n---CHUNK---\n');
     const contentHash = this._simpleHash(allContent);

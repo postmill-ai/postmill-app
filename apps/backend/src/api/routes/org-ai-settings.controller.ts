@@ -60,6 +60,9 @@ export class OrgAiSettingsController {
       credentials: body.credentials,
       defaultModel: body.defaultModel,
       reasoningModel: body.reasoningModel,
+      budgetMonthlyCap: body.budgetMonthlyCap,
+      budgetDailyCap: body.budgetDailyCap,
+      budgetAlertThresholdPct: body.budgetAlertThresholdPct,
       version: body.version,
     });
 

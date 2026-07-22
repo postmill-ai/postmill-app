@@ -42,7 +42,8 @@ describe('useAiUsage', () => {
 
   it('returns AI usage data when loaded', () => {
     const usage: AiUsageResponse = {
-      byScope: [{ scope: 'utility', spend: 1.23 }],
+      byScope: [{ scope: 'utility', _sum: { costUsd: 1.23 } }],
+      byProvider: [],
       totalSpendUsd: 12.34,
       monthlySpendUsd: 5,
       dailySpendUsd: 0.5,
@@ -61,6 +62,37 @@ describe('useAiUsage', () => {
     expect(result.current.data).toEqual(usage);
     expect(result.current.isLoading).toBe(false);
     expect(result.current.error).toBeUndefined();
+  });
+
+  it('returns per-provider spend and caps when byProvider is populated', () => {
+    const usage: AiUsageResponse = {
+      byScope: [{ scope: 'utility', _sum: { costUsd: 1.23 } }],
+      byProvider: [
+        {
+          provider: 'openai',
+          monthlySpendUsd: 8.5,
+          dailySpendUsd: 1.25,
+          monthlyCap: 50,
+          dailyCap: 10,
+          remainingMonthly: 41.5,
+          remainingDaily: 8.75,
+        },
+      ],
+      totalSpendUsd: 12.34,
+      monthlySpendUsd: 8.5,
+      dailySpendUsd: 1.25,
+      budget: null,
+    };
+    swrState.data = usage;
+
+    const { result } = renderHook(() => useAiUsage());
+
+    expect(result.current.data?.byProvider).toHaveLength(1);
+    expect(result.current.data?.byProvider[0]).toMatchObject({
+      provider: 'openai',
+      monthlyCap: 50,
+      remainingMonthly: 41.5,
+    });
   });
 
   it('returns an empty/no-data state when data is missing', () => {

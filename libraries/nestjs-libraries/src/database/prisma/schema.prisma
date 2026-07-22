@@ -570,6 +570,9 @@ model SocialComment {
   platformCreatedAt       DateTime
   raw                     String?
   status                  String?   @default("needs_reply")
+  sentiment               String?
+  priority                String?
+  sentimentConfidence     Float?
   assigneeId              String?
   createdAt               DateTime  @default(now())
   updatedAt               DateTime  @updatedAt
@@ -591,6 +594,8 @@ model SocialComment {
   @@index([assigneeId])
   @@index([organizationId, platformCreatedAt])
   @@index([authorId])
+  @@index([organizationId, sentiment])
+  @@index([organizationId, priority])
 }
 
 model PostCommentRead {
@@ -1170,24 +1175,29 @@ model AISpendLog {
   @@index([provider, createdAt])
   @@index([scope, createdAt])
   @@index([userId, createdAt])
+  @@index([organizationId, provider, createdAt])
+  @@index([organizationId, provider, scope, createdAt])
 }
 
 // Per-org provider config (BYOK scaffold — v3.4.0 stub, v3.5 active, v3.6 full)
 model AIOrgProviderConfig {
-  id             String       @id @default(cuid())
-  organizationId String
-  identifier     String
-  version        String       @default("v1")
-  enabled        Boolean      @default(false)
-  isActive       Boolean      @default(false) // only one can be active per org
-  credentials    String?
-  defaultModel   String?
-  reasoningModel String?
-  extraConfig    String?
-  createdAt      DateTime     @default(now())
-  updatedAt      DateTime     @updatedAt
+  id                     String   @id @default(cuid())
+  organizationId         String
+  identifier             String
+  version                String   @default("v1")
+  enabled                Boolean  @default(false)
+  isActive               Boolean  @default(false) // only one can be active per org
+  credentials            String?
+  defaultModel           String?
+  reasoningModel         String?
+  extraConfig            String?
+  budgetMonthlyCap       Float?
+  budgetDailyCap         Float?
+  budgetAlertThresholdPct Float?
+  createdAt              DateTime @default(now())
+  updatedAt              DateTime @updatedAt
 
-  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
 
   @@unique([organizationId, identifier, version])
   @@index([organizationId])

@@ -2,7 +2,7 @@
 
 The `/dashboard` surface is a thin composition layer over existing domain services. All aggregation lives in `libraries/nestjs-libraries/src/dashboard/`; the backend controller (`apps/backend/src/api/routes/dashboard.controller.ts`) is responsible only for auth, RBAC mapping, and wiring.
 
-> Verified against v1.0.0
+> Verified against v1.1.0 (2026-07-22)
 
 ## Architecture
 
@@ -45,7 +45,7 @@ No new Prisma models were added; every widget reads existing tables through the 
 | `GET` | `/dashboard/schedule?days=7&timezone=UTC` | `posts:read` | Day-bucketed scheduled counts + gap detection. `days` clamped to 1–30. |
 | `GET` | `/dashboard/campaigns?limit=6` | `posts:read` | Active campaign summaries with post-state counts and goal progress. `limit` clamped to 1–50. |
 | `GET` | `/dashboard/media-jobs` | `media:read` | Latest 20 jobs + `{ pending, processing, failed7d }` counts. |
-| `GET` | `/dashboard/usage` | `billing:read` | Plan limits/usage when Stripe is enabled; `{ billingEnabled: false }` otherwise. |
+| `GET` | `/dashboard/usage` | `billing:read` | Plan limits/usage when Stripe is enabled; `{ billingEnabled: false }` otherwise. The AI usage widget consumes `GET /ai/usage`, including the new `byProvider` breakdown. |
 | `GET` | `/dashboard/attention` | auth | 8 attention probes filtered by effective permissions; cached 60s. |
 | `GET` | `/dashboard/brief` | `analytics:read` | Returns cached brief or `{ cached: false }`. |
 | `POST` | `/dashboard/brief` | `analytics:read` | Generates and caches the daily brief. Single-flighted. |

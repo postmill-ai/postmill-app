@@ -29,6 +29,9 @@ interface SocialComment {
   platformCreatedAt: string;
   status?: string | null;
   assigneeId?: string | null;
+  sentiment?: 'positive' | 'neutral' | 'negative' | null;
+  priority?: 'high' | 'medium' | 'low' | null;
+  sentimentConfidence?: number | null;
 }
 
 interface CommentThreadProps {
@@ -124,11 +127,17 @@ const CommentItem: FC<{
     return dayjs(comment.platformCreatedAt).fromNow();
   }, [comment.platformCreatedAt]);
 
-  const sentimentLabel = (comment as any).sentiment as string | undefined;
+  const sentimentLabel = comment.sentiment;
+  const priorityLabel = comment.priority;
   const sentimentColors: Record<string, string> = {
     positive: 'bg-green-500/20 text-green-800 dark:text-green-400 border-green-500/30',
     negative: 'bg-red-500/20 text-dangerText border-red-500/30',
     neutral: 'bg-gray-500/20 text-gray-800 dark:text-gray-400 border-gray-500/30',
+  };
+  const priorityColors: Record<string, string> = {
+    high: 'bg-red-500/20 text-dangerText border-red-500/30',
+    medium: 'bg-yellow-500/20 text-yellow-800 dark:text-yellow-400 border-yellow-500/30',
+    low: 'bg-green-500/20 text-green-800 dark:text-green-400 border-green-500/30',
   };
 
   return (
@@ -170,7 +179,12 @@ const CommentItem: FC<{
           />
           {sentimentLabel && (
             <span className={`text-[10px] px-[6px] py-[1px] rounded-full border ${sentimentColors[sentimentLabel] || sentimentColors.neutral}`}>
-              {sentimentLabel}
+              {t(`sentiment_${sentimentLabel}`, sentimentLabel)}
+            </span>
+          )}
+          {priorityLabel && (
+            <span className={`text-[10px] px-[6px] py-[1px] rounded-full border ${priorityColors[priorityLabel] || priorityColors.medium}`}>
+              {t(`priority_${priorityLabel}`, priorityLabel)}
             </span>
           )}
         </div>

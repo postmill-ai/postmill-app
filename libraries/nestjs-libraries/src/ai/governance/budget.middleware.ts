@@ -58,11 +58,7 @@ export class BudgetMiddleware implements NestMiddleware {
       this._logger.warn(
         `Budget exceeded for scope="${scope}" orgId="${orgId}": ${result.reason}`,
       );
-      res.status(429).json({
-        statusCode: 429,
-        error: 'BudgetExceeded',
-        message: result.reason,
-      });
+      next();
       return;
     }
 

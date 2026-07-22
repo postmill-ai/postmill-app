@@ -226,4 +226,122 @@ describe('SocialCommentsService — controller-moved logic', () => {
       expect(result).toEqual({ platformCommentId: 'reply-1' });
     });
   });
+
+  describe('classifyPostComments', () => {
+    let classifyRepo: any;
+    let classifyService: SocialCommentsService;
+    let defaultsResolution: any;
+    let aiModelProvider: any;
+
+    beforeEach(() => {
+      classifyRepo = {
+        getUnclassifiedComments: vi.fn().mockResolvedValue([]),
+        updateSentimentForIds: vi.fn().mockResolvedValue(undefined),
+      };
+      defaultsResolution = { resolve: vi.fn().mockResolvedValue(null) };
+      aiModelProvider = {
+        generateObjectWithModel: vi.fn().mockResolvedValue({ comments: [] }),
+      };
+      classifyService = new SocialCommentsService(
+        classifyRepo,
+        {},
+        {},
+        {},
+        {},
+        {},
+        {},
+        guardrails as any,
+        defaultsResolution,
+        aiModelProvider,
+      );
+    });
+
+    const makePost = () =>
+      ({ id: 'post-1', releaseId: 'rel-1', content: 'Post content' } as any);
+
+    it('skips when no active AI provider / low-reasoning default is resolved', async () => {
+      await classifyService.classifyPostComments('org-1', makePost());
+
+      expect(defaultsResolution.resolve).toHaveBeenCalledWith(
+        'ai',
+        'low_reasoning',
+        'org-1',
+      );
+      expect(classifyRepo.getUnclassifiedComments).not.toHaveBeenCalled();
+      expect(aiModelProvider.generateObjectWithModel).not.toHaveBeenCalled();
+    });
+
+    it('persists sentiment, priority, and confidence returned by the AI', async () => {
+      defaultsResolution.resolve.mockResolvedValue({
+        providerId: 'openai',
+        version: 'v1',
+        model: 'gpt-4.1',
+      });
+      classifyRepo.getUnclassifiedComments.mockResolvedValue([
+        { id: 'c1', platformCommentId: 'pc1', content: 'Love this!' },
+      ]);
+      aiModelProvider.generateObjectWithModel.mockResolvedValue({
+        comments: [
+          {
+            platformCommentId: 'pc1',
+            sentiment: 'positive',
+            priority: 'low',
+            confidence: 0.95,
+          },
+        ],
+      });
+
+      await classifyService.classifyPostComments('org-1', makePost());
+
+      expect(aiModelProvider.generateObjectWithModel).toHaveBeenCalledWith(
+        'org-1',
+        'openai',
+        'v1',
+        'gpt-4.1',
+        expect.objectContaining({
+          system: expect.stringContaining('comment triage assistant'),
+          schema: expect.anything(),
+        }),
+      );
+      expect(classifyRepo.updateSentimentForIds).toHaveBeenCalledWith('org-1', [
+        {
+          id: 'c1',
+          sentiment: 'positive',
+          priority: 'low',
+          sentimentConfidence: 0.95,
+        },
+      ]);
+    });
+
+    it('continues without failing when classification throws', async () => {
+      defaultsResolution.resolve.mockResolvedValue({
+        providerId: 'openai',
+        version: 'v1',
+        model: 'gpt-4.1',
+      });
+      classifyRepo.getUnclassifiedComments.mockRejectedValue(
+        new Error('db down'),
+      );
+
+      await expect(
+        classifyService.classifyPostComments('org-1', makePost()),
+      ).resolves.toBeUndefined();
+
+      expect(classifyRepo.updateSentimentForIds).not.toHaveBeenCalled();
+    });
+
+    it('does not re-classify already-classified comments (idempotent via NULL filter)', async () => {
+      defaultsResolution.resolve.mockResolvedValue({
+        providerId: 'openai',
+        version: 'v1',
+        model: 'gpt-4.1',
+      });
+      classifyRepo.getUnclassifiedComments.mockResolvedValue([]);
+
+      await classifyService.classifyPostComments('org-1', makePost());
+
+      expect(aiModelProvider.generateObjectWithModel).not.toHaveBeenCalled();
+      expect(classifyRepo.updateSentimentForIds).not.toHaveBeenCalled();
+    });
+  });
 });

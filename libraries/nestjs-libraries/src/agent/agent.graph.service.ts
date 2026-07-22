@@ -64,8 +64,6 @@ interface WorkflowChannelsState {
   }[];
   isPicture?: boolean;
   popularPosts?: { content: string; hook: string }[];
-  // Resolved once in start() — the primary provider/model this run bills against.
-  attribution?: { providerId: string; modelId: string };
 }
 
 const category = z.object({
@@ -133,50 +131,11 @@ export class AgentGraphService {
     private _guardrails: GuardrailService,
   ) {}
 
-  // Best-effort spend attribution for the LangGraph generator's LLM calls. The
-  // generator resolves models via langchainModel() which bypasses _prepareGeneration,
-  // so without this callback its 5+ calls are invisible to AISpendLog. Non-fatal.
-  //
-  // Attribution is the run's PRIMARY provider/model (resolved once in start()). A
-  // _withFallback failover could bill a different provider mid-run, but capturing
-  // per-call fallback identity is out of scope; the primary is correct-enough and
-  // the real provider/model ids let the pricing engine compute actual cost (with
-  // costUsd:0 as the explicit fallback only for genuinely unpriced models).
-  private _spendCallback(
-    orgId: string,
-    attribution?: { providerId: string; modelId: string }
-  ) {
-    return {
-      handleLLMEnd: async (output: any) => {
-        try {
-          const usage =
-            output?.llmOutput?.tokenUsage ??
-            output?.llmOutput?.usage ??
-            output?.generations?.[0]?.[0]?.message?.usage_metadata;
-          if (!usage) return;
-          const inputTokens =
-            usage.promptTokens ?? usage.input_tokens ?? usage.inputTokens ?? 0;
-          const outputTokens =
-            usage.completionTokens ?? usage.output_tokens ?? usage.outputTokens ?? 0;
-          await this._budget.recordSpend({
-            organizationId: orgId,
-            provider: attribution?.providerId ?? 'generator',
-            model: attribution?.modelId ?? 'generator',
-            // One scope across the whole agent/generator surface — gate and record
-            // must agree, so both use 'agent' (matches checkBudget in start()).
-            scope: 'agent',
-            inputTokens,
-            outputTokens,
-            costUsd: 0,
-          });
-        } catch (err) {
-          this._logger.warn(
-            `generator spend recording failed: ${(err as Error)?.message}`
-          );
-        }
-      },
-    };
-  }
+  // Spend for the generator's LLM calls is recorded by the langchain model
+  // wrapper applied in `AIModelProvider.langchainModel()` (see
+  // `_wrapLangchainModelWithBudget`): every `invoke`/`stream` records usage from
+  // the provider's `usage_metadata` with the real provider/model. A callback-based
+  // recorder here would double-log tokens/cost into AISpendLog.
   static state = () =>
     new StateGraph<WorkflowChannelsState>({
       channels: {
@@ -197,7 +156,6 @@ export class AgentGraphService {
         popularPosts: null,
         topic: null,
         isPicture: null,
-        attribution: null,
       },
     });
 
@@ -222,8 +180,7 @@ export class AgentGraphService {
       .invoke(
         {
           text: state.messages[state.messages.length - 1].content,
-        },
-        { callbacks: [this._spendCallback(state.orgId, state.attribution)] }
+        }
       );
 
     return { messages: [response] };
@@ -246,8 +203,7 @@ export class AgentGraphService {
         {
           categories: allCategories.map((p) => p.category).join(', '),
           text: fenceResearch(state.fresearch),
-        },
-        { callbacks: [this._spendCallback(state.orgId, state.attribution)] }
+        }
       );
 
     return {
@@ -273,8 +229,7 @@ export class AgentGraphService {
         {
           topics: allTopics.map((p) => p.topic).join(', '),
           text: fenceResearch(state.fresearch),
-        },
-        { callbacks: [this._spendCallback(state.orgId, state.attribution)] }
+        }
       );
 
     return {
@@ -303,8 +258,7 @@ export class AgentGraphService {
           request: state.messages[0].content,
           hooks: state.popularPosts!.map((p) => p.hook).join('\n'),
           text: fenceResearch(state.fresearch),
-        },
-        { callbacks: [this._spendCallback(state.orgId, state.attribution)] }
+        }
       );
 
     // Guard the hook too — it's streamed to the client and prepended into the
@@ -342,8 +296,7 @@ export class AgentGraphService {
           hook: state.hook,
           request: state.messages[0].content,
           information: fenceResearch(state.fresearch),
-        },
-        { callbacks: [this._spendCallback(state.orgId, state.attribution)] }
+        }
       );
 
     // Run the org's output guardrail over the generated copy before it leaves the
@@ -457,23 +410,19 @@ export class AgentGraphService {
   }
 
   async start(orgId: string, body: GeneratorDto) {
-    // Gate the whole generator run on the org budget BEFORE building the graph —
-    // langchainModel() bypasses _prepareGeneration, so without this the 5+ LLM
-    // calls per run are never budget-checked. A clean throw here (before the
-    // controller's first res.write) surfaces as a 4xx, not a truncated stream.
-    const check = await this._budget.checkBudget('agent', orgId);
+    // Resolve the run's primary provider once so the gate targets the right cap.
+    // null (AI off) → the run fails at the first model call anyway.
+    const cfg = await this._aiModelProvider.resolveConfigForScope('generator', orgId);
+
+    // Gate the whole generator run on the org + provider budget BEFORE building
+    // the graph. Each LLM call is also gated + recorded by the langchain model
+    // wrapper (`_wrapLangchainModelWithBudget`), but this early check throws
+    // cleanly before the controller's first res.write — surfacing as a 4xx, not
+    // a truncated stream.
+    const check = await this._budget.checkBudget('agent', orgId, cfg?.providerId);
     if (!check.allowed) {
       throw new BudgetExceeded(check.reason ?? 'AI budget exceeded', 'agent', orgId);
     }
-
-    // Resolve the run's primary provider/model once for real spend attribution.
-    // null (AI off) → the run fails at the first model call anyway; fall back to
-    // the 'generator' sentinel so recordSpend still logs a row.
-    const cfg = await this._aiModelProvider.resolveConfigForScope('generator', orgId);
-    const attribution = {
-      providerId: cfg?.providerId ?? 'generator',
-      modelId: cfg?.modelId ?? 'generator',
-    };
 
     const tools = await this._getTools(orgId);
     const state = AgentGraphService.state();
@@ -516,7 +465,6 @@ export class AgentGraphService {
         format: body.format,
         tone: body.tone,
         orgId,
-        attribution,
       },
       {
         streamMode: 'values',

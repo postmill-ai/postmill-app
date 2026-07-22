@@ -4441,5 +4441,14 @@
   "failed_to_load_settings": "Không tải được cài đặt",
   "failed_to_load_short_links": "Không tải được liên kết rút gọn",
   "failed_to_load_preferences": "Không tải được tùy chọn",
-  "failed_to_copy_campaign": "Không sao chép được chiến dịch"
+  "failed_to_copy_campaign": "Không sao chép được chiến dịch",
+  "ai_budget_monthly_cap": "Monthly budget cap",
+  "ai_budget_daily_cap": "Daily budget cap",
+  "ai_budget_alert_threshold": "Alert threshold",
+  "sentiment_positive": "Positive",
+  "sentiment_neutral": "Neutral",
+  "sentiment_negative": "Negative",
+  "filter_sentiment": "Filter by sentiment",
+  "filter_priority": "Filter by priority",
+  "comment_inbox.sort_priority_first": "High priority first"
 }

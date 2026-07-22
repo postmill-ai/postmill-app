@@ -11,6 +11,10 @@ vi.mock('@gitroom/nestjs-libraries/ai/ai-model.provider', () => ({
   AIModelProvider: class MockProvider {
     imageModel = mockImageModel;
     generateTextWithModel = mockGenerateTextWithModel;
+    resolveConfigForScope = vi.fn().mockResolvedValue({
+      providerId: 'openai',
+      modelId: 'dall-e-3',
+    });
   },
 }));
 
@@ -210,7 +214,7 @@ describe('AiMediaService', () => {
         expect.objectContaining({
           organizationId: 'org-123',
           userId: 'user-1',
-          provider: 'ai-media',
+          provider: 'openai',
           operation: 'image',
           status: 'done',
           artifactUrl: 'https://cdn.example.com/image.png',
@@ -239,8 +243,8 @@ describe('AiMediaService', () => {
         expect.objectContaining({
           scope: 'media',
           organizationId: 'org-123',
-          provider: 'ai-media',
-          model: 'ai-media',
+          provider: 'openai',
+          model: 'dall-e-3',
           costUsd: 0.04,
           inputTokens: 0,
           outputTokens: 0,

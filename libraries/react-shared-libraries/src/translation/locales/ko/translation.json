@@ -4441,5 +4441,14 @@
   "failed_to_load_settings": "설정을 불러오지 못했습니다",
   "failed_to_load_short_links": "단축 링크를 불러오지 못했습니다",
   "failed_to_load_preferences": "환경설정을 불러오지 못했습니다",
-  "failed_to_copy_campaign": "캠페인을 복사하지 못했습니다"
+  "failed_to_copy_campaign": "캠페인을 복사하지 못했습니다",
+  "ai_budget_monthly_cap": "Monthly budget cap",
+  "ai_budget_daily_cap": "Daily budget cap",
+  "ai_budget_alert_threshold": "Alert threshold",
+  "sentiment_positive": "Positive",
+  "sentiment_neutral": "Neutral",
+  "sentiment_negative": "Negative",
+  "filter_sentiment": "Filter by sentiment",
+  "filter_priority": "Filter by priority",
+  "comment_inbox.sort_priority_first": "High priority first"
 }

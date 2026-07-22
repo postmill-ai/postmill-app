@@ -60,6 +60,7 @@ export default defineConfig({
       'src/components/campaigns/**/*.spec.{ts,tsx}',
       'src/components/agent/**/*.spec.{ts,tsx}',
       'src/components/agents/**/*.spec.{ts,tsx}',
+      'src/components/comments/**/*.spec.{ts,tsx}',
       'src/redirects.config.spec.ts',
       'src/app/**/*.spec.{ts,tsx}',
     ],

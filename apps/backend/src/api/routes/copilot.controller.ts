@@ -36,6 +36,8 @@ import { AuthorizationActions, Sections } from '@gitroom/backend/services/auth/p
 import { AIModelProvider } from '@gitroom/nestjs-libraries/ai/ai-model.provider';
 import { GuardrailService } from '@gitroom/nestjs-libraries/ai/governance/guardrail.service';
 import { TelemetryService } from '@gitroom/nestjs-libraries/ai/governance/telemetry.service';
+import { BudgetService } from '@gitroom/nestjs-libraries/ai/governance/budget.service';
+import { BudgetExceeded } from '@gitroom/nestjs-libraries/ai/governance/errors';
 import { FeatureFlagsService } from '@gitroom/nestjs-libraries/feature-flags';
 
 export type ChannelsContext = {
@@ -55,6 +57,7 @@ export class CopilotController {
     private _aiModelProvider: AIModelProvider,
     private _guardrails: GuardrailService,
     private _telemetry: TelemetryService,
+    private _budget: BudgetService,
     private _featureFlagsService: FeatureFlagsService,
   ) {}
 
@@ -186,12 +189,13 @@ export class CopilotController {
 
   /**
    * Wraps a CopilotKit service adapter so every `process()` call runs input
-   * guardrails and is recorded in a telemetry span. Output guardrails are
-   * intentionally omitted here: CopilotKit streams token-by-token to the client,
-   * so intercepting the full response would require wrapping the runtime event
-   * source in a provider-specific way; the Mastra/agent path uses the governed
-   * model wrapper (AIModelProvider.governedLanguageModel) which does apply both
-   * input and output guardrails.
+   * guardrails, checks the org/provider AI budget, and records spend once the
+   * stream completes. Output guardrails are intentionally omitted here:
+   * CopilotKit streams token-by-token to the client, so intercepting the full
+   * response would require wrapping the runtime event source in a
+   * provider-specific way; the Mastra/agent path uses the governed model
+   * wrapper (AIModelProvider.governedLanguageModel) which does apply both input
+   * and output guardrails.
    */
   private _wrapServiceAdapter(
     adapter: any,
@@ -208,13 +212,26 @@ export class CopilotController {
             if (inputText) {
               await this._guardrails.checkInput(inputText, { orgId });
             }
+
+            const budgetCheck = await this._budget.checkBudget('agent', orgId, providerId);
+            if (!budgetCheck.allowed) {
+              throw new BudgetExceeded(budgetCheck.reason || 'Budget exceeded', 'agent', orgId);
+            }
+
+            const wrappedRequest = this._wrapRequestForUsageTracking(
+              request,
+              orgId,
+              providerId,
+              modelId,
+            );
+
             return this._telemetry.startSpan(
               'copilot.generate',
               async (span) => {
                 span.setAttribute(TelemetryService.ATTR_GEN_AI_SYSTEM, providerId);
                 span.setAttribute(TelemetryService.ATTR_GEN_AI_REQUEST_MODEL, modelId);
                 if (orgId) span.setAttribute('ai.organizationId', orgId);
-                return originalProcess(request);
+                return originalProcess(wrappedRequest);
               },
               { 'ai.scope': 'agent' },
             );
@@ -223,6 +240,88 @@ export class CopilotController {
         return Reflect.get(target, prop, receiver);
       },
     });
+  }
+
+  /**
+   * Wraps the CopilotKit request's event source so we can approximate output
+   * tokens from streamed TextMessageContent events and record spend once the
+   * stream finishes. Input tokens are estimated from the request messages.
+   * This is best-effort: adapters that do not stream through the event source
+   * (e.g., EmptyAdapter) will record zero output tokens.
+   */
+  private _wrapRequestForUsageTracking(
+    request: any,
+    orgId: string | undefined,
+    providerId: string,
+    modelId: string,
+  ): any {
+    const originalEventSource = request.eventSource;
+    if (!originalEventSource) return request;
+
+    const accumulatedContent: string[] = [];
+    const inputTokens = this._estimateTokensFromCopilotMessages(request.messages);
+
+    const wrapEventStream$ = (eventStream$: any) => {
+      return new Proxy(eventStream$, {
+        get: (streamTarget, streamProp) => {
+          if (streamProp === 'sendTextMessageContent') {
+            const original = streamTarget.sendTextMessageContent.bind(streamTarget);
+            return (event: any) => {
+              if (event?.content) {
+                accumulatedContent.push(String(event.content));
+              }
+              return original(event);
+            };
+          }
+          const value = (streamTarget as any)[streamProp];
+          return typeof value === 'function' ? value.bind(streamTarget) : value;
+        },
+      });
+    };
+
+    const wrappedEventSource = new Proxy(originalEventSource, {
+      get: (target, prop) => {
+        if (prop === 'stream') {
+          const originalStream = target.stream.bind(target);
+          return (callback: any) => {
+            return originalStream(async (eventStream$: any) => {
+              const wrapped$ = wrapEventStream$(eventStream$);
+              try {
+                return await callback(wrapped$);
+              } finally {
+                const outputTokens = Math.ceil(
+                  accumulatedContent.join('').length / 4,
+                );
+                try {
+                  await this._budget.recordSpend({
+                    organizationId: orgId,
+                    provider: providerId,
+                    model: modelId,
+                    scope: 'agent',
+                    inputTokens,
+                    outputTokens,
+                    costUsd: 0,
+                  });
+                } catch (err) {
+                  Logger.warn(
+                    `Copilot spend recording failed: ${(err as Error)?.message}`,
+                  );
+                }
+              }
+            });
+          };
+        }
+        const value = (target as any)[prop];
+        return typeof value === 'function' ? value.bind(target) : value;
+      },
+    });
+
+    return { ...request, eventSource: wrappedEventSource };
+  }
+
+  private _estimateTokensFromCopilotMessages(messages: any[] | undefined): number {
+    const text = this._extractCopilotInputText(messages);
+    return Math.ceil(text.length / 4);
   }
 
   private _extractCopilotInputText(messages: any[] | undefined): string {

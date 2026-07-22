@@ -25,9 +25,12 @@ The comments page provides a single view of all incoming comments across channel
 
 Use the filter bar at the top of the inbox to narrow the view:
 
-- **Status**: Filter by comment status (`open`, `in_progress`, `resolved`, `closed`, `spam`).
+- **Status**: Filter by comment status (`needs_reply`, `handled`, `ignored`).
 - **Assignee**: Show comments assigned to a specific team member.
 - **Unread Only**: Show only comments you have not yet read.
+- **Sentiment**: Filter by AI-classified sentiment (`positive`, `neutral`, `negative`).
+- **Priority**: Filter by AI-classified priority (`high`, `medium`, `low`).
+- **High-priority sort**: When sorting unresolved comments by priority, high-priority items appear first.
 - **Cursor Pagination**: Navigate through comment history with ISO 8601 cursor-based pagination.
 
 ### Comment Cards
@@ -65,11 +68,9 @@ Assign comments to team members for triage:
 
 Update the status of a comment as you triage it:
 
-- **Open**: New, unreviewed comment.
-- **In Progress**: Being worked on.
-- **Resolved**: Addressed successfully.
-- **Closed**: No longer needs attention.
-- **Spam**: Marked as spam or irrelevant.
+- **Needs Reply**: New, unreviewed comment.
+- **Handled**: Addressed successfully.
+- **Ignored**: No longer needs attention.
 
 ## Per-Post Comments in Post Detail
 
@@ -103,6 +104,16 @@ post publishes successfully. This behavior is defined in the publish function v1
 24 providers support first comments. See [Composer](./composer.md) for the full list and capability
 gating details.
 
+## AI Classification
+
+When an AI provider is configured, synced comments are automatically classified for sentiment and priority using the org's low-reasoning default model. Classification runs as a best-effort step after each comment sync: failures are logged and do not interrupt sync. Already-classified comments are skipped on retries, so re-running sync is idempotent.
+
+- **Sentiment**: `positive`, `neutral`, or `negative`.
+- **Priority**: `high` (complaints, questions, escalation signals), `medium` (neutral engagement that needs attention), or `low` (positive feedback that needs no action).
+- **Confidence**: a 0–1 score stored with each classification.
+
+Classified values appear as badges on comment cards and power the sentiment/priority filters.
+
 ## AI Reply Drafting
 
 If AI is configured for your organization, you can generate draft replies using AI. From the
@@ -119,4 +130,4 @@ the post detail modal with the comments section.
 
 See [Schedule](./calendar.md) for details on post cards and the post detail modal.
 
-> Verified against v1.0.0
+> Verified against v1.1.0 (2026-07-22)

@@ -49,6 +49,9 @@ export class OrgAiSettingsRepository {
       defaultModel?: string;
       reasoningModel?: string;
       extraConfig?: string;
+      budgetMonthlyCap?: number | null;
+      budgetDailyCap?: number | null;
+      budgetAlertThresholdPct?: number | null;
     },
     version = 'v1',
   ) {

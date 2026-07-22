@@ -4440,5 +4440,14 @@
   "failed_to_load_settings": "Failed to load settings",
   "failed_to_load_short_links": "Failed to load short links",
   "failed_to_load_preferences": "Failed to load preferences",
-  "failed_to_copy_campaign": "Failed to copy campaign"
+  "failed_to_copy_campaign": "Failed to copy campaign",
+  "ai_budget_monthly_cap": "Monthly budget cap",
+  "ai_budget_daily_cap": "Daily budget cap",
+  "ai_budget_alert_threshold": "Alert threshold",
+  "sentiment_positive": "Positive",
+  "sentiment_neutral": "Neutral",
+  "sentiment_negative": "Negative",
+  "filter_sentiment": "Filter by sentiment",
+  "filter_priority": "Filter by priority",
+  "comment_inbox.sort_priority_first": "High priority first"
 }

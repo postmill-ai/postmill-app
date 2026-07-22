@@ -25,6 +25,9 @@ export interface InboxComment {
   likeCount?: number;
   likedByMe?: boolean;
   assigneeId?: string | null;
+  sentiment?: 'positive' | 'neutral' | 'negative' | null;
+  priority?: 'high' | 'medium' | 'low' | null;
+  sentimentConfidence?: number | null;
   post?: {
     id: string;
     content?: string;
@@ -56,6 +59,18 @@ const STATUS_CYCLE: Record<string, string> = {
   needs_reply: 'handled',
   handled: 'ignored',
   ignored: 'needs_reply',
+};
+
+const SENTIMENT_COLORS: Record<string, string> = {
+  positive: 'bg-green-500/20 text-green-800 dark:text-green-400 border-green-500/30',
+  negative: 'bg-red-500/20 text-dangerText border-red-500/30',
+  neutral: 'bg-gray-500/20 text-gray-800 dark:text-gray-400 border-gray-500/30',
+};
+
+const PRIORITY_COLORS: Record<string, string> = {
+  high: 'bg-red-500/20 text-dangerText border-red-500/30',
+  medium: 'bg-yellow-500/20 text-yellow-800 dark:text-yellow-400 border-yellow-500/30',
+  low: 'bg-green-500/20 text-green-800 dark:text-green-400 border-green-500/30',
 };
 
 const HeartIcon: FC<{ filled: boolean }> = ({ filled }) => (
@@ -179,6 +194,20 @@ export const CommentCard: FC<CommentCardProps> = ({
             </span>
           )}
           <span className="text-[11px] text-newTableText ml-auto flex items-center gap-[6px]">
+            {comment.sentiment && (
+              <span
+                className={`text-[10px] px-[6px] py-[1px] rounded-full border ${SENTIMENT_COLORS[comment.sentiment] || SENTIMENT_COLORS.neutral}`}
+              >
+                {t(`sentiment_${comment.sentiment}`, comment.sentiment)}
+              </span>
+            )}
+            {comment.priority && (
+              <span
+                className={`text-[10px] px-[6px] py-[1px] rounded-full border ${PRIORITY_COLORS[comment.priority] || PRIORITY_COLORS.medium}`}
+              >
+                {t(`priority_${comment.priority}`, comment.priority)}
+              </span>
+            )}
             <button
               type="button"
               onClick={enableStatusCycle && postId ? cycleStatus : undefined}

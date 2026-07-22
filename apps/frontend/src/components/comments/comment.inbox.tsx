@@ -29,6 +29,9 @@ interface ReplyFilters {
   integrationIds: string[];
   campaignIds: string[];
   unreadOnly: boolean;
+  sentiment?: 'positive' | 'neutral' | 'negative';
+  priority?: 'high' | 'medium' | 'low';
+  sortBy?: 'priority';
 }
 
 export const CommentInbox: FC = () => {
@@ -39,6 +42,7 @@ export const CommentInbox: FC = () => {
     campaignIds: [],
     unreadOnly: false,
   });
+  const [prioritySort, setPrioritySort] = useState(false);
   const [statusCode, setStatusCode] = useState<number | null>(null);
   const [syncing, setSyncing] = useState(false);
   const [lastSynced, setLastSynced] = useState<string | null>(null);
@@ -60,6 +64,9 @@ export const CommentInbox: FC = () => {
       if (filters.assigneeId) params.set('assigneeId', filters.assigneeId);
       if (filters.integrationIds.length) params.set('integrationId', filters.integrationIds.join(','));
       if (filters.campaignIds.length) params.set('campaignId', filters.campaignIds.join(','));
+      if (filters.sentiment) params.set('sentiment', filters.sentiment);
+      if (filters.priority) params.set('priority', filters.priority);
+      if (filters.sortBy) params.set('sortBy', filters.sortBy);
       if (cursor) params.set('cursor', cursor);
       return params.toString();
     },
@@ -81,6 +88,14 @@ export const CommentInbox: FC = () => {
   useEffect(() => {
     setExtraPages([]);
   }, [data]);
+
+  // Keep the sortBy filter in sync with the priority-sort toggle.
+  useEffect(() => {
+    setFilters((prev) => ({
+      ...prev,
+      sortBy: prioritySort ? 'priority' : undefined,
+    }));
+  }, [prioritySort]);
 
   // --- Filter option sources -------------------------------------------------
   const { data: integrationsData } = useIntegrationList();
@@ -161,21 +176,41 @@ export const CommentInbox: FC = () => {
   );
 
   const filterBar = (
-    <RepliesFilterBar
-      status={filters.status}
-      onStatusChange={(status) => updateFilters({ status })}
-      integrations={integrations}
-      selectedChannels={filters.integrationIds}
-      onChannelsChange={(ids) => updateFilters({ integrationIds: ids })}
-      campaigns={campaigns}
-      selectedCampaigns={filters.campaignIds}
-      onCampaignsChange={(ids) => updateFilters({ campaignIds: ids })}
-      teamMembers={teamMembers}
-      assigneeId={filters.assigneeId}
-      onAssigneeChange={(assigneeId) => updateFilters({ assigneeId })}
-      unreadOnly={filters.unreadOnly}
-      onUnreadChange={(unreadOnly) => updateFilters({ unreadOnly })}
-    />
+    <div className="flex flex-col gap-[12px]">
+      <RepliesFilterBar
+        status={filters.status}
+        onStatusChange={(status) => updateFilters({ status })}
+        integrations={integrations}
+        selectedChannels={filters.integrationIds}
+        onChannelsChange={(ids) => updateFilters({ integrationIds: ids })}
+        campaigns={campaigns}
+        selectedCampaigns={filters.campaignIds}
+        onCampaignsChange={(ids) => updateFilters({ campaignIds: ids })}
+        teamMembers={teamMembers}
+        assigneeId={filters.assigneeId}
+        onAssigneeChange={(assigneeId) => updateFilters({ assigneeId })}
+        unreadOnly={filters.unreadOnly}
+        onUnreadChange={(unreadOnly) => updateFilters({ unreadOnly })}
+        sentiment={filters.sentiment}
+        onSentimentChange={(sentiment) =>
+          updateFilters({ sentiment: sentiment as ReplyFilters['sentiment'] })
+        }
+        priority={filters.priority}
+        onPriorityChange={(priority) =>
+          updateFilters({ priority: priority as ReplyFilters['priority'] })
+        }
+      />
+      <label className="flex items-center gap-[8px] text-[13px] text-newTableText cursor-pointer select-none self-start">
+        <input
+          type="checkbox"
+          className="sr-only peer"
+          checked={prioritySort}
+          onChange={(e) => setPrioritySort(e.target.checked)}
+        />
+        <div className="relative w-[36px] h-[20px] shrink-0 bg-newTableBorder rounded-full peer-checked:bg-btnPrimary after:content-[''] after:absolute after:top-[2px] after:start-[2px] after:bg-white after:rounded-full after:h-[16px] after:w-[16px] after:transition-all peer-checked:after:translate-x-full" />
+        {t('comment_inbox.sort_priority_first', 'High priority first')}
+      </label>
+    </div>
   );
 
   if (error && statusCode === 402) {

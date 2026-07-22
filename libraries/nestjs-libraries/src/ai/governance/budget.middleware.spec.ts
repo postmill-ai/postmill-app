@@ -228,7 +228,7 @@ describe('BudgetMiddleware', () => {
       expect(next).toHaveBeenCalled();
     });
 
-    it('blocks request with 429 when budget is exceeded', async () => {
+    it('passes through without blocking when budget is exceeded', async () => {
       mockGetSettings.mockResolvedValue({
         budgetSettings: { monthlyCap: 100 },
       });
@@ -241,16 +241,12 @@ describe('BudgetMiddleware', () => {
       const res = mockRes();
       await middleware.use(mockReq({ path: '/api/agents/generate' }), res, next);
 
-      expect(res.status).toHaveBeenCalledWith(429);
-      expect(res.json).toHaveBeenCalledWith({
-        statusCode: 429,
-        error: 'BudgetExceeded',
-        message: 'Global monthly cap of $100 exceeded',
-      });
-      expect(next).not.toHaveBeenCalled();
+      expect(next).toHaveBeenCalled();
+      expect(res.status).not.toHaveBeenCalledWith(429);
+      expect(res.json).not.toHaveBeenCalled();
     });
 
-    it('includes the reason in the 429 response', async () => {
+    it('logs and passes through when budget is exceeded', async () => {
       mockGetSettings.mockResolvedValue({
         budgetSettings: { dailyCap: 5 },
       });
@@ -263,11 +259,9 @@ describe('BudgetMiddleware', () => {
       const res = mockRes();
       await middleware.use(mockReq({ path: '/copilot/chat' }), res, next);
 
-      expect(res.json).toHaveBeenCalledWith(
-        expect.objectContaining({
-          message: 'Global daily cap of $5 exceeded',
-        }),
-      );
+      expect(next).toHaveBeenCalled();
+      expect(res.status).not.toHaveBeenCalledWith(429);
+      expect(res.json).not.toHaveBeenCalled();
     });
   });
 

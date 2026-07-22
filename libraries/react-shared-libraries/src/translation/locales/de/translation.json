@@ -4441,5 +4441,14 @@
   "failed_to_load_settings": "Einstellungen konnten nicht geladen werden",
   "failed_to_load_short_links": "Kurzlinks konnten nicht geladen werden",
   "failed_to_load_preferences": "Präferenzen konnten nicht geladen werden",
-  "failed_to_copy_campaign": "Kampagne konnte nicht kopiert werden"
+  "failed_to_copy_campaign": "Kampagne konnte nicht kopiert werden",
+  "ai_budget_monthly_cap": "Monthly budget cap",
+  "ai_budget_daily_cap": "Daily budget cap",
+  "ai_budget_alert_threshold": "Alert threshold",
+  "sentiment_positive": "Positive",
+  "sentiment_neutral": "Neutral",
+  "sentiment_negative": "Negative",
+  "filter_sentiment": "Filter by sentiment",
+  "filter_priority": "Filter by priority",
+  "comment_inbox.sort_priority_first": "High priority first"
 }

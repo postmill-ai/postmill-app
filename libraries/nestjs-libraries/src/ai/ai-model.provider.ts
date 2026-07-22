@@ -417,6 +417,11 @@ export class AIModelProvider {
   async languageModel(scope: AIScope, orgId?: string, options?: ReasoningOptions): Promise<LanguageModel> {
     return this._withFallback(
       async (config) => {
+        const budgetCheck = await this._budget.checkBudget(scope, orgId, config.providerId);
+        if (!budgetCheck.allowed) {
+          throw new BudgetExceeded(budgetCheck.reason || 'Budget exceeded', scope, orgId);
+        }
+
         return this._telemetry.startSpan(
           'ai.languageModel',
           async (span) => {
@@ -426,7 +431,7 @@ export class AIModelProvider {
             const model = config.adapter.createLanguageModel(config.creds, config.modelId, {
               temperature: config.defaultSurface?.temperature,
             });
-            return model;
+            return this._wrapLanguageModelWithBudget(model, span, scope, orgId, config.providerId, config.modelId);
           },
           { 'ai.scope': scope },
         );
@@ -453,6 +458,11 @@ export class AIModelProvider {
   async langchainModel(scope: AIScope, orgId?: string, options?: ReasoningOptions): Promise<BaseChatModel> {
     return this._withFallback(
       async (config) => {
+        const budgetCheck = await this._budget.checkBudget(scope, orgId, config.providerId);
+        if (!budgetCheck.allowed) {
+          throw new BudgetExceeded(budgetCheck.reason || 'Budget exceeded', scope, orgId);
+        }
+
         return this._telemetry.startSpan(
           'ai.langchainModel',
           async (span) => {
@@ -462,7 +472,7 @@ export class AIModelProvider {
             const model = config.adapter.createLangchainModel(config.creds, config.modelId, {
               temperature: config.defaultSurface?.temperature,
             });
-            return model;
+            return this._wrapLangchainModelWithBudget(model, span, scope, orgId, config.providerId, config.modelId);
           },
           { 'ai.scope': scope },
         );
@@ -475,6 +485,11 @@ export class AIModelProvider {
 
   async imageModel(scope: AIScope, orgId?: string): Promise<{ generate(prompt: string, opts?: { size?: string; isVertical?: boolean }): Promise<string> }> {
     return this._withFallback(async (config) => {
+      const budgetCheck = await this._budget.checkBudget(scope, orgId, config.providerId);
+      if (!budgetCheck.allowed) {
+        throw new BudgetExceeded(budgetCheck.reason || 'Budget exceeded', scope, orgId);
+      }
+
       return this._telemetry.startSpan('ai.imageModel', async (span) => {
         span.setAttribute(TelemetryService.ATTR_GEN_AI_SYSTEM, config.providerId);
         span.setAttribute(TelemetryService.ATTR_GEN_AI_REQUEST_MODEL, config.modelId);
@@ -507,16 +522,7 @@ export class AIModelProvider {
               if (imageModel) {
                 this._logger.log(`Falling back to provider "${fallbackImageProvider}" for image generation`);
                 return {
-                  generate: async (prompt: string, _opts?: { size?: string; isVertical?: boolean }) => {
-                    const result = await (imageModel as any).doGenerate({
-                      prompt,
-                      n: 1,
-                      size: _opts?.size || (_opts?.isVertical ? '1024x1536' : '1024x1024'),
-                      aspectRatio: undefined,
-                    });
-                    const images = result.images as Array<string>;
-                    return images?.[0] || '';
-                  },
+                  generate: this._createImageGenerator(imageModel, span, scope, orgId, fallbackRef.providerId, fallbackModelId),
                 };
               }
             }
@@ -525,23 +531,47 @@ export class AIModelProvider {
         }
         this._health.recordSuccess(config.providerId);
         return {
-          generate: async (prompt: string, _opts?: { size?: string; isVertical?: boolean }) => {
-            const result = await (imageModel as any).doGenerate({
-              prompt,
-              n: 1,
-              size: _opts?.size || (_opts?.isVertical ? '1024x1536' : '1024x1024'),
-              aspectRatio: undefined,
-            });
-            const images = result.images as Array<string>;
-            return images?.[0] || '';
-          },
+          generate: this._createImageGenerator(imageModel, span, scope, orgId, config.providerId, imageModelId),
         };
       }, { 'ai.scope': scope });
     }, scope, orgId);
   }
 
+  private _createImageGenerator(
+    imageModel: ImageModel,
+    span: { setAttribute: (key: string, value: any) => void },
+    scope: AIScope,
+    orgId: string | undefined,
+    providerId: string,
+    modelId: string,
+  ): (prompt: string, opts?: { size?: string; isVertical?: boolean }) => Promise<string> {
+    return async (prompt: string, _opts?: { size?: string; isVertical?: boolean }) => {
+      const result = await (imageModel as any).doGenerate({
+        prompt,
+        n: 1,
+        size: _opts?.size || (_opts?.isVertical ? '1024x1536' : '1024x1024'),
+        aspectRatio: undefined,
+      });
+      const images = result.images as Array<string>;
+      await this._recordUsage({
+        usage: result.usage,
+        span,
+        orgId,
+        providerId,
+        modelId,
+        scope,
+      });
+      return images?.[0] || '';
+    };
+  }
+
   async embeddingModel(scope: AIScope, orgId?: string): Promise<any> {
     return this._withFallback(async (config) => {
+      const budgetCheck = await this._budget.checkBudget(scope, orgId, config.providerId);
+      if (!budgetCheck.allowed) {
+        throw new BudgetExceeded(budgetCheck.reason || 'Budget exceeded', scope, orgId);
+      }
+
       return this._telemetry.startSpan('ai.embeddingModel', async (span) => {
         span.setAttribute(TelemetryService.ATTR_GEN_AI_SYSTEM, config.providerId);
         span.setAttribute(TelemetryService.ATTR_GEN_AI_REQUEST_MODEL, config.modelId);
@@ -551,9 +581,185 @@ export class AIModelProvider {
         }
         const model = config.adapter.createEmbeddingModel(config.creds, config.modelId);
         this._health.recordSuccess(config.providerId);
-        return model;
+        return this._wrapEmbeddingModelWithBudget(model, span, scope, orgId, config.providerId, config.modelId);
       }, { 'ai.scope': scope });
     }, scope, orgId);
+  }
+
+  private _wrapEmbeddingModelWithBudget(
+    raw: any,
+    span: { setAttribute: (key: string, value: any) => void },
+    scope: AIScope,
+    orgId: string | undefined,
+    providerId: string,
+    modelId: string,
+  ): any {
+    return new Proxy(raw as object, {
+      get: (target, prop) => {
+        if (prop === 'doEmbed') {
+          return async (opts: any) => {
+            const budgetCheck = await this._budget.checkBudget(scope, orgId, providerId);
+            if (!budgetCheck.allowed) {
+              throw new BudgetExceeded(budgetCheck.reason || 'Budget exceeded', scope, orgId);
+            }
+            const result = await (target as any).doEmbed(opts);
+            await this._recordUsage({
+              usage: result?.usage,
+              span,
+              orgId,
+              providerId,
+              modelId,
+              scope,
+            });
+            return result;
+          };
+        }
+        return (target as any)[prop];
+      },
+    });
+  }
+
+  private _wrapLanguageModelWithBudget(
+    raw: LanguageModel,
+    span: { setAttribute: (key: string, value: any) => void },
+    scope: AIScope,
+    orgId: string | undefined,
+    providerId: string,
+    modelId: string,
+  ): LanguageModel {
+    const generate = async (opts: any) => {
+      const budgetCheck = await this._budget.checkBudget(scope, orgId, providerId);
+      if (!budgetCheck.allowed) {
+        throw new BudgetExceeded(budgetCheck.reason || 'Budget exceeded', scope, orgId);
+      }
+      const result = await (raw as any).doGenerate(opts);
+      await this._recordUsage({
+        usage: result?.usage,
+        span,
+        orgId,
+        providerId,
+        modelId,
+        scope,
+      });
+      return result;
+    };
+
+    const stream = async (opts: any) => {
+      const budgetCheck = await this._budget.checkBudget(scope, orgId, providerId);
+      if (!budgetCheck.allowed) {
+        throw new BudgetExceeded(budgetCheck.reason || 'Budget exceeded', scope, orgId);
+      }
+      const response = await (raw as any).doStream(opts);
+      const originalConsume = response?.consumeStream?.bind(response);
+      if (originalConsume) {
+        response.consumeStream = async () => {
+          const consumed = await originalConsume();
+          await this._recordUsage({
+            usage: consumed?.usage,
+            span,
+            orgId,
+            providerId,
+            modelId,
+            scope,
+          });
+          return consumed;
+        };
+      }
+      return response;
+    };
+
+    return new Proxy(raw as object, {
+      get(target, prop) {
+        if (prop === 'doGenerate') return generate;
+        if (prop === 'doStream') return stream;
+        return (target as any)[prop];
+      },
+    }) as LanguageModel;
+  }
+
+  private _wrapLangchainModelWithBudget(
+    raw: BaseChatModel,
+    span: { setAttribute: (key: string, value: any) => void },
+    scope: AIScope,
+    orgId: string | undefined,
+    providerId: string,
+    modelId: string,
+  ): BaseChatModel {
+    const invoke = async (input: any, options?: any) => {
+      const budgetCheck = await this._budget.checkBudget(scope, orgId, providerId);
+      if (!budgetCheck.allowed) {
+        throw new BudgetExceeded(budgetCheck.reason || 'Budget exceeded', scope, orgId);
+      }
+      const result = await (raw as any).invoke(input, options);
+      const usage = result?.usage_metadata;
+      if (usage) {
+        await this._recordUsage({
+          usage: {
+            inputTokens: usage.input_tokens,
+            outputTokens: usage.output_tokens,
+          },
+          span,
+          orgId,
+          providerId,
+          modelId,
+          scope,
+        });
+      }
+      return result;
+    };
+
+    const stream = async (input: any, options?: any) => {
+      const budgetCheck = await this._budget.checkBudget(scope, orgId, providerId);
+      if (!budgetCheck.allowed) {
+        throw new BudgetExceeded(budgetCheck.reason || 'Budget exceeded', scope, orgId);
+      }
+      const streamResult = await (raw as any).stream(input, options);
+      if (!streamResult || typeof streamResult[Symbol.asyncIterator] !== 'function') {
+        return streamResult;
+      }
+      return this._wrapLangchainStream(streamResult, span, scope, orgId, providerId, modelId);
+    };
+
+    return new Proxy(raw as object, {
+      get(target, prop) {
+        if (prop === 'invoke') return invoke;
+        if (prop === 'stream') return stream;
+        return (target as any)[prop];
+      },
+    }) as BaseChatModel;
+  }
+
+  private _wrapLangchainStream(
+    streamResult: AsyncIterable<any>,
+    span: { setAttribute: (key: string, value: any) => void },
+    scope: AIScope,
+    orgId: string | undefined,
+    providerId: string,
+    modelId: string,
+  ): AsyncIterable<any> {
+    return {
+      [Symbol.asyncIterator]: async function* (this: AIModelProvider) {
+        let lastChunk: any;
+        for await (const chunk of streamResult) {
+          lastChunk = chunk;
+          yield chunk;
+        }
+        const usage = lastChunk?.usage_metadata ?? lastChunk?.usage;
+        if (usage) {
+          await this._recordUsage({
+            usage: {
+              inputTokens: usage.input_tokens ?? usage.inputTokens,
+              outputTokens: usage.output_tokens ?? usage.outputTokens,
+            },
+            span,
+            orgId,
+            providerId,
+            modelId,
+            scope,
+          });
+        }
+      }.bind(this),
+    };
   }
 
   private async _loadBrandVoice(
@@ -699,11 +905,6 @@ export class AIModelProvider {
     brand: { instructions: string; language: string };
     effectiveSystem: string | undefined;
   }> {
-    const budgetCheck = await this._budget.checkBudget(scope, options?.orgId);
-    if (!budgetCheck.allowed) {
-      throw new BudgetExceeded(budgetCheck.reason || 'Budget exceeded', scope, options?.orgId);
-    }
-
     const brand = await this._loadBrandVoice(options?.orgId, options?.platform, options?.brandId);
     const resolvedSystem = options?.promptKey
       ? await this._resolvePromptTemplate(options.promptKey, options?.orgId)
@@ -764,6 +965,11 @@ export class AIModelProvider {
 
     const generated = await this._withFallback(
       async (config) => {
+        const budgetCheck = await this._budget.checkBudget(scope, options?.orgId, config.providerId);
+        if (!budgetCheck.allowed) {
+          throw new BudgetExceeded(budgetCheck.reason || 'Budget exceeded', scope, options?.orgId);
+        }
+
         return this._telemetry.startSpan(
           'ai.generateText',
           async (span) => {
@@ -835,6 +1041,11 @@ export class AIModelProvider {
 
     return this._withFallback(
       async (config) => {
+        const budgetCheck = await this._budget.checkBudget(scope, options?.orgId, config.providerId);
+        if (!budgetCheck.allowed) {
+          throw new BudgetExceeded(budgetCheck.reason || 'Budget exceeded', scope, options?.orgId);
+        }
+
         return this._telemetry.startSpan(
           'ai.generateObject',
           async (span) => {
@@ -940,7 +1151,7 @@ export class AIModelProvider {
         span.setAttribute(TelemetryService.ATTR_GEN_AI_REQUEST_MODEL, effectiveModel);
         if (orgId) span.setAttribute('ai.organizationId', orgId);
 
-        const check = await this._budget.checkBudget('utility', orgId);
+        const check = await this._budget.checkBudget('utility', orgId, providerId);
         if (!check.allowed) {
           throw new BudgetExceeded(check.reason ?? 'AI budget exceeded', 'utility', orgId);
         }
@@ -1010,7 +1221,7 @@ export class AIModelProvider {
         span.setAttribute(TelemetryService.ATTR_GEN_AI_REQUEST_MODEL, effectiveModel);
         if (orgId) span.setAttribute('ai.organizationId', orgId);
 
-        const check = await this._budget.checkBudget('utility', orgId);
+        const check = await this._budget.checkBudget('utility', orgId, providerId);
         if (!check.allowed) {
           throw new BudgetExceeded(check.reason ?? 'AI budget exceeded', 'utility', orgId);
         }
@@ -1129,8 +1340,13 @@ export class AIModelProvider {
     scope: AIScope,
     orgId?: string,
   ): LanguageModel {
+    // NOTE: `raw` always comes from `languageModel()`, which already wrapped it in
+    // `_wrapLanguageModelWithBudget` — usage is recorded there exactly once with the
+    // same provider/model/scope. This wrapper must NOT record again (that would
+    // double-charge the budget ledger); it only adds budget gating, guardrails,
+    // health, and telemetry.
     const guardAndGenerate = async (opts: any) => {
-      const budgetCheck = await this._budget.checkBudget(scope, orgId);
+      const budgetCheck = await this._budget.checkBudget(scope, orgId, config.providerId);
       if (!budgetCheck.allowed) {
         throw new BudgetExceeded(budgetCheck.reason || 'Budget exceeded', scope, orgId);
       }
@@ -1147,14 +1363,6 @@ export class AIModelProvider {
           const result = await (raw as any).doGenerate({ ...opts, prompt: guardedPrompt });
           const guardedResult = await this._applyOutputGuardrails(result, orgId);
           this._health.recordSuccess(config.providerId);
-          await this._recordUsage({
-            usage: guardedResult.usage,
-            span,
-            orgId,
-            providerId: config.providerId,
-            modelId: config.modelId,
-            scope,
-          });
           return guardedResult;
         },
         { 'ai.scope': scope },
@@ -1162,7 +1370,7 @@ export class AIModelProvider {
     };
 
     const guardAndStream = async (opts: any) => {
-      const budgetCheck = await this._budget.checkBudget(scope, orgId);
+      const budgetCheck = await this._budget.checkBudget(scope, orgId, config.providerId);
       if (!budgetCheck.allowed) {
         throw new BudgetExceeded(budgetCheck.reason || 'Budget exceeded', scope, orgId);
       }
@@ -1182,14 +1390,6 @@ export class AIModelProvider {
             response.consumeStream = async () => {
               const consumed = await originalConsume();
               this._health.recordSuccess(config.providerId);
-              await this._recordUsage({
-                usage: consumed?.usage,
-                span,
-                orgId,
-                providerId: config.providerId,
-                modelId: config.modelId,
-                scope,
-              });
               return consumed;
             };
           }

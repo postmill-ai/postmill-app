@@ -32,7 +32,7 @@ Each category can be enabled or disabled per channel. The defaults are:
 | **Post failed** | on | on | on | A post or a sub-step (first comment, etc.) fails. |
 | **Channel issues** | on | on | on | A channel needs reconnecting or is disabled. |
 | **Replies** | on | off | on | New synced comments or a comment backlog digest. |
-| **AI budget** | on | off | on | AI spend reaches a percentage of the budget cap. |
+| **AI budget** | on | off | on | AI spend reaches a percentage of the provider or organisation budget cap. |
 | **Media jobs** | off | off | on | A media render, transcription, or stock import finishes. |
 | **Announcements** | on | off | on | An admin broadcasts a message to the organisation. |
 | **Streak reminders** | on | off | on | Your posting streak is about to expire. |
@@ -77,4 +77,4 @@ A small set of single-recipient emails is sent regardless of notification prefer
 
 > See also [Team & Roles](./team-and-roles.md) for broadcast permissions, [Settings](./settings.md) for the settings layout, and [Operations Guide → Configuration](../operations-guide/configuration.md) for email and FCM environment variables.
 
-> Verified against v1.0.0
+> Verified against v1.1.0 (2026-07-22)

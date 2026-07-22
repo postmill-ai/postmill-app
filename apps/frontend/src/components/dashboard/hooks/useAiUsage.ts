@@ -17,8 +17,19 @@ export interface AiUsageScopeRow {
   _sum?: { costUsd?: number };
 }
 
+export interface AiUsageProviderRow {
+  provider: string;
+  monthlySpendUsd: number;
+  dailySpendUsd: number;
+  monthlyCap: number | null;
+  dailyCap: number | null;
+  remainingMonthly: number | null;
+  remainingDaily: number | null;
+}
+
 export interface AiUsageResponse {
   byScope: AiUsageScopeRow[];
+  byProvider: AiUsageProviderRow[];
   totalSpendUsd: number;
   monthlySpendUsd: number;
   dailySpendUsd: number;

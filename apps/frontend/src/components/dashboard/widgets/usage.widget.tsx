@@ -116,6 +116,32 @@ export const UsageWidget: FC = () => {
               )}
             </div>
           </div>
+
+          {aiUsage.byProvider && aiUsage.byProvider.length > 0 && (
+            <div className="flex flex-col gap-[8px] mt-[4px]">
+              <h5 className="text-[11px] font-medium text-newTableText uppercase tracking-wide">
+                {t('spend_by_provider', 'Spend by Provider')}
+              </h5>
+              {aiUsage.byProvider.map((provider) => (
+                <div key={provider.provider} className="flex flex-col gap-[6px]">
+                  <div className="text-[12px] font-medium capitalize text-textColor">
+                    {provider.provider}
+                  </div>
+                  <UsageBar
+                    label={t('ai_budget_monthly_cap', 'Monthly cap')}
+                    used={provider.monthlySpendUsd}
+                    limit={provider.monthlyCap ?? false}
+                  />
+                  <UsageBar
+                    label={t('ai_budget_daily_cap', 'Daily cap')}
+                    used={provider.dailySpendUsd}
+                    limit={provider.dailyCap ?? false}
+                  />
+                </div>
+              ))}
+            </div>
+          )}
+
           {aiLoading && (
             <div className="h-[40px] bg-newTableHeader rounded-[8px] animate-pulse" />
           )}
