@@ -227,6 +227,17 @@ The `/agents/[id]` page provides a LangGraph-based post generator powered by the
 ```json
 {
   "byScope": [...],           // spend grouped by scope (utility, generator, agent, mcp)
+  "byProvider": [             // per-active-provider spend and caps
+    {
+      "provider": "openai",
+      "monthlySpendUsd": 5.00,
+      "dailySpendUsd": 0.42,
+      "monthlyCap": 50.00,
+      "dailyCap": 10.00,
+      "remainingMonthly": 45.00,
+      "remainingDaily": 9.58
+    }
+  ],
   "totalSpendUsd": 12.34,     // all-time total
   "monthlySpendUsd": 5.67,    // current calendar month
   "dailySpendUsd": 0.42,      // today
@@ -239,16 +250,16 @@ The `/agents/[id]` page provides a LangGraph-based post generator powered by the
 }
 ```
 
-The spend tab in **Settings → AI** provides a visual dashboard of this data.
+The spend tab in **Settings → AI** provides a visual dashboard of this data, including per-provider progress bars.
 
 ## Governance
 
 All AI operations are subject to three governance layers:
 
 1. **Guardrails** — input and output content filtering (toxicity, PII, prompt injection detection). Violations block the operation and return a `CapabilityNotAvailable` error.
-2. **Budgets** — per-scope spending caps (monthly and daily). Exceeding a cap returns HTTP 429 for the offending scope. Configure caps in **Settings → AI → Spend**.
+2. **Budgets** — per-provider spending caps (monthly and daily) plus legacy per-scope caps. Exceeding a provider cap returns HTTP 429 for calls against that provider while other providers remain usable. Configure provider caps in **Settings → AI → Provider** when configuring a provider.
 3. **Rate limits** — throttle limits apply per endpoint (typically 30 requests per 60 seconds for most AI endpoints, lower for intensive operations like brand memory indexing).
 
 All AI operations log to the spend ledger (`AISpendLog`) for audit and cost tracking.
 
-> Verified against v1.0.0
+> Verified against v1.1.0 (2026-07-22)

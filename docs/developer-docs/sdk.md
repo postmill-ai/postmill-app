@@ -1,6 +1,6 @@
 # SDK
 
-> Verified against v1.0.0
+> Verified against v1.1.0 (2026-07-22)
 
 The `@postmill-ai/postmill-sdk` is the official Node.js SDK for the Postmill Public API. It provides typed methods for creating posts, uploading media, listing integrations, and more.
 
@@ -125,7 +125,7 @@ deletePost(id: string): Promise<Response>
 ## Package details
 
 - **Package name**: `@postmill-ai/postmill-sdk`
-- **Version**: 1.0.0
+- **Version**: 1.1.0
 - **License**: AGPL-3.0
 - **Build**: Uses `tsup` for bundling.
 - **Workspace dependency**: `@gitroom/nestjs-libraries`

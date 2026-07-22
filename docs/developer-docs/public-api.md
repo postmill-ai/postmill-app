@@ -221,4 +221,4 @@ Common status codes:
 - `410` — Requested provider version has been retired.
 - `429` — Rate limit exceeded.
 
-> Verified against v1.0.0
+> Verified against v1.1.0 (2026-07-22)

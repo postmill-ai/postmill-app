@@ -852,7 +852,15 @@ paths:
         - { name: assigneeId, in: query, schema: { type: string } }
         - { name: cursor, in: query, schema: { type: string } }
         - { name: unreadOnly, in: query, schema: { type: string, enum: ['true', 'false'] } }
-      responses: { '200': { description: Inbox page } }
+        - { name: sentiment, in: query, schema: { type: string, enum: [positive, neutral, negative] } }
+        - { name: priority, in: query, schema: { type: string, enum: [high, medium, low] } }
+        - { name: sortBy, in: query, schema: { type: string, enum: [priority] } }
+      responses:
+        '200':
+          description: Inbox page
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/SocialCommentsPage' }
 
   /posts/inbox/unread-count:
     get:
@@ -1960,8 +1968,28 @@ paths:
                 type: object
                 properties:
                   byScope: { type: array, items: { type: object, additionalProperties: true } }
+                  byProvider:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        provider: { type: string }
+                        monthlySpendUsd: { type: number }
+                        dailySpendUsd: { type: number }
+                        monthlyCap: { type: [number, 'null'] }
+                        dailyCap: { type: [number, 'null'] }
+                        remainingMonthly: { type: [number, 'null'] }
+                        remainingDaily: { type: [number, 'null'] }
                   totalSpendUsd: { type: number }
-                  budget: { type: [object, 'null'], additionalProperties: true }
+                  monthlySpendUsd: { type: number }
+                  dailySpendUsd: { type: number }
+                  budget:
+                    type: [object, 'null']
+                    properties:
+                      monthlyCap: { type: [number, 'null'] }
+                      dailyCap: { type: [number, 'null'] }
+                      remainingMonthly: { type: [number, 'null'] }
+                      remainingDaily: { type: [number, 'null'] }
 
   /ai/brand-profile:
     get:
@@ -2291,6 +2319,39 @@ paths:
       responses: { '200': { description: Deleted, content: { application/json: { schema: { $ref: '#/components/schemas/SuccessFlag' } } } } }
 
   # ===================================================================== SETTINGS
+  /settings/ai/config/{identifier}:
+    put:
+      tags: [Settings]
+      summary: Upsert per-org AI provider config
+      operationId: upsertOrgAiProviderConfig
+      parameters:
+        - { $ref: '#/components/parameters/PathIdentifier' }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                enabled: { type: boolean }
+                credentials: { type: object, additionalProperties: { type: string } }
+                defaultModel: { type: string }
+                reasoningModel: { type: string }
+                budgetMonthlyCap: { type: [number, 'null'], minimum: 0 }
+                budgetDailyCap: { type: [number, 'null'], minimum: 0 }
+                budgetAlertThresholdPct: { type: [number, 'null'], minimum: 0, maximum: 1 }
+                version: { type: string }
+      responses:
+        '200':
+          description: Saved
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  identifier: { type: string }
+                  success: { type: boolean }
+
   /settings/team:
     get:
       tags: [Settings]
@@ -3685,6 +3746,9 @@ components:
         assigneeId: { type: [string, 'null'] }
         read: { type: boolean }
         createdAt: { type: string, format: date-time }
+        sentiment: { type: [string, 'null'], enum: [positive, neutral, negative, 'null'] }
+        priority: { type: [string, 'null'], enum: [high, medium, low, 'null'] }
+        sentimentConfidence: { type: [number, 'null'] }
     SocialCommentsPage:
       type: object
       properties:

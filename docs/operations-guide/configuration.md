@@ -121,6 +121,14 @@ Model defaults re-point AI model resolution from the legacy scope/model chain to
 |----------|---------|---------|
 | `AI_MODEL_DEFAULTS_ENABLED` | `true` (unset = on) | Kill switch for the model-category re-point and Model/Media Defaults feature. Set to `false` to revert AI model resolution to the legacy chain |
 
+## AI Budget Enforcement
+
+Per-provider AI budgets are configured per-organization in **Settings → AI**. The deployment-level kill switch below controls whether provider caps are actually enforced.
+
+| Variable | Default | Purpose |
+|----------|---------|---------|
+| `AI_PROVIDER_BUDGET_ENFORCE` | `true` (unset = on) | When `true`, `BudgetService.checkBudget` enforces per-provider monthly/daily caps from `AIOrgProviderConfig`. When `false`, provider budget checks always allow the call (alerts and spend logging continue). Set to `false` to roll back enforcement during an incident without losing cap configuration or alerts. |
+
 ## API
 
 | Variable | Default | Purpose |
@@ -354,4 +362,4 @@ The following patterns are no longer supported as environment variables. Configu
 
 The **login** provider env vars (`GITHUB_CLIENT_*`, `YOUTUBE_CLIENT_*`, `POSTMILL_OAUTH_*`) remain readable as the bootstrap fallback for auth providers managed by the separate administration app and must never be used for channel or AI credentials.
 
-> Verified against v1.0.0
+> Verified against v1.1.0 (2026-07-22)

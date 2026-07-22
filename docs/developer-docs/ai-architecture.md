@@ -4,7 +4,7 @@ Postmill ships a pluggable, multi-provider AI layer. Every AI surface resolves i
 
 > For the end-user view, see [AI Tools](../user-guide/ai-tools.md).
 
-> Verified against v1.0.0
+> Verified against v1.1.0 (2026-07-22)
 
 ---
 
@@ -126,13 +126,14 @@ Input and output guardrails via `@reaatech/guardrail-chain` and `GuardrailSettin
 
 ### BudgetService
 
-Token/cost tracking with three cap levels:
+Token/cost tracking with four cap levels:
 
 - **Global** — instance-wide monthly/daily spend caps
 - **Per-org** — per-tenant caps via `perOrgCaps`
+- **Per-provider** — per-tenant, per-active-provider caps stored on `AIOrgProviderConfig`
 - **Per-scope** — per-AI-scope caps via `scopeCaps` (legacy; unified onto `agent` for MCP/chat/agent surfaces)
 
-Writes to `AISpendLog` for every AI call. Uses an in-memory accumulator with a 60s TTL. Fires threshold alerts at `alertThresholdPct` (default 80%). Returns 429 when budget is exceeded.
+Provider budget enforcement is controlled by `AI_PROVIDER_BUDGET_ENFORCE` (default `true`). When enabled, `checkBudget(scope, orgId, providerId)` returns 429 for the provider whose cap is exhausted while other providers remain usable. Writes to `AISpendLog` for every AI call. Uses an in-memory accumulator with a 60s TTL. Fires threshold alerts at `alertThresholdPct` (default 80%) and includes the provider in provider-scoped alerts. Returns 429 when budget is exceeded.
 
 ### ProviderHealthService
 
@@ -169,7 +170,7 @@ pgvector-based RAG: content chunking, embedding computation via `AIModelProvider
 
 ### AI rate limiting
 
-Per-org AI rate limiting is enforced at the policy/budget layer (`BudgetService` / `BudgetMiddleware`); no NestJS throttler guard is currently wired.
+Per-org AI gating happens at the budget layer: `BudgetService.checkBudget(scope, orgId, providerId)` is called at each AI call site (`AIModelProvider` wrappers, media dispatch, RAG backfill, agent/copilot) and blocks only the exhausted provider. `BudgetMiddleware` remains registered for legacy routes as an **alert-only** compatibility shim — it never blocks requests (its `checkBudget` call carries no provider, so it always allows). No NestJS throttler guard is currently wired.
 
 ### IdempotencyFactory
 
@@ -202,7 +203,7 @@ OpenTelemetry via OTLP. Structured GenAI spans with attributes (`gen_ai.system`,
 
 | Model | Purpose |
 |---|---|
-| `AIOrgProviderConfig` | Per-org provider credentials (encrypted), active flag, `defaultModel` + `reasoningModel` |
+| `AIOrgProviderConfig` | Per-org provider credentials (encrypted), active flag, `defaultModel`, `reasoningModel`, and per-provider budget caps (`budgetMonthlyCap`, `budgetDailyCap`, `budgetAlertThresholdPct`) |
 | `AISpendLog` | Cost ledger — input/output tokens, cost, provider, model, scope |
 | `AIBrandProfile` | Brand voice instructions + language; many per org (`name`/`isDefault`/`slug`), selectable per-post via `Post.brandId` |
 | `AIPromptTemplate` | Editable prompt templates (org-scoped or global) |

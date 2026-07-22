@@ -62,7 +62,7 @@ Without this, the analytics dashboard, comment inbox, media render queue, and wa
 |----------|---------|---------|
 | `analytics-sync-org` | `analytics/sync-org` | Per-org channel/post snapshots, rollup/prune, anomaly detection, watched-account probes, short-link snapshots, weekly summary |
 | `analytics-sync-integration` | `analytics/sync-integration` | Per-integration channel snapshot |
-| `comments-sync-org` | `comments/sync-org` | Per-org comment sync, webhook dispatch, pruning, notifications |
+| `comments-sync-org` | `comments/sync-org` | Per-org comment sync, best-effort sentiment/priority classification, webhook dispatch, pruning, notifications |
 | `post-publish-<queue>` | `post/publish` | Publish a post to one or more channels, including first comment, plugs, repeats, and webhooks. One function is generated per provider task queue |
 | `autopost-process` | `autopost/process` | Recurring autopost schedules; re-enqueues itself every hour |
 | `refresh-token` | `integration/refresh-token` | Refresh OAuth tokens before expiry; re-enqueues itself with a **unique** idempotency id per cycle (`refresh_<integrationId>_<uuid>`; a constant id would be dedup-dropped for 24h and black-hole the chain). Cancelled by `integration/refresh-token/cancel` (emitted on channel delete and before every (re)start). A chain terminates on channel deletion, when the integration is flagged `refreshNeeded`, or after 5 consecutive failed refresh cycles (5-minute sleep floor between retries) — bounding failure notifications per dead chain |
@@ -168,4 +168,4 @@ Enable in `.env`:
 AGENT_DIGEST_ENABLED=true
 ```
 
-> Verified against v1.0.0
+> Verified against v1.1.0 (2026-07-22)

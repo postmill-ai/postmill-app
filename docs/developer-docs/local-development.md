@@ -2,7 +2,7 @@
 
 This guide gets the Postmill stack running on a normal developer machine without swapping or crashing. The repo ships with opt-in subsystems and lightweight commands so you only pay for what you use.
 
-> Verified against v1.0.0
+> Verified against v1.1.0 (2026-07-22)
 
 ---
 
@@ -124,6 +124,7 @@ Set any of these environment variables before `pnpm run dev:minimal`. All flags 
 | `DEV_DISABLE_CRON` | `ScheduleModule.forRoot()` (used by session cleanup) |
 | `DEV_DISABLE_SENTRY` | Sentry initialization |
 | `DEV_DISABLE_OPENTELEMETRY` | OpenTelemetry exporter setup |
+| `AI_PROVIDER_BUDGET_ENFORCE` | Per-provider AI budget hard-enforcement (set `=false` to disable hard caps; alerts and usage still record) |
 
 Example for a machine with limited RAM:
 
