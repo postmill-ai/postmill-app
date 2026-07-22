@@ -58,6 +58,13 @@ export class RemotePgVectorStoreAdapter implements VectorStoreAdapter {
     const pool = await this._getPool();
     await pool.query('CREATE EXTENSION IF NOT EXISTS vector');
     const table = this._ident(this._table);
+    // Re-validated into a local at the use site: the numeric coercion + integer
+    // guard is a taint barrier static analysis can see (the constructor check on
+    // the instance field is not tracked across methods).
+    const dimension = Math.trunc(Number(this._dimension));
+    if (!Number.isInteger(dimension) || dimension <= 0) {
+      throw new Error('Invalid pgvector dimension');
+    }
     await pool.query(
       `CREATE TABLE IF NOT EXISTS ${table} (
          "id" text PRIMARY KEY,
@@ -65,7 +72,7 @@ export class RemotePgVectorStoreAdapter implements VectorStoreAdapter {
          "sourceType" text NOT NULL,
          "sourceId" text NOT NULL,
          "text" text,
-         "embedding" vector(${this._dimension}) NOT NULL
+         "embedding" vector(${dimension}) NOT NULL
        )`
     );
     await pool.query(
