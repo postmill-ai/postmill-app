@@ -322,6 +322,8 @@ export const startMcp = async (app: INestApplication) => {
         scopes: mapPersistedScopes((authorization as any).scope),
       };
     }
+    // Not password storage: deterministic digest of a high-entropy CSPRNG API
+    // key, required for indexed lookup (same pattern as GitHub token storage).
     const hash = createHash('sha256').update(token).digest('hex');
     const apiKey = await apiKeysService.findActiveByHash(hash);
     if (!apiKey) return null;

@@ -218,6 +218,8 @@ export class OrgVpnConfigService {
 
     // Fingerprint the full endpoint + auth so a host/port/protocol change (custom
     // proxy) or a credential rotation produces a new dispatcher cache key.
+    // Not password storage: an in-memory cache key over endpoint+credentials so
+    // rotation invalidates the dispatcher cache; never persisted or used for auth.
     const credsFingerprint = createHash('sha256')
       .update(`${region.host}:${region.port}:${region.protocol}:${auth.username}:${auth.password}`)
       .digest('hex');

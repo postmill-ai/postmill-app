@@ -36,6 +36,20 @@ export function decodeHtmlEntities(input: string | null | undefined): string {
 }
 
 /**
+ * Strip tags repeatedly until the string stops changing, so tag fragments that a
+ * single pass would reassemble (e.g. `<scr<b>ipt>`) cannot survive sanitization.
+ */
+function stripTags(input: string): string {
+  let out = input;
+  let prev: string;
+  do {
+    prev = out;
+    out = out.replace(/<[^>]*>/g, '');
+  } while (out !== prev);
+  return out;
+}
+
+/**
  * Convert platform comment HTML (e.g. Mastodon `status.content`) into readable
  * plain text for storage/display:
  *  - `<br>` / closing block tags become newlines so paragraphs survive,
@@ -53,7 +67,7 @@ export function htmlToText(html: string | null | undefined): string {
   text = text.replace(
     /<a\b([^>]*)>([\s\S]*?)<\/a>/gi,
     (_match, attrs: string, inner: string) => {
-      const innerText = inner.replace(/<[^>]+>/g, '').trim();
+      const innerText = stripTags(inner).trim();
       const isMentionOrTag = /class="[^"]*(mention|hashtag|u-url)[^"]*"/i.test(attrs);
       const hrefMatch = attrs.match(/href="([^"]*)"/i);
       const href = hrefMatch ? hrefMatch[1] : '';
@@ -74,7 +88,7 @@ export function htmlToText(html: string | null | undefined): string {
     }
   );
 
-  text = text.replace(/<[^>]+>/g, '');
+  text = stripTags(text);
   text = decodeHtmlEntities(text);
 
   return text

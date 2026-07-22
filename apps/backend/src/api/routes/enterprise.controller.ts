@@ -64,6 +64,8 @@ export class EnterpriseController {
         return;
       }
 
+      // Not password storage: deterministic digest of a high-entropy CSPRNG API
+      // key, required for indexed lookup (same pattern as GitHub token storage).
       const hash = crypto.createHash('sha256').update(load.apiKey).digest('hex');
       const apiKey = await this._apiKeysService.findActiveByHash(hash);
       const org = apiKey?.organization || null;
@@ -121,6 +123,8 @@ export class EnterpriseController {
         return { success: false };
       }
 
+      // Not password storage: deterministic digest of a high-entropy CSPRNG API
+      // key, required for indexed lookup (same pattern as GitHub token storage).
       const hash = crypto.createHash('sha256').update(load.apiKey).digest('hex');
       const apiKey = await this._apiKeysService.findActiveByHash(hash);
       const org = apiKey?.organization || null;

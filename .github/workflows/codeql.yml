@@ -9,6 +9,11 @@ on:
       - apps/**
       - '!apps/docs/**'
       - libraries/**
+  pull_request:
+    paths:
+      - apps/**
+      - '!apps/docs/**'
+      - libraries/**
   merge_group:
 
 

@@ -26,27 +26,40 @@ export class RemotePgVectorStoreAdapter implements VectorStoreAdapter {
       throw new Error('Invalid pgvector dimension');
     }
     this._dimension = cfg.dimension;
-    // Identifier sanitised to defend against SQL injection in the table name.
-    const t = (cfg.table || 'postmill_rag').replace(/[^a-zA-Z0-9_]/g, '');
-    this._table = t.length ? t : 'postmill_rag';
+    // Table name must be a plain SQL identifier — reject (not strip) anything else
+    // so a misconfigured name fails loudly instead of silently aliasing a table.
+    const t = cfg.table || 'postmill_rag';
+    if (!/^[a-zA-Z_][a-zA-Z0-9_]{0,62}$/.test(t)) {
+      throw new Error('Invalid pgvector table name');
+    }
+    this._table = t;
   }
 
   private _connectionString: string;
+  private _escapeIdent: ((name: string) => string) | null = null;
 
   private async _getPool(): Promise<any> {
     if (this._pool) return this._pool;
     const pg: any = await import('pg');
     const Pool = pg.Pool || pg.default?.Pool;
+    this._escapeIdent = pg.escapeIdentifier || pg.default?.escapeIdentifier || null;
     this._pool = new Pool({ connectionString: this._connectionString, max: 4 });
     return this._pool;
+  }
+
+  // Quoted identifier via pg's escapeIdentifier; the constructor-validated name
+  // makes the fallback quoting safe.
+  private _ident(name: string): string {
+    return this._escapeIdent ? this._escapeIdent(name) : `"${name}"`;
   }
 
   private async _ensureTable(): Promise<void> {
     if (this._ensured) return;
     const pool = await this._getPool();
     await pool.query('CREATE EXTENSION IF NOT EXISTS vector');
+    const table = this._ident(this._table);
     await pool.query(
-      `CREATE TABLE IF NOT EXISTS "${this._table}" (
+      `CREATE TABLE IF NOT EXISTS ${table} (
          "id" text PRIMARY KEY,
          "organizationId" text NOT NULL,
          "sourceType" text NOT NULL,
@@ -56,11 +69,11 @@ export class RemotePgVectorStoreAdapter implements VectorStoreAdapter {
        )`
     );
     await pool.query(
-      `CREATE INDEX IF NOT EXISTS "${this._table}_hnsw_idx" ON "${this._table}"
+      `CREATE INDEX IF NOT EXISTS ${this._ident(`${this._table}_hnsw_idx`)} ON ${table}
        USING hnsw ("embedding" vector_cosine_ops) WITH (m = 16, ef_construction = 200)`
     );
     await pool.query(
-      `CREATE INDEX IF NOT EXISTS "${this._table}_org_idx" ON "${this._table}" ("organizationId")`
+      `CREATE INDEX IF NOT EXISTS ${this._ident(`${this._table}_org_idx`)} ON ${table} ("organizationId")`
     );
     this._ensured = true;
   }
@@ -84,7 +97,7 @@ export class RemotePgVectorStoreAdapter implements VectorStoreAdapter {
     const res = await pool.query(
       `SELECT "text", "sourceType", "sourceId",
               (1 - ("embedding" <=> $1::vector)) AS score
-       FROM "${this._table}"
+       FROM ${this._ident(this._table)}
        WHERE "organizationId" = $2
        ORDER BY "embedding" <=> $1::vector
        LIMIT $3`,
@@ -110,7 +123,7 @@ export class RemotePgVectorStoreAdapter implements VectorStoreAdapter {
       await client.query('BEGIN');
       for (const p of points) {
         await client.query(
-          `INSERT INTO "${this._table}"
+          `INSERT INTO ${this._ident(this._table)}
              ("id", "organizationId", "sourceType", "sourceId", "text", "embedding")
            VALUES ($1, $2, $3, $4, $5, $6::vector)
            ON CONFLICT ("id") DO UPDATE SET
@@ -143,7 +156,7 @@ export class RemotePgVectorStoreAdapter implements VectorStoreAdapter {
     try {
       const pool = await this._getPool();
       await pool.query(
-        `DELETE FROM "${this._table}"
+        `DELETE FROM ${this._ident(this._table)}
          WHERE "organizationId" = $1 AND "sourceType" = $2 AND "sourceId" = $3`,
         [organizationId, sourceType, sourceId]
       );
