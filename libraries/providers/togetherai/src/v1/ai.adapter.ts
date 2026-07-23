@@ -4,11 +4,13 @@ import type { BaseChatModel } from '@langchain/core/language_models/chat_models'
 import type { LanguageModelV2, ImageModelV2, EmbeddingModelV2 } from '@ai-sdk/provider-v5';
 import { metadata as providerMetadata } from './metadata';
 import {
+  mergeLiveModels,
   type AiCapability as AIProviderAdapter,
   type AiCredentialField as CredentialField,
   type AiModelInfo as ModelInfo,
   type AiCapabilities as AICapabilities,
   type AiModelOptions as AIModelOptions,
+  type LiveModelEntry,
   type ProviderModule,
   type SafeFetchPort,
 } from '@gitroom/provider-kernel';
@@ -68,8 +70,53 @@ export class TogetherAIAdapter implements AIProviderAdapter {
     return createTogetherAI({ apiKey: creds.apiKey });
   }
 
-  async listModels(_creds: Record<string, string>): Promise<ModelInfo[]> {
-    return TOGETHER_AI_MODELS;
+  /**
+   * Live model list from Together's `GET /models` — a BARE array of
+   * `{ id, type, display_name? }` (not the OpenAI `{data:[...]}` shape), so it
+   * can't use the shared fetchOpenAIStyleModels helper. The `type` field
+   * already classifies each model, so map it to kind/capability overrides that
+   * win over id heuristics; non-chat/embedding/image types (audio, moderation,
+   * rerank) get text:false caps to stay out of text menus. Returns null on ANY
+   * failure so listModels falls back to the static catalog. Never throws.
+   */
+  private async _fetchLiveModels(creds: Record<string, string>): Promise<LiveModelEntry[] | null> {
+    if (!this._safeFetch || !creds.apiKey) return null;
+    try {
+      const response = await this._safeFetch(`${TOGETHER_AI_BASE_URL}/models`, {
+        headers: { Authorization: `Bearer ${creds.apiKey}` },
+      });
+      if (!response.ok) return null;
+      const data: any = await response.json();
+      if (!Array.isArray(data) || data.length === 0) return null;
+      const entries: LiveModelEntry[] = [];
+      for (const m of data) {
+        if (!m || typeof m.id !== 'string' || !m.id) continue;
+        const label = typeof m.display_name === 'string' && m.display_name ? m.display_name : undefined;
+        switch (m.type) {
+          case 'chat':
+            entries.push({ id: m.id, label });
+            break;
+          case 'embedding':
+            entries.push({ id: m.id, label, kind: 'embedding', capabilities: { text: false, image: false, vision: false, speech: false, tools: false, embeddings: true } });
+            break;
+          case 'image':
+            entries.push({ id: m.id, label, kind: 'image', capabilities: { text: false, embeddings: false, speech: false, tools: false, vision: false, image: true } });
+            break;
+          default:
+            entries.push({ id: m.id, label, capabilities: { text: false, image: false, vision: false, embeddings: false, tools: false, speech: true } });
+        }
+      }
+      return entries.length > 0 ? entries : null;
+    } catch {
+      return null;
+    }
+  }
+
+  async listModels(creds: Record<string, string>): Promise<ModelInfo[]> {
+    // Live-first: merge the upstream catalog with the static list (curated
+    // metadata wins on known ids). Any failure falls back to the static list.
+    const live = await this._fetchLiveModels(creds);
+    return mergeLiveModels(live, TOGETHER_AI_MODELS, this.capabilities);
   }
 
   async validateCredentials(creds: Record<string, string>): Promise<{ ok: boolean; error?: string }> {

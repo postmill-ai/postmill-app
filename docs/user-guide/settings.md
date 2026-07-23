@@ -139,10 +139,12 @@ Configure AI providers, models, spending, and prompt management.
   the reasoning model and fall back to the default model when none is set. Image models are no
   longer part of AI provider configuration — image/video/audio generation is configured in the
   [Content tab](#content-tab).
-- **Provider budget** — each provider can carry its own monthly cap, daily cap, and alert threshold.
-  When a cap is exceeded, calls against that provider return HTTP 429 while other configured
-  providers remain usable. Activating a new provider version copies the budget from the previously
-  active row when the target row has no budget set.
+- **Provider budget** — opt-in via the **Budget limits** switch in the provider's configure form
+  (off by default). When enabled, each provider can carry its own monthly cap, daily cap (both
+  numeric, in USD), and alert threshold (a percentage slider). When a cap is exceeded, calls against
+  that provider return HTTP 429 while other configured providers remain usable. Activating a new
+  provider version copies the budget from the previously active row when the target row has no
+  budget set.
 - **Set Active** — activate a configured provider. All AI operations for your organisation will
   use this provider.
 - **Model selection** — choose models per scope:
@@ -556,4 +558,4 @@ Settings access is permission-gated: reading and changing the org-level settings
 permissions. A member whose role lacks the grant receives **HTTP 403**; an org can grant these
 permissions to a custom role. Billing management is owner-only.
 
-> Verified against v1.1.0 (2026-07-22)
+> Verified against v1.1.0 (2026-07-23)

@@ -6,16 +6,17 @@ kernel vitest alias. One row per **module** (multi-module packages — e.g. `ope
 get multiple rows). The `has-spec?` column reflects whether the **package** contains any
 `*.spec.ts` / `*.int-spec.ts` under `src/**`.
 
-- **Modules:** 163  (== `providerModules.length`)
-- **Packages:** 145  (== real package dirs under `libraries/providers/`, excluding `kernel` and `node_modules`)
-  - Note: `ls -d libraries/providers/*/ | grep -v kernel | wc -l` = **146** on a clean checkout because it also counts the `node_modules/` dir; **145** are real packages. (After a local `--coverage` run a gitignored `coverage/` dir also appears, making the raw count **147** — both `node_modules/` and `coverage/` are non-package artifacts.)
-- **Packages with at least one spec:** 91 / 145  (media adapters + the magnific content pack gained recorded-fixture `*.int-spec.ts` behavioral tests via the shared `kernel/src/testing/media-int-helpers.ts`)
+- **Modules:** 168  (== `providerModules.length`)
+- **Packages:** 150  (== real package dirs under `libraries/providers/`, excluding `kernel` and `node_modules`)
+  - Note: `ls -d libraries/providers/*/ | grep -v kernel | wc -l` = **151** on a clean checkout because it also counts the `node_modules/` dir; **150** are real packages. (After a local `--coverage` run a gitignored `coverage/` dir also appears, making the raw count **152** — both `node_modules/` and `coverage/` are non-package artifacts.)
+- **Packages with at least one spec:** 96 / 150  (media adapters + the magnific content pack gained recorded-fixture `*.int-spec.ts` behavioral tests via the shared `kernel/src/testing/media-int-helpers.ts`)
 
-Modules per domain: ai=25, auth=6, contentpack=4, email=7, media=35, shortlink=20, social=36, storage=14, vpn=16
+Modules per domain: ai=30, auth=6, contentpack=4, email=7, media=35, shortlink=20, social=36, storage=14, vpn=16
 
 | package | domain | providerId | version | status | has-spec? |
 |---|---|---|---|---|---|
 | anthropic | ai | anthropic | v1 | active | yes |
+| apertus | ai | apertus | v1 | active | yes |
 | azure | ai | azure | v1 | active | yes |
 | bedrock | ai | bedrock | v1 | active | yes |
 | bitdeer | ai | bitdeer | v1 | active | no |
@@ -27,11 +28,14 @@ Modules per domain: ai=25, auth=6, contentpack=4, email=7, media=35, shortlink=2
 | gmihub | ai | gmihub | v1 | active | no |
 | google | ai | google | v1 | active | yes |
 | groq | ai | groq | v1 | active | yes |
+| kimi | ai | kimi | v1 | active | yes |
 | lightning | ai | lightning | v1 | active | no |
 | meta-llama | ai | meta-llama | v1 | active | no |
 | minimax | ai | minimax | v1 | active | no |
 | mistral | ai | mistral | v1 | active | yes |
+| nvidia | ai | nvidia | v1 | active | yes |
 | openai | ai | openai | v1 | active | yes |
+| openai-compatible | ai | openai-compatible | v1 | active | yes |
 | openrouter | ai | openrouter | v1 | active | yes |
 | perplexity | ai | perplexity | v1 | active | yes |
 | qwen | ai | qwen | v1 | active | no |
@@ -40,6 +44,7 @@ Modules per domain: ai=25, auth=6, contentpack=4, email=7, media=35, shortlink=2
 | vertex | ai | vertex | v1 | active | yes |
 | vultr | ai | vultr | v1 | active | no |
 | xai | ai | xai | v1 | active | yes |
+| zai | ai | zai | v1 | active | yes |
 | generic | auth | generic | v1 | active | no |
 | github | auth | github | v1 | active | no |
 | google | auth | google | v1 | active | yes |

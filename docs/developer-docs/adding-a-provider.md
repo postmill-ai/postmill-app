@@ -315,7 +315,7 @@ export const providerModules: ProviderModule<any, any>[] = [
 ];
 ```
 
-If your provider fits one of the generator templates, you can instead re-run `scripts/generate-provider-packages.mjs`.
+`providers.generated.ts` is hand-maintained despite its name (the one-shot scaffold that originally produced it was removed after the kernel migration); keep the imports and spreads in alphabetical order.
 
 ## Step 7: Optional — implement social comments
 

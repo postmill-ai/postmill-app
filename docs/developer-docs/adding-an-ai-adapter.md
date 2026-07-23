@@ -1,8 +1,8 @@
 # Adding an AI Provider Adapter
 
-Postmill's AI layer supports 25 providers through a pluggable adapter system. Each adapter lives in its own workspace package under `libraries/providers/<id>/` and is registered into the `ProviderKernel` at backend boot.
+Postmill's AI layer supports 30 providers through a pluggable adapter system. Each adapter lives in its own workspace package under `libraries/providers/<id>/` and is registered into the `ProviderKernel` at backend boot.
 
-> Verified against v1.0.0
+> Verified against v1.1.0 (2026-07-23)
 
 ---
 
@@ -78,6 +78,8 @@ import {
   type AiModelOptions as AIModelOptions,
   type ProviderModule,
   type SafeFetchPort,
+  fetchOpenAIStyleModels,
+  mergeLiveModels,
 } from '@gitroom/provider-kernel';
 import { metadata as providerMetadata } from './metadata';
 
@@ -89,6 +91,17 @@ const CAPABILITIES: AICapabilities = {
   speech: false,
   tools: true,
 };
+
+// Static fallback catalog + curated metadata (labels, vision/reasoning flags)
+// for the models you know about. Live listing merges with this.
+const STATIC_MODELS: ModelInfo[] = [
+  {
+    id: 'model-v1',
+    label: 'Model V1',
+    kind: 'text',
+    capabilities: CAPABILITIES,
+  },
+];
 
 const CREDENTIAL_FIELDS: CredentialField[] = [
   {
@@ -113,15 +126,17 @@ export class YourProviderAdapter implements AIProviderAdapter {
     this._safeFetch = fetch;
   }
 
-  async listModels(_creds: Record<string, string>): Promise<ModelInfo[]> {
-    return [
-      {
-        id: 'model-v1',
-        label: 'Model V1',
-        kind: 'text',
-        capabilities: this.capabilities,
-      },
-    ];
+  async listModels(creds: Record<string, string>): Promise<ModelInfo[]> {
+    // Live-first: enumerate the provider's real catalog over the SSRF-safe fetch
+    // and merge it with the static fallback (curated labels/capabilities win on
+    // known ids). On ANY failure the static list is returned unchanged. See
+    // ai-architecture.md → "Model catalogs (live-first)".
+    const live = await fetchOpenAIStyleModels(
+      this._safeFetch,
+      creds.baseURL || 'https://api.yourprovider.com/v1',
+      creds.apiKey,
+    );
+    return mergeLiveModels(live, STATIC_MODELS, this.capabilities);
   }
 
   async validateCredentials(
@@ -275,7 +290,17 @@ export default [yourproviderAiModule];
 
 ## Step 4: Register in the backend manifest
 
-Add the import and array entry to `apps/backend/src/providers.generated.ts`:
+Wire the workspace package up in three places:
+
+1. `apps/backend/package.json` — add `"@gitroom/provider-yourprovider": "workspace:*"` (alphabetical), then run `pnpm install`.
+2. `tsconfig.base.json` — add the two path aliases (alphabetical):
+
+```json
+"@gitroom/provider-yourprovider": ["libraries/providers/yourprovider/src"],
+"@gitroom/provider-yourprovider/*": ["libraries/providers/yourprovider/src/*"],
+```
+
+3. Add the import and array entry to `apps/backend/src/providers.generated.ts`:
 
 ```typescript
 import yourproviderModules from '@gitroom/provider-yourprovider';
@@ -287,6 +312,8 @@ export const providerModules = [
 ```
 
 `ProvidersBootstrap` registers every module into the kernel at boot. If the `ai` feature flag is enabled (`DEV_DISABLE_AI` is not set), your provider appears in the catalog and can be selected in **Settings → AI**.
+
+> **Base URL visibility:** the Settings → AI form hides the `baseURL` credential field for every provider *except* endpoint-bringing ones allowlisted in `BASE_URL_PROVIDERS` (`apps/frontend/src/components/settings/shared/kit/descriptors/ai.descriptor.ts`) — currently only `openai-compatible`. If your provider has no canonical endpoint of its own, add its id there (and pass `{ requireBaseURL: true }` to `OpenAICompatibleAdapter`). Saved `baseURL` values must still be public HTTPS URLs — `OrgAiSettingsService._assertBaseURLSafe` rejects private/loopback/non-HTTPS hosts.
 
 ---
 
@@ -315,8 +342,8 @@ Mock the underlying AI SDK or the injected `SafeFetchPort` rather than making re
 
 `openai`, `anthropic`, `google`, `bedrock`, `vertex`, `azure`, `groq`, `fireworks`, `togetherai`, `deepseek`, `mistral`, `cohere`, `perplexity`, `xai`, `gateway`, `openrouter`
 
-### OpenAI-compatible adapters (9)
+### OpenAI-compatible adapters (14)
 
-`siliconflow`, `deepinfra`, `minimax`, `qwen`, `meta-llama`, `gmihub`, `bitdeer`, `lightning`, `vultr`
+`siliconflow`, `deepinfra`, `minimax`, `qwen`, `meta-llama`, `gmihub`, `bitdeer`, `lightning`, `vultr`, `kimi`, `zai`, `apertus`, `nvidia`, `openai-compatible`
 
-**Total: 25 providers.**
+**Total: 30 providers.**

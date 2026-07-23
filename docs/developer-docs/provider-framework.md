@@ -65,7 +65,7 @@ See [Adding a Provider](./adding-a-provider.md) for the social-channel recipe. T
 1. Create `libraries/providers/<id>/` with a `package.json` depending on the kernel and the domain interfaces.
 2. Add one `src/v1/<domain>.adapter.ts` module per domain the provider participates in, exporting a `ProviderModule`.
 3. Add a `src/v1/metadata.ts` with the static `ProviderMetadata` the defaults resolver and catalog read.
-4. Add the package import to `apps/backend/src/providers.generated.ts` (or re-run `scripts/generate-provider-packages.mjs` if the provider fits its templates).
+4. Add the package import + spread to `apps/backend/src/providers.generated.ts` (hand-maintained, alphabetical order), the path mapping in `tsconfig.base.json`, and the dependency in `apps/backend/package.json`.
 5. Add a conformance test under `libraries/providers/<id>/src/__tests__/`.
 6. Update [Provider Versions](./provider-versions.md) and bump the "Verified against v1.0.0" note.
 
@@ -95,7 +95,7 @@ Usage:
 
 - `DefaultsResolutionService` builds candidate sets from metadata (`modelCategories`/`mediaCategories`) and ranks auto-picks using `modelHints[category]`.
 - Catalog endpoints use `displayName`/`uiName` to format labels such as `<provider>[-<ui-name>]: <model>`.
-- `action` providers (e.g. HeyGen, Deepgram, Suno) are selectable with `model: null` in media defaults.
+- `action` providers (e.g. Deepgram, D-ID, Hedra, Tavus) are selectable with `model: null` in media defaults. (HeyGen used to be one; its account avatars are now exposed as a live model list — the avatar id is the `model`.)
 
 ## Shipping a v2 adapter
 

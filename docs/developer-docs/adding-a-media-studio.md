@@ -218,7 +218,7 @@ export default function QwenPage() {
 
 1. Ensure `libraries/providers/<provider>/` has a workspace `package.json` depending on `@gitroom/provider-kernel`.
 2. Export the media module from `libraries/providers/<provider>/src/index.ts` and `src/v1/index.ts`.
-3. Import the module in `apps/backend/src/providers.generated.ts` (or re-run `scripts/generate-provider-packages.mjs` if you are extending the generated set).
+3. Import the module in `apps/backend/src/providers.generated.ts` (hand-maintained, alphabetical order) and add the path mapping in `tsconfig.base.json`.
 4. Add the backend dependency in `apps/backend/package.json` if it is not already workspace-linked.
 
 ## Step 6: add the nav entry

@@ -82,6 +82,131 @@ function transportErrorMessage(err: unknown): string {
 }
 
 /**
+ * A model entry from a live `/models` listing, before capability classification.
+ * `kind`/`capabilities` are optional overrides for providers whose live list is
+ * already typed (e.g. Together's `type` field, Cohere's `endpoints`) — when
+ * present they win over the id heuristics in `heuristicModelInfo`.
+ */
+export interface LiveModelEntry {
+  id: string;
+  label?: string;
+  kind?: AiModelInfo['kind'];
+  capabilities?: Partial<AiCapabilities>;
+}
+
+/**
+ * Fetch the live model list from an OpenAI-compatible `GET {baseURL}/models`
+ * endpoint (`{ data: [{ id, ... }] }` shape, Bearer auth). Returns `null` on ANY
+ * failure — missing inputs, non-OK response, transport error, SSRF block, or an
+ * empty/unexpected payload — so callers can fall back to their static catalog.
+ * Never throws: the list path must not propagate SSRF or transport errors.
+ */
+export async function fetchOpenAIStyleModels(
+  safeFetch: SafeFetchPort | undefined,
+  baseURL: string | undefined,
+  apiKey: string | undefined,
+): Promise<LiveModelEntry[] | null> {
+  if (!safeFetch || !baseURL || !apiKey) return null;
+  try {
+    const url = baseURL.replace(/(?<![/])\/+$/, '');
+    const response = await safeFetch(`${url}/models`, {
+      headers: { Authorization: `Bearer ${apiKey}` },
+    });
+    if (!response.ok) return null;
+    const data: any = await response.json();
+    const models = Array.isArray(data) ? data : data?.data;
+    if (!Array.isArray(models) || models.length === 0) return null;
+    const entries = models
+      .filter((m: any) => m && typeof m.id === 'string' && m.id.length > 0)
+      .map((m: any) => ({
+        id: m.id as string,
+        label: typeof m.name === 'string' && m.name ? m.name : undefined,
+      }));
+    return entries.length > 0 ? entries : null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Classify a live-only model id into an `AiModelInfo` using id heuristics, based
+ * on the provider's default capabilities. Non-chat models (embeddings, image,
+ * speech/transcription/moderation/realtime) get `text: false` so they don't
+ * pollute the text-category dropdowns.
+ */
+export function heuristicModelInfo(
+  id: string,
+  providerCapabilities: AiCapabilities,
+  label?: string,
+): AiModelInfo {
+  const lower = id.toLowerCase();
+  let kind: AiModelInfo['kind'] = 'text';
+  const caps: AiCapabilities = { ...providerCapabilities };
+  if (lower.includes('embed')) {
+    kind = 'embedding';
+    caps.text = false; caps.image = false; caps.vision = false;
+    caps.speech = false; caps.tools = false; caps.embeddings = true;
+  } else if (lower.includes('dall-e') || lower.includes('image')) {
+    kind = 'image';
+    caps.text = false; caps.embeddings = false; caps.speech = false;
+    caps.tools = false; caps.vision = false; caps.image = true;
+  } else if (/(^|[^a-z])(tts|whisper|transcribe|speech|audio|moderation|realtime)/.test(lower)) {
+    caps.text = false; caps.image = false; caps.vision = false;
+    caps.embeddings = false; caps.tools = false; caps.speech = true;
+  }
+  return { id, label: label || id, kind, capabilities: caps };
+}
+
+/**
+ * Classify one live entry: explicit `kind`/`capabilities` overrides win;
+ * otherwise fall back to the id heuristics.
+ */
+function classifyLiveEntry(entry: LiveModelEntry, providerCapabilities: AiCapabilities): AiModelInfo {
+  if (entry.kind !== undefined || entry.capabilities !== undefined) {
+    return {
+      id: entry.id,
+      label: entry.label || entry.id,
+      kind: entry.kind ?? 'text',
+      capabilities: { ...providerCapabilities, ...entry.capabilities },
+    };
+  }
+  return heuristicModelInfo(entry.id, providerCapabilities, entry.label);
+}
+
+/**
+ * Merge a live model list with the adapter's static catalog. Live is the source
+ * of truth for WHICH models exist (static entries absent upstream are dropped —
+ * they were retired); static is the source of truth for curated metadata (label,
+ * vision/reasoning flags) on ids it knows. Live-only ids get heuristic caps.
+ * Ordering: curated entries first (in the live listing's order), then
+ * live-only ids alphabetically — keeps huge hub lists (OpenRouter 200+) usable.
+ * A null/empty live list returns the static catalog unchanged (fallback path).
+ */
+export function mergeLiveModels(
+  live: LiveModelEntry[] | null | undefined,
+  staticModels: AiModelInfo[],
+  providerCapabilities: AiCapabilities,
+): AiModelInfo[] {
+  if (!live || live.length === 0) return staticModels;
+  const staticById = new Map(staticModels.map((m) => [m.id, m]));
+  const curated: AiModelInfo[] = [];
+  const extra: AiModelInfo[] = [];
+  const seen = new Set<string>();
+  for (const entry of live) {
+    if (seen.has(entry.id)) continue;
+    seen.add(entry.id);
+    const known = staticById.get(entry.id);
+    if (known) {
+      curated.push(known);
+    } else {
+      extra.push(classifyLiveEntry(entry, providerCapabilities));
+    }
+  }
+  extra.sort((a, b) => a.id.localeCompare(b.id));
+  return [...curated, ...extra];
+}
+
+/**
  * Shared OpenAI-compatible AI adapter base. Lives in the kernel so the nine
  * `openai-compatible` provider packages (siliconflow, deepinfra, minimax, qwen,
  * meta-llama, gmihub, bitdeer, lightning, vultr) can construct it without
@@ -100,6 +225,7 @@ export class OpenAICompatibleAdapter implements AiCapability {
   };
   private readonly _defaultModels: AiModelInfo[];
   private readonly _defaultBaseURL: string;
+  private readonly _requireBaseURL: boolean;
   private _providerCache = new BoundedProviderCache<ReturnType<typeof createOpenAI>>();
   // 0.4: the SSRF-safe fetch, injected by each provider module's create(ctx).
   // When absent (isolated unit context) the `${baseURL}/models` call is skipped
@@ -118,16 +244,26 @@ export class OpenAICompatibleAdapter implements AiCapability {
     capabilities?: Partial<AiCapabilities>,
     models?: AiModelInfo[],
     type: AiProviderType = 'hub',
+    opts?: { requireBaseURL?: boolean },
   ) {
     this.identifier = identifier;
     this.name = name;
     this.type = type;
     // The provider's canonical endpoint. Used as the default when the org didn't
-    // set a custom baseURL, so Base URL is not a required user setting.
+    // set a custom baseURL, so Base URL is not a required user setting — unless
+    // the provider opts into requireBaseURL (generic endpoint-bringing providers
+    // with no canonical URL of their own).
     this._defaultBaseURL = baseURL;
+    this._requireBaseURL = opts?.requireBaseURL ?? false;
     this.credentialFields = [
       { key: 'apiKey', label: 'API Key', type: 'password', required: true, placeholder: 'Enter API key' },
-      { key: 'baseURL', label: 'Base URL', type: 'string', required: false, placeholder: baseURL },
+      {
+        key: 'baseURL',
+        label: 'Base URL',
+        type: 'string',
+        required: opts?.requireBaseURL ?? false,
+        placeholder: baseURL || 'https://api.example.com/v1',
+      },
     ];
     this.capabilities = {
       text: true,
@@ -142,60 +278,60 @@ export class OpenAICompatibleAdapter implements AiCapability {
     ];
   }
 
+  /**
+   * Inference on an ORG-SUPPLIED base URL must route through the injected
+   * SSRF-safe fetch — the save-time public-HTTPS string check alone does not
+   * survive DNS rebinding, and `createOpenAI`'s default global fetch has no
+   * per-request re-validation. Canonical provider endpoints (compile-time
+   * constants) keep the SDK's default fetch. Never fall back to the global
+   * fetch for a tenant URL: without a safeFetch we refuse instead.
+   */
+  private _tenantSafeFetch(baseURL: string): ((input: any, init?: any) => Promise<Response>) | undefined {
+    const orgSupplied = !!baseURL && baseURL !== this._defaultBaseURL;
+    if (!orgSupplied) return undefined;
+    const safeFetch = this._safeFetch;
+    if (!safeFetch) {
+      throw new Error(`${this.name}: cannot call an org-supplied Base URL without the SSRF-safe fetch`);
+    }
+    return (input: any, init?: any) => {
+      const url =
+        typeof input === 'string' ? input : input instanceof URL ? input.toString() : input?.url;
+      // 5-minute ceiling (safeFetch's max) bounds streamed completions on tenant endpoints.
+      return safeFetch(String(url), { ...init, timeoutMs: 300_000 });
+    };
+  }
+
   private _getProvider(creds: Record<string, string>) {
     const baseURL = creds.baseURL || this._defaultBaseURL;
+    if (this._requireBaseURL && !baseURL) {
+      // Never let a bring-your-own-endpoint provider silently default to
+      // api.openai.com (the SDK default) — that would send the org's key there.
+      throw new Error(`${this.name}: Base URL is required`);
+    }
     const key = `${creds.apiKey}||${baseURL}`;
     let provider = this._providerCache.get(key);
     if (!provider) {
-      provider = createOpenAI({ apiKey: creds.apiKey, baseURL: baseURL || undefined });
+      provider = createOpenAI({
+        apiKey: creds.apiKey,
+        baseURL: baseURL || undefined,
+        fetch: this._tenantSafeFetch(baseURL),
+      });
       this._providerCache.set(key, provider);
     }
     return provider;
   }
 
   async listModels(creds: Record<string, string>): Promise<AiModelInfo[]> {
-    const resolvedBaseURL = creds.baseURL || this._defaultBaseURL;
-    // 0.4: only reach out over the SSRF-safe fetch. Without it, return the
-    // static catalog instead of hitting a tenant-supplied baseURL with `fetch`.
-    if (this._safeFetch && resolvedBaseURL && creds.apiKey) {
-      try {
-        const baseURL = resolvedBaseURL.replace(/(?<![/])\/+$/, '');
-        const response = await this._safeFetch(`${baseURL}/models`, {
-          headers: { Authorization: `Bearer ${creds.apiKey}` },
-        });
-        if (response.ok) {
-          const data: any = await response.json();
-          const models = data.data || [];
-          if (Array.isArray(models) && models.length > 0) {
-            return models.map((m: any) => {
-              const id = m.id.toLowerCase();
-              let kind: 'text' | 'image' | 'embedding' = 'text';
-              const caps = { ...this.capabilities };
-              if (id.includes('embedding')) {
-                kind = 'embedding';
-                caps.text = false;
-                caps.image = false;
-                caps.vision = false;
-                caps.speech = false;
-                caps.tools = false;
-                caps.embeddings = true;
-              } else if (id.includes('dall-e') || id.includes('image')) {
-                kind = 'image';
-                caps.text = false;
-                caps.embeddings = false;
-                caps.speech = false;
-                caps.tools = false;
-                caps.vision = false;
-                caps.image = true;
-              }
-              return { id: m.id, label: m.id, kind, capabilities: caps };
-            });
-          }
-        }
-      } catch {
-      }
-    }
-    return this._defaultModels;
+    // Live-first: fetch the tenant-visible catalog over the SSRF-safe fetch and
+    // merge it with the static default list (curated metadata wins on known ids).
+    // Without a safeFetch (isolated unit context) or on any failure, fall back to
+    // the static catalog.
+    const live = await fetchOpenAIStyleModels(
+      this._safeFetch,
+      creds.baseURL || this._defaultBaseURL,
+      creds.apiKey,
+    );
+    return mergeLiveModels(live, this._defaultModels, this.capabilities);
   }
 
   async validateCredentials(creds: Record<string, string>): Promise<{ ok: boolean; error?: string }> {
@@ -237,9 +373,18 @@ export class OpenAICompatibleAdapter implements AiCapability {
   }
 
   createLangchainModel(creds: Record<string, string>, modelId: string, opts?: AiModelOptions): BaseChatModel {
+    const baseURL = creds.baseURL || this._defaultBaseURL;
+    if (this._requireBaseURL && !baseURL) {
+      throw new Error(`${this.name}: Base URL is required`);
+    }
     return new ChatOpenAI({
       openAIApiKey: creds.apiKey,
-      configuration: { baseURL: creds.baseURL || this._defaultBaseURL || undefined },
+      configuration: {
+        baseURL: baseURL || undefined,
+        // Same tenant-URL rule as _getProvider: org-supplied endpoints go
+        // through the SSRF-safe fetch.
+        fetch: this._tenantSafeFetch(baseURL) as any,
+      },
       model: modelId,
       temperature: opts?.temperature,
       topP: opts?.topP,

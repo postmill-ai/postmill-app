@@ -4,7 +4,7 @@ Postmill ships a pluggable, multi-provider AI layer. Every AI surface resolves i
 
 > For the end-user view, see [AI Tools](../user-guide/ai-tools.md).
 
-> Verified against v1.1.0 (2026-07-22)
+> Verified against v1.1.0 (2026-07-23)
 
 ---
 
@@ -55,11 +55,11 @@ A caller can pass `reasoning: true` to request the `high-reasoning` category reg
 
 AI adapters live in provider packages under `libraries/providers/<id>/src/v1/ai.adapter.ts`. They are registered into the `ProviderKernel` at backend boot by `ProvidersBootstrap` (`apps/backend/src/providers.bootstrap.ts`) from the generated manifest in `apps/backend/src/providers.generated.ts`.
 
-25 providers total:
+30 providers total:
 
 **16 bespoke adapters:** `openai`, `anthropic`, `google`, `bedrock`, `vertex`, `azure`, `groq`, `fireworks`, `togetherai`, `deepseek`, `mistral`, `cohere`, `perplexity`, `xai`, `gateway`, `openrouter`
 
-**9 OpenAI-compatible adapters** via `OpenAICompatibleAdapter` from `@gitroom/provider-kernel`: `siliconflow`, `deepinfra`, `minimax`, `qwen`, `meta-llama`, `gmihub`, `bitdeer`, `lightning`, `vultr`
+**14 OpenAI-compatible adapters** via `OpenAICompatibleAdapter` from `@gitroom/provider-kernel`: `siliconflow`, `deepinfra`, `minimax`, `qwen`, `meta-llama`, `gmihub`, `bitdeer`, `lightning`, `vultr`, `kimi`, `zai`, `apertus`, `nvidia`, `openai-compatible`
 
 Each adapter implements the `AiCapability` interface from the kernel:
 
@@ -85,6 +85,19 @@ interface AiCapability {
 ```
 
 Adapters receive decrypted credentials at call time and never store or log them. Outbound validation calls use the kernel-injected `SafeFetchPort` so tenant-supplied base URLs are SSRF-checked.
+
+### Model catalogs (live-first)
+
+`listModels` is **live-first with a static fallback**, not a hardcoded list:
+
+- Adapters whose API exposes a model listing fetch it over the injected `SafeFetchPort` and merge it with their static catalog via the kernel helpers `fetchOpenAIStyleModels` / `mergeLiveModels` (`libraries/providers/kernel/src/domains/ai-helpers.ts`). In the merge, the **live list decides which models exist** (static entries absent upstream were retired), while **static entries keep their curated metadata** (labels, `vision`/`reasoning` flags) on known ids; live-only ids get capability heuristics. This covers `deepseek`, `openai`, `groq`, `xai`, `mistral`, `cohere`, `togetherai`, `fireworks`, `perplexity`, `openrouter`, `anthropic`, `google`, `gateway`, and all nine `OpenAICompatibleAdapter` hubs.
+- On **any** failure (no safeFetch, non-OK, transport error, SSRF block, empty/unexpected payload) the static catalog is returned unchanged — `listModels` never throws.
+- `azure`, `vertex`, and `bedrock` remain **static-only**: their model inventories are deployment-scoped and cannot be enumerated with the stored API key.
+- Live results are cached in **Redis for 24h** (`providers:models:{domain}:{providerId}:{version}:{credHash}[:{scope}]`, via `getOrCacheModelList` in `libraries/nestjs-libraries/src/ai/defaults/defaults-cache.ts`), keyed by a SHA-256 hash of the credential material — a credential change lands on a fresh key naturally. Only non-empty results are cached. All consumers go through it: the Settings → AI → Model Defaults and Settings → Content → Media Defaults catalog endpoints plus `DefaultsResolutionService` (auto-pick / stored-model validation). Media listings are per-operation, so media keys carry the operation as `scope`. The rendered per-org catalogs keep their separate 60s cache.
+
+### Media defaults reach generation
+
+The default an org picks in Settings → Content → Media Defaults is honored end-to-end: `AiMediaService._resolveDefaultForOperation` returns the resolved default's `model` **and** `settings` on the default candidate, and every generation call site (image, video, audio, avatar, TTS/STT, upscale, bg-remove, inpaint) forwards them as `options.model` / `options.input` — the fields adapters already read. For **HeyGen** the "model" is the account avatar: the adapter's live `listModels` enumerates `GET /v2/avatars` and `generateVideo` maps `options.model` → `avatar_id`, so the Media Defaults dropdown doubles as the avatar picker.
 
 ---
 

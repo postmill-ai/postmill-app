@@ -16,9 +16,10 @@ import { DefaultsSettingsValidator } from './defaults-settings.validator';
 import { AI_MODEL_CATEGORIES } from './default-categories';
 import { SetDefaultModelDto } from '@gitroom/nestjs-libraries/dtos/ai-settings/default-model.dto';
 import { OrgAiSettingsService } from '@gitroom/nestjs-libraries/database/prisma/ai-settings/org-ai-settings.service';
-import { bustDefaultsCatalogCache } from './defaults-cache';
+import { bustDefaultsCatalogCache, getOrCacheModelList } from './defaults-cache';
 import { AIProviderAdapter } from '@gitroom/nestjs-libraries/ai/ai-provider.interface';
 import { ProviderResolutionService } from '@gitroom/nestjs-libraries/providers/provider-resolution.service';
+import { RuntimeContextFactory } from '@gitroom/nestjs-libraries/providers/runtime-context.factory';
 import { PROVIDER_KERNEL } from '@gitroom/nestjs-libraries/providers/providers.module';
 import { ProviderKernel, DEFAULT_VERSION } from '@gitroom/provider-kernel';
 import { ProviderConfigDto } from '@gitroom/nestjs-libraries/types/provider-config.types';
@@ -40,6 +41,7 @@ export class AiDefaultsService {
     private _defaultsRepository: OrgDefaultModelRepository,
     private _settingsValidator: DefaultsSettingsValidator,
     private _providerResolution: ProviderResolutionService,
+    private _runtimeContextFactory: RuntimeContextFactory,
     @Inject(PROVIDER_KERNEL) private _kernel: ProviderKernel,
     @Inject(forwardRef(() => OrgAiSettingsService))
     private _orgAiSettings: OrgAiSettingsService,
@@ -244,15 +246,19 @@ export class AiDefaultsService {
       const config = await this._orgAiSettings.getByIdentifier(orgId, candidate.providerId, candidate.version);
       const credentials = config?.credentials ?? {};
       const mod = this._kernel?.get('ai', candidate.providerId, candidate.version);
-      const capability: any = mod?.create({
-        credentials,
-        encryption: {} as any,
-        fetch: {} as any,
-        logger: {} as any,
-        telemetry: {} as any,
-      });
+      // Real runtime context (SSRF-safe fetch included) so adapters with a live
+      // `listModels` can actually enumerate their catalog — the previous `{} as any`
+      // stubs made every live fetch throw and silently fall back to the static list.
+      const ctx = this._runtimeContextFactory.build({ credentials, orgId });
+      const capability: any = mod?.create(ctx);
       if (!capability?.listModels) return [];
-      const models = await capability.listModels(credentials);
+      const models = await getOrCacheModelList(
+        'ai',
+        candidate.providerId,
+        candidate.version,
+        credentials,
+        () => capability.listModels(credentials),
+      );
       return this._filterModelsByCategory(models || [], category);
     } catch {
       return [];

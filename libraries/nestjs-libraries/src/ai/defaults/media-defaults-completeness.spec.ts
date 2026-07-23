@@ -12,9 +12,10 @@ import type { ProviderMetadata } from '@gitroom/provider-kernel';
  *      (`media-defaults.controller.ts`: `if (c.metadata.kind === 'action')`) emits a
  *      provider-level option (no model) and the resolver returns `model: null`, so EVERY
  *      category an action provider declares is sourced via that provider-level option.
- *      This subsumes the avatar/caption action providers (HeyGen/D-ID/Hedra/Tavus →
+ *      This subsumes the avatar/caption action providers (D-ID/Hedra/Tavus →
  *      video-avatar, Deepgram → video-caption) AND single-endpoint generators that take
  *      no model param (Ideogram → text/image-to-image, Reel.Farm → text/image-to-video).
+ *      (HeyGen used to be in this set; its avatars are now a live model list, source 4.)
  *      Every model-BEARING provider is `kind: 'direct'` or `'hub'`, so this exemption can
  *      never hide a provider that ought to declare `mediaModels`. OR
  *   3. P declares a non-empty static `mediaModels[C]` catalog, OR
@@ -34,13 +35,15 @@ const ORCHESTRATION_CATEGORIES = new Set([
   'video-caption',
 ]);
 
-// The explicit 9 live-`listModels` hubs (NOT the `hasModelList` flag).
+// Providers whose model catalog is fetched live at runtime via `listModels`
+// (the 9 hubs, plus HeyGen whose "models" are the account's avatar catalog).
 const LIVE_LISTMODELS_HUBS = new Set([
   'deepinfra',
   'fireworks',
   'gateway',
   'genviral',
   'groq',
+  'heygen',
   'openrouter',
   'siliconflow',
   'togetherai',

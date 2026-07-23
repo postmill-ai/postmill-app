@@ -3,6 +3,8 @@ import { ChatOpenAI } from '@langchain/openai';
 import type { BaseChatModel } from '@langchain/core/language_models/chat_models';
 import { metadata as providerMetadata } from './metadata';
 import {
+  fetchOpenAIStyleModels,
+  mergeLiveModels,
   type AiCapability as AIProviderAdapter,
   type AiCredentialField as CredentialField,
   type AiModelInfo as ModelInfo,
@@ -12,10 +14,34 @@ import {
   type ImageModel,
   type EmbeddingModel,
   type ProviderModule,
+  type SafeFetchPort,
 } from '@gitroom/provider-kernel';
+
+const OPENROUTER_BASE_URL = 'https://openrouter.ai/api/v1';
+
+const OPENROUTER_MODELS: ModelInfo[] = [
+  { id: 'openai/gpt-4o', label: 'OpenAI GPT-4o', kind: 'text', capabilities: { text: true, image: true, vision: true, embeddings: false, speech: false, tools: true } },
+  { id: 'openai/gpt-4o-mini', label: 'OpenAI GPT-4o Mini', kind: 'text', capabilities: { text: true, image: true, vision: true, embeddings: false, speech: false, tools: true } },
+  { id: 'openai/o3-mini', label: 'OpenAI o3-mini', kind: 'text', capabilities: { text: true, image: false, vision: true, embeddings: false, speech: false, tools: true }, reasoning: true },
+  { id: 'anthropic/claude-sonnet-4-20250514', label: 'Anthropic Claude Sonnet 4', kind: 'text', capabilities: { text: true, image: false, vision: true, embeddings: false, speech: false, tools: true } },
+  { id: 'anthropic/claude-3-5-haiku-20241022', label: 'Anthropic Claude 3.5 Haiku', kind: 'text', capabilities: { text: true, image: true, vision: true, embeddings: false, speech: false, tools: true } },
+  { id: 'google/gemini-2.0-flash-001', label: 'Google Gemini 2.0 Flash', kind: 'text', capabilities: { text: true, image: false, vision: true, embeddings: false, speech: false, tools: true } },
+  { id: 'meta-llama/llama-4-scout-17b-16e-instruct', label: 'Llama 4 Scout', kind: 'text', capabilities: { text: true, image: true, vision: true, embeddings: false, speech: false, tools: true } },
+  { id: 'deepseek/deepseek-chat', label: 'DeepSeek V3', kind: 'text', capabilities: { text: true, image: false, vision: false, embeddings: false, speech: false, tools: true } },
+  { id: 'mistralai/mistral-large-2411', label: 'Mistral Large', kind: 'text', capabilities: { text: true, image: false, vision: true, embeddings: false, speech: false, tools: true } },
+  { id: 'openai/text-embedding-3-small', label: 'OpenAI Embedding 3 Small', kind: 'embedding', dimension: 1536, capabilities: { text: false, image: false, vision: false, embeddings: true, speech: false, tools: false } },
+  { id: 'openai/text-embedding-3-large', label: 'OpenAI Embedding 3 Large', kind: 'embedding', dimension: 3072, capabilities: { text: false, image: false, vision: false, embeddings: true, speech: false, tools: false } },
+];
 
 export class OpenRouterAdapter implements AIProviderAdapter {
   private _providerCache = new Map<string, ReturnType<typeof createOpenRouter>>();
+
+  // 0.4: SSRF-safe fetch, injected by the provider module's create/validate.
+  private _safeFetch?: SafeFetchPort;
+
+  setSafeFetch(fetch: SafeFetchPort): void {
+    this._safeFetch = fetch;
+  }
 
   private _getProvider(creds: Record<string, string>) {
     const key = `${creds.apiKey}||${creds.baseURL || ''}`;
@@ -45,20 +71,13 @@ export class OpenRouterAdapter implements AIProviderAdapter {
     description: 'OpenRouter API — unified gateway to 200+ models with model fallback, provider routing, and usage accounting',
   };
 
-  async listModels(_creds: Record<string, string>): Promise<ModelInfo[]> {
-    return [
-      { id: 'openai/gpt-4o', label: 'OpenAI GPT-4o', kind: 'text', capabilities: { text: true, image: true, vision: true, embeddings: false, speech: false, tools: true } },
-      { id: 'openai/gpt-4o-mini', label: 'OpenAI GPT-4o Mini', kind: 'text', capabilities: { text: true, image: true, vision: true, embeddings: false, speech: false, tools: true } },
-      { id: 'openai/o3-mini', label: 'OpenAI o3-mini', kind: 'text', capabilities: { text: true, image: false, vision: true, embeddings: false, speech: false, tools: true }, reasoning: true },
-      { id: 'anthropic/claude-sonnet-4-20250514', label: 'Anthropic Claude Sonnet 4', kind: 'text', capabilities: { text: true, image: false, vision: true, embeddings: false, speech: false, tools: true } },
-      { id: 'anthropic/claude-3-5-haiku-20241022', label: 'Anthropic Claude 3.5 Haiku', kind: 'text', capabilities: { text: true, image: true, vision: true, embeddings: false, speech: false, tools: true } },
-      { id: 'google/gemini-2.0-flash-001', label: 'Google Gemini 2.0 Flash', kind: 'text', capabilities: { text: true, image: false, vision: true, embeddings: false, speech: false, tools: true } },
-      { id: 'meta-llama/llama-4-scout-17b-16e-instruct', label: 'Llama 4 Scout', kind: 'text', capabilities: { text: true, image: true, vision: true, embeddings: false, speech: false, tools: true } },
-      { id: 'deepseek/deepseek-chat', label: 'DeepSeek V3', kind: 'text', capabilities: { text: true, image: false, vision: false, embeddings: false, speech: false, tools: true } },
-      { id: 'mistralai/mistral-large-2411', label: 'Mistral Large', kind: 'text', capabilities: { text: true, image: false, vision: true, embeddings: false, speech: false, tools: true } },
-      { id: 'openai/text-embedding-3-small', label: 'OpenAI Embedding 3 Small', kind: 'embedding', dimension: 1536, capabilities: { text: false, image: false, vision: false, embeddings: true, speech: false, tools: false } },
-      { id: 'openai/text-embedding-3-large', label: 'OpenAI Embedding 3 Large', kind: 'embedding', dimension: 3072, capabilities: { text: false, image: false, vision: false, embeddings: true, speech: false, tools: false } },
-    ];
+  async listModels(creds: Record<string, string>): Promise<ModelInfo[]> {
+    const live = await fetchOpenAIStyleModels(
+      this._safeFetch,
+      creds.baseURL || OPENROUTER_BASE_URL,
+      creds.apiKey,
+    );
+    return mergeLiveModels(live, OPENROUTER_MODELS, this.capabilities);
   }
 
   async validateCredentials(creds: Record<string, string>): Promise<{ ok: boolean; error?: string }> {
@@ -116,6 +135,12 @@ export const openrouterAiModule: ProviderModule<any, any> = {
     credentialFields: (adapter as any).credentialFields || [],
     capabilities: (adapter as any).capabilities,
   },
-  create: () => adapter as any,
-  validateCredentials: async (ctx) => adapter.validateCredentials(ctx.credentials),
+  create: (ctx) => {
+    adapter.setSafeFetch(ctx.fetch);
+    return adapter as any;
+  },
+  validateCredentials: async (ctx) => {
+    adapter.setSafeFetch(ctx.fetch);
+    return adapter.validateCredentials(ctx.credentials);
+  },
 };

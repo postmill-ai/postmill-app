@@ -61,10 +61,14 @@ export function ProviderConfigForm<Meta = any>({
   } = useProviderVersionSelection(descriptor.catalogDomain, identifier, initialVersion);
 
   const fallbackFields = descriptor.form.credentialFieldsFromMeta?.(meta) ?? [];
-  const fields: KitCredentialField[] =
+  const rawFields: KitCredentialField[] =
     showSelect && versionFields
       ? (versionFields as KitCredentialField[])
       : fallbackFields;
+  // Descriptor-level post-filter applies to both branches (e.g. the AI surface
+  // hides baseURL except for endpoint-bringing providers).
+  const fields: KitCredentialField[] =
+    descriptor.form.filterCredentialFields?.(rawFields, identifier) ?? rawFields;
 
   const seeded = descriptor.form.seedState?.(meta) ?? {};
   const [state, setState] = useState<ProviderFormState>({

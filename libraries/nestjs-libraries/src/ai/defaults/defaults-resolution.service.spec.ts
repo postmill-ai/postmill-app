@@ -1,4 +1,10 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
+
+vi.mock('./defaults-cache', () => ({
+  // Pass-through: the 24h cache layer is exercised in defaults-cache.spec.ts.
+  getOrCacheModelList: vi.fn((_d, _p, _v, _c, fetcher) => fetcher()),
+}));
+
 import { DefaultsResolutionService } from './defaults-resolution.service';
 import { AI_MODEL_CATEGORIES } from './default-categories';
 

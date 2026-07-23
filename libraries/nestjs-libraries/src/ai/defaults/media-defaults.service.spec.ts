@@ -49,6 +49,17 @@ vi.mock(
 
 const mockOrgMediaGetConfigForProvider = vi.fn().mockResolvedValue({ credentials: {} });
 
+const mockRuntimeContextFactory = {
+  build: vi.fn((opts: { credentials?: Record<string, string>; orgId?: string }) => ({
+    credentials: opts?.credentials ?? {},
+    orgId: opts?.orgId,
+    fetch: vi.fn(),
+    encryption: {},
+    logger: {},
+    telemetry: {},
+  })),
+};
+
 vi.mock(
   '@gitroom/nestjs-libraries/database/prisma/media-providers/org-media-provider-settings.service',
   () => ({
@@ -75,6 +86,7 @@ function makeService() {
       listManifests: mockKernelListManifests,
     } as any,
     new (OrgMediaProviderSettingsService as any)(),
+    mockRuntimeContextFactory as any,
   );
 }
 
@@ -141,6 +153,7 @@ describe('MediaDefaultsService', () => {
       { validate: validateSpy } as any,
       { get: mockKernelGet, listManifests: mockKernelListManifests } as any,
       new (OrgMediaProviderSettingsService as any)(),
+      mockRuntimeContextFactory as any,
     );
 
     await service.setMediaDefault(orgId, 'text-to-image', {

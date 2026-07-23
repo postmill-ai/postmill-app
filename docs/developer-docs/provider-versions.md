@@ -15,12 +15,13 @@ A few branded media studios ride another provider's adapter:
 
 The table below shows each provider's registered domains. A provider that appears in both `ai` and `media` can share a single org credential across both surfaces.
 
-## AI (`ai`) — 25 providers
+## AI (`ai`) — 30 providers
 
 | Provider | ID | Domains | Kind / Notes |
 |---|---|---|---|
 | Amazon Bedrock | `bedrock` | ai, media | hub; low-reasoning, high-reasoning, workflow, vision; image-focal-point, image-slide, text-to-image |
 | Anthropic Claude | `anthropic` | ai | direct; low-reasoning, high-reasoning, workflow, vision |
+| Apertus | `apertus` | ai | direct; low-reasoning, workflow |
 | Azure OpenAI | `azure` | ai, media | hub; low-reasoning, high-reasoning, workflow, vision; image-focal-point, image-slide, text-to-image |
 | Bitdeer AI | `bitdeer` | ai | action |
 | Cohere | `cohere` | ai | hub; low-reasoning, high-reasoning, workflow, vision; image-focal-point |
@@ -34,8 +35,11 @@ The table below shows each provider's registered domains. A provider that appear
 | Lightning AI | `lightning` | ai | action |
 | Llama | `meta-llama` | ai | action |
 | MiniMax | `minimax` | ai, media | direct; low-reasoning, high-reasoning, workflow; image-slide, image-to-video, text-to-video |
+| Moonshot Kimi | `kimi` | ai | direct; low-reasoning, high-reasoning, workflow, vision |
 | Mistral AI | `mistral` | ai | hub; low-reasoning, high-reasoning, workflow, vision; image-focal-point |
+| NVIDIA Nemotron | `nvidia` | ai | direct; low-reasoning, high-reasoning, workflow |
 | OpenAI | `openai` | ai, media | hub; low-reasoning, high-reasoning, workflow, vision; image-focal-point, image-slide, image-to-video, text-to-image, text-to-speech, text-to-video, video-caption |
+| OpenAI Compatible | `openai-compatible` | ai | hub; low-reasoning, high-reasoning, workflow, vision; bring-your-own-endpoint (Base URL is a required, visible setting) |
 | OpenRouter | `openrouter` | ai, media | hub; low-reasoning, high-reasoning, workflow, vision; image-focal-point, image-slide, image-to-image, text-to-image |
 | Perplexity | `perplexity` | ai | hub; low-reasoning, high-reasoning, workflow, vision; image-focal-point |
 | Qwen | `qwen` | ai, media | direct; image-slide, image-to-video, text-to-image, text-to-video |
@@ -44,6 +48,7 @@ The table below shows each provider's registered domains. A provider that appear
 | Vercel AI | `gateway` | ai, media | hub; low-reasoning, high-reasoning, workflow, vision; image-focal-point, image-slide, image-to-image, image-to-video, text-to-image, text-to-video |
 | Vultr Inference | `vultr` | ai, storage | action |
 | xAI Grok | `xai` | ai, media | hub; low-reasoning, high-reasoning, workflow, vision; image-focal-point, image-slide, image-to-image, text-to-image |
+| Z.AI GLM | `zai` | ai | direct; low-reasoning, high-reasoning, workflow, vision |
 
 ## Auth (`auth`) — 6 providers
 

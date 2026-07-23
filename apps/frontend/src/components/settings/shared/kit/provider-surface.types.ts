@@ -69,6 +69,7 @@ export type ProviderExtraFieldType =
   | 'region-checklist'
   | 'storage-binding'
   | 'oauth-block'
+  | 'budget-block'
   | 'text'
   | 'password'
   | 'select';
@@ -156,6 +157,15 @@ export interface ProviderSurfaceDescriptor<Meta = any> {
     oauth?: boolean;
     /** Fallback credential fields from the raw provider when single-version. */
     credentialFieldsFromMeta?: (meta: Meta) => KitCredentialField[];
+    /**
+     * Post-filter applied to the credential fields the form renders — runs on
+     * BOTH the meta fallback and the catalog version-fields branch (e.g. the AI
+     * surface hides baseURL except for endpoint-bringing providers).
+     */
+    filterCredentialFields?: (
+      fields: KitCredentialField[],
+      identifier: string,
+    ) => KitCredentialField[];
     /** Assemble the PUT body from generic state (per-surface envelope). */
     buildBody: (state: ProviderFormState, meta: Meta) => any;
     /** Assemble the test POST body (defaults to `{ credentials }`). */

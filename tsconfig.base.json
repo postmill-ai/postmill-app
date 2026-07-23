@@ -70,6 +70,12 @@
       "@gitroom/provider-anthropic/*": [
         "libraries/providers/anthropic/src/*"
       ],
+      "@gitroom/provider-apertus": [
+        "libraries/providers/apertus/src"
+      ],
+      "@gitroom/provider-apertus/*": [
+        "libraries/providers/apertus/src/*"
+      ],
       "@gitroom/provider-azure": [
         "libraries/providers/azure/src"
       ],
@@ -388,6 +394,12 @@
       "@gitroom/provider-kick/*": [
         "libraries/providers/kick/src/*"
       ],
+      "@gitroom/provider-kimi": [
+        "libraries/providers/kimi/src"
+      ],
+      "@gitroom/provider-kimi/*": [
+        "libraries/providers/kimi/src/*"
+      ],
       "@gitroom/provider-lemmy": [
         "libraries/providers/lemmy/src"
       ],
@@ -544,11 +556,23 @@
       "@gitroom/provider-nostr/*": [
         "libraries/providers/nostr/src/*"
       ],
+      "@gitroom/provider-nvidia": [
+        "libraries/providers/nvidia/src"
+      ],
+      "@gitroom/provider-nvidia/*": [
+        "libraries/providers/nvidia/src/*"
+      ],
       "@gitroom/provider-openai": [
         "libraries/providers/openai/src"
       ],
       "@gitroom/provider-openai/*": [
         "libraries/providers/openai/src/*"
+      ],
+      "@gitroom/provider-openai-compatible": [
+        "libraries/providers/openai-compatible/src"
+      ],
+      "@gitroom/provider-openai-compatible/*": [
+        "libraries/providers/openai-compatible/src/*"
       ],
       "@gitroom/provider-openrouter": [
         "libraries/providers/openrouter/src"
@@ -933,6 +957,12 @@
       ],
       "@gitroom/provider-youtube/*": [
         "libraries/providers/youtube/src/*"
+      ],
+      "@gitroom/provider-zai": [
+        "libraries/providers/zai/src"
+      ],
+      "@gitroom/provider-zai/*": [
+        "libraries/providers/zai/src/*"
       ]
     }
   },

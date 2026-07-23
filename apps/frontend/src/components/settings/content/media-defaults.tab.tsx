@@ -385,6 +385,11 @@ const MediaCategoryRow: React.FC<{
   const canShowSettings = !empty && showSettings && !!row.providerId;
   useEffect(() => {
     if (!canShowSettings || !row.providerId) return;
+    // Wait for the catalog: resolving fields before the options arrive means
+    // `selectedOption` is null and providers without a DESCRIPTOR_LOADERS entry
+    // (replicate, …) would latch `sigRef` on the null result — the form would
+    // never appear even though the catalog option ships `fields`.
+    if (catalogLoading) return;
     let cancelled = false;
     const operation = MEDIA_CATEGORY_OPERATION[category];
     const sig = `${row.providerId}::${row.model ?? ''}::${operation}`;
@@ -418,9 +423,11 @@ const MediaCategoryRow: React.FC<{
     return () => {
       cancelled = true;
     };
-  }, [canShowSettings, row.providerId, row.model, row.settings, category, selectedOption]);
+  }, [canShowSettings, catalogLoading, row.providerId, row.model, row.settings, category, selectedOption]);
 
   const hasForm = canShowSettings && !!fields && fields.length > 0;
+  // Settings live behind an "Advanced Settings" disclosure, collapsed by default.
+  const [advancedOpen, setAdvancedOpen] = useState(false);
 
   const providerInfo = useMemo(
     () =>
@@ -497,37 +504,53 @@ const MediaCategoryRow: React.FC<{
         <div className="flex flex-col gap-[6px]">
           {hasForm ? (
             <>
-              <div className="text-[12px] text-newTextColor/70">
-                {t('default_settings', 'Default settings')}
-              </div>
-              <StudioForm
-                fields={fields!}
-                values={draft}
-                onChange={(name, val) =>
-                  setDraft((prev) => ({ ...prev, [name]: val }))
-                }
-                provider={row.providerId ?? ''}
-                operation={MEDIA_CATEGORY_OPERATION[category]}
-                keyNs={`media_defaults_${row.providerId ?? ''}`}
-                tabKey={category}
-              />
-              <Button
+              <button
                 type="button"
-                onClick={() => {
-                  const cleaned: Record<string, unknown> = {};
-                  for (const f of fields!) {
-                    const v = draft?.[f.name];
-                    if (v !== undefined && v !== '' && v !== null) {
-                      cleaned[f.name] = v;
-                    }
-                  }
-                  onSave(category, value, cleaned);
-                }}
-                loading={saving}
-                className="self-start"
+                onClick={() => setAdvancedOpen((o) => !o)}
+                aria-expanded={advancedOpen}
+                className="flex items-center gap-[6px] text-[12px] text-newTextColor/70 hover:text-textColor transition-colors self-start"
               >
-                {t('save_settings', 'Save settings')}
-              </Button>
+                <span
+                  className={`transition-transform ${
+                    advancedOpen ? 'rotate-90' : ''
+                  }`}
+                >
+                  ▸
+                </span>
+                {t('advanced_settings', 'Advanced Settings')}
+              </button>
+              {advancedOpen && (
+                <>
+                  <StudioForm
+                    fields={fields!}
+                    values={draft}
+                    onChange={(name, val) =>
+                      setDraft((prev) => ({ ...prev, [name]: val }))
+                    }
+                    provider={row.providerId ?? ''}
+                    operation={MEDIA_CATEGORY_OPERATION[category]}
+                    keyNs={`media_defaults_${row.providerId ?? ''}`}
+                    tabKey={category}
+                  />
+                  <Button
+                    type="button"
+                    onClick={() => {
+                      const cleaned: Record<string, unknown> = {};
+                      for (const f of fields!) {
+                        const v = draft?.[f.name];
+                        if (v !== undefined && v !== '' && v !== null) {
+                          cleaned[f.name] = v;
+                        }
+                      }
+                      onSave(category, value, cleaned);
+                    }}
+                    loading={saving}
+                    className="self-start"
+                  >
+                    {t('save_settings', 'Save settings')}
+                  </Button>
+                </>
+              )}
             </>
           ) : (
             <div className="px-[12px] py-[9px] rounded-[8px] border border-newTableBorder bg-newBgColorInner text-[12px] text-newTextColor/60 select-none">

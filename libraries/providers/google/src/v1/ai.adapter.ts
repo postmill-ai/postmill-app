@@ -3,12 +3,15 @@ import type { BaseChatModel } from '@langchain/core/language_models/chat_models'
 import type { LanguageModelV2, ImageModelV2, EmbeddingModelV2 } from '@ai-sdk/provider-v5';
 import { metadata as providerMetadata } from './metadata';
 import {
+  mergeLiveModels,
   type AiCapability as AIProviderAdapter,
   type AiCredentialField as CredentialField,
   type AiModelInfo as ModelInfo,
   type AiCapabilities as AICapabilities,
   type AiModelOptions as AIModelOptions,
+  type LiveModelEntry,
   type ProviderModule,
+  type SafeFetchPort,
 } from '@gitroom/provider-kernel';
 
 const GOOGLE_CAPABILITIES: AICapabilities = {
@@ -45,12 +48,59 @@ export class GoogleAdapter implements AIProviderAdapter {
     description: 'Google Gemini API',
   };
 
+  // 0.4: SSRF-safe fetch, injected by the provider module's create/validate.
+  private _safeFetch?: SafeFetchPort;
+
+  setSafeFetch(fetch: SafeFetchPort): void {
+    this._safeFetch = fetch;
+  }
+
   private _buildProvider(creds: Record<string, string>) {
     return createGoogleGenerativeAI({ apiKey: creds.apiKey });
   }
 
-  async listModels(_creds: Record<string, string>): Promise<ModelInfo[]> {
-    return GOOGLE_MODELS;
+  /**
+   * Live model list from Google's `GET /v1beta/models` — shape
+   * `{ models: [{ name: 'models/<id>', displayName, supportedGenerationMethods }] }`.
+   * Auth uses the `x-goog-api-key` HEADER, not the documented `?key=` query param:
+   * a key in the URL would land unredacted in Sentry fetch breadcrumbs (the
+   * scrubber redacts by header/field name, not mid-URL substrings).
+   * Only entries supporting 'generateContent' are kept; the `models/` prefix is
+   * stripped for the id. Returns null on ANY failure so listModels falls back
+   * to the static catalog. Never throws.
+   */
+  private async _fetchLiveModels(creds: Record<string, string>): Promise<LiveModelEntry[] | null> {
+    if (!this._safeFetch || !creds.apiKey) return null;
+    try {
+      const response = await this._safeFetch(
+        'https://generativelanguage.googleapis.com/v1beta/models',
+        { headers: { 'x-goog-api-key': creds.apiKey } },
+      );
+      if (!response.ok) return null;
+      const data: any = await response.json();
+      const models = data?.models;
+      if (!Array.isArray(models) || models.length === 0) return null;
+      const entries: LiveModelEntry[] = [];
+      for (const m of models) {
+        if (!m || typeof m.name !== 'string') continue;
+        const methods: any[] = Array.isArray(m.supportedGenerationMethods) ? m.supportedGenerationMethods : [];
+        if (!methods.includes('generateContent')) continue;
+        const id = m.name.replace(/^models\//, '');
+        if (!id) continue;
+        const label = typeof m.displayName === 'string' && m.displayName ? m.displayName : undefined;
+        entries.push({ id, label });
+      }
+      return entries.length > 0 ? entries : null;
+    } catch {
+      return null;
+    }
+  }
+
+  async listModels(creds: Record<string, string>): Promise<ModelInfo[]> {
+    // Live-first: merge the upstream catalog with the static list (curated
+    // metadata wins on known ids). Any failure falls back to the static list.
+    const live = await this._fetchLiveModels(creds);
+    return mergeLiveModels(live, GOOGLE_MODELS, this.capabilities);
   }
 
   async validateCredentials(creds: Record<string, string>): Promise<{ ok: boolean; error?: string }> {
@@ -98,6 +148,12 @@ export const googleAiModule: ProviderModule<any, any> = {
     credentialFields: (adapter as any).credentialFields || [],
     capabilities: (adapter as any).capabilities,
   },
-  create: () => adapter as any,
-  validateCredentials: async (ctx) => adapter.validateCredentials(ctx.credentials),
+  create: (ctx) => {
+    adapter.setSafeFetch(ctx.fetch);
+    return adapter as any;
+  },
+  validateCredentials: async (ctx) => {
+    adapter.setSafeFetch(ctx.fetch);
+    return adapter.validateCredentials(ctx.credentials);
+  },
 };

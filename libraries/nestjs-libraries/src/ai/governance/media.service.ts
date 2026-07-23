@@ -21,6 +21,7 @@ import {
   MediaProviderCapabilities,
   MediaGenerationResult,
 } from '@gitroom/nestjs-libraries/media/media-provider-adapter.interface';
+import type { MediaGenerateOptions } from '@gitroom/provider-kernel';
 // Type-only imports: SlideService/CaptionService both inject back into this AI module
 // (slide -> AiDefaultsService -> AiMediaService; caption -> AiMediaService), so a runtime
 // value-import here closes a circular `require` that leaves AiMediaService `undefined` at
@@ -199,6 +200,11 @@ interface ResolvedMediaProvider {
   adapter: MediaProviderAdapter;
   credentials: Record<string, string>;
   version: string;
+  // Present only for the org's configured default candidate: the stored/auto-picked
+  // model and its saved tunables. Forwarded into adapter calls so the default the
+  // org picked in Settings → Content → Media Defaults actually takes effect.
+  model?: string;
+  settings?: Record<string, unknown>;
 }
 
 type AsyncOperation = 'video' | 'audio' | 'avatar';
@@ -319,7 +325,13 @@ export class AiMediaService {
       });
       if (!adapter || !adapter.capabilities[capability]) continue;
 
-      return { adapter, credentials, version: resolved.version };
+      return {
+        adapter,
+        credentials,
+        version: resolved.version,
+        model: resolved.model,
+        settings: resolved.settings,
+      };
     }
 
     return null;
@@ -945,6 +957,8 @@ export class AiMediaService {
       try {
         const result = await candidate.adapter.generateImage(prompt, {
           credentials: candidate.credentials,
+          model: candidate.model,
+          input: candidate.settings as MediaGenerateOptions['input'],
           size,
           sourceUrl: options?.sourceUrl,
         });
@@ -1062,6 +1076,8 @@ export class AiMediaService {
         try {
           const submission = await method(prompt, {
             credentials: candidate.credentials,
+            model: candidate.model,
+            input: candidate.settings as MediaGenerateOptions['input'],
             sourceUrl: options?.sourceUrl,
             voice: options?.voice,
             webhookUrl: this._lifecycle.webhookUrlFor(job.id, options.orgId),
@@ -1090,6 +1106,8 @@ export class AiMediaService {
       try {
         const submission = await method(prompt, {
           credentials: candidate.credentials,
+          model: candidate.model,
+          input: candidate.settings as MediaGenerateOptions['input'],
           sourceUrl: options?.sourceUrl,
           voice: options?.voice,
         });
@@ -1152,6 +1170,8 @@ export class AiMediaService {
       try {
         const result = await candidate.adapter.textToSpeech(text, {
           credentials: candidate.credentials,
+          model: candidate.model,
+          input: candidate.settings as MediaGenerateOptions['input'],
           voice: options?.voice,
         });
         await this._persistJob({
@@ -1187,6 +1207,8 @@ export class AiMediaService {
       try {
         const text = await candidate.adapter.speechToText(audio, {
           credentials: candidate.credentials,
+          model: candidate.model,
+          input: candidate.settings as MediaGenerateOptions['input'],
         });
         await this._persistJob({
           operation: 'stt',
@@ -1234,6 +1256,8 @@ export class AiMediaService {
       try {
         const result = await candidate.adapter.speechToTextWords(audio, {
           credentials: candidate.credentials,
+          model: candidate.model,
+          input: candidate.settings as MediaGenerateOptions['input'],
         });
         await this._persistJob({
           operation: 'stt',
@@ -1270,6 +1294,8 @@ export class AiMediaService {
       try {
         const result = await candidate.adapter.upscaleImage(imageUrl, {
           credentials: candidate.credentials,
+          model: candidate.model,
+          input: candidate.settings as MediaGenerateOptions['input'],
           scale: options?.scale,
         });
         if (!result) continue;
@@ -1300,6 +1326,8 @@ export class AiMediaService {
       try {
         const result = await candidate.adapter.removeBackground(imageUrl, {
           credentials: candidate.credentials,
+          model: candidate.model,
+          input: candidate.settings as MediaGenerateOptions['input'],
         });
         if (!result) continue;
         const persisted = await this._persistJob({
@@ -1336,6 +1364,8 @@ export class AiMediaService {
       try {
         const result = await candidate.adapter.inpaintImage(imageUrl, maskUrl, prompt, {
           credentials: candidate.credentials,
+          model: candidate.model,
+          input: candidate.settings as MediaGenerateOptions['input'],
         });
         if (!result) continue;
         const persisted = await this._persistJob({
@@ -1369,6 +1399,8 @@ export class AiMediaService {
       try {
         const submission = await candidate.adapter.upscaleVideo(videoUrl, {
           credentials: candidate.credentials,
+          model: candidate.model,
+          input: candidate.settings as MediaGenerateOptions['input'],
           scale: options?.scale,
         });
         if (options?.orgId && this._lifecycle) {
@@ -1412,6 +1444,8 @@ export class AiMediaService {
       try {
         const submission = await candidate.adapter.removeVideoBackground(videoUrl, {
           credentials: candidate.credentials,
+          model: candidate.model,
+          input: candidate.settings as MediaGenerateOptions['input'],
         });
         if (options?.orgId && this._lifecycle) {
           const costUsd = await this._chargeCost('video-bg', candidate.adapter.identifier, candidate.adapter.identifier, options.orgId);

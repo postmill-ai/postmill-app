@@ -84,6 +84,10 @@ const CAPABILITY_COLORS: Record<string, string> = {
 
 const titleCase = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
 
+// Providers that bring their own endpoint — Base URL is a required, visible
+// setting for these; hosted providers keep their canonical endpoint hidden.
+const BASE_URL_PROVIDERS = new Set(['openai-compatible']);
+
 export const aiDescriptor: ProviderSurfaceDescriptor<AiMeta> = {
   key: 'ai',
   basePath: '/settings/ai',
@@ -182,49 +186,63 @@ export const aiDescriptor: ProviderSurfaceDescriptor<AiMeta> = {
   form: {
     extraFields: [
       {
-        type: 'text',
-        key: 'budgetMonthlyCap',
-        label: 'Monthly budget cap',
-        placeholder: 'e.g. 100',
-      },
-      {
-        type: 'text',
-        key: 'budgetDailyCap',
-        label: 'Daily budget cap',
-        placeholder: 'e.g. 10',
-      },
-      {
-        type: 'text',
-        key: 'budgetAlertThresholdPct',
-        label: 'Alert threshold',
-        placeholder: 'e.g. 0.8',
-        help: 'Enter a value between 0 and 1 (e.g. 0.8 for 80%).',
+        type: 'budget-block',
+        key: 'budget',
+        label: 'Budget limits',
       },
     ],
-    // Base URL is not a user setting — every AI adapter defaults its own
-    // canonical endpoint (see OpenAICompatibleAdapter / gateway). Hide it.
+    // Base URL is a user setting only for endpoint-bringing providers
+    // (openai-compatible has no canonical endpoint of its own). Every hosted AI
+    // adapter defaults its own canonical endpoint, so baseURL stays hidden for
+    // them. The same rule runs in filterCredentialFields for the catalog
+    // version-fields branch.
     credentialFieldsFromMeta: (m) =>
-      (m?.credentialFields ?? []).filter((f) => f.key !== 'baseURL'),
-    // Model selection lives in Settings → AI → Model Defaults, not here.
-    buildBody: (state) => ({
-      credentials: state.credentials,
-      version: state.version || undefined,
-      budgetMonthlyCap: parseOptionalNumber(state.extra.budgetMonthlyCap),
-      budgetDailyCap: parseOptionalNumber(state.extra.budgetDailyCap),
-      budgetAlertThresholdPct: parseOptionalNumber(
-        state.extra.budgetAlertThresholdPct,
+      (m?.credentialFields ?? []).filter(
+        (f) => f.key !== 'baseURL' || BASE_URL_PROVIDERS.has(m?.identifier ?? ''),
       ),
-    }),
+    filterCredentialFields: (fields, identifier) =>
+      fields.filter(
+        (f) => f.key !== 'baseURL' || BASE_URL_PROVIDERS.has(identifier),
+      ),
+    // Model selection lives in Settings → AI → Model Defaults, not here.
+    // Budget fields are gated by the budget-block switch: disabled ⇒ explicit
+    // null ×3 (clears the columns server-side); enabled-but-empty ⇒ null (no
+    // cap). The slider stores a 0–100 percentage in extra; convert to the
+    // persisted 0–1 fraction here.
+    buildBody: (state) => {
+      const budgetEnabled = !!state.extra.budgetEnabled;
+      const thresholdPct = parseOptionalNumber(state.extra.budgetAlertThresholdPct);
+      return {
+        credentials: state.credentials,
+        version: state.version || undefined,
+        budgetMonthlyCap: budgetEnabled
+          ? parseOptionalNumber(state.extra.budgetMonthlyCap) ?? null
+          : null,
+        budgetDailyCap: budgetEnabled
+          ? parseOptionalNumber(state.extra.budgetDailyCap) ?? null
+          : null,
+        budgetAlertThresholdPct: budgetEnabled
+          ? thresholdPct != null
+            ? thresholdPct / 100
+            : null
+          : null,
+      };
+    },
     buildTestBody: (state) => ({ credentials: state.credentials }),
     seedState: (meta) => ({
       extra: {
+        budgetEnabled:
+          meta?.budgetMonthlyCap != null ||
+          meta?.budgetDailyCap != null ||
+          meta?.budgetAlertThresholdPct != null,
         budgetMonthlyCap:
           meta?.budgetMonthlyCap != null ? String(meta.budgetMonthlyCap) : '',
         budgetDailyCap:
           meta?.budgetDailyCap != null ? String(meta.budgetDailyCap) : '',
+        // Slider works in 0–100; the stored value is a 0–1 fraction.
         budgetAlertThresholdPct:
           meta?.budgetAlertThresholdPct != null
-            ? String(meta.budgetAlertThresholdPct)
+            ? String(Math.round(meta.budgetAlertThresholdPct * 100))
             : '',
       },
     }),

@@ -6,6 +6,8 @@ import {
   MediaGenerateOptions,
   MediaCredentialOptions,
   MediaJobSubmission,
+  MediaModelOption,
+  MediaOperation,
   MediaPollResult,
   resolveApiKey,
   SafeFetchPort,
@@ -95,6 +97,31 @@ export class HeyGenAdapter implements MediaProviderAdapter {
     }
   }
 
+  /**
+   * The org's avatar catalog, exposed as the provider's "model list" so Settings →
+   * Content → Media Defaults can offer avatars in the model dropdown (the avatar
+   * id is stored as the default's `model`). Avatars only make sense for video
+   * operations; other operations get an empty list. Never throws — an unreachable
+   * API returns [] so callers fall back to a provider-level option.
+   */
+  async listModels(operation: MediaOperation, options?: MediaCredentialOptions): Promise<MediaModelOption[]> {
+    if (operation !== 'video') return [];
+    try {
+      const res = await this._fetch('https://api.heygen.com/v2/avatars', { headers: this._headers(options) });
+      if (!res.ok) return [];
+      const body = (await res.json()) as {
+        data?: { avatars?: { avatar_id?: string; avatar_name?: string }[] };
+      };
+      const avatars = body?.data?.avatars;
+      if (!Array.isArray(avatars)) return [];
+      return avatars
+        .filter((a) => a && typeof a.avatar_id === 'string' && a.avatar_id.length > 0)
+        .map((a) => ({ id: a.avatar_id as string, label: a.avatar_name || (a.avatar_id as string) }));
+    } catch {
+      return [];
+    }
+  }
+
   async generateVideo(prompt: string, options?: MediaGenerateOptions): Promise<MediaJobSubmission> {
     const res = await this._fetch('https://api.heygen.com/v2/video/generate', {
       method: 'POST',
@@ -102,7 +129,10 @@ export class HeyGenAdapter implements MediaProviderAdapter {
       body: JSON.stringify({
         video_inputs: [
           {
-            character: { type: 'avatar', avatar_id: options?.avatarId },
+            // The avatar IS the model for HeyGen: the Media Defaults dropdown lists
+            // account avatars via listModels, and the resolved default's `model`
+            // arrives here as the avatar to render.
+            character: { type: 'avatar', avatar_id: options?.avatarId ?? options?.model },
             voice: { type: 'text', input_text: prompt },
           },
         ],

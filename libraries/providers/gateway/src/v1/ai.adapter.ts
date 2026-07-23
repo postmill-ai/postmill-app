@@ -4,6 +4,8 @@ import type { BaseChatModel } from '@langchain/core/language_models/chat_models'
 import { metadata as providerMetadata } from './metadata';
 import {
   BoundedProviderCache,
+  fetchOpenAIStyleModels,
+  mergeLiveModels,
   type AiCapability as AIProviderAdapter,
   type AiCredentialField as CredentialField,
   type AiModelInfo as ModelInfo,
@@ -13,7 +15,17 @@ import {
   type EmbeddingModel,
   type ImageModel,
   type ProviderModule,
+  type SafeFetchPort,
 } from '@gitroom/provider-kernel';
+
+const GATEWAY_DEFAULT_BASE_URL = 'https://ai-gateway.vercel.sh/v1';
+
+const GATEWAY_MODELS: ModelInfo[] = [
+  { id: 'openai/gpt-4o', label: 'OpenAI GPT-4o', kind: 'text', capabilities: { text: true, image: true, vision: true, embeddings: false, speech: false, tools: true } },
+  { id: 'openai/gpt-4o-mini', label: 'OpenAI GPT-4o Mini', kind: 'text', capabilities: { text: true, image: true, vision: true, embeddings: false, speech: false, tools: true } },
+  { id: 'anthropic/claude-sonnet-4-20250514', label: 'Anthropic Claude Sonnet 4', kind: 'text', capabilities: { text: true, image: false, vision: true, embeddings: false, speech: false, tools: true } },
+  { id: 'openai/text-embedding-3-small', label: 'OpenAI Embedding 3 Small', kind: 'embedding', dimension: 1536, capabilities: { text: false, image: false, vision: false, embeddings: true, speech: false, tools: false } },
+];
 
 export class GatewayAdapter implements AIProviderAdapter {
   // 4.11: bounded LRU so rotated keys age out instead of being retained forever.
@@ -40,13 +52,25 @@ export class GatewayAdapter implements AIProviderAdapter {
   readonly capabilities: AICapabilities = { text: true, image: true, vision: true, embeddings: true, speech: true, tools: true };
   readonly privacy = { dataRetention: 'Managed by your gateway policy', trainingOnData: false, description: 'Vercel AI — unified API gateway with caching, rate limiting, and observability' };
 
-  async listModels(_creds: Record<string, string>): Promise<ModelInfo[]> {
-    return [
-      { id: 'openai/gpt-4o', label: 'OpenAI GPT-4o', kind: 'text', capabilities: { text: true, image: true, vision: true, embeddings: false, speech: false, tools: true } },
-      { id: 'openai/gpt-4o-mini', label: 'OpenAI GPT-4o Mini', kind: 'text', capabilities: { text: true, image: true, vision: true, embeddings: false, speech: false, tools: true } },
-      { id: 'anthropic/claude-sonnet-4-20250514', label: 'Anthropic Claude Sonnet 4', kind: 'text', capabilities: { text: true, image: false, vision: true, embeddings: false, speech: false, tools: true } },
-      { id: 'openai/text-embedding-3-small', label: 'OpenAI Embedding 3 Small', kind: 'embedding', dimension: 1536, capabilities: { text: false, image: false, vision: false, embeddings: true, speech: false, tools: false } },
-    ];
+  // 0.4: SSRF-safe fetch, injected by the provider module's create/validate.
+  private _safeFetch?: SafeFetchPort;
+
+  setSafeFetch(fetch: SafeFetchPort): void {
+    this._safeFetch = fetch;
+  }
+
+  async listModels(creds: Record<string, string>): Promise<ModelInfo[]> {
+    // Live-first: the gateway's /models endpoint is OpenAI-shaped
+    // (`{data:[{id}]}`), so the shared helper handles the fetch; merge with the
+    // static list (curated metadata wins on known ids). Any failure (including
+    // a missing safeFetch in an isolated unit context) falls back to the
+    // static catalog.
+    const live = await fetchOpenAIStyleModels(
+      this._safeFetch,
+      creds.baseURL || GATEWAY_DEFAULT_BASE_URL,
+      creds.apiKey,
+    );
+    return mergeLiveModels(live, GATEWAY_MODELS, this.capabilities);
   }
 
   async validateCredentials(creds: Record<string, string>): Promise<{ ok: boolean; error?: string }> {
@@ -123,6 +147,12 @@ export const gatewayAiModule: ProviderModule<any, any> = {
     credentialFields: (adapter as any).credentialFields || [],
     capabilities: (adapter as any).capabilities,
   },
-  create: () => adapter as any,
-  validateCredentials: async (ctx) => adapter.validateCredentials(ctx.credentials),
+  create: (ctx) => {
+    adapter.setSafeFetch(ctx.fetch);
+    return adapter as any;
+  },
+  validateCredentials: async (ctx) => {
+    adapter.setSafeFetch(ctx.fetch);
+    return adapter.validateCredentials(ctx.credentials);
+  },
 };

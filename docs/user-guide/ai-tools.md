@@ -203,7 +203,7 @@ All media operations are governed by the same budget, guardrails, and rate limit
 
 ### Media defaults
 
-**Settings → Content → Media Defaults** lets you choose the default provider/model/settings for each media category, such as **Text to Image**, **Image to Video**, **Text to Speech**, **Avatar Video**, **Caption Burn-in**, etc. Like AI model defaults, you can pick a specific provider/version/model or leave a category on **Auto**. The settings form exposes only the tunables that the selected provider/model supports.
+**Settings → Content → Media Defaults** lets you choose the default provider/model/settings for each media category, such as **Text to Image**, **Image to Video**, **Text to Speech**, **Avatar Video**, **Caption Burn-in**, etc. Like AI model defaults, you can pick a specific provider/version/model or leave a category on **Auto**. The settings form exposes only the tunables that the selected provider/model supports, and the chosen model and settings are applied when the media is generated. For **HeyGen**, the model dropdown lists the avatars in your HeyGen account — pick the avatar to use for avatar videos.
 
 API endpoints:
 

@@ -7,7 +7,7 @@ export const metadata: ProviderMetadata = {
   },
   "id": "heygen",
   "displayName": "heygen",
-  "kind": "action",
+  "kind": "direct",
   "domains": [
     "media"
   ],
@@ -16,5 +16,5 @@ export const metadata: ProviderMetadata = {
     "text-to-video",
     "video-avatar"
   ],
-  "hasModelList": false
+  "hasModelList": true
 };

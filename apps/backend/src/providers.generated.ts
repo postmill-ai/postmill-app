@@ -1,5 +1,6 @@
 import adobestockModules from '@gitroom/provider-adobe-stock';
 import anthropicModules from '@gitroom/provider-anthropic';
+import apertusModules from '@gitroom/provider-apertus';
 import azureModules from '@gitroom/provider-azure';
 import backblazeb2Modules from '@gitroom/provider-backblaze-b2';
 import bedrockModules from '@gitroom/provider-bedrock';
@@ -53,6 +54,7 @@ import instagramstandaloneModules from '@gitroom/provider-instagram-standalone';
 import ipvanishModules from '@gitroom/provider-ipvanish';
 import isgdModules from '@gitroom/provider-isgd';
 import kickModules from '@gitroom/provider-kick';
+import kimiModules from '@gitroom/provider-kimi';
 import lemmyModules from '@gitroom/provider-lemmy';
 import leonardoModules from '@gitroom/provider-leonardo';
 import lightningModules from '@gitroom/provider-lightning';
@@ -79,7 +81,9 @@ import mozillavpnModules from '@gitroom/provider-mozillavpn';
 import mullvadModules from '@gitroom/provider-mullvad';
 import nordvpnModules from '@gitroom/provider-nordvpn';
 import nostrModules from '@gitroom/provider-nostr';
+import nvidiaModules from '@gitroom/provider-nvidia';
 import openaiModules from '@gitroom/provider-openai';
+import openaicompatibleModules from '@gitroom/provider-openai-compatible';
 import openrouterModules from '@gitroom/provider-openrouter';
 import owlyModules from '@gitroom/provider-owly';
 import peertubeModules from '@gitroom/provider-peertube';
@@ -144,11 +148,13 @@ import wrapcastModules from '@gitroom/provider-wrapcast';
 import xModules from '@gitroom/provider-x';
 import xaiModules from '@gitroom/provider-xai';
 import youtubeModules from '@gitroom/provider-youtube';
+import zaiModules from '@gitroom/provider-zai';
 import { ProviderModule } from '@gitroom/provider-kernel';
 
 export const providerModules: ProviderModule<any, any>[] = [
   ...adobestockModules,
   ...anthropicModules,
+  ...apertusModules,
   ...azureModules,
   ...backblazeb2Modules,
   ...bedrockModules,
@@ -202,6 +208,7 @@ export const providerModules: ProviderModule<any, any>[] = [
   ...ipvanishModules,
   ...isgdModules,
   ...kickModules,
+  ...kimiModules,
   ...lemmyModules,
   ...leonardoModules,
   ...lightningModules,
@@ -228,7 +235,9 @@ export const providerModules: ProviderModule<any, any>[] = [
   ...mullvadModules,
   ...nordvpnModules,
   ...nostrModules,
+  ...nvidiaModules,
   ...openaiModules,
+  ...openaicompatibleModules,
   ...openrouterModules,
   ...owlyModules,
   ...peertubeModules,
@@ -293,4 +302,5 @@ export const providerModules: ProviderModule<any, any>[] = [
   ...xModules,
   ...xaiModules,
   ...youtubeModules,
+  ...zaiModules,
 ];

@@ -10,6 +10,8 @@ import { SetDefaultModelDto } from '@gitroom/nestjs-libraries/dtos/ai-settings/d
 import { PROVIDER_KERNEL } from '@gitroom/nestjs-libraries/providers/providers.module';
 import { ProviderKernel } from '@gitroom/provider-kernel';
 import { OrgMediaProviderSettingsService } from '@gitroom/nestjs-libraries/database/prisma/media-providers/org-media-provider-settings.service';
+import { RuntimeContextFactory } from '@gitroom/nestjs-libraries/providers/runtime-context.factory';
+import { getOrCacheModelList } from './defaults-cache';
 import { ioRedis } from '@gitroom/nestjs-libraries/redis/redis.service';
 
 @Injectable()
@@ -20,6 +22,7 @@ export class MediaDefaultsService {
     private _settingsValidator: DefaultsSettingsValidator,
     @Inject(PROVIDER_KERNEL) private _kernel: ProviderKernel,
     private _orgMediaProviderSettings: OrgMediaProviderSettingsService,
+    private _runtimeContextFactory: RuntimeContextFactory,
   ) {}
 
   async getMediaDefaults(orgId: string) {
@@ -232,7 +235,7 @@ export class MediaDefaultsService {
     candidate: { providerId: string; version: string; metadata: any },
     category: string,
     orgId: string,
-  ) {
+  ): Promise<{ id: string; label?: string }[] | undefined> {
     try {
       const config = await this._orgMediaProviderSettings.getConfigForProvider(
         orgId,
@@ -241,17 +244,21 @@ export class MediaDefaultsService {
       );
       const credentials = config?.credentials ?? {};
       const mod = this._kernel?.get('media', candidate.providerId, candidate.version);
-      const capability: any = mod?.create({
-        credentials,
-        encryption: {} as any,
-        fetch: {} as any,
-        logger: {} as any,
-        telemetry: {} as any,
-      });
+      // Real runtime context (SSRF-safe fetch included) so adapters with a live
+      // `listModels` can actually enumerate their catalog — the previous `{} as any`
+      // stubs made every live fetch throw and silently fall back to the static list.
+      const ctx = this._runtimeContextFactory.build({ credentials, orgId });
+      const capability: any = mod?.create(ctx);
       if (!capability?.listModels) return [];
-      return await capability.listModels(this._listOperationForCategory(category), {
+      const operation = this._listOperationForCategory(category);
+      return await getOrCacheModelList(
+        'media',
+        candidate.providerId,
+        candidate.version,
         credentials,
-      });
+        () => capability.listModels(operation, { credentials }),
+        operation,
+      );
     } catch {
       return [];
     }
