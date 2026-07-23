@@ -34,12 +34,16 @@ function modelListCacheKey(
   providerId: string,
   version: string,
   credentials: Record<string, string>,
+  scope?: string,
 ): string {
   const hash = createHash('sha256')
     .update(`${credentials.apiKey ?? ''}|${credentials.baseURL ?? ''}`)
     .digest('hex')
     .slice(0, 16);
-  return `providers:models:${domain}:${providerId}:${version}:${hash}`;
+  // `scope` discriminates listings that vary per call for the same provider —
+  // media listModels is per-operation (image/video/audio), so categories sharing
+  // a provider must not poison each other's cache entry.
+  return `providers:models:${domain}:${providerId}:${version}:${hash}${scope ? `:${scope}` : ''}`;
 }
 
 /**
@@ -54,8 +58,9 @@ export async function getOrCacheModelList<T>(
   version: string,
   credentials: Record<string, string>,
   fetcher: () => Promise<T[] | undefined>,
+  scope?: string,
 ): Promise<T[] | undefined> {
-  const key = modelListCacheKey(domain, providerId, version, credentials);
+  const key = modelListCacheKey(domain, providerId, version, credentials, scope);
   try {
     const cached = await ioRedis.get(key);
     if (cached) {

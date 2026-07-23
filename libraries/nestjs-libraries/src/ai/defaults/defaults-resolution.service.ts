@@ -267,12 +267,14 @@ export class DefaultsResolutionService {
           // No live catalog: fall back to the committed static model list.
           return this._staticMediaModels(candidate, category);
         }
+        const operation = this._categoryToOperation(category);
         const live = await getOrCacheModelList(
           'media',
           candidate.providerId,
           candidate.version,
           credentials,
-          () => media.listModels!(this._categoryToOperation(category), { credentials }),
+          () => media.listModels!(operation, { credentials }),
+          operation,
         );
         // A transient empty live catalog should not hide a static fallback.
         if (!live || live.length === 0) {
