@@ -69,6 +69,7 @@ export type ProviderExtraFieldType =
   | 'region-checklist'
   | 'storage-binding'
   | 'oauth-block'
+  | 'budget-block'
   | 'text'
   | 'password'
   | 'select';

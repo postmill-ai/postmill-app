@@ -7,6 +7,7 @@ import { InstanceNameField } from './instance-name.field';
 import { CustomDomainField } from './custom-domain.field';
 import { RegionChecklistField } from './region-checklist.field';
 import { OAuthBlockField } from './oauth-block.field';
+import { BudgetBlockField } from './budget-block.field';
 
 /**
  * Generic text/password/select extra field writing into `extra[spec.key]`.
@@ -69,6 +70,8 @@ export const ExtraField: React.FC<ExtraFieldProps> = (props) => {
       return <RegionChecklistField {...props} />;
     case 'oauth-block':
       return <OAuthBlockField {...props} />;
+    case 'budget-block':
+      return <BudgetBlockField {...props} />;
     default:
       return <GenericExtraField {...props} />;
   }

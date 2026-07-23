@@ -186,23 +186,9 @@ export const aiDescriptor: ProviderSurfaceDescriptor<AiMeta> = {
   form: {
     extraFields: [
       {
-        type: 'text',
-        key: 'budgetMonthlyCap',
-        label: 'Monthly budget cap',
-        placeholder: 'e.g. 100',
-      },
-      {
-        type: 'text',
-        key: 'budgetDailyCap',
-        label: 'Daily budget cap',
-        placeholder: 'e.g. 10',
-      },
-      {
-        type: 'text',
-        key: 'budgetAlertThresholdPct',
-        label: 'Alert threshold',
-        placeholder: 'e.g. 0.8',
-        help: 'Enter a value between 0 and 1 (e.g. 0.8 for 80%).',
+        type: 'budget-block',
+        key: 'budget',
+        label: 'Budget limits',
       },
     ],
     // Base URL is a user setting only for endpoint-bringing providers
@@ -219,25 +205,44 @@ export const aiDescriptor: ProviderSurfaceDescriptor<AiMeta> = {
         (f) => f.key !== 'baseURL' || BASE_URL_PROVIDERS.has(identifier),
       ),
     // Model selection lives in Settings → AI → Model Defaults, not here.
-    buildBody: (state) => ({
-      credentials: state.credentials,
-      version: state.version || undefined,
-      budgetMonthlyCap: parseOptionalNumber(state.extra.budgetMonthlyCap),
-      budgetDailyCap: parseOptionalNumber(state.extra.budgetDailyCap),
-      budgetAlertThresholdPct: parseOptionalNumber(
-        state.extra.budgetAlertThresholdPct,
-      ),
-    }),
+    // Budget fields are gated by the budget-block switch: disabled ⇒ explicit
+    // null ×3 (clears the columns server-side); enabled-but-empty ⇒ null (no
+    // cap). The slider stores a 0–100 percentage in extra; convert to the
+    // persisted 0–1 fraction here.
+    buildBody: (state) => {
+      const budgetEnabled = !!state.extra.budgetEnabled;
+      const thresholdPct = parseOptionalNumber(state.extra.budgetAlertThresholdPct);
+      return {
+        credentials: state.credentials,
+        version: state.version || undefined,
+        budgetMonthlyCap: budgetEnabled
+          ? parseOptionalNumber(state.extra.budgetMonthlyCap) ?? null
+          : null,
+        budgetDailyCap: budgetEnabled
+          ? parseOptionalNumber(state.extra.budgetDailyCap) ?? null
+          : null,
+        budgetAlertThresholdPct: budgetEnabled
+          ? thresholdPct != null
+            ? thresholdPct / 100
+            : null
+          : null,
+      };
+    },
     buildTestBody: (state) => ({ credentials: state.credentials }),
     seedState: (meta) => ({
       extra: {
+        budgetEnabled:
+          meta?.budgetMonthlyCap != null ||
+          meta?.budgetDailyCap != null ||
+          meta?.budgetAlertThresholdPct != null,
         budgetMonthlyCap:
           meta?.budgetMonthlyCap != null ? String(meta.budgetMonthlyCap) : '',
         budgetDailyCap:
           meta?.budgetDailyCap != null ? String(meta.budgetDailyCap) : '',
+        // Slider works in 0–100; the stored value is a 0–1 fraction.
         budgetAlertThresholdPct:
           meta?.budgetAlertThresholdPct != null
-            ? String(meta.budgetAlertThresholdPct)
+            ? String(Math.round(meta.budgetAlertThresholdPct * 100))
             : '',
       },
     }),
