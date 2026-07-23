@@ -385,6 +385,11 @@ const MediaCategoryRow: React.FC<{
   const canShowSettings = !empty && showSettings && !!row.providerId;
   useEffect(() => {
     if (!canShowSettings || !row.providerId) return;
+    // Wait for the catalog: resolving fields before the options arrive means
+    // `selectedOption` is null and providers without a DESCRIPTOR_LOADERS entry
+    // (replicate, …) would latch `sigRef` on the null result — the form would
+    // never appear even though the catalog option ships `fields`.
+    if (catalogLoading) return;
     let cancelled = false;
     const operation = MEDIA_CATEGORY_OPERATION[category];
     const sig = `${row.providerId}::${row.model ?? ''}::${operation}`;
@@ -418,7 +423,7 @@ const MediaCategoryRow: React.FC<{
     return () => {
       cancelled = true;
     };
-  }, [canShowSettings, row.providerId, row.model, row.settings, category, selectedOption]);
+  }, [canShowSettings, catalogLoading, row.providerId, row.model, row.settings, category, selectedOption]);
 
   const hasForm = canShowSettings && !!fields && fields.length > 0;
 
