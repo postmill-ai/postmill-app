@@ -1167,7 +1167,15 @@ export class AIModelProvider {
         if (!promptPayload) {
           const content: any[] = [{ type: 'text', text: checkedInput }];
           if (args.imageUrl) {
-            content.push({ type: 'image', image: args.imageUrl });
+            // LanguageModelV2 file part — the legacy {type:'image'} shape from
+            // SDK v1 serializes into an invalid provider message
+            // ("Invalid type for 'messages[0].content[1]'").
+            const dataUriMime = args.imageUrl.match(/^data:([^;]+);/)?.[1];
+            content.push({
+              type: 'file',
+              mediaType: dataUriMime || 'image/*',
+              data: args.imageUrl,
+            });
           }
           promptPayload = [{ role: 'user', content }];
         }
