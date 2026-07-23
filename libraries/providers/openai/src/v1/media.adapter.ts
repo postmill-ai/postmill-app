@@ -112,6 +112,8 @@ export class OpenaiMediaAdapter implements MediaProviderAdapter {
     // apply only when input omits them. gpt-image-1 returns b64_json (no url).
     const res = await this._fetch('https://api.openai.com/v1/images/generations', {
       method: 'POST',
+      // gpt-image / dall-e generations routinely exceed the 30s default.
+      timeoutMs: 120_000,
       headers: {
         'Content-Type': 'application/json',
         Authorization: `Bearer ${apiKey}`,
