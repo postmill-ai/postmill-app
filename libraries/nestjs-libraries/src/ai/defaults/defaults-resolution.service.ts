@@ -79,6 +79,13 @@ export class DefaultsResolutionService {
             source,
           };
         }
+        // The org explicitly stored this default but the provider's (live)
+        // catalog no longer lists the model — falling through silently swaps
+        // their pick for an auto-selection, so leave a trace.
+        this._logger.warn(
+          `Stored ${domain} default ${row.providerId}@${resolvedVersion} model "${row.model}" ` +
+            `(org ${orgId}, category ${category}) is not in the provider catalog — auto-picking instead.`,
+        );
       }
     }
 

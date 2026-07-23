@@ -12,6 +12,7 @@ vi.mock('@langchain/openai', () => ({
   ChatOpenAI: vi.fn(function() { return {}; }),
 }));
 
+import { createOpenAI } from '@ai-sdk/openai';
 import { OpenAICompatibleAdapter, BoundedProviderCache } from '../domains/ai-helpers';
 
 describe('BoundedProviderCache (4.11)', () => {
@@ -55,6 +56,11 @@ describe('OpenAICompatibleAdapter', () => {
       { text: true, image: true, vision: false, embeddings: false, speech: false, tools: true },
     );
   });
+
+  // The runtime always injects the SSRF-safe fetch via create(ctx); model
+  // construction with an org-supplied baseURL refuses without it.
+  const injectSafeFetch = () =>
+    adapter.setSafeFetch(vi.fn(async () => new Response('{}')) as any);
 
   describe('metadata', () => {
     it('uses the provided identifier', () => {
@@ -178,6 +184,7 @@ describe('OpenAICompatibleAdapter', () => {
   });
 
   describe('createLanguageModel', () => {
+    beforeEach(() => injectSafeFetch());
     it('returns a language model for the given model id', () => {
       const model = adapter.createLanguageModel(
         { apiKey: 'test-key', baseURL: 'https://api.example.com/v1' },
@@ -196,6 +203,7 @@ describe('OpenAICompatibleAdapter', () => {
   });
 
   describe('createLangchainModel', () => {
+    beforeEach(() => injectSafeFetch());
     it('builds a ChatOpenAI instance with options', () => {
       const model = adapter.createLangchainModel(
         { apiKey: 'test-key', baseURL: 'https://api.example.com/v1' },
@@ -220,6 +228,7 @@ describe('OpenAICompatibleAdapter', () => {
   });
 
   describe('createImageModel', () => {
+    beforeEach(() => injectSafeFetch());
     it('returns an image model when called', () => {
       const model = adapter.createImageModel(
         { apiKey: 'test-key', baseURL: 'https://api.example.com/v1' },
@@ -230,6 +239,7 @@ describe('OpenAICompatibleAdapter', () => {
   });
 
   describe('createEmbeddingModel', () => {
+    beforeEach(() => injectSafeFetch());
     it('returns an embedding model', () => {
       const model = adapter.createEmbeddingModel(
         { apiKey: 'test-key', baseURL: 'https://api.example.com/v1' },
@@ -326,5 +336,53 @@ describe('OpenAICompatibleAdapter', () => {
       const normalized = (input || '').replace(/(?<![/])\/+$/, '');
       expect(normalized).toBe(expected);
     });
+  });
+});
+
+describe('OpenAICompatibleAdapter tenant baseURL safety', () => {
+  beforeEach(() => {
+    vi.mocked(createOpenAI).mockClear();
+  });
+
+  it('throws from createLanguageModel when requireBaseURL is set and no baseURL is given', () => {
+    const adapter = new OpenAICompatibleAdapter('byo', 'BYO', '', undefined, undefined, 'hub', {
+      requireBaseURL: true,
+    });
+    expect(() => adapter.createLanguageModel({ apiKey: 'k' }, 'm')).toThrow(/Base URL is required/);
+  });
+
+  it('throws from createLangchainModel when requireBaseURL is set and no baseURL is given', () => {
+    const adapter = new OpenAICompatibleAdapter('byo', 'BYO', '', undefined, undefined, 'hub', {
+      requireBaseURL: true,
+    });
+    expect(() => adapter.createLangchainModel({ apiKey: 'k' }, 'm')).toThrow(/Base URL is required/);
+  });
+
+  it('refuses an org-supplied baseURL without the SSRF-safe fetch (no global-fetch fallback)', () => {
+    const adapter = new OpenAICompatibleAdapter('hubx', 'HubX', 'https://api.hubx.com/v1');
+    expect(() =>
+      adapter.createLanguageModel({ apiKey: 'k', baseURL: 'https://tenant.example.com/v1' }, 'm'),
+    ).toThrow(/SSRF-safe fetch/);
+  });
+
+  it('routes org-supplied baseURL inference through the injected safeFetch', async () => {
+    const adapter = new OpenAICompatibleAdapter('hubx', 'HubX', 'https://api.hubx.com/v1');
+    const safeFetch = vi.fn(async () => new Response('{}'));
+    adapter.setSafeFetch(safeFetch as any);
+    adapter.createLanguageModel({ apiKey: 'k', baseURL: 'https://tenant.example.com/v1' }, 'm');
+    const call = vi.mocked(createOpenAI).mock.calls.at(-1)![0];
+    expect(call.fetch).toBeTypeOf('function');
+    await call.fetch('https://tenant.example.com/v1/chat/completions', { method: 'POST' });
+    expect(safeFetch).toHaveBeenCalledWith(
+      'https://tenant.example.com/v1/chat/completions',
+      expect.objectContaining({ method: 'POST', timeoutMs: 300_000 }),
+    );
+  });
+
+  it('keeps the SDK default fetch for the canonical provider endpoint', () => {
+    const adapter = new OpenAICompatibleAdapter('hubx', 'HubX', 'https://api.hubx.com/v1');
+    adapter.createLanguageModel({ apiKey: 'k' }, 'm');
+    const call = vi.mocked(createOpenAI).mock.calls.at(-1)![0];
+    expect(call.fetch).toBeUndefined();
   });
 });

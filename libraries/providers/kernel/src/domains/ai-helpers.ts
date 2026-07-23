@@ -178,8 +178,8 @@ function classifyLiveEntry(entry: LiveModelEntry, providerCapabilities: AiCapabi
  * of truth for WHICH models exist (static entries absent upstream are dropped —
  * they were retired); static is the source of truth for curated metadata (label,
  * vision/reasoning flags) on ids it knows. Live-only ids get heuristic caps.
- * Ordering: curated entries first (static order), then live-only ids
- * alphabetically — keeps huge hub lists (OpenRouter 200+) usable.
+ * Ordering: curated entries first (in the live listing's order), then
+ * live-only ids alphabetically — keeps huge hub lists (OpenRouter 200+) usable.
  * A null/empty live list returns the static catalog unchanged (fallback path).
  */
 export function mergeLiveModels(
@@ -225,6 +225,7 @@ export class OpenAICompatibleAdapter implements AiCapability {
   };
   private readonly _defaultModels: AiModelInfo[];
   private readonly _defaultBaseURL: string;
+  private readonly _requireBaseURL: boolean;
   private _providerCache = new BoundedProviderCache<ReturnType<typeof createOpenAI>>();
   // 0.4: the SSRF-safe fetch, injected by each provider module's create(ctx).
   // When absent (isolated unit context) the `${baseURL}/models` call is skipped
@@ -253,6 +254,7 @@ export class OpenAICompatibleAdapter implements AiCapability {
     // the provider opts into requireBaseURL (generic endpoint-bringing providers
     // with no canonical URL of their own).
     this._defaultBaseURL = baseURL;
+    this._requireBaseURL = opts?.requireBaseURL ?? false;
     this.credentialFields = [
       { key: 'apiKey', label: 'API Key', type: 'password', required: true, placeholder: 'Enter API key' },
       {
@@ -276,12 +278,44 @@ export class OpenAICompatibleAdapter implements AiCapability {
     ];
   }
 
+  /**
+   * Inference on an ORG-SUPPLIED base URL must route through the injected
+   * SSRF-safe fetch — the save-time public-HTTPS string check alone does not
+   * survive DNS rebinding, and `createOpenAI`'s default global fetch has no
+   * per-request re-validation. Canonical provider endpoints (compile-time
+   * constants) keep the SDK's default fetch. Never fall back to the global
+   * fetch for a tenant URL: without a safeFetch we refuse instead.
+   */
+  private _tenantSafeFetch(baseURL: string): ((input: any, init?: any) => Promise<Response>) | undefined {
+    const orgSupplied = !!baseURL && baseURL !== this._defaultBaseURL;
+    if (!orgSupplied) return undefined;
+    const safeFetch = this._safeFetch;
+    if (!safeFetch) {
+      throw new Error(`${this.name}: cannot call an org-supplied Base URL without the SSRF-safe fetch`);
+    }
+    return (input: any, init?: any) => {
+      const url =
+        typeof input === 'string' ? input : input instanceof URL ? input.toString() : input?.url;
+      // 5-minute ceiling (safeFetch's max) bounds streamed completions on tenant endpoints.
+      return safeFetch(String(url), { ...init, timeoutMs: 300_000 });
+    };
+  }
+
   private _getProvider(creds: Record<string, string>) {
     const baseURL = creds.baseURL || this._defaultBaseURL;
+    if (this._requireBaseURL && !baseURL) {
+      // Never let a bring-your-own-endpoint provider silently default to
+      // api.openai.com (the SDK default) — that would send the org's key there.
+      throw new Error(`${this.name}: Base URL is required`);
+    }
     const key = `${creds.apiKey}||${baseURL}`;
     let provider = this._providerCache.get(key);
     if (!provider) {
-      provider = createOpenAI({ apiKey: creds.apiKey, baseURL: baseURL || undefined });
+      provider = createOpenAI({
+        apiKey: creds.apiKey,
+        baseURL: baseURL || undefined,
+        fetch: this._tenantSafeFetch(baseURL),
+      });
       this._providerCache.set(key, provider);
     }
     return provider;
@@ -339,9 +373,18 @@ export class OpenAICompatibleAdapter implements AiCapability {
   }
 
   createLangchainModel(creds: Record<string, string>, modelId: string, opts?: AiModelOptions): BaseChatModel {
+    const baseURL = creds.baseURL || this._defaultBaseURL;
+    if (this._requireBaseURL && !baseURL) {
+      throw new Error(`${this.name}: Base URL is required`);
+    }
     return new ChatOpenAI({
       openAIApiKey: creds.apiKey,
-      configuration: { baseURL: creds.baseURL || this._defaultBaseURL || undefined },
+      configuration: {
+        baseURL: baseURL || undefined,
+        // Same tenant-URL rule as _getProvider: org-supplied endpoints go
+        // through the SSRF-safe fetch.
+        fetch: this._tenantSafeFetch(baseURL) as any,
+      },
       model: modelId,
       temperature: opts?.temperature,
       topP: opts?.topP,
