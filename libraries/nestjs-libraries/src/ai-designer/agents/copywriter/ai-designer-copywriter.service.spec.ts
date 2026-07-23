@@ -70,7 +70,7 @@ describe('AiDesignerCopywriterService', () => {
     expect(content.texts.headline).toBe('Summer Sale');
   });
 
-  it('returns an empty string for text slots the model omitted', async () => {
+  it('omits text slots the model did not write (no empty-string backfill)', async () => {
     model.generateText.mockResolvedValue('{"headline":"Only headline"}');
 
     const res = await handler(
@@ -85,7 +85,6 @@ describe('AiDesignerCopywriterService', () => {
     const content = JSON.parse(res.content);
     expect(content.texts).toEqual({
       headline: 'Only headline',
-      cta: '',
     });
   });
 

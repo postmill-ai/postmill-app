@@ -365,7 +365,7 @@ export class AiDesignerComposerService implements OnModuleInit {
       primaryPreset
     );
 
-    const bg = this._backgroundToDesignerBg(plan.background);
+    const bg = this._backgroundToDesignerBg(plan.background, assets);
     const primaryOutput: DesignerOutput = {
       id: '',
       formatId: primaryPreset.formatId,
@@ -683,7 +683,7 @@ export class AiDesignerComposerService implements OnModuleInit {
           elements.push(
             this._textElement(
               slot.id,
-              copy[slot.id] || '',
+              this._slotText(copy, slot, plan, i),
               margin,
               Math.round(h * 0.25) + i * stackH,
               w - margin * 2,
@@ -762,10 +762,65 @@ export class AiDesignerComposerService implements OnModuleInit {
     } as DesignerElement;
   }
 
+  /** Resolve display text for a slot: exact copy id, fuzzy role/id match
+   *  (LLM copy maps often key by role), then a deterministic plan-derived
+   *  fallback — a text slot must never render as an empty string. */
+  private _slotText(
+    copy: SlotTextMap,
+    slot: { id: string; role?: string },
+    plan: DesignPlan,
+    slotIndex: number
+  ): string {
+    if (copy[slot.id]) return copy[slot.id];
+    const norm = (v: string) => v.toLowerCase().replace(/[^a-z0-9]/g, '');
+    const wantId = norm(slot.id);
+    const wantRole = norm(slot.role || '');
+    for (const [k, v] of Object.entries(copy)) {
+      if (!v) continue;
+      const nk = norm(k);
+      if (nk === wantId || (wantRole && (nk === wantRole || nk.includes(wantRole) || wantRole.includes(nk)))) {
+        this._logger.warn(
+          `Copy slot id mismatch: bound "${k}" to slot "${slot.id}" by fuzzy match.`,
+          AiDesignerComposerService.name
+        );
+        return v;
+      }
+    }
+    this._logger.warn(
+      `No copy for text slot "${slot.id}" (role=${slot.role || '?'}); using plan-derived fallback.`,
+      AiDesignerComposerService.name
+    );
+    const role = (slot.role || '').toLowerCase();
+    if (/cta|button|action/.test(role)) return 'Learn more';
+    if (slotIndex === 0 || /head|title|hero/.test(role)) {
+      return (plan.concept || 'Your headline here').slice(0, 60);
+    }
+    return '';
+  }
+
   private _backgroundToDesignerBg(
-    background: DesignPlan['background']
+    background: DesignPlan['background'],
+    assets?: Record<string, AssetResult>
   ): { background: string; bg?: DesignerOutput['bg'] } {
     if (!background) return { background: '#ffffff' };
+    if (background.kind === 'image') {
+      // Plans reference generated/stock assets as `asset:{slotId}`. This case
+      // was previously unimplemented and silently fell through to white —
+      // every image-background plan rendered flat.
+      const ref = (background.ref || '').replace(/^asset:/, '');
+      const asset = ref && assets ? assets[ref] : undefined;
+      if (asset?.path) {
+        return {
+          background: '#000000',
+          bg: { type: 'image', src: asset.path, fileId: asset.fileId },
+        };
+      }
+      this._logger.warn(
+        `Plan requested image background (ref=${background.ref || 'none'}) but no asset resolved; using solid fallback.`,
+        AiDesignerComposerService.name
+      );
+      return { background: background.value || '#1f2937' };
+    }
     if (background.kind === 'solid') {
       return { background: background.value || '#ffffff' };
     }

@@ -206,6 +206,12 @@ export class AiDesignerArtDirectorService implements OnModuleInit {
       `Return ONLY a JSON object in this exact shape: { "type": "plans", "plans": DesignPlan[] }.`,
       `The "plans" array must contain exactly ${variants} DesignPlan objects.`,
       '',
+      'Imagery: social designs live or die on imagery. Unless the brief explicitly asks for a',
+      'flat/solid/typographic-only design, every plan MUST include an image slot (typically the',
+      'background) AND a matching entry in "assetNeeds" with a vivid, specific brief for that',
+      "image (subject, mood, lighting, palette). Use prefer: 'either' unless the brief demands",
+      'photography (stock) or illustration (generate).',
+      '',
       'DesignPlan schema:',
       JSON.stringify(this._designPlanSchema(), null, 2),
     ].join('\n');
@@ -236,6 +242,32 @@ export class AiDesignerArtDirectorService implements OnModuleInit {
 
     if (validPlans.length === 0) {
       throw new Error('AI response contained no valid plan items');
+    }
+
+    // Coherence backstop: a plan that declares an image slot or an image
+    // background but requests no asset for it would silently render as a flat
+    // color (the asset agent only sources what assetNeeds lists). Synthesize
+    // the missing need from the plan's own concept.
+    for (const plan of validPlans) {
+      const needs = (plan.assetNeeds = plan.assetNeeds ?? []);
+      const covered = new Set(needs.map((n) => n.slotId));
+      for (const slot of plan.slots ?? []) {
+        if (slot.kind === 'image' && !covered.has(slot.id)) {
+          needs.push({
+            slotId: slot.id,
+            brief: `${plan.concept} — high-quality ${slot.role || 'background'} image, on-palette (${(plan.palette || []).join(', ')})`,
+            prefer: 'either',
+          });
+          covered.add(slot.id);
+        }
+      }
+      if (plan.background?.kind === 'image' && !plan.background.ref && needs.length === 0) {
+        needs.push({
+          slotId: 'background',
+          brief: `${plan.concept} — full-bleed background image, on-palette`,
+          prefer: 'either',
+        });
+      }
     }
 
     return validPlans;
