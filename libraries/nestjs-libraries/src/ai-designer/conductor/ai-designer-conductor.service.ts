@@ -428,6 +428,14 @@ export class AiDesignerConductorService {
           { instruction, targetDesignId, nonce: '' },
           emitter
         );
+      } else {
+        await this._emitText(
+          sessionId,
+          ctx,
+          emitter,
+          'conversationalist',
+          'No design is available to revise yet.'
+        );
       }
       return;
     }
