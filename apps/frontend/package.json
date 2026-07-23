@@ -120,7 +120,7 @@
     "autoprefixer": "^10.4.17",
     "cross-env": "^10.0.0",
     "dotenv-cli": "^8.0.0",
-    "postcss": "^8.5.10",
+    "postcss": "^8.5.22",
     "react-refresh": "^0.10.0",
     "sass": "^1.100.0",
     "tailwind-scrollbar": "^3.1.0",
