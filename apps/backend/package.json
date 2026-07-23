@@ -98,6 +98,7 @@
     "@gitroom/provider-mullvad": "workspace:*",
     "@gitroom/provider-nordvpn": "workspace:*",
     "@gitroom/provider-nostr": "workspace:*",
+    "@gitroom/provider-nvidia": "workspace:*",
     "@gitroom/provider-openai": "workspace:*",
     "@gitroom/provider-openrouter": "workspace:*",
     "@gitroom/provider-owly": "workspace:*",

@@ -556,6 +556,12 @@
       "@gitroom/provider-nostr/*": [
         "libraries/providers/nostr/src/*"
       ],
+      "@gitroom/provider-nvidia": [
+        "libraries/providers/nvidia/src"
+      ],
+      "@gitroom/provider-nvidia/*": [
+        "libraries/providers/nvidia/src/*"
+      ],
       "@gitroom/provider-openai": [
         "libraries/providers/openai/src"
       ],

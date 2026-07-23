@@ -15,7 +15,7 @@ A few branded media studios ride another provider's adapter:
 
 The table below shows each provider's registered domains. A provider that appears in both `ai` and `media` can share a single org credential across both surfaces.
 
-## AI (`ai`) — 28 providers
+## AI (`ai`) — 29 providers
 
 | Provider | ID | Domains | Kind / Notes |
 |---|---|---|---|
@@ -37,6 +37,7 @@ The table below shows each provider's registered domains. A provider that appear
 | MiniMax | `minimax` | ai, media | direct; low-reasoning, high-reasoning, workflow; image-slide, image-to-video, text-to-video |
 | Moonshot Kimi | `kimi` | ai | direct; low-reasoning, high-reasoning, workflow, vision |
 | Mistral AI | `mistral` | ai | hub; low-reasoning, high-reasoning, workflow, vision; image-focal-point |
+| NVIDIA Nemotron | `nvidia` | ai | direct; low-reasoning, high-reasoning, workflow |
 | OpenAI | `openai` | ai, media | hub; low-reasoning, high-reasoning, workflow, vision; image-focal-point, image-slide, image-to-video, text-to-image, text-to-speech, text-to-video, video-caption |
 | OpenRouter | `openrouter` | ai, media | hub; low-reasoning, high-reasoning, workflow, vision; image-focal-point, image-slide, image-to-image, text-to-image |
 | Perplexity | `perplexity` | ai | hub; low-reasoning, high-reasoning, workflow, vision; image-focal-point |

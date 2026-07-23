@@ -1,6 +1,6 @@
 # Adding an AI Provider Adapter
 
-Postmill's AI layer supports 28 providers through a pluggable adapter system. Each adapter lives in its own workspace package under `libraries/providers/<id>/` and is registered into the `ProviderKernel` at backend boot.
+Postmill's AI layer supports 29 providers through a pluggable adapter system. Each adapter lives in its own workspace package under `libraries/providers/<id>/` and is registered into the `ProviderKernel` at backend boot.
 
 > Verified against v1.1.0 (2026-07-23)
 
@@ -340,8 +340,8 @@ Mock the underlying AI SDK or the injected `SafeFetchPort` rather than making re
 
 `openai`, `anthropic`, `google`, `bedrock`, `vertex`, `azure`, `groq`, `fireworks`, `togetherai`, `deepseek`, `mistral`, `cohere`, `perplexity`, `xai`, `gateway`, `openrouter`
 
-### OpenAI-compatible adapters (12)
+### OpenAI-compatible adapters (13)
 
-`siliconflow`, `deepinfra`, `minimax`, `qwen`, `meta-llama`, `gmihub`, `bitdeer`, `lightning`, `vultr`, `kimi`, `zai`, `apertus`
+`siliconflow`, `deepinfra`, `minimax`, `qwen`, `meta-llama`, `gmihub`, `bitdeer`, `lightning`, `vultr`, `kimi`, `zai`, `apertus`, `nvidia`
 
-**Total: 28 providers.**
+**Total: 29 providers.**

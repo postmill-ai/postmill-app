@@ -6,12 +6,12 @@ kernel vitest alias. One row per **module** (multi-module packages — e.g. `ope
 get multiple rows). The `has-spec?` column reflects whether the **package** contains any
 `*.spec.ts` / `*.int-spec.ts` under `src/**`.
 
-- **Modules:** 166  (== `providerModules.length`)
-- **Packages:** 148  (== real package dirs under `libraries/providers/`, excluding `kernel` and `node_modules`)
-  - Note: `ls -d libraries/providers/*/ | grep -v kernel | wc -l` = **149** on a clean checkout because it also counts the `node_modules/` dir; **148** are real packages. (After a local `--coverage` run a gitignored `coverage/` dir also appears, making the raw count **150** — both `node_modules/` and `coverage/` are non-package artifacts.)
-- **Packages with at least one spec:** 94 / 148  (media adapters + the magnific content pack gained recorded-fixture `*.int-spec.ts` behavioral tests via the shared `kernel/src/testing/media-int-helpers.ts`)
+- **Modules:** 167  (== `providerModules.length`)
+- **Packages:** 149  (== real package dirs under `libraries/providers/`, excluding `kernel` and `node_modules`)
+  - Note: `ls -d libraries/providers/*/ | grep -v kernel | wc -l` = **150** on a clean checkout because it also counts the `node_modules/` dir; **149** are real packages. (After a local `--coverage` run a gitignored `coverage/` dir also appears, making the raw count **151** — both `node_modules/` and `coverage/` are non-package artifacts.)
+- **Packages with at least one spec:** 95 / 149  (media adapters + the magnific content pack gained recorded-fixture `*.int-spec.ts` behavioral tests via the shared `kernel/src/testing/media-int-helpers.ts`)
 
-Modules per domain: ai=28, auth=6, contentpack=4, email=7, media=35, shortlink=20, social=36, storage=14, vpn=16
+Modules per domain: ai=29, auth=6, contentpack=4, email=7, media=35, shortlink=20, social=36, storage=14, vpn=16
 
 | package | domain | providerId | version | status | has-spec? |
 |---|---|---|---|---|---|
@@ -33,6 +33,7 @@ Modules per domain: ai=28, auth=6, contentpack=4, email=7, media=35, shortlink=2
 | meta-llama | ai | meta-llama | v1 | active | no |
 | minimax | ai | minimax | v1 | active | no |
 | mistral | ai | mistral | v1 | active | yes |
+| nvidia | ai | nvidia | v1 | active | yes |
 | openai | ai | openai | v1 | active | yes |
 | openrouter | ai | openrouter | v1 | active | yes |
 | perplexity | ai | perplexity | v1 | active | yes |
