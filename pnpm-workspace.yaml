@@ -7,7 +7,7 @@ overrides:
   # @reaatech/structured-repair-core declares a zod ^3.23.0 peer but was resolving
   # to zod 4.x, breaking type/runtime compatibility with workspace zod 3.x schemas.
   '@reaatech/structured-repair-core>zod': '^3.25.76'
-  next: 16.2.7
+  next: 16.2.11
   react: 19.2.7
   react-dom: 19.2.7
   '@types/react': 19.1.8
@@ -15,9 +15,9 @@ overrides:
   # Security overrides — see dev/PACKAGE_UPGRADE.md §4. Both parents are at their
   # latest and pin the vulnerable version *exactly*, so there is no upgrade-the-parent
   # path; these patched ranges are the only way to close the high advisories.
-  # protobufjs <=7.5.5: 4 high GHSAs. Constrained to the 7.x patch line for
-  #   API compatibility with consumers that use protobufjs 7.x.
-  protobufjs: '>=7.5.6 <8'
+  # protobufjs 8.x <8.4.1: high GHSAs; the lockfile already resolves the patched 8.4.x
+  # line (this matches the previously applied package.json override — do not force 7.x back).
+  'protobufjs@>=8.0.0 <8.4.1': '^8.4.1'
   # rollup <2.80.0: high path-traversal, pinned exactly by @crxjs/vite-plugin@2.4.0.
   rollup: '>=2.80.0'
   # form-data <2.5.6: critical unsafe-random boundary (GHSA-fjxv-7rqg-78g4) + high CRLF
@@ -34,7 +34,7 @@ overrides:
   # fast-xml-parser <4.5.4: critical entity-encoding bypass + high DoS (GHSA-m7jm-9gc2-mpf2),
   # pulled by @aws-sdk/client-sesv2@3.800.0 -> @aws-sdk/core@3.799.0 (pins 4.4.1). Bump the
   # vulnerable 4.x to patched 4.5.x (same major, API-compatible); newer aws-sdk paths use 5.x.
-  'fast-xml-parser@<4.5.4': '>=4.5.4 <5'
+  'fast-xml-parser@>=4.0.0-beta.3 <4.5.5': '^4.5.5'
   # esbuild <0.28.1: high missing binary integrity verification in Deno module enables remote
   # code execution via NPM_CONFIG_REGISTRY (GHSA-gv7w-rqvm-qjhr), pulled by terser-webpack-plugin,
   # vite, and @prisma/config. Bump vulnerable <0.28.1 to patched 0.28.x (same major).
@@ -46,6 +46,10 @@ overrides:
   # multer <2.2.0: high DoS via deeply nested field names (GHSA-72gw-mp4g-v24j), pulled by
   # @nestjs/platform-express. Bump to patched 2.2.x (same major).
   'multer@<2.2.0': '>=2.2.0 <3'
+  # postcss <=8.5.11: high arbitrary file read via attacker-controlled sourceMappingURL
+  # in CSS comments, pulled widely (Tailwind, Next.js toolchain). Bump vulnerable 8.x to
+  # the patched 8.5.x line (same major).
+  'postcss@<=8.5.11': '>=8.5.12 <9'
   # nodemailer <=9.0.0: high raw-option bypass of disableFileAccess/disableUrlAccess enabling
   # SSRF (GHSA-p6gq-j5cr-w38f), direct dependency. Bump to patched 9.0.x (same major).
   'nodemailer@<=9.0.0': '>=9.0.1 <10'
@@ -65,9 +69,9 @@ overrides:
   # ws <8.21.0: high memory-exhaustion DoS from tiny fragments (GHSA-96hv-2xvq-fx4p), pulled by
   # @toruslabs/solana-embed -> socket.io-client -> engine.io-client. Bump to patched 8.21.x.
   'ws@<8.21.0': '>=8.21.0 <9'
-  # happy-dom <20.0.0: critical VM-context-escape RCE (GHSA-96g7-g7g9-jxw8), pulled transitively
-  # via vitest's optional peer. Bump vulnerable <20 to patched 20.x (same DOM API).
-  'happy-dom@<20.0.0': '>=20.0.0 <21'
+  # happy-dom <20.8.9: critical VM-context-escape RCE (GHSA-96g7-g7g9-jxw8) + follow-up
+  # advisory. Bump to patched 20.8.x (same DOM API).
+  'happy-dom@<20.8.9': '^20.8.9'
   # glob >=10.2.0 <10.5.0: high command injection via -c/--cmd (GHSA-5j98-mcp5-4vw2),
   # pulled by @nestjs/cli. Bump to patched 10.5.x.
   'glob@>=10.2.0 <10.5.0': '>=10.5.0'
@@ -80,6 +84,18 @@ overrides:
   # langsmith <0.6.0: high public prompt pull deserializes untrusted manifests
   # (GHSA-3644-q5cj-c5c7), pulled by older @langchain/core paths. Bump to patched 0.6+.
   langsmith: '>=0.6.0'
+  # Migrated from package.json "pnpm.overrides" (ignored by pnpm 10.34+); this file is
+  # the single source of truth for overrides.
+  '@opentelemetry/propagator-jaeger@<2.9.0': '^2.9.0'
+  'axios@>=1.15.2 <1.18.0': '^1.18.0'
+  'brace-expansion@1': '~1.1.16'
+  'brace-expansion@2': '~2.1.2'
+  'brace-expansion@>=3.0.0 <5.0.7': '^5.0.7'
+  'fast-uri@>=3.0.0 <3.1.4': '^3.1.4'
+  'immutable@5': '^5.1.8'
+  'js-yaml@>=4.0.0 <4.3.0': '^4.3.0'
+  'sharp@<0.35.0': '^0.35.0'
+  'svgo@3': '^3.3.4'
 
 onlyBuiltDependencies:
   - bcrypt
