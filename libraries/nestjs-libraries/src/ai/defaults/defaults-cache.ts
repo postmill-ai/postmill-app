@@ -1,4 +1,4 @@
-import { createHash } from 'crypto';
+import { createHmac } from 'crypto';
 import { ioRedis } from '@gitroom/nestjs-libraries/redis/redis.service';
 
 /**
@@ -36,7 +36,11 @@ function modelListCacheKey(
   credentials: Record<string, string>,
   scope?: string,
 ): string {
-  const hash = createHash('sha256')
+  // HMAC with a fixed domain-separation key, NOT password storage: this derives
+  // an opaque cache-key discriminator from the credential material so a
+  // credential change lands on a fresh Redis key. Nothing is ever verified
+  // against it, and only 16 hex chars survive into the key.
+  const hash = createHmac('sha256', 'postmill:model-list-cache:v1')
     .update(`${credentials.apiKey ?? ''}|${credentials.baseURL ?? ''}`)
     .digest('hex')
     .slice(0, 16);
