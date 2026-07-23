@@ -235,7 +235,7 @@ export class MediaDefaultsService {
     candidate: { providerId: string; version: string; metadata: any },
     category: string,
     orgId: string,
-  ) {
+  ): Promise<{ id: string; label?: string }[] | undefined> {
     try {
       const config = await this._orgMediaProviderSettings.getConfigForProvider(
         orgId,
