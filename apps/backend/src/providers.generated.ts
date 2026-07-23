@@ -53,6 +53,7 @@ import instagramstandaloneModules from '@gitroom/provider-instagram-standalone';
 import ipvanishModules from '@gitroom/provider-ipvanish';
 import isgdModules from '@gitroom/provider-isgd';
 import kickModules from '@gitroom/provider-kick';
+import kimiModules from '@gitroom/provider-kimi';
 import lemmyModules from '@gitroom/provider-lemmy';
 import leonardoModules from '@gitroom/provider-leonardo';
 import lightningModules from '@gitroom/provider-lightning';
@@ -202,6 +203,7 @@ export const providerModules: ProviderModule<any, any>[] = [
   ...ipvanishModules,
   ...isgdModules,
   ...kickModules,
+  ...kimiModules,
   ...lemmyModules,
   ...leonardoModules,
   ...lightningModules,

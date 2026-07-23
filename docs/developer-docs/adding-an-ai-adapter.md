@@ -1,6 +1,6 @@
 # Adding an AI Provider Adapter
 
-Postmill's AI layer supports 25 providers through a pluggable adapter system. Each adapter lives in its own workspace package under `libraries/providers/<id>/` and is registered into the `ProviderKernel` at backend boot.
+Postmill's AI layer supports 26 providers through a pluggable adapter system. Each adapter lives in its own workspace package under `libraries/providers/<id>/` and is registered into the `ProviderKernel` at backend boot.
 
 > Verified against v1.1.0 (2026-07-23)
 
@@ -290,7 +290,17 @@ export default [yourproviderAiModule];
 
 ## Step 4: Register in the backend manifest
 
-Add the import and array entry to `apps/backend/src/providers.generated.ts`:
+Wire the workspace package up in three places:
+
+1. `apps/backend/package.json` — add `"@gitroom/provider-yourprovider": "workspace:*"` (alphabetical), then run `pnpm install`.
+2. `tsconfig.base.json` — add the two path aliases (alphabetical):
+
+```json
+"@gitroom/provider-yourprovider": ["libraries/providers/yourprovider/src"],
+"@gitroom/provider-yourprovider/*": ["libraries/providers/yourprovider/src/*"],
+```
+
+3. Add the import and array entry to `apps/backend/src/providers.generated.ts`:
 
 ```typescript
 import yourproviderModules from '@gitroom/provider-yourprovider';
@@ -330,8 +340,8 @@ Mock the underlying AI SDK or the injected `SafeFetchPort` rather than making re
 
 `openai`, `anthropic`, `google`, `bedrock`, `vertex`, `azure`, `groq`, `fireworks`, `togetherai`, `deepseek`, `mistral`, `cohere`, `perplexity`, `xai`, `gateway`, `openrouter`
 
-### OpenAI-compatible adapters (9)
+### OpenAI-compatible adapters (10)
 
-`siliconflow`, `deepinfra`, `minimax`, `qwen`, `meta-llama`, `gmihub`, `bitdeer`, `lightning`, `vultr`
+`siliconflow`, `deepinfra`, `minimax`, `qwen`, `meta-llama`, `gmihub`, `bitdeer`, `lightning`, `vultr`, `kimi`
 
-**Total: 25 providers.**
+**Total: 26 providers.**

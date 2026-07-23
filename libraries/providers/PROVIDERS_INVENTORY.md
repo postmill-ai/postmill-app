@@ -6,12 +6,12 @@ kernel vitest alias. One row per **module** (multi-module packages — e.g. `ope
 get multiple rows). The `has-spec?` column reflects whether the **package** contains any
 `*.spec.ts` / `*.int-spec.ts` under `src/**`.
 
-- **Modules:** 163  (== `providerModules.length`)
-- **Packages:** 145  (== real package dirs under `libraries/providers/`, excluding `kernel` and `node_modules`)
-  - Note: `ls -d libraries/providers/*/ | grep -v kernel | wc -l` = **146** on a clean checkout because it also counts the `node_modules/` dir; **145** are real packages. (After a local `--coverage` run a gitignored `coverage/` dir also appears, making the raw count **147** — both `node_modules/` and `coverage/` are non-package artifacts.)
-- **Packages with at least one spec:** 91 / 145  (media adapters + the magnific content pack gained recorded-fixture `*.int-spec.ts` behavioral tests via the shared `kernel/src/testing/media-int-helpers.ts`)
+- **Modules:** 164  (== `providerModules.length`)
+- **Packages:** 146  (== real package dirs under `libraries/providers/`, excluding `kernel` and `node_modules`)
+  - Note: `ls -d libraries/providers/*/ | grep -v kernel | wc -l` = **147** on a clean checkout because it also counts the `node_modules/` dir; **146** are real packages. (After a local `--coverage` run a gitignored `coverage/` dir also appears, making the raw count **148** — both `node_modules/` and `coverage/` are non-package artifacts.)
+- **Packages with at least one spec:** 92 / 146  (media adapters + the magnific content pack gained recorded-fixture `*.int-spec.ts` behavioral tests via the shared `kernel/src/testing/media-int-helpers.ts`)
 
-Modules per domain: ai=25, auth=6, contentpack=4, email=7, media=35, shortlink=20, social=36, storage=14, vpn=16
+Modules per domain: ai=26, auth=6, contentpack=4, email=7, media=35, shortlink=20, social=36, storage=14, vpn=16
 
 | package | domain | providerId | version | status | has-spec? |
 |---|---|---|---|---|---|
@@ -27,6 +27,7 @@ Modules per domain: ai=25, auth=6, contentpack=4, email=7, media=35, shortlink=2
 | gmihub | ai | gmihub | v1 | active | no |
 | google | ai | google | v1 | active | yes |
 | groq | ai | groq | v1 | active | yes |
+| kimi | ai | kimi | v1 | active | yes |
 | lightning | ai | lightning | v1 | active | no |
 | meta-llama | ai | meta-llama | v1 | active | no |
 | minimax | ai | minimax | v1 | active | no |

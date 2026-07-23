@@ -70,6 +70,7 @@
     "@gitroom/provider-isgd": "workspace:*",
     "@gitroom/provider-kernel": "workspace:*",
     "@gitroom/provider-kick": "workspace:*",
+    "@gitroom/provider-kimi": "workspace:*",
     "@gitroom/provider-lemmy": "workspace:*",
     "@gitroom/provider-leonardo": "workspace:*",
     "@gitroom/provider-lightning": "workspace:*",

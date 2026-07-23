@@ -388,6 +388,12 @@
       "@gitroom/provider-kick/*": [
         "libraries/providers/kick/src/*"
       ],
+      "@gitroom/provider-kimi": [
+        "libraries/providers/kimi/src"
+      ],
+      "@gitroom/provider-kimi/*": [
+        "libraries/providers/kimi/src/*"
+      ],
       "@gitroom/provider-lemmy": [
         "libraries/providers/lemmy/src"
       ],
