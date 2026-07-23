@@ -3,15 +3,15 @@
 import {
   PostComment,
   withProvider,
-} from '@gitroom/frontend/components/composer/providers/high.order.provider';
-import { Checkbox } from '@gitroom/react/form/checkbox';
-import { Input } from '@gitroom/react/form/input';
-import { useT } from '@gitroom/react/translation/get.transation.service.client';
-import { useSettings } from '@gitroom/frontend/components/launches/helpers/use.values';
-import { LinkedinDto } from '@gitroom/nestjs-libraries/dtos/posts/providers-settings/linkedin.dto';
-import { LinkedinPreview } from '@gitroom/frontend/components/composer/providers/linkedin/linkedin.preview';
-import { PollBuilder } from '@gitroom/frontend/components/composer/providers/shared/poll.builder';
-import { FirstCommentField } from '@gitroom/frontend/components/composer/providers/shared/first-comment.field';
+} from '@postmill-ai/frontend/components/composer/providers/high.order.provider';
+import { Checkbox } from '@postmill-ai/react/form/checkbox';
+import { Input } from '@postmill-ai/react/form/input';
+import { useT } from '@postmill-ai/react/translation/get.transation.service.client';
+import { useSettings } from '@postmill-ai/frontend/components/launches/helpers/use.values';
+import { LinkedinDto } from '@postmill-ai/nestjs-libraries/dtos/posts/providers-settings/linkedin.dto';
+import { LinkedinPreview } from '@postmill-ai/frontend/components/composer/providers/linkedin/linkedin.preview';
+import { PollBuilder } from '@postmill-ai/frontend/components/composer/providers/shared/poll.builder';
+import { FirstCommentField } from '@postmill-ai/frontend/components/composer/providers/shared/first-comment.field';
 
 const LinkedInSettings = () => {
   const t = useT();

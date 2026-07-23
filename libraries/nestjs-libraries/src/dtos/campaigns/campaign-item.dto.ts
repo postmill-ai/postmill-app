@@ -1,5 +1,5 @@
 import { IsIn, IsString } from 'class-validator';
-import { ENTITY_SLUGS } from '@gitroom/nestjs-libraries/database/prisma/campaigns/campaign-entity.types';
+import { ENTITY_SLUGS } from '@postmill-ai/nestjs-libraries/database/prisma/campaigns/campaign-entity.types';
 
 export class CampaignItemDto {
   @IsString()

@@ -11,8 +11,8 @@ import React, {
   createContext,
 } from 'react';
 import { CopilotChat, CopilotKitCSSProperties, InputProps, UserMessageProps } from '@copilotkit/react-ui';
-import { Input } from '@gitroom/frontend/components/agents/agent.input';
-import { useModals } from '@gitroom/frontend/components/layout/new-modal';
+import { Input } from '@postmill-ai/frontend/components/agents/agent.input';
+import { useModals } from '@postmill-ai/frontend/components/layout/new-modal';
 import {
   CopilotKit,
   useCopilotAction,
@@ -22,27 +22,27 @@ import {
 import {
   MediaPortal,
   PropertiesContext,
-} from '@gitroom/frontend/components/agents/agent';
-import { useVariables } from '@gitroom/react/helpers/variable.context';
+} from '@postmill-ai/frontend/components/agents/agent';
+import { useVariables } from '@postmill-ai/react/helpers/variable.context';
 import { useParams, useRouter } from 'next/navigation';
-import { Button } from '@gitroom/react/form/button';
-import { useFetch } from '@gitroom/helpers/utils/custom.fetch';
+import { Button } from '@postmill-ai/react/form/button';
+import { useFetch } from '@postmill-ai/helpers/utils/custom.fetch';
 import { TextMessage } from '@copilotkit/runtime-client-gql';
-import { Composer } from '@gitroom/frontend/components/composer/composer';
+import { Composer } from '@postmill-ai/frontend/components/composer/composer';
 import dayjs from 'dayjs';
-import { makeId } from '@gitroom/nestjs-libraries/services/make.is';
-import { ExistingDataContextProvider } from '@gitroom/frontend/components/launches/helpers/use.existing.data';
-import { useT } from '@gitroom/react/translation/get.transation.service.client';
-import { SafeContent } from '@gitroom/frontend/components/shared/safe-content';
-import { csrfHeader } from '@gitroom/helpers/utils/csrf.header';
+import { makeId } from '@postmill-ai/nestjs-libraries/services/make.is';
+import { ExistingDataContextProvider } from '@postmill-ai/frontend/components/launches/helpers/use.existing.data';
+import { useT } from '@postmill-ai/react/translation/get.transation.service.client';
+import { SafeContent } from '@postmill-ai/frontend/components/shared/safe-content';
+import { csrfHeader } from '@postmill-ai/helpers/utils/csrf.header';
 import Link from 'next/link';
 import {
   useAiActive,
   AI_SETUP_HREF,
-} from '@gitroom/frontend/components/layout/use-ai-active';
-import { useToaster } from '@gitroom/react/toaster/toaster';
+} from '@postmill-ai/frontend/components/layout/use-ai-active';
+import { useToaster } from '@postmill-ai/react/toaster/toaster';
 import useSWR, { useSWRConfig } from 'swr';
-import { AgentContextBridge } from '@gitroom/frontend/components/agent/agent-context-bridge';
+import { AgentContextBridge } from '@postmill-ai/frontend/components/agent/agent-context-bridge';
 
 export interface MediaAttachment {
   id: string;
@@ -608,7 +608,7 @@ const ConfirmMediaStudioGenerateCard: FC<{
 
 // Keyed by the tool `name` the stream actually emits. These MUST stay in lockstep
 // with the backend tool-name arrays (`CONTENT/MEDIA/ANALYTICS/OPS_TOOL_NAMES` in
-// `@gitroom/nestjs-libraries/chat/agents/*.agent` and `SUPERVISOR_TOOL_NAMES` in
+// `@postmill-ai/nestjs-libraries/chat/agents/*.agent` and `SUPERVISOR_TOOL_NAMES` in
 // `load.tools.service`) — those modules pull heavy server deps, so we can't import
 // them into the client bundle; `agent.chat.spec.tsx` reads them off disk and fails
 // on any drift instead. Under the supervisor the top-level stream emits the

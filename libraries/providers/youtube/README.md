@@ -1,4 +1,4 @@
-# @gitroom/provider-youtube
+# @postmill-ai/provider-youtube
 
 YouTube social provider (`social/youtube@v1`) and analytics.
 

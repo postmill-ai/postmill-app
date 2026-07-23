@@ -4,7 +4,7 @@ import path from 'path';
 export default defineConfig({
   resolve: {
     alias: {
-      '@gitroom/extension': path.resolve(__dirname, 'src'),
+      '@postmill-ai/extension': path.resolve(__dirname, 'src'),
     },
   },
   test: {

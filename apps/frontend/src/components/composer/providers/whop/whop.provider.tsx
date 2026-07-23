@@ -3,15 +3,15 @@
 import {
   PostComment,
   withProvider,
-} from '@gitroom/frontend/components/composer/providers/high.order.provider';
-import { WhopDto } from '@gitroom/nestjs-libraries/dtos/posts/providers-settings/whop.dto';
-import { Input } from '@gitroom/react/form/input';
-import { useSettings } from '@gitroom/frontend/components/launches/helpers/use.values';
-import { WhopCompanySelect } from '@gitroom/frontend/components/composer/providers/whop/whop.company.select';
-import { WhopExperienceSelect } from '@gitroom/frontend/components/composer/providers/whop/whop.experience.select';
+} from '@postmill-ai/frontend/components/composer/providers/high.order.provider';
+import { WhopDto } from '@postmill-ai/nestjs-libraries/dtos/posts/providers-settings/whop.dto';
+import { Input } from '@postmill-ai/react/form/input';
+import { useSettings } from '@postmill-ai/frontend/components/launches/helpers/use.values';
+import { WhopCompanySelect } from '@postmill-ai/frontend/components/composer/providers/whop/whop.company.select';
+import { WhopExperienceSelect } from '@postmill-ai/frontend/components/composer/providers/whop/whop.experience.select';
 import { FC, useState } from 'react';
-import { FirstCommentField } from '@gitroom/frontend/components/composer/providers/shared/first-comment.field';
-import { useT } from '@gitroom/react/translation/get.transation.service.client';
+import { FirstCommentField } from '@postmill-ai/frontend/components/composer/providers/shared/first-comment.field';
+import { useT } from '@postmill-ai/react/translation/get.transation.service.client';
 
 const WhopSettings: FC = () => {
   const form = useSettings();

@@ -1,7 +1,7 @@
 'use client';
 
 import { FC, useMemo } from 'react';
-import { useT } from '@gitroom/react/translation/get.transation.service.client';
+import { useT } from '@postmill-ai/react/translation/get.transation.service.client';
 import { PublicAnalyticsReport } from '../hooks/usePublicAnalyticsReport';
 import { StatTile } from '../kit/stat-tile';
 import { LineChart } from '../charts/line.chart';

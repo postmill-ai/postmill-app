@@ -1,7 +1,7 @@
 import 'reflect-metadata';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { HttpException } from '@nestjs/common';
-import { REQUIRE_PERMISSION_KEY } from '@gitroom/backend/services/auth/rbac/require-permission.decorator';
+import { REQUIRE_PERMISSION_KEY } from '@postmill-ai/backend/services/auth/rbac/require-permission.decorator';
 import { FilesController } from './files.controller';
 
 const mockImportFromPath = vi.fn();
@@ -30,7 +30,7 @@ const mockGetFilesByFolder = vi.fn();
 const mockGetFiles = vi.fn();
 const mockImportFromUrl = vi.fn();
 
-vi.mock('@gitroom/nestjs-libraries/database/prisma/file/file.service', () => ({
+vi.mock('@postmill-ai/nestjs-libraries/database/prisma/file/file.service', () => ({
   FileService: class {
     importFromPath = mockImportFromPath;
     saveFile = mockSaveFile;
@@ -63,7 +63,7 @@ vi.mock('@gitroom/nestjs-libraries/database/prisma/file/file.service', () => ({
 const mockResolveAdapterForFolderWithConfigId = vi.fn();
 const mockAssertWithinProviderQuota = vi.fn();
 
-vi.mock('@gitroom/nestjs-libraries/database/prisma/storage/storage.service', () => ({
+vi.mock('@postmill-ai/nestjs-libraries/database/prisma/storage/storage.service', () => ({
   StorageService: class {
     resolveAdapterForFolderWithConfigId = mockResolveAdapterForFolderWithConfigId;
     assertWithinProviderQuota = mockAssertWithinProviderQuota;
@@ -73,7 +73,7 @@ vi.mock('@gitroom/nestjs-libraries/database/prisma/storage/storage.service', () 
 const mockImportContentPackAsset = vi.fn();
 const mockTriggerDownload = vi.fn();
 
-vi.mock('@gitroom/nestjs-libraries/media/stock/stock-media.service', () => ({
+vi.mock('@postmill-ai/nestjs-libraries/media/stock/stock-media.service', () => ({
   StockMediaService: class {
     importContentPackAsset = mockImportContentPackAsset;
     triggerDownload = mockTriggerDownload;
@@ -96,17 +96,17 @@ vi.mock('@gitroom/nestjs-libraries/media/stock/stock-media.service', () => ({
 
 const mockListManifests = vi.fn();
 
-vi.mock('@gitroom/nestjs-libraries/providers/provider-resolution.service', () => ({
+vi.mock('@postmill-ai/nestjs-libraries/providers/provider-resolution.service', () => ({
   ProviderResolutionService: class {
     listManifests = mockListManifests;
   },
 }));
 
-import { FileService } from '@gitroom/nestjs-libraries/database/prisma/file/file.service';
-import { StorageService } from '@gitroom/nestjs-libraries/database/prisma/storage/storage.service';
-import { StockMediaService } from '@gitroom/nestjs-libraries/media/stock/stock-media.service';
-import { ProviderResolutionService } from '@gitroom/nestjs-libraries/providers/provider-resolution.service';
-import { ContentPackDailyCapError } from '@gitroom/nestjs-libraries/media/stock/content-packs/content-pack.interface';
+import { FileService } from '@postmill-ai/nestjs-libraries/database/prisma/file/file.service';
+import { StorageService } from '@postmill-ai/nestjs-libraries/database/prisma/storage/storage.service';
+import { StockMediaService } from '@postmill-ai/nestjs-libraries/media/stock/stock-media.service';
+import { ProviderResolutionService } from '@postmill-ai/nestjs-libraries/providers/provider-resolution.service';
+import { ContentPackDailyCapError } from '@postmill-ai/nestjs-libraries/media/stock/content-packs/content-pack.interface';
 
 const org = { id: 'org-1' } as any;
 

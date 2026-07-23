@@ -1,6 +1,6 @@
-import { PrismaRepository } from '@gitroom/nestjs-libraries/database/prisma/prisma.service';
+import { PrismaRepository } from '@postmill-ai/nestjs-libraries/database/prisma/prisma.service';
 import { Injectable } from '@nestjs/common';
-import { SignatureDto } from '@gitroom/nestjs-libraries/dtos/signature/signature.dto';
+import { SignatureDto } from '@postmill-ai/nestjs-libraries/dtos/signature/signature.dto';
 
 const SIGNATURE_INCLUDE = {
   picture: { select: { id: true, path: true } },

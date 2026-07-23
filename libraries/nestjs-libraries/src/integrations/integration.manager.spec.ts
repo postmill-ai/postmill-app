@@ -51,95 +51,95 @@ const { createMockProvider } = vi.hoisted(() => {
 // the IntegrationManager methods.
 // ---------------------------------------------------------------------------
 
-vi.mock('@gitroom/nestjs-libraries/integrations/social/x.provider', () => ({
+vi.mock('@postmill-ai/nestjs-libraries/integrations/social/x.provider', () => ({
   XProvider: createMockProvider('x', 'X', {
     extensionCookies: [{ name: 'auth_token', domain: 'x.com' }],
   }),
 }));
 
-vi.mock('@gitroom/nestjs-libraries/integrations/social/linkedin.provider', () => ({
+vi.mock('@postmill-ai/nestjs-libraries/integrations/social/linkedin.provider', () => ({
   LinkedinProvider: createMockProvider('linkedin', 'LinkedIn'),
 }));
 
-vi.mock('@gitroom/nestjs-libraries/integrations/social/linkedin.page.provider', () => ({
+vi.mock('@postmill-ai/nestjs-libraries/integrations/social/linkedin.page.provider', () => ({
   LinkedinPageProvider: createMockProvider('linkedinpage', 'LinkedIn Page'),
 }));
 
-vi.mock('@gitroom/nestjs-libraries/integrations/social/reddit.provider', () => ({
+vi.mock('@postmill-ai/nestjs-libraries/integrations/social/reddit.provider', () => ({
   RedditProvider: createMockProvider('reddit', 'Reddit'),
 }));
 
-vi.mock('@gitroom/nestjs-libraries/integrations/social/instagram.provider', () => ({
+vi.mock('@postmill-ai/nestjs-libraries/integrations/social/instagram.provider', () => ({
   InstagramProvider: createMockProvider('instagram', 'Instagram'),
 }));
 
-vi.mock('@gitroom/nestjs-libraries/integrations/social/instagram.standalone.provider', () => ({
+vi.mock('@postmill-ai/nestjs-libraries/integrations/social/instagram.standalone.provider', () => ({
   InstagramStandaloneProvider: createMockProvider('instagramstandalone', 'Instagram Standalone'),
 }));
 
-vi.mock('@gitroom/nestjs-libraries/integrations/social/facebook.provider', () => ({
+vi.mock('@postmill-ai/nestjs-libraries/integrations/social/facebook.provider', () => ({
   FacebookProvider: createMockProvider('facebook', 'Facebook'),
 }));
 
-vi.mock('@gitroom/nestjs-libraries/integrations/social/threads.provider', () => ({
+vi.mock('@postmill-ai/nestjs-libraries/integrations/social/threads.provider', () => ({
   ThreadsProvider: createMockProvider('threads', 'Threads'),
 }));
 
-vi.mock('@gitroom/nestjs-libraries/integrations/social/youtube.provider', () => ({
+vi.mock('@postmill-ai/nestjs-libraries/integrations/social/youtube.provider', () => ({
   YoutubeProvider: createMockProvider('youtube', 'YouTube'),
 }));
 
-vi.mock('@gitroom/nestjs-libraries/integrations/social/gmb.provider', () => ({
+vi.mock('@postmill-ai/nestjs-libraries/integrations/social/gmb.provider', () => ({
   GmbProvider: createMockProvider('gmb', 'GMB'),
 }));
 
-vi.mock('@gitroom/nestjs-libraries/integrations/social/tiktok.provider', () => ({
+vi.mock('@postmill-ai/nestjs-libraries/integrations/social/tiktok.provider', () => ({
   TiktokProvider: createMockProvider('tiktok', 'TikTok'),
 }));
 
-vi.mock('@gitroom/nestjs-libraries/integrations/social/pinterest.provider', () => ({
+vi.mock('@postmill-ai/nestjs-libraries/integrations/social/pinterest.provider', () => ({
   PinterestProvider: createMockProvider('pinterest', 'Pinterest'),
 }));
 
-vi.mock('@gitroom/nestjs-libraries/integrations/social/dribbble.provider', () => ({
+vi.mock('@postmill-ai/nestjs-libraries/integrations/social/dribbble.provider', () => ({
   DribbbleProvider: createMockProvider('dribbble', 'Dribbble'),
 }));
 
-vi.mock('@gitroom/nestjs-libraries/integrations/social/discord.provider', () => ({
+vi.mock('@postmill-ai/nestjs-libraries/integrations/social/discord.provider', () => ({
   DiscordProvider: createMockProvider('discord', 'Discord', {
     externalUrl: async () => ({ client_id: 'd_id', client_secret: 'd_secret' }),
   }),
 }));
 
-vi.mock('@gitroom/nestjs-libraries/integrations/social/slack.provider', () => ({
+vi.mock('@postmill-ai/nestjs-libraries/integrations/social/slack.provider', () => ({
   SlackProvider: createMockProvider('slack', 'Slack'),
 }));
 
-vi.mock('@gitroom/nestjs-libraries/integrations/social/kick.provider', () => ({
+vi.mock('@postmill-ai/nestjs-libraries/integrations/social/kick.provider', () => ({
   KickProvider: createMockProvider('kick', 'Kick'),
 }));
 
-vi.mock('@gitroom/nestjs-libraries/integrations/social/twitch.provider', () => ({
+vi.mock('@postmill-ai/nestjs-libraries/integrations/social/twitch.provider', () => ({
   TwitchProvider: createMockProvider('twitch', 'Twitch'),
 }));
 
-vi.mock('@gitroom/nestjs-libraries/integrations/social/mastodon.provider', () => ({
+vi.mock('@postmill-ai/nestjs-libraries/integrations/social/mastodon.provider', () => ({
   MastodonProvider: createMockProvider('mastodon', 'Mastodon'),
 }));
 
-vi.mock('@gitroom/nestjs-libraries/integrations/social/bluesky.provider', () => ({
+vi.mock('@postmill-ai/nestjs-libraries/integrations/social/bluesky.provider', () => ({
   BlueskyProvider: createMockProvider('bluesky', 'Bluesky'),
 }));
 
-vi.mock('@gitroom/nestjs-libraries/integrations/social/lemmy.provider', () => ({
+vi.mock('@postmill-ai/nestjs-libraries/integrations/social/lemmy.provider', () => ({
   LemmyProvider: createMockProvider('lemmy', 'Lemmy'),
 }));
 
-vi.mock('@gitroom/nestjs-libraries/integrations/social/farcaster.provider', () => ({
+vi.mock('@postmill-ai/nestjs-libraries/integrations/social/farcaster.provider', () => ({
   FarcasterProvider: createMockProvider('farcaster', 'Farcaster'),
 }));
 
-vi.mock('@gitroom/nestjs-libraries/integrations/social/telegram.provider', () => ({
+vi.mock('@postmill-ai/nestjs-libraries/integrations/social/telegram.provider', () => ({
   TelegramProvider: createMockProvider('telegram', 'Telegram', {
     isWeb3: true,
     customFields: async () => [
@@ -154,117 +154,117 @@ vi.mock('@gitroom/nestjs-libraries/integrations/social/telegram.provider', () =>
   }),
 }));
 
-vi.mock('@gitroom/nestjs-libraries/integrations/social/nostr.provider', () => ({
+vi.mock('@postmill-ai/nestjs-libraries/integrations/social/nostr.provider', () => ({
   NostrProvider: createMockProvider('nostr', 'Nostr'),
 }));
 
-vi.mock('@gitroom/nestjs-libraries/integrations/social/vk.provider', () => ({
+vi.mock('@postmill-ai/nestjs-libraries/integrations/social/vk.provider', () => ({
   VkProvider: createMockProvider('vk', 'VK'),
 }));
 
-vi.mock('@gitroom/nestjs-libraries/integrations/social/medium.provider', () => ({
+vi.mock('@postmill-ai/nestjs-libraries/integrations/social/medium.provider', () => ({
   MediumProvider: createMockProvider('medium', 'Medium'),
 }));
 
-vi.mock('@gitroom/nestjs-libraries/integrations/social/dev.to.provider', () => ({
+vi.mock('@postmill-ai/nestjs-libraries/integrations/social/dev.to.provider', () => ({
   DevToProvider: createMockProvider('devto', 'DevTo'),
 }));
 
-vi.mock('@gitroom/nestjs-libraries/integrations/social/hashnode.provider', () => ({
+vi.mock('@postmill-ai/nestjs-libraries/integrations/social/hashnode.provider', () => ({
   HashnodeProvider: createMockProvider('hashnode', 'Hashnode'),
 }));
 
-vi.mock('@gitroom/nestjs-libraries/integrations/social/wordpress.provider', () => ({
+vi.mock('@postmill-ai/nestjs-libraries/integrations/social/wordpress.provider', () => ({
   WordpressProvider: createMockProvider('wordpress', 'WordPress'),
 }));
 
-vi.mock('@gitroom/nestjs-libraries/integrations/social/listmonk.provider', () => ({
+vi.mock('@postmill-ai/nestjs-libraries/integrations/social/listmonk.provider', () => ({
   ListmonkProvider: createMockProvider('listmonk', 'Listmonk'),
 }));
 
-vi.mock('@gitroom/nestjs-libraries/integrations/social/moltbook.provider', () => ({
+vi.mock('@postmill-ai/nestjs-libraries/integrations/social/moltbook.provider', () => ({
   MoltbookProvider: createMockProvider('moltbook', 'Moltbook'),
 }));
 
-vi.mock('@gitroom/nestjs-libraries/integrations/social/whop.provider', () => ({
+vi.mock('@postmill-ai/nestjs-libraries/integrations/social/whop.provider', () => ({
   WhopProvider: createMockProvider('whop', 'Whop'),
 }));
 
-vi.mock('@gitroom/nestjs-libraries/integrations/social/skool.provider', () => ({
+vi.mock('@postmill-ai/nestjs-libraries/integrations/social/skool.provider', () => ({
   SkoolProvider: createMockProvider('skool', 'Skool'),
 }));
 
-vi.mock('@gitroom/nestjs-libraries/integrations/social/mewe.provider', () => ({
+vi.mock('@postmill-ai/nestjs-libraries/integrations/social/mewe.provider', () => ({
   MeweProvider: createMockProvider('mewe', 'MeWe'),
 }));
 
-vi.mock('@gitroom/nestjs-libraries/integrations/social/tumblr.provider', () => ({
+vi.mock('@postmill-ai/nestjs-libraries/integrations/social/tumblr.provider', () => ({
   TumblrProvider: createMockProvider('tumblr', 'Tumblr'),
 }));
 
-vi.mock('@gitroom/nestjs-libraries/integrations/social/pixelfed.provider', () => ({
+vi.mock('@postmill-ai/nestjs-libraries/integrations/social/pixelfed.provider', () => ({
   PixelfedProvider: createMockProvider('pixelfed', 'Pixelfed'),
 }));
 
-vi.mock('@gitroom/nestjs-libraries/integrations/social/peertube.provider', () => ({
+vi.mock('@postmill-ai/nestjs-libraries/integrations/social/peertube.provider', () => ({
   PeerTubeProvider: createMockProvider('peertube', 'PeerTube'),
 }));
 
 // Mock SocialAbstract to avoid pulling in sharp, temporalio, etc.
-vi.mock('@gitroom/nestjs-libraries/integrations/social.abstract', () => ({
+vi.mock('@postmill-ai/nestjs-libraries/integrations/social.abstract', () => ({
   SocialAbstract: class {},
 }));
 
 // IntegrationManager injects the ProviderKernel DI token from providers.module;
 // stub the module so this spec doesn't pull in the kernel's heavy provider graph
 // (the manager is constructed manually with a fake kernel below).
-vi.mock('@gitroom/nestjs-libraries/providers/providers.module', () => ({
+vi.mock('@postmill-ai/nestjs-libraries/providers/providers.module', () => ({
   PROVIDER_KERNEL: Symbol('ProviderKernel'),
 }));
 
 // ---------------------------------------------------------------------------
 // Now it's safe to import the real module under test.
 // ---------------------------------------------------------------------------
-import { IntegrationManager } from '@gitroom/nestjs-libraries/integrations/integration.manager';
+import { IntegrationManager } from '@postmill-ai/nestjs-libraries/integrations/integration.manager';
 
 // Populate the registry with the mock providers (mirrors the pre-7.5.1 static
 // list, which the now-stubbed registration module would otherwise have filled).
-import { XProvider } from '@gitroom/nestjs-libraries/integrations/social/x.provider';
-import { LinkedinProvider } from '@gitroom/nestjs-libraries/integrations/social/linkedin.provider';
-import { LinkedinPageProvider } from '@gitroom/nestjs-libraries/integrations/social/linkedin.page.provider';
-import { RedditProvider } from '@gitroom/nestjs-libraries/integrations/social/reddit.provider';
-import { InstagramProvider } from '@gitroom/nestjs-libraries/integrations/social/instagram.provider';
-import { InstagramStandaloneProvider } from '@gitroom/nestjs-libraries/integrations/social/instagram.standalone.provider';
-import { FacebookProvider } from '@gitroom/nestjs-libraries/integrations/social/facebook.provider';
-import { ThreadsProvider } from '@gitroom/nestjs-libraries/integrations/social/threads.provider';
-import { YoutubeProvider } from '@gitroom/nestjs-libraries/integrations/social/youtube.provider';
-import { GmbProvider } from '@gitroom/nestjs-libraries/integrations/social/gmb.provider';
-import { TiktokProvider } from '@gitroom/nestjs-libraries/integrations/social/tiktok.provider';
-import { PinterestProvider } from '@gitroom/nestjs-libraries/integrations/social/pinterest.provider';
-import { DribbbleProvider } from '@gitroom/nestjs-libraries/integrations/social/dribbble.provider';
-import { DiscordProvider } from '@gitroom/nestjs-libraries/integrations/social/discord.provider';
-import { SlackProvider } from '@gitroom/nestjs-libraries/integrations/social/slack.provider';
-import { KickProvider } from '@gitroom/nestjs-libraries/integrations/social/kick.provider';
-import { TwitchProvider } from '@gitroom/nestjs-libraries/integrations/social/twitch.provider';
-import { MastodonProvider } from '@gitroom/nestjs-libraries/integrations/social/mastodon.provider';
-import { BlueskyProvider } from '@gitroom/nestjs-libraries/integrations/social/bluesky.provider';
-import { LemmyProvider } from '@gitroom/nestjs-libraries/integrations/social/lemmy.provider';
-import { FarcasterProvider } from '@gitroom/nestjs-libraries/integrations/social/farcaster.provider';
-import { TelegramProvider } from '@gitroom/nestjs-libraries/integrations/social/telegram.provider';
-import { NostrProvider } from '@gitroom/nestjs-libraries/integrations/social/nostr.provider';
-import { VkProvider } from '@gitroom/nestjs-libraries/integrations/social/vk.provider';
-import { MediumProvider } from '@gitroom/nestjs-libraries/integrations/social/medium.provider';
-import { DevToProvider } from '@gitroom/nestjs-libraries/integrations/social/dev.to.provider';
-import { HashnodeProvider } from '@gitroom/nestjs-libraries/integrations/social/hashnode.provider';
-import { WordpressProvider } from '@gitroom/nestjs-libraries/integrations/social/wordpress.provider';
-import { ListmonkProvider } from '@gitroom/nestjs-libraries/integrations/social/listmonk.provider';
-import { MoltbookProvider } from '@gitroom/nestjs-libraries/integrations/social/moltbook.provider';
-import { WhopProvider } from '@gitroom/nestjs-libraries/integrations/social/whop.provider';
-import { SkoolProvider } from '@gitroom/nestjs-libraries/integrations/social/skool.provider';
-import { MeweProvider } from '@gitroom/nestjs-libraries/integrations/social/mewe.provider';
-import { TumblrProvider } from '@gitroom/nestjs-libraries/integrations/social/tumblr.provider';
-import { PixelfedProvider } from '@gitroom/nestjs-libraries/integrations/social/pixelfed.provider';
-import { PeerTubeProvider } from '@gitroom/nestjs-libraries/integrations/social/peertube.provider';
+import { XProvider } from '@postmill-ai/nestjs-libraries/integrations/social/x.provider';
+import { LinkedinProvider } from '@postmill-ai/nestjs-libraries/integrations/social/linkedin.provider';
+import { LinkedinPageProvider } from '@postmill-ai/nestjs-libraries/integrations/social/linkedin.page.provider';
+import { RedditProvider } from '@postmill-ai/nestjs-libraries/integrations/social/reddit.provider';
+import { InstagramProvider } from '@postmill-ai/nestjs-libraries/integrations/social/instagram.provider';
+import { InstagramStandaloneProvider } from '@postmill-ai/nestjs-libraries/integrations/social/instagram.standalone.provider';
+import { FacebookProvider } from '@postmill-ai/nestjs-libraries/integrations/social/facebook.provider';
+import { ThreadsProvider } from '@postmill-ai/nestjs-libraries/integrations/social/threads.provider';
+import { YoutubeProvider } from '@postmill-ai/nestjs-libraries/integrations/social/youtube.provider';
+import { GmbProvider } from '@postmill-ai/nestjs-libraries/integrations/social/gmb.provider';
+import { TiktokProvider } from '@postmill-ai/nestjs-libraries/integrations/social/tiktok.provider';
+import { PinterestProvider } from '@postmill-ai/nestjs-libraries/integrations/social/pinterest.provider';
+import { DribbbleProvider } from '@postmill-ai/nestjs-libraries/integrations/social/dribbble.provider';
+import { DiscordProvider } from '@postmill-ai/nestjs-libraries/integrations/social/discord.provider';
+import { SlackProvider } from '@postmill-ai/nestjs-libraries/integrations/social/slack.provider';
+import { KickProvider } from '@postmill-ai/nestjs-libraries/integrations/social/kick.provider';
+import { TwitchProvider } from '@postmill-ai/nestjs-libraries/integrations/social/twitch.provider';
+import { MastodonProvider } from '@postmill-ai/nestjs-libraries/integrations/social/mastodon.provider';
+import { BlueskyProvider } from '@postmill-ai/nestjs-libraries/integrations/social/bluesky.provider';
+import { LemmyProvider } from '@postmill-ai/nestjs-libraries/integrations/social/lemmy.provider';
+import { FarcasterProvider } from '@postmill-ai/nestjs-libraries/integrations/social/farcaster.provider';
+import { TelegramProvider } from '@postmill-ai/nestjs-libraries/integrations/social/telegram.provider';
+import { NostrProvider } from '@postmill-ai/nestjs-libraries/integrations/social/nostr.provider';
+import { VkProvider } from '@postmill-ai/nestjs-libraries/integrations/social/vk.provider';
+import { MediumProvider } from '@postmill-ai/nestjs-libraries/integrations/social/medium.provider';
+import { DevToProvider } from '@postmill-ai/nestjs-libraries/integrations/social/dev.to.provider';
+import { HashnodeProvider } from '@postmill-ai/nestjs-libraries/integrations/social/hashnode.provider';
+import { WordpressProvider } from '@postmill-ai/nestjs-libraries/integrations/social/wordpress.provider';
+import { ListmonkProvider } from '@postmill-ai/nestjs-libraries/integrations/social/listmonk.provider';
+import { MoltbookProvider } from '@postmill-ai/nestjs-libraries/integrations/social/moltbook.provider';
+import { WhopProvider } from '@postmill-ai/nestjs-libraries/integrations/social/whop.provider';
+import { SkoolProvider } from '@postmill-ai/nestjs-libraries/integrations/social/skool.provider';
+import { MeweProvider } from '@postmill-ai/nestjs-libraries/integrations/social/mewe.provider';
+import { TumblrProvider } from '@postmill-ai/nestjs-libraries/integrations/social/tumblr.provider';
+import { PixelfedProvider } from '@postmill-ai/nestjs-libraries/integrations/social/pixelfed.provider';
+import { PeerTubeProvider } from '@postmill-ai/nestjs-libraries/integrations/social/peertube.provider';
 
 // The raw social provider singletons now live in the ProviderKernel registry.
 // Build a fake kernel over these mock provider instances; IntegrationManager

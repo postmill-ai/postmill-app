@@ -1,6 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { CampaignEntityType } from '@prisma/client';
-import { PrismaRepository } from '@gitroom/nestjs-libraries/database/prisma/prisma.service';
+import { PrismaRepository } from '@postmill-ai/nestjs-libraries/database/prisma/prisma.service';
 
 // Polymorphic campaign↔entity tags for the 8 non-post types. The POST type is
 // special-cased onto Post.campaignId (this repo also owns that write, since a

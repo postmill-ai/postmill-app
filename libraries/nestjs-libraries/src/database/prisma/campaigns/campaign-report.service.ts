@@ -1,15 +1,15 @@
 import { Injectable } from '@nestjs/common';
 import dayjs from 'dayjs';
 import { Response } from 'express';
-import { CampaignsRepository } from '@gitroom/nestjs-libraries/database/prisma/campaigns/campaigns.repository';
-import { CampaignItemRepository } from '@gitroom/nestjs-libraries/database/prisma/campaigns/campaign-item.repository';
-import { CampaignItemResolverRepository } from '@gitroom/nestjs-libraries/database/prisma/campaigns/campaign-item.resolver';
-import { PostsService } from '@gitroom/nestjs-libraries/database/prisma/posts/posts.service';
-import { ENTITY_ENUM_TO_SLUG } from '@gitroom/nestjs-libraries/database/prisma/campaigns/campaign-entity.types';
-import { campaignReportHtml } from '@gitroom/nestjs-libraries/database/prisma/campaigns/campaign-report.html';
-import { computeGoalProgress } from '@gitroom/nestjs-libraries/database/prisma/campaigns/campaign-goal-progress';
-import { SocialCommentsService } from '@gitroom/nestjs-libraries/database/prisma/social-comments/social.comments.service';
-import { AnalyticsService } from '@gitroom/nestjs-libraries/analytics/analytics.service';
+import { CampaignsRepository } from '@postmill-ai/nestjs-libraries/database/prisma/campaigns/campaigns.repository';
+import { CampaignItemRepository } from '@postmill-ai/nestjs-libraries/database/prisma/campaigns/campaign-item.repository';
+import { CampaignItemResolverRepository } from '@postmill-ai/nestjs-libraries/database/prisma/campaigns/campaign-item.resolver';
+import { PostsService } from '@postmill-ai/nestjs-libraries/database/prisma/posts/posts.service';
+import { ENTITY_ENUM_TO_SLUG } from '@postmill-ai/nestjs-libraries/database/prisma/campaigns/campaign-entity.types';
+import { campaignReportHtml } from '@postmill-ai/nestjs-libraries/database/prisma/campaigns/campaign-report.html';
+import { computeGoalProgress } from '@postmill-ai/nestjs-libraries/database/prisma/campaigns/campaign-goal-progress';
+import { SocialCommentsService } from '@postmill-ai/nestjs-libraries/database/prisma/social-comments/social.comments.service';
+import { AnalyticsService } from '@postmill-ai/nestjs-libraries/analytics/analytics.service';
 import type { CampaignEntityType, State } from '@prisma/client';
 
 // Pre-computed campaign analytics, composed by the controller (from AnalyticsService)

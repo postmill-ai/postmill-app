@@ -3,19 +3,19 @@ import { Injectable } from '@nestjs/common';
 import {
   pricing,
   SELF_HOST_PLAN,
-} from '@gitroom/nestjs-libraries/database/prisma/subscriptions/pricing';
-import { SubscriptionService } from '@gitroom/nestjs-libraries/database/prisma/subscriptions/subscription.service';
-import { PostsService } from '@gitroom/nestjs-libraries/database/prisma/posts/posts.service';
-import { IntegrationService } from '@gitroom/nestjs-libraries/database/prisma/integrations/integration.service';
+} from '@postmill-ai/nestjs-libraries/database/prisma/subscriptions/pricing';
+import { SubscriptionService } from '@postmill-ai/nestjs-libraries/database/prisma/subscriptions/subscription.service';
+import { PostsService } from '@postmill-ai/nestjs-libraries/database/prisma/posts/posts.service';
+import { IntegrationService } from '@postmill-ai/nestjs-libraries/database/prisma/integrations/integration.service';
 import dayjs from 'dayjs';
-import { WebhooksService } from '@gitroom/nestjs-libraries/database/prisma/webhooks/webhooks.service';
-import { OrganizationService } from '@gitroom/nestjs-libraries/database/prisma/organizations/organization.service';
-import { BrandsRepository } from '@gitroom/nestjs-libraries/database/prisma/brands/brands.repository';
-import { WatchlistRepository } from '@gitroom/nestjs-libraries/database/prisma/watchlist/watchlist.repository';
-import { FileRepository } from '@gitroom/nestjs-libraries/database/prisma/file/file.repository';
-import { StorageService } from '@gitroom/nestjs-libraries/database/prisma/storage/storage.service';
+import { WebhooksService } from '@postmill-ai/nestjs-libraries/database/prisma/webhooks/webhooks.service';
+import { OrganizationService } from '@postmill-ai/nestjs-libraries/database/prisma/organizations/organization.service';
+import { BrandsRepository } from '@postmill-ai/nestjs-libraries/database/prisma/brands/brands.repository';
+import { WatchlistRepository } from '@postmill-ai/nestjs-libraries/database/prisma/watchlist/watchlist.repository';
+import { FileRepository } from '@postmill-ai/nestjs-libraries/database/prisma/file/file.repository';
+import { StorageService } from '@postmill-ai/nestjs-libraries/database/prisma/storage/storage.service';
 import { StorageProviderType } from '@prisma/client';
-import { AiSettingsRepository } from '@gitroom/nestjs-libraries/database/prisma/ai-settings/ai-settings.repository';
+import { AiSettingsRepository } from '@postmill-ai/nestjs-libraries/database/prisma/ai-settings/ai-settings.repository';
 import { AuthorizationActions, Sections } from './permission.exception.class';
 
 export type AppAbility = Ability<[AuthorizationActions, Sections]>;

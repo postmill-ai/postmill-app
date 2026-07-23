@@ -1,4 +1,4 @@
-import type { StudioDescriptor } from '@gitroom/frontend/components/media-tools/studio-kit/types';
+import type { StudioDescriptor } from '@postmill-ai/frontend/components/media-tools/studio-kit/types';
 
 // Higgsfield (platform.higgsfield.ai). Field names are the native Higgsfield input params — they ride
 // straight into the submit body (see higgsfield.adapter.ts). Media-field names `image_url`/`audio_url`

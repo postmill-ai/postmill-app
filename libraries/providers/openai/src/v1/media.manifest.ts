@@ -1,4 +1,4 @@
-import { ProviderManifest, type MediaCapability, type MediaProviderCapabilities } from '@gitroom/provider-kernel';
+import { ProviderManifest, type MediaCapability, type MediaProviderCapabilities } from '@postmill-ai/provider-kernel';
 
 export const OPENAI_MEDIA_CAPABILITIES: MediaProviderCapabilities = {
   image: true,

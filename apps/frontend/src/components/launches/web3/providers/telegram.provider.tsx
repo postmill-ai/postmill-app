@@ -2,16 +2,16 @@
 
 import '@neynar/react/dist/style.css';
 import React, { FC, useCallback, useEffect, useRef, useState } from 'react';
-import { Web3ProviderInterface } from '@gitroom/frontend/components/launches/web3/web3.provider.interface';
-import { useFetch } from '@gitroom/helpers/utils/custom.fetch';
-import { timer } from '@gitroom/helpers/utils/timer';
-import { makeId } from '@gitroom/nestjs-libraries/services/make.is';
-import { Input } from '@gitroom/react/form/input';
-import { Button } from '@gitroom/react/form/button';
+import { Web3ProviderInterface } from '@postmill-ai/frontend/components/launches/web3/web3.provider.interface';
+import { useFetch } from '@postmill-ai/helpers/utils/custom.fetch';
+import { timer } from '@postmill-ai/helpers/utils/timer';
+import { makeId } from '@postmill-ai/nestjs-libraries/services/make.is';
+import { Input } from '@postmill-ai/react/form/input';
+import { Button } from '@postmill-ai/react/form/button';
 import copy from 'copy-to-clipboard';
-import { useToaster } from '@gitroom/react/toaster/toaster';
-import { useVariables } from '@gitroom/react/helpers/variable.context';
-import { useT } from '@gitroom/react/translation/get.transation.service.client';
+import { useToaster } from '@postmill-ai/react/toaster/toaster';
+import { useVariables } from '@postmill-ai/react/helpers/variable.context';
+import { useT } from '@postmill-ai/react/translation/get.transation.service.client';
 export const TelegramProvider: FC<Web3ProviderInterface> = (props) => {
   const { onComplete, nonce } = props;
   const { telegramBotName } = useVariables();

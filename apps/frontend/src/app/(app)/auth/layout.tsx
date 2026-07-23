@@ -1,10 +1,10 @@
-import { getT } from '@gitroom/react/translation/get.translation.service.backend';
+import { getT } from '@postmill-ai/react/translation/get.translation.service.backend';
 
 export const dynamic = 'force-dynamic';
 import { ReactNode } from 'react';
 import loadDynamic from 'next/dynamic';
 import Image from 'next/image';
-import { LogoTextComponent } from '@gitroom/frontend/components/ui/logo-text.component';
+import { LogoTextComponent } from '@postmill-ai/frontend/components/ui/logo-text.component';
 const ReturnUrlComponent = loadDynamic(() => import('./return.url.component'));
 
 const features = [

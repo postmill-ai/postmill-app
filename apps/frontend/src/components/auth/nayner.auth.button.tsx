@@ -9,7 +9,7 @@ import React, {
   ReactNode,
 } from 'react';
 import { useNeynarContext } from '@neynar/react';
-import { useT } from '@gitroom/react/translation/get.transation.service.client';
+import { useT } from '@postmill-ai/react/translation/get.transation.service.client';
 export const NeynarAuthButton: FC<{
   children: ReactNode;
   onLogin: (code: string) => void;

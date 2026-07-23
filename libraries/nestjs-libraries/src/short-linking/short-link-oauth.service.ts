@@ -1,8 +1,8 @@
 import { ForbiddenException, Injectable } from '@nestjs/common';
 import { randomBytes, createHash } from 'crypto';
-import { isAllowedReturnUrl } from '@gitroom/nestjs-libraries/security/return-url.validator';
-import { ioRedis } from '@gitroom/nestjs-libraries/redis/redis.service';
-import { OrgShortLinkSettingsService } from '@gitroom/nestjs-libraries/database/prisma/short-links/org-shortlink-settings.service';
+import { isAllowedReturnUrl } from '@postmill-ai/nestjs-libraries/security/return-url.validator';
+import { ioRedis } from '@postmill-ai/nestjs-libraries/redis/redis.service';
+import { OrgShortLinkSettingsService } from '@postmill-ai/nestjs-libraries/database/prisma/short-links/org-shortlink-settings.service';
 
 interface OAuthState {
   codeVerifier: string;

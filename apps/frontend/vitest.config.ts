@@ -6,11 +6,11 @@ export default defineConfig({
   plugins: [react()],
   resolve: {
     alias: {
-      '@gitroom/helpers': path.resolve(__dirname, '../../libraries/helpers/src'),
-      '@gitroom/react': path.resolve(__dirname, '../../libraries/react-shared-libraries/src'),
-      '@gitroom/frontend': path.resolve(__dirname, 'src'),
-      '@gitroom/nestjs-libraries': path.resolve(__dirname, '../../libraries/nestjs-libraries/src'),
-      '@gitroom/provider-kernel': path.resolve(__dirname, '../../libraries/providers/kernel/src'),
+      '@postmill-ai/helpers': path.resolve(__dirname, '../../libraries/helpers/src'),
+      '@postmill-ai/react': path.resolve(__dirname, '../../libraries/react-shared-libraries/src'),
+      '@postmill-ai/frontend': path.resolve(__dirname, 'src'),
+      '@postmill-ai/nestjs-libraries': path.resolve(__dirname, '../../libraries/nestjs-libraries/src'),
+      '@postmill-ai/provider-kernel': path.resolve(__dirname, '../../libraries/providers/kernel/src'),
     },
   },
   test: {

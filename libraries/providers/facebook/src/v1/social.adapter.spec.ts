@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach } from 'vitest';
-import { setSocialFetchPorts } from '@gitroom/provider-kernel';
+import { setSocialFetchPorts } from '@postmill-ai/provider-kernel';
 import { FacebookProvider } from './social.adapter';
 
 const MAX_PAGE_DEPTH = 50;

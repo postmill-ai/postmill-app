@@ -1,4 +1,4 @@
-import type { MediaOperation } from '@gitroom/nestjs-libraries/ai/governance/media-operation.types';
+import type { MediaOperation } from '@postmill-ai/nestjs-libraries/ai/governance/media-operation.types';
 
 /** AI text/vision categories that replace the legacy scope system. */
 export const AI_MODEL_CATEGORIES = [

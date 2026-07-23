@@ -2,7 +2,7 @@
  * Client-safe upload limits. No process.env access — pure constants so the
  * frontend bundle never drags in server-side env parsing.
  *
- * Server code should import from `@gitroom/nestjs-libraries/upload/upload-limits`
+ * Server code should import from `@postmill-ai/nestjs-libraries/upload/upload-limits`
  * which layers env overrides on top of these defaults.
  */
 

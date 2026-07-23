@@ -1,20 +1,20 @@
 import { Injectable } from '@nestjs/common';
 import { Agent } from '@mastra/core/agent';
 import { Memory } from '@mastra/memory';
-import { pStore } from '@gitroom/nestjs-libraries/chat/mastra.store';
+import { pStore } from '@postmill-ai/nestjs-libraries/chat/mastra.store';
 import { array, object, string } from 'zod';
 import { ModuleRef } from '@nestjs/core';
-import { toolList } from '@gitroom/nestjs-libraries/chat/tools/tool.list';
+import { toolList } from '@postmill-ai/nestjs-libraries/chat/tools/tool.list';
 import dayjs from 'dayjs';
-import { AIModelProvider } from '@gitroom/nestjs-libraries/ai/ai-model.provider';
-import { ToolFirewallService } from '@gitroom/nestjs-libraries/ai/governance/tool-firewall.service';
-import { BrandsService } from '@gitroom/nestjs-libraries/brands/brands.service';
-import { resolveOrgIdFromModelContext } from '@gitroom/nestjs-libraries/chat/agents/resolve-org-context';
-import { pickTools } from '@gitroom/nestjs-libraries/chat/agents/specialist-tool-subset';
-import { ContentAgentBuilder } from '@gitroom/nestjs-libraries/chat/agents/content.agent';
-import { MediaAgentBuilder } from '@gitroom/nestjs-libraries/chat/agents/media.agent';
-import { AnalyticsAgentBuilder } from '@gitroom/nestjs-libraries/chat/agents/analytics.agent';
-import { OpsAgentBuilder } from '@gitroom/nestjs-libraries/chat/agents/ops.agent';
+import { AIModelProvider } from '@postmill-ai/nestjs-libraries/ai/ai-model.provider';
+import { ToolFirewallService } from '@postmill-ai/nestjs-libraries/ai/governance/tool-firewall.service';
+import { BrandsService } from '@postmill-ai/nestjs-libraries/brands/brands.service';
+import { resolveOrgIdFromModelContext } from '@postmill-ai/nestjs-libraries/chat/agents/resolve-org-context';
+import { pickTools } from '@postmill-ai/nestjs-libraries/chat/agents/specialist-tool-subset';
+import { ContentAgentBuilder } from '@postmill-ai/nestjs-libraries/chat/agents/content.agent';
+import { MediaAgentBuilder } from '@postmill-ai/nestjs-libraries/chat/agents/media.agent';
+import { AnalyticsAgentBuilder } from '@postmill-ai/nestjs-libraries/chat/agents/analytics.agent';
+import { OpsAgentBuilder } from '@postmill-ai/nestjs-libraries/chat/agents/ops.agent';
 
 // The supervisor holds only these two tools directly; specialists partition the
 // rest. Exported so the MCP/A2A tool-union and the parity eval can build the full

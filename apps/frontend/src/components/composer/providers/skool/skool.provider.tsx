@@ -2,15 +2,15 @@
 
 import {
   PostComment, withProvider
-} from '@gitroom/frontend/components/composer/providers/high.order.provider';
+} from '@postmill-ai/frontend/components/composer/providers/high.order.provider';
 import { FC, useState } from 'react';
-import { SkoolDto } from '@gitroom/nestjs-libraries/dtos/posts/providers-settings/skool.dto';
-import { SkoolGroupSelect } from '@gitroom/frontend/components/composer/providers/skool/skool.group.select';
-import { SkoolLabelSelect } from '@gitroom/frontend/components/composer/providers/skool/skool.label.select';
-import { useSettings } from '@gitroom/frontend/components/launches/helpers/use.values';
-import { Input } from '@gitroom/react/form/input';
-import { FirstCommentField } from '@gitroom/frontend/components/composer/providers/shared/first-comment.field';
-import { useT } from '@gitroom/react/translation/get.transation.service.client';
+import { SkoolDto } from '@postmill-ai/nestjs-libraries/dtos/posts/providers-settings/skool.dto';
+import { SkoolGroupSelect } from '@postmill-ai/frontend/components/composer/providers/skool/skool.group.select';
+import { SkoolLabelSelect } from '@postmill-ai/frontend/components/composer/providers/skool/skool.label.select';
+import { useSettings } from '@postmill-ai/frontend/components/launches/helpers/use.values';
+import { Input } from '@postmill-ai/react/form/input';
+import { FirstCommentField } from '@postmill-ai/frontend/components/composer/providers/shared/first-comment.field';
+import { useT } from '@postmill-ai/react/translation/get.transation.service.client';
 const SkoolComponent: FC = () => {
   const form = useSettings();
   const t = useT();

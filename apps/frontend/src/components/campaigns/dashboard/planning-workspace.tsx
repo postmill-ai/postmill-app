@@ -4,22 +4,22 @@ import { FC, useCallback, useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import clsx from 'clsx';
 import dayjs from 'dayjs';
-import { useFetch } from '@gitroom/helpers/utils/custom.fetch';
-import { useT } from '@gitroom/react/translation/get.transation.service.client';
-import { useToaster } from '@gitroom/react/toaster/toaster';
-import { useModals } from '@gitroom/frontend/components/layout/new-modal';
-import { Button } from '@gitroom/react/form/button';
+import { useFetch } from '@postmill-ai/helpers/utils/custom.fetch';
+import { useT } from '@postmill-ai/react/translation/get.transation.service.client';
+import { useToaster } from '@postmill-ai/react/toaster/toaster';
+import { useModals } from '@postmill-ai/frontend/components/layout/new-modal';
+import { Button } from '@postmill-ai/react/form/button';
 import {
   DataTable,
   StatusPill,
   AvatarCell,
-} from '@gitroom/frontend/components/ui/data-table';
-import { PlatformAvatar } from '@gitroom/frontend/components/shared/platform-avatar';
-import { KebabMenu, KebabMenuItem } from '@gitroom/frontend/components/ui/kebab-menu';
-import { useCampaignDrafts } from '@gitroom/frontend/components/campaigns/hooks/campaign.hooks';
-import { Composer } from '@gitroom/frontend/components/composer/composer';
-import { CloseModalButton } from '@gitroom/frontend/components/shared/close-modal-button';
-import { useLaunchStore } from '@gitroom/frontend/components/composer/store';
+} from '@postmill-ai/frontend/components/ui/data-table';
+import { PlatformAvatar } from '@postmill-ai/frontend/components/shared/platform-avatar';
+import { KebabMenu, KebabMenuItem } from '@postmill-ai/frontend/components/ui/kebab-menu';
+import { useCampaignDrafts } from '@postmill-ai/frontend/components/campaigns/hooks/campaign.hooks';
+import { Composer } from '@postmill-ai/frontend/components/composer/composer';
+import { CloseModalButton } from '@postmill-ai/frontend/components/shared/close-modal-button';
+import { useLaunchStore } from '@postmill-ai/frontend/components/composer/store';
 
 const ListIcon = (
   <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden="true">

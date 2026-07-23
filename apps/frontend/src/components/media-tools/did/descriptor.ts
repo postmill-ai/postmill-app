@@ -1,4 +1,4 @@
-import type { StudioDescriptor } from '@gitroom/frontend/components/media-tools/studio-kit/types';
+import type { StudioDescriptor } from '@postmill-ai/frontend/components/media-tools/studio-kit/types';
 
 // D-ID talking-avatar video (registry/config identifier `did`). A portrait image + a script
 // produce a talking-head clip; completion arrives via webhook (poll-cron fallback). The

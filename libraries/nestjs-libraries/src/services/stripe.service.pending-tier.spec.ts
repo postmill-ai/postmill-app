@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { pricing } from '@gitroom/nestjs-libraries/database/prisma/subscriptions/pricing';
+import { pricing } from '@postmill-ai/nestjs-libraries/database/prisma/subscriptions/pricing';
 
 // Mutable singleton so tests can change Stripe responses while the module-level
 // `stripe` instance inside StripeService points at the same object. Hoisted so it

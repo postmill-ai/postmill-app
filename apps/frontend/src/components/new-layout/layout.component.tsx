@@ -1,12 +1,12 @@
 'use client';
 
 import React, { ReactNode, useCallback, useState, useRef, useEffect } from 'react';
-import { Logo } from '@gitroom/frontend/components/new-layout/logo';
-import { Wordmark } from '@gitroom/frontend/components/new-layout/wordmark';
-import { UserAvatarMenu } from '@gitroom/frontend/components/new-layout/user-avatar-menu';
+import { Logo } from '@postmill-ai/frontend/components/new-layout/logo';
+import { Wordmark } from '@postmill-ai/frontend/components/new-layout/wordmark';
+import { UserAvatarMenu } from '@postmill-ai/frontend/components/new-layout/user-avatar-menu';
 import { Plus_Jakarta_Sans } from 'next/font/google';
 const ModeComponent = dynamic(
-  () => import('@gitroom/frontend/components/layout/mode.component'),
+  () => import('@postmill-ai/frontend/components/layout/mode.component'),
   {
     ssr: false,
   }
@@ -14,47 +14,47 @@ const ModeComponent = dynamic(
 
 import clsx from 'clsx';
 import dynamic from 'next/dynamic';
-import { useFetch } from '@gitroom/helpers/utils/custom.fetch';
-import { useVariables } from '@gitroom/react/helpers/variable.context';
+import { useFetch } from '@postmill-ai/helpers/utils/custom.fetch';
+import { useVariables } from '@postmill-ai/react/helpers/variable.context';
 import { useRouter, useSearchParams, usePathname } from 'next/navigation';
 import Link from 'next/link';
 import useSWR, { useSWRConfig } from 'swr';
-import { CheckPayment } from '@gitroom/frontend/components/layout/check.payment';
-import { ToolTip } from '@gitroom/frontend/components/layout/top.tip';
-import { useT } from '@gitroom/react/translation/get.transation.service.client';
-import { ShowLinkedinCompany } from '@gitroom/frontend/components/launches/helpers/linkedin.component';
-import { MediaSettingsLayout } from '@gitroom/frontend/components/launches/helpers/media.settings.component';
-import { Toaster } from '@gitroom/react/toaster/toaster';
-import { ShowPostSelector } from '@gitroom/frontend/components/post-url-selector/post.url.selector';
-import { NewSubscription } from '@gitroom/frontend/components/layout/new.subscription';
-import { Support } from '@gitroom/frontend/components/layout/support';
-import { ContinueProvider } from '@gitroom/frontend/components/layout/continue.provider';
-import { ContextWrapper } from '@gitroom/frontend/components/layout/user.context';
-import { CopilotProvider } from '@gitroom/frontend/components/layout/copilot.provider';
-import { MantineWrapper } from '@gitroom/react/helpers/mantine.wrapper';
-import { AnnouncementBanner } from '@gitroom/frontend/components/layout/announcement.banner';
-import { Title } from '@gitroom/frontend/components/layout/title';
-import { TopMenu } from '@gitroom/frontend/components/layout/top.menu';
-import { ChromeExtensionComponent } from '@gitroom/frontend/components/layout/chrome.extension.component';
-import NotificationComponent from '@gitroom/frontend/components/notifications/notification.component';
-import { useUser } from '@gitroom/frontend/components/layout/user.context';
-import { OrganizationSelector } from '@gitroom/frontend/components/layout/organization.selector';
-import { StreakComponent } from '@gitroom/frontend/components/layout/streak.component';
-import { PreConditionComponent } from '@gitroom/frontend/components/layout/pre-condition.component';
-import { AttachToFeedbackIcon } from '@gitroom/frontend/components/new-layout/sentry.feedback.component';
-import { FirstBillingComponent } from '@gitroom/frontend/components/billing/first.billing.component';
-import { TrialTracker } from '@gitroom/frontend/components/layout/gtm.component';
-import { usePermissions } from '@gitroom/frontend/components/layout/use-permissions';
-import { BottomTabBar } from '@gitroom/frontend/components/new-layout/bottom-tab-bar';
-import { useModals } from '@gitroom/frontend/components/layout/new-modal';
-import { useAddProvider } from '@gitroom/frontend/components/launches/add.provider.component';
+import { CheckPayment } from '@postmill-ai/frontend/components/layout/check.payment';
+import { ToolTip } from '@postmill-ai/frontend/components/layout/top.tip';
+import { useT } from '@postmill-ai/react/translation/get.transation.service.client';
+import { ShowLinkedinCompany } from '@postmill-ai/frontend/components/launches/helpers/linkedin.component';
+import { MediaSettingsLayout } from '@postmill-ai/frontend/components/launches/helpers/media.settings.component';
+import { Toaster } from '@postmill-ai/react/toaster/toaster';
+import { ShowPostSelector } from '@postmill-ai/frontend/components/post-url-selector/post.url.selector';
+import { NewSubscription } from '@postmill-ai/frontend/components/layout/new.subscription';
+import { Support } from '@postmill-ai/frontend/components/layout/support';
+import { ContinueProvider } from '@postmill-ai/frontend/components/layout/continue.provider';
+import { ContextWrapper } from '@postmill-ai/frontend/components/layout/user.context';
+import { CopilotProvider } from '@postmill-ai/frontend/components/layout/copilot.provider';
+import { MantineWrapper } from '@postmill-ai/react/helpers/mantine.wrapper';
+import { AnnouncementBanner } from '@postmill-ai/frontend/components/layout/announcement.banner';
+import { Title } from '@postmill-ai/frontend/components/layout/title';
+import { TopMenu } from '@postmill-ai/frontend/components/layout/top.menu';
+import { ChromeExtensionComponent } from '@postmill-ai/frontend/components/layout/chrome.extension.component';
+import NotificationComponent from '@postmill-ai/frontend/components/notifications/notification.component';
+import { useUser } from '@postmill-ai/frontend/components/layout/user.context';
+import { OrganizationSelector } from '@postmill-ai/frontend/components/layout/organization.selector';
+import { StreakComponent } from '@postmill-ai/frontend/components/layout/streak.component';
+import { PreConditionComponent } from '@postmill-ai/frontend/components/layout/pre-condition.component';
+import { AttachToFeedbackIcon } from '@postmill-ai/frontend/components/new-layout/sentry.feedback.component';
+import { FirstBillingComponent } from '@postmill-ai/frontend/components/billing/first.billing.component';
+import { TrialTracker } from '@postmill-ai/frontend/components/layout/gtm.component';
+import { usePermissions } from '@postmill-ai/frontend/components/layout/use-permissions';
+import { BottomTabBar } from '@postmill-ai/frontend/components/new-layout/bottom-tab-bar';
+import { useModals } from '@postmill-ai/frontend/components/layout/new-modal';
+import { useAddProvider } from '@postmill-ai/frontend/components/launches/add.provider.component';
 
 // Lazy — only loaded when "New Campaign" is actually chosen (keeps the campaign-modal
 // dependency graph out of the global layout bundle).
 const CreateEditCampaignModal = dynamic(
   () =>
     import(
-      '@gitroom/frontend/components/campaigns/index/create-edit-campaign.modal'
+      '@postmill-ai/frontend/components/campaigns/index/create-edit-campaign.modal'
     ).then((m) => m.CreateEditCampaignModal),
   { ssr: false }
 );
@@ -62,7 +62,7 @@ const CreateEditCampaignModal = dynamic(
 // Lazy — the CSV bulk-import surface is only pulled in when "Bulk Import" is chosen.
 const BulkImport = dynamic(
   () =>
-    import('@gitroom/frontend/components/composer/bulk/bulk.import').then(
+    import('@postmill-ai/frontend/components/composer/bulk/bulk.import').then(
       (m) => m.BulkImport
     ),
   { ssr: false }

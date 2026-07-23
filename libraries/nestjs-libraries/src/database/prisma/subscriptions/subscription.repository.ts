@@ -3,7 +3,7 @@ import {
   PrismaRepository,
   PrismaTransaction,
   PrismaService,
-} from '@gitroom/nestjs-libraries/database/prisma/prisma.service';
+} from '@postmill-ai/nestjs-libraries/database/prisma/prisma.service';
 import dayjs from 'dayjs';
 import { Organization } from '@prisma/client';
 

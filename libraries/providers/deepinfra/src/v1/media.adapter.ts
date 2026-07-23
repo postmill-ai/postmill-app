@@ -13,7 +13,7 @@ import {
   validateModelId,
   SafeFetchPort,
   ProviderModule,
-} from '@gitroom/provider-kernel';
+} from '@postmill-ai/provider-kernel';
 
 // DeepInfra — same key as the DeepInfra LLM provider (registry id `deepinfra`), reused via
 // the universal-credential fallback. Media uses DeepInfra's native per-model inference

@@ -2,7 +2,7 @@ import 'reflect-metadata';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
 const safeFetchMock = vi.fn();
-vi.mock('@gitroom/nestjs-libraries/dtos/webhooks/safe.fetch', () => ({
+vi.mock('@postmill-ai/nestjs-libraries/dtos/webhooks/safe.fetch', () => ({
   safeFetch: (...args: any[]) => safeFetchMock(...args),
 }));
 

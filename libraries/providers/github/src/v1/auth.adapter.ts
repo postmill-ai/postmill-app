@@ -4,7 +4,7 @@ import {
   ProviderRuntimeContext,
   AuthCapability,
   AuthUserInfo,
-} from '@gitroom/provider-kernel';
+} from '@postmill-ai/provider-kernel';
 
 // Self-contained kernel auth module for GitHub OAuth login.
 //

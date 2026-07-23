@@ -5,8 +5,8 @@ import { ReactNode } from 'react';
 import { Plus_Jakarta_Sans } from 'next/font/google';
 import clsx from 'clsx';
 import { cookies } from 'next/headers';
-import { VariableContextComponent } from '@gitroom/react/helpers/variable.context';
-import { FetchWrapperComponent } from '@gitroom/helpers/utils/custom.fetch';
+import { VariableContextComponent } from '@postmill-ai/react/helpers/variable.context';
+import { FetchWrapperComponent } from '@postmill-ai/helpers/utils/custom.fetch';
 
 const jakartaSans = Plus_Jakarta_Sans({
   weight: ['600', '500'],

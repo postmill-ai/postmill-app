@@ -1,5 +1,5 @@
 import { metadata as providerMetadata } from './metadata';
-import { makeS3StorageModule } from '@gitroom/provider-kernel';
+import { makeS3StorageModule } from '@postmill-ai/provider-kernel';
 
 export const vultrStorageModule = makeS3StorageModule({
   type: 'VULTR',

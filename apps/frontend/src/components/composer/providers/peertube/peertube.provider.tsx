@@ -1,7 +1,7 @@
 'use client';
 import { withProvider, PostComment } from
-  '@gitroom/frontend/components/composer/providers/high.order.provider';
-import { FirstCommentField } from '@gitroom/frontend/components/composer/providers/shared/first-comment.field';
+  '@postmill-ai/frontend/components/composer/providers/high.order.provider';
+import { FirstCommentField } from '@postmill-ai/frontend/components/composer/providers/shared/first-comment.field';
 
 const SettingsComponent = () => {
   return <FirstCommentField />;

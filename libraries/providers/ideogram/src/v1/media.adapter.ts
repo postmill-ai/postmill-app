@@ -10,7 +10,7 @@ import {
   resolveApiKey,
   SafeFetchPort,
   ProviderModule,
-} from '@gitroom/provider-kernel';
+} from '@postmill-ai/provider-kernel';
 
 // Ideogram — own-key image generation, strong at accurate in-image text. The v3 generate endpoint
 // takes multipart/form-data with the key in an `Api-Key` header (no Bearer). Synchronous: one POST

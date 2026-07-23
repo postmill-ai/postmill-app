@@ -1,10 +1,10 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { createHash } from 'crypto';
-import { safeFetch } from '@gitroom/nestjs-libraries/dtos/webhooks/safe.fetch';
-import { RedisService } from '@gitroom/nestjs-libraries/redis/redis.service';
-import { OrgContentPackSettingsService } from '@gitroom/nestjs-libraries/database/prisma/content-packs/org-content-pack-settings.service';
-import { ProviderResolutionService } from '@gitroom/nestjs-libraries/providers/provider-resolution.service';
-import type { ContentPackCapability as ContentPackCapabilityInstance } from '@gitroom/provider-kernel';
+import { safeFetch } from '@postmill-ai/nestjs-libraries/dtos/webhooks/safe.fetch';
+import { RedisService } from '@postmill-ai/nestjs-libraries/redis/redis.service';
+import { OrgContentPackSettingsService } from '@postmill-ai/nestjs-libraries/database/prisma/content-packs/org-content-pack-settings.service';
+import { ProviderResolutionService } from '@postmill-ai/nestjs-libraries/providers/provider-resolution.service';
+import type { ContentPackCapability as ContentPackCapabilityInstance } from '@postmill-ai/provider-kernel';
 import { ContentPackDailyCapError } from './content-packs/content-pack.interface';
 import type { ContentPackCapability } from './content-packs/content-pack.interface';
 

@@ -3,7 +3,7 @@ import {
   AuthContextResolver,
   AuthContextResult,
 } from './auth-context.resolver';
-import { AuthService } from '@gitroom/helpers/auth/auth.service';
+import { AuthService } from '@postmill-ai/helpers/auth/auth.service';
 import { Organization, User } from '@prisma/client';
 
 const makeUser = (overrides: Partial<User> = {}): User =>

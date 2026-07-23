@@ -1,16 +1,16 @@
 'use client';
 
-import { useIntegration } from '@gitroom/frontend/components/launches/helpers/use.integration';
-import { useMediaDirectory } from '@gitroom/react/helpers/use.media.directory';
+import { useIntegration } from '@postmill-ai/frontend/components/launches/helpers/use.integration';
+import { useMediaDirectory } from '@postmill-ai/react/helpers/use.media.directory';
 import clsx from 'clsx';
-import { VideoOrImage } from '@gitroom/react/helpers/video.or.image';
+import { VideoOrImage } from '@postmill-ai/react/helpers/video.or.image';
 import { FC } from 'react';
-import { textSlicer } from '@gitroom/helpers/utils/count.length';
-import SafeImage from '@gitroom/react/helpers/safe.image';
-import { useLaunchStore } from '@gitroom/frontend/components/composer/store';
-import { stripHtmlValidation } from '@gitroom/helpers/utils/strip.html.validation';
-import { SafeContent } from '@gitroom/frontend/components/shared/safe-content';
-import { useT } from '@gitroom/react/translation/get.transation.service.client';
+import { textSlicer } from '@postmill-ai/helpers/utils/count.length';
+import SafeImage from '@postmill-ai/react/helpers/safe.image';
+import { useLaunchStore } from '@postmill-ai/frontend/components/composer/store';
+import { stripHtmlValidation } from '@postmill-ai/helpers/utils/strip.html.validation';
+import { SafeContent } from '@postmill-ai/frontend/components/shared/safe-content';
+import { useT } from '@postmill-ai/react/translation/get.transation.service.client';
 
 export const GeneralPreviewComponent: FC<{
   maximumCharacters?: number;

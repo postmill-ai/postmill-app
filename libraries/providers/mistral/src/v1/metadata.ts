@@ -1,4 +1,4 @@
-import { ProviderMetadata } from '@gitroom/provider-kernel';
+import { ProviderMetadata } from '@postmill-ai/provider-kernel';
 
 export const metadata: ProviderMetadata = {
   "website": "https://mistral.ai",

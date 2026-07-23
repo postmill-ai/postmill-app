@@ -10,16 +10,16 @@ import { SocialCommentDTO } from '../social';
 import { makeId, makeOauthState } from '../social-make-id';
 import sharp from 'sharp';
 import { lookup } from 'mime-types';
-import { readOrFetch } from '@gitroom/helpers/utils/read.or.fetch';
-import { hasExtension } from '@gitroom/helpers/utils/has.extension';
-import { timer } from '@gitroom/helpers/utils/timer';
+import { readOrFetch } from '@postmill-ai/helpers/utils/read.or.fetch';
+import { hasExtension } from '@postmill-ai/helpers/utils/has.extension';
+import { timer } from '@postmill-ai/helpers/utils/timer';
 import {
   BadBody,
   SocialAbstract,
   ValidityMedia,
 } from '../social-base';
 import type { Integration } from '@prisma/client';
-import { PostPlug } from '@gitroom/helpers/decorators/post.plug';
+import { PostPlug } from '@postmill-ai/helpers/decorators/post.plug';
 import { Logger } from '@nestjs/common';
 import { LinkedinDto } from '../social-dtos';
 import imageToPDF from 'image-to-pdf';

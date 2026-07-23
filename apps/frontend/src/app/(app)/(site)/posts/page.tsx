@@ -1,5 +1,5 @@
 export const dynamic = 'force-dynamic';
-import { LaunchesComponent } from '@gitroom/frontend/components/launches/launches.component';
+import { LaunchesComponent } from '@postmill-ai/frontend/components/launches/launches.component';
 import { Metadata } from 'next';
 export const metadata: Metadata = {
   title: `Postmill Posts`,

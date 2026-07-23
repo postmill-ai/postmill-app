@@ -7,7 +7,7 @@ import {
   MediaJobSubmission,
   SafeFetchPort,
   ProviderModule,
-} from '@gitroom/provider-kernel';
+} from '@postmill-ai/provider-kernel';
 
 // Recraft — own-key (Bearer) image generation, strong on vector/SVG, brand styles, and icons.
 // Synchronous: a single POST returns hosted image URLs. Native params (style, substyle, size, n,

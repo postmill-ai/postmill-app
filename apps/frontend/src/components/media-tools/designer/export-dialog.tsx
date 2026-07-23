@@ -5,19 +5,19 @@ import { createRoot } from 'react-dom/client';
 import { Stage, Layer, Rect, Image as KonvaImage } from 'react-konva';
 import type Konva from 'konva';
 import useSWR from 'swr';
-import { useFetch } from '@gitroom/helpers/utils/custom.fetch';
-import { useToaster } from '@gitroom/react/toaster/toaster';
-import { useT } from '@gitroom/react/translation/get.transation.service.client';
-import ProviderIcon from '@gitroom/frontend/components/shared/provider-icon';
-import { useUser } from '@gitroom/frontend/components/layout/user.context';
+import { useFetch } from '@postmill-ai/helpers/utils/custom.fetch';
+import { useToaster } from '@postmill-ai/react/toaster/toaster';
+import { useT } from '@postmill-ai/react/translation/get.transation.service.client';
+import ProviderIcon from '@postmill-ai/frontend/components/shared/provider-icon';
+import { useUser } from '@postmill-ai/frontend/components/layout/user.context';
 import { useBrandColors } from './panels/use-brand-colors';
 import { useBrandFonts } from './panels/use-brand-fonts';
 import { getBrandViolations } from './brand-compliance';
 import { CanvasElements, gradientFillProps, getImageNaturalSize } from './elements';
 import type { DesignerDoc, DesignerOutput, VideoOutput } from './designer.store';
 import { getThumbnailDataUrl } from './designer';
-import { CHANNEL_PRESETS } from '@gitroom/nestjs-libraries/integrations/social/channel-presets';
-import type { Integrations } from '@gitroom/frontend/components/launches/calendar.context';
+import { CHANNEL_PRESETS } from '@postmill-ai/nestjs-libraries/integrations/social/channel-presets';
+import type { Integrations } from '@postmill-ai/frontend/components/launches/calendar.context';
 
 const useFocusTrap = (containerRef: React.RefObject<HTMLElement | null>) => {
   useEffect(() => {

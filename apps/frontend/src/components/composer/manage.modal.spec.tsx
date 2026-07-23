@@ -47,15 +47,15 @@ const res = (ok: boolean, status: number, body: any) => ({
 // ---------------------------------------------------------------------------
 // Module mocks
 // ---------------------------------------------------------------------------
-vi.mock('@gitroom/react/translation/get.transation.service.client', () => ({
+vi.mock('@postmill-ai/react/translation/get.transation.service.client', () => ({
   useT: () => (_key: string, fallback?: string) => fallback || _key,
 }));
 
-vi.mock('@gitroom/helpers/utils/custom.fetch', () => ({
+vi.mock('@postmill-ai/helpers/utils/custom.fetch', () => ({
   useFetch: () => (...args: any[]) => h.fetchImpl(...args),
 }));
 
-vi.mock('@gitroom/frontend/components/composer/content-qa/usePreflight', () => ({
+vi.mock('@postmill-ai/frontend/components/composer/content-qa/usePreflight', () => ({
   usePreflight: () => ({
     runPreflight: (...args: any[]) => h.runPreflightImpl(...args),
     loading: false,
@@ -66,7 +66,7 @@ vi.mock('@gitroom/frontend/components/composer/content-qa/usePreflight', () => (
 }));
 
 vi.mock(
-  '@gitroom/frontend/components/composer/content-qa/preflight.panel',
+  '@postmill-ai/frontend/components/composer/content-qa/preflight.panel',
   () => ({
     PreflightPanel: ({ onProceed, onClose }: any) => (
       <div data-testid="preflight-panel">
@@ -81,19 +81,19 @@ vi.mock(
   })
 );
 
-vi.mock('@gitroom/frontend/components/composer/store', () => ({
+vi.mock('@postmill-ai/frontend/components/composer/store', () => ({
   useLaunchStore: (selector: any) => selector(h.state),
 }));
 
-vi.mock('@gitroom/frontend/components/launches/helpers/use.existing.data', () => ({
+vi.mock('@postmill-ai/frontend/components/launches/helpers/use.existing.data', () => ({
   useExistingData: () => h.existing,
 }));
 
-vi.mock('@gitroom/react/toaster/toaster', () => ({
+vi.mock('@postmill-ai/react/toaster/toaster', () => ({
   useToaster: () => ({ show: (...a: any[]) => h.toasterShow(...a) }),
 }));
 
-vi.mock('@gitroom/frontend/components/layout/new-modal', () => ({
+vi.mock('@postmill-ai/frontend/components/layout/new-modal', () => ({
   useModals: () => ({
     openModal: (...a: any[]) => h.openModal(...a),
     closeAll: (...a: any[]) => h.closeAll(...a),
@@ -104,29 +104,29 @@ vi.mock('next/navigation', () => ({
   useRouter: () => ({ push: (...a: any[]) => h.routerPush(...a) }),
 }));
 
-vi.mock('@gitroom/frontend/components/layout/use-ai-active', () => ({
+vi.mock('@postmill-ai/frontend/components/layout/use-ai-active', () => ({
   useAiActive: () => h.aiActive,
 }));
 
 vi.mock(
-  '@gitroom/frontend/components/settings/shortlink-preference.component',
+  '@postmill-ai/frontend/components/settings/shortlink-preference.component',
   () => ({
     useShortlinkPreference: () => ({ data: { shortlink: 'NO' } }),
     ShortlinkPreferenceComponent: () => null,
   })
 );
 
-vi.mock('@gitroom/react/helpers/delete.dialog', () => ({
+vi.mock('@postmill-ai/react/helpers/delete.dialog', () => ({
   deleteDialog: vi.fn(async () => true),
 }));
 
-vi.mock('@gitroom/nestjs-libraries/services/make.is', () => ({
+vi.mock('@postmill-ai/nestjs-libraries/services/make.is', () => ({
   makeId: () => 'grp-generated',
 }));
 
 // ShowAllProviders exposes getAllValues through its ref — the composer reads it.
 vi.mock(
-  '@gitroom/frontend/components/composer/providers/show.all.providers',
+  '@postmill-ai/frontend/components/composer/providers/show.all.providers',
   async () => {
     const RealReact = (await vi.importActual<any>('react')).default;
     return {
@@ -141,59 +141,59 @@ vi.mock(
 );
 
 // Lightweight stubs for the remaining heavy children.
-vi.mock('@gitroom/frontend/components/composer/picks.socials.component', () => ({
+vi.mock('@postmill-ai/frontend/components/composer/picks.socials.component', () => ({
   PicksSocialsComponent: () => null,
 }));
-vi.mock('@gitroom/frontend/components/composer/editor', () => ({
+vi.mock('@postmill-ai/frontend/components/composer/editor', () => ({
   EditorWrapper: () => null,
 }));
-vi.mock('@gitroom/frontend/components/composer/select.current', () => ({
+vi.mock('@postmill-ai/frontend/components/composer/select.current', () => ({
   SelectCurrent: () => null,
 }));
-vi.mock('@gitroom/frontend/components/launches/helpers/date.picker', () => ({
+vi.mock('@postmill-ai/frontend/components/launches/helpers/date.picker', () => ({
   DatePicker: () => null,
 }));
-vi.mock('@gitroom/frontend/components/launches/repeat.component', () => ({
+vi.mock('@postmill-ai/frontend/components/launches/repeat.component', () => ({
   RepeatComponent: () => null,
 }));
-vi.mock('@gitroom/frontend/components/launches/tags.component', () => ({
+vi.mock('@postmill-ai/frontend/components/launches/tags.component', () => ({
   TagsComponent: () => null,
 }));
-vi.mock('@gitroom/frontend/components/launches/select.customer', () => ({
+vi.mock('@postmill-ai/frontend/components/launches/select.customer', () => ({
   SelectCustomer: () => null,
 }));
-vi.mock('@gitroom/frontend/components/launches/brand-picker', () => ({
+vi.mock('@postmill-ai/frontend/components/launches/brand-picker', () => ({
   BrandPicker: () => null,
 }));
-vi.mock('@gitroom/frontend/components/composer/shortlink-picker', () => ({
+vi.mock('@postmill-ai/frontend/components/composer/shortlink-picker', () => ({
   ShortlinkPicker: () => null,
 }));
-vi.mock('@gitroom/frontend/components/launches/creation.method.badge', () => ({
+vi.mock('@postmill-ai/frontend/components/launches/creation.method.badge', () => ({
   CreationMethodBadge: () => null,
 }));
-vi.mock('@gitroom/frontend/components/composer/dummy.code.component', () => ({
+vi.mock('@postmill-ai/frontend/components/composer/dummy.code.component', () => ({
   DummyCodeComponent: () => null,
 }));
-vi.mock('@gitroom/frontend/components/composer/composer-library.modal', () => ({
+vi.mock('@postmill-ai/frontend/components/composer/composer-library.modal', () => ({
   ComposerLibraryModal: () => null,
 }));
-vi.mock('@gitroom/frontend/components/ui/color-picker', () => ({
+vi.mock('@postmill-ai/frontend/components/ui/color-picker', () => ({
   ColorPicker: () => null,
   DEFAULT_POST_COLOR: '#2B5CD3',
 }));
-vi.mock('@gitroom/frontend/components/ui/icons', () => ({
+vi.mock('@postmill-ai/frontend/components/ui/icons', () => ({
   SettingsIcon: () => null,
   ChevronDownIcon: () => null,
   TrashIcon: () => null,
   DropdownArrowSmallIcon: () => null,
 }));
-vi.mock('@gitroom/frontend/components/ui/is.scroll.hook', () => ({
+vi.mock('@postmill-ai/frontend/components/ui/is.scroll.hook', () => ({
   useHasScroll: () => false,
 }));
-vi.mock('@gitroom/react/form/button', () => ({
+vi.mock('@postmill-ai/react/form/button', () => ({
   Button: ({ children, ...p }: any) => <button {...p}>{children}</button>,
 }));
-vi.mock('@gitroom/react/helpers/safe.image', () => ({
+vi.mock('@postmill-ai/react/helpers/safe.image', () => ({
   default: () => null,
 }));
 vi.mock('@copilotkit/react-ui', () => ({

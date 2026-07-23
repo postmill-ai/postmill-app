@@ -18,7 +18,7 @@ vi.mock('stripe', () => {
 });
 
 import { StripeController } from './stripe.controller';
-import type { StripeService as StripeServiceType } from '@gitroom/nestjs-libraries/services/stripe.service';
+import type { StripeService as StripeServiceType } from '@postmill-ai/nestjs-libraries/services/stripe.service';
 
 // ---------------------------------------------------------------------------
 // Add-on webhook tests: customer.subscription.updated with addon metadata
@@ -119,7 +119,7 @@ describe('StripeController — add-on subscription webhooks', () => {
 describe('StripeService — syncAddonQuantities', () => {
   it('writes extraStorageGb = 2 * ADDON_STORAGE_GB_PER_PACK', async () => {
     const { StripeService } = await import(
-      '@gitroom/nestjs-libraries/services/stripe.service'
+      '@postmill-ai/nestjs-libraries/services/stripe.service'
     );
 
     mockStripe.subscriptions.list.mockResolvedValue({
@@ -159,7 +159,7 @@ describe('StripeService — syncAddonQuantities', () => {
 
   it('writes extraVideoExports = 3 * ADDON_VIDEO_EXPORTS_PER_PACK', async () => {
     const { StripeService } = await import(
-      '@gitroom/nestjs-libraries/services/stripe.service'
+      '@postmill-ai/nestjs-libraries/services/stripe.service'
     );
 
     mockStripe.subscriptions.list.mockResolvedValue({
@@ -199,7 +199,7 @@ describe('StripeService — syncAddonQuantities', () => {
 
   it('aggregates quantities across multiple addon subscriptions', async () => {
     const { StripeService } = await import(
-      '@gitroom/nestjs-libraries/services/stripe.service'
+      '@postmill-ai/nestjs-libraries/services/stripe.service'
     );
 
     mockStripe.subscriptions.list.mockResolvedValue({
@@ -249,7 +249,7 @@ describe('StripeService — syncAddonQuantities', () => {
 
   it('returns early when the customer has no org', async () => {
     const { StripeService } = await import(
-      '@gitroom/nestjs-libraries/services/stripe.service'
+      '@postmill-ai/nestjs-libraries/services/stripe.service'
     );
 
     const subscriptionService = {

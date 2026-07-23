@@ -1,5 +1,5 @@
 import { Module } from '@nestjs/common';
-import { DatabaseModule } from '@gitroom/nestjs-libraries/database/prisma/database.module';
+import { DatabaseModule } from '@postmill-ai/nestjs-libraries/database/prisma/database.module';
 import { PostActivity } from './activities/post.activity';
 import { AnalyticsActivity } from './activities/analytics.activity';
 import { CommentsActivity } from './activities/comments.activity';
@@ -10,7 +10,7 @@ import { MediaJobsActivity } from './activities/media-jobs.activity';
 import { DigestActivity } from './activities/digest.activity';
 import { CampaignActivity } from './activities/campaign.activity';
 import { RetentionActivity } from './activities/retention.activity';
-import { RetentionRepository } from '@gitroom/nestjs-libraries/database/prisma/retention/retention.repository';
+import { RetentionRepository } from '@postmill-ai/nestjs-libraries/database/prisma/retention/retention.repository';
 import { AgentDigestActivity } from './activities/agent-digest.activity';
 import { InngestService } from './inngest.service';
 import { InngestRunService } from './inngest-run.service';

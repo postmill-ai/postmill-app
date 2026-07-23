@@ -1,13 +1,13 @@
 'use client';
 
 import { FC } from 'react';
-import { useIntegration } from '@gitroom/frontend/components/launches/helpers/use.integration';
-import { stripHtmlValidation } from '@gitroom/helpers/utils/strip.html.validation';
-import { textSlicer } from '@gitroom/helpers/utils/count.length';
-import { VideoOrImage } from '@gitroom/react/helpers/video.or.image';
-import { useMediaDirectory } from '@gitroom/react/helpers/use.media.directory';
-import { SafeContent } from '@gitroom/frontend/components/shared/safe-content';
-import { useT } from '@gitroom/react/translation/get.transation.service.client';
+import { useIntegration } from '@postmill-ai/frontend/components/launches/helpers/use.integration';
+import { stripHtmlValidation } from '@postmill-ai/helpers/utils/strip.html.validation';
+import { textSlicer } from '@postmill-ai/helpers/utils/count.length';
+import { VideoOrImage } from '@postmill-ai/react/helpers/video.or.image';
+import { useMediaDirectory } from '@postmill-ai/react/helpers/use.media.directory';
+import { SafeContent } from '@postmill-ai/frontend/components/shared/safe-content';
+import { useT } from '@postmill-ai/react/translation/get.transation.service.client';
 
 export const PinterestPreview: FC<{
   maximumCharacters?: number;

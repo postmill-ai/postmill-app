@@ -1,8 +1,8 @@
 import { HttpStatus, Injectable, NestMiddleware } from '@nestjs/common';
 import { Request, Response, NextFunction } from 'express';
-import { OAuthService } from '@gitroom/nestjs-libraries/database/prisma/oauth/oauth.service';
-import { ApiKeysService } from '@gitroom/nestjs-libraries/database/prisma/api-keys/api-keys.service';
-import { HttpForbiddenException } from '@gitroom/nestjs-libraries/services/exception.filter';
+import { OAuthService } from '@postmill-ai/nestjs-libraries/database/prisma/oauth/oauth.service';
+import { ApiKeysService } from '@postmill-ai/nestjs-libraries/database/prisma/api-keys/api-keys.service';
+import { HttpForbiddenException } from '@postmill-ai/nestjs-libraries/services/exception.filter';
 import * as crypto from 'crypto';
 
 @Injectable()

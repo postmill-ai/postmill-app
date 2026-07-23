@@ -1,6 +1,6 @@
 'use client';
 
-import { SubscriptionPanel } from '@gitroom/frontend/components/settings/subscription/subscription.panel';
+import { SubscriptionPanel } from '@postmill-ai/frontend/components/settings/subscription/subscription.panel';
 
 export default function Page() {
   return <SubscriptionPanel />;

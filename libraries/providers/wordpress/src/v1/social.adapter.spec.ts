@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { setSocialFetchPorts } from '@gitroom/provider-kernel';
+import { setSocialFetchPorts } from '@postmill-ai/provider-kernel';
 import { WordpressProvider } from './social.adapter';
 
 const encodeCallback = (payload: Record<string, string>) =>

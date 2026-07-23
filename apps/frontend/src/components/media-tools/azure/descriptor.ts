@@ -1,4 +1,4 @@
-import type { StudioDescriptor } from '@gitroom/frontend/components/media-tools/studio-kit/types';
+import type { StudioDescriptor } from '@postmill-ai/frontend/components/media-tools/studio-kit/types';
 
 // Azure OpenAI — image generation (DALL·E / gpt-image deployments) delegated to the AI-SDK
 // Azure provider on the org's existing Azure AI credentials (universal-credential reuse).

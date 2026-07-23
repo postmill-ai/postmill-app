@@ -1,17 +1,17 @@
 'use client';
 
 import React, { FC, useCallback, useMemo, useState } from 'react';
-import { useFetch } from '@gitroom/helpers/utils/custom.fetch';
+import { useFetch } from '@postmill-ai/helpers/utils/custom.fetch';
 import useSWR from 'swr';
-import { Button } from '@gitroom/react/form/button';
+import { Button } from '@postmill-ai/react/form/button';
 import clsx from 'clsx';
-import { useModals } from '@gitroom/frontend/components/layout/new-modal';
-import { useToaster } from '@gitroom/react/toaster/toaster';
-import { useT } from '@gitroom/react/translation/get.transation.service.client';
-import { createFetchError } from '@gitroom/frontend/components/settings/shared/fetch-error';
-import { deleteDialog } from '@gitroom/react/helpers/delete.dialog';
-import { MediaSelectorModal } from '@gitroom/frontend/components/media-tools/media-selector-modal';
-import { CampaignSelector } from '@gitroom/frontend/components/campaigns/selector/campaign-selector';
+import { useModals } from '@postmill-ai/frontend/components/layout/new-modal';
+import { useToaster } from '@postmill-ai/react/toaster/toaster';
+import { useT } from '@postmill-ai/react/translation/get.transation.service.client';
+import { createFetchError } from '@postmill-ai/frontend/components/settings/shared/fetch-error';
+import { deleteDialog } from '@postmill-ai/react/helpers/delete.dialog';
+import { MediaSelectorModal } from '@postmill-ai/frontend/components/media-tools/media-selector-modal';
+import { CampaignSelector } from '@postmill-ai/frontend/components/campaigns/selector/campaign-selector';
 
 const PAGE_SIZE = 25;
 

@@ -3,18 +3,18 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import useSWR, { useSWRConfig } from 'swr';
-import { useFetch } from '@gitroom/helpers/utils/custom.fetch';
-import { usePermissions } from '@gitroom/frontend/components/layout/use-permissions';
-import { useT } from '@gitroom/react/translation/get.transation.service.client';
-import { Button } from '@gitroom/react/form/button';
-import { SetupStepper } from '@gitroom/frontend/components/setup/setup-stepper';
-import { StepLlm } from '@gitroom/frontend/components/setup/steps/step-llm';
-import { StepAiMedia } from '@gitroom/frontend/components/setup/steps/step-ai-media';
-import { StepChannels } from '@gitroom/frontend/components/setup/steps/step-channels';
-import { StepContentPacks } from '@gitroom/frontend/components/setup/steps/step-content-packs';
-import { StepStorage } from '@gitroom/frontend/components/setup/steps/step-storage';
-import { StepShortlinks } from '@gitroom/frontend/components/setup/steps/step-shortlinks';
-import { StepVpn } from '@gitroom/frontend/components/setup/steps/step-vpn';
+import { useFetch } from '@postmill-ai/helpers/utils/custom.fetch';
+import { usePermissions } from '@postmill-ai/frontend/components/layout/use-permissions';
+import { useT } from '@postmill-ai/react/translation/get.transation.service.client';
+import { Button } from '@postmill-ai/react/form/button';
+import { SetupStepper } from '@postmill-ai/frontend/components/setup/setup-stepper';
+import { StepLlm } from '@postmill-ai/frontend/components/setup/steps/step-llm';
+import { StepAiMedia } from '@postmill-ai/frontend/components/setup/steps/step-ai-media';
+import { StepChannels } from '@postmill-ai/frontend/components/setup/steps/step-channels';
+import { StepContentPacks } from '@postmill-ai/frontend/components/setup/steps/step-content-packs';
+import { StepStorage } from '@postmill-ai/frontend/components/setup/steps/step-storage';
+import { StepShortlinks } from '@postmill-ai/frontend/components/setup/steps/step-shortlinks';
+import { StepVpn } from '@postmill-ai/frontend/components/setup/steps/step-vpn';
 
 // Only StepLlm consumes `onProviderChange` / `onActiveChange`; the others are no-arg
 // components and remain assignable to this prop type (extra optional props are ignored).

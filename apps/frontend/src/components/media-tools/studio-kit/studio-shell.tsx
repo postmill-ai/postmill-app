@@ -1,11 +1,11 @@
 'use client';
 
 import React, { useMemo, useState } from 'react';
-import { Logo } from '@gitroom/frontend/components/new-layout/logo';
-import { FullscreenButton } from '@gitroom/frontend/components/media-tools/fullscreen-button';
-import { useFullscreen } from '@gitroom/frontend/components/media-tools/use-fullscreen';
-import { useToaster } from '@gitroom/react/toaster/toaster';
-import { useT } from '@gitroom/react/translation/get.transation.service.client';
+import { Logo } from '@postmill-ai/frontend/components/new-layout/logo';
+import { FullscreenButton } from '@postmill-ai/frontend/components/media-tools/fullscreen-button';
+import { useFullscreen } from '@postmill-ai/frontend/components/media-tools/use-fullscreen';
+import { useToaster } from '@postmill-ai/react/toaster/toaster';
+import { useT } from '@postmill-ai/react/translation/get.transation.service.client';
 import { StudioForm } from './studio-form';
 import { StudioLanding } from './studio-landing';
 import { RenderQueue } from './render-queue';

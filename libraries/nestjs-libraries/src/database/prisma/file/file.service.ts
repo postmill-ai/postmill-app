@@ -1,12 +1,12 @@
 import { HttpException, Injectable, Logger } from '@nestjs/common';
-import { FileRepository } from '@gitroom/nestjs-libraries/database/prisma/file/file.repository';
+import { FileRepository } from '@postmill-ai/nestjs-libraries/database/prisma/file/file.repository';
 import { Organization } from '@prisma/client';
-import { SaveMediaInformationDto } from '@gitroom/nestjs-libraries/dtos/file/save.media.information.dto';
-import { StorageService } from '@gitroom/nestjs-libraries/database/prisma/storage/storage.service';
-import { safeFetch } from '@gitroom/nestjs-libraries/dtos/webhooks/safe.fetch';
-import { readResponseCapped } from '@gitroom/nestjs-libraries/utils/capped-stream';
-import { IStorageAdapter } from '@gitroom/nestjs-libraries/upload/upload.interface';
-import { fromBuffer } from '@gitroom/nestjs-libraries/upload/file-type.compat';
+import { SaveMediaInformationDto } from '@postmill-ai/nestjs-libraries/dtos/file/save.media.information.dto';
+import { StorageService } from '@postmill-ai/nestjs-libraries/database/prisma/storage/storage.service';
+import { safeFetch } from '@postmill-ai/nestjs-libraries/dtos/webhooks/safe.fetch';
+import { readResponseCapped } from '@postmill-ai/nestjs-libraries/utils/capped-stream';
+import { IStorageAdapter } from '@postmill-ai/nestjs-libraries/upload/upload.interface';
+import { fromBuffer } from '@postmill-ai/nestjs-libraries/upload/file-type.compat';
 
 export interface ImportFromPathResult {
   buffer: Buffer;

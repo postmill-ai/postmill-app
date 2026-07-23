@@ -1,9 +1,9 @@
 'use client';
 
 import { createContext, useContext } from 'react';
-import { Integrations } from '@gitroom/frontend/components/launches/calendar.context';
+import { Integrations } from '@postmill-ai/frontend/components/launches/calendar.context';
 import dayjs from 'dayjs';
-import { newDayjs } from '@gitroom/frontend/components/layout/set.timezone';
+import { newDayjs } from '@postmill-ai/frontend/components/layout/set.timezone';
 export type IntegrationContextType = {
   date: dayjs.Dayjs;
   integration: Integrations | undefined;

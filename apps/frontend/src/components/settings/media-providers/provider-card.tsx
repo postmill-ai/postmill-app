@@ -1,8 +1,8 @@
 'use client';
 
 import React from 'react';
-import { useT } from '@gitroom/react/translation/get.transation.service.client';
-import ProviderIcon from '@gitroom/frontend/components/shared/provider-icon';
+import { useT } from '@postmill-ai/react/translation/get.transation.service.client';
+import ProviderIcon from '@postmill-ai/frontend/components/shared/provider-icon';
 
 interface ProviderData {
   identifier: string;

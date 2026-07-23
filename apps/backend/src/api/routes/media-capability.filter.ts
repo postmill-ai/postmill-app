@@ -5,8 +5,8 @@ import {
   Logger,
 } from '@nestjs/common';
 import { Response } from 'express';
-import { CapabilityNotAvailable } from '@gitroom/nestjs-libraries/ai/governance/errors';
-import { DefaultNotConfiguredError } from '@gitroom/nestjs-libraries/ai/defaults/ai-defaults.service';
+import { CapabilityNotAvailable } from '@postmill-ai/nestjs-libraries/ai/governance/errors';
+import { DefaultNotConfiguredError } from '@postmill-ai/nestjs-libraries/ai/defaults/ai-defaults.service';
 
 // Narrowly-scoped (MediaController only, via @UseFilters) so it never reclassifies
 // unrelated 500s elsewhere. Maps the two "tool isn't configured for this org" errors that

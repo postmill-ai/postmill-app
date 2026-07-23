@@ -1,18 +1,18 @@
 'use client';
 
 import React, { useCallback, useState } from 'react';
-import { useFetch } from '@gitroom/helpers/utils/custom.fetch';
+import { useFetch } from '@postmill-ai/helpers/utils/custom.fetch';
 import useSWR from 'swr';
-import { useT } from '@gitroom/react/translation/get.transation.service.client';
-import { createFetchError } from '@gitroom/frontend/components/settings/shared/fetch-error';
-import { useToaster } from '@gitroom/react/toaster/toaster';
-import ProviderIcon from '@gitroom/frontend/components/shared/provider-icon';
-import ProviderListShell from '@gitroom/frontend/components/settings/shared/provider-list-shell';
-import { useProviderCatalog } from '@gitroom/frontend/components/settings/shared/use-provider-catalog';
-import { ProviderFormModal } from '@gitroom/frontend/components/settings/storage/provider-form.modal';
-import { MigrationModal } from '@gitroom/frontend/components/settings/storage/migration.modal';
-import { AuditTab } from '@gitroom/frontend/components/settings/storage/audit.tab';
-import { deleteDialog } from '@gitroom/react/helpers/delete.dialog';
+import { useT } from '@postmill-ai/react/translation/get.transation.service.client';
+import { createFetchError } from '@postmill-ai/frontend/components/settings/shared/fetch-error';
+import { useToaster } from '@postmill-ai/react/toaster/toaster';
+import ProviderIcon from '@postmill-ai/frontend/components/shared/provider-icon';
+import ProviderListShell from '@postmill-ai/frontend/components/settings/shared/provider-list-shell';
+import { useProviderCatalog } from '@postmill-ai/frontend/components/settings/shared/use-provider-catalog';
+import { ProviderFormModal } from '@postmill-ai/frontend/components/settings/storage/provider-form.modal';
+import { MigrationModal } from '@postmill-ai/frontend/components/settings/storage/migration.modal';
+import { AuditTab } from '@postmill-ai/frontend/components/settings/storage/audit.tab';
+import { deleteDialog } from '@postmill-ai/react/helpers/delete.dialog';
 
 const formatBytes = (bytes: number): string => {
   if (bytes === 0) return '0 B';

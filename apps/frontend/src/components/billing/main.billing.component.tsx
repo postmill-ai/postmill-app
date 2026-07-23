@@ -1,35 +1,35 @@
 'use client';
 
-import { Slider } from '@gitroom/react/form/slider';
+import { Slider } from '@postmill-ai/react/form/slider';
 import React, { FC, useCallback, useEffect, useMemo, useState } from 'react';
-import { Button } from '@gitroom/react/form/button';
-import { useFetch } from '@gitroom/helpers/utils/custom.fetch';
+import { Button } from '@postmill-ai/react/form/button';
+import { useFetch } from '@postmill-ai/helpers/utils/custom.fetch';
 import type { Subscription } from '@prisma/client';
 import { useDebouncedCallback } from 'use-debounce';
-import ReactLoading from '@gitroom/frontend/components/layout/loading';
-import { deleteDialog } from '@gitroom/react/helpers/delete.dialog';
-import { useToaster } from '@gitroom/react/toaster/toaster';
+import ReactLoading from '@postmill-ai/frontend/components/layout/loading';
+import { deleteDialog } from '@postmill-ai/react/helpers/delete.dialog';
+import { useToaster } from '@postmill-ai/react/toaster/toaster';
 import clsx from 'clsx';
 import {
   pricing,
   PlanInterface,
-} from '@gitroom/nestjs-libraries/database/prisma/subscriptions/pricing';
-import { FAQComponent } from '@gitroom/frontend/components/billing/faq.component';
+} from '@postmill-ai/nestjs-libraries/database/prisma/subscriptions/pricing';
+import { FAQComponent } from '@postmill-ai/frontend/components/billing/faq.component';
 import { useSWRConfig } from 'swr';
-import { useUser } from '@gitroom/frontend/components/layout/user.context';
+import { useUser } from '@postmill-ai/frontend/components/layout/user.context';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { useModals } from '@gitroom/frontend/components/layout/new-modal';
-import { Textarea } from '@gitroom/react/form/textarea';
-import { useFireEvents } from '@gitroom/helpers/utils/use.fire.events';
-import { useUtmUrl } from '@gitroom/helpers/utils/utm.saver';
-import { useTrack } from '@gitroom/react/helpers/use.track';
-import { TrackEnum } from '@gitroom/nestjs-libraries/user/track.enum';
-import { useT } from '@gitroom/react/translation/get.transation.service.client';
-import { FinishTrial } from '@gitroom/frontend/components/billing/finish.trial';
-import { newDayjs } from '@gitroom/frontend/components/layout/set.timezone';
-import { useDubClickId } from '@gitroom/frontend/components/layout/dubAnalytics';
-import { LogoutComponent } from '@gitroom/frontend/components/layout/logout.component';
-import { PageHeader } from '@gitroom/frontend/components/ui/page-header';
+import { useModals } from '@postmill-ai/frontend/components/layout/new-modal';
+import { Textarea } from '@postmill-ai/react/form/textarea';
+import { useFireEvents } from '@postmill-ai/helpers/utils/use.fire.events';
+import { useUtmUrl } from '@postmill-ai/helpers/utils/utm.saver';
+import { useTrack } from '@postmill-ai/react/helpers/use.track';
+import { TrackEnum } from '@postmill-ai/nestjs-libraries/user/track.enum';
+import { useT } from '@postmill-ai/react/translation/get.transation.service.client';
+import { FinishTrial } from '@postmill-ai/frontend/components/billing/finish.trial';
+import { newDayjs } from '@postmill-ai/frontend/components/layout/set.timezone';
+import { useDubClickId } from '@postmill-ai/frontend/components/layout/dubAnalytics';
+import { LogoutComponent } from '@postmill-ai/frontend/components/layout/logout.component';
+import { PageHeader } from '@postmill-ai/frontend/components/ui/page-header';
 
 type TierKey = PlanInterface['current'];
 

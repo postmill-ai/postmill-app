@@ -1,5 +1,5 @@
 import { Injectable } from '@nestjs/common';
-import { PrismaService } from '@gitroom/nestjs-libraries/database/prisma/prisma.service';
+import { PrismaService } from '@postmill-ai/nestjs-libraries/database/prisma/prisma.service';
 
 const RESOURCES = [
   'posts', 'media', 'channels', 'analytics', 'comments', 'webhooks',

@@ -3,18 +3,18 @@
 import React, { useCallback, useEffect, useMemo, useState, type FC } from 'react';
 import { FormProvider, useForm } from 'react-hook-form';
 import useSWR from 'swr';
-import { useFetch } from '@gitroom/helpers/utils/custom.fetch';
+import { useFetch } from '@postmill-ai/helpers/utils/custom.fetch';
 import { classValidatorResolver } from '@hookform/resolvers/class-validator';
-import { UserDetailDto } from '@gitroom/nestjs-libraries/dtos/users/user.details.dto';
-import { useToaster } from '@gitroom/react/toaster/toaster';
-import { useT } from '@gitroom/react/translation/get.transation.service.client';
-import i18next from '@gitroom/react/translation/i18next';
-import { deleteDialog } from '@gitroom/react/helpers/delete.dialog';
+import { UserDetailDto } from '@postmill-ai/nestjs-libraries/dtos/users/user.details.dto';
+import { useToaster } from '@postmill-ai/react/toaster/toaster';
+import { useT } from '@postmill-ai/react/translation/get.transation.service.client';
+import i18next from '@postmill-ai/react/translation/i18next';
+import { deleteDialog } from '@postmill-ai/react/helpers/delete.dialog';
 import clsx from 'clsx';
-import { ProfileComponent } from '@gitroom/frontend/components/settings/profile.component';
-import MetricComponent from '@gitroom/frontend/components/settings/metric.component';
-import ChangePasswordComponent from '@gitroom/frontend/components/settings/change-password.component';
-import { NotificationPreferencesPanel } from '@gitroom/frontend/components/settings/notifications/notification-preferences.panel';
+import { ProfileComponent } from '@postmill-ai/frontend/components/settings/profile.component';
+import MetricComponent from '@postmill-ai/frontend/components/settings/metric.component';
+import ChangePasswordComponent from '@postmill-ai/frontend/components/settings/change-password.component';
+import { NotificationPreferencesPanel } from '@postmill-ai/frontend/components/settings/notifications/notification-preferences.panel';
 
 const tabs = [
   { key: 'profile', label: 'Profile' },

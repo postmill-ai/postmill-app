@@ -1,13 +1,13 @@
 'use client';
 
 import React, { FC, useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { useFetch } from '@gitroom/helpers/utils/custom.fetch';
+import { useFetch } from '@postmill-ai/helpers/utils/custom.fetch';
 import { useDebounce } from 'use-debounce';
-import { useModals } from '@gitroom/frontend/components/layout/new-modal';
+import { useModals } from '@postmill-ai/frontend/components/layout/new-modal';
 import { StockPreviewModal } from './stock-preview-modal';
 import { StockPhotoItem, stockSourceLabel } from './stock.types';
 import { useStockSearch } from './use-stock-search';
-import { useT } from '@gitroom/react/translation/get.transation.service.client';
+import { useT } from '@postmill-ai/react/translation/get.transation.service.client';
 
 const COLOR_SWATCHES: { value: string; label: string; swatch: string }[] = [
   { value: 'black_and_white', label: 'B&W', swatch: 'linear-gradient(90deg, #000000 50%, #FFFFFF 50%)' },

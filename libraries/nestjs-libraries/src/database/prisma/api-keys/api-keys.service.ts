@@ -1,5 +1,5 @@
 import { Injectable } from '@nestjs/common';
-import { ApiKeysRepository } from '@gitroom/nestjs-libraries/database/prisma/api-keys/api-keys.repository';
+import { ApiKeysRepository } from '@postmill-ai/nestjs-libraries/database/prisma/api-keys/api-keys.repository';
 import * as crypto from 'crypto';
 
 @Injectable()

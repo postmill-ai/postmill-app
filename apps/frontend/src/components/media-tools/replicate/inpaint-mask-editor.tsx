@@ -1,10 +1,10 @@
 'use client';
 
 import React, { useCallback, useState } from 'react';
-import { useFetch } from '@gitroom/helpers/utils/custom.fetch';
-import { useModals } from '@gitroom/frontend/components/layout/new-modal';
-import { MediaSelectorModal } from '@gitroom/frontend/components/media-tools/media-selector-modal';
-import { useT } from '@gitroom/react/translation/get.transation.service.client';
+import { useFetch } from '@postmill-ai/helpers/utils/custom.fetch';
+import { useModals } from '@postmill-ai/frontend/components/layout/new-modal';
+import { MediaSelectorModal } from '@postmill-ai/frontend/components/media-tools/media-selector-modal';
+import { useT } from '@postmill-ai/react/translation/get.transation.service.client';
 import { useReplicateStore } from './replicate.store';
 import { MaskPainter } from './mask-painter';
 import { EditorShell, toolbarBtn, toolbarPrimary } from './editor-shell';

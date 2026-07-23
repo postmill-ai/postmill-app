@@ -5,11 +5,11 @@ import clsx from 'clsx';
 import { useCalendar } from './context';
 import { CalendarItem } from './card';
 import dayjs from 'dayjs';
-import { newDayjs } from '@gitroom/frontend/components/layout/set.timezone';
-import { isUSCitizen } from '@gitroom/frontend/components/launches/helpers/isuscitizen.utils';
+import { newDayjs } from '@postmill-ai/frontend/components/layout/set.timezone';
+import { isUSCitizen } from '@postmill-ai/frontend/components/launches/helpers/isuscitizen.utils';
 import { usePostActions } from './helpers';
-import { useT } from '@gitroom/react/translation/get.transation.service.client';
-import { useUser } from '@gitroom/frontend/components/layout/user.context';
+import { useT } from '@postmill-ai/react/translation/get.transation.service.client';
+import { useUser } from '@postmill-ai/frontend/components/layout/user.context';
 
 export const ListView = () => {
   const t = useT();

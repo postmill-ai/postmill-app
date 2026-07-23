@@ -1,6 +1,6 @@
 import { Command } from 'nestjs-command';
 import { Injectable, Logger } from '@nestjs/common';
-import { DemoSeeder } from '@gitroom/nestjs-libraries/database/seeds/demo-seeder';
+import { DemoSeeder } from '@postmill-ai/nestjs-libraries/database/seeds/demo-seeder';
 
 @Injectable()
 export class SeedDemo {

@@ -5,17 +5,17 @@ import {
   PostDetails,
   PostResponse,
   SocialProvider,
-} from '@gitroom/provider-kernel';
-import { makeId, makeOauthState } from '@gitroom/provider-kernel';
+} from '@postmill-ai/provider-kernel';
+import { makeId, makeOauthState } from '@postmill-ai/provider-kernel';
 import { google } from 'googleapis';
 import { OAuth2Client } from 'google-auth-library/build/src/auth/oauth2client';
 import {
   SocialAbstract,
   ValidityMedia,
-} from '@gitroom/provider-kernel';
+} from '@postmill-ai/provider-kernel';
 import dayjs from 'dayjs';
-import { Rules } from '@gitroom/provider-kernel';
-import { GmbSettingsDto } from '@gitroom/provider-kernel';
+import { Rules } from '@postmill-ai/provider-kernel';
+import { GmbSettingsDto } from '@postmill-ai/provider-kernel';
 
 import { metadata as providerMetadata } from './metadata';
 
@@ -691,7 +691,7 @@ import {
   ProviderModule as __ProviderModule,
   SocialProviderKernelAdapter as __Bridge,
   PROVIDER_CAPABILITIES as __CAPS,
-} from '@gitroom/provider-kernel';
+} from '@postmill-ai/provider-kernel';
 
 const __adapter = new GmbProvider();
 

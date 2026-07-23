@@ -11,7 +11,7 @@ import {
   ProviderModule,
   SafeFetchPort,
   LoggerPort,
-} from '@gitroom/provider-kernel';
+} from '@postmill-ai/provider-kernel';
 
 // SES verifies/confirms SNS notifications by fetching the SubscribeURL and the
 // signing certificate. Those outbound calls go through the kernel SafeFetchPort

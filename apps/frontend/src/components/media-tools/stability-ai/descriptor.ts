@@ -1,4 +1,4 @@
-import type { StudioDescriptor } from '@gitroom/frontend/components/media-tools/studio-kit/types';
+import type { StudioDescriptor } from '@postmill-ai/frontend/components/media-tools/studio-kit/types';
 
 // Stability AI (registry/config identifier `stability-ai`). `model` selects the Stable
 // Image endpoint (core/ultra/sd3); the remaining native params (negative_prompt,

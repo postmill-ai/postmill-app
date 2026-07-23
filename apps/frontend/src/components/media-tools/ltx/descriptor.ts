@@ -1,4 +1,4 @@
-import type { StudioDescriptor } from '@gitroom/frontend/components/media-tools/studio-kit/types';
+import type { StudioDescriptor } from '@postmill-ai/frontend/components/media-tools/studio-kit/types';
 
 // LTX Studio (Lightricks) official developer API. Field names are LTX's native params — they ride
 // straight into the async submit body (see ltx.adapter.ts). The media-field names `image_uri` /

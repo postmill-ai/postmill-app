@@ -6,19 +6,19 @@ import {
   PostResponse,
   SocialCommentDTO,
   SocialProvider,
-} from '@gitroom/provider-kernel';
+} from '@postmill-ai/provider-kernel';
 import dayjs from 'dayjs';
-import { makeOauthState } from '@gitroom/provider-kernel';
+import { makeOauthState } from '@postmill-ai/provider-kernel';
 import {
   BadBody,
   SocialAbstract,
   ValidityMedia,
-} from '@gitroom/provider-kernel';
-import { TikTokDto } from '@gitroom/provider-kernel';
-import { timer } from '@gitroom/helpers/utils/timer';
-import { hasExtension } from '@gitroom/helpers/utils/has.extension';
+} from '@postmill-ai/provider-kernel';
+import { TikTokDto } from '@postmill-ai/provider-kernel';
+import { timer } from '@postmill-ai/helpers/utils/timer';
+import { hasExtension } from '@postmill-ai/helpers/utils/has.extension';
 import { Integration } from '@prisma/client';
-import { Rules } from '@gitroom/provider-kernel';
+import { Rules } from '@postmill-ai/provider-kernel';
 
 
 import { metadata as providerMetadata } from './metadata';
@@ -1071,7 +1071,7 @@ import {
   ProviderModule as __ProviderModule,
   SocialProviderKernelAdapter as __Bridge,
   PROVIDER_CAPABILITIES as __CAPS,
-} from '@gitroom/provider-kernel';
+} from '@postmill-ai/provider-kernel';
 
 const __adapter = new TiktokProvider();
 

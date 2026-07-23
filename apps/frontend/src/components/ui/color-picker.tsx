@@ -2,7 +2,7 @@
 
 import { FC } from 'react';
 import clsx from 'clsx';
-import { useT } from '@gitroom/react/translation/get.transation.service.client';
+import { useT } from '@postmill-ai/react/translation/get.transation.service.client';
 
 // The default heading colour (primary blue). A null value means "default".
 export const DEFAULT_POST_COLOR = '#2b5cd3';

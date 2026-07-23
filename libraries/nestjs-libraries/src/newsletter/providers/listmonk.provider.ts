@@ -1,5 +1,5 @@
-import { NewsletterInterface } from '@gitroom/nestjs-libraries/newsletter/newsletter.interface';
-import { safeFetch } from '@gitroom/nestjs-libraries/dtos/webhooks/safe.fetch';
+import { NewsletterInterface } from '@postmill-ai/nestjs-libraries/newsletter/newsletter.interface';
+import { safeFetch } from '@postmill-ai/nestjs-libraries/dtos/webhooks/safe.fetch';
 
 export class ListmonkProvider implements NewsletterInterface {
   name = 'listmonk';

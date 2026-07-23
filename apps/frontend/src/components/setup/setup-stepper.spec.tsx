@@ -9,7 +9,7 @@ const mockT = vi.fn((_key: string, fallback?: string, opts?: Record<string, any>
     .replace('{{total}}', String(opts?.total ?? ''));
 });
 
-vi.mock('@gitroom/react/translation/get.transation.service.client', () => ({
+vi.mock('@postmill-ai/react/translation/get.transation.service.client', () => ({
   useT: () => mockT,
 }));
 

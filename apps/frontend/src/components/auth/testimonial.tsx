@@ -1,5 +1,5 @@
 import { FC } from 'react';
-import SafeImage from '@gitroom/react/helpers/safe.image';
+import SafeImage from '@postmill-ai/react/helpers/safe.image';
 
 export const Testimonial: FC<{
   picture: string;

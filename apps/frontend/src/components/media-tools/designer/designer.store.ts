@@ -1,14 +1,14 @@
 import { create } from 'zustand';
-import { CHANNEL_PRESETS } from '@gitroom/nestjs-libraries/integrations/social/channel-presets';
+import { CHANNEL_PRESETS } from '@postmill-ai/nestjs-libraries/integrations/social/channel-presets';
 import { detectFocalPoint } from './reflow';
 import {
   migrateDoc,
   genId,
   matchPreset,
-} from '@gitroom/nestjs-libraries/media/designer-doc/designer-doc.migrate';
-import { smartReflow } from '@gitroom/nestjs-libraries/media/designer-doc/reflow';
-import { seedCopy } from '@gitroom/nestjs-libraries/media/designer-doc/seed-copy';
-import { applyLinked, GEOMETRY_KEYS } from '@gitroom/nestjs-libraries/media/designer-doc/apply-linked';
+} from '@postmill-ai/nestjs-libraries/media/designer-doc/designer-doc.migrate';
+import { smartReflow } from '@postmill-ai/nestjs-libraries/media/designer-doc/reflow';
+import { seedCopy } from '@postmill-ai/nestjs-libraries/media/designer-doc/seed-copy';
+import { applyLinked, GEOMETRY_KEYS } from '@postmill-ai/nestjs-libraries/media/designer-doc/apply-linked';
 import type {
   DesignerDoc,
   DesignerElement,
@@ -23,7 +23,7 @@ import type {
   DesignerAttribution,
   DesignerTextShadow,
   StickerFrame,
-} from '@gitroom/nestjs-libraries/media/designer-doc/designer-doc.schema';
+} from '@postmill-ai/nestjs-libraries/media/designer-doc/designer-doc.schema';
 
 export type {
   DesignerDoc,

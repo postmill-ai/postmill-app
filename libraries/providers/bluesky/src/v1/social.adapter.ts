@@ -6,14 +6,14 @@ import {
   SocialCommentAuthor,
   SocialCommentDTO,
   SocialProvider,
-} from '@gitroom/provider-kernel';
-import { makeId, makeOauthState } from '@gitroom/provider-kernel';
+} from '@postmill-ai/provider-kernel';
+import { makeId, makeOauthState } from '@postmill-ai/provider-kernel';
 import {
   BadBody,
   RefreshToken,
   SocialAbstract,
   ValidityMedia,
-} from '@gitroom/provider-kernel';
+} from '@postmill-ai/provider-kernel';
 import {
   BskyAgent,
   RichText,
@@ -25,14 +25,14 @@ import {
 import { Logger } from '@nestjs/common';
 import dayjs from 'dayjs';
 import { Integration } from '@prisma/client';
-import { AuthService } from '@gitroom/helpers/auth/auth.service';
+import { AuthService } from '@postmill-ai/helpers/auth/auth.service';
 import sharp from 'sharp';
-import { Plug } from '@gitroom/helpers/decorators/plug.decorator';
-import { timer } from '@gitroom/helpers/utils/timer';
-import { stripHtmlValidation } from '@gitroom/helpers/utils/strip.html.validation';
-import { Rules } from '@gitroom/provider-kernel';
-import { hasExtension } from '@gitroom/helpers/utils/has.extension';
-import { safeFetch } from '@gitroom/provider-kernel';
+import { Plug } from '@postmill-ai/helpers/decorators/plug.decorator';
+import { timer } from '@postmill-ai/helpers/utils/timer';
+import { stripHtmlValidation } from '@postmill-ai/helpers/utils/strip.html.validation';
+import { Rules } from '@postmill-ai/provider-kernel';
+import { hasExtension } from '@postmill-ai/helpers/utils/has.extension';
+import { safeFetch } from '@postmill-ai/provider-kernel';
 import net from 'node:net';
 
 import { metadata as providerMetadata } from './metadata';
@@ -983,7 +983,7 @@ import {
   ProviderModule as __ProviderModule,
   SocialProviderKernelAdapter as __Bridge,
   PROVIDER_CAPABILITIES as __CAPS,
-} from '@gitroom/provider-kernel';
+} from '@postmill-ai/provider-kernel';
 
 const __adapter = new BlueskyProvider();
 

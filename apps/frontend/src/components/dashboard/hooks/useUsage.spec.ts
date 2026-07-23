@@ -1,10 +1,10 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { renderHook } from '@testing-library/react';
 import useSWR from 'swr';
-import { useFetch } from '@gitroom/helpers/utils/custom.fetch';
+import { useFetch } from '@postmill-ai/helpers/utils/custom.fetch';
 import { useUsage } from './useUsage';
 
-vi.mock('@gitroom/helpers/utils/custom.fetch', () => ({
+vi.mock('@postmill-ai/helpers/utils/custom.fetch', () => ({
   useFetch: vi.fn(),
 }));
 

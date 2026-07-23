@@ -6,24 +6,24 @@ import {
   EngagementFilter,
   MetricKey,
   DEFAULT_METRIC_FILTERS,
-} from '@gitroom/frontend/components/launches/calendar.context';
+} from '@postmill-ai/frontend/components/launches/calendar.context';
 import clsx from 'clsx';
 import dayjs from 'dayjs';
 import { ReactNode, useCallback, useEffect, useState } from 'react';
-import { SelectCustomer } from '@gitroom/frontend/components/launches/select.customer';
-import { ChannelFilterSelect } from '@gitroom/frontend/components/launches/channel-filter-select';
-import { CampaignFilterSelect } from '@gitroom/frontend/components/launches/campaign-filter-select';
-import { TagFilterSelect } from '@gitroom/frontend/components/launches/tag-filter-select';
-import { MetricFilter } from '@gitroom/frontend/components/launches/metric-filter';
+import { SelectCustomer } from '@postmill-ai/frontend/components/launches/select.customer';
+import { ChannelFilterSelect } from '@postmill-ai/frontend/components/launches/channel-filter-select';
+import { CampaignFilterSelect } from '@postmill-ai/frontend/components/launches/campaign-filter-select';
+import { TagFilterSelect } from '@postmill-ai/frontend/components/launches/tag-filter-select';
+import { MetricFilter } from '@postmill-ai/frontend/components/launches/metric-filter';
 import {
   SimpleMultiSelect,
   SimpleOption,
-} from '@gitroom/frontend/components/launches/simple-multi-select';
-import SafeImage from '@gitroom/react/helpers/safe.image';
+} from '@postmill-ai/frontend/components/launches/simple-multi-select';
+import SafeImage from '@postmill-ai/react/helpers/safe.image';
 import { RangeCalendar } from '@mantine/dates';
-import { useT } from '@gitroom/react/translation/get.transation.service.client';
+import { useT } from '@postmill-ai/react/translation/get.transation.service.client';
 import i18next from 'i18next';
-import { newDayjs } from '@gitroom/frontend/components/layout/set.timezone';
+import { newDayjs } from '@postmill-ai/frontend/components/layout/set.timezone';
 
 // Helper function to get start and end dates based on display type
 function getDateRange(

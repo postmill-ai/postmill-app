@@ -6,19 +6,19 @@ import {
   PostResponse,
   SocialCommentDTO,
   SocialProvider,
-} from '@gitroom/provider-kernel';
-import { makeId, makeOauthState } from '@gitroom/provider-kernel';
+} from '@postmill-ai/provider-kernel';
+import { makeId, makeOauthState } from '@postmill-ai/provider-kernel';
 import dayjs from 'dayjs';
 import {
   SocialAbstract,
   ValidityMedia,
-} from '@gitroom/provider-kernel';
-import { FacebookDto } from '@gitroom/provider-kernel';
-import { DribbbleDto } from '@gitroom/provider-kernel';
+} from '@postmill-ai/provider-kernel';
+import { FacebookDto } from '@postmill-ai/provider-kernel';
+import { DribbbleDto } from '@postmill-ai/provider-kernel';
 import { Integration } from '@prisma/client';
-import { hasExtension } from '@gitroom/helpers/utils/has.extension';
-import { timer } from '@gitroom/helpers/utils/timer';
-import { Rules } from '@gitroom/provider-kernel';
+import { hasExtension } from '@postmill-ai/helpers/utils/has.extension';
+import { timer } from '@postmill-ai/helpers/utils/timer';
+import { Rules } from '@postmill-ai/provider-kernel';
 import { Logger } from '@nestjs/common';
 
 import { metadata as providerMetadata } from './metadata';
@@ -958,7 +958,7 @@ import {
   ProviderModule as __ProviderModule,
   SocialProviderKernelAdapter as __Bridge,
   PROVIDER_CAPABILITIES as __CAPS,
-} from '@gitroom/provider-kernel';
+} from '@postmill-ai/provider-kernel';
 
 const __adapter = new FacebookProvider();
 

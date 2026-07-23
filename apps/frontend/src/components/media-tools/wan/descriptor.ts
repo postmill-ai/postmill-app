@@ -1,4 +1,4 @@
-import type { StudioDescriptor } from '@gitroom/frontend/components/media-tools/studio-kit/types';
+import type { StudioDescriptor } from '@postmill-ai/frontend/components/media-tools/studio-kit/types';
 
 // Wan (Tongyi Wanxiang) on Alibaba Cloud Model Studio (DashScope, intl host). Field names are the
 // native DashScope params: `negative_prompt`/`img_url` ride into `input`, everything else (size,

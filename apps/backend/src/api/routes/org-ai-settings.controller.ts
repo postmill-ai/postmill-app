@@ -10,19 +10,19 @@ import {
   Query,
 } from '@nestjs/common';
 import { Throttle } from '@nestjs/throttler';
-import { GetOrgFromRequest } from '@gitroom/nestjs-libraries/user/org.from.request';
+import { GetOrgFromRequest } from '@postmill-ai/nestjs-libraries/user/org.from.request';
 import { Organization } from '@prisma/client';
 import { ApiTags } from '@nestjs/swagger';
-import { OrgAiSettingsService } from '@gitroom/nestjs-libraries/database/prisma/ai-settings/org-ai-settings.service';
-import { AiDefaultsService } from '@gitroom/nestjs-libraries/ai/defaults/ai-defaults.service';
-import { SetDefaultModelDto } from '@gitroom/nestjs-libraries/dtos/ai-settings/default-model.dto';
-import { RequirePermission } from '@gitroom/backend/services/auth/rbac/require-permission.decorator';
+import { OrgAiSettingsService } from '@postmill-ai/nestjs-libraries/database/prisma/ai-settings/org-ai-settings.service';
+import { AiDefaultsService } from '@postmill-ai/nestjs-libraries/ai/defaults/ai-defaults.service';
+import { SetDefaultModelDto } from '@postmill-ai/nestjs-libraries/dtos/ai-settings/default-model.dto';
+import { RequirePermission } from '@postmill-ai/backend/services/auth/rbac/require-permission.decorator';
 import {
   UpsertOrgAiConfigDto,
   UpdateBudgetDto,
   SetActiveVersionDto,
   ProviderTestConnectionDto,
-} from '@gitroom/nestjs-libraries/dtos/providers/provider-config.dtos';
+} from '@postmill-ai/nestjs-libraries/dtos/providers/provider-config.dtos';
 
 @ApiTags('Org AI Settings')
 @Controller('/settings/ai')

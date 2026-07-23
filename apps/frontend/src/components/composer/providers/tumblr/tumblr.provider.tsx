@@ -1,6 +1,6 @@
 'use client';
 import { withProvider, PostComment } from
-  '@gitroom/frontend/components/composer/providers/high.order.provider';
+  '@postmill-ai/frontend/components/composer/providers/high.order.provider';
 
 export default withProvider({
   comments: false,

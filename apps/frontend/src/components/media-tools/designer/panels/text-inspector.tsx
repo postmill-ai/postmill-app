@@ -5,7 +5,7 @@ import { TextFormatPanel } from './text-format-panel';
 import { TEXT_STYLE_PRESETS, TextStylePreset, FONT_PAIRINGS } from '../text-styles';
 import { ensureFontLoaded } from '../fonts';
 import { sharedStageRef } from '../stage-ref';
-import { useT } from '@gitroom/react/translation/get.transation.service.client';
+import { useT } from '@postmill-ai/react/translation/get.transation.service.client';
 import type { DesignerElement } from '../designer.store';
 
 interface TextInspectorProps {

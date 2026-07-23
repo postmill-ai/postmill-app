@@ -1,10 +1,10 @@
 'use client';
 
 import React from 'react';
-import i18next from '@gitroom/react/translation/i18next';
-import { useT } from '@gitroom/react/translation/get.transation.service.client';
-import ProviderIcon from '@gitroom/frontend/components/shared/provider-icon';
-import { ProviderCatalogEntry } from '@gitroom/frontend/components/settings/shared/use-provider-catalog';
+import i18next from '@postmill-ai/react/translation/i18next';
+import { useT } from '@postmill-ai/react/translation/get.transation.service.client';
+import ProviderIcon from '@postmill-ai/frontend/components/shared/provider-icon';
+import { ProviderCatalogEntry } from '@postmill-ai/frontend/components/settings/shared/use-provider-catalog';
 
 /**
  * Minimal "what is this provider" modal, opened by clicking a provider name in

@@ -1,6 +1,6 @@
 import { Injectable, Logger, NotFoundException } from '@nestjs/common';
-import { WatchlistRepository } from '@gitroom/nestjs-libraries/database/prisma/watchlist/watchlist.repository';
-import { safeFetch } from '@gitroom/nestjs-libraries/dtos/webhooks/safe.fetch';
+import { WatchlistRepository } from '@postmill-ai/nestjs-libraries/database/prisma/watchlist/watchlist.repository';
+import { safeFetch } from '@postmill-ai/nestjs-libraries/dtos/webhooks/safe.fetch';
 import dayjs from 'dayjs';
 
 @Injectable()

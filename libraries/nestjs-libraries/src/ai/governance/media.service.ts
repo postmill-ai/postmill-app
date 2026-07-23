@@ -1,41 +1,41 @@
 import { BadRequestException, Injectable, Logger, Optional } from '@nestjs/common';
 import { ModuleRef } from '@nestjs/core';
 import { randomBytes } from 'crypto';
-import { AiSettingsService } from '@gitroom/nestjs-libraries/database/prisma/ai-settings/ai-settings.service';
-import { AiSettingsManager } from '@gitroom/nestjs-libraries/ai/ai-settings.manager';
-import { AIModelProvider } from '@gitroom/nestjs-libraries/ai/ai-model.provider';
-import { DefaultsResolutionService } from '@gitroom/nestjs-libraries/ai/defaults/defaults-resolution.service';
-import { OrgMediaProviderSettingsService } from '@gitroom/nestjs-libraries/database/prisma/media-providers/org-media-provider-settings.service';
-import { OrgAiSettingsRepository } from '@gitroom/nestjs-libraries/database/prisma/ai-settings/org-ai-settings.repository';
-import { EncryptionService } from '@gitroom/nestjs-libraries/encryption/encryption.service';
-import { MediaJobLifecycleService } from '@gitroom/nestjs-libraries/database/prisma/media-providers/media-job-lifecycle.service';
-import { ProviderResolutionService } from '@gitroom/nestjs-libraries/providers/provider-resolution.service';
+import { AiSettingsService } from '@postmill-ai/nestjs-libraries/database/prisma/ai-settings/ai-settings.service';
+import { AiSettingsManager } from '@postmill-ai/nestjs-libraries/ai/ai-settings.manager';
+import { AIModelProvider } from '@postmill-ai/nestjs-libraries/ai/ai-model.provider';
+import { DefaultsResolutionService } from '@postmill-ai/nestjs-libraries/ai/defaults/defaults-resolution.service';
+import { OrgMediaProviderSettingsService } from '@postmill-ai/nestjs-libraries/database/prisma/media-providers/org-media-provider-settings.service';
+import { OrgAiSettingsRepository } from '@postmill-ai/nestjs-libraries/database/prisma/ai-settings/org-ai-settings.repository';
+import { EncryptionService } from '@postmill-ai/nestjs-libraries/encryption/encryption.service';
+import { MediaJobLifecycleService } from '@postmill-ai/nestjs-libraries/database/prisma/media-providers/media-job-lifecycle.service';
+import { ProviderResolutionService } from '@postmill-ai/nestjs-libraries/providers/provider-resolution.service';
 import { BudgetService } from './budget.service';
-import { StorageService } from '@gitroom/nestjs-libraries/database/prisma/storage/storage.service';
-import { FileService } from '@gitroom/nestjs-libraries/database/prisma/file/file.service';
-import { BrandsService } from '@gitroom/nestjs-libraries/brands/brands.service';
-import { ioRedis } from '@gitroom/nestjs-libraries/redis/redis.service';
-import { safeFetch } from '@gitroom/nestjs-libraries/dtos/webhooks/safe.fetch';
+import { StorageService } from '@postmill-ai/nestjs-libraries/database/prisma/storage/storage.service';
+import { FileService } from '@postmill-ai/nestjs-libraries/database/prisma/file/file.service';
+import { BrandsService } from '@postmill-ai/nestjs-libraries/brands/brands.service';
+import { ioRedis } from '@postmill-ai/nestjs-libraries/redis/redis.service';
+import { safeFetch } from '@postmill-ai/nestjs-libraries/dtos/webhooks/safe.fetch';
 import {
   MediaProviderAdapter,
   MediaProviderCapabilities,
   MediaGenerationResult,
-} from '@gitroom/nestjs-libraries/media/media-provider-adapter.interface';
-import type { MediaGenerateOptions } from '@gitroom/provider-kernel';
+} from '@postmill-ai/nestjs-libraries/media/media-provider-adapter.interface';
+import type { MediaGenerateOptions } from '@postmill-ai/provider-kernel';
 // Type-only imports: SlideService/CaptionService both inject back into this AI module
 // (slide -> AiDefaultsService -> AiMediaService; caption -> AiMediaService), so a runtime
 // value-import here closes a circular `require` that leaves AiMediaService `undefined` at
 // decorator-metadata time (boot-time DI failure). They are only ever resolved lazily via
 // `moduleRef.get(...)` at call-time, so the runtime class is `require`d inside the methods.
-import type { SlideService } from '@gitroom/nestjs-libraries/media/slide/slide.service';
-import type { CaptionService } from '@gitroom/nestjs-libraries/media/caption/caption.service';
+import type { SlideService } from '@postmill-ai/nestjs-libraries/media/slide/slide.service';
+import type { CaptionService } from '@postmill-ai/nestjs-libraries/media/caption/caption.service';
 import { BudgetExceeded, CapabilityNotAvailable } from './errors';
-import type { MediaOperation } from '@gitroom/nestjs-libraries/ai/governance/media-operation.types';
+import type { MediaOperation } from '@postmill-ai/nestjs-libraries/ai/governance/media-operation.types';
 import {
   AI_MEDIA_CATEGORIES,
   MEDIA_CATEGORY_OPERATION,
   type AiMediaCategory,
-} from '@gitroom/nestjs-libraries/ai/defaults/default-categories';
+} from '@postmill-ai/nestjs-libraries/ai/defaults/default-categories';
 
 // Read-only, credential-free view of which media providers are active per operation.
 // Surfaced to non-admin users (4F) so they can see what media capabilities the org
@@ -1495,7 +1495,7 @@ export class AiMediaService {
     }
     // Lazy require (not a top-level import) to avoid the circular boot-time require — see note at imports.
     // eslint-disable-next-line @typescript-eslint/no-require-imports
-    const { SlideService } = require('@gitroom/nestjs-libraries/media/slide/slide.service');
+    const { SlideService } = require('@postmill-ai/nestjs-libraries/media/slide/slide.service');
     const slideService = this._moduleRef.get<SlideService>(SlideService, {
       strict: false,
     });
@@ -1522,7 +1522,7 @@ export class AiMediaService {
     }
     // Lazy require (not a top-level import) to avoid the circular boot-time require — see note at imports.
     // eslint-disable-next-line @typescript-eslint/no-require-imports
-    const { CaptionService } = require('@gitroom/nestjs-libraries/media/caption/caption.service');
+    const { CaptionService } = require('@postmill-ai/nestjs-libraries/media/caption/caption.service');
     const captionService = this._moduleRef.get<CaptionService>(CaptionService, {
       strict: false,
     });

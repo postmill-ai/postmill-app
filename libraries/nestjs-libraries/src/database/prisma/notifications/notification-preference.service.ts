@@ -1,12 +1,12 @@
 import { Injectable } from '@nestjs/common';
-import { PrismaRepository } from '@gitroom/nestjs-libraries/database/prisma/prisma.service';
+import { PrismaRepository } from '@postmill-ai/nestjs-libraries/database/prisma/prisma.service';
 import { Prisma } from '@prisma/client';
 import {
   ChannelToggles,
   DigestFrequency,
   NotificationCategory,
   UpdateNotificationPreferenceDto,
-} from '@gitroom/nestjs-libraries/dtos/notifications/notification-preference.dto';
+} from '@postmill-ai/nestjs-libraries/dtos/notifications/notification-preference.dto';
 
 type JsonInput = Prisma.InputJsonValue;
 

@@ -1,14 +1,14 @@
 import { HttpException, Injectable, Logger } from '@nestjs/common';
 import { Prisma, StorageProviderType } from '@prisma/client';
 import { StorageRepository } from './storage.repository';
-import { AuditService } from '@gitroom/nestjs-libraries/database/prisma/audit/audit.service';
-import { EncryptionService } from '@gitroom/nestjs-libraries/encryption/encryption.service';
-import { IStorageAdapter } from '@gitroom/nestjs-libraries/upload/upload.interface';
-import { ProviderResolutionService } from '@gitroom/nestjs-libraries/providers/provider-resolution.service';
-import { accountFingerprint } from '@gitroom/nestjs-libraries/utils/account-fingerprint';
-import { SubscriptionRepository } from '@gitroom/nestjs-libraries/database/prisma/subscriptions/subscription.repository';
-import { FileRepository } from '@gitroom/nestjs-libraries/database/prisma/file/file.repository';
-import { pricing } from '@gitroom/nestjs-libraries/database/prisma/subscriptions/pricing';
+import { AuditService } from '@postmill-ai/nestjs-libraries/database/prisma/audit/audit.service';
+import { EncryptionService } from '@postmill-ai/nestjs-libraries/encryption/encryption.service';
+import { IStorageAdapter } from '@postmill-ai/nestjs-libraries/upload/upload.interface';
+import { ProviderResolutionService } from '@postmill-ai/nestjs-libraries/providers/provider-resolution.service';
+import { accountFingerprint } from '@postmill-ai/nestjs-libraries/utils/account-fingerprint';
+import { SubscriptionRepository } from '@postmill-ai/nestjs-libraries/database/prisma/subscriptions/subscription.repository';
+import { FileRepository } from '@postmill-ai/nestjs-libraries/database/prisma/file/file.repository';
+import { pricing } from '@postmill-ai/nestjs-libraries/database/prisma/subscriptions/pricing';
 
 type StorageConfigRow = {
   id: string;

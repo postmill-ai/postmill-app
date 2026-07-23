@@ -7,7 +7,7 @@ import { ShapeInspector } from './shape-inspector';
 import { IconInspector } from './icon-inspector';
 import { TextInspector } from './text-inspector';
 import { ClipInspector } from './clip-inspector';
-import { useT } from '@gitroom/react/translation/get.transation.service.client';
+import { useT } from '@postmill-ai/react/translation/get.transation.service.client';
 import type { DesignerElement } from '../designer.store';
 
 interface InspectorProps {

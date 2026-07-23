@@ -1,18 +1,18 @@
-import { makeId, makeOauthState } from '@gitroom/provider-kernel';
-import { SocialAbstract } from '@gitroom/provider-kernel';
+import { makeId, makeOauthState } from '@postmill-ai/provider-kernel';
+import { SocialAbstract } from '@postmill-ai/provider-kernel';
 import {
   AuthTokenDetails,
   MediaContent,
   PostDetails,
   PostResponse,
   SocialProvider,
-} from '@gitroom/provider-kernel';
+} from '@postmill-ai/provider-kernel';
 import dayjs from 'dayjs';
 import { Integration } from '@prisma/client';
-import { Tool } from '@gitroom/provider-kernel';
-import { SkoolDto } from '@gitroom/provider-kernel';
-import { AuthService } from '@gitroom/helpers/auth/auth.service';
-import { safeFetch } from '@gitroom/provider-kernel';
+import { Tool } from '@postmill-ai/provider-kernel';
+import { SkoolDto } from '@postmill-ai/provider-kernel';
+import { AuthService } from '@postmill-ai/helpers/auth/auth.service';
+import { safeFetch } from '@postmill-ai/provider-kernel';
 
 import { metadata as providerMetadata } from './metadata';
 export class SkoolProvider extends SocialAbstract implements SocialProvider {
@@ -355,7 +355,7 @@ import {
   ProviderModule as __ProviderModule,
   SocialProviderKernelAdapter as __Bridge,
   PROVIDER_CAPABILITIES as __CAPS,
-} from '@gitroom/provider-kernel';
+} from '@postmill-ai/provider-kernel';
 
 const __adapter = new SkoolProvider();
 

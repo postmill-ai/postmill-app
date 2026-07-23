@@ -3,7 +3,7 @@
 import { FC } from 'react';
 import dayjs from 'dayjs';
 import utc from 'dayjs/plugin/utc';
-import { useT } from '@gitroom/react/translation/get.transation.service.client';
+import { useT } from '@postmill-ai/react/translation/get.transation.service.client';
 dayjs.extend(utc);
 
 export const RenderPreviewDate: FC<{ date: string }> = ({ date }) => {

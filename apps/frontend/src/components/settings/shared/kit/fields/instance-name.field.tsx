@@ -1,7 +1,7 @@
 'use client';
 
 import React from 'react';
-import { useT } from '@gitroom/react/translation/get.transation.service.client';
+import { useT } from '@postmill-ai/react/translation/get.transation.service.client';
 import { ExtraFieldProps } from './extra-field.types';
 
 /** "Configuration Name" text input (shortlinks/channels). Writes `state.name`. */

@@ -1,6 +1,6 @@
 'use client';
 
-import { useT } from '@gitroom/react/translation/get.transation.service.client';
+import { useT } from '@postmill-ai/react/translation/get.transation.service.client';
 
 export function RefreshButton() {
   const t = useT();

@@ -11,16 +11,16 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { trace } from '@opentelemetry/api';
-import { singleFlight } from '@gitroom/nestjs-libraries/utils/concurrency';
-import { PostsService } from '@gitroom/nestjs-libraries/database/prisma/posts/posts.service';
-import { AnalyticsRepository } from '@gitroom/nestjs-libraries/database/prisma/analytics/analytics.repository';
-import { IntegrationService } from '@gitroom/nestjs-libraries/database/prisma/integrations/integration.service';
-import { isKnownMetric } from '@gitroom/nestjs-libraries/integrations/social/analytics.metrics';
+import { singleFlight } from '@postmill-ai/nestjs-libraries/utils/concurrency';
+import { PostsService } from '@postmill-ai/nestjs-libraries/database/prisma/posts/posts.service';
+import { AnalyticsRepository } from '@postmill-ai/nestjs-libraries/database/prisma/analytics/analytics.repository';
+import { IntegrationService } from '@postmill-ai/nestjs-libraries/database/prisma/integrations/integration.service';
+import { isKnownMetric } from '@postmill-ai/nestjs-libraries/integrations/social/analytics.metrics';
 import { Organization } from '@prisma/client';
 import dayjs from 'dayjs';
 import utc from 'dayjs/plugin/utc';
 import { createHash } from 'crypto';
-import { RedisService } from '@gitroom/nestjs-libraries/redis/redis.service';
+import { RedisService } from '@postmill-ai/nestjs-libraries/redis/redis.service';
 import {
   AnalyticsOverviewResponse,
   ByChannelItem,

@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { providerModules } from '@gitroom/backend/providers.generated';
+import { providerModules } from '@postmill-ai/backend/providers.generated';
 import { runDomainConformance } from '../testing/conformance';
 
 /**
@@ -45,7 +45,7 @@ const REQUIRED_METHODS: Record<string, string[]> = {
 // shortlink validate/stats skeleton) cannot drift back into per-adapter copies.
 //
 // NOTE: `providerModules` is loaded through the workspace's node_modules graph, which
-// resolves `@gitroom/provider-kernel` to a different module instance than this spec's alias
+// resolves `@postmill-ai/provider-kernel` to a different module instance than this spec's alias
 // import — so a literal `toBeInstanceOf(<imported base>)` always fails (two distinct class
 // objects). We instead resolve the base constructor from the adapter's OWN prototype chain
 // (its realm) and assert a real `instanceof` against that — a genuine extends-the-base lock.

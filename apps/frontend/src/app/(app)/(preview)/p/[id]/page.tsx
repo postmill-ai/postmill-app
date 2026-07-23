@@ -1,18 +1,18 @@
-import { internalFetch } from '@gitroom/helpers/utils/internal.fetch';
-import { sanitizePostContent } from '@gitroom/helpers/utils/sanitize.post.content';
+import { internalFetch } from '@postmill-ai/helpers/utils/internal.fetch';
+import { sanitizePostContent } from '@postmill-ai/helpers/utils/sanitize.post.content';
 export const dynamic = 'force-dynamic';
 import { Metadata } from 'next';
-import SafeImage from '@gitroom/react/helpers/safe.image';
+import SafeImage from '@postmill-ai/react/helpers/safe.image';
 import Image from 'next/image';
 import Link from 'next/link';
-import { CommentsComponents } from '@gitroom/frontend/components/preview/comments.components';
+import { CommentsComponents } from '@postmill-ai/frontend/components/preview/comments.components';
 import dayjs from 'dayjs';
 import utc from 'dayjs/plugin/utc';
-import { VideoOrImage } from '@gitroom/react/helpers/video.or.image';
-import { CopyClient } from '@gitroom/frontend/components/preview/copy.client';
-import { getT } from '@gitroom/react/translation/get.translation.service.backend';
-import { RenderPreviewDateClient } from '@gitroom/frontend/components/preview/render.preview.date.client';
-import { CreationMethodBadge } from '@gitroom/frontend/components/launches/creation.method.badge';
+import { VideoOrImage } from '@postmill-ai/react/helpers/video.or.image';
+import { CopyClient } from '@postmill-ai/frontend/components/preview/copy.client';
+import { getT } from '@postmill-ai/react/translation/get.translation.service.backend';
+import { RenderPreviewDateClient } from '@postmill-ai/frontend/components/preview/render.preview.date.client';
+import { CreationMethodBadge } from '@postmill-ai/frontend/components/launches/creation.method.badge';
 
 dayjs.extend(utc);
 export const metadata: Metadata = {

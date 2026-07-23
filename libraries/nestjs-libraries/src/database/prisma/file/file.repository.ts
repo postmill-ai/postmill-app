@@ -1,6 +1,6 @@
-import { PrismaRepository } from '@gitroom/nestjs-libraries/database/prisma/prisma.service';
+import { PrismaRepository } from '@postmill-ai/nestjs-libraries/database/prisma/prisma.service';
 import { Injectable, Logger } from '@nestjs/common';
-import { SaveMediaInformationDto } from '@gitroom/nestjs-libraries/dtos/file/save.media.information.dto';
+import { SaveMediaInformationDto } from '@postmill-ai/nestjs-libraries/dtos/file/save.media.information.dto';
 import { Prisma } from '@prisma/client';
 import { stat } from 'fs/promises';
 import { extname, resolve, relative, isAbsolute } from 'path';

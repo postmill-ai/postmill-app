@@ -5,7 +5,7 @@ import {
   RawBodyRequest,
   Req,
 } from '@nestjs/common';
-import { StripeService } from '@gitroom/nestjs-libraries/services/stripe.service';
+import { StripeService } from '@postmill-ai/nestjs-libraries/services/stripe.service';
 import { ApiTags } from '@nestjs/swagger';
 import Stripe from 'stripe';
 

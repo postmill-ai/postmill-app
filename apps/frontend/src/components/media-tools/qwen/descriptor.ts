@@ -1,4 +1,4 @@
-import type { StudioDescriptor } from '@gitroom/frontend/components/media-tools/studio-kit/types';
+import type { StudioDescriptor } from '@postmill-ai/frontend/components/media-tools/studio-kit/types';
 
 // Qwen on Alibaba DashScope (registry/config identifier `qwen`). Field names are native
 // DashScope params — the adapter routes prompt/negative_prompt/img_url into `input` and

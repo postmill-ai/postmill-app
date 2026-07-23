@@ -3,7 +3,7 @@
 import dynamic from 'next/dynamic';
 
 const FireworksStudio = dynamic(
-  () => import('@gitroom/frontend/components/media-tools/fireworks/fireworks-studio').then((m) => m.FireworksStudio),
+  () => import('@postmill-ai/frontend/components/media-tools/fireworks/fireworks-studio').then((m) => m.FireworksStudio),
   { ssr: false }
 );
 

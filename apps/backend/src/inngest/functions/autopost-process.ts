@@ -1,5 +1,5 @@
-import { inngest } from '@gitroom/nestjs-libraries/inngest/inngest.client';
-import { AutopostActivity } from '@gitroom/nestjs-libraries/inngest/activities/autopost.activity';
+import { inngest } from '@postmill-ai/nestjs-libraries/inngest/inngest.client';
+import { AutopostActivity } from '@postmill-ai/nestjs-libraries/inngest/activities/autopost.activity';
 
 export const createAutopostProcess = (autopostActivity: AutopostActivity) =>
   inngest.createFunction(

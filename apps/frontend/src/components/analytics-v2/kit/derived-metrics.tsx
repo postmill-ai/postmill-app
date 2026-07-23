@@ -1,7 +1,7 @@
 'use client';
 
 import { FC } from 'react';
-import { useT } from '@gitroom/react/translation/get.transation.service.client';
+import { useT } from '@postmill-ai/react/translation/get.transation.service.client';
 import { DerivedMetrics } from '../utils';
 
 // Shared rendering of the derived (computed) secondary metrics (6.2):

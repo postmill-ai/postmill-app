@@ -3,7 +3,7 @@ import {
   ProviderRuntimeContext,
   AuthCapability,
   AuthUserInfo,
-} from '@gitroom/provider-kernel';
+} from '@postmill-ai/provider-kernel';
 import { NeynarAPIClient } from '@neynar/nodejs-sdk';
 
 import { metadata as providerMetadata } from './metadata';

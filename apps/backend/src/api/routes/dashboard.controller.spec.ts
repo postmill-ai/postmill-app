@@ -2,19 +2,19 @@ import 'reflect-metadata';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { UnauthorizedException } from '@nestjs/common';
 
-vi.mock('@gitroom/nestjs-libraries/dashboard/dashboard.service', () => ({
+vi.mock('@postmill-ai/nestjs-libraries/dashboard/dashboard.service', () => ({
   DashboardService: class {},
 }));
-vi.mock('@gitroom/nestjs-libraries/dashboard/dashboard-brief.service', () => ({
+vi.mock('@postmill-ai/nestjs-libraries/dashboard/dashboard-brief.service', () => ({
   DashboardBriefService: class {},
 }));
-vi.mock('@gitroom/backend/services/auth/permissions/permissions.service', () => ({
+vi.mock('@postmill-ai/backend/services/auth/permissions/permissions.service', () => ({
   PermissionsService: class {},
 }));
 
 import { DashboardController } from './dashboard.controller';
-import type { DashboardService } from '@gitroom/nestjs-libraries/dashboard/dashboard.service';
-import type { DashboardBriefService } from '@gitroom/nestjs-libraries/dashboard/dashboard-brief.service';
+import type { DashboardService } from '@postmill-ai/nestjs-libraries/dashboard/dashboard.service';
+import type { DashboardBriefService } from '@postmill-ai/nestjs-libraries/dashboard/dashboard-brief.service';
 
 const org = { id: 'org-1', timezone: 'UTC', createdAt: new Date('2024-01-01') } as any;
 const user = { id: 'user-1' } as any;

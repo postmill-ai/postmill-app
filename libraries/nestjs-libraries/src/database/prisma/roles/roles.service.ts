@@ -1,7 +1,7 @@
 import { BadRequestException, Injectable, HttpException, HttpStatus, Logger } from '@nestjs/common';
 import { User } from '@prisma/client';
 import { RolesRepository } from './roles.repository';
-import { AuditService } from '@gitroom/nestjs-libraries/database/prisma/audit/audit.service';
+import { AuditService } from '@postmill-ai/nestjs-libraries/database/prisma/audit/audit.service';
 
 type RolePermissionRow = { permission: { resource: string; action: string } };
 type AssignableRole = {

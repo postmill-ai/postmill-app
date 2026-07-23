@@ -4,12 +4,12 @@ import { FC } from 'react';
 import {
   PostComment,
   withProvider,
-} from '@gitroom/frontend/components/composer/providers/high.order.provider';
-import { useSettings } from '@gitroom/frontend/components/launches/helpers/use.values';
-import { Input } from '@gitroom/react/form/input';
-import { DribbbleTeams } from '@gitroom/frontend/components/composer/providers/dribbble/dribbble.teams';
-import { DribbbleDto } from '@gitroom/nestjs-libraries/dtos/posts/providers-settings/dribbble.dto';
-import { useT } from '@gitroom/react/translation/get.transation.service.client';
+} from '@postmill-ai/frontend/components/composer/providers/high.order.provider';
+import { useSettings } from '@postmill-ai/frontend/components/launches/helpers/use.values';
+import { Input } from '@postmill-ai/react/form/input';
+import { DribbbleTeams } from '@postmill-ai/frontend/components/composer/providers/dribbble/dribbble.teams';
+import { DribbbleDto } from '@postmill-ai/nestjs-libraries/dtos/posts/providers-settings/dribbble.dto';
+import { useT } from '@postmill-ai/react/translation/get.transation.service.client';
 const DribbbleSettings: FC = () => {
   const { register, control } = useSettings();
   const t = useT();

@@ -1,4 +1,4 @@
-import type { StudioDescriptor } from '@gitroom/frontend/components/media-tools/studio-kit/types';
+import type { StudioDescriptor } from '@postmill-ai/frontend/components/media-tools/studio-kit/types';
 
 // Google Vertex AI (registry/config identifier `vertex`): Veo text→video + Imagen text→image.
 // Field names are native Vertex `parameters` keys and ride into the request body via the

@@ -10,7 +10,7 @@ import {
   VpnProxyAuth,
   VpnProxyProtocol,
   VpnProxyRegion,
-} from '@gitroom/provider-kernel';
+} from '@postmill-ai/provider-kernel';
 
 // Generic "bring-your-own proxy" provider. The org supplies its own SOCKS5 /
 // HTTP-CONNECT endpoint (e.g. a proxy on their office network reachable over

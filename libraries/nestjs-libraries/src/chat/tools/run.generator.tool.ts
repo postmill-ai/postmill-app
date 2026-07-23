@@ -1,16 +1,16 @@
-import { AgentToolInterface } from '@gitroom/nestjs-libraries/chat/agent.tool.interface';
+import { AgentToolInterface } from '@postmill-ai/nestjs-libraries/chat/agent.tool.interface';
 import { createTool } from '@mastra/core/tools';
 import { Injectable } from '@nestjs/common';
 import { z } from 'zod';
-import { AgentGraphService } from '@gitroom/nestjs-libraries/agent/agent.graph.service';
-import { GeneratorDto } from '@gitroom/nestjs-libraries/dtos/generator/generator.dto';
-import { checkAuth } from '@gitroom/nestjs-libraries/chat/auth.context';
-import { RagService } from '@gitroom/nestjs-libraries/ai/governance/rag.service';
+import { AgentGraphService } from '@postmill-ai/nestjs-libraries/agent/agent.graph.service';
+import { GeneratorDto } from '@postmill-ai/nestjs-libraries/dtos/generator/generator.dto';
+import { checkAuth } from '@postmill-ai/nestjs-libraries/chat/auth.context';
+import { RagService } from '@postmill-ai/nestjs-libraries/ai/governance/rag.service';
 import {
   parseOrg,
   requireRead,
   requireWrite,
-} from '@gitroom/nestjs-libraries/chat/tools/tool.helpers';
+} from '@postmill-ai/nestjs-libraries/chat/tools/tool.helpers';
 
 @Injectable()
 export class RunGeneratorTool implements AgentToolInterface {

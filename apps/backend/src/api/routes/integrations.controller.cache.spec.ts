@@ -4,7 +4,7 @@ import type { Organization } from '@prisma/client';
 const getIntegrationListResponse = vi.fn();
 const invalidateIntegrationListCache = vi.fn();
 
-vi.mock('@gitroom/nestjs-libraries/integrations/integration.manager', () => ({
+vi.mock('@postmill-ai/nestjs-libraries/integrations/integration.manager', () => ({
   IntegrationManager: class {
     getIntegrationListResponse = getIntegrationListResponse;
     invalidateIntegrationListCache = invalidateIntegrationListCache;
@@ -12,19 +12,19 @@ vi.mock('@gitroom/nestjs-libraries/integrations/integration.manager', () => ({
 }));
 
 vi.mock(
-  '@gitroom/nestjs-libraries/database/prisma/integrations/integration.service',
+  '@postmill-ai/nestjs-libraries/database/prisma/integrations/integration.service',
   () => ({ IntegrationService: class {} })
 );
-vi.mock('@gitroom/nestjs-libraries/database/prisma/posts/posts.service', () => ({
+vi.mock('@postmill-ai/nestjs-libraries/database/prisma/posts/posts.service', () => ({
   PostsService: class {},
 }));
 vi.mock(
-  '@gitroom/nestjs-libraries/database/prisma/campaigns/campaigns.service',
+  '@postmill-ai/nestjs-libraries/database/prisma/campaigns/campaigns.service',
   () => ({ CampaignsService: class {} })
 );
 
 import { IntegrationsController } from './integrations.controller';
-import { IntegrationManager } from '@gitroom/nestjs-libraries/integrations/integration.manager';
+import { IntegrationManager } from '@postmill-ai/nestjs-libraries/integrations/integration.manager';
 
 const org = { id: 'org-1' } as Organization;
 

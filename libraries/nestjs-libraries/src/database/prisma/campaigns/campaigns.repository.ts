@@ -1,4 +1,4 @@
-import { PrismaService } from '@gitroom/nestjs-libraries/database/prisma/prisma.service';
+import { PrismaService } from '@postmill-ai/nestjs-libraries/database/prisma/prisma.service';
 import { Injectable } from '@nestjs/common';
 import { CampaignEntityType, State } from '@prisma/client';
 import dayjs from 'dayjs';

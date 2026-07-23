@@ -1,7 +1,7 @@
 'use client';
 
 import { FC, ReactNode } from 'react';
-import { useT } from '@gitroom/react/translation/get.transation.service.client';
+import { useT } from '@postmill-ai/react/translation/get.transation.service.client';
 
 // Shared loading / empty / error states (F5). Replaces the per-tab ad-hoc
 // skeletons, bare "Loading..." strings, and diverging empty/error blocks.

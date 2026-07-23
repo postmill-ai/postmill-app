@@ -15,12 +15,12 @@ import {
 import { Throttle } from '@nestjs/throttler';
 import { Organization, User } from '@prisma/client';
 import { ApiTags } from '@nestjs/swagger';
-import { GetOrgFromRequest } from '@gitroom/nestjs-libraries/user/org.from.request';
-import { GetUserFromRequest } from '@gitroom/nestjs-libraries/user/user.from.request';
-import { RagService, RagSettings } from '@gitroom/nestjs-libraries/ai/governance/rag.service';
-import { AiSettingsManager } from '@gitroom/nestjs-libraries/ai/ai-settings.manager';
-import { AiSettingsService } from '@gitroom/nestjs-libraries/database/prisma/ai-settings/ai-settings.service';
-import { RagSearchDto } from '@gitroom/backend/dtos/rag/rag-search.dto';
+import { GetOrgFromRequest } from '@postmill-ai/nestjs-libraries/user/org.from.request';
+import { GetUserFromRequest } from '@postmill-ai/nestjs-libraries/user/user.from.request';
+import { RagService, RagSettings } from '@postmill-ai/nestjs-libraries/ai/governance/rag.service';
+import { AiSettingsManager } from '@postmill-ai/nestjs-libraries/ai/ai-settings.manager';
+import { AiSettingsService } from '@postmill-ai/nestjs-libraries/database/prisma/ai-settings/ai-settings.service';
+import { RagSearchDto } from '@postmill-ai/backend/dtos/rag/rag-search.dto';
 
 // 'pgvector' = built-in Postmill default; the rest are remote stores.
 const VECTOR_STORES = ['pgvector', 'pgvector-remote', 'qdrant', 'pinecone'];

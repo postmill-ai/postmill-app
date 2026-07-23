@@ -1,15 +1,15 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import 'reflect-metadata';
 import { BadRequestException, ValidationPipe } from '@nestjs/common';
-import { UpdateWatchlistDto } from '@gitroom/nestjs-libraries/dtos/analytics/analytics.query.dto';
-import { REQUIRE_PERMISSION_KEY } from '@gitroom/backend/services/auth/rbac/require-permission.decorator';
-import { CHECK_POLICIES_KEY } from '@gitroom/backend/services/auth/permissions/permissions.ability';
+import { UpdateWatchlistDto } from '@postmill-ai/nestjs-libraries/dtos/analytics/analytics.query.dto';
+import { REQUIRE_PERMISSION_KEY } from '@postmill-ai/backend/services/auth/rbac/require-permission.decorator';
+import { CHECK_POLICIES_KEY } from '@postmill-ai/backend/services/auth/permissions/permissions.ability';
 import {
   AuthorizationActions,
   Sections,
-} from '@gitroom/backend/services/auth/permissions/permission.exception.class';
+} from '@postmill-ai/backend/services/auth/permissions/permission.exception.class';
 
-vi.mock('@gitroom/nestjs-libraries/analytics/analytics.service', () => ({
+vi.mock('@postmill-ai/nestjs-libraries/analytics/analytics.service', () => ({
   AnalyticsService: class MockAnalyticsService {
     getOverview = vi.fn();
     getChannel = vi.fn();
@@ -46,12 +46,12 @@ import {
   validateDateRange,
   validateToGteFrom,
 } from './analytics.v2.controller';
-import { AnalyticsService } from '@gitroom/nestjs-libraries/analytics/analytics.service';
+import { AnalyticsService } from '@postmill-ai/nestjs-libraries/analytics/analytics.service';
 import type {
   AnalyticsDateRangeDto,
   AnalyticsPostsQueryDto,
   AnalyticsExportQueryDto,
-} from '@gitroom/nestjs-libraries/dtos/analytics/analytics.query.dto';
+} from '@postmill-ai/nestjs-libraries/dtos/analytics/analytics.query.dto';
 
 const mockOrg = { id: 'test-org-id', name: 'Test Org' } as any;
 

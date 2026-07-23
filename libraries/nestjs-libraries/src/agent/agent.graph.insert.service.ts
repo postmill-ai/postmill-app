@@ -2,11 +2,11 @@ import { Injectable } from '@nestjs/common';
 import { BaseMessage, HumanMessage } from '@langchain/core/messages';
 import { END, START, StateGraph } from '@langchain/langgraph';
 import { ChatPromptTemplate } from '@langchain/core/prompts';
-import { agentCategories } from '@gitroom/nestjs-libraries/agent/agent.categories';
+import { agentCategories } from '@postmill-ai/nestjs-libraries/agent/agent.categories';
 import { z } from 'zod';
-import { agentTopics } from '@gitroom/nestjs-libraries/agent/agent.topics';
-import { PostsService } from '@gitroom/nestjs-libraries/database/prisma/posts/posts.service';
-import { AIModelProvider } from '@gitroom/nestjs-libraries/ai/ai-model.provider';
+import { agentTopics } from '@postmill-ai/nestjs-libraries/agent/agent.topics';
+import { PostsService } from '@postmill-ai/nestjs-libraries/database/prisma/posts/posts.service';
+import { AIModelProvider } from '@postmill-ai/nestjs-libraries/ai/ai-model.provider';
 
 interface WorkflowChannelsState {
   messages: BaseMessage[];

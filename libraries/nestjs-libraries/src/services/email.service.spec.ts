@@ -21,14 +21,14 @@ const mockCreateLog = vi.fn().mockResolvedValue({ id: 'log-1' });
 const mockMarkSent = vi.fn().mockResolvedValue(undefined);
 const mockMarkFailed = vi.fn().mockResolvedValue(undefined);
 
-vi.mock('@gitroom/nestjs-libraries/emails/email-adapter.registry', () => ({
+vi.mock('@postmill-ai/nestjs-libraries/emails/email-adapter.registry', () => ({
   EmailAdapterRegistry: class {
     getActiveAdapter = vi.fn();
   },
 }));
 
 vi.mock(
-  '@gitroom/nestjs-libraries/database/prisma/emails/email-log.service',
+  '@postmill-ai/nestjs-libraries/database/prisma/emails/email-log.service',
   () => ({
     EmailLogService: class {
       createLog = mockCreateLog;
@@ -38,20 +38,20 @@ vi.mock(
   }),
 );
 
-vi.mock('@gitroom/nestjs-libraries/inngest/inngest.client', () => ({
+vi.mock('@postmill-ai/nestjs-libraries/inngest/inngest.client', () => ({
   inngest: { send: vi.fn() },
   isInngestEnabled: vi.fn().mockReturnValue(true),
 }));
 
-vi.mock('@gitroom/helpers/utils/timer', () => ({ timer: vi.fn() }));
+vi.mock('@postmill-ai/helpers/utils/timer', () => ({ timer: vi.fn() }));
 
-import { EmailAdapterRegistry } from '@gitroom/nestjs-libraries/emails/email-adapter.registry';
-import { EmailLogService } from '@gitroom/nestjs-libraries/database/prisma/emails/email-log.service';
+import { EmailAdapterRegistry } from '@postmill-ai/nestjs-libraries/emails/email-adapter.registry';
+import { EmailLogService } from '@postmill-ai/nestjs-libraries/database/prisma/emails/email-log.service';
 import {
   inngest,
   isInngestEnabled,
-} from '@gitroom/nestjs-libraries/inngest/inngest.client';
-import { timer } from '@gitroom/helpers/utils/timer';
+} from '@postmill-ai/nestjs-libraries/inngest/inngest.client';
+import { timer } from '@postmill-ai/helpers/utils/timer';
 import { EmailService } from './email.service';
 
 describe('EmailService', () => {

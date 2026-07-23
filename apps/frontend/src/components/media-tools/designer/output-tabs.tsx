@@ -2,11 +2,11 @@
 
 import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { createPortal } from 'react-dom';
-import { useT } from '@gitroom/react/translation/get.transation.service.client';
+import { useT } from '@postmill-ai/react/translation/get.transation.service.client';
 import {
   CHANNEL_PRESETS,
   type ChannelPreset,
-} from '@gitroom/nestjs-libraries/integrations/social/channel-presets';
+} from '@postmill-ai/nestjs-libraries/integrations/social/channel-presets';
 
 interface OutputTabsProps {
   store: any;

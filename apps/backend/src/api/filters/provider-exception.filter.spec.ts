@@ -4,7 +4,7 @@ import {
   ProviderVersionRetiredError,
   ProviderKernel,
   ContentPackDailyCapError,
-} from '@gitroom/provider-kernel';
+} from '@postmill-ai/provider-kernel';
 import { ProviderExceptionFilter } from './provider-exception.filter';
 
 /**

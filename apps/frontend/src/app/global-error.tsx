@@ -2,9 +2,9 @@
 import * as Sentry from '@sentry/nextjs';
 import NextError from 'next/error';
 import { useEffect } from 'react';
-import { useVariables } from '@gitroom/react/helpers/variable.context';
-import { useT } from '@gitroom/react/translation/get.transation.service.client';
-import i18next from '@gitroom/react/translation/i18next';
+import { useVariables } from '@postmill-ai/react/helpers/variable.context';
+import { useT } from '@postmill-ai/react/translation/get.transation.service.client';
+import i18next from '@postmill-ai/react/translation/i18next';
 
 export default function GlobalError({
   error,

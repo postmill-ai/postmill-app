@@ -5,15 +5,15 @@ import { HttpStatus } from '@nestjs/common';
 import type { Request, Response } from 'express';
 import * as crypto from 'crypto';
 
-vi.mock('@gitroom/nestjs-libraries/database/prisma/oauth/oauth.service', () => ({
+vi.mock('@postmill-ai/nestjs-libraries/database/prisma/oauth/oauth.service', () => ({
   OAuthService: class {},
 }));
 
-vi.mock('@gitroom/nestjs-libraries/database/prisma/api-keys/api-keys.service', () => ({
+vi.mock('@postmill-ai/nestjs-libraries/database/prisma/api-keys/api-keys.service', () => ({
   ApiKeysService: class {},
 }));
 
-vi.mock('@gitroom/nestjs-libraries/services/exception.filter', () => ({
+vi.mock('@postmill-ai/nestjs-libraries/services/exception.filter', () => ({
   HttpForbiddenException: class HttpForbiddenException extends Error {
     constructor() {
       super('Forbidden');
@@ -22,7 +22,7 @@ vi.mock('@gitroom/nestjs-libraries/services/exception.filter', () => ({
 }));
 
 import { PublicAuthMiddleware } from './public.auth.middleware';
-import { HttpForbiddenException } from '@gitroom/nestjs-libraries/services/exception.filter';
+import { HttpForbiddenException } from '@postmill-ai/nestjs-libraries/services/exception.filter';
 
 const sha256 = (value: string) =>
   crypto.createHash('sha256').update(value).digest('hex');

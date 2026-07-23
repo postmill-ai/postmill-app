@@ -2,9 +2,9 @@
 
 import { useCallback } from 'react';
 import useSWR, { mutate as globalMutate } from 'swr';
-import { useFetch } from '@gitroom/helpers/utils/custom.fetch';
-import { AttentionItemDto, AttentionResponseDto } from '@gitroom/nestjs-libraries/dtos/dashboard/attention.dto';
-import { useT } from '@gitroom/react/translation/get.transation.service.client';
+import { useFetch } from '@postmill-ai/helpers/utils/custom.fetch';
+import { AttentionItemDto, AttentionResponseDto } from '@postmill-ai/nestjs-libraries/dtos/dashboard/attention.dto';
+import { useT } from '@postmill-ai/react/translation/get.transation.service.client';
 import { createFetchError } from '../dashboard.utils';
 
 export type { AttentionItemDto, AttentionResponseDto };

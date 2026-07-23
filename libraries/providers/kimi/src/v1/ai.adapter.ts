@@ -2,7 +2,7 @@ import {
   OpenAICompatibleAdapter,
   type AiModelInfo,
   type ProviderModule,
-} from '@gitroom/provider-kernel';
+} from '@postmill-ai/provider-kernel';
 
 import { metadata as providerMetadata } from './metadata';
 

@@ -1,10 +1,10 @@
 import { Controller, Get, Param, Query } from '@nestjs/common';
-import { GetOrgFromRequest } from '@gitroom/nestjs-libraries/user/org.from.request';
+import { GetOrgFromRequest } from '@postmill-ai/nestjs-libraries/user/org.from.request';
 import { Organization } from '@prisma/client';
-import { StockMediaService } from '@gitroom/nestjs-libraries/media/stock/stock-media.service';
-import { CheckPolicies } from '@gitroom/backend/services/auth/permissions/permissions.ability';
-import { AuthorizationActions, Sections } from '@gitroom/backend/services/auth/permissions/permission.exception.class';
-import { RequirePermission } from '@gitroom/backend/services/auth/rbac/require-permission.decorator';
+import { StockMediaService } from '@postmill-ai/nestjs-libraries/media/stock/stock-media.service';
+import { CheckPolicies } from '@postmill-ai/backend/services/auth/permissions/permissions.ability';
+import { AuthorizationActions, Sections } from '@postmill-ai/backend/services/auth/permissions/permission.exception.class';
+import { RequirePermission } from '@postmill-ai/backend/services/auth/rbac/require-permission.decorator';
 import { ApiTags } from '@nestjs/swagger';
 
 @ApiTags('Stock Media')

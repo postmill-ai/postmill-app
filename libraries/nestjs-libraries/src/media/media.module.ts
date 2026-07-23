@@ -1,7 +1,7 @@
 import { Logger, Module, OnModuleInit } from '@nestjs/common';
-import { FeatureFlagsService } from '@gitroom/nestjs-libraries/feature-flags';
-import { setAiRegistry, AiCapability } from '@gitroom/provider-kernel';
-import { ProviderResolutionService } from '@gitroom/nestjs-libraries/providers/provider-resolution.service';
+import { FeatureFlagsService } from '@postmill-ai/nestjs-libraries/feature-flags';
+import { setAiRegistry, AiCapability } from '@postmill-ai/provider-kernel';
+import { ProviderResolutionService } from '@postmill-ai/nestjs-libraries/providers/provider-resolution.service';
 
 // The media provider adapter implementations live in their relocated packages
 // (`libraries/providers/<id>/src/v1/media.adapter.ts`) and are registered into the

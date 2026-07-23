@@ -1,8 +1,8 @@
 'use client';
 
 import { FC, useCallback } from 'react';
-import { useT } from '@gitroom/react/translation/get.transation.service.client';
-import { TeamMemberItem } from '@gitroom/frontend/components/settings/roles/hooks/use-roles';
+import { useT } from '@postmill-ai/react/translation/get.transation.service.client';
+import { TeamMemberItem } from '@postmill-ai/frontend/components/settings/roles/hooks/use-roles';
 
 export interface InboxFilters {
   status?: string;

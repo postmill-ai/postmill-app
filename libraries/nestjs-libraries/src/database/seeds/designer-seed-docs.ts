@@ -1,5 +1,5 @@
-import { DESIGNER_DOC_VERSION } from '@gitroom/nestjs-libraries/media/designer-doc/designer-doc.migrate';
-import type { DesignerDoc } from '@gitroom/nestjs-libraries/media/designer-doc/designer-doc.schema';
+import { DESIGNER_DOC_VERSION } from '@postmill-ai/nestjs-libraries/media/designer-doc/designer-doc.migrate';
+import type { DesignerDoc } from '@postmill-ai/nestjs-libraries/media/designer-doc/designer-doc.schema';
 
 // Hand-authored starter content for the Designer "Start a design" modal.
 //

@@ -1,4 +1,4 @@
-import type { StudioDescriptor } from '@gitroom/frontend/components/media-tools/studio-kit/types';
+import type { StudioDescriptor } from '@postmill-ai/frontend/components/media-tools/studio-kit/types';
 
 // MiniMax video (registry/config identifier `minimax`). Native params ride
 // `options.input`; `first_frame_image`/`subject_image` are resolved to URLs and folded

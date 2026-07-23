@@ -4,9 +4,9 @@ import { MediaAgentBuilder } from './media.agent';
 import { AnalyticsAgentBuilder } from './analytics.agent';
 import { OpsAgentBuilder } from './ops.agent';
 import { pickTools } from './specialist-tool-subset';
-import { toolList } from '@gitroom/nestjs-libraries/chat/tools/tool.list';
-import { IntegrationValidationTool } from '@gitroom/nestjs-libraries/chat/tools/integration.validation.tool';
-import { IntegrationTriggerTool } from '@gitroom/nestjs-libraries/chat/tools/integration.trigger.tool';
+import { toolList } from '@postmill-ai/nestjs-libraries/chat/tools/tool.list';
+import { IntegrationValidationTool } from '@postmill-ai/nestjs-libraries/chat/tools/integration.validation.tool';
+import { IntegrationTriggerTool } from '@postmill-ai/nestjs-libraries/chat/tools/integration.trigger.tool';
 
 const mockIntegrationManager = {
   getAllowedSocialsIntegrations: () => ['x', 'linkedin'],

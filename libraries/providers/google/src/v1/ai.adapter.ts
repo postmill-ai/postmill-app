@@ -12,7 +12,7 @@ import {
   type LiveModelEntry,
   type ProviderModule,
   type SafeFetchPort,
-} from '@gitroom/provider-kernel';
+} from '@postmill-ai/provider-kernel';
 
 const GOOGLE_CAPABILITIES: AICapabilities = {
   text: true,

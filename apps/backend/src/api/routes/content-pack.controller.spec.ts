@@ -1,7 +1,7 @@
 import 'reflect-metadata';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { BadRequestException, HttpException } from '@nestjs/common';
-import { REQUIRE_PERMISSION_KEY } from '@gitroom/backend/services/auth/rbac/require-permission.decorator';
+import { REQUIRE_PERMISSION_KEY } from '@postmill-ai/backend/services/auth/rbac/require-permission.decorator';
 import { ContentPackController } from './content-pack.controller';
 
 const mockListProviderMetadata = vi.fn();
@@ -14,7 +14,7 @@ const mockDelete = vi.fn();
 const mockTestConnection = vi.fn();
 
 vi.mock(
-  '@gitroom/nestjs-libraries/database/prisma/content-packs/org-content-pack-settings.service',
+  '@postmill-ai/nestjs-libraries/database/prisma/content-packs/org-content-pack-settings.service',
   () => ({
     OrgContentPackSettingsService: class {
       listProviderMetadata = mockListProviderMetadata;
@@ -29,7 +29,7 @@ vi.mock(
   }),
 );
 
-import { OrgContentPackSettingsService } from '@gitroom/nestjs-libraries/database/prisma/content-packs/org-content-pack-settings.service';
+import { OrgContentPackSettingsService } from '@postmill-ai/nestjs-libraries/database/prisma/content-packs/org-content-pack-settings.service';
 
 const org = { id: 'org-1' } as any;
 

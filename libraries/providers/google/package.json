@@ -1,12 +1,12 @@
 {
-  "name": "@gitroom/provider-google",
+  "name": "@postmill-ai/provider-google",
   "version": "1.0.0",
   "private": true,
   "main": "src/index.ts",
   "types": "src/index.ts",
   "dependencies": {
     "@ai-sdk/google": "^2.0.0",
-    "@gitroom/provider-kernel": "workspace:*",
+    "@postmill-ai/provider-kernel": "workspace:*",
     "@langchain/core": "^1.1.48"
   },
   "license": "AGPL-3.0",

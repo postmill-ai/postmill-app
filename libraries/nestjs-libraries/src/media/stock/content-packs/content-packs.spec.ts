@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import type { ProviderManifest } from '@gitroom/provider-kernel';
+import type { ProviderManifest } from '@postmill-ai/provider-kernel';
 import { manifestToContentPackMeta } from './content-pack.registry';
 
 // The adapter implementations + their behavioural tests now live in their own

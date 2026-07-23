@@ -1,15 +1,15 @@
 import { Body, Controller, Get, Headers, Param, Post, Query } from '@nestjs/common';
 import { Throttle } from '@nestjs/throttler';
-import { ioRedis } from '@gitroom/nestjs-libraries/redis/redis.service';
+import { ioRedis } from '@postmill-ai/nestjs-libraries/redis/redis.service';
 import { ApiTags } from '@nestjs/swagger';
-import { CheckPolicies } from '@gitroom/backend/services/auth/permissions/permissions.ability';
-import { AuthorizationActions, Sections } from '@gitroom/backend/services/auth/permissions/permission.exception.class';
-import { RequirePermission } from '@gitroom/backend/services/auth/rbac/require-permission.decorator';
-import { GetOrgFromRequest } from '@gitroom/nestjs-libraries/user/org.from.request';
-import { GetUserFromRequest } from '@gitroom/nestjs-libraries/user/user.from.request';
+import { CheckPolicies } from '@postmill-ai/backend/services/auth/permissions/permissions.ability';
+import { AuthorizationActions, Sections } from '@postmill-ai/backend/services/auth/permissions/permission.exception.class';
+import { RequirePermission } from '@postmill-ai/backend/services/auth/rbac/require-permission.decorator';
+import { GetOrgFromRequest } from '@postmill-ai/nestjs-libraries/user/org.from.request';
+import { GetUserFromRequest } from '@postmill-ai/nestjs-libraries/user/user.from.request';
 import { Organization, User } from '@prisma/client';
-import { MediaStudioService } from '@gitroom/nestjs-libraries/media/studio/media-studio.service';
-import { MediaStudioGenerateDto } from '@gitroom/nestjs-libraries/dtos/media-studio/media-studio.generate.dto';
+import { MediaStudioService } from '@postmill-ai/nestjs-libraries/media/studio/media-studio.service';
+import { MediaStudioGenerateDto } from '@postmill-ai/nestjs-libraries/dtos/media-studio/media-studio.generate.dto';
 
 // Generic studio endpoint shared by every descriptor-driven provider studio (Runway,
 // Luma, MiniMax, Kling, …). No provider-specific code — the adapter + descriptor carry

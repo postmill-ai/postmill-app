@@ -4,7 +4,7 @@ import React, { FC, useCallback } from 'react';
 import type { DesignerElement, VideoClip } from '../designer.store';
 import { ensureFontLoaded } from '../fonts';
 import { TEXT_STYLE_PRESETS, type TextStylePreset } from '../text-styles';
-import { useT } from '@gitroom/react/translation/get.transation.service.client';
+import { useT } from '@postmill-ai/react/translation/get.transation.service.client';
 
 interface TextPanelProps {
   store: ReturnType<typeof import('../designer.store').createDesignerStore>;

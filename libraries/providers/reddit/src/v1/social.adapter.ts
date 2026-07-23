@@ -6,25 +6,25 @@ import {
   PostResponse,
   SocialCommentDTO,
   SocialProvider,
-} from '@gitroom/provider-kernel';
-import { makeId, makeOauthState } from '@gitroom/provider-kernel';
+} from '@postmill-ai/provider-kernel';
+import { makeId, makeOauthState } from '@postmill-ai/provider-kernel';
 import dayjs from 'dayjs';
-import { RedditSettingsDto } from '@gitroom/provider-kernel';
-import { timer } from '@gitroom/helpers/utils/timer';
-import { decodeHtmlEntities } from '@gitroom/helpers/utils/html.to.text';
+import { RedditSettingsDto } from '@postmill-ai/provider-kernel';
+import { timer } from '@postmill-ai/helpers/utils/timer';
+import { decodeHtmlEntities } from '@postmill-ai/helpers/utils/html.to.text';
 import { groupBy } from 'lodash';
 import {
   RefreshToken,
   SocialAbstract,
   ValidityMedia,
-} from '@gitroom/provider-kernel';
+} from '@postmill-ai/provider-kernel';
 import { lookup } from 'mime-types';
-import { safeFetch } from '@gitroom/provider-kernel';
+import { safeFetch } from '@postmill-ai/provider-kernel';
 import WebSocket from 'ws';
 import { Logger } from '@nestjs/common';
-import { Tool } from '@gitroom/provider-kernel';
+import { Tool } from '@postmill-ai/provider-kernel';
 import { Integration } from '@prisma/client';
-import { hasExtension } from '@gitroom/helpers/utils/has.extension';
+import { hasExtension } from '@postmill-ai/helpers/utils/has.extension';
 
 
 import { metadata as providerMetadata } from './metadata';
@@ -769,7 +769,7 @@ import {
   ProviderModule as __ProviderModule,
   SocialProviderKernelAdapter as __Bridge,
   PROVIDER_CAPABILITIES as __CAPS,
-} from '@gitroom/provider-kernel';
+} from '@postmill-ai/provider-kernel';
 
 const __adapter = new RedditProvider();
 

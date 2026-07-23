@@ -2,35 +2,35 @@
 
 import React, { FC, useCallback, useMemo, useState } from 'react';
 import useSWR from 'swr';
-import { useFetch } from '@gitroom/helpers/utils/custom.fetch';
-import { useVariables } from '@gitroom/react/helpers/variable.context';
+import { useFetch } from '@postmill-ai/helpers/utils/custom.fetch';
+import { useVariables } from '@postmill-ai/react/helpers/variable.context';
 import { loadStripe, Stripe } from '@stripe/stripe-js';
-import { OrganizationSelector } from '@gitroom/frontend/components/layout/organization.selector';
-import { LanguageComponent } from '@gitroom/frontend/components/layout/language.component';
-import { AttachToFeedbackIcon } from '@gitroom/frontend/components/new-layout/sentry.feedback.component';
-import NotificationComponent from '@gitroom/frontend/components/notifications/notification.component';
+import { OrganizationSelector } from '@postmill-ai/frontend/components/layout/organization.selector';
+import { LanguageComponent } from '@postmill-ai/frontend/components/layout/language.component';
+import { AttachToFeedbackIcon } from '@postmill-ai/frontend/components/new-layout/sentry.feedback.component';
+import NotificationComponent from '@postmill-ai/frontend/components/notifications/notification.component';
 import dynamic from 'next/dynamic';
-import { LogoTextComponent } from '@gitroom/frontend/components/ui/logo-text.component';
+import { LogoTextComponent } from '@postmill-ai/frontend/components/ui/logo-text.component';
 import {
   pricing,
   PlanInterface,
-} from '@gitroom/nestjs-libraries/database/prisma/subscriptions/pricing';
+} from '@postmill-ai/nestjs-libraries/database/prisma/subscriptions/pricing';
 import { capitalize } from 'lodash';
 import clsx from 'clsx';
-import { LoadingComponent } from '@gitroom/frontend/components/layout/loading';
-import { CheckIconComponent } from '@gitroom/frontend/components/ui/check.icon.component';
-import { FAQComponent } from '@gitroom/frontend/components/billing/faq.component';
-import { useT } from '@gitroom/react/translation/get.transation.service.client';
-import { useUser } from '@gitroom/frontend/components/layout/user.context';
-import { useDubClickId } from '@gitroom/frontend/components/layout/dubAnalytics';
-import SafeImage from '@gitroom/react/helpers/safe.image';
-import { useModals } from '@gitroom/frontend/components/layout/new-modal';
+import { LoadingComponent } from '@postmill-ai/frontend/components/layout/loading';
+import { CheckIconComponent } from '@postmill-ai/frontend/components/ui/check.icon.component';
+import { FAQComponent } from '@postmill-ai/frontend/components/billing/faq.component';
+import { useT } from '@postmill-ai/react/translation/get.transation.service.client';
+import { useUser } from '@postmill-ai/frontend/components/layout/user.context';
+import { useDubClickId } from '@postmill-ai/frontend/components/layout/dubAnalytics';
+import SafeImage from '@postmill-ai/react/helpers/safe.image';
+import { useModals } from '@postmill-ai/frontend/components/layout/new-modal';
 import useCookie from 'react-use-cookie';
-import { LogoutComponent } from '@gitroom/frontend/components/layout/logout.component';
-import { DeveloperIconComponent } from '@gitroom/frontend/components/developer/developer.icon.component';
+import { LogoutComponent } from '@postmill-ai/frontend/components/layout/logout.component';
+import { DeveloperIconComponent } from '@postmill-ai/frontend/components/developer/developer.icon.component';
 
 const ModeComponent = dynamic(
-  () => import('@gitroom/frontend/components/layout/mode.component'),
+  () => import('@postmill-ai/frontend/components/layout/mode.component'),
   {
     ssr: false,
   }
@@ -38,7 +38,7 @@ const ModeComponent = dynamic(
 
 const EmbeddedBilling = dynamic(
   () =>
-    import('@gitroom/frontend/components/billing/embedded.billing').then(
+    import('@postmill-ai/frontend/components/billing/embedded.billing').then(
       (mod) => mod.EmbeddedBilling
     ),
   {

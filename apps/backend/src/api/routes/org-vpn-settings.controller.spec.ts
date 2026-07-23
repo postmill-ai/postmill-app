@@ -6,7 +6,7 @@ const mockGetProviderMetadata = vi.fn();
 const mockTestConnection = vi.fn();
 const mockDelete = vi.fn();
 
-vi.mock('@gitroom/nestjs-libraries/vpn/org-vpn-config.service', () => ({
+vi.mock('@postmill-ai/nestjs-libraries/vpn/org-vpn-config.service', () => ({
   OrgVpnConfigService: class {
     upsert = mockUpsert;
     getProviders = mockGetProviders;
@@ -17,7 +17,7 @@ vi.mock('@gitroom/nestjs-libraries/vpn/org-vpn-config.service', () => ({
 }));
 
 import { OrgVpnSettingsController } from './org-vpn-settings.controller';
-import { OrgVpnConfigService } from '@gitroom/nestjs-libraries/vpn/org-vpn-config.service';
+import { OrgVpnConfigService } from '@postmill-ai/nestjs-libraries/vpn/org-vpn-config.service';
 
 const org = { id: 'org-1' } as any;
 

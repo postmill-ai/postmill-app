@@ -1,7 +1,7 @@
 'use client';
 
 import { FC, Fragment } from 'react';
-import { useT } from '@gitroom/react/translation/get.transation.service.client';
+import { useT } from '@postmill-ai/react/translation/get.transation.service.client';
 import { PostDetail, FetchError } from './utils';
 import { usePostDetail } from './hooks/usePostDetail';
 import { usePostShortlinkStats } from './hooks/usePostShortlinkStats';

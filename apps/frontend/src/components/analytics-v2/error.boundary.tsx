@@ -1,7 +1,7 @@
 'use client';
 
 import { Component, ReactNode } from 'react';
-import i18next from '@gitroom/react/translation/i18next';
+import i18next from '@postmill-ai/react/translation/i18next';
 
 interface Props {
   children: ReactNode;

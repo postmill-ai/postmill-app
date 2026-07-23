@@ -2,24 +2,24 @@
 
 import { FC, useCallback, useState } from 'react';
 import useSWR from 'swr';
-import { useFetch } from '@gitroom/helpers/utils/custom.fetch';
-import { useToaster } from '@gitroom/react/toaster/toaster';
-import { useT } from '@gitroom/react/translation/get.transation.service.client';
-import { useModals } from '@gitroom/frontend/components/layout/new-modal';
-import { Button } from '@gitroom/react/form/button';
-import { newDayjs } from '@gitroom/frontend/components/layout/set.timezone';
-import { Composer } from '@gitroom/frontend/components/composer/composer';
-import { useLaunchStore } from '@gitroom/frontend/components/composer/store';
-import { Integrations } from '@gitroom/frontend/components/launches/calendar.context';
-import { CloseModalButton } from '@gitroom/frontend/components/shared/close-modal-button';
+import { useFetch } from '@postmill-ai/helpers/utils/custom.fetch';
+import { useToaster } from '@postmill-ai/react/toaster/toaster';
+import { useT } from '@postmill-ai/react/translation/get.transation.service.client';
+import { useModals } from '@postmill-ai/frontend/components/layout/new-modal';
+import { Button } from '@postmill-ai/react/form/button';
+import { newDayjs } from '@postmill-ai/frontend/components/layout/set.timezone';
+import { Composer } from '@postmill-ai/frontend/components/composer/composer';
+import { useLaunchStore } from '@postmill-ai/frontend/components/composer/store';
+import { Integrations } from '@postmill-ai/frontend/components/launches/calendar.context';
+import { CloseModalButton } from '@postmill-ai/frontend/components/shared/close-modal-button';
 import {
   CampaignEntitySlug,
   ResolvedCampaignItem,
-} from '@gitroom/frontend/components/campaigns/campaign-types';
+} from '@postmill-ai/frontend/components/campaigns/campaign-types';
 import {
   PanelItem,
   AddItemsModal,
-} from '@gitroom/frontend/components/campaigns/dashboard/tagged-items-panels';
+} from '@postmill-ai/frontend/components/campaigns/dashboard/tagged-items-panels';
 
 // Dedicated Post Templates section — the campaign's tagged Sets ("Post Templates"),
 // each openable in the composer as a fresh, campaign-scoped draft. Owns its own

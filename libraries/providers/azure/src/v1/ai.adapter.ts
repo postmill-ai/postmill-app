@@ -9,7 +9,7 @@ import {
   type AiCapabilities as AICapabilities,
   type AiModelOptions as AIModelOptions,
   type ProviderModule,
-} from '@gitroom/provider-kernel';
+} from '@postmill-ai/provider-kernel';
 
 const AZURE_CAPABILITIES: AICapabilities = {
   text: true,

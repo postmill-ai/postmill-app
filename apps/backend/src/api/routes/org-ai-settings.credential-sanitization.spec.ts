@@ -6,7 +6,7 @@ const aiSvcMock = {
   getProviders: vi.fn(),
 };
 
-vi.mock('@gitroom/nestjs-libraries/database/prisma/ai-settings/org-ai-settings.service', () => ({
+vi.mock('@postmill-ai/nestjs-libraries/database/prisma/ai-settings/org-ai-settings.service', () => ({
   OrgAiSettingsService: class {
     getActiveProvider = aiSvcMock.getActiveProvider;
     getProviders = aiSvcMock.getProviders;
@@ -14,7 +14,7 @@ vi.mock('@gitroom/nestjs-libraries/database/prisma/ai-settings/org-ai-settings.s
 }));
 
 import { OrgAiSettingsController } from './org-ai-settings.controller';
-import { AiDefaultsService } from '@gitroom/nestjs-libraries/ai/defaults/ai-defaults.service';
+import { AiDefaultsService } from '@postmill-ai/nestjs-libraries/ai/defaults/ai-defaults.service';
 
 const org: Organization = { id: 'org-1' } as any;
 

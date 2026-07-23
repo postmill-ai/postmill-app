@@ -2,16 +2,16 @@
 
 import React, { useCallback, useState } from 'react';
 import clsx from 'clsx';
-import { useFetch } from '@gitroom/helpers/utils/custom.fetch';
-import { useUser } from '@gitroom/frontend/components/layout/user.context';
-import { useToaster } from '@gitroom/react/toaster/toaster';
-import { useT } from '@gitroom/react/translation/get.transation.service.client';
-import { Button } from '@gitroom/react/form/button';
+import { useFetch } from '@postmill-ai/helpers/utils/custom.fetch';
+import { useUser } from '@postmill-ai/frontend/components/layout/user.context';
+import { useToaster } from '@postmill-ai/react/toaster/toaster';
+import { useT } from '@postmill-ai/react/translation/get.transation.service.client';
+import { Button } from '@postmill-ai/react/form/button';
 import {
   pricing,
   type PlanInterface,
-} from '@gitroom/nestjs-libraries/database/prisma/subscriptions/pricing';
-import { newDayjs } from '@gitroom/frontend/components/layout/set.timezone';
+} from '@postmill-ai/nestjs-libraries/database/prisma/subscriptions/pricing';
+import { newDayjs } from '@postmill-ai/frontend/components/layout/set.timezone';
 import Link from 'next/link';
 import {
   refreshSubscriptionData,
@@ -20,7 +20,7 @@ import {
   type SubscriptionTier,
   type UsageData,
   type UsageLimits,
-} from '@gitroom/frontend/components/settings/subscription/use-subscription';
+} from '@postmill-ai/frontend/components/settings/subscription/use-subscription';
 
 const ADDON_STORAGE_GB_PER_PACK = Number(
   process.env.NEXT_PUBLIC_ADDON_STORAGE_GB_PER_PACK || 25

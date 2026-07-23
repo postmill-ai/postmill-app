@@ -1,18 +1,18 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
 // Speed up the publish-status poll loop so bounded-loop tests finish instantly.
-vi.mock('@gitroom/helpers/utils/timer', () => ({
+vi.mock('@postmill-ai/helpers/utils/timer', () => ({
   timer: vi.fn(async () => undefined),
 }));
 
 // Keep the real kernel exports but turn `safeFetch` into a spy for any
 // future download assertions.
-vi.mock('@gitroom/provider-kernel', async (orig) => {
+vi.mock('@postmill-ai/provider-kernel', async (orig) => {
   const actual: any = await orig();
   return { ...actual, safeFetch: vi.fn() };
 });
 
-import { setSocialFetchPorts } from '@gitroom/provider-kernel';
+import { setSocialFetchPorts } from '@postmill-ai/provider-kernel';
 import { TiktokProvider } from './social.adapter';
 
 // The kernel's `BadBody` is a Proxy that delegates construction to the

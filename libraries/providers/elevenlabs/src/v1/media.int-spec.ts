@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { makeCtx, res } from '@gitroom/provider-kernel/testing/media-int-helpers';
+import { makeCtx, res } from '@postmill-ai/provider-kernel/testing/media-int-helpers';
 import { elevenlabsMediaModule } from './media.adapter';
 
 // Recorded-fixture integration test (plan B4) — no network. ElevenLabs TTS is synchronous: a

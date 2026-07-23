@@ -3,7 +3,7 @@
 import React, { FC, useState } from 'react';
 import { ColorSwatch, Slider } from '../controls';
 import { useBrandColors } from './use-brand-colors';
-import { useT } from '@gitroom/react/translation/get.transation.service.client';
+import { useT } from '@postmill-ai/react/translation/get.transation.service.client';
 import type { DesignerOutput, VideoOutput } from '../designer.store';
 
 interface CanvasInspectorProps {

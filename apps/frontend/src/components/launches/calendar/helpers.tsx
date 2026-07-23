@@ -2,25 +2,25 @@
 
 import React, { FC, useCallback, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { useFetch } from '@gitroom/helpers/utils/custom.fetch';
-import { useModals } from '@gitroom/frontend/components/layout/new-modal';
+import { useFetch } from '@postmill-ai/helpers/utils/custom.fetch';
+import { useModals } from '@postmill-ai/frontend/components/layout/new-modal';
 import { useCalendar } from './context';
 import type { Integrations } from './context';
 import dayjs from 'dayjs';
 import clsx from 'clsx';
-import { useToaster } from '@gitroom/react/toaster/toaster';
-import { useT } from '@gitroom/react/translation/get.transation.service.client';
+import { useToaster } from '@postmill-ai/react/toaster/toaster';
+import { useT } from '@postmill-ai/react/translation/get.transation.service.client';
 import { Fragment } from 'react';
 import { Post } from '@prisma/client';
-import { Composer } from '@gitroom/frontend/components/composer/composer';
-import { Button } from '@gitroom/react/form/button';
-import { ColorPicker } from '@gitroom/frontend/components/ui/color-picker';
-import { PostAnalyticsDrawer } from '@gitroom/frontend/components/analytics-v2/post-analytics.drawer';
-import { MissingReleaseModal } from '@gitroom/frontend/components/launches/missing-release.modal';
-import { PostDetailModal } from '@gitroom/frontend/components/launches/post-detail/post.detail.modal';
-import { deleteDialog } from '@gitroom/react/helpers/delete.dialog';
+import { Composer } from '@postmill-ai/frontend/components/composer/composer';
+import { Button } from '@postmill-ai/react/form/button';
+import { ColorPicker } from '@postmill-ai/frontend/components/ui/color-picker';
+import { PostAnalyticsDrawer } from '@postmill-ai/frontend/components/analytics-v2/post-analytics.drawer';
+import { MissingReleaseModal } from '@postmill-ai/frontend/components/launches/missing-release.modal';
+import { PostDetailModal } from '@postmill-ai/frontend/components/launches/post-detail/post.detail.modal';
+import { deleteDialog } from '@postmill-ai/react/helpers/delete.dialog';
 import copy from 'copy-to-clipboard';
-import { isUSCitizen } from '@gitroom/frontend/components/launches/helpers/isuscitizen.utils';
+import { isUSCitizen } from '@postmill-ai/frontend/components/launches/helpers/isuscitizen.utils';
 
 export const convertTimeFormatBasedOnLocality = (time: number) => {
   if (isUSCitizen()) {

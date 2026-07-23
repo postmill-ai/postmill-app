@@ -1,4 +1,4 @@
-import { PrismaRepository, PrismaTransaction } from '@gitroom/nestjs-libraries/database/prisma/prisma.service';
+import { PrismaRepository, PrismaTransaction } from '@postmill-ai/nestjs-libraries/database/prisma/prisma.service';
 import { Injectable } from '@nestjs/common';
 
 @Injectable()

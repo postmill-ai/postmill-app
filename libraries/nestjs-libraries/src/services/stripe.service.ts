@@ -1,25 +1,25 @@
 import Stripe from 'stripe';
 import { Injectable, Logger } from '@nestjs/common';
 import { Organization, User } from '@prisma/client';
-import { BillingTier, SubscriptionService } from '@gitroom/nestjs-libraries/database/prisma/subscriptions/subscription.service';
-import { OrganizationService } from '@gitroom/nestjs-libraries/database/prisma/organizations/organization.service';
-import { makeId } from '@gitroom/nestjs-libraries/services/make.is';
-import { BillingSubscribeDto } from '@gitroom/nestjs-libraries/dtos/billing/billing.subscribe.dto';
+import { BillingTier, SubscriptionService } from '@postmill-ai/nestjs-libraries/database/prisma/subscriptions/subscription.service';
+import { OrganizationService } from '@postmill-ai/nestjs-libraries/database/prisma/organizations/organization.service';
+import { makeId } from '@postmill-ai/nestjs-libraries/services/make.is';
+import { BillingSubscribeDto } from '@postmill-ai/nestjs-libraries/dtos/billing/billing.subscribe.dto';
 import {
   pricing,
   ADDONS,
   addonPackSize,
-} from '@gitroom/nestjs-libraries/database/prisma/subscriptions/pricing';
-import { AuthService } from '@gitroom/helpers/auth/auth.service';
-import { TrackService } from '@gitroom/nestjs-libraries/track/track.service';
-import { UsersService } from '@gitroom/nestjs-libraries/database/prisma/users/users.service';
-import { TrackEnum } from '@gitroom/nestjs-libraries/user/track.enum';
+} from '@postmill-ai/nestjs-libraries/database/prisma/subscriptions/pricing';
+import { AuthService } from '@postmill-ai/helpers/auth/auth.service';
+import { TrackService } from '@postmill-ai/nestjs-libraries/track/track.service';
+import { UsersService } from '@postmill-ai/nestjs-libraries/database/prisma/users/users.service';
+import { TrackEnum } from '@postmill-ai/nestjs-libraries/user/track.enum';
 // layering: sanctioned leaf-read — StripeEventRepository lives in the subscriptions
 // domain, but SubscriptionService does not depend on StripeService, and these are
 // narrow Stripe-webhook idempotency/grace reads with no service-level cycle.
-import { StripeEventRepository } from '@gitroom/nestjs-libraries/database/prisma/subscriptions/stripe-event.repository';
-import { NotificationService } from '@gitroom/nestjs-libraries/database/prisma/notifications/notification.service';
-import { AuditService } from '@gitroom/nestjs-libraries/database/prisma/audit/audit.service';
+import { StripeEventRepository } from '@postmill-ai/nestjs-libraries/database/prisma/subscriptions/stripe-event.repository';
+import { NotificationService } from '@postmill-ai/nestjs-libraries/database/prisma/notifications/notification.service';
+import { AuditService } from '@postmill-ai/nestjs-libraries/database/prisma/audit/audit.service';
 
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY || 'sk_nothing');
 

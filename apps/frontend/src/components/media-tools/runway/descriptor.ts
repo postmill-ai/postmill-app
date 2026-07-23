@@ -1,4 +1,4 @@
-import type { StudioDescriptor } from '@gitroom/frontend/components/media-tools/studio-kit/types';
+import type { StudioDescriptor } from '@postmill-ai/frontend/components/media-tools/studio-kit/types';
 
 // Runway (registry/config identifier `runway`). Field names are native Runway params;
 // `promptImage` is the i2v source image. Runway has no callback, so renders complete via

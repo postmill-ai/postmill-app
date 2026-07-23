@@ -1,5 +1,5 @@
 import { Metadata } from 'next';
-import { DashboardComponent } from '@gitroom/frontend/components/dashboard/dashboard.component';
+import { DashboardComponent } from '@postmill-ai/frontend/components/dashboard/dashboard.component';
 
 export const dynamic = 'force-dynamic';
 

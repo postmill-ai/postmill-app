@@ -1,13 +1,13 @@
 'use client';
 
-import { BillingComponent } from '@gitroom/frontend/components/billing/billing.component';
-import { useUser } from '@gitroom/frontend/components/layout/user.context';
-import { useVariables } from '@gitroom/react/helpers/variable.context';
-import { useT } from '@gitroom/react/translation/get.transation.service.client';
-import { Logo } from '@gitroom/frontend/components/new-layout/logo';
-import { LogoutComponent } from '@gitroom/frontend/components/layout/logout.component';
+import { BillingComponent } from '@postmill-ai/frontend/components/billing/billing.component';
+import { useUser } from '@postmill-ai/frontend/components/layout/user.context';
+import { useVariables } from '@postmill-ai/react/helpers/variable.context';
+import { useT } from '@postmill-ai/react/translation/get.transation.service.client';
+import { Logo } from '@postmill-ai/frontend/components/new-layout/logo';
+import { LogoutComponent } from '@postmill-ai/frontend/components/layout/logout.component';
 import React from 'react';
-import { OrganizationSelector } from '@gitroom/frontend/components/layout/organization.selector';
+import { OrganizationSelector } from '@postmill-ai/frontend/components/layout/organization.selector';
 
 export const BillingAfter = () => {
   const user = useUser();

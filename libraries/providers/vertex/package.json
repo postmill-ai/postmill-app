@@ -1,12 +1,12 @@
 {
-  "name": "@gitroom/provider-vertex",
+  "name": "@postmill-ai/provider-vertex",
   "version": "1.0.0",
   "private": true,
   "main": "src/index.ts",
   "types": "src/index.ts",
   "dependencies": {
     "@ai-sdk/google-vertex": "^2.0.0",
-    "@gitroom/provider-kernel": "workspace:*",
+    "@postmill-ai/provider-kernel": "workspace:*",
     "@langchain/core": "^1.1.48",
     "google-auth-library": "^9.11.0"
   },

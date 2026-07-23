@@ -3,13 +3,13 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { HttpException } from '@nestjs/common';
 import { Organization } from '@prisma/client';
 
-vi.mock('@gitroom/nestjs-libraries/brands/brands.service', () => ({
+vi.mock('@postmill-ai/nestjs-libraries/brands/brands.service', () => ({
   BrandsService: class {},
 }));
 
 import { BrandsController } from './brands.controller';
-import { REQUIRE_PERMISSION_KEY } from '@gitroom/backend/services/auth/rbac/require-permission.decorator';
-import type { BrandsService } from '@gitroom/nestjs-libraries/brands/brands.service';
+import { REQUIRE_PERMISSION_KEY } from '@postmill-ai/backend/services/auth/rbac/require-permission.decorator';
+import type { BrandsService } from '@postmill-ai/nestjs-libraries/brands/brands.service';
 
 const org = { id: 'org-1' } as unknown as Organization;
 

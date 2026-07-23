@@ -1,6 +1,6 @@
 import { IsIn, IsOptional, IsString, Min, Max, IsNumber, IsBoolean, Length } from 'class-validator';
 import { Transform, Type } from 'class-transformer';
-import { METRIC_REGISTRY } from '@gitroom/nestjs-libraries/integrations/social/analytics.metrics';
+import { METRIC_REGISTRY } from '@postmill-ai/nestjs-libraries/integrations/social/analytics.metrics';
 
 const KNOWN_METRICS = Object.keys(METRIC_REGISTRY);
 const VALID_SORT_FIELDS = [...KNOWN_METRICS, 'publishedAt'];

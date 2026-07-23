@@ -1,4 +1,4 @@
-import { CampaignReport } from '@gitroom/nestjs-libraries/database/prisma/campaigns/campaign-report.service';
+import { CampaignReport } from '@postmill-ai/nestjs-libraries/database/prisma/campaigns/campaign-report.service';
 
 function escapeHtml(value: unknown): string {
   const str = String(value ?? '');

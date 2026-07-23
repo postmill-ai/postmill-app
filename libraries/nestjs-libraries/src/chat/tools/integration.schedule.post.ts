@@ -1,27 +1,27 @@
-import { AgentToolInterface } from '@gitroom/nestjs-libraries/chat/agent.tool.interface';
+import { AgentToolInterface } from '@postmill-ai/nestjs-libraries/chat/agent.tool.interface';
 import { createTool } from '@mastra/core/tools';
 import { z } from 'zod';
 import { Injectable } from '@nestjs/common';
-import { IntegrationService } from '@gitroom/nestjs-libraries/database/prisma/integrations/integration.service';
-import { PostsService } from '@gitroom/nestjs-libraries/database/prisma/posts/posts.service';
-import { SubscriptionService } from '@gitroom/nestjs-libraries/database/prisma/subscriptions/subscription.service';
-import { pricing } from '@gitroom/nestjs-libraries/database/prisma/subscriptions/pricing';
+import { IntegrationService } from '@postmill-ai/nestjs-libraries/database/prisma/integrations/integration.service';
+import { PostsService } from '@postmill-ai/nestjs-libraries/database/prisma/posts/posts.service';
+import { SubscriptionService } from '@postmill-ai/nestjs-libraries/database/prisma/subscriptions/subscription.service';
+import { pricing } from '@postmill-ai/nestjs-libraries/database/prisma/subscriptions/pricing';
 import dayjs from 'dayjs';
-import { makeId } from '@gitroom/nestjs-libraries/services/make.is';
-import { AllProvidersSettings } from '@gitroom/nestjs-libraries/dtos/posts/providers-settings/all.providers.settings';
+import { makeId } from '@postmill-ai/nestjs-libraries/services/make.is';
+import { AllProvidersSettings } from '@postmill-ai/nestjs-libraries/dtos/posts/providers-settings/all.providers.settings';
 import { Integration } from '@prisma/client';
-import { checkAuth } from '@gitroom/nestjs-libraries/chat/auth.context';
+import { checkAuth } from '@postmill-ai/nestjs-libraries/chat/auth.context';
 import {
   guardOutbound,
   parseOrg,
   parseUser,
   requireWrite,
-} from '@gitroom/nestjs-libraries/chat/tools/tool.helpers';
-import { GuardrailService } from '@gitroom/nestjs-libraries/ai/governance/guardrail.service';
+} from '@postmill-ai/nestjs-libraries/chat/tools/tool.helpers';
+import { GuardrailService } from '@postmill-ai/nestjs-libraries/ai/governance/guardrail.service';
 import {
   ValidUrlExtension,
   ValidUrlPath,
-} from '@gitroom/helpers/utils/valid.url.path';
+} from '@postmill-ai/helpers/utils/valid.url.path';
 
 const validUrlExtension = new ValidUrlExtension();
 const validUrlPath = new ValidUrlPath();

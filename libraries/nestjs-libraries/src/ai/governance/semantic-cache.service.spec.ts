@@ -5,7 +5,7 @@ const mockBudgetService = {
   recordSpend: vi.fn().mockResolvedValue(undefined),
 };
 
-vi.mock('@gitroom/nestjs-libraries/ai/governance/budget.service', () => ({
+vi.mock('@postmill-ai/nestjs-libraries/ai/governance/budget.service', () => ({
   BudgetService: class {
     checkBudget = mockBudgetService.checkBudget;
     recordSpend = mockBudgetService.recordSpend;
@@ -19,7 +19,7 @@ const mockSet = vi.fn(async (key: string, value: string, _ex?: string, _ttl?: nu
   return 'OK';
 });
 
-vi.mock('@gitroom/nestjs-libraries/redis/redis.service', () => ({
+vi.mock('@postmill-ai/nestjs-libraries/redis/redis.service', () => ({
   ioRedis: {
     get: (key: string) => mockGet(key),
     set: (key: string, value: string, ex?: string, ttl?: number) => mockSet(key, value, ex, ttl),

@@ -5,8 +5,8 @@ import {
   Res,
 } from '@nestjs/common';
 import { Request, Response } from 'express';
-import { createInngestServeHandler } from '@gitroom/backend/inngest/serve';
-import { InngestService } from '@gitroom/nestjs-libraries/inngest/inngest.service';
+import { createInngestServeHandler } from '@postmill-ai/backend/inngest/serve';
+import { InngestService } from '@postmill-ai/nestjs-libraries/inngest/inngest.service';
 
 @Controller('/api/inngest')
 export class InngestController {

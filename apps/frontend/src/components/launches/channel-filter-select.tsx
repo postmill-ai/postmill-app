@@ -2,10 +2,10 @@
 
 import { FC, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import clsx from 'clsx';
-import SafeImage from '@gitroom/react/helpers/safe.image';
-import { PlatformAvatar as SharedPlatformAvatar } from '@gitroom/frontend/components/shared/platform-avatar';
-import { useT } from '@gitroom/react/translation/get.transation.service.client';
-import { Integrations } from '@gitroom/frontend/components/launches/calendar.context';
+import SafeImage from '@postmill-ai/react/helpers/safe.image';
+import { PlatformAvatar as SharedPlatformAvatar } from '@postmill-ai/frontend/components/shared/platform-avatar';
+import { useT } from '@postmill-ai/react/translation/get.transation.service.client';
+import { Integrations } from '@postmill-ai/frontend/components/launches/calendar.context';
 
 const CHANNEL_SELECTOR_THRESHOLD = 4;
 

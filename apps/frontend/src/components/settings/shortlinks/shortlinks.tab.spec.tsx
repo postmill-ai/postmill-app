@@ -10,33 +10,33 @@ const mockT = vi.fn((_key: string, fallback?: string, opts?: Record<string, any>
   return fallback;
 });
 
-vi.mock('@gitroom/helpers/utils/custom.fetch', () => ({
+vi.mock('@postmill-ai/helpers/utils/custom.fetch', () => ({
   useFetch: () => mockFetchFn,
 }));
 
-vi.mock('@gitroom/react/toaster/toaster', () => ({
+vi.mock('@postmill-ai/react/toaster/toaster', () => ({
   useToaster: () => ({ show: mockToasterShow }),
 }));
 
-vi.mock('@gitroom/react/translation/get.transation.service.client', () => ({
+vi.mock('@postmill-ai/react/translation/get.transation.service.client', () => ({
   useT: () => mockT,
 }));
 
 // The delete flow now confirms through the bespoke decision modal
 // (useDecisionModal) instead of window.confirm. Keep the rest of new-modal real
 // (provider-settings-panel uses useModals) and only stub the decision hook.
-vi.mock('@gitroom/frontend/components/layout/new-modal', async (importOriginal) => ({
+vi.mock('@postmill-ai/frontend/components/layout/new-modal', async (importOriginal) => ({
   ...((await importOriginal()) as any),
   useDecisionModal: () => ({ open: mockDecisionOpen }),
 }));
 
-vi.mock('@gitroom/frontend/components/shared/provider-icon', () => ({
+vi.mock('@postmill-ai/frontend/components/shared/provider-icon', () => ({
   default: ({ identifier, name }: { identifier: string; name: string }) => (
     <span data-testid="provider-icon" data-identifier={identifier}>{name}</span>
   ),
 }));
 
-vi.mock('@gitroom/frontend/components/settings/shared/use-provider-catalog', () => ({
+vi.mock('@postmill-ai/frontend/components/settings/shared/use-provider-catalog', () => ({
   useProviderCatalog: () => ({ data: [] }),
   selectableVersions: () => [],
   latestActiveVersion: () => undefined,

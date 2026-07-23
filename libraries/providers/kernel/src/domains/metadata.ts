@@ -8,7 +8,7 @@ import { LanguageCode } from './languages';
  * separate from `ProviderManifest` so it can be authored as a small metadata file
  * (`metadata.ts`) in each provider package.
  *
- * Category values are strings; consumers in `@gitroom/nestjs-libraries` validate that
+ * Category values are strings; consumers in `@postmill-ai/nestjs-libraries` validate that
  * declared categories are subsets of the known `AI_MODEL_CATEGORIES` and
  * `AI_MEDIA_CATEGORIES` unions.
  */

@@ -22,7 +22,7 @@ const mockLanguageModel = { modelId: 'gpt-4.1', doGenerate: mockDoGenerate };
 
 // The legacy AIProviderRegistry was deleted; the facade now resolves adapters through
 // ProviderResolutionService.resolveAI(id). Mock it with the same per-id adapter logic.
-vi.mock('@gitroom/nestjs-libraries/providers/provider-resolution.service', () => ({
+vi.mock('@postmill-ai/nestjs-libraries/providers/provider-resolution.service', () => ({
   ProviderResolutionService: class {
     resolveAI = vi.fn().mockImplementation((id: string) => {
       if (id === 'openai') {
@@ -60,14 +60,14 @@ const mockGetActiveProvider = vi.fn().mockResolvedValue({
 
 const mockGetByIdentifier = vi.fn().mockResolvedValue(null);
 
-vi.mock('@gitroom/nestjs-libraries/database/prisma/ai-settings/org-ai-settings.service', () => ({
+vi.mock('@postmill-ai/nestjs-libraries/database/prisma/ai-settings/org-ai-settings.service', () => ({
   OrgAiSettingsService: class MockOrgAiSettings {
     getActiveProvider = mockGetActiveProvider;
     getByIdentifier = mockGetByIdentifier;
   },
 }));
 
-vi.mock('@gitroom/nestjs-libraries/ai/defaults/defaults-resolution.service', () => ({
+vi.mock('@postmill-ai/nestjs-libraries/ai/defaults/defaults-resolution.service', () => ({
   DefaultsResolutionService: class MockDefaultsResolutionService {
     resolve = vi.fn().mockResolvedValue(null);
     resolveAll = vi.fn().mockResolvedValue({});
@@ -76,7 +76,7 @@ vi.mock('@gitroom/nestjs-libraries/ai/defaults/defaults-resolution.service', () 
 }));
 
 const mockSpendLogData: any[] = [];
-vi.mock('@gitroom/nestjs-libraries/database/prisma/ai-settings/ai-settings.service', () => ({
+vi.mock('@postmill-ai/nestjs-libraries/database/prisma/ai-settings/ai-settings.service', () => ({
   AiSettingsService: class MockAiSettings {
     getProviderConfigs = vi.fn().mockResolvedValue([]);
     getProviderConfigByIdentifier = vi.fn().mockResolvedValue(null);
@@ -106,14 +106,14 @@ const mockSettings = {
   ragSettings: null,
 };
 
-vi.mock('@gitroom/nestjs-libraries/ai/ai-settings.manager', () => ({
+vi.mock('@postmill-ai/nestjs-libraries/ai/ai-settings.manager', () => ({
   AiSettingsManager: class MockManager {
     getSettings = vi.fn().mockResolvedValue(mockSettings);
     refreshCache = vi.fn();
   },
 }));
 
-vi.mock('@gitroom/nestjs-libraries/ai/governance/telemetry.service', () => ({
+vi.mock('@postmill-ai/nestjs-libraries/ai/governance/telemetry.service', () => ({
   TelemetryService: class MockTelemetry {
     configure = vi.fn();
     // eslint-disable-next-line @typescript-eslint/no-unsafe-function-type
@@ -123,7 +123,7 @@ vi.mock('@gitroom/nestjs-libraries/ai/governance/telemetry.service', () => ({
   },
 }));
 
-vi.mock('@gitroom/nestjs-libraries/ai/governance/provider-health.service', () => ({
+vi.mock('@postmill-ai/nestjs-libraries/ai/governance/provider-health.service', () => ({
   ProviderHealthService: class MockHealth {
     recordSuccess = vi.fn();
     recordError = vi.fn();
@@ -134,39 +134,39 @@ vi.mock('@gitroom/nestjs-libraries/ai/governance/provider-health.service', () =>
 }));
 
 let budgetAllowed = true;
-vi.mock('@gitroom/nestjs-libraries/ai/governance/budget.service', () => ({
+vi.mock('@postmill-ai/nestjs-libraries/ai/governance/budget.service', () => ({
   BudgetService: class MockBudget {
     checkBudget = vi.fn().mockImplementation(async () => ({ allowed: budgetAllowed }));
     recordSpend = vi.fn();
   },
 }));
 
-vi.mock('@gitroom/nestjs-libraries/ai/governance/guardrail.service', () => ({
+vi.mock('@postmill-ai/nestjs-libraries/ai/governance/guardrail.service', () => ({
   GuardrailService: class MockGuardrail {
     checkInput = vi.fn().mockImplementation(async (text: string) => text);
     checkOutput = vi.fn().mockImplementation(async (text: string) => text);
   },
 }));
 
-import { ProviderResolutionService } from '@gitroom/nestjs-libraries/providers/provider-resolution.service';
-import { AiSettingsService } from '@gitroom/nestjs-libraries/database/prisma/ai-settings/ai-settings.service';
-import { OrgAiSettingsService } from '@gitroom/nestjs-libraries/database/prisma/ai-settings/org-ai-settings.service';
+import { ProviderResolutionService } from '@postmill-ai/nestjs-libraries/providers/provider-resolution.service';
+import { AiSettingsService } from '@postmill-ai/nestjs-libraries/database/prisma/ai-settings/ai-settings.service';
+import { OrgAiSettingsService } from '@postmill-ai/nestjs-libraries/database/prisma/ai-settings/org-ai-settings.service';
 
-import { DefaultsResolutionService } from '@gitroom/nestjs-libraries/ai/defaults/defaults-resolution.service';
+import { DefaultsResolutionService } from '@postmill-ai/nestjs-libraries/ai/defaults/defaults-resolution.service';
 import { AiSettingsManager } from './ai-settings.manager';
 import { TelemetryService } from './governance/telemetry.service';
 import { ProviderHealthService } from './governance/provider-health.service';
 import { BudgetService } from './governance/budget.service';
 import { GuardrailService } from './governance/guardrail.service';
 
-vi.mock('@gitroom/nestjs-libraries/brands/brands.service', () => ({
+vi.mock('@postmill-ai/nestjs-libraries/brands/brands.service', () => ({
   BrandsService: class MockBrands {
     getBrand = vi.fn().mockResolvedValue(null);
     getDefaultBrand = vi.fn().mockResolvedValue(null);
   },
 }));
 
-import { BrandsService } from '@gitroom/nestjs-libraries/brands/brands.service';
+import { BrandsService } from '@postmill-ai/nestjs-libraries/brands/brands.service';
 
 describe('AIModelProvider', () => {
   let provider: AIModelProvider;

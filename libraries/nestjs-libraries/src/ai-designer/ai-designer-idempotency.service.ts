@@ -1,5 +1,5 @@
 import { Injectable } from '@nestjs/common';
-import { ioRedis } from '@gitroom/nestjs-libraries/redis/redis.service';
+import { ioRedis } from '@postmill-ai/nestjs-libraries/redis/redis.service';
 
 /**
  * Idempotency guard for mutating AI Designer socket events.

@@ -2,7 +2,7 @@ import {
   getAuth,
   getAccess,
   getUserId,
-} from '@gitroom/nestjs-libraries/chat/async.storage';
+} from '@postmill-ai/nestjs-libraries/chat/async.storage';
 
 export const checkAuth = (
   inputData: any,

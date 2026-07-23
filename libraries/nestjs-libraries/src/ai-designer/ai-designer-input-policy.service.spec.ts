@@ -3,7 +3,7 @@ import {
   AiDesignerInputPolicyService,
   GuardedInput,
 } from './ai-designer-input-policy.service';
-import { GuardrailViolation } from '@gitroom/nestjs-libraries/ai/governance/errors';
+import { GuardrailViolation } from '@postmill-ai/nestjs-libraries/ai/governance/errors';
 
 const makeService = (
   guardrailImpl: (text: string, orgId?: string) => Promise<string> = async (

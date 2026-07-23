@@ -1,4 +1,4 @@
-import '@gitroom/nestjs-libraries/ai-designer/agent-mesh/agent-mesh-env.shim';
+import '@postmill-ai/nestjs-libraries/ai-designer/agent-mesh/agent-mesh-env.shim';
 import { Injectable, Logger, OnModuleInit } from '@nestjs/common';
 import {
   registerInProcessAgent,
@@ -7,11 +7,11 @@ import {
 import type { AgentResponse, ContextPacket } from '@reaatech/agent-mesh';
 import { readFile } from 'fs/promises';
 import path from 'path';
-import { AiDefaultsService } from '@gitroom/nestjs-libraries/ai/defaults/ai-defaults.service';
-import { FileService } from '@gitroom/nestjs-libraries/database/prisma/file/file.service';
-import { CHANNEL_PRESETS } from '@gitroom/nestjs-libraries/integrations/social/channel-presets';
-import { isSafePublicHttpsUrl } from '@gitroom/nestjs-libraries/dtos/webhooks/webhook.url.validator';
-import { fromBuffer } from '@gitroom/nestjs-libraries/upload/file-type.compat';
+import { AiDefaultsService } from '@postmill-ai/nestjs-libraries/ai/defaults/ai-defaults.service';
+import { FileService } from '@postmill-ai/nestjs-libraries/database/prisma/file/file.service';
+import { CHANNEL_PRESETS } from '@postmill-ai/nestjs-libraries/integrations/social/channel-presets';
+import { isSafePublicHttpsUrl } from '@postmill-ai/nestjs-libraries/dtos/webhooks/webhook.url.validator';
+import { fromBuffer } from '@postmill-ai/nestjs-libraries/upload/file-type.compat';
 import type {
   DesignPlan,
   Fix,

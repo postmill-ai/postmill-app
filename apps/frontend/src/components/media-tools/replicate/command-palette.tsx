@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { useT } from '@gitroom/react/translation/get.transation.service.client';
+import { useT } from '@postmill-ai/react/translation/get.transation.service.client';
 import { useReplicateStore, type CategoryDefinition } from './replicate.store';
 import { useGenerate } from './use-generate';
 import { missingRequiredFields } from './use-generate';

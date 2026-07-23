@@ -1,8 +1,8 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { BudgetExceeded, GuardrailViolation } from '@gitroom/nestjs-libraries/ai/governance/errors';
+import { BudgetExceeded, GuardrailViolation } from '@postmill-ai/nestjs-libraries/ai/governance/errors';
 
-import { AIModelProvider } from '@gitroom/nestjs-libraries/ai/ai-model.provider';
-import { AiMediaService } from '@gitroom/nestjs-libraries/ai/governance/media.service';
+import { AIModelProvider } from '@postmill-ai/nestjs-libraries/ai/ai-model.provider';
+import { AiMediaService } from '@postmill-ai/nestjs-libraries/ai/governance/media.service';
 import { OpenaiService, PROMPT_CONSTANTS } from './openai.service';
 
 function mockAIModelProvider() {

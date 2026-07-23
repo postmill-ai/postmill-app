@@ -16,8 +16,8 @@ import React, {
   useRef,
   useState,
 } from 'react';
-import { useUser } from '@gitroom/frontend/components/layout/user.context';
-import { useT } from '@gitroom/react/translation/get.transation.service.client';
+import { useUser } from '@postmill-ai/frontend/components/layout/user.context';
+import { useT } from '@postmill-ai/react/translation/get.transation.service.client';
 
 const ACCENT = '#2B5CD3';
 

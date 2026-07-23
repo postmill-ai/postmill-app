@@ -2,14 +2,14 @@ import React from 'react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen } from '@testing-library/react';
 
-vi.mock('@gitroom/react/translation/get.transation.service.client', () => ({
+vi.mock('@postmill-ai/react/translation/get.transation.service.client', () => ({
   useT:
     () =>
     (_k: string, d: string, vars?: Record<string, unknown>) =>
       vars ? d.replace(/\{\{(\w+)\}\}/g, (_m, k) => String(vars[k])) : d,
 }));
 
-vi.mock('@gitroom/frontend/components/layout/use-ai-active', () => ({
+vi.mock('@postmill-ai/frontend/components/layout/use-ai-active', () => ({
   AI_SETUP_HREF: '/settings/ai/llm-providers',
 }));
 

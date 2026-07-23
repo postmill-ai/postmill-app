@@ -4,7 +4,7 @@ import {
   MediaProviderCapabilities,
   MediaCredentialField,
   ProviderModule,
-} from '@gitroom/provider-kernel';
+} from '@postmill-ai/provider-kernel';
 
 // Azure OpenAI — image via DALL·E / gpt-image deployments through @ai-sdk/azure (handled by
 // the matching AI Azure adapter via the AI-SDK media bridge).

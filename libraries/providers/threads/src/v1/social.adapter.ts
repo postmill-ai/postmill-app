@@ -6,17 +6,17 @@ import {
   PostResponse,
   SocialCommentDTO,
   SocialProvider,
-} from '@gitroom/provider-kernel';
-import { makeId, makeOauthState } from '@gitroom/provider-kernel';
-import { timer } from '@gitroom/helpers/utils/timer';
+} from '@postmill-ai/provider-kernel';
+import { makeId, makeOauthState } from '@postmill-ai/provider-kernel';
+import { timer } from '@postmill-ai/helpers/utils/timer';
 import { Logger } from '@nestjs/common';
 import dayjs from 'dayjs';
-import { SocialAbstract } from '@gitroom/provider-kernel';
+import { SocialAbstract } from '@postmill-ai/provider-kernel';
 import { capitalize, chunk } from 'lodash';
-import { Plug } from '@gitroom/helpers/decorators/plug.decorator';
+import { Plug } from '@postmill-ai/helpers/decorators/plug.decorator';
 import { Integration } from '@prisma/client';
-import { stripHtmlValidation } from '@gitroom/helpers/utils/strip.html.validation';
-import { hasExtension } from '@gitroom/helpers/utils/has.extension';
+import { stripHtmlValidation } from '@postmill-ai/helpers/utils/strip.html.validation';
+import { hasExtension } from '@postmill-ai/helpers/utils/has.extension';
 
 import { metadata as providerMetadata } from './metadata';
 export class ThreadsProvider extends SocialAbstract implements SocialProvider {
@@ -809,7 +809,7 @@ import {
   ProviderModule as __ProviderModule,
   SocialProviderKernelAdapter as __Bridge,
   PROVIDER_CAPABILITIES as __CAPS,
-} from '@gitroom/provider-kernel';
+} from '@postmill-ai/provider-kernel';
 
 const __adapter = new ThreadsProvider();
 

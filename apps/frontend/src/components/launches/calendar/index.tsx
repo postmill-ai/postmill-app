@@ -2,7 +2,7 @@
 
 import React, { useEffect, useState } from 'react';
 import { useCalendar } from './context';
-import { useT } from '@gitroom/react/translation/get.transation.service.client';
+import { useT } from '@postmill-ai/react/translation/get.transation.service.client';
 
 // dayjs locale imports and setup
 import 'dayjs/locale/en';

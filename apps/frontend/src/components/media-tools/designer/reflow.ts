@@ -5,8 +5,8 @@ export {
   estimateFocalPoint,
   deriveAnchor,
   getSafeZoneInset,
-} from '@gitroom/nestjs-libraries/media/designer-doc/reflow';
-export type { Anchor } from '@gitroom/nestjs-libraries/media/designer-doc/reflow';
+} from '@postmill-ai/nestjs-libraries/media/designer-doc/reflow';
+export type { Anchor } from '@postmill-ai/nestjs-libraries/media/designer-doc/reflow';
 
 export const computeCoverCrop = (
   srcW: number,

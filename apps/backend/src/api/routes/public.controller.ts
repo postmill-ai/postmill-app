@@ -10,18 +10,18 @@ import {
 } from '@nestjs/common';
 import { ApiTags } from '@nestjs/swagger';
 import { Throttle } from '@nestjs/throttler';
-import { TrackService } from '@gitroom/nestjs-libraries/track/track.service';
+import { TrackService } from '@postmill-ai/nestjs-libraries/track/track.service';
 import { RealIP } from 'nestjs-real-ip';
-import { UserAgent } from '@gitroom/nestjs-libraries/user/user.agent';
-import { TrackEnum } from '@gitroom/nestjs-libraries/user/track.enum';
+import { UserAgent } from '@postmill-ai/nestjs-libraries/user/user.agent';
+import { TrackEnum } from '@postmill-ai/nestjs-libraries/user/track.enum';
 import { Request, Response } from 'express';
-import { makeId } from '@gitroom/nestjs-libraries/services/make.is';
-import { getCookieUrlFromDomain } from '@gitroom/helpers/subdomain/subdomain.management';
-import { AgentGraphInsertService } from '@gitroom/nestjs-libraries/agent/agent.graph.insert.service';
-import { SubscriptionService } from '@gitroom/nestjs-libraries/database/prisma/subscriptions/subscription.service';
-import { OnlyURL } from '@gitroom/nestjs-libraries/dtos/webhooks/webhooks.dto';
-import { CreateAgentDto } from '@gitroom/backend/dtos/public/create-agent.dto';
-import { MediaStreamService } from '@gitroom/nestjs-libraries/media/stream/media-stream.service';
+import { makeId } from '@postmill-ai/nestjs-libraries/services/make.is';
+import { getCookieUrlFromDomain } from '@postmill-ai/helpers/subdomain/subdomain.management';
+import { AgentGraphInsertService } from '@postmill-ai/nestjs-libraries/agent/agent.graph.insert.service';
+import { SubscriptionService } from '@postmill-ai/nestjs-libraries/database/prisma/subscriptions/subscription.service';
+import { OnlyURL } from '@postmill-ai/nestjs-libraries/dtos/webhooks/webhooks.dto';
+import { CreateAgentDto } from '@postmill-ai/backend/dtos/public/create-agent.dto';
+import { MediaStreamService } from '@postmill-ai/nestjs-libraries/media/stream/media-stream.service';
 
 @ApiTags('Public')
 @Controller('/public')

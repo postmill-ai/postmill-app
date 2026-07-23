@@ -1,10 +1,10 @@
 'use client';
 
 import { useCallback } from 'react';
-import { useFetch } from '@gitroom/helpers/utils/custom.fetch';
-import { useToaster } from '@gitroom/react/toaster/toaster';
-import { useT } from '@gitroom/react/translation/get.transation.service.client';
-import { useDecisionModal } from '@gitroom/frontend/components/layout/new-modal';
+import { useFetch } from '@postmill-ai/helpers/utils/custom.fetch';
+import { useToaster } from '@postmill-ai/react/toaster/toaster';
+import { useT } from '@postmill-ai/react/translation/get.transation.service.client';
+import { useDecisionModal } from '@postmill-ai/frontend/components/layout/new-modal';
 import useSWR from 'swr';
 import { ProviderSurfaceDescriptor } from './provider-surface.types';
 

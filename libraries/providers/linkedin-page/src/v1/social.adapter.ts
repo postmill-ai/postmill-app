@@ -5,14 +5,14 @@ import {
   PostDetails,
   PostResponse,
   SocialProvider,
-} from '@gitroom/provider-kernel';
-import { makeId, makeOauthState } from '@gitroom/provider-kernel';
-import { LinkedinProvider } from '@gitroom/provider-kernel';
+} from '@postmill-ai/provider-kernel';
+import { makeId, makeOauthState } from '@postmill-ai/provider-kernel';
+import { LinkedinProvider } from '@postmill-ai/provider-kernel';
 import dayjs from 'dayjs';
 import { Integration } from '@prisma/client';
-import { Plug } from '@gitroom/helpers/decorators/plug.decorator';
-import { timer } from '@gitroom/helpers/utils/timer';
-import { Rules } from '@gitroom/provider-kernel';
+import { Plug } from '@postmill-ai/helpers/decorators/plug.decorator';
+import { timer } from '@postmill-ai/helpers/utils/timer';
+import { Rules } from '@postmill-ai/provider-kernel';
 
 import { metadata as providerMetadata } from './metadata';
 @Rules(
@@ -933,7 +933,7 @@ import {
   ProviderModule as __ProviderModule,
   SocialProviderKernelAdapter as __Bridge,
   PROVIDER_CAPABILITIES as __CAPS,
-} from '@gitroom/provider-kernel';
+} from '@postmill-ai/provider-kernel';
 
 const __adapter = new LinkedinPageProvider();
 

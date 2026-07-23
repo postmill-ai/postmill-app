@@ -8,17 +8,17 @@ import { END, START, StateGraph } from '@langchain/langgraph';
 import { ToolNode } from '@langchain/langgraph/prebuilt';
 import { ChatPromptTemplate } from '@langchain/core/prompts';
 import dayjs from 'dayjs';
-import { PostsService } from '@gitroom/nestjs-libraries/database/prisma/posts/posts.service';
+import { PostsService } from '@postmill-ai/nestjs-libraries/database/prisma/posts/posts.service';
 import { z } from 'zod';
-import { FileService } from '@gitroom/nestjs-libraries/database/prisma/file/file.service';
-import { StorageService } from '@gitroom/nestjs-libraries/database/prisma/storage/storage.service';
-import { GeneratorDto } from '@gitroom/nestjs-libraries/dtos/generator/generator.dto';
-import { AIModelProvider } from '@gitroom/nestjs-libraries/ai/ai-model.provider';
-import { AiMediaService } from '@gitroom/nestjs-libraries/ai/governance/media.service';
-import { BudgetService } from '@gitroom/nestjs-libraries/ai/governance/budget.service';
-import { GuardrailService } from '@gitroom/nestjs-libraries/ai/governance/guardrail.service';
-import { BudgetExceeded } from '@gitroom/nestjs-libraries/ai/governance/errors';
-import { PROMPT_CONSTANTS } from '@gitroom/nestjs-libraries/ai/prompt-constants.const';
+import { FileService } from '@postmill-ai/nestjs-libraries/database/prisma/file/file.service';
+import { StorageService } from '@postmill-ai/nestjs-libraries/database/prisma/storage/storage.service';
+import { GeneratorDto } from '@postmill-ai/nestjs-libraries/dtos/generator/generator.dto';
+import { AIModelProvider } from '@postmill-ai/nestjs-libraries/ai/ai-model.provider';
+import { AiMediaService } from '@postmill-ai/nestjs-libraries/ai/governance/media.service';
+import { BudgetService } from '@postmill-ai/nestjs-libraries/ai/governance/budget.service';
+import { GuardrailService } from '@postmill-ai/nestjs-libraries/ai/governance/guardrail.service';
+import { BudgetExceeded } from '@postmill-ai/nestjs-libraries/ai/governance/errors';
+import { PROMPT_CONSTANTS } from '@postmill-ai/nestjs-libraries/ai/prompt-constants.const';
 
 const logger = new Logger('AgentGraphService');
 

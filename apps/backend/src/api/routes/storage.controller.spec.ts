@@ -31,7 +31,7 @@ const permissionsMock = {
   check: vi.fn(),
 };
 
-vi.mock('@gitroom/nestjs-libraries/database/prisma/storage/storage.service', () => ({
+vi.mock('@postmill-ai/nestjs-libraries/database/prisma/storage/storage.service', () => ({
   StorageService: class {
     getProviderConfigs = serviceMock.getProviderConfigs;
     createAndTestConfig = serviceMock.createAndTestConfig;
@@ -51,18 +51,18 @@ vi.mock('@gitroom/nestjs-libraries/database/prisma/storage/storage.service', () 
 
 import { StorageController } from './storage.controller';
 import { HttpException } from '@nestjs/common';
-import type { StorageService } from '@gitroom/nestjs-libraries/database/prisma/storage/storage.service';
-import type { AuditService } from '@gitroom/nestjs-libraries/database/prisma/audit/audit.service';
-import type { FileService } from '@gitroom/nestjs-libraries/database/prisma/file/file.service';
+import type { StorageService } from '@postmill-ai/nestjs-libraries/database/prisma/storage/storage.service';
+import type { AuditService } from '@postmill-ai/nestjs-libraries/database/prisma/audit/audit.service';
+import type { FileService } from '@postmill-ai/nestjs-libraries/database/prisma/file/file.service';
 import {
   AppAbility,
   PermissionsService,
-} from '@gitroom/backend/services/auth/permissions/permissions.service';
-import { CHECK_POLICIES_KEY } from '@gitroom/backend/services/auth/permissions/permissions.ability';
+} from '@postmill-ai/backend/services/auth/permissions/permissions.service';
+import { CHECK_POLICIES_KEY } from '@postmill-ai/backend/services/auth/permissions/permissions.ability';
 import {
   AuthorizationActions,
   Sections,
-} from '@gitroom/backend/services/auth/permissions/permission.exception.class';
+} from '@postmill-ai/backend/services/auth/permissions/permission.exception.class';
 
 const org: Organization = { id: 'org-1', createdAt: new Date() } as any;
 const user: User = { id: 'user-1' } as any;

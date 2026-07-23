@@ -1,6 +1,6 @@
-import { inngest } from '@gitroom/nestjs-libraries/inngest/inngest.client';
-import { AgentDigestActivity } from '@gitroom/nestjs-libraries/inngest/activities/agent-digest.activity';
-import { OrganizationService } from '@gitroom/nestjs-libraries/database/prisma/organizations/organization.service';
+import { inngest } from '@postmill-ai/nestjs-libraries/inngest/inngest.client';
+import { AgentDigestActivity } from '@postmill-ai/nestjs-libraries/inngest/activities/agent-digest.activity';
+import { OrganizationService } from '@postmill-ai/nestjs-libraries/database/prisma/organizations/organization.service';
 
 export const createAgentDigest = (
   // The cron fan-out only reads org ids; the activity is threaded in solely to

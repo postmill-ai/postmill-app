@@ -2,12 +2,12 @@
 
 import { useCallback } from 'react';
 import useSWR from 'swr';
-import { useFetch } from '@gitroom/helpers/utils/custom.fetch';
-import type { MediaSelectorItem } from '@gitroom/frontend/components/media-tools/media-selector-modal';
+import { useFetch } from '@postmill-ai/helpers/utils/custom.fetch';
+import type { MediaSelectorItem } from '@postmill-ai/frontend/components/media-tools/media-selector-modal';
 import type {
   AiDesignerSessionDto,
   AiDesignerMessagePayload,
-} from '@gitroom/nestjs-libraries/ai-designer/ai-designer.types';
+} from '@postmill-ai/nestjs-libraries/ai-designer/ai-designer.types';
 
 export interface AiDesignerSessionHydrate {
   session: AiDesignerSessionDto;

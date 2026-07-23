@@ -10,7 +10,7 @@ import {
   MediaPollResult,
   SafeFetchPort,
   ProviderModule,
-} from '@gitroom/provider-kernel';
+} from '@postmill-ai/provider-kernel';
 import { GoogleAuth } from 'google-auth-library';
 
 import { metadata as providerMetadata } from './metadata';

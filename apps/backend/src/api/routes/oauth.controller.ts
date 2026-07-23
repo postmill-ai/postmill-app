@@ -9,12 +9,12 @@ import {
 } from '@nestjs/common';
 import { ApiTags } from '@nestjs/swagger';
 import { Throttle } from '@nestjs/throttler';
-import { OAuthService } from '@gitroom/nestjs-libraries/database/prisma/oauth/oauth.service';
-import { GetUserFromRequest } from '@gitroom/nestjs-libraries/user/user.from.request';
-import { GetOrgFromRequest } from '@gitroom/nestjs-libraries/user/org.from.request';
+import { OAuthService } from '@postmill-ai/nestjs-libraries/database/prisma/oauth/oauth.service';
+import { GetUserFromRequest } from '@postmill-ai/nestjs-libraries/user/user.from.request';
+import { GetOrgFromRequest } from '@postmill-ai/nestjs-libraries/user/org.from.request';
 import { User, Organization } from '@prisma/client';
-import { AuthorizeOAuthQueryDto, ApproveOAuthDto } from '@gitroom/nestjs-libraries/dtos/oauth/authorize-oauth.dto';
-import { TokenExchangeDto } from '@gitroom/nestjs-libraries/dtos/oauth/token-exchange.dto';
+import { AuthorizeOAuthQueryDto, ApproveOAuthDto } from '@postmill-ai/nestjs-libraries/dtos/oauth/authorize-oauth.dto';
+import { TokenExchangeDto } from '@postmill-ai/nestjs-libraries/dtos/oauth/token-exchange.dto';
 
 @ApiTags('OAuth')
 @Controller('/oauth')

@@ -3,13 +3,13 @@
 import {
   PostComment,
   withProvider,
-} from '@gitroom/frontend/components/composer/providers/high.order.provider';
-import { ListmonkDto } from '@gitroom/nestjs-libraries/dtos/posts/providers-settings/listmonk.dto';
-import { Input } from '@gitroom/react/form/input';
-import { useSettings } from '@gitroom/frontend/components/launches/helpers/use.values';
-import { SelectList } from '@gitroom/frontend/components/composer/providers/listmonk/select.list';
-import { SelectTemplates } from '@gitroom/frontend/components/composer/providers/listmonk/select.templates';
-import { useT } from '@gitroom/react/translation/get.transation.service.client';
+} from '@postmill-ai/frontend/components/composer/providers/high.order.provider';
+import { ListmonkDto } from '@postmill-ai/nestjs-libraries/dtos/posts/providers-settings/listmonk.dto';
+import { Input } from '@postmill-ai/react/form/input';
+import { useSettings } from '@postmill-ai/frontend/components/launches/helpers/use.values';
+import { SelectList } from '@postmill-ai/frontend/components/composer/providers/listmonk/select.list';
+import { SelectTemplates } from '@postmill-ai/frontend/components/composer/providers/listmonk/select.templates';
+import { useT } from '@postmill-ai/react/translation/get.transation.service.client';
 
 const SettingsComponent = () => {
   const form = useSettings();

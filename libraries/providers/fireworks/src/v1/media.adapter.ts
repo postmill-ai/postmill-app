@@ -12,7 +12,7 @@ import {
   validateModelId,
   SafeFetchPort,
   ProviderModule,
-} from '@gitroom/provider-kernel';
+} from '@postmill-ai/provider-kernel';
 
 // Fireworks AI — same key as the Fireworks LLM provider (registry id `fireworks`), reused via
 // the universal-credential fallback. Image generation uses Fireworks' workflow endpoint

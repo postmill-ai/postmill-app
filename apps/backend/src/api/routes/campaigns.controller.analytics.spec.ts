@@ -1,7 +1,7 @@
 import { describe, it, expect, vi } from 'vitest';
 import { BadRequestException, NotFoundException } from '@nestjs/common';
 
-vi.mock('@gitroom/nestjs-libraries/analytics/analytics.service', () => ({
+vi.mock('@postmill-ai/nestjs-libraries/analytics/analytics.service', () => ({
   AnalyticsService: class {
     getOverview = vi.fn();
   },

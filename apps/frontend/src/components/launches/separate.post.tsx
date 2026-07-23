@@ -1,10 +1,10 @@
 'use client';
-import { Button } from '@gitroom/react/form/button';
-import { deleteDialog } from '@gitroom/react/helpers/delete.dialog';
+import { Button } from '@postmill-ai/react/form/button';
+import { deleteDialog } from '@postmill-ai/react/helpers/delete.dialog';
 import { FC, useCallback } from 'react';
-import { useT } from '@gitroom/react/translation/get.transation.service.client';
-import { useFetch } from '@gitroom/helpers/utils/custom.fetch';
-import { useToaster } from '@gitroom/react/toaster/toaster';
+import { useT } from '@postmill-ai/react/translation/get.transation.service.client';
+import { useFetch } from '@postmill-ai/helpers/utils/custom.fetch';
+import { useToaster } from '@postmill-ai/react/toaster/toaster';
 export const SeparatePost: FC<{
   posts: string[];
   len: number;

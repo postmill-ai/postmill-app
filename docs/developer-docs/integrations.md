@@ -7,7 +7,7 @@ Postmill's **Integrations** pillar covers every social channel, messaging destin
 A social integration is a connection between an organization and an external platform. The runtime pieces are:
 
 - **`Integration` row** — a connected channel (`providerIdentifier`, `internalId`, encrypted token/refresh token, posting times, groups, etc.).
-- **Provider adapter** — a versioned package under `libraries/providers/<provider>/` that implements the social domain contract (`@gitroom/provider-kernel`).
+- **Provider adapter** — a versioned package under `libraries/providers/<provider>/` that implements the social domain contract (`@postmill-ai/provider-kernel`).
 - **`IntegrationManager`** — the central service (`libraries/nestjs-libraries/src/integrations/integration.manager.ts`) that enumerates providers, resolves credentials, builds the channel list, generates OAuth URLs, and dispatches provider tools.
 
 Resolution always goes through the [provider framework](./provider-framework.md): the manager asks `ProviderResolutionService` for the exact `(social, providerId, version)` module, and the adapter's pinned version is respected for already-connected channels even when the provider is later disabled for new connections.

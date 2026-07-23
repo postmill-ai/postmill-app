@@ -2,9 +2,9 @@
 
 import { FC, useEffect, useState } from 'react';
 import Link from 'next/link';
-import { useT } from '@gitroom/react/translation/get.transation.service.client';
+import { useT } from '@postmill-ai/react/translation/get.transation.service.client';
 import { useNarrate, NarrateError } from '../hooks/useNarrate';
-import { AI_SETUP_HREF } from '@gitroom/frontend/components/layout/use-ai-active';
+import { AI_SETUP_HREF } from '@postmill-ai/frontend/components/layout/use-ai-active';
 
 // Actual narration UI. A fresh instance is mounted (via key on the public
 // wrapper) whenever the requested period changes, so initial state is enough

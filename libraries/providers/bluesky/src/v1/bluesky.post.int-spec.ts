@@ -44,7 +44,7 @@ vi.mock('@atproto/api', () => ({
   BlobRef: class {},
 }));
 
-vi.mock('@gitroom/helpers/auth/auth.service', () => ({
+vi.mock('@postmill-ai/helpers/auth/auth.service', () => ({
   AuthService: {
     fixedDecryption: () =>
       JSON.stringify({

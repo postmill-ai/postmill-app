@@ -4,30 +4,30 @@ import * as crypto from 'crypto';
 import dayjs from 'dayjs';
 import { Provider } from '@prisma/client';
 
-vi.mock('@gitroom/nestjs-libraries/database/prisma/users/users.service', () => ({
+vi.mock('@postmill-ai/nestjs-libraries/database/prisma/users/users.service', () => ({
   UsersService: class {},
 }));
 vi.mock(
-  '@gitroom/nestjs-libraries/database/prisma/organizations/organization.service',
+  '@postmill-ai/nestjs-libraries/database/prisma/organizations/organization.service',
   () => ({
     OrganizationService: class {},
   })
 );
 vi.mock(
-  '@gitroom/nestjs-libraries/database/prisma/notifications/notification.service',
+  '@postmill-ai/nestjs-libraries/database/prisma/notifications/notification.service',
   () => ({
     NotificationService: class {},
   })
 );
-vi.mock('@gitroom/nestjs-libraries/services/email.service', () => ({
+vi.mock('@postmill-ai/nestjs-libraries/services/email.service', () => ({
   EmailService: class {},
 }));
-vi.mock('@gitroom/backend/services/auth/providers/providers.manager', () => ({
+vi.mock('@postmill-ai/backend/services/auth/providers/providers.manager', () => ({
   ProvidersManager: class {},
 }));
 
 const newsletterRegister = vi.fn().mockResolvedValue(undefined);
-vi.mock('@gitroom/nestjs-libraries/newsletter/newsletter.service', () => ({
+vi.mock('@postmill-ai/nestjs-libraries/newsletter/newsletter.service', () => ({
   NewsletterService: {
     register: (...args: unknown[]) => newsletterRegister(...args),
   },
@@ -38,7 +38,7 @@ const authCheckerMock = {
   verifyJWT: vi.fn(),
   comparePassword: vi.fn(),
 };
-vi.mock('@gitroom/helpers/auth/auth.service', () => ({
+vi.mock('@postmill-ai/helpers/auth/auth.service', () => ({
   AuthService: {
     signJWT: (payload: { id: string }) => authCheckerMock.signJWT(payload),
     verifyJWT: (token: string) => authCheckerMock.verifyJWT(token),
@@ -48,8 +48,8 @@ vi.mock('@gitroom/helpers/auth/auth.service', () => ({
 }));
 
 import { AuthService } from './auth.service';
-import { CreateOrgUserDto } from '@gitroom/nestjs-libraries/dtos/auth/create.org.user.dto';
-import { LoginUserDto } from '@gitroom/nestjs-libraries/dtos/auth/login.user.dto';
+import { CreateOrgUserDto } from '@postmill-ai/nestjs-libraries/dtos/auth/create.org.user.dto';
+import { LoginUserDto } from '@postmill-ai/nestjs-libraries/dtos/auth/login.user.dto';
 
 const sha256 = (value: string) =>
   crypto.createHash('sha256').update(value).digest('hex');

@@ -1,9 +1,9 @@
-import { PrismaRepository } from '@gitroom/nestjs-libraries/database/prisma/prisma.service';
+import { PrismaRepository } from '@postmill-ai/nestjs-libraries/database/prisma/prisma.service';
 import { Injectable, BadRequestException } from '@nestjs/common';
 import dayjs from 'dayjs';
 // type-only: the service value-imports this repository, so a runtime import here would
 // close a circular require. InboxFilterOptions is only a type, so import it as such.
-import type { InboxFilterOptions } from '@gitroom/nestjs-libraries/database/prisma/social-comments/social.comments.service';
+import type { InboxFilterOptions } from '@postmill-ai/nestjs-libraries/database/prisma/social-comments/social.comments.service';
 
 @Injectable()
 export class SocialCommentsRepository {

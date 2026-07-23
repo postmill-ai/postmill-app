@@ -1,4 +1,4 @@
-import type { StudioDescriptor } from '@gitroom/frontend/components/media-tools/studio-kit/types';
+import type { StudioDescriptor } from '@postmill-ai/frontend/components/media-tools/studio-kit/types';
 
 // Leonardo.ai (registry/config identifier `leonardo`): own-key image generation. The API is async
 // (create → poll), but the adapter polls internally to keep the synchronous image contract. The

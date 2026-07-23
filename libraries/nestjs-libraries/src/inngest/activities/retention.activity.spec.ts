@@ -1,6 +1,6 @@
 import { describe, expect, it, vi, beforeEach } from 'vitest';
 import { RetentionActivity } from './retention.activity';
-import { RetentionRepository } from '@gitroom/nestjs-libraries/database/prisma/retention/retention.repository';
+import { RetentionRepository } from '@postmill-ai/nestjs-libraries/database/prisma/retention/retention.repository';
 
 function makeRepository() {
   return {

@@ -1,8 +1,8 @@
 import { Mastra } from '@mastra/core/mastra';
 import { ConsoleLogger } from '@mastra/core/logger';
-import { pStore } from '@gitroom/nestjs-libraries/chat/mastra.store';
+import { pStore } from '@postmill-ai/nestjs-libraries/chat/mastra.store';
 import { Injectable } from '@nestjs/common';
-import { LoadToolsService } from '@gitroom/nestjs-libraries/chat/load.tools.service';
+import { LoadToolsService } from '@postmill-ai/nestjs-libraries/chat/load.tools.service';
 
 @Injectable()
 export class MastraService {

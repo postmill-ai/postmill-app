@@ -1,8 +1,8 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { BadRequestException, ForbiddenException, Logger, UseGuards } from '@nestjs/common';
-import { REQUIRE_PERMISSION_KEY } from '@gitroom/backend/services/auth/rbac/require-permission.decorator';
-import { SuperAdminGuard } from '@gitroom/backend/services/auth/rbac/super-admin.guard';
-import { OrgRbacGuard } from '@gitroom/backend/services/auth/rbac/org-rbac.guard';
+import { REQUIRE_PERMISSION_KEY } from '@postmill-ai/backend/services/auth/rbac/require-permission.decorator';
+import { SuperAdminGuard } from '@postmill-ai/backend/services/auth/rbac/super-admin.guard';
+import { OrgRbacGuard } from '@postmill-ai/backend/services/auth/rbac/org-rbac.guard';
 
 // The social provider list now comes from IntegrationManager (kernel-backed);
 // the controller iterates `getSocialProviders()` / looks up a single provider
@@ -15,7 +15,7 @@ const fakeProviders = [
   { identifier: 'ext-test', name: 'Extension', toolTip: 'Ext', isChromeExtension: true, customFields: true, scopes: ['ext_scope'] },
 ] as any[];
 
-vi.mock('@gitroom/nestjs-libraries/integrations/integration.manager', () => ({
+vi.mock('@postmill-ai/nestjs-libraries/integrations/integration.manager', () => ({
   IntegrationManager: class {},
 }));
 

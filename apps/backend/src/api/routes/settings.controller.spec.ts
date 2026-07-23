@@ -9,7 +9,7 @@ const mockGetShortlinkPreference = vi.fn();
 const mockUpdateShortlinkPreference = vi.fn();
 
 vi.mock(
-  '@gitroom/nestjs-libraries/database/prisma/organizations/organization.service',
+  '@postmill-ai/nestjs-libraries/database/prisma/organizations/organization.service',
   () => ({
     OrganizationService: class {
       createTeamUser = mockCreateTeamUser;
@@ -24,8 +24,8 @@ vi.mock(
 );
 
 import { SettingsController } from './settings.controller';
-import { OrganizationService } from '@gitroom/nestjs-libraries/database/prisma/organizations/organization.service';
-import { CreateTeamUserDto } from '@gitroom/nestjs-libraries/dtos/settings/create-team-user.dto';
+import { OrganizationService } from '@postmill-ai/nestjs-libraries/database/prisma/organizations/organization.service';
+import { CreateTeamUserDto } from '@postmill-ai/nestjs-libraries/dtos/settings/create-team-user.dto';
 
 const org = { id: 'org-1' } as any;
 

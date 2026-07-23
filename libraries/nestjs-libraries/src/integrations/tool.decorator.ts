@@ -1,3 +1,3 @@
-// Re-export shim — relocated to @gitroom/provider-kernel (step 7.5.2).
+// Re-export shim — relocated to @postmill-ai/provider-kernel (step 7.5.2).
 // Same decorator instance (Mastra MCP metadata) — do not duplicate.
-export { Tool } from '@gitroom/provider-kernel';
+export { Tool } from '@postmill-ai/provider-kernel';

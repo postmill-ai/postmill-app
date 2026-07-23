@@ -3,7 +3,7 @@ import {
   ProviderRuntimeContext,
   AuthCapability,
   AuthUserInfo,
-} from '@gitroom/provider-kernel';
+} from '@postmill-ai/provider-kernel';
 import { google } from 'googleapis';
 
 import { metadata as providerMetadata } from './metadata';

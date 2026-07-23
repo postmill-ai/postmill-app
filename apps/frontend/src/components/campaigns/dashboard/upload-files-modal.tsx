@@ -3,11 +3,11 @@
 import React, { FC, useCallback, useRef, useState } from 'react';
 import useSWR from 'swr';
 import clsx from 'clsx';
-import { useFetch } from '@gitroom/helpers/utils/custom.fetch';
-import { useToaster } from '@gitroom/react/toaster/toaster';
-import { useT } from '@gitroom/react/translation/get.transation.service.client';
-import { useModals } from '@gitroom/frontend/components/layout/new-modal';
-import { FolderTree } from '@gitroom/frontend/components/files/folder-tree';
+import { useFetch } from '@postmill-ai/helpers/utils/custom.fetch';
+import { useToaster } from '@postmill-ai/react/toaster/toaster';
+import { useT } from '@postmill-ai/react/translation/get.transation.service.client';
+import { useModals } from '@postmill-ai/frontend/components/layout/new-modal';
+import { FolderTree } from '@postmill-ai/frontend/components/files/folder-tree';
 
 // Bulk file upload for the campaign Files tab. Mirrors the Designer's
 // MediaSelectorModal "My Files" upload: the real /files FolderTree as the

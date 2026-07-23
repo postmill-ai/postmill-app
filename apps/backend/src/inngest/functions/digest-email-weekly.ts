@@ -1,6 +1,6 @@
-import { inngest } from '@gitroom/nestjs-libraries/inngest/inngest.client';
-import { DigestActivity } from '@gitroom/nestjs-libraries/inngest/activities/digest.activity';
-import { InngestEvents } from '@gitroom/nestjs-libraries/inngest/inngest.types';
+import { inngest } from '@postmill-ai/nestjs-libraries/inngest/inngest.client';
+import { DigestActivity } from '@postmill-ai/nestjs-libraries/inngest/activities/digest.activity';
+import { InngestEvents } from '@postmill-ai/nestjs-libraries/inngest/inngest.types';
 import dayjs from 'dayjs';
 
 export const createDigestEmailWeekly = (digestActivity: DigestActivity) =>

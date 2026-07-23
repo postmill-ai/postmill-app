@@ -1,7 +1,7 @@
 import { describe, it, expect, vi } from 'vitest';
 import { SkoolProvider } from './social.adapter';
 
-vi.mock('@gitroom/helpers/auth/auth.service', () => ({
+vi.mock('@postmill-ai/helpers/auth/auth.service', () => ({
   AuthService: {
     fixedEncryption: vi.fn((value: string) => `encrypted:${value}`),
     fixedDecryption: vi.fn((value: string) =>

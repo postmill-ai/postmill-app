@@ -1,6 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { CampaignEntityType } from '@prisma/client';
-import { PrismaRepository } from '@gitroom/nestjs-libraries/database/prisma/prisma.service';
+import { PrismaRepository } from '@postmill-ai/nestjs-libraries/database/prisma/prisma.service';
 import { ResolvedItem } from './campaign-entity.types';
 
 // Resolves a batch of entity ids (of one type) to their display fields. A

@@ -12,7 +12,7 @@ import { setSocialFetchPorts } from '../../libraries/providers/kernel/src/domain
 import {
   RefreshTokenError,
   BadBodyError,
-} from '@gitroom/nestjs-libraries/inngest/errors';
+} from '@postmill-ai/nestjs-libraries/inngest/errors';
 
 setSocialFetchPorts({
   getVpnDispatcher: () => undefined,

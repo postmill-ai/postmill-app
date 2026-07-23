@@ -1,13 +1,13 @@
 'use client';
 
 import React, { useCallback, useMemo, useState } from 'react';
-import { useFetch } from '@gitroom/helpers/utils/custom.fetch';
-import { useToaster } from '@gitroom/react/toaster/toaster';
-import { useModals } from '@gitroom/frontend/components/layout/new-modal';
-import { MediaSelectorModal } from '@gitroom/frontend/components/media-tools/media-selector-modal';
-import { openInDesigner } from '@gitroom/frontend/components/media-tools/open-in-designer';
-import type { StudioCustomProps } from '@gitroom/frontend/components/media-tools/studio-kit/types';
-import { useT } from '@gitroom/react/translation/get.transation.service.client';
+import { useFetch } from '@postmill-ai/helpers/utils/custom.fetch';
+import { useToaster } from '@postmill-ai/react/toaster/toaster';
+import { useModals } from '@postmill-ai/frontend/components/layout/new-modal';
+import { MediaSelectorModal } from '@postmill-ai/frontend/components/media-tools/media-selector-modal';
+import { openInDesigner } from '@postmill-ai/frontend/components/media-tools/open-in-designer';
+import type { StudioCustomProps } from '@postmill-ai/frontend/components/media-tools/studio-kit/types';
+import { useT } from '@postmill-ai/react/translation/get.transation.service.client';
 
 interface Segment {
   start: number;
@@ -163,7 +163,7 @@ export const DeepgramPanel: React.FC<StudioCustomProps> = ({ onGenerated }) => {
       return;
     }
     const integrations = await integrationsRes.json();
-    const { Composer } = await import('@gitroom/frontend/components/composer/composer');
+    const { Composer } = await import('@postmill-ai/frontend/components/composer/composer');
     const dayjs = (await import('dayjs')).default;
     modal.openModal({
       fullScreen: true,

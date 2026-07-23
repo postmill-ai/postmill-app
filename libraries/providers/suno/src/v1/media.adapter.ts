@@ -9,7 +9,7 @@ import {
   MediaPollResult,
   SafeFetchPort,
   ProviderModule,
-} from '@gitroom/provider-kernel';
+} from '@postmill-ai/provider-kernel';
 
 // Suno AI music generation via the sunoapi.org hosted gateway — own-key Bearer provider
 // configured at Settings → Media. Audio-only (music). Generation is async: POST /api/v1/generate

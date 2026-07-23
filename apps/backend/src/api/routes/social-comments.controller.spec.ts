@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
 vi.mock(
-  '@gitroom/nestjs-libraries/database/prisma/social-comments/social.comments.service',
+  '@postmill-ai/nestjs-libraries/database/prisma/social-comments/social.comments.service',
   () => ({
     SocialCommentsService: class MockSocialCommentsService {
       getComments = vi.fn();
@@ -22,7 +22,7 @@ vi.mock(
 );
 
 import { SocialCommentsController } from './social-comments.controller';
-import { SocialCommentsService } from '@gitroom/nestjs-libraries/database/prisma/social-comments/social.comments.service';
+import { SocialCommentsService } from '@postmill-ai/nestjs-libraries/database/prisma/social-comments/social.comments.service';
 
 const mockOrg = { id: 'org-1', name: 'Test Org' } as any;
 const mockUser = { id: 'user-1', name: 'Test User' } as any;

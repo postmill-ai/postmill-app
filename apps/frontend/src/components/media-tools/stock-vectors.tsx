@@ -2,11 +2,11 @@
 
 import React, { FC, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useDebounce } from 'use-debounce';
-import { useModals } from '@gitroom/frontend/components/layout/new-modal';
+import { useModals } from '@postmill-ai/frontend/components/layout/new-modal';
 import { StockPreviewModal } from './stock-preview-modal';
 import { StockVectorItem, stockSourceLabel } from './stock.types';
 import { useStockSearch } from './use-stock-search';
-import { useT } from '@gitroom/react/translation/get.transation.service.client';
+import { useT } from '@postmill-ai/react/translation/get.transation.service.client';
 
 // Values must match Pixabay's `colors` parameter exactly
 // (https://pixabay.com/api/docs/) — e.g. `grayscale`/`lilac`, not `black_and_white`/`purple`.

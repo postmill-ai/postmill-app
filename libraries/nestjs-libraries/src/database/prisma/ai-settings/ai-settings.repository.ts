@@ -1,4 +1,4 @@
-import { PrismaRepository } from '@gitroom/nestjs-libraries/database/prisma/prisma.service';
+import { PrismaRepository } from '@postmill-ai/nestjs-libraries/database/prisma/prisma.service';
 import { Injectable } from '@nestjs/common';
 import dayjs from 'dayjs';
 import utc from 'dayjs/plugin/utc';

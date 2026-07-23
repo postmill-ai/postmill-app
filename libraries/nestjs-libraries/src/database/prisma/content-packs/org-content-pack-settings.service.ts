@@ -1,16 +1,16 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { OrgContentPackSettingsRepository } from './org-content-pack-settings.repository';
-import { EncryptionService } from '@gitroom/nestjs-libraries/encryption/encryption.service';
-import { ProviderResolutionService } from '@gitroom/nestjs-libraries/providers/provider-resolution.service';
+import { EncryptionService } from '@postmill-ai/nestjs-libraries/encryption/encryption.service';
+import { ProviderResolutionService } from '@postmill-ai/nestjs-libraries/providers/provider-resolution.service';
 import {
   parseQualified,
   qualify,
   DEFAULT_VERSION,
-} from '@gitroom/provider-kernel';
+} from '@postmill-ai/provider-kernel';
 import {
   ContentPackMeta,
   manifestToContentPackMeta,
-} from '@gitroom/nestjs-libraries/media/stock/content-packs/content-pack.registry';
+} from '@postmill-ai/nestjs-libraries/media/stock/content-packs/content-pack.registry';
 
 @Injectable()
 export class OrgContentPackSettingsService {

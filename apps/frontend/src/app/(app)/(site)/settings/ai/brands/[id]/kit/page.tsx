@@ -2,8 +2,8 @@
 
 import React from 'react';
 import { useParams } from 'next/navigation';
-import { BrandAssets } from '@gitroom/frontend/components/settings/brand/brand-assets';
-import { useBrands } from '@gitroom/frontend/components/settings/brand/use-brands';
+import { BrandAssets } from '@postmill-ai/frontend/components/settings/brand/brand-assets';
+import { useBrands } from '@postmill-ai/frontend/components/settings/brand/use-brands';
 
 export default function Page() {
   const params = useParams();

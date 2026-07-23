@@ -13,7 +13,7 @@ import {
   type AiModelOptions as AIModelOptions,
   type ProviderModule,
   type SafeFetchPort,
-} from '@gitroom/provider-kernel';
+} from '@postmill-ai/provider-kernel';
 
 const GROQ_CAPABILITIES: AICapabilities = {
   text: true,

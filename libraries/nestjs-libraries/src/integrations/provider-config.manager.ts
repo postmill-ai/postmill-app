@@ -1,10 +1,10 @@
 import { Injectable, Logger, OnModuleInit, OnModuleDestroy } from '@nestjs/common';
 import { randomUUID } from 'crypto';
 import type { Redis } from 'ioredis';
-import { AuthService } from '@gitroom/helpers/auth/auth.service';
-import { ioRedis } from '@gitroom/nestjs-libraries/redis/redis.service';
-import { ProviderConfigService } from '@gitroom/nestjs-libraries/database/prisma/provider-configs/provider-config.service';
-import { replaceCredentialsMap, type CredentialEntry } from '@gitroom/nestjs-libraries/integrations/credentials';
+import { AuthService } from '@postmill-ai/helpers/auth/auth.service';
+import { ioRedis } from '@postmill-ai/nestjs-libraries/redis/redis.service';
+import { ProviderConfigService } from '@postmill-ai/nestjs-libraries/database/prisma/provider-configs/provider-config.service';
+import { replaceCredentialsMap, type CredentialEntry } from '@postmill-ai/nestjs-libraries/integrations/credentials';
 import { ProviderConfiguration } from '@prisma/client';
 
 // Cross-replica cache invalidation channel (A3). Other replicas clear/refresh

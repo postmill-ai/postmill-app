@@ -3,10 +3,10 @@ import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
 import { spawn } from 'child_process';
-import { DefaultsResolutionService } from '@gitroom/nestjs-libraries/ai/defaults/defaults-resolution.service';
-import { AiDefaultsService } from '@gitroom/nestjs-libraries/ai/defaults/ai-defaults.service';
-import { MediaJobLifecycleService } from '@gitroom/nestjs-libraries/database/prisma/media-providers/media-job-lifecycle.service';
-import { DefaultNotConfiguredError } from '@gitroom/nestjs-libraries/ai/defaults/defaults.errors';
+import { DefaultsResolutionService } from '@postmill-ai/nestjs-libraries/ai/defaults/defaults-resolution.service';
+import { AiDefaultsService } from '@postmill-ai/nestjs-libraries/ai/defaults/ai-defaults.service';
+import { MediaJobLifecycleService } from '@postmill-ai/nestjs-libraries/database/prisma/media-providers/media-job-lifecycle.service';
+import { DefaultNotConfiguredError } from '@postmill-ai/nestjs-libraries/ai/defaults/defaults.errors';
 
 function getFfmpegPath(): string {
   try {
@@ -260,7 +260,7 @@ export class SlideService {
   }
 
   private async _downloadImage(url: string, destPath: string): Promise<void> {
-    const { safeFetch } = await import('@gitroom/nestjs-libraries/dtos/webhooks/safe.fetch');
+    const { safeFetch } = await import('@postmill-ai/nestjs-libraries/dtos/webhooks/safe.fetch');
     const res = await safeFetch(url);
     if (!res.ok) throw new Error(`Image download failed (${res.status}): ${url}`);
     const buffer = Buffer.from(await res.arrayBuffer());

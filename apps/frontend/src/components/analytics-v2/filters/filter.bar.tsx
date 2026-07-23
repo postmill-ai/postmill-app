@@ -12,11 +12,11 @@ import { createPortal } from 'react-dom';
 import clsx from 'clsx';
 import dayjs from 'dayjs';
 import { RangeCalendar } from '@mantine/dates';
-import { useT } from '@gitroom/react/translation/get.transation.service.client';
-import { newDayjs } from '@gitroom/frontend/components/layout/set.timezone';
-import { Integrations } from '@gitroom/frontend/components/launches/calendar.context';
-import { ChannelFilterSelect } from '@gitroom/frontend/components/launches/channel-filter-select';
-import { CampaignFilterSelect } from '@gitroom/frontend/components/launches/campaign-filter-select';
+import { useT } from '@postmill-ai/react/translation/get.transation.service.client';
+import { newDayjs } from '@postmill-ai/frontend/components/layout/set.timezone';
+import { Integrations } from '@postmill-ai/frontend/components/launches/calendar.context';
+import { ChannelFilterSelect } from '@postmill-ai/frontend/components/launches/channel-filter-select';
+import { CampaignFilterSelect } from '@postmill-ai/frontend/components/launches/campaign-filter-select';
 
 type WindowMode = 'day' | 'week' | 'month' | 'custom';
 const FMT = 'YYYY-MM-DD';

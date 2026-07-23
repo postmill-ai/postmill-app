@@ -1,11 +1,11 @@
 'use client';
 import { useCallback } from 'react';
 import useSWR from 'swr';
-import { useFetch } from '@gitroom/helpers/utils/custom.fetch';
+import { useFetch } from '@postmill-ai/helpers/utils/custom.fetch';
 import { useSearchParams, useRouter } from 'next/navigation';
-import { Composer } from '@gitroom/frontend/components/composer/composer';
-import { LoadingComponent } from '@gitroom/frontend/components/layout/loading';
-import { newDayjs } from '@gitroom/frontend/components/layout/set.timezone';
+import { Composer } from '@postmill-ai/frontend/components/composer/composer';
+import { LoadingComponent } from '@postmill-ai/frontend/components/layout/loading';
+import { newDayjs } from '@postmill-ai/frontend/components/layout/set.timezone';
 
 export default function CreatePostPage() {
   const fetch = useFetch();

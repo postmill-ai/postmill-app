@@ -172,7 +172,7 @@ export const CANONICAL_METRICS: { key: string; labelKey: string; label: string }
 export {
   createFetchError,
   type FetchError,
-} from '@gitroom/frontend/components/settings/shared/fetch-error';
+} from '@postmill-ai/frontend/components/settings/shared/fetch-error';
 
 export function formatCompactNumber(value: number): string {
   if (value >= 1_000_000_000) return (value / 1_000_000_000).toFixed(1) + 'B';

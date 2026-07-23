@@ -1,8 +1,8 @@
 'use client';
 
-import { useUser } from '@gitroom/frontend/components/layout/user.context';
-import { SettingsGate } from '@gitroom/frontend/components/settings/settings-gate';
-import { Autopost } from '@gitroom/frontend/components/autopost/autopost';
+import { useUser } from '@postmill-ai/frontend/components/layout/user.context';
+import { SettingsGate } from '@postmill-ai/frontend/components/settings/settings-gate';
+import { Autopost } from '@postmill-ai/frontend/components/autopost/autopost';
 
 export default function Page() {
   const user = useUser();

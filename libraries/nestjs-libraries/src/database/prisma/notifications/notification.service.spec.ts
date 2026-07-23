@@ -17,7 +17,7 @@ const mockGetDigestFrequencies = vi.fn().mockResolvedValue({});
 const mockEnqueueMany = vi.fn().mockResolvedValue(undefined);
 
 vi.mock(
-  '@gitroom/nestjs-libraries/database/prisma/notifications/notifications.repository',
+  '@postmill-ai/nestjs-libraries/database/prisma/notifications/notifications.repository',
   () => ({
     NotificationsRepository: class {
       createNotification = mockCreateNotification;
@@ -29,7 +29,7 @@ vi.mock(
   })
 );
 
-vi.mock('@gitroom/nestjs-libraries/services/email.service', () => ({
+vi.mock('@postmill-ai/nestjs-libraries/services/email.service', () => ({
   EmailService: class {
     sendEmail = vi.fn().mockResolvedValue(undefined);
     hasProvider = vi.fn().mockReturnValue(true);
@@ -37,7 +37,7 @@ vi.mock('@gitroom/nestjs-libraries/services/email.service', () => ({
 }));
 
 vi.mock(
-  '@gitroom/nestjs-libraries/database/prisma/organizations/organization.repository',
+  '@postmill-ai/nestjs-libraries/database/prisma/organizations/organization.repository',
   () => ({
     OrganizationRepository: class {
       getTeam = mockGetTeam;
@@ -46,7 +46,7 @@ vi.mock(
 );
 
 vi.mock(
-  '@gitroom/nestjs-libraries/database/prisma/notifications/notification-preference.service',
+  '@postmill-ai/nestjs-libraries/database/prisma/notifications/notification-preference.service',
   () => ({
     NotificationPreferenceService: class {
       ensureDefaults = mockEnsureDefaults;
@@ -59,7 +59,7 @@ vi.mock(
 );
 
 vi.mock(
-  '@gitroom/nestjs-libraries/database/prisma/notifications/push-notification.service',
+  '@postmill-ai/nestjs-libraries/database/prisma/notifications/push-notification.service',
   () => ({
     PushNotificationService: class {
       sendPushNotification = vi.fn().mockResolvedValue(undefined);
@@ -69,7 +69,7 @@ vi.mock(
 );
 
 vi.mock(
-  '@gitroom/nestjs-libraries/database/prisma/notifications/notification-digest.service',
+  '@postmill-ai/nestjs-libraries/database/prisma/notifications/notification-digest.service',
   () => ({
     NotificationDigestService: class {
       enqueueMany = mockEnqueueMany;
@@ -78,12 +78,12 @@ vi.mock(
 );
 
 import { NotificationService } from './notification.service';
-import { NotificationsRepository } from '@gitroom/nestjs-libraries/database/prisma/notifications/notifications.repository';
-import { EmailService } from '@gitroom/nestjs-libraries/services/email.service';
-import { OrganizationRepository } from '@gitroom/nestjs-libraries/database/prisma/organizations/organization.repository';
-import { NotificationPreferenceService } from '@gitroom/nestjs-libraries/database/prisma/notifications/notification-preference.service';
-import { PushNotificationService } from '@gitroom/nestjs-libraries/database/prisma/notifications/push-notification.service';
-import { NotificationDigestService } from '@gitroom/nestjs-libraries/database/prisma/notifications/notification-digest.service';
+import { NotificationsRepository } from '@postmill-ai/nestjs-libraries/database/prisma/notifications/notifications.repository';
+import { EmailService } from '@postmill-ai/nestjs-libraries/services/email.service';
+import { OrganizationRepository } from '@postmill-ai/nestjs-libraries/database/prisma/organizations/organization.repository';
+import { NotificationPreferenceService } from '@postmill-ai/nestjs-libraries/database/prisma/notifications/notification-preference.service';
+import { PushNotificationService } from '@postmill-ai/nestjs-libraries/database/prisma/notifications/push-notification.service';
+import { NotificationDigestService } from '@postmill-ai/nestjs-libraries/database/prisma/notifications/notification-digest.service';
 
 describe('NotificationService', () => {
   let service: NotificationService;

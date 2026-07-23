@@ -4,11 +4,11 @@ import React from 'react';
 
 const mockT = vi.fn((_key: string, fallback?: string) => fallback ?? _key);
 
-vi.mock('@gitroom/react/translation/get.transation.service.client', () => ({
+vi.mock('@postmill-ai/react/translation/get.transation.service.client', () => ({
   useT: () => mockT,
 }));
 
-vi.mock('@gitroom/react/helpers/safe.image', () => ({
+vi.mock('@postmill-ai/react/helpers/safe.image', () => ({
   default: ({ src, alt, className }: any) => (
     // eslint-disable-next-line @next/next/no-img-element -- test mock
     <img src={src} alt={alt} className={className} />

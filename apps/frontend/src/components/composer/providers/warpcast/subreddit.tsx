@@ -1,12 +1,12 @@
 'use client';
 
 import { FC, FormEvent, useCallback, useState } from 'react';
-import { useCustomProviderFunction } from '@gitroom/frontend/components/launches/helpers/use.custom.provider.function';
-import { Input } from '@gitroom/react/form/input';
+import { useCustomProviderFunction } from '@postmill-ai/frontend/components/launches/helpers/use.custom.provider.function';
+import { Input } from '@postmill-ai/react/form/input';
 import { useDebouncedCallback } from 'use-debounce';
 import { useWatch } from 'react-hook-form';
-import { useSettings } from '@gitroom/frontend/components/launches/helpers/use.values';
-import { useT } from '@gitroom/react/translation/get.transation.service.client';
+import { useSettings } from '@postmill-ai/frontend/components/launches/helpers/use.values';
+import { useT } from '@postmill-ai/react/translation/get.transation.service.client';
 export const Subreddit: FC<{
   onChange: (event: {
     target: {

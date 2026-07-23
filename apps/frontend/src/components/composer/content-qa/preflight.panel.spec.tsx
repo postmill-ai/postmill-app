@@ -4,7 +4,7 @@ import { render, screen, fireEvent, cleanup } from '@testing-library/react';
 import { PreflightPanel } from './preflight.panel';
 import type { PreflightResultItem } from './usePreflight';
 
-vi.mock('@gitroom/react/translation/get.transation.service.client', () => ({
+vi.mock('@postmill-ai/react/translation/get.transation.service.client', () => ({
   useT: () => (key: string, fallback?: string) => fallback || key,
 }));
 

@@ -4,12 +4,12 @@ import { FC } from 'react';
 import {
   PostComment,
   withProvider,
-} from '@gitroom/frontend/components/composer/providers/high.order.provider';
-import { MoltbookDto } from '@gitroom/nestjs-libraries/dtos/posts/providers-settings/moltbook.dto';
-import { useSettings } from '@gitroom/frontend/components/launches/helpers/use.values';
-import { Input } from '@gitroom/react/form/input';
-import { useT } from '@gitroom/react/translation/get.transation.service.client';
-import { FirstCommentField } from '@gitroom/frontend/components/composer/providers/shared/first-comment.field';
+} from '@postmill-ai/frontend/components/composer/providers/high.order.provider';
+import { MoltbookDto } from '@postmill-ai/nestjs-libraries/dtos/posts/providers-settings/moltbook.dto';
+import { useSettings } from '@postmill-ai/frontend/components/launches/helpers/use.values';
+import { Input } from '@postmill-ai/react/form/input';
+import { useT } from '@postmill-ai/react/translation/get.transation.service.client';
+import { FirstCommentField } from '@postmill-ai/frontend/components/composer/providers/shared/first-comment.field';
 
 const MoltbookSettings: FC = () => {
   const form = useSettings();

@@ -4,7 +4,7 @@ import React, { FC } from 'react';
 import { ColorSwatch, Slider, Stepper } from '../controls';
 import type { DesignerElement, DesignerTextShadow } from '../designer.store';
 import { useBrandColors } from './use-brand-colors';
-import { useT } from '@gitroom/react/translation/get.transation.service.client';
+import { useT } from '@postmill-ai/react/translation/get.transation.service.client';
 
 interface ShapeInspectorProps {
   element: DesignerElement;

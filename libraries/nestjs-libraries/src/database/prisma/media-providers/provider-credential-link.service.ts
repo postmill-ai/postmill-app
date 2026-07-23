@@ -1,8 +1,8 @@
 import { Injectable, Logger } from '@nestjs/common';
-import { OrgMediaProviderSettingsRepository } from '@gitroom/nestjs-libraries/database/prisma/media-providers/org-media-provider-settings.repository';
-import { OrgAiSettingsRepository } from '@gitroom/nestjs-libraries/database/prisma/ai-settings/org-ai-settings.repository';
-import { EncryptionService } from '@gitroom/nestjs-libraries/encryption/encryption.service';
-import { ProviderResolutionService } from '@gitroom/nestjs-libraries/providers/provider-resolution.service';
+import { OrgMediaProviderSettingsRepository } from '@postmill-ai/nestjs-libraries/database/prisma/media-providers/org-media-provider-settings.repository';
+import { OrgAiSettingsRepository } from '@postmill-ai/nestjs-libraries/database/prisma/ai-settings/org-ai-settings.repository';
+import { EncryptionService } from '@postmill-ai/nestjs-libraries/encryption/encryption.service';
+import { ProviderResolutionService } from '@postmill-ai/nestjs-libraries/providers/provider-resolution.service';
 
 // §11.4 auto-config live-link: OpenAI and MiniMax are both AI providers and media
 // providers and share one API key. Configuring (or re-keying) either surface updates

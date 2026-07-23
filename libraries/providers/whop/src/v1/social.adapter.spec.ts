@@ -1,9 +1,9 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { setSocialFetchPorts } from '@gitroom/provider-kernel';
+import { setSocialFetchPorts } from '@postmill-ai/provider-kernel';
 import { WhopProvider } from './social.adapter';
 
 // Avoid waiting 5 s between each of the 120 capped status-poll iterations.
-vi.mock('@gitroom/helpers/utils/timer', () => ({
+vi.mock('@postmill-ai/helpers/utils/timer', () => ({
   timer: () => Promise.resolve(),
 }));
 

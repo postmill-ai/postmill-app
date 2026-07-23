@@ -1,4 +1,4 @@
-import type { StudioDescriptor } from '@gitroom/frontend/components/media-tools/studio-kit/types';
+import type { StudioDescriptor } from '@postmill-ai/frontend/components/media-tools/studio-kit/types';
 import { DeepgramPanel } from './deepgram-panel';
 
 // Deepgram (registry/config identifier `deepgram`) is STT — it returns text, not a media

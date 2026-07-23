@@ -1,8 +1,8 @@
-import { PrismaRepository } from '@gitroom/nestjs-libraries/database/prisma/prisma.service';
+import { PrismaRepository } from '@postmill-ai/nestjs-libraries/database/prisma/prisma.service';
 import { Injectable } from '@nestjs/common';
 import { Provider } from '@prisma/client';
-import { AuthService } from '@gitroom/helpers/auth/auth.service';
-import { UserDetailDto } from '@gitroom/nestjs-libraries/dtos/users/user.details.dto';
+import { AuthService } from '@postmill-ai/helpers/auth/auth.service';
+import { UserDetailDto } from '@postmill-ai/nestjs-libraries/dtos/users/user.details.dto';
 
 @Injectable()
 export class UsersRepository {

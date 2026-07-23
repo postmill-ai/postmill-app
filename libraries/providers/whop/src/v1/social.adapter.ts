@@ -6,14 +6,14 @@ import {
   PostDetails,
   PostResponse,
   SocialProvider,
-} from '@gitroom/provider-kernel';
-import { makeOauthState } from '@gitroom/provider-kernel';
-import { timer } from '@gitroom/helpers/utils/timer';
-import { SocialAbstract } from '@gitroom/provider-kernel';
-import { WhopDto } from '@gitroom/provider-kernel';
+} from '@postmill-ai/provider-kernel';
+import { makeOauthState } from '@postmill-ai/provider-kernel';
+import { timer } from '@postmill-ai/helpers/utils/timer';
+import { SocialAbstract } from '@postmill-ai/provider-kernel';
+import { WhopDto } from '@postmill-ai/provider-kernel';
 import { Integration } from '@prisma/client';
-import { Tool } from '@gitroom/provider-kernel';
-import { safeFetch } from '@gitroom/provider-kernel';
+import { Tool } from '@postmill-ai/provider-kernel';
+import { safeFetch } from '@postmill-ai/provider-kernel';
 
 import { metadata as providerMetadata } from './metadata';
 export class WhopProvider extends SocialAbstract implements SocialProvider {
@@ -409,7 +409,7 @@ import {
   ProviderModule as __ProviderModule,
   SocialProviderKernelAdapter as __Bridge,
   PROVIDER_CAPABILITIES as __CAPS,
-} from '@gitroom/provider-kernel';
+} from '@postmill-ai/provider-kernel';
 
 const __adapter = new WhopProvider();
 

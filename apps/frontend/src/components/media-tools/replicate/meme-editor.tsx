@@ -2,14 +2,14 @@
 
 import React, { useRef, useEffect, useState, useCallback, useMemo } from 'react';
 import useSWR from 'swr';
-import { useFetch } from '@gitroom/helpers/utils/custom.fetch';
-import { useModals } from '@gitroom/frontend/components/layout/new-modal';
-import { useToaster } from '@gitroom/react/toaster/toaster';
-import { MediaSelectorModal } from '@gitroom/frontend/components/media-tools/media-selector-modal';
-import { useT } from '@gitroom/react/translation/get.transation.service.client';
+import { useFetch } from '@postmill-ai/helpers/utils/custom.fetch';
+import { useModals } from '@postmill-ai/frontend/components/layout/new-modal';
+import { useToaster } from '@postmill-ai/react/toaster/toaster';
+import { MediaSelectorModal } from '@postmill-ai/frontend/components/media-tools/media-selector-modal';
+import { useT } from '@postmill-ai/react/translation/get.transation.service.client';
 import { useReplicateStore } from './replicate.store';
 import { EditorShell, toolbarBtn, toolbarPrimary } from './editor-shell';
-import { openInDesigner } from '@gitroom/frontend/components/media-tools/open-in-designer';
+import { openInDesigner } from '@postmill-ai/frontend/components/media-tools/open-in-designer';
 import type { FileValue } from './fields/file';
 
 interface CustomFontEntry {

@@ -1,10 +1,10 @@
 'use client';
 
 import React, { FC } from 'react';
-import { useFetch } from '@gitroom/helpers/utils/custom.fetch';
+import { useFetch } from '@postmill-ai/helpers/utils/custom.fetch';
 import useSWR from 'swr';
 import { createFetchError } from './fetch-error';
-import type { StudioField } from '@gitroom/frontend/components/media-tools/studio-kit/types';
+import type { StudioField } from '@postmill-ai/frontend/components/media-tools/studio-kit/types';
 
 export interface DefaultCatalogOption {
   providerId: string;

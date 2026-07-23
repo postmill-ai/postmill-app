@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, afterEach } from 'vitest';
-import { makeCtx, res } from '@gitroom/provider-kernel/testing/media-int-helpers';
+import { makeCtx, res } from '@postmill-ai/provider-kernel/testing/media-int-helpers';
 import { gatewayMediaModule } from './media.adapter';
 
 // 5.7 — the gateway video path calls AI SDK's experimental_generateVideo directly (not ctx.fetch),

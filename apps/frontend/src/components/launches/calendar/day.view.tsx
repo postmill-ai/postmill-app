@@ -5,8 +5,8 @@ import { useCalendar, CalendarContext } from './context';
 import { CalendarColumn } from './grid';
 import dayjs from 'dayjs';
 import { groupBy, sortBy } from 'lodash';
-import { newDayjs } from '@gitroom/frontend/components/layout/set.timezone';
-import { isUSCitizen } from '@gitroom/frontend/components/launches/helpers/isuscitizen.utils';
+import { newDayjs } from '@postmill-ai/frontend/components/layout/set.timezone';
+import { isUSCitizen } from '@postmill-ai/frontend/components/launches/helpers/isuscitizen.utils';
 import i18next from 'i18next';
 
 export const DayView = () => {

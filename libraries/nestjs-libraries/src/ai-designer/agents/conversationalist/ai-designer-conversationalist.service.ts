@@ -1,11 +1,11 @@
-import '@gitroom/nestjs-libraries/ai-designer/agent-mesh/agent-mesh-env.shim';
+import '@postmill-ai/nestjs-libraries/ai-designer/agent-mesh/agent-mesh-env.shim';
 import { Injectable, Logger, OnModuleInit } from '@nestjs/common';
 import {
   registerInProcessAgent,
   type InProcessHandler,
 } from '@reaatech/agent-mesh-router';
 import type { AgentConfig, AgentResponse, ContextPacket } from '@reaatech/agent-mesh';
-import { AIModelProvider } from '@gitroom/nestjs-libraries/ai/ai-model.provider';
+import { AIModelProvider } from '@postmill-ai/nestjs-libraries/ai/ai-model.provider';
 import type {
   DesignBrief,
   FormField,

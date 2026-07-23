@@ -1,12 +1,12 @@
 {
-  "name": "@gitroom/provider-openai",
+  "name": "@postmill-ai/provider-openai",
   "version": "1.0.0",
   "private": true,
   "main": "src/index.ts",
   "types": "src/index.ts",
   "dependencies": {
     "@ai-sdk/openai": "^2.0.52",
-    "@gitroom/provider-kernel": "workspace:*",
+    "@postmill-ai/provider-kernel": "workspace:*",
     "@langchain/core": "^1.1.48",
     "@langchain/openai": "^1.4.7"
   },

@@ -12,7 +12,7 @@ import { SocialAbstract } from '../social-base';
 import dayjs from 'dayjs';
 import { Integration } from '@prisma/client';
 import { number, string } from 'yup';
-import { htmlToText } from '@gitroom/helpers/utils/html.to.text';
+import { htmlToText } from '@postmill-ai/helpers/utils/html.to.text';
 import { Logger } from '@nestjs/common';
 import { safeFetch } from '../social-base';
 

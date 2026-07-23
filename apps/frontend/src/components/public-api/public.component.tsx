@@ -3,11 +3,11 @@
 import { useState, useCallback } from 'react';
 import { useUser } from '../layout/user.context';
 import copy from 'copy-to-clipboard';
-import { useToaster } from '@gitroom/react/toaster/toaster';
-import { useVariables } from '@gitroom/react/helpers/variable.context';
-import { useT } from '@gitroom/react/translation/get.transation.service.client';
-import { DeveloperComponent } from '@gitroom/frontend/components/developer/developer.component';
-import { ApiKeysSection, CreatedKey } from '@gitroom/frontend/components/api-keys/api-keys.component';
+import { useToaster } from '@postmill-ai/react/toaster/toaster';
+import { useVariables } from '@postmill-ai/react/helpers/variable.context';
+import { useT } from '@postmill-ai/react/translation/get.transation.service.client';
+import { DeveloperComponent } from '@postmill-ai/frontend/components/developer/developer.component';
+import { ApiKeysSection, CreatedKey } from '@postmill-ai/frontend/components/api-keys/api-keys.component';
 import clsx from 'clsx';
 
 const mcpClients = [

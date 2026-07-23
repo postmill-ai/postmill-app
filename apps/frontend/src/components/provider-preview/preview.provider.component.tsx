@@ -3,14 +3,14 @@ import 'reflect-metadata';
 import { FC, MutableRefObject, useEffect, useMemo } from 'react';
 import { FormProvider, useForm, useWatch } from 'react-hook-form';
 import { classValidatorResolver } from '@hookform/resolvers/class-validator';
-import { useT } from '@gitroom/react/translation/get.transation.service.client';
-import { Providers } from '@gitroom/frontend/components/composer/providers/show.all.providers';
-import { getProviderSettingsMeta } from '@gitroom/frontend/components/composer/providers/high.order.provider';
+import { useT } from '@postmill-ai/react/translation/get.transation.service.client';
+import { Providers } from '@postmill-ai/frontend/components/composer/providers/show.all.providers';
+import { getProviderSettingsMeta } from '@postmill-ai/frontend/components/composer/providers/high.order.provider';
 import {
   IntegrationContext,
   type IntegrationContextType,
-} from '@gitroom/frontend/components/launches/helpers/use.integration';
-import { newDayjs } from '@gitroom/frontend/components/layout/set.timezone';
+} from '@postmill-ai/frontend/components/launches/helpers/use.integration';
+import { newDayjs } from '@postmill-ai/frontend/components/layout/set.timezone';
 
 type MockIntegration = IntegrationContextType['integration'];
 

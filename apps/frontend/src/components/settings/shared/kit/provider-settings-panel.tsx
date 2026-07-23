@@ -1,14 +1,14 @@
 'use client';
 
 import React, { useCallback, useMemo, useState } from 'react';
-import { useT } from '@gitroom/react/translation/get.transation.service.client';
-import ProviderIcon from '@gitroom/frontend/components/shared/provider-icon';
+import { useT } from '@postmill-ai/react/translation/get.transation.service.client';
+import ProviderIcon from '@postmill-ai/frontend/components/shared/provider-icon';
 import ProviderListShell, {
   ProviderConfigItem,
-} from '@gitroom/frontend/components/settings/shared/provider-list-shell';
-import { useProviderCatalog } from '@gitroom/frontend/components/settings/shared/use-provider-catalog';
-import { ProviderInfoModal } from '@gitroom/frontend/components/settings/shared/provider-info-modal';
-import { useModals } from '@gitroom/frontend/components/layout/new-modal';
+} from '@postmill-ai/frontend/components/settings/shared/provider-list-shell';
+import { useProviderCatalog } from '@postmill-ai/frontend/components/settings/shared/use-provider-catalog';
+import { ProviderInfoModal } from '@postmill-ai/frontend/components/settings/shared/provider-info-modal';
+import { useModals } from '@postmill-ai/frontend/components/layout/new-modal';
 import { ProviderSurfaceDescriptor, ProviderRow } from './provider-surface.types';
 import { useProviderSurface } from './use-provider-surface';
 import { ProviderSearchToolbar } from './provider-search-toolbar';

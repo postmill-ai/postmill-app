@@ -1,7 +1,7 @@
 import { Injectable, Logger, OnModuleInit } from '@nestjs/common';
 import { idempotentExpress } from '@reaatech/idempotency-middleware-express';
 import { RedisAdapter } from '@reaatech/idempotency-middleware-adapter-redis';
-import { ioRedis } from '@gitroom/nestjs-libraries/redis/redis.service';
+import { ioRedis } from '@postmill-ai/nestjs-libraries/redis/redis.service';
 import type { Request, Response, NextFunction } from 'express';
 
 @Injectable()

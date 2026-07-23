@@ -4,7 +4,7 @@ import {
   LoggerPort,
   ProviderRuntimeContext,
   SafeFetchPort,
-} from '@gitroom/provider-kernel';
+} from '@postmill-ai/provider-kernel';
 import defaultModules from '../..';
 import { medialockerStorageModule } from '../storage.adapter';
 

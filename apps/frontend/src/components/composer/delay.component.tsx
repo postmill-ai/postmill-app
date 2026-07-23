@@ -1,11 +1,11 @@
 'use client';
 
 import React, { FC, useCallback, useState } from 'react';
-import { DelayIcon, DropdownArrowIcon } from '@gitroom/frontend/components/ui/icons';
+import { DelayIcon, DropdownArrowIcon } from '@postmill-ai/frontend/components/ui/icons';
 import clsx from 'clsx';
-import { useLaunchStore } from '@gitroom/frontend/components/composer/store';
+import { useLaunchStore } from '@postmill-ai/frontend/components/composer/store';
 import { useShallow } from 'zustand/react/shallow';
-import { useT } from '@gitroom/react/translation/get.transation.service.client';
+import { useT } from '@postmill-ai/react/translation/get.transation.service.client';
 import { useClickOutside } from '@mantine/hooks';
 
 const delayOptions = [

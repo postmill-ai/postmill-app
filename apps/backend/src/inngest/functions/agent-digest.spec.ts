@@ -1,13 +1,13 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 
-vi.mock('@gitroom/nestjs-libraries/inngest/inngest.client', () => ({
+vi.mock('@postmill-ai/nestjs-libraries/inngest/inngest.client', () => ({
   inngest: {
     send: vi.fn(),
     createFunction: vi.fn(),
   },
 }));
 
-import { inngest } from '@gitroom/nestjs-libraries/inngest/inngest.client';
+import { inngest } from '@postmill-ai/nestjs-libraries/inngest/inngest.client';
 import { createAgentDigest, createAgentDigestOrg } from './agent-digest';
 import { createMockStep, captureFunctionHandler } from '../test/step.mock';
 

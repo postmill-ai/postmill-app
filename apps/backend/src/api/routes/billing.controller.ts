@@ -1,22 +1,22 @@
 import { BadRequestException, Body, Controller, Delete, Get, Param, Post, Req, UseGuards } from '@nestjs/common';
-import { SubscriptionService } from '@gitroom/nestjs-libraries/database/prisma/subscriptions/subscription.service';
-import { StripeService } from '@gitroom/nestjs-libraries/services/stripe.service';
-import { GetOrgFromRequest } from '@gitroom/nestjs-libraries/user/org.from.request';
+import { SubscriptionService } from '@postmill-ai/nestjs-libraries/database/prisma/subscriptions/subscription.service';
+import { StripeService } from '@postmill-ai/nestjs-libraries/services/stripe.service';
+import { GetOrgFromRequest } from '@postmill-ai/nestjs-libraries/user/org.from.request';
 import { Organization, User } from '@prisma/client';
-import { BillingSubscribeDto } from '@gitroom/nestjs-libraries/dtos/billing/billing.subscribe.dto';
-import { CancelSubscriptionDto } from '@gitroom/backend/dtos/billing/cancel-subscription.dto';
-import { LifetimeCodeDto } from '@gitroom/backend/dtos/billing/lifetime-code.dto';
-import { RefundChargesDto } from '@gitroom/backend/dtos/billing/refund-charges.dto';
-import { AddSubscriptionDto } from '@gitroom/backend/dtos/billing/add-subscription.dto';
-import { ChangePlanDto } from '@gitroom/nestjs-libraries/dtos/billing/change-plan.dto';
-import { ManageAddonsDto } from '@gitroom/nestjs-libraries/dtos/billing/manage-addons.dto';
+import { BillingSubscribeDto } from '@postmill-ai/nestjs-libraries/dtos/billing/billing.subscribe.dto';
+import { CancelSubscriptionDto } from '@postmill-ai/backend/dtos/billing/cancel-subscription.dto';
+import { LifetimeCodeDto } from '@postmill-ai/backend/dtos/billing/lifetime-code.dto';
+import { RefundChargesDto } from '@postmill-ai/backend/dtos/billing/refund-charges.dto';
+import { AddSubscriptionDto } from '@postmill-ai/backend/dtos/billing/add-subscription.dto';
+import { ChangePlanDto } from '@postmill-ai/nestjs-libraries/dtos/billing/change-plan.dto';
+import { ManageAddonsDto } from '@postmill-ai/nestjs-libraries/dtos/billing/manage-addons.dto';
 import { ApiTags } from '@nestjs/swagger';
-import { GetUserFromRequest } from '@gitroom/nestjs-libraries/user/user.from.request';
-import { NotificationService } from '@gitroom/nestjs-libraries/database/prisma/notifications/notification.service';
+import { GetUserFromRequest } from '@postmill-ai/nestjs-libraries/user/user.from.request';
+import { NotificationService } from '@postmill-ai/nestjs-libraries/database/prisma/notifications/notification.service';
 import { Request } from 'express';
-import { AuthService } from '@gitroom/helpers/auth/auth.service';
-import { RequirePermission } from '@gitroom/backend/services/auth/rbac/require-permission.decorator';
-import { OrgRbacGuard } from '@gitroom/backend/services/auth/rbac/org-rbac.guard';
+import { AuthService } from '@postmill-ai/helpers/auth/auth.service';
+import { RequirePermission } from '@postmill-ai/backend/services/auth/rbac/require-permission.decorator';
+import { OrgRbacGuard } from '@postmill-ai/backend/services/auth/rbac/org-rbac.guard';
 
 @ApiTags('Billing')
 @Controller('/billing')

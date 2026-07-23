@@ -24,7 +24,7 @@ import {
   LoggerPort,
   parseDataUrl,
   fromBuffer,
-} from '@gitroom/provider-kernel';
+} from '@postmill-ai/provider-kernel';
 
 const TYPE = 'CLOUDFLARE_R2';
 const DISPLAY = 'Cloudflare R2';

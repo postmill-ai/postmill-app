@@ -5,10 +5,10 @@ import { useCalendar } from './context';
 import { CalendarColumn } from './grid';
 import dayjs from 'dayjs';
 import clsx from 'clsx';
-import { newDayjs } from '@gitroom/frontend/components/layout/set.timezone';
+import { newDayjs } from '@postmill-ai/frontend/components/layout/set.timezone';
 import { convertTimeFormatBasedOnLocality, hours } from './helpers';
 import i18next from 'i18next';
-import { useT } from '@gitroom/react/translation/get.transation.service.client';
+import { useT } from '@postmill-ai/react/translation/get.transation.service.client';
 
 export const WeekView = () => {
   const { startDate, endDate } = useCalendar();

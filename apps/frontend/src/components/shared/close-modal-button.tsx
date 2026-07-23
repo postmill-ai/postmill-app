@@ -1,7 +1,7 @@
 'use client';
 
 import { FC } from 'react';
-import { useT } from '@gitroom/react/translation/get.transation.service.client';
+import { useT } from '@postmill-ai/react/translation/get.transation.service.client';
 
 // Floating close (✕) for full-screen `removeLayout` modals that have no built-in
 // chrome (e.g. the composer opened from the campaign dashboard).

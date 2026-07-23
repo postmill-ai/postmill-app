@@ -11,7 +11,7 @@ import {
   resolveApiKey,
   SafeFetchPort,
   ProviderModule,
-} from '@gitroom/provider-kernel';
+} from '@postmill-ai/provider-kernel';
 
 // Alibaba DashScope (Model Studio) — same host + API key as the Qwen LLM provider
 // (`ai.module.ts`), so an org configures Qwen once and it works for both surfaces (the

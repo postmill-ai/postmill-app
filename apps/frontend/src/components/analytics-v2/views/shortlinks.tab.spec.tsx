@@ -7,7 +7,7 @@ const mockT = vi.fn((_key: string, fallback?: string, opts?: Record<string, any>
   return fallback;
 });
 
-vi.mock('@gitroom/react/translation/get.transation.service.client', () => ({
+vi.mock('@postmill-ai/react/translation/get.transation.service.client', () => ({
   useT: () => mockT,
 }));
 
@@ -37,7 +37,7 @@ vi.mock('../hooks/useShortLinks', () => ({
   }),
 }));
 
-vi.mock('@gitroom/frontend/components/settings/shortlinks/hooks/useShortlinksConfig', () => ({
+vi.mock('@postmill-ai/frontend/components/settings/shortlinks/hooks/useShortlinksConfig', () => ({
   useShortlinksConfig: () => ({ data: mockConfigData }),
 }));
 

@@ -1,14 +1,14 @@
 'use client';
 
 import React, { FC, useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { useMediaDirectory } from '@gitroom/react/helpers/use.media.directory';
-import { hasExtension } from '@gitroom/helpers/utils/has.extension';
-import { useFetch } from '@gitroom/helpers/utils/custom.fetch';
-import { useT } from '@gitroom/react/translation/get.transation.service.client';
-import i18next from '@gitroom/react/translation/i18next';
+import { useMediaDirectory } from '@postmill-ai/react/helpers/use.media.directory';
+import { hasExtension } from '@postmill-ai/helpers/utils/has.extension';
+import { useFetch } from '@postmill-ai/helpers/utils/custom.fetch';
+import { useT } from '@postmill-ai/react/translation/get.transation.service.client';
+import i18next from '@postmill-ai/react/translation/i18next';
 import type { FileItem } from './file-manager';
-import { DataTable } from '@gitroom/frontend/components/ui/data-table';
-import type { Column } from '@gitroom/frontend/components/ui/data-table';
+import { DataTable } from '@postmill-ai/frontend/components/ui/data-table';
+import type { Column } from '@postmill-ai/frontend/components/ui/data-table';
 
 const formatDate = (dateStr: string) => {
   try {

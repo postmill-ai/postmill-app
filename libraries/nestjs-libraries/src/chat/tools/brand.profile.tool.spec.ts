@@ -1,7 +1,7 @@
 import 'reflect-metadata';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { BrandProfileTool } from './brand.profile.tool';
-import { BrandsService } from '@gitroom/nestjs-libraries/brands/brands.service';
+import { BrandsService } from '@postmill-ai/nestjs-libraries/brands/brands.service';
 import { executeTool, makeOrganization, makeUser } from './__tests__/tool-test.harness';
 
 describe('BrandProfileTool', () => {

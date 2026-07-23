@@ -10,7 +10,7 @@ vi.mock('swr', () => ({
   useSWRConfig: vi.fn(() => ({ mutate: mockMutateFn })),
 }));
 
-vi.mock('@gitroom/helpers/utils/custom.fetch', () => ({
+vi.mock('@postmill-ai/helpers/utils/custom.fetch', () => ({
   useFetch: () => mockFetchFn,
 }));
 
@@ -20,18 +20,18 @@ vi.mock('react-i18next', () => ({
   }),
 }));
 
-vi.mock('@gitroom/frontend/components/layout/loading', () => ({
+vi.mock('@postmill-ai/frontend/components/layout/loading', () => ({
   LoadingComponent: () => <div data-testid="loading-component">Loading...</div>,
 }));
 
-vi.mock('@gitroom/react/helpers/safe.image', () => ({
+vi.mock('@postmill-ai/react/helpers/safe.image', () => ({
   default: ({ src, className, alt }: any) => (
     // eslint-disable-next-line @next/next/no-img-element -- test mock
     <img src={src} className={className} alt={alt} data-testid="safe-image" />
   ),
 }));
 
-vi.mock('@gitroom/helpers/utils/strip.html.validation', () => ({
+vi.mock('@postmill-ai/helpers/utils/strip.html.validation', () => ({
   stripHtmlValidation: (_type: string, val: string) => val || '',
 }));
 

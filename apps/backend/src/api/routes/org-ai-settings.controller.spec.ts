@@ -1,7 +1,7 @@
 import 'reflect-metadata';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { OrgAiSettingsController } from './org-ai-settings.controller';
-import { AiDefaultsService } from '@gitroom/nestjs-libraries/ai/defaults/ai-defaults.service';
+import { AiDefaultsService } from '@postmill-ai/nestjs-libraries/ai/defaults/ai-defaults.service';
 
 const mockOrgAiUpsert = vi.fn();
 const mockOrgAiSetActive = vi.fn();
@@ -13,7 +13,7 @@ const mockOrgAiGetBudget = vi.fn();
 const mockOrgAiUpdateBudget = vi.fn();
 
 vi.mock(
-  '@gitroom/nestjs-libraries/database/prisma/ai-settings/org-ai-settings.service',
+  '@postmill-ai/nestjs-libraries/database/prisma/ai-settings/org-ai-settings.service',
   () => ({
     OrgAiSettingsService: class {
       upsert = mockOrgAiUpsert;
@@ -55,7 +55,7 @@ function makeController() {
   );
 }
 
-import { OrgAiSettingsService } from '@gitroom/nestjs-libraries/database/prisma/ai-settings/org-ai-settings.service';
+import { OrgAiSettingsService } from '@postmill-ai/nestjs-libraries/database/prisma/ai-settings/org-ai-settings.service';
 
 describe('OrgAiSettingsController — provider config + cache invalidation', () => {
   let controller: OrgAiSettingsController;

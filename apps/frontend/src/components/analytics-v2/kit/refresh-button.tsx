@@ -2,8 +2,8 @@
 
 import { FC, useState } from 'react';
 import { mutate } from 'swr';
-import { useT } from '@gitroom/react/translation/get.transation.service.client';
-import { useToaster } from '@gitroom/react/toaster/toaster';
+import { useT } from '@postmill-ai/react/translation/get.transation.service.client';
+import { useToaster } from '@postmill-ai/react/toaster/toaster';
 import { useChannelRefresh, ChannelRefreshError } from '../hooks/useChannelRefresh';
 
 // On-demand channel refresh button (6.7). Shared by the channels tab rows and

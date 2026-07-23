@@ -1,4 +1,4 @@
-import { MediaDto } from '@gitroom/nestjs-libraries/dtos/file/media.dto';
+import { MediaDto } from '@postmill-ai/nestjs-libraries/dtos/file/media.dto';
 import {
   IsOptional,
   IsString,

@@ -3,7 +3,7 @@
 // campaign-report-view.tsx (F11). Built from analytics-v2's single source of
 // truth (`CANONICAL_METRICS`) plus the few campaign-only goal metrics that the
 // analytics catalog doesn't carry (e.g. `posts`).
-import { CANONICAL_METRICS } from '@gitroom/frontend/components/analytics-v2/utils';
+import { CANONICAL_METRICS } from '@postmill-ai/frontend/components/analytics-v2/utils';
 
 const LABELS: Record<string, string> = {
   ...Object.fromEntries(CANONICAL_METRICS.map((m) => [m.key, m.label])),

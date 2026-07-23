@@ -3,8 +3,8 @@
 import { FC, useCallback } from 'react';
 import { useParams } from 'next/navigation';
 import useSWR from 'swr';
-import { useFetch } from '@gitroom/helpers/utils/custom.fetch';
-import { useT } from '@gitroom/react/translation/get.transation.service.client';
+import { useFetch } from '@postmill-ai/helpers/utils/custom.fetch';
+import { useT } from '@postmill-ai/react/translation/get.transation.service.client';
 import dayjs from 'dayjs';
 
 interface MemberProfileData {

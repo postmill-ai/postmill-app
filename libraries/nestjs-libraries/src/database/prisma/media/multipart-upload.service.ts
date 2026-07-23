@@ -1,5 +1,5 @@
 import { Injectable } from '@nestjs/common';
-import { MultipartUploadRepository } from '@gitroom/nestjs-libraries/database/prisma/media/multipart-upload.repository';
+import { MultipartUploadRepository } from '@postmill-ai/nestjs-libraries/database/prisma/media/multipart-upload.repository';
 
 @Injectable()
 export class MultipartUploadService {

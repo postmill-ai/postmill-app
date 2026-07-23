@@ -1,23 +1,23 @@
 'use client';
 
 import { FC, useCallback, useMemo, useState } from 'react';
-import { useFetch } from '@gitroom/helpers/utils/custom.fetch';
-import { useT } from '@gitroom/react/translation/get.transation.service.client';
+import { useFetch } from '@postmill-ai/helpers/utils/custom.fetch';
+import { useT } from '@postmill-ai/react/translation/get.transation.service.client';
 import useSWR, { mutate as swrMutate } from 'swr';
-import { useModals } from '@gitroom/frontend/components/layout/new-modal';
-import { Button } from '@gitroom/react/form/button';
-import { deleteDialog } from '@gitroom/react/helpers/delete.dialog';
-import { useToaster } from '@gitroom/react/toaster/toaster';
+import { useModals } from '@postmill-ai/frontend/components/layout/new-modal';
+import { Button } from '@postmill-ai/react/form/button';
+import { deleteDialog } from '@postmill-ai/react/helpers/delete.dialog';
+import { useToaster } from '@postmill-ai/react/toaster/toaster';
 import dayjs from 'dayjs';
-import { CreateEditCampaignModal } from '@gitroom/frontend/components/campaigns/index/create-edit-campaign.modal';
-import { CopyCampaignModal } from '@gitroom/frontend/components/campaigns/index/copy-campaign.modal';
-import { CampaignCard } from '@gitroom/frontend/components/campaigns/index/campaign-card';
+import { CreateEditCampaignModal } from '@postmill-ai/frontend/components/campaigns/index/create-edit-campaign.modal';
+import { CopyCampaignModal } from '@postmill-ai/frontend/components/campaigns/index/copy-campaign.modal';
+import { CampaignCard } from '@postmill-ai/frontend/components/campaigns/index/campaign-card';
 import {
   CampaignFilterBar,
   DEFAULT_CAMPAIGN_FILTERS,
   type CampaignFilters,
-} from '@gitroom/frontend/components/campaigns/index/campaign-filter-bar';
-import type { Campaign } from '@gitroom/frontend/components/campaigns/campaign-types';
+} from '@postmill-ai/frontend/components/campaigns/index/campaign-filter-bar';
+import type { Campaign } from '@postmill-ai/frontend/components/campaigns/campaign-types';
 
 const PAGE_SIZE = 25;
 

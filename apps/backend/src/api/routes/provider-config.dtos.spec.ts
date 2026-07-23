@@ -8,11 +8,11 @@ import {
   SetMediaStorageDto,
   UpsertVpnConfigDto,
   UpsertContentPackConfigDto,
-} from '@gitroom/nestjs-libraries/dtos/providers/provider-config.dtos';
+} from '@postmill-ai/nestjs-libraries/dtos/providers/provider-config.dtos';
 import {
   SaveAiProviderDto,
   UpsertOrgProviderConfigDto,
-} from '@gitroom/nestjs-libraries/dtos/providers/admin-ai-settings.dtos';
+} from '@postmill-ai/nestjs-libraries/dtos/providers/admin-ai-settings.dtos';
 
 // PROVIDER_REMEDIATION 3.4: the global pipe runs whitelist + forbidNonWhitelisted.
 // Replicate those options here to prove the promoted DTOs strip/reject unknown fields

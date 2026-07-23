@@ -1,16 +1,16 @@
 'use client';
 
 import { FC, useCallback, useMemo, useState } from 'react';
-import { useFetch } from '@gitroom/helpers/utils/custom.fetch';
-import { useToaster } from '@gitroom/react/toaster/toaster';
-import { useT } from '@gitroom/react/translation/get.transation.service.client';
-import { Button } from '@gitroom/react/form/button';
+import { useFetch } from '@postmill-ai/helpers/utils/custom.fetch';
+import { useToaster } from '@postmill-ai/react/toaster/toaster';
+import { useT } from '@postmill-ai/react/translation/get.transation.service.client';
+import { Button } from '@postmill-ai/react/form/button';
 import dayjs from 'dayjs';
 import clsx from 'clsx';
-import { LineChart } from '@gitroom/frontend/components/analytics-v2/charts/line.chart';
-import { BarChart } from '@gitroom/frontend/components/analytics-v2/charts/bar.chart';
-import { metricLabelT } from '@gitroom/frontend/components/campaigns/metric-labels';
-import { readableTextColor } from '@gitroom/frontend/components/shared/readable-text-color';
+import { LineChart } from '@postmill-ai/frontend/components/analytics-v2/charts/line.chart';
+import { BarChart } from '@postmill-ai/frontend/components/analytics-v2/charts/bar.chart';
+import { metricLabelT } from '@postmill-ai/frontend/components/campaigns/metric-labels';
+import { readableTextColor } from '@postmill-ai/frontend/components/shared/readable-text-color';
 
 const stripHtml = (html?: string | null): string =>
   (html || '').replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim();

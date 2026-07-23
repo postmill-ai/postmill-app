@@ -2,7 +2,7 @@ import { Injectable, Logger } from '@nestjs/common';
 import { Request, Response } from 'express';
 import { Readable, pipeline } from 'stream';
 import { promisify } from 'util';
-import { safeFetch } from '@gitroom/nestjs-libraries/dtos/webhooks/safe.fetch';
+import { safeFetch } from '@postmill-ai/nestjs-libraries/dtos/webhooks/safe.fetch';
 
 const pump = promisify(pipeline);
 

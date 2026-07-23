@@ -1,12 +1,12 @@
 {
-  "name": "@gitroom/provider-gateway",
+  "name": "@postmill-ai/provider-gateway",
   "version": "1.0.0",
   "private": true,
   "main": "src/index.ts",
   "types": "src/index.ts",
   "dependencies": {
     "@ai-sdk/gateway": "^3.0.0",
-    "@gitroom/provider-kernel": "workspace:*",
+    "@postmill-ai/provider-kernel": "workspace:*",
     "@langchain/core": "^1.1.48",
     "@langchain/openai": "^1.4.7",
     "ai": "^6.0.197",

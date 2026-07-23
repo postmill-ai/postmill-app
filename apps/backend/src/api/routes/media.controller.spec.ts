@@ -3,14 +3,14 @@ import { describe, it, expect, vi, afterEach } from 'vitest';
 
 // The controller module imports the shared ioRedis client at load time; stub it so
 // importing the controller never opens a real Redis connection.
-vi.mock('@gitroom/nestjs-libraries/redis/redis.service', () => ({
+vi.mock('@postmill-ai/nestjs-libraries/redis/redis.service', () => ({
   ioRedis: { get: vi.fn(), set: vi.fn(), keys: vi.fn(), del: vi.fn() },
 }));
 
 import { HttpStatus } from '@nestjs/common';
 import { MediaController } from './media.controller';
 // Import from the SAME module the controller catches against so `instanceof` holds.
-import { DefaultNotConfiguredError } from '@gitroom/nestjs-libraries/ai/defaults/ai-defaults.service';
+import { DefaultNotConfiguredError } from '@postmill-ai/nestjs-libraries/ai/defaults/ai-defaults.service';
 
 const org = { id: 'org-1' } as any;
 

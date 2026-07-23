@@ -4,20 +4,20 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 // services import as lightweight class definitions — the tests only exercise
 // the in-process handler logic, not the real providers.
 vi.mock(
-  '@gitroom/nestjs-libraries/ai-designer/agent-mesh/agent-mesh-env.shim',
+  '@postmill-ai/nestjs-libraries/ai-designer/agent-mesh/agent-mesh-env.shim',
   () => ({})
 );
 vi.mock('@reaatech/agent-mesh', () => ({}));
 vi.mock('@reaatech/agent-mesh-router', () => ({
   registerInProcessAgent: vi.fn(),
 }));
-vi.mock('@gitroom/nestjs-libraries/ai/ai-model.provider', () => ({
+vi.mock('@postmill-ai/nestjs-libraries/ai/ai-model.provider', () => ({
   AIModelProvider: class {},
 }));
-vi.mock('@gitroom/nestjs-libraries/brands/brands.service', () => ({
+vi.mock('@postmill-ai/nestjs-libraries/brands/brands.service', () => ({
   BrandsService: class {},
 }));
-vi.mock('@gitroom/nestjs-libraries/ai/governance/rag.service', () => ({
+vi.mock('@postmill-ai/nestjs-libraries/ai/governance/rag.service', () => ({
   RagService: class {},
 }));
 

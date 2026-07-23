@@ -1,6 +1,6 @@
-import { inngest } from '@gitroom/nestjs-libraries/inngest/inngest.client';
-import { MediaJobsActivity } from '@gitroom/nestjs-libraries/inngest/activities/media-jobs.activity';
-import { getRenderConcurrency } from '@gitroom/nestjs-libraries/media/design-render/render-config';
+import { inngest } from '@postmill-ai/nestjs-libraries/inngest/inngest.client';
+import { MediaJobsActivity } from '@postmill-ai/nestjs-libraries/inngest/activities/media-jobs.activity';
+import { getRenderConcurrency } from '@postmill-ai/nestjs-libraries/media/design-render/render-config';
 
 // Local video renders (Designer timeline + clip-merge) run here, one Inngest function with a
 // static `concurrency.limit` (the post-publish idiom) — so at most VIDEO_RENDER_CONCURRENCY

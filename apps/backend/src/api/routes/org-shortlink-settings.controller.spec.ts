@@ -6,9 +6,9 @@ import {
   HttpException,
 } from '@nestjs/common';
 import { OrgShortLinkSettingsController } from './org-shortlink-settings.controller';
-import { OrgShortLinkSettingsService } from '@gitroom/nestjs-libraries/database/prisma/short-links/org-shortlink-settings.service';
-import { ShortLinkOAuthService } from '@gitroom/nestjs-libraries/short-linking/short-link-oauth.service';
-import type { ShortLinkAdapter } from '@gitroom/nestjs-libraries/short-linking/short-link.interface';
+import { OrgShortLinkSettingsService } from '@postmill-ai/nestjs-libraries/database/prisma/short-links/org-shortlink-settings.service';
+import { ShortLinkOAuthService } from '@postmill-ai/nestjs-libraries/short-linking/short-link-oauth.service';
+import type { ShortLinkAdapter } from '@postmill-ai/nestjs-libraries/short-linking/short-link.interface';
 
 const org = { id: 'org-1' } as any;
 

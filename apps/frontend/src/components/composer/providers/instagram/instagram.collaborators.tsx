@@ -3,16 +3,16 @@
 import {
   PostComment,
   withProvider,
-} from '@gitroom/frontend/components/composer/providers/high.order.provider';
+} from '@postmill-ai/frontend/components/composer/providers/high.order.provider';
 import { FC } from 'react';
-import { Select } from '@gitroom/react/form/select';
-import { Checkbox } from '@gitroom/react/form/checkbox';
-import { useSettings } from '@gitroom/frontend/components/launches/helpers/use.values';
-import { InstagramDto } from '@gitroom/nestjs-libraries/dtos/posts/providers-settings/instagram.dto';
-import { InstagramCollaboratorsTags } from '@gitroom/frontend/components/composer/providers/instagram/instagram.tags';
-import { useT } from '@gitroom/react/translation/get.transation.service.client';
-import { InstagramPreview } from '@gitroom/frontend/components/composer/providers/instagram/instagram.preview';
-import { FirstCommentField } from '@gitroom/frontend/components/composer/providers/shared/first-comment.field';
+import { Select } from '@postmill-ai/react/form/select';
+import { Checkbox } from '@postmill-ai/react/form/checkbox';
+import { useSettings } from '@postmill-ai/frontend/components/launches/helpers/use.values';
+import { InstagramDto } from '@postmill-ai/nestjs-libraries/dtos/posts/providers-settings/instagram.dto';
+import { InstagramCollaboratorsTags } from '@postmill-ai/frontend/components/composer/providers/instagram/instagram.tags';
+import { useT } from '@postmill-ai/react/translation/get.transation.service.client';
+import { InstagramPreview } from '@postmill-ai/frontend/components/composer/providers/instagram/instagram.preview';
+import { FirstCommentField } from '@postmill-ai/frontend/components/composer/providers/shared/first-comment.field';
 const postType = [
   {
     value: 'post',

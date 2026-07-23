@@ -1,7 +1,7 @@
 import { Injectable, CanActivate, ExecutionContext, ForbiddenException } from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
-import { RolesService } from '@gitroom/nestjs-libraries/database/prisma/roles/roles.service';
-import { AuditService } from '@gitroom/nestjs-libraries/database/prisma/audit/audit.service';
+import { RolesService } from '@postmill-ai/nestjs-libraries/database/prisma/roles/roles.service';
+import { AuditService } from '@postmill-ai/nestjs-libraries/database/prisma/audit/audit.service';
 import { REQUIRE_PERMISSION_KEY, RequirePermissionMetadata } from './require-permission.decorator';
 
 const RBAC_PERMS_CACHE = Symbol('rbacPermsCache');

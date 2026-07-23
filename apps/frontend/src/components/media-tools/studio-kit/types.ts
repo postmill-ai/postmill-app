@@ -1,5 +1,5 @@
 import type React from 'react';
-import type { ModelField } from '@gitroom/provider-kernel';
+import type { ModelField } from '@postmill-ai/provider-kernel';
 
 // A media file reference produced by the media picker (MediaSelectorModal).
 export interface FileFieldValue {

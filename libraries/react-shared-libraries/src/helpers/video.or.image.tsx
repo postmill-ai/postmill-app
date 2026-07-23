@@ -1,6 +1,6 @@
 import { FC } from 'react';
 import { clsx } from 'clsx';
-import { hasExtension } from '@gitroom/helpers/utils/has.extension';
+import { hasExtension } from '@postmill-ai/helpers/utils/has.extension';
 export const VideoOrImage: FC<{
   src: string;
   autoplay: boolean;

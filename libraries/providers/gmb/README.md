@@ -1,4 +1,4 @@
-# @gitroom/provider-gmb
+# @postmill-ai/provider-gmb
 
 Google My Business (Business Profile) social provider (`social/gmb@v1`).
 

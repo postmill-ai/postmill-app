@@ -1,19 +1,19 @@
 'use client';
 
 import { FC, useCallback, useEffect, useMemo, useState } from 'react';
-import { useFetch } from '@gitroom/helpers/utils/custom.fetch';
+import { useFetch } from '@postmill-ai/helpers/utils/custom.fetch';
 import useSWR from 'swr';
 import dayjs from 'dayjs';
-import { useT } from '@gitroom/react/translation/get.transation.service.client';
+import { useT } from '@postmill-ai/react/translation/get.transation.service.client';
 import { CommentCard, InboxComment } from './comment.card';
-import { PageHeader } from '@gitroom/frontend/components/ui/page-header';
+import { PageHeader } from '@postmill-ai/frontend/components/ui/page-header';
 import { RepliesFilterBar } from './filters/replies.filter.bar';
-import { useIntegrationList } from '@gitroom/frontend/components/launches/helpers/use.integration.list';
-import { Integrations } from '@gitroom/frontend/components/launches/calendar.context';
+import { useIntegrationList } from '@postmill-ai/frontend/components/launches/helpers/use.integration.list';
+import { Integrations } from '@postmill-ai/frontend/components/launches/calendar.context';
 import {
   useTeamMembers,
   TeamMemberItem,
-} from '@gitroom/frontend/components/settings/roles/hooks/use-roles';
+} from '@postmill-ai/frontend/components/settings/roles/hooks/use-roles';
 
 interface InboxResponse {
   comments: InboxComment[];

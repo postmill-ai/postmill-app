@@ -1,12 +1,12 @@
 {
-  "name": "@gitroom/provider-generic",
+  "name": "@postmill-ai/provider-generic",
   "version": "1.0.0",
   "private": true,
   "main": "src/index.ts",
   "types": "src/index.ts",
   "dependencies": {
-    "@gitroom/provider-kernel": "workspace:*",
-    "@gitroom/nestjs-libraries": "workspace:*"
+    "@postmill-ai/provider-kernel": "workspace:*",
+    "@postmill-ai/nestjs-libraries": "workspace:*"
   },
   "license": "AGPL-3.0",
   "engines": {

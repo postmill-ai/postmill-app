@@ -4,7 +4,7 @@ import {
   ExceptionFilter,
   HttpException,
 } from '@nestjs/common';
-import { AuthorizationActions, Sections, SubscriptionException } from '@gitroom/backend/services/auth/permissions/permission.exception.class';
+import { AuthorizationActions, Sections, SubscriptionException } from '@postmill-ai/backend/services/auth/permissions/permission.exception.class';
 
 @Catch(SubscriptionException)
 export class SubscriptionExceptionFilter implements ExceptionFilter {

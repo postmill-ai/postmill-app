@@ -1,4 +1,4 @@
-import type { StudioDescriptor } from '@gitroom/frontend/components/media-tools/studio-kit/types';
+import type { StudioDescriptor } from '@postmill-ai/frontend/components/media-tools/studio-kit/types';
 
 // OpenAI media (registry/config identifier `openai`). gpt-image-1 and DALL·E 3 take different
 // param sets, so each is its own image tab with a fixed model and its own correct fields; a

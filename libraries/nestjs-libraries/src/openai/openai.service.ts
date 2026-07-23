@@ -1,10 +1,10 @@
 import { forwardRef, Inject, Injectable, Logger } from '@nestjs/common';
 import { shuffle } from 'lodash';
 import { z } from 'zod';
-import { AIModelProvider } from '@gitroom/nestjs-libraries/ai/ai-model.provider';
-import { AiMediaService } from '@gitroom/nestjs-libraries/ai/governance/media.service';
-import { BudgetExceeded, GuardrailViolation } from '@gitroom/nestjs-libraries/ai/governance/errors';
-import { PROMPT_CONSTANTS } from '@gitroom/nestjs-libraries/ai/prompt-constants.const';
+import { AIModelProvider } from '@postmill-ai/nestjs-libraries/ai/ai-model.provider';
+import { AiMediaService } from '@postmill-ai/nestjs-libraries/ai/governance/media.service';
+import { BudgetExceeded, GuardrailViolation } from '@postmill-ai/nestjs-libraries/ai/governance/errors';
+import { PROMPT_CONSTANTS } from '@postmill-ai/nestjs-libraries/ai/prompt-constants.const';
 export { PROMPT_CONSTANTS };
 
 const PicturePrompt = z.object({

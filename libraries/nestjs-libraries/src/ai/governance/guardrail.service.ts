@@ -1,5 +1,5 @@
 import { Injectable, Logger } from '@nestjs/common';
-import { AiSettingsManager } from '@gitroom/nestjs-libraries/ai/ai-settings.manager';
+import { AiSettingsManager } from '@postmill-ai/nestjs-libraries/ai/ai-settings.manager';
 import { GuardrailViolation } from './errors';
 import {
   ChainBuilder,

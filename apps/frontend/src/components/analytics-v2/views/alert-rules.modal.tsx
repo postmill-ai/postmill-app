@@ -1,10 +1,10 @@
 'use client';
 
 import { FC, useMemo, useState } from 'react';
-import { useT } from '@gitroom/react/translation/get.transation.service.client';
-import { useToaster } from '@gitroom/react/toaster/toaster';
-import { useIntegrationList } from '@gitroom/frontend/components/launches/helpers/use.integration.list';
-import { Integrations } from '@gitroom/frontend/components/launches/calendar.context';
+import { useT } from '@postmill-ai/react/translation/get.transation.service.client';
+import { useToaster } from '@postmill-ai/react/toaster/toaster';
+import { useIntegrationList } from '@postmill-ai/frontend/components/launches/helpers/use.integration.list';
+import { Integrations } from '@postmill-ai/frontend/components/launches/calendar.context';
 import {
   useAlertRules,
   AlertRule,

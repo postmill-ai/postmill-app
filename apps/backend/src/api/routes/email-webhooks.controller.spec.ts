@@ -1,22 +1,22 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { HttpException } from '@nestjs/common';
 
-vi.mock('@gitroom/nestjs-libraries/database/prisma/emails/email-log.service', () => ({
+vi.mock('@postmill-ai/nestjs-libraries/database/prisma/emails/email-log.service', () => ({
   EmailLogService: class MockEmailLogService {
     applyWebhookEvent = vi.fn().mockResolvedValue(undefined);
   },
 }));
 
-vi.mock('@gitroom/nestjs-libraries/emails/email-adapter.registry', () => ({
+vi.mock('@postmill-ai/nestjs-libraries/emails/email-adapter.registry', () => ({
   EmailAdapterRegistry: class MockEmailAdapterRegistry {
     getActiveAdapter = vi.fn();
   },
 }));
 
 import { EmailWebhooksController } from './email-webhooks.controller';
-import { EmailLogService } from '@gitroom/nestjs-libraries/database/prisma/emails/email-log.service';
-import { EmailAdapterRegistry } from '@gitroom/nestjs-libraries/emails/email-adapter.registry';
-import type { EmailAdapter } from '@gitroom/nestjs-libraries/emails/email-adapter.interface';
+import { EmailLogService } from '@postmill-ai/nestjs-libraries/database/prisma/emails/email-log.service';
+import { EmailAdapterRegistry } from '@postmill-ai/nestjs-libraries/emails/email-adapter.registry';
+import type { EmailAdapter } from '@postmill-ai/nestjs-libraries/emails/email-adapter.interface';
 
 interface BuildAdapterOptions {
   name?: string;

@@ -3,11 +3,11 @@
 import { FC, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useDailyBrief } from '../hooks/useDailyBrief';
-import { useAiActive, AI_SETUP_HREF } from '@gitroom/frontend/components/layout/use-ai-active';
-import { useToaster } from '@gitroom/react/toaster/toaster';
-import { Button } from '@gitroom/react/form/button';
-import { TabSkeleton } from '@gitroom/frontend/components/analytics-v2/kit/states';
-import { useT } from '@gitroom/react/translation/get.transation.service.client';
+import { useAiActive, AI_SETUP_HREF } from '@postmill-ai/frontend/components/layout/use-ai-active';
+import { useToaster } from '@postmill-ai/react/toaster/toaster';
+import { Button } from '@postmill-ai/react/form/button';
+import { TabSkeleton } from '@postmill-ai/frontend/components/analytics-v2/kit/states';
+import { useT } from '@postmill-ai/react/translation/get.transation.service.client';
 
 const MAX_TEASER_LENGTH = 80;
 

@@ -10,22 +10,22 @@ import {
   useRef,
   useState,
 } from 'react';
-import { AiDesignerStart } from '@gitroom/frontend/components/media-tools/ai-designer/ai-designer-start';
-import { useAiDesignerSession } from '@gitroom/frontend/components/media-tools/ai-designer/ai-designer.hooks';
-import { useToaster } from '@gitroom/react/toaster/toaster';
+import { AiDesignerStart } from '@postmill-ai/frontend/components/media-tools/ai-designer/ai-designer-start';
+import { useAiDesignerSession } from '@postmill-ai/frontend/components/media-tools/ai-designer/ai-designer.hooks';
+import { useToaster } from '@postmill-ai/react/toaster/toaster';
 import {
   useAiDesignerSocket,
   type AiDesignerServerMessage,
-} from '@gitroom/frontend/components/media-tools/ai-designer/use-ai-designer-socket';
+} from '@postmill-ai/frontend/components/media-tools/ai-designer/use-ai-designer-socket';
 import type {
   AiDesignerMode,
   AiDesignerSessionDto,
   AiDesignerStartPayload,
-} from '@gitroom/nestjs-libraries/ai-designer/ai-designer.types';
+} from '@postmill-ai/nestjs-libraries/ai-designer/ai-designer.types';
 
 const AiDesignerChat = dynamic(
   () =>
-    import('@gitroom/frontend/components/media-tools/ai-designer/ai-designer-chat').then(
+    import('@postmill-ai/frontend/components/media-tools/ai-designer/ai-designer-chat').then(
       (m) => m.AiDesignerChat
     ),
   { ssr: false }

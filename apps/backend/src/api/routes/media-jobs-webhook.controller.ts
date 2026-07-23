@@ -1,8 +1,8 @@
 import { Controller, HttpException, Param, Post } from '@nestjs/common';
 import { Throttle } from '@nestjs/throttler';
 import { ApiTags } from '@nestjs/swagger';
-import { MediaJobLifecycleService } from '@gitroom/nestjs-libraries/database/prisma/media-providers/media-job-lifecycle.service';
-import { verifyMediaJobWebhookToken } from '@gitroom/nestjs-libraries/media/media-job-token';
+import { MediaJobLifecycleService } from '@postmill-ai/nestjs-libraries/database/prisma/media-providers/media-job-lifecycle.service';
+import { verifyMediaJobWebhookToken } from '@postmill-ai/nestjs-libraries/media/media-job-token';
 
 // Async media-job completion webhook (§11.2). Unauthenticated by design (providers
 // can't carry our cookies): the URL is unguessable — the job id plus a per-job

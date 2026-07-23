@@ -3,7 +3,7 @@
 import dynamic from 'next/dynamic';
 
 const OpenRouterStudio = dynamic(
-  () => import('@gitroom/frontend/components/media-tools/openrouter/openrouter-studio').then((m) => m.OpenRouterStudio),
+  () => import('@postmill-ai/frontend/components/media-tools/openrouter/openrouter-studio').then((m) => m.OpenRouterStudio),
   { ssr: false }
 );
 

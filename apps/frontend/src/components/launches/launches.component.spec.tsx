@@ -9,40 +9,40 @@ let searchParams: Record<string, string> = {};
 // returns `isLoading: true`, so the component short-circuits to the loading
 // state. The mount `useEffect` (which owns the `isSameOrigin` logic under test)
 // still runs because it is declared above that early return.
-vi.mock('@gitroom/frontend/components/launches/calendar.context', () => ({
+vi.mock('@postmill-ai/frontend/components/launches/calendar.context', () => ({
   CalendarWeekProvider: ({ children }: any) => <>{children}</>,
 }));
-vi.mock('@gitroom/frontend/components/launches/calendar', () => ({
+vi.mock('@postmill-ai/frontend/components/launches/calendar', () => ({
   useCalendar: () => ({ startDate: '', endDate: '', posts: [] }),
 }));
 vi.mock('./calendar', () => ({
   Calendar: () => null,
 }));
-vi.mock('@gitroom/frontend/components/agent/agent-context-bridge', () => ({
+vi.mock('@postmill-ai/frontend/components/agent/agent-context-bridge', () => ({
   pushAgentUiContext: () => () => {},
 }));
-vi.mock('@gitroom/frontend/components/launches/filters', () => ({
+vi.mock('@postmill-ai/frontend/components/launches/filters', () => ({
   Filters: () => null,
 }));
-vi.mock('@gitroom/frontend/components/layout/loading', () => ({
+vi.mock('@postmill-ai/frontend/components/layout/loading', () => ({
   LoadingComponent: () => <div data-testid="loading" />,
 }));
 vi.mock('next/navigation', () => ({
   useSearchParams: () => ({ get: (k: string) => searchParams[k] ?? null }),
 }));
-vi.mock('@gitroom/react/toaster/toaster', () => ({
+vi.mock('@postmill-ai/react/toaster/toaster', () => ({
   useToaster: () => ({ show: mockShow }),
 }));
-vi.mock('@gitroom/helpers/utils/use.fire.events', () => ({
+vi.mock('@postmill-ai/helpers/utils/use.fire.events', () => ({
   useFireEvents: () => vi.fn(),
 }));
-vi.mock('@gitroom/frontend/components/launches/helpers/dnd.provider', () => ({
+vi.mock('@postmill-ai/frontend/components/launches/helpers/dnd.provider', () => ({
   DNDProvider: ({ children }: any) => <>{children}</>,
 }));
-vi.mock('@gitroom/react/translation/get.transation.service.client', () => ({
+vi.mock('@postmill-ai/react/translation/get.transation.service.client', () => ({
   useT: () => (key: string, fallback?: string) => fallback || key,
 }));
-vi.mock('@gitroom/frontend/components/launches/helpers/use.integration.list', () => ({
+vi.mock('@postmill-ai/frontend/components/launches/helpers/use.integration.list', () => ({
   useIntegrationList: () => ({
     isLoading: true,
     data: undefined,
@@ -50,7 +50,7 @@ vi.mock('@gitroom/frontend/components/launches/helpers/use.integration.list', ()
     error: undefined,
   }),
 }));
-vi.mock('@gitroom/frontend/components/launches/add.provider.component', () => ({
+vi.mock('@postmill-ai/frontend/components/launches/add.provider.component', () => ({
   useAddProvider: () => vi.fn(),
 }));
 

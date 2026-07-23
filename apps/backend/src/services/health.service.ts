@@ -1,10 +1,10 @@
 import { Injectable, ServiceUnavailableException } from '@nestjs/common';
-import { InngestService } from '@gitroom/nestjs-libraries/inngest/inngest.service';
-import { InngestRunRepository } from '@gitroom/nestjs-libraries/database/prisma/inngest-runs/inngest-run.repository';
-import { HealthRepository } from '@gitroom/nestjs-libraries/database/prisma/health/health.repository';
-import { RedisService } from '@gitroom/nestjs-libraries/redis/redis.service';
-import { safeFetch } from '@gitroom/nestjs-libraries/dtos/webhooks/safe.fetch';
-import { isInngestEnabled } from '@gitroom/nestjs-libraries/inngest/inngest.client';
+import { InngestService } from '@postmill-ai/nestjs-libraries/inngest/inngest.service';
+import { InngestRunRepository } from '@postmill-ai/nestjs-libraries/database/prisma/inngest-runs/inngest-run.repository';
+import { HealthRepository } from '@postmill-ai/nestjs-libraries/database/prisma/health/health.repository';
+import { RedisService } from '@postmill-ai/nestjs-libraries/redis/redis.service';
+import { safeFetch } from '@postmill-ai/nestjs-libraries/dtos/webhooks/safe.fetch';
+import { isInngestEnabled } from '@postmill-ai/nestjs-libraries/inngest/inngest.client';
 
 const EVENT_API_TIMEOUT_MS = 5_000;
 const INNGEST_CLOUD_EVENT_API = 'https://inn.gs/';

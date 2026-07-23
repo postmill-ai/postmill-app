@@ -4,10 +4,10 @@ import {
   Logger,
   NotFoundException,
 } from '@nestjs/common';
-import { AnalyticsRepository } from '@gitroom/nestjs-libraries/database/prisma/analytics/analytics.repository';
-import { OrgShortLinkSettingsService } from '@gitroom/nestjs-libraries/database/prisma/short-links/org-shortlink-settings.service';
-import { WebhooksService } from '@gitroom/nestjs-libraries/database/prisma/webhooks/webhooks.service';
-import { NotificationService } from '@gitroom/nestjs-libraries/database/prisma/notifications/notification.service';
+import { AnalyticsRepository } from '@postmill-ai/nestjs-libraries/database/prisma/analytics/analytics.repository';
+import { OrgShortLinkSettingsService } from '@postmill-ai/nestjs-libraries/database/prisma/short-links/org-shortlink-settings.service';
+import { WebhooksService } from '@postmill-ai/nestjs-libraries/database/prisma/webhooks/webhooks.service';
+import { NotificationService } from '@postmill-ai/nestjs-libraries/database/prisma/notifications/notification.service';
 import { Organization } from '@prisma/client';
 import dayjs from 'dayjs';
 import isoWeek from 'dayjs/plugin/isoWeek';
@@ -36,8 +36,8 @@ import {
   MetricKind,
 } from './anomaly.detection';
 import { getRetentionDays } from './analytics-aggregation';
-import { METRIC_REGISTRY } from '@gitroom/nestjs-libraries/integrations/social/analytics.metrics';
-import { stripHtmlTags } from '@gitroom/helpers/utils/strip.tags';
+import { METRIC_REGISTRY } from '@postmill-ai/nestjs-libraries/integrations/social/analytics.metrics';
+import { stripHtmlTags } from '@postmill-ai/helpers/utils/strip.tags';
 
 dayjs.extend(isoWeek);
 

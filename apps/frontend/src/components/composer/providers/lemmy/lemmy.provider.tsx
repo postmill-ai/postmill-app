@@ -4,15 +4,15 @@ import { FC, useCallback } from 'react';
 import {
   PostComment,
   withProvider,
-} from '@gitroom/frontend/components/composer/providers/high.order.provider';
-import { useSettings } from '@gitroom/frontend/components/launches/helpers/use.values';
+} from '@postmill-ai/frontend/components/composer/providers/high.order.provider';
+import { useSettings } from '@postmill-ai/frontend/components/launches/helpers/use.values';
 import { useFieldArray } from 'react-hook-form';
-import { Button } from '@gitroom/react/form/button';
-import { deleteDialog } from '@gitroom/react/helpers/delete.dialog';
+import { Button } from '@postmill-ai/react/form/button';
+import { deleteDialog } from '@postmill-ai/react/helpers/delete.dialog';
 import { Subreddit } from './subreddit';
-import { LemmySettingsDto } from '@gitroom/nestjs-libraries/dtos/posts/providers-settings/lemmy.dto';
-import { useT } from '@gitroom/react/translation/get.transation.service.client';
-import { FirstCommentField } from '@gitroom/frontend/components/composer/providers/shared/first-comment.field';
+import { LemmySettingsDto } from '@postmill-ai/nestjs-libraries/dtos/posts/providers-settings/lemmy.dto';
+import { useT } from '@postmill-ai/react/translation/get.transation.service.client';
+import { FirstCommentField } from '@postmill-ai/frontend/components/composer/providers/shared/first-comment.field';
 const LemmySettings: FC = () => {
   const { register, control } = useSettings();
   const { fields, append, remove } = useFieldArray({

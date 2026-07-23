@@ -1,16 +1,16 @@
-import { PostActivity } from '@gitroom/nestjs-libraries/inngest/activities/post.activity';
-import { AnalyticsActivity } from '@gitroom/nestjs-libraries/inngest/activities/analytics.activity';
-import { CommentsActivity } from '@gitroom/nestjs-libraries/inngest/activities/comments.activity';
-import { EmailActivity } from '@gitroom/nestjs-libraries/inngest/activities/email.activity';
-import { IntegrationsActivity } from '@gitroom/nestjs-libraries/inngest/activities/integrations.activity';
-import { AutopostActivity } from '@gitroom/nestjs-libraries/inngest/activities/autopost.activity';
-import { MediaJobsActivity } from '@gitroom/nestjs-libraries/inngest/activities/media-jobs.activity';
-import { DigestActivity } from '@gitroom/nestjs-libraries/inngest/activities/digest.activity';
-import { CampaignActivity } from '@gitroom/nestjs-libraries/inngest/activities/campaign.activity';
-import { RetentionActivity } from '@gitroom/nestjs-libraries/inngest/activities/retention.activity';
-import { AgentDigestActivity } from '@gitroom/nestjs-libraries/inngest/activities/agent-digest.activity';
-import { InngestRunService } from '@gitroom/nestjs-libraries/inngest/inngest-run.service';
-import { OrganizationService } from '@gitroom/nestjs-libraries/database/prisma/organizations/organization.service';
+import { PostActivity } from '@postmill-ai/nestjs-libraries/inngest/activities/post.activity';
+import { AnalyticsActivity } from '@postmill-ai/nestjs-libraries/inngest/activities/analytics.activity';
+import { CommentsActivity } from '@postmill-ai/nestjs-libraries/inngest/activities/comments.activity';
+import { EmailActivity } from '@postmill-ai/nestjs-libraries/inngest/activities/email.activity';
+import { IntegrationsActivity } from '@postmill-ai/nestjs-libraries/inngest/activities/integrations.activity';
+import { AutopostActivity } from '@postmill-ai/nestjs-libraries/inngest/activities/autopost.activity';
+import { MediaJobsActivity } from '@postmill-ai/nestjs-libraries/inngest/activities/media-jobs.activity';
+import { DigestActivity } from '@postmill-ai/nestjs-libraries/inngest/activities/digest.activity';
+import { CampaignActivity } from '@postmill-ai/nestjs-libraries/inngest/activities/campaign.activity';
+import { RetentionActivity } from '@postmill-ai/nestjs-libraries/inngest/activities/retention.activity';
+import { AgentDigestActivity } from '@postmill-ai/nestjs-libraries/inngest/activities/agent-digest.activity';
+import { InngestRunService } from '@postmill-ai/nestjs-libraries/inngest/inngest-run.service';
+import { OrganizationService } from '@postmill-ai/nestjs-libraries/database/prisma/organizations/organization.service';
 import {
   createAnalyticsCollection,
   createAnalyticsSyncOrg,

@@ -3,7 +3,7 @@
 import React, { forwardRef, useImperativeHandle, useMemo, useState } from 'react';
 import { computePosition, flip, shift } from '@floating-ui/dom';
 import { posToDOMRect, ReactRenderer } from '@tiptap/react';
-import { useT } from '@gitroom/react/translation/get.transation.service.client';
+import { useT } from '@postmill-ai/react/translation/get.transation.service.client';
 
 // Debounce utility for TipTap. Each superseded call must still resolve (TipTap
 // awaits every returned promise) — otherwise cancelled keystrokes leak pending

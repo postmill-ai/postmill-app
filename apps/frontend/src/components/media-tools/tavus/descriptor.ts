@@ -1,4 +1,4 @@
-import type { StudioDescriptor } from '@gitroom/frontend/components/media-tools/studio-kit/types';
+import type { StudioDescriptor } from '@postmill-ai/frontend/components/media-tools/studio-kit/types';
 
 // Tavus replica video (registry/config identifier `tavus`). A pre-trained replica id + a
 // script produce a personalized talking video; completion arrives via webhook (poll-cron

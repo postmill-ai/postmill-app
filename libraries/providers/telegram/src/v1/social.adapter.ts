@@ -5,17 +5,17 @@ import {
   PostResponse,
   SocialCommentDTO,
   SocialProvider,
-} from '@gitroom/provider-kernel';
-import { makeId, makeOauthState } from '@gitroom/provider-kernel';
+} from '@postmill-ai/provider-kernel';
+import { makeId, makeOauthState } from '@postmill-ai/provider-kernel';
 import dayjs from 'dayjs';
-import { SocialAbstract } from '@gitroom/provider-kernel';
+import { SocialAbstract } from '@postmill-ai/provider-kernel';
 //@ts-ignore
 import mime from 'mime';
 import TelegramBot from 'node-telegram-bot-api';
 import { Integration } from '@prisma/client';
 import striptags from 'striptags';
-import { getOrgCredential } from '@gitroom/provider-kernel';
-import { ClientInformation } from '@gitroom/provider-kernel';
+import { getOrgCredential } from '@postmill-ai/provider-kernel';
+import { ClientInformation } from '@postmill-ai/provider-kernel';
 import { Logger } from '@nestjs/common';
 
 import { metadata as providerMetadata } from './metadata';
@@ -501,7 +501,7 @@ import {
   ProviderModule as __ProviderModule,
   SocialProviderKernelAdapter as __Bridge,
   PROVIDER_CAPABILITIES as __CAPS,
-} from '@gitroom/provider-kernel';
+} from '@postmill-ai/provider-kernel';
 
 const __adapter = new TelegramProvider();
 

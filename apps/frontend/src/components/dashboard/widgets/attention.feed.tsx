@@ -3,10 +3,10 @@
 import { FC, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAttention, AttentionItemDto } from '../hooks/useAttention';
-import { useToaster } from '@gitroom/react/toaster/toaster';
-import { EmptyState, TabSkeleton } from '@gitroom/frontend/components/analytics-v2/kit/states';
-import { Button } from '@gitroom/react/form/button';
-import { useT } from '@gitroom/react/translation/get.transation.service.client';
+import { useToaster } from '@postmill-ai/react/toaster/toaster';
+import { EmptyState, TabSkeleton } from '@postmill-ai/frontend/components/analytics-v2/kit/states';
+import { Button } from '@postmill-ai/react/form/button';
+import { useT } from '@postmill-ai/react/translation/get.transation.service.client';
 
 const severityBorder: Record<string, string> = {
   critical: 'border-l-[var(--negative,#f97066)]',

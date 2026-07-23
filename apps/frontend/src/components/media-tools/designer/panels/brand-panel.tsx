@@ -2,11 +2,11 @@
 
 import React, { FC, useCallback, useEffect, useMemo, useState } from 'react';
 import useSWR from 'swr';
-import { useFetch } from '@gitroom/helpers/utils/custom.fetch';
-import { useUser } from '@gitroom/frontend/components/layout/user.context';
-import { useToaster } from '@gitroom/react/toaster/toaster';
-import { useT } from '@gitroom/react/translation/get.transation.service.client';
-import ProviderIcon from '@gitroom/frontend/components/shared/provider-icon';
+import { useFetch } from '@postmill-ai/helpers/utils/custom.fetch';
+import { useUser } from '@postmill-ai/frontend/components/layout/user.context';
+import { useToaster } from '@postmill-ai/react/toaster/toaster';
+import { useT } from '@postmill-ai/react/translation/get.transation.service.client';
+import ProviderIcon from '@postmill-ai/frontend/components/shared/provider-icon';
 import { PanelSkeletonGrid, PanelError } from './panel-states';
 import { useCustomFonts, CustomFontEntry } from './use-brand-fonts';
 import { getBrandViolations } from '../brand-compliance';

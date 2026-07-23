@@ -1,17 +1,17 @@
 import { forwardRef, Injectable, Logger, Optional, Inject, HttpException } from '@nestjs/common';
-import { OrgMediaProviderSettingsRepository } from '@gitroom/nestjs-libraries/database/prisma/media-providers/org-media-provider-settings.repository';
-import { EncryptionService } from '@gitroom/nestjs-libraries/encryption/encryption.service';
-import { ProviderResolutionService } from '@gitroom/nestjs-libraries/providers/provider-resolution.service';
-import { PROVIDER_KERNEL } from '@gitroom/nestjs-libraries/providers/providers.module';
-import { ProviderKernel } from '@gitroom/provider-kernel';
-import { FileService } from '@gitroom/nestjs-libraries/database/prisma/file/file.service';
-import { StorageService } from '@gitroom/nestjs-libraries/database/prisma/storage/storage.service';
-import { DefaultsSeedService } from '@gitroom/nestjs-libraries/ai/defaults/defaults-seed.service';
-import { ProviderCredentialLinkService } from '@gitroom/nestjs-libraries/database/prisma/media-providers/provider-credential-link.service';
-import { OrgAiSettingsRepository } from '@gitroom/nestjs-libraries/database/prisma/ai-settings/org-ai-settings.repository';
-import { isSafePublicHttpsUrl } from '@gitroom/nestjs-libraries/dtos/webhooks/webhook.url.validator';
-import { ioRedis } from '@gitroom/nestjs-libraries/redis/redis.service';
-import { MediaProviderAdapter } from '@gitroom/nestjs-libraries/media/media-provider-adapter.interface';
+import { OrgMediaProviderSettingsRepository } from '@postmill-ai/nestjs-libraries/database/prisma/media-providers/org-media-provider-settings.repository';
+import { EncryptionService } from '@postmill-ai/nestjs-libraries/encryption/encryption.service';
+import { ProviderResolutionService } from '@postmill-ai/nestjs-libraries/providers/provider-resolution.service';
+import { PROVIDER_KERNEL } from '@postmill-ai/nestjs-libraries/providers/providers.module';
+import { ProviderKernel } from '@postmill-ai/provider-kernel';
+import { FileService } from '@postmill-ai/nestjs-libraries/database/prisma/file/file.service';
+import { StorageService } from '@postmill-ai/nestjs-libraries/database/prisma/storage/storage.service';
+import { DefaultsSeedService } from '@postmill-ai/nestjs-libraries/ai/defaults/defaults-seed.service';
+import { ProviderCredentialLinkService } from '@postmill-ai/nestjs-libraries/database/prisma/media-providers/provider-credential-link.service';
+import { OrgAiSettingsRepository } from '@postmill-ai/nestjs-libraries/database/prisma/ai-settings/org-ai-settings.repository';
+import { isSafePublicHttpsUrl } from '@postmill-ai/nestjs-libraries/dtos/webhooks/webhook.url.validator';
+import { ioRedis } from '@postmill-ai/nestjs-libraries/redis/redis.service';
+import { MediaProviderAdapter } from '@postmill-ai/nestjs-libraries/media/media-provider-adapter.interface';
 
 const STANDARD_FOLDERS = ['documents', 'audio', 'images', 'video', 'other'];
 

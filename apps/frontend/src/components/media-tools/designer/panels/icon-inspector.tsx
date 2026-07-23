@@ -4,7 +4,7 @@ import React, { FC } from 'react';
 import { ColorSwatch, Stepper } from '../controls';
 import type { DesignerElement } from '../designer.store';
 import { useBrandColors } from './use-brand-colors';
-import { useT } from '@gitroom/react/translation/get.transation.service.client';
+import { useT } from '@postmill-ai/react/translation/get.transation.service.client';
 
 interface IconInspectorProps {
   element: DesignerElement;

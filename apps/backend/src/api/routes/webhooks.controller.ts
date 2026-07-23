@@ -9,17 +9,17 @@ import {
   Put,
   Query,
 } from '@nestjs/common';
-import { GetOrgFromRequest } from '@gitroom/nestjs-libraries/user/org.from.request';
+import { GetOrgFromRequest } from '@postmill-ai/nestjs-libraries/user/org.from.request';
 import { Organization } from '@prisma/client';
 import { ApiTags } from '@nestjs/swagger';
-import { WebhooksService } from '@gitroom/nestjs-libraries/database/prisma/webhooks/webhooks.service';
-import { CheckPolicies } from '@gitroom/backend/services/auth/permissions/permissions.ability';
+import { WebhooksService } from '@postmill-ai/nestjs-libraries/database/prisma/webhooks/webhooks.service';
+import { CheckPolicies } from '@postmill-ai/backend/services/auth/permissions/permissions.ability';
 import {
   OnlyURL, SendWebhookDto, UpdateDto, WebhooksDto
-} from '@gitroom/nestjs-libraries/dtos/webhooks/webhooks.dto';
-import { AuthorizationActions, Sections } from '@gitroom/backend/services/auth/permissions/permission.exception.class';
-import { safeFetch, webhookSignature, webhookTimeoutMs } from '@gitroom/nestjs-libraries/dtos/webhooks/safe.fetch';
-import { RequirePermission } from '@gitroom/backend/services/auth/rbac/require-permission.decorator';
+} from '@postmill-ai/nestjs-libraries/dtos/webhooks/webhooks.dto';
+import { AuthorizationActions, Sections } from '@postmill-ai/backend/services/auth/permissions/permission.exception.class';
+import { safeFetch, webhookSignature, webhookTimeoutMs } from '@postmill-ai/nestjs-libraries/dtos/webhooks/safe.fetch';
+import { RequirePermission } from '@postmill-ai/backend/services/auth/rbac/require-permission.decorator';
 
 @ApiTags('Webhooks')
 @Controller('/webhooks')

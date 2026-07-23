@@ -4,11 +4,11 @@ import { FC, useState } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import clsx from 'clsx';
-import { useMenuItem } from '@gitroom/frontend/components/layout/top.menu';
-import { useUser } from '@gitroom/frontend/components/layout/user.context';
-import { useVariables } from '@gitroom/react/helpers/variable.context';
-import { useT } from '@gitroom/react/translation/get.transation.service.client';
-import { useHasOpenModals } from '@gitroom/frontend/components/layout/new-modal';
+import { useMenuItem } from '@postmill-ai/frontend/components/layout/top.menu';
+import { useUser } from '@postmill-ai/frontend/components/layout/user.context';
+import { useVariables } from '@postmill-ai/react/helpers/variable.context';
+import { useT } from '@postmill-ai/react/translation/get.transation.service.client';
+import { useHasOpenModals } from '@postmill-ai/frontend/components/layout/new-modal';
 import { MenuItemRow } from './menu-item-row';
 
 // Primary destinations pinned to the bottom bar. Home is always first; the remaining

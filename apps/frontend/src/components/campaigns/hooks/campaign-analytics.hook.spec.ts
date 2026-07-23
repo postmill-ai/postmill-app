@@ -4,10 +4,10 @@ import dayjs from 'dayjs';
 
 const mockFetch = vi.fn();
 const mockT = (key: string, fallback: string) => fallback;
-vi.mock('@gitroom/helpers/utils/custom.fetch', () => ({
+vi.mock('@postmill-ai/helpers/utils/custom.fetch', () => ({
   useFetch: () => mockFetch,
 }));
-vi.mock('@gitroom/react/translation/get.transation.service.client', () => ({
+vi.mock('@postmill-ai/react/translation/get.transation.service.client', () => ({
   useT: () => mockT,
 }));
 

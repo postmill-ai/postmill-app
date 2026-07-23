@@ -8,7 +8,7 @@ import { CHART_PALETTE } from '../kit/palette';
 import { Drawer } from '../kit/drawer';
 import { ChannelAvatar } from '../kit/channel-avatar';
 import { RefreshButton } from '../kit/refresh-button';
-import { useT } from '@gitroom/react/translation/get.transation.service.client';
+import { useT } from '@postmill-ai/react/translation/get.transation.service.client';
 
 interface ChannelDetailPanelProps {
   channel: {

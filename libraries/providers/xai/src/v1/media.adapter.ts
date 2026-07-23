@@ -11,7 +11,7 @@ import {
   resolveApiKey,
   SafeFetchPort,
   ProviderModule,
-} from '@gitroom/provider-kernel';
+} from '@postmill-ai/provider-kernel';
 
 // xAI (Grok) — same key as the xAI LLM provider (registry id `xai`), reused via the
 // universal-credential fallback. Image generation is OpenAI-compatible:

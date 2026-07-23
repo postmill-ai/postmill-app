@@ -1,6 +1,6 @@
 'use client';
 
-import { PromptLibrarySection } from '@gitroom/frontend/components/settings/brand-ai.settings';
+import { PromptLibrarySection } from '@postmill-ai/frontend/components/settings/brand-ai.settings';
 
 export default function Page() {
   return <PromptLibrarySection />;

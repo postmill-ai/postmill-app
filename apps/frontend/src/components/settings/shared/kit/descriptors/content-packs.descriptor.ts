@@ -9,7 +9,7 @@ import { createFetchError } from '../../fetch-error';
 import {
   ContentPackConfigResponse,
   ContentPackProviderInfo,
-} from '@gitroom/frontend/components/settings/content-packs/hooks/useContentPacksConfig';
+} from '@postmill-ai/frontend/components/settings/content-packs/hooks/useContentPacksConfig';
 
 /**
  * Content Packs provider settings surface descriptor (Provider Settings Kit).

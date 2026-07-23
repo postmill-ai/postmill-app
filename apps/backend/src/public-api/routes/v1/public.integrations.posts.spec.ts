@@ -6,8 +6,8 @@ vi.mock('file-type', () => ({ fromBuffer: vi.fn() }));
 
 import { HttpException } from '@nestjs/common';
 import { PublicIntegrationsController } from './public.integrations.controller';
-import { DefaultNotConfiguredError } from '@gitroom/nestjs-libraries/ai/defaults/ai-defaults.service';
-import { RefreshToken } from '@gitroom/nestjs-libraries/integrations/social.abstract';
+import { DefaultNotConfiguredError } from '@postmill-ai/nestjs-libraries/ai/defaults/ai-defaults.service';
+import { RefreshToken } from '@postmill-ai/nestjs-libraries/integrations/social.abstract';
 
 describe('PublicIntegrationsController.getPosts — J2 pagination cap', () => {
   const org = { id: 'org-1' } as any;

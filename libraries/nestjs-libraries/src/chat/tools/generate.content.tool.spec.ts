@@ -1,8 +1,8 @@
 import 'reflect-metadata';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { GenerateContentTool } from './generate.content.tool';
-import { AiDefaultsService } from '@gitroom/nestjs-libraries/ai/defaults/ai-defaults.service';
-import { RagService } from '@gitroom/nestjs-libraries/ai/governance/rag.service';
+import { AiDefaultsService } from '@postmill-ai/nestjs-libraries/ai/defaults/ai-defaults.service';
+import { RagService } from '@postmill-ai/nestjs-libraries/ai/governance/rag.service';
 
 describe('GenerateContentTool', () => {
   let aiDefaults: {

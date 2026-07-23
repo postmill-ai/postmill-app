@@ -14,11 +14,11 @@ vi.mock('react-i18next', () => ({
   }),
 }));
 
-vi.mock('@gitroom/react/helpers/variable.context', () => ({
+vi.mock('@postmill-ai/react/helpers/variable.context', () => ({
   useVariables: () => ({ disableXAnalytics: false }),
 }));
 
-vi.mock('@gitroom/frontend/components/layout/user.context', () => ({
+vi.mock('@postmill-ai/frontend/components/layout/user.context', () => ({
   useUser: () => ({
     id: 'user-1',
     impersonate: false,
@@ -26,43 +26,43 @@ vi.mock('@gitroom/frontend/components/layout/user.context', () => ({
   }),
 }));
 
-vi.mock('@gitroom/helpers/utils/strip.html.validation', () => ({
+vi.mock('@postmill-ai/helpers/utils/strip.html.validation', () => ({
   stripHtmlValidation: (...args: any[]) => (args[1] || ''),
 }));
 
-vi.mock('@gitroom/react/helpers/safe.image', () => ({
+vi.mock('@postmill-ai/react/helpers/safe.image', () => ({
   default: ({ src, className, alt }: any) => (
     // eslint-disable-next-line @next/next/no-img-element -- test mock
     <img src={src} className={className} alt={alt} data-testid="safe-image" />
   ),
 }));
 
-vi.mock('@gitroom/frontend/components/launches/creation.method.badge', () => ({
+vi.mock('@postmill-ai/frontend/components/launches/creation.method.badge', () => ({
   CreationMethodBadge: () => <div data-testid="creation-method-badge" />,
 }));
 
-vi.mock('@gitroom/frontend/components/layout/new-modal', () => ({
+vi.mock('@postmill-ai/frontend/components/layout/new-modal', () => ({
   useModals: vi.fn(() => ({
     openModal: vi.fn(),
     closeAll: vi.fn(),
   })),
 }));
 
-vi.mock('@gitroom/helpers/utils/custom.fetch', () => ({
+vi.mock('@postmill-ai/helpers/utils/custom.fetch', () => ({
   useFetch: vi.fn(() => vi.fn()),
 }));
 
-vi.mock('@gitroom/react/toaster/toaster', () => ({
+vi.mock('@postmill-ai/react/toaster/toaster', () => ({
   useToaster: vi.fn(() => ({
     show: vi.fn(),
   })),
 }));
 
-vi.mock('@gitroom/frontend/components/launches/add.provider.component', () => ({
+vi.mock('@postmill-ai/frontend/components/launches/add.provider.component', () => ({
   useAddProvider: vi.fn(),
 }));
 
-vi.mock('@gitroom/frontend/components/launches/calendar.context', () => ({
+vi.mock('@postmill-ai/frontend/components/launches/calendar.context', () => ({
   CalendarContext: { Provider: ({ children }: any) => children },
   useCalendar: vi.fn(() => ({
     integrations: [],
@@ -115,36 +115,36 @@ vi.mock('@gitroom/frontend/components/launches/calendar.context', () => ({
   })),
 }));
 
-vi.mock('@gitroom/frontend/components/launches/helpers/use.existing.data', () => ({
+vi.mock('@postmill-ai/frontend/components/launches/helpers/use.existing.data', () => ({
   ExistingDataContextProvider: ({ children }: any) => children,
 }));
 
-vi.mock('@gitroom/frontend/components/analytics-v2/post-analytics.drawer', () => ({
+vi.mock('@postmill-ai/frontend/components/analytics-v2/post-analytics.drawer', () => ({
   PostAnalyticsDrawer: () => <div data-testid="post-analytics-drawer" />,
   PostDetailBody: () => <div data-testid="post-detail-body" />,
 }));
 
-vi.mock('@gitroom/frontend/components/launches/missing-release.modal', () => ({
+vi.mock('@postmill-ai/frontend/components/launches/missing-release.modal', () => ({
   MissingReleaseModal: () => <div data-testid="missing-release-modal" />,
 }));
 
-vi.mock('@gitroom/frontend/components/launches/post-detail/post.detail.modal', () => ({
+vi.mock('@postmill-ai/frontend/components/launches/post-detail/post.detail.modal', () => ({
   PostDetailModal: () => <div data-testid="post-detail-modal" />,
 }));
 
-vi.mock('@gitroom/frontend/components/composer/composer', () => ({
+vi.mock('@postmill-ai/frontend/components/composer/composer', () => ({
   Composer: () => <div data-testid="add-edit-modal" />,
 }));
 
-vi.mock('@gitroom/react/helpers/delete.dialog', () => ({
+vi.mock('@postmill-ai/react/helpers/delete.dialog', () => ({
   deleteDialog: vi.fn(() => Promise.resolve(true)),
 }));
 
-vi.mock('@gitroom/frontend/components/layout/set.timezone', () => ({
+vi.mock('@postmill-ai/frontend/components/layout/set.timezone', () => ({
   newDayjs: (...args: any[]) => dayjs(...args),
 }));
 
-vi.mock('@gitroom/react/form/button', () => ({
+vi.mock('@postmill-ai/react/form/button', () => ({
   Button: ({ children, onClick, type, className }: any) => (
     <button type={type} onClick={onClick} className={className}>{children}</button>
   ),

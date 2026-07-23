@@ -1,5 +1,5 @@
 import { Injectable } from '@nestjs/common';
-import { AiRagRepository } from '@gitroom/nestjs-libraries/database/prisma/ai-rag/ai-rag.repository';
+import { AiRagRepository } from '@postmill-ai/nestjs-libraries/database/prisma/ai-rag/ai-rag.repository';
 import { VectorStoreAdapter, RagHit } from './vector-store.adapter';
 
 @Injectable()

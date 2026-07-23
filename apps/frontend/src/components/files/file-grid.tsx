@@ -1,11 +1,11 @@
 'use client';
 
 import React, { FC, useCallback, useEffect, useRef, useState } from 'react';
-import { useMediaDirectory } from '@gitroom/react/helpers/use.media.directory';
-import { hasExtension } from '@gitroom/helpers/utils/has.extension';
+import { useMediaDirectory } from '@postmill-ai/react/helpers/use.media.directory';
+import { hasExtension } from '@postmill-ai/helpers/utils/has.extension';
 import clsx from 'clsx';
-import { useT } from '@gitroom/react/translation/get.transation.service.client';
-import i18next from '@gitroom/react/translation/i18next';
+import { useT } from '@postmill-ai/react/translation/get.transation.service.client';
+import i18next from '@postmill-ai/react/translation/i18next';
 import type { FileItem } from './file-manager';
 
 // Thumbnail with a graceful fallback: prefer a still thumbnail (doubles as a

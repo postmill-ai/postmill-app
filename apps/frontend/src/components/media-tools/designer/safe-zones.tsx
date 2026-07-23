@@ -2,8 +2,8 @@
 
 import React, { FC, useMemo } from 'react';
 import { Rect, Text, Group } from 'react-konva';
-import { CHANNEL_PRESETS } from '@gitroom/nestjs-libraries/integrations/social/channel-presets';
-import { useT } from '@gitroom/react/translation/get.transation.service.client';
+import { CHANNEL_PRESETS } from '@postmill-ai/nestjs-libraries/integrations/social/channel-presets';
+import { useT } from '@postmill-ai/react/translation/get.transation.service.client';
 
 interface SafeZoneOverlayProps {
   presetId?: string;

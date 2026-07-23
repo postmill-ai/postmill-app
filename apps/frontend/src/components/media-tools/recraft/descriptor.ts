@@ -1,4 +1,4 @@
-import type { StudioDescriptor } from '@gitroom/frontend/components/media-tools/studio-kit/types';
+import type { StudioDescriptor } from '@postmill-ai/frontend/components/media-tools/studio-kit/types';
 
 // Recraft (registry/config identifier `recraft`): own-key image generation — raster + vector/SVG,
 // brand styles, icons. Synchronous (one POST → hosted URL). Field names are native Recraft params;

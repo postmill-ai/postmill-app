@@ -1,4 +1,4 @@
-import type { StudioDescriptor } from '@gitroom/frontend/components/media-tools/studio-kit/types';
+import type { StudioDescriptor } from '@postmill-ai/frontend/components/media-tools/studio-kit/types';
 
 // Genviral Partner API (Studio AI video). `model` is required and populated live from Genviral's
 // catalog (`source: 'models'`) — it routes to underlying providers (fal / Sora / Seedance, etc.).

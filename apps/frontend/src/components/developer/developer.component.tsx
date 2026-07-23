@@ -1,16 +1,16 @@
 'use client';
 
 import { FC, useCallback, useState } from 'react';
-import { useFetch } from '@gitroom/helpers/utils/custom.fetch';
+import { useFetch } from '@postmill-ai/helpers/utils/custom.fetch';
 import useSWR from 'swr';
-import { useToaster } from '@gitroom/react/toaster/toaster';
-import { useDecisionModal, useModals } from '@gitroom/frontend/components/layout/new-modal';
+import { useToaster } from '@postmill-ai/react/toaster/toaster';
+import { useDecisionModal, useModals } from '@postmill-ai/frontend/components/layout/new-modal';
 import {
   MediaSelectorItem,
   MediaSelectorModal,
-} from '@gitroom/frontend/components/media-tools/media-selector-modal';
+} from '@postmill-ai/frontend/components/media-tools/media-selector-modal';
 import copy from 'copy-to-clipboard';
-import { useT } from '@gitroom/react/translation/get.transation.service.client';
+import { useT } from '@postmill-ai/react/translation/get.transation.service.client';
 
 const useOAuthApp = () => {
   const fetch = useFetch();

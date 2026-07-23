@@ -2,19 +2,19 @@
 
 import { FC, useCallback, useEffect, useMemo } from 'react';
 import { orderBy } from 'lodash';
-import { CalendarWeekProvider } from '@gitroom/frontend/components/launches/calendar.context';
-import { useCalendar } from '@gitroom/frontend/components/launches/calendar';
-import { pushAgentUiContext } from '@gitroom/frontend/components/agent/agent-context-bridge';
-import { Filters } from '@gitroom/frontend/components/launches/filters';
-import { LoadingComponent } from '@gitroom/frontend/components/layout/loading';
+import { CalendarWeekProvider } from '@postmill-ai/frontend/components/launches/calendar.context';
+import { useCalendar } from '@postmill-ai/frontend/components/launches/calendar';
+import { pushAgentUiContext } from '@postmill-ai/frontend/components/agent/agent-context-bridge';
+import { Filters } from '@postmill-ai/frontend/components/launches/filters';
+import { LoadingComponent } from '@postmill-ai/frontend/components/layout/loading';
 import { useSearchParams } from 'next/navigation';
-import { useToaster } from '@gitroom/react/toaster/toaster';
-import { useFireEvents } from '@gitroom/helpers/utils/use.fire.events';
+import { useToaster } from '@postmill-ai/react/toaster/toaster';
+import { useFireEvents } from '@postmill-ai/helpers/utils/use.fire.events';
 import { Calendar } from './calendar';
-import { DNDProvider } from '@gitroom/frontend/components/launches/helpers/dnd.provider';
-import { useT } from '@gitroom/react/translation/get.transation.service.client';
-import { useIntegrationList } from '@gitroom/frontend/components/launches/helpers/use.integration.list';
-import { useAddProvider } from '@gitroom/frontend/components/launches/add.provider.component';
+import { DNDProvider } from '@postmill-ai/frontend/components/launches/helpers/dnd.provider';
+import { useT } from '@postmill-ai/react/translation/get.transation.service.client';
+import { useIntegrationList } from '@postmill-ai/frontend/components/launches/helpers/use.integration.list';
+import { useAddProvider } from '@postmill-ai/frontend/components/launches/add.provider.component';
 
 // Kept as a shared export — imported by agents/agent.tsx.
 export const SVGLine = () => {

@@ -4,7 +4,7 @@ import { render, screen, fireEvent } from '@testing-library/react';
 import { PostDetailBody, PostAnalyticsDrawer } from './post-analytics.drawer';
 import { PostDetail } from './utils';
 
-vi.mock('@gitroom/react/translation/get.transation.service.client', () => ({
+vi.mock('@postmill-ai/react/translation/get.transation.service.client', () => ({
   useT:
     () =>
     (_k: string, d: string, vars?: Record<string, unknown>) =>

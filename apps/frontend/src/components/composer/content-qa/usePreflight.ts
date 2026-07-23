@@ -1,6 +1,6 @@
 'use client';
 
-import { useFetch } from '@gitroom/helpers/utils/custom.fetch';
+import { useFetch } from '@postmill-ai/helpers/utils/custom.fetch';
 import { useCallback, useState } from 'react';
 
 export interface PreflightResultItem {

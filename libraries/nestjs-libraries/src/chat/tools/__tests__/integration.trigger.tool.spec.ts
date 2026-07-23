@@ -1,11 +1,11 @@
 import 'reflect-metadata';
 import { describe, it, expect, vi } from 'vitest';
-import { RefreshToken } from '@gitroom/nestjs-libraries/integrations/social.abstract';
+import { RefreshToken } from '@postmill-ai/nestjs-libraries/integrations/social.abstract';
 import { IntegrationTriggerTool } from '../integration.trigger.tool';
 import { executeTool, makeOrganization, makeUser } from './tool-test.harness';
 
 // Neutralize the 10s refresh-wait sleep so the bounded-retry test is instant.
-vi.mock('@gitroom/helpers/utils/timer', () => ({
+vi.mock('@postmill-ai/helpers/utils/timer', () => ({
   timer: vi.fn().mockResolvedValue(undefined),
 }));
 

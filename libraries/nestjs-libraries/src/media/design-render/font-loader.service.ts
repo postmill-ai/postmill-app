@@ -1,6 +1,6 @@
 import { Injectable, Logger } from '@nestjs/common';
-import { BrandsService } from '@gitroom/nestjs-libraries/brands/brands.service';
-import { safeFetch } from '@gitroom/nestjs-libraries/dtos/webhooks/safe.fetch';
+import { BrandsService } from '@postmill-ai/nestjs-libraries/brands/brands.service';
+import { safeFetch } from '@postmill-ai/nestjs-libraries/dtos/webhooks/safe.fetch';
 import { registerFont } from 'canvas';
 import path from 'path';
 import os from 'os';

@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { MediaJobsWebhookController } from './media-jobs-webhook.controller';
-import { mediaJobWebhookToken } from '@gitroom/nestjs-libraries/media/media-job-token';
+import { mediaJobWebhookToken } from '@postmill-ai/nestjs-libraries/media/media-job-token';
 
 function makeController() {
   const lifecycle = {

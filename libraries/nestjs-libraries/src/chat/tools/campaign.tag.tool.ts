@@ -1,14 +1,14 @@
-import { AgentToolInterface } from '@gitroom/nestjs-libraries/chat/agent.tool.interface';
-import { checkAuth } from '@gitroom/nestjs-libraries/chat/auth.context';
+import { AgentToolInterface } from '@postmill-ai/nestjs-libraries/chat/agent.tool.interface';
+import { checkAuth } from '@postmill-ai/nestjs-libraries/chat/auth.context';
 import { createTool } from '@mastra/core/tools';
 import { z } from 'zod';
 import { Injectable } from '@nestjs/common';
-import { CampaignTagService } from '@gitroom/nestjs-libraries/database/prisma/campaigns/campaign-item.service';
+import { CampaignTagService } from '@postmill-ai/nestjs-libraries/database/prisma/campaigns/campaign-item.service';
 import {
   parseOrg,
   parseUser,
   requireWrite,
-} from '@gitroom/nestjs-libraries/chat/tools/tool.helpers';
+} from '@postmill-ai/nestjs-libraries/chat/tools/tool.helpers';
 
 const ENTITY_TYPE_SLUGS = [
   'post',

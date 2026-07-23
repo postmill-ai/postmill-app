@@ -1,8 +1,8 @@
 import { Injectable } from '@nestjs/common';
-import { AuthService } from '@gitroom/helpers/auth/auth.service';
+import { AuthService } from '@postmill-ai/helpers/auth/auth.service';
 import { Organization, User } from '@prisma/client';
-import { UsersService } from '@gitroom/nestjs-libraries/database/prisma/users/users.service';
-import { OrganizationService } from '@gitroom/nestjs-libraries/database/prisma/organizations/organization.service';
+import { UsersService } from '@postmill-ai/nestjs-libraries/database/prisma/users/users.service';
+import { OrganizationService } from '@postmill-ai/nestjs-libraries/database/prisma/organizations/organization.service';
 
 /**
  * Lightweight membership row returned by org-resolution queries.

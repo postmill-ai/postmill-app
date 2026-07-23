@@ -5,7 +5,7 @@ import {
   VpnConfigValidationResult,
   VpnCredentialField,
   VpnProviderCapabilities,
-} from '@gitroom/provider-kernel';
+} from '@postmill-ai/provider-kernel';
 
 export class ProtonvpnAdapter implements VpnCapability {
   readonly identifier = 'protonvpn';

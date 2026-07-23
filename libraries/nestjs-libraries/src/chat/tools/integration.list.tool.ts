@@ -1,12 +1,12 @@
 import {
   AgentToolInterface,
-} from '@gitroom/nestjs-libraries/chat/agent.tool.interface';
+} from '@postmill-ai/nestjs-libraries/chat/agent.tool.interface';
 import { createTool } from '@mastra/core/tools';
 import { Injectable } from '@nestjs/common';
-import { IntegrationService } from '@gitroom/nestjs-libraries/database/prisma/integrations/integration.service';
+import { IntegrationService } from '@postmill-ai/nestjs-libraries/database/prisma/integrations/integration.service';
 import z from 'zod';
-import { checkAuth } from '@gitroom/nestjs-libraries/chat/auth.context';
-import { parseOrg, requireRead } from '@gitroom/nestjs-libraries/chat/tools/tool.helpers';
+import { checkAuth } from '@postmill-ai/nestjs-libraries/chat/auth.context';
+import { parseOrg, requireRead } from '@postmill-ai/nestjs-libraries/chat/tools/tool.helpers';
 
 @Injectable()
 export class IntegrationListTool implements AgentToolInterface {

@@ -6,33 +6,33 @@ export default defineConfig({
     alias: [
       // Keep exact workspace aliases first so non-provider packages resolve to source.
       {
-        find: '@gitroom/provider-kernel',
+        find: '@postmill-ai/provider-kernel',
         replacement: path.resolve(__dirname, './kernel/src'),
       },
       {
-        find: '@gitroom/provider-kernel/*',
+        find: '@postmill-ai/provider-kernel/*',
         replacement: path.resolve(__dirname, './kernel/src/*'),
       },
       {
-        find: '@gitroom/nestjs-libraries',
+        find: '@postmill-ai/nestjs-libraries',
         replacement: path.resolve(__dirname, '../nestjs-libraries/src'),
       },
       {
-        find: '@gitroom/helpers',
+        find: '@postmill-ai/helpers',
         replacement: path.resolve(__dirname, '../helpers/src'),
       },
       {
-        find: '@gitroom/backend',
+        find: '@postmill-ai/backend',
         replacement: path.resolve(__dirname, '../../apps/backend/src'),
       },
-      // Redirect every @gitroom/provider-* workspace package to its src directory so tests
+      // Redirect every @postmill-ai/provider-* workspace package to its src directory so tests
       // use the current source files instead of stale node_modules copies (e.g. missing metadata.ts).
       {
-        find: /^@gitroom\/provider-([^/]+)$/,
+        find: /^@postmill-ai\/provider-([^/]+)$/,
         replacement: path.resolve(__dirname, './$1/src'),
       },
       {
-        find: /^@gitroom\/provider-([^/]+)\/(.*)$/,
+        find: /^@postmill-ai\/provider-([^/]+)\/(.*)$/,
         replacement: path.resolve(__dirname, './$1/src/$2'),
       },
     ],

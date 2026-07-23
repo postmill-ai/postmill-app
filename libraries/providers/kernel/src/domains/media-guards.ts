@@ -1,5 +1,5 @@
 // Shared reliability/hygiene guards for media provider adapters (MEDIA_REMEDIATION 6.1).
-// Kept dependency-free so every provider package can import it from `@gitroom/provider-kernel`.
+// Kept dependency-free so every provider package can import it from `@postmill-ai/provider-kernel`.
 
 // A model id is interpolated into a provider request path (e.g. `https://fal.run/${model}`).
 // Enforce a strict allowlist BEFORE interpolation so a hostile `model` can't inject a path

@@ -3,15 +3,15 @@
 import {
   PostComment,
   withProvider,
-} from '@gitroom/frontend/components/composer/providers/high.order.provider';
+} from '@postmill-ai/frontend/components/composer/providers/high.order.provider';
 import { FC, useCallback } from 'react';
-import { useSettings } from '@gitroom/frontend/components/launches/helpers/use.values';
+import { useSettings } from '@postmill-ai/frontend/components/launches/helpers/use.values';
 import { useFieldArray } from 'react-hook-form';
-import { deleteDialog } from '@gitroom/react/helpers/delete.dialog';
-import { Button } from '@gitroom/react/form/button';
+import { deleteDialog } from '@postmill-ai/react/helpers/delete.dialog';
+import { Button } from '@postmill-ai/react/form/button';
 import { Subreddit } from './subreddit';
-import { useT } from '@gitroom/react/translation/get.transation.service.client';
-import { FirstCommentField } from '@gitroom/frontend/components/composer/providers/shared/first-comment.field';
+import { useT } from '@postmill-ai/react/translation/get.transation.service.client';
+import { FirstCommentField } from '@postmill-ai/frontend/components/composer/providers/shared/first-comment.field';
 const WrapcastProvider: FC = () => {
   const { register, control } = useSettings();
   const { fields, append, remove } = useFieldArray({

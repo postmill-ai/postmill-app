@@ -1,6 +1,6 @@
-import { inngest } from '@gitroom/nestjs-libraries/inngest/inngest.client';
-import { PostActivity } from '@gitroom/nestjs-libraries/inngest/activities/post.activity';
-import { InngestRunService } from '@gitroom/nestjs-libraries/inngest/inngest-run.service';
+import { inngest } from '@postmill-ai/nestjs-libraries/inngest/inngest.client';
+import { PostActivity } from '@postmill-ai/nestjs-libraries/inngest/activities/post.activity';
+import { InngestRunService } from '@postmill-ai/nestjs-libraries/inngest/inngest-run.service';
 import { trackRun } from './track-run';
 
 export const createMissingPostFinder = (

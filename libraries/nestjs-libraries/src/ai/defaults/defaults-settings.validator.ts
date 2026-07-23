@@ -5,8 +5,8 @@ import {
   StudioDescriptorSchema,
   StudioTabSchema,
 } from './studio-descriptor-fields.generated';
-import { PROVIDER_KERNEL } from '@gitroom/nestjs-libraries/providers/providers.module';
-import { ProviderKernel } from '@gitroom/provider-kernel';
+import { PROVIDER_KERNEL } from '@postmill-ai/nestjs-libraries/providers/providers.module';
+import { ProviderKernel } from '@postmill-ai/provider-kernel';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // P7.3 — per-provider+operation settings validation

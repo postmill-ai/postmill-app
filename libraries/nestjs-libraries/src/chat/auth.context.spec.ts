@@ -2,7 +2,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 
 // The auth-context module reads request-scoped values from AsyncLocalStorage via
 // async.storage. Mock that module so we can drive getAuth/getUserId/getAccess.
-vi.mock('@gitroom/nestjs-libraries/chat/async.storage', () => ({
+vi.mock('@postmill-ai/nestjs-libraries/chat/async.storage', () => ({
   getAuth: vi.fn(() => undefined),
   getUserId: vi.fn(() => undefined),
   getAccess: vi.fn(() => undefined),

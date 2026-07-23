@@ -11,25 +11,25 @@ vi.mock('sharp', () => ({ default: vi.fn(function() { return ({
   resize: vi.fn(() => ({ gif: vi.fn(() => ({ toBuffer: vi.fn().mockResolvedValue(Buffer.from('gif')) })) })),
   gif: vi.fn(() => ({ toBuffer: vi.fn().mockResolvedValue(Buffer.from('gif')) })),
 }); }) }));
-vi.mock('@gitroom/helpers/utils/timer', () => ({ timer: vi.fn() }));
-vi.mock('@gitroom/helpers/utils/read.or.fetch', () => ({ readOrFetch: vi.fn().mockResolvedValue(Buffer.from('data')) }));
+vi.mock('@postmill-ai/helpers/utils/timer', () => ({ timer: vi.fn() }));
+vi.mock('@postmill-ai/helpers/utils/read.or.fetch', () => ({ readOrFetch: vi.fn().mockResolvedValue(Buffer.from('data')) }));
 // safeFetch's SSRF pre-validation does real DNS; delegate to the mocked global
 // fetch so provider-logic specs stay deterministic (SSRF blocking is covered by
 // social.abstract.spec.ts). Matches that spec's safe.fetch mock.
-vi.mock('@gitroom/nestjs-libraries/dtos/webhooks/safe.fetch', () => ({ safeFetch: vi.fn((url: string, options?: RequestInit) => (globalThis.fetch as any)(url, options)) }));
+vi.mock('@postmill-ai/nestjs-libraries/dtos/webhooks/safe.fetch', () => ({ safeFetch: vi.fn((url: string, options?: RequestInit) => (globalThis.fetch as any)(url, options)) }));
 vi.mock('@prisma/client', () => ({ PrismaClient: vi.fn(), ProviderConfiguration: class {}, Integration: class {} }));
-vi.mock('@gitroom/helpers/auth/auth.service', () => ({ AuthService: { fixedEncryption: vi.fn((s: string) => s), fixedDecryption: vi.fn((s: string) => s), signJWT: vi.fn(() => 'signed-jwt'), verifyJWT: vi.fn(() => ({ password: 'deadbeef' })) } }));
-vi.mock('@gitroom/nestjs-libraries/database/prisma/provider-configs/provider-config.service', () => ({
+vi.mock('@postmill-ai/helpers/auth/auth.service', () => ({ AuthService: { fixedEncryption: vi.fn((s: string) => s), fixedDecryption: vi.fn((s: string) => s), signJWT: vi.fn(() => 'signed-jwt'), verifyJWT: vi.fn(() => ({ password: 'deadbeef' })) } }));
+vi.mock('@postmill-ai/nestjs-libraries/database/prisma/provider-configs/provider-config.service', () => ({
   ProviderConfigService: vi.fn(() => ({ getAll: vi.fn().mockResolvedValue([]), getByIdentifier: vi.fn(), decryptConfig: vi.fn(function() { return {}; }), upsert: vi.fn(), delete: vi.fn() })),
 }));
-vi.mock('@gitroom/nestjs-libraries/database/prisma/provider-configs/provider-config.repository', () => ({
+vi.mock('@postmill-ai/nestjs-libraries/database/prisma/provider-configs/provider-config.repository', () => ({
   ProviderConfigRepository: vi.fn(() => ({ getAll: vi.fn(), getByIdentifier: vi.fn(), upsert: vi.fn(), delete: vi.fn(), setEnabled: vi.fn() })),
 }));
-vi.mock('@gitroom/nestjs-libraries/database/prisma/prisma.service', () => ({
+vi.mock('@postmill-ai/nestjs-libraries/database/prisma/prisma.service', () => ({
   PrismaRepository: vi.fn(() => ({ model: {} })),
   PrismaService: class {},
 }));
-vi.mock('@gitroom/nestjs-libraries/integrations/credentials', () => ({
+vi.mock('@postmill-ai/nestjs-libraries/integrations/credentials', () => ({
   getOrgCredential: (_orgId: string, identifier: string, key: string) => {
     if (identifier === 'farcaster' && key === 'clientSecret') return 'neynar-secret-key';
     if (identifier === 'farcaster' && key === 'clientId') return 'neynar-client-id';
@@ -176,7 +176,7 @@ process.env.FRONTEND_URL = 'http://localhost:5000';
 process.env.NEXT_PUBLIC_BACKEND_URL = 'http://localhost:5000';
 process.env.NEXT_PUBLIC_UPLOAD_STATIC_DIRECTORY = '/uploads';
 
-import { RefreshTokenError, BadBodyError } from '@gitroom/nestjs-libraries/inngest/errors';
+import { RefreshTokenError, BadBodyError } from '@postmill-ai/nestjs-libraries/inngest/errors';
 import { BlueskyProvider } from './bluesky.provider';
 import { LemmyProvider } from './lemmy.provider';
 import { NostrProvider } from './nostr.provider';

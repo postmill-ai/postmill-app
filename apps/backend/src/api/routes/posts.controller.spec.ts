@@ -1,23 +1,23 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
-vi.mock('@gitroom/nestjs-libraries/database/prisma/posts/posts.service', () => ({
+vi.mock('@postmill-ai/nestjs-libraries/database/prisma/posts/posts.service', () => ({
   PostsService: class MockPostsService {},
 }));
 
-vi.mock('@gitroom/nestjs-libraries/agent/agent.graph.service', () => ({
+vi.mock('@postmill-ai/nestjs-libraries/agent/agent.graph.service', () => ({
   AgentGraphService: class MockAgentGraphService {},
 }));
 
-vi.mock('@gitroom/nestjs-libraries/short-linking/short.link.service', () => ({
+vi.mock('@postmill-ai/nestjs-libraries/short-linking/short.link.service', () => ({
   ShortLinkService: class MockShortLinkService {
     shouldShortlink = vi.fn();
   },
 }));
 
 import { PostsController } from './posts.controller';
-import { PostsService } from '@gitroom/nestjs-libraries/database/prisma/posts/posts.service';
-import { AgentGraphService } from '@gitroom/nestjs-libraries/agent/agent.graph.service';
-import { ShortLinkService } from '@gitroom/nestjs-libraries/short-linking/short.link.service';
+import { PostsService } from '@postmill-ai/nestjs-libraries/database/prisma/posts/posts.service';
+import { AgentGraphService } from '@postmill-ai/nestjs-libraries/agent/agent.graph.service';
+import { ShortLinkService } from '@postmill-ai/nestjs-libraries/short-linking/short.link.service';
 
 describe('PostsController', () => {
   let controller: PostsController;

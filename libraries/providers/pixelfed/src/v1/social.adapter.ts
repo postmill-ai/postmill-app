@@ -1,12 +1,12 @@
 import {
   AuthTokenDetails, PostDetails, PostResponse, SocialProvider,
-} from '@gitroom/provider-kernel';
-import { SocialAbstract, ValidityMedia } from '@gitroom/provider-kernel';
-import { makeId, makeOauthState } from '@gitroom/provider-kernel';
-import { AuthService } from '@gitroom/helpers/auth/auth.service';
+} from '@postmill-ai/provider-kernel';
+import { SocialAbstract, ValidityMedia } from '@postmill-ai/provider-kernel';
+import { makeId, makeOauthState } from '@postmill-ai/provider-kernel';
+import { AuthService } from '@postmill-ai/helpers/auth/auth.service';
 import { Integration } from '@prisma/client';
 import dayjs from 'dayjs';
-import { safeFetch } from '@gitroom/provider-kernel';
+import { safeFetch } from '@postmill-ai/provider-kernel';
 
 import { metadata as providerMetadata } from './metadata';
 export class PixelfedProvider extends SocialAbstract implements SocialProvider {
@@ -169,7 +169,7 @@ import {
   ProviderModule as __ProviderModule,
   SocialProviderKernelAdapter as __Bridge,
   PROVIDER_CAPABILITIES as __CAPS,
-} from '@gitroom/provider-kernel';
+} from '@postmill-ai/provider-kernel';
 
 const __adapter = new PixelfedProvider();
 

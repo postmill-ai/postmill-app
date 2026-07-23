@@ -1,6 +1,6 @@
 # Render-worker image for the Podman video-render path.
 #
-# Same build as Dockerfile.dev (whole repo at /app so the monorepo's @gitroom/* runtime
+# Same build as Dockerfile.dev (whole repo at /app so the monorepo's @postmill-ai/* runtime
 # resolution + node_modules symlinks are intact) but: installs distro Chromium + FFmpeg,
 # skips puppeteer's bundled-Chromium download, and uses the compiled render-worker CLI as
 # the entrypoint. The container reads /work/job.json and writes the artifact to /work/out.

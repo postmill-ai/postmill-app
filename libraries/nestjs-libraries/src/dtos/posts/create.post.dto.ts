@@ -17,14 +17,14 @@ import {
 } from 'class-validator';
 import { Transform, Type } from 'class-transformer';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { MediaDto } from '@gitroom/nestjs-libraries/dtos/file/media.dto';
+import { MediaDto } from '@postmill-ai/nestjs-libraries/dtos/file/media.dto';
 import {
   allProviders,
   type AllProvidersSettings,
   EmptySettings,
-} from '@gitroom/nestjs-libraries/dtos/posts/providers-settings/all.providers.settings';
-import { ValidContent } from '@gitroom/helpers/utils/valid.images';
-import { sanitizePostContent } from '@gitroom/helpers/utils/sanitize.post.content';
+} from '@postmill-ai/nestjs-libraries/dtos/posts/providers-settings/all.providers.settings';
+import { ValidContent } from '@postmill-ai/helpers/utils/valid.images';
+import { sanitizePostContent } from '@postmill-ai/helpers/utils/sanitize.post.content';
 
 export class Integration {
   @ApiProperty({ description: 'The channel (integration) id to post to.' })

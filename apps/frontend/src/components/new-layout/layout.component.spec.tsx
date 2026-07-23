@@ -8,7 +8,7 @@ const mockT = vi.fn((_key: string, fallback?: string, opts?: Record<string, any>
   return fallback;
 });
 
-vi.mock('@gitroom/react/translation/get.transation.service.client', () => ({
+vi.mock('@postmill-ai/react/translation/get.transation.service.client', () => ({
   useT: () => mockT,
 }));
 
@@ -22,7 +22,7 @@ vi.mock('next/navigation', () => ({
   useRouter: () => ({ replace: vi.fn() }),
 }));
 
-vi.mock('@gitroom/helpers/utils/custom.fetch', () => ({
+vi.mock('@postmill-ai/helpers/utils/custom.fetch', () => ({
   useFetch: () =>
     vi.fn().mockResolvedValue({
       json: () =>
@@ -50,7 +50,7 @@ vi.mock('swr', () => ({
   useSWRConfig: () => ({ mutate: vi.fn() }),
 }));
 
-vi.mock('@gitroom/react/helpers/variable.context', () => ({
+vi.mock('@postmill-ai/react/helpers/variable.context', () => ({
   useVariables: () => ({ billingEnabled: false, isGeneral: true, sentryDsn: '' }),
 }));
 
@@ -129,7 +129,7 @@ vi.mock('../notifications/notification.component', () => ({
   default: () => <div data-testid="notifications">Notifications</div>,
 }));
 
-vi.mock('@gitroom/react/toaster/toaster', () => ({
+vi.mock('@postmill-ai/react/toaster/toaster', () => ({
   Toaster: () => null,
 }));
 
@@ -174,7 +174,7 @@ vi.mock('../layout/copilot.provider', () => ({
   CopilotProvider: ({ children }: any) => children,
 }));
 
-vi.mock('@gitroom/react/helpers/mantine.wrapper', () => ({
+vi.mock('@postmill-ai/react/helpers/mantine.wrapper', () => ({
   MantineWrapper: ({ children }: any) => children,
 }));
 

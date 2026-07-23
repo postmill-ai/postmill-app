@@ -5,7 +5,7 @@ import { Slider, Stepper } from '../controls';
 import type { VideoClip } from '../designer.store';
 import { TEXT_ANIMATION_PRESETS } from '../text-animation-presets';
 import type { EaseType } from '../video-preview';
-import { useT } from '@gitroom/react/translation/get.transation.service.client';
+import { useT } from '@postmill-ai/react/translation/get.transation.service.client';
 
 interface ClipInspectorProps {
   store: any;

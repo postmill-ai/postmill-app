@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import 'reflect-metadata';
 import { HttpException } from '@nestjs/common';
-import { REQUIRE_PERMISSION_KEY } from '@gitroom/backend/services/auth/rbac/require-permission.decorator';
+import { REQUIRE_PERMISSION_KEY } from '@postmill-ai/backend/services/auth/rbac/require-permission.decorator';
 import { MediaProviderController } from './media-provider.controller';
 
 const mockListProviderMetadata = vi.fn();
@@ -13,7 +13,7 @@ const mockDeleteConfig = vi.fn();
 const mockTestConnection = vi.fn();
 
 vi.mock(
-  '@gitroom/nestjs-libraries/database/prisma/media-providers/org-media-provider-settings.service',
+  '@postmill-ai/nestjs-libraries/database/prisma/media-providers/org-media-provider-settings.service',
   () => ({
     OrgMediaProviderSettingsService: class {
       listProviderMetadata = mockListProviderMetadata;
@@ -27,7 +27,7 @@ vi.mock(
   }),
 );
 
-import { OrgMediaProviderSettingsService } from '@gitroom/nestjs-libraries/database/prisma/media-providers/org-media-provider-settings.service';
+import { OrgMediaProviderSettingsService } from '@postmill-ai/nestjs-libraries/database/prisma/media-providers/org-media-provider-settings.service';
 
 const org = { id: 'org-1' } as any;
 

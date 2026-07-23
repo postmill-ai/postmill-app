@@ -9,7 +9,7 @@ import {
   redactError,
   SafeFetchPort,
   ProviderModule,
-} from '@gitroom/provider-kernel';
+} from '@postmill-ai/provider-kernel';
 
 interface DeepgramListenResponse {
   results?: {

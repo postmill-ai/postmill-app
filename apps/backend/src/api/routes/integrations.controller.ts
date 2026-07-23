@@ -13,44 +13,44 @@ import {
   ValidationPipe,
 } from '@nestjs/common';
 
-import { IntegrationManager } from '@gitroom/nestjs-libraries/integrations/integration.manager';
-import { IntegrationService } from '@gitroom/nestjs-libraries/database/prisma/integrations/integration.service';
-import { GetOrgFromRequest } from '@gitroom/nestjs-libraries/user/org.from.request';
-import { isAllowedReturnUrl } from '@gitroom/nestjs-libraries/security/return-url.validator';
+import { IntegrationManager } from '@postmill-ai/nestjs-libraries/integrations/integration.manager';
+import { IntegrationService } from '@postmill-ai/nestjs-libraries/database/prisma/integrations/integration.service';
+import { GetOrgFromRequest } from '@postmill-ai/nestjs-libraries/user/org.from.request';
+import { isAllowedReturnUrl } from '@postmill-ai/nestjs-libraries/security/return-url.validator';
 import { Organization, User } from '@prisma/client';
-import { IntegrationFunctionDto } from '@gitroom/nestjs-libraries/dtos/integrations/integration.function.dto';
-import { CheckPolicies } from '@gitroom/backend/services/auth/permissions/permissions.ability';
-import { pricing } from '@gitroom/nestjs-libraries/database/prisma/subscriptions/pricing';
+import { IntegrationFunctionDto } from '@postmill-ai/nestjs-libraries/dtos/integrations/integration.function.dto';
+import { CheckPolicies } from '@postmill-ai/backend/services/auth/permissions/permissions.ability';
+import { pricing } from '@postmill-ai/nestjs-libraries/database/prisma/subscriptions/pricing';
 import { ApiTags } from '@nestjs/swagger';
 import { Throttle } from '@nestjs/throttler';
-import { GetUserFromRequest } from '@gitroom/nestjs-libraries/user/user.from.request';
-import { PostsService } from '@gitroom/nestjs-libraries/database/prisma/posts/posts.service';
-import { CampaignsService } from '@gitroom/nestjs-libraries/database/prisma/campaigns/campaigns.service';
-import { ConnectProviderDto } from '@gitroom/nestjs-libraries/dtos/integrations/connect-provider.dto';
-import { IntegrationTimeDto } from '@gitroom/nestjs-libraries/dtos/integrations/integration.time.dto';
-import { PlugDto } from '@gitroom/nestjs-libraries/dtos/plugs/plug.dto';
+import { GetUserFromRequest } from '@postmill-ai/nestjs-libraries/user/user.from.request';
+import { PostsService } from '@postmill-ai/nestjs-libraries/database/prisma/posts/posts.service';
+import { CampaignsService } from '@postmill-ai/nestjs-libraries/database/prisma/campaigns/campaigns.service';
+import { ConnectProviderDto } from '@postmill-ai/nestjs-libraries/dtos/integrations/connect-provider.dto';
+import { IntegrationTimeDto } from '@postmill-ai/nestjs-libraries/dtos/integrations/integration.time.dto';
+import { PlugDto } from '@postmill-ai/nestjs-libraries/dtos/plugs/plug.dto';
 
-import { UpdateProviderSettingsDto } from '@gitroom/nestjs-libraries/dtos/integrations/update-provider-settings.dto';
-import { ChannelIdBodyDto } from '@gitroom/nestjs-libraries/dtos/integrations/channel-id-body.dto';
-import { PlugActivationDto } from '@gitroom/nestjs-libraries/dtos/integrations/plug-activation.dto';
-import { TelegramUpdatesQueryDto } from '@gitroom/nestjs-libraries/dtos/integrations/telegram-updates-query.dto';
-import { UpdateIntegrationGroupDto } from '@gitroom/nestjs-libraries/dtos/integrations/update-integration-group.dto';
-import { UpdateOnCustomerNameDto } from '@gitroom/nestjs-libraries/dtos/integrations/update-on-customer-name.dto';
-import { SetNicknameDto } from '@gitroom/nestjs-libraries/dtos/integrations/set-nickname.dto';
-import { ParseCuidPipe } from '@gitroom/nestjs-libraries/pipes/parse-cuid.pipe';
-import { MoltbookRegisterDto } from '@gitroom/nestjs-libraries/dtos/integrations/moltbook-register.dto';
-import { MoltbookStatusQueryDto } from '@gitroom/nestjs-libraries/dtos/integrations/moltbook-status-query.dto';
+import { UpdateProviderSettingsDto } from '@postmill-ai/nestjs-libraries/dtos/integrations/update-provider-settings.dto';
+import { ChannelIdBodyDto } from '@postmill-ai/nestjs-libraries/dtos/integrations/channel-id-body.dto';
+import { PlugActivationDto } from '@postmill-ai/nestjs-libraries/dtos/integrations/plug-activation.dto';
+import { TelegramUpdatesQueryDto } from '@postmill-ai/nestjs-libraries/dtos/integrations/telegram-updates-query.dto';
+import { UpdateIntegrationGroupDto } from '@postmill-ai/nestjs-libraries/dtos/integrations/update-integration-group.dto';
+import { UpdateOnCustomerNameDto } from '@postmill-ai/nestjs-libraries/dtos/integrations/update-on-customer-name.dto';
+import { SetNicknameDto } from '@postmill-ai/nestjs-libraries/dtos/integrations/set-nickname.dto';
+import { ParseCuidPipe } from '@postmill-ai/nestjs-libraries/pipes/parse-cuid.pipe';
+import { MoltbookRegisterDto } from '@postmill-ai/nestjs-libraries/dtos/integrations/moltbook-register.dto';
+import { MoltbookStatusQueryDto } from '@postmill-ai/nestjs-libraries/dtos/integrations/moltbook-status-query.dto';
 
 
-import { TelegramProvider } from '@gitroom/provider-telegram';
-import { MoltbookProvider } from '@gitroom/provider-moltbook';
+import { TelegramProvider } from '@postmill-ai/provider-telegram';
+import { MoltbookProvider } from '@postmill-ai/provider-moltbook';
 import {
   AuthorizationActions,
   Sections,
-} from '@gitroom/backend/services/auth/permissions/permission.exception.class';
+} from '@postmill-ai/backend/services/auth/permissions/permission.exception.class';
 
-import { RefreshIntegrationService } from '@gitroom/nestjs-libraries/integrations/refresh.integration.service';
-import { RequirePermission } from '@gitroom/backend/services/auth/rbac/require-permission.decorator';
+import { RefreshIntegrationService } from '@postmill-ai/nestjs-libraries/integrations/refresh.integration.service';
+import { RequirePermission } from '@postmill-ai/backend/services/auth/rbac/require-permission.decorator';
 
 @ApiTags('Integrations')
 @Controller('/integrations')

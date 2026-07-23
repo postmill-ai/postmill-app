@@ -3,7 +3,7 @@ import {
   NotificationPreferenceService,
   DEFAULT_CATEGORY_TOGGLES,
 } from './notification-preference.service';
-import { PrismaRepository } from '@gitroom/nestjs-libraries/database/prisma/prisma.service';
+import { PrismaRepository } from '@postmill-ai/nestjs-libraries/database/prisma/prisma.service';
 
 describe('NotificationPreferenceService', () => {
   let service: NotificationPreferenceService;

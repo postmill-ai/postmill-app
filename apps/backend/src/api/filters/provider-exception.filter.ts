@@ -14,8 +14,8 @@ import {
   ProviderVersionDeprecatedForWriteError,
   ProviderVersionRetiredError,
   ContentPackDailyCapError,
-} from '@gitroom/provider-kernel';
-import { PROVIDER_KERNEL } from '@gitroom/nestjs-libraries/providers/providers.module';
+} from '@postmill-ai/provider-kernel';
+import { PROVIDER_KERNEL } from '@postmill-ai/nestjs-libraries/providers/providers.module';
 
 @Catch(
   ProviderVersionRetiredError,

@@ -2,7 +2,7 @@
 
 import React, { FC, useCallback } from 'react';
 import type { DesignerElement } from '../designer.store';
-import { useT } from '@gitroom/react/translation/get.transation.service.client';
+import { useT } from '@postmill-ai/react/translation/get.transation.service.client';
 
 interface ElementsPanelProps {
   store: ReturnType<typeof import('../designer.store').createDesignerStore>;

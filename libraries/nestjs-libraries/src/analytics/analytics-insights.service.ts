@@ -5,8 +5,8 @@
 // getBestTimeAnalyticsContext/getBestTimeData/getRecommendations here.
 
 import { Injectable, ServiceUnavailableException } from '@nestjs/common';
-import { AnalyticsRepository } from '@gitroom/nestjs-libraries/database/prisma/analytics/analytics.repository';
-import { AIModelProvider } from '@gitroom/nestjs-libraries/ai/ai-model.provider';
+import { AnalyticsRepository } from '@postmill-ai/nestjs-libraries/database/prisma/analytics/analytics.repository';
+import { AIModelProvider } from '@postmill-ai/nestjs-libraries/ai/ai-model.provider';
 import { Organization } from '@prisma/client';
 import dayjs from 'dayjs';
 import utc from 'dayjs/plugin/utc';

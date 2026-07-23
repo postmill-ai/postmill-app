@@ -1,15 +1,15 @@
 'use client';
 import { FC, useCallback, useEffect, useRef, useState } from 'react';
-import { Integrations } from '@gitroom/frontend/components/launches/calendar.context';
-import { useMoveToIntegrationListener } from '@gitroom/frontend/components/launches/helpers/use.move.to.integration';
-import { deleteDialog } from '@gitroom/react/helpers/delete.dialog';
+import { Integrations } from '@postmill-ai/frontend/components/launches/calendar.context';
+import { useMoveToIntegrationListener } from '@postmill-ai/frontend/components/launches/helpers/use.move.to.integration';
+import { deleteDialog } from '@postmill-ai/react/helpers/delete.dialog';
 import clsx from 'clsx';
 import Image from 'next/image';
-import SafeImage from '@gitroom/react/helpers/safe.image';
-import { useAiActive } from '@gitroom/frontend/components/layout/use-ai-active';
-import { PickPlatformCopilotBridge } from '@gitroom/frontend/components/launches/copilot-bridges';
-import { useStateCallback } from '@gitroom/react/helpers/use.state.callback';
-import { timer } from '@gitroom/helpers/utils/timer';
+import SafeImage from '@postmill-ai/react/helpers/safe.image';
+import { useAiActive } from '@postmill-ai/frontend/components/layout/use-ai-active';
+import { PickPlatformCopilotBridge } from '@postmill-ai/frontend/components/launches/copilot-bridges';
+import { useStateCallback } from '@postmill-ai/react/helpers/use.state.callback';
+import { timer } from '@postmill-ai/helpers/utils/timer';
 export const PickPlatforms: FC<{
   integrations: Integrations[];
   selectedIntegrations: Integrations[];

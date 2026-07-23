@@ -1,6 +1,6 @@
 import { Injectable, Logger, Optional } from '@nestjs/common';
 import { SpanStatusCode } from '@opentelemetry/api';
-import { TelemetryService } from '@gitroom/nestjs-libraries/ai/governance/telemetry.service';
+import { TelemetryService } from '@postmill-ai/nestjs-libraries/ai/governance/telemetry.service';
 
 /**
  * Tool-use firewall (section 5 / section 8 / decision #8).

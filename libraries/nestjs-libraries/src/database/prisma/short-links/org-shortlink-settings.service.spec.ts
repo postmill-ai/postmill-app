@@ -1,10 +1,10 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { OrgShortLinkSettingsService } from './org-shortlink-settings.service';
 import { OrgShortLinkSettingsRepository } from './org-shortlink-settings.repository';
-import { EncryptionService } from '@gitroom/nestjs-libraries/encryption/encryption.service';
-import { ProviderKernel, ProviderNotFoundError } from '@gitroom/provider-kernel';
-import type { ShortLinkAdapter, ShortLinkCapabilities, ShortLinkCredentialField } from '@gitroom/nestjs-libraries/short-linking/short-link.interface';
-import { ProviderResolutionService } from '@gitroom/nestjs-libraries/providers/provider-resolution.service';
+import { EncryptionService } from '@postmill-ai/nestjs-libraries/encryption/encryption.service';
+import { ProviderKernel, ProviderNotFoundError } from '@postmill-ai/provider-kernel';
+import type { ShortLinkAdapter, ShortLinkCapabilities, ShortLinkCredentialField } from '@postmill-ai/nestjs-libraries/short-linking/short-link.interface';
+import { ProviderResolutionService } from '@postmill-ai/nestjs-libraries/providers/provider-resolution.service';
 
 const mockCapabilities: ShortLinkCapabilities = {
   create: true,

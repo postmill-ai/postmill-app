@@ -5,7 +5,7 @@ import { User } from '@prisma/client';
 import {
   pricing,
   PlanInterface,
-} from '@gitroom/nestjs-libraries/database/prisma/subscriptions/pricing';
+} from '@postmill-ai/nestjs-libraries/database/prisma/subscriptions/pricing';
 
 /** Profile fields returned by GET /user/self (UserProfile split, v3.8.10). */
 export interface UserSelfProfile {

@@ -2,7 +2,7 @@ import { Agent, ProxyAgent, buildConnector, Dispatcher } from 'undici';
 import dns from 'node:dns';
 import net from 'node:net';
 import { SocksClient } from 'socks';
-import { isBlockedIp } from '@gitroom/nestjs-libraries/dtos/webhooks/webhook.url.validator';
+import { isBlockedIp } from '@postmill-ai/nestjs-libraries/dtos/webhooks/webhook.url.validator';
 import { VpnProxyAuth, VpnProxyRegion } from './vpn.types';
 
 const CONNECT_TIMEOUT = 10_000;

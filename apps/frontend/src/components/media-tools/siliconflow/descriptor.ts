@@ -1,4 +1,4 @@
-import type { StudioDescriptor } from '@gitroom/frontend/components/media-tools/studio-kit/types';
+import type { StudioDescriptor } from '@postmill-ai/frontend/components/media-tools/studio-kit/types';
 
 // SiliconFlow — image (OpenAI-compatible), async video (Wan2.2 submit/poll), and TTS, on the
 // org's existing SiliconFlow LLM key (universal-credential reuse). Field names are native

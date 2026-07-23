@@ -8,12 +8,12 @@ import {
   Post,
   UseGuards,
 } from '@nestjs/common';
-import { GetUserFromRequest } from '@gitroom/nestjs-libraries/user/user.from.request';
+import { GetUserFromRequest } from '@postmill-ai/nestjs-libraries/user/user.from.request';
 import { User } from '@prisma/client';
 import { ApiTags } from '@nestjs/swagger';
-import { AnnouncementsService } from '@gitroom/nestjs-libraries/database/prisma/announcements/announcements.service';
-import { AnnouncementDto } from '@gitroom/nestjs-libraries/dtos/announcements/announcements.dto';
-import { OrgRbacGuard } from '@gitroom/backend/services/auth/rbac/org-rbac.guard';
+import { AnnouncementsService } from '@postmill-ai/nestjs-libraries/database/prisma/announcements/announcements.service';
+import { AnnouncementDto } from '@postmill-ai/nestjs-libraries/dtos/announcements/announcements.dto';
+import { OrgRbacGuard } from '@postmill-ai/backend/services/auth/rbac/org-rbac.guard';
 
 @ApiTags('Announcements')
 @Controller('/announcements')

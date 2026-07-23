@@ -1,8 +1,8 @@
 'use client';
 
 import useSWR from 'swr';
-import { useFetch } from '@gitroom/helpers/utils/custom.fetch';
-import { useUser } from '@gitroom/frontend/components/layout/user.context';
+import { useFetch } from '@postmill-ai/helpers/utils/custom.fetch';
+import { useUser } from '@postmill-ai/frontend/components/layout/user.context';
 import { useEffect } from 'react';
 
 export interface CustomFontEntry {

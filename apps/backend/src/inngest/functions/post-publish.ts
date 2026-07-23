@@ -1,11 +1,11 @@
-import { inngest } from '@gitroom/nestjs-libraries/inngest/inngest.client';
-import { PostActivity } from '@gitroom/nestjs-libraries/inngest/activities/post.activity';
+import { inngest } from '@postmill-ai/nestjs-libraries/inngest/inngest.client';
+import { PostActivity } from '@postmill-ai/nestjs-libraries/inngest/activities/post.activity';
 import {
   RefreshTokenError,
   BadBodyError,
-} from '@gitroom/nestjs-libraries/inngest/errors';
-import { providerModules } from '@gitroom/backend/providers.generated';
-import { SocialProvider } from '@gitroom/provider-kernel';
+} from '@postmill-ai/nestjs-libraries/inngest/errors';
+import { providerModules } from '@postmill-ai/backend/providers.generated';
+import { SocialProvider } from '@postmill-ai/provider-kernel';
 import dayjs from 'dayjs';
 import { Integration } from '@prisma/client';
 import { capitalize, sortBy } from 'lodash';

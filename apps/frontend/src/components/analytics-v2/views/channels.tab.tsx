@@ -1,7 +1,7 @@
 'use client';
 
 import { FC, useMemo } from 'react';
-import { useT } from '@gitroom/react/translation/get.transation.service.client';
+import { useT } from '@postmill-ai/react/translation/get.transation.service.client';
 import { OverviewResponse } from '../utils';
 import { useChannelDetail } from '../hooks/useChannelDetail';
 import { ChannelDetailPanel } from '../drill/channel.detail.panel';

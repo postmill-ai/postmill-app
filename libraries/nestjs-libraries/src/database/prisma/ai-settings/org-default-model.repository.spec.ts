@@ -1,12 +1,12 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
-vi.mock('@gitroom/nestjs-libraries/database/prisma/prisma.service', () => ({
+vi.mock('@postmill-ai/nestjs-libraries/database/prisma/prisma.service', () => ({
   PrismaRepository: vi.fn(function () {
     return { model: {} };
   }),
 }));
 
-import { PrismaRepository } from '@gitroom/nestjs-libraries/database/prisma/prisma.service';
+import { PrismaRepository } from '@postmill-ai/nestjs-libraries/database/prisma/prisma.service';
 import { OrgDefaultModelRepository } from './org-default-model.repository';
 
 describe('OrgDefaultModelRepository', () => {

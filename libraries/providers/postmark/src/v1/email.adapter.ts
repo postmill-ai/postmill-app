@@ -8,7 +8,7 @@ import {
   EmailWebhookEvent,
   EmailStatus,
   ProviderModule,
-} from '@gitroom/provider-kernel';
+} from '@postmill-ai/provider-kernel';
 
 export class PostmarkAdapter implements EmailCapability {
   readonly name = 'postmark';

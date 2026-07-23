@@ -4,12 +4,12 @@ import {
   PostDetails,
   PostResponse,
   SocialProvider,
-} from '@gitroom/provider-kernel';
-import { makeId } from '@gitroom/provider-kernel';
-import { SocialAbstract } from '@gitroom/provider-kernel';
+} from '@postmill-ai/provider-kernel';
+import { makeId } from '@postmill-ai/provider-kernel';
+import { SocialAbstract } from '@postmill-ai/provider-kernel';
 import dayjs from 'dayjs';
 import { Integration } from '@prisma/client';
-import { KickDto } from '@gitroom/provider-kernel';
+import { KickDto } from '@postmill-ai/provider-kernel';
 import { createHash, randomBytes } from 'crypto';
 
 import { metadata as providerMetadata } from './metadata';
@@ -242,7 +242,7 @@ import {
   ProviderModule as __ProviderModule,
   SocialProviderKernelAdapter as __Bridge,
   PROVIDER_CAPABILITIES as __CAPS,
-} from '@gitroom/provider-kernel';
+} from '@postmill-ai/provider-kernel';
 
 const __adapter = new KickProvider();
 

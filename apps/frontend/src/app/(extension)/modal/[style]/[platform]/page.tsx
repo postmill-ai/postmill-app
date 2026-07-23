@@ -1,6 +1,6 @@
 'use client';
 
-import { StandaloneModal } from '@gitroom/frontend/components/standalone-modal/standalone.modal';
+import { StandaloneModal } from '@postmill-ai/frontend/components/standalone-modal/standalone.modal';
 export default function Modal() {
   return (
     <div className="w-screen h-screen overflow-hidden bg-black">

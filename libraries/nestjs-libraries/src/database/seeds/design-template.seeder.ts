@@ -1,6 +1,6 @@
 import { Injectable, Logger } from '@nestjs/common';
-import { PrismaService } from '@gitroom/nestjs-libraries/database/prisma/prisma.service';
-import { DesignerDocService } from '@gitroom/nestjs-libraries/media/designer-doc/designer-doc.service';
+import { PrismaService } from '@postmill-ai/nestjs-libraries/database/prisma/prisma.service';
+import { DesignerDocService } from '@postmill-ai/nestjs-libraries/media/designer-doc/designer-doc.service';
 import { SYSTEM_DESIGN_TEMPLATES } from './designer-seed-docs';
 
 /**

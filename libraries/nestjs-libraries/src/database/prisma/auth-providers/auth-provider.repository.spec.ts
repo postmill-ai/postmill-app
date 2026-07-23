@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { Provider } from '@prisma/client';
 import { AuthProviderRepository } from './auth-provider.repository';
-import type { PrismaRepository } from '@gitroom/nestjs-libraries/database/prisma/prisma.service';
+import type { PrismaRepository } from '@postmill-ai/nestjs-libraries/database/prisma/prisma.service';
 
 // The repository stores credentials exactly as given — encryption happens in
 // the calling layer (AdminController) via EncryptionService. This mock mirrors

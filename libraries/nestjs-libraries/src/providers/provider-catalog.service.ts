@@ -4,8 +4,8 @@ import {
   ProviderKernel,
   isProviderVerified,
   LanguageCode,
-} from '@gitroom/provider-kernel';
-import { FeaturedProviderService } from '@gitroom/nestjs-libraries/database/prisma/featured-providers/featured-provider.service';
+} from '@postmill-ai/provider-kernel';
+import { FeaturedProviderService } from '@postmill-ai/nestjs-libraries/database/prisma/featured-providers/featured-provider.service';
 import { PROVIDER_KERNEL } from './provider-kernel.token';
 
 export interface CatalogEntry {

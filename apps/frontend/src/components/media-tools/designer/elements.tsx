@@ -5,7 +5,7 @@ import { Image as KonvaImage, Rect, Ellipse, Line, Star, Text as KonvaText, Text
 import Konva from 'konva';
 import type { DesignerElement, DesignerGradient, TextRun } from './designer.store';
 import { computeCoverCrop } from './reflow';
-import { parseDesignerFilterToken } from '@gitroom/nestjs-libraries/media/design-render/filter-tokens';
+import { parseDesignerFilterToken } from '@postmill-ai/nestjs-libraries/media/design-render/filter-tokens';
 
 type SelectHandler = (id: string, evt?: Konva.KonvaEventObject<any>) => void;
 

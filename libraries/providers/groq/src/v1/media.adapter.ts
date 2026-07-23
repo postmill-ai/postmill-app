@@ -7,7 +7,7 @@ import {
   MediaModelOption,
   SafeFetchPort,
   ProviderModule,
-} from '@gitroom/provider-kernel';
+} from '@postmill-ai/provider-kernel';
 
 // Groq — same key as the Groq LLM provider (registry id `groq`), reused via the
 // universal-credential fallback. Groq's only media surface is TTS (`/openai/v1/audio/speech`,

@@ -1,18 +1,18 @@
 import { BadRequestException, Body, Controller, Get, Headers, Param, ParseUUIDPipe, Post, Query } from '@nestjs/common';
-import { ParseCuidPipe } from '@gitroom/nestjs-libraries/pipes/parse-cuid.pipe';
-import { SocialCommentsService } from '@gitroom/nestjs-libraries/database/prisma/social-comments/social.comments.service';
-import { GetOrgFromRequest } from '@gitroom/nestjs-libraries/user/org.from.request';
-import { GetUserFromRequest } from '@gitroom/nestjs-libraries/user/user.from.request';
+import { ParseCuidPipe } from '@postmill-ai/nestjs-libraries/pipes/parse-cuid.pipe';
+import { SocialCommentsService } from '@postmill-ai/nestjs-libraries/database/prisma/social-comments/social.comments.service';
+import { GetOrgFromRequest } from '@postmill-ai/nestjs-libraries/user/org.from.request';
+import { GetUserFromRequest } from '@postmill-ai/nestjs-libraries/user/user.from.request';
 import {
   LikeCommentDto,
   ReplyCommentDto,
-} from '@gitroom/nestjs-libraries/dtos/social-comments/social.comment.dto';
-import { GetInboxDto } from '@gitroom/nestjs-libraries/dtos/social-comments/get-inbox.dto';
-import { BulkMarkReadDto } from '@gitroom/nestjs-libraries/dtos/social-comments/bulk-mark-read.dto';
-import { UpdateCommentStatusDto } from '@gitroom/nestjs-libraries/dtos/social-comments/update-comment-status.dto';
-import { AssignCommentDto } from '@gitroom/nestjs-libraries/dtos/social-comments/assign-comment.dto';
+} from '@postmill-ai/nestjs-libraries/dtos/social-comments/social.comment.dto';
+import { GetInboxDto } from '@postmill-ai/nestjs-libraries/dtos/social-comments/get-inbox.dto';
+import { BulkMarkReadDto } from '@postmill-ai/nestjs-libraries/dtos/social-comments/bulk-mark-read.dto';
+import { UpdateCommentStatusDto } from '@postmill-ai/nestjs-libraries/dtos/social-comments/update-comment-status.dto';
+import { AssignCommentDto } from '@postmill-ai/nestjs-libraries/dtos/social-comments/assign-comment.dto';
 import { Organization, User } from '@prisma/client';
-import { RequirePermission } from '@gitroom/backend/services/auth/rbac/require-permission.decorator';
+import { RequirePermission } from '@postmill-ai/backend/services/auth/rbac/require-permission.decorator';
 
 @Controller('/posts')
 export class SocialCommentsController {

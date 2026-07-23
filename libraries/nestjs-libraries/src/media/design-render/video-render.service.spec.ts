@@ -3,9 +3,9 @@ import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
 import { VideoRenderService, withTimeout } from './video-render.service';
-import { ioRedis } from '@gitroom/nestjs-libraries/redis/redis.service';
+import { ioRedis } from '@postmill-ai/nestjs-libraries/redis/redis.service';
 
-vi.mock('@gitroom/nestjs-libraries/redis/redis.service', () => ({
+vi.mock('@postmill-ai/nestjs-libraries/redis/redis.service', () => ({
   ioRedis: {
     set: vi.fn().mockResolvedValue('OK'),
     get: vi.fn(),

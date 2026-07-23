@@ -1,5 +1,5 @@
 import dayjs from 'dayjs';
-import { Integrations } from '@gitroom/frontend/components/launches/calendar.context';
+import { Integrations } from '@postmill-ai/frontend/components/launches/calendar.context';
 
 // Shape consumed internally by ManageModal (unchanged from the old
 // `AddEditModalProps`): `date`/`mutate`/`reopenModal` are required here because

@@ -3,7 +3,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { CustomizePopover } from './customize.popover';
 
-vi.mock('@gitroom/react/translation/get.transation.service.client', () => ({
+vi.mock('@postmill-ai/react/translation/get.transation.service.client', () => ({
   useT: () => (_key: string, fallback: string) => fallback,
 }));
 
@@ -12,7 +12,7 @@ const mockPermissions = {
   hasPermission: vi.fn(),
 };
 
-vi.mock('@gitroom/frontend/components/layout/use-permissions', () => ({
+vi.mock('@postmill-ai/frontend/components/layout/use-permissions', () => ({
   usePermissions: () => mockPermissions,
 }));
 

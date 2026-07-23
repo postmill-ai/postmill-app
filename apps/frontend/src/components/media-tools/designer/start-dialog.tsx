@@ -1,12 +1,12 @@
 'use client';
 
 import React, { FC, useCallback, useMemo, useState } from 'react';
-import { useT } from '@gitroom/react/translation/get.transation.service.client';
-import { CHANNEL_PRESETS } from '@gitroom/nestjs-libraries/integrations/social/channel-presets';
+import { useT } from '@postmill-ai/react/translation/get.transation.service.client';
+import { CHANNEL_PRESETS } from '@postmill-ai/nestjs-libraries/integrations/social/channel-presets';
 import { MyDesignsPanel } from './panels/my-designs-panel';
 import { TemplatesPanel } from './panels/templates-panel';
 import { fitWithin } from './panels/fit-within';
-import SafeImage from '@gitroom/react/helpers/safe.image';
+import SafeImage from '@postmill-ai/react/helpers/safe.image';
 
 type StoreApi = ReturnType<typeof import('./designer.store').createDesignerStore>;
 type FetchLike = (url: string, init?: RequestInit) => Promise<Response>;

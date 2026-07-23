@@ -3,7 +3,7 @@
 import dynamic from 'next/dynamic';
 
 const HiggsfieldStudio = dynamic(
-  () => import('@gitroom/frontend/components/media-tools/higgsfield/higgsfield-studio').then((m) => m.HiggsfieldStudio),
+  () => import('@postmill-ai/frontend/components/media-tools/higgsfield/higgsfield-studio').then((m) => m.HiggsfieldStudio),
   { ssr: false }
 );
 

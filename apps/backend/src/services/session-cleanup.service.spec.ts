@@ -1,19 +1,19 @@
 import 'reflect-metadata';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
-vi.mock('@gitroom/nestjs-libraries/database/prisma/users/users.service', () => ({
+vi.mock('@postmill-ai/nestjs-libraries/database/prisma/users/users.service', () => ({
   UsersService: class {},
 }));
 
 // Deterministically acquire the distributed cron lock so the body always runs
 // (real acquireLock depends on Redis state, which differs across run modes).
-vi.mock('@gitroom/nestjs-libraries/redis/redis-lock', () => ({
+vi.mock('@postmill-ai/nestjs-libraries/redis/redis-lock', () => ({
   acquireLock: vi.fn().mockResolvedValue(true),
 }));
 
 import { SessionCleanupService } from './session-cleanup.service';
-import type { UsersService } from '@gitroom/nestjs-libraries/database/prisma/users/users.service';
-import { acquireLock } from '@gitroom/nestjs-libraries/redis/redis-lock';
+import type { UsersService } from '@postmill-ai/nestjs-libraries/database/prisma/users/users.service';
+import { acquireLock } from '@postmill-ai/nestjs-libraries/redis/redis-lock';
 
 describe('SessionCleanupService', () => {
   let usersService: { cleanupExpiredSessions: ReturnType<typeof vi.fn> };

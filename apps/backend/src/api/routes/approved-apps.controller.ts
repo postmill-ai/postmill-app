@@ -1,8 +1,8 @@
 import { Controller, Delete, Get, Param } from '@nestjs/common';
-import { GetUserFromRequest } from '@gitroom/nestjs-libraries/user/user.from.request';
+import { GetUserFromRequest } from '@postmill-ai/nestjs-libraries/user/user.from.request';
 import { User } from '@prisma/client';
 import { ApiTags } from '@nestjs/swagger';
-import { OAuthService } from '@gitroom/nestjs-libraries/database/prisma/oauth/oauth.service';
+import { OAuthService } from '@postmill-ai/nestjs-libraries/database/prisma/oauth/oauth.service';
 
 @ApiTags('Approved Apps')
 @Controller('/user/approved-apps')

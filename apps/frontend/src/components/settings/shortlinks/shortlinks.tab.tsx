@@ -2,9 +2,9 @@
 
 import React from 'react';
 import { mutate as globalMutate } from 'swr';
-import { ProviderSettingsPanel } from '@gitroom/frontend/components/settings/shared/kit/provider-settings-panel';
-import { useOAuthReturn } from '@gitroom/frontend/components/settings/shared/kit/use-oauth-return';
-import { shortlinksDescriptor } from '@gitroom/frontend/components/settings/shared/kit/descriptors/shortlinks.descriptor';
+import { ProviderSettingsPanel } from '@postmill-ai/frontend/components/settings/shared/kit/provider-settings-panel';
+import { useOAuthReturn } from '@postmill-ai/frontend/components/settings/shared/kit/use-oauth-return';
+import { shortlinksDescriptor } from '@postmill-ai/frontend/components/settings/shared/kit/descriptors/shortlinks.descriptor';
 
 export const ShortlinksTab = () => {
   useOAuthReturn({

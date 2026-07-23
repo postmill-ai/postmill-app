@@ -2,7 +2,7 @@
 
 import React, { useEffect } from 'react';
 import { useRouter } from 'next/navigation';
-import { SETTINGS_DEFAULT_PATH } from '@gitroom/frontend/components/settings/settings-paths';
+import { SETTINGS_DEFAULT_PATH } from '@postmill-ai/frontend/components/settings/settings-paths';
 
 // Route-level guard for tier/permission-gated settings sections. The old SettingsPopup
 // render-guarded these tabs (`{tab === 'webhooks' && user?.tier?.webhooks && <Webhooks/>}`),

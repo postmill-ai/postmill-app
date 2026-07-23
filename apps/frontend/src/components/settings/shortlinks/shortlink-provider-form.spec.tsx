@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
-import { shortlinksDescriptor } from '@gitroom/frontend/components/settings/shared/kit/descriptors/shortlinks.descriptor';
-import { ProviderFormState } from '@gitroom/frontend/components/settings/shared/kit/provider-surface.types';
+import { shortlinksDescriptor } from '@postmill-ai/frontend/components/settings/shared/kit/descriptors/shortlinks.descriptor';
+import { ProviderFormState } from '@postmill-ai/frontend/components/settings/shared/kit/provider-surface.types';
 
 /**
  * The old `ShortlinkProviderForm` was replaced by the generic Provider Settings

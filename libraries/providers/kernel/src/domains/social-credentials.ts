@@ -1,7 +1,7 @@
 /**
  * Per-org channel credential cache, relocated into the kernel (step 7.5.2) so
  * provider packages read `getOrgCredential` without depending on
- * `@gitroom/nestjs-libraries`. The legacy path re-exports these symbols, so the
+ * `@postmill-ai/nestjs-libraries`. The legacy path re-exports these symbols, so the
  * single in-memory cache stays single-instance: IntegrationManager writes via
  * the legacy re-export and providers read from the kernel — both resolve to this
  * one module.

@@ -1,11 +1,11 @@
 'use client';
 
 import React, { useEffect, useRef, useState, useCallback } from 'react';
-import { useFetch } from '@gitroom/helpers/utils/custom.fetch';
-import { useToaster } from '@gitroom/react/toaster/toaster';
-import { useMediaDirectory } from '@gitroom/react/helpers/use.media.directory';
-import { deleteDialog } from '@gitroom/react/helpers/delete.dialog';
-import { useT } from '@gitroom/react/translation/get.transation.service.client';
+import { useFetch } from '@postmill-ai/helpers/utils/custom.fetch';
+import { useToaster } from '@postmill-ai/react/toaster/toaster';
+import { useMediaDirectory } from '@postmill-ai/react/helpers/use.media.directory';
+import { deleteDialog } from '@postmill-ai/react/helpers/delete.dialog';
+import { useT } from '@postmill-ai/react/translation/get.transation.service.client';
 
 const TrashThumb: React.FC<{ src: string; alt: string }> = ({ src, alt }) => {
   const ref = useRef<HTMLImageElement>(null);

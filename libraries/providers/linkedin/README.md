@@ -1,4 +1,4 @@
-# @gitroom/provider-linkedin
+# @postmill-ai/provider-linkedin
 
 LinkedIn social provider (`social/linkedin@v1`).
 
@@ -6,7 +6,7 @@ LinkedIn social provider (`social/linkedin@v1`).
 
 This package is a thin wrapper: it instantiates and re-exports the `LinkedinProvider`
 family base, whose implementation lives in
-`@gitroom/provider-kernel` (`src/domains/social-families/linkedin-base.ts`). There are
+`@postmill-ai/provider-kernel` (`src/domains/social-families/linkedin-base.ts`). There are
 **no outbound HTTP calls in this package's own `src/`** — `grep "axios\|fetch("` over
 `libraries/providers/linkedin/src` is clean.
 

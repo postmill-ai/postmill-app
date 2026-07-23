@@ -2,11 +2,11 @@
 
 import React, { useMemo, useState } from 'react';
 import dayjs from 'dayjs';
-import { useIntegrationList } from '@gitroom/frontend/components/launches/helpers/use.integration.list';
-import { useOverview } from '@gitroom/frontend/components/analytics-v2/hooks/useOverview';
+import { useIntegrationList } from '@postmill-ai/frontend/components/launches/helpers/use.integration.list';
+import { useOverview } from '@postmill-ai/frontend/components/analytics-v2/hooks/useOverview';
 import { useDashboardSummary } from './hooks/useDashboardSummary';
-import { LineChart } from '@gitroom/frontend/components/analytics-v2/charts/line.chart';
-import { EmptyState } from '@gitroom/frontend/components/analytics-v2/kit/states';
+import { LineChart } from '@postmill-ai/frontend/components/analytics-v2/charts/line.chart';
+import { EmptyState } from '@postmill-ai/frontend/components/analytics-v2/kit/states';
 import { DashboardSetup } from './dashboard.setup';
 import { SectionCard } from './kit/section-card';
 import { DashboardHeader } from './dashboard.header';
@@ -20,9 +20,9 @@ import { MediaQueueWidget } from './widgets/media.queue';
 import { UsageWidget } from './widgets/usage.widget';
 import { RecommendationsStrip } from './widgets/recommendations.strip';
 import { AttentionFeed } from './widgets/attention.feed';
-import { useAiActive } from '@gitroom/frontend/components/layout/use-ai-active';
+import { useAiActive } from '@postmill-ai/frontend/components/layout/use-ai-active';
 import { DailyBrief } from './widgets/daily.brief';
-import { useT } from '@gitroom/react/translation/get.transation.service.client';
+import { useT } from '@postmill-ai/react/translation/get.transation.service.client';
 
 export { greetingForUser };
 

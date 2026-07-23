@@ -1,8 +1,8 @@
 import 'reflect-metadata';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { RunGeneratorTool } from './run.generator.tool';
-import { AgentGraphService } from '@gitroom/nestjs-libraries/agent/agent.graph.service';
-import { RagService } from '@gitroom/nestjs-libraries/ai/governance/rag.service';
+import { AgentGraphService } from '@postmill-ai/nestjs-libraries/agent/agent.graph.service';
+import { RagService } from '@postmill-ai/nestjs-libraries/ai/governance/rag.service';
 
 describe('RunGeneratorTool', () => {
   let agentGraphService: {

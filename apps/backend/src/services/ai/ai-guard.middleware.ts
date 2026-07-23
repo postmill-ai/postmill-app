@@ -1,7 +1,7 @@
 import { Injectable, NestMiddleware, HttpStatus } from '@nestjs/common';
 import { Request, Response, NextFunction } from 'express';
-import { GuardrailService } from '@gitroom/nestjs-libraries/ai/governance/guardrail.service';
-import { GuardrailViolation } from '@gitroom/nestjs-libraries/ai/governance/errors';
+import { GuardrailService } from '@postmill-ai/nestjs-libraries/ai/governance/guardrail.service';
+import { GuardrailViolation } from '@postmill-ai/nestjs-libraries/ai/governance/errors';
 
 @Injectable()
 export class AiGuardMiddleware implements NestMiddleware {

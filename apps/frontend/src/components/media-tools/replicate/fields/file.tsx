@@ -1,10 +1,10 @@
 'use client';
 
 import React, { useMemo } from 'react';
-import { useModals } from '@gitroom/frontend/components/layout/new-modal';
-import { useToaster } from '@gitroom/react/toaster/toaster';
-import { MediaSelectorModal } from '@gitroom/frontend/components/media-tools/media-selector-modal';
-import { useT } from '@gitroom/react/translation/get.transation.service.client';
+import { useModals } from '@postmill-ai/frontend/components/layout/new-modal';
+import { useToaster } from '@postmill-ai/react/toaster/toaster';
+import { MediaSelectorModal } from '@postmill-ai/frontend/components/media-tools/media-selector-modal';
+import { useT } from '@postmill-ai/react/translation/get.transation.service.client';
 
 function mediaTypeNoun(t: (key: string, fallback: string) => string, type: string): string {
   switch (type) {

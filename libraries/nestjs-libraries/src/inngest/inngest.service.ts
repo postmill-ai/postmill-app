@@ -12,8 +12,8 @@ import { CampaignActivity } from './activities/campaign.activity';
 import { RetentionActivity } from './activities/retention.activity';
 import { AgentDigestActivity } from './activities/agent-digest.activity';
 import { InngestRunService } from './inngest-run.service';
-import { OrganizationService } from '@gitroom/nestjs-libraries/database/prisma/organizations/organization.service';
-import { createFunctions } from '@gitroom/backend/inngest/functions';
+import { OrganizationService } from '@postmill-ai/nestjs-libraries/database/prisma/organizations/organization.service';
+import { createFunctions } from '@postmill-ai/backend/inngest/functions';
 import { InngestFunction } from 'inngest';
 
 @Injectable()

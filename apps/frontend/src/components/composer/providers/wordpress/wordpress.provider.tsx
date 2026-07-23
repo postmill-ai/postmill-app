@@ -4,13 +4,13 @@ import { FC } from 'react';
 import {
   PostComment,
   withProvider,
-} from '@gitroom/frontend/components/composer/providers/high.order.provider';
-import { Input } from '@gitroom/react/form/input';
-import { useSettings } from '@gitroom/frontend/components/launches/helpers/use.values';
-import { WordpressPostType } from '@gitroom/frontend/components/composer/providers/wordpress/wordpress.post.type';
-import { FileComponent } from '@gitroom/frontend/components/files/file.component';
-import { WordpressDto } from '@gitroom/nestjs-libraries/dtos/posts/providers-settings/wordpress.dto';
-import { useT } from '@gitroom/react/translation/get.transation.service.client';
+} from '@postmill-ai/frontend/components/composer/providers/high.order.provider';
+import { Input } from '@postmill-ai/react/form/input';
+import { useSettings } from '@postmill-ai/frontend/components/launches/helpers/use.values';
+import { WordpressPostType } from '@postmill-ai/frontend/components/composer/providers/wordpress/wordpress.post.type';
+import { FileComponent } from '@postmill-ai/frontend/components/files/file.component';
+import { WordpressDto } from '@postmill-ai/nestjs-libraries/dtos/posts/providers-settings/wordpress.dto';
+import { useT } from '@postmill-ai/react/translation/get.transation.service.client';
 
 const WordpressSettings: FC = () => {
   const form = useSettings();

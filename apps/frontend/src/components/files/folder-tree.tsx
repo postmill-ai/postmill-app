@@ -1,12 +1,12 @@
 'use client';
 
 import React, { FC, useCallback, useState, useEffect, useRef } from 'react';
-import { useFetch } from '@gitroom/helpers/utils/custom.fetch';
-import { useToaster } from '@gitroom/react/toaster/toaster';
+import { useFetch } from '@postmill-ai/helpers/utils/custom.fetch';
+import { useToaster } from '@postmill-ai/react/toaster/toaster';
 import useSWR from 'swr';
 import clsx from 'clsx';
-import ProviderIcon from '@gitroom/frontend/components/shared/provider-icon';
-import { useT } from '@gitroom/react/translation/get.transation.service.client';
+import ProviderIcon from '@postmill-ai/frontend/components/shared/provider-icon';
+import { useT } from '@postmill-ai/react/translation/get.transation.service.client';
 
 type FolderItem = {
   id: string;

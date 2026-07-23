@@ -4,13 +4,13 @@ import { FC } from 'react';
 import {
   PostComment,
   withProvider,
-} from '@gitroom/frontend/components/composer/providers/high.order.provider';
-import { TwitchDto } from '@gitroom/nestjs-libraries/dtos/posts/providers-settings/twitch.dto';
-import { useSettings } from '@gitroom/frontend/components/launches/helpers/use.values';
-import { Select } from '@gitroom/react/form/select';
+} from '@postmill-ai/frontend/components/composer/providers/high.order.provider';
+import { TwitchDto } from '@postmill-ai/nestjs-libraries/dtos/posts/providers-settings/twitch.dto';
+import { useSettings } from '@postmill-ai/frontend/components/launches/helpers/use.values';
+import { Select } from '@postmill-ai/react/form/select';
 import { useWatch } from 'react-hook-form';
-import { FirstCommentField } from '@gitroom/frontend/components/composer/providers/shared/first-comment.field';
-import { useT } from '@gitroom/react/translation/get.transation.service.client';
+import { FirstCommentField } from '@postmill-ai/frontend/components/composer/providers/shared/first-comment.field';
+import { useT } from '@postmill-ai/react/translation/get.transation.service.client';
 
 const messageTypes = [
   {

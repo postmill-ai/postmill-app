@@ -1,5 +1,5 @@
-import { inngest } from '@gitroom/nestjs-libraries/inngest/inngest.client';
-import { EmailActivity } from '@gitroom/nestjs-libraries/inngest/activities/email.activity';
+import { inngest } from '@postmill-ai/nestjs-libraries/inngest/inngest.client';
+import { EmailActivity } from '@postmill-ai/nestjs-libraries/inngest/activities/email.activity';
 
 export const createSendEmail = (emailActivity: EmailActivity) =>
   inngest.createFunction(

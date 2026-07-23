@@ -1,5 +1,5 @@
-import { inngest } from '@gitroom/nestjs-libraries/inngest/inngest.client';
-import { AnalyticsActivity } from '@gitroom/nestjs-libraries/inngest/activities/analytics.activity';
+import { inngest } from '@postmill-ai/nestjs-libraries/inngest/inngest.client';
+import { AnalyticsActivity } from '@postmill-ai/nestjs-libraries/inngest/activities/analytics.activity';
 
 export const createAnalyticsBackfill = (analyticsActivity: AnalyticsActivity) =>
   inngest.createFunction(

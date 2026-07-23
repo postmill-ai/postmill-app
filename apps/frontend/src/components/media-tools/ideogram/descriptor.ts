@@ -1,4 +1,4 @@
-import type { StudioDescriptor } from '@gitroom/frontend/components/media-tools/studio-kit/types';
+import type { StudioDescriptor } from '@postmill-ai/frontend/components/media-tools/studio-kit/types';
 
 // Ideogram (registry/config identifier `ideogram`): own-key image generation, strong at accurate
 // in-image text. Single v3 generate endpoint (no model param), synchronous (one POST → hosted URL).

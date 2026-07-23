@@ -1,6 +1,6 @@
 'use client';
 
-import { useT } from '@gitroom/react/translation/get.transation.service.client';
+import { useT } from '@postmill-ai/react/translation/get.transation.service.client';
 
 // Postmill wordmark (the "Postmill" lettering from public/postmill-text.svg),
 // inlined so `fill="currentColor"` inherits the parent's text color — white in

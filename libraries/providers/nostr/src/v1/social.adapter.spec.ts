@@ -1,11 +1,11 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { setSocialFetchPorts } from '@gitroom/provider-kernel';
+import { setSocialFetchPorts } from '@postmill-ai/provider-kernel';
 import { NostrProvider } from './social.adapter';
 
 const encodeCallback = (payload: Record<string, unknown>) =>
   Buffer.from(JSON.stringify(payload)).toString('base64');
 
-vi.mock('@gitroom/helpers/auth/auth.service', () => ({
+vi.mock('@postmill-ai/helpers/auth/auth.service', () => ({
   AuthService: {
     fixedEncryption: (value: string) => `encrypted:${value}`,
     fixedDecryption: (value: string) =>

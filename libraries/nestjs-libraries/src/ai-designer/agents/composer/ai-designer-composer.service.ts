@@ -1,4 +1,4 @@
-import '@gitroom/nestjs-libraries/ai-designer/agent-mesh/agent-mesh-env.shim';
+import '@postmill-ai/nestjs-libraries/ai-designer/agent-mesh/agent-mesh-env.shim';
 import { Injectable, Logger, OnModuleInit } from '@nestjs/common';
 import {
   registerInProcessAgent,
@@ -6,18 +6,18 @@ import {
 } from '@reaatech/agent-mesh-router';
 import type { AgentResponse } from '@reaatech/agent-mesh';
 import { repair } from '@reaatech/structured-repair-core';
-import { DesignerDocService } from '@gitroom/nestjs-libraries/media/designer-doc/designer-doc.service';
-import { AIModelProvider } from '@gitroom/nestjs-libraries/ai/ai-model.provider';
-import { CHANNEL_PRESETS } from '@gitroom/nestjs-libraries/integrations/social/channel-presets';
+import { DesignerDocService } from '@postmill-ai/nestjs-libraries/media/designer-doc/designer-doc.service';
+import { AIModelProvider } from '@postmill-ai/nestjs-libraries/ai/ai-model.provider';
+import { CHANNEL_PRESETS } from '@postmill-ai/nestjs-libraries/integrations/social/channel-presets';
 import type {
   DesignerDoc,
   DesignerElement,
   DesignerOutput,
-} from '@gitroom/nestjs-libraries/media/designer-doc/designer-doc.schema';
+} from '@postmill-ai/nestjs-libraries/media/designer-doc/designer-doc.schema';
 import {
   DesignerDocOpsSchema,
   type DesignerDocOp,
-} from '@gitroom/nestjs-libraries/media/designer-doc/designer-doc-ops.schema';
+} from '@postmill-ai/nestjs-libraries/media/designer-doc/designer-doc-ops.schema';
 import type {
   AssetResult,
   DesignPlan,

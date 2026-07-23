@@ -10,7 +10,7 @@ import {
   Max,
   Min,
 } from 'class-validator';
-import { METRIC_REGISTRY } from '@gitroom/nestjs-libraries/integrations/social/analytics.metrics';
+import { METRIC_REGISTRY } from '@postmill-ai/nestjs-libraries/integrations/social/analytics.metrics';
 
 const KNOWN_METRICS = Object.keys(METRIC_REGISTRY);
 const COMPARATORS = ['gte', 'lte', 'change_pct'] as const;

@@ -15,7 +15,7 @@ const mockLanguageModel = {
   doGenerate: mockDoGenerate,
 };
 
-vi.mock('@gitroom/nestjs-libraries/ai/ai-model.provider', () => ({
+vi.mock('@postmill-ai/nestjs-libraries/ai/ai-model.provider', () => ({
   AIModelProvider: class {
     langchainModel = vi.fn().mockResolvedValue(mockLangchainModel);
     imageModel = vi.fn().mockResolvedValue({
@@ -28,7 +28,7 @@ vi.mock('@gitroom/nestjs-libraries/ai/ai-model.provider', () => ({
   },
 }));
 
-vi.mock('@gitroom/nestjs-libraries/database/prisma/posts/posts.service', () => ({
+vi.mock('@postmill-ai/nestjs-libraries/database/prisma/posts/posts.service', () => ({
   PostsService: class {
     findAllExistingCategories = vi.fn().mockResolvedValue([{ category: 'Tech' }, { category: 'Business' }]);
     findAllExistingTopicsOfCategory = vi.fn().mockResolvedValue([{ topic: 'AI' }, { topic: 'Cloud' }]);
@@ -37,7 +37,7 @@ vi.mock('@gitroom/nestjs-libraries/database/prisma/posts/posts.service', () => (
   },
 }));
 
-vi.mock('@gitroom/nestjs-libraries/database/prisma/file/file.service', () => ({
+vi.mock('@postmill-ai/nestjs-libraries/database/prisma/file/file.service', () => ({
   FileService: class {
     saveFile = vi.fn().mockResolvedValue('uploaded-file-id-123');
   },
@@ -49,7 +49,7 @@ const { mockUploadAdapter } = vi.hoisted(() => ({
   },
 }));
 
-vi.mock('@gitroom/nestjs-libraries/database/prisma/storage/storage.service', () => ({
+vi.mock('@postmill-ai/nestjs-libraries/database/prisma/storage/storage.service', () => ({
   StorageService: class {
     getLocalAdapterForOrg = vi.fn().mockResolvedValue(mockUploadAdapter);
   },
@@ -127,13 +127,13 @@ vi.mock('dayjs', () => {
   };
 });
 
-import { AIModelProvider } from '@gitroom/nestjs-libraries/ai/ai-model.provider';
-import { PostsService } from '@gitroom/nestjs-libraries/database/prisma/posts/posts.service';
-import { FileService } from '@gitroom/nestjs-libraries/database/prisma/file/file.service';
-import { StorageService } from '@gitroom/nestjs-libraries/database/prisma/storage/storage.service';
+import { AIModelProvider } from '@postmill-ai/nestjs-libraries/ai/ai-model.provider';
+import { PostsService } from '@postmill-ai/nestjs-libraries/database/prisma/posts/posts.service';
+import { FileService } from '@postmill-ai/nestjs-libraries/database/prisma/file/file.service';
+import { StorageService } from '@postmill-ai/nestjs-libraries/database/prisma/storage/storage.service';
 import { ChatPromptTemplate } from '@langchain/core/prompts';
 import { AgentGraphService } from './agent.graph.service';
-import type { AiMediaService } from '@gitroom/nestjs-libraries/ai/governance/media.service';
+import type { AiMediaService } from '@postmill-ai/nestjs-libraries/ai/governance/media.service';
 
 describe('AgentGraphService', () => {
   let service: AgentGraphService;

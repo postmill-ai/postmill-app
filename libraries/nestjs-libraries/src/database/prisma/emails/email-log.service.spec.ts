@@ -9,7 +9,7 @@ const repoMock = {
 };
 
 vi.mock(
-  '@gitroom/nestjs-libraries/database/prisma/emails/email-log.repository',
+  '@postmill-ai/nestjs-libraries/database/prisma/emails/email-log.repository',
   () => ({
     EmailLogRepository: vi.fn(() => repoMock),
   }),

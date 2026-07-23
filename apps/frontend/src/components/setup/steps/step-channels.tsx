@@ -1,9 +1,9 @@
 'use client';
 
 import React from 'react';
-import { StepFrame } from '@gitroom/frontend/components/setup/step-frame';
-import { ChannelsTab } from '@gitroom/frontend/components/settings/channels/channels.tab';
-import { useT } from '@gitroom/react/translation/get.transation.service.client';
+import { StepFrame } from '@postmill-ai/frontend/components/setup/step-frame';
+import { ChannelsTab } from '@postmill-ai/frontend/components/settings/channels/channels.tab';
+import { useT } from '@postmill-ai/react/translation/get.transation.service.client';
 
 export function StepChannels() {
   const t = useT();

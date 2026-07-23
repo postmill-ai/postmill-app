@@ -4,7 +4,7 @@ import {
   ProviderRuntimeContext,
   AuthCapability,
   AuthUserInfo,
-} from '@gitroom/provider-kernel';
+} from '@postmill-ai/provider-kernel';
 
 // Self-contained kernel auth module for the GENERIC / OIDC login provider.
 // Mirrors the legacy apps/backend oauth.provider.ts DB-first → env-fallback

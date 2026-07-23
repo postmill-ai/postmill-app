@@ -6,10 +6,10 @@ import { usePostDetail } from '../hooks/usePostDetail';
 import { PostDetailBody } from '../post-analytics.drawer';
 import { Drawer } from '../kit/drawer';
 import { ChannelAvatar } from '../kit/channel-avatar';
-import { DataTable } from '@gitroom/frontend/components/ui/data-table';
-import type { Column } from '@gitroom/frontend/components/ui/data-table';
+import { DataTable } from '@postmill-ai/frontend/components/ui/data-table';
+import type { Column } from '@postmill-ai/frontend/components/ui/data-table';
 import { TabSkeleton } from '../kit/states';
-import { useT } from '@gitroom/react/translation/get.transation.service.client';
+import { useT } from '@postmill-ai/react/translation/get.transation.service.client';
 
 interface PostsTabProps {
   posts?: Post[];

@@ -5,17 +5,17 @@ import {
   PostResponse,
   SocialCommentDTO,
   SocialProvider,
-} from '@gitroom/provider-kernel';
-import { makeId, makeOauthState } from '@gitroom/provider-kernel';
+} from '@postmill-ai/provider-kernel';
+import { makeId, makeOauthState } from '@postmill-ai/provider-kernel';
 import dayjs from 'dayjs';
 import {
   SocialAbstract,
   ValidityMedia,
-} from '@gitroom/provider-kernel';
-import { InstagramDto } from '@gitroom/provider-kernel';
-import { InstagramProvider } from '@gitroom/provider-kernel';
+} from '@postmill-ai/provider-kernel';
+import { InstagramDto } from '@postmill-ai/provider-kernel';
+import { InstagramProvider } from '@postmill-ai/provider-kernel';
 import { Integration } from '@prisma/client';
-import { Rules } from '@gitroom/provider-kernel';
+import { Rules } from '@postmill-ai/provider-kernel';
 import { Logger } from '@nestjs/common';
 
 import { metadata as providerMetadata } from './metadata';
@@ -369,7 +369,7 @@ import {
   ProviderModule as __ProviderModule,
   SocialProviderKernelAdapter as __Bridge,
   PROVIDER_CAPABILITIES as __CAPS,
-} from '@gitroom/provider-kernel';
+} from '@postmill-ai/provider-kernel';
 
 const __adapter = new InstagramStandaloneProvider();
 

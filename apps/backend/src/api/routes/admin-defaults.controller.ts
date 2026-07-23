@@ -7,11 +7,11 @@ import {
   UseGuards,
 } from '@nestjs/common';
 import { ApiTags } from '@nestjs/swagger';
-import { GetUserFromRequest } from '@gitroom/nestjs-libraries/user/user.from.request';
+import { GetUserFromRequest } from '@postmill-ai/nestjs-libraries/user/user.from.request';
 import { User } from '@prisma/client';
-import { OrgRbacGuard } from '@gitroom/backend/services/auth/rbac/org-rbac.guard';
-import { SuperAdminGuard } from '@gitroom/backend/services/auth/rbac/super-admin.guard';
-import { DefaultsSeedService } from '@gitroom/nestjs-libraries/ai/defaults/defaults-seed.service';
+import { OrgRbacGuard } from '@postmill-ai/backend/services/auth/rbac/org-rbac.guard';
+import { SuperAdminGuard } from '@postmill-ai/backend/services/auth/rbac/super-admin.guard';
+import { DefaultsSeedService } from '@postmill-ai/nestjs-libraries/ai/defaults/defaults-seed.service';
 
 // PROVIDER_REMEDIATION 3.2: this endpoint iterates ALL orgs, so it is
 // platform-operator-only. The class-level SuperAdminGuard is the structural backstop;

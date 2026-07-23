@@ -1,15 +1,15 @@
 'use client';
 
 import React, { useMemo, useState } from 'react';
-import { SafeContent } from '@gitroom/frontend/components/shared/safe-content';
-import { Button } from '@gitroom/react/form/button';
-import { useT } from '@gitroom/react/translation/get.transation.service.client';
+import { SafeContent } from '@postmill-ai/frontend/components/shared/safe-content';
+import { Button } from '@postmill-ai/react/form/button';
+import { useT } from '@postmill-ai/react/translation/get.transation.service.client';
 import { InteractiveForm } from './interactive-form';
 import { markdownToHtml } from './markdown-lite';
 import type {
   AiDesignerMessagePayload,
   AiDesignerMsgContent,
-} from '@gitroom/nestjs-libraries/ai-designer/ai-designer.types';
+} from '@postmill-ai/nestjs-libraries/ai-designer/ai-designer.types';
 
 interface MessageRendererProps {
   message: AiDesignerMessagePayload;

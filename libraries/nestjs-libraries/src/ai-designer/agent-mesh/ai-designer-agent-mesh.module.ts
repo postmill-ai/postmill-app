@@ -1,4 +1,4 @@
-import '@gitroom/nestjs-libraries/ai-designer/agent-mesh/agent-mesh-env.shim';
+import '@postmill-ai/nestjs-libraries/ai-designer/agent-mesh/agent-mesh-env.shim';
 import {
   Logger,
   Module,
@@ -13,7 +13,7 @@ import {
   registryState,
 } from '@reaatech/agent-mesh-registry';
 import { AI_DESIGNER_AGENTS } from './agent-registry.data';
-import { ioRedis } from '@gitroom/nestjs-libraries/redis/redis.service';
+import { ioRedis } from '@postmill-ai/nestjs-libraries/redis/redis.service';
 import {
   RedisSessionStore,
   RedisBreakerStore,

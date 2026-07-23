@@ -4,15 +4,15 @@ import path from 'path';
 export default defineConfig({
   resolve: {
     alias: [
-      { find: '@gitroom/backend', replacement: path.resolve(__dirname, 'src') },
-      { find: '@gitroom/nestjs-libraries', replacement: path.resolve(__dirname, '../../libraries/nestjs-libraries/src') },
-      { find: '@gitroom/helpers', replacement: path.resolve(__dirname, '../../libraries/helpers/src') },
+      { find: '@postmill-ai/backend', replacement: path.resolve(__dirname, 'src') },
+      { find: '@postmill-ai/nestjs-libraries', replacement: path.resolve(__dirname, '../../libraries/nestjs-libraries/src') },
+      { find: '@postmill-ai/helpers', replacement: path.resolve(__dirname, '../../libraries/helpers/src') },
       // Resolve relocated provider packages + kernel to workspace source so all
       // workspaces share a single kernel module instance (correct barrel init order;
       // avoids the "Rules is not a function" half-initialized-copy error when the
       // social registration module eagerly imports all 36 packages).
-      { find: '@gitroom/provider-kernel', replacement: path.resolve(__dirname, '../../libraries/providers/kernel/src') },
-      { find: /^@gitroom\/provider-(.+)$/, replacement: path.resolve(__dirname, '../../libraries/providers/$1/src') },
+      { find: '@postmill-ai/provider-kernel', replacement: path.resolve(__dirname, '../../libraries/providers/kernel/src') },
+      { find: /^@postmill-ai\/provider-(.+)$/, replacement: path.resolve(__dirname, '../../libraries/providers/$1/src') },
     ],
   },
   test: {

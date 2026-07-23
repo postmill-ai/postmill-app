@@ -1,9 +1,9 @@
 'use client';
 
 import React, { FC, useMemo, useState } from 'react';
-import { useT } from '@gitroom/react/translation/get.transation.service.client';
-import { useModals } from '@gitroom/frontend/components/layout/new-modal';
-import { AudioPlayer } from '@gitroom/frontend/components/media-tools/audio-player';
+import { useT } from '@postmill-ai/react/translation/get.transation.service.client';
+import { useModals } from '@postmill-ai/frontend/components/layout/new-modal';
+import { AudioPlayer } from '@postmill-ai/frontend/components/media-tools/audio-player';
 import { HeyGenVoice } from './use-heygen';
 
 interface VoicePickerProps {

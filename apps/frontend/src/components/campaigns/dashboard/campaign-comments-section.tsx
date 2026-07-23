@@ -1,19 +1,19 @@
 'use client';
 
 import { FC, useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { useFetch } from '@gitroom/helpers/utils/custom.fetch';
-import { useT } from '@gitroom/react/translation/get.transation.service.client';
+import { useFetch } from '@postmill-ai/helpers/utils/custom.fetch';
+import { useT } from '@postmill-ai/react/translation/get.transation.service.client';
 import {
   useCampaignComments,
   CampaignCommentFilters,
-} from '@gitroom/frontend/components/campaigns/hooks/campaign.hooks';
-import { useTeamMembers } from '@gitroom/frontend/components/settings/roles/hooks/use-roles';
+} from '@postmill-ai/frontend/components/campaigns/hooks/campaign.hooks';
+import { useTeamMembers } from '@postmill-ai/frontend/components/settings/roles/hooks/use-roles';
 import {
   CommentInboxFilters,
   InboxFilters,
   ChannelOption,
-} from '@gitroom/frontend/components/comments/comment.inbox.filters';
-import { CommentCard, InboxComment } from '@gitroom/frontend/components/comments/comment.card';
+} from '@postmill-ai/frontend/components/comments/comment.inbox.filters';
+import { CommentCard, InboxComment } from '@postmill-ai/frontend/components/comments/comment.card';
 
 interface CampaignCommentsSectionProps {
   campaignId: string;

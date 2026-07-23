@@ -9,11 +9,11 @@ const mockFetch = vi.fn();
 
 let summaryData: any = { aiProviderActive: false };
 
-vi.mock('@gitroom/react/translation/get.transation.service.client', () => ({
+vi.mock('@postmill-ai/react/translation/get.transation.service.client', () => ({
   useT: () => mockT,
 }));
 
-vi.mock('@gitroom/helpers/utils/custom.fetch', () => ({
+vi.mock('@postmill-ai/helpers/utils/custom.fetch', () => ({
   useFetch: () => mockFetch,
 }));
 
@@ -32,7 +32,7 @@ vi.mock('swr', () => ({
   useSWRConfig: () => ({ mutate: mockMutate }),
 }));
 
-vi.mock('@gitroom/react/form/button', () => ({
+vi.mock('@postmill-ai/react/form/button', () => ({
   Button: ({ children, onClick, disabled, ...props }: any) => (
     <button type="button" onClick={onClick} disabled={disabled} {...props}>
       {children}

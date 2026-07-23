@@ -1,13 +1,13 @@
 'use client';
 
 import React, { useMemo } from 'react';
-import { useT } from '@gitroom/react/translation/get.transation.service.client';
+import { useT } from '@postmill-ai/react/translation/get.transation.service.client';
 import { useShortLinks, useShortLinksTimeseries } from '../hooks/useShortLinks';
 import { StatTile } from '../kit/stat-tile';
 import { TabSkeleton, ErrorState } from '../kit/states';
-import { useShortlinksConfig } from '@gitroom/frontend/components/settings/shortlinks/hooks/useShortlinksConfig';
-import { DataTable } from '@gitroom/frontend/components/ui/data-table';
-import type { Column } from '@gitroom/frontend/components/ui/data-table';
+import { useShortlinksConfig } from '@postmill-ai/frontend/components/settings/shortlinks/hooks/useShortlinksConfig';
+import { DataTable } from '@postmill-ai/frontend/components/ui/data-table';
+import type { Column } from '@postmill-ai/frontend/components/ui/data-table';
 
 interface ShortlinksTabProps {
   from: string;

@@ -2,11 +2,11 @@
 
 import { useCallback } from 'react';
 import useSWR from 'swr';
-import { useFetch } from '@gitroom/helpers/utils/custom.fetch';
-import { expandPostsList } from '@gitroom/helpers/utils/posts.list.minify';
+import { useFetch } from '@postmill-ai/helpers/utils/custom.fetch';
+import { expandPostsList } from '@postmill-ai/helpers/utils/posts.list.minify';
 import dayjs from 'dayjs';
-import { useT } from '@gitroom/react/translation/get.transation.service.client';
-import { Campaign, CampaignEntitySlug, CampaignRef } from '@gitroom/frontend/components/campaigns/campaign-types';
+import { useT } from '@postmill-ai/react/translation/get.transation.service.client';
+import { Campaign, CampaignEntitySlug, CampaignRef } from '@postmill-ai/frontend/components/campaigns/campaign-types';
 
 export interface OrgEntityOption {
   id: string;

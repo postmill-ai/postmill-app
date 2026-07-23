@@ -1,27 +1,27 @@
 'use client';
 
 import React, { useMemo, useState } from 'react';
-import { Button } from '@gitroom/react/form/button';
-import { Input } from '@gitroom/react/form/input';
-import { useT } from '@gitroom/react/translation/get.transation.service.client';
-import { Logo } from '@gitroom/frontend/components/new-layout/logo';
-import { FullscreenButton } from '@gitroom/frontend/components/media-tools/fullscreen-button';
-import { useFullscreen } from '@gitroom/frontend/components/media-tools/use-fullscreen';
+import { Button } from '@postmill-ai/react/form/button';
+import { Input } from '@postmill-ai/react/form/input';
+import { useT } from '@postmill-ai/react/translation/get.transation.service.client';
+import { Logo } from '@postmill-ai/frontend/components/new-layout/logo';
+import { FullscreenButton } from '@postmill-ai/frontend/components/media-tools/fullscreen-button';
+import { useFullscreen } from '@postmill-ai/frontend/components/media-tools/use-fullscreen';
 import {
   MediaSelectorModal,
   type MediaSelectorItem,
-} from '@gitroom/frontend/components/media-tools/media-selector-modal';
-import { useBrands } from '@gitroom/frontend/components/settings/brand/use-brands';
-import { useToaster } from '@gitroom/react/toaster/toaster';
-import { SafeContent } from '@gitroom/frontend/components/shared/safe-content';
+} from '@postmill-ai/frontend/components/media-tools/media-selector-modal';
+import { useBrands } from '@postmill-ai/frontend/components/settings/brand/use-brands';
+import { useToaster } from '@postmill-ai/react/toaster/toaster';
+import { SafeContent } from '@postmill-ai/frontend/components/shared/safe-content';
 import { useImportStockMedia } from './ai-designer.hooks';
 import { markdownToHtml } from './markdown-lite';
-import { CHANNEL_PRESETS } from '@gitroom/nestjs-libraries/integrations/social/channel-presets';
+import { CHANNEL_PRESETS } from '@postmill-ai/nestjs-libraries/integrations/social/channel-presets';
 import type {
   AiDesignerConfig,
   AiDesignerMode,
   AiDesignerStartPayload,
-} from '@gitroom/nestjs-libraries/ai-designer/ai-designer.types';
+} from '@postmill-ai/nestjs-libraries/ai-designer/ai-designer.types';
 
 interface AiDesignerStartProps {
   onStart: (

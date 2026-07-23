@@ -1,15 +1,15 @@
 'use client';
 
 import React, { useState } from 'react';
-import ProviderIcon from '@gitroom/frontend/components/shared/provider-icon';
-import { useFetch } from '@gitroom/helpers/utils/custom.fetch';
-import { CampaignSelector } from '@gitroom/frontend/components/campaigns/selector/campaign-selector';
-import { useT } from '@gitroom/react/translation/get.transation.service.client';
-import { ExtraField } from '@gitroom/frontend/components/settings/shared/kit/fields';
+import ProviderIcon from '@postmill-ai/frontend/components/shared/provider-icon';
+import { useFetch } from '@postmill-ai/helpers/utils/custom.fetch';
+import { CampaignSelector } from '@postmill-ai/frontend/components/campaigns/selector/campaign-selector';
+import { useT } from '@postmill-ai/react/translation/get.transation.service.client';
+import { ExtraField } from '@postmill-ai/frontend/components/settings/shared/kit/fields';
 import {
   ProviderExtraFieldSpec,
   ProviderFormState,
-} from '@gitroom/frontend/components/settings/shared/kit/provider-surface.types';
+} from '@postmill-ai/frontend/components/settings/shared/kit/provider-surface.types';
 
 const allProviderTypes = [
   { value: 'LOCAL', label: 'Local Storage' },

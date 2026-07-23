@@ -8,65 +8,65 @@ import {
   Logger,
   ValidationPipe,
 } from '@nestjs/common';
-import { PostValidationException } from '@gitroom/nestjs-libraries/errors/post-validation.exception';
-import { PostsRepository } from '@gitroom/nestjs-libraries/database/prisma/posts/posts.repository';
-import { CreatePostDto } from '@gitroom/nestjs-libraries/dtos/posts/create.post.dto';
-import { ValidatePostsDto } from '@gitroom/nestjs-libraries/dtos/posts/validate.posts.dto';
-import { BulkCreatePostsDto, BulkCreatePostRowDto } from '@gitroom/nestjs-libraries/dtos/posts/bulk.create.posts.dto';
+import { PostValidationException } from '@postmill-ai/nestjs-libraries/errors/post-validation.exception';
+import { PostsRepository } from '@postmill-ai/nestjs-libraries/database/prisma/posts/posts.repository';
+import { CreatePostDto } from '@postmill-ai/nestjs-libraries/dtos/posts/create.post.dto';
+import { ValidatePostsDto } from '@postmill-ai/nestjs-libraries/dtos/posts/validate.posts.dto';
+import { BulkCreatePostsDto, BulkCreatePostRowDto } from '@postmill-ai/nestjs-libraries/dtos/posts/bulk.create.posts.dto';
 import dayjs from 'dayjs';
 import { randomInt } from 'crypto';
 import { v4 as uuidv4 } from 'uuid';
-import { AnalyticsRepository } from '@gitroom/nestjs-libraries/database/prisma/analytics/analytics.repository';
-import { CampaignsRepository } from '@gitroom/nestjs-libraries/database/prisma/campaigns/campaigns.repository';
-import { AuditService } from '@gitroom/nestjs-libraries/database/prisma/audit/audit.service';
-import { SubscriptionService } from '@gitroom/nestjs-libraries/database/prisma/subscriptions/subscription.service';
-import { pricing } from '@gitroom/nestjs-libraries/database/prisma/subscriptions/pricing';
-import { IntegrationManager } from '@gitroom/nestjs-libraries/integrations/integration.manager';
+import { AnalyticsRepository } from '@postmill-ai/nestjs-libraries/database/prisma/analytics/analytics.repository';
+import { CampaignsRepository } from '@postmill-ai/nestjs-libraries/database/prisma/campaigns/campaigns.repository';
+import { AuditService } from '@postmill-ai/nestjs-libraries/database/prisma/audit/audit.service';
+import { SubscriptionService } from '@postmill-ai/nestjs-libraries/database/prisma/subscriptions/subscription.service';
+import { pricing } from '@postmill-ai/nestjs-libraries/database/prisma/subscriptions/pricing';
+import { IntegrationManager } from '@postmill-ai/nestjs-libraries/integrations/integration.manager';
 import {
   Integration,
   Post,
   CreationMethod,
   State,
 } from '@prisma/client';
-import { GetPostsDto } from '@gitroom/nestjs-libraries/dtos/posts/get.posts.dto';
-import { GetPostsListDto } from '@gitroom/nestjs-libraries/dtos/posts/get.posts.list.dto';
+import { GetPostsDto } from '@postmill-ai/nestjs-libraries/dtos/posts/get.posts.dto';
+import { GetPostsListDto } from '@postmill-ai/nestjs-libraries/dtos/posts/get.posts.list.dto';
 import { shuffle } from 'lodash';
-import { CreateGeneratedPostsDto } from '@gitroom/nestjs-libraries/dtos/generator/create.generated.posts.dto';
-import { IntegrationService } from '@gitroom/nestjs-libraries/database/prisma/integrations/integration.service';
-import { makeId } from '@gitroom/nestjs-libraries/services/make.is';
+import { CreateGeneratedPostsDto } from '@postmill-ai/nestjs-libraries/dtos/generator/create.generated.posts.dto';
+import { IntegrationService } from '@postmill-ai/nestjs-libraries/database/prisma/integrations/integration.service';
+import { makeId } from '@postmill-ai/nestjs-libraries/services/make.is';
 import utc from 'dayjs/plugin/utc';
 import timezone from 'dayjs/plugin/timezone';
 import isoWeek from 'dayjs/plugin/isoWeek';
-import { FileService } from '@gitroom/nestjs-libraries/database/prisma/file/file.service';
-import { ShortLinkService } from '@gitroom/nestjs-libraries/short-linking/short.link.service';
-import { CreateTagDto } from '@gitroom/nestjs-libraries/dtos/posts/create.tag.dto';
+import { FileService } from '@postmill-ai/nestjs-libraries/database/prisma/file/file.service';
+import { ShortLinkService } from '@postmill-ai/nestjs-libraries/short-linking/short.link.service';
+import { CreateTagDto } from '@postmill-ai/nestjs-libraries/dtos/posts/create.tag.dto';
 import {
   minifyPostsList,
   minifyPosts,
-} from '@gitroom/helpers/utils/posts.list.minify';
+} from '@postmill-ai/helpers/utils/posts.list.minify';
 import sharp from 'sharp';
-import { StorageService } from '@gitroom/nestjs-libraries/database/prisma/storage/storage.service';
+import { StorageService } from '@postmill-ai/nestjs-libraries/database/prisma/storage/storage.service';
 import { Readable } from 'stream';
-import { OpenaiService } from '@gitroom/nestjs-libraries/openai/openai.service';
+import { OpenaiService } from '@postmill-ai/nestjs-libraries/openai/openai.service';
 dayjs.extend(utc);
 dayjs.extend(timezone);
 dayjs.extend(isoWeek);
 import * as Sentry from '@sentry/nestjs';
-import { RagService } from '@gitroom/nestjs-libraries/ai/governance/rag.service';
-import { inngest, isInngestEnabled } from '@gitroom/nestjs-libraries/inngest/inngest.client';
-import { AnalyticsData } from '@gitroom/nestjs-libraries/integrations/social/social.integrations.interface';
-import { normalizeMetric } from '@gitroom/nestjs-libraries/integrations/social/analytics.metrics';
-import { timer } from '@gitroom/helpers/utils/timer';
-import { ioRedis } from '@gitroom/nestjs-libraries/redis/redis.service';
-import { RefreshTokenError } from '@gitroom/nestjs-libraries/inngest/errors';
-import { RefreshIntegrationService } from '@gitroom/nestjs-libraries/integrations/refresh.integration.service';
-import { hasExtension } from '@gitroom/helpers/utils/has.extension';
-import { stripLinks } from '@gitroom/helpers/utils/strip.links';
-import { readOrFetch } from '@gitroom/helpers/utils/read.or.fetch';
+import { RagService } from '@postmill-ai/nestjs-libraries/ai/governance/rag.service';
+import { inngest, isInngestEnabled } from '@postmill-ai/nestjs-libraries/inngest/inngest.client';
+import { AnalyticsData } from '@postmill-ai/nestjs-libraries/integrations/social/social.integrations.interface';
+import { normalizeMetric } from '@postmill-ai/nestjs-libraries/integrations/social/analytics.metrics';
+import { timer } from '@postmill-ai/helpers/utils/timer';
+import { ioRedis } from '@postmill-ai/nestjs-libraries/redis/redis.service';
+import { RefreshTokenError } from '@postmill-ai/nestjs-libraries/inngest/errors';
+import { RefreshIntegrationService } from '@postmill-ai/nestjs-libraries/integrations/refresh.integration.service';
+import { hasExtension } from '@postmill-ai/helpers/utils/has.extension';
+import { stripLinks } from '@postmill-ai/helpers/utils/strip.links';
+import { readOrFetch } from '@postmill-ai/helpers/utils/read.or.fetch';
 import { validate } from 'class-validator';
 import { plainToInstance } from 'class-transformer';
-import { stripHtmlValidation } from '@gitroom/helpers/utils/strip.html.validation';
-import { weightedLength } from '@gitroom/helpers/utils/count.length';
+import { stripHtmlValidation } from '@postmill-ai/helpers/utils/strip.html.validation';
+import { weightedLength } from '@postmill-ai/helpers/utils/count.length';
 
 type PostWithConditionals = Post & {
   integration?: Integration;

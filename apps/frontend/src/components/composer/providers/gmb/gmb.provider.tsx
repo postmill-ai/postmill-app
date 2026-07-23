@@ -4,13 +4,13 @@ import { FC, useCallback, useEffect } from 'react';
 import {
   PostComment,
   withProvider,
-} from '@gitroom/frontend/components/composer/providers/high.order.provider';
-import { GmbSettingsDto } from '@gitroom/nestjs-libraries/dtos/posts/providers-settings/gmb.settings.dto';
-import { useSettings } from '@gitroom/frontend/components/launches/helpers/use.values';
-import { Input } from '@gitroom/react/form/input';
-import { Select } from '@gitroom/react/form/select';
+} from '@postmill-ai/frontend/components/composer/providers/high.order.provider';
+import { GmbSettingsDto } from '@postmill-ai/nestjs-libraries/dtos/posts/providers-settings/gmb.settings.dto';
+import { useSettings } from '@postmill-ai/frontend/components/launches/helpers/use.values';
+import { Input } from '@postmill-ai/react/form/input';
+import { Select } from '@postmill-ai/react/form/select';
 import { useWatch } from 'react-hook-form';
-import { useT } from '@gitroom/react/translation/get.transation.service.client';
+import { useT } from '@postmill-ai/react/translation/get.transation.service.client';
 
 const topicTypes = [
   {

@@ -1,29 +1,29 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { Integration } from '@prisma/client';
-import { IntegrationManager } from '@gitroom/nestjs-libraries/integrations/integration.manager';
-import { OrgProviderConfigManager } from '@gitroom/nestjs-libraries/integrations/org-provider-config.manager';
-import { OrganizationService } from '@gitroom/nestjs-libraries/database/prisma/organizations/organization.service';
-import { IntegrationService } from '@gitroom/nestjs-libraries/database/prisma/integrations/integration.service';
-import { RefreshIntegrationService } from '@gitroom/nestjs-libraries/integrations/refresh.integration.service';
-import { WebhooksService } from '@gitroom/nestjs-libraries/database/prisma/webhooks/webhooks.service';
-import { WatchlistService } from '@gitroom/nestjs-libraries/database/prisma/watchlist/watchlist.service';
-import { PROVIDER_CAPABILITIES } from '@gitroom/nestjs-libraries/integrations/social/provider-capabilities';
+import { IntegrationManager } from '@postmill-ai/nestjs-libraries/integrations/integration.manager';
+import { OrgProviderConfigManager } from '@postmill-ai/nestjs-libraries/integrations/org-provider-config.manager';
+import { OrganizationService } from '@postmill-ai/nestjs-libraries/database/prisma/organizations/organization.service';
+import { IntegrationService } from '@postmill-ai/nestjs-libraries/database/prisma/integrations/integration.service';
+import { RefreshIntegrationService } from '@postmill-ai/nestjs-libraries/integrations/refresh.integration.service';
+import { WebhooksService } from '@postmill-ai/nestjs-libraries/database/prisma/webhooks/webhooks.service';
+import { WatchlistService } from '@postmill-ai/nestjs-libraries/database/prisma/watchlist/watchlist.service';
+import { PROVIDER_CAPABILITIES } from '@postmill-ai/nestjs-libraries/integrations/social/provider-capabilities';
 import {
   normalizeMetric,
   METRIC_REGISTRY,
-} from '@gitroom/nestjs-libraries/integrations/social/analytics.metrics';
+} from '@postmill-ai/nestjs-libraries/integrations/social/analytics.metrics';
 import dayjs from 'dayjs';
 import isoWeek from 'dayjs/plugin/isoWeek';
-import { timer } from '@gitroom/helpers/utils/timer';
-import { RefreshToken } from '@gitroom/nestjs-libraries/integrations/social.abstract';
-import { decryptIntegrationTokens, decryptPostIntegrationTokens } from '@gitroom/nestjs-libraries/database/prisma/integrations/integration-token.utils';
-import { OrgShortLinkSettingsService } from '@gitroom/nestjs-libraries/database/prisma/short-links/org-shortlink-settings.service';
-import { ProviderResolutionService } from '@gitroom/nestjs-libraries/providers/provider-resolution.service';
-import { EmailLogService } from '@gitroom/nestjs-libraries/database/prisma/emails/email-log.service';
-import { NotificationService } from '@gitroom/nestjs-libraries/database/prisma/notifications/notification.service';
-import { AnalyticsService } from '@gitroom/nestjs-libraries/analytics/analytics.service';
-import { getRetentionDays } from '@gitroom/nestjs-libraries/analytics/analytics-aggregation';
-import { stripHtmlTags } from '@gitroom/helpers/utils/strip.tags';
+import { timer } from '@postmill-ai/helpers/utils/timer';
+import { RefreshToken } from '@postmill-ai/nestjs-libraries/integrations/social.abstract';
+import { decryptIntegrationTokens, decryptPostIntegrationTokens } from '@postmill-ai/nestjs-libraries/database/prisma/integrations/integration-token.utils';
+import { OrgShortLinkSettingsService } from '@postmill-ai/nestjs-libraries/database/prisma/short-links/org-shortlink-settings.service';
+import { ProviderResolutionService } from '@postmill-ai/nestjs-libraries/providers/provider-resolution.service';
+import { EmailLogService } from '@postmill-ai/nestjs-libraries/database/prisma/emails/email-log.service';
+import { NotificationService } from '@postmill-ai/nestjs-libraries/database/prisma/notifications/notification.service';
+import { AnalyticsService } from '@postmill-ai/nestjs-libraries/analytics/analytics.service';
+import { getRetentionDays } from '@postmill-ai/nestjs-libraries/analytics/analytics-aggregation';
+import { stripHtmlTags } from '@postmill-ai/helpers/utils/strip.tags';
 
 dayjs.extend(isoWeek);
 

@@ -1,4 +1,4 @@
-import { InngestRunService } from '@gitroom/nestjs-libraries/inngest/inngest-run.service';
+import { InngestRunService } from '@postmill-ai/nestjs-libraries/inngest/inngest-run.service';
 
 // Minimal structural slice of the Inngest step tools — only `run` is needed here.
 type TrackStep = { run(id: string, fn: () => any): Promise<any> };

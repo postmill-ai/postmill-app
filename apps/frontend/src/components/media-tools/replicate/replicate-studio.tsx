@@ -2,11 +2,11 @@
 
 import React, { useEffect, useMemo, useState } from 'react';
 import useSWR from 'swr';
-import { useFetch } from '@gitroom/helpers/utils/custom.fetch';
-import { Logo } from '@gitroom/frontend/components/new-layout/logo';
-import { FullscreenButton } from '@gitroom/frontend/components/media-tools/fullscreen-button';
-import { useFullscreen } from '@gitroom/frontend/components/media-tools/use-fullscreen';
-import { useT } from '@gitroom/react/translation/get.transation.service.client';
+import { useFetch } from '@postmill-ai/helpers/utils/custom.fetch';
+import { Logo } from '@postmill-ai/frontend/components/new-layout/logo';
+import { FullscreenButton } from '@postmill-ai/frontend/components/media-tools/fullscreen-button';
+import { useFullscreen } from '@postmill-ai/frontend/components/media-tools/use-fullscreen';
+import { useT } from '@postmill-ai/react/translation/get.transation.service.client';
 import { useReplicateStore, type CategoryDefinition } from './replicate.store';
 import { ModelPicker } from './model-picker';
 import { DynamicForm } from './dynamic-form';
@@ -16,7 +16,7 @@ import { InpaintMaskEditor } from './inpaint-mask-editor';
 import { MergeEditor } from './merge-editor';
 import { MemeEditor } from './meme-editor';
 import { CommandPalette } from './command-palette';
-import { StudioLanding } from '@gitroom/frontend/components/media-tools/studio-kit/studio-landing';
+import { StudioLanding } from '@postmill-ai/frontend/components/media-tools/studio-kit/studio-landing';
 import { useGenerate, missingRequiredFields, FOLDER_REQUIRED_CATEGORIES } from './use-generate';
 
 const REPLICATE_LANDING = {

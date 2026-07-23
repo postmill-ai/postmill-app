@@ -4,9 +4,9 @@ import { FC, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
 import dayjs from 'dayjs';
 import { useDashboardCampaigns, CampaignSummary } from '../hooks/useDashboardCampaigns';
-import { Button } from '@gitroom/react/form/button';
-import { EmptyState, TabSkeleton } from '@gitroom/frontend/components/analytics-v2/kit/states';
-import { useT } from '@gitroom/react/translation/get.transation.service.client';
+import { Button } from '@postmill-ai/react/form/button';
+import { EmptyState, TabSkeleton } from '@postmill-ai/frontend/components/analytics-v2/kit/states';
+import { useT } from '@postmill-ai/react/translation/get.transation.service.client';
 
 const BAR_COLORS: Record<string, string> = {
   queue: 'bg-[var(--chart-5,#ffac30)]',

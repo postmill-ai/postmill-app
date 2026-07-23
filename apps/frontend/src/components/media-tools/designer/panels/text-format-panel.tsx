@@ -15,7 +15,7 @@ import {
 import { DESIGNER_FONTS, ensureFontLoaded } from '../fonts';
 import { useBrandColors } from './use-brand-colors';
 import { useBrandFonts, useCustomFonts } from './use-brand-fonts';
-import { useT } from '@gitroom/react/translation/get.transation.service.client';
+import { useT } from '@postmill-ai/react/translation/get.transation.service.client';
 
 const RUN_STYLE_KEYS = new Set(['fill', 'fontFamily', 'fontSize', 'fontWeight', 'fontStyle']);
 

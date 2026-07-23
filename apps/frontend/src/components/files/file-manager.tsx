@@ -2,21 +2,21 @@
 
 import React, { FC, useCallback, useEffect, useState } from 'react';
 import useSWR from 'swr';
-import { useFetch } from '@gitroom/helpers/utils/custom.fetch';
+import { useFetch } from '@postmill-ai/helpers/utils/custom.fetch';
 import { useDebounce } from 'use-debounce';
-import { FolderTree } from '@gitroom/frontend/components/files/folder-tree';
-import { FileGrid } from '@gitroom/frontend/components/files/file-grid';
-import { FileList } from '@gitroom/frontend/components/files/file-list';
-import { FileDetailsPanel } from '@gitroom/frontend/components/files/file-details-panel';
-import { FilePreviewModal } from '@gitroom/frontend/components/files/file-preview-modal';
-import { BulkToolbar } from '@gitroom/frontend/components/files/bulk-toolbar';
-import { useModals } from '@gitroom/frontend/components/layout/new-modal';
-import { FileUploader } from '@gitroom/frontend/components/files/file-uploader';
-import { LoadingComponent } from '@gitroom/frontend/components/layout/loading';
-import { TrashComponent } from '@gitroom/frontend/components/files/trash.component';
+import { FolderTree } from '@postmill-ai/frontend/components/files/folder-tree';
+import { FileGrid } from '@postmill-ai/frontend/components/files/file-grid';
+import { FileList } from '@postmill-ai/frontend/components/files/file-list';
+import { FileDetailsPanel } from '@postmill-ai/frontend/components/files/file-details-panel';
+import { FilePreviewModal } from '@postmill-ai/frontend/components/files/file-preview-modal';
+import { BulkToolbar } from '@postmill-ai/frontend/components/files/bulk-toolbar';
+import { useModals } from '@postmill-ai/frontend/components/layout/new-modal';
+import { FileUploader } from '@postmill-ai/frontend/components/files/file-uploader';
+import { LoadingComponent } from '@postmill-ai/frontend/components/layout/loading';
+import { TrashComponent } from '@postmill-ai/frontend/components/files/trash.component';
 import clsx from 'clsx';
-import { PageHeader } from '@gitroom/frontend/components/ui/page-header';
-import { useT } from '@gitroom/react/translation/get.transation.service.client';
+import { PageHeader } from '@postmill-ai/frontend/components/ui/page-header';
+import { useT } from '@postmill-ai/react/translation/get.transation.service.client';
 
 type ViewMode = 'grid' | 'list';
 

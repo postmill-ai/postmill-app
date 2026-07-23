@@ -12,24 +12,24 @@ import {
 } from '@nestjs/common';
 import { Response, Request } from 'express';
 
-import { CreateOrgUserDto } from '@gitroom/nestjs-libraries/dtos/auth/create.org.user.dto';
-import { LoginUserDto } from '@gitroom/nestjs-libraries/dtos/auth/login.user.dto';
-import { AuthService } from '@gitroom/backend/services/auth/auth.service';
-import { ForgotReturnPasswordDto } from '@gitroom/nestjs-libraries/dtos/auth/forgot-return.password.dto';
-import { ForgotPasswordDto } from '@gitroom/nestjs-libraries/dtos/auth/forgot.password.dto';
-import { ResendActivationDto } from '@gitroom/nestjs-libraries/dtos/auth/resend-activation.dto';
-import { RefreshTokenDto } from '@gitroom/nestjs-libraries/dtos/auth/refresh-token.dto';
-import { OAuthLinkQueryDto } from '@gitroom/nestjs-libraries/dtos/auth/oauth-link-query.dto';
+import { CreateOrgUserDto } from '@postmill-ai/nestjs-libraries/dtos/auth/create.org.user.dto';
+import { LoginUserDto } from '@postmill-ai/nestjs-libraries/dtos/auth/login.user.dto';
+import { AuthService } from '@postmill-ai/backend/services/auth/auth.service';
+import { ForgotReturnPasswordDto } from '@postmill-ai/nestjs-libraries/dtos/auth/forgot-return.password.dto';
+import { ForgotPasswordDto } from '@postmill-ai/nestjs-libraries/dtos/auth/forgot.password.dto';
+import { ResendActivationDto } from '@postmill-ai/nestjs-libraries/dtos/auth/resend-activation.dto';
+import { RefreshTokenDto } from '@postmill-ai/nestjs-libraries/dtos/auth/refresh-token.dto';
+import { OAuthLinkQueryDto } from '@postmill-ai/nestjs-libraries/dtos/auth/oauth-link-query.dto';
 import { ApiTags } from '@nestjs/swagger';
 import { Throttle } from '@nestjs/throttler';
-import { getCookieUrlFromDomain } from '@gitroom/helpers/subdomain/subdomain.management';
-import { EmailService } from '@gitroom/nestjs-libraries/services/email.service';
+import { getCookieUrlFromDomain } from '@postmill-ai/helpers/subdomain/subdomain.management';
+import { EmailService } from '@postmill-ai/nestjs-libraries/services/email.service';
 import { RealIP } from 'nestjs-real-ip';
-import { UserAgent } from '@gitroom/nestjs-libraries/user/user.agent';
+import { UserAgent } from '@postmill-ai/nestjs-libraries/user/user.agent';
 import { Provider } from '@prisma/client';
 import * as Sentry from '@sentry/nestjs';
-import { issueCsrfToken } from '@gitroom/backend/services/auth/csrf.middleware';
-import { AuthProviderManager } from '@gitroom/backend/services/auth/providers/auth-provider.manager';
+import { issueCsrfToken } from '@postmill-ai/backend/services/auth/csrf.middleware';
+import { AuthProviderManager } from '@postmill-ai/backend/services/auth/providers/auth-provider.manager';
 
 @ApiTags('Auth')
 @Controller('/auth')

@@ -2,12 +2,12 @@
 
 import React, { FC, useCallback, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { useFetch } from '@gitroom/helpers/utils/custom.fetch';
-import { useMediaDirectory } from '@gitroom/react/helpers/use.media.directory';
-import { hasExtension } from '@gitroom/helpers/utils/has.extension';
-import { useToaster } from '@gitroom/react/toaster/toaster';
+import { useFetch } from '@postmill-ai/helpers/utils/custom.fetch';
+import { useMediaDirectory } from '@postmill-ai/react/helpers/use.media.directory';
+import { hasExtension } from '@postmill-ai/helpers/utils/has.extension';
+import { useToaster } from '@postmill-ai/react/toaster/toaster';
 import clsx from 'clsx';
-import { useT } from '@gitroom/react/translation/get.transation.service.client';
+import { useT } from '@postmill-ai/react/translation/get.transation.service.client';
 import type { FileItem } from './file-manager';
 
 const loadDims = (src: string) =>

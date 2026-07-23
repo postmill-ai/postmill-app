@@ -15,7 +15,7 @@ import {
   readCappedArrayBuffer,
   SafeFetchPort,
   ProviderModule,
-} from '@gitroom/provider-kernel';
+} from '@postmill-ai/provider-kernel';
 
 // Cap a fetched source frame before base64-inlining it into the i2v request body (6.1j).
 const MAX_SOURCE_IMAGE_BYTES = 32 * 1024 * 1024;

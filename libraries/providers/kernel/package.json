@@ -1,5 +1,5 @@
 {
-  "name": "@gitroom/provider-kernel",
+  "name": "@postmill-ai/provider-kernel",
   "version": "1.0.0",
   "private": true,
   "main": "src/index.ts",

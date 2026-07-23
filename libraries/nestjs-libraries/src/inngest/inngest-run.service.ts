@@ -2,7 +2,7 @@ import { Injectable } from '@nestjs/common';
 import {
   InngestFunctionRunView,
   InngestRunRepository,
-} from '@gitroom/nestjs-libraries/database/prisma/inngest-runs/inngest-run.repository';
+} from '@postmill-ai/nestjs-libraries/database/prisma/inngest-runs/inngest-run.repository';
 
 // Thin service wrapper around InngestRunRepository so Inngest function factories
 // receive a service rather than the repository directly (layering refactor A-09/A-10).

@@ -5,7 +5,7 @@ type TranslateFn = (key: string, fallback: string, vars?: Record<string, unknown
 export {
   createFetchError,
   type FetchError,
-} from '@gitroom/frontend/components/settings/shared/fetch-error';
+} from '@postmill-ai/frontend/components/settings/shared/fetch-error';
 
 export function greetingForUser(name: string, hour: number, t: TranslateFn) {
   if (hour < 5) return t('greeting_working_late', 'Working late, {{name}}?', { name });

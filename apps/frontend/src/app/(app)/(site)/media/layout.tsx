@@ -5,12 +5,12 @@ import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import clsx from 'clsx';
 import useSWR from 'swr';
-import { useFetch } from '@gitroom/helpers/utils/custom.fetch';
-import { useT } from '@gitroom/react/translation/get.transation.service.client';
-import { usePermissions } from '@gitroom/frontend/components/layout/use-permissions';
-import { useSidebarCollapse } from '@gitroom/frontend/components/layout/use-sidebar-collapse';
-import { SubmenuStrip } from '@gitroom/frontend/components/new-layout/submenu-strip';
-import { StudioErrorBoundary } from '@gitroom/frontend/components/media-tools/studio-error-boundary';
+import { useFetch } from '@postmill-ai/helpers/utils/custom.fetch';
+import { useT } from '@postmill-ai/react/translation/get.transation.service.client';
+import { usePermissions } from '@postmill-ai/frontend/components/layout/use-permissions';
+import { useSidebarCollapse } from '@postmill-ai/frontend/components/layout/use-sidebar-collapse';
+import { SubmenuStrip } from '@postmill-ai/frontend/components/new-layout/submenu-strip';
+import { StudioErrorBoundary } from '@postmill-ai/frontend/components/media-tools/studio-error-boundary';
 
 interface MediaTab {
   href: string;

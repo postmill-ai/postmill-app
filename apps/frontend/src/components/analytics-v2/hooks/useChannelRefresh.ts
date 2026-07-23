@@ -1,6 +1,6 @@
 'use client';
 
-import { useFetch } from '@gitroom/helpers/utils/custom.fetch';
+import { useFetch } from '@postmill-ai/helpers/utils/custom.fetch';
 import { useCallback } from 'react';
 
 // On-demand channel refresh (6.7). POSTs /analytics/v2/refresh/:integrationId,

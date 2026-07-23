@@ -1,6 +1,6 @@
 'use client';
 import React, { useEffect, useRef } from 'react';
-import { useT } from '@gitroom/react/translation/get.transation.service.client';
+import { useT } from '@postmill-ai/react/translation/get.transation.service.client';
 
 interface ContextMenuProps {
   x: number;

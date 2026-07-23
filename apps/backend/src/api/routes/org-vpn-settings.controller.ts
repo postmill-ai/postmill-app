@@ -10,12 +10,12 @@ import {
   Put,
 } from '@nestjs/common';
 import { Throttle } from '@nestjs/throttler';
-import { GetOrgFromRequest } from '@gitroom/nestjs-libraries/user/org.from.request';
+import { GetOrgFromRequest } from '@postmill-ai/nestjs-libraries/user/org.from.request';
 import { Organization } from '@prisma/client';
 import { ApiTags } from '@nestjs/swagger';
-import { OrgVpnConfigService } from '@gitroom/nestjs-libraries/vpn/org-vpn-config.service';
-import { RequirePermission } from '@gitroom/backend/services/auth/rbac/require-permission.decorator';
-import { UpsertVpnConfigDto } from '@gitroom/nestjs-libraries/dtos/providers/provider-config.dtos';
+import { OrgVpnConfigService } from '@postmill-ai/nestjs-libraries/vpn/org-vpn-config.service';
+import { RequirePermission } from '@postmill-ai/backend/services/auth/rbac/require-permission.decorator';
+import { UpsertVpnConfigDto } from '@postmill-ai/nestjs-libraries/dtos/providers/provider-config.dtos';
 
 @ApiTags('Org VPN Settings')
 @Controller('/settings/vpn')

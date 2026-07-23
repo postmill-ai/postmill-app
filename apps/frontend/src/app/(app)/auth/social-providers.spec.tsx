@@ -2,15 +2,15 @@ import React from 'react';
 import { describe, it, expect, vi, beforeEach, type Mock } from 'vitest';
 import { act, render, screen, waitFor } from '@testing-library/react';
 import { SWRConfig } from 'swr';
-import { Login } from '@gitroom/frontend/components/auth/login';
-import { RegisterAfter } from '@gitroom/frontend/components/auth/register';
-import { useFetch } from '@gitroom/helpers/utils/custom.fetch';
+import { Login } from '@postmill-ai/frontend/components/auth/login';
+import { RegisterAfter } from '@postmill-ai/frontend/components/auth/register';
+import { useFetch } from '@postmill-ai/helpers/utils/custom.fetch';
 
 // F10: the login/register pages must advertise exactly the providers the
 // backend (/auth/providers) returns — no hardcoded fallback. A fresh install
 // ({providers:[LOCAL]}) renders no social button on either page.
 
-vi.mock('@gitroom/react/translation/get.transation.service.client', () => ({
+vi.mock('@postmill-ai/react/translation/get.transation.service.client', () => ({
   useT: () => (_key: string, fallback: string) => fallback,
 }));
 
@@ -27,11 +27,11 @@ vi.mock('next/navigation', () => ({
   useSearchParams: () => new URLSearchParams(),
 }));
 
-vi.mock('@gitroom/helpers/utils/custom.fetch', () => ({
+vi.mock('@postmill-ai/helpers/utils/custom.fetch', () => ({
   useFetch: vi.fn(),
 }));
 
-vi.mock('@gitroom/react/helpers/variable.context', () => ({
+vi.mock('@postmill-ai/react/helpers/variable.context', () => ({
   useVariables: () => ({
     isGeneral: true,
     genericOauth: false,
@@ -42,11 +42,11 @@ vi.mock('@gitroom/react/helpers/variable.context', () => ({
   }),
 }));
 
-vi.mock('@gitroom/helpers/utils/use.fire.events', () => ({
+vi.mock('@postmill-ai/helpers/utils/use.fire.events', () => ({
   useFireEvents: () => vi.fn(),
 }));
 
-vi.mock('@gitroom/react/helpers/use.track', () => ({
+vi.mock('@postmill-ai/react/helpers/use.track', () => ({
   useTrack: () => vi.fn(),
 }));
 
@@ -56,35 +56,35 @@ vi.mock('react-use-cookie', () => ({
 
 // Plain DTO stand-ins: the real ones pull @prisma/client into jsdom, and the
 // resolver only runs on submit (not exercised here).
-vi.mock('@gitroom/nestjs-libraries/dtos/auth/login.user.dto', () => ({
+vi.mock('@postmill-ai/nestjs-libraries/dtos/auth/login.user.dto', () => ({
   LoginUserDto: class LoginUserDto {},
 }));
-vi.mock('@gitroom/nestjs-libraries/dtos/auth/create.org.user.dto', () => ({
+vi.mock('@postmill-ai/nestjs-libraries/dtos/auth/create.org.user.dto', () => ({
   CreateOrgUserDto: class CreateOrgUserDto {},
 }));
 
 // Provider buttons are mocked with sentinels: the spec asserts which buttons
 // the pages choose to render, without pulling Solana/Neynar SDKs into jsdom.
-vi.mock('@gitroom/frontend/components/auth/providers/google.provider', () => ({
+vi.mock('@postmill-ai/frontend/components/auth/providers/google.provider', () => ({
   GoogleProvider: () => <div data-testid="google-provider" />,
 }));
-vi.mock('@gitroom/frontend/components/auth/providers/github.provider', () => ({
+vi.mock('@postmill-ai/frontend/components/auth/providers/github.provider', () => ({
   GithubProvider: () => <div data-testid="github-provider" />,
 }));
-vi.mock('@gitroom/frontend/components/auth/providers/oauth.provider', () => ({
+vi.mock('@postmill-ai/frontend/components/auth/providers/oauth.provider', () => ({
   OauthProvider: () => <div data-testid="oauth-provider" />,
 }));
 vi.mock(
-  '@gitroom/frontend/components/auth/providers/farcaster.provider',
+  '@postmill-ai/frontend/components/auth/providers/farcaster.provider',
   () => ({
     FarcasterProvider: () => <div data-testid="farcaster-provider" />,
   })
 );
-vi.mock('@gitroom/frontend/components/auth/providers/wallet.provider', () => ({
+vi.mock('@postmill-ai/frontend/components/auth/providers/wallet.provider', () => ({
   default: () => <div data-testid="wallet-provider" />,
 }));
 vi.mock(
-  '@gitroom/frontend/components/auth/providers/placeholder/wallet.ui.provider',
+  '@postmill-ai/frontend/components/auth/providers/placeholder/wallet.ui.provider',
   () => ({
     WalletUiProvider: () => <div data-testid="wallet-ui-provider" />,
   })

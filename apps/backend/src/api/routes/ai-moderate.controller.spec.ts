@@ -1,19 +1,19 @@
 import 'reflect-metadata';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { CHECK_POLICIES_KEY } from '@gitroom/backend/services/auth/permissions/permissions.ability';
-import { AuthorizationActions, Sections } from '@gitroom/backend/services/auth/permissions/permission.exception.class';
+import { CHECK_POLICIES_KEY } from '@postmill-ai/backend/services/auth/permissions/permissions.ability';
+import { AuthorizationActions, Sections } from '@postmill-ai/backend/services/auth/permissions/permission.exception.class';
 
 const mockCheckInput = vi.fn(async (text: string) => text);
 const mockCheckOutput = vi.fn(async (text: string) => text);
 
-vi.mock('@gitroom/nestjs-libraries/ai/governance/guardrail.service', () => ({
+vi.mock('@postmill-ai/nestjs-libraries/ai/governance/guardrail.service', () => ({
   GuardrailService: class {
     checkInput = mockCheckInput;
     checkOutput = mockCheckOutput;
   },
 }));
 
-vi.mock('@gitroom/nestjs-libraries/ai/governance/errors', () => ({
+vi.mock('@postmill-ai/nestjs-libraries/ai/governance/errors', () => ({
   GuardrailViolation: class GuardrailViolation extends Error {
     constructor(message: string) {
       super(message);
@@ -22,8 +22,8 @@ vi.mock('@gitroom/nestjs-libraries/ai/governance/errors', () => ({
 }));
 
 import { AiModerateController } from './ai-moderate.controller';
-import { GuardrailService } from '@gitroom/nestjs-libraries/ai/governance/guardrail.service';
-import { GuardrailViolation } from '@gitroom/nestjs-libraries/ai/governance/errors';
+import { GuardrailService } from '@postmill-ai/nestjs-libraries/ai/governance/guardrail.service';
+import { GuardrailViolation } from '@postmill-ai/nestjs-libraries/ai/governance/errors';
 
 describe('AiModerateController', () => {
   let controller: AiModerateController;

@@ -1,15 +1,15 @@
-import { AgentToolInterface } from '@gitroom/nestjs-libraries/chat/agent.tool.interface';
-import { checkAuth } from '@gitroom/nestjs-libraries/chat/auth.context';
+import { AgentToolInterface } from '@postmill-ai/nestjs-libraries/chat/agent.tool.interface';
+import { checkAuth } from '@postmill-ai/nestjs-libraries/chat/auth.context';
 import { createTool } from '@mastra/core/tools';
 import { Injectable } from '@nestjs/common';
-import { MediaStudioService } from '@gitroom/nestjs-libraries/media/studio/media-studio.service';
-import { OrgMediaProviderSettingsService } from '@gitroom/nestjs-libraries/database/prisma/media-providers/org-media-provider-settings.service';
+import { MediaStudioService } from '@postmill-ai/nestjs-libraries/media/studio/media-studio.service';
+import { OrgMediaProviderSettingsService } from '@postmill-ai/nestjs-libraries/database/prisma/media-providers/org-media-provider-settings.service';
 import { z } from 'zod';
 import {
   parseOrg,
   parseUser,
   requireWrite,
-} from '@gitroom/nestjs-libraries/chat/tools/tool.helpers';
+} from '@postmill-ai/nestjs-libraries/chat/tools/tool.helpers';
 
 @Injectable()
 export class MediaStudioGenerateTool implements AgentToolInterface {

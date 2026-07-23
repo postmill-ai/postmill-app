@@ -5,20 +5,20 @@ import {
   PostDetails,
   PostResponse,
   SocialProvider,
-} from '@gitroom/provider-kernel';
-import { makeId, makeOauthState } from '@gitroom/provider-kernel';
-import { PinterestSettingsDto } from '@gitroom/provider-kernel';
-import { safeFetch } from '@gitroom/provider-kernel';
-import { timer } from '@gitroom/helpers/utils/timer';
+} from '@postmill-ai/provider-kernel';
+import { makeId, makeOauthState } from '@postmill-ai/provider-kernel';
+import { PinterestSettingsDto } from '@postmill-ai/provider-kernel';
+import { safeFetch } from '@postmill-ai/provider-kernel';
+import { timer } from '@postmill-ai/helpers/utils/timer';
 import {
   BadBody,
   SocialAbstract,
   ValidityMedia,
-} from '@gitroom/provider-kernel';
+} from '@postmill-ai/provider-kernel';
 import dayjs from 'dayjs';
-import { Tool } from '@gitroom/provider-kernel';
-import { Rules } from '@gitroom/provider-kernel';
-import { hasExtension } from '@gitroom/helpers/utils/has.extension';
+import { Tool } from '@postmill-ai/provider-kernel';
+import { Rules } from '@postmill-ai/provider-kernel';
+import { hasExtension } from '@postmill-ai/helpers/utils/has.extension';
 
 import { metadata as providerMetadata } from './metadata';
 @Rules(
@@ -639,7 +639,7 @@ import {
   ProviderModule as __ProviderModule,
   SocialProviderKernelAdapter as __Bridge,
   PROVIDER_CAPABILITIES as __CAPS,
-} from '@gitroom/provider-kernel';
+} from '@postmill-ai/provider-kernel';
 
 const __adapter = new PinterestProvider();
 

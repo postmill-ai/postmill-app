@@ -8,7 +8,7 @@ import {
 } from '../social-provider';
 import { SocialCommentDTO } from '../social';
 import { makeId, makeOauthState } from '../social-make-id';
-import { timer } from '@gitroom/helpers/utils/timer';
+import { timer } from '@postmill-ai/helpers/utils/timer';
 import dayjs from 'dayjs';
 import {
   SocialAbstract,
@@ -17,7 +17,7 @@ import {
 import { InstagramDto } from '../social-dtos';
 import { Integration } from '@prisma/client';
 import { Rules } from '../social-rules-decorator';
-import { hasExtension } from '@gitroom/helpers/utils/has.extension';
+import { hasExtension } from '@postmill-ai/helpers/utils/has.extension';
 import { Logger } from '@nestjs/common';
 
 /** Maximum number of status checks while waiting for a single media upload to finish. */

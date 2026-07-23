@@ -1,5 +1,5 @@
 {
-  "name": "@gitroom/nestjs-libraries",
+  "name": "@postmill-ai/nestjs-libraries",
   "version": "1.0.0",
   "private": true,
   "dependencies": {
@@ -23,7 +23,7 @@
     "@aws-sdk/client-s3": "^3.1062.0",
     "@aws-sdk/client-sesv2": "3.800.0",
     "@aws-sdk/s3-request-presigner": "^3.1062.0",
-    "@gitroom/provider-kernel": "workspace:*",
+    "@postmill-ai/provider-kernel": "workspace:*",
     "@langchain/anthropic": "^1.0.0",
     "@langchain/community": "^1.1.29",
     "@langchain/core": "^1.1.48",
