@@ -12,6 +12,7 @@ import {
   AiMediaCategory,
   AiModelCategory,
 } from './default-categories';
+import { getOrCacheModelList } from './defaults-cache';
 
 export interface ResolvedDefault {
   providerId: string;
@@ -266,9 +267,13 @@ export class DefaultsResolutionService {
           // No live catalog: fall back to the committed static model list.
           return this._staticMediaModels(candidate, category);
         }
-        const live = await media.listModels(this._categoryToOperation(category), {
+        const live = await getOrCacheModelList(
+          'media',
+          candidate.providerId,
+          candidate.version,
           credentials,
-        });
+          () => media.listModels!(this._categoryToOperation(category), { credentials }),
+        );
         // A transient empty live catalog should not hide a static fallback.
         if (!live || live.length === 0) {
           return this._staticMediaModels(candidate, category) || live;
@@ -280,7 +285,9 @@ export class DefaultsResolutionService {
       if (!ai?.listModels) {
         return undefined;
       }
-      return ai.listModels(credentials);
+      return getOrCacheModelList('ai', candidate.providerId, candidate.version, credentials, () =>
+        ai.listModels!(credentials),
+      );
     } catch (err) {
       this._logger.warn(
         `listModels failed for ${candidate.providerId}@${candidate.version} category ${category}: ${(err as Error).message}`,

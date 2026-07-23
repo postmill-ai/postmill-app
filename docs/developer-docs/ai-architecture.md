@@ -4,7 +4,7 @@ Postmill ships a pluggable, multi-provider AI layer. Every AI surface resolves i
 
 > For the end-user view, see [AI Tools](../user-guide/ai-tools.md).
 
-> Verified against v1.1.0 (2026-07-22)
+> Verified against v1.1.0 (2026-07-23)
 
 ---
 
@@ -85,6 +85,15 @@ interface AiCapability {
 ```
 
 Adapters receive decrypted credentials at call time and never store or log them. Outbound validation calls use the kernel-injected `SafeFetchPort` so tenant-supplied base URLs are SSRF-checked.
+
+### Model catalogs (live-first)
+
+`listModels` is **live-first with a static fallback**, not a hardcoded list:
+
+- Adapters whose API exposes a model listing fetch it over the injected `SafeFetchPort` and merge it with their static catalog via the kernel helpers `fetchOpenAIStyleModels` / `mergeLiveModels` (`libraries/providers/kernel/src/domains/ai-helpers.ts`). In the merge, the **live list decides which models exist** (static entries absent upstream were retired), while **static entries keep their curated metadata** (labels, `vision`/`reasoning` flags) on known ids; live-only ids get capability heuristics. This covers `deepseek`, `openai`, `groq`, `xai`, `mistral`, `cohere`, `togetherai`, `fireworks`, `perplexity`, `openrouter`, `anthropic`, `google`, `gateway`, and all nine `OpenAICompatibleAdapter` hubs.
+- On **any** failure (no safeFetch, non-OK, transport error, SSRF block, empty/unexpected payload) the static catalog is returned unchanged — `listModels` never throws.
+- `azure`, `vertex`, and `bedrock` remain **static-only**: their model inventories are deployment-scoped and cannot be enumerated with the stored API key.
+- Live results are cached in **Redis for 24h** (`providers:models:{domain}:{providerId}:{version}:{credHash}`, via `getOrCacheModelList` in `libraries/nestjs-libraries/src/ai/defaults/defaults-cache.ts`), keyed by a SHA-256 hash of the credential material — a credential change lands on a fresh key naturally. Only non-empty results are cached. Both consumers go through it: the Settings → AI → Model Defaults catalog endpoint and `DefaultsResolutionService` (auto-pick / stored-model validation). The rendered per-org catalog keeps its separate 60s cache.
 
 ---
 

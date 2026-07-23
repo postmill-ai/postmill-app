@@ -5,14 +5,28 @@ import { ChatAnthropic } from '@langchain/anthropic';
 import type { LanguageModelV2 } from '@ai-sdk/provider-v5';
 import { metadata as providerMetadata } from './metadata';
 import {
+  mergeLiveModels,
   type AiCapability as AIProviderAdapter,
   type AiCredentialField as CredentialField,
   type AiModelInfo as ModelInfo,
   type AiCapabilities as AICapabilities,
   type AiModelOptions as AIModelOptions,
+  type LiveModelEntry,
   type ProviderModule,
   type SafeFetchPort,
 } from '@gitroom/provider-kernel';
+
+// 2.5: current live model IDs only — the previous catalog carried
+// `claude-4-20250514` (never existed), `claude-3-opus-20240229` (retired),
+// and `claude-3-5-sonnet-20241022` (retired 404), with the sole `reasoning`
+// flag on the retired opus, so high-reasoning auto-pick chose a dead model.
+const ANTHROPIC_MODELS: ModelInfo[] = [
+  { id: 'claude-opus-4-8', label: 'Claude Opus 4.8', kind: 'text', capabilities: { text: true, image: false, vision: true, embeddings: false, speech: false, tools: true }, reasoning: true },
+  { id: 'claude-sonnet-5', label: 'Claude Sonnet 5', kind: 'text', capabilities: { text: true, image: false, vision: true, embeddings: false, speech: false, tools: true } },
+  { id: 'claude-haiku-4-5', label: 'Claude Haiku 4.5', kind: 'text', capabilities: { text: true, image: false, vision: true, embeddings: false, speech: false, tools: true } },
+];
+
+const ANTHROPIC_MODELS_URL = 'https://api.anthropic.com/v1/models';
 
 export class AnthropicAdapter implements AIProviderAdapter {
   readonly identifier = 'anthropic';
@@ -31,16 +45,42 @@ export class AnthropicAdapter implements AIProviderAdapter {
     this._safeFetch = fetch;
   }
 
-  async listModels(_creds: Record<string, string>): Promise<ModelInfo[]> {
-    // 2.5: current live model IDs only — the previous catalog carried
-    // `claude-4-20250514` (never existed), `claude-3-opus-20240229` (retired),
-    // and `claude-3-5-sonnet-20241022` (retired 404), with the sole `reasoning`
-    // flag on the retired opus, so high-reasoning auto-pick chose a dead model.
-    return [
-      { id: 'claude-opus-4-8', label: 'Claude Opus 4.8', kind: 'text', capabilities: { text: true, image: false, vision: true, embeddings: false, speech: false, tools: true }, reasoning: true },
-      { id: 'claude-sonnet-5', label: 'Claude Sonnet 5', kind: 'text', capabilities: { text: true, image: false, vision: true, embeddings: false, speech: false, tools: true } },
-      { id: 'claude-haiku-4-5', label: 'Claude Haiku 4.5', kind: 'text', capabilities: { text: true, image: false, vision: true, embeddings: false, speech: false, tools: true } },
-    ];
+  /**
+   * Live model list from Anthropic's `GET /v1/models` — shape
+   * `{ data: [{ id, display_name }] }` with x-api-key auth (not Bearer), so it
+   * can't use the shared fetchOpenAIStyleModels helper. Returns null on ANY
+   * failure so listModels falls back to the static catalog. Never throws.
+   */
+  private async _fetchLiveModels(creds: Record<string, string>): Promise<LiveModelEntry[] | null> {
+    if (!this._safeFetch || !creds.apiKey) return null;
+    try {
+      const response = await this._safeFetch(ANTHROPIC_MODELS_URL, {
+        headers: {
+          'x-api-key': creds.apiKey,
+          'anthropic-version': '2023-06-01',
+        },
+      });
+      if (!response.ok) return null;
+      const data: any = await response.json();
+      const models = data?.data;
+      if (!Array.isArray(models) || models.length === 0) return null;
+      const entries: LiveModelEntry[] = models
+        .filter((m: any) => m && typeof m.id === 'string' && m.id.length > 0)
+        .map((m: any) => ({
+          id: m.id as string,
+          label: typeof m.display_name === 'string' && m.display_name ? m.display_name : undefined,
+        }));
+      return entries.length > 0 ? entries : null;
+    } catch {
+      return null;
+    }
+  }
+
+  async listModels(creds: Record<string, string>): Promise<ModelInfo[]> {
+    // Live-first: merge the upstream catalog with the static list (curated
+    // metadata wins on known ids). Any failure falls back to the static list.
+    const live = await this._fetchLiveModels(creds);
+    return mergeLiveModels(live, ANTHROPIC_MODELS, this.capabilities);
   }
 
   async validateCredentials(creds: Record<string, string>): Promise<{ ok: boolean; error?: string }> {

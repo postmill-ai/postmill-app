@@ -2,7 +2,7 @@
 
 Postmill's AI layer supports 25 providers through a pluggable adapter system. Each adapter lives in its own workspace package under `libraries/providers/<id>/` and is registered into the `ProviderKernel` at backend boot.
 
-> Verified against v1.0.0
+> Verified against v1.1.0 (2026-07-23)
 
 ---
 
@@ -78,6 +78,8 @@ import {
   type AiModelOptions as AIModelOptions,
   type ProviderModule,
   type SafeFetchPort,
+  fetchOpenAIStyleModels,
+  mergeLiveModels,
 } from '@gitroom/provider-kernel';
 import { metadata as providerMetadata } from './metadata';
 
@@ -89,6 +91,17 @@ const CAPABILITIES: AICapabilities = {
   speech: false,
   tools: true,
 };
+
+// Static fallback catalog + curated metadata (labels, vision/reasoning flags)
+// for the models you know about. Live listing merges with this.
+const STATIC_MODELS: ModelInfo[] = [
+  {
+    id: 'model-v1',
+    label: 'Model V1',
+    kind: 'text',
+    capabilities: CAPABILITIES,
+  },
+];
 
 const CREDENTIAL_FIELDS: CredentialField[] = [
   {
@@ -113,15 +126,17 @@ export class YourProviderAdapter implements AIProviderAdapter {
     this._safeFetch = fetch;
   }
 
-  async listModels(_creds: Record<string, string>): Promise<ModelInfo[]> {
-    return [
-      {
-        id: 'model-v1',
-        label: 'Model V1',
-        kind: 'text',
-        capabilities: this.capabilities,
-      },
-    ];
+  async listModels(creds: Record<string, string>): Promise<ModelInfo[]> {
+    // Live-first: enumerate the provider's real catalog over the SSRF-safe fetch
+    // and merge it with the static fallback (curated labels/capabilities win on
+    // known ids). On ANY failure the static list is returned unchanged. See
+    // ai-architecture.md → "Model catalogs (live-first)".
+    const live = await fetchOpenAIStyleModels(
+      this._safeFetch,
+      creds.baseURL || 'https://api.yourprovider.com/v1',
+      creds.apiKey,
+    );
+    return mergeLiveModels(live, STATIC_MODELS, this.capabilities);
   }
 
   async validateCredentials(

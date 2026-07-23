@@ -5,6 +5,8 @@ import type { BaseChatModel } from '@langchain/core/language_models/chat_models'
 import type { LanguageModelV2, ImageModelV2, EmbeddingModelV2, SpeechModelV2 } from '@ai-sdk/provider-v5';
 import { metadata as providerMetadata } from './metadata';
 import {
+  fetchOpenAIStyleModels,
+  mergeLiveModels,
   type AiCapability as AIProviderAdapter,
   type AiCredentialField as CredentialField,
   type AiModelInfo as ModelInfo,
@@ -94,8 +96,13 @@ export class OpenAIAdapter implements AIProviderAdapter {
     });
   }
 
-  async listModels(_creds: Record<string, string>): Promise<ModelInfo[]> {
-    return OPENAI_MODELS;
+  async listModels(creds: Record<string, string>): Promise<ModelInfo[]> {
+    const live = await fetchOpenAIStyleModels(
+      this._safeFetch,
+      creds.baseURL || 'https://api.openai.com/v1',
+      creds.apiKey,
+    );
+    return mergeLiveModels(live, OPENAI_MODELS, this.capabilities);
   }
 
   async validateCredentials(creds: Record<string, string>): Promise<{ ok: boolean; error?: string }> {

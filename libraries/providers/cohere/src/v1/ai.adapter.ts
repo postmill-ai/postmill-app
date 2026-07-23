@@ -4,11 +4,13 @@ import type { BaseChatModel } from '@langchain/core/language_models/chat_models'
 import type { LanguageModelV2, EmbeddingModelV2 } from '@ai-sdk/provider-v5';
 import { metadata as providerMetadata } from './metadata';
 import {
+  mergeLiveModels,
   type AiCapability as AIProviderAdapter,
   type AiCredentialField as CredentialField,
   type AiModelInfo as ModelInfo,
   type AiCapabilities as AICapabilities,
   type AiModelOptions as AIModelOptions,
+  type LiveModelEntry,
   type ProviderModule,
   type SafeFetchPort,
 } from '@gitroom/provider-kernel';
@@ -59,8 +61,46 @@ export class CohereAdapter implements AIProviderAdapter {
     return createCohere({ apiKey: creds.apiKey });
   }
 
-  async listModels(_creds: Record<string, string>): Promise<ModelInfo[]> {
-    return COHERE_MODELS;
+  /**
+   * Live model list from Cohere's `GET /models` — shape
+   * `{ models: [{ name, endpoints: ['chat','embed',...] }] }`, not the OpenAI
+   * `{data:[...]}` shape, so it can't use the shared fetchOpenAIStyleModels
+   * helper. `endpoints` already types each model: 'chat' → plain text entry,
+   * else 'embed' → embedding override; models with neither (rerank, classify)
+   * are skipped so they don't pollute text menus. Returns null on ANY failure
+   * so listModels falls back to the static catalog. Never throws.
+   */
+  private async _fetchLiveModels(creds: Record<string, string>): Promise<LiveModelEntry[] | null> {
+    if (!this._safeFetch || !creds.apiKey) return null;
+    try {
+      const response = await this._safeFetch(`${COHERE_BASE_URL}/models`, {
+        headers: { Authorization: `Bearer ${creds.apiKey}` },
+      });
+      if (!response.ok) return null;
+      const data: any = await response.json();
+      const models = data?.models;
+      if (!Array.isArray(models) || models.length === 0) return null;
+      const entries: LiveModelEntry[] = [];
+      for (const m of models) {
+        if (!m || typeof m.name !== 'string' || !m.name) continue;
+        const endpoints: any[] = Array.isArray(m.endpoints) ? m.endpoints : [];
+        if (endpoints.includes('chat')) {
+          entries.push({ id: m.name });
+        } else if (endpoints.includes('embed')) {
+          entries.push({ id: m.name, kind: 'embedding', capabilities: { text: false, image: false, vision: false, speech: false, tools: false, embeddings: true } });
+        }
+      }
+      return entries.length > 0 ? entries : null;
+    } catch {
+      return null;
+    }
+  }
+
+  async listModels(creds: Record<string, string>): Promise<ModelInfo[]> {
+    // Live-first: merge the upstream catalog with the static list (curated
+    // metadata wins on known ids). Any failure falls back to the static list.
+    const live = await this._fetchLiveModels(creds);
+    return mergeLiveModels(live, COHERE_MODELS, this.capabilities);
   }
 
   async validateCredentials(creds: Record<string, string>): Promise<{ ok: boolean; error?: string }> {

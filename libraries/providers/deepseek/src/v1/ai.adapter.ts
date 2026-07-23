@@ -4,6 +4,8 @@ import type { BaseChatModel } from '@langchain/core/language_models/chat_models'
 import type { LanguageModelV2 } from '@ai-sdk/provider-v5';
 import { metadata as providerMetadata } from './metadata';
 import {
+  fetchOpenAIStyleModels,
+  mergeLiveModels,
   type AiCapability as AIProviderAdapter,
   type AiCredentialField as CredentialField,
   type AiModelInfo as ModelInfo,
@@ -56,8 +58,13 @@ export class DeepSeekAdapter implements AIProviderAdapter {
     return createDeepSeek({ apiKey: creds.apiKey });
   }
 
-  async listModels(_creds: Record<string, string>): Promise<ModelInfo[]> {
-    return DEEPSEEK_MODELS;
+  async listModels(creds: Record<string, string>): Promise<ModelInfo[]> {
+    const live = await fetchOpenAIStyleModels(
+      this._safeFetch,
+      creds.baseURL || DEEPSEEK_BASE_URL,
+      creds.apiKey,
+    );
+    return mergeLiveModels(live, DEEPSEEK_MODELS, this.capabilities);
   }
 
   async validateCredentials(creds: Record<string, string>): Promise<{ ok: boolean; error?: string }> {

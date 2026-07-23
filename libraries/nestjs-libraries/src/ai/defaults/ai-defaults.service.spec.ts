@@ -4,6 +4,8 @@ import { bustDefaultsCatalogCache as mockBustCache } from './defaults-cache';
 
 vi.mock('./defaults-cache', () => ({
   bustDefaultsCatalogCache: vi.fn(),
+  // Pass-through: the cache layer is exercised in its own spec.
+  getOrCacheModelList: vi.fn((_d, _p, _v, _c, fetcher) => fetcher()),
 }));
 import { DefaultsResolutionService } from './defaults-resolution.service';
 import { AIModelProvider } from '../ai-model.provider';
@@ -55,6 +57,17 @@ describe('AiDefaultsService', () => {
     resolveAI: vi.fn(),
   } as unknown as ProviderResolutionService;
 
+  const mockRuntimeContextFactory = {
+    build: vi.fn((opts: { credentials?: Record<string, string>; orgId?: string }) => ({
+      credentials: opts?.credentials ?? {},
+      orgId: opts?.orgId,
+      fetch: vi.fn(),
+      encryption: {},
+      logger: {},
+      telemetry: {},
+    })),
+  };
+
   const mockKernel = {
     listManifests: vi.fn(),
     versions: vi.fn(),
@@ -79,6 +92,7 @@ describe('AiDefaultsService', () => {
       mockDefaultsRepository,
       mockSettingsValidator,
       mockProviderResolution,
+      mockRuntimeContextFactory as any,
       mockKernel as any,
       mockOrgAiSettings,
     );
