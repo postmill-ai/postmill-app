@@ -32,6 +32,7 @@ export const CopilotProvider: FC<{ children: ReactNode }> = ({ children }) => {
       runtimeUrl={backendUrl + '/copilot/chat'}
       headers={csrfHeader()}
       showDevConsole={false}
+      enableInspector={false}
     >
       {children}
     </CopilotKit>

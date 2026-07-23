@@ -96,6 +96,7 @@ export const AgentChat: FC = () => {
       runtimeUrl={backendUrl + '/copilot/agent'}
       headers={csrfHeader()}
       showDevConsole={false}
+      enableInspector={false}
       agent="postmill"
       properties={{
         integrations: properties,
