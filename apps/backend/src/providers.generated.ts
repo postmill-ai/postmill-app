@@ -145,6 +145,7 @@ import wrapcastModules from '@gitroom/provider-wrapcast';
 import xModules from '@gitroom/provider-x';
 import xaiModules from '@gitroom/provider-xai';
 import youtubeModules from '@gitroom/provider-youtube';
+import zaiModules from '@gitroom/provider-zai';
 import { ProviderModule } from '@gitroom/provider-kernel';
 
 export const providerModules: ProviderModule<any, any>[] = [
@@ -295,4 +296,5 @@ export const providerModules: ProviderModule<any, any>[] = [
   ...xModules,
   ...xaiModules,
   ...youtubeModules,
+  ...zaiModules,
 ];

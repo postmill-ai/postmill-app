@@ -39,6 +39,7 @@ const ICONS: Record<string, Entry> = {
   lightning: { viewBox: '0 0 24 24', color: '#792EE5', node: (<path d="M13 2 3 14h7l-1 8 10-12h-7l1-8Z" />) },
   vultr: { viewBox: '0 0 24 24', color: '#007BFC', node: (<path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2Zm4 14h-3l-4-4V8h3l4 4v4Z" />) },
   kimi: { viewBox: '0 0 24 24', color: '#111827', node: (<path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8Z" />) },
+  zai: { viewBox: '0 0 24 24', color: '#3B5BFD', node: (<path d="M5 5h14v3L10 16h9v3H5v-3l9-8H5V5Z" />) },
 
   // ── Media Providers ───────────────────────────────────────
   reelfarm: { viewBox: '0 0 24 24', color: '#22C55E', node: (<path d="M4 6a2 2 0 0 1 2-2h8a2 2 0 0 1 2 2v1l4-2v14l-4-2v1a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6Zm5 2v8l6-4-6-4Z" />) },
@@ -141,6 +142,7 @@ const FALLBACK_COLORS: Record<string, string> = {
   lightning: '#792EE5',
   vultr: '#007BFC',
   kimi: '#111827',
+  zai: '#3B5BFD',
   WASABI: '#13B57E',
   DIGITALOCEAN_SPACES: '#0080FF',
   HETZNER: '#D50C2D',

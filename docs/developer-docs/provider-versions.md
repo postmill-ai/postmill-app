@@ -15,7 +15,7 @@ A few branded media studios ride another provider's adapter:
 
 The table below shows each provider's registered domains. A provider that appears in both `ai` and `media` can share a single org credential across both surfaces.
 
-## AI (`ai`) — 26 providers
+## AI (`ai`) — 27 providers
 
 | Provider | ID | Domains | Kind / Notes |
 |---|---|---|---|
@@ -45,6 +45,7 @@ The table below shows each provider's registered domains. A provider that appear
 | Vercel AI | `gateway` | ai, media | hub; low-reasoning, high-reasoning, workflow, vision; image-focal-point, image-slide, image-to-image, image-to-video, text-to-image, text-to-video |
 | Vultr Inference | `vultr` | ai, storage | action |
 | xAI Grok | `xai` | ai, media | hub; low-reasoning, high-reasoning, workflow, vision; image-focal-point, image-slide, image-to-image, text-to-image |
+| Z.AI GLM | `zai` | ai | direct; low-reasoning, high-reasoning, workflow, vision |
 
 ## Auth (`auth`) — 6 providers
 

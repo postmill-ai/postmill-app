@@ -162,6 +162,7 @@
     "@gitroom/provider-x": "workspace:*",
     "@gitroom/provider-xai": "workspace:*",
     "@gitroom/provider-youtube": "workspace:*",
+    "@gitroom/provider-zai": "workspace:*",
     "@nestjs/platform-socket.io": "^11.1.27",
     "@nestjs/websockets": "^11.1.27",
     "bs58": "^6.0.0",

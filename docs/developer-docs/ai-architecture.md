@@ -55,11 +55,11 @@ A caller can pass `reasoning: true` to request the `high-reasoning` category reg
 
 AI adapters live in provider packages under `libraries/providers/<id>/src/v1/ai.adapter.ts`. They are registered into the `ProviderKernel` at backend boot by `ProvidersBootstrap` (`apps/backend/src/providers.bootstrap.ts`) from the generated manifest in `apps/backend/src/providers.generated.ts`.
 
-26 providers total:
+27 providers total:
 
 **16 bespoke adapters:** `openai`, `anthropic`, `google`, `bedrock`, `vertex`, `azure`, `groq`, `fireworks`, `togetherai`, `deepseek`, `mistral`, `cohere`, `perplexity`, `xai`, `gateway`, `openrouter`
 
-**10 OpenAI-compatible adapters** via `OpenAICompatibleAdapter` from `@gitroom/provider-kernel`: `siliconflow`, `deepinfra`, `minimax`, `qwen`, `meta-llama`, `gmihub`, `bitdeer`, `lightning`, `vultr`, `kimi`
+**11 OpenAI-compatible adapters** via `OpenAICompatibleAdapter` from `@gitroom/provider-kernel`: `siliconflow`, `deepinfra`, `minimax`, `qwen`, `meta-llama`, `gmihub`, `bitdeer`, `lightning`, `vultr`, `kimi`, `zai`
 
 Each adapter implements the `AiCapability` interface from the kernel:
 

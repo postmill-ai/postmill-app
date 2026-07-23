@@ -939,6 +939,12 @@
       ],
       "@gitroom/provider-youtube/*": [
         "libraries/providers/youtube/src/*"
+      ],
+      "@gitroom/provider-zai": [
+        "libraries/providers/zai/src"
+      ],
+      "@gitroom/provider-zai/*": [
+        "libraries/providers/zai/src/*"
       ]
     }
   },
