@@ -428,6 +428,14 @@ export class AiDesignerConductorService {
           { instruction, targetDesignId, nonce: '' },
           emitter
         );
+      } else {
+        await this._emitText(
+          sessionId,
+          ctx,
+          emitter,
+          'conversationalist',
+          'No design is available to revise yet.'
+        );
       }
       return;
     }
@@ -1716,12 +1724,30 @@ export class AiDesignerConductorService {
 
   private _parseAssets(response: AgentResponse): Record<string, AssetResult> {
     const parsed = this._safeJson(response.content) as any;
-    return parsed?.type === 'assets' ? parsed.assets : {};
+    if (parsed?.type !== 'assets') {
+      this._logger.warn(
+        `Asset agent returned non-asset response (type=${parsed?.type ?? 'unparseable'}); composing without imagery.`
+      );
+      return {};
+    }
+    if (!parsed.assets || Object.keys(parsed.assets).length === 0) {
+      this._logger.warn('Asset agent returned zero assets; composing without imagery.');
+    }
+    return parsed.assets ?? {};
   }
 
   private _parseCopy(response: AgentResponse): SlotTextMap {
     const parsed = this._safeJson(response.content) as any;
-    return parsed?.type === 'copy' ? parsed.texts : {};
+    if (parsed?.type !== 'copy') {
+      this._logger.warn(
+        `Copywriter returned non-copy response (type=${parsed?.type ?? 'unparseable'}); composing without copy.`
+      );
+      return {};
+    }
+    if (!parsed.texts || Object.keys(parsed.texts).length === 0) {
+      this._logger.warn('Copywriter returned zero texts; composing without copy.');
+    }
+    return parsed.texts ?? {};
   }
 
   private _parseDesignDoc(response: AgentResponse): DesignerDoc {

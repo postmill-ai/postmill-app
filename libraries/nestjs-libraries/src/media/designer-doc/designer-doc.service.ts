@@ -72,8 +72,15 @@ export class DesignerDocService {
     // Strict-parse every op first — bad agent values fail fast with a path.
     const parsedOpsResult = DesignerDocOpsSchema.safeParse(ops);
     if (!parsedOpsResult.success) {
+      // Surface the zod paths in the message itself — callers (conductor logs,
+      // agent retries) typically only see `err.message`, and a bare "Invalid
+      // DesignerDoc op" is undebuggable.
+      const detail = parsedOpsResult.error.issues
+        .slice(0, 5)
+        .map((i) => `${i.path.join('.')}: ${i.message}`)
+        .join('; ');
       throw new BadRequestException({
-        message: 'Invalid DesignerDoc op',
+        message: `Invalid DesignerDoc op — ${detail}`,
         issues: parsedOpsResult.error.issues.map((i) => ({
           path: i.path,
           message: i.message,

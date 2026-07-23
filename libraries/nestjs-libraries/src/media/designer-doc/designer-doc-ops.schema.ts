@@ -9,6 +9,7 @@ import {
   StrictDesignerElementSchema,
   SrcSchema,
 } from './designer-doc.schema';
+import { migrateDoc } from './designer-doc.migrate';
 
 const strictNum = (min: number, max: number) =>
   z.number().finite().min(min).max(max);
@@ -44,7 +45,10 @@ const UpdateElementPatchSchema =
 
 const SetDocOpSchema = z.object({
   op: z.literal('setDoc'),
-  doc: DesignerDocStrictSchema,
+  // Embedded docs go through the same migration as every other doc entry
+  // point (validate/validateStrict) — agent-emitted docs routinely omit
+  // normalized fields like `version`, which migrateDoc defaults.
+  doc: z.preprocess((raw) => migrateDoc(raw), DesignerDocStrictSchema),
 });
 
 const RemoveOutputOpSchema = z.object({

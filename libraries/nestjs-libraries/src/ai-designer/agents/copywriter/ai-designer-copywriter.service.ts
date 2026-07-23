@@ -1,5 +1,5 @@
 import '@gitroom/nestjs-libraries/ai-designer/agent-mesh/agent-mesh-env.shim';
-import { Injectable, OnModuleInit } from '@nestjs/common';
+import { Injectable, Logger, OnModuleInit } from '@nestjs/common';
 import {
   registerInProcessAgent,
   type InProcessHandler,
@@ -30,6 +30,8 @@ interface CopywriterInput {
 
 @Injectable()
 export class AiDesignerCopywriterService implements OnModuleInit {
+  private readonly _logger = new Logger(AiDesignerCopywriterService.name);
+
   constructor(private readonly _ai: AIModelProvider) {}
 
   onModuleInit() {
@@ -87,7 +89,7 @@ export class AiDesignerCopywriterService implements OnModuleInit {
       orgId,
     });
 
-    const parsed = await this._parseRawCopy(raw, textSlots.map((s) => s.id));
+    const parsed = await this._parseRawCopy(raw, textSlots);
 
     // For a revise request, keep unchanged slots from the existing copy.
     if (existingTexts) {
@@ -101,8 +103,20 @@ export class AiDesignerCopywriterService implements OnModuleInit {
     }
 
     const result: Record<string, string> = {};
+    const missing: string[] = [];
     for (const slot of textSlots) {
-      result[slot.id] = parsed[slot.id] ?? '';
+      if (parsed[slot.id]) {
+        result[slot.id] = parsed[slot.id];
+      } else {
+        // Do NOT backfill '' — an empty string masks the miss from every
+        // downstream fallback (it reads as "copy present").
+        missing.push(slot.id);
+      }
+    }
+    if (missing.length > 0) {
+      this._logger.warn(
+        `Copywriter could not bind copy for slots [${missing.join(', ')}].`
+      );
     }
     return result;
   }
@@ -184,44 +198,32 @@ export class AiDesignerCopywriterService implements OnModuleInit {
 
   private async _parseRawCopy(
     raw: string,
-    slotIds: string[]
+    slots: { id: string; role?: string }[]
   ): Promise<Record<string, string>> {
-    const result: Record<string, string> = {};
-
-    // Try structured repair first so fenced JSON and slightly malformed
-    // model replies are normalized before the hand-rolled fallbacks.
+    // Layer 1: structured repair (fenced/malformed JSON normalized).
     try {
       const repaired = await repair(z.record(z.string()), raw);
       if (repaired && typeof repaired === 'object' && !Array.isArray(repaired)) {
-        for (const id of slotIds) {
-          if (typeof repaired[id] === 'string') {
-            result[id] = repaired[id];
-          }
-        }
-        if (Object.keys(result).length > 0) {
-          return result;
-        }
+        const matched = this._matchSlots(repaired as Record<string, string>, slots);
+        if (Object.keys(matched).length > 0) return matched;
       }
     } catch {
       // Fall through to JSON.parse / line extraction.
     }
 
+    // Layer 2: plain JSON.
     try {
       const parsed = JSON.parse(raw);
       if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
-        for (const id of slotIds) {
-          if (typeof parsed[id] === 'string') {
-            result[id] = parsed[id];
-          }
-        }
-        if (Object.keys(result).length > 0) {
-          return result;
-        }
+        const matched = this._matchSlots(parsed, slots);
+        if (Object.keys(matched).length > 0) return matched;
       }
     } catch {
       // Fall through to line extraction.
     }
 
+    // Layer 3: "key: text" lines.
+    const lines: Record<string, string> = {};
     for (const line of raw.split('\n')) {
       const idx = line.indexOf(':');
       if (idx === -1) continue;
@@ -234,11 +236,34 @@ export class AiDesignerCopywriterService implements OnModuleInit {
         .trim()
         .replace(/,$/, '')
         .replace(/^["'`]+|["'`]+$/g, '');
-      if (slotIds.includes(id) && text) {
-        result[id] = text;
-      }
+      if (id && text) lines[id] = text;
     }
+    return this._matchSlots(lines, slots);
+  }
 
-    return result;
+  /** Match model-returned keys to slots by exact id, then normalized id/role —
+   *  models routinely key by the slot's ROLE (e.g. "primaryHeadline") instead
+   *  of its id ("headline"). */
+  private _matchSlots(
+    record: Record<string, unknown>,
+    slots: { id: string; role?: string }[]
+  ): Record<string, string> {
+    const norm = (v: string) => v.toLowerCase().replace(/[^a-z0-9]/g, '');
+    const out: Record<string, string> = {};
+    const entries = Object.entries(record).filter(
+      ([, v]) => typeof v === 'string' && (v as string).trim().length > 0
+    ) as [string, string][];
+    for (const slot of slots) {
+      const exact = entries.find(([k]) => k === slot.id);
+      if (exact) { out[slot.id] = exact[1]; continue; }
+      const wantId = norm(slot.id);
+      const wantRole = norm(slot.role || '');
+      const fuzzy = entries.find(([k]) => {
+        const nk = norm(k);
+        return nk === wantId || (wantRole && (nk === wantRole || nk.includes(wantRole) || wantRole.includes(nk)));
+      });
+      if (fuzzy) out[slot.id] = fuzzy[1];
+    }
+    return out;
   }
 }

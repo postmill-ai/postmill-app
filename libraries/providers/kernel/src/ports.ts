@@ -8,7 +8,9 @@ export interface SafeFetchPort {
   // the URL to a string for SSRF validation; a `Request` object was previously
   // stringified to the literal "[object Request]", silently dropping its
   // method/headers/body — so `Request` is not an accepted input.
-  (input: string | URL, init?: RequestInit): Promise<Response>;
+  // `timeoutMs` extends the default outbound timeout for known-slow calls
+  // (e.g. OpenAI image generation, which routinely exceeds 30s).
+  (input: string | URL, init?: RequestInit & { timeoutMs?: number }): Promise<Response>;
 }
 
 export interface LoggerPort {

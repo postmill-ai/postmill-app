@@ -134,14 +134,22 @@ export class AiDesignerAssetService implements OnModuleInit {
           const file = await this._importDataUrl(orgId, url, need.brief);
           if (file) return this._toResult(need.slotId, file);
         }
-      } catch {
-        // Swallow provider/timeout/capability errors and try stock.
+      } catch (err) {
+        // Swallow provider/timeout/capability errors and try stock — but say
+        // so: a silent fallthrough here renders flat backgrounds with zero
+        // diagnostic trail.
+        this._logger.warn(
+          `Asset generate failed for slot ${need.slotId}: ${(err as Error).message}; trying stock.`
+        );
       }
     }
 
     const stock = await this._tryStock(orgId, need);
     if (stock) return stock;
 
+    this._logger.warn(
+      `Asset for slot ${need.slotId} fell back to gradient (generate + stock both unavailable).`
+    );
     return this._fallbackGradient(orgId, need);
   }
 

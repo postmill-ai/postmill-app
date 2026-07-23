@@ -96,14 +96,19 @@ export function webhookSignature(rawBody: string): string {
 // `invalid onRequestStart method` (the handler API changed in undici 7/8) and every
 // outbound provider/webhook publish fails. undici.fetch + undici.Agent are the same
 // version, so the dispatcher is honoured (SSRF DNS-pinning preserved).
-export async function safeFetch(url: string, init?: RequestInit): Promise<Response> {
+export async function safeFetch(url: string, init?: RequestInit & { timeoutMs?: number }): Promise<Response> {
   let currentUrl = url;
   let response: Response | undefined;
 
   // D1: bound the whole operation (across redirect hops) by a timeout, merged
   // with any caller-supplied signal. Webhook dispatch passes a tighter
   // WEBHOOK_TIMEOUT_MS signal via `init.signal`, which wins via AbortSignal.any.
-  const timeoutMs = outboundTimeoutMs();
+  // Per-call override for known-slow providers (bounded to 5 min); the
+  // env/default budget applies otherwise.
+  const timeoutMs =
+    init?.timeoutMs && Number.isFinite(init.timeoutMs)
+      ? Math.min(init.timeoutMs, 300_000)
+      : outboundTimeoutMs();
   const signal = withTimeoutSignal(
     (init as { signal?: AbortSignal } | undefined)?.signal,
     timeoutMs,

@@ -43,7 +43,7 @@ jobs:
           path: |
             ${{ env.STORE_PATH }}
             ${{ github.workspace }}/.next/cache
-          key: ${{ runner.os }}-pnpm-${{ hashFiles('**/pnpm-lock.yaml') }}-${{ hashFiles('**/*.js', '**/*.jsx', '**/*.ts', '**/*.tsx') }}
+          key: ${{ runner.os }}-pnpm-${{ hashFiles('**/pnpm-lock.yaml') }}-${{ hashFiles('apps/**/*.js', 'apps/**/*.jsx', 'apps/**/*.ts', 'apps/**/*.tsx', 'libraries/**/*.js', 'libraries/**/*.jsx', 'libraries/**/*.ts', 'libraries/**/*.tsx', '!**/node_modules/**') }}
           restore-keys: |
             ${{ runner.os }}-pnpm-${{ hashFiles('**/pnpm-lock.yaml') }}-
 
