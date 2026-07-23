@@ -427,6 +427,7 @@ If the contact sheet looks good, return { "findings": [] }.`;
     );
   }
 
+  /** Resolved path must stay inside UPLOAD_DIRECTORY (traversal guard). */
   private _localPathFromUrl(url: string): string {
     const frontendUrl = (process.env.FRONTEND_URL || '').replace(/\/$/, '');
     let key = url;
@@ -435,7 +436,11 @@ If the contact sheet looks good, return { "findings": [] }.`;
     } else if (key.startsWith('/uploads/')) {
       key = key.slice('/uploads/'.length);
     }
-    const uploadDirectory = process.env.UPLOAD_DIRECTORY || './uploads';
-    return path.join(uploadDirectory, key);
+    const uploadDirectory = path.resolve(process.env.UPLOAD_DIRECTORY || './uploads');
+    const resolved = path.resolve(uploadDirectory, decodeURIComponent(key));
+    if (resolved !== uploadDirectory && !resolved.startsWith(uploadDirectory + path.sep)) {
+      throw new Error(`upload path escapes storage root: ${url}`);
+    }
+    return resolved;
   }
 }
