@@ -54,7 +54,6 @@ const ORCHESTRATION_CATEGORIES = new Set([
 ]);
 
 const ACTION_ONLY_PROVIDERS = new Set([
-  'heygen',
   'did',
   'hedra',
   'tavus',
@@ -62,6 +61,10 @@ const ACTION_ONLY_PROVIDERS = new Set([
   'ideogram',
   'reelfarm',
 ]);
+
+// Direct providers whose model catalog is a live listModels (HeyGen's "models"
+// are the account's avatar catalog) — kind stays direct, hasModelList stays true.
+const LIVE_LISTMODELS_DIRECT = new Set(['heygen']);
 
 const LIVE_LISTMODELS_HUBS = new Set([
   'deepinfra',
@@ -266,6 +269,11 @@ function reconcileMetadata(providerId, existing, catalog) {
   if (isLiveHub) {
     // Live hubs keep their broad category declarations; listModels is the source.
     kind = 'hub';
+    hasModelList = true;
+  } else if (LIVE_LISTMODELS_DIRECT.has(providerId)) {
+    // Live-list direct providers: the runtime listModels is the catalog source;
+    // keep the file's declared categories.
+    kind = 'direct';
     hasModelList = true;
   } else if (isActionOnly) {
     kind = 'action';

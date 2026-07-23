@@ -7,8 +7,6 @@ export const metadata: ProviderMetadata = {
   },
   "id": "heygen",
   "displayName": "heygen",
-  // Avatars are HeyGen's "models" (listModels enumerates the account's avatar
-  // catalog), so this is a regular model-list provider, not an action provider.
   "kind": "direct",
   "domains": [
     "media"
