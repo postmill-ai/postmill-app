@@ -84,6 +84,10 @@ const CAPABILITY_COLORS: Record<string, string> = {
 
 const titleCase = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
 
+// Providers that bring their own endpoint — Base URL is a required, visible
+// setting for these; hosted providers keep their canonical endpoint hidden.
+const BASE_URL_PROVIDERS = new Set(['openai-compatible']);
+
 export const aiDescriptor: ProviderSurfaceDescriptor<AiMeta> = {
   key: 'ai',
   basePath: '/settings/ai',
@@ -201,10 +205,19 @@ export const aiDescriptor: ProviderSurfaceDescriptor<AiMeta> = {
         help: 'Enter a value between 0 and 1 (e.g. 0.8 for 80%).',
       },
     ],
-    // Base URL is not a user setting — every AI adapter defaults its own
-    // canonical endpoint (see OpenAICompatibleAdapter / gateway). Hide it.
+    // Base URL is a user setting only for endpoint-bringing providers
+    // (openai-compatible has no canonical endpoint of its own). Every hosted AI
+    // adapter defaults its own canonical endpoint, so baseURL stays hidden for
+    // them. The same rule runs in filterCredentialFields for the catalog
+    // version-fields branch.
     credentialFieldsFromMeta: (m) =>
-      (m?.credentialFields ?? []).filter((f) => f.key !== 'baseURL'),
+      (m?.credentialFields ?? []).filter(
+        (f) => f.key !== 'baseURL' || BASE_URL_PROVIDERS.has(m?.identifier ?? ''),
+      ),
+    filterCredentialFields: (fields, identifier) =>
+      fields.filter(
+        (f) => f.key !== 'baseURL' || BASE_URL_PROVIDERS.has(identifier),
+      ),
     // Model selection lives in Settings → AI → Model Defaults, not here.
     buildBody: (state) => ({
       credentials: state.credentials,

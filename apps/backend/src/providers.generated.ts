@@ -83,6 +83,7 @@ import nordvpnModules from '@gitroom/provider-nordvpn';
 import nostrModules from '@gitroom/provider-nostr';
 import nvidiaModules from '@gitroom/provider-nvidia';
 import openaiModules from '@gitroom/provider-openai';
+import openaicompatibleModules from '@gitroom/provider-openai-compatible';
 import openrouterModules from '@gitroom/provider-openrouter';
 import owlyModules from '@gitroom/provider-owly';
 import peertubeModules from '@gitroom/provider-peertube';
@@ -236,6 +237,7 @@ export const providerModules: ProviderModule<any, any>[] = [
   ...nostrModules,
   ...nvidiaModules,
   ...openaiModules,
+  ...openaicompatibleModules,
   ...openrouterModules,
   ...owlyModules,
   ...peertubeModules,

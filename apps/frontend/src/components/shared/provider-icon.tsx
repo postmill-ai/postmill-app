@@ -42,6 +42,7 @@ const ICONS: Record<string, Entry> = {
   zai: { viewBox: '0 0 24 24', color: '#3B5BFD', node: (<path d="M5 5h14v3L10 16h9v3H5v-3l9-8H5V5Z" />) },
   apertus: { viewBox: '0 0 24 24', color: '#DA291C', node: (<path d="M12 3 2 21h4l2-4h8l2 4h4L12 3Zm0 7 2.5 5h-5L12 10Z" />) },
   nvidia: { viewBox: '0 0 24 24', color: '#76B900', node: (<path d="M12 5C6 5 2 12 2 12s4 7 10 7 10-7 10-7-4-7-10-7Zm0 11a4 4 0 1 1 0-8 4 4 0 0 1 0 8Z" />) },
+  'openai-compatible': { viewBox: '0 0 24 24', color: '#64748B', node: (<path d="M9 2v6M15 2v6M7 8h10v4a5 5 0 0 1-5 5 5 5 0 0 1-5-5V8Zm5 9v5" stroke="currentColor" strokeWidth="2" strokeLinecap="round" fill="none" />) },
 
   // ── Media Providers ───────────────────────────────────────
   reelfarm: { viewBox: '0 0 24 24', color: '#22C55E', node: (<path d="M4 6a2 2 0 0 1 2-2h8a2 2 0 0 1 2 2v1l4-2v14l-4-2v1a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6Zm5 2v8l6-4-6-4Z" />) },
@@ -147,6 +148,7 @@ const FALLBACK_COLORS: Record<string, string> = {
   zai: '#3B5BFD',
   apertus: '#DA291C',
   nvidia: '#76B900',
+  'openai-compatible': '#64748B',
   WASABI: '#13B57E',
   DIGITALOCEAN_SPACES: '#0080FF',
   HETZNER: '#D50C2D',

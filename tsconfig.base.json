@@ -568,6 +568,12 @@
       "@gitroom/provider-openai/*": [
         "libraries/providers/openai/src/*"
       ],
+      "@gitroom/provider-openai-compatible": [
+        "libraries/providers/openai-compatible/src"
+      ],
+      "@gitroom/provider-openai-compatible/*": [
+        "libraries/providers/openai-compatible/src/*"
+      ],
       "@gitroom/provider-openrouter": [
         "libraries/providers/openrouter/src"
       ],

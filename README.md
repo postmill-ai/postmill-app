@@ -23,7 +23,7 @@
 
 **The open-source, AI-native social media scheduling platform.**
 
-Self-hosted, bring-your-own-key AI across 29+ providers, 36+ channels, and 46 built-in media tools — an open-source alternative to Buffer, Hootsuite, and Sprout Social. Postmill is built for agencies, teams, and multi-brand operators who want to schedule everywhere, generate on-brand content with their own AI keys, and own their entire stack.
+Self-hosted, bring-your-own-key AI across 30+ providers, 36+ channels, and 46 built-in media tools — an open-source alternative to Buffer, Hootsuite, and Sprout Social. Postmill is built for agencies, teams, and multi-brand operators who want to schedule everywhere, generate on-brand content with their own AI keys, and own their entire stack.
 
 **[Website](https://postmill.ai)** · **[Docs](https://docs.postmill.ai)** · **[Quick Start](#-quick-start)** · **[Node SDK (`@postmill-ai/postmill-sdk`)](https://www.npmjs.com/package/@postmill-ai/postmill-sdk)** · **[Public API](https://docs.postmill.ai)**
 
@@ -39,7 +39,7 @@ Screenshots and a product demo video are coming soon. In the meantime, explore t
 
 ## 🤖 AI at the core — BYOK, governed, multi-provider
 
-Postmill is AI-native from the ground up. A single governed AI layer powers every surface, and you bring your own keys: **29 providers** — 17 direct model providers plus 12 multi-model hubs and gateways — configured per organization, with no bundled credits, quotas, or metering. Pick the exact model from an admin screen and switch providers everywhere without a redeploy.
+Postmill is AI-native from the ground up. A single governed AI layer powers every surface, and you bring your own keys: **30 providers** — 17 direct model providers plus 13 multi-model hubs and gateways — configured per organization, with no bundled credits, quotas, or metering. Pick the exact model from an admin screen and switch providers everywhere without a redeploy.
 
 On top of that: brand-voice profiles, a shared prompt library, retrieval-augmented (RAG) search over your own content, compliance guardrails (prompt-injection / PII / brand-safety / NSFW), per-org spend caps with a full audit log, and an agent/MCP automation surface. Every AI entry point is scoped, rate-limited, and budget-checked — and a deployment's environment key is never silently billed to a tenant.
 

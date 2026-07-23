@@ -1,6 +1,6 @@
 # Adding an AI Provider Adapter
 
-Postmill's AI layer supports 29 providers through a pluggable adapter system. Each adapter lives in its own workspace package under `libraries/providers/<id>/` and is registered into the `ProviderKernel` at backend boot.
+Postmill's AI layer supports 30 providers through a pluggable adapter system. Each adapter lives in its own workspace package under `libraries/providers/<id>/` and is registered into the `ProviderKernel` at backend boot.
 
 > Verified against v1.1.0 (2026-07-23)
 
@@ -313,6 +313,8 @@ export const providerModules = [
 
 `ProvidersBootstrap` registers every module into the kernel at boot. If the `ai` feature flag is enabled (`DEV_DISABLE_AI` is not set), your provider appears in the catalog and can be selected in **Settings → AI**.
 
+> **Base URL visibility:** the Settings → AI form hides the `baseURL` credential field for every provider *except* endpoint-bringing ones allowlisted in `BASE_URL_PROVIDERS` (`apps/frontend/src/components/settings/shared/kit/descriptors/ai.descriptor.ts`) — currently only `openai-compatible`. If your provider has no canonical endpoint of its own, add its id there (and pass `{ requireBaseURL: true }` to `OpenAICompatibleAdapter`). Saved `baseURL` values must still be public HTTPS URLs — `OrgAiSettingsService._assertBaseURLSafe` rejects private/loopback/non-HTTPS hosts.
+
 ---
 
 ## Step 5: Credential encryption
@@ -340,8 +342,8 @@ Mock the underlying AI SDK or the injected `SafeFetchPort` rather than making re
 
 `openai`, `anthropic`, `google`, `bedrock`, `vertex`, `azure`, `groq`, `fireworks`, `togetherai`, `deepseek`, `mistral`, `cohere`, `perplexity`, `xai`, `gateway`, `openrouter`
 
-### OpenAI-compatible adapters (13)
+### OpenAI-compatible adapters (14)
 
-`siliconflow`, `deepinfra`, `minimax`, `qwen`, `meta-llama`, `gmihub`, `bitdeer`, `lightning`, `vultr`, `kimi`, `zai`, `apertus`, `nvidia`
+`siliconflow`, `deepinfra`, `minimax`, `qwen`, `meta-llama`, `gmihub`, `bitdeer`, `lightning`, `vultr`, `kimi`, `zai`, `apertus`, `nvidia`, `openai-compatible`
 
-**Total: 29 providers.**
+**Total: 30 providers.**

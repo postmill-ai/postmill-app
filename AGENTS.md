@@ -271,7 +271,7 @@ The deep per-subsystem detail lives in `docs/`. Follow the pointer rather than d
 | Provider framework | Kernel, per-provider packages, version lifecycle | `docs/developer-docs/provider-framework.md`, `docs/developer-docs/provider-versions.md` |
 | Background jobs (Inngest) | Cron + event functions; publish, analytics, media, digests | `docs/operations-guide/inngest-and-cron.md` |
 | Video rendering | Local video compute queue + optional Podman workers | `docs/operations-guide/video-rendering.md` |
-| AI providers / adapters | 29 providers (BYOK), facade, governance, RAG | `docs/developer-docs/ai-architecture.md`, `docs/developer-docs/adding-an-ai-adapter.md` |
+| AI providers / adapters | 30 providers (BYOK), facade, governance, RAG | `docs/developer-docs/ai-architecture.md`, `docs/developer-docs/adding-an-ai-adapter.md` |
 | Agent / MCP | Mastra chat agent + LangGraph generator; MCP entrypoints | `docs/developer-docs/agent-architecture.md`, `docs/developer-docs/mcp.md` |
 | Analytics | Persisted daily snapshots, rollup/retention, best-time, recommendations | `docs/developer-docs/analytics-api.md` |
 | Data model / schema | Prisma models, migrations | `docs/developer-docs/data-model.md`, `docs/developer-docs/database.md` |
@@ -286,7 +286,7 @@ The deep per-subsystem detail lives in `docs/`. Follow the pointer rather than d
 
 ### Numbers stated once (do not let them drift)
 
-- **AI providers: 29** (17 direct + 12 hubs/gateways), BYOK, no env fallback.
+- **AI providers: 30** (17 direct + 13 hubs/gateways), BYOK, no env fallback.
 - **Media tools: 46** = Designer + AI Designer + **38 provider studios** + **6 stock browsers**.
 - **Channels: 36+.**
 - **Background jobs: Inngest** (the previous workflow orchestrator was removed — there is **no

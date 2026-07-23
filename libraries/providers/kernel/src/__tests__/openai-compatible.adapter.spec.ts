@@ -93,6 +93,27 @@ describe('OpenAICompatibleAdapter', () => {
       expect(baseField?.placeholder).toBe('https://api.test-hub.com/v1');
     });
 
+    it('keeps baseURL optional by default', () => {
+      const baseField = adapter.credentialFields.find((f) => f.key === 'baseURL');
+      expect(baseField?.required).toBe(false);
+    });
+
+    it('marks baseURL required when opts.requireBaseURL is set', () => {
+      const strict = new OpenAICompatibleAdapter(
+        'generic',
+        'Generic',
+        '',
+        undefined,
+        undefined,
+        'hub',
+        { requireBaseURL: true },
+      );
+      const baseField = strict.credentialFields.find((f) => f.key === 'baseURL');
+      expect(baseField?.required).toBe(true);
+      // No canonical URL → generic placeholder
+      expect(baseField?.placeholder).toBe('https://api.example.com/v1');
+    });
+
     it('reflects the provided capabilities', () => {
       expect(adapter.capabilities).toEqual({
         text: true,

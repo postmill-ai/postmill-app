@@ -100,6 +100,7 @@
     "@gitroom/provider-nostr": "workspace:*",
     "@gitroom/provider-nvidia": "workspace:*",
     "@gitroom/provider-openai": "workspace:*",
+    "@gitroom/provider-openai-compatible": "workspace:*",
     "@gitroom/provider-openrouter": "workspace:*",
     "@gitroom/provider-owly": "workspace:*",
     "@gitroom/provider-peertube": "workspace:*",

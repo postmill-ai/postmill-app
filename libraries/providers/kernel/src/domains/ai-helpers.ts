@@ -243,16 +243,25 @@ export class OpenAICompatibleAdapter implements AiCapability {
     capabilities?: Partial<AiCapabilities>,
     models?: AiModelInfo[],
     type: AiProviderType = 'hub',
+    opts?: { requireBaseURL?: boolean },
   ) {
     this.identifier = identifier;
     this.name = name;
     this.type = type;
     // The provider's canonical endpoint. Used as the default when the org didn't
-    // set a custom baseURL, so Base URL is not a required user setting.
+    // set a custom baseURL, so Base URL is not a required user setting — unless
+    // the provider opts into requireBaseURL (generic endpoint-bringing providers
+    // with no canonical URL of their own).
     this._defaultBaseURL = baseURL;
     this.credentialFields = [
       { key: 'apiKey', label: 'API Key', type: 'password', required: true, placeholder: 'Enter API key' },
-      { key: 'baseURL', label: 'Base URL', type: 'string', required: false, placeholder: baseURL },
+      {
+        key: 'baseURL',
+        label: 'Base URL',
+        type: 'string',
+        required: opts?.requireBaseURL ?? false,
+        placeholder: baseURL || 'https://api.example.com/v1',
+      },
     ];
     this.capabilities = {
       text: true,
