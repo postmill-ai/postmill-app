@@ -95,7 +95,7 @@ Usage:
 
 - `DefaultsResolutionService` builds candidate sets from metadata (`modelCategories`/`mediaCategories`) and ranks auto-picks using `modelHints[category]`.
 - Catalog endpoints use `displayName`/`uiName` to format labels such as `<provider>[-<ui-name>]: <model>`.
-- `action` providers (e.g. HeyGen, Deepgram, Suno) are selectable with `model: null` in media defaults.
+- `action` providers (e.g. Deepgram, D-ID, Hedra, Tavus) are selectable with `model: null` in media defaults. (HeyGen used to be one; its account avatars are now exposed as a live model list — the avatar id is the `model`.)
 
 ## Shipping a v2 adapter
 

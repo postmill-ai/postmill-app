@@ -105,4 +105,46 @@ describe('heygen media adapter (async avatar-video submit-and-poll)', () => {
     await expect(adapter.generateImage('x', { apiKey: 'k' })).rejects.toThrow();
     await expect(adapter.generateAudio('x', { apiKey: 'k' })).rejects.toThrow();
   });
+
+  it('listModels(video) maps the account avatar catalog to {id: avatar_id, label: avatar_name}', async () => {
+    const { recs, ctx } = makeCtx(() =>
+      res({
+        data: {
+          avatars: [
+            { avatar_id: 'av-1', avatar_name: 'Ann' },
+            { avatar_id: 'av-2', avatar_name: 'Bob' },
+            { avatar_id: '' },
+          ],
+        },
+      }),
+    );
+    const adapter: any = heygenMediaModule.create(ctx as any);
+
+    const models = await adapter.listModels('video', { apiKey: 'heygen-key' });
+
+    expect(models).toEqual([
+      { id: 'av-1', label: 'Ann' },
+      { id: 'av-2', label: 'Bob' },
+    ]);
+    expect(recs[0].url).toBe('https://api.heygen.com/v2/avatars');
+    expect(recs[0].headers['x-api-key']).toBe('heygen-key');
+  });
+
+  it('listModels returns [] for non-video operations and on API failure (never throws)', async () => {
+    const { ctx } = makeCtx(() => res('nope', false, 500));
+    const adapter: any = heygenMediaModule.create(ctx as any);
+
+    expect(await adapter.listModels('image', { apiKey: 'k' })).toEqual([]);
+    expect(await adapter.listModels('video', { apiKey: 'k' })).toEqual([]);
+  });
+
+  it('generateVideo falls back to options.model as the avatar id (media-defaults resolution)', async () => {
+    const { recs, ctx } = makeCtx(() => res({ data: { video_id: 'vid-9' } }));
+    const adapter: any = heygenMediaModule.create(ctx as any);
+
+    await adapter.generateVideo('hi', { apiKey: 'heygen-key', model: 'av-1' });
+
+    const body = JSON.parse(recs[0].body);
+    expect(body.video_inputs[0].character).toEqual({ type: 'avatar', avatar_id: 'av-1' });
+  });
 });
