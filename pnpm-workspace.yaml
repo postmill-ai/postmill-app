@@ -47,9 +47,10 @@ overrides:
   # @nestjs/platform-express. Bump to patched 2.2.x (same major).
   'multer@<2.2.0': '>=2.2.0 <3'
   # postcss <=8.5.11: high arbitrary file read via attacker-controlled sourceMappingURL
-  # in CSS comments, pulled widely (Tailwind, Next.js toolchain). Bump vulnerable 8.x to
-  # the patched 8.5.x line (same major).
-  'postcss@<=8.5.11': '>=8.5.12 <9'
+  # in CSS comments (GHSA-6g55-p6wh-862q). Only vulnerable path is next's exact 8.4.31
+  # pin; parent-scoped so direct postcss specifiers (^8.5.22) are untouched — an
+  # unscoped selector override breaks CI's frozen-lockfile specifier comparison.
+  'next>postcss': '>=8.5.12 <9'
   # nodemailer <=9.0.0: high raw-option bypass of disableFileAccess/disableUrlAccess enabling
   # SSRF (GHSA-p6gq-j5cr-w38f), direct dependency. Bump to patched 9.0.x (same major).
   'nodemailer@<=9.0.0': '>=9.0.1 <10'
