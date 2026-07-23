@@ -1,5 +1,6 @@
 import adobestockModules from '@gitroom/provider-adobe-stock';
 import anthropicModules from '@gitroom/provider-anthropic';
+import apertusModules from '@gitroom/provider-apertus';
 import azureModules from '@gitroom/provider-azure';
 import backblazeb2Modules from '@gitroom/provider-backblaze-b2';
 import bedrockModules from '@gitroom/provider-bedrock';
@@ -151,6 +152,7 @@ import { ProviderModule } from '@gitroom/provider-kernel';
 export const providerModules: ProviderModule<any, any>[] = [
   ...adobestockModules,
   ...anthropicModules,
+  ...apertusModules,
   ...azureModules,
   ...backblazeb2Modules,
   ...bedrockModules,

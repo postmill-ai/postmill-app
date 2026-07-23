@@ -70,6 +70,12 @@
       "@gitroom/provider-anthropic/*": [
         "libraries/providers/anthropic/src/*"
       ],
+      "@gitroom/provider-apertus": [
+        "libraries/providers/apertus/src"
+      ],
+      "@gitroom/provider-apertus/*": [
+        "libraries/providers/apertus/src/*"
+      ],
       "@gitroom/provider-azure": [
         "libraries/providers/azure/src"
       ],

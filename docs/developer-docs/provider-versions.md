@@ -15,12 +15,13 @@ A few branded media studios ride another provider's adapter:
 
 The table below shows each provider's registered domains. A provider that appears in both `ai` and `media` can share a single org credential across both surfaces.
 
-## AI (`ai`) — 27 providers
+## AI (`ai`) — 28 providers
 
 | Provider | ID | Domains | Kind / Notes |
 |---|---|---|---|
 | Amazon Bedrock | `bedrock` | ai, media | hub; low-reasoning, high-reasoning, workflow, vision; image-focal-point, image-slide, text-to-image |
 | Anthropic Claude | `anthropic` | ai | direct; low-reasoning, high-reasoning, workflow, vision |
+| Apertus | `apertus` | ai | direct; low-reasoning, workflow |
 | Azure OpenAI | `azure` | ai, media | hub; low-reasoning, high-reasoning, workflow, vision; image-focal-point, image-slide, text-to-image |
 | Bitdeer AI | `bitdeer` | ai | action |
 | Cohere | `cohere` | ai | hub; low-reasoning, high-reasoning, workflow, vision; image-focal-point |

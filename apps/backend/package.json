@@ -16,6 +16,7 @@
     "@gitroom/nestjs-libraries": "workspace:*",
     "@gitroom/provider-adobe-stock": "workspace:*",
     "@gitroom/provider-anthropic": "workspace:*",
+    "@gitroom/provider-apertus": "workspace:*",
     "@gitroom/provider-azure": "workspace:*",
     "@gitroom/provider-backblaze-b2": "workspace:*",
     "@gitroom/provider-bedrock": "workspace:*",

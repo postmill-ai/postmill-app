@@ -6,16 +6,17 @@ kernel vitest alias. One row per **module** (multi-module packages — e.g. `ope
 get multiple rows). The `has-spec?` column reflects whether the **package** contains any
 `*.spec.ts` / `*.int-spec.ts` under `src/**`.
 
-- **Modules:** 165  (== `providerModules.length`)
-- **Packages:** 147  (== real package dirs under `libraries/providers/`, excluding `kernel` and `node_modules`)
-  - Note: `ls -d libraries/providers/*/ | grep -v kernel | wc -l` = **148** on a clean checkout because it also counts the `node_modules/` dir; **147** are real packages. (After a local `--coverage` run a gitignored `coverage/` dir also appears, making the raw count **149** — both `node_modules/` and `coverage/` are non-package artifacts.)
-- **Packages with at least one spec:** 93 / 147  (media adapters + the magnific content pack gained recorded-fixture `*.int-spec.ts` behavioral tests via the shared `kernel/src/testing/media-int-helpers.ts`)
+- **Modules:** 166  (== `providerModules.length`)
+- **Packages:** 148  (== real package dirs under `libraries/providers/`, excluding `kernel` and `node_modules`)
+  - Note: `ls -d libraries/providers/*/ | grep -v kernel | wc -l` = **149** on a clean checkout because it also counts the `node_modules/` dir; **148** are real packages. (After a local `--coverage` run a gitignored `coverage/` dir also appears, making the raw count **150** — both `node_modules/` and `coverage/` are non-package artifacts.)
+- **Packages with at least one spec:** 94 / 148  (media adapters + the magnific content pack gained recorded-fixture `*.int-spec.ts` behavioral tests via the shared `kernel/src/testing/media-int-helpers.ts`)
 
-Modules per domain: ai=27, auth=6, contentpack=4, email=7, media=35, shortlink=20, social=36, storage=14, vpn=16
+Modules per domain: ai=28, auth=6, contentpack=4, email=7, media=35, shortlink=20, social=36, storage=14, vpn=16
 
 | package | domain | providerId | version | status | has-spec? |
 |---|---|---|---|---|---|
 | anthropic | ai | anthropic | v1 | active | yes |
+| apertus | ai | apertus | v1 | active | yes |
 | azure | ai | azure | v1 | active | yes |
 | bedrock | ai | bedrock | v1 | active | yes |
 | bitdeer | ai | bitdeer | v1 | active | no |
