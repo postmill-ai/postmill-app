@@ -261,16 +261,19 @@ describe('LayoutComponent header', () => {
     const menuItems = screen.getAllByRole('menuitem');
     const profileLink = menuItems.find((l) => l.getAttribute('href') === '/user/me');
     const settingsLink = menuItems.find((l) => l.getAttribute('href') === '/settings');
-    const logoutLink = menuItems.find((l) => l.getAttribute('href') === '/logout');
+    // Logout is a BUTTON running the canonical logout flow (session revoke +
+    // /auth/logout) — the old href="/logout" pointed at a nonexistent route.
+    const logoutItem = menuItems.find(
+      (l) => l.tagName === 'BUTTON' && /logout/i.test(l.textContent || '')
+    );
 
     expect(profileLink).toBeDefined();
     expect(settingsLink).toBeDefined();
-    expect(logoutLink).toBeDefined();
+    expect(logoutItem).toBeDefined();
 
-    const avatarLinks = [profileLink!, settingsLink!, logoutLink!];
     const linkOrder = menuItems.indexOf(profileLink!) < menuItems.indexOf(settingsLink!);
     expect(linkOrder).toBe(true);
-    expect(menuItems.indexOf(settingsLink!)).toBeLessThan(menuItems.indexOf(logoutLink!));
+    expect(menuItems.indexOf(settingsLink!)).toBeLessThan(menuItems.indexOf(logoutItem!));
   });
 
   it('avatar menu uses translated labels via useT (L4)', () => {

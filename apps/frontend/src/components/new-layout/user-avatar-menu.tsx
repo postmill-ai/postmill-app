@@ -1,9 +1,12 @@
 'use client';
 
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import dynamic from 'next/dynamic';
 import { useUser } from '@gitroom/frontend/components/layout/user.context';
 import { useT } from '@gitroom/react/translation/get.transation.service.client';
+import { useFetch } from '@gitroom/helpers/utils/custom.fetch';
+import { useVariables } from '@gitroom/react/helpers/variable.context';
+import { deleteDialog } from '@gitroom/react/helpers/delete.dialog';
 import { usePermissions } from '@gitroom/frontend/components/layout/use-permissions';
 import SafeImage from '@gitroom/react/helpers/safe.image';
 import { LanguageMenuRow } from '@gitroom/frontend/components/layout/language.component';
@@ -21,8 +24,28 @@ export const UserAvatarMenu = () => {
   const user = useUser();
   const t = useT();
   const permissions = usePermissions();
+  const fetch = useFetch();
+  const { isSecured } = useVariables();
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
+
+  // Same flow as LogoutComponent: confirm, revoke the server session (secured
+  // deployments), then hit /auth/logout (proxy clears the cookie). The old
+  // href="/logout" pointed at a route that doesn't exist.
+  const logout = useCallback(async () => {
+    if (
+      await deleteDialog(
+        t('are_you_sure_you_want_to_logout', 'Are you sure you want to logout?'),
+        t('yes_logout', 'Yes logout')
+      )
+    ) {
+      setOpen(false);
+      if (isSecured) {
+        await fetch('/user/logout', { method: 'POST' });
+      }
+      window.location.href = '/auth/logout';
+    }
+  }, [fetch, isSecured, t]);
   // R5: hide the Settings entry for members whose role lacks settings:read.
   // Shown optimistically while permissions load; backend 403s backstop.
   const showSettings =
@@ -131,13 +154,14 @@ export const UserAvatarMenu = () => {
           >
             {t('documentation', 'Documentation')}
           </a>
-          <a
-            href="/logout"
+          <button
+            type="button"
+            onClick={logout}
             role="menuitem"
-            className="block px-[14px] py-[8px] text-[13px] text-red-500 hover:bg-boxHover"
+            className="block w-full text-left px-[14px] py-[8px] text-[13px] text-red-500 hover:bg-boxHover bg-transparent border-none cursor-pointer"
           >
             {t('logout', 'Logout')}
-          </a>
+          </button>
         </div>
       )}
     </div>

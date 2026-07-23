@@ -1,6 +1,11 @@
 import { Injectable, Logger, Optional } from '@nestjs/common';
 import dayjs from 'dayjs';
+import utc from 'dayjs/plugin/utc';
+import timezone from 'dayjs/plugin/timezone';
 import { createHash } from 'crypto';
+
+dayjs.extend(utc);
+dayjs.extend(timezone);
 import {
   State,
   CreationMethod,
@@ -112,7 +117,10 @@ const AI_PROVIDERS: {
   { identifier: 'openrouter', defaultModel: 'auto', monthlyCap: 15, spendTarget: 1.2 },
 ];
 
-const HISTORY_DAYS = 35;
+const HISTORY_DAYS = 35; // post history depth
+// Channel snapshots go back further so period-over-period comparisons have a
+// real previous window (35d of history alone renders as absurd +1000% deltas).
+const SNAPSHOT_DAYS = 70;
 const SPIKE_DAYS_AGO = 5;
 
 /**
@@ -263,7 +271,11 @@ export class DemoSeeder {
     orgId: string,
     mainUserId: string,
   ): Promise<{ id: string; slug: string; name: string }[]> {
-    // Give the main login user a face + name (Maya Chen, the Owner).
+    // Give the main login user a face + name (Maya Chen, the Owner). Timezone
+    // is pinned to the seeding host's zone so seeded publish hours (9am-6pm
+    // local) render at those hours in the calendar — without it the display
+    // falls back to UTC and every card shifts into the small hours.
+    const hostTz = this._zone();
     await this._prisma.userProfile.upsert({
       where: { userId: mainUserId },
       create: {
@@ -272,11 +284,13 @@ export class DemoSeeder {
         lastName: 'Chen',
         avatarUrl: 'https://i.pravatar.cc/150?u=maya@solstice.demo',
         bio: 'Founder @ Solstice Supply Co.',
+        timezone: hostTz,
       },
       update: {
         name: 'Maya',
         lastName: 'Chen',
         avatarUrl: 'https://i.pravatar.cc/150?u=maya@solstice.demo',
+        timezone: hostTz,
       },
     });
 
@@ -672,7 +686,7 @@ export class DemoSeeder {
         orgId,
         integrationId: integration.id,
         state: State.PUBLISHED,
-        publishDate: dayjs().add(offset, 'day').hour(9 + (n % 8)).minute((n * 7) % 60).second(0).toDate(),
+        publishDate: this._at(offset, 9 + (n % 8), (n * 7) % 60),
         content: CAPTIONS[n % CAPTIONS.length],
         group: `demo-${short}-g${n}`,
         campaignId: inCampaign ? launchCampaignId : null,
@@ -694,7 +708,7 @@ export class DemoSeeder {
         orgId,
         integrationId: integration.id,
         state: State.PUBLISHED,
-        publishDate: dayjs().subtract(SPIKE_DAYS_AGO, 'day').hour(10).minute(0).second(0).toDate(),
+        publishDate: this._at(-SPIKE_DAYS_AGO, 10, 0),
         content: 'The Winter Drop is LIVE. New shells, merino layers, and the return of the Fireside mug. ❄️🔥',
         group: `demo-${short}-g-hero`,
         campaignId: launchCampaignId,
@@ -713,7 +727,7 @@ export class DemoSeeder {
         orgId,
         integrationId: sibling.id,
         state: State.PUBLISHED,
-        publishDate: dayjs().subtract(SPIKE_DAYS_AGO, 'day').hour(10).minute(0).second(0).toDate(),
+        publishDate: this._at(-SPIKE_DAYS_AGO, 10, 0),
         content: 'The Winter Drop is LIVE. New shells, merino layers, and the return of the Fireside mug. ❄️🔥',
         group: `demo-${short}-g-hero`,
         campaignId: launchCampaignId,
@@ -736,7 +750,7 @@ export class DemoSeeder {
         orgId,
         integrationId: integration.id,
         state: State.ERROR,
-        publishDate: dayjs().add(offset, 'day').hour(11).minute(0).second(0).toDate(),
+        publishDate: this._at(offset, 11, 0),
         content: i === 0 ? 'Trail mix restock announcement.' : 'Weekend hours update.',
         group: `demo-${short}-g${n}`,
         campaignId: null,
@@ -763,7 +777,7 @@ export class DemoSeeder {
         orgId,
         integrationId: integration.id,
         state: State.QUEUE,
-        publishDate: dayjs().add(s.offset, 'day').hour(9 + (n % 9)).minute((n * 11) % 60).second(0).toDate(),
+        publishDate: this._at(s.offset, 9 + (n % 9), (n * 11) % 60),
         content: CAPTIONS[(n + 7) % CAPTIONS.length],
         group,
         campaignId: s.campaign ? launchCampaignId : null,
@@ -779,7 +793,7 @@ export class DemoSeeder {
           orgId,
           integrationId: sibling.id,
           state: State.QUEUE,
-          publishDate: dayjs().add(s.offset, 'day').hour(10).minute(30).second(0).toDate(),
+          publishDate: this._at(s.offset, 10, 30),
           content: CAPTIONS[(n + 7) % CAPTIONS.length],
           group,
           campaignId: null,
@@ -808,7 +822,7 @@ export class DemoSeeder {
         orgId,
         integrationId: integration.id,
         state: State.DRAFT,
-        publishDate: dayjs().add(s.offset, 'day').hour(15).minute(0).second(0).toDate(),
+        publishDate: this._at(s.offset, 15, 0),
         content: s.content,
         group: `demo-${short}-g${n}`,
         campaignId: s.campaign ? launchCampaignId : null,
@@ -877,7 +891,7 @@ export class DemoSeeder {
     rand: () => number,
   ): Promise<void> {
     const short = this._short(orgId);
-    const metrics = ['followers', 'views', 'likes', 'comments', 'engagement'];
+    const metrics = ['followers', 'views', 'likes', 'comments', 'engagement', 'reach'];
     const snapshotRows: any[] = [];
 
     integrations.forEach((integration, ci) => {
@@ -889,17 +903,20 @@ export class DemoSeeder {
         likes: Math.round(140 * scale),
         comments: Math.round(18 * scale),
         engagement: Math.round(210 * scale),
+        reach: Math.round(3400 * scale),
       };
-      for (let d = HISTORY_DAYS - 1; d >= 0; d--) {
+      for (let d = SNAPSHOT_DAYS - 1; d >= 0; d--) {
         const date = dayjs().subtract(d, 'day').startOf('day');
-        const age = HISTORY_DAYS - 1 - d; // 0 oldest → 34 newest
+        const age = SNAPSHOT_DAYS - 1 - d; // 0 oldest → newest
         const dow = date.day();
         const weekend = dow === 0 || dow === 6 ? 0.93 : 1; // dip, never net-negative WoW
         const isSpike = ci === 0 && d === SPIKE_DAYS_AGO;
         for (const metric of metrics) {
           // followers strictly cumulative (never dips); activity metrics grow
           // ~1.8%/day with weekend seasonality and jitter.
-          const growth = Math.pow(metric === 'followers' ? 1.006 : 1.018, age);
+          // Gentler daily growth over the longer window (~1.9x activity, ~1.4x
+          // followers across 70d) — still clearly up-and-to-the-right.
+          const growth = Math.pow(metric === 'followers' ? 1.005 : 1.0095, age);
           const jitter = metric === 'followers' ? 1 : 0.92 + rand() * 0.16;
           const season = metric === 'followers' ? 1 : weekend;
           const spike = isSpike && (metric === 'views' || metric === 'engagement') ? 1.4 : 1;
@@ -1466,6 +1483,30 @@ export class DemoSeeder {
 
   private _short(orgId: string): string {
     return orgId.replace(/[^a-z0-9]/gi, '').slice(0, 8).toLowerCase();
+  }
+
+  // Display timezone for seeded wall-clock times. The backend process often
+  // runs with TZ=UTC, so plain dayjs().hour(15) would seed 15:00 UTC and the
+  // calendar (browser/profile zone) would render it in the small hours.
+  // DEV_SEED_DEMO_TZ pins the zone; default is the process zone.
+  private _zone(): string {
+    return (
+      process.env.DEV_SEED_DEMO_TZ ||
+      Intl.DateTimeFormat().resolvedOptions().timeZone ||
+      'UTC'
+    );
+  }
+
+  // Wall-clock date in the display zone: "offsetDays from today at H:M local".
+  private _at(offsetDays: number, hour: number, minute: number): Date {
+    return dayjs()
+      .tz(this._zone())
+      .add(offsetDays, 'day')
+      .hour(hour)
+      .minute(minute)
+      .second(0)
+      .millisecond(0)
+      .toDate();
   }
 
   private _hex64(orgId: string, purpose: string): string {
