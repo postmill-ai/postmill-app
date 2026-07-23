@@ -4,7 +4,7 @@ Contributions are welcome - code, docs, whatever it might be! If this is your fi
 
 ## Read the developers guide
 
-The main documentation site has a [developer guide](https://docs.postiz.com/developer-guide) . That guide provides you a good understanding of the project structure, and how to setup your development environment. Read this document after you have read that guide. This document is intended to provide you a good understanding of how to submit your first contribution.
+The main documentation site has a [developer guide](https://docs.postmill.ai/developer-docs/). That guide provides you a good understanding of the project structure, and how to setup your development environment. Read this document after you have read that guide. This document is intended to provide you a good understanding of how to submit your first contribution.
 
 ## Apply via the contribution form
 
@@ -24,7 +24,7 @@ You accept the agreement by following the instructions on the [CLA page](https:/
 This is an open source project, with an open and welcoming community that is always keen to welcome new contributors. We recommend the two best ways to interact with the community are:
 
 - **GitHub issues**: To discuss more slowly, or longer-written messages.
-- **[Discord chat](https://discord.postiz.com)**: To chat with people [Discord chat](https://discord.postiz.com/) and a quicker feedback.
+- **[GitHub Discussions](https://github.com/postmill-ai/postmill-app/discussions)**: To ask questions and get quicker feedback.
 
 As a general rule;
 
@@ -52,7 +52,7 @@ This project follows a Fork/Feature Branch/Pull Request model. If you're not fam
 1. **Fork the project:** Create a personal copy of the repository on your GitHub account.
 2. **Clone your fork:** Bring a copy of your fork to your local machine.
    ```bash
-   git clone https://github.com/YOUR_USERNAME/postiz.git
+   git clone https://github.com/YOUR_USERNAME/postmill-app.git
    ```
 3. **Create a new branch**: Start a new branch for your changes
    ```bash
@@ -67,6 +67,6 @@ This project follows a Fork/Feature Branch/Pull Request model. If you're not fam
 
 # Need Help?
 
-Again, do check the [developer guide](https://docs.postiz.com/developer-guide). Much of what you probably need to know is in there.
+Again, do check the [developer guide](https://docs.postmill.ai/developer-docs/). Much of what you probably need to know is in there.
 
-If you encounter any issues, please visit our [support page](https://docs.postiz.com/support) or check the community forums. Your contributions help make Postmill better!
+If you encounter any issues, please check the [documentation](https://docs.postmill.ai) or open a GitHub Discussion. Your contributions help make Postmill better!
