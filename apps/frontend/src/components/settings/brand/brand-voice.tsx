@@ -191,14 +191,14 @@ const BrandVoiceForm = ({ initial, brandId, onMutate }: { initial?: BrandProfile
       </div>
 
       {/* Language — selects which language's dataset is being edited below. */}
-      <div className="flex items-center justify-between gap-[24px]">
+      <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-[12px] md:gap-[24px]">
         <div className="flex flex-col flex-1">
           <div className="text-[14px]">{t('brand_language', 'Language')}</div>
           <div className="text-[12px] text-newTableText">
             {t('brand_language_description_v3', "The language the AI writes in. Everything below is for this language — switch it to set up a different language, and your other languages are kept.")}
           </div>
         </div>
-        <div className="w-[200px]">
+        <div className="w-full md:w-[200px]">
           <Select
             name="brandLanguage"
             label=""

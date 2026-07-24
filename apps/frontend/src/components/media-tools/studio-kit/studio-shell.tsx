@@ -152,7 +152,7 @@ export function StudioShell({ descriptor }: { descriptor: StudioDescriptor }) {
   const Custom = tab.custom;
 
   return (
-    <div className={`flex flex-col h-full bg-studioBg${isFullscreen ? ' fixed inset-0 z-[100]' : ' rounded-[12px] overflow-hidden'}`}>
+    <div className={`flex flex-col h-full bg-studioBg${isFullscreen ? ' fixed inset-0 z-[100]' : ' rounded-[12px] overflow-hidden mobile:h-[calc(100vh-200px)]'}`}>
       <div className="flex items-center justify-between gap-[10px] px-[16px] h-[52px] border-b border-studioBorder shrink-0">
         <div className="flex items-center gap-[10px] shrink-0">
           <Logo size={22} className="" />
