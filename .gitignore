@@ -85,3 +85,7 @@ apps/backend/uploads/
 # but keep the Next.js /uploads serve route (and its spec) trackable
 !apps/frontend/src/app/(app)/api/uploads/
 /dev/
+
+# Marketing capture artifacts (stills/clips for the demo video) — local only,
+# large binaries that do not belong in the repo.
+capture/
