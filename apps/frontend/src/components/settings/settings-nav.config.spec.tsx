@@ -2,11 +2,11 @@ import { describe, it, expect } from 'vitest';
 import {
   SETTINGS_NAV,
   type SettingsGateCtx,
-} from '@gitroom/frontend/components/settings/settings-nav.config';
+} from '@postmill-ai/frontend/components/settings/settings-nav.config';
 import {
   LEGACY_TAB_TO_PATH,
   SETTINGS_DEFAULT_PATH,
-} from '@gitroom/frontend/components/settings/settings-paths';
+} from '@postmill-ai/frontend/components/settings/settings-paths';
 
 // Guards the settings nav config: the legacy ?tab= compat map must cover every old tab key,
 // hrefs must be unique routes, and the tier/permission gates must mirror the old SettingsPopup

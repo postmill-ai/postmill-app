@@ -4,18 +4,18 @@ import {
   PostDetails,
   PostResponse,
   SocialProvider,
-} from '@gitroom/provider-kernel';
-import { makeId, makeOauthState } from '@gitroom/provider-kernel';
+} from '@postmill-ai/provider-kernel';
+import { makeId, makeOauthState } from '@postmill-ai/provider-kernel';
 import dayjs from 'dayjs';
 import {
   SocialAbstract,
   ValidityMedia,
-} from '@gitroom/provider-kernel';
+} from '@postmill-ai/provider-kernel';
 import { NeynarAPIClient } from '@neynar/nodejs-sdk';
 import { Integration } from '@prisma/client';
-import { FarcasterDto } from '@gitroom/provider-kernel';
-import { Tool } from '@gitroom/provider-kernel';
-import { Rules } from '@gitroom/provider-kernel';
+import { FarcasterDto } from '@postmill-ai/provider-kernel';
+import { Tool } from '@postmill-ai/provider-kernel';
+import { Rules } from '@postmill-ai/provider-kernel';
 
 import { socialMetadata as providerMetadata } from './metadata';
 @Rules(
@@ -234,7 +234,7 @@ import {
   ProviderModule as __ProviderModule,
   SocialProviderKernelAdapter as __Bridge,
   PROVIDER_CAPABILITIES as __CAPS,
-} from '@gitroom/provider-kernel';
+} from '@postmill-ai/provider-kernel';
 
 const __adapter = new FarcasterProvider();
 

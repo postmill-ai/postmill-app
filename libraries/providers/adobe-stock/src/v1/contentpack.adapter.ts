@@ -9,7 +9,7 @@ import {
   StockSearchResponse,
   StockVectorItem,
   StockVideoItem,
-} from '@gitroom/provider-kernel';
+} from '@postmill-ai/provider-kernel';
 
 // Adobe Stock Search API — https://developer.adobe.com/stock/
 //   GET https://stock.adobe.io/Rest/Media/1/Search/Files

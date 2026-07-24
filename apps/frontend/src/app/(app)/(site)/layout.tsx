@@ -1,4 +1,4 @@
-import { LayoutComponent } from '@gitroom/frontend/components/new-layout/layout.component';
+import { LayoutComponent } from '@postmill-ai/frontend/components/new-layout/layout.component';
 
 export default async function Layout({
   children,

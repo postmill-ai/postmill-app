@@ -2,8 +2,8 @@
 
 import { FC, useEffect, useMemo, useRef, useState } from 'react';
 import * as Sentry from '@sentry/nextjs';
-import { useVariables } from '@gitroom/react/helpers/variable.context';
-import { useT } from '@gitroom/react/translation/get.transation.service.client';
+import { useVariables } from '@postmill-ai/react/helpers/variable.context';
+import { useT } from '@postmill-ai/react/translation/get.transation.service.client';
 
 export const AttachToFeedbackIcon: FC = () => {
   const { sentryDsn } = useVariables();

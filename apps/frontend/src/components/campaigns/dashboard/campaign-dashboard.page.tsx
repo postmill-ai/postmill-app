@@ -2,27 +2,27 @@
 
 import { FC, useEffect, useMemo, useState } from 'react';
 import { useParams } from 'next/navigation';
-import { pushAgentUiContext } from '@gitroom/frontend/components/agent/agent-context-bridge';
+import { pushAgentUiContext } from '@postmill-ai/frontend/components/agent/agent-context-bridge';
 import Link from 'next/link';
 import clsx from 'clsx';
-import { Button } from '@gitroom/react/form/button';
-import { useT } from '@gitroom/react/translation/get.transation.service.client';
-import { useCampaignDashboard } from '@gitroom/frontend/components/campaigns/hooks/campaign.hooks';
-import { DashboardHeader } from '@gitroom/frontend/components/campaigns/dashboard/dashboard-header';
-import { DashboardKpis } from '@gitroom/frontend/components/campaigns/dashboard/dashboard-kpis';
-import { CampaignAnalyticsSection } from '@gitroom/frontend/components/campaigns/dashboard/campaign-analytics-section';
-import { TaggedItemsPanels } from '@gitroom/frontend/components/campaigns/dashboard/tagged-items-panels';
-import { CampaignChannelsSection } from '@gitroom/frontend/components/campaigns/dashboard/campaign-channels-section';
-import { CampaignFilesSection } from '@gitroom/frontend/components/campaigns/dashboard/campaign-files-section';
-import { CampaignTemplatesSection } from '@gitroom/frontend/components/campaigns/dashboard/campaign-templates-section';
-import { CampaignDraftsSection } from '@gitroom/frontend/components/campaigns/dashboard/campaign-drafts-section';
-import { CampaignPostsSection } from '@gitroom/frontend/components/campaigns/dashboard/campaign-posts-section';
-import { PlanningWorkspace } from '@gitroom/frontend/components/campaigns/dashboard/planning-workspace';
-import { ChangelogPanel } from '@gitroom/frontend/components/campaigns/dashboard/changelog-panel';
-import { CampaignCommentsSection } from '@gitroom/frontend/components/campaigns/dashboard/campaign-comments-section';
-import { CampaignDiscussionSection } from '@gitroom/frontend/components/campaigns/dashboard/campaign-discussion-section';
-import { ChannelOption } from '@gitroom/frontend/components/comments/comment.inbox.filters';
-import { KebabMenu } from '@gitroom/frontend/components/ui/kebab-menu';
+import { Button } from '@postmill-ai/react/form/button';
+import { useT } from '@postmill-ai/react/translation/get.transation.service.client';
+import { useCampaignDashboard } from '@postmill-ai/frontend/components/campaigns/hooks/campaign.hooks';
+import { DashboardHeader } from '@postmill-ai/frontend/components/campaigns/dashboard/dashboard-header';
+import { DashboardKpis } from '@postmill-ai/frontend/components/campaigns/dashboard/dashboard-kpis';
+import { CampaignAnalyticsSection } from '@postmill-ai/frontend/components/campaigns/dashboard/campaign-analytics-section';
+import { TaggedItemsPanels } from '@postmill-ai/frontend/components/campaigns/dashboard/tagged-items-panels';
+import { CampaignChannelsSection } from '@postmill-ai/frontend/components/campaigns/dashboard/campaign-channels-section';
+import { CampaignFilesSection } from '@postmill-ai/frontend/components/campaigns/dashboard/campaign-files-section';
+import { CampaignTemplatesSection } from '@postmill-ai/frontend/components/campaigns/dashboard/campaign-templates-section';
+import { CampaignDraftsSection } from '@postmill-ai/frontend/components/campaigns/dashboard/campaign-drafts-section';
+import { CampaignPostsSection } from '@postmill-ai/frontend/components/campaigns/dashboard/campaign-posts-section';
+import { PlanningWorkspace } from '@postmill-ai/frontend/components/campaigns/dashboard/planning-workspace';
+import { ChangelogPanel } from '@postmill-ai/frontend/components/campaigns/dashboard/changelog-panel';
+import { CampaignCommentsSection } from '@postmill-ai/frontend/components/campaigns/dashboard/campaign-comments-section';
+import { CampaignDiscussionSection } from '@postmill-ai/frontend/components/campaigns/dashboard/campaign-discussion-section';
+import { ChannelOption } from '@postmill-ai/frontend/components/comments/comment.inbox.filters';
+import { KebabMenu } from '@postmill-ai/frontend/components/ui/kebab-menu';
 
 type TabKey =
   | 'posts'

@@ -2,12 +2,12 @@
 
 import React, { FC, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import useSWR, { useSWRConfig } from 'swr';
-import { useFetch } from '@gitroom/helpers/utils/custom.fetch';
-import { useT } from '@gitroom/react/translation/get.transation.service.client';
-import { LoadingComponent } from '@gitroom/frontend/components/layout/loading';
-import SafeImage from '@gitroom/react/helpers/safe.image';
-import { stripHtmlValidation } from '@gitroom/helpers/utils/strip.html.validation';
-import { pushAgentUiContext } from '@gitroom/frontend/components/agent/agent-context-bridge';
+import { useFetch } from '@postmill-ai/helpers/utils/custom.fetch';
+import { useT } from '@postmill-ai/react/translation/get.transation.service.client';
+import { LoadingComponent } from '@postmill-ai/frontend/components/layout/loading';
+import SafeImage from '@postmill-ai/react/helpers/safe.image';
+import { stripHtmlValidation } from '@postmill-ai/helpers/utils/strip.html.validation';
+import { pushAgentUiContext } from '@postmill-ai/frontend/components/agent/agent-context-bridge';
 import { CommentThread } from './comment.thread';
 
 interface PostDetailModalProps {

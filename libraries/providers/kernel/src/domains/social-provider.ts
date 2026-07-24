@@ -3,8 +3,8 @@ import { SocialCommentDTO } from './social';
 
 /**
  * Legacy-named social provider types, relocated into the kernel (step 7.5.2) so
- * provider packages import them from `@gitroom/provider-kernel` instead of
- * `@gitroom/nestjs-libraries/integrations/social/social.integrations.interface`.
+ * provider packages import them from `@postmill-ai/provider-kernel` instead of
+ * `@postmill-ai/nestjs-libraries/integrations/social/social.integrations.interface`.
  * The legacy interface file is now a re-export shim of these symbols, so the
  * ~8 nestjs-libraries consumers and the bridge are unchanged.
  *

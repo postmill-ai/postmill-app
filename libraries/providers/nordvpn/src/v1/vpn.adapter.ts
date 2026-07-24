@@ -7,7 +7,7 @@ import {
   VpnProviderCapabilities,
   VpnProxyAuth,
   VpnProxyRegion,
-} from '@gitroom/provider-kernel';
+} from '@postmill-ai/provider-kernel';
 
 export class NordvpnAdapter implements VpnCapability {
   readonly identifier = 'nordvpn';

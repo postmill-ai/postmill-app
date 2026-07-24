@@ -5,31 +5,31 @@ import React from 'react';
 
 const mockToasterShow = vi.fn();
 
-vi.mock('@gitroom/react/toaster/toaster', () => ({
+vi.mock('@postmill-ai/react/toaster/toaster', () => ({
   useToaster: () => ({ show: mockToasterShow }),
 }));
 
 const mockDeleteDialog = vi.fn().mockResolvedValue(false);
 
-vi.mock('@gitroom/react/helpers/delete.dialog', () => ({
+vi.mock('@postmill-ai/react/helpers/delete.dialog', () => ({
   deleteDialog: mockDeleteDialog,
 }));
 
-vi.mock('@gitroom/frontend/components/settings/storage/provider-form.modal', () => ({
+vi.mock('@postmill-ai/frontend/components/settings/storage/provider-form.modal', () => ({
   ProviderFormModal: () => null,
 }));
 
-vi.mock('@gitroom/frontend/components/settings/storage/migration.modal', () => ({
+vi.mock('@postmill-ai/frontend/components/settings/storage/migration.modal', () => ({
   MigrationModal: () => null,
 }));
 
-vi.mock('@gitroom/frontend/components/settings/storage/audit.tab', () => ({
+vi.mock('@postmill-ai/frontend/components/settings/storage/audit.tab', () => ({
   AuditTab: () => null,
 }));
 
 // storage.tab reads the kernel provider catalog to surface version status;
 // mock it to an empty catalog (mirrors shortlinks/vpn specs).
-vi.mock('@gitroom/frontend/components/settings/shared/use-provider-catalog', () => ({
+vi.mock('@postmill-ai/frontend/components/settings/shared/use-provider-catalog', () => ({
   useProviderCatalog: () => ({ data: [] }),
 }));
 
@@ -80,7 +80,7 @@ const mockFetchFn = vi.fn(async (url: string) => {
   return { ok: true, json: () => Promise.resolve({}) };
 });
 
-vi.mock('@gitroom/helpers/utils/custom.fetch', () => ({
+vi.mock('@postmill-ai/helpers/utils/custom.fetch', () => ({
   useFetch: () => mockFetchFn,
 }));
 

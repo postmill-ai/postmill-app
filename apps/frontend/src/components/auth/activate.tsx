@@ -1,10 +1,10 @@
 'use client';
 
-import { useT } from '@gitroom/react/translation/get.transation.service.client';
+import { useT } from '@postmill-ai/react/translation/get.transation.service.client';
 import { FormProvider, SubmitHandler, useForm } from 'react-hook-form';
-import { useFetch } from '@gitroom/helpers/utils/custom.fetch';
-import { Button } from '@gitroom/react/form/button';
-import { Input } from '@gitroom/react/form/input';
+import { useFetch } from '@postmill-ai/helpers/utils/custom.fetch';
+import { Button } from '@postmill-ai/react/form/button';
+import { Input } from '@postmill-ai/react/form/input';
 import { useState, useEffect, useCallback } from 'react';
 import Link from 'next/link';
 

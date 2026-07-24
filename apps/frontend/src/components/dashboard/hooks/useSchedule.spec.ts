@@ -1,14 +1,14 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { renderHook } from '@testing-library/react';
 import useSWR from 'swr';
-import { useFetch } from '@gitroom/helpers/utils/custom.fetch';
+import { useFetch } from '@postmill-ai/helpers/utils/custom.fetch';
 import { useSchedule, ScheduleResponse } from './useSchedule';
 
 vi.mock('next/navigation', () => ({
   useRouter: () => ({ push: vi.fn() }),
 }));
 
-vi.mock('@gitroom/helpers/utils/custom.fetch', () => ({
+vi.mock('@postmill-ai/helpers/utils/custom.fetch', () => ({
   useFetch: vi.fn(() => vi.fn()),
 }));
 
@@ -17,7 +17,7 @@ vi.mock('swr', () => ({
   default: vi.fn(),
 }));
 
-vi.mock('@gitroom/frontend/components/layout/set.timezone', () => ({
+vi.mock('@postmill-ai/frontend/components/layout/set.timezone', () => ({
   getTimezone: () => 'America/New_York',
 }));
 

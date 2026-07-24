@@ -1,4 +1,4 @@
-import { SetupWizard } from '@gitroom/frontend/components/setup/setup-wizard';
+import { SetupWizard } from '@postmill-ai/frontend/components/setup/setup-wizard';
 
 export default function SetupPage() {
   return <SetupWizard />;

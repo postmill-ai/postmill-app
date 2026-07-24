@@ -1,4 +1,4 @@
-import type { StudioDescriptor } from '@gitroom/frontend/components/media-tools/studio-kit/types';
+import type { StudioDescriptor } from '@postmill-ai/frontend/components/media-tools/studio-kit/types';
 
 // Pika video, served through the fal.ai adapter (registry/config identifier `fal`) — Pika's
 // official API is hosted on fal (pika.art/api directs developers there), so this mirrors the

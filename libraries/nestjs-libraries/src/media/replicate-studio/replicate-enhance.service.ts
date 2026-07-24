@@ -1,5 +1,5 @@
 import { Injectable, Logger } from '@nestjs/common';
-import { AIModelProvider } from '@gitroom/nestjs-libraries/ai/ai-model.provider';
+import { AIModelProvider } from '@postmill-ai/nestjs-libraries/ai/ai-model.provider';
 
 export interface EnhanceResult {
   text: string;

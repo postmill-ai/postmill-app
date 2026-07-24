@@ -1,6 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { JSDOM } from 'jsdom';
-import { safeFetch } from '@gitroom/nestjs-libraries/dtos/webhooks/safe.fetch';
+import { safeFetch } from '@postmill-ai/nestjs-libraries/dtos/webhooks/safe.fetch';
 
 function findDepth(element: Element) {
   let depth = 0;

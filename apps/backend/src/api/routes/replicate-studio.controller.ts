@@ -7,18 +7,18 @@ import {
 } from '@nestjs/common';
 import { Throttle } from '@nestjs/throttler';
 import { ApiTags } from '@nestjs/swagger';
-import { CheckPolicies } from '@gitroom/backend/services/auth/permissions/permissions.ability';
-import { AuthorizationActions, Sections } from '@gitroom/backend/services/auth/permissions/permission.exception.class';
-import { RequirePermission } from '@gitroom/backend/services/auth/rbac/require-permission.decorator';
-import { GetOrgFromRequest } from '@gitroom/nestjs-libraries/user/org.from.request';
-import { GetUserFromRequest } from '@gitroom/nestjs-libraries/user/user.from.request';
+import { CheckPolicies } from '@postmill-ai/backend/services/auth/permissions/permissions.ability';
+import { AuthorizationActions, Sections } from '@postmill-ai/backend/services/auth/permissions/permission.exception.class';
+import { RequirePermission } from '@postmill-ai/backend/services/auth/rbac/require-permission.decorator';
+import { GetOrgFromRequest } from '@postmill-ai/nestjs-libraries/user/org.from.request';
+import { GetUserFromRequest } from '@postmill-ai/nestjs-libraries/user/user.from.request';
 import { Organization, User } from '@prisma/client';
-import { ReplicateRunnerService } from '@gitroom/nestjs-libraries/media/replicate-studio/replicate-runner.service';
-import { ReplicateCatalogService } from '@gitroom/nestjs-libraries/media/replicate-studio/replicate-catalog.service';
-import { ReplicateEnhanceService } from '@gitroom/nestjs-libraries/media/replicate-studio/replicate-enhance.service';
-import { FileService } from '@gitroom/nestjs-libraries/database/prisma/file/file.service';
-import { EstimateDto, RunSyncDto, RunAsyncDto, SaveUrlDto, MergeDto, EnhancePromptDto } from '@gitroom/nestjs-libraries/dtos/replicate';
-import { estimate } from '@gitroom/nestjs-libraries/media/replicate-studio/replicate-cost';
+import { ReplicateRunnerService } from '@postmill-ai/nestjs-libraries/media/replicate-studio/replicate-runner.service';
+import { ReplicateCatalogService } from '@postmill-ai/nestjs-libraries/media/replicate-studio/replicate-catalog.service';
+import { ReplicateEnhanceService } from '@postmill-ai/nestjs-libraries/media/replicate-studio/replicate-enhance.service';
+import { FileService } from '@postmill-ai/nestjs-libraries/database/prisma/file/file.service';
+import { EstimateDto, RunSyncDto, RunAsyncDto, SaveUrlDto, MergeDto, EnhancePromptDto } from '@postmill-ai/nestjs-libraries/dtos/replicate';
+import { estimate } from '@postmill-ai/nestjs-libraries/media/replicate-studio/replicate-cost';
 
 @ApiTags('Replicate Studio')
 @Controller('/media/replicate')

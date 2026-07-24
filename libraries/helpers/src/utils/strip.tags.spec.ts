@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { stripHtmlTags } from '@gitroom/helpers/utils/strip.tags';
+import { stripHtmlTags } from '@postmill-ai/helpers/utils/strip.tags';
 
 describe('stripHtmlTags', () => {
   it('removes simple tags', () => {

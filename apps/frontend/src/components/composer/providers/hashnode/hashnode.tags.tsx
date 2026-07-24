@@ -1,8 +1,8 @@
 'use client';
 
 import { FC, useCallback, useEffect, useState } from 'react';
-import { useCustomProviderFunction } from '@gitroom/frontend/components/launches/helpers/use.custom.provider.function';
-import { useSettings } from '@gitroom/frontend/components/launches/helpers/use.values';
+import { useCustomProviderFunction } from '@postmill-ai/frontend/components/launches/helpers/use.custom.provider.function';
+import { useSettings } from '@postmill-ai/frontend/components/launches/helpers/use.values';
 import { ReactTags } from 'react-tag-autocomplete';
 
 export const HashnodeTags: FC<{

@@ -3,7 +3,7 @@
 import dynamic from 'next/dynamic';
 
 const ReelFarmStudio = dynamic(
-  () => import('@gitroom/frontend/components/media-tools/reelfarm/reelfarm-studio').then((m) => m.ReelFarmStudio),
+  () => import('@postmill-ai/frontend/components/media-tools/reelfarm/reelfarm-studio').then((m) => m.ReelFarmStudio),
   { ssr: false }
 );
 

@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { ProviderConfigService } from './provider-config.service';
-import { AuthService } from '@gitroom/helpers/auth/auth.service';
+import { AuthService } from '@postmill-ai/helpers/auth/auth.service';
 
 const mockRepo = {
   getAll: vi.fn(),

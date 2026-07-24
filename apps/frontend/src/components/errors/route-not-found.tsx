@@ -1,5 +1,5 @@
 import Link from 'next/link';
-import { getT } from '@gitroom/react/translation/get.translation.service.backend';
+import { getT } from '@postmill-ai/react/translation/get.translation.service.backend';
 
 /**
  * Shared friendly fallback rendered by the App Router `not-found.tsx` segment

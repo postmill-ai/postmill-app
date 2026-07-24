@@ -1,12 +1,12 @@
 'use client';
 
 import React, { useCallback, useEffect, useState } from 'react';
-import { useFetch } from '@gitroom/helpers/utils/custom.fetch';
+import { useFetch } from '@postmill-ai/helpers/utils/custom.fetch';
 import useSWR from 'swr';
-import { useToaster } from '@gitroom/react/toaster/toaster';
-import { useT } from '@gitroom/react/translation/get.transation.service.client';
-import { Slider } from '@gitroom/react/form/slider';
-import { DataTable } from '@gitroom/frontend/components/ui/data-table';
+import { useToaster } from '@postmill-ai/react/toaster/toaster';
+import { useT } from '@postmill-ai/react/translation/get.transation.service.client';
+import { Slider } from '@postmill-ai/react/form/slider';
+import { DataTable } from '@postmill-ai/frontend/components/ui/data-table';
 
 interface RagStatus {
   enabled: boolean;

@@ -3,12 +3,12 @@ import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
 import { spawn } from 'child_process';
-import { DefaultsResolutionService } from '@gitroom/nestjs-libraries/ai/defaults/defaults-resolution.service';
-import { AiMediaService } from '@gitroom/nestjs-libraries/ai/governance/media.service';
-import { MediaJobLifecycleService } from '@gitroom/nestjs-libraries/database/prisma/media-providers/media-job-lifecycle.service';
-import { StorageService } from '@gitroom/nestjs-libraries/database/prisma/storage/storage.service';
-import { FileService } from '@gitroom/nestjs-libraries/database/prisma/file/file.service';
-import { DefaultNotConfiguredError } from '@gitroom/nestjs-libraries/ai/defaults/defaults.errors';
+import { DefaultsResolutionService } from '@postmill-ai/nestjs-libraries/ai/defaults/defaults-resolution.service';
+import { AiMediaService } from '@postmill-ai/nestjs-libraries/ai/governance/media.service';
+import { MediaJobLifecycleService } from '@postmill-ai/nestjs-libraries/database/prisma/media-providers/media-job-lifecycle.service';
+import { StorageService } from '@postmill-ai/nestjs-libraries/database/prisma/storage/storage.service';
+import { FileService } from '@postmill-ai/nestjs-libraries/database/prisma/file/file.service';
+import { DefaultNotConfiguredError } from '@postmill-ai/nestjs-libraries/ai/defaults/defaults.errors';
 
 function getFfmpegPath(): string {
   try {
@@ -144,7 +144,7 @@ export class CaptionService {
     }
 
     // Otherwise, fetch the URL (public URLs only).
-    const { safeFetch } = await import('@gitroom/nestjs-libraries/dtos/webhooks/safe.fetch');
+    const { safeFetch } = await import('@postmill-ai/nestjs-libraries/dtos/webhooks/safe.fetch');
     const res = await safeFetch(videoUrl);
     if (!res.ok) throw new Error(`Video download failed (${res.status}): ${videoUrl}`);
     const buffer = Buffer.from(await res.arrayBuffer());

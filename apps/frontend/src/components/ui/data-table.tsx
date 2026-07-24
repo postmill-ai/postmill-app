@@ -3,7 +3,7 @@
 import React, { FC, useCallback, useMemo } from 'react';
 import clsx from 'clsx';
 import { EmptyState } from './empty-state';
-import { useT } from '@gitroom/react/translation/get.transation.service.client';
+import { useT } from '@postmill-ai/react/translation/get.transation.service.client';
 
 export interface Column<T> {
   key: string;

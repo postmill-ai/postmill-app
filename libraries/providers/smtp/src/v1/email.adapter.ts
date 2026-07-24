@@ -7,7 +7,7 @@ import {
   EmailSendParams,
   EmailSendResult,
   ProviderModule,
-} from '@gitroom/provider-kernel';
+} from '@postmill-ai/provider-kernel';
 
 export class SmtpAdapter implements EmailCapability {
   readonly name = 'smtp';

@@ -1,13 +1,13 @@
 'use client';
 
 import { FC } from 'react';
-import { useFetch } from '@gitroom/helpers/utils/custom.fetch';
-import { useT } from '@gitroom/react/translation/get.transation.service.client';
+import { useFetch } from '@postmill-ai/helpers/utils/custom.fetch';
+import { useT } from '@postmill-ai/react/translation/get.transation.service.client';
 import useSWR from 'swr';
 import dayjs from 'dayjs';
 import Link from 'next/link';
-import { KebabMenu } from '@gitroom/frontend/components/ui/kebab-menu';
-import type { Campaign } from '@gitroom/frontend/components/campaigns/campaign-types';
+import { KebabMenu } from '@postmill-ai/frontend/components/ui/kebab-menu';
+import type { Campaign } from '@postmill-ai/frontend/components/campaigns/campaign-types';
 
 interface CampaignEngagement {
   totalViews: number;

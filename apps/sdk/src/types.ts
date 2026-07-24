@@ -3,7 +3,7 @@
  *
  * These are intentionally local to the published SDK so that `dist/index.d.ts`
  * stays self-contained and does not import private monorepo packages such as
- * `@gitroom/nestjs-libraries` or `@prisma/client` (see S6).
+ * `@postmill-ai/nestjs-libraries` or `@prisma/client` (see S6).
  *
  * When backend DTOs change, update the corresponding shape here. Only fields
  * that the SDK actually sends or receives are typed; everything else is left

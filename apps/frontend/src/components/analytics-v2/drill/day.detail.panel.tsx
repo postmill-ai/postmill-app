@@ -4,7 +4,7 @@ import { FC } from 'react';
 import { DayDetailResponse } from '../utils';
 import { Drawer } from '../kit/drawer';
 import { ChannelAvatar } from '../kit/channel-avatar';
-import { useT } from '@gitroom/react/translation/get.transation.service.client';
+import { useT } from '@postmill-ai/react/translation/get.transation.service.client';
 
 interface DayDetailPanelProps {
   data?: DayDetailResponse;

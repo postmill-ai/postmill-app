@@ -2,8 +2,8 @@
 
 import { FC, useRef, useState } from 'react';
 import { useExport } from './hooks/useExport';
-import { useToaster } from '@gitroom/react/toaster/toaster';
-import { useT } from '@gitroom/react/translation/get.transation.service.client';
+import { useToaster } from '@postmill-ai/react/toaster/toaster';
+import { useT } from '@postmill-ai/react/translation/get.transation.service.client';
 
 interface ExportButtonProps {
   from: string;

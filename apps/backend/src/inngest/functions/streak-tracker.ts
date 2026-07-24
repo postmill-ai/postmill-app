@@ -1,6 +1,6 @@
-import { inngest } from '@gitroom/nestjs-libraries/inngest/inngest.client';
-import { EmailActivity } from '@gitroom/nestjs-libraries/inngest/activities/email.activity';
-import { PostActivity } from '@gitroom/nestjs-libraries/inngest/activities/post.activity';
+import { inngest } from '@postmill-ai/nestjs-libraries/inngest/inngest.client';
+import { EmailActivity } from '@postmill-ai/nestjs-libraries/inngest/activities/email.activity';
+import { PostActivity } from '@postmill-ai/nestjs-libraries/inngest/activities/post.activity';
 
 export const createStreakTracker = (
   emailActivity: EmailActivity,

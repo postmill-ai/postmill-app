@@ -1,9 +1,9 @@
 'use client';
 
-import { useFetch } from '@gitroom/helpers/utils/custom.fetch';
+import { useFetch } from '@postmill-ai/helpers/utils/custom.fetch';
 import { useCallback, useSyncExternalStore } from 'react';
 import useSWR from 'swr';
-import { getTimezone } from '@gitroom/frontend/components/layout/set.timezone';
+import { getTimezone } from '@postmill-ai/frontend/components/layout/set.timezone';
 import { createFetchError } from '../dashboard.utils';
 
 export interface ScheduleDay {

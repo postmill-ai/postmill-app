@@ -4,16 +4,16 @@ import { FC } from 'react';
 import {
   PostComment,
   withProvider,
-} from '@gitroom/frontend/components/composer/providers/high.order.provider';
-import { useSettings } from '@gitroom/frontend/components/launches/helpers/use.values';
-import { Input } from '@gitroom/react/form/input';
-import { MediumPublications } from '@gitroom/frontend/components/composer/providers/medium/medium.publications';
-import { MediumTags } from '@gitroom/frontend/components/composer/providers/medium/medium.tags';
-import { MediumSettingsDto } from '@gitroom/nestjs-libraries/dtos/posts/providers-settings/medium.settings.dto';
-import { useIntegration } from '@gitroom/frontend/components/launches/helpers/use.integration';
-import { Canonical } from '@gitroom/react/form/canonical';
-import { useShowPostSelector } from '@gitroom/frontend/components/post-url-selector/post.url.selector';
-import { useT } from '@gitroom/react/translation/get.transation.service.client';
+} from '@postmill-ai/frontend/components/composer/providers/high.order.provider';
+import { useSettings } from '@postmill-ai/frontend/components/launches/helpers/use.values';
+import { Input } from '@postmill-ai/react/form/input';
+import { MediumPublications } from '@postmill-ai/frontend/components/composer/providers/medium/medium.publications';
+import { MediumTags } from '@postmill-ai/frontend/components/composer/providers/medium/medium.tags';
+import { MediumSettingsDto } from '@postmill-ai/nestjs-libraries/dtos/posts/providers-settings/medium.settings.dto';
+import { useIntegration } from '@postmill-ai/frontend/components/launches/helpers/use.integration';
+import { Canonical } from '@postmill-ai/react/form/canonical';
+import { useShowPostSelector } from '@postmill-ai/frontend/components/post-url-selector/post.url.selector';
+import { useT } from '@postmill-ai/react/translation/get.transation.service.client';
 
 const MediumSettings: FC = () => {
   const form = useSettings();

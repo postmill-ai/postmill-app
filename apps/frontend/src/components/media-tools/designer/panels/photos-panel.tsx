@@ -2,14 +2,14 @@
 
 import React, { FC, useCallback, useState } from 'react';
 import useSWR from 'swr';
-import { useFetch } from '@gitroom/helpers/utils/custom.fetch';
+import { useFetch } from '@postmill-ai/helpers/utils/custom.fetch';
 import { useDebounce } from 'use-debounce';
 import type { DesignerElement } from '../designer.store';
 import { PanelSkeletonGrid, PanelError } from './panel-states';
 import { fitWithin } from './fit-within';
 import { MediaSelectorModal } from '../../media-selector-modal';
 import { getDefaultClipEndMs, getVideoDurationMs } from './video-clip-duration';
-import { useT } from '@gitroom/react/translation/get.transation.service.client';
+import { useT } from '@postmill-ai/react/translation/get.transation.service.client';
 
 interface PhotosPanelProps {
   store: ReturnType<typeof import('../designer.store').createDesignerStore>;

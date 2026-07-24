@@ -1,16 +1,16 @@
 'use client';
 
 import React, { useState } from 'react';
-import { useT } from '@gitroom/react/translation/get.transation.service.client';
-import { Logo } from '@gitroom/frontend/components/new-layout/logo';
-import { FullscreenButton } from '@gitroom/frontend/components/media-tools/fullscreen-button';
-import { useFullscreen } from '@gitroom/frontend/components/media-tools/use-fullscreen';
+import { useT } from '@postmill-ai/react/translation/get.transation.service.client';
+import { Logo } from '@postmill-ai/frontend/components/new-layout/logo';
+import { FullscreenButton } from '@postmill-ai/frontend/components/media-tools/fullscreen-button';
+import { useFullscreen } from '@postmill-ai/frontend/components/media-tools/use-fullscreen';
 import { Storyboard } from './storyboard';
 import { TalkingPhoto } from './talking-photo';
 import { Voiceover } from './voiceover';
 import { Translate } from './translate';
 import { RenderQueue } from './render-queue';
-import { StudioLanding } from '@gitroom/frontend/components/media-tools/studio-kit/studio-landing';
+import { StudioLanding } from '@postmill-ai/frontend/components/media-tools/studio-kit/studio-landing';
 import { useHeygenStatus, useHeygenAvatars, useHeygenVoices, useHeygenJobs } from './use-heygen';
 
 const HEYGEN_LANDING = {

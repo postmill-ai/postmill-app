@@ -2,12 +2,12 @@
 
 import React, { FC, useCallback, useState } from 'react';
 import useSWR from 'swr';
-import { useFetch } from '@gitroom/helpers/utils/custom.fetch';
-import { useT } from '@gitroom/react/translation/get.transation.service.client';
-import { useModals } from '@gitroom/frontend/components/layout/new-modal';
-import { LoadingComponent } from '@gitroom/frontend/components/layout/loading';
-import { useToaster } from '@gitroom/react/toaster/toaster';
-import { Button } from '@gitroom/react/form/button';
+import { useFetch } from '@postmill-ai/helpers/utils/custom.fetch';
+import { useT } from '@postmill-ai/react/translation/get.transation.service.client';
+import { useModals } from '@postmill-ai/frontend/components/layout/new-modal';
+import { LoadingComponent } from '@postmill-ai/frontend/components/layout/loading';
+import { useToaster } from '@postmill-ai/react/toaster/toaster';
+import { Button } from '@postmill-ai/react/form/button';
 
 export const MissingReleaseModal: FC<{
   postId: string;

@@ -1,4 +1,4 @@
-import { BaseShortLinkAdapter, ShortLinkCapability, ShortLinkCredentialField, ShortLinkCapabilities, ShortLinkContext, ShortLinkStat, ProviderModule, SafeFetchPort } from '@gitroom/provider-kernel';
+import { BaseShortLinkAdapter, ShortLinkCapability, ShortLinkCredentialField, ShortLinkCapabilities, ShortLinkContext, ShortLinkStat, ProviderModule, SafeFetchPort } from '@postmill-ai/provider-kernel';
 
 import { metadata as providerMetadata } from './metadata';
 export class BlinkAdapter extends BaseShortLinkAdapter {

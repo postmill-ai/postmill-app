@@ -1,4 +1,4 @@
-# @gitroom/provider-bluesky
+# @postmill-ai/provider-bluesky
 
 Bluesky social provider (`social/bluesky@v1`).
 

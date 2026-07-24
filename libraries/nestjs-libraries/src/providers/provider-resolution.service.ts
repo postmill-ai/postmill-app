@@ -20,15 +20,15 @@ import {
   ProviderVersionDeprecatedForWriteError,
   ProviderVersionPreviewError,
   ProviderVersionInvalidError,
-} from '@gitroom/provider-kernel';
-import { accountFingerprint } from '@gitroom/nestjs-libraries/utils/account-fingerprint';
-import { AIProviderAdapter } from '@gitroom/nestjs-libraries/ai/ai-provider.interface';
-import { MediaProviderAdapter } from '@gitroom/nestjs-libraries/media/media-provider-adapter.interface';
-import { ShortLinkAdapter } from '@gitroom/nestjs-libraries/short-linking/short-link.interface';
-import { VpnProviderAdapter } from '@gitroom/nestjs-libraries/vpn/vpn-provider.interface';
-import { EmailAdapter } from '@gitroom/nestjs-libraries/emails/email-adapter.interface';
-import { IStorageAdapter } from '@gitroom/nestjs-libraries/upload/upload.interface';
-import { SocialProvider } from '@gitroom/nestjs-libraries/integrations/social/social.integrations.interface';
+} from '@postmill-ai/provider-kernel';
+import { accountFingerprint } from '@postmill-ai/nestjs-libraries/utils/account-fingerprint';
+import { AIProviderAdapter } from '@postmill-ai/nestjs-libraries/ai/ai-provider.interface';
+import { MediaProviderAdapter } from '@postmill-ai/nestjs-libraries/media/media-provider-adapter.interface';
+import { ShortLinkAdapter } from '@postmill-ai/nestjs-libraries/short-linking/short-link.interface';
+import { VpnProviderAdapter } from '@postmill-ai/nestjs-libraries/vpn/vpn-provider.interface';
+import { EmailAdapter } from '@postmill-ai/nestjs-libraries/emails/email-adapter.interface';
+import { IStorageAdapter } from '@postmill-ai/nestjs-libraries/upload/upload.interface';
+import { SocialProvider } from '@postmill-ai/nestjs-libraries/integrations/social/social.integrations.interface';
 import { PROVIDER_KERNEL } from './provider-kernel.token';
 import { RuntimeContextFactory } from './runtime-context.factory';
 import { trace } from '@opentelemetry/api';

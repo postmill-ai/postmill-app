@@ -1,6 +1,6 @@
 'use client';
 
-import { useFetch } from '@gitroom/helpers/utils/custom.fetch';
+import { useFetch } from '@postmill-ai/helpers/utils/custom.fetch';
 import useSWR from 'swr';
 import { useCallback } from 'react';
 import { createFetchError } from '../utils';

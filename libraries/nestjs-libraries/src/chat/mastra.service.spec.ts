@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
-vi.mock('@gitroom/nestjs-libraries/chat/load.tools.service', () => ({
+vi.mock('@postmill-ai/nestjs-libraries/chat/load.tools.service', () => ({
   LoadToolsService: class {
     agent = vi.fn().mockResolvedValue({
       id: 'postmill',
@@ -9,7 +9,7 @@ vi.mock('@gitroom/nestjs-libraries/chat/load.tools.service', () => ({
   },
 }));
 
-vi.mock('@gitroom/nestjs-libraries/chat/mastra.store', () => ({
+vi.mock('@postmill-ai/nestjs-libraries/chat/mastra.store', () => ({
   pStore: { _type: 'mock.mastra.store' },
 }));
 
@@ -33,7 +33,7 @@ vi.mock('@mastra/core/mastra', () => ({
 }));
 
 import { MastraService } from './mastra.service';
-import { LoadToolsService } from '@gitroom/nestjs-libraries/chat/load.tools.service';
+import { LoadToolsService } from '@postmill-ai/nestjs-libraries/chat/load.tools.service';
 import { Mastra } from '@mastra/core/mastra';
 
 describe('MastraService', () => {

@@ -11,15 +11,15 @@ import {
   CreationMethod,
   CampaignEntityType,
 } from '@prisma/client';
-import { AuthService } from '@gitroom/helpers/auth/auth.service';
-import { PrismaService } from '@gitroom/nestjs-libraries/database/prisma/prisma.service';
-import { MigrationLedgerRepository } from '@gitroom/nestjs-libraries/database/prisma/migration-ledger/migration-ledger.repository';
-import { OrganizationService } from '@gitroom/nestjs-libraries/database/prisma/organizations/organization.service';
-import { UsersService } from '@gitroom/nestjs-libraries/database/prisma/users/users.service';
-import { FileService } from '@gitroom/nestjs-libraries/database/prisma/file/file.service';
-import { DesignService } from '@gitroom/nestjs-libraries/database/prisma/design/design.service';
-import { DefaultsSeedService } from '@gitroom/nestjs-libraries/ai/defaults/defaults-seed.service';
-import { EncryptionService } from '@gitroom/nestjs-libraries/encryption/encryption.service';
+import { AuthService } from '@postmill-ai/helpers/auth/auth.service';
+import { PrismaService } from '@postmill-ai/nestjs-libraries/database/prisma/prisma.service';
+import { MigrationLedgerRepository } from '@postmill-ai/nestjs-libraries/database/prisma/migration-ledger/migration-ledger.repository';
+import { OrganizationService } from '@postmill-ai/nestjs-libraries/database/prisma/organizations/organization.service';
+import { UsersService } from '@postmill-ai/nestjs-libraries/database/prisma/users/users.service';
+import { FileService } from '@postmill-ai/nestjs-libraries/database/prisma/file/file.service';
+import { DesignService } from '@postmill-ai/nestjs-libraries/database/prisma/design/design.service';
+import { DefaultsSeedService } from '@postmill-ai/nestjs-libraries/ai/defaults/defaults-seed.service';
+import { EncryptionService } from '@postmill-ai/nestjs-libraries/encryption/encryption.service';
 import { DEMO_DESIGNS, DEMO_DESIGN_PREFIX } from './designer-seed-docs';
 
 const LEDGER_KEY = 'demo:fixtures-v2';

@@ -2,7 +2,7 @@ import { Injectable, Logger } from '@nestjs/common';
 import puppeteer from 'puppeteer';
 import * as path from 'path';
 import { FRAME_RENDERER_SCRIPT, escapeForScriptTag } from './frame-renderer-script';
-import { isSafePublicHttpsUrl } from '@gitroom/nestjs-libraries/dtos/webhooks/webhook.url.validator';
+import { isSafePublicHttpsUrl } from '@postmill-ai/nestjs-libraries/dtos/webhooks/webhook.url.validator';
 import type { VideoOutput } from './design-render.types';
 
 export interface FrameCaptureProgress {

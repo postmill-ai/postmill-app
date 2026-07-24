@@ -7,16 +7,16 @@ import {
 import {
   PostComment,
   withProvider,
-} from '@gitroom/frontend/components/composer/providers/high.order.provider';
-import { TikTokDto } from '@gitroom/nestjs-libraries/dtos/posts/providers-settings/tiktok.dto';
-import { useSettings } from '@gitroom/frontend/components/launches/helpers/use.values';
-import { Select } from '@gitroom/react/form/select';
-import { Checkbox } from '@gitroom/react/form/checkbox';
+} from '@postmill-ai/frontend/components/composer/providers/high.order.provider';
+import { TikTokDto } from '@postmill-ai/nestjs-libraries/dtos/posts/providers-settings/tiktok.dto';
+import { useSettings } from '@postmill-ai/frontend/components/launches/helpers/use.values';
+import { Select } from '@postmill-ai/react/form/select';
+import { Checkbox } from '@postmill-ai/react/form/checkbox';
 import clsx from 'clsx';
-import { useT } from '@gitroom/react/translation/get.transation.service.client';
-import { useIntegration } from '@gitroom/frontend/components/launches/helpers/use.integration';
-import { Input } from '@gitroom/react/form/input';
-import { TiktokPreview } from '@gitroom/frontend/components/composer/providers/tiktok/tiktok.preview';
+import { useT } from '@postmill-ai/react/translation/get.transation.service.client';
+import { useIntegration } from '@postmill-ai/frontend/components/launches/helpers/use.integration';
+import { Input } from '@postmill-ai/react/form/input';
+import { TiktokPreview } from '@postmill-ai/frontend/components/composer/providers/tiktok/tiktok.preview';
 
 const TikTokSettings: FC<{
   values?: any;

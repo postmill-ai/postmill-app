@@ -3,7 +3,7 @@ import { GuardrailViolation } from './errors';
 
 const mockGetSettings = vi.fn().mockResolvedValue(null);
 
-vi.mock('@gitroom/nestjs-libraries/ai/ai-settings.manager', () => ({
+vi.mock('@postmill-ai/nestjs-libraries/ai/ai-settings.manager', () => ({
   AiSettingsManager: class MockManager {
     getSettings = mockGetSettings;
   },
@@ -36,7 +36,7 @@ vi.mock('@reaatech/guardrail-chain', () => ({
 }));
 
 import { GuardrailService } from './guardrail.service';
-import { AiSettingsManager } from '@gitroom/nestjs-libraries/ai/ai-settings.manager';
+import { AiSettingsManager } from '@postmill-ai/nestjs-libraries/ai/ai-settings.manager';
 
 function guardrailSettings(enabled: boolean = true) {
   return {

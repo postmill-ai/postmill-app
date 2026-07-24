@@ -1,15 +1,15 @@
 import { Body, Controller, Delete, Get, Param, Post, Put } from '@nestjs/common';
-import { GetOrgFromRequest } from '@gitroom/nestjs-libraries/user/org.from.request';
-import { GetUserFromRequest } from '@gitroom/nestjs-libraries/user/user.from.request';
+import { GetOrgFromRequest } from '@postmill-ai/nestjs-libraries/user/org.from.request';
+import { GetUserFromRequest } from '@postmill-ai/nestjs-libraries/user/user.from.request';
 import { Organization, User } from '@prisma/client';
-import { CheckPolicies } from '@gitroom/backend/services/auth/permissions/permissions.ability';
-import { AuthorizationActions, Sections } from '@gitroom/backend/services/auth/permissions/permission.exception.class';
-import { OrganizationService } from '@gitroom/nestjs-libraries/database/prisma/organizations/organization.service';
-import { AddTeamMemberDto } from '@gitroom/nestjs-libraries/dtos/settings/add.team.member.dto';
-import { ShortlinkPreferenceDto } from '@gitroom/nestjs-libraries/dtos/settings/shortlink-preference.dto';
-import { CreateTeamUserDto } from '@gitroom/nestjs-libraries/dtos/settings/create-team-user.dto';
+import { CheckPolicies } from '@postmill-ai/backend/services/auth/permissions/permissions.ability';
+import { AuthorizationActions, Sections } from '@postmill-ai/backend/services/auth/permissions/permission.exception.class';
+import { OrganizationService } from '@postmill-ai/nestjs-libraries/database/prisma/organizations/organization.service';
+import { AddTeamMemberDto } from '@postmill-ai/nestjs-libraries/dtos/settings/add.team.member.dto';
+import { ShortlinkPreferenceDto } from '@postmill-ai/nestjs-libraries/dtos/settings/shortlink-preference.dto';
+import { CreateTeamUserDto } from '@postmill-ai/nestjs-libraries/dtos/settings/create-team-user.dto';
 import { ApiTags } from '@nestjs/swagger';
-import { RequirePermission } from '@gitroom/backend/services/auth/rbac/require-permission.decorator';
+import { RequirePermission } from '@postmill-ai/backend/services/auth/rbac/require-permission.decorator';
 
 @ApiTags('Settings')
 @Controller('/settings')

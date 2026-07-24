@@ -96,7 +96,7 @@ function parseTimelineHandoff(raw: unknown): TimelineHandoff | undefined {
 
 const DesignerPage = dynamic(
   () =>
-    import('@gitroom/frontend/components/media-tools/designer/designer').then(
+    import('@postmill-ai/frontend/components/media-tools/designer/designer').then(
       (m) => m.Designer
     ),
   { ssr: false }

@@ -1,7 +1,7 @@
 'use client';
 
 import { FC, KeyboardEvent, useCallback, useState } from 'react';
-import { useT } from '@gitroom/react/translation/get.transation.service.client';
+import { useT } from '@postmill-ai/react/translation/get.transation.service.client';
 
 // Small bespoke tag input: type comma-separated text (`tag1, tag2`) and each
 // completed token becomes a removable chip. Used by the campaign create/edit

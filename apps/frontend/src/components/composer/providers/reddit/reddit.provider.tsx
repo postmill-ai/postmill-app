@@ -4,24 +4,24 @@ import { FC, useCallback } from 'react';
 import {
   PostComment,
   withProvider,
-} from '@gitroom/frontend/components/composer/providers/high.order.provider';
-import { useIntegration } from '@gitroom/frontend/components/launches/helpers/use.integration';
-import { Subreddit } from '@gitroom/frontend/components/composer/providers/reddit/subreddit';
-import { useSettings } from '@gitroom/frontend/components/launches/helpers/use.values';
+} from '@postmill-ai/frontend/components/composer/providers/high.order.provider';
+import { useIntegration } from '@postmill-ai/frontend/components/launches/helpers/use.integration';
+import { Subreddit } from '@postmill-ai/frontend/components/composer/providers/reddit/subreddit';
+import { useSettings } from '@postmill-ai/frontend/components/launches/helpers/use.values';
 import { useFieldArray, useWatch } from 'react-hook-form';
-import { Button } from '@gitroom/react/form/button';
+import { Button } from '@postmill-ai/react/form/button';
 import {
   RedditSettingsDto,
   RedditSettingsValueDto,
-} from '@gitroom/nestjs-libraries/dtos/posts/providers-settings/reddit.dto';
+} from '@postmill-ai/nestjs-libraries/dtos/posts/providers-settings/reddit.dto';
 import clsx from 'clsx';
-import { useMediaDirectory } from '@gitroom/react/helpers/use.media.directory';
-import { deleteDialog } from '@gitroom/react/helpers/delete.dialog';
-import SafeImage from '@gitroom/react/helpers/safe.image';
-import { useT } from '@gitroom/react/translation/get.transation.service.client';
-import { useFormatting } from '@gitroom/frontend/components/launches/helpers/use.formatting';
-import { SafeContent } from '@gitroom/frontend/components/shared/safe-content';
-import { FirstCommentField } from '@gitroom/frontend/components/composer/providers/shared/first-comment.field';
+import { useMediaDirectory } from '@postmill-ai/react/helpers/use.media.directory';
+import { deleteDialog } from '@postmill-ai/react/helpers/delete.dialog';
+import SafeImage from '@postmill-ai/react/helpers/safe.image';
+import { useT } from '@postmill-ai/react/translation/get.transation.service.client';
+import { useFormatting } from '@postmill-ai/frontend/components/launches/helpers/use.formatting';
+import { SafeContent } from '@postmill-ai/frontend/components/shared/safe-content';
+import { FirstCommentField } from '@postmill-ai/frontend/components/composer/providers/shared/first-comment.field';
 const RenderRedditComponent: FC<{
   type: string;
   images?: Array<{

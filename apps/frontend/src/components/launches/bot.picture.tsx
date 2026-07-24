@@ -1,18 +1,18 @@
 'use client';
 
-import { TopTitle } from '@gitroom/frontend/components/launches/helpers/top.title.component';
+import { TopTitle } from '@postmill-ai/frontend/components/launches/helpers/top.title.component';
 import React, { FC, FormEventHandler, useCallback, useState } from 'react';
-import { Integrations } from '@gitroom/frontend/components/launches/calendar.context';
-import { useModals } from '@gitroom/frontend/components/layout/new-modal';
-import { Input } from '@gitroom/react/form/input';
-import { Button } from '@gitroom/react/form/button';
-import { useFetch } from '@gitroom/helpers/utils/custom.fetch';
-import { useToaster } from '@gitroom/react/toaster/toaster';
-import { useT } from '@gitroom/react/translation/get.transation.service.client';
+import { Integrations } from '@postmill-ai/frontend/components/launches/calendar.context';
+import { useModals } from '@postmill-ai/frontend/components/layout/new-modal';
+import { Input } from '@postmill-ai/react/form/input';
+import { Button } from '@postmill-ai/react/form/button';
+import { useFetch } from '@postmill-ai/helpers/utils/custom.fetch';
+import { useToaster } from '@postmill-ai/react/toaster/toaster';
+import { useT } from '@postmill-ai/react/translation/get.transation.service.client';
 import {
   MediaSelectorItem,
   MediaSelectorModal,
-} from '@gitroom/frontend/components/media-tools/media-selector-modal';
+} from '@postmill-ai/frontend/components/media-tools/media-selector-modal';
 
 export const BotPicture: FC<{
   integration: Integrations;

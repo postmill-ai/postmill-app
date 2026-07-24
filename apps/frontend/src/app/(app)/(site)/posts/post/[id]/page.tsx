@@ -1,13 +1,13 @@
 'use client';
 import { useCallback } from 'react';
 import useSWR from 'swr';
-import { useFetch } from '@gitroom/helpers/utils/custom.fetch';
+import { useFetch } from '@postmill-ai/helpers/utils/custom.fetch';
 import { useParams } from 'next/navigation';
 import dayjs from 'dayjs';
-import { ExistingDataContextProvider } from '@gitroom/frontend/components/launches/helpers/use.existing.data';
-import { Integrations } from '@gitroom/frontend/components/launches/calendar.context';
-import { Composer } from '@gitroom/frontend/components/composer/composer';
-import { LoadingComponent } from '@gitroom/frontend/components/layout/loading';
+import { ExistingDataContextProvider } from '@postmill-ai/frontend/components/launches/helpers/use.existing.data';
+import { Integrations } from '@postmill-ai/frontend/components/launches/calendar.context';
+import { Composer } from '@postmill-ai/frontend/components/composer/composer';
+import { LoadingComponent } from '@postmill-ai/frontend/components/layout/loading';
 
 export default function EditPostPage() {
   const fetch = useFetch();

@@ -4,7 +4,7 @@ import path from 'path';
 export default defineConfig({
   resolve: {
     alias: {
-      '@gitroom/helpers': path.resolve(__dirname, 'src'),
+      '@postmill-ai/helpers': path.resolve(__dirname, 'src'),
     },
   },
   test: {

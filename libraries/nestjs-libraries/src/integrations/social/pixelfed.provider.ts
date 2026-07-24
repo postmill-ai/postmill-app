@@ -1,2 +1,2 @@
-// Re-export shim — provider relocated into @gitroom/provider-pixelfed (step 7.5.1).
-export { PixelfedProvider } from '@gitroom/provider-pixelfed';
+// Re-export shim — provider relocated into @postmill-ai/provider-pixelfed (step 7.5.1).
+export { PixelfedProvider } from '@postmill-ai/provider-pixelfed';

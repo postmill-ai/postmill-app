@@ -1,5 +1,5 @@
 import React from 'react';
-import { useT } from '@gitroom/react/translation/get.transation.service.client';
+import { useT } from '@postmill-ai/react/translation/get.transation.service.client';
 import type { ImageAwareness } from './collaboration';
 
 export interface PeerTimelineState {

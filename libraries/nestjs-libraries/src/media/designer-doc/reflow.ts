@@ -1,4 +1,4 @@
-import { CHANNEL_PRESETS } from '@gitroom/nestjs-libraries/integrations/social/channel-presets';
+import { CHANNEL_PRESETS } from '@postmill-ai/nestjs-libraries/integrations/social/channel-presets';
 import type { DesignerElement } from './designer-doc.schema';
 
 // Scale (natW × natH) down to fit inside (maxW × maxH) using a single uniform

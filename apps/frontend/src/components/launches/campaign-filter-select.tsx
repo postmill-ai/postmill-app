@@ -2,7 +2,7 @@
 
 import { FC, useEffect, useMemo, useRef, useState } from 'react';
 import clsx from 'clsx';
-import { useT } from '@gitroom/react/translation/get.transation.service.client';
+import { useT } from '@postmill-ai/react/translation/get.transation.service.client';
 
 // Controlled multi-select campaign picker — mirrors the channel filter's
 // dropdown display (pill + searchable checklist), wired to the calendar

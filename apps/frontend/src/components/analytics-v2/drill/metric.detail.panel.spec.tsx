@@ -4,7 +4,7 @@ import { render, screen } from '@testing-library/react';
 import { MetricDetailPanel } from './metric.detail.panel';
 import { MetricDetailResponse } from '../utils';
 
-vi.mock('@gitroom/react/translation/get.transation.service.client', () => ({
+vi.mock('@postmill-ai/react/translation/get.transation.service.client', () => ({
   useT: () => (_k: string, d: string) => d,
 }));
 

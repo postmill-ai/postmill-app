@@ -16,21 +16,21 @@ import { IsString, IsOptional, IsNumber, IsBoolean, Min } from 'class-validator'
 import { Organization, User } from '@prisma/client';
 import { ApiTags } from '@nestjs/swagger';
 import { z } from 'zod';
-import { GetOrgFromRequest } from '@gitroom/nestjs-libraries/user/org.from.request';
-import { GetUserFromRequest } from '@gitroom/nestjs-libraries/user/user.from.request';
-import { CapabilityNotAvailable } from '@gitroom/nestjs-libraries/ai/governance/errors';
-import { RequirePermission } from '@gitroom/backend/services/auth/rbac/require-permission.decorator';
-import { AiSettingsService } from '@gitroom/nestjs-libraries/database/prisma/ai-settings/ai-settings.service';
-import { AiSettingsManager } from '@gitroom/nestjs-libraries/ai/ai-settings.manager';
-import { AiMediaService } from '@gitroom/nestjs-libraries/ai/governance/media.service';
-import { RagService } from '@gitroom/nestjs-libraries/ai/governance/rag.service';
-import { AIModelProvider } from '@gitroom/nestjs-libraries/ai/ai-model.provider';
-import { GuardrailService } from '@gitroom/nestjs-libraries/ai/governance/guardrail.service';
-import { BudgetService } from '@gitroom/nestjs-libraries/ai/governance/budget.service';
-import { AnalyticsService } from '@gitroom/nestjs-libraries/analytics/analytics.service';
-import { AiDefaultsService } from '@gitroom/nestjs-libraries/ai/defaults/ai-defaults.service';
-import { PROMPT_CONSTANTS } from '@gitroom/nestjs-libraries/ai/prompt-constants.const';
-import { BrandMemorySearchDto } from '@gitroom/backend/dtos/ai/brand-memory-search.dto';
+import { GetOrgFromRequest } from '@postmill-ai/nestjs-libraries/user/org.from.request';
+import { GetUserFromRequest } from '@postmill-ai/nestjs-libraries/user/user.from.request';
+import { CapabilityNotAvailable } from '@postmill-ai/nestjs-libraries/ai/governance/errors';
+import { RequirePermission } from '@postmill-ai/backend/services/auth/rbac/require-permission.decorator';
+import { AiSettingsService } from '@postmill-ai/nestjs-libraries/database/prisma/ai-settings/ai-settings.service';
+import { AiSettingsManager } from '@postmill-ai/nestjs-libraries/ai/ai-settings.manager';
+import { AiMediaService } from '@postmill-ai/nestjs-libraries/ai/governance/media.service';
+import { RagService } from '@postmill-ai/nestjs-libraries/ai/governance/rag.service';
+import { AIModelProvider } from '@postmill-ai/nestjs-libraries/ai/ai-model.provider';
+import { GuardrailService } from '@postmill-ai/nestjs-libraries/ai/governance/guardrail.service';
+import { BudgetService } from '@postmill-ai/nestjs-libraries/ai/governance/budget.service';
+import { AnalyticsService } from '@postmill-ai/nestjs-libraries/analytics/analytics.service';
+import { AiDefaultsService } from '@postmill-ai/nestjs-libraries/ai/defaults/ai-defaults.service';
+import { PROMPT_CONSTANTS } from '@postmill-ai/nestjs-libraries/ai/prompt-constants.const';
+import { BrandMemorySearchDto } from '@postmill-ai/backend/dtos/ai/brand-memory-search.dto';
 import dayjs from 'dayjs';
 
 class UpsertBrandProfileDto {

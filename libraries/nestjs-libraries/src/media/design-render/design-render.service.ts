@@ -3,7 +3,7 @@ import { Injectable, Logger } from '@nestjs/common';
 import PDFDocument from 'pdfkit';
 import { readFile } from 'fs/promises';
 import * as path from 'path';
-import { safeFetch } from '@gitroom/nestjs-libraries/dtos/webhooks/safe.fetch';
+import { safeFetch } from '@postmill-ai/nestjs-libraries/dtos/webhooks/safe.fetch';
 import {
   DesignerDoc,
   DesignerElement,

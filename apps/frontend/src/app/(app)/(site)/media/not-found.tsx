@@ -1,5 +1,5 @@
-import { RouteNotFound } from '@gitroom/frontend/components/errors/route-not-found';
-import { getT } from '@gitroom/react/translation/get.translation.service.backend';
+import { RouteNotFound } from '@postmill-ai/frontend/components/errors/route-not-found';
+import { getT } from '@postmill-ai/react/translation/get.translation.service.backend';
 
 export default async function MediaNotFound() {
   const t = await getT();

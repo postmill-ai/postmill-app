@@ -13,7 +13,7 @@ import {
   isTransientStatus,
   SafeFetchPort,
   ProviderModule,
-} from '@gitroom/provider-kernel';
+} from '@postmill-ai/provider-kernel';
 
 // Reel.Farm official developer API (https://reel.farm/api-docs) — own-key Bearer provider
 // configured at Settings → Media. Video-only: a natural-language prompt renders an AI TikTok

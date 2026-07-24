@@ -1,13 +1,13 @@
 import { ForbiddenException, Injectable, Logger } from '@nestjs/common';
 import { AIMediaJob } from '@prisma/client';
-import { safeFetch } from '@gitroom/nestjs-libraries/dtos/webhooks/safe.fetch';
-import { ioRedis } from '@gitroom/nestjs-libraries/redis/redis.service';
-import { OrgMediaProviderSettingsService } from '@gitroom/nestjs-libraries/database/prisma/media-providers/org-media-provider-settings.service';
-import { MediaJobLifecycleService } from '@gitroom/nestjs-libraries/database/prisma/media-providers/media-job-lifecycle.service';
-import { AiSettingsService } from '@gitroom/nestjs-libraries/database/prisma/ai-settings/ai-settings.service';
-import { StorageService } from '@gitroom/nestjs-libraries/database/prisma/storage/storage.service';
-import { FileService } from '@gitroom/nestjs-libraries/database/prisma/file/file.service';
-import { redactError } from '@gitroom/provider-kernel';
+import { safeFetch } from '@postmill-ai/nestjs-libraries/dtos/webhooks/safe.fetch';
+import { ioRedis } from '@postmill-ai/nestjs-libraries/redis/redis.service';
+import { OrgMediaProviderSettingsService } from '@postmill-ai/nestjs-libraries/database/prisma/media-providers/org-media-provider-settings.service';
+import { MediaJobLifecycleService } from '@postmill-ai/nestjs-libraries/database/prisma/media-providers/media-job-lifecycle.service';
+import { AiSettingsService } from '@postmill-ai/nestjs-libraries/database/prisma/ai-settings/ai-settings.service';
+import { StorageService } from '@postmill-ai/nestjs-libraries/database/prisma/storage/storage.service';
+import { FileService } from '@postmill-ai/nestjs-libraries/database/prisma/file/file.service';
+import { redactError } from '@postmill-ai/provider-kernel';
 
 const BASE = 'https://api.heygen.com';
 

@@ -3,11 +3,11 @@
 import { FC, useCallback, useState } from 'react';
 import dayjs from 'dayjs';
 import relativeTime from 'dayjs/plugin/relativeTime';
-import { useFetch } from '@gitroom/helpers/utils/custom.fetch';
-import { useT } from '@gitroom/react/translation/get.transation.service.client';
-import ProviderIcon from '@gitroom/frontend/components/shared/provider-icon';
-import { CommentComposer } from '@gitroom/frontend/components/launches/post-detail/comment.composer';
-import { TeamMemberItem } from '@gitroom/frontend/components/settings/roles/hooks/use-roles';
+import { useFetch } from '@postmill-ai/helpers/utils/custom.fetch';
+import { useT } from '@postmill-ai/react/translation/get.transation.service.client';
+import ProviderIcon from '@postmill-ai/frontend/components/shared/provider-icon';
+import { CommentComposer } from '@postmill-ai/frontend/components/launches/post-detail/comment.composer';
+import { TeamMemberItem } from '@postmill-ai/frontend/components/settings/roles/hooks/use-roles';
 
 dayjs.extend(relativeTime);
 

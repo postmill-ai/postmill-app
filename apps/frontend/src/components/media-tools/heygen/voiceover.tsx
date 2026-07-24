@@ -1,10 +1,10 @@
 'use client';
 
 import React, { FC, useState } from 'react';
-import { useT } from '@gitroom/react/translation/get.transation.service.client';
-import { useFetch } from '@gitroom/helpers/utils/custom.fetch';
-import { useToaster } from '@gitroom/react/toaster/toaster';
-import { useModals } from '@gitroom/frontend/components/layout/new-modal';
+import { useT } from '@postmill-ai/react/translation/get.transation.service.client';
+import { useFetch } from '@postmill-ai/helpers/utils/custom.fetch';
+import { useToaster } from '@postmill-ai/react/toaster/toaster';
+import { useModals } from '@postmill-ai/frontend/components/layout/new-modal';
 import { VoicePicker } from './voice-picker';
 import { HeyGenVoice } from './use-heygen';
 

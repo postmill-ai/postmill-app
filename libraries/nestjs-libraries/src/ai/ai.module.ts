@@ -12,16 +12,16 @@ import { ModelRouterService } from './governance/model-router.service';
 import { CircuitBreakerService } from './governance/circuit-breaker.service';
 import { ToolFirewallService } from './governance/tool-firewall.service';
 import { IdempotencyFactory } from './governance/idempotency.factory';
-import { OrgAiSettingsService } from '@gitroom/nestjs-libraries/database/prisma/ai-settings/org-ai-settings.service';
-import { OrgAiSettingsRepository } from '@gitroom/nestjs-libraries/database/prisma/ai-settings/org-ai-settings.repository';
-import { OrgDefaultModelRepository } from '@gitroom/nestjs-libraries/database/prisma/ai-settings/org-default-model.repository';
+import { OrgAiSettingsService } from '@postmill-ai/nestjs-libraries/database/prisma/ai-settings/org-ai-settings.service';
+import { OrgAiSettingsRepository } from '@postmill-ai/nestjs-libraries/database/prisma/ai-settings/org-ai-settings.repository';
+import { OrgDefaultModelRepository } from '@postmill-ai/nestjs-libraries/database/prisma/ai-settings/org-default-model.repository';
 import { DefaultsResolutionService } from './defaults/defaults-resolution.service';
 import { DefaultsSeedService } from './defaults/defaults-seed.service';
 import { AiDefaultsService } from './defaults/ai-defaults.service';
 import { DefaultsSettingsValidator } from './defaults/defaults-settings.validator';
 import { MediaDefaultsService } from './defaults/media-defaults.service';
-import { SlideService } from '@gitroom/nestjs-libraries/media/slide/slide.service';
-import { CaptionService } from '@gitroom/nestjs-libraries/media/caption/caption.service';
+import { SlideService } from '@postmill-ai/nestjs-libraries/media/slide/slide.service';
+import { CaptionService } from '@postmill-ai/nestjs-libraries/media/caption/caption.service';
 
 @Global()
 @Module({

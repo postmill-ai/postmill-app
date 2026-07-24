@@ -55,7 +55,7 @@
  * If a different channel is needed, adjust ./bridge.tsx — this page is only
  * a server wrapper that forwards the `:p` route param.
  */
-import { InBridge } from '@gitroom/frontend/app/(provider)/provider/[p]/in-bridge';
+import { InBridge } from '@postmill-ai/frontend/app/(provider)/provider/[p]/in-bridge';
 
 export default async function Page({
   params,

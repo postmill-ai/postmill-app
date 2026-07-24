@@ -2,7 +2,7 @@ import { metadata as providerMetadata } from './metadata';
 import {
   ProviderModule,
   AuthCapability,
-} from '@gitroom/provider-kernel';
+} from '@postmill-ai/provider-kernel';
 
 // Kernel auth module for LOCAL (email + password) login.
 //

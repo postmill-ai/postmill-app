@@ -1,17 +1,17 @@
-import { AgentToolInterface } from '@gitroom/nestjs-libraries/chat/agent.tool.interface';
+import { AgentToolInterface } from '@postmill-ai/nestjs-libraries/chat/agent.tool.interface';
 import { createTool } from '@mastra/core/tools';
 import { z } from 'zod';
 import { Injectable, Logger } from '@nestjs/common';
-import { IntegrationManager } from '@gitroom/nestjs-libraries/integrations/integration.manager';
-import { IntegrationService } from '@gitroom/nestjs-libraries/database/prisma/integrations/integration.service';
-import { RefreshToken } from '@gitroom/nestjs-libraries/integrations/social.abstract';
-import { timer } from '@gitroom/helpers/utils/timer';
-import { checkAuth } from '@gitroom/nestjs-libraries/chat/auth.context';
-import { RefreshIntegrationService } from '@gitroom/nestjs-libraries/integrations/refresh.integration.service';
+import { IntegrationManager } from '@postmill-ai/nestjs-libraries/integrations/integration.manager';
+import { IntegrationService } from '@postmill-ai/nestjs-libraries/database/prisma/integrations/integration.service';
+import { RefreshToken } from '@postmill-ai/nestjs-libraries/integrations/social.abstract';
+import { timer } from '@postmill-ai/helpers/utils/timer';
+import { checkAuth } from '@postmill-ai/nestjs-libraries/chat/auth.context';
+import { RefreshIntegrationService } from '@postmill-ai/nestjs-libraries/integrations/refresh.integration.service';
 import {
   parseOrg,
   requireRead,
-} from '@gitroom/nestjs-libraries/chat/tools/tool.helpers';
+} from '@postmill-ai/nestjs-libraries/chat/tools/tool.helpers';
 
 @Injectable()
 export class IntegrationTriggerTool implements AgentToolInterface {

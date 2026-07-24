@@ -1,4 +1,4 @@
-import type { StudioDescriptor } from '@gitroom/frontend/components/media-tools/studio-kit/types';
+import type { StudioDescriptor } from '@postmill-ai/frontend/components/media-tools/studio-kit/types';
 
 // Groq — TTS only (PlayAI / Orpheus voices) on the org's existing Groq LLM key
 // (universal-credential reuse). OpenAI-compatible `/audio/speech`.

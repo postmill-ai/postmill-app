@@ -1,9 +1,9 @@
 import { Injectable } from '@nestjs/common';
-import { StorageService } from '@gitroom/nestjs-libraries/database/prisma/storage/storage.service';
-import { FileService } from '@gitroom/nestjs-libraries/database/prisma/file/file.service';
-import { DesignService } from '@gitroom/nestjs-libraries/database/prisma/design/design.service';
-import { DesignRenderService } from '@gitroom/nestjs-libraries/media/design-render/design-render.service';
-import type { DesignerDoc } from '@gitroom/nestjs-libraries/media/designer-doc/designer-doc.schema';
+import { StorageService } from '@postmill-ai/nestjs-libraries/database/prisma/storage/storage.service';
+import { FileService } from '@postmill-ai/nestjs-libraries/database/prisma/file/file.service';
+import { DesignService } from '@postmill-ai/nestjs-libraries/database/prisma/design/design.service';
+import { DesignRenderService } from '@postmill-ai/nestjs-libraries/media/design-render/design-render.service';
+import type { DesignerDoc } from '@postmill-ai/nestjs-libraries/media/designer-doc/designer-doc.schema';
 import type { AiDesignerRenderResult } from './ai-designer.types';
 
 interface SaveOptions {

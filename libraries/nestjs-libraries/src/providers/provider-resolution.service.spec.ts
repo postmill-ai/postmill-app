@@ -6,7 +6,7 @@ import {
   ProviderNotFoundError,
   ProviderVersionRetiredError,
   ProviderVersionInvalidError,
-} from '@gitroom/provider-kernel';
+} from '@postmill-ai/provider-kernel';
 import { RuntimeContextFactory } from './runtime-context.factory';
 import { ProviderResolutionService } from './provider-resolution.service';
 

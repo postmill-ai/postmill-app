@@ -3,7 +3,7 @@
 import { withContinueProvider } from '../with-continue-provider';
 // renderItem is a non-hook config callback, so translate via the client i18next
 // instance directly (same pattern as analytics-v2/error.boundary).
-import i18next from '@gitroom/react/translation/i18next';
+import i18next from '@postmill-ai/react/translation/i18next';
 
 interface YoutubeItem {
   id: string;

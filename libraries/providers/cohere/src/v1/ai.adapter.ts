@@ -13,7 +13,7 @@ import {
   type LiveModelEntry,
   type ProviderModule,
   type SafeFetchPort,
-} from '@gitroom/provider-kernel';
+} from '@postmill-ai/provider-kernel';
 
 const COHERE_CAPABILITIES: AICapabilities = {
   text: true,

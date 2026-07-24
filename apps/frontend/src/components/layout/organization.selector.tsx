@@ -1,10 +1,10 @@
 'use client';
 
 import React, { FC, useCallback } from 'react';
-import { useFetch } from '@gitroom/helpers/utils/custom.fetch';
+import { useFetch } from '@postmill-ai/helpers/utils/custom.fetch';
 import useSWR from 'swr';
-import { useUser } from '@gitroom/frontend/components/layout/user.context';
-import { useT } from '@gitroom/react/translation/get.transation.service.client';
+import { useUser } from '@postmill-ai/frontend/components/layout/user.context';
+import { useT } from '@postmill-ai/react/translation/get.transation.service.client';
 import clsx from 'clsx';
 export const OrganizationSelector: FC<{ asOpenSelect?: boolean }> = ({
   asOpenSelect,

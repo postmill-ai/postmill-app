@@ -1,4 +1,4 @@
-import type { StudioDescriptor } from '@gitroom/frontend/components/media-tools/studio-kit/types';
+import type { StudioDescriptor } from '@postmill-ai/frontend/components/media-tools/studio-kit/types';
 
 // Amazon Bedrock — image generation (Titan / Nova Canvas) delegated to the AI-SDK Bedrock
 // provider (SigV4 auth) on the org's existing Bedrock AI credentials (universal-credential

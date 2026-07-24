@@ -7,8 +7,8 @@ import {
 } from '@nestjs/common';
 import { Throttle } from '@nestjs/throttler';
 import { ApiTags } from '@nestjs/swagger';
-import { EmailLogService } from '@gitroom/nestjs-libraries/database/prisma/emails/email-log.service';
-import { EmailAdapterRegistry } from '@gitroom/nestjs-libraries/emails/email-adapter.registry';
+import { EmailLogService } from '@postmill-ai/nestjs-libraries/database/prisma/emails/email-log.service';
+import { EmailAdapterRegistry } from '@postmill-ai/nestjs-libraries/emails/email-adapter.registry';
 
 @ApiTags('Email')
 @Controller('/webhooks/email')

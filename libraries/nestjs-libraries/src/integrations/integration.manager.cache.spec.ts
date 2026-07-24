@@ -15,7 +15,7 @@ const redis = vi.hoisted(() => {
     }),
   };
 });
-vi.mock('@gitroom/nestjs-libraries/redis/redis.service', () => ({
+vi.mock('@postmill-ai/nestjs-libraries/redis/redis.service', () => ({
   ioRedis: redis,
 }));
 

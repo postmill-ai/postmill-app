@@ -1,9 +1,9 @@
-import { inngest } from '@gitroom/nestjs-libraries/inngest/inngest.client';
+import { inngest } from '@postmill-ai/nestjs-libraries/inngest/inngest.client';
 import {
   AnalyticsActivity,
   ChannelSnapshotIntegrationRef,
-} from '@gitroom/nestjs-libraries/inngest/activities/analytics.activity';
-import { InngestRunService } from '@gitroom/nestjs-libraries/inngest/inngest-run.service';
+} from '@postmill-ai/nestjs-libraries/inngest/activities/analytics.activity';
+import { InngestRunService } from '@postmill-ai/nestjs-libraries/inngest/inngest-run.service';
 import { trackRun } from './track-run';
 import dayjs from 'dayjs';
 import utc from 'dayjs/plugin/utc';

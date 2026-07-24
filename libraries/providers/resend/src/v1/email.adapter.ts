@@ -9,7 +9,7 @@ import {
   EmailWebhookEvent,
   EmailStatus,
   ProviderModule,
-} from '@gitroom/provider-kernel';
+} from '@postmill-ai/provider-kernel';
 
 export class ResendAdapter implements EmailCapability {
   readonly name = 'resend';

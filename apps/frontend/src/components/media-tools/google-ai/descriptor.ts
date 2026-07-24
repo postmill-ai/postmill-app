@@ -1,4 +1,4 @@
-import type { StudioDescriptor } from '@gitroom/frontend/components/media-tools/studio-kit/types';
+import type { StudioDescriptor } from '@postmill-ai/frontend/components/media-tools/studio-kit/types';
 
 // Google AI Studio (registry/config identifier `google`): the Gemini Developer API, keyed by the
 // same Gemini API key as Settings → AI → "Google Gemini" (universal credential — configure once).

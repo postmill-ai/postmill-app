@@ -1,10 +1,10 @@
 import { Injectable, NestMiddleware } from '@nestjs/common';
 import { Request, Response, NextFunction } from 'express';
-import { AuthService } from '@gitroom/helpers/auth/auth.service';
-import { AuthContextResolver } from '@gitroom/nestjs-libraries/auth/auth-context.resolver';
-import { getCookieUrlFromDomain } from '@gitroom/helpers/subdomain/subdomain.management';
-import { HttpForbiddenException } from '@gitroom/nestjs-libraries/services/exception.filter';
-import { issueCsrfToken } from '@gitroom/backend/services/auth/csrf.middleware';
+import { AuthService } from '@postmill-ai/helpers/auth/auth.service';
+import { AuthContextResolver } from '@postmill-ai/nestjs-libraries/auth/auth-context.resolver';
+import { getCookieUrlFromDomain } from '@postmill-ai/helpers/subdomain/subdomain.management';
+import { HttpForbiddenException } from '@postmill-ai/nestjs-libraries/services/exception.filter';
+import { issueCsrfToken } from '@postmill-ai/backend/services/auth/csrf.middleware';
 
 export const removeAuth = (res: Response) => {
   res.cookie('auth', '', {

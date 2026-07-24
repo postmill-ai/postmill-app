@@ -6,17 +6,17 @@ import {
   Logger,
   Optional,
 } from '@nestjs/common';
-import { OrgAiSettingsRepository } from '@gitroom/nestjs-libraries/database/prisma/ai-settings/org-ai-settings.repository';
-import { EncryptionService } from '@gitroom/nestjs-libraries/encryption/encryption.service';
-import { AIProviderAdapter } from '@gitroom/nestjs-libraries/ai/ai-provider.interface';
-import { ProviderCredentialLinkService } from '@gitroom/nestjs-libraries/database/prisma/media-providers/provider-credential-link.service';
-import { ProviderResolutionService } from '@gitroom/nestjs-libraries/providers/provider-resolution.service';
-import { PROVIDER_KERNEL } from '@gitroom/nestjs-libraries/providers/providers.module';
-import { ProviderKernel, DEFAULT_VERSION } from '@gitroom/provider-kernel';
-import { isSafePublicHttpsUrl } from '@gitroom/nestjs-libraries/dtos/webhooks/webhook.url.validator';
-import { bustDefaultsCatalogCache } from '@gitroom/nestjs-libraries/ai/defaults/defaults-cache';
-import { DefaultsSeedService } from '@gitroom/nestjs-libraries/ai/defaults/defaults-seed.service';
-import { AiSettingsService } from '@gitroom/nestjs-libraries/database/prisma/ai-settings/ai-settings.service';
+import { OrgAiSettingsRepository } from '@postmill-ai/nestjs-libraries/database/prisma/ai-settings/org-ai-settings.repository';
+import { EncryptionService } from '@postmill-ai/nestjs-libraries/encryption/encryption.service';
+import { AIProviderAdapter } from '@postmill-ai/nestjs-libraries/ai/ai-provider.interface';
+import { ProviderCredentialLinkService } from '@postmill-ai/nestjs-libraries/database/prisma/media-providers/provider-credential-link.service';
+import { ProviderResolutionService } from '@postmill-ai/nestjs-libraries/providers/provider-resolution.service';
+import { PROVIDER_KERNEL } from '@postmill-ai/nestjs-libraries/providers/providers.module';
+import { ProviderKernel, DEFAULT_VERSION } from '@postmill-ai/provider-kernel';
+import { isSafePublicHttpsUrl } from '@postmill-ai/nestjs-libraries/dtos/webhooks/webhook.url.validator';
+import { bustDefaultsCatalogCache } from '@postmill-ai/nestjs-libraries/ai/defaults/defaults-cache';
+import { DefaultsSeedService } from '@postmill-ai/nestjs-libraries/ai/defaults/defaults-seed.service';
+import { AiSettingsService } from '@postmill-ai/nestjs-libraries/database/prisma/ai-settings/ai-settings.service';
 
 @Injectable()
 export class OrgAiSettingsService {

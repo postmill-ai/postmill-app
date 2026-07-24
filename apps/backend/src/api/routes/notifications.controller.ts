@@ -11,19 +11,19 @@ import {
   UsePipes,
   ValidationPipe,
 } from '@nestjs/common';
-import { GetUserFromRequest } from '@gitroom/nestjs-libraries/user/user.from.request';
+import { GetUserFromRequest } from '@postmill-ai/nestjs-libraries/user/user.from.request';
 import { Organization, User } from '@prisma/client';
-import { GetOrgFromRequest } from '@gitroom/nestjs-libraries/user/org.from.request';
-import { NotificationService } from '@gitroom/nestjs-libraries/database/prisma/notifications/notification.service';
-import { NotificationPreferenceService } from '@gitroom/nestjs-libraries/database/prisma/notifications/notification-preference.service';
-import { PushNotificationService } from '@gitroom/nestjs-libraries/database/prisma/notifications/push-notification.service';
+import { GetOrgFromRequest } from '@postmill-ai/nestjs-libraries/user/org.from.request';
+import { NotificationService } from '@postmill-ai/nestjs-libraries/database/prisma/notifications/notification.service';
+import { NotificationPreferenceService } from '@postmill-ai/nestjs-libraries/database/prisma/notifications/notification-preference.service';
+import { PushNotificationService } from '@postmill-ai/nestjs-libraries/database/prisma/notifications/push-notification.service';
 import { ApiTags } from '@nestjs/swagger';
 import {
   RegisterPushTokenDto,
   UpdateNotificationPreferenceDto,
-} from '@gitroom/nestjs-libraries/dtos/notifications/notification-preference.dto';
-import { GetNotificationsDto } from '@gitroom/nestjs-libraries/dtos/notifications/get.notifications.dto';
-import { OrgRbacGuard } from '@gitroom/backend/services/auth/rbac/org-rbac.guard';
+} from '@postmill-ai/nestjs-libraries/dtos/notifications/notification-preference.dto';
+import { GetNotificationsDto } from '@postmill-ai/nestjs-libraries/dtos/notifications/get.notifications.dto';
+import { OrgRbacGuard } from '@postmill-ai/backend/services/auth/rbac/org-rbac.guard';
 
 @ApiTags('Notifications')
 @Controller('/notifications')

@@ -1,5 +1,5 @@
 import { Injectable } from '@nestjs/common';
-import { GuardrailViolation } from '@gitroom/nestjs-libraries/ai/governance/errors';
+import { GuardrailViolation } from '@postmill-ai/nestjs-libraries/ai/governance/errors';
 import { AiDesignerService } from './ai-designer.service';
 
 export interface GuardedInput {

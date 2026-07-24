@@ -13,7 +13,7 @@ import {
   validateModelId,
   SafeFetchPort,
   ProviderModule,
-} from '@gitroom/provider-kernel';
+} from '@postmill-ai/provider-kernel';
 
 const BASE = 'https://api.replicate.com/v1';
 

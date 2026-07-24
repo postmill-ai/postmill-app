@@ -1,24 +1,24 @@
 'use client';
 
 import { useForm, SubmitHandler, FormProvider } from 'react-hook-form';
-import { useFetch } from '@gitroom/helpers/utils/custom.fetch';
+import { useFetch } from '@postmill-ai/helpers/utils/custom.fetch';
 import Link from 'next/link';
-import { Button } from '@gitroom/react/form/button';
-import { Input } from '@gitroom/react/form/input';
+import { Button } from '@postmill-ai/react/form/button';
+import { Input } from '@postmill-ai/react/form/input';
 import { useMemo, useState } from 'react';
 import { classValidatorResolver } from '@hookform/resolvers/class-validator';
-import { LoginUserDto } from '@gitroom/nestjs-libraries/dtos/auth/login.user.dto';
-import { GithubProvider } from '@gitroom/frontend/components/auth/providers/github.provider';
-import { OauthProvider } from '@gitroom/frontend/components/auth/providers/oauth.provider';
-import { GoogleProvider } from '@gitroom/frontend/components/auth/providers/google.provider';
-import { FarcasterProvider } from '@gitroom/frontend/components/auth/providers/farcaster.provider';
-import { useT } from '@gitroom/react/translation/get.transation.service.client';
+import { LoginUserDto } from '@postmill-ai/nestjs-libraries/dtos/auth/login.user.dto';
+import { GithubProvider } from '@postmill-ai/frontend/components/auth/providers/github.provider';
+import { OauthProvider } from '@postmill-ai/frontend/components/auth/providers/oauth.provider';
+import { GoogleProvider } from '@postmill-ai/frontend/components/auth/providers/google.provider';
+import { FarcasterProvider } from '@postmill-ai/frontend/components/auth/providers/farcaster.provider';
+import { useT } from '@postmill-ai/react/translation/get.transation.service.client';
 import useSWR from 'swr';
 import dynamic from 'next/dynamic';
-import { WalletUiProvider } from '@gitroom/frontend/components/auth/providers/placeholder/wallet.ui.provider';
+import { WalletUiProvider } from '@postmill-ai/frontend/components/auth/providers/placeholder/wallet.ui.provider';
 
 const WalletProvider = dynamic(
-  () => import('@gitroom/frontend/components/auth/providers/wallet.provider'),
+  () => import('@postmill-ai/frontend/components/auth/providers/wallet.provider'),
   {
     ssr: false,
     loading: () => <WalletUiProvider />,

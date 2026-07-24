@@ -1,17 +1,17 @@
-import { AgentToolInterface } from '@gitroom/nestjs-libraries/chat/agent.tool.interface';
+import { AgentToolInterface } from '@postmill-ai/nestjs-libraries/chat/agent.tool.interface';
 import { createTool } from '@mastra/core/tools';
 import { z } from 'zod';
 import { Injectable } from '@nestjs/common';
-import { DesignerDocService } from '@gitroom/nestjs-libraries/media/designer-doc/designer-doc.service';
-import { DesignService } from '@gitroom/nestjs-libraries/database/prisma/design/design.service';
-import { DesignRenderService } from '@gitroom/nestjs-libraries/media/design-render/design-render.service';
-import { StorageService } from '@gitroom/nestjs-libraries/database/prisma/storage/storage.service';
-import { FileService } from '@gitroom/nestjs-libraries/database/prisma/file/file.service';
-import { checkAuth } from '@gitroom/nestjs-libraries/chat/auth.context';
-import { parseOrg, requireWrite } from '@gitroom/nestjs-libraries/chat/tools/tool.helpers';
-import { DesignerDocStrictSchema } from '@gitroom/nestjs-libraries/media/designer-doc/designer-doc.schema';
-import { DesignerDocOpSchema } from '@gitroom/nestjs-libraries/media/designer-doc/designer-doc-ops.schema';
-import { createBlankDoc } from '@gitroom/nestjs-libraries/media/designer-doc/designer-doc.migrate';
+import { DesignerDocService } from '@postmill-ai/nestjs-libraries/media/designer-doc/designer-doc.service';
+import { DesignService } from '@postmill-ai/nestjs-libraries/database/prisma/design/design.service';
+import { DesignRenderService } from '@postmill-ai/nestjs-libraries/media/design-render/design-render.service';
+import { StorageService } from '@postmill-ai/nestjs-libraries/database/prisma/storage/storage.service';
+import { FileService } from '@postmill-ai/nestjs-libraries/database/prisma/file/file.service';
+import { checkAuth } from '@postmill-ai/nestjs-libraries/chat/auth.context';
+import { parseOrg, requireWrite } from '@postmill-ai/nestjs-libraries/chat/tools/tool.helpers';
+import { DesignerDocStrictSchema } from '@postmill-ai/nestjs-libraries/media/designer-doc/designer-doc.schema';
+import { DesignerDocOpSchema } from '@postmill-ai/nestjs-libraries/media/designer-doc/designer-doc-ops.schema';
+import { createBlankDoc } from '@postmill-ai/nestjs-libraries/media/designer-doc/designer-doc.migrate';
 
 @Injectable()
 export class DesignerDesignTool implements AgentToolInterface {

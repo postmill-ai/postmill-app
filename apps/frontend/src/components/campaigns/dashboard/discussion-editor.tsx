@@ -7,9 +7,9 @@ import Mention from '@tiptap/extension-mention';
 import { Node, mergeAttributes } from '@tiptap/core';
 import { useEditor, EditorContent } from '@tiptap/react';
 import EmojiPicker, { Theme } from 'emoji-picker-react';
-import { useT } from '@gitroom/react/translation/get.transation.service.client';
-import { MediaSelectorModal } from '@gitroom/frontend/components/media-tools/media-selector-modal';
-import { suggestion } from '@gitroom/frontend/components/composer/mention.component';
+import { useT } from '@postmill-ai/react/translation/get.transation.service.client';
+import { MediaSelectorModal } from '@postmill-ai/frontend/components/media-tools/media-selector-modal';
+import { suggestion } from '@postmill-ai/frontend/components/composer/mention.component';
 
 // Minimal atom nodes so picked media embeds inline in the note HTML. Both tags
 // (img / video[controls]) are in the SafeContent allowlist used to render notes.

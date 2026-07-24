@@ -9,53 +9,53 @@ import React, {
   useRef,
   useState,
 } from 'react';
-import { AddEditModalProps } from '@gitroom/frontend/components/composer/composer.types';
+import { AddEditModalProps } from '@postmill-ai/frontend/components/composer/composer.types';
 import clsx from 'clsx';
-import { useT } from '@gitroom/react/translation/get.transation.service.client';
-import { PicksSocialsComponent } from '@gitroom/frontend/components/composer/picks.socials.component';
-import { EditorWrapper } from '@gitroom/frontend/components/composer/editor';
-import { SelectCurrent } from '@gitroom/frontend/components/composer/select.current';
-import { ShowAllProviders } from '@gitroom/frontend/components/composer/providers/show.all.providers';
-import { useExistingData } from '@gitroom/frontend/components/launches/helpers/use.existing.data';
-import { useLaunchStore } from '@gitroom/frontend/components/composer/store';
-import { DatePicker } from '@gitroom/frontend/components/launches/helpers/date.picker';
+import { useT } from '@postmill-ai/react/translation/get.transation.service.client';
+import { PicksSocialsComponent } from '@postmill-ai/frontend/components/composer/picks.socials.component';
+import { EditorWrapper } from '@postmill-ai/frontend/components/composer/editor';
+import { SelectCurrent } from '@postmill-ai/frontend/components/composer/select.current';
+import { ShowAllProviders } from '@postmill-ai/frontend/components/composer/providers/show.all.providers';
+import { useExistingData } from '@postmill-ai/frontend/components/launches/helpers/use.existing.data';
+import { useLaunchStore } from '@postmill-ai/frontend/components/composer/store';
+import { DatePicker } from '@postmill-ai/frontend/components/launches/helpers/date.picker';
 import { useShallow } from 'zustand/react/shallow';
-import { RepeatComponent } from '@gitroom/frontend/components/launches/repeat.component';
-import { TagsComponent } from '@gitroom/frontend/components/launches/tags.component';
-import { useToaster } from '@gitroom/react/toaster/toaster';
-import { deleteDialog } from '@gitroom/react/helpers/delete.dialog';
-import { useFetch } from '@gitroom/helpers/utils/custom.fetch';
-import { stripHtmlTags } from '@gitroom/helpers/utils/strip.tags';
-import { makeId } from '@gitroom/nestjs-libraries/services/make.is';
-import { useModals } from '@gitroom/frontend/components/layout/new-modal';
+import { RepeatComponent } from '@postmill-ai/frontend/components/launches/repeat.component';
+import { TagsComponent } from '@postmill-ai/frontend/components/launches/tags.component';
+import { useToaster } from '@postmill-ai/react/toaster/toaster';
+import { deleteDialog } from '@postmill-ai/react/helpers/delete.dialog';
+import { useFetch } from '@postmill-ai/helpers/utils/custom.fetch';
+import { stripHtmlTags } from '@postmill-ai/helpers/utils/strip.tags';
+import { makeId } from '@postmill-ai/nestjs-libraries/services/make.is';
+import { useModals } from '@postmill-ai/frontend/components/layout/new-modal';
 import { capitalize } from 'lodash';
-import { SelectCustomer } from '@gitroom/frontend/components/launches/select.customer';
+import { SelectCustomer } from '@postmill-ai/frontend/components/launches/select.customer';
 import { CopilotChat } from '@copilotkit/react-ui';
 import { createPortal } from 'react-dom';
-import { useAiActive } from '@gitroom/frontend/components/layout/use-ai-active';
-import { DummyCodeComponent } from '@gitroom/frontend/components/composer/dummy.code.component';
-import { CreationMethodBadge } from '@gitroom/frontend/components/launches/creation.method.badge';
+import { useAiActive } from '@postmill-ai/frontend/components/layout/use-ai-active';
+import { DummyCodeComponent } from '@postmill-ai/frontend/components/composer/dummy.code.component';
+import { CreationMethodBadge } from '@postmill-ai/frontend/components/launches/creation.method.badge';
 import {
   ColorPicker,
   DEFAULT_POST_COLOR,
-} from '@gitroom/frontend/components/ui/color-picker';
+} from '@postmill-ai/frontend/components/ui/color-picker';
 import {
   SettingsIcon,
   ChevronDownIcon,
   TrashIcon,
   DropdownArrowSmallIcon,
-} from '@gitroom/frontend/components/ui/icons';
-import { useHasScroll } from '@gitroom/frontend/components/ui/is.scroll.hook';
-import { useShortlinkPreference } from '@gitroom/frontend/components/settings/shortlink-preference.component';
-import { BrandPicker } from '@gitroom/frontend/components/launches/brand-picker';
-import { ShortlinkPicker } from '@gitroom/frontend/components/composer/shortlink-picker';
-import { usePreflight, PreflightResponse } from '@gitroom/frontend/components/composer/content-qa/usePreflight';
-import { PreflightPanel } from '@gitroom/frontend/components/composer/content-qa/preflight.panel';
+} from '@postmill-ai/frontend/components/ui/icons';
+import { useHasScroll } from '@postmill-ai/frontend/components/ui/is.scroll.hook';
+import { useShortlinkPreference } from '@postmill-ai/frontend/components/settings/shortlink-preference.component';
+import { BrandPicker } from '@postmill-ai/frontend/components/launches/brand-picker';
+import { ShortlinkPicker } from '@postmill-ai/frontend/components/composer/shortlink-picker';
+import { usePreflight, PreflightResponse } from '@postmill-ai/frontend/components/composer/content-qa/usePreflight';
+import { PreflightPanel } from '@postmill-ai/frontend/components/composer/content-qa/preflight.panel';
 import dayjs from 'dayjs';
-import { Button } from '@gitroom/react/form/button';
-import SafeImage from '@gitroom/react/helpers/safe.image';
+import { Button } from '@postmill-ai/react/form/button';
+import SafeImage from '@postmill-ai/react/helpers/safe.image';
 import { useRouter } from 'next/navigation';
-import { ComposerLibraryModal } from '@gitroom/frontend/components/composer/composer-library.modal';
+import { ComposerLibraryModal } from '@postmill-ai/frontend/components/composer/composer-library.modal';
 
 const ColorPick: FC<{
   initial: string | null;

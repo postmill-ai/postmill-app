@@ -1,4 +1,4 @@
-import { NewsletterInterface } from '@gitroom/nestjs-libraries/newsletter/newsletter.interface';
+import { NewsletterInterface } from '@postmill-ai/nestjs-libraries/newsletter/newsletter.interface';
 import { Logger } from '@nestjs/common';
 
 export class EmailEmptyProvider implements NewsletterInterface {

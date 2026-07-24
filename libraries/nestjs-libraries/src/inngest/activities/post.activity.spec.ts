@@ -4,13 +4,13 @@ import { validate } from 'class-validator';
 import { plainToInstance } from 'class-transformer';
 
 const sendMock = vi.fn().mockResolvedValue(undefined);
-vi.mock('@gitroom/nestjs-libraries/inngest/inngest.client', () => ({
+vi.mock('@postmill-ai/nestjs-libraries/inngest/inngest.client', () => ({
   inngest: { send: (...args: any[]) => sendMock(...args) },
   isInngestEnabled: () => true,
 }));
 
-import { PostActivity } from '@gitroom/nestjs-libraries/inngest/activities/post.activity';
-import { XDto } from '@gitroom/provider-kernel/domains/social-dtos';
+import { PostActivity } from '@postmill-ai/nestjs-libraries/inngest/activities/post.activity';
+import { XDto } from '@postmill-ai/provider-kernel/domains/social-dtos';
 
 // Minimal constructor stub — the methods under test only touch a handful of deps.
 const build = (over: Partial<Record<string, any>> = {}) => {

@@ -1,7 +1,7 @@
 'use client';
 
 import { FC, useEffect } from 'react';
-import { useT } from '@gitroom/react/translation/get.transation.service.client';
+import { useT } from '@postmill-ai/react/translation/get.transation.service.client';
 import { BestTimeTab } from './best-time.tab';
 import { RecommendationsTab } from './recommendations.tab';
 import { AlertsSection } from './alerts.section';

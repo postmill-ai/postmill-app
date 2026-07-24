@@ -10,7 +10,7 @@ const mockGovernedLanguageModelFn = vi.fn().mockResolvedValue({
 
 const mockModuleRefGet = vi.fn();
 
-vi.mock('@gitroom/nestjs-libraries/ai/ai-model.provider', () => ({
+vi.mock('@postmill-ai/nestjs-libraries/ai/ai-model.provider', () => ({
   AIModelProvider: class {
     governedLanguageModel = mockGovernedLanguageModelFn;
   },
@@ -52,7 +52,7 @@ vi.mock('@mastra/memory', () => ({
   },
 }));
 
-vi.mock('@gitroom/nestjs-libraries/chat/mastra.store', () => ({
+vi.mock('@postmill-ai/nestjs-libraries/chat/mastra.store', () => ({
   pStore: { _type: 'mastra.pg.store' },
 }));
 
@@ -62,11 +62,11 @@ vi.mock('@nestjs/core', () => ({
   },
 }));
 
-vi.mock('@gitroom/nestjs-libraries/chat/tools/tool.list', () => ({
+vi.mock('@postmill-ai/nestjs-libraries/chat/tools/tool.list', () => ({
   toolList: [],
 }));
 
-vi.mock('@gitroom/nestjs-libraries/brands/brands.service', () => ({
+vi.mock('@postmill-ai/nestjs-libraries/brands/brands.service', () => ({
   BrandsService: class {
     getDefaultBrand = vi.fn().mockResolvedValue(null);
   },
@@ -81,19 +81,19 @@ vi.mock('dayjs', () => {
   };
 });
 
-import { AIModelProvider } from '@gitroom/nestjs-libraries/ai/ai-model.provider';
+import { AIModelProvider } from '@postmill-ai/nestjs-libraries/ai/ai-model.provider';
 import { Agent } from '@mastra/core/agent';
 import { Memory } from '@mastra/memory';
-import { pStore } from '@gitroom/nestjs-libraries/chat/mastra.store';
+import { pStore } from '@postmill-ai/nestjs-libraries/chat/mastra.store';
 import { ModuleRef } from '@nestjs/core';
 import { LoadToolsService, AgentState } from './load.tools.service';
-import { ToolFirewallService } from '@gitroom/nestjs-libraries/ai/governance/tool-firewall.service';
-import { toolList as mockToolList } from '@gitroom/nestjs-libraries/chat/tools/tool.list';
-import { BrandsService } from '@gitroom/nestjs-libraries/brands/brands.service';
-import { ContentAgentBuilder, CONTENT_TOOL_NAMES } from '@gitroom/nestjs-libraries/chat/agents/content.agent';
-import { MediaAgentBuilder, MEDIA_TOOL_NAMES } from '@gitroom/nestjs-libraries/chat/agents/media.agent';
-import { AnalyticsAgentBuilder, ANALYTICS_TOOL_NAMES } from '@gitroom/nestjs-libraries/chat/agents/analytics.agent';
-import { OpsAgentBuilder, OPS_TOOL_NAMES } from '@gitroom/nestjs-libraries/chat/agents/ops.agent';
+import { ToolFirewallService } from '@postmill-ai/nestjs-libraries/ai/governance/tool-firewall.service';
+import { toolList as mockToolList } from '@postmill-ai/nestjs-libraries/chat/tools/tool.list';
+import { BrandsService } from '@postmill-ai/nestjs-libraries/brands/brands.service';
+import { ContentAgentBuilder, CONTENT_TOOL_NAMES } from '@postmill-ai/nestjs-libraries/chat/agents/content.agent';
+import { MediaAgentBuilder, MEDIA_TOOL_NAMES } from '@postmill-ai/nestjs-libraries/chat/agents/media.agent';
+import { AnalyticsAgentBuilder, ANALYTICS_TOOL_NAMES } from '@postmill-ai/nestjs-libraries/chat/agents/analytics.agent';
+import { OpsAgentBuilder, OPS_TOOL_NAMES } from '@postmill-ai/nestjs-libraries/chat/agents/ops.agent';
 import { SUPERVISOR_TOOL_NAMES } from './load.tools.service';
 
 describe('LoadToolsService', () => {

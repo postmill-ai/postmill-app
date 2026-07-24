@@ -2,9 +2,9 @@
 
 import { FC, useCallback, useState } from 'react';
 import clsx from 'clsx';
-import { useUser } from '@gitroom/frontend/components/layout/user.context';
-import { useT } from '@gitroom/react/translation/get.transation.service.client';
-import { SafeContent } from '@gitroom/frontend/components/shared/safe-content';
+import { useUser } from '@postmill-ai/frontend/components/layout/user.context';
+import { useT } from '@postmill-ai/react/translation/get.transation.service.client';
+import { SafeContent } from '@postmill-ai/frontend/components/shared/safe-content';
 const useFaqList = () => {
   const user = useUser();
   const t = useT();

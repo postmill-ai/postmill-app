@@ -1,5 +1,5 @@
-import { inngest } from '@gitroom/nestjs-libraries/inngest/inngest.client';
-import { MediaJobsActivity } from '@gitroom/nestjs-libraries/inngest/activities/media-jobs.activity';
+import { inngest } from '@postmill-ai/nestjs-libraries/inngest/inngest.client';
+import { MediaJobsActivity } from '@postmill-ai/nestjs-libraries/inngest/activities/media-jobs.activity';
 
 export const createMediaJobsPollJob = (
   mediaJobsActivity: MediaJobsActivity,

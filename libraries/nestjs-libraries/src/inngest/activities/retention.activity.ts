@@ -1,5 +1,5 @@
 import { Injectable, Logger } from '@nestjs/common';
-import { RetentionRepository } from '@gitroom/nestjs-libraries/database/prisma/retention/retention.repository';
+import { RetentionRepository } from '@postmill-ai/nestjs-libraries/database/prisma/retention/retention.repository';
 
 /**
  * RetentionActivity (ENHANCEMENTS_2 I3 + I4c) — bounded, logged, non-fatal retention

@@ -1,13 +1,13 @@
 'use client';
 
-import SafeImage from '@gitroom/react/helpers/safe.image';
-import { Button } from '@gitroom/react/form/button';
+import SafeImage from '@postmill-ai/react/helpers/safe.image';
+import { Button } from '@postmill-ai/react/form/button';
 import { FC, Fragment, useCallback, useEffect, useState } from 'react';
-import { useFetch } from '@gitroom/helpers/utils/custom.fetch';
-import { deleteDialog } from '@gitroom/react/helpers/delete.dialog';
-import { Input } from '@gitroom/react/form/input';
-import { useToaster } from '@gitroom/react/toaster/toaster';
-import { useT } from '@gitroom/react/translation/get.transation.service.client';
+import { useFetch } from '@postmill-ai/helpers/utils/custom.fetch';
+import { deleteDialog } from '@postmill-ai/react/helpers/delete.dialog';
+import { Input } from '@postmill-ai/react/form/input';
+import { useToaster } from '@postmill-ai/react/toaster/toaster';
+import { useT } from '@postmill-ai/react/translation/get.transation.service.client';
 const ConnectedComponent: FC<{
   id: string;
   login: string;

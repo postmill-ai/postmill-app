@@ -1,4 +1,4 @@
-import type { StudioDescriptor } from '@gitroom/frontend/components/media-tools/studio-kit/types';
+import type { StudioDescriptor } from '@postmill-ai/frontend/components/media-tools/studio-kit/types';
 
 // Hedra character video (registry/config identifier `hedra`). A portrait keyframe + a text
 // prompt drive an expressive character clip; completion arrives via webhook (poll-cron

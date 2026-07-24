@@ -3,7 +3,7 @@
 import dynamic from 'next/dynamic';
 
 const MinimaxStudio = dynamic(
-  () => import('@gitroom/frontend/components/media-tools/minimax/minimax-studio').then((m) => m.MinimaxStudio),
+  () => import('@postmill-ai/frontend/components/media-tools/minimax/minimax-studio').then((m) => m.MinimaxStudio),
   { ssr: false }
 );
 

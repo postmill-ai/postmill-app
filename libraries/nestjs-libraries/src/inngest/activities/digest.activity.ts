@@ -1,8 +1,8 @@
 import { Injectable } from '@nestjs/common';
-import { NotificationDigestService } from '@gitroom/nestjs-libraries/database/prisma/notifications/notification-digest.service';
-import { NotificationPreferenceService } from '@gitroom/nestjs-libraries/database/prisma/notifications/notification-preference.service';
-import { EmailService } from '@gitroom/nestjs-libraries/services/email.service';
-import { DigestFrequency } from '@gitroom/nestjs-libraries/dtos/notifications/notification-preference.dto';
+import { NotificationDigestService } from '@postmill-ai/nestjs-libraries/database/prisma/notifications/notification-digest.service';
+import { NotificationPreferenceService } from '@postmill-ai/nestjs-libraries/database/prisma/notifications/notification-preference.service';
+import { EmailService } from '@postmill-ai/nestjs-libraries/services/email.service';
+import { DigestFrequency } from '@postmill-ai/nestjs-libraries/dtos/notifications/notification-preference.dto';
 
 export type DigestTarget = {
   userId: string;

@@ -39,8 +39,8 @@ import { clusterApiUrl } from '@solana/web3.js';
 
 // Default styles that can be overridden by your app
 import '@solana/wallet-adapter-react-ui/styles.css';
-import { useFetch } from '@gitroom/helpers/utils/custom.fetch';
-import { WalletUiProvider } from '@gitroom/frontend/components/auth/providers/placeholder/wallet.ui.provider';
+import { useFetch } from '@postmill-ai/helpers/utils/custom.fetch';
+import { WalletUiProvider } from '@postmill-ai/frontend/components/auth/providers/placeholder/wallet.ui.provider';
 
 const NETWORK = WalletAdapterNetwork.Mainnet;
 const ENDPOINT = clusterApiUrl(NETWORK);

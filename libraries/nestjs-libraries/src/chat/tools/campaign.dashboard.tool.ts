@@ -1,13 +1,13 @@
-import { AgentToolInterface } from '@gitroom/nestjs-libraries/chat/agent.tool.interface';
-import { checkAuth } from '@gitroom/nestjs-libraries/chat/auth.context';
+import { AgentToolInterface } from '@postmill-ai/nestjs-libraries/chat/agent.tool.interface';
+import { checkAuth } from '@postmill-ai/nestjs-libraries/chat/auth.context';
 import { createTool } from '@mastra/core/tools';
 import { z } from 'zod';
 import { Injectable, NotFoundException } from '@nestjs/common';
-import { CampaignsService } from '@gitroom/nestjs-libraries/database/prisma/campaigns/campaigns.service';
+import { CampaignsService } from '@postmill-ai/nestjs-libraries/database/prisma/campaigns/campaigns.service';
 import {
   parseOrg,
   requireRead,
-} from '@gitroom/nestjs-libraries/chat/tools/tool.helpers';
+} from '@postmill-ai/nestjs-libraries/chat/tools/tool.helpers';
 
 const CHANNEL_CAP = 20;
 const UPCOMING_CAP = 5;

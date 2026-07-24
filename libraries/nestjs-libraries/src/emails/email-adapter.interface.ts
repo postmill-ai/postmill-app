@@ -1,6 +1,6 @@
 // Single source of truth for these types is now the provider kernel. They are
 // re-exported here so existing consumers (services, registry, controllers, specs)
-// keep their `@gitroom/nestjs-libraries/emails/email-adapter.interface` import
+// keep their `@postmill-ai/nestjs-libraries/emails/email-adapter.interface` import
 // path working unchanged. The legacy `EmailAdapter` name maps to the kernel's
 // `EmailCapability` (identical shape).
 export type {
@@ -10,4 +10,4 @@ export type {
   EmailSendResult,
   EmailWebhookEvent,
   EmailAdapterCapabilities,
-} from '@gitroom/provider-kernel';
+} from '@postmill-ai/provider-kernel';

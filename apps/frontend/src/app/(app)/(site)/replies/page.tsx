@@ -1,7 +1,7 @@
 'use client';
 
 import { FC } from 'react';
-import { CommentInbox } from '@gitroom/frontend/components/comments/comment.inbox';
+import { CommentInbox } from '@postmill-ai/frontend/components/comments/comment.inbox';
 
 const RepliesPage: FC = () => {
   return (

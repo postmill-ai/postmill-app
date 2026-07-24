@@ -11,7 +11,7 @@ vi.mock('./context', () => ({
   CalendarWeekProvider: ({ children }: any) => children,
 }));
 
-vi.mock('@gitroom/react/translation/get.transation.service.client', () => ({
+vi.mock('@postmill-ai/react/translation/get.transation.service.client', () => ({
   useT: () => (_key: string, fallback?: string) => fallback || _key,
 }));
 

@@ -1,19 +1,19 @@
 'use client';
 
 import React, { FC, useCallback, useMemo, useState } from 'react';
-import { Button } from '@gitroom/react/form/button';
-import { Input } from '@gitroom/react/form/input';
-import { useFetch } from '@gitroom/helpers/utils/custom.fetch';
-import { createFetchError } from '@gitroom/frontend/components/settings/shared/fetch-error';
-import { useToaster } from '@gitroom/react/toaster/toaster';
-import { useT } from '@gitroom/react/translation/get.transation.service.client';
-import { useVpnConfig } from '@gitroom/frontend/components/settings/vpn/hooks/useVpnConfig';
+import { Button } from '@postmill-ai/react/form/button';
+import { Input } from '@postmill-ai/react/form/input';
+import { useFetch } from '@postmill-ai/helpers/utils/custom.fetch';
+import { createFetchError } from '@postmill-ai/frontend/components/settings/shared/fetch-error';
+import { useToaster } from '@postmill-ai/react/toaster/toaster';
+import { useT } from '@postmill-ai/react/translation/get.transation.service.client';
+import { useVpnConfig } from '@postmill-ai/frontend/components/settings/vpn/hooks/useVpnConfig';
 import { ChannelVpnRegionSelect } from './channel-vpn-region-select';
-import { CampaignSelector } from '@gitroom/frontend/components/campaigns/selector/campaign-selector';
+import { CampaignSelector } from '@postmill-ai/frontend/components/campaigns/selector/campaign-selector';
 import {
   ProviderVersionSelect,
   useProviderVersionSelection,
-} from '@gitroom/frontend/components/settings/shared/provider-version-select';
+} from '@postmill-ai/frontend/components/settings/shared/provider-version-select';
 
 const PROVIDER_APP_LINKS: Record<string, { label: string; url: string | null }> = {
   linkedin: { label: 'LinkedIn Developer Portal', url: 'https://www.linkedin.com/developers/apps' },

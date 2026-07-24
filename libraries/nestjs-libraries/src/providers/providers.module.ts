@@ -5,10 +5,10 @@ import {
   SafeFetchPort,
   LoggerPort,
   TelemetryPort,
-} from '@gitroom/provider-kernel';
-import { EncryptionService } from '@gitroom/nestjs-libraries/encryption/encryption.service';
-import { safeFetch } from '@gitroom/nestjs-libraries/dtos/webhooks/safe.fetch';
-import { TelemetryService } from '@gitroom/nestjs-libraries/ai/governance/telemetry.service';
+} from '@postmill-ai/provider-kernel';
+import { EncryptionService } from '@postmill-ai/nestjs-libraries/encryption/encryption.service';
+import { safeFetch } from '@postmill-ai/nestjs-libraries/dtos/webhooks/safe.fetch';
+import { TelemetryService } from '@postmill-ai/nestjs-libraries/ai/governance/telemetry.service';
 import { RuntimeContextFactory } from './runtime-context.factory';
 import { ProviderResolutionService } from './provider-resolution.service';
 import { PROVIDER_KERNEL } from './provider-kernel.token';

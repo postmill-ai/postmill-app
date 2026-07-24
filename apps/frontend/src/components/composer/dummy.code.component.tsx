@@ -1,10 +1,10 @@
-import { TopTitle } from '@gitroom/frontend/components/launches/helpers/top.title.component';
-import { useModals } from '@gitroom/frontend/components/layout/new-modal';
+import { TopTitle } from '@postmill-ai/frontend/components/launches/helpers/top.title.component';
+import { useModals } from '@postmill-ai/frontend/components/layout/new-modal';
 import React, { FC } from 'react';
-import { Button } from '@gitroom/react/form/button';
+import { Button } from '@postmill-ai/react/form/button';
 import copy from 'copy-to-clipboard';
-import { useToaster } from '@gitroom/react/toaster/toaster';
-import { useT } from '@gitroom/react/translation/get.transation.service.client';
+import { useToaster } from '@postmill-ai/react/toaster/toaster';
+import { useT } from '@postmill-ai/react/translation/get.transation.service.client';
 
 export const DummyCodeComponent: FC<{ code: any }> = ({ code }) => {
   const modal = useModals();

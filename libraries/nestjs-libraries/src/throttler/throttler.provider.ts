@@ -1,7 +1,7 @@
 import { ThrottlerGuard } from '@nestjs/throttler';
 import { ExecutionContext, Injectable } from '@nestjs/common';
 import { Request } from 'express';
-import { resolveClientIp } from '@gitroom/nestjs-libraries/utils/client-ip';
+import { resolveClientIp } from '@postmill-ai/nestjs-libraries/utils/client-ip';
 
 @Injectable()
 export class ThrottlerBehindProxyGuard extends ThrottlerGuard {

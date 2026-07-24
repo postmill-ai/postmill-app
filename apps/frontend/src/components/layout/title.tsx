@@ -2,7 +2,7 @@
 
 import { usePathname } from 'next/navigation';
 import { useMemo } from 'react';
-import { useMenuItem } from '@gitroom/frontend/components/layout/top.menu';
+import { useMenuItem } from '@postmill-ai/frontend/components/layout/top.menu';
 export const Title = () => {
   const path = usePathname();
   const { all: menuItems } = useMenuItem();

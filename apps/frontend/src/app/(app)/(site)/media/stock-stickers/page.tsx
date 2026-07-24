@@ -4,7 +4,7 @@ import dynamic from 'next/dynamic';
 
 const StockStickers = dynamic(
   () =>
-    import('@gitroom/frontend/components/media-tools/stock-stickers').then(
+    import('@postmill-ai/frontend/components/media-tools/stock-stickers').then(
       (m) => m.StockStickers
     ),
   { ssr: false }

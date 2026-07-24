@@ -4,7 +4,7 @@ import dynamic from 'next/dynamic';
 
 const ElevenLabsStudio = dynamic(
   () =>
-    import('@gitroom/frontend/components/media-tools/elevenlabs/elevenlabs-studio').then(
+    import('@postmill-ai/frontend/components/media-tools/elevenlabs/elevenlabs-studio').then(
       (m) => m.ElevenLabsStudio
     ),
   { ssr: false }

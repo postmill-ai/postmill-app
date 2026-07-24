@@ -4,12 +4,12 @@ import {
   PostDetails,
   PostResponse,
   SocialProvider,
-} from '@gitroom/provider-kernel';
-import { makeId } from '@gitroom/provider-kernel';
-import { SocialAbstract } from '@gitroom/provider-kernel';
+} from '@postmill-ai/provider-kernel';
+import { makeId } from '@postmill-ai/provider-kernel';
+import { SocialAbstract } from '@postmill-ai/provider-kernel';
 import { Integration } from '@prisma/client';
-import { TwitchDto } from '@gitroom/provider-kernel';
-import { timer } from '@gitroom/helpers/utils/timer';
+import { TwitchDto } from '@postmill-ai/provider-kernel';
+import { timer } from '@postmill-ai/helpers/utils/timer';
 
 import { metadata as providerMetadata } from './metadata';
 export class TwitchProvider extends SocialAbstract implements SocialProvider {
@@ -313,7 +313,7 @@ import {
   ProviderModule as __ProviderModule,
   SocialProviderKernelAdapter as __Bridge,
   PROVIDER_CAPABILITIES as __CAPS,
-} from '@gitroom/provider-kernel';
+} from '@postmill-ai/provider-kernel';
 
 const __adapter = new TwitchProvider();
 

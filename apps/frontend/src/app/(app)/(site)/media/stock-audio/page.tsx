@@ -4,7 +4,7 @@ import dynamic from 'next/dynamic';
 
 const StockAudio = dynamic(
   () =>
-    import('@gitroom/frontend/components/media-tools/stock-audio').then(
+    import('@postmill-ai/frontend/components/media-tools/stock-audio').then(
       (m) => m.StockAudio
     ),
   { ssr: false }

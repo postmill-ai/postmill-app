@@ -11,10 +11,10 @@ import { DefaultsResolutionService } from './defaults-resolution.service';
 import { AIModelProvider } from '../ai-model.provider';
 import { AiMediaService } from '../governance/media.service';
 import { DefaultNotConfiguredError } from './defaults.errors';
-import { OrgDefaultModelRepository } from '@gitroom/nestjs-libraries/database/prisma/ai-settings/org-default-model.repository';
+import { OrgDefaultModelRepository } from '@postmill-ai/nestjs-libraries/database/prisma/ai-settings/org-default-model.repository';
 import { DefaultsSettingsValidator } from './defaults-settings.validator';
-import { ProviderResolutionService } from '@gitroom/nestjs-libraries/providers/provider-resolution.service';
-import { OrgAiSettingsService } from '@gitroom/nestjs-libraries/database/prisma/ai-settings/org-ai-settings.service';
+import { ProviderResolutionService } from '@postmill-ai/nestjs-libraries/providers/provider-resolution.service';
+import { OrgAiSettingsService } from '@postmill-ai/nestjs-libraries/database/prisma/ai-settings/org-ai-settings.service';
 
 describe('AiDefaultsService', () => {
   const mockResolution = {

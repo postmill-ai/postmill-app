@@ -17,25 +17,25 @@
  */
 import { describe, it, expect, vi } from 'vitest';
 
-vi.mock('@gitroom/nestjs-libraries/chat/mastra.store', () => ({
+vi.mock('@postmill-ai/nestjs-libraries/chat/mastra.store', () => ({
   pStore: { _type: 'mock.mastra.store' },
 }));
 
-import { LoadToolsService, SUPERVISOR_TOOL_NAMES } from '@gitroom/nestjs-libraries/chat/load.tools.service';
-import { pickTools } from '@gitroom/nestjs-libraries/chat/agents/specialist-tool-subset';
-import { CONTENT_TOOL_NAMES } from '@gitroom/nestjs-libraries/chat/agents/content.agent';
-import { MEDIA_TOOL_NAMES } from '@gitroom/nestjs-libraries/chat/agents/media.agent';
-import { ANALYTICS_TOOL_NAMES } from '@gitroom/nestjs-libraries/chat/agents/analytics.agent';
-import { OPS_TOOL_NAMES } from '@gitroom/nestjs-libraries/chat/agents/ops.agent';
-import { ToolFirewallService } from '@gitroom/nestjs-libraries/ai/governance/tool-firewall.service';
-import { toolList } from '@gitroom/nestjs-libraries/chat/tools/tool.list';
+import { LoadToolsService, SUPERVISOR_TOOL_NAMES } from '@postmill-ai/nestjs-libraries/chat/load.tools.service';
+import { pickTools } from '@postmill-ai/nestjs-libraries/chat/agents/specialist-tool-subset';
+import { CONTENT_TOOL_NAMES } from '@postmill-ai/nestjs-libraries/chat/agents/content.agent';
+import { MEDIA_TOOL_NAMES } from '@postmill-ai/nestjs-libraries/chat/agents/media.agent';
+import { ANALYTICS_TOOL_NAMES } from '@postmill-ai/nestjs-libraries/chat/agents/analytics.agent';
+import { OPS_TOOL_NAMES } from '@postmill-ai/nestjs-libraries/chat/agents/ops.agent';
+import { ToolFirewallService } from '@postmill-ai/nestjs-libraries/ai/governance/tool-firewall.service';
+import { toolList } from '@postmill-ai/nestjs-libraries/chat/tools/tool.list';
 import { ModuleRef } from '@nestjs/core';
-import { ContentAgentBuilder } from '@gitroom/nestjs-libraries/chat/agents/content.agent';
-import { MediaAgentBuilder } from '@gitroom/nestjs-libraries/chat/agents/media.agent';
-import { AnalyticsAgentBuilder } from '@gitroom/nestjs-libraries/chat/agents/analytics.agent';
-import { OpsAgentBuilder } from '@gitroom/nestjs-libraries/chat/agents/ops.agent';
-import { IntegrationValidationTool } from '@gitroom/nestjs-libraries/chat/tools/integration.validation.tool';
-import { IntegrationTriggerTool } from '@gitroom/nestjs-libraries/chat/tools/integration.trigger.tool';
+import { ContentAgentBuilder } from '@postmill-ai/nestjs-libraries/chat/agents/content.agent';
+import { MediaAgentBuilder } from '@postmill-ai/nestjs-libraries/chat/agents/media.agent';
+import { AnalyticsAgentBuilder } from '@postmill-ai/nestjs-libraries/chat/agents/analytics.agent';
+import { OpsAgentBuilder } from '@postmill-ai/nestjs-libraries/chat/agents/ops.agent';
+import { IntegrationValidationTool } from '@postmill-ai/nestjs-libraries/chat/tools/integration.validation.tool';
+import { IntegrationTriggerTool } from '@postmill-ai/nestjs-libraries/chat/tools/integration.trigger.tool';
 
 const liveEval = process.env.LIVE_EVAL === '1';
 

@@ -1,8 +1,8 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { Organization, StorageProviderType } from '@prisma/client';
 import { FilesController } from './files.controller';
-import { FileService } from '@gitroom/nestjs-libraries/database/prisma/file/file.service';
-import { FileRepository } from '@gitroom/nestjs-libraries/database/prisma/file/file.repository';
+import { FileService } from '@postmill-ai/nestjs-libraries/database/prisma/file/file.service';
+import { FileRepository } from '@postmill-ai/nestjs-libraries/database/prisma/file/file.repository';
 import * as fs from 'fs/promises';
 import * as os from 'os';
 import * as path from 'path';

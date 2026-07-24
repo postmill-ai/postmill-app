@@ -1,7 +1,7 @@
 import { IsDefined, IsString, Validate } from 'class-validator';
 import { ApiProperty } from '@nestjs/swagger';
-import { ValidUrlExtension } from '@gitroom/helpers/utils/valid.url.path';
-import { IsSafeWebhookUrl } from '@gitroom/nestjs-libraries/dtos/webhooks/webhook.url.validator';
+import { ValidUrlExtension } from '@postmill-ai/helpers/utils/valid.url.path';
+import { IsSafeWebhookUrl } from '@postmill-ai/nestjs-libraries/dtos/webhooks/webhook.url.validator';
 
 export class UploadDto {
   @ApiProperty({

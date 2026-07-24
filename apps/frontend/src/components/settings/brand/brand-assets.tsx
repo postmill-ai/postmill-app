@@ -1,11 +1,11 @@
 'use client';
 
 import React, { useCallback, useState } from 'react';
-import { useFetch } from '@gitroom/helpers/utils/custom.fetch';
-import { useToaster } from '@gitroom/react/toaster/toaster';
-import { useT } from '@gitroom/react/translation/get.transation.service.client';
-import { Slider } from '@gitroom/react/form/slider';
-import { MediaSelectorModal } from '@gitroom/frontend/components/media-tools/media-selector-modal';
+import { useFetch } from '@postmill-ai/helpers/utils/custom.fetch';
+import { useToaster } from '@postmill-ai/react/toaster/toaster';
+import { useT } from '@postmill-ai/react/translation/get.transation.service.client';
+import { Slider } from '@postmill-ai/react/form/slider';
+import { MediaSelectorModal } from '@postmill-ai/frontend/components/media-tools/media-selector-modal';
 
 interface BrandAsset {
   fileId?: string;

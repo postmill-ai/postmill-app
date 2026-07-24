@@ -5,14 +5,14 @@ import {
   type AICapabilities,
   type AIScope,
 } from './ai-provider.interface';
-import { ProviderKernel } from '@gitroom/provider-kernel';
-import { PROVIDER_KERNEL } from '@gitroom/nestjs-libraries/providers/providers.module';
-import { OrgAiSettingsService } from '@gitroom/nestjs-libraries/database/prisma/ai-settings/org-ai-settings.service';
-import { AiSettingsService } from '@gitroom/nestjs-libraries/database/prisma/ai-settings/ai-settings.service';
+import { ProviderKernel } from '@postmill-ai/provider-kernel';
+import { PROVIDER_KERNEL } from '@postmill-ai/nestjs-libraries/providers/providers.module';
+import { OrgAiSettingsService } from '@postmill-ai/nestjs-libraries/database/prisma/ai-settings/org-ai-settings.service';
+import { AiSettingsService } from '@postmill-ai/nestjs-libraries/database/prisma/ai-settings/ai-settings.service';
 import { AiSettingsManager } from './ai-settings.manager';
-import { BrandsService } from '@gitroom/nestjs-libraries/brands/brands.service';
+import { BrandsService } from '@postmill-ai/nestjs-libraries/brands/brands.service';
 import type { ImageModel, LanguageModel } from './ai-provider.interface';
-import { ProviderResolutionService } from '@gitroom/nestjs-libraries/providers/provider-resolution.service';
+import { ProviderResolutionService } from '@postmill-ai/nestjs-libraries/providers/provider-resolution.service';
 import { DefaultsResolutionService } from './defaults/defaults-resolution.service';
 import { SCOPE_TO_CATEGORY } from './defaults/default-categories';
 

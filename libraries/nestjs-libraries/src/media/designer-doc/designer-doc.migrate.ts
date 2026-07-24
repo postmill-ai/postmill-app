@@ -1,4 +1,4 @@
-import { CHANNEL_PRESETS } from '@gitroom/nestjs-libraries/integrations/social/channel-presets';
+import { CHANNEL_PRESETS } from '@postmill-ai/nestjs-libraries/integrations/social/channel-presets';
 import type { DesignerDoc } from './designer-doc.schema';
 
 /** Current DesignerDoc schema version. */

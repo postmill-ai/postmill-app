@@ -2,7 +2,7 @@
 
 import { FC } from 'react';
 import { PreflightResultItem } from './usePreflight';
-import { useT } from '@gitroom/react/translation/get.transation.service.client';
+import { useT } from '@postmill-ai/react/translation/get.transation.service.client';
 
 interface PreflightPanelProps {
   results: PreflightResultItem[];

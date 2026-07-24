@@ -5,12 +5,12 @@ import {
   Logger,
   NotFoundException,
 } from '@nestjs/common';
-import { CampaignNoteRepository } from '@gitroom/nestjs-libraries/database/prisma/campaigns/campaign-note.repository';
-import { CampaignsService } from '@gitroom/nestjs-libraries/database/prisma/campaigns/campaigns.service';
-import { UsersService } from '@gitroom/nestjs-libraries/database/prisma/users/users.service';
-import { OrganizationService } from '@gitroom/nestjs-libraries/database/prisma/organizations/organization.service';
-import { NotificationService } from '@gitroom/nestjs-libraries/database/prisma/notifications/notification.service';
-import { sanitizeNoteHtml } from '@gitroom/nestjs-libraries/database/prisma/campaigns/campaign-note.sanitize';
+import { CampaignNoteRepository } from '@postmill-ai/nestjs-libraries/database/prisma/campaigns/campaign-note.repository';
+import { CampaignsService } from '@postmill-ai/nestjs-libraries/database/prisma/campaigns/campaigns.service';
+import { UsersService } from '@postmill-ai/nestjs-libraries/database/prisma/users/users.service';
+import { OrganizationService } from '@postmill-ai/nestjs-libraries/database/prisma/organizations/organization.service';
+import { NotificationService } from '@postmill-ai/nestjs-libraries/database/prisma/notifications/notification.service';
+import { sanitizeNoteHtml } from '@postmill-ai/nestjs-libraries/database/prisma/campaigns/campaign-note.sanitize';
 
 type ReactionRow = { emoji: string; userId: string };
 type NoteRow = {

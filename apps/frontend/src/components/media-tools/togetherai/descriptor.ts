@@ -1,4 +1,4 @@
-import type { StudioDescriptor } from '@gitroom/frontend/components/media-tools/studio-kit/types';
+import type { StudioDescriptor } from '@postmill-ai/frontend/components/media-tools/studio-kit/types';
 
 // Together AI — image (FLUX family), video (Together /v1/videos async), and TTS, all on the
 // org's existing Together LLM key (universal-credential reuse). Model dropdowns are

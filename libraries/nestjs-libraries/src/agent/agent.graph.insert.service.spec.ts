@@ -6,13 +6,13 @@ const mockLangchainModel = {
   withStructuredOutput: vi.fn().mockReturnValue(mockStructuredOutput),
 };
 
-vi.mock('@gitroom/nestjs-libraries/ai/ai-model.provider', () => ({
+vi.mock('@postmill-ai/nestjs-libraries/ai/ai-model.provider', () => ({
   AIModelProvider: class {
     langchainModel = vi.fn().mockResolvedValue(mockLangchainModel);
   },
 }));
 
-vi.mock('@gitroom/nestjs-libraries/database/prisma/posts/posts.service', () => ({
+vi.mock('@postmill-ai/nestjs-libraries/database/prisma/posts/posts.service', () => ({
   PostsService: class {
     createPopularPosts = vi.fn().mockResolvedValue(undefined);
   },
@@ -74,8 +74,8 @@ vi.mock('@langchain/langgraph', () => ({
   },
 }));
 
-import { AIModelProvider } from '@gitroom/nestjs-libraries/ai/ai-model.provider';
-import { PostsService } from '@gitroom/nestjs-libraries/database/prisma/posts/posts.service';
+import { AIModelProvider } from '@postmill-ai/nestjs-libraries/ai/ai-model.provider';
+import { PostsService } from '@postmill-ai/nestjs-libraries/database/prisma/posts/posts.service';
 import { AgentGraphInsertService } from './agent.graph.insert.service';
 
 describe('AgentGraphInsertService', () => {

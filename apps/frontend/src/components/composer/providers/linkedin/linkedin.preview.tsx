@@ -1,14 +1,14 @@
 'use client';
 
-import { useIntegration } from '@gitroom/frontend/components/launches/helpers/use.integration';
-import { useLaunchStore } from '@gitroom/frontend/components/composer/store';
-import { useMediaDirectory } from '@gitroom/react/helpers/use.media.directory';
-import { stripHtmlValidation } from '@gitroom/helpers/utils/strip.html.validation';
-import { textSlicer } from '@gitroom/helpers/utils/count.length';
+import { useIntegration } from '@postmill-ai/frontend/components/launches/helpers/use.integration';
+import { useLaunchStore } from '@postmill-ai/frontend/components/composer/store';
+import { useMediaDirectory } from '@postmill-ai/react/helpers/use.media.directory';
+import { stripHtmlValidation } from '@postmill-ai/helpers/utils/strip.html.validation';
+import { textSlicer } from '@postmill-ai/helpers/utils/count.length';
 import { FC } from 'react';
-import { SafeContent } from '@gitroom/frontend/components/shared/safe-content';
-import { VideoOrImage } from '@gitroom/react/helpers/video.or.image';
-import { useT } from '@gitroom/react/translation/get.transation.service.client';
+import { SafeContent } from '@postmill-ai/frontend/components/shared/safe-content';
+import { VideoOrImage } from '@postmill-ai/react/helpers/video.or.image';
+import { useT } from '@postmill-ai/react/translation/get.transation.service.client';
 
 const Icons = () => {
   return (

@@ -4,17 +4,17 @@ vi.mock('@mastra/mcp', () => ({
   MCPServer: class MockMCPServer {},
 }));
 
-vi.mock('@gitroom/nestjs-libraries/chat/mastra.service', () => ({
+vi.mock('@postmill-ai/nestjs-libraries/chat/mastra.service', () => ({
   MastraService: class MockMastraService {},
 }));
 
 // start.mcp now statically imports LoadToolsService (for the in-repo tool union),
 // which transitively pulls mastra.store's eager PostgresStore. Stub both so the
 // suite doesn't need a live DATABASE_URL at import time.
-vi.mock('@gitroom/nestjs-libraries/chat/mastra.store', () => ({
+vi.mock('@postmill-ai/nestjs-libraries/chat/mastra.store', () => ({
   pStore: { _type: 'mock.mastra.store' },
 }));
-vi.mock('@gitroom/nestjs-libraries/chat/load.tools.service', () => ({
+vi.mock('@postmill-ai/nestjs-libraries/chat/load.tools.service', () => ({
   LoadToolsService: class MockLoadToolsService {
     async loadTools() {
       return {};
@@ -23,27 +23,27 @@ vi.mock('@gitroom/nestjs-libraries/chat/load.tools.service', () => ({
   SUPERVISOR_TOOL_NAMES: ['integrationList', 'groupList'],
 }));
 
-vi.mock('@gitroom/nestjs-libraries/database/prisma/organizations/organization.service', () => ({
+vi.mock('@postmill-ai/nestjs-libraries/database/prisma/organizations/organization.service', () => ({
   OrganizationService: class MockOrganizationService {},
 }));
 
-vi.mock('@gitroom/nestjs-libraries/database/prisma/oauth/oauth.service', () => ({
+vi.mock('@postmill-ai/nestjs-libraries/database/prisma/oauth/oauth.service', () => ({
   OAuthService: class MockOAuthService {},
 }));
 
-vi.mock('@gitroom/nestjs-libraries/ai/ai-settings.manager', () => ({
+vi.mock('@postmill-ai/nestjs-libraries/ai/ai-settings.manager', () => ({
   AiSettingsManager: class MockAiSettingsManager {},
 }));
 
-vi.mock('@gitroom/nestjs-libraries/ai/governance/idempotency.factory', () => ({
+vi.mock('@postmill-ai/nestjs-libraries/ai/governance/idempotency.factory', () => ({
   IdempotencyFactory: class MockIdempotencyFactory {},
 }));
 
-vi.mock('@gitroom/nestjs-libraries/ai/governance/budget.service', () => ({
+vi.mock('@postmill-ai/nestjs-libraries/ai/governance/budget.service', () => ({
   BudgetService: class MockBudgetService {},
 }));
 
-vi.mock('@gitroom/nestjs-libraries/redis/redis.service', () => ({
+vi.mock('@postmill-ai/nestjs-libraries/redis/redis.service', () => ({
   ioRedis: {
     incr: vi.fn(),
     pexpire: vi.fn(),

@@ -1,4 +1,4 @@
-import type { StudioDescriptor } from '@gitroom/frontend/components/media-tools/studio-kit/types';
+import type { StudioDescriptor } from '@postmill-ai/frontend/components/media-tools/studio-kit/types';
 
 // xAI (Grok) — image generation via the OpenAI-compatible `/v1/images/generations` endpoint on
 // the org's existing xAI LLM key (universal-credential reuse). xAI's image API takes only

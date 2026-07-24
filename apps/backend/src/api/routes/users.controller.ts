@@ -13,36 +13,36 @@ import {
   Res,
 } from '@nestjs/common';
 import { Throttle } from '@nestjs/throttler';
-import { AuditService } from '@gitroom/nestjs-libraries/database/prisma/audit/audit.service';
-import { GetUserFromRequest } from '@gitroom/nestjs-libraries/user/user.from.request';
+import { AuditService } from '@postmill-ai/nestjs-libraries/database/prisma/audit/audit.service';
+import { GetUserFromRequest } from '@postmill-ai/nestjs-libraries/user/user.from.request';
 import { sign } from 'jsonwebtoken';
 import { Organization, User } from '@prisma/client';
-import { SubscriptionService } from '@gitroom/nestjs-libraries/database/prisma/subscriptions/subscription.service';
-import { GetOrgFromRequest } from '@gitroom/nestjs-libraries/user/org.from.request';
-import { StripeService } from '@gitroom/nestjs-libraries/services/stripe.service';
+import { SubscriptionService } from '@postmill-ai/nestjs-libraries/database/prisma/subscriptions/subscription.service';
+import { GetOrgFromRequest } from '@postmill-ai/nestjs-libraries/user/org.from.request';
+import { StripeService } from '@postmill-ai/nestjs-libraries/services/stripe.service';
 import { Response, Request } from 'express';
-import { AuthService } from '@gitroom/backend/services/auth/auth.service';
-import { OrganizationService } from '@gitroom/nestjs-libraries/database/prisma/organizations/organization.service';
-import { getCookieUrlFromDomain } from '@gitroom/helpers/subdomain/subdomain.management';
+import { AuthService } from '@postmill-ai/backend/services/auth/auth.service';
+import { OrganizationService } from '@postmill-ai/nestjs-libraries/database/prisma/organizations/organization.service';
+import { getCookieUrlFromDomain } from '@postmill-ai/helpers/subdomain/subdomain.management';
 import {
   pricing,
   SELF_HOST_PLAN,
-} from '@gitroom/nestjs-libraries/database/prisma/subscriptions/pricing';
+} from '@postmill-ai/nestjs-libraries/database/prisma/subscriptions/pricing';
 
 import { ApiTags } from '@nestjs/swagger';
-import { UsersService } from '@gitroom/nestjs-libraries/database/prisma/users/users.service';
-import { CampaignsService } from '@gitroom/nestjs-libraries/database/prisma/campaigns/campaigns.service';
-import { DeletionService } from '@gitroom/nestjs-libraries/database/prisma/users/deletion.service';
-import { DataExportService } from '@gitroom/nestjs-libraries/database/prisma/users/data-export.service';
-import { UserDetailDto } from '@gitroom/nestjs-libraries/dtos/users/user.details.dto';
+import { UsersService } from '@postmill-ai/nestjs-libraries/database/prisma/users/users.service';
+import { CampaignsService } from '@postmill-ai/nestjs-libraries/database/prisma/campaigns/campaigns.service';
+import { DeletionService } from '@postmill-ai/nestjs-libraries/database/prisma/users/deletion.service';
+import { DataExportService } from '@postmill-ai/nestjs-libraries/database/prisma/users/data-export.service';
+import { UserDetailDto } from '@postmill-ai/nestjs-libraries/dtos/users/user.details.dto';
 
-import { ChangePasswordDto } from '@gitroom/nestjs-libraries/dtos/users/change-password.dto';
-import { HttpForbiddenException } from '@gitroom/nestjs-libraries/services/exception.filter';
+import { ChangePasswordDto } from '@postmill-ai/nestjs-libraries/dtos/users/change-password.dto';
+import { HttpForbiddenException } from '@postmill-ai/nestjs-libraries/services/exception.filter';
 import { RealIP } from 'nestjs-real-ip';
-import { UserAgent } from '@gitroom/nestjs-libraries/user/user.agent';
-import { TrackEnum } from '@gitroom/nestjs-libraries/user/track.enum';
-import { TrackService } from '@gitroom/nestjs-libraries/track/track.service';
-import { makeId } from '@gitroom/nestjs-libraries/services/make.is';
+import { UserAgent } from '@postmill-ai/nestjs-libraries/user/user.agent';
+import { TrackEnum } from '@postmill-ai/nestjs-libraries/user/track.enum';
+import { TrackService } from '@postmill-ai/nestjs-libraries/track/track.service';
+import { makeId } from '@postmill-ai/nestjs-libraries/services/make.is';
 import crypto from 'crypto';
 
 @ApiTags('User')

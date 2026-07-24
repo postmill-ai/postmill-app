@@ -2,21 +2,21 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 
 const mockGetSystemSettings = vi.fn();
 
-vi.mock('@gitroom/nestjs-libraries/database/prisma/ai-settings/ai-settings.service', () => ({
+vi.mock('@postmill-ai/nestjs-libraries/database/prisma/ai-settings/ai-settings.service', () => ({
   AiSettingsService: class MockAiSettings {
     getSystemSettings = mockGetSystemSettings;
   },
 }));
 
-vi.mock('@gitroom/helpers/auth/auth.service', () => ({
+vi.mock('@postmill-ai/helpers/auth/auth.service', () => ({
   AuthService: {
     fixedDecryption: vi.fn((val: string) => val),
   },
 }));
 
 import { AiSettingsManager } from './ai-settings.manager';
-import { AiSettingsService } from '@gitroom/nestjs-libraries/database/prisma/ai-settings/ai-settings.service';
-import { AuthService } from '@gitroom/helpers/auth/auth.service';
+import { AiSettingsService } from '@postmill-ai/nestjs-libraries/database/prisma/ai-settings/ai-settings.service';
+import { AuthService } from '@postmill-ai/helpers/auth/auth.service';
 
 const baseSettings = {
   id: 'singleton',

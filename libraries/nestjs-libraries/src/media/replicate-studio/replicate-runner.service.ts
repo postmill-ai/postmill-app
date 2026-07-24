@@ -4,17 +4,17 @@ import {
   Injectable,
   Logger,
 } from '@nestjs/common';
-import { safeFetch } from '@gitroom/nestjs-libraries/dtos/webhooks/safe.fetch';
+import { safeFetch } from '@postmill-ai/nestjs-libraries/dtos/webhooks/safe.fetch';
 import { ReplicateCatalogService } from './replicate-catalog.service';
-import { AiSettingsService } from '@gitroom/nestjs-libraries/database/prisma/ai-settings/ai-settings.service';
-import { MediaJobLifecycleService } from '@gitroom/nestjs-libraries/database/prisma/media-providers/media-job-lifecycle.service';
-import { StorageService } from '@gitroom/nestjs-libraries/database/prisma/storage/storage.service';
-import { OrgMediaProviderSettingsService } from '@gitroom/nestjs-libraries/database/prisma/media-providers/org-media-provider-settings.service';
-import { FileService } from '@gitroom/nestjs-libraries/database/prisma/file/file.service';
+import { AiSettingsService } from '@postmill-ai/nestjs-libraries/database/prisma/ai-settings/ai-settings.service';
+import { MediaJobLifecycleService } from '@postmill-ai/nestjs-libraries/database/prisma/media-providers/media-job-lifecycle.service';
+import { StorageService } from '@postmill-ai/nestjs-libraries/database/prisma/storage/storage.service';
+import { OrgMediaProviderSettingsService } from '@postmill-ai/nestjs-libraries/database/prisma/media-providers/org-media-provider-settings.service';
+import { FileService } from '@postmill-ai/nestjs-libraries/database/prisma/file/file.service';
 import { estimate } from './replicate-cost';
 import { isWarm, MODEL_ALLOWLIST } from './replicate-catalog.allowlist';
-import { VideoRenderService } from '@gitroom/nestjs-libraries/media/design-render/video-render.service';
-import { renderWorkDir } from '@gitroom/nestjs-libraries/media/design-render/render-job-spec';
+import { VideoRenderService } from '@postmill-ai/nestjs-libraries/media/design-render/video-render.service';
+import { renderWorkDir } from '@postmill-ai/nestjs-libraries/media/design-render/render-job-spec';
 import * as fs from 'fs';
 
 const BASE = 'https://api.replicate.com/v1';

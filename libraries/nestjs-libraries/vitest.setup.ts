@@ -24,12 +24,12 @@ vi.mock('undici', async (importOriginal) => {
 // real error classes are used so `instanceof`/`toThrow` assertions hold.
 // Import from the specific module (NOT the kernel barrel) so this setup file does
 // not eagerly load the family-base providers — that would cache their direct
-// `@gitroom/helpers` imports before a spec's `vi.mock(...)` hoists.
+// `@postmill-ai/helpers` imports before a spec's `vi.mock(...)` hoists.
 import { setSocialFetchPorts } from '../providers/kernel/src/domains/social-base';
 import {
   RefreshTokenError,
   BadBodyError,
-} from '@gitroom/nestjs-libraries/inngest/errors';
+} from '@postmill-ai/nestjs-libraries/inngest/errors';
 
 setSocialFetchPorts({
   getVpnDispatcher: () => undefined,

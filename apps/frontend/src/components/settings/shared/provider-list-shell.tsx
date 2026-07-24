@@ -2,7 +2,7 @@
 
 import React, { ReactNode } from 'react';
 import Link from 'next/link';
-import { useT } from '@gitroom/react/translation/get.transation.service.client';
+import { useT } from '@postmill-ai/react/translation/get.transation.service.client';
 
 export interface ProviderConfigItem {
   id: string;

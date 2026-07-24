@@ -1,4 +1,4 @@
-import '@gitroom/nestjs-libraries/ai-designer/agent-mesh/agent-mesh-env.shim';
+import '@postmill-ai/nestjs-libraries/ai-designer/agent-mesh/agent-mesh-env.shim';
 import { Global, Module } from '@nestjs/common';
 import { ContentPipelineMeshModule } from './content-pipeline-mesh.module';
 import { StrategistService } from './agents/strategist.service';

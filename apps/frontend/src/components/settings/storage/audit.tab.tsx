@@ -1,11 +1,11 @@
 'use client';
 
 import React, { useCallback, useState } from 'react';
-import { useFetch } from '@gitroom/helpers/utils/custom.fetch';
+import { useFetch } from '@postmill-ai/helpers/utils/custom.fetch';
 import useSWR from 'swr';
-import { DataTable } from '@gitroom/frontend/components/ui/data-table';
-import { useT } from '@gitroom/react/translation/get.transation.service.client';
-import { createFetchError } from '@gitroom/frontend/components/settings/shared/fetch-error';
+import { DataTable } from '@postmill-ai/frontend/components/ui/data-table';
+import { useT } from '@postmill-ai/react/translation/get.transation.service.client';
+import { createFetchError } from '@postmill-ai/frontend/components/settings/shared/fetch-error';
 
 const limit = 25;
 

@@ -3,15 +3,15 @@
 import React, { FC, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { VideoClip, VideoTrack, VideoOutput, DesignerElement } from './designer.store';
 import { VideoPreviewEngine } from './video-preview';
-import { useFetch } from '@gitroom/helpers/utils/custom.fetch';
-import { useToaster } from '@gitroom/react/toaster/toaster';
-import { useModals } from '@gitroom/frontend/components/layout/new-modal';
-import { useMediaToolsStatus } from '@gitroom/frontend/components/layout/use-media-tools-status';
+import { useFetch } from '@postmill-ai/helpers/utils/custom.fetch';
+import { useToaster } from '@postmill-ai/react/toaster/toaster';
+import { useModals } from '@postmill-ai/frontend/components/layout/new-modal';
+import { useMediaToolsStatus } from '@postmill-ai/frontend/components/layout/use-media-tools-status';
 import { VoiceoverDialog } from './voiceover-dialog';
 import { addMediaToTimeline } from './add-media-to-timeline';
-import { isArtifactPath } from '@gitroom/frontend/components/launches/ai.video';
-import { MediaSelectorModal } from '@gitroom/frontend/components/media-tools/media-selector-modal';
-import { useT } from '@gitroom/react/translation/get.transation.service.client';
+import { isArtifactPath } from '@postmill-ai/frontend/components/launches/ai.video';
+import { MediaSelectorModal } from '@postmill-ai/frontend/components/media-tools/media-selector-modal';
+import { useT } from '@postmill-ai/react/translation/get.transation.service.client';
 
 interface VideoTimelineProps {
   store: ReturnType<typeof import('./designer.store').createDesignerStore>;

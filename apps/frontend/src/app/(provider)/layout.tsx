@@ -1,16 +1,16 @@
-import { MantineWrapper } from '@gitroom/react/helpers/mantine.wrapper';
+import { MantineWrapper } from '@postmill-ai/react/helpers/mantine.wrapper';
 
 export const dynamic = 'force-dynamic';
 export const metadata = { title: { default: 'Postmill', template: '%s' } };
 import '../global.scss';
 import 'react-tooltip/dist/react-tooltip.css';
 import '@copilotkit/react-ui/styles.css';
-import LayoutContext from '@gitroom/frontend/components/layout/layout.context';
+import LayoutContext from '@postmill-ai/frontend/components/layout/layout.context';
 import { ReactNode } from 'react';
 import { Plus_Jakarta_Sans } from 'next/font/google';
 import clsx from 'clsx';
-import { VariableContextComponent } from '@gitroom/react/helpers/variable.context';
-import UtmSaver from '@gitroom/helpers/utils/utm.saver';
+import { VariableContextComponent } from '@postmill-ai/react/helpers/variable.context';
+import UtmSaver from '@postmill-ai/helpers/utils/utm.saver';
 
 const jakartaSans = Plus_Jakarta_Sans({
   weight: ['600', '500'],

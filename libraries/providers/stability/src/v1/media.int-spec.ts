@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { makeCtx, res } from '@gitroom/provider-kernel/testing/media-int-helpers';
+import { makeCtx, res } from '@postmill-ai/provider-kernel/testing/media-int-helpers';
 import { stabilityMediaModule } from './media.adapter';
 
 // Recorded-fixture integration test (plan B4) — no network. Stability has a synchronous image

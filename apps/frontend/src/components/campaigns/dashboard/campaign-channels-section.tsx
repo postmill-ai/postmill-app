@@ -1,10 +1,10 @@
 'use client';
 
 import { FC } from 'react';
-import { useT } from '@gitroom/react/translation/get.transation.service.client';
-import ProviderIcon from '@gitroom/frontend/components/shared/provider-icon';
-import { useAddProvider } from '@gitroom/frontend/components/launches/add.provider.component';
-import { KebabMenu } from '@gitroom/frontend/components/ui/kebab-menu';
+import { useT } from '@postmill-ai/react/translation/get.transation.service.client';
+import ProviderIcon from '@postmill-ai/frontend/components/shared/provider-icon';
+import { useAddProvider } from '@postmill-ai/frontend/components/launches/add.provider.component';
+import { KebabMenu } from '@postmill-ai/frontend/components/ui/kebab-menu';
 
 interface CampaignChannel {
   id: string;

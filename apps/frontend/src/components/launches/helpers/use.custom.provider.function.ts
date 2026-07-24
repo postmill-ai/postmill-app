@@ -1,6 +1,6 @@
-import { useIntegration } from '@gitroom/frontend/components/launches/helpers/use.integration';
+import { useIntegration } from '@postmill-ai/frontend/components/launches/helpers/use.integration';
 import { useCallback } from 'react';
-import { useFetch } from '@gitroom/helpers/utils/custom.fetch';
+import { useFetch } from '@postmill-ai/helpers/utils/custom.fetch';
 export const useCustomProviderFunction = () => {
   const { integration } = useIntegration();
   const fetch = useFetch();

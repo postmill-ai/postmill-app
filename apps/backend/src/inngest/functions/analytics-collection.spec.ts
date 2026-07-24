@@ -1,20 +1,20 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
-vi.mock('@gitroom/nestjs-libraries/inngest/inngest.client', () => ({
+vi.mock('@postmill-ai/nestjs-libraries/inngest/inngest.client', () => ({
   inngest: {
     send: vi.fn(),
     createFunction: vi.fn(),
   },
 }));
 
-import { inngest } from '@gitroom/nestjs-libraries/inngest/inngest.client';
+import { inngest } from '@postmill-ai/nestjs-libraries/inngest/inngest.client';
 import {
   createAnalyticsCollection,
   createAnalyticsSyncOrg,
   createAnalyticsSyncIntegration,
 } from './analytics-collection';
 import { createMockStep, captureFunctionHandler } from '../test/step.mock';
-import { ChannelSnapshotIntegrationRef } from '@gitroom/nestjs-libraries/inngest/activities/analytics.activity';
+import { ChannelSnapshotIntegrationRef } from '@postmill-ai/nestjs-libraries/inngest/activities/analytics.activity';
 
 const makeActivity = () => ({
   getAllOrganizationIds: vi.fn().mockResolvedValue(['org-1', 'org-2']),

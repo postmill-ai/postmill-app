@@ -4,7 +4,7 @@ import { FC, useCallback, useMemo, useState } from 'react';
 import { HexColorPicker } from 'react-colorful';
 import { useFormContext } from 'react-hook-form';
 import { Button } from './button';
-import { useT } from '@gitroom/react/translation/get.transation.service.client';
+import { useT } from '@postmill-ai/react/translation/get.transation.service.client';
 import { TranslatedLabel } from '../translation/translated-label';
 
 export const ColorPicker: FC<{

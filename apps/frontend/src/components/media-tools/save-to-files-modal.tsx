@@ -2,11 +2,11 @@
 
 import React, { FC, useCallback, useState } from 'react';
 import useSWR from 'swr';
-import { useFetch } from '@gitroom/helpers/utils/custom.fetch';
-import { useToaster } from '@gitroom/react/toaster/toaster';
-import { useModals } from '@gitroom/frontend/components/layout/new-modal';
-import ProviderIcon from '@gitroom/frontend/components/shared/provider-icon';
-import { useT } from '@gitroom/react/translation/get.transation.service.client';
+import { useFetch } from '@postmill-ai/helpers/utils/custom.fetch';
+import { useToaster } from '@postmill-ai/react/toaster/toaster';
+import { useModals } from '@postmill-ai/frontend/components/layout/new-modal';
+import ProviderIcon from '@postmill-ai/frontend/components/shared/provider-icon';
+import { useT } from '@postmill-ai/react/translation/get.transation.service.client';
 
 interface SaveToFilesModalProps {
   url: string;
@@ -91,7 +91,7 @@ export const SaveToFilesModal: FC<SaveToFilesModalProps> = ({ url, name, source,
         const integrationsRes = await fetch('/integrations');
         if (integrationsRes.ok) {
           const integrations = await integrationsRes.json();
-          const { Composer } = await import('@gitroom/frontend/components/composer/composer');
+          const { Composer } = await import('@postmill-ai/frontend/components/composer/composer');
           const dayjs = (await import('dayjs')).default;
           modal.openModal({
             fullScreen: true,

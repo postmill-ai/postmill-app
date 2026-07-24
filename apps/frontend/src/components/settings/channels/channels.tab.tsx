@@ -2,23 +2,23 @@
 
 import React, { FC, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import useSWR, { useSWRConfig } from 'swr';
-import { useFetch } from '@gitroom/helpers/utils/custom.fetch';
-import { createFetchError } from '@gitroom/frontend/components/settings/shared/fetch-error';
-import { useToaster } from '@gitroom/react/toaster/toaster';
+import { useFetch } from '@postmill-ai/helpers/utils/custom.fetch';
+import { createFetchError } from '@postmill-ai/frontend/components/settings/shared/fetch-error';
+import { useToaster } from '@postmill-ai/react/toaster/toaster';
 import { ChannelConfigForm } from './channel-edit.modal';
-import ProviderListShell from '@gitroom/frontend/components/settings/shared/provider-list-shell';
+import ProviderListShell from '@postmill-ai/frontend/components/settings/shared/provider-list-shell';
 import {
   useProviderCatalog,
   ProviderCatalogEntry,
   latestActiveVersion,
-} from '@gitroom/frontend/components/settings/shared/use-provider-catalog';
-import { useModals } from '@gitroom/frontend/components/layout/new-modal';
-import { usePermissions } from '@gitroom/frontend/components/layout/use-permissions';
-import SafeImage from '@gitroom/react/helpers/safe.image';
-import { useT } from '@gitroom/react/translation/get.transation.service.client';
-import { CapabilityBadges as KitCapabilityBadges } from '@gitroom/frontend/components/settings/shared/kit/capabilities';
-import { ProviderSearchToolbar } from '@gitroom/frontend/components/settings/shared/kit/provider-search-toolbar';
-import { CapabilityMeta } from '@gitroom/frontend/components/settings/shared/kit/provider-surface.types';
+} from '@postmill-ai/frontend/components/settings/shared/use-provider-catalog';
+import { useModals } from '@postmill-ai/frontend/components/layout/new-modal';
+import { usePermissions } from '@postmill-ai/frontend/components/layout/use-permissions';
+import SafeImage from '@postmill-ai/react/helpers/safe.image';
+import { useT } from '@postmill-ai/react/translation/get.transation.service.client';
+import { CapabilityBadges as KitCapabilityBadges } from '@postmill-ai/frontend/components/settings/shared/kit/capabilities';
+import { ProviderSearchToolbar } from '@postmill-ai/frontend/components/settings/shared/kit/provider-search-toolbar';
+import { CapabilityMeta } from '@postmill-ai/frontend/components/settings/shared/kit/provider-surface.types';
 
 interface ProviderCapability {
   analytics: boolean;

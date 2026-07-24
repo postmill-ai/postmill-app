@@ -10,7 +10,7 @@ import {
   LoggerPort,
   parseDataUrl,
   fromBuffer,
-} from '@gitroom/provider-kernel';
+} from '@postmill-ai/provider-kernel';
 
 const TYPE = 'MEDIALOCKER';
 const DISPLAY = 'MediaLocker';

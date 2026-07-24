@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { decodeHtmlEntities, htmlToText } from '@gitroom/helpers/utils/html.to.text';
+import { decodeHtmlEntities, htmlToText } from '@postmill-ai/helpers/utils/html.to.text';
 
 describe('decodeHtmlEntities', () => {
   it('returns empty string for nullish input', () => {

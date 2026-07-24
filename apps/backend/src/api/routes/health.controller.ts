@@ -1,7 +1,7 @@
 import { Controller, Get } from '@nestjs/common';
 import { ApiTags } from '@nestjs/swagger';
 import { SkipThrottle } from '@nestjs/throttler';
-import { HealthService } from '@gitroom/backend/services/health.service';
+import { HealthService } from '@postmill-ai/backend/services/health.service';
 
 @ApiTags('Health')
 @Controller('/health')

@@ -3,11 +3,11 @@ import { Reflector } from '@nestjs/core';
 import {
   AppAbility,
   PermissionsService,
-} from '@gitroom/backend/services/auth/permissions/permissions.service';
+} from '@postmill-ai/backend/services/auth/permissions/permissions.service';
 import {
   AbilityPolicy,
   CHECK_POLICIES_KEY,
-} from '@gitroom/backend/services/auth/permissions/permissions.ability';
+} from '@postmill-ai/backend/services/auth/permissions/permissions.ability';
 import { Organization } from '@prisma/client';
 import { Request } from 'express';
 import { SubscriptionException } from './permission.exception.class';

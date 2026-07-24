@@ -1,6 +1,6 @@
 import { Injectable } from '@nestjs/common';
-import { OrgProviderConfigService } from '@gitroom/nestjs-libraries/database/prisma/provider-configs/org-provider-config.service';
-import { replaceCredentialsMap, clearOrgCredentials, type CredentialEntry } from '@gitroom/nestjs-libraries/integrations/credentials';
+import { OrgProviderConfigService } from '@postmill-ai/nestjs-libraries/database/prisma/provider-configs/org-provider-config.service';
+import { replaceCredentialsMap, clearOrgCredentials, type CredentialEntry } from '@postmill-ai/nestjs-libraries/integrations/credentials';
 
 type DecryptedConfig = {
   id: string;

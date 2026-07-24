@@ -6,15 +6,15 @@ vi.mock('sharp', () => ({
   }),
 }));
 
-vi.mock('@gitroom/helpers/utils/timer', () => ({
+vi.mock('@postmill-ai/helpers/utils/timer', () => ({
   timer: vi.fn().mockResolvedValue(undefined),
 }));
 
-vi.mock('@gitroom/helpers/utils/read.or.fetch', () => ({
+vi.mock('@postmill-ai/helpers/utils/read.or.fetch', () => ({
   readOrFetch: vi.fn().mockResolvedValue(Buffer.from('fake-image-data')),
 }));
 
-vi.mock('@gitroom/nestjs-libraries/dtos/webhooks/safe.fetch', () => ({
+vi.mock('@postmill-ai/nestjs-libraries/dtos/webhooks/safe.fetch', () => ({
   safeFetch: vi.fn((url: string, options?: RequestInit) => fetch(url, options)),
 }));
 
@@ -22,14 +22,14 @@ import {
   SocialAbstract,
   NotEnoughScopes,
 } from './social.abstract';
-import { setSocialFetchPorts } from '@gitroom/provider-kernel';
+import { setSocialFetchPorts } from '@postmill-ai/provider-kernel';
 import sharp from 'sharp';
-import { timer } from '@gitroom/helpers/utils/timer';
-import { readOrFetch } from '@gitroom/helpers/utils/read.or.fetch';
+import { timer } from '@postmill-ai/helpers/utils/timer';
+import { readOrFetch } from '@postmill-ai/helpers/utils/read.or.fetch';
 import {
   RefreshTokenError,
   BadBodyError,
-} from '@gitroom/nestjs-libraries/inngest/errors';
+} from '@postmill-ai/nestjs-libraries/inngest/errors';
 
 // SocialAbstract was relocated into the kernel (step 7.5.2) and dereferences its
 // security/runtime primitives from injected ports. Wire them with the mocked

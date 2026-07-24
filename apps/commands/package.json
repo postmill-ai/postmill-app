@@ -9,8 +9,8 @@
     "test": "vitest run"
   },
   "dependencies": {
-    "@gitroom/helpers": "workspace:*",
-    "@gitroom/nestjs-libraries": "workspace:*",
+    "@postmill-ai/helpers": "workspace:*",
+    "@postmill-ai/nestjs-libraries": "workspace:*",
     "nestjs-command": "^3.1.4"
   },
   "devDependencies": {

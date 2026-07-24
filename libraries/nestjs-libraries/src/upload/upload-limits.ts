@@ -1,8 +1,8 @@
 /**
  * Server-side upload limits. Imports the client-safe defaults from
- * `@gitroom/helpers/upload-limits.client` and layers env overrides on top.
+ * `@postmill-ai/helpers/upload-limits.client` and layers env overrides on top.
  *
- * Client code must import from `@gitroom/helpers/upload-limits.client` so it
+ * Client code must import from `@postmill-ai/helpers/upload-limits.client` so it
  * never bundles server-side env parsing.
  */
 
@@ -11,7 +11,7 @@ import {
   UPLOAD_ALLOWED_MIME_TYPES,
   UploadLimitCheckFile,
   checkUploadLimit as baseCheckUploadLimit,
-} from '@gitroom/helpers/upload-limits.client';
+} from '@postmill-ai/helpers/upload-limits.client';
 
 const MB = 1024 * 1024;
 const GB = 1024 * MB;

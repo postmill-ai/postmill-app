@@ -7,18 +7,18 @@ import React, {
   useMemo,
   useState,
 } from 'react';
-import { useFetch } from '@gitroom/helpers/utils/custom.fetch';
+import { useFetch } from '@postmill-ai/helpers/utils/custom.fetch';
 import useSWR from 'swr';
-import { useT } from '@gitroom/react/translation/get.transation.service.client';
-import { useLaunchStore } from '@gitroom/frontend/components/composer/store';
+import { useT } from '@postmill-ai/react/translation/get.transation.service.client';
+import { useLaunchStore } from '@postmill-ai/frontend/components/composer/store';
 import { useShallow } from 'zustand/react/shallow';
-import { makeId } from '@gitroom/nestjs-libraries/services/make.is';
-import { Button } from '@gitroom/react/form/button';
-import { Integrations } from '@gitroom/frontend/components/launches/calendar.context';
+import { makeId } from '@postmill-ai/nestjs-libraries/services/make.is';
+import { Button } from '@postmill-ai/react/form/button';
+import { Integrations } from '@postmill-ai/frontend/components/launches/calendar.context';
 import dayjs from 'dayjs';
 import clsx from 'clsx';
-import SafeImage from '@gitroom/react/helpers/safe.image';
-import { expandPostsList } from '@gitroom/helpers/utils/posts.list.minify';
+import SafeImage from '@postmill-ai/react/helpers/safe.image';
+import { expandPostsList } from '@postmill-ai/helpers/utils/posts.list.minify';
 
 type Tab = 'drafts' | 'templates' | 'signatures';
 

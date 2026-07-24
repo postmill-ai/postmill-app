@@ -9,8 +9,8 @@
  *      restarted automatically whenever (1) rewrites the dist files it loaded.
  *
  * Why run the COMPILED dist instead of the TS source: the provider kernel and
- * the ~144 `@gitroom/provider-*` workspace packages only resolve correctly
- * against compiled JS. register-paths.cjs maps `@gitroom/*` to dist (baseUrl=dist).
+ * the ~144 `@postmill-ai/provider-*` workspace packages only resolve correctly
+ * against compiled JS. register-paths.cjs maps `@postmill-ai/*` to dist (baseUrl=dist).
  * A swc-node/ts-node source run trips circular-init order in nestjs-libraries
  * ("Cannot access 'IntegrationService' before initialization"), and `nest start`'s
  * own tsconfig-paths registration resolves the aliases to raw .ts (ESM, fails).

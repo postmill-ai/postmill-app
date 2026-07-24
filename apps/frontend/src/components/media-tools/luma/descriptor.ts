@@ -1,4 +1,4 @@
-import type { StudioDescriptor } from '@gitroom/frontend/components/media-tools/studio-kit/types';
+import type { StudioDescriptor } from '@postmill-ai/frontend/components/media-tools/studio-kit/types';
 
 // Luma Dream Machine (registry/config identifier `luma`). Field names are native Luma
 // params; `start_image_url`/`end_image_url` are folded into Luma's `keyframes` by the

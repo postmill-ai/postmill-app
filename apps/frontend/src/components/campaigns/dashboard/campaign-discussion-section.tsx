@@ -1,15 +1,15 @@
 'use client';
 
 import { FC, useCallback } from 'react';
-import { useFetch } from '@gitroom/helpers/utils/custom.fetch';
-import { useToaster } from '@gitroom/react/toaster/toaster';
-import { useT } from '@gitroom/react/translation/get.transation.service.client';
+import { useFetch } from '@postmill-ai/helpers/utils/custom.fetch';
+import { useToaster } from '@postmill-ai/react/toaster/toaster';
+import { useT } from '@postmill-ai/react/translation/get.transation.service.client';
 import {
   useCampaignNotes,
   useTeamMembers,
-} from '@gitroom/frontend/components/campaigns/hooks/campaign.hooks';
-import { DiscussionEditor } from '@gitroom/frontend/components/campaigns/dashboard/discussion-editor';
-import { NoteCard } from '@gitroom/frontend/components/campaigns/dashboard/note-card';
+} from '@postmill-ai/frontend/components/campaigns/hooks/campaign.hooks';
+import { DiscussionEditor } from '@postmill-ai/frontend/components/campaigns/dashboard/discussion-editor';
+import { NoteCard } from '@postmill-ai/frontend/components/campaigns/dashboard/note-card';
 
 interface CampaignDiscussionSectionProps {
   campaignId: string;

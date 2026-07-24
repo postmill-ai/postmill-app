@@ -1,11 +1,11 @@
 'use client';
 
 import React, { useCallback, useMemo, useState } from 'react';
-import { Button } from '@gitroom/react/form/button';
-import { useFetch } from '@gitroom/helpers/utils/custom.fetch';
-import { useToaster } from '@gitroom/react/toaster/toaster';
-import { useT } from '@gitroom/react/translation/get.transation.service.client';
-import { PermissionItem } from '@gitroom/frontend/components/settings/roles/hooks/use-roles';
+import { Button } from '@postmill-ai/react/form/button';
+import { useFetch } from '@postmill-ai/helpers/utils/custom.fetch';
+import { useToaster } from '@postmill-ai/react/toaster/toaster';
+import { useT } from '@postmill-ai/react/translation/get.transation.service.client';
+import { PermissionItem } from '@postmill-ai/frontend/components/settings/roles/hooks/use-roles';
 
 /** Derives a stable machine key from a display name (create flow only). */
 export const roleKeyFromName = (name: string): string =>

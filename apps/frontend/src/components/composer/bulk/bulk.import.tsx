@@ -1,10 +1,10 @@
 'use client';
 
 import { FC, useCallback, useMemo, useRef, useState } from 'react';
-import { useFetch } from '@gitroom/helpers/utils/custom.fetch';
-import { useT } from '@gitroom/react/translation/get.transation.service.client';
+import { useFetch } from '@postmill-ai/helpers/utils/custom.fetch';
+import { useT } from '@postmill-ai/react/translation/get.transation.service.client';
 import { useBulkImport, BulkRow } from './useBulkImport';
-import { DataTable } from '@gitroom/frontend/components/ui/data-table';
+import { DataTable } from '@postmill-ai/frontend/components/ui/data-table';
 
 // 5 MB is generous for a text CSV of posts; anything larger is almost certainly a
 // mistaken upload and would block the main thread in `readAsText`.

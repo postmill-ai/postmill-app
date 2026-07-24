@@ -1,7 +1,7 @@
 import { describe, it, expect, vi } from 'vitest';
 import { MeweProvider } from './social.adapter';
 
-vi.mock('@gitroom/provider-kernel', async (importOriginal) => {
+vi.mock('@postmill-ai/provider-kernel', async (importOriginal) => {
   const mod = (await importOriginal()) as any;
   return {
     ...mod,

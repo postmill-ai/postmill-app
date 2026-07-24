@@ -1,17 +1,17 @@
 import { Injectable } from '@nestjs/common';
 import { Provider, User, UserOrganization } from '@prisma/client';
-import { CreateOrgUserDto } from '@gitroom/nestjs-libraries/dtos/auth/create.org.user.dto';
-import { LoginUserDto } from '@gitroom/nestjs-libraries/dtos/auth/login.user.dto';
-import { UsersService } from '@gitroom/nestjs-libraries/database/prisma/users/users.service';
-import { OrganizationService } from '@gitroom/nestjs-libraries/database/prisma/organizations/organization.service';
-import { AuthService as AuthChecker } from '@gitroom/helpers/auth/auth.service';
-import { ProvidersManager } from '@gitroom/backend/services/auth/providers/providers.manager';
+import { CreateOrgUserDto } from '@postmill-ai/nestjs-libraries/dtos/auth/create.org.user.dto';
+import { LoginUserDto } from '@postmill-ai/nestjs-libraries/dtos/auth/login.user.dto';
+import { UsersService } from '@postmill-ai/nestjs-libraries/database/prisma/users/users.service';
+import { OrganizationService } from '@postmill-ai/nestjs-libraries/database/prisma/organizations/organization.service';
+import { AuthService as AuthChecker } from '@postmill-ai/helpers/auth/auth.service';
+import { ProvidersManager } from '@postmill-ai/backend/services/auth/providers/providers.manager';
 import dayjs from 'dayjs';
-import { NotificationService } from '@gitroom/nestjs-libraries/database/prisma/notifications/notification.service';
-import { ForgotReturnPasswordDto } from '@gitroom/nestjs-libraries/dtos/auth/forgot-return.password.dto';
-import { OAuthLinkQueryDto } from '@gitroom/nestjs-libraries/dtos/auth/oauth-link-query.dto';
-import { NewsletterService } from '@gitroom/nestjs-libraries/newsletter/newsletter.service';
-import { safeFetch } from '@gitroom/nestjs-libraries/dtos/webhooks/safe.fetch';
+import { NotificationService } from '@postmill-ai/nestjs-libraries/database/prisma/notifications/notification.service';
+import { ForgotReturnPasswordDto } from '@postmill-ai/nestjs-libraries/dtos/auth/forgot-return.password.dto';
+import { OAuthLinkQueryDto } from '@postmill-ai/nestjs-libraries/dtos/auth/oauth-link-query.dto';
+import { NewsletterService } from '@postmill-ai/nestjs-libraries/newsletter/newsletter.service';
+import { safeFetch } from '@postmill-ai/nestjs-libraries/dtos/webhooks/safe.fetch';
 import crypto from 'crypto';
 
 @Injectable()

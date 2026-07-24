@@ -6,10 +6,10 @@ import {
 } from '@nestjs/common';
 import { ApiTags } from '@nestjs/swagger';
 import { Organization, User } from '@prisma/client';
-import { GetUserFromRequest } from '@gitroom/nestjs-libraries/user/user.from.request';
-import { GetOrgFromRequest } from '@gitroom/nestjs-libraries/user/org.from.request';
-import { RequirePermission } from '@gitroom/backend/services/auth/rbac/require-permission.decorator';
-import { DeletionService } from '@gitroom/nestjs-libraries/database/prisma/users/deletion.service';
+import { GetUserFromRequest } from '@postmill-ai/nestjs-libraries/user/user.from.request';
+import { GetOrgFromRequest } from '@postmill-ai/nestjs-libraries/user/org.from.request';
+import { RequirePermission } from '@postmill-ai/backend/services/auth/rbac/require-permission.decorator';
+import { DeletionService } from '@postmill-ai/nestjs-libraries/database/prisma/users/deletion.service';
 
 @ApiTags('Organizations')
 @Controller('/organizations')

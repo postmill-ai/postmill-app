@@ -1,11 +1,11 @@
 'use client';
 
 import { ReactNode, useCallback } from 'react';
-import { FetchWrapperComponent } from '@gitroom/helpers/utils/custom.fetch';
-import { deleteDialog } from '@gitroom/react/helpers/delete.dialog';
-import { useReturnUrl } from '@gitroom/frontend/app/(app)/auth/return.url.component';
-import { useVariables } from '@gitroom/react/helpers/variable.context';
-import { useT } from '@gitroom/react/translation/get.transation.service.client';
+import { FetchWrapperComponent } from '@postmill-ai/helpers/utils/custom.fetch';
+import { deleteDialog } from '@postmill-ai/react/helpers/delete.dialog';
+import { useReturnUrl } from '@postmill-ai/frontend/app/(app)/auth/return.url.component';
+import { useVariables } from '@postmill-ai/react/helpers/variable.context';
+import { useT } from '@postmill-ai/react/translation/get.transation.service.client';
 export default function LayoutContext(params: { children: ReactNode }) {
   if (params?.children) {
     // eslint-disable-next-line react/no-children-prop

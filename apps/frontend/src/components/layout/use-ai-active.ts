@@ -1,7 +1,7 @@
 'use client';
 
 import useSWR from 'swr';
-import { useFetch } from '@gitroom/helpers/utils/custom.fetch';
+import { useFetch } from '@postmill-ai/helpers/utils/custom.fetch';
 
 /**
  * Whether the current org has an active AI provider configured.

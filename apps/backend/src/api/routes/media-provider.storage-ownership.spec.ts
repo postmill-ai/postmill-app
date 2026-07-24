@@ -4,7 +4,7 @@ import { BadRequestException, HttpException } from '@nestjs/common';
 
 // ioRedis is touched by _bustDefaultsCatalogCache on the success path — stub it so no
 // real connection is attempted.
-vi.mock('@gitroom/nestjs-libraries/redis/redis.service', () => ({
+vi.mock('@postmill-ai/nestjs-libraries/redis/redis.service', () => ({
   ioRedis: {
     keys: vi.fn().mockResolvedValue([]),
     del: vi.fn().mockResolvedValue(0),

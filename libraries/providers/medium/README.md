@@ -1,4 +1,4 @@
-# @gitroom/provider-medium
+# @postmill-ai/provider-medium
 
 Medium social provider (`social/medium@v1`).
 

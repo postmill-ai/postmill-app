@@ -1,13 +1,13 @@
 import { Inject, Injectable } from '@nestjs/common';
-import { AuthProviderAbstract } from '@gitroom/backend/services/auth/providers.interface';
+import { AuthProviderAbstract } from '@postmill-ai/backend/services/auth/providers.interface';
 import {
   ProviderKernel,
   DEFAULT_VERSION,
-} from '@gitroom/provider-kernel';
-import { PROVIDER_KERNEL } from '@gitroom/nestjs-libraries/providers/providers.module';
-import { RuntimeContextFactory } from '@gitroom/nestjs-libraries/providers/runtime-context.factory';
-import { AuthProviderRepository } from '@gitroom/nestjs-libraries/database/prisma/auth-providers/auth-provider.repository';
-import { ioRedis } from '@gitroom/nestjs-libraries/redis/redis.service';
+} from '@postmill-ai/provider-kernel';
+import { PROVIDER_KERNEL } from '@postmill-ai/nestjs-libraries/providers/providers.module';
+import { RuntimeContextFactory } from '@postmill-ai/nestjs-libraries/providers/runtime-context.factory';
+import { AuthProviderRepository } from '@postmill-ai/nestjs-libraries/database/prisma/auth-providers/auth-provider.repository';
+import { ioRedis } from '@postmill-ai/nestjs-libraries/redis/redis.service';
 
 @Injectable()
 export class AuthProviderManager {

@@ -1,10 +1,10 @@
 'use client';
 
 import React, { FC, useCallback } from 'react';
-import { deleteDialog } from '@gitroom/react/helpers/delete.dialog';
-import { useFetch } from '@gitroom/helpers/utils/custom.fetch';
-import { useVariables } from '@gitroom/react/helpers/variable.context';
-import { useT } from '@gitroom/react/translation/get.transation.service.client';
+import { deleteDialog } from '@postmill-ai/react/helpers/delete.dialog';
+import { useFetch } from '@postmill-ai/helpers/utils/custom.fetch';
+import { useVariables } from '@postmill-ai/react/helpers/variable.context';
+import { useT } from '@postmill-ai/react/translation/get.transation.service.client';
 export const LogoutComponent: FC<{ isIcon?: boolean }> = ({ isIcon }) => {
   const fetch = useFetch();
   const { isSecured } = useVariables();

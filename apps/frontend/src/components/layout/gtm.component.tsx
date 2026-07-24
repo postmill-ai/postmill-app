@@ -2,8 +2,8 @@
 
 import Script from 'next/script';
 import { FC, useEffect } from 'react';
-import { useUser } from '@gitroom/frontend/components/layout/user.context';
-import { useVariables } from '@gitroom/react/helpers/variable.context';
+import { useUser } from '@postmill-ai/frontend/components/layout/user.context';
+import { useVariables } from '@postmill-ai/react/helpers/variable.context';
 
 export const TrialTracker: FC = () => {
   const user = useUser();

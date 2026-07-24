@@ -15,7 +15,7 @@ const fileSvcMock = {
   saveFile: vi.fn(),
 };
 
-vi.mock('@gitroom/nestjs-libraries/database/prisma/storage/storage.service', () => ({
+vi.mock('@postmill-ai/nestjs-libraries/database/prisma/storage/storage.service', () => ({
   StorageService: class {
     resolveAdapterForFolderWithConfigId = storageSvcMock.resolveAdapterForFolderWithConfigId;
     assertWithinProviderQuota = storageSvcMock.assertWithinProviderQuota;

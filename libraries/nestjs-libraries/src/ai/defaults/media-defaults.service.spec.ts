@@ -1,16 +1,16 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { MediaDefaultsService } from './media-defaults.service';
 import { DefaultsResolutionService } from './defaults-resolution.service';
-import { OrgDefaultModelRepository } from '@gitroom/nestjs-libraries/database/prisma/ai-settings/org-default-model.repository';
+import { OrgDefaultModelRepository } from '@postmill-ai/nestjs-libraries/database/prisma/ai-settings/org-default-model.repository';
 import { DefaultsSettingsValidator } from './defaults-settings.validator';
-import { OrgMediaProviderSettingsService } from '@gitroom/nestjs-libraries/database/prisma/media-providers/org-media-provider-settings.service';
+import { OrgMediaProviderSettingsService } from '@postmill-ai/nestjs-libraries/database/prisma/media-providers/org-media-provider-settings.service';
 
 const mockRedisGet = vi.fn();
 const mockRedisSet = vi.fn();
 const mockRedisKeys = vi.fn();
 const mockRedisDel = vi.fn();
 
-vi.mock('@gitroom/nestjs-libraries/redis/redis.service', () => ({
+vi.mock('@postmill-ai/nestjs-libraries/redis/redis.service', () => ({
   ioRedis: {
     get: (...args: any[]) => mockRedisGet(...args),
     set: (...args: any[]) => mockRedisSet(...args),
@@ -37,7 +37,7 @@ const mockRepositoryUpsert = vi.fn();
 const mockRepositoryRemove = vi.fn();
 
 vi.mock(
-  '@gitroom/nestjs-libraries/database/prisma/ai-settings/org-default-model.repository',
+  '@postmill-ai/nestjs-libraries/database/prisma/ai-settings/org-default-model.repository',
   () => ({
     OrgDefaultModelRepository: class {
       getAll = mockRepositoryGetAll;
@@ -61,7 +61,7 @@ const mockRuntimeContextFactory = {
 };
 
 vi.mock(
-  '@gitroom/nestjs-libraries/database/prisma/media-providers/org-media-provider-settings.service',
+  '@postmill-ai/nestjs-libraries/database/prisma/media-providers/org-media-provider-settings.service',
   () => ({
     OrgMediaProviderSettingsService: class {
       getConfigForProvider = mockOrgMediaGetConfigForProvider;
@@ -72,7 +72,7 @@ vi.mock(
 const mockKernelGet = vi.fn();
 const mockKernelListManifests = vi.fn();
 
-vi.mock('@gitroom/nestjs-libraries/providers/providers.module', () => ({
+vi.mock('@postmill-ai/nestjs-libraries/providers/providers.module', () => ({
   PROVIDER_KERNEL: 'PROVIDER_KERNEL',
 }));
 

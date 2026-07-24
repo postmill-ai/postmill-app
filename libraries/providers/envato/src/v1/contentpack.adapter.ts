@@ -10,7 +10,7 @@ import {
   StockSearchResponse,
   StockVectorItem,
   StockVideoItem,
-} from '@gitroom/provider-kernel';
+} from '@postmill-ai/provider-kernel';
 
 // Envato API — https://build.envato.com/api/ (Bearer personal token).
 //   GET https://api.envato.com/v1/discovery/search/search/item?term=&site=&page=&page_size=

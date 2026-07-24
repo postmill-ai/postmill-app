@@ -1,11 +1,11 @@
 'use client';
 
 import { FC, useMemo } from 'react';
-import { StatTile } from '@gitroom/frontend/components/analytics-v2/kit/stat-tile';
-import { useOverview } from '@gitroom/frontend/components/analytics-v2/hooks/useOverview';
+import { StatTile } from '@postmill-ai/frontend/components/analytics-v2/kit/stat-tile';
+import { useOverview } from '@postmill-ai/frontend/components/analytics-v2/hooks/useOverview';
 import { useDashboardSummary } from '../hooks/useDashboardSummary';
-import { KPI } from '@gitroom/frontend/components/analytics-v2/utils';
-import { useT } from '@gitroom/react/translation/get.transation.service.client';
+import { KPI } from '@postmill-ai/frontend/components/analytics-v2/utils';
+import { useT } from '@postmill-ai/react/translation/get.transation.service.client';
 
 const staticKPI = (label: string, total: number): KPI => ({
   metric: label,

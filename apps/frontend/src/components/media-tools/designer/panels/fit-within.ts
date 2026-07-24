@@ -5,4 +5,4 @@
 //
 // Re-exported from the shared `designer-doc` layer (used by the server-side
 // reflow too) so the two implementations can't diverge.
-export { fitWithin } from '@gitroom/nestjs-libraries/media/designer-doc/reflow';
+export { fitWithin } from '@postmill-ai/nestjs-libraries/media/designer-doc/reflow';

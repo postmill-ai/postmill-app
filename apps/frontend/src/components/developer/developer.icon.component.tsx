@@ -1,9 +1,9 @@
 'use client';
 
 import { FC } from 'react';
-import { useModals } from '@gitroom/frontend/components/layout/new-modal';
-import { useT } from '@gitroom/react/translation/get.transation.service.client';
-import { DeveloperComponent } from '@gitroom/frontend/components/developer/developer.component';
+import { useModals } from '@postmill-ai/frontend/components/layout/new-modal';
+import { useT } from '@postmill-ai/react/translation/get.transation.service.client';
+import { DeveloperComponent } from '@postmill-ai/frontend/components/developer/developer.component';
 
 export const DeveloperIconComponent: FC = () => {
   const modals = useModals();

@@ -7,7 +7,7 @@ import { CampaignSummary } from '../hooks/useDashboardCampaigns';
 
 const push = vi.fn();
 
-vi.mock('@gitroom/react/translation/get.transation.service.client', () => ({
+vi.mock('@postmill-ai/react/translation/get.transation.service.client', () => ({
   useT:
     () =>
     (_key: string, fallback: string, vars?: Record<string, unknown>) =>
@@ -20,7 +20,7 @@ vi.mock('next/navigation', () => ({
   useRouter: () => ({ push }),
 }));
 
-vi.mock('@gitroom/helpers/utils/custom.fetch', () => ({
+vi.mock('@postmill-ai/helpers/utils/custom.fetch', () => ({
   useFetch: () => vi.fn(),
 }));
 
@@ -29,7 +29,7 @@ vi.mock('../hooks/useDashboardCampaigns', () => ({
   CampaignSummary: {} as any,
 }));
 
-vi.mock('@gitroom/frontend/components/analytics-v2/kit/states', () => ({
+vi.mock('@postmill-ai/frontend/components/analytics-v2/kit/states', () => ({
   TabSkeleton: ({ variant }: { variant?: string }) => (
     <div data-testid="tab-skeleton" data-variant={variant} />
   ),

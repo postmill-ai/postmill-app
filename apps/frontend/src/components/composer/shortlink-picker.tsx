@@ -4,10 +4,10 @@ import React, { FC, useCallback, useMemo, useState } from 'react';
 import useSWR from 'swr';
 import clsx from 'clsx';
 import { useClickOutside } from '@mantine/hooks';
-import { useFetch } from '@gitroom/helpers/utils/custom.fetch';
-import { useT } from '@gitroom/react/translation/get.transation.service.client';
-import { useToaster } from '@gitroom/react/toaster/toaster';
-import { DropdownArrowIcon } from '@gitroom/frontend/components/ui/icons';
+import { useFetch } from '@postmill-ai/helpers/utils/custom.fetch';
+import { useT } from '@postmill-ai/react/translation/get.transation.service.client';
+import { useToaster } from '@postmill-ai/react/toaster/toaster';
+import { DropdownArrowIcon } from '@postmill-ai/frontend/components/ui/icons';
 
 interface ShortlinkProvider {
   identifier: string;

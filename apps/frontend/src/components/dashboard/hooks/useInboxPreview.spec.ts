@@ -3,7 +3,7 @@ import { renderHook } from '@testing-library/react';
 
 const mockFetchFn = vi.fn();
 
-vi.mock('@gitroom/helpers/utils/custom.fetch', () => ({
+vi.mock('@postmill-ai/helpers/utils/custom.fetch', () => ({
   useFetch: () => mockFetchFn,
 }));
 

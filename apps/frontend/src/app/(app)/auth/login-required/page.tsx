@@ -1,4 +1,4 @@
-import { getT } from '@gitroom/react/translation/get.translation.service.backend';
+import { getT } from '@postmill-ai/react/translation/get.translation.service.backend';
 
 export default async function LoginRequiredPage() {
   const t = await getT();

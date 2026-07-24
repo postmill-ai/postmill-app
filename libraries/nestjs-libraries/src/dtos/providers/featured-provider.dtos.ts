@@ -9,7 +9,7 @@ import {
   ValidateNested,
 } from 'class-validator';
 import { Type } from 'class-transformer';
-import { PROVIDER_DOMAINS } from '@gitroom/provider-kernel';
+import { PROVIDER_DOMAINS } from '@postmill-ai/provider-kernel';
 
 export class FeaturedProviderDto {
   @IsString()

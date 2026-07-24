@@ -4,19 +4,19 @@ import { FC } from 'react';
 import {
   PostComment,
   withProvider,
-} from '@gitroom/frontend/components/composer/providers/high.order.provider';
-import { DevToSettingsDto } from '@gitroom/nestjs-libraries/dtos/posts/providers-settings/dev.to.settings.dto';
-import { Input } from '@gitroom/react/form/input';
-import { FileComponent } from '@gitroom/frontend/components/files/file.component';
-import { SelectOrganization } from '@gitroom/frontend/components/composer/providers/devto/select.organization';
-import { DevtoTags } from '@gitroom/frontend/components/composer/providers/devto/devto.tags';
-import { useMediaDirectory } from '@gitroom/react/helpers/use.media.directory';
+} from '@postmill-ai/frontend/components/composer/providers/high.order.provider';
+import { DevToSettingsDto } from '@postmill-ai/nestjs-libraries/dtos/posts/providers-settings/dev.to.settings.dto';
+import { Input } from '@postmill-ai/react/form/input';
+import { FileComponent } from '@postmill-ai/frontend/components/files/file.component';
+import { SelectOrganization } from '@postmill-ai/frontend/components/composer/providers/devto/select.organization';
+import { DevtoTags } from '@postmill-ai/frontend/components/composer/providers/devto/devto.tags';
+import { useMediaDirectory } from '@postmill-ai/react/helpers/use.media.directory';
 import clsx from 'clsx';
-import { Canonical } from '@gitroom/react/form/canonical';
-import { useIntegration } from '@gitroom/frontend/components/launches/helpers/use.integration';
-import { useSettings } from '@gitroom/frontend/components/launches/helpers/use.values';
-import { useShowPostSelector } from '@gitroom/frontend/components/post-url-selector/post.url.selector';
-import { useT } from '@gitroom/react/translation/get.transation.service.client';
+import { Canonical } from '@postmill-ai/react/form/canonical';
+import { useIntegration } from '@postmill-ai/frontend/components/launches/helpers/use.integration';
+import { useSettings } from '@postmill-ai/frontend/components/launches/helpers/use.values';
+import { useShowPostSelector } from '@postmill-ai/frontend/components/post-url-selector/post.url.selector';
+import { useT } from '@postmill-ai/react/translation/get.transation.service.client';
 
 const DevtoSettings: FC = () => {
   const form = useSettings();

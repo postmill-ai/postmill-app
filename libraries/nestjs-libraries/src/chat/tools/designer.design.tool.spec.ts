@@ -2,7 +2,7 @@ import 'reflect-metadata';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { HttpException } from '@nestjs/common';
 import { DesignerDesignTool } from './designer.design.tool';
-import { DesignerDocService } from '@gitroom/nestjs-libraries/media/designer-doc/designer-doc.service';
+import { DesignerDocService } from '@postmill-ai/nestjs-libraries/media/designer-doc/designer-doc.service';
 
 const makeImageDoc = () => ({
   mode: 'image' as const,

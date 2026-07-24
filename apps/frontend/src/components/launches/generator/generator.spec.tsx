@@ -10,26 +10,26 @@ const fetchMock = vi.fn();
 const showMock = vi.fn();
 const pushMock = vi.fn();
 
-vi.mock('@gitroom/helpers/utils/custom.fetch', () => ({
+vi.mock('@postmill-ai/helpers/utils/custom.fetch', () => ({
   useFetch: () => fetchMock,
 }));
-vi.mock('@gitroom/react/toaster/toaster', () => ({
+vi.mock('@postmill-ai/react/toaster/toaster', () => ({
   useToaster: () => ({ show: showMock }),
 }));
 vi.mock('next/navigation', () => ({
   useRouter: () => ({ push: pushMock }),
 }));
-vi.mock('@gitroom/frontend/components/launches/calendar.context', () => ({
+vi.mock('@postmill-ai/frontend/components/launches/calendar.context', () => ({
   CalendarWeekProvider: ({ children }: any) => children,
   useCalendar: () => ({ integrations: [], reloadCalendarView: vi.fn() }),
 }));
-vi.mock('@gitroom/frontend/components/layout/new-modal', () => ({
+vi.mock('@postmill-ai/frontend/components/layout/new-modal', () => ({
   useModals: () => ({ closeAll: vi.fn(), openModal: vi.fn() }),
 }));
-vi.mock('@gitroom/frontend/components/layout/user.context', () => ({
+vi.mock('@postmill-ai/frontend/components/layout/user.context', () => ({
   useUser: () => ({ tier: { ai: true } }),
 }));
-vi.mock('@gitroom/react/translation/get.transation.service.client', () => ({
+vi.mock('@postmill-ai/react/translation/get.transation.service.client', () => ({
   useT: () => (_key: string, def: string) => def,
 }));
 

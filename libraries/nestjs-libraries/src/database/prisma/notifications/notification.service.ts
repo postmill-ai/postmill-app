@@ -1,20 +1,20 @@
 import { Injectable, Logger } from '@nestjs/common';
-import { NotificationsRepository } from '@gitroom/nestjs-libraries/database/prisma/notifications/notifications.repository';
-import { EmailService } from '@gitroom/nestjs-libraries/services/email.service';
+import { NotificationsRepository } from '@postmill-ai/nestjs-libraries/database/prisma/notifications/notifications.repository';
+import { EmailService } from '@postmill-ai/nestjs-libraries/services/email.service';
 // layering: sanctioned leaf-read — OrganizationService depends on NotificationService
 // (sendEmail/hasEmailProvider/createOrgAndUser), so routing getTeam through the service
 // layer would create a NestJS dependency-injection cycle. Reading the repository directly
 // here is a deliberate, behaviour-neutral leaf lookup.
-import { OrganizationRepository } from '@gitroom/nestjs-libraries/database/prisma/organizations/organization.repository';
-import { NotificationPreferenceService } from '@gitroom/nestjs-libraries/database/prisma/notifications/notification-preference.service';
-import { PushNotificationService } from '@gitroom/nestjs-libraries/database/prisma/notifications/push-notification.service';
-import { NotificationDigestService } from '@gitroom/nestjs-libraries/database/prisma/notifications/notification-digest.service';
+import { OrganizationRepository } from '@postmill-ai/nestjs-libraries/database/prisma/organizations/organization.repository';
+import { NotificationPreferenceService } from '@postmill-ai/nestjs-libraries/database/prisma/notifications/notification-preference.service';
+import { PushNotificationService } from '@postmill-ai/nestjs-libraries/database/prisma/notifications/push-notification.service';
+import { NotificationDigestService } from '@postmill-ai/nestjs-libraries/database/prisma/notifications/notification-digest.service';
 import {
   BroadcastNotificationDto,
   ChannelToggles,
   DigestFrequency,
   NotificationCategory,
-} from '@gitroom/nestjs-libraries/dtos/notifications/notification-preference.dto';
+} from '@postmill-ai/nestjs-libraries/dtos/notifications/notification-preference.dto';
 
 export interface NotifyOptions {
   orgId: string;

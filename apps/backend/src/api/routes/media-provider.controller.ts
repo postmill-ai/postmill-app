@@ -12,17 +12,17 @@ import {
   Query,
 } from '@nestjs/common';
 import { Throttle } from '@nestjs/throttler';
-import { GetOrgFromRequest } from '@gitroom/nestjs-libraries/user/org.from.request';
+import { GetOrgFromRequest } from '@postmill-ai/nestjs-libraries/user/org.from.request';
 import { Organization } from '@prisma/client';
 import { ApiTags } from '@nestjs/swagger';
-import { OrgMediaProviderSettingsService } from '@gitroom/nestjs-libraries/database/prisma/media-providers/org-media-provider-settings.service';
-import { RequirePermission } from '@gitroom/backend/services/auth/rbac/require-permission.decorator';
+import { OrgMediaProviderSettingsService } from '@postmill-ai/nestjs-libraries/database/prisma/media-providers/org-media-provider-settings.service';
+import { RequirePermission } from '@postmill-ai/backend/services/auth/rbac/require-permission.decorator';
 import {
   UpsertMediaConfigDto,
   SetMediaStorageDto,
   SetActiveVersionDto,
   ProviderTestConnectionDto,
-} from '@gitroom/nestjs-libraries/dtos/providers/provider-config.dtos';
+} from '@postmill-ai/nestjs-libraries/dtos/providers/provider-config.dtos';
 
 @ApiTags('Org Media Provider Settings')
 @Controller('/settings/media')

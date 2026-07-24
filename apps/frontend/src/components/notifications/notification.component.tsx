@@ -1,15 +1,15 @@
 'use client';
 
-import { useFetch } from '@gitroom/helpers/utils/custom.fetch';
+import { useFetch } from '@postmill-ai/helpers/utils/custom.fetch';
 import useSWR, { useSWRConfig } from 'swr';
 import { FC, useCallback, useEffect, useState } from 'react';
 import clsx from 'clsx';
 import dayjs from 'dayjs';
 import relativeTime from 'dayjs/plugin/relativeTime';
 import { useClickAway } from '@uidotdev/usehooks';
-import ReactLoading from '@gitroom/frontend/components/layout/loading';
-import { useT } from '@gitroom/react/translation/get.transation.service.client';
-import { SafeContent } from '@gitroom/frontend/components/shared/safe-content';
+import ReactLoading from '@postmill-ai/frontend/components/layout/loading';
+import { useT } from '@postmill-ai/react/translation/get.transation.service.client';
+import { SafeContent } from '@postmill-ai/frontend/components/shared/safe-content';
 
 dayjs.extend(relativeTime);
 

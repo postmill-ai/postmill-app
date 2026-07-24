@@ -1,6 +1,6 @@
 import { BadRequestException, Injectable } from '@nestjs/common';
-import { ProviderDomain, isProviderDomain } from '@gitroom/provider-kernel';
-import { ProviderResolutionService } from '@gitroom/nestjs-libraries/providers/provider-resolution.service';
+import { ProviderDomain, isProviderDomain } from '@postmill-ai/provider-kernel';
+import { ProviderResolutionService } from '@postmill-ai/nestjs-libraries/providers/provider-resolution.service';
 import { FeaturedProviderRepository } from './featured-provider.repository';
 
 // 3.3: domain set + guard now come from the shared kernel export (single source

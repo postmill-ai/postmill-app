@@ -3,11 +3,11 @@
 import React, { useEffect } from 'react';
 import Link from 'next/link';
 import { useParams, usePathname, useRouter } from 'next/navigation';
-import { useT } from '@gitroom/react/translation/get.transation.service.client';
-import { useUser } from '@gitroom/frontend/components/layout/user.context';
-import { useBrands } from '@gitroom/frontend/components/settings/brand/use-brands';
-import { CampaignSelector } from '@gitroom/frontend/components/campaigns/selector/campaign-selector';
-import { SettingsGate } from '@gitroom/frontend/components/settings/settings-gate';
+import { useT } from '@postmill-ai/react/translation/get.transation.service.client';
+import { useUser } from '@postmill-ai/frontend/components/layout/user.context';
+import { useBrands } from '@postmill-ai/frontend/components/settings/brand/use-brands';
+import { CampaignSelector } from '@postmill-ai/frontend/components/campaigns/selector/campaign-selector';
+import { SettingsGate } from '@postmill-ai/frontend/components/settings/settings-gate';
 
 // Brand-edit chrome (former BrandTab `subtab === 'edit'` view): back link, name, intro,
 // campaign selector, and the Voice/Kit/Knowledge sub-nav — now real routes.

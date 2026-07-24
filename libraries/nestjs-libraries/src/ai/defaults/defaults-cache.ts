@@ -1,5 +1,5 @@
 import { createHmac } from 'crypto';
-import { ioRedis } from '@gitroom/nestjs-libraries/redis/redis.service';
+import { ioRedis } from '@postmill-ai/nestjs-libraries/redis/redis.service';
 
 /**
  * Best-effort invalidation of the AI/media defaults catalog cache for an org.

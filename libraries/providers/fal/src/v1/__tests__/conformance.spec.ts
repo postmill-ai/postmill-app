@@ -1,5 +1,5 @@
 import { describe, it } from 'vitest';
-import { runDomainConformance } from '@gitroom/provider-kernel';
+import { runDomainConformance } from '@postmill-ai/provider-kernel';
 import defaultModules from '../..';
 
 describe('fal provider conformance', () => {

@@ -10,7 +10,7 @@ The `@postmill-ai/postmill-sdk` is the official Node.js SDK for the Postmill Pub
 npm install @postmill-ai/postmill-sdk
 ```
 
-The SDK depends on `@gitroom/nestjs-libraries` for DTO types and uses the global `fetch` implementation (Node 18+, or a polyfill in older environments).
+The SDK depends on `@postmill-ai/nestjs-libraries` for DTO types and uses the global `fetch` implementation (Node 18+, or a polyfill in older environments).
 
 ## Quick start
 
@@ -128,7 +128,7 @@ deletePost(id: string): Promise<Response>
 - **Version**: 1.1.0
 - **License**: AGPL-3.0
 - **Build**: Uses `tsup` for bundling.
-- **Workspace dependency**: `@gitroom/nestjs-libraries`
+- **Workspace dependency**: `@postmill-ai/nestjs-libraries`
 
 ## Analytics access
 

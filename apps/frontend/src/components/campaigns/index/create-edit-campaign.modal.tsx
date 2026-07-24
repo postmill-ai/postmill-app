@@ -1,14 +1,14 @@
 'use client';
 
 import { FC, useCallback, useEffect, useRef, useState } from 'react';
-import { useFetch } from '@gitroom/helpers/utils/custom.fetch';
-import { useT } from '@gitroom/react/translation/get.transation.service.client';
-import { useToaster } from '@gitroom/react/toaster/toaster';
-import { Button } from '@gitroom/react/form/button';
+import { useFetch } from '@postmill-ai/helpers/utils/custom.fetch';
+import { useT } from '@postmill-ai/react/translation/get.transation.service.client';
+import { useToaster } from '@postmill-ai/react/toaster/toaster';
+import { Button } from '@postmill-ai/react/form/button';
 import dayjs from 'dayjs';
-import type { Campaign } from '@gitroom/frontend/components/campaigns/campaign-types';
-import { TagsInput } from '@gitroom/frontend/components/campaigns/index/tags-input';
-import { ColorPicker } from '@gitroom/frontend/components/ui/color-picker';
+import type { Campaign } from '@postmill-ai/frontend/components/campaigns/campaign-types';
+import { TagsInput } from '@postmill-ai/frontend/components/campaigns/index/tags-input';
+import { ColorPicker } from '@postmill-ai/frontend/components/ui/color-picker';
 
 const GOAL_METRICS = ['impressions', 'likes', 'comments', 'clicks', 'posts', 'followers'] as const;
 

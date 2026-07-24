@@ -2,7 +2,7 @@ import { Inject, Injectable } from '@nestjs/common';
 import {
   ProviderDomain,
   ProviderKernel,
-} from '@gitroom/provider-kernel';
+} from '@postmill-ai/provider-kernel';
 import { PROVIDER_KERNEL } from './provider-kernel.token';
 
 export interface HealthEntry {

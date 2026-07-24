@@ -1,7 +1,7 @@
 'use client';
 
 import { FC } from 'react';
-import { useT } from '@gitroom/react/translation/get.transation.service.client';
+import { useT } from '@postmill-ai/react/translation/get.transation.service.client';
 import { useHealth, HealthItem } from '../hooks/useHealth';
 import { TabSkeleton, EmptyState, ErrorState } from '../kit/states';
 import { ChannelAvatar } from '../kit/channel-avatar';

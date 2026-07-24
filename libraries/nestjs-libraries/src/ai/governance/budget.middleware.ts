@@ -1,6 +1,6 @@
 import { Injectable, NestMiddleware, Logger } from '@nestjs/common';
 import { Request, Response, NextFunction } from 'express';
-import { AiSettingsManager } from '@gitroom/nestjs-libraries/ai/ai-settings.manager';
+import { AiSettingsManager } from '@postmill-ai/nestjs-libraries/ai/ai-settings.manager';
 import { BudgetService } from './budget.service';
 
 function parseScopeFromPath(path: string): string | null {

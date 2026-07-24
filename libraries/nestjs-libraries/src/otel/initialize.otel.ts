@@ -1,5 +1,5 @@
 import { Logger } from '@nestjs/common';
-import { getRequestId } from '@gitroom/nestjs-libraries/chat/async.storage';
+import { getRequestId } from '@postmill-ai/nestjs-libraries/chat/async.storage';
 import { NodeSDK } from '@opentelemetry/sdk-node';
 import { getNodeAutoInstrumentations } from '@opentelemetry/auto-instrumentations-node';
 import { OTLPTraceExporter } from '@opentelemetry/exporter-trace-otlp-http';

@@ -7,11 +7,11 @@ import {
   Query,
 } from '@nestjs/common';
 import { ApiTags } from '@nestjs/swagger';
-import { RequirePermission } from '@gitroom/backend/services/auth/rbac/require-permission.decorator';
-import { GetOrgFromRequest } from '@gitroom/nestjs-libraries/user/org.from.request';
-import { GetUserFromRequest } from '@gitroom/nestjs-libraries/user/user.from.request';
-import { AiDesignerService } from '@gitroom/nestjs-libraries/ai-designer/ai-designer.service';
-import { toAiDesignerSessionDto } from '@gitroom/nestjs-libraries/ai-designer/ai-designer.types';
+import { RequirePermission } from '@postmill-ai/backend/services/auth/rbac/require-permission.decorator';
+import { GetOrgFromRequest } from '@postmill-ai/nestjs-libraries/user/org.from.request';
+import { GetUserFromRequest } from '@postmill-ai/nestjs-libraries/user/user.from.request';
+import { AiDesignerService } from '@postmill-ai/nestjs-libraries/ai-designer/ai-designer.service';
+import { toAiDesignerSessionDto } from '@postmill-ai/nestjs-libraries/ai-designer/ai-designer.types';
 import { Organization, User } from '@prisma/client';
 
 @ApiTags('AI Designer')

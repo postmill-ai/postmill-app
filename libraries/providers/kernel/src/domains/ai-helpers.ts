@@ -210,7 +210,7 @@ export function mergeLiveModels(
  * Shared OpenAI-compatible AI adapter base. Lives in the kernel so the nine
  * `openai-compatible` provider packages (siliconflow, deepinfra, minimax, qwen,
  * meta-llama, gmihub, bitdeer, lightning, vultr) can construct it without
- * importing each other or `@gitroom/nestjs-libraries`.
+ * importing each other or `@postmill-ai/nestjs-libraries`.
  */
 export class OpenAICompatibleAdapter implements AiCapability {
   readonly identifier: string;

@@ -1,8 +1,8 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { DigestActivity } from './digest.activity';
-import { NotificationDigestService } from '@gitroom/nestjs-libraries/database/prisma/notifications/notification-digest.service';
-import { NotificationPreferenceService } from '@gitroom/nestjs-libraries/database/prisma/notifications/notification-preference.service';
-import { EmailService } from '@gitroom/nestjs-libraries/services/email.service';
+import { NotificationDigestService } from '@postmill-ai/nestjs-libraries/database/prisma/notifications/notification-digest.service';
+import { NotificationPreferenceService } from '@postmill-ai/nestjs-libraries/database/prisma/notifications/notification-preference.service';
+import { EmailService } from '@postmill-ai/nestjs-libraries/services/email.service';
 
 describe('DigestActivity', () => {
   let activity: DigestActivity;

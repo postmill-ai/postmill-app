@@ -15,24 +15,24 @@ import { plainToInstance } from 'class-transformer';
 import {
   AuthContextResolver,
   AuthContextResult,
-} from '@gitroom/nestjs-libraries/auth/auth-context.resolver';
-import { RolesService } from '@gitroom/nestjs-libraries/database/prisma/roles/roles.service';
-import { PermissionsService } from '@gitroom/backend/services/auth/permissions/permissions.service';
-import { AiDesignerService } from '@gitroom/nestjs-libraries/ai-designer/ai-designer.service';
-import { AiDesignerBudgetGuard } from '@gitroom/nestjs-libraries/ai-designer/guards/ai-designer-budget.guard';
-import { AiDesignerDefaultsGate } from '@gitroom/nestjs-libraries/ai-designer/guards/ai-designer-defaults.gate';
-import { AiDesignerIdempotencyService } from '@gitroom/nestjs-libraries/ai-designer/ai-designer-idempotency.service';
-import { toAiDesignerSessionDto } from '@gitroom/nestjs-libraries/ai-designer/ai-designer.types';
+} from '@postmill-ai/nestjs-libraries/auth/auth-context.resolver';
+import { RolesService } from '@postmill-ai/nestjs-libraries/database/prisma/roles/roles.service';
+import { PermissionsService } from '@postmill-ai/backend/services/auth/permissions/permissions.service';
+import { AiDesignerService } from '@postmill-ai/nestjs-libraries/ai-designer/ai-designer.service';
+import { AiDesignerBudgetGuard } from '@postmill-ai/nestjs-libraries/ai-designer/guards/ai-designer-budget.guard';
+import { AiDesignerDefaultsGate } from '@postmill-ai/nestjs-libraries/ai-designer/guards/ai-designer-defaults.gate';
+import { AiDesignerIdempotencyService } from '@postmill-ai/nestjs-libraries/ai-designer/ai-designer-idempotency.service';
+import { toAiDesignerSessionDto } from '@postmill-ai/nestjs-libraries/ai-designer/ai-designer.types';
 import {
   StartAiDesignerSessionDto,
   AiDesignerMessageDto,
   AiDesignerFormSubmitDto,
   AiDesignerAcceptPlanDto,
   AiDesignerReviseDto,
-} from '@gitroom/nestjs-libraries/dtos/ai-designer/start-ai-designer-session.dto';
-import { AiDesignerConductorService } from '@gitroom/nestjs-libraries/ai-designer/conductor/ai-designer-conductor.service';
-import { AiDesignerInputPolicyService } from '@gitroom/nestjs-libraries/ai-designer';
-import { resolveClientIp } from '@gitroom/nestjs-libraries/utils/client-ip';
+} from '@postmill-ai/nestjs-libraries/dtos/ai-designer/start-ai-designer-session.dto';
+import { AiDesignerConductorService } from '@postmill-ai/nestjs-libraries/ai-designer/conductor/ai-designer-conductor.service';
+import { AiDesignerInputPolicyService } from '@postmill-ai/nestjs-libraries/ai-designer';
+import { resolveClientIp } from '@postmill-ai/nestjs-libraries/utils/client-ip';
 
 interface SocketContext {
   userId: string;

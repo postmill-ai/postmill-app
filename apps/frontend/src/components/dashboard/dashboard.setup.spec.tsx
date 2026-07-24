@@ -2,7 +2,7 @@ import React from 'react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, fireEvent } from '@testing-library/react';
 
-vi.mock('@gitroom/react/translation/get.transation.service.client', () => ({
+vi.mock('@postmill-ai/react/translation/get.transation.service.client', () => ({
   useT: () => (_key: string, fallback: string) => fallback,
 }));
 
@@ -13,7 +13,7 @@ vi.mock('next/navigation', () => ({
 
 let mockIntegrations: any[] = [];
 vi.mock(
-  '@gitroom/frontend/components/launches/helpers/use.integration.list',
+  '@postmill-ai/frontend/components/launches/helpers/use.integration.list',
   () => ({
     useIntegrationList: () => ({ data: mockIntegrations }),
   })
@@ -24,7 +24,7 @@ vi.mock('./hooks/useDashboardSummary', () => ({
   useDashboardSummary: () => ({ data: mockSummary }),
 }));
 
-vi.mock('@gitroom/frontend/components/layout/use-permissions', () => ({
+vi.mock('@postmill-ai/frontend/components/layout/use-permissions', () => ({
   usePermissions: () => ({ isResolved: true, hasPermission: () => true }),
 }));
 

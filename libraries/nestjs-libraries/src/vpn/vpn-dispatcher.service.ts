@@ -1,7 +1,7 @@
 import { Injectable, Logger, OnModuleDestroy } from '@nestjs/common';
 import type { Dispatcher } from 'undici';
 import { buildVpnDispatcher } from './vpn-dispatcher.factory';
-import { ProviderResolutionService } from '@gitroom/nestjs-libraries/providers/provider-resolution.service';
+import { ProviderResolutionService } from '@postmill-ai/nestjs-libraries/providers/provider-resolution.service';
 import type { VpnResolvedProxy } from './org-vpn-config.service';
 
 // Pools undici proxy dispatchers (each owns a connection pool — expensive to

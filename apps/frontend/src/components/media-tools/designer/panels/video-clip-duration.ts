@@ -1,4 +1,4 @@
-import { CHANNEL_PRESETS } from '@gitroom/nestjs-libraries/integrations/social/channel-presets';
+import { CHANNEL_PRESETS } from '@postmill-ai/nestjs-libraries/integrations/social/channel-presets';
 
 export function getFormatMaxDurationMs(formatId: string): number {
   return CHANNEL_PRESETS.find((p) => p.id === formatId)?.maxDurationMs ?? 60000;

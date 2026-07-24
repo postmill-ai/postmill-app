@@ -2,7 +2,7 @@
 
 import { FC } from 'react';
 import { DrillState } from '../utils';
-import { useT } from '@gitroom/react/translation/get.transation.service.client';
+import { useT } from '@postmill-ai/react/translation/get.transation.service.client';
 
 interface BreadcrumbItem {
   id: string;

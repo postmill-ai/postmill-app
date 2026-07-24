@@ -1,4 +1,4 @@
-import type { StudioDescriptor } from '@gitroom/frontend/components/media-tools/studio-kit/types';
+import type { StudioDescriptor } from '@postmill-ai/frontend/components/media-tools/studio-kit/types';
 
 // Kling video, served through the fal.ai adapter (registry/config identifier `fal`).
 // Field names are the native fal request params — the adapter spreads `input` straight

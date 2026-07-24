@@ -1,5 +1,5 @@
 import { Injectable } from '@nestjs/common';
-import { CampaignTagService } from '@gitroom/nestjs-libraries/database/prisma/campaigns/campaign-item.service';
+import { CampaignTagService } from '@postmill-ai/nestjs-libraries/database/prisma/campaigns/campaign-item.service';
 
 @Injectable()
 export class CampaignActivity {

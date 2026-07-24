@@ -1,5 +1,5 @@
 import { VectorStoreAdapter, RagHit } from './vector-store.adapter';
-import { safeFetch } from '@gitroom/nestjs-libraries/dtos/webhooks/safe.fetch';
+import { safeFetch } from '@postmill-ai/nestjs-libraries/dtos/webhooks/safe.fetch';
 
 interface PineconeConfig {
   apiKey: string;

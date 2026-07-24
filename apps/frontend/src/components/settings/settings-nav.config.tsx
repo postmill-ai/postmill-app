@@ -230,4 +230,4 @@ export const SETTINGS_NAV: SettingsNavItem[] = [
 export {
   LEGACY_TAB_TO_PATH,
   SETTINGS_DEFAULT_PATH,
-} from '@gitroom/frontend/components/settings/settings-paths';
+} from '@postmill-ai/frontend/components/settings/settings-paths';

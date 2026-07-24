@@ -1,5 +1,5 @@
 import { cookies } from 'next/headers';
-import { customFetch } from '@gitroom/helpers/utils/custom.fetch.func';
+import { customFetch } from '@postmill-ai/helpers/utils/custom.fetch.func';
 
 export const internalFetch = async (url: string, options: RequestInit = {}) => {
   const cookieStore = await cookies();

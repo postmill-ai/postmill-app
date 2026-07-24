@@ -3,10 +3,10 @@
 import React, { FC, useCallback, useMemo, useSyncExternalStore } from 'react';
 import { useRouter } from 'next/navigation';
 import clsx from 'clsx';
-import { useIntegrationList } from '@gitroom/frontend/components/launches/helpers/use.integration.list';
+import { useIntegrationList } from '@postmill-ai/frontend/components/launches/helpers/use.integration.list';
 import { useDashboardSummary } from './hooks/useDashboardSummary';
 import { SectionCard } from './kit/section-card';
-import { useT } from '@gitroom/react/translation/get.transation.service.client';
+import { useT } from '@postmill-ai/react/translation/get.transation.service.client';
 
 const DISMISS_KEY = 'onboarding_dismissed';
 const DISMISS_EVENT = 'onboarding-dismiss-change';

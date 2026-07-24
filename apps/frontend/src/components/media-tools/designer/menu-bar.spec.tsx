@@ -6,7 +6,7 @@ import type { DesignerAction } from './actions';
 
 // MenuBar now calls useT() to translate menu/action labels (i18n sweep). Mock the
 // translation client like other specs so it resolves to the English fallback.
-vi.mock('@gitroom/react/translation/get.transation.service.client', () => ({
+vi.mock('@postmill-ai/react/translation/get.transation.service.client', () => ({
   useT:
     () =>
     (_k: string, d: string, vars?: Record<string, unknown>) =>

@@ -3,7 +3,7 @@
 import dynamic from 'next/dynamic';
 
 const IdeogramStudio = dynamic(
-  () => import('@gitroom/frontend/components/media-tools/ideogram/ideogram-studio').then((m) => m.IdeogramStudio),
+  () => import('@postmill-ai/frontend/components/media-tools/ideogram/ideogram-studio').then((m) => m.IdeogramStudio),
   { ssr: false }
 );
 

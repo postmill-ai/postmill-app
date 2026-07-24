@@ -1,4 +1,4 @@
-import type { DesignerDoc, DesignerElement } from '@gitroom/nestjs-libraries/media/designer-doc/designer-doc.schema';
+import type { DesignerDoc, DesignerElement } from '@postmill-ai/nestjs-libraries/media/designer-doc/designer-doc.schema';
 
 export type AiDesignerMode = 'chat' | 'prompt';
 

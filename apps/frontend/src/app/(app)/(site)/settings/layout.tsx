@@ -4,18 +4,18 @@ import React, { useMemo } from 'react';
 import Link from 'next/link';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import clsx from 'clsx';
-import { useUser } from '@gitroom/frontend/components/layout/user.context';
-import { usePermissions } from '@gitroom/frontend/components/layout/use-permissions';
-import { useVariables } from '@gitroom/react/helpers/variable.context';
-import { useT } from '@gitroom/react/translation/get.transation.service.client';
-import { useSidebarCollapse } from '@gitroom/frontend/components/layout/use-sidebar-collapse';
-import { LogoutComponent } from '@gitroom/frontend/components/layout/logout.component';
-import { SubmenuStrip } from '@gitroom/frontend/components/new-layout/submenu-strip';
+import { useUser } from '@postmill-ai/frontend/components/layout/user.context';
+import { usePermissions } from '@postmill-ai/frontend/components/layout/use-permissions';
+import { useVariables } from '@postmill-ai/react/helpers/variable.context';
+import { useT } from '@postmill-ai/react/translation/get.transation.service.client';
+import { useSidebarCollapse } from '@postmill-ai/frontend/components/layout/use-sidebar-collapse';
+import { LogoutComponent } from '@postmill-ai/frontend/components/layout/logout.component';
+import { SubmenuStrip } from '@postmill-ai/frontend/components/new-layout/submenu-strip';
 import {
   SETTINGS_NAV,
   SETTINGS_SECTION_ORDER,
   type SettingsNavItem,
-} from '@gitroom/frontend/components/settings/settings-nav.config';
+} from '@postmill-ai/frontend/components/settings/settings-nav.config';
 
 // Settings shell: the collapsible left rail + the page header, shared across every
 // /settings/* route. Replaces the old single-page SettingsPopup tab switcher — each rail

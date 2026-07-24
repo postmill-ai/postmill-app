@@ -1,4 +1,4 @@
-import type { StudioDescriptor } from '@gitroom/frontend/components/media-tools/studio-kit/types';
+import type { StudioDescriptor } from '@postmill-ai/frontend/components/media-tools/studio-kit/types';
 
 // DeepInfra — image, video and TTS via DeepInfra's native per-model inference endpoint, on
 // the org's existing DeepInfra LLM key (universal-credential reuse). The model id is the

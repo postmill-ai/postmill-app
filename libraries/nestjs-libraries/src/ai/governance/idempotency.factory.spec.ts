@@ -25,7 +25,7 @@ vi.mock('@reaatech/idempotency-middleware-express', () => ({
   idempotentExpress: mockIdempotentExpress,
 }));
 
-vi.mock('@gitroom/nestjs-libraries/redis/redis.service', () => ({
+vi.mock('@postmill-ai/nestjs-libraries/redis/redis.service', () => ({
   ioRedis: {},
 }));
 

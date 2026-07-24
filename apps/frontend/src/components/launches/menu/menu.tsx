@@ -10,23 +10,23 @@ import React, {
   useState,
 } from 'react';
 import { useClickOutside } from '@mantine/hooks';
-import { useFetch } from '@gitroom/helpers/utils/custom.fetch';
-import { deleteDialog } from '@gitroom/react/helpers/delete.dialog';
-import { useToaster } from '@gitroom/react/toaster/toaster';
-import { useModals } from '@gitroom/frontend/components/layout/new-modal';
-import { TimeTable } from '@gitroom/frontend/components/launches/time.table';
+import { useFetch } from '@postmill-ai/helpers/utils/custom.fetch';
+import { deleteDialog } from '@postmill-ai/react/helpers/delete.dialog';
+import { useToaster } from '@postmill-ai/react/toaster/toaster';
+import { useModals } from '@postmill-ai/frontend/components/layout/new-modal';
+import { TimeTable } from '@postmill-ai/frontend/components/launches/time.table';
 import {
   Integrations,
   useCalendar,
-} from '@gitroom/frontend/components/launches/calendar.context';
-import { BotPicture } from '@gitroom/frontend/components/launches/bot.picture';
-import { CustomerModal } from '@gitroom/frontend/components/launches/customer.modal';
+} from '@postmill-ai/frontend/components/launches/calendar.context';
+import { BotPicture } from '@postmill-ai/frontend/components/launches/bot.picture';
+import { CustomerModal } from '@postmill-ai/frontend/components/launches/customer.modal';
 import type { Integration } from '@prisma/client';
-import { SettingsModal } from '@gitroom/frontend/components/launches/settings.modal';
-import { CustomVariables } from '@gitroom/frontend/components/launches/add.provider.component';
+import { SettingsModal } from '@postmill-ai/frontend/components/launches/settings.modal';
+import { CustomVariables } from '@postmill-ai/frontend/components/launches/add.provider.component';
 import { useRouter } from 'next/navigation';
-import { useVariables } from '@gitroom/react/helpers/variable.context';
-import { useT } from '@gitroom/react/translation/get.transation.service.client';
+import { useVariables } from '@postmill-ai/react/helpers/variable.context';
+import { useT } from '@postmill-ai/react/translation/get.transation.service.client';
 import dayjs from 'dayjs';
 import copy from 'copy-to-clipboard';
 

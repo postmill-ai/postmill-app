@@ -3,25 +3,25 @@
 import { FC, useCallback, useEffect, useRef, useState } from 'react';
 import clsx from 'clsx';
 import useSWR from 'swr';
-import { useFetch } from '@gitroom/helpers/utils/custom.fetch';
-import { useToaster } from '@gitroom/react/toaster/toaster';
-import { useT } from '@gitroom/react/translation/get.transation.service.client';
-import { useMediaDirectory } from '@gitroom/react/helpers/use.media.directory';
-import { hasExtension } from '@gitroom/helpers/utils/has.extension';
-import { useModals, areYouSure } from '@gitroom/frontend/components/layout/new-modal';
-import { Button } from '@gitroom/react/form/button';
-import { newDayjs } from '@gitroom/frontend/components/layout/set.timezone';
+import { useFetch } from '@postmill-ai/helpers/utils/custom.fetch';
+import { useToaster } from '@postmill-ai/react/toaster/toaster';
+import { useT } from '@postmill-ai/react/translation/get.transation.service.client';
+import { useMediaDirectory } from '@postmill-ai/react/helpers/use.media.directory';
+import { hasExtension } from '@postmill-ai/helpers/utils/has.extension';
+import { useModals, areYouSure } from '@postmill-ai/frontend/components/layout/new-modal';
+import { Button } from '@postmill-ai/react/form/button';
+import { newDayjs } from '@postmill-ai/frontend/components/layout/set.timezone';
 import dayjs from 'dayjs';
-import { Composer } from '@gitroom/frontend/components/composer/composer';
-import { useLaunchStore } from '@gitroom/frontend/components/composer/store';
-import { Integrations } from '@gitroom/frontend/components/launches/calendar.context';
-import { CloseModalButton } from '@gitroom/frontend/components/shared/close-modal-button';
+import { Composer } from '@postmill-ai/frontend/components/composer/composer';
+import { useLaunchStore } from '@postmill-ai/frontend/components/composer/store';
+import { Integrations } from '@postmill-ai/frontend/components/launches/calendar.context';
+import { CloseModalButton } from '@postmill-ai/frontend/components/shared/close-modal-button';
 import {
   FilePreviewModal,
-} from '@gitroom/frontend/components/files/file-preview-modal';
-import type { FileItem } from '@gitroom/frontend/components/files/file-manager';
-import { useCampaignFiles } from '@gitroom/frontend/components/campaigns/hooks/campaign.hooks';
-import { UploadFilesModal } from '@gitroom/frontend/components/campaigns/dashboard/upload-files-modal';
+} from '@postmill-ai/frontend/components/files/file-preview-modal';
+import type { FileItem } from '@postmill-ai/frontend/components/files/file-manager';
+import { useCampaignFiles } from '@postmill-ai/frontend/components/campaigns/hooks/campaign.hooks';
+import { UploadFilesModal } from '@postmill-ai/frontend/components/campaigns/dashboard/upload-files-modal';
 
 const formatDate = (d: string, format: string) => {
   try {

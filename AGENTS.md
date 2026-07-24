@@ -37,7 +37,7 @@ Apps (`apps/`):
 Libraries (`libraries/`):
 - `nestjs-libraries` — the bulk of shared server logic, Prisma schema, and repositories. **Most
   backend logic belongs here**, not in `apps/backend`.
-- `helpers` — shared utilities, including the `useFetch` hook (`@gitroom/helpers`).
+- `helpers` — shared utilities, including the `useFetch` hook (`@postmill-ai/helpers`).
 - `react-shared-libraries` — shared React components.
 - `providers` — the unified provider framework (kernel + one package per provider).
 
@@ -179,10 +179,10 @@ See `docs/developer-docs/backend-conventions.md`.
 ### Component / design-system policy
 
 - **Default to the shared bespoke primitives** — the canonical building blocks:
-  - **Button** → `Button` from `@gitroom/react/form/button` (native; supports `secondary`/`danger`/`loading`).
-  - **Input / form fields** → `Input` from `@gitroom/react/form/input` (native, `react-hook-form`-integrated).
+  - **Button** → `Button` from `@postmill-ai/react/form/button` (native; supports `secondary`/`danger`/`loading`).
+  - **Input / form fields** → `Input` from `@postmill-ai/react/form/input` (native, `react-hook-form`-integrated).
   - **Modals** → the bespoke `useModals()` / `ModalManager` from
-    `@gitroom/frontend/components/layout/new-modal` (**not** `@mantine/modals`, which is vestigial).
+    `@postmill-ai/frontend/components/layout/new-modal` (**not** `@mantine/modals`, which is vestigial).
 - **Mantine is the sanctioned base for the few primitives where bespoke would be wasteful** and stays:
   `@mantine/core` (e.g. `Autocomplete`), `@mantine/dates` (date picker), `@mantine/hooks`. Reach for
   an existing Mantine primitive before hand-rolling one of these; do **not** rip Mantine out.

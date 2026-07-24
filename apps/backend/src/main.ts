@@ -1,15 +1,15 @@
-// Must be first: installs the runtime resolver for bare `@gitroom/provider-*` imports
+// Must be first: installs the runtime resolver for bare `@postmill-ai/provider-*` imports
 // (see register-provider-paths.ts) before any transitive require of a provider package.
 import './register-provider-paths';
-import { initializeOtel } from '@gitroom/nestjs-libraries/otel/initialize.otel';
+import { initializeOtel } from '@postmill-ai/nestjs-libraries/otel/initialize.otel';
 // Start OpenTelemetry first — before Sentry init and before the Nest app is created — so
 // auto-instrumentations can patch modules as they load. No-ops unless configured (G3).
 initializeOtel();
-import { initializeSentry } from '@gitroom/nestjs-libraries/sentry/initialize.sentry';
+import { initializeSentry } from '@postmill-ai/nestjs-libraries/sentry/initialize.sentry';
 initializeSentry('backend', true);
 import compression from 'compression';
 
-import { loadSwagger } from '@gitroom/helpers/swagger/load.swagger';
+import { loadSwagger } from '@postmill-ai/helpers/swagger/load.swagger';
 import { json } from 'express';
 
 process.env.TZ = 'UTC';
@@ -20,16 +20,16 @@ import { NestFactory } from '@nestjs/core';
 import { IoAdapter } from '@nestjs/platform-socket.io';
 import { AppModule } from './app.module';
 
-import { SubscriptionExceptionFilter } from '@gitroom/backend/services/auth/permissions/subscription.exception';
-import { PostValidationExceptionFilter } from '@gitroom/backend/api/routes/posts.validation.exception';
-import { HttpExceptionFilter } from '@gitroom/nestjs-libraries/services/exception.filter';
-import { ConfigurationChecker } from '@gitroom/helpers/configuration/configuration.checker';
-import { startMcp } from '@gitroom/nestjs-libraries/chat/start.mcp';
-import { isDev } from '@gitroom/helpers/utils/is.dev';
+import { SubscriptionExceptionFilter } from '@postmill-ai/backend/services/auth/permissions/subscription.exception';
+import { PostValidationExceptionFilter } from '@postmill-ai/backend/api/routes/posts.validation.exception';
+import { HttpExceptionFilter } from '@postmill-ai/nestjs-libraries/services/exception.filter';
+import { ConfigurationChecker } from '@postmill-ai/helpers/configuration/configuration.checker';
+import { startMcp } from '@postmill-ai/nestjs-libraries/chat/start.mcp';
+import { isDev } from '@postmill-ai/helpers/utils/is.dev';
 import { CollaborationGateway } from './services/collaboration/collaboration.gateway';
-import { AuthService } from '@gitroom/helpers/auth/auth.service';
-import { UsersService } from '@gitroom/nestjs-libraries/database/prisma/users/users.service';
-import { OrganizationService } from '@gitroom/nestjs-libraries/database/prisma/organizations/organization.service';
+import { AuthService } from '@postmill-ai/helpers/auth/auth.service';
+import { UsersService } from '@postmill-ai/nestjs-libraries/database/prisma/users/users.service';
+import { OrganizationService } from '@postmill-ai/nestjs-libraries/database/prisma/organizations/organization.service';
 
 // v3.6.0 added BigInt columns (e.g. Organization.localStorageQuotaBytes,
 // StorageProviderConfig.quotaBytes). Express serializes responses with

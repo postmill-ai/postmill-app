@@ -9,7 +9,7 @@
  */
 
 import { PrismaClient } from '@prisma/client';
-import { AuthService } from '@gitroom/helpers/auth/auth.service';
+import { AuthService } from '@postmill-ai/helpers/auth/auth.service';
 
 const prisma = new PrismaClient();
 

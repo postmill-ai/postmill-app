@@ -11,7 +11,7 @@ const h = vi.hoisted(() => ({
   agentOpts: [] as any[],
 }));
 
-vi.mock('@gitroom/provider-kernel', async (orig) => {
+vi.mock('@postmill-ai/provider-kernel', async (orig) => {
   const actual: any = await orig();
   return {
     ...actual,
@@ -19,7 +19,7 @@ vi.mock('@gitroom/provider-kernel', async (orig) => {
   };
 });
 
-vi.mock('@gitroom/helpers/auth/auth.service', () => ({
+vi.mock('@postmill-ai/helpers/auth/auth.service', () => ({
   AuthService: {
     fixedDecryption: () =>
       JSON.stringify({
@@ -30,7 +30,7 @@ vi.mock('@gitroom/helpers/auth/auth.service', () => ({
   },
 }));
 
-vi.mock('@gitroom/helpers/utils/timer', () => ({
+vi.mock('@postmill-ai/helpers/utils/timer', () => ({
   timer: vi.fn().mockResolvedValue(undefined),
 }));
 
@@ -121,7 +121,7 @@ class TestBadBody extends Error {
   }
 }
 
-import { safeFetch, setSocialFetchPorts } from '@gitroom/provider-kernel';
+import { safeFetch, setSocialFetchPorts } from '@postmill-ai/provider-kernel';
 import { BlueskyProvider } from './social.adapter';
 
 beforeEach(() => {

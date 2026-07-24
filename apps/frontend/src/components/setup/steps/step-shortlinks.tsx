@@ -1,9 +1,9 @@
 'use client';
 
 import React from 'react';
-import { StepFrame } from '@gitroom/frontend/components/setup/step-frame';
-import { ShortlinksTab } from '@gitroom/frontend/components/settings/shortlinks/shortlinks.tab';
-import { useT } from '@gitroom/react/translation/get.transation.service.client';
+import { StepFrame } from '@postmill-ai/frontend/components/setup/step-frame';
+import { ShortlinksTab } from '@postmill-ai/frontend/components/settings/shortlinks/shortlinks.tab';
+import { useT } from '@postmill-ai/react/translation/get.transation.service.client';
 
 export function StepShortlinks() {
   const t = useT();

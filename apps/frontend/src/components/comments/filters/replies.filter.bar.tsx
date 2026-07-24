@@ -3,11 +3,11 @@
 import { FC, ReactNode, useCallback, useEffect, useMemo, useState } from 'react';
 import { createPortal } from 'react-dom';
 import clsx from 'clsx';
-import { useT } from '@gitroom/react/translation/get.transation.service.client';
-import { Integrations } from '@gitroom/frontend/components/launches/calendar.context';
-import { ChannelFilterSelect } from '@gitroom/frontend/components/launches/channel-filter-select';
-import { CampaignFilterSelect } from '@gitroom/frontend/components/launches/campaign-filter-select';
-import { TeamMemberItem } from '@gitroom/frontend/components/settings/roles/hooks/use-roles';
+import { useT } from '@postmill-ai/react/translation/get.transation.service.client';
+import { Integrations } from '@postmill-ai/frontend/components/launches/calendar.context';
+import { ChannelFilterSelect } from '@postmill-ai/frontend/components/launches/channel-filter-select';
+import { CampaignFilterSelect } from '@postmill-ai/frontend/components/launches/campaign-filter-select';
+import { TeamMemberItem } from '@postmill-ai/frontend/components/settings/roles/hooks/use-roles';
 
 interface RepliesFilterBarProps {
   status?: string;

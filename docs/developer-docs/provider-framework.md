@@ -16,14 +16,14 @@ Postmill integrates with external services across AI, media generation, social c
 
 ```
 ┌─────────────────────────────────────┐
-│ @gitroom/provider-kernel            │
+│ @postmill-ai/provider-kernel            │
 │ ProviderKernel (domain/provider@ver)│
 │ ProviderManifest, ProviderModule    │
 │ domain contracts, conformance kit   │
 └─────────────────────────────────────┘
           ▲ depends on
 ┌─────────────────────────────────────┐
-│ @gitroom/provider-<name>            │
+│ @postmill-ai/provider-<name>            │
 │ src/v1/<domain>.adapter.ts          │
 │ src/v1/<domain>.manifest.ts         │
 │ ... one module per (domain, version)│

@@ -1,12 +1,12 @@
 import { Injectable, Logger, OnModuleDestroy, OnModuleInit } from '@nestjs/common';
 import { createHash } from 'crypto';
-import { AiSettingsService } from '@gitroom/nestjs-libraries/database/prisma/ai-settings/ai-settings.service';
-import { AiRagRepository } from '@gitroom/nestjs-libraries/database/prisma/ai-rag/ai-rag.repository';
+import { AiSettingsService } from '@postmill-ai/nestjs-libraries/database/prisma/ai-settings/ai-settings.service';
+import { AiRagRepository } from '@postmill-ai/nestjs-libraries/database/prisma/ai-rag/ai-rag.repository';
 import { AIModelProvider } from '../ai-model.provider';
 import { AiSettingsManager } from '../ai-settings.manager';
 import { BudgetService } from './budget.service';
 import { BudgetExceeded } from './errors';
-import { ioRedis } from '@gitroom/nestjs-libraries/redis/redis.service';
+import { ioRedis } from '@postmill-ai/nestjs-libraries/redis/redis.service';
 import { PgVectorStoreAdapter } from '../rag/pgvector.adapter';
 import { QdrantVectorStoreAdapter } from '../rag/qdrant.adapter';
 import { PineconeVectorStoreAdapter } from '../rag/pinecone.adapter';

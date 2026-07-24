@@ -4,19 +4,19 @@ import { FC } from 'react';
 import {
   PostComment,
   withProvider,
-} from '@gitroom/frontend/components/composer/providers/high.order.provider';
-import { useSettings } from '@gitroom/frontend/components/launches/helpers/use.values';
-import { Input } from '@gitroom/react/form/input';
-import { HashnodePublications } from '@gitroom/frontend/components/composer/providers/hashnode/hashnode.publications';
-import { HashnodeTags } from '@gitroom/frontend/components/composer/providers/hashnode/hashnode.tags';
-import { HashnodeSettingsDto } from '@gitroom/nestjs-libraries/dtos/posts/providers-settings/hashnode.settings.dto';
-import { useIntegration } from '@gitroom/frontend/components/launches/helpers/use.integration';
-import { useMediaDirectory } from '@gitroom/react/helpers/use.media.directory';
+} from '@postmill-ai/frontend/components/composer/providers/high.order.provider';
+import { useSettings } from '@postmill-ai/frontend/components/launches/helpers/use.values';
+import { Input } from '@postmill-ai/react/form/input';
+import { HashnodePublications } from '@postmill-ai/frontend/components/composer/providers/hashnode/hashnode.publications';
+import { HashnodeTags } from '@postmill-ai/frontend/components/composer/providers/hashnode/hashnode.tags';
+import { HashnodeSettingsDto } from '@postmill-ai/nestjs-libraries/dtos/posts/providers-settings/hashnode.settings.dto';
+import { useIntegration } from '@postmill-ai/frontend/components/launches/helpers/use.integration';
+import { useMediaDirectory } from '@postmill-ai/react/helpers/use.media.directory';
 import clsx from 'clsx';
-import { FileComponent } from '@gitroom/frontend/components/files/file.component';
-import { Canonical } from '@gitroom/react/form/canonical';
-import { useShowPostSelector } from '@gitroom/frontend/components/post-url-selector/post.url.selector';
-import { useT } from '@gitroom/react/translation/get.transation.service.client';
+import { FileComponent } from '@postmill-ai/frontend/components/files/file.component';
+import { Canonical } from '@postmill-ai/react/form/canonical';
+import { useShowPostSelector } from '@postmill-ai/frontend/components/post-url-selector/post.url.selector';
+import { useT } from '@postmill-ai/react/translation/get.transation.service.client';
 
 const HashnodeSettings: FC = () => {
   const form = useSettings();

@@ -1,10 +1,10 @@
 'use client';
 
 import React from 'react';
-import { StepFrame } from '@gitroom/frontend/components/setup/step-frame';
-import { ContentPacksTab } from '@gitroom/frontend/components/settings/content-packs/content-packs.tab';
-import { usePermissions } from '@gitroom/frontend/components/layout/use-permissions';
-import { useT } from '@gitroom/react/translation/get.transation.service.client';
+import { StepFrame } from '@postmill-ai/frontend/components/setup/step-frame';
+import { ContentPacksTab } from '@postmill-ai/frontend/components/settings/content-packs/content-packs.tab';
+import { usePermissions } from '@postmill-ai/frontend/components/layout/use-permissions';
+import { useT } from '@postmill-ai/react/translation/get.transation.service.client';
 
 export function StepContentPacks() {
   const t = useT();

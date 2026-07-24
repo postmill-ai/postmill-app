@@ -6,12 +6,12 @@ const { mockRedisSet, mockRedisDel } = vi.hoisted(() => ({
   mockRedisDel: vi.fn(),
 }));
 
-vi.mock('@gitroom/nestjs-libraries/redis/redis.service', () => ({
+vi.mock('@postmill-ai/nestjs-libraries/redis/redis.service', () => ({
   ioRedis: { set: mockRedisSet, del: mockRedisDel },
 }));
 
 import { SocialCommentsService } from './social.comments.service';
-import { GuardrailViolation } from '@gitroom/nestjs-libraries/ai/governance/errors';
+import { GuardrailViolation } from '@postmill-ai/nestjs-libraries/ai/governance/errors';
 
 describe('SocialCommentsService — controller-moved logic', () => {
   let service: SocialCommentsService;

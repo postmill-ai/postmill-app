@@ -3,7 +3,7 @@
 import dynamic from 'next/dynamic';
 
 const PikaStudio = dynamic(
-  () => import('@gitroom/frontend/components/media-tools/pika/pika-studio').then((m) => m.PikaStudio),
+  () => import('@postmill-ai/frontend/components/media-tools/pika/pika-studio').then((m) => m.PikaStudio),
   { ssr: false }
 );
 

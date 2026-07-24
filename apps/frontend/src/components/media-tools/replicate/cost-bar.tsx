@@ -2,8 +2,8 @@
 
 import React, { useEffect, useRef } from 'react';
 import useSWR from 'swr';
-import { useFetch } from '@gitroom/helpers/utils/custom.fetch';
-import { useT } from '@gitroom/react/translation/get.transation.service.client';
+import { useFetch } from '@postmill-ai/helpers/utils/custom.fetch';
+import { useT } from '@postmill-ai/react/translation/get.transation.service.client';
 import { useReplicateStore, EstimateResult } from './replicate.store';
 
 const ENHANCE_SURCHARGE = 0.1; // oc-platform: $0.10 per enabled prompt enhancement

@@ -1,4 +1,4 @@
-import type { StudioDescriptor } from '@gitroom/frontend/components/media-tools/studio-kit/types';
+import type { StudioDescriptor } from '@postmill-ai/frontend/components/media-tools/studio-kit/types';
 
 // OpenRouter — image generation via the dedicated `/api/v1/images` endpoint on the org's
 // existing OpenRouter LLM key (universal-credential reuse). Image models are discovered live

@@ -14,13 +14,13 @@ vi.mock('next/navigation', () => ({
   useRouter: () => ({ replace: mockReplace }),
 }));
 
-vi.mock('@gitroom/helpers/utils/custom.fetch', () => ({
+vi.mock('@postmill-ai/helpers/utils/custom.fetch', () => ({
   useFetch: () => vi.fn(),
 }));
 
 vi.mock('./hooks/useOverview');
 vi.mock('./hooks/usePosts');
-vi.mock('@gitroom/frontend/components/launches/helpers/use.integration.list', () => ({
+vi.mock('@postmill-ai/frontend/components/launches/helpers/use.integration.list', () => ({
   useIntegrationList: () => ({
     data: [
       { id: 'i1', name: 'Twitter', identifier: '@twitter', picture: '/tw.png' },

@@ -1,4 +1,4 @@
-import { GuardrailService } from '@gitroom/nestjs-libraries/ai/governance/guardrail.service';
+import { GuardrailService } from '@postmill-ai/nestjs-libraries/ai/governance/guardrail.service';
 
 type AccessMode = {
   mode: string;

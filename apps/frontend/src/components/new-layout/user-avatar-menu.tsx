@@ -2,21 +2,21 @@
 
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import dynamic from 'next/dynamic';
-import { useUser } from '@gitroom/frontend/components/layout/user.context';
-import { useT } from '@gitroom/react/translation/get.transation.service.client';
-import { useFetch } from '@gitroom/helpers/utils/custom.fetch';
-import { useVariables } from '@gitroom/react/helpers/variable.context';
-import { deleteDialog } from '@gitroom/react/helpers/delete.dialog';
-import { usePermissions } from '@gitroom/frontend/components/layout/use-permissions';
-import SafeImage from '@gitroom/react/helpers/safe.image';
-import { LanguageMenuRow } from '@gitroom/frontend/components/layout/language.component';
-import { StreakComponent } from '@gitroom/frontend/components/layout/streak.component';
-import { OrganizationSelector } from '@gitroom/frontend/components/layout/organization.selector';
-import { ChromeExtensionComponent } from '@gitroom/frontend/components/layout/chrome.extension.component';
-import { AttachToFeedbackIcon } from '@gitroom/frontend/components/new-layout/sentry.feedback.component';
+import { useUser } from '@postmill-ai/frontend/components/layout/user.context';
+import { useT } from '@postmill-ai/react/translation/get.transation.service.client';
+import { useFetch } from '@postmill-ai/helpers/utils/custom.fetch';
+import { useVariables } from '@postmill-ai/react/helpers/variable.context';
+import { deleteDialog } from '@postmill-ai/react/helpers/delete.dialog';
+import { usePermissions } from '@postmill-ai/frontend/components/layout/use-permissions';
+import SafeImage from '@postmill-ai/react/helpers/safe.image';
+import { LanguageMenuRow } from '@postmill-ai/frontend/components/layout/language.component';
+import { StreakComponent } from '@postmill-ai/frontend/components/layout/streak.component';
+import { OrganizationSelector } from '@postmill-ai/frontend/components/layout/organization.selector';
+import { ChromeExtensionComponent } from '@postmill-ai/frontend/components/layout/chrome.extension.component';
+import { AttachToFeedbackIcon } from '@postmill-ai/frontend/components/new-layout/sentry.feedback.component';
 
 const ModeComponent = dynamic(
-  () => import('@gitroom/frontend/components/layout/mode.component'),
+  () => import('@postmill-ai/frontend/components/layout/mode.component'),
   { ssr: false }
 );
 

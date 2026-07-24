@@ -3,7 +3,7 @@
 import { FC } from 'react';
 import { useRouter } from 'next/navigation';
 import { useRecommendations, RecommendationItem } from '../hooks/useRecommendations';
-import { useT } from '@gitroom/react/translation/get.transation.service.client';
+import { useT } from '@postmill-ai/react/translation/get.transation.service.client';
 import { TabSkeleton, EmptyState, ErrorState } from '../kit/states';
 
 const PRIORITY_COLORS: Record<number, string> = {

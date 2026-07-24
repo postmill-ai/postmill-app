@@ -3,16 +3,16 @@
 import {
   PostComment,
   withProvider,
-} from '@gitroom/frontend/components/composer/providers/high.order.provider';
-import { ThreadFinisher } from '@gitroom/frontend/components/composer/finisher/thread.finisher';
-import { Select } from '@gitroom/react/form/select';
-import { useT } from '@gitroom/react/translation/get.transation.service.client';
-import { useSettings } from '@gitroom/frontend/components/launches/helpers/use.values';
-import { XDto } from '@gitroom/nestjs-libraries/dtos/posts/providers-settings/x.dto';
-import { Input } from '@gitroom/react/form/input';
-import { Checkbox } from '@gitroom/react/form/checkbox';
-import { PollBuilder } from '@gitroom/frontend/components/composer/providers/shared/poll.builder';
-import { FirstCommentField } from '@gitroom/frontend/components/composer/providers/shared/first-comment.field';
+} from '@postmill-ai/frontend/components/composer/providers/high.order.provider';
+import { ThreadFinisher } from '@postmill-ai/frontend/components/composer/finisher/thread.finisher';
+import { Select } from '@postmill-ai/react/form/select';
+import { useT } from '@postmill-ai/react/translation/get.transation.service.client';
+import { useSettings } from '@postmill-ai/frontend/components/launches/helpers/use.values';
+import { XDto } from '@postmill-ai/nestjs-libraries/dtos/posts/providers-settings/x.dto';
+import { Input } from '@postmill-ai/react/form/input';
+import { Checkbox } from '@postmill-ai/react/form/checkbox';
+import { PollBuilder } from '@postmill-ai/frontend/components/composer/providers/shared/poll.builder';
+import { FirstCommentField } from '@postmill-ai/frontend/components/composer/providers/shared/first-comment.field';
 
 const whoCanReply = [
   {

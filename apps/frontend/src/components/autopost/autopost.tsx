@@ -1,21 +1,21 @@
 'use client';
 
 import React, { FC, Fragment, useCallback, useMemo, useState } from 'react';
-import { useFetch } from '@gitroom/helpers/utils/custom.fetch';
+import { useFetch } from '@postmill-ai/helpers/utils/custom.fetch';
 import useSWR from 'swr';
-import { Button } from '@gitroom/react/form/button';
-import { useModals } from '@gitroom/frontend/components/layout/new-modal';
-import { Input } from '@gitroom/react/form/input';
+import { Button } from '@postmill-ai/react/form/button';
+import { useModals } from '@postmill-ai/frontend/components/layout/new-modal';
+import { Input } from '@postmill-ai/react/form/input';
 import { FormProvider, useForm, useWatch } from 'react-hook-form';
 import { array, boolean, object, string } from 'yup';
 import { yupResolver } from '@hookform/resolvers/yup';
-import { Select } from '@gitroom/react/form/select';
-import { PickPlatforms } from '@gitroom/frontend/components/launches/helpers/pick.platform.component';
-import { useToaster } from '@gitroom/react/toaster/toaster';
+import { Select } from '@postmill-ai/react/form/select';
+import { PickPlatforms } from '@postmill-ai/frontend/components/launches/helpers/pick.platform.component';
+import { useToaster } from '@postmill-ai/react/toaster/toaster';
 import clsx from 'clsx';
-import { deleteDialog } from '@gitroom/react/helpers/delete.dialog';
-import { Slider } from '@gitroom/react/form/slider';
-import { useT } from '@gitroom/react/translation/get.transation.service.client';
+import { deleteDialog } from '@postmill-ai/react/helpers/delete.dialog';
+import { Slider } from '@postmill-ai/react/form/slider';
+import { useT } from '@postmill-ai/react/translation/get.transation.service.client';
 import dayjs from 'dayjs';
 
 const PAGE_SIZE = 25;

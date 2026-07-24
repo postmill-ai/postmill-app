@@ -59,7 +59,7 @@ vi.mock('./ai-settings.repository', () => ({
   AiSettingsRepository: vi.fn(() => mockRepo),
 }));
 
-vi.mock('@gitroom/helpers/auth/auth.service', () => ({
+vi.mock('@postmill-ai/helpers/auth/auth.service', () => ({
   AuthService: {
     fixedEncryption: vi.fn((value: string) => `ENC:${value}`),
     fixedDecryption: vi.fn((hash: string) => hash.replace('ENC:', '')),
@@ -73,7 +73,7 @@ const mockEncryption = {
 };
 
 import { AiSettingsService } from './ai-settings.service';
-import { AuthService } from '@gitroom/helpers/auth/auth.service';
+import { AuthService } from '@postmill-ai/helpers/auth/auth.service';
 
 describe('AiSettingsService', () => {
   let service: AiSettingsService;

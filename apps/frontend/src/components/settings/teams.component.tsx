@@ -1,26 +1,26 @@
 'use client';
 
-import { Button } from '@gitroom/react/form/button';
-import { useFetch } from '@gitroom/helpers/utils/custom.fetch';
+import { Button } from '@postmill-ai/react/form/button';
+import { useFetch } from '@postmill-ai/helpers/utils/custom.fetch';
 import useSWR from 'swr';
 import React, { useCallback, useMemo, useState } from 'react';
-import { useUser } from '@gitroom/frontend/components/layout/user.context';
+import { useUser } from '@postmill-ai/frontend/components/layout/user.context';
 import { capitalize } from 'lodash';
-import { useModals } from '@gitroom/frontend/components/layout/new-modal';
-import { Input } from '@gitroom/react/form/input';
+import { useModals } from '@postmill-ai/frontend/components/layout/new-modal';
+import { Input } from '@postmill-ai/react/form/input';
 import { useForm, FormProvider } from 'react-hook-form';
-import { Select } from '@gitroom/react/form/select';
+import { Select } from '@postmill-ai/react/form/select';
 import { classValidatorResolver } from '@hookform/resolvers/class-validator';
-import { AddTeamMemberDto } from '@gitroom/nestjs-libraries/dtos/settings/add.team.member.dto';
-import { CreateTeamUserDto } from '@gitroom/nestjs-libraries/dtos/settings/create-team-user.dto';
-import { useToaster } from '@gitroom/react/toaster/toaster';
-import { deleteDialog } from '@gitroom/react/helpers/delete.dialog';
+import { AddTeamMemberDto } from '@postmill-ai/nestjs-libraries/dtos/settings/add.team.member.dto';
+import { CreateTeamUserDto } from '@postmill-ai/nestjs-libraries/dtos/settings/create-team-user.dto';
+import { useToaster } from '@postmill-ai/react/toaster/toaster';
+import { deleteDialog } from '@postmill-ai/react/helpers/delete.dialog';
 import copy from 'copy-to-clipboard';
-import { useT } from '@gitroom/react/translation/get.transation.service.client';
-import { DataTable, StatusPill, AvatarCell } from '@gitroom/frontend/components/ui/data-table';
-import { useRoles, RoleItem } from '@gitroom/frontend/components/settings/roles/hooks/use-roles';
-import { usePermissions } from '@gitroom/frontend/components/layout/use-permissions';
-import { ManageRolesModal } from '@gitroom/frontend/components/settings/roles/manage-roles.modal';
+import { useT } from '@postmill-ai/react/translation/get.transation.service.client';
+import { DataTable, StatusPill, AvatarCell } from '@postmill-ai/frontend/components/ui/data-table';
+import { useRoles, RoleItem } from '@postmill-ai/frontend/components/settings/roles/hooks/use-roles';
+import { usePermissions } from '@postmill-ai/frontend/components/layout/use-permissions';
+import { ManageRolesModal } from '@postmill-ai/frontend/components/settings/roles/manage-roles.modal';
 
 const PAGE_SIZE = 25;
 

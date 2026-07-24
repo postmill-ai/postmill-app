@@ -1,10 +1,10 @@
 'use client';
 
 import React, { FC, useCallback, useRef, useState } from 'react';
-import { useFetch } from '@gitroom/helpers/utils/custom.fetch';
-import { useToaster } from '@gitroom/react/toaster/toaster';
-import { useMediaToolsStatus } from '@gitroom/frontend/components/layout/use-media-tools-status';
-import { useT } from '@gitroom/react/translation/get.transation.service.client';
+import { useFetch } from '@postmill-ai/helpers/utils/custom.fetch';
+import { useToaster } from '@postmill-ai/react/toaster/toaster';
+import { useMediaToolsStatus } from '@postmill-ai/frontend/components/layout/use-media-tools-status';
+import { useT } from '@postmill-ai/react/translation/get.transation.service.client';
 
 interface AiPanelProps {
   store: any;

@@ -1,6 +1,6 @@
 'use client';
 
-import { useT } from '@gitroom/react/translation/get.transation.service.client';
+import { useT } from '@postmill-ai/react/translation/get.transation.service.client';
 
 /**
  * Shared friendly fallback rendered by the App Router `error.tsx` segment

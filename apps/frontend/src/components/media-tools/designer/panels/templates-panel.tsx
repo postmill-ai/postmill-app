@@ -2,13 +2,13 @@
 
 import React, { FC, useCallback } from 'react';
 import useSWR from 'swr';
-import { useFetch } from '@gitroom/helpers/utils/custom.fetch';
-import { useUser } from '@gitroom/frontend/components/layout/user.context';
-import { useToaster } from '@gitroom/react/toaster/toaster';
+import { useFetch } from '@postmill-ai/helpers/utils/custom.fetch';
+import { useUser } from '@postmill-ai/frontend/components/layout/user.context';
+import { useToaster } from '@postmill-ai/react/toaster/toaster';
 import type { DesignerStore, DesignerDoc } from '../designer.store';
 import { getThumbnailDataUrl } from '../designer';
 import { PanelSkeletonGrid, PanelError } from './panel-states';
-import { useT } from '@gitroom/react/translation/get.transation.service.client';
+import { useT } from '@postmill-ai/react/translation/get.transation.service.client';
 
 interface DesignTemplate {
   id: string;

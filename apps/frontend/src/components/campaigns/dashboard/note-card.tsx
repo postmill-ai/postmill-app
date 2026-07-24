@@ -4,13 +4,13 @@ import { FC, useState, useCallback } from 'react';
 import clsx from 'clsx';
 import dayjs from 'dayjs';
 import relativeTime from 'dayjs/plugin/relativeTime';
-import { useFetch } from '@gitroom/helpers/utils/custom.fetch';
-import { useToaster } from '@gitroom/react/toaster/toaster';
-import { useT } from '@gitroom/react/translation/get.transation.service.client';
-import { SafeContent } from '@gitroom/frontend/components/shared/safe-content';
-import { KebabMenu } from '@gitroom/frontend/components/ui/kebab-menu';
-import { DiscussionEditor } from '@gitroom/frontend/components/campaigns/dashboard/discussion-editor';
-import { DiscussionNote } from '@gitroom/frontend/components/campaigns/hooks/campaign.hooks';
+import { useFetch } from '@postmill-ai/helpers/utils/custom.fetch';
+import { useToaster } from '@postmill-ai/react/toaster/toaster';
+import { useT } from '@postmill-ai/react/translation/get.transation.service.client';
+import { SafeContent } from '@postmill-ai/frontend/components/shared/safe-content';
+import { KebabMenu } from '@postmill-ai/frontend/components/ui/kebab-menu';
+import { DiscussionEditor } from '@postmill-ai/frontend/components/campaigns/dashboard/discussion-editor';
+import { DiscussionNote } from '@postmill-ai/frontend/components/campaigns/hooks/campaign.hooks';
 
 dayjs.extend(relativeTime);
 

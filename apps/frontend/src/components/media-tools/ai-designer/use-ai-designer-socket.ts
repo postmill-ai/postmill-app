@@ -2,8 +2,8 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { io, Socket } from 'socket.io-client';
-import { useVariables } from '@gitroom/react/helpers/variable.context';
-import { useT } from '@gitroom/react/translation/get.transation.service.client';
+import { useVariables } from '@postmill-ai/react/helpers/variable.context';
+import { useT } from '@postmill-ai/react/translation/get.transation.service.client';
 import type {
   AiDesignerAckPayload,
   AiDesignerAcceptPlanPayload,
@@ -17,7 +17,7 @@ import type {
   AiDesignerRevisePayload,
   AiDesignerSessionDto,
   AiDesignerStartPayload,
-} from '@gitroom/nestjs-libraries/ai-designer/ai-designer.types';
+} from '@postmill-ai/nestjs-libraries/ai-designer/ai-designer.types';
 
 export interface AiDesignerStartPayloadWithMode
   extends AiDesignerStartPayload {

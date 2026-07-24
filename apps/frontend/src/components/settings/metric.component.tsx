@@ -1,10 +1,10 @@
 'use client';
 
-import { Select } from '@gitroom/react/form/select';
+import { Select } from '@postmill-ai/react/form/select';
 import React, { useState } from 'react';
-import { isUSCitizen } from '@gitroom/frontend/components/launches/helpers/isuscitizen.utils';
+import { isUSCitizen } from '@postmill-ai/frontend/components/launches/helpers/isuscitizen.utils';
 import rawTimezonesList from 'timezones-list';
-import { useT } from '@gitroom/react/translation/get.transation.service.client';
+import { useT } from '@postmill-ai/react/translation/get.transation.service.client';
 
 const timezonesList =
   (rawTimezonesList as any).default || (rawTimezonesList as any);

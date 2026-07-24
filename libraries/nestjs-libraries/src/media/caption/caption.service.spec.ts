@@ -3,7 +3,7 @@ import { CaptionService, MAX_WORDS_PER_SEGMENT } from './caption.service';
 
 const mockSafeFetch = vi.fn();
 
-vi.mock('@gitroom/nestjs-libraries/dtos/webhooks/safe.fetch', () => ({
+vi.mock('@postmill-ai/nestjs-libraries/dtos/webhooks/safe.fetch', () => ({
   safeFetch: (...args: any[]) => mockSafeFetch(...args),
 }));
 

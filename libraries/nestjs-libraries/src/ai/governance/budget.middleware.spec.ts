@@ -4,7 +4,7 @@ import type { Request, Response, NextFunction } from 'express';
 const mockCheckBudget = vi.fn().mockResolvedValue({ allowed: true });
 const mockGetSettings = vi.fn().mockResolvedValue(null);
 
-vi.mock('@gitroom/nestjs-libraries/ai/ai-settings.manager', () => ({
+vi.mock('@postmill-ai/nestjs-libraries/ai/ai-settings.manager', () => ({
   AiSettingsManager: class {
     getSettings = mockGetSettings;
   },
@@ -17,7 +17,7 @@ vi.mock('./budget.service', () => ({
 }));
 
 import { BudgetMiddleware } from './budget.middleware';
-import { AiSettingsManager } from '@gitroom/nestjs-libraries/ai/ai-settings.manager';
+import { AiSettingsManager } from '@postmill-ai/nestjs-libraries/ai/ai-settings.manager';
 import { BudgetService } from './budget.service';
 
 function freshMiddleware() {

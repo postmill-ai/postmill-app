@@ -1,4 +1,4 @@
-import type { StudioDescriptor } from '@gitroom/frontend/components/media-tools/studio-kit/types';
+import type { StudioDescriptor } from '@postmill-ai/frontend/components/media-tools/studio-kit/types';
 
 // Vercel AI Gateway — image (delegated to the AI-SDK gateway provider) and video (AI SDK v6
 // experimental generateVideo) on the org's existing Gateway LLM key (universal-credential

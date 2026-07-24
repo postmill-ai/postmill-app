@@ -5,7 +5,7 @@ import { KPI } from '../utils';
 import { useCountUp } from '../hooks/useCountUp';
 import { AreaChart } from '../charts/area.chart';
 import { ACCENT } from './palette';
-import { useT } from '@gitroom/react/translation/get.transation.service.client';
+import { useT } from '@postmill-ai/react/translation/get.transation.service.client';
 
 // One KPI tile, merging the former `KPICard` (rich: animated value + trend +
 // sparkline) and `KpiCard` (plain label/value) into a single component (F4).

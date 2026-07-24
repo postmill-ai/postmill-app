@@ -4,7 +4,7 @@ import {
   MediaProviderCapabilities,
   MediaCredentialField,
   ProviderModule,
-} from '@gitroom/provider-kernel';
+} from '@postmill-ai/provider-kernel';
 
 // AWS Bedrock — image via Amazon Titan / Nova Canvas, auth = SigV4 through
 // @ai-sdk/amazon-bedrock (handled by the matching AI Bedrock adapter via the AI-SDK media

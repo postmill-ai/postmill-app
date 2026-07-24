@@ -1,9 +1,9 @@
 'use client';
 
 import { FC } from 'react';
-import { SignaturesComponent } from '@gitroom/frontend/components/settings/signatures.component';
-import { useModals } from '@gitroom/frontend/components/layout/new-modal';
-import { useT } from '@gitroom/react/translation/get.transation.service.client';
+import { SignaturesComponent } from '@postmill-ai/frontend/components/settings/signatures.component';
+import { useModals } from '@postmill-ai/frontend/components/layout/new-modal';
+import { useT } from '@postmill-ai/react/translation/get.transation.service.client';
 
 export interface AppendSignaturePayload {
   content: string;

@@ -1,11 +1,11 @@
 'use client';
 
 import { FC, ReactNode } from 'react';
-import { useUser } from '@gitroom/frontend/components/layout/user.context';
-import { useVariables } from '@gitroom/react/helpers/variable.context';
-import { useT } from '@gitroom/react/translation/get.transation.service.client';
-import { MenuItem } from '@gitroom/frontend/components/new-layout/menu-item';
-import { usePermissions } from '@gitroom/frontend/components/layout/use-permissions';
+import { useUser } from '@postmill-ai/frontend/components/layout/user.context';
+import { useVariables } from '@postmill-ai/react/helpers/variable.context';
+import { useT } from '@postmill-ai/react/translation/get.transation.service.client';
+import { MenuItem } from '@postmill-ai/frontend/components/new-layout/menu-item';
+import { usePermissions } from '@postmill-ai/frontend/components/layout/use-permissions';
 
 interface MenuItemInterface {
   name: string;

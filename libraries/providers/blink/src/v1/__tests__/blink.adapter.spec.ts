@@ -3,7 +3,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 
 import { BlinkAdapter } from '../shortlink.adapter';
 const safeFetch = vi.fn((url: string, options?: RequestInit) => fetch(url, options));
-import type { ShortLinkContext, ShortLinkStat } from '@gitroom/provider-kernel';
+import type { ShortLinkContext, ShortLinkStat } from '@postmill-ai/provider-kernel';
 
 const mockContext: ShortLinkContext = {
   orgId: 'org-1',

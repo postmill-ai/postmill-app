@@ -4,10 +4,10 @@ import React, { useCallback, useMemo, useState } from 'react';
 import useSWR from 'swr';
 import clsx from 'clsx';
 import { useClickOutside } from '@mantine/hooks';
-import { useFetch } from '@gitroom/helpers/utils/custom.fetch';
-import { useT } from '@gitroom/react/translation/get.transation.service.client';
-import { useLaunchStore } from '@gitroom/frontend/components/composer/store';
-import { DropdownArrowIcon } from '@gitroom/frontend/components/ui/icons';
+import { useFetch } from '@postmill-ai/helpers/utils/custom.fetch';
+import { useT } from '@postmill-ai/react/translation/get.transation.service.client';
+import { useLaunchStore } from '@postmill-ai/frontend/components/composer/store';
+import { DropdownArrowIcon } from '@postmill-ai/frontend/components/ui/icons';
 
 interface Brand {
   id: string;

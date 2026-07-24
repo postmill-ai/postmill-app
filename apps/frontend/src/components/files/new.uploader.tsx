@@ -3,17 +3,17 @@ import React, { useEffect, useRef, useState } from 'react';
 // @ts-ignore
 import Uppy, { BasePlugin, UploadResult, UppyFile } from '@uppy/core';
 // @ts-ignore
-import { useFetch } from '@gitroom/helpers/utils/custom.fetch';
-import { getUppyUploadPlugin } from '@gitroom/react/helpers/uppy.upload';
+import { useFetch } from '@postmill-ai/helpers/utils/custom.fetch';
+import { getUppyUploadPlugin } from '@postmill-ai/react/helpers/uppy.upload';
 import { Dashboard } from '@uppy/react';
 
-import { useVariables } from '@gitroom/react/helpers/variable.context';
+import { useVariables } from '@postmill-ai/react/helpers/variable.context';
 import Compressor from '@uppy/compressor';
-import { useToaster } from '@gitroom/react/toaster/toaster';
-import { useLaunchStore } from '@gitroom/frontend/components/composer/store';
+import { useToaster } from '@postmill-ai/react/toaster/toaster';
+import { useLaunchStore } from '@postmill-ai/frontend/components/composer/store';
 import { uniqBy } from 'lodash';
-import { checkUploadLimit } from '@gitroom/helpers/upload-limits.client';
-import { useT } from '@gitroom/react/translation/get.transation.service.client';
+import { checkUploadLimit } from '@postmill-ai/helpers/upload-limits.client';
+import { useT } from '@postmill-ai/react/translation/get.transation.service.client';
 
 const MB = 1024 * 1024;
 const GB = 1024 * MB;

@@ -1,5 +1,5 @@
 import { Injectable, Logger } from '@nestjs/common';
-import { PrismaService } from '@gitroom/nestjs-libraries/database/prisma/prisma.service';
+import { PrismaService } from '@postmill-ai/nestjs-libraries/database/prisma/prisma.service';
 
 /**
  * RetentionRepository — encapsulated data access for the retention sweep.

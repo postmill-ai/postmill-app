@@ -2,12 +2,12 @@
 
 import { FC } from 'react';
 import Link from 'next/link';
-import { useT } from '@gitroom/react/translation/get.transation.service.client';
+import { useT } from '@postmill-ai/react/translation/get.transation.service.client';
 import { useAnomalies, AnomalyRow } from '../hooks/useAnomalies';
 import { TabSkeleton, EmptyState, ErrorState } from '../kit/states';
 import { ChannelAvatar } from '../kit/channel-avatar';
 import { CANONICAL_METRICS, formatCompactNumber, FetchError } from '../utils';
-import { useModals } from '@gitroom/frontend/components/layout/new-modal';
+import { useModals } from '@postmill-ai/frontend/components/layout/new-modal';
 import { AlertRulesModal } from './alert-rules.modal';
 
 // Anomaly Alerts surface (4.8). Renders the org's undismissed spike/drop

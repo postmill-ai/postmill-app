@@ -6,7 +6,7 @@ const { mockHset, mockExpire, mockHgetall } = vi.hoisted(() => ({
   mockHgetall: vi.fn().mockResolvedValue({}),
 }));
 
-vi.mock('@gitroom/nestjs-libraries/redis/redis.service', () => ({
+vi.mock('@postmill-ai/nestjs-libraries/redis/redis.service', () => ({
   ioRedis: {
     hset: mockHset,
     expire: mockExpire,

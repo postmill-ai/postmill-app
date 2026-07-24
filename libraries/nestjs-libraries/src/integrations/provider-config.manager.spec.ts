@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { Logger } from '@nestjs/common';
 import { ProviderConfigManager } from './provider-config.manager';
-import { AuthService } from '@gitroom/helpers/auth/auth.service';
+import { AuthService } from '@postmill-ai/helpers/auth/auth.service';
 import { replaceCredentialsMap, clearCredentials, getCredential } from './credentials';
 
 const mockProviderConfigService = {
@@ -13,7 +13,7 @@ const mockProviderConfigService = {
   decryptConfig: vi.fn(),
 };
 
-vi.mock('@gitroom/nestjs-libraries/database/prisma/provider-configs/provider-config.service', () => ({
+vi.mock('@postmill-ai/nestjs-libraries/database/prisma/provider-configs/provider-config.service', () => ({
   ProviderConfigService: vi.fn(() => mockProviderConfigService),
 }));
 

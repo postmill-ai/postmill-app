@@ -1,5 +1,5 @@
 import { Injectable } from '@nestjs/common';
-import { PrismaRepository } from '@gitroom/nestjs-libraries/database/prisma/prisma.service';
+import { PrismaRepository } from '@postmill-ai/nestjs-libraries/database/prisma/prisma.service';
 
 /**
  * Billing-webhook persistence. Keeps Prisma access inside a repository (layering law):

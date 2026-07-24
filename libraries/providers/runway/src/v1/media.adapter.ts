@@ -12,7 +12,7 @@ import {
   isTransientStatus,
   SafeFetchPort,
   ProviderModule,
-} from '@gitroom/provider-kernel';
+} from '@postmill-ai/provider-kernel';
 
 const BASE = 'https://api.dev.runwayml.com/v1';
 const API_VERSION = '2024-11-06';

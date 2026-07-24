@@ -2,8 +2,8 @@
 
 import { FC } from 'react';
 import clsx from 'clsx';
-import ImageWithFallback from '@gitroom/react/helpers/image.with.fallback';
-import SafeImage from '@gitroom/react/helpers/safe.image';
+import ImageWithFallback from '@postmill-ai/react/helpers/image.with.fallback';
+import SafeImage from '@postmill-ai/react/helpers/safe.image';
 
 // The channel avatar used across the app (composer channel picker, campaign posts, …):
 // the account picture (falling back to a generic avatar) with a platform badge overlay.

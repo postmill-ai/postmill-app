@@ -11,7 +11,7 @@ import {
   resolveApiKey,
   SafeFetchPort,
   ProviderModule,
-} from '@gitroom/provider-kernel';
+} from '@postmill-ai/provider-kernel';
 
 // OpenRouter — same key as the OpenRouter LLM provider (registry id `openrouter`), reused via
 // the universal-credential fallback. Image generation uses OpenRouter's dedicated

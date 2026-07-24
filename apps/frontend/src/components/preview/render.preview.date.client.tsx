@@ -4,7 +4,7 @@ import dynamic from 'next/dynamic';
 
 const RenderPreviewDate = dynamic(
   () =>
-    import('@gitroom/frontend/components/preview/render.preview.date').then(
+    import('@postmill-ai/frontend/components/preview/render.preview.date').then(
       (mod) => mod.RenderPreviewDate
     ),
   { ssr: false }

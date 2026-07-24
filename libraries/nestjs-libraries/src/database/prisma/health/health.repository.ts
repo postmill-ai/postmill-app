@@ -1,5 +1,5 @@
 import { Injectable } from '@nestjs/common';
-import { PrismaRepository } from '@gitroom/nestjs-libraries/database/prisma/prisma.service';
+import { PrismaRepository } from '@postmill-ai/nestjs-libraries/database/prisma/prisma.service';
 
 // Repository for the readiness probe (/health/ready). Only the repository touches Prisma
 // (layering law); the controller calls ping() and never queries directly.

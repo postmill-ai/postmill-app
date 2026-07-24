@@ -2,23 +2,23 @@
 
 import { FC, useCallback, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { useFetch } from '@gitroom/helpers/utils/custom.fetch';
-import { useToaster } from '@gitroom/react/toaster/toaster';
-import { useT } from '@gitroom/react/translation/get.transation.service.client';
-import { KebabMenu } from '@gitroom/frontend/components/ui/kebab-menu';
-import { useModals } from '@gitroom/frontend/components/layout/new-modal';
-import { usePermissions } from '@gitroom/frontend/components/layout/use-permissions';
-import { useUser } from '@gitroom/frontend/components/layout/user.context';
-import { Button } from '@gitroom/react/form/button';
+import { useFetch } from '@postmill-ai/helpers/utils/custom.fetch';
+import { useToaster } from '@postmill-ai/react/toaster/toaster';
+import { useT } from '@postmill-ai/react/translation/get.transation.service.client';
+import { KebabMenu } from '@postmill-ai/frontend/components/ui/kebab-menu';
+import { useModals } from '@postmill-ai/frontend/components/layout/new-modal';
+import { usePermissions } from '@postmill-ai/frontend/components/layout/use-permissions';
+import { useUser } from '@postmill-ai/frontend/components/layout/user.context';
+import { Button } from '@postmill-ai/react/form/button';
 import clsx from 'clsx';
 import {
   CampaignEntitySlug,
   ResolvedCampaignItem,
-} from '@gitroom/frontend/components/campaigns/campaign-types';
+} from '@postmill-ai/frontend/components/campaigns/campaign-types';
 import {
   useOrgEntities,
   OrgEntityOption,
-} from '@gitroom/frontend/components/campaigns/hooks/campaign.hooks';
+} from '@postmill-ai/frontend/components/campaigns/hooks/campaign.hooks';
 
 const ENTITY_LABELS: Record<CampaignEntitySlug, { key: string; fallback: string }> = {
   post: { key: 'entity_posts', fallback: 'Posts' },

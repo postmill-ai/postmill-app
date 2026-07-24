@@ -1,4 +1,4 @@
-import type { StudioDescriptor } from '@gitroom/frontend/components/media-tools/studio-kit/types';
+import type { StudioDescriptor } from '@postmill-ai/frontend/components/media-tools/studio-kit/types';
 
 // Fireworks AI — image generation (FLUX / SDXL) via the workflow endpoint on the org's
 // existing Fireworks LLM key (universal-credential reuse). The model id is the Fireworks

@@ -1,8 +1,8 @@
 import { Module } from '@nestjs/common';
-import { AiModule } from '@gitroom/nestjs-libraries/ai/ai.module';
+import { AiModule } from '@postmill-ai/nestjs-libraries/ai/ai.module';
 import { AiDesignerService } from './ai-designer.service';
-import { AiDesignerSessionRepository } from '@gitroom/nestjs-libraries/database/prisma/ai-designer/ai-designer-session.repository';
-import { AiDesignerMessageRepository } from '@gitroom/nestjs-libraries/database/prisma/ai-designer/ai-designer-message.repository';
+import { AiDesignerSessionRepository } from '@postmill-ai/nestjs-libraries/database/prisma/ai-designer/ai-designer-session.repository';
+import { AiDesignerMessageRepository } from '@postmill-ai/nestjs-libraries/database/prisma/ai-designer/ai-designer-message.repository';
 import { AiDesignerBudgetGuard } from './guards/ai-designer-budget.guard';
 import { AiDesignerDefaultsGate } from './guards/ai-designer-defaults.gate';
 import { AiDesignerIdempotencyService } from './ai-designer-idempotency.service';

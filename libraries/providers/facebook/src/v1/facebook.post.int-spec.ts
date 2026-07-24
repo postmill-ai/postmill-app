@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { setSocialFetchPorts } from '@gitroom/provider-kernel';
+import { setSocialFetchPorts } from '@postmill-ai/provider-kernel';
 import { FacebookProvider } from './social.adapter';
 
 // F3 — Social-adapter posting contract test (Facebook Pages).

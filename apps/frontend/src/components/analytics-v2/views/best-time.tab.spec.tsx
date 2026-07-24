@@ -2,7 +2,7 @@ import React from 'react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen } from '@testing-library/react';
 
-vi.mock('@gitroom/react/translation/get.transation.service.client', () => ({
+vi.mock('@postmill-ai/react/translation/get.transation.service.client', () => ({
   useT:
     () =>
     (_k: string, d: string, vars?: Record<string, unknown>) =>
@@ -16,7 +16,7 @@ vi.mock('../hooks/useBestTime', () => ({
 }));
 
 const mockUseIntegrationList = vi.fn(() => ({ data: [] as any[] }));
-vi.mock('@gitroom/frontend/components/launches/helpers/use.integration.list', () => ({
+vi.mock('@postmill-ai/frontend/components/launches/helpers/use.integration.list', () => ({
   useIntegrationList: () => mockUseIntegrationList(),
 }));
 

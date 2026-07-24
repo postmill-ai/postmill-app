@@ -3,7 +3,7 @@
 import dynamic from 'next/dynamic';
 
 const TavusStudio = dynamic(
-  () => import('@gitroom/frontend/components/media-tools/tavus/tavus-studio').then((m) => m.TavusStudio),
+  () => import('@postmill-ai/frontend/components/media-tools/tavus/tavus-studio').then((m) => m.TavusStudio),
   { ssr: false }
 );
 

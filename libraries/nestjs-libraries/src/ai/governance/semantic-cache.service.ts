@@ -1,6 +1,6 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { createHash } from 'crypto';
-import { ioRedis } from '@gitroom/nestjs-libraries/redis/redis.service';
+import { ioRedis } from '@postmill-ai/nestjs-libraries/redis/redis.service';
 import { AiSettingsManager } from '../ai-settings.manager';
 import type { AIModelProvider } from '../ai-model.provider';
 import type { AIScope } from '../ai-provider.interface';

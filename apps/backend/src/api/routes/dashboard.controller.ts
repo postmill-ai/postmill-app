@@ -7,19 +7,19 @@ import {
   ParseIntPipe,
   DefaultValuePipe,
 } from '@nestjs/common';
-import { GetOrgFromRequest } from '@gitroom/nestjs-libraries/user/org.from.request';
-import { GetUserFromRequest } from '@gitroom/nestjs-libraries/user/user.from.request';
+import { GetOrgFromRequest } from '@postmill-ai/nestjs-libraries/user/org.from.request';
+import { GetUserFromRequest } from '@postmill-ai/nestjs-libraries/user/user.from.request';
 import {
   DashboardService,
   DashboardSummaryResponse,
   AttentionKind,
   PlanUsageSnapshot,
-} from '@gitroom/nestjs-libraries/dashboard/dashboard.service';
-import { DashboardBriefService } from '@gitroom/nestjs-libraries/dashboard/dashboard-brief.service';
+} from '@postmill-ai/nestjs-libraries/dashboard/dashboard.service';
+import { DashboardBriefService } from '@postmill-ai/nestjs-libraries/dashboard/dashboard-brief.service';
 import { Organization, User } from '@prisma/client';
-import { RequirePermission } from '@gitroom/backend/services/auth/rbac/require-permission.decorator';
-import { PermissionsService } from '@gitroom/backend/services/auth/permissions/permissions.service';
-import { RolesService } from '@gitroom/nestjs-libraries/database/prisma/roles/roles.service';
+import { RequirePermission } from '@postmill-ai/backend/services/auth/rbac/require-permission.decorator';
+import { PermissionsService } from '@postmill-ai/backend/services/auth/permissions/permissions.service';
+import { RolesService } from '@postmill-ai/nestjs-libraries/database/prisma/roles/roles.service';
 
 const KIND_PERMISSION_MAP: Record<AttentionKind, string> = {
   'failed-posts': 'posts:read',

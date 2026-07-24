@@ -1,7 +1,7 @@
 import 'reflect-metadata';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { DesignRenderService } from '@gitroom/nestjs-libraries/media/design-render/design-render.service';
-import type { DesignerDoc } from '@gitroom/nestjs-libraries/media/design-render/design-render.types';
+import { DesignRenderService } from '@postmill-ai/nestjs-libraries/media/design-render/design-render.service';
+import type { DesignerDoc } from '@postmill-ai/nestjs-libraries/media/design-render/design-render.types';
 
 /**
  * Mutable state shared between the `canvas` mock factory and the tests.

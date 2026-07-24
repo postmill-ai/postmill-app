@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
-vi.mock('@gitroom/nestjs-libraries/media/studio/media-studio.service', () => ({
+vi.mock('@postmill-ai/nestjs-libraries/media/studio/media-studio.service', () => ({
   MediaStudioService: class MockMediaStudioService {
     generate = vi.fn();
     status = vi.fn();
@@ -14,12 +14,12 @@ const { mockRedisSet, mockRedisDel } = vi.hoisted(() => ({
   mockRedisSet: vi.fn(),
   mockRedisDel: vi.fn(),
 }));
-vi.mock('@gitroom/nestjs-libraries/redis/redis.service', () => ({
+vi.mock('@postmill-ai/nestjs-libraries/redis/redis.service', () => ({
   ioRedis: { set: mockRedisSet, del: mockRedisDel },
 }));
 
 import { MediaStudioController } from './media-studio.controller';
-import { MediaStudioService } from '@gitroom/nestjs-libraries/media/studio/media-studio.service';
+import { MediaStudioService } from '@postmill-ai/nestjs-libraries/media/studio/media-studio.service';
 
 const mockOrg = { id: 'org-1' } as any;
 const mockUser = { id: 'user-1' } as any;

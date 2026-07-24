@@ -1,12 +1,12 @@
 {
-  "name": "@gitroom/provider-anthropic",
+  "name": "@postmill-ai/provider-anthropic",
   "version": "1.0.0",
   "private": true,
   "main": "src/index.ts",
   "types": "src/index.ts",
   "dependencies": {
     "@ai-sdk/anthropic": "^2.0.0",
-    "@gitroom/provider-kernel": "workspace:*",
+    "@postmill-ai/provider-kernel": "workspace:*",
     "@langchain/anthropic": "^1.0.0",
     "@langchain/core": "^1.1.48"
   },

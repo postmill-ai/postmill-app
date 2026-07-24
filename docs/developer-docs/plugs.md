@@ -10,7 +10,7 @@ Plugs are automation hooks attached to social channel providers. They allow prov
 
 Polling-based background jobs that react to analytics or time-based triggers.
 
-Declared with the `@Plug` decorator from `@gitroom/helpers/decorators/plug.decorator`:
+Declared with the `@Plug` decorator from `@postmill-ai/helpers/decorators/plug.decorator`:
 
 ```typescript
 @Plug({
@@ -43,7 +43,7 @@ Parameters:
 
 One-shot actions executed immediately after a post is successfully published.
 
-Declared with the `@PostPlug` decorator from `@gitroom/helpers/decorators/post.plug`:
+Declared with the `@PostPlug` decorator from `@postmill-ai/helpers/decorators/post.plug`:
 
 ```typescript
 @PostPlug({

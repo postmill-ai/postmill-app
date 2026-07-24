@@ -1,8 +1,8 @@
 import 'reflect-metadata';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { HttpException, HttpStatus } from '@nestjs/common';
-import { CHECK_POLICIES_KEY } from '@gitroom/backend/services/auth/permissions/permissions.ability';
-import { AuthorizationActions, Sections } from '@gitroom/backend/services/auth/permissions/permission.exception.class';
+import { CHECK_POLICIES_KEY } from '@postmill-ai/backend/services/auth/permissions/permissions.ability';
+import { AuthorizationActions, Sections } from '@postmill-ai/backend/services/auth/permissions/permission.exception.class';
 
 const OLD_ENV = { ...process.env };
 
@@ -120,7 +120,7 @@ const mockGatewayAdapter = {
 
 const mockResolveConfigForScope = vi.fn().mockResolvedValue(null);
 
-vi.mock('@gitroom/nestjs-libraries/ai/ai-model.provider', () => ({
+vi.mock('@postmill-ai/nestjs-libraries/ai/ai-model.provider', () => ({
   AIModelProvider: class {
     resolveConfigForScope = mockResolveConfigForScope;
     getSurfaceDefaults = vi.fn().mockReturnValue({
@@ -130,11 +130,11 @@ vi.mock('@gitroom/nestjs-libraries/ai/ai-model.provider', () => ({
   },
 }));
 
-vi.mock('@gitroom/nestjs-libraries/database/prisma/subscriptions/subscription.service', () => ({
+vi.mock('@postmill-ai/nestjs-libraries/database/prisma/subscriptions/subscription.service', () => ({
   SubscriptionService: class {},
 }));
 
-vi.mock('@gitroom/nestjs-libraries/chat/mastra.service', () => ({
+vi.mock('@postmill-ai/nestjs-libraries/chat/mastra.service', () => ({
   MastraService: class {
     mastra = vi.fn().mockResolvedValue({
       getAgent: vi.fn().mockReturnValue({
@@ -148,27 +148,27 @@ vi.mock('@gitroom/nestjs-libraries/chat/mastra.service', () => ({
 }));
 
 const mockCheckInput = vi.fn().mockResolvedValue('guarded input');
-vi.mock('@gitroom/nestjs-libraries/ai/governance/guardrail.service', () => ({
+vi.mock('@postmill-ai/nestjs-libraries/ai/governance/guardrail.service', () => ({
   GuardrailService: class {
     checkInput = mockCheckInput;
   },
 }));
 
 const mockStartSpan = vi.fn().mockImplementation(async (_name, fn) => fn({ setAttribute: vi.fn() }));
-vi.mock('@gitroom/nestjs-libraries/ai/governance/telemetry.service', () => ({
+vi.mock('@postmill-ai/nestjs-libraries/ai/governance/telemetry.service', () => ({
   TelemetryService: class {
     startSpan = mockStartSpan;
   },
 }));
 
-vi.mock('@gitroom/nestjs-libraries/ai/governance/budget.service', () => ({
+vi.mock('@postmill-ai/nestjs-libraries/ai/governance/budget.service', () => ({
   BudgetService: class {
     checkBudget = vi.fn().mockResolvedValue({ allowed: true });
     recordSpend = vi.fn().mockResolvedValue(undefined);
   },
 }));
 
-vi.mock('@gitroom/nestjs-libraries/feature-flags', () => ({
+vi.mock('@postmill-ai/nestjs-libraries/feature-flags', () => ({
   FeatureFlagsService: class {
     isDisabled = vi.fn().mockReturnValue(false);
   },
@@ -193,12 +193,12 @@ import {
   copilotRuntimeNodeHttpEndpoint,
   copilotRuntimeNestEndpoint,
 } from '@copilotkit/runtime';
-import { MastraService } from '@gitroom/nestjs-libraries/chat/mastra.service';
-import { AIModelProvider } from '@gitroom/nestjs-libraries/ai/ai-model.provider';
-import { GuardrailService } from '@gitroom/nestjs-libraries/ai/governance/guardrail.service';
-import { TelemetryService } from '@gitroom/nestjs-libraries/ai/governance/telemetry.service';
-import { BudgetService } from '@gitroom/nestjs-libraries/ai/governance/budget.service';
-import { FeatureFlagsService } from '@gitroom/nestjs-libraries/feature-flags';
+import { MastraService } from '@postmill-ai/nestjs-libraries/chat/mastra.service';
+import { AIModelProvider } from '@postmill-ai/nestjs-libraries/ai/ai-model.provider';
+import { GuardrailService } from '@postmill-ai/nestjs-libraries/ai/governance/guardrail.service';
+import { TelemetryService } from '@postmill-ai/nestjs-libraries/ai/governance/telemetry.service';
+import { BudgetService } from '@postmill-ai/nestjs-libraries/ai/governance/budget.service';
+import { FeatureFlagsService } from '@postmill-ai/nestjs-libraries/feature-flags';
 import { RequestContext } from '@mastra/core/di';
 
 function expectWrappedAdapter(result: any, rawInstance: any) {

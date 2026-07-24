@@ -1,4 +1,4 @@
-import { FileManager } from '@gitroom/frontend/components/files/file-manager';
+import { FileManager } from '@postmill-ai/frontend/components/files/file-manager';
 import { Metadata } from 'next';
 export const metadata: Metadata = {
   title: `Postmill Files`,

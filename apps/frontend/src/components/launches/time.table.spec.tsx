@@ -4,40 +4,40 @@ import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import dayjs from 'dayjs';
 
 // deleteDialog always confirms so removeSlot proceeds.
-vi.mock('@gitroom/react/helpers/delete.dialog', () => ({
+vi.mock('@postmill-ai/react/helpers/delete.dialog', () => ({
   deleteDialog: vi.fn(() => Promise.resolve(true)),
 }));
 
 const fetchMock = vi.fn(() => Promise.resolve({ ok: true }));
-vi.mock('@gitroom/helpers/utils/custom.fetch', () => ({
+vi.mock('@postmill-ai/helpers/utils/custom.fetch', () => ({
   useFetch: () => fetchMock,
 }));
 
 const toastShow = vi.fn();
-vi.mock('@gitroom/react/toaster/toaster', () => ({
+vi.mock('@postmill-ai/react/toaster/toaster', () => ({
   useToaster: () => ({ show: toastShow }),
 }));
 
 const closeAll = vi.fn();
-vi.mock('@gitroom/frontend/components/layout/new-modal', () => ({
+vi.mock('@postmill-ai/frontend/components/layout/new-modal', () => ({
   useModals: () => ({ closeAll }),
 }));
 
 vi.mock('react-use-keypress', () => ({ default: () => {} }));
 
-vi.mock('@gitroom/react/helpers/use.prevent.window.unload', () => ({
+vi.mock('@postmill-ai/react/helpers/use.prevent.window.unload', () => ({
   usePreventWindowUnload: () => {},
 }));
 
-vi.mock('@gitroom/react/translation/get.transation.service.client', () => ({
+vi.mock('@postmill-ai/react/translation/get.transation.service.client', () => ({
   useT: () => (_key: string, fallback?: string) => fallback || _key,
 }));
 
-vi.mock('@gitroom/frontend/components/layout/set.timezone', () => ({
+vi.mock('@postmill-ai/frontend/components/layout/set.timezone', () => ({
   newDayjs: (...args: any[]) => dayjs(...args),
 }));
 
-vi.mock('@gitroom/react/form/select', () => ({
+vi.mock('@postmill-ai/react/form/select', () => ({
   Select: ({ children, value, onChange, name }: any) => (
     <select data-testid={name} value={value} onChange={onChange}>
       {children}
@@ -45,13 +45,13 @@ vi.mock('@gitroom/react/form/select', () => ({
   ),
 }));
 
-vi.mock('@gitroom/react/form/button', () => ({
+vi.mock('@postmill-ai/react/form/button', () => ({
   Button: ({ children, onClick }: any) => (
     <button onClick={onClick}>{children}</button>
   ),
 }));
 
-vi.mock('@gitroom/frontend/components/ui/icons', () => ({
+vi.mock('@postmill-ai/frontend/components/ui/icons', () => ({
   TrashIcon: () => <span data-testid="trash" />,
   PlusIcon: () => <span data-testid="plus" />,
   DelayIcon: () => <span data-testid="delay" />,

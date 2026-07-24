@@ -1,2 +1,2 @@
-// Re-export shim — family base relocated into @gitroom/provider-kernel (step 7.5.1).
-export { LinkedinProvider } from '@gitroom/provider-kernel';
+// Re-export shim — family base relocated into @postmill-ai/provider-kernel (step 7.5.1).
+export { LinkedinProvider } from '@postmill-ai/provider-kernel';

@@ -2,7 +2,7 @@
 
 import React, { FC, useState } from 'react';
 import { Slider, SegmentedControl, Stepper } from '../controls';
-import { useT } from '@gitroom/react/translation/get.transation.service.client';
+import { useT } from '@postmill-ai/react/translation/get.transation.service.client';
 import type { DesignerElement } from '../designer.store';
 
 interface CommonInspectorProps {

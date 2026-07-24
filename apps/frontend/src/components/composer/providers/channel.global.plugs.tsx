@@ -9,7 +9,7 @@ import React, {
   useMemo,
   useState,
 } from 'react';
-import { useFetch } from '@gitroom/helpers/utils/custom.fetch';
+import { useFetch } from '@postmill-ai/helpers/utils/custom.fetch';
 import useSWR from 'swr';
 import {
   FormProvider,
@@ -21,13 +21,13 @@ import { object, string } from 'yup';
 import { yupResolver } from '@hookform/resolvers/yup';
 import clsx from 'clsx';
 import { CopilotTextarea } from '@copilotkit/react-textarea';
-import { Button } from '@gitroom/react/form/button';
-import { Input } from '@gitroom/react/form/input';
-import { Slider } from '@gitroom/react/form/slider';
-import { useToaster } from '@gitroom/react/toaster/toaster';
-import { useT } from '@gitroom/react/translation/get.transation.service.client';
-import { useModals } from '@gitroom/frontend/components/layout/new-modal';
-import { usePermissions } from '@gitroom/frontend/components/layout/use-permissions';
+import { Button } from '@postmill-ai/react/form/button';
+import { Input } from '@postmill-ai/react/form/input';
+import { Slider } from '@postmill-ai/react/form/slider';
+import { useToaster } from '@postmill-ai/react/toaster/toaster';
+import { useT } from '@postmill-ai/react/translation/get.transation.service.client';
+import { useModals } from '@postmill-ai/frontend/components/layout/new-modal';
+import { usePermissions } from '@postmill-ai/frontend/components/layout/use-permissions';
 
 // ── Types + context (relocated from the retired components/plugs/plugs.context.ts) ──
 interface PlugSettings {

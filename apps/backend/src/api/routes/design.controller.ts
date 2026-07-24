@@ -11,42 +11,42 @@ import {
   Res,
 } from '@nestjs/common';
 import { Organization, User } from '@prisma/client';
-import { GetOrgFromRequest } from '@gitroom/nestjs-libraries/user/org.from.request';
-import { GetUserFromRequest } from '@gitroom/nestjs-libraries/user/user.from.request';
+import { GetOrgFromRequest } from '@postmill-ai/nestjs-libraries/user/org.from.request';
+import { GetUserFromRequest } from '@postmill-ai/nestjs-libraries/user/user.from.request';
 import { ApiTags } from '@nestjs/swagger';
-import { DesignService } from '@gitroom/nestjs-libraries/database/prisma/design/design.service';
-import { CheckPolicies } from '@gitroom/backend/services/auth/permissions/permissions.ability';
+import { DesignService } from '@postmill-ai/nestjs-libraries/database/prisma/design/design.service';
+import { CheckPolicies } from '@postmill-ai/backend/services/auth/permissions/permissions.ability';
 import {
   AuthorizationActions,
   Sections,
-} from '@gitroom/backend/services/auth/permissions/permission.exception.class';
-import { RequirePermission } from '@gitroom/backend/services/auth/rbac/require-permission.decorator';
-import { safeFetch } from '@gitroom/nestjs-libraries/dtos/webhooks/safe.fetch';
-import { FileService } from '@gitroom/nestjs-libraries/database/prisma/file/file.service';
-import { DesignRenderService } from '@gitroom/nestjs-libraries/media/design-render/design-render.service';
-import { DesignBulkService } from '@gitroom/nestjs-libraries/media/design-render/design-bulk.service';
-import { VideoRenderService } from '@gitroom/nestjs-libraries/media/design-render/video-render.service';
+} from '@postmill-ai/backend/services/auth/permissions/permission.exception.class';
+import { RequirePermission } from '@postmill-ai/backend/services/auth/rbac/require-permission.decorator';
+import { safeFetch } from '@postmill-ai/nestjs-libraries/dtos/webhooks/safe.fetch';
+import { FileService } from '@postmill-ai/nestjs-libraries/database/prisma/file/file.service';
+import { DesignRenderService } from '@postmill-ai/nestjs-libraries/media/design-render/design-render.service';
+import { DesignBulkService } from '@postmill-ai/nestjs-libraries/media/design-render/design-bulk.service';
+import { VideoRenderService } from '@postmill-ai/nestjs-libraries/media/design-render/video-render.service';
 import {
   FRAME_RENDERER_SCRIPT,
   escapeForScriptTag,
-} from '@gitroom/nestjs-libraries/media/design-render/frame-renderer-script';
-import { RenderDesignDto } from '@gitroom/nestjs-libraries/dtos/design/render.design.dto';
-import { RenderVideoDesignDto } from '@gitroom/nestjs-libraries/dtos/design/render-video.design.dto';
-import { BulkGenerateDesignDto } from '@gitroom/nestjs-libraries/dtos/design/bulk.generate.design.dto';
-import { CreateDesignDto } from '@gitroom/nestjs-libraries/dtos/design/create-design.dto';
-import { UpdateDesignDto } from '@gitroom/nestjs-libraries/dtos/design/update-design.dto';
-import { CreateTemplateDto } from '@gitroom/nestjs-libraries/dtos/design/create-template.dto';
-import { UpdateTemplateDto } from '@gitroom/nestjs-libraries/dtos/design/update-template.dto';
-import { ValidateDocDto } from '@gitroom/nestjs-libraries/dtos/design/validate-doc.dto';
-import { ApplyOpsDto } from '@gitroom/nestjs-libraries/dtos/design/apply-ops.dto';
-import type { DesignerDoc } from '@gitroom/nestjs-libraries/media/design-render/design-render.types';
-import { DesignerDocService } from '@gitroom/nestjs-libraries/media/designer-doc/designer-doc.service';
+} from '@postmill-ai/nestjs-libraries/media/design-render/frame-renderer-script';
+import { RenderDesignDto } from '@postmill-ai/nestjs-libraries/dtos/design/render.design.dto';
+import { RenderVideoDesignDto } from '@postmill-ai/nestjs-libraries/dtos/design/render-video.design.dto';
+import { BulkGenerateDesignDto } from '@postmill-ai/nestjs-libraries/dtos/design/bulk.generate.design.dto';
+import { CreateDesignDto } from '@postmill-ai/nestjs-libraries/dtos/design/create-design.dto';
+import { UpdateDesignDto } from '@postmill-ai/nestjs-libraries/dtos/design/update-design.dto';
+import { CreateTemplateDto } from '@postmill-ai/nestjs-libraries/dtos/design/create-template.dto';
+import { UpdateTemplateDto } from '@postmill-ai/nestjs-libraries/dtos/design/update-template.dto';
+import { ValidateDocDto } from '@postmill-ai/nestjs-libraries/dtos/design/validate-doc.dto';
+import { ApplyOpsDto } from '@postmill-ai/nestjs-libraries/dtos/design/apply-ops.dto';
+import type { DesignerDoc } from '@postmill-ai/nestjs-libraries/media/design-render/design-render.types';
+import { DesignerDocService } from '@postmill-ai/nestjs-libraries/media/designer-doc/designer-doc.service';
 import type { Response } from 'express';
-import { ioRedis } from '@gitroom/nestjs-libraries/redis/redis.service';
+import { ioRedis } from '@postmill-ai/nestjs-libraries/redis/redis.service';
 import {
   mediaJobWebhookToken,
   verifyMediaJobWebhookToken,
-} from '@gitroom/nestjs-libraries/media/media-job-token';
+} from '@postmill-ai/nestjs-libraries/media/media-job-token';
 
 @ApiTags('Design')
 @Controller('/media/designs')

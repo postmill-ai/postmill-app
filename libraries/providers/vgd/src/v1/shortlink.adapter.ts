@@ -1,4 +1,4 @@
-import { ShortLinkCapability, ShortLinkCredentialField, ShortLinkCapabilities, ShortLinkContext, ProviderModule, SafeFetchPort } from '@gitroom/provider-kernel';
+import { ShortLinkCapability, ShortLinkCredentialField, ShortLinkCapabilities, ShortLinkContext, ProviderModule, SafeFetchPort } from '@postmill-ai/provider-kernel';
 
 import { metadata as providerMetadata } from './metadata';
 export class VgdAdapter implements ShortLinkCapability {

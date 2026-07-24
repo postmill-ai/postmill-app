@@ -5,7 +5,7 @@ import { useRouter, useSearchParams } from 'next/navigation';
 import {
   LEGACY_TAB_TO_PATH,
   SETTINGS_DEFAULT_PATH,
-} from '@gitroom/frontend/components/settings/settings-paths';
+} from '@postmill-ai/frontend/components/settings/settings-paths';
 
 // /settings has no content of its own — it redirects to the default section, mapping any
 // legacy `?tab=` deep-link (OAuth return URIs, old bookmarks, dashboard onboarding cards) to

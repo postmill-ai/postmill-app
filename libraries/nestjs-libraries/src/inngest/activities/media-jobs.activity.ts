@@ -1,12 +1,12 @@
 import { Injectable, Logger } from '@nestjs/common';
-import { MediaJobLifecycleService } from '@gitroom/nestjs-libraries/database/prisma/media-providers/media-job-lifecycle.service';
-import { AiSettingsService } from '@gitroom/nestjs-libraries/database/prisma/ai-settings/ai-settings.service';
-import { VideoRenderService } from '@gitroom/nestjs-libraries/media/design-render/video-render.service';
-import { SubscriptionService } from '@gitroom/nestjs-libraries/database/prisma/subscriptions/subscription.service';
-import { OrganizationService } from '@gitroom/nestjs-libraries/database/prisma/organizations/organization.service';
-import { inngest, isInngestEnabled } from '@gitroom/nestjs-libraries/inngest/inngest.client';
-import { getRenderConcurrency } from '@gitroom/nestjs-libraries/media/design-render/render-config';
-import { mapWithConcurrency } from '@gitroom/nestjs-libraries/utils/concurrency';
+import { MediaJobLifecycleService } from '@postmill-ai/nestjs-libraries/database/prisma/media-providers/media-job-lifecycle.service';
+import { AiSettingsService } from '@postmill-ai/nestjs-libraries/database/prisma/ai-settings/ai-settings.service';
+import { VideoRenderService } from '@postmill-ai/nestjs-libraries/media/design-render/video-render.service';
+import { SubscriptionService } from '@postmill-ai/nestjs-libraries/database/prisma/subscriptions/subscription.service';
+import { OrganizationService } from '@postmill-ai/nestjs-libraries/database/prisma/organizations/organization.service';
+import { inngest, isInngestEnabled } from '@postmill-ai/nestjs-libraries/inngest/inngest.client';
+import { getRenderConcurrency } from '@postmill-ai/nestjs-libraries/media/design-render/render-config';
+import { mapWithConcurrency } from '@postmill-ai/nestjs-libraries/utils/concurrency';
 
 // Polling fallback for async media generations (§11.2): the sweep selects pending
 // jobs and fans them out via `media/poll-job` Inngest events; local renders are

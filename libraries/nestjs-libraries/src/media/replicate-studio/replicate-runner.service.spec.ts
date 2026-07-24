@@ -2,7 +2,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { BadRequestException, ForbiddenException } from '@nestjs/common';
 
 const mockSafeFetch = vi.fn();
-vi.mock('@gitroom/nestjs-libraries/dtos/webhooks/safe.fetch', () => ({
+vi.mock('@postmill-ai/nestjs-libraries/dtos/webhooks/safe.fetch', () => ({
   safeFetch: (url: string, init?: RequestInit) => mockSafeFetch(url, init),
 }));
 

@@ -1,4 +1,4 @@
-import type { StudioDescriptor } from '@gitroom/frontend/components/media-tools/studio-kit/types';
+import type { StudioDescriptor } from '@postmill-ai/frontend/components/media-tools/studio-kit/types';
 
 // Sora (OpenAI). Reuses the registry/config identifier `openai` (the org's existing Settings → AI /
 // Media OpenAI key) — like Pika rides the `fal` provider — so no separate credential is needed.

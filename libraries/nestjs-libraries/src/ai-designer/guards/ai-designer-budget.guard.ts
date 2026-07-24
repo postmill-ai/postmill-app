@@ -1,5 +1,5 @@
 import { Injectable } from '@nestjs/common';
-import { BudgetService } from '@gitroom/nestjs-libraries/ai/governance/budget.service';
+import { BudgetService } from '@postmill-ai/nestjs-libraries/ai/governance/budget.service';
 
 @Injectable()
 export class AiDesignerBudgetGuard {

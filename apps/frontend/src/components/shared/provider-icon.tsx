@@ -1,8 +1,8 @@
 'use client';
 
 import React, { FC, ReactNode } from 'react';
-import { readableTextColor } from '@gitroom/frontend/components/shared/readable-text-color';
-import { useT } from '@gitroom/react/translation/get.transation.service.client';
+import { readableTextColor } from '@postmill-ai/frontend/components/shared/readable-text-color';
+import { useT } from '@postmill-ai/react/translation/get.transation.service.client';
 
 type Entry = { viewBox?: string; color?: string; node?: ReactNode; full?: boolean; src?: string };
 

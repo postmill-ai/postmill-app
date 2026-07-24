@@ -6,31 +6,31 @@ import {
   UnprocessableEntityException,
 } from '@nestjs/common';
 import { z } from 'zod';
-import { mapWithConcurrency } from '@gitroom/nestjs-libraries/utils/concurrency';
-import { GuardrailService } from '@gitroom/nestjs-libraries/ai/governance/guardrail.service';
-import { GuardrailViolation } from '@gitroom/nestjs-libraries/ai/governance/errors';
-import { ioRedis } from '@gitroom/nestjs-libraries/redis/redis.service';
-import { isCuid } from '@gitroom/nestjs-libraries/pipes/parse-cuid.pipe';
-import { GetInboxDto } from '@gitroom/nestjs-libraries/dtos/social-comments/get-inbox.dto';
+import { mapWithConcurrency } from '@postmill-ai/nestjs-libraries/utils/concurrency';
+import { GuardrailService } from '@postmill-ai/nestjs-libraries/ai/governance/guardrail.service';
+import { GuardrailViolation } from '@postmill-ai/nestjs-libraries/ai/governance/errors';
+import { ioRedis } from '@postmill-ai/nestjs-libraries/redis/redis.service';
+import { isCuid } from '@postmill-ai/nestjs-libraries/pipes/parse-cuid.pipe';
+import { GetInboxDto } from '@postmill-ai/nestjs-libraries/dtos/social-comments/get-inbox.dto';
 import { Organization, User } from '@prisma/client';
 import { isUUID } from 'class-validator';
-import { OrgProviderConfigManager } from '@gitroom/nestjs-libraries/integrations/org-provider-config.manager';
-import { SocialCommentsRepository } from '@gitroom/nestjs-libraries/database/prisma/social-comments/social.comments.repository';
-import { PostsService } from '@gitroom/nestjs-libraries/database/prisma/posts/posts.service';
-import { IntegrationManager } from '@gitroom/nestjs-libraries/integrations/integration.manager';
-import { RefreshIntegrationService } from '@gitroom/nestjs-libraries/integrations/refresh.integration.service';
-import { IntegrationService } from '@gitroom/nestjs-libraries/database/prisma/integrations/integration.service';
-import { WebhooksService } from '@gitroom/nestjs-libraries/database/prisma/webhooks/webhooks.service';
+import { OrgProviderConfigManager } from '@postmill-ai/nestjs-libraries/integrations/org-provider-config.manager';
+import { SocialCommentsRepository } from '@postmill-ai/nestjs-libraries/database/prisma/social-comments/social.comments.repository';
+import { PostsService } from '@postmill-ai/nestjs-libraries/database/prisma/posts/posts.service';
+import { IntegrationManager } from '@postmill-ai/nestjs-libraries/integrations/integration.manager';
+import { RefreshIntegrationService } from '@postmill-ai/nestjs-libraries/integrations/refresh.integration.service';
+import { IntegrationService } from '@postmill-ai/nestjs-libraries/database/prisma/integrations/integration.service';
+import { WebhooksService } from '@postmill-ai/nestjs-libraries/database/prisma/webhooks/webhooks.service';
 import dayjs from 'dayjs';
-import { timer } from '@gitroom/helpers/utils/timer';
-import { RefreshToken } from '@gitroom/nestjs-libraries/integrations/social.abstract';
+import { timer } from '@postmill-ai/helpers/utils/timer';
+import { RefreshToken } from '@postmill-ai/nestjs-libraries/integrations/social.abstract';
 import {
   SocialProvider,
   SocialCommentDTO,
-} from '@gitroom/nestjs-libraries/integrations/social/social.integrations.interface';
+} from '@postmill-ai/nestjs-libraries/integrations/social/social.integrations.interface';
 import { Post, Integration } from '@prisma/client';
-import { DefaultsResolutionService } from '@gitroom/nestjs-libraries/ai/defaults/defaults-resolution.service';
-import { AIModelProvider } from '@gitroom/nestjs-libraries/ai/ai-model.provider';
+import { DefaultsResolutionService } from '@postmill-ai/nestjs-libraries/ai/defaults/defaults-resolution.service';
+import { AIModelProvider } from '@postmill-ai/nestjs-libraries/ai/ai-model.provider';
 
 const CommentStatus = {
   NEEDS_REPLY: 'needs_reply',

@@ -10,7 +10,7 @@ import {
   EmailWebhookEvent,
   EmailStatus,
   ProviderModule,
-} from '@gitroom/provider-kernel';
+} from '@postmill-ai/provider-kernel';
 
 export class MailgunAdapter implements EmailCapability {
   readonly name = 'mailgun';

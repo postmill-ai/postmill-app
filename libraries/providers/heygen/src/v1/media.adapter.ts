@@ -12,7 +12,7 @@ import {
   resolveApiKey,
   SafeFetchPort,
   ProviderModule,
-} from '@gitroom/provider-kernel';
+} from '@postmill-ai/provider-kernel';
 
 interface HeyGenGenerateResponse {
   data?: { video_id?: string };

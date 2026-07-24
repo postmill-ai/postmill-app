@@ -2,7 +2,7 @@
 
 import { FC } from 'react';
 import Link from 'next/link';
-import { useT } from '@gitroom/react/translation/get.transation.service.client';
+import { useT } from '@postmill-ai/react/translation/get.transation.service.client';
 import { useContentInsights, ContentFinding } from '../hooks/useContentInsights';
 import { TabSkeleton, EmptyState, ErrorState } from '../kit/states';
 import { FetchError } from '../utils';

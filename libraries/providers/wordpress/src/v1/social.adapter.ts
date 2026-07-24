@@ -4,16 +4,16 @@ import {
   PostResponse,
   SocialCommentDTO,
   SocialProvider,
-} from '@gitroom/provider-kernel';
-import { SocialAbstract } from '@gitroom/provider-kernel';
+} from '@postmill-ai/provider-kernel';
+import { SocialAbstract } from '@postmill-ai/provider-kernel';
 import dayjs from 'dayjs';
 import { Integration } from '@prisma/client';
-import { makeId, makeOauthState } from '@gitroom/provider-kernel';
-import { WordpressDto } from '@gitroom/provider-kernel';
+import { makeId, makeOauthState } from '@postmill-ai/provider-kernel';
+import { WordpressDto } from '@postmill-ai/provider-kernel';
 import slugify from 'slugify';
 // import FormData from 'form-data';
-import { Tool } from '@gitroom/provider-kernel';
-import { safeFetch } from '@gitroom/provider-kernel';
+import { Tool } from '@postmill-ai/provider-kernel';
+import { safeFetch } from '@postmill-ai/provider-kernel';
 import { Logger } from '@nestjs/common';
 import net from 'node:net';
 
@@ -431,7 +431,7 @@ import {
   ProviderModule as __ProviderModule,
   SocialProviderKernelAdapter as __Bridge,
   PROVIDER_CAPABILITIES as __CAPS,
-} from '@gitroom/provider-kernel';
+} from '@postmill-ai/provider-kernel';
 
 const __adapter = new WordpressProvider();
 

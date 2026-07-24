@@ -11,7 +11,7 @@ import React, {
 import { createPortal } from 'react-dom';
 import clsx from 'clsx';
 import useCookie from 'react-use-cookie';
-import { DropdownArrowIcon } from '@gitroom/frontend/components/ui/icons';
+import { DropdownArrowIcon } from '@postmill-ai/frontend/components/ui/icons';
 
 // A single row inside a ToolbarDropdown. It renders one of the existing composer
 // toolbar icon-buttons (`children`) unchanged — the `.tb-menu-item` rule in

@@ -14,38 +14,38 @@ import {
 import { Organization, User } from '@prisma/client';
 import { Response } from 'express';
 import dayjs from 'dayjs';
-import { AnalyticsService } from '@gitroom/nestjs-libraries/analytics/analytics.service';
-import { GetOrgFromRequest } from '@gitroom/nestjs-libraries/user/org.from.request';
-import { GetUserFromRequest } from '@gitroom/nestjs-libraries/user/user.from.request';
+import { AnalyticsService } from '@postmill-ai/nestjs-libraries/analytics/analytics.service';
+import { GetOrgFromRequest } from '@postmill-ai/nestjs-libraries/user/org.from.request';
+import { GetUserFromRequest } from '@postmill-ai/nestjs-libraries/user/user.from.request';
 import { ApiTags } from '@nestjs/swagger';
-import { CampaignsService } from '@gitroom/nestjs-libraries/database/prisma/campaigns/campaigns.service';
-import { CampaignTagService } from '@gitroom/nestjs-libraries/database/prisma/campaigns/campaign-item.service';
-import { PostsService } from '@gitroom/nestjs-libraries/database/prisma/posts/posts.service';
-import { CampaignReportService } from '@gitroom/nestjs-libraries/database/prisma/campaigns/campaign-report.service';
-import { CampaignNoteService } from '@gitroom/nestjs-libraries/database/prisma/campaigns/campaign-note.service';
+import { CampaignsService } from '@postmill-ai/nestjs-libraries/database/prisma/campaigns/campaigns.service';
+import { CampaignTagService } from '@postmill-ai/nestjs-libraries/database/prisma/campaigns/campaign-item.service';
+import { PostsService } from '@postmill-ai/nestjs-libraries/database/prisma/posts/posts.service';
+import { CampaignReportService } from '@postmill-ai/nestjs-libraries/database/prisma/campaigns/campaign-report.service';
+import { CampaignNoteService } from '@postmill-ai/nestjs-libraries/database/prisma/campaigns/campaign-note.service';
 import {
   validateDateRange,
   validateToGteFrom,
   validateWindowCap,
-} from '@gitroom/nestjs-libraries/analytics/date-range.validation';
-import { CampaignItemDto } from '@gitroom/nestjs-libraries/dtos/campaigns/campaign-item.dto';
-import { CreatePostDto } from '@gitroom/nestjs-libraries/dtos/posts/create.post.dto';
-import { CopyCampaignDto } from '@gitroom/nestjs-libraries/dtos/campaigns/copy-campaign.dto';
-import { PromoteDraftsDto } from '@gitroom/nestjs-libraries/dtos/campaigns/promote-drafts.dto';
-import { CampaignGoalDto } from '@gitroom/nestjs-libraries/dtos/campaigns/campaign-goals.dto';
-import { CreateCampaignDto } from '@gitroom/nestjs-libraries/dtos/campaigns/create-campaign.dto';
-import { UpdateCampaignDto } from '@gitroom/nestjs-libraries/dtos/campaigns/update-campaign.dto';
-import { CreateCampaignNoteDto } from '@gitroom/nestjs-libraries/dtos/campaigns/create-campaign-note.dto';
-import { UpdateCampaignNoteDto } from '@gitroom/nestjs-libraries/dtos/campaigns/update-campaign-note.dto';
-import { NotePinDto } from '@gitroom/nestjs-libraries/dtos/campaigns/note-pin.dto';
-import { NoteResolveDto } from '@gitroom/nestjs-libraries/dtos/campaigns/note-resolve.dto';
-import { NoteReactionDto } from '@gitroom/nestjs-libraries/dtos/campaigns/note-reaction.dto';
-import { CheckPolicies } from '@gitroom/backend/services/auth/permissions/permissions.ability';
+} from '@postmill-ai/nestjs-libraries/analytics/date-range.validation';
+import { CampaignItemDto } from '@postmill-ai/nestjs-libraries/dtos/campaigns/campaign-item.dto';
+import { CreatePostDto } from '@postmill-ai/nestjs-libraries/dtos/posts/create.post.dto';
+import { CopyCampaignDto } from '@postmill-ai/nestjs-libraries/dtos/campaigns/copy-campaign.dto';
+import { PromoteDraftsDto } from '@postmill-ai/nestjs-libraries/dtos/campaigns/promote-drafts.dto';
+import { CampaignGoalDto } from '@postmill-ai/nestjs-libraries/dtos/campaigns/campaign-goals.dto';
+import { CreateCampaignDto } from '@postmill-ai/nestjs-libraries/dtos/campaigns/create-campaign.dto';
+import { UpdateCampaignDto } from '@postmill-ai/nestjs-libraries/dtos/campaigns/update-campaign.dto';
+import { CreateCampaignNoteDto } from '@postmill-ai/nestjs-libraries/dtos/campaigns/create-campaign-note.dto';
+import { UpdateCampaignNoteDto } from '@postmill-ai/nestjs-libraries/dtos/campaigns/update-campaign-note.dto';
+import { NotePinDto } from '@postmill-ai/nestjs-libraries/dtos/campaigns/note-pin.dto';
+import { NoteResolveDto } from '@postmill-ai/nestjs-libraries/dtos/campaigns/note-resolve.dto';
+import { NoteReactionDto } from '@postmill-ai/nestjs-libraries/dtos/campaigns/note-reaction.dto';
+import { CheckPolicies } from '@postmill-ai/backend/services/auth/permissions/permissions.ability';
 import {
   AuthorizationActions,
   Sections,
-} from '@gitroom/backend/services/auth/permissions/permission.exception.class';
-import { RequirePermission } from '@gitroom/backend/services/auth/rbac/require-permission.decorator';
+} from '@postmill-ai/backend/services/auth/permissions/permission.exception.class';
+import { RequirePermission } from '@postmill-ai/backend/services/auth/rbac/require-permission.decorator';
 
 // J2 — hard cap for the campaigns list (default page size == max).
 const CAMPAIGNS_MAX_LIMIT = 100;

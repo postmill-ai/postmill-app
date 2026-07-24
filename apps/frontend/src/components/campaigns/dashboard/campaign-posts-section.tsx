@@ -4,17 +4,17 @@ import { FC, useCallback, useEffect, useMemo, useState } from 'react';
 import dayjs from 'dayjs';
 import clsx from 'clsx';
 import useSWR, { mutate as swrMutate } from 'swr';
-import { useModals } from '@gitroom/frontend/components/layout/new-modal';
-import { useLaunchStore } from '@gitroom/frontend/components/composer/store';
-import { Composer } from '@gitroom/frontend/components/composer/composer';
-import { newDayjs } from '@gitroom/frontend/components/layout/set.timezone';
-import { useFetch } from '@gitroom/helpers/utils/custom.fetch';
-import { Integrations } from '@gitroom/frontend/components/launches/calendar.context';
-import { Button } from '@gitroom/react/form/button';
-import { useT } from '@gitroom/react/translation/get.transation.service.client';
-import { DataTable, StatusPill } from '@gitroom/frontend/components/ui/data-table';
-import { PlatformAvatar } from '@gitroom/frontend/components/shared/platform-avatar';
-import { CloseModalButton } from '@gitroom/frontend/components/shared/close-modal-button';
+import { useModals } from '@postmill-ai/frontend/components/layout/new-modal';
+import { useLaunchStore } from '@postmill-ai/frontend/components/composer/store';
+import { Composer } from '@postmill-ai/frontend/components/composer/composer';
+import { newDayjs } from '@postmill-ai/frontend/components/layout/set.timezone';
+import { useFetch } from '@postmill-ai/helpers/utils/custom.fetch';
+import { Integrations } from '@postmill-ai/frontend/components/launches/calendar.context';
+import { Button } from '@postmill-ai/react/form/button';
+import { useT } from '@postmill-ai/react/translation/get.transation.service.client';
+import { DataTable, StatusPill } from '@postmill-ai/frontend/components/ui/data-table';
+import { PlatformAvatar } from '@postmill-ai/frontend/components/shared/platform-avatar';
+import { CloseModalButton } from '@postmill-ai/frontend/components/shared/close-modal-button';
 
 interface CampaignPost {
   id: string;

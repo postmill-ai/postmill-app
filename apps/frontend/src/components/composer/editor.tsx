@@ -14,33 +14,33 @@ import React, {
 } from 'react';
 import { createPortal } from 'react-dom';
 import clsx from 'clsx';
-import { makeId } from '@gitroom/nestjs-libraries/services/make.is';
-import { PROVIDER_CAPABILITIES } from '@gitroom/provider-kernel/domains/social-capabilities';
+import { makeId } from '@postmill-ai/nestjs-libraries/services/make.is';
+import { PROVIDER_CAPABILITIES } from '@postmill-ai/provider-kernel/domains/social-capabilities';
 import EmojiPicker from 'emoji-picker-react';
 import { Theme } from 'emoji-picker-react';
-import { BoldText } from '@gitroom/frontend/components/composer/bold.text';
-import { UText } from '@gitroom/frontend/components/composer/u.text';
-import { SignatureBox } from '@gitroom/frontend/components/signature';
-import { useT } from '@gitroom/react/translation/get.transation.service.client';
+import { BoldText } from '@postmill-ai/frontend/components/composer/bold.text';
+import { UText } from '@postmill-ai/frontend/components/composer/u.text';
+import { SignatureBox } from '@postmill-ai/frontend/components/signature';
+import { useT } from '@postmill-ai/react/translation/get.transation.service.client';
 import {
   SelectedIntegrations,
   useLaunchStore,
-} from '@gitroom/frontend/components/composer/store';
+} from '@postmill-ai/frontend/components/composer/store';
 import { useShallow } from 'zustand/react/shallow';
-import { AddPostButton } from '@gitroom/frontend/components/composer/add.post.button';
+import { AddPostButton } from '@postmill-ai/frontend/components/composer/add.post.button';
 import {
   ToolbarDropdown,
   MenuItem,
   FormatIcon,
-} from '@gitroom/frontend/components/composer/toolbar-dropdown';
-import { MultiFileComponent } from '@gitroom/frontend/components/files/file.component';
-import { UpDownArrow } from '@gitroom/frontend/components/launches/up.down.arrow';
-import { deleteDialog } from '@gitroom/react/helpers/delete.dialog';
-import { useExistingData } from '@gitroom/frontend/components/launches/helpers/use.existing.data';
-import { useAiActive } from '@gitroom/frontend/components/layout/use-ai-active';
-import { EditorCopilotBridge } from '@gitroom/frontend/components/launches/copilot-bridges';
+} from '@postmill-ai/frontend/components/composer/toolbar-dropdown';
+import { MultiFileComponent } from '@postmill-ai/frontend/components/files/file.component';
+import { UpDownArrow } from '@postmill-ai/frontend/components/launches/up.down.arrow';
+import { deleteDialog } from '@postmill-ai/react/helpers/delete.dialog';
+import { useExistingData } from '@postmill-ai/frontend/components/launches/helpers/use.existing.data';
+import { useAiActive } from '@postmill-ai/frontend/components/layout/use-ai-active';
+import { EditorCopilotBridge } from '@postmill-ai/frontend/components/launches/copilot-bridges';
 import { useDropzone } from 'react-dropzone';
-import { useUppyUploader } from '@gitroom/frontend/components/files/new.uploader';
+import { useUppyUploader } from '@postmill-ai/frontend/components/files/new.uploader';
 import { Dashboard } from '@uppy/react';
 import Link from '@tiptap/extension-link';
 import {
@@ -54,19 +54,19 @@ import Bold from '@tiptap/extension-bold';
 import Text from '@tiptap/extension-text';
 import Paragraph from '@tiptap/extension-paragraph';
 import Underline from '@tiptap/extension-underline';
-import { stripHtmlValidation } from '@gitroom/helpers/utils/strip.html.validation';
+import { stripHtmlValidation } from '@postmill-ai/helpers/utils/strip.html.validation';
 import { History } from '@tiptap/extension-history';
 import { BulletList, ListItem } from '@tiptap/extension-list';
-import { Bullets } from '@gitroom/frontend/components/composer/bullets.component';
+import { Bullets } from '@postmill-ai/frontend/components/composer/bullets.component';
 import Heading from '@tiptap/extension-heading';
-import { HeadingComponent } from '@gitroom/frontend/components/composer/heading.component';
+import { HeadingComponent } from '@postmill-ai/frontend/components/composer/heading.component';
 import Mention from '@tiptap/extension-mention';
-import { suggestion } from '@gitroom/frontend/components/composer/mention.component';
-import { useFetch } from '@gitroom/helpers/utils/custom.fetch';
-import { AComponent } from '@gitroom/frontend/components/composer/a.component';
+import { suggestion } from '@postmill-ai/frontend/components/composer/mention.component';
+import { useFetch } from '@postmill-ai/helpers/utils/custom.fetch';
+import { AComponent } from '@postmill-ai/frontend/components/composer/a.component';
 import { Placeholder } from '@tiptap/extensions';
-import { useToaster } from '@gitroom/react/toaster/toaster';
-import { InformationComponent } from '@gitroom/frontend/components/launches/information.component';
+import { useToaster } from '@postmill-ai/react/toaster/toaster';
+import { InformationComponent } from '@postmill-ai/frontend/components/launches/information.component';
 import {
   LockIcon,
   ConnectionLineIcon,
@@ -74,8 +74,8 @@ import {
   TrashIcon,
   EmojiIcon,
   DelayIcon,
-} from '@gitroom/frontend/components/ui/icons';
-import { DelayComponent } from '@gitroom/frontend/components/composer/delay.component';
+} from '@postmill-ai/frontend/components/ui/icons';
+import { DelayComponent } from '@postmill-ai/frontend/components/composer/delay.component';
 
 const MAX_UPLOAD_SIZE = 1024 * 1024 * 1024; // 1 GB
 

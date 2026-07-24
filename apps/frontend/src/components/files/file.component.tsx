@@ -7,33 +7,33 @@ import React, {
   useMemo,
   useState,
 } from 'react';
-import { Button } from '@gitroom/react/form/button';
-import { useFetch } from '@gitroom/helpers/utils/custom.fetch';
-import { hasExtension } from '@gitroom/helpers/utils/has.extension';
-import { useMediaDirectory } from '@gitroom/react/helpers/use.media.directory';
-import { useToaster } from '@gitroom/react/toaster/toaster';
+import { Button } from '@postmill-ai/react/form/button';
+import { useFetch } from '@postmill-ai/helpers/utils/custom.fetch';
+import { hasExtension } from '@postmill-ai/helpers/utils/has.extension';
+import { useMediaDirectory } from '@postmill-ai/react/helpers/use.media.directory';
+import { useToaster } from '@postmill-ai/react/toaster/toaster';
 import clsx from 'clsx';
-import { VideoFrame } from '@gitroom/react/helpers/video.frame';
+import { VideoFrame } from '@postmill-ai/react/helpers/video.frame';
 import dynamic from 'next/dynamic';
-import { useUser } from '@gitroom/frontend/components/layout/user.context';
-import { usePermissions } from '@gitroom/frontend/components/layout/use-permissions';
-import { AiImage } from '@gitroom/frontend/components/launches/ai.image';
-import { useMediaToolsStatus } from '@gitroom/frontend/components/layout/use-media-tools-status';
-import { useT } from '@gitroom/react/translation/get.transation.service.client';
-import i18next from '@gitroom/react/translation/i18next';
+import { useUser } from '@postmill-ai/frontend/components/layout/user.context';
+import { usePermissions } from '@postmill-ai/frontend/components/layout/use-permissions';
+import { AiImage } from '@postmill-ai/frontend/components/launches/ai.image';
+import { useMediaToolsStatus } from '@postmill-ai/frontend/components/layout/use-media-tools-status';
+import { useT } from '@postmill-ai/react/translation/get.transation.service.client';
+import i18next from '@postmill-ai/react/translation/i18next';
 import { ReactSortable } from 'react-sortablejs';
-import { MediaComponentInner } from '@gitroom/frontend/components/launches/helpers/media.settings.component';
-import { AiVideo } from '@gitroom/frontend/components/launches/ai.video';
-import { AiBestTime } from '@gitroom/frontend/components/launches/ai.best-time';
-import { AiContentTools } from '@gitroom/frontend/components/launches/ai.content.tools';
-import { AiPromptLibraryInsert } from '@gitroom/frontend/components/launches/ai.prompt-library.insert';
-import { AiSearch } from '@gitroom/frontend/components/launches/ai.search';
+import { MediaComponentInner } from '@postmill-ai/frontend/components/launches/helpers/media.settings.component';
+import { AiVideo } from '@postmill-ai/frontend/components/launches/ai.video';
+import { AiBestTime } from '@postmill-ai/frontend/components/launches/ai.best-time';
+import { AiContentTools } from '@postmill-ai/frontend/components/launches/ai.content.tools';
+import { AiPromptLibraryInsert } from '@postmill-ai/frontend/components/launches/ai.prompt-library.insert';
+import { AiSearch } from '@postmill-ai/frontend/components/launches/ai.search';
 import {
   ToolbarDropdown,
   MenuItem,
   SparkleIcon,
-} from '@gitroom/frontend/components/composer/toolbar-dropdown';
-import { useModals } from '@gitroom/frontend/components/layout/new-modal';
+} from '@postmill-ai/frontend/components/composer/toolbar-dropdown';
+import { useModals } from '@postmill-ai/frontend/components/layout/new-modal';
 import {
   ChevronLeftIcon,
   ChevronRightIcon,
@@ -42,16 +42,16 @@ import {
   MediaSettingsIcon,
   InsertMediaIcon,
   VerticalDividerIcon,
-} from '@gitroom/frontend/components/ui/icons';
-import { useLaunchStore } from '@gitroom/frontend/components/composer/store';
+} from '@postmill-ai/frontend/components/ui/icons';
+import { useLaunchStore } from '@postmill-ai/frontend/components/composer/store';
 import { useShallow } from 'zustand/react/shallow';
 import {
   MediaSelectorItem,
   MediaSelectorModal,
-} from '@gitroom/frontend/components/media-tools/media-selector-modal';
-import { useComposerImportFolder } from '@gitroom/frontend/components/composer/use-composer-import-folder';
+} from '@postmill-ai/frontend/components/media-tools/media-selector-modal';
+import { useComposerImportFolder } from '@postmill-ai/frontend/components/composer/use-composer-import-folder';
 const Designer = dynamic(
-  () => import('@gitroom/frontend/components/media-tools/designer/designer').then(
+  () => import('@postmill-ai/frontend/components/media-tools/designer/designer').then(
     (m) => m.Designer
   ),
   { ssr: false }

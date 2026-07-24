@@ -3,11 +3,11 @@
 import { FC } from 'react';
 import dayjs from 'dayjs';
 import { useRouter } from 'next/navigation';
-import { useUser } from '@gitroom/frontend/components/layout/user.context';
-import { getTimezone } from '@gitroom/frontend/components/layout/set.timezone';
-import { StreakComponent } from '@gitroom/frontend/components/layout/streak.component';
-import { Button } from '@gitroom/react/form/button';
-import { useT } from '@gitroom/react/translation/get.transation.service.client';
+import { useUser } from '@postmill-ai/frontend/components/layout/user.context';
+import { getTimezone } from '@postmill-ai/frontend/components/layout/set.timezone';
+import { StreakComponent } from '@postmill-ai/frontend/components/layout/streak.component';
+import { Button } from '@postmill-ai/react/form/button';
+import { useT } from '@postmill-ai/react/translation/get.transation.service.client';
 import { CustomizePopover, DashboardSectionMeta } from './customize.popover';
 import { greetingForUser } from './dashboard.utils';
 

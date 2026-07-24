@@ -24,21 +24,21 @@ import {
 } from '@copilotkit/runtime';
 import Anthropic from '@anthropic-ai/sdk';
 import { Groq } from 'groq-sdk';
-import { GetOrgFromRequest } from '@gitroom/nestjs-libraries/user/org.from.request';
-import { GetUserFromRequest } from '@gitroom/nestjs-libraries/user/user.from.request';
+import { GetOrgFromRequest } from '@postmill-ai/nestjs-libraries/user/org.from.request';
+import { GetUserFromRequest } from '@postmill-ai/nestjs-libraries/user/user.from.request';
 import { Organization, User } from '@prisma/client';
 import { MastraAgent } from '@ag-ui/mastra';
-import { MastraService } from '@gitroom/nestjs-libraries/chat/mastra.service';
+import { MastraService } from '@postmill-ai/nestjs-libraries/chat/mastra.service';
 import { Request, Response } from 'express';
 import { RequestContext } from '@mastra/core/di';
-import { CheckPolicies } from '@gitroom/backend/services/auth/permissions/permissions.ability';
-import { AuthorizationActions, Sections } from '@gitroom/backend/services/auth/permissions/permission.exception.class';
-import { AIModelProvider } from '@gitroom/nestjs-libraries/ai/ai-model.provider';
-import { GuardrailService } from '@gitroom/nestjs-libraries/ai/governance/guardrail.service';
-import { TelemetryService } from '@gitroom/nestjs-libraries/ai/governance/telemetry.service';
-import { BudgetService } from '@gitroom/nestjs-libraries/ai/governance/budget.service';
-import { BudgetExceeded } from '@gitroom/nestjs-libraries/ai/governance/errors';
-import { FeatureFlagsService } from '@gitroom/nestjs-libraries/feature-flags';
+import { CheckPolicies } from '@postmill-ai/backend/services/auth/permissions/permissions.ability';
+import { AuthorizationActions, Sections } from '@postmill-ai/backend/services/auth/permissions/permission.exception.class';
+import { AIModelProvider } from '@postmill-ai/nestjs-libraries/ai/ai-model.provider';
+import { GuardrailService } from '@postmill-ai/nestjs-libraries/ai/governance/guardrail.service';
+import { TelemetryService } from '@postmill-ai/nestjs-libraries/ai/governance/telemetry.service';
+import { BudgetService } from '@postmill-ai/nestjs-libraries/ai/governance/budget.service';
+import { BudgetExceeded } from '@postmill-ai/nestjs-libraries/ai/governance/errors';
+import { FeatureFlagsService } from '@postmill-ai/nestjs-libraries/feature-flags';
 
 export type ChannelsContext = {
   integrations: unknown[];

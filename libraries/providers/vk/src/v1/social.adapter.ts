@@ -4,14 +4,14 @@ import {
   PostDetails,
   PostResponse,
   SocialProvider,
-} from '@gitroom/provider-kernel';
-import { makeId } from '@gitroom/provider-kernel';
+} from '@postmill-ai/provider-kernel';
+import { makeId } from '@postmill-ai/provider-kernel';
 import dayjs from 'dayjs';
-import { safeFetch, SocialAbstract } from '@gitroom/provider-kernel';
+import { safeFetch, SocialAbstract } from '@postmill-ai/provider-kernel';
 import { createHash, randomBytes } from 'crypto';
 import mime from 'mime-types';
 import { Integration } from '@prisma/client';
-import { hasExtension } from '@gitroom/helpers/utils/has.extension';
+import { hasExtension } from '@postmill-ai/helpers/utils/has.extension';
 
 import { metadata as providerMetadata } from './metadata';
 export class VkProvider extends SocialAbstract implements SocialProvider {
@@ -382,7 +382,7 @@ import {
   ProviderModule as __ProviderModule,
   SocialProviderKernelAdapter as __Bridge,
   PROVIDER_CAPABILITIES as __CAPS,
-} from '@gitroom/provider-kernel';
+} from '@postmill-ai/provider-kernel';
 
 const __adapter = new VkProvider();
 

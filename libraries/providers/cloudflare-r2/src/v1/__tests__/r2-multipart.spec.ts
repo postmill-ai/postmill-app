@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import type { LoggerPort } from '@gitroom/provider-kernel';
+import type { LoggerPort } from '@postmill-ai/provider-kernel';
 
 const mockSend = vi.fn();
 const logger: LoggerPort = {

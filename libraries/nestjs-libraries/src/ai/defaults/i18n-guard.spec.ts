@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import * as fs from 'fs';
 import * as path from 'path';
-import { LANGUAGE_CODES } from '@gitroom/provider-kernel';
+import { LANGUAGE_CODES } from '@postmill-ai/provider-kernel';
 
 // G2 (i18n regression guard): belt-and-suspenders on top of languages.sync.spec.
 // Locks in the Hebrew/Bengali/Georgian removal and enforces locale key parity so a

@@ -43,8 +43,8 @@ info:
     proxy-aware). Some routes apply tighter per-route throttles (e.g. AI provider connection tests).
 
   contact:
-    name: Postmill (gitroom)
-    url: https://postiz.com
+    name: Postmill
+    url: https://postmill.ai
   license:
     name: AGPL-3.0
     url: https://www.gnu.org/licenses/agpl-3.0.en.html
@@ -52,7 +52,7 @@ info:
 servers:
   - url: http://localhost:3000
     description: Local development
-  - url: https://api.postiz.example.com
+  - url: https://api.postmill.example.com
     description: Self-hosted production (example)
 
 tags:

@@ -9,7 +9,7 @@ import {
   resolveApiKey,
   SafeFetchPort,
   ProviderModule,
-} from '@gitroom/provider-kernel';
+} from '@postmill-ai/provider-kernel';
 
 export class ElevenLabsAdapter implements MediaProviderAdapter {
   constructor(private readonly _fetch: SafeFetchPort) {}

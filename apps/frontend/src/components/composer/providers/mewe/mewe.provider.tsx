@@ -3,14 +3,14 @@
 import {
   PostComment,
   withProvider,
-} from '@gitroom/frontend/components/composer/providers/high.order.provider';
+} from '@postmill-ai/frontend/components/composer/providers/high.order.provider';
 import { FC } from 'react';
-import { MeweDto } from '@gitroom/nestjs-libraries/dtos/posts/providers-settings/mewe.dto';
-import { MeweGroupSelect } from '@gitroom/frontend/components/composer/providers/mewe/mewe.group.select';
-import { useSettings } from '@gitroom/frontend/components/launches/helpers/use.values';
-import { Select } from '@gitroom/react/form/select';
+import { MeweDto } from '@postmill-ai/nestjs-libraries/dtos/posts/providers-settings/mewe.dto';
+import { MeweGroupSelect } from '@postmill-ai/frontend/components/composer/providers/mewe/mewe.group.select';
+import { useSettings } from '@postmill-ai/frontend/components/launches/helpers/use.values';
+import { Select } from '@postmill-ai/react/form/select';
 import { useWatch } from 'react-hook-form';
-import { useT } from '@gitroom/react/translation/get.transation.service.client';
+import { useT } from '@postmill-ai/react/translation/get.transation.service.client';
 
 const MeweComponent: FC = () => {
   const form = useSettings();

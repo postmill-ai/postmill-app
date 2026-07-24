@@ -3,8 +3,8 @@ import 'reflect-metadata';
 
 import { StripeController } from './stripe.controller';
 import { BillingController } from './billing.controller';
-import { REQUIRE_PERMISSION_KEY } from '@gitroom/backend/services/auth/rbac/require-permission.decorator';
-import type { StripeService } from '@gitroom/nestjs-libraries/services/stripe.service';
+import { REQUIRE_PERMISSION_KEY } from '@postmill-ai/backend/services/auth/rbac/require-permission.decorator';
+import type { StripeService } from '@postmill-ai/nestjs-libraries/services/stripe.service';
 
 // ---------------------------------------------------------------------------
 // F2 — Billing/Stripe behavioural tests (Stripe mocked).

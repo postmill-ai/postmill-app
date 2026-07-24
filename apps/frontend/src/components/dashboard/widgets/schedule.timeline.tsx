@@ -4,9 +4,9 @@ import { FC, useMemo } from 'react';
 import dayjs from 'dayjs';
 import { useRouter } from 'next/navigation';
 import { useSchedule } from '../hooks/useSchedule';
-import { EmptyState, TabSkeleton } from '@gitroom/frontend/components/analytics-v2/kit/states';
-import { ChannelAvatar } from '@gitroom/frontend/components/analytics-v2/kit/channel-avatar';
-import { useT } from '@gitroom/react/translation/get.transation.service.client';
+import { EmptyState, TabSkeleton } from '@postmill-ai/frontend/components/analytics-v2/kit/states';
+import { ChannelAvatar } from '@postmill-ai/frontend/components/analytics-v2/kit/channel-avatar';
+import { useT } from '@postmill-ai/react/translation/get.transation.service.client';
 
 interface UpcomingPost {
   id: string;

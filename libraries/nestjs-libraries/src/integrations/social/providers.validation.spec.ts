@@ -3,21 +3,21 @@ import { describe, it, expect } from 'vitest';
 
 vi.mock('sharp', () => ({ default: vi.fn(function() { return { metadata: vi.fn() }; }) }));
 vi.mock('ws', () => ({ default: class MockWs {} }));
-vi.mock('@gitroom/helpers/utils/timer', () => ({ timer: vi.fn() }));
-vi.mock('@gitroom/helpers/utils/read.or.fetch', () => ({ readOrFetch: vi.fn() }));
+vi.mock('@postmill-ai/helpers/utils/timer', () => ({ timer: vi.fn() }));
+vi.mock('@postmill-ai/helpers/utils/read.or.fetch', () => ({ readOrFetch: vi.fn() }));
 vi.mock('@prisma/client', () => ({ PrismaClient: vi.fn(), ProviderConfiguration: class {}, Integration: class {} }));
-vi.mock('@gitroom/helpers/auth/auth.service', () => ({ AuthService: { fixedEncryption: vi.fn((s: string) => s), fixedDecryption: vi.fn((s: string) => s) } }));
-vi.mock('@gitroom/nestjs-libraries/database/prisma/provider-configs/provider-config.service', () => ({
+vi.mock('@postmill-ai/helpers/auth/auth.service', () => ({ AuthService: { fixedEncryption: vi.fn((s: string) => s), fixedDecryption: vi.fn((s: string) => s) } }));
+vi.mock('@postmill-ai/nestjs-libraries/database/prisma/provider-configs/provider-config.service', () => ({
   ProviderConfigService: vi.fn(() => ({ getAll: vi.fn().mockResolvedValue([]), getByIdentifier: vi.fn(), decryptConfig: vi.fn(() => ({})), upsert: vi.fn(), delete: vi.fn() })),
 }));
-vi.mock('@gitroom/nestjs-libraries/database/prisma/provider-configs/provider-config.repository', () => ({
+vi.mock('@postmill-ai/nestjs-libraries/database/prisma/provider-configs/provider-config.repository', () => ({
   ProviderConfigRepository: vi.fn(() => ({ getAll: vi.fn(), getByIdentifier: vi.fn(), upsert: vi.fn(), delete: vi.fn(), setEnabled: vi.fn() })),
 }));
-vi.mock('@gitroom/nestjs-libraries/database/prisma/prisma.service', () => ({
+vi.mock('@postmill-ai/nestjs-libraries/database/prisma/prisma.service', () => ({
   PrismaRepository: vi.fn(() => ({ model: {} })),
   PrismaService: class {},
 }));
-vi.mock('@gitroom/nestjs-libraries/integrations/credentials', () => ({
+vi.mock('@postmill-ai/nestjs-libraries/integrations/credentials', () => ({
   getOrgCredential: () => 'mock-value',
   setCredentials: vi.fn(),
   getCredential: vi.fn(() => undefined),
@@ -27,43 +27,43 @@ vi.mock('@gitroom/nestjs-libraries/integrations/credentials', () => ({
 
 // The legacy in-memory social registry was removed; the ProviderKernel is the
 // single source of truth. Source the raw provider singletons the same way the
-// kernel does — from each relocated `@gitroom/provider-*` package's module(s).
-import __m0 from '@gitroom/provider-bluesky';
-import __m1 from '@gitroom/provider-devto';
-import __m2 from '@gitroom/provider-discord';
-import __m3 from '@gitroom/provider-dribbble';
-import __m4 from '@gitroom/provider-facebook';
-import __m5 from '@gitroom/provider-gmb';
-import __m6 from '@gitroom/provider-hashnode';
-import __m7 from '@gitroom/provider-instagram-standalone';
-import __m8 from '@gitroom/provider-instagram';
-import __m9 from '@gitroom/provider-kick';
-import __m10 from '@gitroom/provider-lemmy';
-import __m11 from '@gitroom/provider-linkedin-page';
-import __m12 from '@gitroom/provider-linkedin';
-import __m13 from '@gitroom/provider-listmonk';
-import __m14 from '@gitroom/provider-mastodon';
-import __m15 from '@gitroom/provider-medium';
-import __m16 from '@gitroom/provider-mewe';
-import __m17 from '@gitroom/provider-moltbook';
-import __m18 from '@gitroom/provider-nostr';
-import __m19 from '@gitroom/provider-peertube';
-import __m20 from '@gitroom/provider-pinterest';
-import __m21 from '@gitroom/provider-pixelfed';
-import __m22 from '@gitroom/provider-reddit';
-import __m23 from '@gitroom/provider-skool';
-import __m24 from '@gitroom/provider-slack';
-import __m25 from '@gitroom/provider-telegram';
-import __m26 from '@gitroom/provider-threads';
-import __m27 from '@gitroom/provider-tiktok';
-import __m28 from '@gitroom/provider-tumblr';
-import __m29 from '@gitroom/provider-twitch';
-import __m30 from '@gitroom/provider-vk';
-import __m31 from '@gitroom/provider-whop';
-import __m32 from '@gitroom/provider-wordpress';
-import __m33 from '@gitroom/provider-wrapcast';
-import __m34 from '@gitroom/provider-x';
-import __m35 from '@gitroom/provider-youtube';
+// kernel does — from each relocated `@postmill-ai/provider-*` package's module(s).
+import __m0 from '@postmill-ai/provider-bluesky';
+import __m1 from '@postmill-ai/provider-devto';
+import __m2 from '@postmill-ai/provider-discord';
+import __m3 from '@postmill-ai/provider-dribbble';
+import __m4 from '@postmill-ai/provider-facebook';
+import __m5 from '@postmill-ai/provider-gmb';
+import __m6 from '@postmill-ai/provider-hashnode';
+import __m7 from '@postmill-ai/provider-instagram-standalone';
+import __m8 from '@postmill-ai/provider-instagram';
+import __m9 from '@postmill-ai/provider-kick';
+import __m10 from '@postmill-ai/provider-lemmy';
+import __m11 from '@postmill-ai/provider-linkedin-page';
+import __m12 from '@postmill-ai/provider-linkedin';
+import __m13 from '@postmill-ai/provider-listmonk';
+import __m14 from '@postmill-ai/provider-mastodon';
+import __m15 from '@postmill-ai/provider-medium';
+import __m16 from '@postmill-ai/provider-mewe';
+import __m17 from '@postmill-ai/provider-moltbook';
+import __m18 from '@postmill-ai/provider-nostr';
+import __m19 from '@postmill-ai/provider-peertube';
+import __m20 from '@postmill-ai/provider-pinterest';
+import __m21 from '@postmill-ai/provider-pixelfed';
+import __m22 from '@postmill-ai/provider-reddit';
+import __m23 from '@postmill-ai/provider-skool';
+import __m24 from '@postmill-ai/provider-slack';
+import __m25 from '@postmill-ai/provider-telegram';
+import __m26 from '@postmill-ai/provider-threads';
+import __m27 from '@postmill-ai/provider-tiktok';
+import __m28 from '@postmill-ai/provider-tumblr';
+import __m29 from '@postmill-ai/provider-twitch';
+import __m30 from '@postmill-ai/provider-vk';
+import __m31 from '@postmill-ai/provider-whop';
+import __m32 from '@postmill-ai/provider-wordpress';
+import __m33 from '@postmill-ai/provider-wrapcast';
+import __m34 from '@postmill-ai/provider-x';
+import __m35 from '@postmill-ai/provider-youtube';
 
 // Minimal runtime context for creating the social bridge; only metadata getters
 // (`identifier`, `name`, `maxConcurrentJob`, etc.) are exercised here.

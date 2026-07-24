@@ -2,21 +2,21 @@ import 'reflect-metadata';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
 vi.mock('sharp', () => ({ default: vi.fn() }));
-vi.mock('@gitroom/helpers/utils/timer', () => ({ timer: vi.fn() }));
-vi.mock('@gitroom/helpers/utils/read.or.fetch', () => ({ readOrFetch: vi.fn().mockResolvedValue(Buffer.from('data')) }));
+vi.mock('@postmill-ai/helpers/utils/timer', () => ({ timer: vi.fn() }));
+vi.mock('@postmill-ai/helpers/utils/read.or.fetch', () => ({ readOrFetch: vi.fn().mockResolvedValue(Buffer.from('data')) }));
 vi.mock('@prisma/client', () => ({ PrismaClient: vi.fn(), ProviderConfiguration: class {}, Integration: class {} }));
-vi.mock('@gitroom/helpers/auth/auth.service', () => ({ AuthService: { fixedEncryption: vi.fn((s: string) => s), fixedDecryption: vi.fn((s: string) => s) } }));
-vi.mock('@gitroom/nestjs-libraries/database/prisma/provider-configs/provider-config.service', () => ({
+vi.mock('@postmill-ai/helpers/auth/auth.service', () => ({ AuthService: { fixedEncryption: vi.fn((s: string) => s), fixedDecryption: vi.fn((s: string) => s) } }));
+vi.mock('@postmill-ai/nestjs-libraries/database/prisma/provider-configs/provider-config.service', () => ({
   ProviderConfigService: vi.fn(() => ({ getAll: vi.fn().mockResolvedValue([]), getByIdentifier: vi.fn(), decryptConfig: vi.fn(function() { return {}; }), upsert: vi.fn(), delete: vi.fn() })),
 }));
-vi.mock('@gitroom/nestjs-libraries/database/prisma/provider-configs/provider-config.repository', () => ({
+vi.mock('@postmill-ai/nestjs-libraries/database/prisma/provider-configs/provider-config.repository', () => ({
   ProviderConfigRepository: vi.fn(() => ({ getAll: vi.fn(), getByIdentifier: vi.fn(), upsert: vi.fn(), delete: vi.fn(), setEnabled: vi.fn() })),
 }));
-vi.mock('@gitroom/nestjs-libraries/database/prisma/prisma.service', () => ({
+vi.mock('@postmill-ai/nestjs-libraries/database/prisma/prisma.service', () => ({
   PrismaRepository: vi.fn(() => ({ model: {} })),
   PrismaService: class {},
 }));
-vi.mock('@gitroom/nestjs-libraries/integrations/credentials', () => ({
+vi.mock('@postmill-ai/nestjs-libraries/integrations/credentials', () => ({
   getOrgCredential: () => 'https://mastodon.social',
   setCredentials: vi.fn(),
   getCredential: vi.fn(function() { return undefined; }),
@@ -24,7 +24,7 @@ vi.mock('@gitroom/nestjs-libraries/integrations/credentials', () => ({
   replaceCredentialsMap: vi.fn(),
 }));
 vi.mock('form-data', () => ({ default: class FormData { append = vi.fn(); } }));
-vi.mock('@gitroom/helpers/utils/html.to.text', () => ({ htmlToText: vi.fn((s: string) => s.replace(/<[^>]*>/g, '')) }));
+vi.mock('@postmill-ai/helpers/utils/html.to.text', () => ({ htmlToText: vi.fn((s: string) => s.replace(/<[^>]*>/g, '')) }));
 
 import { MastodonProvider } from './mastodon.provider';
 

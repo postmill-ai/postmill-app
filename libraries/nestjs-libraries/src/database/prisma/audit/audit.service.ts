@@ -1,5 +1,5 @@
 import { Injectable } from '@nestjs/common';
-import { AuditRepository } from '@gitroom/nestjs-libraries/database/prisma/audit/audit.repository';
+import { AuditRepository } from '@postmill-ai/nestjs-libraries/database/prisma/audit/audit.repository';
 
 /**
  * Service wrapper over {@link AuditRepository} (ENHANCEMENTS_3 F1). Feature code should

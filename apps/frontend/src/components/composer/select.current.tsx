@@ -4,18 +4,18 @@ import { FC, RefObject, useCallback, useEffect, useRef, useState } from 'react';
 import {
   SelectedIntegrations,
   useLaunchStore,
-} from '@gitroom/frontend/components/composer/store';
+} from '@postmill-ai/frontend/components/composer/store';
 import clsx from 'clsx';
 import Image from 'next/image';
-import SafeImage from '@gitroom/react/helpers/safe.image';
+import SafeImage from '@postmill-ai/react/helpers/safe.image';
 import { useShallow } from 'zustand/react/shallow';
-import { GlobalIcon } from '@gitroom/frontend/components/ui/icons';
-import { useT } from '@gitroom/react/translation/get.transation.service.client';
-import { Integrations } from '@gitroom/frontend/components/launches/calendar.context';
+import { GlobalIcon } from '@postmill-ai/frontend/components/ui/icons';
+import { useT } from '@postmill-ai/react/translation/get.transation.service.client';
+import { Integrations } from '@postmill-ai/frontend/components/launches/calendar.context';
 import {
   useDecisionModal,
   useModals,
-} from '@gitroom/frontend/components/layout/new-modal';
+} from '@postmill-ai/frontend/components/layout/new-modal';
 
 export function useHasScroll(ref: RefObject<HTMLElement | null>): boolean {
   const [hasHorizontalScroll, setHasHorizontalScroll] = useState(false);

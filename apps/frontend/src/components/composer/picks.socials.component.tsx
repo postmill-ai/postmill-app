@@ -2,14 +2,14 @@
 
 import { FC, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import clsx from 'clsx';
-import SafeImage from '@gitroom/react/helpers/safe.image';
-import { useLaunchStore } from '@gitroom/frontend/components/composer/store';
+import SafeImage from '@postmill-ai/react/helpers/safe.image';
+import { useLaunchStore } from '@postmill-ai/frontend/components/composer/store';
 import { useShallow } from 'zustand/react/shallow';
-import { useExistingData } from '@gitroom/frontend/components/launches/helpers/use.existing.data';
-import { PlatformAvatar as SharedPlatformAvatar } from '@gitroom/frontend/components/shared/platform-avatar';
-import { useT } from '@gitroom/react/translation/get.transation.service.client';
-import { Integrations } from '@gitroom/frontend/components/launches/calendar.context';
-import { DropdownArrowIcon } from '@gitroom/frontend/components/ui/icons';
+import { useExistingData } from '@postmill-ai/frontend/components/launches/helpers/use.existing.data';
+import { PlatformAvatar as SharedPlatformAvatar } from '@postmill-ai/frontend/components/shared/platform-avatar';
+import { useT } from '@postmill-ai/react/translation/get.transation.service.client';
+import { Integrations } from '@postmill-ai/frontend/components/launches/calendar.context';
+import { DropdownArrowIcon } from '@postmill-ai/frontend/components/ui/icons';
 
 const CHANNEL_SELECTOR_THRESHOLD = 4;
 

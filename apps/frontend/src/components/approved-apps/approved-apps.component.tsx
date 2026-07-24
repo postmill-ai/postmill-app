@@ -1,12 +1,12 @@
 'use client';
 
 import { FC, Fragment, useCallback } from 'react';
-import { useFetch } from '@gitroom/helpers/utils/custom.fetch';
+import { useFetch } from '@postmill-ai/helpers/utils/custom.fetch';
 import useSWR from 'swr';
-import { Button } from '@gitroom/react/form/button';
-import { useToaster } from '@gitroom/react/toaster/toaster';
-import { deleteDialog } from '@gitroom/react/helpers/delete.dialog';
-import { useT } from '@gitroom/react/translation/get.transation.service.client';
+import { Button } from '@postmill-ai/react/form/button';
+import { useToaster } from '@postmill-ai/react/toaster/toaster';
+import { deleteDialog } from '@postmill-ai/react/helpers/delete.dialog';
+import { useT } from '@postmill-ai/react/translation/get.transation.service.client';
 import dayjs from 'dayjs';
 
 const useApprovedApps = () => {

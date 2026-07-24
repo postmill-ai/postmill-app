@@ -1,12 +1,12 @@
 'use client';
 
 import { FC, useCallback, useState } from 'react';
-import { useFetch } from '@gitroom/helpers/utils/custom.fetch';
+import { useFetch } from '@postmill-ai/helpers/utils/custom.fetch';
 import useSWR, { useSWRConfig } from 'swr';
-import { useToaster } from '@gitroom/react/toaster/toaster';
-import { useDecisionModal } from '@gitroom/frontend/components/layout/new-modal';
+import { useToaster } from '@postmill-ai/react/toaster/toaster';
+import { useDecisionModal } from '@postmill-ai/frontend/components/layout/new-modal';
 import copy from 'copy-to-clipboard';
-import { useT } from '@gitroom/react/translation/get.transation.service.client';
+import { useT } from '@postmill-ai/react/translation/get.transation.service.client';
 import dayjs from 'dayjs';
 
 interface ApiKey {

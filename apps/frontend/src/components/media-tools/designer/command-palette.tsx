@@ -7,7 +7,7 @@ import React, {
   useMemo,
 } from 'react';
 import { actionLabel, actionLabelKey, menuLabel, menuLabelKey, type DesignerAction } from './actions';
-import { useT } from '@gitroom/react/translation/get.transation.service.client';
+import { useT } from '@postmill-ai/react/translation/get.transation.service.client';
 
 interface CommandPaletteProps {
   actions: DesignerAction[];

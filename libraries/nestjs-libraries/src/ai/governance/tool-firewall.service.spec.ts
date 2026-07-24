@@ -1,7 +1,7 @@
 import { describe, it, expect, vi } from 'vitest';
 import { SpanStatusCode } from '@opentelemetry/api';
 import { ToolFirewallService, ToolFirewallBlocked } from './tool-firewall.service';
-import type { TelemetryService } from '@gitroom/nestjs-libraries/ai/governance/telemetry.service';
+import type { TelemetryService } from '@postmill-ai/nestjs-libraries/ai/governance/telemetry.service';
 
 class FakeTelemetryService implements Partial<TelemetryService> {
   calls: Array<{ name: string; attrs?: Record<string, string | number | boolean> }> = [];

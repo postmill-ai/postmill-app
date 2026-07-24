@@ -5,11 +5,11 @@ export default defineConfig({
   resolve: {
     conditions: ['require', 'node', 'import', 'default'],
     alias: {
-      '@gitroom/commands': path.resolve(__dirname, 'src'),
-      '@gitroom/nestjs-libraries': path.resolve(__dirname, '../../libraries/nestjs-libraries/src'),
-      '@gitroom/helpers': path.resolve(__dirname, '../../libraries/helpers/src'),
-      '@gitroom/backend': path.resolve(__dirname, '../backend/src'),
-      '@gitroom/provider-kernel': path.resolve(__dirname, '../../libraries/providers/kernel/src'),
+      '@postmill-ai/commands': path.resolve(__dirname, 'src'),
+      '@postmill-ai/nestjs-libraries': path.resolve(__dirname, '../../libraries/nestjs-libraries/src'),
+      '@postmill-ai/helpers': path.resolve(__dirname, '../../libraries/helpers/src'),
+      '@postmill-ai/backend': path.resolve(__dirname, '../backend/src'),
+      '@postmill-ai/provider-kernel': path.resolve(__dirname, '../../libraries/providers/kernel/src'),
       'nestjs-command': path.resolve(__dirname, '../../node_modules/nestjs-command/dist/index.js'),
     },
   },

@@ -3,7 +3,7 @@
 import dynamic from 'next/dynamic';
 
 const OpenaiStudio = dynamic(
-  () => import('@gitroom/frontend/components/media-tools/openai/openai-studio').then((m) => m.OpenaiStudio),
+  () => import('@postmill-ai/frontend/components/media-tools/openai/openai-studio').then((m) => m.OpenaiStudio),
   { ssr: false }
 );
 

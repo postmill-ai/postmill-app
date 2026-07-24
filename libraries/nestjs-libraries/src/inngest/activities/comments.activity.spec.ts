@@ -1,24 +1,24 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { Logger } from '@nestjs/common';
 
-vi.mock('@gitroom/nestjs-libraries/integrations/provider-config.manager', () => ({
+vi.mock('@postmill-ai/nestjs-libraries/integrations/provider-config.manager', () => ({
   ProviderConfigManager: vi.fn(),
 }));
 
-vi.mock('@gitroom/nestjs-libraries/database/prisma/prisma.service', () => ({
+vi.mock('@postmill-ai/nestjs-libraries/database/prisma/prisma.service', () => ({
   PrismaService: vi.fn(),
 }));
 
 vi.mock(
-  '@gitroom/nestjs-libraries/database/prisma/social-comments/social.comments.service',
+  '@postmill-ai/nestjs-libraries/database/prisma/social-comments/social.comments.service',
   () => ({ SocialCommentsService: vi.fn() })
 );
 
-vi.mock('@gitroom/nestjs-libraries/services/email.service', () => ({
+vi.mock('@postmill-ai/nestjs-libraries/services/email.service', () => ({
   EmailService: vi.fn(),
 }));
 
-import { CommentsActivity } from '@gitroom/nestjs-libraries/inngest/activities/comments.activity';
+import { CommentsActivity } from '@postmill-ai/nestjs-libraries/inngest/activities/comments.activity';
 
 const makePost = (overrides: any = {}) => ({
   id: 'post-1',

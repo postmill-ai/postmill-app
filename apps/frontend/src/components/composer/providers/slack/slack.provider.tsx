@@ -3,12 +3,12 @@
 import {
   PostComment,
   withProvider,
-} from '@gitroom/frontend/components/composer/providers/high.order.provider';
+} from '@postmill-ai/frontend/components/composer/providers/high.order.provider';
 import { FC } from 'react';
-import { useSettings } from '@gitroom/frontend/components/launches/helpers/use.values';
-import { SlackChannelSelect } from '@gitroom/frontend/components/composer/providers/slack/slack.channel.select';
-import { SlackDto } from '@gitroom/nestjs-libraries/dtos/posts/providers-settings/slack.dto';
-import { FirstCommentField } from '@gitroom/frontend/components/composer/providers/shared/first-comment.field';
+import { useSettings } from '@postmill-ai/frontend/components/launches/helpers/use.values';
+import { SlackChannelSelect } from '@postmill-ai/frontend/components/composer/providers/slack/slack.channel.select';
+import { SlackDto } from '@postmill-ai/nestjs-libraries/dtos/posts/providers-settings/slack.dto';
+import { FirstCommentField } from '@postmill-ai/frontend/components/composer/providers/shared/first-comment.field';
 const SlackComponent: FC = () => {
   const form = useSettings();
   return (

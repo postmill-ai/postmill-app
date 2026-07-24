@@ -10,17 +10,17 @@ import {
   Put,
   UseGuards,
 } from '@nestjs/common';
-import { GetUserFromRequest } from '@gitroom/nestjs-libraries/user/user.from.request';
+import { GetUserFromRequest } from '@postmill-ai/nestjs-libraries/user/user.from.request';
 import { User } from '@prisma/client';
 import { ApiTags } from '@nestjs/swagger';
-import { ProviderConfigService } from '@gitroom/nestjs-libraries/database/prisma/provider-configs/provider-config.service';
-import { ProviderConfigManager } from '@gitroom/nestjs-libraries/integrations/provider-config.manager';
-import { IntegrationManager } from '@gitroom/nestjs-libraries/integrations/integration.manager';
+import { ProviderConfigService } from '@postmill-ai/nestjs-libraries/database/prisma/provider-configs/provider-config.service';
+import { ProviderConfigManager } from '@postmill-ai/nestjs-libraries/integrations/provider-config.manager';
+import { IntegrationManager } from '@postmill-ai/nestjs-libraries/integrations/integration.manager';
 import { Prisma } from '@prisma/client';
-import { RequirePermission } from '@gitroom/backend/services/auth/rbac/require-permission.decorator';
-import { OrgRbacGuard } from '@gitroom/backend/services/auth/rbac/org-rbac.guard';
-import { SuperAdminGuard } from '@gitroom/backend/services/auth/rbac/super-admin.guard';
-import { SaveChannelConfigDto } from '@gitroom/nestjs-libraries/dtos/providers/provider-config.dtos';
+import { RequirePermission } from '@postmill-ai/backend/services/auth/rbac/require-permission.decorator';
+import { OrgRbacGuard } from '@postmill-ai/backend/services/auth/rbac/org-rbac.guard';
+import { SuperAdminGuard } from '@postmill-ai/backend/services/auth/rbac/super-admin.guard';
+import { SaveChannelConfigDto } from '@postmill-ai/nestjs-libraries/dtos/providers/provider-config.dtos';
 
 // PROVIDER_REMEDIATION 0.2 + 3.2: `ProviderConfiguration` is the platform-global
 // social OAuth-app store (no organizationId). It was gated only by

@@ -1,6 +1,6 @@
 'use client';
 import { FC, ReactNode, useEffect, useState } from 'react';
-import { useTranslationSettings } from '@gitroom/react/translation/get.transation.service.client';
+import { useTranslationSettings } from '@postmill-ai/react/translation/get.transation.service.client';
 
 export const HtmlComponent: FC = () => {
   const settings = useTranslationSettings();

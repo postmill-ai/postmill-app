@@ -13,7 +13,7 @@ import {
   isTransientStatus,
   SafeFetchPort,
   ProviderModule,
-} from '@gitroom/provider-kernel';
+} from '@postmill-ai/provider-kernel';
 
 const BASE = 'https://tavusapi.com/v2';
 

@@ -2,7 +2,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 
 // Partially mock the kernel so `safeFetch` is a spy while SocialAbstract / the
 // BadBody Proxy / setSocialFetchPorts (all needed to construct + throw) stay real.
-vi.mock('@gitroom/provider-kernel', async (orig) => {
+vi.mock('@postmill-ai/provider-kernel', async (orig) => {
   const actual: any = await orig();
   return { ...actual, safeFetch: vi.fn() };
 });
@@ -45,7 +45,7 @@ vi.mock('googleapis', () => ({
   youtube_v3: {},
 }));
 
-import { safeFetch, setSocialFetchPorts } from '@gitroom/provider-kernel';
+import { safeFetch, setSocialFetchPorts } from '@postmill-ai/provider-kernel';
 import { google } from 'googleapis';
 import { YoutubeProvider } from './social.adapter';
 

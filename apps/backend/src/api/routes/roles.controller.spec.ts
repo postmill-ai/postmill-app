@@ -3,7 +3,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { HttpException } from '@nestjs/common';
 
 vi.mock(
-  '@gitroom/nestjs-libraries/database/prisma/roles/roles.service',
+  '@postmill-ai/nestjs-libraries/database/prisma/roles/roles.service',
   () => ({
     RolesService: class {},
   })

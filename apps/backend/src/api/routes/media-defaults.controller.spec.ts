@@ -1,14 +1,14 @@
 import 'reflect-metadata';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { MediaDefaultsController } from './media-defaults.controller';
-import { MediaDefaultsService } from '@gitroom/nestjs-libraries/ai/defaults/media-defaults.service';
+import { MediaDefaultsService } from '@postmill-ai/nestjs-libraries/ai/defaults/media-defaults.service';
 
 const mockGetMediaDefaults = vi.fn();
 const mockSetMediaDefault = vi.fn();
 const mockClearMediaDefault = vi.fn();
 const mockGetMediaDefaultsCatalog = vi.fn();
 
-vi.mock('@gitroom/nestjs-libraries/ai/defaults/media-defaults.service', () => ({
+vi.mock('@postmill-ai/nestjs-libraries/ai/defaults/media-defaults.service', () => ({
   MediaDefaultsService: class {
     getMediaDefaults = mockGetMediaDefaults;
     setMediaDefault = mockSetMediaDefault;

@@ -6,13 +6,13 @@ import Image from 'next/image';
 import { useDrag } from 'react-dnd';
 import { Post, State, Tags, Integration } from '@prisma/client';
 import type { Integrations } from './context';
-import { useT } from '@gitroom/react/translation/get.transation.service.client';
-import { stripHtmlValidation } from '@gitroom/helpers/utils/strip.html.validation';
-import { newDayjs } from '@gitroom/frontend/components/layout/set.timezone';
-import { isUSCitizen } from '@gitroom/frontend/components/launches/helpers/isuscitizen.utils';
-import { useVariables } from '@gitroom/react/helpers/variable.context';
-import { useUser } from '@gitroom/frontend/components/layout/user.context';
-import { CreationMethodBadge } from '@gitroom/frontend/components/launches/creation.method.badge';
+import { useT } from '@postmill-ai/react/translation/get.transation.service.client';
+import { stripHtmlValidation } from '@postmill-ai/helpers/utils/strip.html.validation';
+import { newDayjs } from '@postmill-ai/frontend/components/layout/set.timezone';
+import { isUSCitizen } from '@postmill-ai/frontend/components/launches/helpers/isuscitizen.utils';
+import { useVariables } from '@postmill-ai/react/helpers/variable.context';
+import { useUser } from '@postmill-ai/frontend/components/layout/user.context';
+import { CreationMethodBadge } from '@postmill-ai/frontend/components/launches/creation.method.badge';
 import {
   formatCompactNumber,
   ViewsIcon,
@@ -22,7 +22,7 @@ import {
 import {
   KebabMenu,
   KebabMenuItem,
-} from '@gitroom/frontend/components/ui/kebab-menu';
+} from '@postmill-ai/frontend/components/ui/kebab-menu';
 import dayjs from 'dayjs';
 
 export const CalendarItem: FC<{

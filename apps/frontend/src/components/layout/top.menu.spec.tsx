@@ -5,17 +5,17 @@ let mockIsGeneral = true;
 let mockBillingEnabled = false;
 let mockPathname = '/dashboard';
 
-vi.mock('@gitroom/react/helpers/variable.context', () => ({
+vi.mock('@postmill-ai/react/helpers/variable.context', () => ({
   useVariables: () => ({ isGeneral: mockIsGeneral, billingEnabled: mockBillingEnabled }),
 }));
 
 const mockT = vi.fn((_key: string, fallback?: string) => fallback ?? _key);
 
-vi.mock('@gitroom/react/translation/get.transation.service.client', () => ({
+vi.mock('@postmill-ai/react/translation/get.transation.service.client', () => ({
   useT: () => mockT,
 }));
 
-vi.mock('@gitroom/frontend/components/layout/user.context', () => ({
+vi.mock('@postmill-ai/frontend/components/layout/user.context', () => ({
   useUser: () => ({
     id: 'test-user',
     orgId: 'test-org',
@@ -25,12 +25,12 @@ vi.mock('@gitroom/frontend/components/layout/user.context', () => ({
   ContextWrapper: ({ children }: any) => children,
 }));
 
-vi.mock('@gitroom/frontend/components/layout/new-modal', () => ({
+vi.mock('@postmill-ai/frontend/components/layout/new-modal', () => ({
   useModals: () => ({ openModal: vi.fn() }),
   ModalWrapper: ({ children }: any) => children,
 }));
 
-vi.mock('@gitroom/frontend/components/layout/agent.media.modal', () => ({
+vi.mock('@postmill-ai/frontend/components/layout/agent.media.modal', () => ({
   AgentMediaModal: () => null,
 }));
 
@@ -49,7 +49,7 @@ let mockPermissions = {
   refresh: vi.fn(),
 };
 
-vi.mock('@gitroom/frontend/components/layout/use-permissions', () => ({
+vi.mock('@postmill-ai/frontend/components/layout/use-permissions', () => ({
   usePermissions: () => mockPermissions,
 }));
 

@@ -1,18 +1,18 @@
-import { makeId, makeOauthState } from '@gitroom/provider-kernel';
-import { SocialAbstract } from '@gitroom/provider-kernel';
+import { makeId, makeOauthState } from '@postmill-ai/provider-kernel';
+import { SocialAbstract } from '@postmill-ai/provider-kernel';
 import {
   AuthTokenDetails,
   PostDetails,
   PostResponse,
   SocialProvider,
-} from '@gitroom/provider-kernel';
+} from '@postmill-ai/provider-kernel';
 import dayjs from 'dayjs';
 import { Integration } from '@prisma/client';
-import { ListmonkDto } from '@gitroom/provider-kernel';
-import { AuthService } from '@gitroom/helpers/auth/auth.service';
+import { ListmonkDto } from '@postmill-ai/provider-kernel';
+import { AuthService } from '@postmill-ai/helpers/auth/auth.service';
 import slugify from 'slugify';
-import { Tool } from '@gitroom/provider-kernel';
-import { safeFetch } from '@gitroom/provider-kernel';
+import { Tool } from '@postmill-ai/provider-kernel';
+import { safeFetch } from '@postmill-ai/provider-kernel';
 import { Logger } from '@nestjs/common';
 import net from 'node:net';
 
@@ -354,7 +354,7 @@ import {
   ProviderModule as __ProviderModule,
   SocialProviderKernelAdapter as __Bridge,
   PROVIDER_CAPABILITIES as __CAPS,
-} from '@gitroom/provider-kernel';
+} from '@postmill-ai/provider-kernel';
 
 const __adapter = new ListmonkProvider();
 

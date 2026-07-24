@@ -16,28 +16,28 @@ import {
   UseGuards,
 } from '@nestjs/common';
 import { Throttle } from '@nestjs/throttler';
-import { GetUserFromRequest } from '@gitroom/nestjs-libraries/user/user.from.request';
+import { GetUserFromRequest } from '@postmill-ai/nestjs-libraries/user/user.from.request';
 import { User } from '@prisma/client';
 import { ApiTags } from '@nestjs/swagger';
-import { AiSettingsService } from '@gitroom/nestjs-libraries/database/prisma/ai-settings/ai-settings.service';
+import { AiSettingsService } from '@postmill-ai/nestjs-libraries/database/prisma/ai-settings/ai-settings.service';
 import {
   AiSettingsManager,
   normalizeProviderId,
   qualifyProviderId,
-} from '@gitroom/nestjs-libraries/ai/ai-settings.manager';
-import { SaveGovernanceDto } from '@gitroom/nestjs-libraries/dtos/ai-settings/governance.dto';
-import { AIProviderAdapter } from '@gitroom/nestjs-libraries/ai/ai-provider.interface';
-import { ProviderResolutionService } from '@gitroom/nestjs-libraries/providers/provider-resolution.service';
-import { ProviderHealthService } from '@gitroom/nestjs-libraries/ai/governance/provider-health.service';
-import { GuardrailService } from '@gitroom/nestjs-libraries/ai/governance/guardrail.service';
-import { BudgetService } from '@gitroom/nestjs-libraries/ai/governance/budget.service';
-import { RagService } from '@gitroom/nestjs-libraries/ai/governance/rag.service';
-import { OrgMediaProviderSettingsService } from '@gitroom/nestjs-libraries/database/prisma/media-providers/org-media-provider-settings.service';
-import { RequirePermission } from '@gitroom/backend/services/auth/rbac/require-permission.decorator';
-import { OrgRbacGuard } from '@gitroom/backend/services/auth/rbac/org-rbac.guard';
-import { SuperAdminGuard } from '@gitroom/backend/services/auth/rbac/super-admin.guard';
-import { PROVIDER_KERNEL } from '@gitroom/nestjs-libraries/providers/providers.module';
-import { ProviderKernel, DEFAULT_VERSION, parseQualified, qualify } from '@gitroom/provider-kernel';
+} from '@postmill-ai/nestjs-libraries/ai/ai-settings.manager';
+import { SaveGovernanceDto } from '@postmill-ai/nestjs-libraries/dtos/ai-settings/governance.dto';
+import { AIProviderAdapter } from '@postmill-ai/nestjs-libraries/ai/ai-provider.interface';
+import { ProviderResolutionService } from '@postmill-ai/nestjs-libraries/providers/provider-resolution.service';
+import { ProviderHealthService } from '@postmill-ai/nestjs-libraries/ai/governance/provider-health.service';
+import { GuardrailService } from '@postmill-ai/nestjs-libraries/ai/governance/guardrail.service';
+import { BudgetService } from '@postmill-ai/nestjs-libraries/ai/governance/budget.service';
+import { RagService } from '@postmill-ai/nestjs-libraries/ai/governance/rag.service';
+import { OrgMediaProviderSettingsService } from '@postmill-ai/nestjs-libraries/database/prisma/media-providers/org-media-provider-settings.service';
+import { RequirePermission } from '@postmill-ai/backend/services/auth/rbac/require-permission.decorator';
+import { OrgRbacGuard } from '@postmill-ai/backend/services/auth/rbac/org-rbac.guard';
+import { SuperAdminGuard } from '@postmill-ai/backend/services/auth/rbac/super-admin.guard';
+import { PROVIDER_KERNEL } from '@postmill-ai/nestjs-libraries/providers/providers.module';
+import { ProviderKernel, DEFAULT_VERSION, parseQualified, qualify } from '@postmill-ai/provider-kernel';
 import {
   SaveAiProviderDto,
   TestAiProviderDto,
@@ -48,7 +48,7 @@ import {
   TriggerRagBackfillDto,
   UpdateSecretSettingsDto,
   UpsertOrgProviderConfigDto,
-} from '@gitroom/nestjs-libraries/dtos/providers/admin-ai-settings.dtos';
+} from '@postmill-ai/nestjs-libraries/dtos/providers/admin-ai-settings.dtos';
 
 // PROVIDER_REMEDIATION 0.1a/0.1b + 3.2: this controller writes the platform-global
 // AIProviderConfig/AISystemSettings singletons and, via :orgId path params, ANY

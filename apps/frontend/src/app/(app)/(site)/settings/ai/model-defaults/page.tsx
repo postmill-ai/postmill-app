@@ -1,6 +1,6 @@
 'use client';
 
-import { ModelDefaultsTab } from '@gitroom/frontend/components/settings/ai/model-defaults.tab';
+import { ModelDefaultsTab } from '@postmill-ai/frontend/components/settings/ai/model-defaults.tab';
 
 export default function Page() {
   return <ModelDefaultsTab />;

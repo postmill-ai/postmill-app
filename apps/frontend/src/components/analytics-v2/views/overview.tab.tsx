@@ -1,7 +1,7 @@
 'use client';
 
 import { FC, useMemo, useState } from 'react';
-import { useT } from '@gitroom/react/translation/get.transation.service.client';
+import { useT } from '@postmill-ai/react/translation/get.transation.service.client';
 import { OverviewResponse, FetchError } from '../utils';
 import { StatTile } from '../kit/stat-tile';
 import { TabSkeleton, EmptyState, ErrorState } from '../kit/states';
@@ -15,8 +15,8 @@ import { useDayDrill } from '../hooks/useDayDrill';
 import { CHART_PALETTE } from '../kit/palette';
 import { AnomalyOverviewStrip } from './alerts.section';
 import { DerivedMetricTiles } from '../kit/derived-metrics';
-import { useModals } from '@gitroom/frontend/components/layout/new-modal';
-import { useAiActive } from '@gitroom/frontend/components/layout/use-ai-active';
+import { useModals } from '@postmill-ai/frontend/components/layout/new-modal';
+import { useAiActive } from '@postmill-ai/frontend/components/layout/use-ai-active';
 import { NarrateModal } from './narrate.modal';
 
 interface OverviewTabProps {

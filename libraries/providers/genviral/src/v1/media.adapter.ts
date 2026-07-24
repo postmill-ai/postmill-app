@@ -15,7 +15,7 @@ import {
   isTransientStatus,
   SafeFetchPort,
   ProviderModule,
-} from '@gitroom/provider-kernel';
+} from '@postmill-ai/provider-kernel';
 
 // Genviral Partner API (https://docs.genviral.io) — own-key Bearer provider configured at
 // Settings → Media. The Bearer token is a single `public_id.secret` string. Video-only Studio AI

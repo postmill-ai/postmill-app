@@ -32,53 +32,53 @@ vi.mock('@copilotkit/runtime-client-gql', () => ({
   },
 }));
 
-vi.mock('@gitroom/frontend/components/composer/composer', () => ({
+vi.mock('@postmill-ai/frontend/components/composer/composer', () => ({
   Composer: () => <div />,
 }));
 
-vi.mock('@gitroom/frontend/components/agents/agent', () => ({
+vi.mock('@postmill-ai/frontend/components/agents/agent', () => ({
   MediaPortal: () => <div />,
   PropertiesContext: React.createContext({ properties: [] }),
 }));
 
-vi.mock('@gitroom/frontend/components/agents/agent.input', () => ({
+vi.mock('@postmill-ai/frontend/components/agents/agent.input', () => ({
   Input: () => <div />,
 }));
 
-vi.mock('@gitroom/frontend/components/layout/new-modal', () => ({
+vi.mock('@postmill-ai/frontend/components/layout/new-modal', () => ({
   useModals: () => ({ openModal: vi.fn() }),
 }));
 
-vi.mock('@gitroom/frontend/components/launches/helpers/use.existing.data', () => ({
+vi.mock('@postmill-ai/frontend/components/launches/helpers/use.existing.data', () => ({
   ExistingDataContextProvider: ({ children }: any) => <>{children}</>,
 }));
 
-vi.mock('@gitroom/frontend/components/shared/safe-content', () => ({
+vi.mock('@postmill-ai/frontend/components/shared/safe-content', () => ({
   SafeContent: () => <div />,
 }));
 
-vi.mock('@gitroom/frontend/components/agent/agent-context-bridge', () => ({
+vi.mock('@postmill-ai/frontend/components/agent/agent-context-bridge', () => ({
   AgentContextBridge: () => null,
 }));
 
-vi.mock('@gitroom/frontend/components/layout/use-ai-active', () => ({
+vi.mock('@postmill-ai/frontend/components/layout/use-ai-active', () => ({
   useAiActive: () => true,
   AI_SETUP_HREF: '/settings/ai/llm-providers',
 }));
 
-vi.mock('@gitroom/react/form/button', () => ({
+vi.mock('@postmill-ai/react/form/button', () => ({
   Button: ({ children, ...p }: any) => <button {...p}>{children}</button>,
 }));
 
-vi.mock('@gitroom/react/helpers/variable.context', () => ({
+vi.mock('@postmill-ai/react/helpers/variable.context', () => ({
   useVariables: () => ({ backendUrl: 'http://x' }),
 }));
 
-vi.mock('@gitroom/react/toaster/toaster', () => ({
+vi.mock('@postmill-ai/react/toaster/toaster', () => ({
   useToaster: () => ({ show: vi.fn() }),
 }));
 
-vi.mock('@gitroom/react/translation/get.transation.service.client', () => ({
+vi.mock('@postmill-ai/react/translation/get.transation.service.client', () => ({
   useT: () => (_k: string, fallback?: string) => fallback || _k,
 }));
 
@@ -103,7 +103,7 @@ const fetchMock = vi.fn((url: string) => {
   });
 });
 
-vi.mock('@gitroom/helpers/utils/custom.fetch', () => ({
+vi.mock('@postmill-ai/helpers/utils/custom.fetch', () => ({
   useFetch: () => fetchMock,
 }));
 

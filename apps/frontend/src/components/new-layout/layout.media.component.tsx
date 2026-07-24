@@ -1,6 +1,6 @@
 'use client';
 
-import { FileManager } from '@gitroom/frontend/components/files/file-manager';
+import { FileManager } from '@postmill-ai/frontend/components/files/file-manager';
 
 export const MediaLayoutComponent = () => {
   return (

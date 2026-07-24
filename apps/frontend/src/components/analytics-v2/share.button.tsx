@@ -1,8 +1,8 @@
 'use client';
 
 import { FC } from 'react';
-import { useT } from '@gitroom/react/translation/get.transation.service.client';
-import { useModals } from '@gitroom/frontend/components/layout/new-modal';
+import { useT } from '@postmill-ai/react/translation/get.transation.service.client';
+import { useModals } from '@postmill-ai/frontend/components/layout/new-modal';
 import { AnalyticsShareModal } from './views/analytics-share.modal';
 
 // Org-level public share button (7.6). Sits next to Export in the dashboard

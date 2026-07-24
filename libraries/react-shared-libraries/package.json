@@ -1,5 +1,5 @@
 {
-  "name": "@gitroom/react-shared-libraries",
+  "name": "@postmill-ai/react-shared-libraries",
   "version": "1.0.0",
   "private": true,
   "dependencies": {

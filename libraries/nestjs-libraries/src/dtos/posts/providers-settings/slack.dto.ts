@@ -1,2 +1,2 @@
-// Re-export shim — DTO relocated into @gitroom/provider-kernel (step 7.5.1).
-export { SlackDto } from '@gitroom/provider-kernel/domains/social-dtos';
+// Re-export shim — DTO relocated into @postmill-ai/provider-kernel (step 7.5.1).
+export { SlackDto } from '@postmill-ai/provider-kernel/domains/social-dtos';

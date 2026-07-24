@@ -2,12 +2,12 @@
 
 import React, { FC, useCallback, useRef, useState } from 'react';
 import clsx from 'clsx';
-import { useFetch } from '@gitroom/helpers/utils/custom.fetch';
-import { useUppyUploader } from '@gitroom/frontend/components/files/new.uploader';
+import { useFetch } from '@postmill-ai/helpers/utils/custom.fetch';
+import { useUppyUploader } from '@postmill-ai/frontend/components/files/new.uploader';
 import { Dashboard } from '@uppy/react';
-import { PlusIcon } from '@gitroom/frontend/components/ui/icons';
-import { UPLOAD_ALLOWED_MIME_TYPES } from '@gitroom/helpers/upload-limits.client';
-import { useT } from '@gitroom/react/translation/get.transation.service.client';
+import { PlusIcon } from '@postmill-ai/frontend/components/ui/icons';
+import { UPLOAD_ALLOWED_MIME_TYPES } from '@postmill-ai/helpers/upload-limits.client';
+import { useT } from '@postmill-ai/react/translation/get.transation.service.client';
 
 export const FileUploader: FC<{
   folderId: string | null;

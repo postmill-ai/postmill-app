@@ -2,8 +2,8 @@
 
 import { EventEmitter } from 'events';
 import { useEffect, useState } from 'react';
-import { useVariables } from '@gitroom/react/helpers/variable.context';
-import { useT } from '@gitroom/react/translation/get.transation.service.client';
+import { useVariables } from '@postmill-ai/react/helpers/variable.context';
+import { useT } from '@postmill-ai/react/translation/get.transation.service.client';
 export const supportEmitter = new EventEmitter();
 export const Support = () => {
   const [show, setShow] = useState(true);

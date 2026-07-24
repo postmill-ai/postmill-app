@@ -1,9 +1,9 @@
 'use client';
 
-import { Button } from '@gitroom/react/form/button';
+import { Button } from '@postmill-ai/react/form/button';
 import React, { FC } from 'react';
-import { useT } from '@gitroom/react/translation/get.transation.service.client';
-import { PostComment } from '@gitroom/frontend/components/composer/providers/high.order.provider';
+import { useT } from '@postmill-ai/react/translation/get.transation.service.client';
+import { PostComment } from '@postmill-ai/frontend/components/composer/providers/high.order.provider';
 export const AddPostButton: FC<{
   onClick: () => void;
   num: number;

@@ -1,10 +1,10 @@
 'use client';
 
 import React, { FC } from 'react';
-import { useModals } from '@gitroom/frontend/components/layout/new-modal';
-import { useToaster } from '@gitroom/react/toaster/toaster';
-import { useT } from '@gitroom/react/translation/get.transation.service.client';
-import { MediaSelectorModal } from '@gitroom/frontend/components/media-tools/media-selector-modal';
+import { useModals } from '@postmill-ai/frontend/components/layout/new-modal';
+import { useToaster } from '@postmill-ai/react/toaster/toaster';
+import { useT } from '@postmill-ai/react/translation/get.transation.service.client';
+import { MediaSelectorModal } from '@postmill-ai/frontend/components/media-tools/media-selector-modal';
 import { ModelSelect } from './model-select';
 import { studioFieldKey, studioOptionKey } from './i18n-keys';
 import type { FileFieldValue, StudioField, StudioFieldValue } from './types';

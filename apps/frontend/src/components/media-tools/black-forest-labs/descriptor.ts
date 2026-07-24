@@ -1,4 +1,4 @@
-import type { StudioDescriptor } from '@gitroom/frontend/components/media-tools/studio-kit/types';
+import type { StudioDescriptor } from '@postmill-ai/frontend/components/media-tools/studio-kit/types';
 
 // Black Forest Labs / FLUX (registry/config identifier `black-forest-labs`). Field names
 // are native FLUX params — they ride straight into the request body. FLUX generation is

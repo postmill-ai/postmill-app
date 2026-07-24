@@ -1,8 +1,8 @@
 import { Injectable } from '@nestjs/common';
 import { Agent } from '@mastra/core/agent';
-import { AIModelProvider } from '@gitroom/nestjs-libraries/ai/ai-model.provider';
-import { resolveOrgIdFromModelContext } from '@gitroom/nestjs-libraries/chat/agents/resolve-org-context';
-import { pickTools } from '@gitroom/nestjs-libraries/chat/agents/specialist-tool-subset';
+import { AIModelProvider } from '@postmill-ai/nestjs-libraries/ai/ai-model.provider';
+import { resolveOrgIdFromModelContext } from '@postmill-ai/nestjs-libraries/chat/agents/resolve-org-context';
+import { pickTools } from '@postmill-ai/nestjs-libraries/chat/agents/specialist-tool-subset';
 
 export const CONTENT_TOOL_NAMES = [
   'generatePostContent',

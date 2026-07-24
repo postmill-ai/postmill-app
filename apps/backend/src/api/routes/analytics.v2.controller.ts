@@ -13,30 +13,30 @@ import {
   Res,
 } from '@nestjs/common';
 import { Throttle } from '@nestjs/throttler';
-import { ParseCuidPipe } from '@gitroom/nestjs-libraries/pipes/parse-cuid.pipe';
+import { ParseCuidPipe } from '@postmill-ai/nestjs-libraries/pipes/parse-cuid.pipe';
 import { Organization } from '@prisma/client';
-import { GetOrgFromRequest } from '@gitroom/nestjs-libraries/user/org.from.request';
+import { GetOrgFromRequest } from '@postmill-ai/nestjs-libraries/user/org.from.request';
 import { ApiTags } from '@nestjs/swagger';
-import { AnalyticsService, BestTimeEntry } from '@gitroom/nestjs-libraries/analytics/analytics.service';
-import { AnalyticsShareService } from '@gitroom/nestjs-libraries/analytics/analytics-share.service';
+import { AnalyticsService, BestTimeEntry } from '@postmill-ai/nestjs-libraries/analytics/analytics.service';
+import { AnalyticsShareService } from '@postmill-ai/nestjs-libraries/analytics/analytics-share.service';
 import {
   AnalyticsDateRangeDto,
   AnalyticsPostsQueryDto,
   AnalyticsExportQueryDto,
   UpdateWatchlistDto,
-} from '@gitroom/nestjs-libraries/dtos/analytics/analytics.query.dto';
+} from '@postmill-ai/nestjs-libraries/dtos/analytics/analytics.query.dto';
 import {
   CreateAlertRuleDto,
   UpdateAlertRuleDto,
   AnalyticsShareDto,
-} from '@gitroom/nestjs-libraries/dtos/analytics/alert-rule.dto';
-import { isKnownMetric } from '@gitroom/nestjs-libraries/integrations/social/analytics.metrics';
+} from '@postmill-ai/nestjs-libraries/dtos/analytics/alert-rule.dto';
+import { isKnownMetric } from '@postmill-ai/nestjs-libraries/integrations/social/analytics.metrics';
 import { Response } from 'express';
 import dayjs from 'dayjs';
-import { WatchlistService } from '@gitroom/nestjs-libraries/database/prisma/watchlist/watchlist.service';
-import { CheckPolicies } from '@gitroom/backend/services/auth/permissions/permissions.ability';
-import { AuthorizationActions, Sections } from '@gitroom/backend/services/auth/permissions/permission.exception.class';
-import { RequirePermission } from '@gitroom/backend/services/auth/rbac/require-permission.decorator';
+import { WatchlistService } from '@postmill-ai/nestjs-libraries/database/prisma/watchlist/watchlist.service';
+import { CheckPolicies } from '@postmill-ai/backend/services/auth/permissions/permissions.ability';
+import { AuthorizationActions, Sections } from '@postmill-ai/backend/services/auth/permissions/permission.exception.class';
+import { RequirePermission } from '@postmill-ai/backend/services/auth/rbac/require-permission.decorator';
 import { IsString, IsOptional, IsIn, MinLength, MaxLength, isUUID } from 'class-validator';
 
 // Date-range helpers live in the shared util (used by the campaigns + public
@@ -45,7 +45,7 @@ import {
   validateDateRange,
   validateToGteFrom,
   validateWindowCap,
-} from '@gitroom/nestjs-libraries/analytics/date-range.validation';
+} from '@postmill-ai/nestjs-libraries/analytics/date-range.validation';
 
 export { validateDateRange, validateToGteFrom, validateWindowCap };
 

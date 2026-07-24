@@ -2,8 +2,8 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { BadRequestException } from '@nestjs/common';
 import { WebhooksService } from './webhooks.service';
 import { WebhooksRepository } from './webhooks.repository';
-import { IntegrationRepository } from '@gitroom/nestjs-libraries/database/prisma/integrations/integration.repository';
-import type { WebhooksDto } from '@gitroom/nestjs-libraries/dtos/webhooks/webhooks.dto';
+import { IntegrationRepository } from '@postmill-ai/nestjs-libraries/database/prisma/integrations/integration.repository';
+import type { WebhooksDto } from '@postmill-ai/nestjs-libraries/dtos/webhooks/webhooks.dto';
 
 describe('WebhooksService', () => {
   let service: WebhooksService;

@@ -11,7 +11,7 @@ dayjs.extend(relativeTime);
 
 const mockPush = vi.hoisted(() => vi.fn());
 
-vi.mock('@gitroom/react/translation/get.transation.service.client', () => ({
+vi.mock('@postmill-ai/react/translation/get.transation.service.client', () => ({
   useT:
     () =>
     (_key: string, fallback: string, vars?: Record<string, unknown>) =>
@@ -24,7 +24,7 @@ vi.mock('next/navigation', () => ({
   useRouter: () => ({ push: mockPush }),
 }));
 
-vi.mock('@gitroom/helpers/utils/custom.fetch', () => ({
+vi.mock('@postmill-ai/helpers/utils/custom.fetch', () => ({
   useFetch: () => vi.fn(),
 }));
 
@@ -32,13 +32,13 @@ vi.mock('../hooks/useInboxPreview', () => ({
   useInboxPreview: vi.fn(),
 }));
 
-vi.mock('@gitroom/frontend/components/analytics-v2/kit/channel-avatar', () => ({
+vi.mock('@postmill-ai/frontend/components/analytics-v2/kit/channel-avatar', () => ({
   ChannelAvatar: ({ name, identifier }: { name?: string; identifier?: string }) => (
     <div data-testid="channel-avatar" data-name={name} data-identifier={identifier} />
   ),
 }));
 
-vi.mock('@gitroom/frontend/components/analytics-v2/kit/states', () => ({
+vi.mock('@postmill-ai/frontend/components/analytics-v2/kit/states', () => ({
   TabSkeleton: () => <div data-testid="tab-skeleton">Loading</div>,
   EmptyState: () => <div data-testid="empty-state">Empty</div>,
 }));

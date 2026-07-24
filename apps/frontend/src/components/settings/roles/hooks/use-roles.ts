@@ -2,7 +2,7 @@
 
 import { useCallback } from 'react';
 import useSWR from 'swr';
-import { useFetch } from '@gitroom/helpers/utils/custom.fetch';
+import { useFetch } from '@postmill-ai/helpers/utils/custom.fetch';
 import { createFetchError } from '../../shared/fetch-error';
 
 export interface PermissionItem {

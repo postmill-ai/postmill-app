@@ -3,7 +3,7 @@
 import dynamic from 'next/dynamic';
 
 const BedrockStudio = dynamic(
-  () => import('@gitroom/frontend/components/media-tools/bedrock/bedrock-studio').then((m) => m.BedrockStudio),
+  () => import('@postmill-ai/frontend/components/media-tools/bedrock/bedrock-studio').then((m) => m.BedrockStudio),
   { ssr: false }
 );
 

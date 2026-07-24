@@ -10,7 +10,7 @@ vi.mock('../hooks/useCountUp', () => ({
 
 // RichTile now calls useT() for the clickable tile's aria-label (2.7). Mock the
 // translation client like the other analytics-v2 specs so it resolves fallbacks.
-vi.mock('@gitroom/react/translation/get.transation.service.client', () => ({
+vi.mock('@postmill-ai/react/translation/get.transation.service.client', () => ({
   useT:
     () =>
     (_k: string, d: string, vars?: Record<string, unknown>) =>

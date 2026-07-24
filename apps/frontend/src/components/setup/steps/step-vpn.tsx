@@ -1,9 +1,9 @@
 'use client';
 
 import React from 'react';
-import { StepFrame } from '@gitroom/frontend/components/setup/step-frame';
-import { VpnTab } from '@gitroom/frontend/components/settings/vpn/vpn.tab';
-import { useT } from '@gitroom/react/translation/get.transation.service.client';
+import { StepFrame } from '@postmill-ai/frontend/components/setup/step-frame';
+import { VpnTab } from '@postmill-ai/frontend/components/settings/vpn/vpn.tab';
+import { useT } from '@postmill-ai/react/translation/get.transation.service.client';
 
 export function StepVpn() {
   const t = useT();

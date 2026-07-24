@@ -1,7 +1,7 @@
 'use client';
 
 import useSWR from 'swr';
-import { useFetch } from '@gitroom/helpers/utils/custom.fetch';
+import { useFetch } from '@postmill-ai/helpers/utils/custom.fetch';
 
 /**
  * The single, honest "which media tools can this org use" signal, served by

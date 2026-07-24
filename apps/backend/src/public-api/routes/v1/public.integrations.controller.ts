@@ -12,7 +12,7 @@ import {
   UseInterceptors,
   UsePipes,
 } from '@nestjs/common';
-import { CustomFileValidationPipe } from '@gitroom/nestjs-libraries/upload/custom.upload.validation';
+import { CustomFileValidationPipe } from '@postmill-ai/nestjs-libraries/upload/custom.upload.validation';
 import {
   ApiBearerAuth,
   ApiHeader,
@@ -21,36 +21,36 @@ import {
   ApiSecurity,
   ApiTags,
 } from '@nestjs/swagger';
-import { parseQualified } from '@gitroom/provider-kernel';
+import { parseQualified } from '@postmill-ai/provider-kernel';
 import { Throttle } from '@nestjs/throttler';
-import { GetOrgFromRequest } from '@gitroom/nestjs-libraries/user/org.from.request';
+import { GetOrgFromRequest } from '@postmill-ai/nestjs-libraries/user/org.from.request';
 import { Organization } from '@prisma/client';
-import { IntegrationService } from '@gitroom/nestjs-libraries/database/prisma/integrations/integration.service';
-import { CheckPolicies } from '@gitroom/backend/services/auth/permissions/permissions.ability';
-import { PostsService } from '@gitroom/nestjs-libraries/database/prisma/posts/posts.service';
-import { AnalyticsService } from '@gitroom/nestjs-libraries/analytics/analytics.service';
-import { CampaignsService } from '@gitroom/nestjs-libraries/database/prisma/campaigns/campaigns.service';
+import { IntegrationService } from '@postmill-ai/nestjs-libraries/database/prisma/integrations/integration.service';
+import { CheckPolicies } from '@postmill-ai/backend/services/auth/permissions/permissions.ability';
+import { PostsService } from '@postmill-ai/nestjs-libraries/database/prisma/posts/posts.service';
+import { AnalyticsService } from '@postmill-ai/nestjs-libraries/analytics/analytics.service';
+import { CampaignsService } from '@postmill-ai/nestjs-libraries/database/prisma/campaigns/campaigns.service';
 import {
   validateDateRange,
   validateToGteFrom,
   validateWindowCap,
-} from '@gitroom/nestjs-libraries/analytics/date-range.validation';
+} from '@postmill-ai/nestjs-libraries/analytics/date-range.validation';
 import dayjs from 'dayjs';
-import { CreatePostDto } from '@gitroom/nestjs-libraries/dtos/posts/create.post.dto';
+import { CreatePostDto } from '@postmill-ai/nestjs-libraries/dtos/posts/create.post.dto';
 import { FileInterceptor } from '@nestjs/platform-express';
-import { StorageService } from '@gitroom/nestjs-libraries/database/prisma/storage/storage.service';
-import { FileService } from '@gitroom/nestjs-libraries/database/prisma/file/file.service';
-import { GetPostsDto } from '@gitroom/nestjs-libraries/dtos/posts/get.posts.dto';
-import { ChangePostStatusDto } from '@gitroom/nestjs-libraries/dtos/posts/change.post.status.dto';
+import { StorageService } from '@postmill-ai/nestjs-libraries/database/prisma/storage/storage.service';
+import { FileService } from '@postmill-ai/nestjs-libraries/database/prisma/file/file.service';
+import { GetPostsDto } from '@postmill-ai/nestjs-libraries/dtos/posts/get.posts.dto';
+import { ChangePostStatusDto } from '@postmill-ai/nestjs-libraries/dtos/posts/change.post.status.dto';
 import {
   AuthorizationActions,
   Sections,
-} from '@gitroom/backend/services/auth/permissions/permission.exception.class';
-import { UploadDto } from '@gitroom/nestjs-libraries/dtos/file/upload.dto';
-import { NotificationService } from '@gitroom/nestjs-libraries/database/prisma/notifications/notification.service';
-import { GetNotificationsDto } from '@gitroom/nestjs-libraries/dtos/notifications/get.notifications.dto';
+} from '@postmill-ai/backend/services/auth/permissions/permission.exception.class';
+import { UploadDto } from '@postmill-ai/nestjs-libraries/dtos/file/upload.dto';
+import { NotificationService } from '@postmill-ai/nestjs-libraries/database/prisma/notifications/notification.service';
+import { GetNotificationsDto } from '@postmill-ai/nestjs-libraries/dtos/notifications/get.notifications.dto';
 import { Readable } from 'stream';
-import { safeFetch } from '@gitroom/nestjs-libraries/dtos/webhooks/safe.fetch';
+import { safeFetch } from '@postmill-ai/nestjs-libraries/dtos/webhooks/safe.fetch';
 // eslint-disable-next-line @typescript-eslint/no-require-imports
 const { fromBuffer } = require('file-type');
 
@@ -68,21 +68,21 @@ const PUBLIC_API_ALLOWED_MIME = new Set<string>([
   'video/mp4',
 ]);
 import * as Sentry from '@sentry/nestjs';
-import { IntegrationManager } from '@gitroom/nestjs-libraries/integrations/integration.manager';
-import { getValidationSchemas } from '@gitroom/nestjs-libraries/chat/validation.schemas.helper';
-import { RefreshIntegrationService } from '@gitroom/nestjs-libraries/integrations/refresh.integration.service';
-import { RefreshToken } from '@gitroom/nestjs-libraries/integrations/social.abstract';
-import { timer } from '@gitroom/helpers/utils/timer';
-import { ioRedis } from '@gitroom/nestjs-libraries/redis/redis.service';
+import { IntegrationManager } from '@postmill-ai/nestjs-libraries/integrations/integration.manager';
+import { getValidationSchemas } from '@postmill-ai/nestjs-libraries/chat/validation.schemas.helper';
+import { RefreshIntegrationService } from '@postmill-ai/nestjs-libraries/integrations/refresh.integration.service';
+import { RefreshToken } from '@postmill-ai/nestjs-libraries/integrations/social.abstract';
+import { timer } from '@postmill-ai/helpers/utils/timer';
+import { ioRedis } from '@postmill-ai/nestjs-libraries/redis/redis.service';
 import {
   AiDefaultsService,
   DefaultNotConfiguredError,
-} from '@gitroom/nestjs-libraries/ai/defaults/ai-defaults.service';
-import { AiMediaService } from '@gitroom/nestjs-libraries/ai/governance/media.service';
-import { VideoDto } from '@gitroom/nestjs-libraries/dtos/videos/video.dto';
-import { VideoFunctionDto } from '@gitroom/nestjs-libraries/dtos/videos/video.function.dto';
-import { UpdateReleaseIdDto } from '@gitroom/nestjs-libraries/dtos/posts/update-release-id.dto';
-import { TriggerIntegrationToolDto } from '@gitroom/nestjs-libraries/dtos/integrations/trigger-integration-tool.dto';
+} from '@postmill-ai/nestjs-libraries/ai/defaults/ai-defaults.service';
+import { AiMediaService } from '@postmill-ai/nestjs-libraries/ai/governance/media.service';
+import { VideoDto } from '@postmill-ai/nestjs-libraries/dtos/videos/video.dto';
+import { VideoFunctionDto } from '@postmill-ai/nestjs-libraries/dtos/videos/video.function.dto';
+import { UpdateReleaseIdDto } from '@postmill-ai/nestjs-libraries/dtos/posts/update-release-id.dto';
+import { TriggerIntegrationToolDto } from '@postmill-ai/nestjs-libraries/dtos/integrations/trigger-integration-tool.dto';
 
 @ApiTags('Public API')
 @ApiSecurity('api-key')

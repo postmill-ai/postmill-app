@@ -1,5 +1,5 @@
 import { Injectable } from '@nestjs/common';
-import { BrandsRepository } from '@gitroom/nestjs-libraries/database/prisma/brands/brands.repository';
+import { BrandsRepository } from '@postmill-ai/nestjs-libraries/database/prisma/brands/brands.repository';
 
 @Injectable()
 export class BrandsService {

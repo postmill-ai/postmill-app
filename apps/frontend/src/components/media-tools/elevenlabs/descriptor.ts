@@ -1,4 +1,4 @@
-import type { StudioDescriptor } from '@gitroom/frontend/components/media-tools/studio-kit/types';
+import type { StudioDescriptor } from '@postmill-ai/frontend/components/media-tools/studio-kit/types';
 
 // ElevenLabs text-to-speech (registry/config identifier `elevenlabs`). TTS is synchronous —
 // the adapter returns the audio inline as a data URL. Field names are native ElevenLabs

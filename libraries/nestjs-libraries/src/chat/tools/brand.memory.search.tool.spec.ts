@@ -1,7 +1,7 @@
 import 'reflect-metadata';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { BrandMemorySearchTool } from './brand.memory.search.tool';
-import { RagService } from '@gitroom/nestjs-libraries/ai/governance/rag.service';
+import { RagService } from '@postmill-ai/nestjs-libraries/ai/governance/rag.service';
 import { executeTool, makeOrganization, makeUser } from './__tests__/tool-test.harness';
 
 describe('BrandMemorySearchTool', () => {

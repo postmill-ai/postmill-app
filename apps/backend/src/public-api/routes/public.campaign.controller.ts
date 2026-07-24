@@ -3,7 +3,7 @@ import { Throttle } from '@nestjs/throttler';
 import {
   CampaignReportService,
   CampaignReportAnalytics,
-} from '@gitroom/nestjs-libraries/database/prisma/campaigns/campaign-report.service';
+} from '@postmill-ai/nestjs-libraries/database/prisma/campaigns/campaign-report.service';
 
 @Controller('/public/campaign-report')
 export class PublicCampaignController {

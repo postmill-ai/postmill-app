@@ -14,7 +14,7 @@ import {
   isTransientStatus,
   SafeFetchPort,
   ProviderModule,
-} from '@gitroom/provider-kernel';
+} from '@postmill-ai/provider-kernel';
 
 // Together AI — same key as the Together LLM provider (registry id `togetherai`), reused
 // via the universal-credential fallback. Image + TTS ride the shared OpenAI-compatible base

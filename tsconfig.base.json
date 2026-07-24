@@ -31,937 +31,937 @@
       "@langchain/langgraph/prebuilt": [
         "node_modules/@langchain/langgraph/dist/prebuilt/index.d.ts"
       ],
-      "@gitroom/backend/*": [
+      "@postmill-ai/backend/*": [
         "apps/backend/src/*"
       ],
-      "@gitroom/frontend/*": [
+      "@postmill-ai/frontend/*": [
         "apps/frontend/src/*"
       ],
-      "@gitroom/helpers/*": [
+      "@postmill-ai/helpers/*": [
         "libraries/helpers/src/*"
       ],
-      "@gitroom/nestjs-libraries/*": [
+      "@postmill-ai/nestjs-libraries/*": [
         "libraries/nestjs-libraries/src/*"
       ],
-      "@gitroom/react/*": [
+      "@postmill-ai/react/*": [
         "libraries/react-shared-libraries/src/*"
       ],
-      "@gitroom/plugins/*": [
+      "@postmill-ai/plugins/*": [
         "libraries/plugins/src/*"
       ],
-      "@gitroom/extension/*": [
+      "@postmill-ai/extension/*": [
         "apps/extension/src/*"
       ],
-      "@gitroom/provider-kernel": [
+      "@postmill-ai/provider-kernel": [
         "libraries/providers/kernel/src"
       ],
-      "@gitroom/provider-kernel/*": [
+      "@postmill-ai/provider-kernel/*": [
         "libraries/providers/kernel/src/*"
       ],
-      "@gitroom/provider-adobe-stock": [
+      "@postmill-ai/provider-adobe-stock": [
         "libraries/providers/adobe-stock/src"
       ],
-      "@gitroom/provider-adobe-stock/*": [
+      "@postmill-ai/provider-adobe-stock/*": [
         "libraries/providers/adobe-stock/src/*"
       ],
-      "@gitroom/provider-anthropic": [
+      "@postmill-ai/provider-anthropic": [
         "libraries/providers/anthropic/src"
       ],
-      "@gitroom/provider-anthropic/*": [
+      "@postmill-ai/provider-anthropic/*": [
         "libraries/providers/anthropic/src/*"
       ],
-      "@gitroom/provider-apertus": [
+      "@postmill-ai/provider-apertus": [
         "libraries/providers/apertus/src"
       ],
-      "@gitroom/provider-apertus/*": [
+      "@postmill-ai/provider-apertus/*": [
         "libraries/providers/apertus/src/*"
       ],
-      "@gitroom/provider-azure": [
+      "@postmill-ai/provider-azure": [
         "libraries/providers/azure/src"
       ],
-      "@gitroom/provider-azure/*": [
+      "@postmill-ai/provider-azure/*": [
         "libraries/providers/azure/src/*"
       ],
-      "@gitroom/provider-backblaze-b2": [
+      "@postmill-ai/provider-backblaze-b2": [
         "libraries/providers/backblaze-b2/src"
       ],
-      "@gitroom/provider-backblaze-b2/*": [
+      "@postmill-ai/provider-backblaze-b2/*": [
         "libraries/providers/backblaze-b2/src/*"
       ],
-      "@gitroom/provider-bedrock": [
+      "@postmill-ai/provider-bedrock": [
         "libraries/providers/bedrock/src"
       ],
-      "@gitroom/provider-bedrock/*": [
+      "@postmill-ai/provider-bedrock/*": [
         "libraries/providers/bedrock/src/*"
       ],
-      "@gitroom/provider-bitdeer": [
+      "@postmill-ai/provider-bitdeer": [
         "libraries/providers/bitdeer/src"
       ],
-      "@gitroom/provider-bitdeer/*": [
+      "@postmill-ai/provider-bitdeer/*": [
         "libraries/providers/bitdeer/src/*"
       ],
-      "@gitroom/provider-bitly": [
+      "@postmill-ai/provider-bitly": [
         "libraries/providers/bitly/src"
       ],
-      "@gitroom/provider-bitly/*": [
+      "@postmill-ai/provider-bitly/*": [
         "libraries/providers/bitly/src/*"
       ],
-      "@gitroom/provider-black-forest-labs": [
+      "@postmill-ai/provider-black-forest-labs": [
         "libraries/providers/black-forest-labs/src"
       ],
-      "@gitroom/provider-black-forest-labs/*": [
+      "@postmill-ai/provider-black-forest-labs/*": [
         "libraries/providers/black-forest-labs/src/*"
       ],
-      "@gitroom/provider-blink": [
+      "@postmill-ai/provider-blink": [
         "libraries/providers/blink/src"
       ],
-      "@gitroom/provider-blink/*": [
+      "@postmill-ai/provider-blink/*": [
         "libraries/providers/blink/src/*"
       ],
-      "@gitroom/provider-bluesky": [
+      "@postmill-ai/provider-bluesky": [
         "libraries/providers/bluesky/src"
       ],
-      "@gitroom/provider-bluesky/*": [
+      "@postmill-ai/provider-bluesky/*": [
         "libraries/providers/bluesky/src/*"
       ],
-      "@gitroom/provider-cleanuri": [
+      "@postmill-ai/provider-cleanuri": [
         "libraries/providers/cleanuri/src"
       ],
-      "@gitroom/provider-cleanuri/*": [
+      "@postmill-ai/provider-cleanuri/*": [
         "libraries/providers/cleanuri/src/*"
       ],
-      "@gitroom/provider-cloudflare-r2": [
+      "@postmill-ai/provider-cloudflare-r2": [
         "libraries/providers/cloudflare-r2/src"
       ],
-      "@gitroom/provider-cloudflare-r2/*": [
+      "@postmill-ai/provider-cloudflare-r2/*": [
         "libraries/providers/cloudflare-r2/src/*"
       ],
-      "@gitroom/provider-cohere": [
+      "@postmill-ai/provider-cohere": [
         "libraries/providers/cohere/src"
       ],
-      "@gitroom/provider-cohere/*": [
+      "@postmill-ai/provider-cohere/*": [
         "libraries/providers/cohere/src/*"
       ],
-      "@gitroom/provider-custom-proxy": [
+      "@postmill-ai/provider-custom-proxy": [
         "libraries/providers/custom-proxy/src"
       ],
-      "@gitroom/provider-custom-proxy/*": [
+      "@postmill-ai/provider-custom-proxy/*": [
         "libraries/providers/custom-proxy/src/*"
       ],
-      "@gitroom/provider-cuttly": [
+      "@postmill-ai/provider-cuttly": [
         "libraries/providers/cuttly/src"
       ],
-      "@gitroom/provider-cuttly/*": [
+      "@postmill-ai/provider-cuttly/*": [
         "libraries/providers/cuttly/src/*"
       ],
-      "@gitroom/provider-cyberghost": [
+      "@postmill-ai/provider-cyberghost": [
         "libraries/providers/cyberghost/src"
       ],
-      "@gitroom/provider-cyberghost/*": [
+      "@postmill-ai/provider-cyberghost/*": [
         "libraries/providers/cyberghost/src/*"
       ],
-      "@gitroom/provider-deepgram": [
+      "@postmill-ai/provider-deepgram": [
         "libraries/providers/deepgram/src"
       ],
-      "@gitroom/provider-deepgram/*": [
+      "@postmill-ai/provider-deepgram/*": [
         "libraries/providers/deepgram/src/*"
       ],
-      "@gitroom/provider-deepinfra": [
+      "@postmill-ai/provider-deepinfra": [
         "libraries/providers/deepinfra/src"
       ],
-      "@gitroom/provider-deepinfra/*": [
+      "@postmill-ai/provider-deepinfra/*": [
         "libraries/providers/deepinfra/src/*"
       ],
-      "@gitroom/provider-deepseek": [
+      "@postmill-ai/provider-deepseek": [
         "libraries/providers/deepseek/src"
       ],
-      "@gitroom/provider-deepseek/*": [
+      "@postmill-ai/provider-deepseek/*": [
         "libraries/providers/deepseek/src/*"
       ],
-      "@gitroom/provider-devto": [
+      "@postmill-ai/provider-devto": [
         "libraries/providers/devto/src"
       ],
-      "@gitroom/provider-devto/*": [
+      "@postmill-ai/provider-devto/*": [
         "libraries/providers/devto/src/*"
       ],
-      "@gitroom/provider-did": [
+      "@postmill-ai/provider-did": [
         "libraries/providers/did/src"
       ],
-      "@gitroom/provider-did/*": [
+      "@postmill-ai/provider-did/*": [
         "libraries/providers/did/src/*"
       ],
-      "@gitroom/provider-digitalocean-spaces": [
+      "@postmill-ai/provider-digitalocean-spaces": [
         "libraries/providers/digitalocean-spaces/src"
       ],
-      "@gitroom/provider-digitalocean-spaces/*": [
+      "@postmill-ai/provider-digitalocean-spaces/*": [
         "libraries/providers/digitalocean-spaces/src/*"
       ],
-      "@gitroom/provider-discord": [
+      "@postmill-ai/provider-discord": [
         "libraries/providers/discord/src"
       ],
-      "@gitroom/provider-discord/*": [
+      "@postmill-ai/provider-discord/*": [
         "libraries/providers/discord/src/*"
       ],
-      "@gitroom/provider-dribbble": [
+      "@postmill-ai/provider-dribbble": [
         "libraries/providers/dribbble/src"
       ],
-      "@gitroom/provider-dribbble/*": [
+      "@postmill-ai/provider-dribbble/*": [
         "libraries/providers/dribbble/src/*"
       ],
-      "@gitroom/provider-dub": [
+      "@postmill-ai/provider-dub": [
         "libraries/providers/dub/src"
       ],
-      "@gitroom/provider-dub/*": [
+      "@postmill-ai/provider-dub/*": [
         "libraries/providers/dub/src/*"
       ],
-      "@gitroom/provider-elevenlabs": [
+      "@postmill-ai/provider-elevenlabs": [
         "libraries/providers/elevenlabs/src"
       ],
-      "@gitroom/provider-elevenlabs/*": [
+      "@postmill-ai/provider-elevenlabs/*": [
         "libraries/providers/elevenlabs/src/*"
       ],
-      "@gitroom/provider-empty": [
+      "@postmill-ai/provider-empty": [
         "libraries/providers/empty/src"
       ],
-      "@gitroom/provider-empty/*": [
+      "@postmill-ai/provider-empty/*": [
         "libraries/providers/empty/src/*"
       ],
-      "@gitroom/provider-envato": [
+      "@postmill-ai/provider-envato": [
         "libraries/providers/envato/src"
       ],
-      "@gitroom/provider-envato/*": [
+      "@postmill-ai/provider-envato/*": [
         "libraries/providers/envato/src/*"
       ],
-      "@gitroom/provider-expressvpn": [
+      "@postmill-ai/provider-expressvpn": [
         "libraries/providers/expressvpn/src"
       ],
-      "@gitroom/provider-expressvpn/*": [
+      "@postmill-ai/provider-expressvpn/*": [
         "libraries/providers/expressvpn/src/*"
       ],
-      "@gitroom/provider-facebook": [
+      "@postmill-ai/provider-facebook": [
         "libraries/providers/facebook/src"
       ],
-      "@gitroom/provider-facebook/*": [
+      "@postmill-ai/provider-facebook/*": [
         "libraries/providers/facebook/src/*"
       ],
-      "@gitroom/provider-fal": [
+      "@postmill-ai/provider-fal": [
         "libraries/providers/fal/src"
       ],
-      "@gitroom/provider-fal/*": [
+      "@postmill-ai/provider-fal/*": [
         "libraries/providers/fal/src/*"
       ],
-      "@gitroom/provider-fireworks": [
+      "@postmill-ai/provider-fireworks": [
         "libraries/providers/fireworks/src"
       ],
-      "@gitroom/provider-fireworks/*": [
+      "@postmill-ai/provider-fireworks/*": [
         "libraries/providers/fireworks/src/*"
       ],
-      "@gitroom/provider-gateway": [
+      "@postmill-ai/provider-gateway": [
         "libraries/providers/gateway/src"
       ],
-      "@gitroom/provider-gateway/*": [
+      "@postmill-ai/provider-gateway/*": [
         "libraries/providers/gateway/src/*"
       ],
-      "@gitroom/provider-generic": [
+      "@postmill-ai/provider-generic": [
         "libraries/providers/generic/src"
       ],
-      "@gitroom/provider-generic/*": [
+      "@postmill-ai/provider-generic/*": [
         "libraries/providers/generic/src/*"
       ],
-      "@gitroom/provider-genviral": [
+      "@postmill-ai/provider-genviral": [
         "libraries/providers/genviral/src"
       ],
-      "@gitroom/provider-genviral/*": [
+      "@postmill-ai/provider-genviral/*": [
         "libraries/providers/genviral/src/*"
       ],
-      "@gitroom/provider-github": [
+      "@postmill-ai/provider-github": [
         "libraries/providers/github/src"
       ],
-      "@gitroom/provider-github/*": [
+      "@postmill-ai/provider-github/*": [
         "libraries/providers/github/src/*"
       ],
-      "@gitroom/provider-gmb": [
+      "@postmill-ai/provider-gmb": [
         "libraries/providers/gmb/src"
       ],
-      "@gitroom/provider-gmb/*": [
+      "@postmill-ai/provider-gmb/*": [
         "libraries/providers/gmb/src/*"
       ],
-      "@gitroom/provider-gmihub": [
+      "@postmill-ai/provider-gmihub": [
         "libraries/providers/gmihub/src"
       ],
-      "@gitroom/provider-gmihub/*": [
+      "@postmill-ai/provider-gmihub/*": [
         "libraries/providers/gmihub/src/*"
       ],
-      "@gitroom/provider-google": [
+      "@postmill-ai/provider-google": [
         "libraries/providers/google/src"
       ],
-      "@gitroom/provider-google/*": [
+      "@postmill-ai/provider-google/*": [
         "libraries/providers/google/src/*"
       ],
-      "@gitroom/provider-google-ai": [
+      "@postmill-ai/provider-google-ai": [
         "libraries/providers/google-ai/src"
       ],
-      "@gitroom/provider-google-ai/*": [
+      "@postmill-ai/provider-google-ai/*": [
         "libraries/providers/google-ai/src/*"
       ],
-      "@gitroom/provider-groq": [
+      "@postmill-ai/provider-groq": [
         "libraries/providers/groq/src"
       ],
-      "@gitroom/provider-groq/*": [
+      "@postmill-ai/provider-groq/*": [
         "libraries/providers/groq/src/*"
       ],
-      "@gitroom/provider-hashnode": [
+      "@postmill-ai/provider-hashnode": [
         "libraries/providers/hashnode/src"
       ],
-      "@gitroom/provider-hashnode/*": [
+      "@postmill-ai/provider-hashnode/*": [
         "libraries/providers/hashnode/src/*"
       ],
-      "@gitroom/provider-hedra": [
+      "@postmill-ai/provider-hedra": [
         "libraries/providers/hedra/src"
       ],
-      "@gitroom/provider-hedra/*": [
+      "@postmill-ai/provider-hedra/*": [
         "libraries/providers/hedra/src/*"
       ],
-      "@gitroom/provider-hetzner": [
+      "@postmill-ai/provider-hetzner": [
         "libraries/providers/hetzner/src"
       ],
-      "@gitroom/provider-hetzner/*": [
+      "@postmill-ai/provider-hetzner/*": [
         "libraries/providers/hetzner/src/*"
       ],
-      "@gitroom/provider-heygen": [
+      "@postmill-ai/provider-heygen": [
         "libraries/providers/heygen/src"
       ],
-      "@gitroom/provider-heygen/*": [
+      "@postmill-ai/provider-heygen/*": [
         "libraries/providers/heygen/src/*"
       ],
-      "@gitroom/provider-hideme": [
+      "@postmill-ai/provider-hideme": [
         "libraries/providers/hideme/src"
       ],
-      "@gitroom/provider-hideme/*": [
+      "@postmill-ai/provider-hideme/*": [
         "libraries/providers/hideme/src/*"
       ],
-      "@gitroom/provider-higgsfield": [
+      "@postmill-ai/provider-higgsfield": [
         "libraries/providers/higgsfield/src"
       ],
-      "@gitroom/provider-higgsfield/*": [
+      "@postmill-ai/provider-higgsfield/*": [
         "libraries/providers/higgsfield/src/*"
       ],
-      "@gitroom/provider-hotspotshield": [
+      "@postmill-ai/provider-hotspotshield": [
         "libraries/providers/hotspotshield/src"
       ],
-      "@gitroom/provider-hotspotshield/*": [
+      "@postmill-ai/provider-hotspotshield/*": [
         "libraries/providers/hotspotshield/src/*"
       ],
-      "@gitroom/provider-ideogram": [
+      "@postmill-ai/provider-ideogram": [
         "libraries/providers/ideogram/src"
       ],
-      "@gitroom/provider-ideogram/*": [
+      "@postmill-ai/provider-ideogram/*": [
         "libraries/providers/ideogram/src/*"
       ],
-      "@gitroom/provider-idrive-e2": [
+      "@postmill-ai/provider-idrive-e2": [
         "libraries/providers/idrive-e2/src"
       ],
-      "@gitroom/provider-idrive-e2/*": [
+      "@postmill-ai/provider-idrive-e2/*": [
         "libraries/providers/idrive-e2/src/*"
       ],
-      "@gitroom/provider-instagram": [
+      "@postmill-ai/provider-instagram": [
         "libraries/providers/instagram/src"
       ],
-      "@gitroom/provider-instagram/*": [
+      "@postmill-ai/provider-instagram/*": [
         "libraries/providers/instagram/src/*"
       ],
-      "@gitroom/provider-instagram-standalone": [
+      "@postmill-ai/provider-instagram-standalone": [
         "libraries/providers/instagram-standalone/src"
       ],
-      "@gitroom/provider-instagram-standalone/*": [
+      "@postmill-ai/provider-instagram-standalone/*": [
         "libraries/providers/instagram-standalone/src/*"
       ],
-      "@gitroom/provider-ipvanish": [
+      "@postmill-ai/provider-ipvanish": [
         "libraries/providers/ipvanish/src"
       ],
-      "@gitroom/provider-ipvanish/*": [
+      "@postmill-ai/provider-ipvanish/*": [
         "libraries/providers/ipvanish/src/*"
       ],
-      "@gitroom/provider-isgd": [
+      "@postmill-ai/provider-isgd": [
         "libraries/providers/isgd/src"
       ],
-      "@gitroom/provider-isgd/*": [
+      "@postmill-ai/provider-isgd/*": [
         "libraries/providers/isgd/src/*"
       ],
-      "@gitroom/provider-kick": [
+      "@postmill-ai/provider-kick": [
         "libraries/providers/kick/src"
       ],
-      "@gitroom/provider-kick/*": [
+      "@postmill-ai/provider-kick/*": [
         "libraries/providers/kick/src/*"
       ],
-      "@gitroom/provider-kimi": [
+      "@postmill-ai/provider-kimi": [
         "libraries/providers/kimi/src"
       ],
-      "@gitroom/provider-kimi/*": [
+      "@postmill-ai/provider-kimi/*": [
         "libraries/providers/kimi/src/*"
       ],
-      "@gitroom/provider-lemmy": [
+      "@postmill-ai/provider-lemmy": [
         "libraries/providers/lemmy/src"
       ],
-      "@gitroom/provider-lemmy/*": [
+      "@postmill-ai/provider-lemmy/*": [
         "libraries/providers/lemmy/src/*"
       ],
-      "@gitroom/provider-leonardo": [
+      "@postmill-ai/provider-leonardo": [
         "libraries/providers/leonardo/src"
       ],
-      "@gitroom/provider-leonardo/*": [
+      "@postmill-ai/provider-leonardo/*": [
         "libraries/providers/leonardo/src/*"
       ],
-      "@gitroom/provider-lightning": [
+      "@postmill-ai/provider-lightning": [
         "libraries/providers/lightning/src"
       ],
-      "@gitroom/provider-lightning/*": [
+      "@postmill-ai/provider-lightning/*": [
         "libraries/providers/lightning/src/*"
       ],
-      "@gitroom/provider-linkedin": [
+      "@postmill-ai/provider-linkedin": [
         "libraries/providers/linkedin/src"
       ],
-      "@gitroom/provider-linkedin/*": [
+      "@postmill-ai/provider-linkedin/*": [
         "libraries/providers/linkedin/src/*"
       ],
-      "@gitroom/provider-linkedin-page": [
+      "@postmill-ai/provider-linkedin-page": [
         "libraries/providers/linkedin-page/src"
       ],
-      "@gitroom/provider-linkedin-page/*": [
+      "@postmill-ai/provider-linkedin-page/*": [
         "libraries/providers/linkedin-page/src/*"
       ],
-      "@gitroom/provider-linkly": [
+      "@postmill-ai/provider-linkly": [
         "libraries/providers/linkly/src"
       ],
-      "@gitroom/provider-linkly/*": [
+      "@postmill-ai/provider-linkly/*": [
         "libraries/providers/linkly/src/*"
       ],
-      "@gitroom/provider-linode": [
+      "@postmill-ai/provider-linode": [
         "libraries/providers/linode/src"
       ],
-      "@gitroom/provider-linode/*": [
+      "@postmill-ai/provider-linode/*": [
         "libraries/providers/linode/src/*"
       ],
-      "@gitroom/provider-listmonk": [
+      "@postmill-ai/provider-listmonk": [
         "libraries/providers/listmonk/src"
       ],
-      "@gitroom/provider-listmonk/*": [
+      "@postmill-ai/provider-listmonk/*": [
         "libraries/providers/listmonk/src/*"
       ],
-      "@gitroom/provider-lnkify": [
+      "@postmill-ai/provider-lnkify": [
         "libraries/providers/lnkify/src"
       ],
-      "@gitroom/provider-lnkify/*": [
+      "@postmill-ai/provider-lnkify/*": [
         "libraries/providers/lnkify/src/*"
       ],
-      "@gitroom/provider-local": [
+      "@postmill-ai/provider-local": [
         "libraries/providers/local/src"
       ],
-      "@gitroom/provider-local/*": [
+      "@postmill-ai/provider-local/*": [
         "libraries/providers/local/src/*"
       ],
-      "@gitroom/provider-ltx": [
+      "@postmill-ai/provider-ltx": [
         "libraries/providers/ltx/src"
       ],
-      "@gitroom/provider-ltx/*": [
+      "@postmill-ai/provider-ltx/*": [
         "libraries/providers/ltx/src/*"
       ],
-      "@gitroom/provider-luma": [
+      "@postmill-ai/provider-luma": [
         "libraries/providers/luma/src"
       ],
-      "@gitroom/provider-luma/*": [
+      "@postmill-ai/provider-luma/*": [
         "libraries/providers/luma/src/*"
       ],
-      "@gitroom/provider-magnific": [
+      "@postmill-ai/provider-magnific": [
         "libraries/providers/magnific/src"
       ],
-      "@gitroom/provider-magnific/*": [
+      "@postmill-ai/provider-magnific/*": [
         "libraries/providers/magnific/src/*"
       ],
-      "@gitroom/provider-mailgun": [
+      "@postmill-ai/provider-mailgun": [
         "libraries/providers/mailgun/src"
       ],
-      "@gitroom/provider-mailgun/*": [
+      "@postmill-ai/provider-mailgun/*": [
         "libraries/providers/mailgun/src/*"
       ],
-      "@gitroom/provider-mastodon": [
+      "@postmill-ai/provider-mastodon": [
         "libraries/providers/mastodon/src"
       ],
-      "@gitroom/provider-mastodon/*": [
+      "@postmill-ai/provider-mastodon/*": [
         "libraries/providers/mastodon/src/*"
       ],
-      "@gitroom/provider-medialocker": [
+      "@postmill-ai/provider-medialocker": [
         "libraries/providers/medialocker/src"
       ],
-      "@gitroom/provider-medialocker/*": [
+      "@postmill-ai/provider-medialocker/*": [
         "libraries/providers/medialocker/src/*"
       ],
-      "@gitroom/provider-medium": [
+      "@postmill-ai/provider-medium": [
         "libraries/providers/medium/src"
       ],
-      "@gitroom/provider-medium/*": [
+      "@postmill-ai/provider-medium/*": [
         "libraries/providers/medium/src/*"
       ],
-      "@gitroom/provider-meta-llama": [
+      "@postmill-ai/provider-meta-llama": [
         "libraries/providers/meta-llama/src"
       ],
-      "@gitroom/provider-meta-llama/*": [
+      "@postmill-ai/provider-meta-llama/*": [
         "libraries/providers/meta-llama/src/*"
       ],
-      "@gitroom/provider-mewe": [
+      "@postmill-ai/provider-mewe": [
         "libraries/providers/mewe/src"
       ],
-      "@gitroom/provider-mewe/*": [
+      "@postmill-ai/provider-mewe/*": [
         "libraries/providers/mewe/src/*"
       ],
-      "@gitroom/provider-minimax": [
+      "@postmill-ai/provider-minimax": [
         "libraries/providers/minimax/src"
       ],
-      "@gitroom/provider-minimax/*": [
+      "@postmill-ai/provider-minimax/*": [
         "libraries/providers/minimax/src/*"
       ],
-      "@gitroom/provider-mistral": [
+      "@postmill-ai/provider-mistral": [
         "libraries/providers/mistral/src"
       ],
-      "@gitroom/provider-mistral/*": [
+      "@postmill-ai/provider-mistral/*": [
         "libraries/providers/mistral/src/*"
       ],
-      "@gitroom/provider-moltbook": [
+      "@postmill-ai/provider-moltbook": [
         "libraries/providers/moltbook/src"
       ],
-      "@gitroom/provider-moltbook/*": [
+      "@postmill-ai/provider-moltbook/*": [
         "libraries/providers/moltbook/src/*"
       ],
-      "@gitroom/provider-mozillavpn": [
+      "@postmill-ai/provider-mozillavpn": [
         "libraries/providers/mozillavpn/src"
       ],
-      "@gitroom/provider-mozillavpn/*": [
+      "@postmill-ai/provider-mozillavpn/*": [
         "libraries/providers/mozillavpn/src/*"
       ],
-      "@gitroom/provider-mullvad": [
+      "@postmill-ai/provider-mullvad": [
         "libraries/providers/mullvad/src"
       ],
-      "@gitroom/provider-mullvad/*": [
+      "@postmill-ai/provider-mullvad/*": [
         "libraries/providers/mullvad/src/*"
       ],
-      "@gitroom/provider-nordvpn": [
+      "@postmill-ai/provider-nordvpn": [
         "libraries/providers/nordvpn/src"
       ],
-      "@gitroom/provider-nordvpn/*": [
+      "@postmill-ai/provider-nordvpn/*": [
         "libraries/providers/nordvpn/src/*"
       ],
-      "@gitroom/provider-nostr": [
+      "@postmill-ai/provider-nostr": [
         "libraries/providers/nostr/src"
       ],
-      "@gitroom/provider-nostr/*": [
+      "@postmill-ai/provider-nostr/*": [
         "libraries/providers/nostr/src/*"
       ],
-      "@gitroom/provider-nvidia": [
+      "@postmill-ai/provider-nvidia": [
         "libraries/providers/nvidia/src"
       ],
-      "@gitroom/provider-nvidia/*": [
+      "@postmill-ai/provider-nvidia/*": [
         "libraries/providers/nvidia/src/*"
       ],
-      "@gitroom/provider-openai": [
+      "@postmill-ai/provider-openai": [
         "libraries/providers/openai/src"
       ],
-      "@gitroom/provider-openai/*": [
+      "@postmill-ai/provider-openai/*": [
         "libraries/providers/openai/src/*"
       ],
-      "@gitroom/provider-openai-compatible": [
+      "@postmill-ai/provider-openai-compatible": [
         "libraries/providers/openai-compatible/src"
       ],
-      "@gitroom/provider-openai-compatible/*": [
+      "@postmill-ai/provider-openai-compatible/*": [
         "libraries/providers/openai-compatible/src/*"
       ],
-      "@gitroom/provider-openrouter": [
+      "@postmill-ai/provider-openrouter": [
         "libraries/providers/openrouter/src"
       ],
-      "@gitroom/provider-openrouter/*": [
+      "@postmill-ai/provider-openrouter/*": [
         "libraries/providers/openrouter/src/*"
       ],
-      "@gitroom/provider-owly": [
+      "@postmill-ai/provider-owly": [
         "libraries/providers/owly/src"
       ],
-      "@gitroom/provider-owly/*": [
+      "@postmill-ai/provider-owly/*": [
         "libraries/providers/owly/src/*"
       ],
-      "@gitroom/provider-peertube": [
+      "@postmill-ai/provider-peertube": [
         "libraries/providers/peertube/src"
       ],
-      "@gitroom/provider-peertube/*": [
+      "@postmill-ai/provider-peertube/*": [
         "libraries/providers/peertube/src/*"
       ],
-      "@gitroom/provider-perplexity": [
+      "@postmill-ai/provider-perplexity": [
         "libraries/providers/perplexity/src"
       ],
-      "@gitroom/provider-perplexity/*": [
+      "@postmill-ai/provider-perplexity/*": [
         "libraries/providers/perplexity/src/*"
       ],
-      "@gitroom/provider-pia": [
+      "@postmill-ai/provider-pia": [
         "libraries/providers/pia/src"
       ],
-      "@gitroom/provider-pia/*": [
+      "@postmill-ai/provider-pia/*": [
         "libraries/providers/pia/src/*"
       ],
-      "@gitroom/provider-pinterest": [
+      "@postmill-ai/provider-pinterest": [
         "libraries/providers/pinterest/src"
       ],
-      "@gitroom/provider-pinterest/*": [
+      "@postmill-ai/provider-pinterest/*": [
         "libraries/providers/pinterest/src/*"
       ],
-      "@gitroom/provider-pixelfed": [
+      "@postmill-ai/provider-pixelfed": [
         "libraries/providers/pixelfed/src"
       ],
-      "@gitroom/provider-pixelfed/*": [
+      "@postmill-ai/provider-pixelfed/*": [
         "libraries/providers/pixelfed/src/*"
       ],
-      "@gitroom/provider-pixelme": [
+      "@postmill-ai/provider-pixelme": [
         "libraries/providers/pixelme/src"
       ],
-      "@gitroom/provider-pixelme/*": [
+      "@postmill-ai/provider-pixelme/*": [
         "libraries/providers/pixelme/src/*"
       ],
-      "@gitroom/provider-postmark": [
+      "@postmill-ai/provider-postmark": [
         "libraries/providers/postmark/src"
       ],
-      "@gitroom/provider-postmark/*": [
+      "@postmill-ai/provider-postmark/*": [
         "libraries/providers/postmark/src/*"
       ],
-      "@gitroom/provider-protonvpn": [
+      "@postmill-ai/provider-protonvpn": [
         "libraries/providers/protonvpn/src"
       ],
-      "@gitroom/provider-protonvpn/*": [
+      "@postmill-ai/provider-protonvpn/*": [
         "libraries/providers/protonvpn/src/*"
       ],
-      "@gitroom/provider-purevpn": [
+      "@postmill-ai/provider-purevpn": [
         "libraries/providers/purevpn/src"
       ],
-      "@gitroom/provider-purevpn/*": [
+      "@postmill-ai/provider-purevpn/*": [
         "libraries/providers/purevpn/src/*"
       ],
-      "@gitroom/provider-qwen": [
+      "@postmill-ai/provider-qwen": [
         "libraries/providers/qwen/src"
       ],
-      "@gitroom/provider-qwen/*": [
+      "@postmill-ai/provider-qwen/*": [
         "libraries/providers/qwen/src/*"
       ],
-      "@gitroom/provider-rebrandly": [
+      "@postmill-ai/provider-rebrandly": [
         "libraries/providers/rebrandly/src"
       ],
-      "@gitroom/provider-rebrandly/*": [
+      "@postmill-ai/provider-rebrandly/*": [
         "libraries/providers/rebrandly/src/*"
       ],
-      "@gitroom/provider-recraft": [
+      "@postmill-ai/provider-recraft": [
         "libraries/providers/recraft/src"
       ],
-      "@gitroom/provider-recraft/*": [
+      "@postmill-ai/provider-recraft/*": [
         "libraries/providers/recraft/src/*"
       ],
-      "@gitroom/provider-reddit": [
+      "@postmill-ai/provider-reddit": [
         "libraries/providers/reddit/src"
       ],
-      "@gitroom/provider-reddit/*": [
+      "@postmill-ai/provider-reddit/*": [
         "libraries/providers/reddit/src/*"
       ],
-      "@gitroom/provider-reelfarm": [
+      "@postmill-ai/provider-reelfarm": [
         "libraries/providers/reelfarm/src"
       ],
-      "@gitroom/provider-reelfarm/*": [
+      "@postmill-ai/provider-reelfarm/*": [
         "libraries/providers/reelfarm/src/*"
       ],
-      "@gitroom/provider-replicate": [
+      "@postmill-ai/provider-replicate": [
         "libraries/providers/replicate/src"
       ],
-      "@gitroom/provider-replicate/*": [
+      "@postmill-ai/provider-replicate/*": [
         "libraries/providers/replicate/src/*"
       ],
-      "@gitroom/provider-replug": [
+      "@postmill-ai/provider-replug": [
         "libraries/providers/replug/src"
       ],
-      "@gitroom/provider-replug/*": [
+      "@postmill-ai/provider-replug/*": [
         "libraries/providers/replug/src/*"
       ],
-      "@gitroom/provider-resend": [
+      "@postmill-ai/provider-resend": [
         "libraries/providers/resend/src"
       ],
-      "@gitroom/provider-resend/*": [
+      "@postmill-ai/provider-resend/*": [
         "libraries/providers/resend/src/*"
       ],
-      "@gitroom/provider-runway": [
+      "@postmill-ai/provider-runway": [
         "libraries/providers/runway/src"
       ],
-      "@gitroom/provider-runway/*": [
+      "@postmill-ai/provider-runway/*": [
         "libraries/providers/runway/src/*"
       ],
-      "@gitroom/provider-s3": [
+      "@postmill-ai/provider-s3": [
         "libraries/providers/s3/src"
       ],
-      "@gitroom/provider-s3/*": [
+      "@postmill-ai/provider-s3/*": [
         "libraries/providers/s3/src/*"
       ],
-      "@gitroom/provider-s3-compatible": [
+      "@postmill-ai/provider-s3-compatible": [
         "libraries/providers/s3-compatible/src"
       ],
-      "@gitroom/provider-s3-compatible/*": [
+      "@postmill-ai/provider-s3-compatible/*": [
         "libraries/providers/s3-compatible/src/*"
       ],
-      "@gitroom/provider-scaleway": [
+      "@postmill-ai/provider-scaleway": [
         "libraries/providers/scaleway/src"
       ],
-      "@gitroom/provider-scaleway/*": [
+      "@postmill-ai/provider-scaleway/*": [
         "libraries/providers/scaleway/src/*"
       ],
-      "@gitroom/provider-sendgrid": [
+      "@postmill-ai/provider-sendgrid": [
         "libraries/providers/sendgrid/src"
       ],
-      "@gitroom/provider-sendgrid/*": [
+      "@postmill-ai/provider-sendgrid/*": [
         "libraries/providers/sendgrid/src/*"
       ],
-      "@gitroom/provider-ses": [
+      "@postmill-ai/provider-ses": [
         "libraries/providers/ses/src"
       ],
-      "@gitroom/provider-ses/*": [
+      "@postmill-ai/provider-ses/*": [
         "libraries/providers/ses/src/*"
       ],
-      "@gitroom/provider-shortio": [
+      "@postmill-ai/provider-shortio": [
         "libraries/providers/shortio/src"
       ],
-      "@gitroom/provider-shortio/*": [
+      "@postmill-ai/provider-shortio/*": [
         "libraries/providers/shortio/src/*"
       ],
-      "@gitroom/provider-siliconflow": [
+      "@postmill-ai/provider-siliconflow": [
         "libraries/providers/siliconflow/src"
       ],
-      "@gitroom/provider-siliconflow/*": [
+      "@postmill-ai/provider-siliconflow/*": [
         "libraries/providers/siliconflow/src/*"
       ],
-      "@gitroom/provider-skool": [
+      "@postmill-ai/provider-skool": [
         "libraries/providers/skool/src"
       ],
-      "@gitroom/provider-skool/*": [
+      "@postmill-ai/provider-skool/*": [
         "libraries/providers/skool/src/*"
       ],
-      "@gitroom/provider-slack": [
+      "@postmill-ai/provider-slack": [
         "libraries/providers/slack/src"
       ],
-      "@gitroom/provider-slack/*": [
+      "@postmill-ai/provider-slack/*": [
         "libraries/providers/slack/src/*"
       ],
-      "@gitroom/provider-smtp": [
+      "@postmill-ai/provider-smtp": [
         "libraries/providers/smtp/src"
       ],
-      "@gitroom/provider-smtp/*": [
+      "@postmill-ai/provider-smtp/*": [
         "libraries/providers/smtp/src/*"
       ],
-      "@gitroom/provider-sniply": [
+      "@postmill-ai/provider-sniply": [
         "libraries/providers/sniply/src"
       ],
-      "@gitroom/provider-sniply/*": [
+      "@postmill-ai/provider-sniply/*": [
         "libraries/providers/sniply/src/*"
       ],
-      "@gitroom/provider-stability": [
+      "@postmill-ai/provider-stability": [
         "libraries/providers/stability/src"
       ],
-      "@gitroom/provider-stability/*": [
+      "@postmill-ai/provider-stability/*": [
         "libraries/providers/stability/src/*"
       ],
-      "@gitroom/provider-storj": [
+      "@postmill-ai/provider-storj": [
         "libraries/providers/storj/src"
       ],
-      "@gitroom/provider-storj/*": [
+      "@postmill-ai/provider-storj/*": [
         "libraries/providers/storj/src/*"
       ],
-      "@gitroom/provider-suno": [
+      "@postmill-ai/provider-suno": [
         "libraries/providers/suno/src"
       ],
-      "@gitroom/provider-suno/*": [
+      "@postmill-ai/provider-suno/*": [
         "libraries/providers/suno/src/*"
       ],
-      "@gitroom/provider-surfshark": [
+      "@postmill-ai/provider-surfshark": [
         "libraries/providers/surfshark/src"
       ],
-      "@gitroom/provider-surfshark/*": [
+      "@postmill-ai/provider-surfshark/*": [
         "libraries/providers/surfshark/src/*"
       ],
-      "@gitroom/provider-switchy": [
+      "@postmill-ai/provider-switchy": [
         "libraries/providers/switchy/src"
       ],
-      "@gitroom/provider-switchy/*": [
+      "@postmill-ai/provider-switchy/*": [
         "libraries/providers/switchy/src/*"
       ],
-      "@gitroom/provider-t2m": [
+      "@postmill-ai/provider-t2m": [
         "libraries/providers/t2m/src"
       ],
-      "@gitroom/provider-t2m/*": [
+      "@postmill-ai/provider-t2m/*": [
         "libraries/providers/t2m/src/*"
       ],
-      "@gitroom/provider-tavus": [
+      "@postmill-ai/provider-tavus": [
         "libraries/providers/tavus/src"
       ],
-      "@gitroom/provider-tavus/*": [
+      "@postmill-ai/provider-tavus/*": [
         "libraries/providers/tavus/src/*"
       ],
-      "@gitroom/provider-telegram": [
+      "@postmill-ai/provider-telegram": [
         "libraries/providers/telegram/src"
       ],
-      "@gitroom/provider-telegram/*": [
+      "@postmill-ai/provider-telegram/*": [
         "libraries/providers/telegram/src/*"
       ],
-      "@gitroom/provider-threads": [
+      "@postmill-ai/provider-threads": [
         "libraries/providers/threads/src"
       ],
-      "@gitroom/provider-threads/*": [
+      "@postmill-ai/provider-threads/*": [
         "libraries/providers/threads/src/*"
       ],
-      "@gitroom/provider-tiktok": [
+      "@postmill-ai/provider-tiktok": [
         "libraries/providers/tiktok/src"
       ],
-      "@gitroom/provider-tiktok/*": [
+      "@postmill-ai/provider-tiktok/*": [
         "libraries/providers/tiktok/src/*"
       ],
-      "@gitroom/provider-tinycc": [
+      "@postmill-ai/provider-tinycc": [
         "libraries/providers/tinycc/src"
       ],
-      "@gitroom/provider-tinycc/*": [
+      "@postmill-ai/provider-tinycc/*": [
         "libraries/providers/tinycc/src/*"
       ],
-      "@gitroom/provider-tinyurl": [
+      "@postmill-ai/provider-tinyurl": [
         "libraries/providers/tinyurl/src"
       ],
-      "@gitroom/provider-tinyurl/*": [
+      "@postmill-ai/provider-tinyurl/*": [
         "libraries/providers/tinyurl/src/*"
       ],
-      "@gitroom/provider-tly": [
+      "@postmill-ai/provider-tly": [
         "libraries/providers/tly/src"
       ],
-      "@gitroom/provider-tly/*": [
+      "@postmill-ai/provider-tly/*": [
         "libraries/providers/tly/src/*"
       ],
-      "@gitroom/provider-togetherai": [
+      "@postmill-ai/provider-togetherai": [
         "libraries/providers/togetherai/src"
       ],
-      "@gitroom/provider-togetherai/*": [
+      "@postmill-ai/provider-togetherai/*": [
         "libraries/providers/togetherai/src/*"
       ],
-      "@gitroom/provider-tumblr": [
+      "@postmill-ai/provider-tumblr": [
         "libraries/providers/tumblr/src"
       ],
-      "@gitroom/provider-tumblr/*": [
+      "@postmill-ai/provider-tumblr/*": [
         "libraries/providers/tumblr/src/*"
       ],
-      "@gitroom/provider-tunnelbear": [
+      "@postmill-ai/provider-tunnelbear": [
         "libraries/providers/tunnelbear/src"
       ],
-      "@gitroom/provider-tunnelbear/*": [
+      "@postmill-ai/provider-tunnelbear/*": [
         "libraries/providers/tunnelbear/src/*"
       ],
-      "@gitroom/provider-twitch": [
+      "@postmill-ai/provider-twitch": [
         "libraries/providers/twitch/src"
       ],
-      "@gitroom/provider-twitch/*": [
+      "@postmill-ai/provider-twitch/*": [
         "libraries/providers/twitch/src/*"
       ],
-      "@gitroom/provider-vecteezy": [
+      "@postmill-ai/provider-vecteezy": [
         "libraries/providers/vecteezy/src"
       ],
-      "@gitroom/provider-vecteezy/*": [
+      "@postmill-ai/provider-vecteezy/*": [
         "libraries/providers/vecteezy/src/*"
       ],
-      "@gitroom/provider-vertex": [
+      "@postmill-ai/provider-vertex": [
         "libraries/providers/vertex/src"
       ],
-      "@gitroom/provider-vertex/*": [
+      "@postmill-ai/provider-vertex/*": [
         "libraries/providers/vertex/src/*"
       ],
-      "@gitroom/provider-vgd": [
+      "@postmill-ai/provider-vgd": [
         "libraries/providers/vgd/src"
       ],
-      "@gitroom/provider-vgd/*": [
+      "@postmill-ai/provider-vgd/*": [
         "libraries/providers/vgd/src/*"
       ],
-      "@gitroom/provider-vk": [
+      "@postmill-ai/provider-vk": [
         "libraries/providers/vk/src"
       ],
-      "@gitroom/provider-vk/*": [
+      "@postmill-ai/provider-vk/*": [
         "libraries/providers/vk/src/*"
       ],
-      "@gitroom/provider-vultr": [
+      "@postmill-ai/provider-vultr": [
         "libraries/providers/vultr/src"
       ],
-      "@gitroom/provider-vultr/*": [
+      "@postmill-ai/provider-vultr/*": [
         "libraries/providers/vultr/src/*"
       ],
-      "@gitroom/provider-vyprvpn": [
+      "@postmill-ai/provider-vyprvpn": [
         "libraries/providers/vyprvpn/src"
       ],
-      "@gitroom/provider-vyprvpn/*": [
+      "@postmill-ai/provider-vyprvpn/*": [
         "libraries/providers/vyprvpn/src/*"
       ],
-      "@gitroom/provider-wallet": [
+      "@postmill-ai/provider-wallet": [
         "libraries/providers/wallet/src"
       ],
-      "@gitroom/provider-wallet/*": [
+      "@postmill-ai/provider-wallet/*": [
         "libraries/providers/wallet/src/*"
       ],
-      "@gitroom/provider-wan": [
+      "@postmill-ai/provider-wan": [
         "libraries/providers/wan/src"
       ],
-      "@gitroom/provider-wan/*": [
+      "@postmill-ai/provider-wan/*": [
         "libraries/providers/wan/src/*"
       ],
-      "@gitroom/provider-wasabi": [
+      "@postmill-ai/provider-wasabi": [
         "libraries/providers/wasabi/src"
       ],
-      "@gitroom/provider-wasabi/*": [
+      "@postmill-ai/provider-wasabi/*": [
         "libraries/providers/wasabi/src/*"
       ],
-      "@gitroom/provider-whop": [
+      "@postmill-ai/provider-whop": [
         "libraries/providers/whop/src"
       ],
-      "@gitroom/provider-whop/*": [
+      "@postmill-ai/provider-whop/*": [
         "libraries/providers/whop/src/*"
       ],
-      "@gitroom/provider-windscribe": [
+      "@postmill-ai/provider-windscribe": [
         "libraries/providers/windscribe/src"
       ],
-      "@gitroom/provider-windscribe/*": [
+      "@postmill-ai/provider-windscribe/*": [
         "libraries/providers/windscribe/src/*"
       ],
-      "@gitroom/provider-wordpress": [
+      "@postmill-ai/provider-wordpress": [
         "libraries/providers/wordpress/src"
       ],
-      "@gitroom/provider-wordpress/*": [
+      "@postmill-ai/provider-wordpress/*": [
         "libraries/providers/wordpress/src/*"
       ],
-      "@gitroom/provider-wrapcast": [
+      "@postmill-ai/provider-wrapcast": [
         "libraries/providers/wrapcast/src"
       ],
-      "@gitroom/provider-wrapcast/*": [
+      "@postmill-ai/provider-wrapcast/*": [
         "libraries/providers/wrapcast/src/*"
       ],
-      "@gitroom/provider-x": [
+      "@postmill-ai/provider-x": [
         "libraries/providers/x/src"
       ],
-      "@gitroom/provider-x/*": [
+      "@postmill-ai/provider-x/*": [
         "libraries/providers/x/src/*"
       ],
-      "@gitroom/provider-xai": [
+      "@postmill-ai/provider-xai": [
         "libraries/providers/xai/src"
       ],
-      "@gitroom/provider-xai/*": [
+      "@postmill-ai/provider-xai/*": [
         "libraries/providers/xai/src/*"
       ],
-      "@gitroom/provider-youtube": [
+      "@postmill-ai/provider-youtube": [
         "libraries/providers/youtube/src"
       ],
-      "@gitroom/provider-youtube/*": [
+      "@postmill-ai/provider-youtube/*": [
         "libraries/providers/youtube/src/*"
       ],
-      "@gitroom/provider-zai": [
+      "@postmill-ai/provider-zai": [
         "libraries/providers/zai/src"
       ],
-      "@gitroom/provider-zai/*": [
+      "@postmill-ai/provider-zai/*": [
         "libraries/providers/zai/src/*"
       ]
     }

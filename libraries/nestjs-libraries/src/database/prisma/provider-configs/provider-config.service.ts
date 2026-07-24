@@ -1,6 +1,6 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { ProviderConfigRepository } from './provider-config.repository';
-import { AuthService } from '@gitroom/helpers/auth/auth.service';
+import { AuthService } from '@postmill-ai/helpers/auth/auth.service';
 import { ProviderConfiguration } from '@prisma/client';
 
 export interface ProviderCatalogListItem {

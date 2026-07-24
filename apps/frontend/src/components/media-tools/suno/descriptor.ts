@@ -1,4 +1,4 @@
-import type { StudioDescriptor } from '@gitroom/frontend/components/media-tools/studio-kit/types';
+import type { StudioDescriptor } from '@postmill-ai/frontend/components/media-tools/studio-kit/types';
 
 // Suno music generation via the sunoapi.org gateway (registry/config identifier `suno`).
 // Audio-only, async: the adapter submits the generation and the render queue polls until the

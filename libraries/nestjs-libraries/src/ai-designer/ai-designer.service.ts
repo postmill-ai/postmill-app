@@ -1,7 +1,7 @@
 import { Injectable } from '@nestjs/common';
-import { AiDesignerSessionRepository } from '@gitroom/nestjs-libraries/database/prisma/ai-designer/ai-designer-session.repository';
-import { AiDesignerMessageRepository } from '@gitroom/nestjs-libraries/database/prisma/ai-designer/ai-designer-message.repository';
-import { GuardrailService } from '@gitroom/nestjs-libraries/ai/governance/guardrail.service';
+import { AiDesignerSessionRepository } from '@postmill-ai/nestjs-libraries/database/prisma/ai-designer/ai-designer-session.repository';
+import { AiDesignerMessageRepository } from '@postmill-ai/nestjs-libraries/database/prisma/ai-designer/ai-designer-message.repository';
+import { GuardrailService } from '@postmill-ai/nestjs-libraries/ai/governance/guardrail.service';
 import type {
   AiDesignerConfig,
   AiDesignerMessagePayload,

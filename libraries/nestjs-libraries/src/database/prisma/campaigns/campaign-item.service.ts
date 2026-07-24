@@ -3,7 +3,7 @@ import { CampaignEntityType } from '@prisma/client';
 import { CampaignItemRepository } from './campaign-item.repository';
 import { CampaignItemResolverRepository } from './campaign-item.resolver';
 import { CampaignsRepository } from './campaigns.repository';
-import { AuditService } from '@gitroom/nestjs-libraries/database/prisma/audit/audit.service';
+import { AuditService } from '@postmill-ai/nestjs-libraries/database/prisma/audit/audit.service';
 import {
   ENTITY_ENUM_TO_SLUG,
   ResolvedCampaignItem,

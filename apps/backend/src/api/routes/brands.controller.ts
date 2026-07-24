@@ -11,17 +11,17 @@ import {
   UseGuards,
 } from '@nestjs/common';
 import { Organization } from '@prisma/client';
-import { GetOrgFromRequest } from '@gitroom/nestjs-libraries/user/org.from.request';
+import { GetOrgFromRequest } from '@postmill-ai/nestjs-libraries/user/org.from.request';
 import { ApiTags } from '@nestjs/swagger';
-import { CheckPolicies } from '@gitroom/backend/services/auth/permissions/permissions.ability';
+import { CheckPolicies } from '@postmill-ai/backend/services/auth/permissions/permissions.ability';
 import {
   AuthorizationActions,
   Sections,
-} from '@gitroom/backend/services/auth/permissions/permission.exception.class';
-import { BrandsService } from '@gitroom/nestjs-libraries/brands/brands.service';
+} from '@postmill-ai/backend/services/auth/permissions/permission.exception.class';
+import { BrandsService } from '@postmill-ai/nestjs-libraries/brands/brands.service';
 import { IsString, IsOptional, IsBoolean, IsArray, IsObject } from 'class-validator';
-import { OrgRbacGuard } from '@gitroom/backend/services/auth/rbac/org-rbac.guard';
-import { RequirePermission } from '@gitroom/backend/services/auth/rbac/require-permission.decorator';
+import { OrgRbacGuard } from '@postmill-ai/backend/services/auth/rbac/org-rbac.guard';
+import { RequirePermission } from '@postmill-ai/backend/services/auth/rbac/require-permission.decorator';
 
 class CreateBrandDto {
   @IsString()

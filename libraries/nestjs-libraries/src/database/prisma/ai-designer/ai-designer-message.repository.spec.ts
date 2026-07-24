@@ -9,7 +9,7 @@ const redisMock = vi.hoisted(() => ({
   del: vi.fn(),
 }));
 
-vi.mock('@gitroom/nestjs-libraries/redis/redis.service', () => ({
+vi.mock('@postmill-ai/nestjs-libraries/redis/redis.service', () => ({
   ioRedis: redisMock,
 }));
 

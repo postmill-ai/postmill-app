@@ -1,7 +1,7 @@
 'use client';
 
 import { FC, useState } from 'react';
-import ProviderIcon from '@gitroom/frontend/components/shared/provider-icon';
+import ProviderIcon from '@postmill-ai/frontend/components/shared/provider-icon';
 
 interface ChannelAvatarProps {
   src?: string;

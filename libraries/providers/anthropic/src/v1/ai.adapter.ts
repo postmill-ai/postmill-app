@@ -14,7 +14,7 @@ import {
   type LiveModelEntry,
   type ProviderModule,
   type SafeFetchPort,
-} from '@gitroom/provider-kernel';
+} from '@postmill-ai/provider-kernel';
 
 // 2.5: current live model IDs only — the previous catalog carried
 // `claude-4-20250514` (never existed), `claude-3-opus-20240229` (retired),

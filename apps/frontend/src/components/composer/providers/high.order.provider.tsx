@@ -11,26 +11,26 @@ import React, {
 import { useForm, FormProvider } from 'react-hook-form';
 import { IsOptional } from 'class-validator';
 import { classValidatorResolver } from '@hookform/resolvers/class-validator';
-import { useLaunchStore } from '@gitroom/frontend/components/composer/store';
+import { useLaunchStore } from '@postmill-ai/frontend/components/composer/store';
 import { useShallow } from 'zustand/react/shallow';
-import { GeneralPreviewComponent } from '@gitroom/frontend/components/launches/general.preview.component';
-import { IntegrationContext } from '@gitroom/frontend/components/launches/helpers/use.integration';
-import { useT } from '@gitroom/react/translation/get.transation.service.client';
-import { useFetch } from '@gitroom/helpers/utils/custom.fetch';
+import { GeneralPreviewComponent } from '@postmill-ai/frontend/components/launches/general.preview.component';
+import { IntegrationContext } from '@postmill-ai/frontend/components/launches/helpers/use.integration';
+import { useT } from '@postmill-ai/react/translation/get.transation.service.client';
+import { useFetch } from '@postmill-ai/helpers/utils/custom.fetch';
 import useSWR from 'swr';
-import { InternalChannels } from '@gitroom/frontend/components/launches/internal.channels';
-import { ChannelGlobalPlugs } from '@gitroom/frontend/components/composer/providers/channel.global.plugs';
+import { InternalChannels } from '@postmill-ai/frontend/components/launches/internal.channels';
+import { ChannelGlobalPlugs } from '@postmill-ai/frontend/components/composer/providers/channel.global.plugs';
 import { createPortal } from 'react-dom';
 import clsx from 'clsx';
-import SafeImage from '@gitroom/react/helpers/safe.image';
+import SafeImage from '@postmill-ai/react/helpers/safe.image';
 
 class Empty {
   @IsOptional()
   empty: string;
 }
 
-export { PostComment } from '@gitroom/frontend/components/composer/providers/post-comment.enum';
-import { PostComment } from '@gitroom/frontend/components/composer/providers/post-comment.enum';
+export { PostComment } from '@postmill-ai/frontend/components/composer/providers/post-comment.enum';
+import { PostComment } from '@postmill-ai/frontend/components/composer/providers/post-comment.enum';
 
 interface CharacterCondition {
   format: 'no-pictures' | 'with-pictures';

@@ -1,8 +1,8 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
-import { DesignRepository } from '@gitroom/nestjs-libraries/database/prisma/design/design.repository';
-import { DesignerDocService } from '@gitroom/nestjs-libraries/media/designer-doc/designer-doc.service';
-import type { DesignerDoc } from '@gitroom/nestjs-libraries/media/designer-doc/designer-doc.schema';
-import { FileService } from '@gitroom/nestjs-libraries/database/prisma/file/file.service';
+import { DesignRepository } from '@postmill-ai/nestjs-libraries/database/prisma/design/design.repository';
+import { DesignerDocService } from '@postmill-ai/nestjs-libraries/media/designer-doc/designer-doc.service';
+import type { DesignerDoc } from '@postmill-ai/nestjs-libraries/media/designer-doc/designer-doc.schema';
+import { FileService } from '@postmill-ai/nestjs-libraries/database/prisma/file/file.service';
 
 @Injectable()
 export class DesignService {

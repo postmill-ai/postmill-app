@@ -1,4 +1,4 @@
-import '@gitroom/nestjs-libraries/ai-designer/agent-mesh/agent-mesh-env.shim';
+import '@postmill-ai/nestjs-libraries/ai-designer/agent-mesh/agent-mesh-env.shim';
 import { describe, expect, it } from 'vitest';
 import { AgentRegistrySchema } from '@reaatech/agent-mesh-registry';
 import {

@@ -2,11 +2,11 @@
 
 import { FC, useCallback, useState, useRef, useEffect } from 'react';
 import clsx from 'clsx';
-import Loading from '@gitroom/frontend/components/layout/loading';
-import { useFetch } from '@gitroom/helpers/utils/custom.fetch';
+import Loading from '@postmill-ai/frontend/components/layout/loading';
+import { useFetch } from '@postmill-ai/helpers/utils/custom.fetch';
 import useSWR from 'swr';
-import { useT } from '@gitroom/react/translation/get.transation.service.client';
-import { useToaster } from '@gitroom/react/toaster/toaster';
+import { useT } from '@postmill-ai/react/translation/get.transation.service.client';
+import { useToaster } from '@postmill-ai/react/toaster/toaster';
 
 interface PromptLibraryItem {
   id: string;

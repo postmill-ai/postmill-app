@@ -5,7 +5,7 @@ import {
   SafeFetchPort,
   LoggerPort,
   TelemetryPort,
-} from '@gitroom/provider-kernel';
+} from '@postmill-ai/provider-kernel';
 
 export interface ProviderPorts {
   encryption: EncryptionPort;

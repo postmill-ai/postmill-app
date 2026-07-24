@@ -6,7 +6,7 @@ import {
   ProviderCatalogEntry,
   selectableVersions,
   useProviderCatalog,
-} from '@gitroom/frontend/components/settings/shared/use-provider-catalog';
+} from '@postmill-ai/frontend/components/settings/shared/use-provider-catalog';
 
 /**
  * Version-aware configure-modal helper (plan §9.2). Resolves the provider's

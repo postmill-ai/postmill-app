@@ -10,27 +10,27 @@ import {
   UsePipes,
   ValidationPipe,
 } from '@nestjs/common';
-import { ioRedis } from '@gitroom/nestjs-libraries/redis/redis.service';
-import { ConnectIntegrationDto } from '@gitroom/nestjs-libraries/dtos/integrations/connect.integration.dto';
-import { SaveProviderPageDto } from '@gitroom/nestjs-libraries/dtos/integrations/provider-page.dto';
-import { ExtensionRefreshDto } from '@gitroom/nestjs-libraries/dtos/integrations/extension-refresh.dto';
-import { IntegrationManager } from '@gitroom/nestjs-libraries/integrations/integration.manager';
-import { IntegrationService } from '@gitroom/nestjs-libraries/database/prisma/integrations/integration.service';
-import { CheckPolicies } from '@gitroom/backend/services/auth/permissions/permissions.ability';
+import { ioRedis } from '@postmill-ai/nestjs-libraries/redis/redis.service';
+import { ConnectIntegrationDto } from '@postmill-ai/nestjs-libraries/dtos/integrations/connect.integration.dto';
+import { SaveProviderPageDto } from '@postmill-ai/nestjs-libraries/dtos/integrations/provider-page.dto';
+import { ExtensionRefreshDto } from '@postmill-ai/nestjs-libraries/dtos/integrations/extension-refresh.dto';
+import { IntegrationManager } from '@postmill-ai/nestjs-libraries/integrations/integration.manager';
+import { IntegrationService } from '@postmill-ai/nestjs-libraries/database/prisma/integrations/integration.service';
+import { CheckPolicies } from '@postmill-ai/backend/services/auth/permissions/permissions.ability';
 import { ApiTags } from '@nestjs/swagger';
-import { NotEnoughScopesFilter } from '@gitroom/nestjs-libraries/integrations/integration.missing.scopes';
-import { AuthService } from '@gitroom/helpers/auth/auth.service';
-import { AuthTokenDetails } from '@gitroom/nestjs-libraries/integrations/social/social.integrations.interface';
-import { NotEnoughScopes } from '@gitroom/nestjs-libraries/integrations/social.abstract';
+import { NotEnoughScopesFilter } from '@postmill-ai/nestjs-libraries/integrations/integration.missing.scopes';
+import { AuthService } from '@postmill-ai/helpers/auth/auth.service';
+import { AuthTokenDetails } from '@postmill-ai/nestjs-libraries/integrations/social/social.integrations.interface';
+import { NotEnoughScopes } from '@postmill-ai/nestjs-libraries/integrations/social.abstract';
 import {
   AuthorizationActions,
   Sections,
-} from '@gitroom/backend/services/auth/permissions/permission.exception.class';
-import { RefreshIntegrationService } from '@gitroom/nestjs-libraries/integrations/refresh.integration.service';
-import { OrganizationService } from '@gitroom/nestjs-libraries/database/prisma/organizations/organization.service';
-import { CampaignTagService } from '@gitroom/nestjs-libraries/database/prisma/campaigns/campaign-item.service';
-import { safeFetch } from '@gitroom/nestjs-libraries/dtos/webhooks/safe.fetch';
-import { isAllowedReturnUrl } from '@gitroom/nestjs-libraries/security/return-url.validator';
+} from '@postmill-ai/backend/services/auth/permissions/permission.exception.class';
+import { RefreshIntegrationService } from '@postmill-ai/nestjs-libraries/integrations/refresh.integration.service';
+import { OrganizationService } from '@postmill-ai/nestjs-libraries/database/prisma/organizations/organization.service';
+import { CampaignTagService } from '@postmill-ai/nestjs-libraries/database/prisma/campaigns/campaign-item.service';
+import { safeFetch } from '@postmill-ai/nestjs-libraries/dtos/webhooks/safe.fetch';
+import { isAllowedReturnUrl } from '@postmill-ai/nestjs-libraries/security/return-url.validator';
 
 @ApiTags('Integrations')
 @Controller('/integrations')

@@ -21,7 +21,7 @@ import {
   parseDataUrl,
   fromBuffer,
   fromFile,
-} from '@gitroom/provider-kernel';
+} from '@postmill-ai/provider-kernel';
 
 const TYPE = 'LOCAL';
 const DISPLAY = 'Local Filesystem';

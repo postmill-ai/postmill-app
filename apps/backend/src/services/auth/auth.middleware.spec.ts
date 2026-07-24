@@ -2,15 +2,15 @@ import 'reflect-metadata';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import type { NextFunction, Request, Response } from 'express';
 
-vi.mock('@gitroom/helpers/subdomain/subdomain.management', () => ({
+vi.mock('@postmill-ai/helpers/subdomain/subdomain.management', () => ({
   getCookieUrlFromDomain: () => 'localhost',
 }));
 
-vi.mock('@gitroom/nestjs-libraries/auth/auth-context.resolver', () => ({
+vi.mock('@postmill-ai/nestjs-libraries/auth/auth-context.resolver', () => ({
   AuthContextResolver: class {},
 }));
 
-vi.mock('@gitroom/nestjs-libraries/services/exception.filter', () => ({
+vi.mock('@postmill-ai/nestjs-libraries/services/exception.filter', () => ({
   HttpForbiddenException: class HttpForbiddenException extends Error {
     constructor() {
       super('Forbidden');
@@ -19,7 +19,7 @@ vi.mock('@gitroom/nestjs-libraries/services/exception.filter', () => ({
 }));
 
 import { AuthMiddleware, removeAuth } from './auth.middleware';
-import { HttpForbiddenException } from '@gitroom/nestjs-libraries/services/exception.filter';
+import { HttpForbiddenException } from '@postmill-ai/nestjs-libraries/services/exception.filter';
 
 type MockResponse = Response & {
   cookie: ReturnType<typeof vi.fn>;

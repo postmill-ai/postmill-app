@@ -1,8 +1,8 @@
 'use client';
 
 import React from 'react';
-import { useT } from '@gitroom/react/translation/get.transation.service.client';
-import { SettingsSubnav } from '@gitroom/frontend/components/settings/settings-subnav';
+import { useT } from '@postmill-ai/react/translation/get.transation.service.client';
+import { SettingsSubnav } from '@postmill-ai/frontend/components/settings/settings-subnav';
 
 export default function StorageSettingsLayout({ children }: { children: React.ReactNode }) {
   const t = useT();

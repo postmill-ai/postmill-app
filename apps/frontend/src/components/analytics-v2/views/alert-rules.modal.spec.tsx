@@ -6,21 +6,21 @@ const { mockT } = vi.hoisted(() => ({ mockT: vi.fn() }));
 // Default: return the English fallback (with {{var}} interpolation).
 const defaultT = (_k: string, d: string, vars?: Record<string, unknown>) =>
   vars ? d.replace(/\{\{(\w+)\}\}/g, (_m, k) => String(vars[k])) : d;
-vi.mock('@gitroom/react/translation/get.transation.service.client', () => ({
+vi.mock('@postmill-ai/react/translation/get.transation.service.client', () => ({
   useT: () => mockT,
 }));
 
 const mockToasterShow = vi.fn();
-vi.mock('@gitroom/react/toaster/toaster', () => ({
+vi.mock('@postmill-ai/react/toaster/toaster', () => ({
   useToaster: () => ({ show: mockToasterShow }),
 }));
 
 const mockUseIntegrationList = vi.fn();
-vi.mock('@gitroom/frontend/components/launches/helpers/use.integration.list', () => ({
+vi.mock('@postmill-ai/frontend/components/launches/helpers/use.integration.list', () => ({
   useIntegrationList: () => mockUseIntegrationList(),
 }));
 
-vi.mock('@gitroom/frontend/components/launches/calendar.context', () => ({}));
+vi.mock('@postmill-ai/frontend/components/launches/calendar.context', () => ({}));
 
 const mockCreate = vi.fn();
 const mockUpdate = vi.fn();

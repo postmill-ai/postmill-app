@@ -5,8 +5,8 @@ import { PATH_METADATA, METHOD_METADATA } from '@nestjs/common/constants';
 import fs from 'fs';
 import path from 'path';
 
-import { CHECK_POLICIES_KEY } from '@gitroom/backend/services/auth/permissions/permissions.ability';
-import { REQUIRE_PERMISSION_KEY } from '@gitroom/backend/services/auth/rbac/require-permission.decorator';
+import { CHECK_POLICIES_KEY } from '@postmill-ai/backend/services/auth/permissions/permissions.ability';
+import { REQUIRE_PERMISSION_KEY } from '@postmill-ai/backend/services/auth/rbac/require-permission.decorator';
 
 // Org-resource controllers whose mutating routes MUST carry @RequirePermission or
 // @CheckPolicies. Kept as static imports so Nest/reflect-metadata is deterministic.

@@ -2,18 +2,18 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 
 // Partially mock the kernel so `safeFetch` is a spy while SocialAbstract / the
 // BadBody Proxy / setSocialFetchPorts (all needed to construct + throw) stay real.
-vi.mock('@gitroom/provider-kernel', async (orig) => {
+vi.mock('@postmill-ai/provider-kernel', async (orig) => {
   const actual: any = await orig();
   return { ...actual, safeFetch: vi.fn() };
 });
 
 // The adapter imports the polling delay directly from helpers; make it immediate
 // in tests so bounded loops do not wait for real 30s sleeps.
-vi.mock('@gitroom/helpers/utils/timer', () => ({
+vi.mock('@postmill-ai/helpers/utils/timer', () => ({
   timer: async () => undefined,
 }));
 
-import { safeFetch, setSocialFetchPorts } from '@gitroom/provider-kernel';
+import { safeFetch, setSocialFetchPorts } from '@postmill-ai/provider-kernel';
 import { PinterestProvider } from './social.adapter';
 
 // The `BadBody` kernel Proxy constructs `new _ports.BadBodyError(...args)`, where

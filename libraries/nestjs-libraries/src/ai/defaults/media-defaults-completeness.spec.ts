@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import type { ProviderMetadata } from '@gitroom/provider-kernel';
+import type { ProviderMetadata } from '@postmill-ai/provider-kernel';
 
 /**
  * Plan §6.1 — Media-defaults completeness gate.

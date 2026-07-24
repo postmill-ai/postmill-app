@@ -8,7 +8,7 @@ import {
   MediaJobSubmission,
   SafeFetchPort,
   ProviderModule,
-} from '@gitroom/provider-kernel';
+} from '@postmill-ai/provider-kernel';
 
 // Leonardo.ai — own-key (Bearer) image generation. Its API is async (create returns a
 // generationId, results are polled), but image is expected to be synchronous (§11.2), so we keep

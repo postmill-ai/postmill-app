@@ -1,7 +1,7 @@
 'use client';
 
 import React, { FC } from 'react';
-import { useT } from '@gitroom/react/translation/get.transation.service.client';
+import { useT } from '@postmill-ai/react/translation/get.transation.service.client';
 import type { DesignerElement } from './designer.store';
 
 interface ToolbarProps {

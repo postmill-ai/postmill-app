@@ -2,14 +2,14 @@
 
 import React, { useCallback, useEffect, useState } from 'react';
 import useSWR from 'swr';
-import { useFetch } from '@gitroom/helpers/utils/custom.fetch';
+import { useFetch } from '@postmill-ai/helpers/utils/custom.fetch';
 import { useReplicateStore } from './replicate.store';
-import { AudioPlayer } from '@gitroom/frontend/components/media-tools/audio-player';
-import { useT } from '@gitroom/react/translation/get.transation.service.client';
+import { AudioPlayer } from '@postmill-ai/frontend/components/media-tools/audio-player';
+import { useT } from '@postmill-ai/react/translation/get.transation.service.client';
 import { VideoPlayer } from './players/video-player';
 import { ElapsedTimer } from './elapsed-timer';
 import { useGenerate } from './use-generate';
-import { openInDesigner } from '@gitroom/frontend/components/media-tools/open-in-designer';
+import { openInDesigner } from '@postmill-ai/frontend/components/media-tools/open-in-designer';
 
 type Medium = 'image' | 'video' | 'audio';
 

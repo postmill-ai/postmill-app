@@ -1,9 +1,9 @@
-import { PrismaRepository } from '@gitroom/nestjs-libraries/database/prisma/prisma.service';
+import { PrismaRepository } from '@postmill-ai/nestjs-libraries/database/prisma/prisma.service';
 import { ShortLinkPreference, SubscriptionTier, Provider, StorageProviderType } from '@prisma/client';
 import { BadRequestException, Injectable } from '@nestjs/common';
-import { AuthService } from '@gitroom/helpers/auth/auth.service';
-import { CreateOrgUserDto } from '@gitroom/nestjs-libraries/dtos/auth/create.org.user.dto';
-import { makeId } from '@gitroom/nestjs-libraries/services/make.is';
+import { AuthService } from '@postmill-ai/helpers/auth/auth.service';
+import { CreateOrgUserDto } from '@postmill-ai/nestjs-libraries/dtos/auth/create.org.user.dto';
+import { makeId } from '@postmill-ai/nestjs-libraries/services/make.is';
 
 // Terms-of-Service version recorded at account creation (I4 — consent tracking).
 // Bump when the ToS materially changes so re-acceptance can be detected.

@@ -4,7 +4,7 @@ import useCookie from 'react-use-cookie';
 import {
   cookieName,
   fallbackLng,
-} from '@gitroom/react/translation/i18n.config';
+} from '@postmill-ai/react/translation/i18n.config';
 import i18next from 'i18next';
 import { FC, useEffect } from 'react';
 

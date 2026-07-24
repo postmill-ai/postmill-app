@@ -23,13 +23,13 @@ A minimal `package.json`:
 
 ```json
 {
-  "name": "@gitroom/provider-yourprovider",
+  "name": "@postmill-ai/provider-yourprovider",
   "version": "1.0.0",
   "private": true,
   "main": "src/index.ts",
   "types": "src/index.ts",
   "dependencies": {
-    "@gitroom/provider-kernel": "workspace:*"
+    "@postmill-ai/provider-kernel": "workspace:*"
   },
   "license": "AGPL-3.0",
   "engines": {
@@ -43,7 +43,7 @@ A minimal `package.json`:
 
 ## Step 2: Implement the provider class
 
-Create `src/v1/social.adapter.ts`. Your class must extend `SocialAbstract` and implement `SocialProvider` from `@gitroom/provider-kernel`:
+Create `src/v1/social.adapter.ts`. Your class must extend `SocialAbstract` and implement `SocialProvider` from `@postmill-ai/provider-kernel`:
 
 ```typescript
 import {
@@ -54,7 +54,7 @@ import {
   AuthTokenDetails,
   PostDetails,
   PostResponse,
-} from '@gitroom/provider-kernel';
+} from '@postmill-ai/provider-kernel';
 import { Integration } from '@prisma/client';
 import { metadata as providerMetadata } from './metadata';
 
@@ -189,10 +189,10 @@ The publish pipeline automatically handles `RefreshTokenError` by refreshing the
 
 ### Outbound HTTP
 
-All outbound HTTP calls must use `this.fetch()` from `SocialAbstract` or `safeFetch` from `@gitroom/provider-kernel`. Never use bare `fetch()` — these provide SSRF protection and per-channel VPN egress support.
+All outbound HTTP calls must use `this.fetch()` from `SocialAbstract` or `safeFetch` from `@postmill-ai/provider-kernel`. Never use bare `fetch()` — these provide SSRF protection and per-channel VPN egress support.
 
 ```typescript
-import { safeFetch } from '@gitroom/provider-kernel';
+import { safeFetch } from '@postmill-ai/provider-kernel';
 
 const response = await safeFetch('https://api.provider.com/endpoint', {
   method: 'POST',
@@ -210,7 +210,7 @@ import {
   ProviderModule,
   SocialProviderKernelAdapter,
   PROVIDER_CAPABILITIES,
-} from '@gitroom/provider-kernel';
+} from '@postmill-ai/provider-kernel';
 
 const adapter = new YourProvider();
 
@@ -249,7 +249,7 @@ export default yourproviderProviderModules;
 Create `src/v1/metadata.ts`:
 
 ```typescript
-import { ProviderMetadata } from '@gitroom/provider-kernel';
+import { ProviderMetadata } from '@postmill-ai/provider-kernel';
 
 export const metadata: ProviderMetadata = {
   id: 'yourprovider',
@@ -303,7 +303,7 @@ Add an entry for the new provider in `libraries/providers/kernel/src/domains/soc
 Add the import to `apps/backend/src/providers.generated.ts`:
 
 ```typescript
-import yourproviderModules from '@gitroom/provider-yourprovider';
+import yourproviderModules from '@postmill-ai/provider-yourprovider';
 ```
 
 And spread it into `providerModules`:

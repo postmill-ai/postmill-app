@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { Organization } from '@prisma/client';
 import { HttpException } from '@nestjs/common';
-import { ContentPackDailyCapError } from '@gitroom/nestjs-libraries/media/stock/content-packs/content-pack.interface';
+import { ContentPackDailyCapError } from '@postmill-ai/nestjs-libraries/media/stock/content-packs/content-pack.interface';
 
 import { FilesController } from './files.controller';
 

@@ -15,7 +15,7 @@ import {
   type EmbeddingModel,
   type ProviderModule,
   type SafeFetchPort,
-} from '@gitroom/provider-kernel';
+} from '@postmill-ai/provider-kernel';
 
 const OPENROUTER_BASE_URL = 'https://openrouter.ai/api/v1';
 

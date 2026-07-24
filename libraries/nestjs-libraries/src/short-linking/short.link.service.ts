@@ -1,8 +1,8 @@
 import { Injectable, Logger } from '@nestjs/common';
-import { ProviderResolutionService } from '@gitroom/nestjs-libraries/providers/provider-resolution.service';
-import { OrgShortLinkSettingsService } from '@gitroom/nestjs-libraries/database/prisma/short-links/org-shortlink-settings.service';
-import { OrgShortLinkSettingsRepository } from '@gitroom/nestjs-libraries/database/prisma/short-links/org-shortlink-settings.repository';
-import { type ShortLinkContext } from '@gitroom/nestjs-libraries/short-linking/short-link.interface';
+import { ProviderResolutionService } from '@postmill-ai/nestjs-libraries/providers/provider-resolution.service';
+import { OrgShortLinkSettingsService } from '@postmill-ai/nestjs-libraries/database/prisma/short-links/org-shortlink-settings.service';
+import { OrgShortLinkSettingsRepository } from '@postmill-ai/nestjs-libraries/database/prisma/short-links/org-shortlink-settings.repository';
+import { type ShortLinkContext } from '@postmill-ai/nestjs-libraries/short-linking/short-link.interface';
 import { uniq } from 'lodash';
 import striptags from 'striptags';
 

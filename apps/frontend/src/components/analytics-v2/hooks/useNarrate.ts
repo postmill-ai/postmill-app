@@ -1,6 +1,6 @@
 'use client';
 
-import { useFetch } from '@gitroom/helpers/utils/custom.fetch';
+import { useFetch } from '@postmill-ai/helpers/utils/custom.fetch';
 import { useCallback } from 'react';
 
 // LLM-narrated period summary (7.5). This is a POST *action* (not an SWR

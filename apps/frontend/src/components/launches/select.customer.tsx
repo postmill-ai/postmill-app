@@ -2,14 +2,14 @@
 
 import { uniqBy } from 'lodash';
 import React, { FC, useCallback, useMemo, useRef, useState } from 'react';
-import { Integrations } from '@gitroom/frontend/components/launches/calendar.context';
-import { useT } from '@gitroom/react/translation/get.transation.service.client';
+import { Integrations } from '@postmill-ai/frontend/components/launches/calendar.context';
+import { useT } from '@postmill-ai/react/translation/get.transation.service.client';
 import clsx from 'clsx';
 import { useClickOutside } from '@mantine/hooks';
-import { useToaster } from '@gitroom/react/toaster/toaster';
-import { useLaunchStore } from '@gitroom/frontend/components/composer/store';
+import { useToaster } from '@postmill-ai/react/toaster/toaster';
+import { useLaunchStore } from '@postmill-ai/frontend/components/composer/store';
 import { useShallow } from 'zustand/react/shallow';
-import { UserIcon, DropdownArrowIcon } from '@gitroom/frontend/components/ui/icons';
+import { UserIcon, DropdownArrowIcon } from '@postmill-ai/frontend/components/ui/icons';
 
 export const SelectCustomer: FC<{
   onChange: (value: string) => void;

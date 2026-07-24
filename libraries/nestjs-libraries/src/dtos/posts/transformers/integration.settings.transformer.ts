@@ -1,5 +1,5 @@
 import { Transform, Type } from 'class-transformer';
-import { IntegrationService } from '@gitroom/nestjs-libraries/database/prisma/integrations/integration.service';
+import { IntegrationService } from '@postmill-ai/nestjs-libraries/database/prisma/integrations/integration.service';
 import { Injectable, Logger } from '@nestjs/common';
 
 @Injectable()
