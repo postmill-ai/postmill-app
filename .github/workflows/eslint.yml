@@ -1,25 +1,17 @@
 ---
 name: ESLint
 
+# This is a REQUIRED status check. A required check must be able to report on
+# every PR — a path filter here makes docs/config-only PRs hang forever "waiting
+# for status" because the job never runs and never reports. Run unconditionally,
+# same as the other required workflows (test/build/boot-guard); ESLint passes
+# cheaply when no code changed.
 on:
   push:
     branches:
       - main
-    paths:
-      - package.json
-      - pnpm-lock.yaml
-      - eslint.config.mjs
-      - apps/**
-      - '!apps/docs/**'
-      - libraries/**
   pull_request:
-    paths:
-      - package.json
-      - pnpm-lock.yaml
-      - eslint.config.mjs
-      - apps/**
-      - '!apps/docs/**'
-      - libraries/**
+  merge_group:
 
 jobs:
   eslint:

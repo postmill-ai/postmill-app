@@ -1,19 +1,15 @@
 ---
 name: "Code Quality Analysis"
 
+# This is a REQUIRED status check (Analyze (javascript-typescript)). A required
+# check must report on every PR — a path filter makes docs/config-only PRs hang
+# forever "waiting for status" because the job never runs. Run unconditionally,
+# same as the other required workflows; CodeQL passes quickly when no code changed.
 on:
   push:
     branches:
       - main
-    paths:
-      - apps/**
-      - '!apps/docs/**'
-      - libraries/**
   pull_request:
-    paths:
-      - apps/**
-      - '!apps/docs/**'
-      - libraries/**
   merge_group:
 
 
