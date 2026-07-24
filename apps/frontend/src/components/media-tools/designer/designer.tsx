@@ -963,7 +963,7 @@ export const Designer: FC<DesignerProps> = ({
   const { isFullscreen } = useFullscreen();
 
   return (
-    <div className={`flex flex-col h-full w-full overflow-hidden bg-newBgColorInner ${isFullscreen ? 'fixed inset-0 z-[100]' : 'relative'}`}>
+    <div className={`flex flex-col h-full w-full overflow-hidden bg-newBgColorInner ${isFullscreen ? 'fixed inset-0 z-[100]' : 'relative mobile:h-[calc(100vh-200px)]'}`}>
       <div className="flex items-center gap-3 px-3 py-1.5 border-b border-studioBorder bg-newBgColorInner shrink-0">
         <div className="flex items-center gap-2 shrink-0">
           <Logo size={26} className="" />

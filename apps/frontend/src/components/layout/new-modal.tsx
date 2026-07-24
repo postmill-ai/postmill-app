@@ -290,7 +290,7 @@ export const Component: FC<{
                   'gap-[24px] p-[20px] md:gap-[40px] md:p-[32px]',
                 'bg-newBgColorInner border border-newTableBorder mx-auto flex flex-col w-fit rounded-[12px] relative',
                 modal.size
-                  ? ''
+                  ? 'max-w-[calc(100vw-24px)]'
                   : 'max-w-[calc(100vw-24px)] md:min-w-[600px] md:max-w-none',
                 modal.fullScreen && 'h-full'
               )}

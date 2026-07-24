@@ -1,6 +1,6 @@
 'use client';
 
-import { FC, useState } from 'react';
+import { FC, useState, useEffect } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import clsx from 'clsx';
@@ -36,6 +36,17 @@ export const BottomTabBar: FC = () => {
   const hasOpenModals = useHasOpenModals();
   const [moreOpen, setMoreOpen] = useState(false);
 
+  // Hide the bar in browser fullscreen too — the media studios / Designer go
+  // fullscreen for an immersive edit surface, and a fixed bottom bar would cover
+  // their footer controls (e.g. the Designer's video timeline).
+  const [isFullscreen, setIsFullscreen] = useState(false);
+  useEffect(() => {
+    const onChange = () => setIsFullscreen(!!document.fullscreenElement);
+    document.addEventListener('fullscreenchange', onChange);
+    onChange();
+    return () => document.removeEventListener('fullscreenchange', onChange);
+  }, []);
+
   // Close the sheet whenever the route changes (derived-state-during-render —
   // https://react.dev/learn/you-might-not-need-an-effect).
   const [lastPath, setLastPath] = useState(pathname);
@@ -45,7 +56,7 @@ export const BottomTabBar: FC = () => {
   }
 
   // Hide the bar while a modal is open so a full-screen modal's footer isn't covered.
-  if (hasOpenModals) return null;
+  if (hasOpenModals || isFullscreen) return null;
 
   const visible = (f: { hide?: boolean; requireBilling?: boolean }) =>
     !f.hide && !(f.requireBilling && !billingEnabled);

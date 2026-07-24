@@ -261,7 +261,7 @@ export const TeamsComponent = () => {
         {canManageRoles && <Button secondary onClick={openManageRoles}>{t('manage_roles', 'Manage roles')}</Button>}
       </div>
 
-      <div className="flex items-center gap-[12px] mb-[16px]">
+      <div className="flex items-center mobile:flex-col mobile:items-stretch gap-[12px] mb-[16px]">
         <div className="flex-1">
           <input
             type="text"
@@ -275,7 +275,7 @@ export const TeamsComponent = () => {
           aria-label={t('filter_by_role', 'Filter by role')}
           value={roleFilter}
           onChange={(e) => { setRoleFilter(e.target.value); setPage(0); }}
-          className="px-[12px] py-[8px] bg-newBgColor border border-newTableBorder rounded-[8px] text-[14px] outline-none"
+          className="mobile:w-full px-[12px] py-[8px] bg-newBgColor border border-newTableBorder rounded-[8px] text-[14px] outline-none"
         >
           <option value="all">{t('all_roles', 'All Roles')}</option>
           {(rolesList || []).map((r) => (
@@ -286,7 +286,7 @@ export const TeamsComponent = () => {
           aria-label={t('sort_by', 'Sort by')}
           value={sortBy}
           onChange={(e) => setSortBy(e.target.value as 'name' | 'joined')}
-          className="px-[12px] py-[8px] bg-newBgColor border border-newTableBorder rounded-[8px] text-[14px] outline-none"
+          className="mobile:w-full px-[12px] py-[8px] bg-newBgColor border border-newTableBorder rounded-[8px] text-[14px] outline-none"
         >
           <option value="joined">{t('joined_date', 'Joined Date')}</option>
           <option value="name">{t('name', 'Name')}</option>

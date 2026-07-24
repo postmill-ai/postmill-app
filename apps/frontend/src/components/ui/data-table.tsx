@@ -227,8 +227,11 @@ export function DataTable<T>({
   return (
     <div className={clsx('bg-newBgColorInner border border-newTableBorder rounded-[12px] overflow-hidden', className)}>
       <div className="overflow-x-auto">
-        <table className="w-full border-collapse">
-          <thead>
+        {/* On mobile (<=1025px, the app-wide breakpoint) the table reflows to stacked
+            cards: the header row is hidden and each cell shows its column label inline
+            (via data-label + the before: pseudo on the td below). */}
+        <table className="w-full border-collapse mobile:block">
+          <thead className="mobile:hidden">
             <tr className="bg-newTableHeader">
               {onSelectionChange && (
                 <th className="w-[40px] py-[14px] px-[16px] text-left">
@@ -277,7 +280,7 @@ export function DataTable<T>({
               ))}
             </tr>
           </thead>
-          <tbody>
+          <tbody className="mobile:block">
             {data.map((item) => {
               const id = keyExtractor(item);
               const isSelected = selectedIds.includes(id);
@@ -286,13 +289,14 @@ export function DataTable<T>({
                   key={id}
                   className={clsx(
                     'border-b border-newTableBorder/60 last:border-b-0 hover:bg-boxHover transition-colors',
+                    'mobile:flex mobile:flex-col mobile:gap-[6px] mobile:p-[14px] mobile:rounded-[10px] mobile:border mobile:border-newTableBorder mobile:mb-[10px] mobile:last:mb-0',
                     isSelected && 'bg-btnPrimary/5',
                     onRowClick && 'cursor-pointer',
                   )}
                   onClick={() => onRowClick?.(item)}
                 >
                   {onSelectionChange && (
-                    <td className="py-[14px] px-[16px]" onClick={(e) => e.stopPropagation()}>
+                    <td className="py-[14px] px-[16px] mobile:hidden" onClick={(e) => e.stopPropagation()}>
                       <input
                         type="checkbox"
                         aria-label={t('select_row', 'Select row')}
@@ -305,12 +309,16 @@ export function DataTable<T>({
                   {columns.map((col) => (
                     <td
                       key={col.key}
+                      data-label={typeof col.header === 'string' ? col.header : undefined}
                       className={clsx(
                         'py-[14px] px-[16px] text-[13px]',
+                        // Phone card layout: label (from data-label) on the left, value on the right.
+                        'mobile:flex mobile:items-center mobile:justify-between mobile:gap-[12px] mobile:py-[4px] mobile:px-0',
+                        'mobile:before:content-[attr(data-label)] mobile:before:shrink-0 mobile:before:text-[11px] mobile:before:font-medium mobile:before:uppercase mobile:before:tracking-wide mobile:before:text-newTableText',
                         col.align === 'right'
-                          ? 'text-right tabular-nums'
+                          ? 'text-right tabular-nums mobile:text-right'
                           : col.align === 'center'
-                            ? 'text-center'
+                            ? 'text-center mobile:text-right'
                             : 'text-left',
                       )}
                     >
