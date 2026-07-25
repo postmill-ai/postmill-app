@@ -124,3 +124,18 @@ allowBuilds:
   sharp: true
   unrs-resolver: true
   utf-8-validate: true
+
+# Audit suppressions — advisories with no viable fix in the current tree.
+auditConfig:
+  ignoreGhsas:
+    # brace-expansion <=5.0.7 DoS (GHSA-mh99-v99m-4gvg): the only patched version,
+    # 5.0.8, is ESM-only with a *named* `expand` export, which breaks the old
+    # `minimatch@3.x`/`glob@7` that `require('brace-expansion')` as a function. Those
+    # are pulled by eslint core (@eslint/config-array, @eslint/eslintrc), every eslint
+    # plugin, @swc/cli and glob — none of which have a modern-minimatch release yet, so
+    # there is no override or dep-bump that removes the vulnerable line without breaking
+    # the lint/build toolchain (verified: forcing 5.0.8 → "TypeError: expand is not a
+    # function" in eslint). Not reachable in practice — brace-expansion only ever sees
+    # trusted build/lint globs here, never untrusted input. Remove this once eslint-core
+    # and glob adopt minimatch@10 / brace-expansion@5.
+    - GHSA-mh99-v99m-4gvg
