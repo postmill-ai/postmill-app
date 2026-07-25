@@ -342,11 +342,11 @@ async likeComment(/* ... */): Promise<{ liked: boolean; likeCount?: number }> { 
 
 ## Step 8: Frontend composer component
 
-Create a provider-specific editor component in `apps/frontend/src/components/new-launch/` (for example `yourprovider.component.tsx`). The component should render any provider-specific settings fields and integrate with the shared composer form. Register the component so the composer picks it up by `identifier`.
+Create a provider-specific editor component at `apps/frontend/src/components/composer/providers/<id>/<id>.provider.tsx`. The component should render any provider-specific settings fields and integrate with the shared composer form. Register it in `apps/frontend/src/components/composer/providers/show.all.providers.tsx` (the `Providers` array maps `identifier` → component; the shared wrapper lives in `high.order.provider.tsx` in the same directory).
 
 ## Step 9: Provider icon
 
-Add the provider's brand SVG icon to the frontend icon registry (`apps/frontend/src/components/shared/provider-icon.tsx` or the equivalent registry). The icon is referenced by `identifier` in channel lists and the composer.
+Add the provider's icon as `apps/frontend/public/icons/platforms/<identifier>.png`. Channel lists and the composer reference it as `/icons/platforms/${identifier}.png` (see `platform-avatar.tsx`, `picks.socials.component.tsx`). (`apps/frontend/src/components/shared/provider-icon.tsx` is a separate brand-SVG registry used for AI/media/settings surfaces, not social channels.)
 
 ## Step 10: Tests
 

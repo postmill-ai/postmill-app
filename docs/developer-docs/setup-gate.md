@@ -14,7 +14,7 @@ The gate is a single client-side predicate over `GET /user/self`:
 const mustSetup = !user.setupCompleted;
 ```
 
-`LayoutComponent` (the authenticated app chrome) redirects incomplete users to `/setup` and renders nothing while redirecting to avoid a chrome flash. `/setup` lives in its own route segment under `apps/frontend/src/app/(app)/(site)/setup/` so it is outside `LayoutComponent` and cannot redirect itself.
+`LayoutComponent` (the authenticated app chrome) redirects incomplete users to `/setup` and renders nothing while redirecting to avoid a chrome flash. `/setup` lives in its own route segment under `apps/frontend/src/app/(app)/setup/` so it is outside `LayoutComponent` and cannot redirect itself.
 
 Only users who can complete the required LLM step stay in the wizard. Members without owner/admin role are redirected to `/dashboard` because they cannot save org-level AI provider settings.
 

@@ -20,7 +20,7 @@ import { FileService } from '@postmill-ai/nestjs-libraries/database/prisma/file/
 import { DesignService } from '@postmill-ai/nestjs-libraries/database/prisma/design/design.service';
 import { DefaultsSeedService } from '@postmill-ai/nestjs-libraries/ai/defaults/defaults-seed.service';
 import { EncryptionService } from '@postmill-ai/nestjs-libraries/encryption/encryption.service';
-import { DEMO_DESIGNS, DEMO_DESIGN_PREFIX } from './designer-seed-docs';
+import { DEMO_DESIGNS, DEMO_DESIGN_PREFIX, DEMO_DESIGN_NAMES } from './designer-seed-docs';
 
 const LEDGER_KEY = 'demo:fixtures-v2';
 
@@ -117,7 +117,7 @@ const AI_PROVIDERS: {
   { identifier: 'openrouter', defaultModel: 'auto', monthlyCap: 15, spendTarget: 1.2 },
 ];
 
-const HISTORY_DAYS = 35; // post history depth
+const HISTORY_DAYS = 70; // post history depth (10 weeks → weekly slots hit high confidence)
 // Channel snapshots go back further so period-over-period comparisons have a
 // real previous window (35d of history alone renders as absurd +1000% deltas).
 const SNAPSHOT_DAYS = 70;
@@ -205,6 +205,8 @@ export class DemoSeeder {
     const brandProfileId = await this._seedBrandProfiles(orgId, files);
     const campaigns = await this._seedCampaigns(orgId, userId);
     const posts = await this._seedPosts(orgId, userId, integrations, campaigns.launchId, files, rand);
+    await this._seedTags(orgId, posts, rand);
+    await this._seedShortLinks(orgId, posts, rand);
     await this._seedCampaignExtras(orgId, userId, cast, campaigns.launchId, integrations[0]?.id, posts, files, brandProfileId);
     await this._seedAnalytics(orgId, integrations, posts, rand);
     await this._seedComments(orgId, userId, cast, integrations, posts, rand);
@@ -410,7 +412,7 @@ export class DemoSeeder {
       ['landscape', 'lifestyle'],
     ];
     const files: { id: string; path: string; type: string }[] = [];
-    for (let i = 1; i <= 24; i++) {
+    for (let i = 1; i <= 30; i++) {
       const portrait = i % 3 === 0;
       const id = `${DEMO_ID_PREFIX}${short}-file-${i}`;
       const folder = folders[i % folders.length];
@@ -507,7 +509,7 @@ export class DemoSeeder {
       create: {
         id: launchId,
         organizationId: orgId,
-        name: `${DEMO_CAMPAIGN_PREFIX} Winter Drop Launch`,
+        name: 'Winter Drop Launch',
         description: 'Coordinated multi-channel launch push for the winter collection.',
         color: '#2B5CD3',
         startDate: dayjs().subtract(14, 'day').toDate(),
@@ -516,8 +518,10 @@ export class DemoSeeder {
         client: 'Acme Inc.',
         project: 'Winter 2026',
         tags: ['launch', 'winter'],
+        // NOTE: goal metrics must be keys computeGoalProgress understands
+        // ('impressions', not 'views') or the goal renders as a dead 0%.
         goals: [
-          { metric: 'views', target: 30000 },
+          { metric: 'impressions', target: 30000 },
           { metric: 'likes', target: 1500 },
         ],
         // Public read-only client report (deterministic token, per-org).
@@ -526,10 +530,11 @@ export class DemoSeeder {
         createdById: userId,
       },
       update: {
+        name: 'Winter Drop Launch',
         shareToken: this._hex64(orgId, 'campaign-share'),
         shareEnabled: true,
         goals: [
-          { metric: 'views', target: 30000 },
+          { metric: 'impressions', target: 30000 },
           { metric: 'likes', target: 1500 },
         ],
       },
@@ -540,17 +545,100 @@ export class DemoSeeder {
       create: {
         id: alwaysOnId,
         organizationId: orgId,
-        name: `${DEMO_CAMPAIGN_PREFIX} Always-On Social`,
+        name: 'Always-On Social',
         description: 'Ongoing evergreen content — no end date.',
         color: '#16a34a',
         startDate: dayjs().subtract(7, 'day').toDate(),
         endDate: null,
         createdById: userId,
       },
-      update: {},
+      update: { name: 'Always-On Social' },
     });
 
     return { launchId, alwaysOnId };
+  }
+
+  // ── tags (calendar card colors come from post.tags[0].tag.color) ───────────
+
+  private async _seedTags(
+    orgId: string,
+    posts: SeededPost[],
+    rand: () => number,
+  ): Promise<void> {
+    const short = this._short(orgId);
+    const tags = [
+      { id: `${DEMO_ID_PREFIX}${short}-tag-launch`, name: 'Launch', color: '#f59e0b' },
+      { id: `${DEMO_ID_PREFIX}${short}-tag-community`, name: 'Community', color: '#16a34a' },
+      { id: `${DEMO_ID_PREFIX}${short}-tag-product`, name: 'Product', color: '#8b5cf6' },
+      { id: `${DEMO_ID_PREFIX}${short}-tag-coffee`, name: 'Coffee', color: '#dc2626' },
+    ];
+    for (const t of tags) {
+      await this._prisma.tags.upsert({
+        where: { id: t.id },
+        create: { id: t.id, orgId, name: t.name, color: t.color },
+        update: { name: t.name, color: t.color },
+      });
+    }
+    // ~2 of 3 posts get a tag (round-robin) so month/week views read colorful
+    // but not uniform; campaign-tagged posts lean Launch (amber).
+    let k = 0;
+    for (const p of posts) {
+      if (k % 3 === 2) { k++; continue; }
+      const tag = p.campaign ? tags[0] : tags[1 + (k % 3)];
+      await this._prisma.tagsPosts.upsert({
+        where: { postId_tagId: { postId: p.id, tagId: tag.id } },
+        create: { postId: p.id, tagId: tag.id },
+        update: {},
+      });
+      k++;
+    }
+  }
+
+  // ── short links (campaign CLICKS KPI = ShortLinkSnapshot totals) ───────────
+
+  private async _seedShortLinks(
+    orgId: string,
+    posts: SeededPost[],
+    rand: () => number,
+  ): Promise<void> {
+    const short = this._short(orgId);
+    const campaignPosts = posts.filter((p) => p.campaign && p.state === 'PUBLISHED').slice(-3);
+    if (!campaignPosts.length) return;
+
+    const linkIds: string[] = [];
+    for (const [i, p] of campaignPosts.entries()) {
+      const id = `${DEMO_ID_PREFIX}${short}-sl-${i}`;
+      await this._prisma.shortLink.upsert({
+        where: { id },
+        create: {
+          id,
+          organizationId: orgId,
+          provider: 'bitly',
+          shortUrl: `https://bit.ly/slstc-${short.slice(0, 4)}${i}`,
+          originalUrl: 'https://solsticesupply.example/winter-drop',
+          postId: p.id,
+        },
+        update: { postId: p.id },
+      });
+      linkIds.push(id);
+    }
+    // 14 days of rising daily clicks per link (~600-900 total across links).
+    await this._prisma.shortLinkSnapshot.deleteMany({
+      where: { shortLinkId: { in: linkIds } },
+    });
+    const rows: any[] = [];
+    for (const [i, id] of linkIds.entries()) {
+      for (let d = 13; d >= 0; d--) {
+        const age = 13 - d;
+        rows.push({
+          organizationId: orgId,
+          shortLinkId: id,
+          clicks: Math.round((6 + i * 3) * Math.pow(1.13, age) * (0.8 + rand() * 0.4)),
+          date: dayjs().subtract(d, 'day').startOf('day').toDate(),
+        });
+      }
+    }
+    await this._prisma.shortLinkSnapshot.createMany({ data: rows });
   }
 
   private async _seedCampaignExtras(
@@ -666,14 +754,31 @@ export class DemoSeeder {
       return JSON.stringify([{ id: f.id, path: f.path }]);
     };
 
-    // Published history: one post every ~1.25 days across HISTORY_DAYS, stats
-    // rising with recency (growth rule: newer posts perform better).
-    const publishedOffsets: number[] = [];
+    // Published history: a real brand posting SCHEDULE — five fixed weekly
+    // slots across HISTORY_DAYS (10 weeks), so best-time heatmap cells
+    // accumulate ~10 posts each (>=10 → 'high' confidence tier), plus a few
+    // off-schedule extras so the calendar doesn't read robotic. Stats rise
+    // with recency (growth rule: newer posts perform better).
+    const weeklySlots = [
+      { dow: 2, hour: 9, minute: 30 }, // Tue 9:30a
+      { dow: 4, hour: 10, minute: 0 }, // Thu 10a
+      { dow: 5, hour: 10, minute: 0 }, // Fri 10a — the flagship slot
+      { dow: 6, hour: 15, minute: 0 }, // Sat 3p
+      { dow: 0, hour: 12, minute: 0 }, // Sun noon
+    ];
+    const publishedSpecs: { offset: number; hour: number; minute: number }[] = [];
     for (let d = HISTORY_DAYS; d >= 1; d -= 1) {
-      if (d % 5 === 2 || d % 5 === 4) continue; // ~3 posts per 5 days
-      publishedOffsets.push(-d);
+      const dow = dayjs().tz(this._zone()).subtract(d, 'day').day();
+      const slot = weeklySlots.find((s) => s.dow === dow);
+      if (slot) publishedSpecs.push({ offset: -d, hour: slot.hour, minute: slot.minute });
     }
-    for (const offset of publishedOffsets) {
+    // Off-schedule extras (recent, varied times) — organic feel.
+    for (const d of [3, 8, 13, 19, 26, 33]) {
+      publishedSpecs.push({ offset: -d, hour: 8 + (d % 9), minute: (d * 13) % 60 });
+    }
+    publishedSpecs.sort((a, b) => a.offset - b.offset);
+    for (const spec of publishedSpecs) {
+      const { offset } = spec;
       const integration = integrations[n % integrations.length];
       const recency = (HISTORY_DAYS + offset) / HISTORY_DAYS; // 0 old → 1 new
       const views = Math.round((900 + 6200 * recency) * (0.85 + rand() * 0.3));
@@ -686,7 +791,7 @@ export class DemoSeeder {
         orgId,
         integrationId: integration.id,
         state: State.PUBLISHED,
-        publishDate: this._at(offset, 9 + (n % 8), (n * 7) % 60),
+        publishDate: this._at(offset, spec.hour, spec.minute),
         content: CAPTIONS[n % CAPTIONS.length],
         group: `demo-${short}-g${n}`,
         campaignId: inCampaign ? launchCampaignId : null,
@@ -1064,7 +1169,10 @@ export class DemoSeeder {
     ];
 
     let n = 0;
-    for (const p of commentable.slice(0, 14)) {
+    // Most-RECENT commentable posts (matches the hours-ago timestamps below and
+    // covers campaign-tagged posts + the hero, so the campaign REPLIES KPI is
+    // non-zero — countCampaignComments counts SocialComment rows on campaign posts).
+    for (const p of commentable.slice(-14)) {
       const perPost = 2 + Math.floor(rand() * 2); // 2-3 top-level per post
       let parentPlatformId: string | null = null;
       for (let j = 0; j < perPost && n < 35; j++) {
@@ -1113,7 +1221,7 @@ export class DemoSeeder {
     }
 
     // A few of the brand's own replies so threads read two-sided.
-    const own = commentable.slice(0, 3);
+    const own = commentable.slice(-3);
     for (const [i, p] of own.entries()) {
       await this._prisma.socialComment.upsert({
         where: {
@@ -1148,7 +1256,7 @@ export class DemoSeeder {
 
     // Partial read-state for the main user → real unread badges on schedule
     // cards (some posts read a while ago with fewer comments than now exist).
-    const readTargets = commentable.slice(0, 7);
+    const readTargets = commentable.slice(-7);
     for (const [i, p] of readTargets.entries()) {
       const existing = await this._prisma.postCommentRead.findFirst({
         where: { userId: mainUserId, postId: p.id },
@@ -1372,11 +1480,13 @@ export class DemoSeeder {
   // ── designs ─────────────────────────────────────────────────────────────────
 
   private async _seedDesigns(orgId: string, userId: string): Promise<void> {
-    const existing = await this._prisma.design.count({
-      where: { organizationId: orgId, name: { startsWith: DEMO_DESIGN_PREFIX } },
+    const existing = await this._prisma.design.findMany({
+      where: { organizationId: orgId, name: { in: DEMO_DESIGN_NAMES } },
+      select: { name: true },
     });
-    if (existing >= DEMO_DESIGNS.length) return;
+    const have = new Set(existing.map((d) => d.name));
     for (const design of DEMO_DESIGNS) {
+      if (have.has(design.name)) continue;
       await this._designService.createDesign(orgId, userId, {
         name: design.name,
         doc: design.doc,
@@ -1394,11 +1504,34 @@ export class DemoSeeder {
     });
     const integrationIds = demoIntegrations.map((i) => i.id);
 
+    // Campaigns are matched by deterministic id (display names no longer carry
+    // the "Demo:" prefix); the name clause keeps pre-rename seeds resettable.
     const demoCampaigns = await this._prisma.campaign.findMany({
-      where: { organizationId: orgId, name: { startsWith: DEMO_CAMPAIGN_PREFIX } },
+      where: {
+        organizationId: orgId,
+        OR: [
+          { id: { startsWith: DEMO_ID_PREFIX } },
+          { name: { startsWith: DEMO_CAMPAIGN_PREFIX } },
+        ],
+      },
       select: { id: true },
     });
     const campaignIds = demoCampaigns.map((c) => c.id);
+
+    // Tag joins before posts (TagsPosts→Post FK has no cascade), then tags.
+    const demoTags = await this._prisma.tags.findMany({
+      where: { orgId, id: { startsWith: DEMO_ID_PREFIX } },
+      select: { id: true },
+    });
+    if (demoTags.length) {
+      const tagIds = demoTags.map((t) => t.id);
+      await this._prisma.tagsPosts.deleteMany({ where: { tagId: { in: tagIds } } });
+      await this._prisma.tags.deleteMany({ where: { id: { in: tagIds } } });
+    }
+    // Short links (snapshots cascade).
+    await this._prisma.shortLink.deleteMany({
+      where: { organizationId: orgId, id: { startsWith: DEMO_ID_PREFIX } },
+    });
 
     // Posts first: cascades SocialComment, PostCommentRead, PostAnalyticsSnapshot.
     if (integrationIds.length) {
@@ -1431,7 +1564,13 @@ export class DemoSeeder {
       where: { organizationId: orgId, id: { startsWith: DEMO_ID_PREFIX } },
     });
     await this._prisma.design.deleteMany({
-      where: { organizationId: orgId, name: { startsWith: DEMO_DESIGN_PREFIX } },
+      where: {
+        organizationId: orgId,
+        OR: [
+          { name: { in: DEMO_DESIGN_NAMES } },
+          { name: { startsWith: DEMO_DESIGN_PREFIX } },
+        ],
+      },
     });
 
     await this._prisma.aISpendLog.deleteMany({

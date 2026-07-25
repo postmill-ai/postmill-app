@@ -16,7 +16,7 @@
 | `Session` | Login session backing refresh-token rotation — `tokenHash` (sha256 of the refresh token, rotated on every use), `previousTokenHash` (last rotated-out hash; reusing it revokes the session), userAgent/ip, `expiresAt`, `revokedAt` | FK → `User` (cascade) |
 | `UserOrganization` | Many-to-many join between users and orgs. The legacy `role` enum column was dropped in v3.8.10 — `roleId` → `AppRole` is the role pointer. | FK → `Organization`, `User`, `AppRole` (nullable `roleId`) |
 | `AppRole` | RBAC role. Org-scoped when `organizationId` is set; NULL org = seeded system role (`owner`/`admin`/`editor`/`member`/`viewer`, `isSystem: true`) | FK → `Organization` (nullable); has many `AppRolePermission`, `UserOrganization` |
-| `Permission` | Fine-grained `(resource, action)` capability — 16 resources × 5 actions seeded | Unique on `(resource, action)`; has many `AppRolePermission` |
+| `Permission` | Fine-grained `(resource, action)` capability — 18 resources × 5 actions = 90 seeded | Unique on `(resource, action)`; has many `AppRolePermission` |
 | `AppRolePermission` | Join table linking roles to permissions | Composite PK `(roleId, permissionId)`; cascade on both |
 | `AuthProviderConfig` | Platform-wide login provider config (managed by the separate administration app — this repo ships no `/admin` frontend and reads it DB-first) — client ID/secret encrypted, OIDC endpoints, enabled flag. Env vars remain the bootstrap fallback. | Unique on `(provider, version)` |
 
