@@ -166,6 +166,13 @@ Key rules:
 
 Every provider package must ship `src/v1/metadata.ts` exporting a `ProviderMetadata` object. For media studios the relevant fields are:
 
+> **Descriptor drift gate:** after adding or changing a studio descriptor, run
+> `node scripts/generate-studio-descriptor-registry.mjs` from the repo root. It merges generated
+> `mediaModels`, `website`, `description.en`, and reconciled `mediaCategories`/`kind` from the
+> frontend descriptors into each provider's `metadata.ts`. CI runs the same script with `--check`
+> (`.github/workflows/test.yml`, "Studio descriptor metadata drift gate") and fails the build if the
+> committed metadata has drifted from the descriptors.
+
 ```ts
 export interface ProviderMetadata {
   id: string;

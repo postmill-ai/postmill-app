@@ -53,7 +53,7 @@ new Postmill(apiKey: string, path?: string)
 | Parameter | Type | Default | Description |
 |---|---|---|---|
 | `apiKey` | `string` | required | Org API key (sent as `Authorization` header). |
-| `path` | `string` | `https://api.postiz.com` | Custom API base URL for self-hosted instances. |
+| `path` | `string` | `https://api.postmill.ai` | Custom API base URL for self-hosted instances. |
 
 ### Methods
 

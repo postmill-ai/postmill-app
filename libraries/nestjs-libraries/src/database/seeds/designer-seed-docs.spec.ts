@@ -3,7 +3,7 @@ import { DesignerDocService } from '@postmill-ai/nestjs-libraries/media/designer
 import {
   SYSTEM_DESIGN_TEMPLATES,
   DEMO_DESIGNS,
-  DEMO_DESIGN_PREFIX,
+  DEMO_DESIGN_NAMES,
 } from './designer-seed-docs';
 
 // DesignerDocService has a no-arg constructor — its validate/validateStrict are
@@ -32,9 +32,11 @@ describe('designer seed docs', () => {
     expect(new Set(names).size).toBe(names.length);
   });
 
-  it('every demo design name carries the reset prefix', () => {
-    for (const d of DEMO_DESIGNS) {
-      expect(d.name.startsWith(DEMO_DESIGN_PREFIX)).toBe(true);
-    }
+  it('every demo design is reset-findable via DEMO_DESIGN_NAMES (unique, in sync)', () => {
+    // Display names are clean (no "Demo:" prefix) — the seeder's reset and
+    // idempotency both key on this exact-name list, so it must cover every
+    // demo design and contain no duplicates.
+    expect(DEMO_DESIGN_NAMES).toEqual(DEMO_DESIGNS.map((d) => d.name));
+    expect(new Set(DEMO_DESIGN_NAMES).size).toBe(DEMO_DESIGN_NAMES.length);
   });
 });

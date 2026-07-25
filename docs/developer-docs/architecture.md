@@ -115,7 +115,7 @@ See [Frontend Conventions](./frontend-conventions.md) for the full policy.
 
 1. User creates a post in the composer. A **preflight** validation (`POST /posts/preflight`) checks content, media, and provider capabilities.
 2. Post is saved to the database with a scheduled date and `state = QUEUE`.
-3. At the scheduled time, the Inngest `post/publish` function picks up the post, sleeps until the publish date, and calls `PostActivity`.
+3. At the scheduled time, the Inngest `post-publish-${taskQueue}` function (one per task queue) picks up the post, sleeps until the publish date, and calls `PostActivity`.
 4. `PostActivity` resolves the provider through `IntegrationManager` and calls `provider.post()`.
 5. After a successful publish:
    - **Internal plugs** (`@PostPlug`) execute (one-shot post-publish actions, e.g. "have another account repost this").
@@ -137,7 +137,7 @@ All scheduled and async work runs on Inngest. The backend serves the handler at 
 
 | Function | Trigger | Purpose |
 |----------|---------|---------|
-| `post/publish` | Event | Sleep until publish date, post, post thread items, first comment, webhooks, plugs. |
+| `post-publish-${taskQueue}` | Event | Sleep until publish date, post, post thread items, first comment, webhooks, plugs. One function per task queue. |
 | `autopost/process` | Event | RSS/feed autoposting. |
 | `integration/refresh-token` | Event | Refresh channel OAuth tokens. Each cycle reschedules with a unique idempotency id; `integration/refresh-token/cancel` (channel delete / reconnect) stops the chain, which also terminates on a missing expiry, a `refreshNeeded` flag, or 5 failed cycles. |
 | `email/send` | Event | Send transactional email (global 1/sec). |
@@ -152,7 +152,7 @@ All scheduled and async work runs on Inngest. The backend serves the handler at 
 | `media/render` | Event | Local video render (Designer timeline + clip merge). |
 | `media-jobs-poll-job` | Event | Individual media job poll helper. |
 | `missing-post-finder` | Cron | Recover posts that should have published. |
-| `streak/start` | Cron | Streak notifications. |
+| `streak-tracker` | Cron | Streak notifications. |
 | `campaign-tag-purge` | Cron | Purge tagged campaign items for ended campaigns. |
 | `retention-purge` | Cron | Prune analytics, email logs, and other retention-bound data. |
 | `refresh-token` | Cron | Bulk token refresh sweep. |
@@ -197,7 +197,7 @@ See [Data Model](./data-model.md) for the full schema breakdown.
 Full role-based access control replaces the dropped legacy `Role` enum:
 
 - **`AppRole`** — org-scoped roles; `organizationId = NULL` rows are seeded system roles (`owner`, `admin`, `editor`, `member`, `viewer`, `isSystem: true`). Orgs can create custom roles via `/settings/roles` or the Settings → Workspace → Roles tab.
-- **`Permission`** — seeded `(resource, action)` catalog: 16 resources × 5 actions. The seeder is idempotent.
+- **`Permission`** — seeded `(resource, action)` catalog: 18 resources × 5 actions = 90 permissions. The seeder is idempotent.
 - **`AppRolePermission`** — the join table. `manage` on a resource implies all actions.
 - **`OrgRbacGuard` + `@RequirePermission(resource, action)`** gate routes at the controller level. Failure throws `ForbiddenException` → HTTP 403.
 

@@ -38,7 +38,9 @@ Each SWR call must be its own hook. Never nest hook calls inside returned object
 ### Prisma Repository-Only Access
 
 Schema at `libraries/nestjs-libraries/src/database/prisma/schema.prisma`. Run
-`pnpm run prisma-generate` after schema edits. Run `pnpm run prisma-db-push` to apply changes.
+`pnpm run prisma-generate` after schema edits. To apply changes, author a committed migration with
+`pnpm run prisma-migrate-dev`; the canonical apply path is `pnpm run prisma-migrate-deploy`
+(`prisma-db-push` is for local prototyping/reset only — see [Database](./database.md)).
 
 ---
 

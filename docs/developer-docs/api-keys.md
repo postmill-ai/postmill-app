@@ -128,6 +128,6 @@ These scopes are intersected with `mcpsettings.allowedScopes` if configured.
 
 ## Migration from legacy org-level keys
 
-If you have integrations still using the old `Organization.apiKey`, generate a new per-user key from **Settings → API Keys** and update the `Authorization` header. The old key type is no longer accepted by the Public API or MCP.
+If you have integrations still using the old `Organization.apiKey`, generate a new per-user key from **Settings → Developers** and update the `Authorization` header. The old key type is no longer accepted by the Public API or MCP.
 
 > Verified against v1.0.0

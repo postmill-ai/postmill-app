@@ -49,6 +49,13 @@ Two situations are allowed to bypass the normal layering rule by design:
 2. **Cross-domain leaf-reads** where routing "up" through the owning service would create a Nest dependency-injection cycle. These are deliberate, behavior-neutral reads and must carry a `// layering: sanctioned leaf-read` comment:
    - `PostsService` → `AnalyticsRepository` / `CampaignsRepository` (the analytics/campaigns services depend on `PostsService`).
    - `OrgMediaProviderSettingsService` → `@Optional() OrgAiSettingsRepository` (the Qwen/Google universal-credential read; `OrgAiSettingsService` depends on this package's `ProviderCredentialLinkService`).
+   - `AiMediaService` (`ai/governance/media.service.ts`) → `@Optional() OrgAiSettingsRepository` (universal-credential fallback; same DI-cycle rationale as above).
+   - `StripeService` → `StripeEventRepository` (narrow Stripe-webhook idempotency/grace reads, no service-level cycle).
+   - `PostActivity` (Inngest) → `CampaignsRepository` (UTM `utmEnabled` flag) and `PostsRepository` (atomic publish claim).
+   - `OrgVpnConfigService` → `OrgProviderConfigRepository` (`OrgProviderConfigService` depends back on this service; used to clear orphaned channel `vpnSelection` rows).
+   - `StorageService` → subscription read via the repository (routing through `SubscriptionService` would close a DI cycle that crashes Nest at boot).
+   - `WebhooksService` → `IntegrationRepository` (id-only ownership check, no token decrypt).
+   - `NotificationService` → `OrganizationRepository` (`OrganizationService` depends on `NotificationService`).
 
 ---
 
@@ -216,12 +223,10 @@ Each repository typically has a companion service file in the same directory (e.
 
 ## Module wiring
 
-AI providers are registered in `AIProviderRegistry` at module init. Each adapter calls `registry.register(adapter)` during construction. The registry is the single source of truth for available providers — `AIModelProvider` resolves adapters by identifier through the registry.
+All provider domains (AI, Media, Storage, Short-link, Social, VPN, Content Packs, Email, Auth) register through the shared **`ProviderKernel`** at module init. `apps/backend/src/providers.generated.ts` (hand-maintained despite the name) imports every provider package's modules into a single `providerModules` array; `ProvidersBootstrap.onModuleInit` (`apps/backend/src/providers.bootstrap.ts`) walks that array and calls `kernel.register(mod)` for each, honoring the `DEV_DISABLE_*` feature flags. Malformed manifests or duplicate registrations are fatal to boot. (The legacy `AIProviderRegistry`/`MediaProviderRegistry` in-memory registries and the `PROVIDER_KERNEL=legacy` kill switch were removed.)
 
-Channel provider integrations follow a similar pattern with `IntegrationManager` and social provider classes implementing the `SocialAbstract` interface.
+Resolution is through `ProviderResolutionService` — the kernel is the sole resolution path. Channel provider integrations resolve the same way: social adapters are wrapped in `SocialProviderKernelAdapter` and registered like every other domain; `IntegrationManager` resolves them by identifier.
 
-Media-generation providers follow the same shape: `MediaProviderRegistry` (`libraries/nestjs-libraries/src/media/`) registers every `MediaProviderAdapter` at module init (`MediaModule.onModuleInit`).
-
-All of these ultimately resolve through the shared `ProviderKernel` (see [Architecture](./architecture.md) and [Provider Framework](./provider-framework.md)).
+See [Architecture](./architecture.md) and [Provider Framework](./provider-framework.md).
 
 > Verified against v1.0.0

@@ -94,7 +94,7 @@ Both plug types are configured **in the composer's per-channel settings panel** 
 
 **Auto Plugs**: During the post workflow, `PostActivity` checks configured plugs. When conditions are met, the plug handler is called.
 
-**Post Plugs**: Executed by the `post/publish` Inngest function immediately after a successful `provider.post()`, before the workflow completes. Idempotency comes from Inngest's durable `step.run`.
+**Post Plugs**: Executed by the post-publish Inngest function immediately after a successful `provider.post()`, before the workflow completes. Idempotency comes from Inngest's durable `step.run`.
 
 ## Frontend integration
 
@@ -114,7 +114,7 @@ Provider @Plug/@PostPlug decorator
       → GET /integrations/plug/list → composer channel-settings panel renders available plugs
       → User configures plug → POST /integrations/:id/plugs
         → Stored in Plugs table (upsert by plugFunction + integrationId)
-          → post/publish Inngest function reads plugs during publish
+          → post-publish Inngest function reads plugs during publish
             → Post plugs: run once after provider.post()
             → Auto plugs: scheduled for totalRuns at runEveryMilliseconds
 ```
