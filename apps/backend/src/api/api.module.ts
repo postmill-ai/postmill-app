@@ -86,6 +86,7 @@ import {
   ProvidersController,
   AdminProvidersController,
 } from '@postmill-ai/backend/api/routes/providers.controller';
+import { AdminOrgsController } from '@postmill-ai/backend/api/routes/admin.orgs.controller';
 import { InngestModule } from '@postmill-ai/nestjs-libraries/inngest/inngest.module';
 import { ReplicateStudioModule } from '@postmill-ai/nestjs-libraries/media/replicate-studio/replicate-studio.module';
 import { ReplicateStudioController } from './routes/replicate-studio.controller';
@@ -99,7 +100,9 @@ import { AiDesignerModule } from '@postmill-ai/nestjs-libraries/ai-designer/ai-d
 import { AiDesignerController } from './routes/ai-designer.controller';
 import { AiDesignerGateway } from './gateways/ai-designer.gateway';
 
-const authenticatedController = [
+// Exported so tests can prove a controller is registered for
+// AuthMiddleware/CsrfMiddleware (an unregistered controller serves unauthenticated).
+export const authenticatedController = [
   UsersController,
   IntegrationsController,
   SettingsController,
@@ -151,6 +154,7 @@ const authenticatedController = [
   DeepgramController,
   AiDesignerController,
   AdminProvidersController,
+  AdminOrgsController,
   // PROVIDER_REMEDIATION 3.1: `/providers/catalog` was fully anonymous. It is
   // org-agnostic but must be authenticated — it fingerprints the deployment's exact
   // release + the `verified:false` beta cohort. Moved into the authenticated group so

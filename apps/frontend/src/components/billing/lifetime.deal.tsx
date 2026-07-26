@@ -72,7 +72,7 @@ export const LifetimeDeal = () => {
 
     list.push(
       t('billing_n_channels', '{{count}} channel', {
-        count: user.totalChannels || currentPricing.channel,
+        count: user.totalChannels ?? currentPricing.channel,
       })
     );
 

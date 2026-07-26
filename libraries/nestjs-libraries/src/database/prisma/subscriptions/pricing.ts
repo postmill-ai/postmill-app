@@ -24,34 +24,141 @@ export interface PricingInterface {
 
 export const SELF_HOST_PLAN = 'AGENCY';
 
-export type AddonType = 'storage' | 'video_exports';
+export type AddonType =
+  | 'storage'
+  | 'video_exports'
+  | 'channels'
+  | 'team_seats'
+  | 'posts'
+  | 'brand_kits'
+  | 'webhooks'
+  | 'competitors';
+
+/** Subscription `extra*` column holding the purchased amount for an add-on. */
+export type AddonExtraColumn =
+  | 'extraStorageGb'
+  | 'extraVideoExports'
+  | 'extraChannels'
+  | 'extraTeamMembers'
+  | 'extraPosts'
+  | 'extraBrandKits'
+  | 'extraWebhooks'
+  | 'extraCompetitors';
+
+/** Numeric PlanInterface limit an add-on raises. */
+export type AddonLimitKey =
+  | 'storage_gb'
+  | 'video_exports'
+  | 'channel'
+  | 'team_members'
+  | 'posts_per_month'
+  | 'brand_kits'
+  | 'webhooks'
+  | 'competitors';
+
+export interface AddonDefinition {
+  column: AddonExtraColumn;
+  limitKey: AddonLimitKey;
+  productName: string;
+  packSizeEnv: string;
+  defaultPackSize: number;
+  priceCentsEnv: string;
+  defaultPriceCents: number;
+}
 
 export const ADDONS = {
   storage: {
-    priceCents: 1900,
+    column: 'extraStorageGb',
+    limitKey: 'storage_gb',
     productName: 'Postmill Extra Storage',
     packSizeEnv: 'ADDON_STORAGE_GB_PER_PACK',
     defaultPackSize: 25,
+    priceCentsEnv: 'ADDON_STORAGE_PRICE_CENTS',
+    defaultPriceCents: 1900,
   },
   video_exports: {
-    priceCents: 1900,
+    column: 'extraVideoExports',
+    limitKey: 'video_exports',
     productName: 'Postmill Extra Video Exports',
     packSizeEnv: 'ADDON_VIDEO_EXPORTS_PER_PACK',
     defaultPackSize: 50,
+    priceCentsEnv: 'ADDON_VIDEO_EXPORTS_PRICE_CENTS',
+    defaultPriceCents: 1900,
   },
-} as const satisfies Record<
-  AddonType,
-  {
-    priceCents: number;
-    productName: string;
-    packSizeEnv: string;
-    defaultPackSize: number;
-  }
->;
+  channels: {
+    column: 'extraChannels',
+    limitKey: 'channel',
+    productName: 'Postmill Extra Channels',
+    packSizeEnv: 'ADDON_CHANNELS_PER_PACK',
+    defaultPackSize: 5,
+    priceCentsEnv: 'ADDON_CHANNELS_PRICE_CENTS',
+    defaultPriceCents: 1900,
+  },
+  team_seats: {
+    column: 'extraTeamMembers',
+    limitKey: 'team_members',
+    productName: 'Postmill Extra Team Seats',
+    packSizeEnv: 'ADDON_TEAM_SEATS_PER_PACK',
+    defaultPackSize: 5,
+    priceCentsEnv: 'ADDON_TEAM_SEATS_PRICE_CENTS',
+    defaultPriceCents: 1500,
+  },
+  posts: {
+    column: 'extraPosts',
+    limitKey: 'posts_per_month',
+    productName: 'Postmill Extra Posts',
+    packSizeEnv: 'ADDON_POSTS_PER_PACK',
+    defaultPackSize: 500,
+    priceCentsEnv: 'ADDON_POSTS_PRICE_CENTS',
+    defaultPriceCents: 900,
+  },
+  brand_kits: {
+    column: 'extraBrandKits',
+    limitKey: 'brand_kits',
+    productName: 'Postmill Extra Brand Kits',
+    packSizeEnv: 'ADDON_BRAND_KITS_PER_PACK',
+    defaultPackSize: 5,
+    priceCentsEnv: 'ADDON_BRAND_KITS_PRICE_CENTS',
+    defaultPriceCents: 900,
+  },
+  webhooks: {
+    column: 'extraWebhooks',
+    limitKey: 'webhooks',
+    productName: 'Postmill Extra Webhooks',
+    packSizeEnv: 'ADDON_WEBHOOKS_PER_PACK',
+    defaultPackSize: 10,
+    priceCentsEnv: 'ADDON_WEBHOOKS_PRICE_CENTS',
+    defaultPriceCents: 900,
+  },
+  competitors: {
+    column: 'extraCompetitors',
+    limitKey: 'competitors',
+    productName: 'Postmill Extra Competitors',
+    packSizeEnv: 'ADDON_COMPETITORS_PER_PACK',
+    defaultPackSize: 10,
+    priceCentsEnv: 'ADDON_COMPETITORS_PRICE_CENTS',
+    defaultPriceCents: 900,
+  },
+} as const satisfies Record<AddonType, AddonDefinition>;
 
 export function addonPackSize(type: AddonType): number {
   const { packSizeEnv, defaultPackSize } = ADDONS[type];
-  return Number(process.env[packSizeEnv] || defaultPackSize);
+  const parsed = Number(process.env[packSizeEnv]);
+  // Unset (NaN), zero, negative, or garbage env → documented default, never
+  // NaN/0 propagating into limit math.
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : defaultPackSize;
+}
+
+/**
+ * Server-side only: in a browser bundle dynamic `process.env` reads are not
+ * inlined, so this silently returns the default. Frontend must use the
+ * statically-referenced NEXT_PUBLIC_ADDON_* mirrors instead.
+ */
+export function addonPriceCents(type: AddonType): number {
+  const { priceCentsEnv, defaultPriceCents } = ADDONS[type];
+  const parsed = Number(process.env[priceCentsEnv]);
+  // Same guard — a $0 or NaN Stripe price must never be created.
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : defaultPriceCents;
 }
 
 export const pricing: PricingInterface = {

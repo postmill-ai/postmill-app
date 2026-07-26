@@ -9,6 +9,7 @@ import { accountFingerprint } from '@postmill-ai/nestjs-libraries/utils/account-
 import { SubscriptionRepository } from '@postmill-ai/nestjs-libraries/database/prisma/subscriptions/subscription.repository';
 import { FileRepository } from '@postmill-ai/nestjs-libraries/database/prisma/file/file.repository';
 import { pricing } from '@postmill-ai/nestjs-libraries/database/prisma/subscriptions/pricing';
+import { mergeEffectiveLimits } from '@postmill-ai/nestjs-libraries/database/prisma/subscriptions/effective.limits';
 
 type StorageConfigRow = {
   id: string;
@@ -466,8 +467,10 @@ export class StorageService {
       return;
     }
 
+    // Effective cap: plan + add-on extras + super-admin limitOverrides, all
+    // merged in one place so the upload path honors overrides too.
     const capBytes =
-      (plan.storage_gb + (subscription?.extraStorageGb ?? 0)) *
+      mergeEffectiveLimits(plan, subscription).storage_gb *
       1024 *
       1024 *
       1024;

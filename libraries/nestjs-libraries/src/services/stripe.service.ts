@@ -1,5 +1,5 @@
 import Stripe from 'stripe';
-import { Injectable, Logger } from '@nestjs/common';
+import { BadRequestException, Injectable, Logger } from '@nestjs/common';
 import { Organization, User } from '@prisma/client';
 import { BillingTier, SubscriptionService } from '@postmill-ai/nestjs-libraries/database/prisma/subscriptions/subscription.service';
 import { OrganizationService } from '@postmill-ai/nestjs-libraries/database/prisma/organizations/organization.service';
@@ -8,7 +8,10 @@ import { BillingSubscribeDto } from '@postmill-ai/nestjs-libraries/dtos/billing/
 import {
   pricing,
   ADDONS,
+  AddonType,
+  AddonExtraColumn,
   addonPackSize,
+  addonPriceCents,
 } from '@postmill-ai/nestjs-libraries/database/prisma/subscriptions/pricing';
 import { AuthService } from '@postmill-ai/helpers/auth/auth.service';
 import { TrackService } from '@postmill-ai/nestjs-libraries/track/track.service';
@@ -514,10 +517,18 @@ export class StripeService {
 
   async createOrUpdateAddon(
     organizationId: string,
-    type: 'storage' | 'video_exports',
+    type: AddonType,
     packs: number
   ) {
     const org = await this._organizationService.getOrgById(organizationId);
+    // Lifetime orgs have no base Stripe subscription for add-on items to ride on.
+    const subscription =
+      await this._subscriptionService.getSubscription(organizationId);
+    if (subscription?.isLifetime) {
+      throw new BadRequestException(
+        'Add-ons are not available for lifetime organizations'
+      );
+    }
     const customer = await this.createOrGetCustomer(org!);
 
     const existingAddons = await this._getAddonSubscriptions(customer);
@@ -553,14 +564,14 @@ export class StripeService {
         pricesList.data.find(
           (p) =>
             p.recurring?.interval === 'month' &&
-            p.unit_amount === ADDONS[type].priceCents
+            p.unit_amount === addonPriceCents(type)
         ) ||
         (await stripe.prices.create({
           active: true,
           product: findProduct.id,
           currency: 'usd',
           nickname: `${productName} monthly`,
-          unit_amount: ADDONS[type].priceCents,
+          unit_amount: addonPriceCents(type),
           recurring: { interval: 'month' },
           metadata: { service: 'postmill', addon: type },
         }));
@@ -579,7 +590,7 @@ export class StripeService {
     return { ok: true };
   }
 
-  async cancelAddon(organizationId: string, type: 'storage' | 'video_exports') {
+  async cancelAddon(organizationId: string, type: AddonType) {
     const org = await this._organizationService.getOrgById(organizationId);
     const customer = await this.createOrGetCustomer(org!);
     const existingAddons = await this._getAddonSubscriptions(customer);
@@ -612,15 +623,13 @@ export class StripeService {
       quantities[type] = (quantities[type] || 0) + qty;
     }
 
-    const extraStorageGb =
-      (quantities['storage'] || 0) * addonPackSize('storage');
-    const extraVideoExports =
-      (quantities['video_exports'] || 0) * addonPackSize('video_exports');
+    const payload: Partial<Record<AddonExtraColumn, number>> = {};
+    for (const type of Object.keys(ADDONS) as AddonType[]) {
+      payload[ADDONS[type].column] =
+        (quantities[type] || 0) * addonPackSize(type);
+    }
 
-    await this._subscriptionService.updateAddonQuantities(org.id, {
-      extraStorageGb,
-      extraVideoExports,
-    });
+    await this._subscriptionService.updateAddonQuantities(org.id, payload);
 
     return { ok: true };
   }

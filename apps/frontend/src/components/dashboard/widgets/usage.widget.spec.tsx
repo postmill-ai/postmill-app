@@ -93,11 +93,17 @@ describe('UsageWidget', () => {
           postsPerMonth: 100,
           channels: 10,
           teamMembers: 20,
+          competitors: 5,
+          webhooks: 10,
+          brandKits: 2,
         },
         usage: {
           postsThisCycle: 75,
           channels: 3,
           teamMembers: 5,
+          competitors: 2,
+          webhooks: 4,
+          brandKits: 1,
         },
       },
       isLoading: false,
@@ -118,6 +124,12 @@ describe('UsageWidget', () => {
     expect(screen.getByText('3 / 10')).toBeTruthy();
     expect(screen.getByText('Team')).toBeTruthy();
     expect(screen.getByText('5 / 20')).toBeTruthy();
+    expect(screen.getByText('Competitors')).toBeTruthy();
+    expect(screen.getByText('2 / 5')).toBeTruthy();
+    expect(screen.getByText('Webhooks')).toBeTruthy();
+    expect(screen.getByText('4 / 10')).toBeTruthy();
+    expect(screen.getByText('Brand kits')).toBeTruthy();
+    expect(screen.getByText('1 / 2')).toBeTruthy();
   });
 
   it('renders AI spend cards including remaining budget', () => {
@@ -167,11 +179,17 @@ describe('UsageWidget', () => {
           postsPerMonth: 50,
           channels: 5,
           teamMembers: 10,
+          competitors: 5,
+          webhooks: 10,
+          brandKits: 2,
         },
         usage: {
           postsThisCycle: 10,
           channels: 2,
           teamMembers: 4,
+          competitors: 1,
+          webhooks: 2,
+          brandKits: 1,
         },
       },
       isLoading: false,
@@ -206,11 +224,17 @@ describe('UsageWidget', () => {
           postsPerMonth: 100,
           channels: 10,
           teamMembers: 20,
+          competitors: 5,
+          webhooks: 10,
+          brandKits: 2,
         },
         usage: {
           postsThisCycle: 150,
           channels: 3,
           teamMembers: 5,
+          competitors: 1,
+          webhooks: 2,
+          brandKits: 1,
         },
       },
       isLoading: false,
@@ -239,11 +263,17 @@ describe('UsageWidget', () => {
           postsPerMonth: 100,
           channels: false,
           teamMembers: 20,
+          competitors: 5,
+          webhooks: 10,
+          brandKits: 2,
         },
         usage: {
           postsThisCycle: 10,
           channels: 99,
           teamMembers: 5,
+          competitors: 1,
+          webhooks: 2,
+          brandKits: 1,
         },
       },
       isLoading: false,

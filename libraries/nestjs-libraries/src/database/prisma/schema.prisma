@@ -233,6 +233,13 @@ model Subscription {
   gracePeriodEnd    DateTime?
   extraStorageGb    Int              @default(0)
   extraVideoExports Int              @default(0)
+  extraChannels     Int              @default(0)
+  extraTeamMembers  Int              @default(0)
+  extraPosts        Int              @default(0)
+  extraBrandKits    Int              @default(0)
+  extraWebhooks     Int              @default(0)
+  extraCompetitors  Int              @default(0)
+  limitOverrides    Json?
   pendingTier       SubscriptionTier?
   createdAt         DateTime         @default(now())
   updatedAt         DateTime         @updatedAt

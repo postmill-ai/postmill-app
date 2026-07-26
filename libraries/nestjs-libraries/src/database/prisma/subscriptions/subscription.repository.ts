@@ -4,6 +4,7 @@ import {
   PrismaTransaction,
   PrismaService,
 } from '@postmill-ai/nestjs-libraries/database/prisma/prisma.service';
+import { AddonExtraColumn } from '@postmill-ai/nestjs-libraries/database/prisma/subscriptions/pricing';
 import dayjs from 'dayjs';
 import { Organization } from '@prisma/client';
 
@@ -293,14 +294,21 @@ export class SubscriptionRepository {
 
   updateAddonQuantities(
     organizationId: string,
-    quantities: { extraStorageGb: number; extraVideoExports: number }
+    quantities: Partial<Record<AddonExtraColumn, number>>
   ) {
     return this._subscription.model.subscription.updateMany({
       where: { organizationId, deletedAt: null },
-      data: {
-        extraStorageGb: quantities.extraStorageGb,
-        extraVideoExports: quantities.extraVideoExports,
-      },
+      data: { ...quantities },
+    });
+  }
+
+  setLimitOverrides(
+    organizationId: string,
+    overrides: Record<string, number>
+  ) {
+    return this._subscription.model.subscription.updateMany({
+      where: { organizationId, deletedAt: null },
+      data: { limitOverrides: overrides },
     });
   }
 }

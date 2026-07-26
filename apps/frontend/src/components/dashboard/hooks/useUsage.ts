@@ -4,21 +4,11 @@ import { useFetch } from '@postmill-ai/helpers/utils/custom.fetch';
 import { useCallback } from 'react';
 import useSWR from 'swr';
 import { createFetchError } from '../dashboard.utils';
+import type {
+  UsageResponse,
+} from '@postmill-ai/frontend/components/settings/subscription/use-subscription';
 
-export interface UsageResponse {
-  billingEnabled: boolean;
-  tier?: string;
-  limits?: {
-    postsPerMonth: number | boolean;
-    channels: number | boolean;
-    teamMembers: number | boolean;
-  };
-  usage?: {
-    postsThisCycle: number;
-    channels: number;
-    teamMembers: number;
-  };
-}
+export type { UsageResponse };
 
 export const useUsage = () => {
   const fetch = useFetch();

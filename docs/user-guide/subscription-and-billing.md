@@ -40,12 +40,22 @@ Both caps are **hard caps**: once you hit the limit, the action is blocked until
 
 ### Add-ons
 
-Add-ons extend the two metered caps:
+Every capped plan limit can be extended with add-on packs, so nothing is a hard ceiling — you can
+always buy more or upgrade your plan:
 
 - **Extra storage** — +25 GB per pack for $19/mo (default; configurable via `ADDON_STORAGE_GB_PER_PACK`).
 - **Extra video exports** — +50 exports per pack for $19/mo (default; configurable via `ADDON_VIDEO_EXPORTS_PER_PACK`).
+- **Extra channels** — +5 channels per pack for $19/mo.
+- **Extra team seats** — +5 seats per pack for $15/mo.
+- **Extra posts** — +500 posts per month per pack for $9/mo.
+- **Extra brand kits** — +5 brand kits per pack for $9/mo.
+- **Extra webhooks** — +10 webhooks per pack for $9/mo.
+- **Extra competitors** — +10 competitors per pack for $9/mo.
 
-Add-ons are managed from Settings → Subscription. Pack sizes are configured server-side and mirrored to the frontend via `NEXT_PUBLIC_*` variables.
+Add-ons are managed from Settings → Subscription. Pack sizes are configured server-side and
+mirrored to the frontend via `NEXT_PUBLIC_*` variables. Add-ons survive a plan downgrade — if you
+move to a lower plan, excess channels and seats are only pruned down to what your new plan plus
+your active add-on packs allow. Add-ons are not available to organizations on lifetime plans.
 
 ### Managing your subscription
 

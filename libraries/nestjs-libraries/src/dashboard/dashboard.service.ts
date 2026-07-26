@@ -18,6 +18,14 @@ import { AnalyticsService } from '@postmill-ai/nestjs-libraries/analytics/analyt
 import { AiSettingsManager } from '@postmill-ai/nestjs-libraries/ai/ai-settings.manager';
 import { RedisService } from '@postmill-ai/nestjs-libraries/redis/redis.service';
 import { singleFlight } from '@postmill-ai/nestjs-libraries/utils/concurrency';
+import { WebhooksService } from '@postmill-ai/nestjs-libraries/database/prisma/webhooks/webhooks.service';
+import { BrandsRepository } from '@postmill-ai/nestjs-libraries/database/prisma/brands/brands.repository';
+import { WatchlistRepository } from '@postmill-ai/nestjs-libraries/database/prisma/watchlist/watchlist.repository';
+import {
+  mergeEffectiveLimits,
+  SubscriptionLimitColumns,
+} from '@postmill-ai/nestjs-libraries/database/prisma/subscriptions/effective.limits';
+import { PlanInterface } from '@postmill-ai/nestjs-libraries/database/prisma/subscriptions/pricing';
 
 dayjs.extend(utc);
 dayjs.extend(timezone);
@@ -142,6 +150,9 @@ export class DashboardService {
     private _redisService: RedisService,
     private _subscriptionService: SubscriptionService,
     private _fileRepository: FileRepository,
+    private _webhooksService: WebhooksService,
+    private _brandsRepository: BrandsRepository,
+    private _watchlistRepository: WatchlistRepository,
   ) {}
 
   private _summaryCacheKey(orgId: string, userId: string) {
@@ -286,13 +297,18 @@ export class DashboardService {
 
   async buildUsage(
     org: Organization,
-    subscription: { subscriptionTier?: string; createdAt?: Date; extraVideoExports?: number; totalChannels?: number } | null | undefined,
+    subscription: { subscriptionTier?: string; createdAt?: Date } | null | undefined,
+    // Effective merged limits (from PermissionsService.getEffectiveLimits) —
+    // options.channel is already the real cap, never the -10 sentinel.
     options: {
       posts_per_month: number | boolean;
       channel: number | boolean;
       team_members: number | boolean;
       storage_gb: number;
       video_exports: number;
+      competitors: number;
+      webhooks: number;
+      brand_kits: number;
     },
     byoStorageActive: boolean
   ) {
@@ -300,18 +316,29 @@ export class DashboardService {
     const totalMonthPast = Math.abs(dayjs(createdAt).diff(dayjs(), 'month'));
     const checkFrom = dayjs(createdAt).add(totalMonthPast, 'month');
 
-    const [postsThisCycle, integrations, team, storageBytes, videoExportsUsed] =
-      await Promise.all([
-        this._postsService.countPostsFromDay(org.id, checkFrom.toDate()),
-        this._integrationService.getIntegrationsList(org.id),
-        this._organizationService.getTeam(org.id),
-        this._fileRepository.getStorageBytes(org.id),
-        this._subscriptionService.getCreditsFrom(
-          org.id,
-          checkFrom,
-          'video_export'
-        ),
-      ]);
+    const [
+      postsThisCycle,
+      integrations,
+      team,
+      storageBytes,
+      videoExportsUsed,
+      competitors,
+      webhooks,
+      brandKits,
+    ] = await Promise.all([
+      this._postsService.countPostsFromDay(org.id, checkFrom.toDate()),
+      this._integrationService.getIntegrationsList(org.id),
+      this._organizationService.getTeam(org.id),
+      this._fileRepository.getStorageBytes(org.id),
+      this._subscriptionService.getCreditsFrom(
+        org.id,
+        checkFrom,
+        'video_export'
+      ),
+      this._watchlistRepository.countByOrg(org.id),
+      this._webhooksService.getTotal(org.id),
+      this._brandsRepository.countBrands(org.id),
+    ]);
 
     return {
       billingEnabled: true,
@@ -319,12 +346,13 @@ export class DashboardService {
       byoStorageActive,
       limits: {
         postsPerMonth: options.posts_per_month,
-        // A subscribed org's real channel cap is subscription.totalChannels;
-        // options.channel is the -10 "effectively unlimited when paid" sentinel.
-        channels: subscription ? subscription.totalChannels : options.channel,
+        channels: options.channel,
         teamMembers: options.team_members,
         storageGb: options.storage_gb,
         videoExports: options.video_exports,
+        competitors: options.competitors,
+        webhooks: options.webhooks,
+        brandKits: options.brand_kits,
       },
       usage: {
         postsThisCycle,
@@ -332,6 +360,9 @@ export class DashboardService {
         teamMembers: team?.users?.filter((u) => !u.disabled).length ?? 0,
         storageBytes,
         videoExports: videoExportsUsed,
+        competitors,
+        webhooks,
+        brandKits,
       },
     };
   }
@@ -339,14 +370,16 @@ export class DashboardService {
   async buildPlanUsage(
     org: Organization,
     subscription:
-      | { subscriptionTier?: string; createdAt?: Date; totalChannels?: number }
+      | (SubscriptionLimitColumns & {
+          subscriptionTier?: string;
+          createdAt?: Date;
+        })
       | null
       | undefined,
-    options: {
-      posts_per_month: number | boolean;
-      channel: number | boolean;
-      team_members: number | boolean;
-    }
+    // Raw package options from PermissionsService.getPackageOptions —
+    // options.channel is the -10 sentinel when subscribed, so the real cap
+    // must come from the effective merge.
+    options: PlanInterface
   ): Promise<PlanUsageSnapshot> {
     const createdAt = subscription?.createdAt || org.createdAt;
     const totalMonthPast = Math.abs(dayjs(createdAt).diff(dayjs(), 'month'));
@@ -362,7 +395,7 @@ export class DashboardService {
       postsThisCycle,
       postsLimit: options.posts_per_month,
       channels: integrations.filter((i) => !i.refreshNeeded).length,
-      channelsLimit: subscription?.totalChannels ?? options.channel,
+      channelsLimit: mergeEffectiveLimits(options, subscription).channel,
       teamMembers: team?.users?.filter((u) => !u.disabled).length ?? 0,
       teamLimit: options.team_members,
     };

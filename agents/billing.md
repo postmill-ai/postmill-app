@@ -33,7 +33,16 @@ Billing is **on iff `process.env.STRIPE_PUBLISHABLE_KEY` is set** — checked di
 | `SubscriptionException` | `apps/backend/src/services/auth/permissions/permission.exception.class.ts` | `HttpException` with `HttpStatus.PAYMENT_REQUIRED` (**402**), body `{section, action}` |
 | `Sections` enum (14) | same file | `CHANNEL`, `POSTS_PER_MONTH`, `TEAM_MEMBERS`, `BRANDS`, `CAMPAIGNS`, `API`, `MCP`, `COMPETITORS`, `ADMIN`, `WEBHOOKS`, `MEDIA`, `VIDEO_EXPORTS`, `STORAGE`, `BYO_STORAGE` |
 | `AuthorizationActions` enum | same file | `Create` / `Read` / `Update` / `Delete` |
-| `PermissionsService` | `apps/backend/src/services/auth/permissions/permissions.service.ts` | Builds the CASL ability per request: `getPackageOptions` (tier + grace-lapse downgrade) → `getEffectiveLimits` (adds `extraStorageGb`/`extraVideoExports`, detects `byoStorageActive`) → per-section limit checks |
+| `PermissionsService` | `apps/backend/src/services/auth/permissions/permissions.service.ts` | Builds the CASL ability per request: `getPackageOptions` (tier + grace-lapse downgrade) → `getEffectiveLimits` (merges add-on extras + `limitOverrides` via `mergeEffectiveLimits`, detects `byoStorageActive`) → per-section limit checks |
+
+Effective limits merge in exactly one place: **`mergeEffectiveLimits(base, subscription)`**
+(`libraries/nestjs-libraries/src/database/prisma/subscriptions/effective.limits.ts`) — base plan +
+each `ADDONS[type]` extra column + manual overrides (overrides win last, replacing base+add-ons).
+Channels are special: the persisted `totalChannels` column is the base, not `options.channel`.
+All four readers go through it: `PermissionsService` enforcement, the storage upload quota
+(`storage.service.ts` `assertWithinQuota`), the channel-enable gate
+(`integrations.controller.ts` `POST /integrations/enable`), and the dashboard usage read
+(`dashboard.service.ts`). Never re-implement the merge at a call site.
 
 Per-section enforcement inside `check()`:
 
@@ -65,7 +74,7 @@ super-admin branch to the billing path.
 
 | Model | Key fields |
 |---|---|
-| `Subscription` | `organizationId @unique`, `subscriptionTier SubscriptionTier`, `identifier?` (Stripe customer/sub id), `cancelAt?`, `period` (default `"MONTHLY"`), `totalChannels`, `isLifetime`, `gracePeriodEnd?`, `extraStorageGb`, `extraVideoExports`, `pendingTier?` (deferred downgrade), `deletedAt?` |
+| `Subscription` | `organizationId @unique`, `subscriptionTier SubscriptionTier`, `identifier?` (Stripe customer/sub id), `cancelAt?`, `period` (default `"MONTHLY"`), `totalChannels`, `isLifetime`, `gracePeriodEnd?`, `extraStorageGb`, `extraVideoExports`, `extraChannels`, `extraTeamMembers`, `extraPosts`, `extraBrandKits`, `extraWebhooks`, `extraCompetitors` (all `Int @default(0)` add-on tallies), `limitOverrides?` (JSON sparse map, super-admin only), `pendingTier?` (deferred downgrade), `deletedAt?` |
 | `SubscriptionTier` (enum) | `STARTER`, `PRO`, `TEAM`, `AGENCY` |
 | `StripeEvent` | `id` = Stripe `event.id`, `type`, `processedAt` — webhook idempotency ledger |
 | `Credits` | `organizationId`, `credits Int`, `type` — the only live credit dimension is **`video_export`**; a regression guard (`no-ai-credits.invariant.spec.ts`) fails the build if removed AI-credit types (`ai_images`, …) resurface in app source |
@@ -74,7 +83,7 @@ super-admin branch to the billing path.
 
 | File | Symbol | Role |
 |---|---|---|
-| `libraries/nestjs-libraries/src/database/prisma/subscriptions/pricing.ts` | `pricing`, `PlanInterface`, `SELF_HOST_PLAN`, `ADDONS`, `addonPackSize` | The plan table (channels, posts/month, seats, brand kits, campaigns/api/mcp flags, webhooks, competitors, analytics retention, video exports, storage GB, byo_storage). Add-ons: `storage` (+25 GB default, `ADDON_STORAGE_GB_PER_PACK`) and `video_exports` (+50 default, `ADDON_VIDEO_EXPORTS_PER_PACK`), 1900¢ each |
+| `libraries/nestjs-libraries/src/database/prisma/subscriptions/pricing.ts` | `pricing`, `PlanInterface`, `SELF_HOST_PLAN`, `ADDONS`, `AddonType`, `addonPackSize`, `addonPriceCents` | The plan table (channels, posts/month, seats, brand kits, campaigns/api/mcp flags, webhooks, competitors, analytics retention, video exports, storage GB, byo_storage). **8 add-on types** (`storage`, `video_exports`, `channels`, `team_seats`, `posts`, `brand_kits`, `webhooks`, `competitors`), data-driven: each `ADDONS[type]` entry carries `column` (the `Subscription` `extra*` column), `limitKey` (the `PlanInterface` key it raises), `packSizeEnv`+`defaultPackSize`, `priceCentsEnv`+`defaultPriceCents` — sync and merge are generic loops over `ADDONS`, no per-type branches. `addonPackSize()`/`addonPriceCents()` are server-side only (dynamic `process.env` reads return defaults in the browser; the frontend uses statically-referenced `NEXT_PUBLIC_ADDON_*` mirrors) |
 | `…/subscriptions/subscription.service.ts` | `SubscriptionService`, `BillingTier` | `createOrUpdateSubscription`, `modifySubscription(ByOrg)`, `setPendingTier`/`clearPendingTier`, `updateAddonQuantities`, `_pruneToPlanLimits` (downgrade teardown), `getCreditsFrom`, `recordCredit(org, 'video_export')` |
 | `…/subscriptions/stripe-event.repository.ts` | `StripeEventRepository` | Idempotency/grace reads; injected into `StripeService` as a `// layering: sanctioned leaf-read` |
 | `libraries/nestjs-libraries/src/services/stripe.service.ts` | `StripeService` (~1460 lines) | `validateRequest` (`constructEvent` with `STRIPE_SIGNING_KEY`), `isEventProcessed`/`recordEvent` (C1 idempotency), `checkValidCard`, `createSubscription`/`updateSubscription`/`deleteSubscription`, `paymentSucceeded`/`paymentFailed` (dunning grace — verifies **live** subscription status before entering grace), `prorate` (`invoices.createPreview`), embedded + hosted checkout sessions, billing portal, `syncAddonQuantities`, lifetime deals, invoice PDF fetch, audit events |
@@ -86,7 +95,7 @@ super-admin branch to the billing path.
   `invoice.payment_failed` which carry no metadata), checks `StripeEvent` idempotency
   **before** processing, records the event only after success (a thrown error stays
   retryable). Routes `customer.subscription.*` to add-on sync when
-  `metadata.addon ∈ {storage, video_exports}`, else to base-subscription transitions.
+  `metadata.addon ∈ ADDONS` (any of the 8 types), else to base-subscription transitions.
 - **Billing API:** `apps/backend/src/api/routes/billing.controller.ts` —
   `@Controller('/billing')`: `GET /` (current billing), `GET /check/:id`,
   `GET /check-discount`, `POST /apply-discount`, `POST /finish-trial`,
@@ -97,6 +106,13 @@ super-admin branch to the billing path.
 - **Usage read:** `GET /dashboard/usage` (`dashboard.controller.ts`), consumed by
   `apps/frontend/src/components/settings/subscription/use-subscription.ts`
   (`USAGE_KEY = '/dashboard/usage'`; subscription from `GET /billing/`).
+- **Manual limit overrides (super-admin, backend-only):** `PATCH
+  /admin/orgs/:orgId/limit-overrides`, body `{ overrides: { <limitKey>: number|null } }` — a
+  number sets, `null` clears, absent leaves. Keys are the 8 `OVERRIDABLE_LIMIT_KEYS` in
+  `effective.limits.ts`; `analytics_retention_days` and booleans are deliberately rejected.
+  Consumed by the separate admin app with the super-admin JWT in the custom `auth` header
+  (CSRF skipped for header auth; no API-key path). Must stay registered in the
+  `authenticatedController` array in `api.module.ts`. No frontend in this repo.
 
 ## Frontend surfaces
 
@@ -131,3 +147,15 @@ super-admin branch to the billing path.
 - Metered actions must record credits **after** confirmed completion (see the
   `video_export` charge in `MediaJobsActivity.processRenderJob` — a plain insert, never
   wrapped in an interactive transaction that a long render would outlive).
+- **Downgrade pruning targets effective limits** — `_pruneToPlanLimits`
+  (`subscription.service.ts`) prunes channels/seats to plan + surviving add-on packs +
+  overrides, not to the bare plan: add-ons survive a downgrade.
+- **Lifetime orgs cannot purchase add-ons** (frontend hides the section, backend rejects) —
+  no base Stripe subscription for add-on items to ride on.
+- **Price-env changes grandfather:** a new `ADDON_*_PRICE_CENTS` value creates a new Stripe
+  Price for new purchases only; existing add-on subscriptions keep the old price (migrating
+  them is a manual Stripe operation). The same env value must feed both the Stripe price
+  lookup and price creation, or every call find-mismatches and recreates.
+- **`NEXT_PUBLIC_ADDON_*` mirrors are build-time** — changing a backend `ADDON_*` without
+  rebuilding the frontend with matching mirrors leaves the UI showing stale pack
+  sizes/prices. Never call `addonPackSize()`/`addonPriceCents()` client-side.

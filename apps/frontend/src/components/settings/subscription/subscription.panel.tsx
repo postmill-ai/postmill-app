@@ -8,7 +8,9 @@ import { useToaster } from '@postmill-ai/react/toaster/toaster';
 import { useT } from '@postmill-ai/react/translation/get.transation.service.client';
 import { Button } from '@postmill-ai/react/form/button';
 import {
+  ADDONS,
   pricing,
+  type AddonType,
   type PlanInterface,
 } from '@postmill-ai/nestjs-libraries/database/prisma/subscriptions/pricing';
 import { newDayjs } from '@postmill-ai/frontend/components/layout/set.timezone';
@@ -22,12 +24,111 @@ import {
   type UsageLimits,
 } from '@postmill-ai/frontend/components/settings/subscription/use-subscription';
 
-const ADDON_STORAGE_GB_PER_PACK = Number(
-  process.env.NEXT_PUBLIC_ADDON_STORAGE_GB_PER_PACK || 25
-);
-const ADDON_VIDEO_EXPORTS_PER_PACK = Number(
-  process.env.NEXT_PUBLIC_ADDON_VIDEO_EXPORTS_PER_PACK || 50
-);
+// Browser-safe mirrors of the server-side ADDON_* env vars. Every var must be
+// its own static `process.env.NEXT_PUBLIC_...` reference so Next can inline it —
+// never call `addonPackSize()`/`addonPriceCents()` client-side (dynamic env reads
+// silently return defaults in the browser).
+const envNum = (value: string | undefined, fallback: number) => {
+  const parsed = Number(value);
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
+};
+
+const ADDON_PACK_SIZES: Record<AddonType, number> = {
+  storage: envNum(process.env.NEXT_PUBLIC_ADDON_STORAGE_GB_PER_PACK, 25),
+  video_exports: envNum(process.env.NEXT_PUBLIC_ADDON_VIDEO_EXPORTS_PER_PACK, 50),
+  channels: envNum(process.env.NEXT_PUBLIC_ADDON_CHANNELS_PER_PACK, 5),
+  team_seats: envNum(process.env.NEXT_PUBLIC_ADDON_TEAM_SEATS_PER_PACK, 5),
+  posts: envNum(process.env.NEXT_PUBLIC_ADDON_POSTS_PER_PACK, 500),
+  brand_kits: envNum(process.env.NEXT_PUBLIC_ADDON_BRAND_KITS_PER_PACK, 5),
+  webhooks: envNum(process.env.NEXT_PUBLIC_ADDON_WEBHOOKS_PER_PACK, 10),
+  competitors: envNum(process.env.NEXT_PUBLIC_ADDON_COMPETITORS_PER_PACK, 10),
+};
+
+const ADDON_PRICE_CENTS: Record<AddonType, number> = {
+  storage: envNum(process.env.NEXT_PUBLIC_ADDON_STORAGE_PRICE_CENTS, 1900),
+  video_exports: envNum(process.env.NEXT_PUBLIC_ADDON_VIDEO_EXPORTS_PRICE_CENTS, 1900),
+  channels: envNum(process.env.NEXT_PUBLIC_ADDON_CHANNELS_PRICE_CENTS, 1900),
+  team_seats: envNum(process.env.NEXT_PUBLIC_ADDON_TEAM_SEATS_PRICE_CENTS, 1500),
+  posts: envNum(process.env.NEXT_PUBLIC_ADDON_POSTS_PRICE_CENTS, 900),
+  brand_kits: envNum(process.env.NEXT_PUBLIC_ADDON_BRAND_KITS_PRICE_CENTS, 900),
+  webhooks: envNum(process.env.NEXT_PUBLIC_ADDON_WEBHOOKS_PRICE_CENTS, 900),
+  competitors: envNum(process.env.NEXT_PUBLIC_ADDON_COMPETITORS_PRICE_CENTS, 900),
+};
+
+const formatAddonPrice = (cents: number) =>
+  (cents / 100).toLocaleString(undefined, { maximumFractionDigits: 2 });
+
+// [i18n key, fallback] pairs; `amountParam` names the pack-size interpolation
+// placeholder used by the description fallback.
+const ADDON_COPY: Record<
+  AddonType,
+  { title: [string, string]; description: [string, string]; amountParam: 'gb' | 'count' }
+> = {
+  storage: {
+    title: ['extra_storage', 'Extra storage'],
+    description: [
+      'extra_storage_description',
+      '+{{gb}} GB per pack for ${{price}}/mo',
+    ],
+    amountParam: 'gb',
+  },
+  video_exports: {
+    title: ['extra_video_exports', 'Extra video exports'],
+    description: [
+      'extra_video_exports_description',
+      '+{{count}} exports per pack for ${{price}}/mo',
+    ],
+    amountParam: 'count',
+  },
+  channels: {
+    title: ['extra_channels', 'Extra channels'],
+    description: [
+      'extra_channels_description',
+      '+{{count}} channels per pack for ${{price}}/mo',
+    ],
+    amountParam: 'count',
+  },
+  team_seats: {
+    title: ['extra_team_seats', 'Extra team seats'],
+    description: [
+      'extra_team_seats_description',
+      '+{{count}} team seats per pack for ${{price}}/mo',
+    ],
+    amountParam: 'count',
+  },
+  posts: {
+    title: ['extra_posts', 'Extra posts'],
+    description: [
+      'extra_posts_description',
+      '+{{count}} posts per pack for ${{price}}/mo',
+    ],
+    amountParam: 'count',
+  },
+  brand_kits: {
+    title: ['extra_brand_kits', 'Extra brand kits'],
+    description: [
+      'extra_brand_kits_description',
+      '+{{count}} brand kits per pack for ${{price}}/mo',
+    ],
+    amountParam: 'count',
+  },
+  webhooks: {
+    title: ['extra_webhooks', 'Extra webhooks'],
+    description: [
+      'extra_webhooks_description',
+      '+{{count}} webhooks per pack for ${{price}}/mo',
+    ],
+    amountParam: 'count',
+  },
+  competitors: {
+    title: ['extra_competitors', 'Extra competitors'],
+    description: [
+      'extra_competitors_description',
+      '+{{count}} competitors per pack for ${{price}}/mo',
+    ],
+    amountParam: 'count',
+  },
+};
 
 const TIER_ORDER: SubscriptionTier[] = ['STARTER', 'PRO', 'TEAM', 'AGENCY'];
 
@@ -56,7 +157,10 @@ const UsageBar: React.FC<UsageBarProps> = ({
   unit = '',
   unlimited,
 }) => {
-  const pct = limit > 0 && !unlimited ? Math.min(100, (used / limit) * 100) : 0;
+  // 1000000 is the pricing.ts "effectively unlimited" sentinel — render it as
+  // Unlimited rather than a literal "75 / 1,000,000" bar.
+  const isUnlimited = unlimited || limit >= 1000000;
+  const pct = limit > 0 && !isUnlimited ? Math.min(100, (used / limit) * 100) : 0;
   const color =
     pct >= 100 ? 'bg-red-500' : pct >= 80 ? 'bg-amber-500' : 'bg-btnPrimary';
 
@@ -65,18 +169,24 @@ const UsageBar: React.FC<UsageBarProps> = ({
       <div className="flex justify-between text-[13px]">
         <span className="text-textColor">{label}</span>
         <span className="text-newTableText">
-          {unlimited ? (
+          {isUnlimited ? (
             'Unlimited'
-          ) : (
+          ) : limit > 0 ? (
             <>
               {used.toLocaleString(undefined, { maximumFractionDigits: 1 })}
               {unit} / {limit.toLocaleString(undefined, { maximumFractionDigits: 1 })}
               {unit}
             </>
+          ) : (
+            // Zero cap (e.g. STARTER brand kits) — show usage, not "0 / 0".
+            <>
+              {used.toLocaleString(undefined, { maximumFractionDigits: 1 })}
+              {unit}
+            </>
           )}
         </span>
       </div>
-      {!unlimited && limit > 0 && (
+      {!isUnlimited && limit > 0 && (
         <div className="h-[6px] w-full rounded-full bg-newTableBorder overflow-hidden">
           <div className={`h-full ${color} transition-all`} style={{ width: `${pct}%` }} />
         </div>
@@ -277,7 +387,7 @@ export const SubscriptionPanel: React.FC = () => {
   }, [fetch, currentTier, toaster, t]);
 
   const updateAddon = useCallback(
-    async (type: 'storage' | 'video_exports', packs: number) => {
+    async (type: AddonType, packs: number) => {
       setAddonLoading((prev) => ({ ...prev, [type]: true }));
       try {
         const res = await fetch('/billing/addons', {
@@ -304,7 +414,7 @@ export const SubscriptionPanel: React.FC = () => {
   );
 
   const removeAddon = useCallback(
-    async (type: 'storage' | 'video_exports') => {
+    async (type: AddonType) => {
       setAddonLoading((prev) => ({ ...prev, [type]: true }));
       try {
         const res = await fetch(`/billing/addons/${type}`, {
@@ -460,6 +570,16 @@ export const SubscriptionPanel: React.FC = () => {
         {usageData && limits ? (
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-[16px]">
             <UsageBar
+              label={t('posts', 'Posts')}
+              used={usageData.postsThisCycle}
+              limit={
+                typeof limits.postsPerMonth === 'number'
+                  ? limits.postsPerMonth
+                  : 0
+              }
+              unlimited={typeof limits.postsPerMonth !== 'number'}
+            />
+            <UsageBar
               label={t('video_exports_label', 'Video exports')}
               used={usageData.videoExports}
               limit={limits.videoExports}
@@ -482,6 +602,21 @@ export const SubscriptionPanel: React.FC = () => {
               used={usageData.teamMembers}
               limit={typeof limits.teamMembers === 'number' ? limits.teamMembers : 0}
               unlimited={typeof limits.teamMembers !== 'number'}
+            />
+            <UsageBar
+              label={t('competitors', 'Competitors')}
+              used={usageData.competitors}
+              limit={limits.competitors}
+            />
+            <UsageBar
+              label={t('webhooks', 'Webhooks')}
+              used={usageData.webhooks}
+              limit={limits.webhooks}
+            />
+            <UsageBar
+              label={t('brand_kits', 'Brand kits')}
+              used={usageData.brandKits}
+              limit={limits.brandKits}
             />
           </div>
         ) : (
@@ -519,50 +654,48 @@ export const SubscriptionPanel: React.FC = () => {
         )}
       </div>
 
-      {/* Add-ons */}
-      <div className="bg-newBgColorInner border border-newTableBorder rounded-[4px] p-[20px] flex flex-col gap-[16px]">
-        <h3 className="text-[16px] font-semibold text-textColor">
-          {t('addons', 'Add-ons')}
-        </h3>
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-[16px]">
-          <AddonControl
-            title={t('extra_storage', 'Extra storage')}
-            description={t(
-              'extra_storage_description',
-              '+{{gb}} GB per pack for ${{price}}/mo',
-              { gb: ADDON_STORAGE_GB_PER_PACK, price: 19 }
-            )}
-            nudge={
-              <div className="text-[12px] text-amber-600 mt-[8px]">
-                {t(
-                  'storage_addon_nudge',
-                  'Storage add-ons are premium on purpose — connect your own storage bucket and get unlimited storage at no extra cost.'
-                )}{' '}
-                <Link
-                  href="/settings/storage/providers"
-                  className="underline hover:text-textColor"
-                >
-                  {t('connect_storage', 'Connect storage')}
-                </Link>
-              </div>
-            }
-            onBuy={(packs) => updateAddon('storage', packs)}
-            onRemove={() => removeAddon('storage')}
-            loading={addonLoading.storage}
-          />
-          <AddonControl
-            title={t('extra_video_exports', 'Extra video exports')}
-            description={t(
-              'extra_video_exports_description',
-              '+{{count}} exports per pack for ${{price}}/mo',
-              { count: ADDON_VIDEO_EXPORTS_PER_PACK, price: 19 }
-            )}
-            onBuy={(packs) => updateAddon('video_exports', packs)}
-            onRemove={() => removeAddon('video_exports')}
-            loading={addonLoading.video_exports}
-          />
+      {/* Add-ons (hidden for lifetime orgs — no base Stripe subscription to ride on) */}
+      {!subscription?.isLifetime && (
+        <div className="bg-newBgColorInner border border-newTableBorder rounded-[4px] p-[20px] flex flex-col gap-[16px]">
+          <h3 className="text-[16px] font-semibold text-textColor">
+            {t('addons', 'Add-ons')}
+          </h3>
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-[16px]">
+            {(Object.keys(ADDONS) as AddonType[]).map((type) => {
+              const copy = ADDON_COPY[type];
+              return (
+                <AddonControl
+                  key={type}
+                  title={t(copy.title[0], copy.title[1])}
+                  description={t(copy.description[0], copy.description[1], {
+                    [copy.amountParam]: ADDON_PACK_SIZES[type],
+                    price: formatAddonPrice(ADDON_PRICE_CENTS[type]),
+                  })}
+                  nudge={
+                    type === 'storage' ? (
+                      <div className="text-[12px] text-amber-600 mt-[8px]">
+                        {t(
+                          'storage_addon_nudge',
+                          'Storage add-ons are premium on purpose — connect your own storage bucket and get unlimited storage at no extra cost.'
+                        )}{' '}
+                        <Link
+                          href="/settings/storage/providers"
+                          className="underline hover:text-textColor"
+                        >
+                          {t('connect_storage', 'Connect storage')}
+                        </Link>
+                      </div>
+                    ) : undefined
+                  }
+                  onBuy={(packs) => updateAddon(type, packs)}
+                  onRemove={() => removeAddon(type)}
+                  loading={addonLoading[type]}
+                />
+              );
+            })}
+          </div>
         </div>
-      </div>
+      )}
     </div>
   );
 };

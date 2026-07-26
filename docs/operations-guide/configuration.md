@@ -160,8 +160,44 @@ Per-provider AI budgets are configured per-organization in **Settings → AI**. 
 | `STRIPE_DISCOUNT_ID` | — | Stripe coupon ID. When set, eligible existing paying customers on a monthly plan (no yearly plan, no existing discount) can have the coupon applied to their subscription |
 | `ADDON_STORAGE_GB_PER_PACK` | `25` | Gigabytes added by one storage add-on pack |
 | `ADDON_VIDEO_EXPORTS_PER_PACK` | `50` | Video exports added by one video-exports add-on pack |
+| `ADDON_CHANNELS_PER_PACK` | `5` | Channels added by one channels add-on pack |
+| `ADDON_TEAM_SEATS_PER_PACK` | `5` | Team seats added by one team-seats add-on pack |
+| `ADDON_POSTS_PER_PACK` | `500` | Posts per month added by one posts add-on pack |
+| `ADDON_BRAND_KITS_PER_PACK` | `5` | Brand kits added by one brand-kits add-on pack |
+| `ADDON_WEBHOOKS_PER_PACK` | `10` | Webhooks added by one webhooks add-on pack |
+| `ADDON_COMPETITORS_PER_PACK` | `10` | Competitors added by one competitors add-on pack |
+| `ADDON_STORAGE_PRICE_CENTS` | `1900` | Price per storage add-on pack, in USD cents per month |
+| `ADDON_VIDEO_EXPORTS_PRICE_CENTS` | `1900` | Price per video-exports add-on pack, in USD cents per month |
+| `ADDON_CHANNELS_PRICE_CENTS` | `1900` | Price per channels add-on pack, in USD cents per month |
+| `ADDON_TEAM_SEATS_PRICE_CENTS` | `1500` | Price per team-seats add-on pack, in USD cents per month |
+| `ADDON_POSTS_PRICE_CENTS` | `900` | Price per posts add-on pack, in USD cents per month |
+| `ADDON_BRAND_KITS_PRICE_CENTS` | `900` | Price per brand-kits add-on pack, in USD cents per month |
+| `ADDON_WEBHOOKS_PRICE_CENTS` | `900` | Price per webhooks add-on pack, in USD cents per month |
+| `ADDON_COMPETITORS_PRICE_CENTS` | `900` | Price per competitors add-on pack, in USD cents per month |
 | `NEXT_PUBLIC_ADDON_STORAGE_GB_PER_PACK` | `25` | Browser-visible mirror of `ADDON_STORAGE_GB_PER_PACK` |
 | `NEXT_PUBLIC_ADDON_VIDEO_EXPORTS_PER_PACK` | `50` | Browser-visible mirror of `ADDON_VIDEO_EXPORTS_PER_PACK` |
+| `NEXT_PUBLIC_ADDON_CHANNELS_PER_PACK` | `5` | Browser-visible mirror of `ADDON_CHANNELS_PER_PACK` |
+| `NEXT_PUBLIC_ADDON_TEAM_SEATS_PER_PACK` | `5` | Browser-visible mirror of `ADDON_TEAM_SEATS_PER_PACK` |
+| `NEXT_PUBLIC_ADDON_POSTS_PER_PACK` | `500` | Browser-visible mirror of `ADDON_POSTS_PER_PACK` |
+| `NEXT_PUBLIC_ADDON_BRAND_KITS_PER_PACK` | `5` | Browser-visible mirror of `ADDON_BRAND_KITS_PER_PACK` |
+| `NEXT_PUBLIC_ADDON_WEBHOOKS_PER_PACK` | `10` | Browser-visible mirror of `ADDON_WEBHOOKS_PER_PACK` |
+| `NEXT_PUBLIC_ADDON_COMPETITORS_PER_PACK` | `10` | Browser-visible mirror of `ADDON_COMPETITORS_PER_PACK` |
+| `NEXT_PUBLIC_ADDON_STORAGE_PRICE_CENTS` | `1900` | Browser-visible mirror of `ADDON_STORAGE_PRICE_CENTS` |
+| `NEXT_PUBLIC_ADDON_VIDEO_EXPORTS_PRICE_CENTS` | `1900` | Browser-visible mirror of `ADDON_VIDEO_EXPORTS_PRICE_CENTS` |
+| `NEXT_PUBLIC_ADDON_CHANNELS_PRICE_CENTS` | `1900` | Browser-visible mirror of `ADDON_CHANNELS_PRICE_CENTS` |
+| `NEXT_PUBLIC_ADDON_TEAM_SEATS_PRICE_CENTS` | `1500` | Browser-visible mirror of `ADDON_TEAM_SEATS_PRICE_CENTS` |
+| `NEXT_PUBLIC_ADDON_POSTS_PRICE_CENTS` | `900` | Browser-visible mirror of `ADDON_POSTS_PRICE_CENTS` |
+| `NEXT_PUBLIC_ADDON_BRAND_KITS_PRICE_CENTS` | `900` | Browser-visible mirror of `ADDON_BRAND_KITS_PRICE_CENTS` |
+| `NEXT_PUBLIC_ADDON_WEBHOOKS_PRICE_CENTS` | `900` | Browser-visible mirror of `ADDON_WEBHOOKS_PRICE_CENTS` |
+| `NEXT_PUBLIC_ADDON_COMPETITORS_PRICE_CENTS` | `900` | Browser-visible mirror of `ADDON_COMPETITORS_PRICE_CENTS` |
+
+**Build-time/runtime desync warning:** the `NEXT_PUBLIC_ADDON_*` values are baked into the
+frontend bundle at build time and duplicate the backend defaults. If you change a backend
+`ADDON_*` variable, you must rebuild the frontend with matching `NEXT_PUBLIC_ADDON_*` values —
+otherwise the UI shows stale pack sizes and prices while the backend enforces the new ones.
+Changing an `ADDON_*_PRICE_CENTS` variable creates a new Stripe Price for new purchases only;
+existing add-on subscriptions keep billing the old price (see
+[Subscriptions & Stripe](./subscriptions.md#add-ons)).
 
 Plan and add-on prices are created dynamically from `pricing.ts`; no `STRIPE_PRICE_*` IDs are read from the environment. See [Subscriptions & Stripe](./subscriptions.md).
 

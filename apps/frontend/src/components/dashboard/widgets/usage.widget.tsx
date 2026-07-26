@@ -13,7 +13,10 @@ interface UsageBarProps {
 }
 
 const UsageBar: FC<UsageBarProps> = ({ label, used, limit }) => {
-  const numericLimit = typeof limit === 'number' ? limit : 0;
+  // 1000000 is the pricing.ts "effectively unlimited" sentinel — show usage
+  // without the literal " / 1,000,000" (same as a zero/false cap).
+  const numericLimit =
+    typeof limit === 'number' && limit < 1000000 ? limit : 0;
   const pct = numericLimit > 0 ? Math.min(100, (used / numericLimit) * 100) : 0;
   const color =
     pct >= 100 ? 'bg-[var(--negative,#f97066)]' : pct >= 80 ? 'bg-amber-500' : 'bg-btnPrimary';
@@ -81,6 +84,21 @@ export const UsageWidget: FC = () => {
             label={t('team', 'Team')}
             used={planUsageData!.teamMembers}
             limit={planLimits!.teamMembers}
+          />
+          <UsageBar
+            label={t('competitors', 'Competitors')}
+            used={planUsageData!.competitors}
+            limit={planLimits!.competitors}
+          />
+          <UsageBar
+            label={t('webhooks', 'Webhooks')}
+            used={planUsageData!.webhooks}
+            limit={planLimits!.webhooks}
+          />
+          <UsageBar
+            label={t('brand_kits', 'Brand kits')}
+            used={planUsageData!.brandKits}
+            limit={planLimits!.brandKits}
           />
         </div>
       )}

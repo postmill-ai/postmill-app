@@ -89,6 +89,7 @@ const ADMIN_CONTROLLERS = new Set<string>([
   'AdminNotificationsController',
   'ChannelConfigController',
   'AdminProvidersController',
+  'AdminOrgsController',
 ]);
 
 // Public, unauthenticated, or external-callback controllers.

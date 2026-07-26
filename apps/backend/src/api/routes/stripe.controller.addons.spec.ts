@@ -19,13 +19,26 @@ vi.mock('stripe', () => {
 
 import { StripeController } from './stripe.controller';
 import type { StripeService as StripeServiceType } from '@postmill-ai/nestjs-libraries/services/stripe.service';
+import type { AddonType } from '@postmill-ai/nestjs-libraries/database/prisma/subscriptions/pricing';
 
 // ---------------------------------------------------------------------------
 // Add-on webhook tests: customer.subscription.updated with addon metadata
-// routes to syncAddonQuantities, which writes extraStorageGb/extraVideoExports.
+// routes to syncAddonQuantities, which writes the extra* column for each of
+// the 8 add-on types (packs * pack size, 0 for types with no active sub).
 // ---------------------------------------------------------------------------
 
-function addonEvent(type: 'storage' | 'video_exports', quantity: number) {
+const ZERO_QUANTITIES = {
+  extraStorageGb: 0,
+  extraVideoExports: 0,
+  extraChannels: 0,
+  extraTeamMembers: 0,
+  extraPosts: 0,
+  extraBrandKits: 0,
+  extraWebhooks: 0,
+  extraCompetitors: 0,
+};
+
+function addonEvent(type: AddonType, quantity: number) {
   return {
     id: 'evt_addon',
     type: 'customer.subscription.updated',
@@ -68,6 +81,7 @@ beforeEach(() => {
   mockStripe.subscriptions.list.mockReset().mockResolvedValue({ data: [] });
   process.env.ADDON_STORAGE_GB_PER_PACK = '25';
   process.env.ADDON_VIDEO_EXPORTS_PER_PACK = '50';
+  process.env.ADDON_CHANNELS_PER_PACK = '5';
 });
 
 describe('StripeController — add-on subscription webhooks', () => {
@@ -93,6 +107,18 @@ describe('StripeController — add-on subscription webhooks', () => {
 
     expect(stripeService.syncAddonQuantities).toHaveBeenCalledTimes(1);
     expect(stripeService.syncAddonQuantities).toHaveBeenCalledWith('cus_1');
+  });
+
+  it('routes any of the 8 addon types (e.g. channels) to syncAddonQuantities', async () => {
+    const { controller, stripeService } = makeController();
+    const event = addonEvent('channels', 2);
+    stripeService.validateRequest.mockReturnValue(event);
+
+    await controller.stripe(req());
+
+    expect(stripeService.syncAddonQuantities).toHaveBeenCalledTimes(1);
+    expect(stripeService.syncAddonQuantities).toHaveBeenCalledWith('cus_1');
+    expect(stripeService.updateSubscription).not.toHaveBeenCalled();
   });
 
   it('ignores addon events without postmill metadata', async () => {
@@ -152,8 +178,8 @@ describe('StripeService — syncAddonQuantities', () => {
     await service.syncAddonQuantities('cus_1');
 
     expect(subscriptionService.updateAddonQuantities).toHaveBeenCalledWith('org-1', {
+      ...ZERO_QUANTITIES,
       extraStorageGb: 50,
-      extraVideoExports: 0,
     });
   });
 
@@ -192,7 +218,7 @@ describe('StripeService — syncAddonQuantities', () => {
     await service.syncAddonQuantities('cus_1');
 
     expect(subscriptionService.updateAddonQuantities).toHaveBeenCalledWith('org-1', {
-      extraStorageGb: 0,
+      ...ZERO_QUANTITIES,
       extraVideoExports: 150,
     });
   });
@@ -242,8 +268,55 @@ describe('StripeService — syncAddonQuantities', () => {
     await service.syncAddonQuantities('cus_1');
 
     expect(subscriptionService.updateAddonQuantities).toHaveBeenCalledWith('org-1', {
+      ...ZERO_QUANTITIES,
       extraStorageGb: 50,
       extraVideoExports: 100,
+    });
+  });
+
+  it('writes the correct columns for a multi-type customer (storage + channels)', async () => {
+    const { StripeService } = await import(
+      '@postmill-ai/nestjs-libraries/services/stripe.service'
+    );
+
+    mockStripe.subscriptions.list.mockResolvedValue({
+      data: [
+        {
+          status: 'active',
+          metadata: { addon: 'storage' },
+          items: { data: [{ quantity: 2 }] },
+        },
+        {
+          status: 'active',
+          metadata: { addon: 'channels' },
+          items: { data: [{ quantity: 3 }] },
+        },
+      ],
+    });
+
+    const subscriptionService = {
+      updateAddonQuantities: vi.fn().mockResolvedValue({ count: 1 }),
+    };
+    const organizationService = {
+      getOrgByCustomerId: vi.fn().mockResolvedValue({ id: 'org-1' }),
+    };
+
+    const service = new StripeService(
+      subscriptionService as any,
+      organizationService as any,
+      {} as any,
+      {} as any,
+      {} as any,
+      {} as any,
+      {} as any
+    );
+
+    await service.syncAddonQuantities('cus_1');
+
+    expect(subscriptionService.updateAddonQuantities).toHaveBeenCalledWith('org-1', {
+      ...ZERO_QUANTITIES,
+      extraStorageGb: 50,
+      extraChannels: 15,
     });
   });
 

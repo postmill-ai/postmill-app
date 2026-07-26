@@ -10,6 +10,10 @@ import { RefundChargesDto } from '@postmill-ai/backend/dtos/billing/refund-charg
 import { AddSubscriptionDto } from '@postmill-ai/backend/dtos/billing/add-subscription.dto';
 import { ChangePlanDto } from '@postmill-ai/nestjs-libraries/dtos/billing/change-plan.dto';
 import { ManageAddonsDto } from '@postmill-ai/nestjs-libraries/dtos/billing/manage-addons.dto';
+import {
+  ADDONS,
+  AddonType,
+} from '@postmill-ai/nestjs-libraries/database/prisma/subscriptions/pricing';
 import { ApiTags } from '@nestjs/swagger';
 import { GetUserFromRequest } from '@postmill-ai/nestjs-libraries/user/user.from.request';
 import { NotificationService } from '@postmill-ai/nestjs-libraries/database/prisma/notifications/notification.service';
@@ -219,9 +223,9 @@ export class BillingController {
   @RequirePermission('billing', 'manage')
   async cancelAddon(
     @GetOrgFromRequest() org: Organization,
-    @Param('type') type: 'storage' | 'video_exports'
+    @Param('type') type: AddonType
   ) {
-    if (type !== 'storage' && type !== 'video_exports') {
+    if (!Object.prototype.hasOwnProperty.call(ADDONS, type)) {
       throw new BadRequestException('Invalid add-on type');
     }
     return this._stripeService.cancelAddon(org.id, type);
