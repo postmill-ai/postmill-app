@@ -160,6 +160,26 @@ describe('Storage quota — aggregate, BYO waiver, add-on GB', () => {
       );
     });
 
+    it('a storage_gb limitOverride beats base + add-on packs on the upload path', async () => {
+      const { service, subscriptionService, fileRepository } =
+        buildStorageService();
+      subscriptionService.getSubscriptionByOrganizationId.mockResolvedValue({
+        subscriptionTier: 'STARTER',
+        extraStorageGb: 5,
+        limitOverrides: { storage_gb: 10 },
+      });
+      const gb = 1024 * 1024 * 1024;
+
+      // Base + add-on would cap at 6GB; the override raises it to 10GB.
+      fileRepository.getStorageBytes.mockResolvedValue(10 * gb - 1);
+      await expect(service.assertWithinQuota('org-1', 1)).resolves.toBeUndefined();
+
+      fileRepository.getStorageBytes.mockResolvedValue(10 * gb);
+      await expect(service.assertWithinQuota('org-1', 1)).rejects.toThrow(
+        HttpException
+      );
+    });
+
     it('is always waived in self-host mode without Stripe', async () => {
       delete process.env.STRIPE_PUBLISHABLE_KEY;
       const { service, fileRepository } = buildStorageService();

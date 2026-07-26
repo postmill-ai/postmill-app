@@ -21,6 +21,8 @@ import { Organization, User } from '@prisma/client';
 import { IntegrationFunctionDto } from '@postmill-ai/nestjs-libraries/dtos/integrations/integration.function.dto';
 import { CheckPolicies } from '@postmill-ai/backend/services/auth/permissions/permissions.ability';
 import { pricing } from '@postmill-ai/nestjs-libraries/database/prisma/subscriptions/pricing';
+import { mergeEffectiveLimits } from '@postmill-ai/nestjs-libraries/database/prisma/subscriptions/effective.limits';
+import { SubscriptionService } from '@postmill-ai/nestjs-libraries/database/prisma/subscriptions/subscription.service';
 import { ApiTags } from '@nestjs/swagger';
 import { Throttle } from '@nestjs/throttler';
 import { GetUserFromRequest } from '@postmill-ai/nestjs-libraries/user/user.from.request';
@@ -59,7 +61,8 @@ export class IntegrationsController {
     private _integrationManager: IntegrationManager,
     private _integrationService: IntegrationService,
     private _postService: PostsService,
-    private _campaignsService: CampaignsService
+    private _campaignsService: CampaignsService,
+    private _subscriptionService: SubscriptionService
   ) {}
 
   @Post('/provider/:id/connect')
@@ -309,10 +312,18 @@ export class IntegrationsController {
     @GetOrgFromRequest() org: Organization,
     @Body() body: ChannelIdBodyDto
   ) {
+    // Effective channel cap: plan + channel add-ons + limitOverrides. The
+    // request-scoped org.subscription select is intentionally narrow (no
+    // extra*/limitOverrides), so fetch the full row; with no subscription the
+    // merge returns the STARTER plan's base channel limit.
+    const subscription =
+      await this._subscriptionService.getSubscriptionByOrganizationId(org.id);
+    const plan =
+      pricing[subscription?.subscriptionTier || 'STARTER'] ?? pricing.STARTER;
+    const channelLimit = mergeEffectiveLimits(plan, subscription).channel;
     const result = await this._integrationService.enableChannel(
       org.id,
-      // @ts-ignore
-      org?.subscription?.totalChannels || pricing.FREE.channel,
+      channelLimit,
       body.id
     );
     await this._integrationManager.invalidateIntegrationListCache(org.id);

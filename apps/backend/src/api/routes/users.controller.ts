@@ -28,6 +28,7 @@ import {
   pricing,
   SELF_HOST_PLAN,
 } from '@postmill-ai/nestjs-libraries/database/prisma/subscriptions/pricing';
+import { mergeEffectiveLimits } from '@postmill-ai/nestjs-libraries/database/prisma/subscriptions/effective.limits';
 
 import { ApiTags } from '@nestjs/swagger';
 import { UsersService } from '@postmill-ai/nestjs-libraries/database/prisma/users/users.service';
@@ -94,6 +95,14 @@ export class UsersController {
     const impersonate = req.cookies.impersonate || req.headers.impersonate;
     const profile = await this._userService.getProfileByUserId(user.id);
     const org = organization as any;
+    // The request-scoped org.subscription select is intentionally narrow (no
+    // extra*/limitOverrides) — fetch the full row so the effective channel
+    // limit includes add-ons and super-admin overrides.
+    const subscription = !process.env.STRIPE_PUBLISHABLE_KEY
+      ? null
+      : await this._subscriptionService.getSubscriptionByOrganizationId(
+          organization.id
+        );
     // @ts-ignore
     return {
       ...user,
@@ -101,7 +110,11 @@ export class UsersController {
       // @ts-ignore
       totalChannels: !process.env.STRIPE_PUBLISHABLE_KEY
         ? 10000
-        : org?.subscription?.totalChannels || pricing.STARTER.channel,
+        : mergeEffectiveLimits(
+            pricing[subscription?.subscriptionTier || 'STARTER'] ??
+              pricing.STARTER,
+            subscription
+          ).channel,
       // @ts-ignore
       tier:
         org?.subscription?.subscriptionTier ||

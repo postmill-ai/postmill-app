@@ -44,8 +44,10 @@ persisted, so each org can trial only once. Operators can force a trial to end i
 
 ## Metered limits and enforcement
 
-The `PermissionsService` evaluates every billed action against the org's effective limits. Limits
-include purchased add-ons (`extraStorageGb`, `extraVideoExports`).
+The `PermissionsService` evaluates every billed action against the org's effective limits: the
+base plan limits plus purchased add-ons (the `extra*` columns on `Subscription`) plus any manual
+[limit overrides](#manual-overrides). The same merged value feeds the storage upload quota, the
+channel-enable gate, and the dashboard usage read.
 
 | Dimension | Counted as | Reset behavior |
 |-----------|-----------|----------------|
@@ -63,16 +65,61 @@ message naming the specific limit and a `url` field pointing to `/billing`.
 
 ## Add-ons
 
-Two metered dimensions can be expanded without changing plans:
+Every capped plan dimension can be expanded without changing plans. Eight add-on types exist; each
+pack adds a fixed amount and bills monthly alongside the base subscription. Pack sizes and prices
+are env-overridable per type:
 
-| Add-on | Default pack size | Price | Env override |
-|--------|-------------------|-------|--------------|
-| Extra storage | 25 GB | $19 / pack / month | `ADDON_STORAGE_GB_PER_PACK` |
-| Extra video exports | 50 exports | $19 / pack / month | `ADDON_VIDEO_EXPORTS_PER_PACK` |
+| Add-on | Default pack | Default price | Pack-size env | Price env |
+|--------|--------------|---------------|---------------|-----------|
+| Extra storage | 25 GB | $19 / pack / month | `ADDON_STORAGE_GB_PER_PACK` | `ADDON_STORAGE_PRICE_CENTS` |
+| Extra video exports | 50 exports | $19 / pack / month | `ADDON_VIDEO_EXPORTS_PER_PACK` | `ADDON_VIDEO_EXPORTS_PRICE_CENTS` |
+| Extra channels | 5 channels | $19 / pack / month | `ADDON_CHANNELS_PER_PACK` | `ADDON_CHANNELS_PRICE_CENTS` |
+| Extra team seats | 5 seats | $15 / pack / month | `ADDON_TEAM_SEATS_PER_PACK` | `ADDON_TEAM_SEATS_PRICE_CENTS` |
+| Extra posts | 500 posts / month | $9 / pack / month | `ADDON_POSTS_PER_PACK` | `ADDON_POSTS_PRICE_CENTS` |
+| Extra brand kits | 5 kits | $9 / pack / month | `ADDON_BRAND_KITS_PER_PACK` | `ADDON_BRAND_KITS_PRICE_CENTS` |
+| Extra webhooks | 10 webhooks | $9 / pack / month | `ADDON_WEBHOOKS_PER_PACK` | `ADDON_WEBHOOKS_PRICE_CENTS` |
+| Extra competitors | 10 competitors | $9 / pack / month | `ADDON_COMPETITORS_PER_PACK` | `ADDON_COMPETITORS_PRICE_CENTS` |
 
 Add-ons are Stripe subscriptions marked with `metadata.addon`. Their quantities are synced back to
-the `Subscription` table on every relevant Stripe webhook so effective limits update immediately.
-The frontend mirrors the pack sizes via `NEXT_PUBLIC_ADDON_*` variables.
+the `Subscription` table (the matching `extra*` column) on every relevant Stripe webhook so
+effective limits update immediately.
+
+Operational notes:
+
+- **Frontend mirrors:** the frontend reads pack sizes and prices from `NEXT_PUBLIC_ADDON_*`
+  variables baked in at build time. If you change a backend `ADDON_*` value, rebuild the frontend
+  with matching `NEXT_PUBLIC_ADDON_*` values or the UI shows stale pack sizes/prices. See
+  [Configuration](./configuration.md).
+- **Price grandfathering:** changing an `ADDON_*_PRICE_CENTS` variable creates a **new** Stripe
+  Price used for new purchases only. Existing add-on subscriptions keep billing the old price;
+  migrating them to the new price is a manual Stripe operation.
+- **Downgrades:** when a plan downgrade prunes excess channels/team seats, it prunes to the
+  org's **effective** limits (new plan + surviving add-on packs + overrides) — add-ons survive a
+  downgrade.
+- **Lifetime orgs:** organizations on a lifetime code cannot purchase add-ons (the UI hides the
+  section and the backend rejects the purchase) — they have no base Stripe subscription for
+  add-on items to ride on.
+
+### Manual overrides
+
+Super-admins can override any numeric limit for a specific org, replacing base + add-ons for that
+dimension entirely. This is a **backend-only** surface — there is no UI for it in this repo; it
+exists for the separate administration app.
+
+```
+PATCH /admin/orgs/:orgId/limit-overrides
+```
+
+Body: `{ "overrides": { "<key>": <number|null> } }` where key is one of `channel`,
+`team_members`, `posts_per_month`, `brand_kits`, `webhooks`, `competitors`, `storage_gb`,
+`video_exports`. A number sets the override, `null` clears it, and an absent key is left
+untouched. `analytics_retention_days` is deliberately **not** overridable (a data-lifecycle
+decision, not a purchasable quota) and is rejected like any unknown key.
+
+Overrides are stored on `Subscription.limitOverrides` (JSON) and win last in the effective-limits
+merge. The endpoint requires super-admin authentication: the admin app sends the super-admin
+user's JWT in the custom `auth` header (`auth: <jwt>`) — CSRF is skipped for header auth, and
+there is no API-key path.
 
 ## Self-hosted default
 
@@ -161,4 +208,4 @@ Most billing-management routes require the `billing:manage` RBAC permission, but
 - [Settings](../user-guide/settings.md) — the Team & Roles tab where the `billing:manage` permission is granted
 - [Subscription & Billing](../user-guide/subscription-and-billing.md) — end-user guide to plans, add-ons, and the `/billing` UI
 
-> Verified against v1.0.0
+> Verified against v1.0.0 (2026-07-25)

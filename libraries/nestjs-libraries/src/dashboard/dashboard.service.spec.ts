@@ -9,6 +9,7 @@ import { OrgAiSettingsService } from '@postmill-ai/nestjs-libraries/database/pri
 import { AiMediaService } from '@postmill-ai/nestjs-libraries/ai/governance/media.service';
 import { StorageService } from '@postmill-ai/nestjs-libraries/database/prisma/storage/storage.service';
 import { RedisService } from '@postmill-ai/nestjs-libraries/redis/redis.service';
+import { pricing } from '@postmill-ai/nestjs-libraries/database/prisma/subscriptions/pricing';
 
 const org = { id: 'org-1', timezone: 'UTC' } as any;
 const user = { id: 'user-1' } as any;
@@ -96,6 +97,18 @@ function buildService(overrides: {
     getStorageBytes: vi.fn().mockResolvedValue(1024 * 1024),
   } as any;
 
+  const webhooksService = {
+    getTotal: vi.fn().mockResolvedValue(7),
+  } as any;
+
+  const brandsRepository = {
+    countBrands: vi.fn().mockResolvedValue(4),
+  } as any;
+
+  const watchlistRepository = {
+    countByOrg: vi.fn().mockResolvedValue(6),
+  } as any;
+
   const service = new DashboardService(
     postsService,
     integrationService,
@@ -111,6 +124,9 @@ function buildService(overrides: {
     redisService,
     subscriptionService,
     fileRepository,
+    webhooksService,
+    brandsRepository,
+    watchlistRepository,
   );
 
   return {
@@ -127,6 +143,9 @@ function buildService(overrides: {
     analyticsService,
     aiSettingsManager,
     redisService,
+    webhooksService,
+    brandsRepository,
+    watchlistRepository,
   };
 }
 
@@ -373,14 +392,31 @@ describe('DashboardService.buildUsage', () => {
     const result = await service.buildUsage(
       org,
       { subscriptionTier: 'PRO', createdAt: new Date('2024-01-01') },
-      { posts_per_month: 1000, channel: -10, team_members: 5 },
+      {
+        posts_per_month: 1000,
+        channel: 12,
+        team_members: 5,
+        storage_gb: 5,
+        video_exports: 60,
+        competitors: 5,
+        webhooks: 5,
+        brand_kits: 2,
+      },
+      false
     );
 
     expect(result.billingEnabled).toBe(true);
     expect(result.tier).toBe('PRO');
+    expect(result.limits.channels).toBe(12);
+    expect(result.limits.competitors).toBe(5);
+    expect(result.limits.webhooks).toBe(5);
+    expect(result.limits.brandKits).toBe(2);
     expect(result.usage.postsThisCycle).toBe(12);
     expect(result.usage.channels).toBe(2);
     expect(result.usage.teamMembers).toBe(3);
+    expect(result.usage.competitors).toBe(6);
+    expect(result.usage.webhooks).toBe(7);
+    expect(result.usage.brandKits).toBe(4);
   });
 });
 
@@ -398,16 +434,48 @@ describe('DashboardService.buildPlanUsage', () => {
     const { service } = buildService();
     const result = await service.buildPlanUsage(
       org,
-      { subscriptionTier: 'PRO', createdAt: new Date('2024-01-01') },
-      { posts_per_month: 1000, channel: -10, team_members: 5 },
+      {
+        subscriptionTier: 'PRO',
+        createdAt: new Date('2024-01-01'),
+        totalChannels: 10,
+        extraChannels: 0,
+      },
+      // getPackageOptions shape: the -10 sentinel when subscribed.
+      { ...pricing.PRO, channel: -10 },
     );
 
     expect(result.postsThisCycle).toBe(12);
-    expect(result.postsLimit).toBe(1000);
+    expect(result.postsLimit).toBe(pricing.PRO.posts_per_month);
     expect(result.channels).toBe(2);
-    expect(result.channelsLimit).toBe(-10);
+    // The real cap comes from the effective merge, not the -10 sentinel.
+    expect(result.channelsLimit).toBe(10);
     expect(result.teamMembers).toBe(3);
-    expect(result.teamLimit).toBe(5);
+    expect(result.teamLimit).toBe(pricing.PRO.team_members);
+  });
+
+  it('channelsLimit includes channel add-ons and honors limitOverrides', async () => {
+    const { service } = buildService();
+    const subscription = {
+      subscriptionTier: 'PRO',
+      createdAt: new Date('2024-01-01'),
+      totalChannels: 10,
+      extraChannels: 5,
+      limitOverrides: null,
+    };
+
+    const withAddons = await service.buildPlanUsage(
+      org,
+      subscription,
+      { ...pricing.PRO, channel: -10 },
+    );
+    expect(withAddons.channelsLimit).toBe(15);
+
+    const withOverride = await service.buildPlanUsage(
+      org,
+      { ...subscription, limitOverrides: { channel: 42 } },
+      { ...pricing.PRO, channel: -10 },
+    );
+    expect(withOverride.channelsLimit).toBe(42);
   });
 });
 

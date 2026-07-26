@@ -6,6 +6,7 @@ import {
   Req,
 } from '@nestjs/common';
 import { StripeService } from '@postmill-ai/nestjs-libraries/services/stripe.service';
+import { ADDONS } from '@postmill-ai/nestjs-libraries/database/prisma/subscriptions/pricing';
 import { ApiTags } from '@nestjs/swagger';
 import Stripe from 'stripe';
 
@@ -46,7 +47,7 @@ export class StripeController {
       const metadata = event?.data?.object?.metadata || {};
       const isAddon =
         metadata.service === 'postmill' &&
-        (metadata.addon === 'storage' || metadata.addon === 'video_exports');
+        Object.prototype.hasOwnProperty.call(ADDONS, metadata.addon);
 
       switch (event.type) {
         case 'invoice.payment_succeeded':

@@ -5,6 +5,7 @@ import {
   SELF_HOST_PLAN,
 } from '@postmill-ai/nestjs-libraries/database/prisma/subscriptions/pricing';
 import { SubscriptionService } from '@postmill-ai/nestjs-libraries/database/prisma/subscriptions/subscription.service';
+import { mergeEffectiveLimits } from '@postmill-ai/nestjs-libraries/database/prisma/subscriptions/effective.limits';
 import { PostsService } from '@postmill-ai/nestjs-libraries/database/prisma/posts/posts.service';
 import { IntegrationService } from '@postmill-ai/nestjs-libraries/database/prisma/integrations/integration.service';
 import dayjs from 'dayjs';
@@ -83,8 +84,6 @@ export class PermissionsService {
 
   async getEffectiveLimits(orgId: string) {
     const { subscription, options } = await this.getPackageOptions(orgId);
-    const extraStorageGb = subscription?.extraStorageGb ?? 0;
-    const extraVideoExports = subscription?.extraVideoExports ?? 0;
     const mounted = await this._storageService.getMountedConfigs(orgId);
     const byoStorageActive = mounted.some(
       (c) => c.type !== StorageProviderType.LOCAL
@@ -92,11 +91,7 @@ export class PermissionsService {
 
     return {
       subscription,
-      options: {
-        ...options,
-        storage_gb: options.storage_gb + extraStorageGb,
-        video_exports: options.video_exports + extraVideoExports,
-      },
+      options: mergeEffectiveLimits(options, subscription),
       byoStorageActive,
     };
   }
@@ -152,10 +147,9 @@ export class PermissionsService {
           await this._integrationService.getIntegrationsList(orgId)
         ).filter((f) => !f.refreshNeeded).length;
 
-        if (
-          (options.channel && options.channel > totalChannels) ||
-          (subscription?.totalChannels || 0) > totalChannels
-        ) {
+        // options.channel is the effective merged limit (totalChannels +
+        // extraChannels, overrides applied) — never the -10 sentinel here.
+        if (options.channel > totalChannels) {
           can(action, section);
           continue;
         }

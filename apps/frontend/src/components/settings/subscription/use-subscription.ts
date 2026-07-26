@@ -14,6 +14,9 @@ export interface UsageLimits {
   teamMembers: number | boolean;
   storageGb: number;
   videoExports: number;
+  competitors: number;
+  webhooks: number;
+  brandKits: number;
 }
 
 export interface UsageData {
@@ -22,6 +25,9 @@ export interface UsageData {
   teamMembers: number;
   storageBytes: number;
   videoExports: number;
+  competitors: number;
+  webhooks: number;
+  brandKits: number;
 }
 
 export interface UsageResponse {

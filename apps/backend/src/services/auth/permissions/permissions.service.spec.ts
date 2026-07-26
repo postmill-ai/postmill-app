@@ -18,6 +18,15 @@ function subscriptionFixture(
     subscriptionTier: tier,
     totalChannels: pricing[tier].channel,
     createdAt: new Date(),
+    extraStorageGb: 0,
+    extraVideoExports: 0,
+    extraChannels: 0,
+    extraTeamMembers: 0,
+    extraPosts: 0,
+    extraBrandKits: 0,
+    extraWebhooks: 0,
+    extraCompetitors: 0,
+    limitOverrides: null,
     ...extra,
   };
 }
@@ -226,6 +235,44 @@ describe('PermissionsService — subscription matrix', () => {
 
       expect(await can(service, Sections.CHANNEL)).toBe(false);
       expect(await canWithRefresh(service, Sections.CHANNEL, 'ch-1')).toBe(true);
+    });
+
+    it('channel add-on extras raise the gate beyond the persisted base cap', async () => {
+      const { service, subscriptionService, integrationService } = buildService();
+      subscriptionService.getSubscriptionByOrganizationId.mockResolvedValue(
+        subscriptionFixture('STARTER', { extraChannels: 2 })
+      );
+
+      // Effective cap is 3 (totalChannels) + 2 (extraChannels) = 5.
+      integrationService.getIntegrationsList.mockResolvedValue(
+        Array.from({ length: 4 }, () => ({ refreshNeeded: false }))
+      );
+      expect(await can(service, Sections.CHANNEL)).toBe(true);
+
+      integrationService.getIntegrationsList.mockResolvedValue(
+        Array.from({ length: 5 }, () => ({ refreshNeeded: false }))
+      );
+      expect(await can(service, Sections.CHANNEL)).toBe(false);
+    });
+
+    it('a channel limitOverride wins over base + add-ons in the gate', async () => {
+      const { service, subscriptionService, integrationService } = buildService();
+      subscriptionService.getSubscriptionByOrganizationId.mockResolvedValue(
+        subscriptionFixture('STARTER', {
+          extraChannels: 10,
+          limitOverrides: { channel: 4 },
+        })
+      );
+
+      integrationService.getIntegrationsList.mockResolvedValue(
+        Array.from({ length: 3 }, () => ({ refreshNeeded: false }))
+      );
+      expect(await can(service, Sections.CHANNEL)).toBe(true);
+
+      integrationService.getIntegrationsList.mockResolvedValue(
+        Array.from({ length: 4 }, () => ({ refreshNeeded: false }))
+      );
+      expect(await can(service, Sections.CHANNEL)).toBe(false);
     });
   });
 
@@ -474,6 +521,97 @@ describe('PermissionsService — subscription matrix', () => {
 
       expect(options.storage_gb).toBe(pricing.STARTER.storage_gb);
       expect(options.video_exports).toBe(pricing.STARTER.video_exports);
+    });
+
+    it('is behavior-neutral with no add-ons or overrides (identical to plan limits)', async () => {
+      const { service, subscriptionService } = buildService();
+      subscriptionService.getSubscriptionByOrganizationId.mockResolvedValue(
+        subscriptionFixture('PRO')
+      );
+
+      const { options } = await service.getEffectiveLimits(orgId);
+
+      // The merged channel is rebuilt from totalChannels (not the -10
+      // sentinel) and every other dimension equals the base plan.
+      expect(options).toEqual(pricing.PRO);
+    });
+
+    it('merges every extra* add-on column into its plan limit', async () => {
+      const { service, subscriptionService } = buildService();
+      subscriptionService.getSubscriptionByOrganizationId.mockResolvedValue(
+        subscriptionFixture('STARTER', {
+          extraChannels: 5,
+          extraTeamMembers: 2,
+          extraPosts: 500,
+          extraBrandKits: 3,
+          extraWebhooks: 10,
+          extraCompetitors: 10,
+          extraStorageGb: 25,
+          extraVideoExports: 50,
+        })
+      );
+
+      const { options } = await service.getEffectiveLimits(orgId);
+
+      expect(options.channel).toBe(pricing.STARTER.channel + 5);
+      expect(options.team_members).toBe(pricing.STARTER.team_members + 2);
+      expect(options.posts_per_month).toBe(
+        pricing.STARTER.posts_per_month + 500
+      );
+      expect(options.brand_kits).toBe(pricing.STARTER.brand_kits + 3);
+      expect(options.webhooks).toBe(pricing.STARTER.webhooks + 10);
+      expect(options.competitors).toBe(pricing.STARTER.competitors + 10);
+      expect(options.storage_gb).toBe(pricing.STARTER.storage_gb + 25);
+      expect(options.video_exports).toBe(pricing.STARTER.video_exports + 50);
+    });
+
+    it('limitOverrides replace base + add-ons on every dimension, channel included', async () => {
+      const { service, subscriptionService } = buildService();
+      subscriptionService.getSubscriptionByOrganizationId.mockResolvedValue(
+        subscriptionFixture('STARTER', {
+          extraChannels: 5,
+          extraTeamMembers: 2,
+          extraPosts: 500,
+          extraBrandKits: 3,
+          extraWebhooks: 10,
+          extraCompetitors: 10,
+          extraStorageGb: 25,
+          extraVideoExports: 50,
+          limitOverrides: {
+            channel: 500,
+            team_members: 100,
+            posts_per_month: 42,
+            brand_kits: 7,
+            webhooks: 8,
+            competitors: 9,
+            storage_gb: 10,
+            video_exports: 11,
+          },
+        })
+      );
+
+      const { options } = await service.getEffectiveLimits(orgId);
+
+      expect(options.channel).toBe(500);
+      expect(options.team_members).toBe(100);
+      expect(options.posts_per_month).toBe(42);
+      expect(options.brand_kits).toBe(7);
+      expect(options.webhooks).toBe(8);
+      expect(options.competitors).toBe(9);
+      expect(options.storage_gb).toBe(10);
+      expect(options.video_exports).toBe(11);
+    });
+
+    it('returns the real plan channel (not the -10 sentinel) when there is no subscription', async () => {
+      process.env.STRIPE_PUBLISHABLE_KEY = 'pk_test';
+      const { service, subscriptionService } = buildService();
+      subscriptionService.getSubscriptionByOrganizationId.mockResolvedValue(
+        null
+      );
+
+      const { options } = await service.getEffectiveLimits(orgId);
+
+      expect(options.channel).toBe(pricing.STARTER.channel);
     });
 
     it('adds extraStorageGb / extraVideoExports to the plan caps', async () => {
