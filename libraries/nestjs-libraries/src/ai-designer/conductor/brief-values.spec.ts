@@ -22,10 +22,12 @@ describe('sanitizeBriefValues', () => {
     const values: Record<string, unknown> = {
       intent: 'keep me',
       lastPlans: [{ variantId: 'x' }],
+      lastDeliveredDesignIds: ['design-1'],
       skillId: 'meme',
       pendingReviseTarget: 'design-1',
       questionsAsked: ['q1'],
       referenceCues: ['cue'],
+      recapShown: true,
     };
     const result = sanitizeBriefValues(values);
     expect(result).toEqual({ intent: 'keep me' });
@@ -74,6 +76,27 @@ describe('mergeBriefValues', () => {
     expect(merged.intent).toBe('a promo');
   });
 
+  it('appends every entry of an array replyTo (form field names)', () => {
+    const merged = mergeBriefValues(
+      { intent: '', questionsAsked: ['audience'] },
+      { intent: 'a summer sale', audience: 'followers' },
+      ['intent', 'audience']
+    );
+    expect(merged.questionsAsked).toEqual(['audience', 'intent', 'audience']);
+  });
+
+  it('merges without touching questionsAsked when no replyTo is given', () => {
+    const merged = mergeBriefValues(
+      { intent: 'a meme', questionsAsked: ['q1'] },
+      { tone: 'funny' }
+    );
+    expect(merged).toEqual({
+      intent: 'a meme',
+      tone: 'funny',
+      questionsAsked: ['q1'],
+    });
+  });
+
   it('caps questionsAsked at MAX_QUESTIONS_ASKED', () => {
     const existing = {
       intent: 'x',
@@ -107,5 +130,86 @@ describe('mergeBriefValues', () => {
       'q1'
     );
     expect(merged.note).toBe('y'.repeat(1024));
+  });
+
+  it('normalizes spoken-style URLs in merged values', () => {
+    const merged = mergeBriefValues(
+      { intent: '' },
+      { intent: 'a launch post for glowlab dot shop' },
+      'intent'
+    );
+    expect(merged.intent).toBe('a launch post for glowlab.shop');
+  });
+
+  it('normalizes spoken URLs in carried-over brief fields too', () => {
+    const merged = mergeBriefValues(
+      { intent: 'check neonkickz dot co for the drop' },
+      { tone: 'hype' }
+    );
+    expect(merged.intent).toBe('check neonkickz.co for the drop');
+  });
+
+  it('handles "dotcom" and is idempotent on dotted domains', () => {
+    const merged = mergeBriefValues(
+      { intent: '' },
+      { intent: 'promo for glowlab dotcom and neonkickz.co' },
+      'intent'
+    );
+    expect(merged.intent).toBe('promo for glowlab.com and neonkickz.co');
+  });
+
+  it('leaves non-TLD "dot" usages untouched', () => {
+    const merged = mergeBriefValues(
+      { intent: '' },
+      { intent: 'a polka dot dress, the dot product, built on dot matrix' },
+      'intent'
+    );
+    expect(merged.intent).toBe(
+      'a polka dot dress, the dot product, built on dot matrix'
+    );
+  });
+
+  it('extracts single-, double-, and curly-quoted intent spans into fixedCopy', () => {
+    const merged = mergeBriefValues(
+      { intent: '' },
+      {
+        intent:
+          'a coffee ad with "Join now" and “Brew Better” and the tagline \'COFFEE, PERFECTED\'',
+      },
+      'intent'
+    );
+    expect(merged.fixedCopy).toBe(
+      'Join now | Brew Better | COFFEE, PERFECTED'
+    );
+  });
+
+  it('dedupes quoted spans the existing fixedCopy already carries', () => {
+    const merged = mergeBriefValues(
+      { intent: '', fixedCopy: 'use code BEAN30' },
+      { intent: 'a promo with "BEAN30" and "Free shipping" and "BEAN30" again' },
+      'intent'
+    );
+    // BEAN30 is contained in the existing fixedCopy (and quoted twice) —
+    // only the genuinely new span is appended, once.
+    expect(merged.fixedCopy).toBe('use code BEAN30 | Free shipping');
+  });
+
+  it('never extracts apostrophe usage as a quoted span', () => {
+    const merged = mergeBriefValues(
+      { intent: '' },
+      { intent: "don't miss it, it's tonight and that's final" },
+      'intent'
+    );
+    expect(merged.fixedCopy).toBeUndefined();
+  });
+
+  it('extracts quoted spans after spoken-URL normalization', () => {
+    const merged = mergeBriefValues(
+      { intent: '' },
+      { intent: "launch post — visit 'northbean dot shop' tonight" },
+      'intent'
+    );
+    expect(merged.intent).toBe("launch post — visit 'northbean.shop' tonight");
+    expect(merged.fixedCopy).toBe('northbean.shop');
   });
 });

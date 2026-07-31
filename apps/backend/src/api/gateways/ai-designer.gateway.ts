@@ -592,6 +592,7 @@ export class AiDesignerGateway
         payload.replyTo,
         payload.variantId,
         payload.saveTemplate,
+        payload.texts,
         emitter
       );
     } catch (err) {

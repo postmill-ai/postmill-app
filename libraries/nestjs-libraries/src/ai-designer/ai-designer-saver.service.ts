@@ -32,12 +32,7 @@ export class AiDesignerSaverService {
     doc: DesignerDoc,
     options: SaveOptions = {}
   ): Promise<AiDesignerRenderResult> {
-    const rendered = await this._renderAndPersistFiles(
-      orgId,
-      variantId,
-      doc,
-      options
-    );
+    const rendered = await this._renderAndPersistFiles(orgId, doc, options);
 
     const firstOutput = doc.outputs[0];
     const design = await this._designService.createDesign(orgId, userId, {
@@ -66,12 +61,7 @@ export class AiDesignerSaverService {
     doc: DesignerDoc,
     options: SaveOptions = {}
   ): Promise<AiDesignerRenderResult> {
-    const rendered = await this._renderAndPersistFiles(
-      orgId,
-      variantId,
-      doc,
-      options
-    );
+    const rendered = await this._renderAndPersistFiles(orgId, doc, options);
 
     await this._designService.updateDesign(orgId, designId, {
       doc,
@@ -87,7 +77,6 @@ export class AiDesignerSaverService {
 
   private async _renderAndPersistFiles(
     orgId: string,
-    variantId: string,
     doc: DesignerDoc,
     options: SaveOptions
   ): Promise<Omit<AiDesignerRenderResult, 'designId' | 'variantId'>> {
@@ -99,7 +88,23 @@ export class AiDesignerSaverService {
       pages,
     });
 
+    // Deterministic text-over-imagery contrast audit on the same page
+    // buffers. Non-fatal: a sampling failure must never block a save.
+    let contrastViolations: AiDesignerRenderResult['contrastViolations'];
+    try {
+      const found = await this._renderService.auditTextContrast(doc, pages);
+      if (found.length > 0) contrastViolations = found;
+    } catch {
+      contrastViolations = undefined;
+    }
+
     const adapter = await this._storageService.getLocalAdapterForOrg(orgId, true);
+
+    // The caller-supplied name is the FULL base — do not append the variantId
+    // here. Callers already embed it (or a `-revised` suffix / timestamp) in
+    // the name, so appending again compounded on every critic pass:
+    // `announcement-<id>-revised-<id>-revised-ig-post.png`.
+    const baseName = options.name || 'ai-design';
 
     const outputPreviews: AiDesignerRenderResult['outputPreviews'] = [];
     let pageIndex = 0;
@@ -107,7 +112,7 @@ export class AiDesignerSaverService {
       const output = doc.outputs[pageIndex];
       const path = await adapter.writeBuffer(page, 'image/png');
       const file = await this._fileService.saveGeneratedMedia(orgId, {
-        name: `${options.name || 'ai-design'}-${variantId}-${output?.formatId || pageIndex}.png`,
+        name: `${baseName}-${output?.formatId || pageIndex}.png`,
         path,
         type: 'image/png',
         folderId: options.saveFolderId ?? null,
@@ -121,19 +126,17 @@ export class AiDesignerSaverService {
       pageIndex++;
     }
 
+    // The contact sheet exists ONLY to feed the vision critic — it is a QC
+    // artifact (framed, labeled per output), never a deliverable. It is
+    // written to storage for the critic to read (local /uploads paths are
+    // inlined by the critic) but deliberately NOT persisted as a `File` row,
+    // so it never appears in the org's Files library.
     const contactPath = await adapter.writeBuffer(contactSheet, 'image/png');
-    const contactFile = await this._fileService.saveGeneratedMedia(orgId, {
-      name: `${options.name || 'ai-design'}-${variantId}-contact-sheet.png`,
-      path: contactPath,
-      type: 'image/png',
-      folderId: options.saveFolderId ?? null,
-      fileSize: contactSheet.length,
-    });
 
     return {
       outputPreviews,
-      contactSheetFileId: contactFile.id,
-      contactSheetUrl: contactFile.path,
+      contactSheetUrl: contactPath,
+      ...(contrastViolations ? { contrastViolations } : {}),
     };
   }
 }
