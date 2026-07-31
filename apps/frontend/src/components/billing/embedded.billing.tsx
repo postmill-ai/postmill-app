@@ -616,7 +616,7 @@ const SubmitBar: FC<{ loading: boolean }> = ({ loading }) => {
       <div className="w-full h-full border-t border-newColColor bg-newBgColorInner px-[80px] tablet:px-[33px] mobile:!px-[16px] flex mobile:flex-col gap-[32px] mobile:gap-[16px] justify-end items-center font-[400] text-[14px] text-[#A3A3A3] mobile:py-[16px]">
         {checkout.checkout.recurring?.trial?.trialEnd ? (
           <div>
-            {t('billing_your_7_day_trial_is', 'Your 7-day trial is')}{' '}
+            {t('billing_your_30_day_trial_is', 'Your 30-day trial is')}{' '}
             <span className="text-textColor font-[600]">
               {t('billing_100_percent_free', '100% free')}
             </span>{' '}
