@@ -709,6 +709,60 @@ export const Filters = () => {
             {getDisplayText()}
           </span>
         </div>
+        {/* Quick content search — drives the same contentSearch state as the
+            Filters drawer's free-text field (client-side .filter over the
+            loaded posts). Left of the view switcher; hidden on small screens. */}
+        <div className="relative hidden md:flex items-center shrink-0">
+          <svg
+            xmlns="http://www.w3.org/2000/svg"
+            width="15"
+            height="15"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth={2}
+            className="absolute start-[10px] pointer-events-none text-newTableText"
+            aria-hidden="true"
+          >
+            <path
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              d="M21 21l-4.35-4.35M11 19a8 8 0 100-16 8 8 0 000 16z"
+            />
+          </svg>
+          <input
+            type="text"
+            value={calendar.contentSearch}
+            onChange={(e) => calendar.setContentSearch(e.target.value)}
+            placeholder={t('search_posts', 'Search posts...')}
+            aria-label={t('search_posts', 'Search posts')}
+            className="w-[190px] h-[42px] ps-[32px] pe-[26px] rounded-[8px] bg-newBgColorInner border border-newTableBorder text-[14px] text-textColor outline-none focus:border-btnPrimary placeholder:text-newTableText"
+          />
+          {!!calendar.contentSearch && (
+            <button
+              type="button"
+              aria-label={t('clear_search', 'Clear search')}
+              onClick={() => calendar.setContentSearch('')}
+              className="absolute end-[7px] w-[18px] h-[18px] flex items-center justify-center rounded-full text-newTableText hover:bg-boxFocused hover:text-textColor transition-all"
+            >
+              <svg
+                xmlns="http://www.w3.org/2000/svg"
+                width="9"
+                height="9"
+                viewBox="0 0 14 14"
+                fill="none"
+                aria-hidden="true"
+              >
+                <path
+                  d="M1 1L13 13M13 1L1 13"
+                  stroke="currentColor"
+                  strokeWidth="1.6"
+                  strokeLinecap="round"
+                />
+              </svg>
+            </button>
+          )}
+        </div>
         {viewToggle}
         <button
           type="button"
