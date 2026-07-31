@@ -16,7 +16,9 @@ import { useToaster } from '@postmill-ai/react/toaster/toaster';
 import { SafeContent } from '@postmill-ai/frontend/components/shared/safe-content';
 import { useImportStockMedia } from './ai-designer.hooks';
 import { markdownToHtml } from './markdown-lite';
+import { ChannelIcon } from './channel-icons';
 import { CHANNEL_PRESETS } from '@postmill-ai/nestjs-libraries/integrations/social/channel-presets';
+import { listStylePresets } from '@postmill-ai/nestjs-libraries/ai-designer/styles';
 import type {
   AiDesignerConfig,
   AiDesignerMode,
@@ -37,6 +39,11 @@ interface AiDesignerStartProps {
 }
 
 const makeId = () => `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+
+// Same direct-import pattern as CHANNEL_PRESETS above: the style registry is a
+// pure data module (no backend-only deps), so the frontend reads it straight
+// from nestjs-libraries instead of mirroring the 8 presets.
+const STYLE_PRESETS = listStylePresets();
 
 const NoticeContent: React.FC<{ notice: string }> = ({ notice }) => {
   const html = useMemo(() => markdownToHtml(notice), [notice]);
@@ -68,6 +75,7 @@ export const AiDesignerStart: React.FC<AiDesignerStartProps> = ({
   const [customH, setCustomH] = useState('');
   const [savePath, setSavePath] = useState('');
   const [brandProfileId, setBrandProfileId] = useState('');
+  const [styleId, setStyleId] = useState('');
   const [variants, setVariants] = useState(3);
   const [referenceItems, setReferenceItems] = useState<MediaSelectorItem[]>([]);
   const [referenceImporting, setReferenceImporting] = useState(false);
@@ -138,6 +146,7 @@ export const AiDesignerStart: React.FC<AiDesignerStartProps> = ({
           : undefined,
       savePath: savePath.trim() || undefined,
       brandProfileId: brandProfileId || undefined,
+      styleId: styleId || undefined,
       variants,
       referenceFileIds:
         referenceItems.length > 0
@@ -179,28 +188,58 @@ export const AiDesignerStart: React.FC<AiDesignerStartProps> = ({
           )}
 
           {/* Mode selector */}
-          <div className="flex items-center gap-2 p-1 rounded-lg border border-studioBorder bg-newBgColorInner w-fit">
-            {(['chat', 'prompt'] as AiDesignerMode[]).map((m) => (
-              <button
-                key={m}
-                type="button"
-                onClick={() => setMode(m)}
-                className={`px-4 py-1.5 rounded-md text-[13px] font-medium transition-colors ${
-                  mode === m
-                    ? 'bg-designerAccent/20 text-textColor'
-                    : 'text-textColor/60 hover:text-textColor'
-                }`}
-              >
-                {m === 'chat' ? t('chat', 'Chat') : t('prompt', 'Prompt')}
-              </button>
-            ))}
+          <div className="space-y-2">
+            <div className="flex items-center gap-2 p-1 rounded-lg border border-studioBorder bg-newBgColorInner w-fit">
+              {(['chat', 'prompt'] as AiDesignerMode[]).map((m) => (
+                <button
+                  key={m}
+                  type="button"
+                  onClick={() => setMode(m)}
+                  className={`px-4 py-1.5 rounded-md text-[13px] font-medium transition-colors ${
+                    mode === m
+                      ? 'bg-designerAccent/20 text-textColor'
+                      : 'text-textColor/60 hover:text-textColor'
+                  }`}
+                >
+                  {m === 'chat' ? t('chat', 'Chat') : t('prompt', 'Prompt')}
+                </button>
+              ))}
+            </div>
+            <p className="text-[12px] text-textColor/60">
+              {mode === 'chat'
+                ? t(
+                    'chat_mode_description',
+                    'Answer a few quick questions in conversation and iterate on ideas together.'
+                  )
+                : t(
+                    'prompt_mode_description',
+                    'Describe the design in one shot — no questions, straight to concepts.'
+                  )}
+            </p>
           </div>
 
           {/* Channels */}
           <section className="space-y-3">
-            <h2 className="text-[14px] font-semibold text-textColor">
-              {t('channels_formats', 'Channels / formats')}
-            </h2>
+            <div className="flex items-center gap-3">
+              <div>
+                <h2 className="text-[14px] font-semibold text-textColor">
+                  {t('channels_formats', 'Channels / formats')}
+                </h2>
+                <p className="text-[12px] text-textColor/60">
+                  {t(
+                    'select_output_formats_hint',
+                    'Select the output formats you want designs for — pick one or more.'
+                  )}
+                </p>
+              </div>
+              {selectedChannels.length > 0 && (
+                <span className="shrink-0 px-2 py-0.5 rounded-full bg-designerAccent/15 text-[11px] font-medium text-textColor tabular-nums">
+                  {t('n_selected_count', '{{count}} selected', {
+                    count: selectedChannels.length,
+                  })}
+                </span>
+              )}
+            </div>
             <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2">
               {imagePresets.map((preset) => {
                 const active = selectedChannels.includes(preset.id);
@@ -215,7 +254,8 @@ export const AiDesignerStart: React.FC<AiDesignerStartProps> = ({
                         : 'border-studioBorder hover:border-designerAccent/60 hover:bg-boxHover'
                     }`}
                   >
-                    <span className="text-[13px] font-medium text-textColor">
+                    <span className="flex items-center gap-1.5 text-[13px] font-medium text-textColor">
+                      <ChannelIcon provider={preset.provider} size={16} />
                       {preset.name}
                     </span>
                     <span className="text-[11px] text-textColor/50 tabular-nums">
@@ -315,6 +355,25 @@ export const AiDesignerStart: React.FC<AiDesignerStartProps> = ({
                 {brands?.map((brand) => (
                   <option key={brand.id} value={brand.id}>
                     {brand.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            <div className="flex flex-col gap-[6px]">
+              <label htmlFor="aiDesignerStyleId" className="text-[14px] text-textColor">
+                {t('style', 'Style')}
+              </label>
+              <select
+                id="aiDesignerStyleId"
+                value={styleId}
+                onChange={(e) => setStyleId(e.target.value)}
+                className="h-[42px] rounded-[8px] border border-studioBorder bg-newBgColorInner px-[16px] text-[14px] text-textColor outline-none focus:border-designerAccent"
+              >
+                <option value="">{t('let_ai_decide', 'Let AI decide')}</option>
+                {STYLE_PRESETS.map((preset) => (
+                  <option key={preset.id} value={preset.id}>
+                    {preset.title} — {preset.description}
                   </option>
                 ))}
               </select>
@@ -423,27 +482,39 @@ export const AiDesignerStart: React.FC<AiDesignerStartProps> = ({
             </section>
           )}
 
-          <div className="pt-2 flex items-center gap-2">
-            <Button
-              type="button"
-              loading={isStarting}
-              onClick={handleStart}
-              disabled={
-                (selectedChannels.length === 0 && customSizes.length === 0) ||
-                isStarting ||
-                !isConnected ||
-                referenceImporting
-              }
-            >
-              {isConnected
-                ? t('start_designing', 'Start designing')
-                : t('connecting_ellipsis', 'Connecting…')}
-            </Button>
-            {!isConnected && onReconnect && (
-              <Button type="button" secondary onClick={onReconnect}>
-                {t('retry', 'Retry')}
+          <div className="pt-2 space-y-2">
+            <div className="flex items-center gap-2">
+              <Button
+                type="button"
+                loading={isStarting}
+                onClick={handleStart}
+                disabled={
+                  (selectedChannels.length === 0 && customSizes.length === 0) ||
+                  isStarting ||
+                  !isConnected ||
+                  referenceImporting
+                }
+              >
+                {isConnected
+                  ? t('start_designing', 'Start designing')
+                  : t('connecting_ellipsis', 'Connecting…')}
               </Button>
-            )}
+              {!isConnected && onReconnect && (
+                <Button type="button" secondary onClick={onReconnect}>
+                  {t('retry', 'Retry')}
+                </Button>
+              )}
+            </div>
+            {isConnected &&
+              selectedChannels.length === 0 &&
+              customSizes.length === 0 && (
+                <p className="text-[12px] text-textColor/50">
+                  {t(
+                    'select_at_least_one_format_to_continue',
+                    'Select at least one format to continue'
+                  )}
+                </p>
+              )}
           </div>
         </div>
       </div>

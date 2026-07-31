@@ -7,7 +7,7 @@ import { useT } from '@postmill-ai/react/translation/get.transation.service.clie
 import { Logo } from '@postmill-ai/frontend/components/new-layout/logo';
 import { FullscreenButton } from '@postmill-ai/frontend/components/media-tools/fullscreen-button';
 import { useFullscreen } from '@postmill-ai/frontend/components/media-tools/use-fullscreen';
-import { MessageRenderer } from './message-renderer';
+import { MessageRenderer, TypingIndicator } from './message-renderer';
 import { useAiDesignerSession } from './ai-designer.hooks';
 import {
   useAiDesignerSocket,
@@ -79,6 +79,8 @@ export const AiDesignerChat: React.FC<AiDesignerChatProps> = ({
     );
     setInput((cur) => (cur.trim() ? cur : pending.text));
     setSending(false);
+    // An undelivered send means nothing is working on it — drop the bubble.
+    setProgress(null);
   }, []);
 
   const onMessage = useCallback((msg: AiDesignerServerMessage) => {
@@ -94,6 +96,12 @@ export const AiDesignerChat: React.FC<AiDesignerChatProps> = ({
     // own echo so an in-flight render stays visible.
     if (msg.role !== 'user') {
       setProgress(null);
+    }
+    // A persisted media message is the delivery of the render the ephemeral
+    // preview was standing in for — drop the preview so it doesn't render
+    // twice (once as the preview bubble, once as the delivered message).
+    if (msg.content.kind === 'media') {
+      setPreview(null);
     }
     setMessages((prev) => {
       const next = msg.nonce
@@ -211,6 +219,7 @@ export const AiDesignerChat: React.FC<AiDesignerChatProps> = ({
           seq: 0,
           sessionId,
           role: 'assistant',
+          agent: 'composer',
           kind: 'media',
           content: {
             kind: 'media',
@@ -223,6 +232,25 @@ export const AiDesignerChat: React.FC<AiDesignerChatProps> = ({
           createdAt: new Date().toISOString(),
         }
       : null;
+
+  // Instant local "thinking" bubble the moment the user sends anything —
+  // replaced by the first real agent:progress event (onProgress) and cleared
+  // by the existing message/preview/error/hydrate handlers.
+  const showThinking = () =>
+    setProgress({ kind: 'progress', agent: 'assistant', phase: 'Thinking…' });
+
+  // Cancel emits once per in-flight run: keyed to the progress object identity,
+  // so a cleared or replaced bubble re-arms the button. The bubble itself stays
+  // until the backend's rollback/progress-clear events arrive (the existing
+  // handlers clear it).
+  const [cancelSentFor, setCancelSentFor] =
+    useState<AiDesignerProgressMsg | null>(null);
+  const cancelSent = progress !== null && cancelSentFor === progress;
+  const handleCancel = () => {
+    if (!progress || cancelSent) return;
+    setCancelSentFor(progress);
+    socket.cancel();
+  };
 
   const handleSend = () => {
     const text = input.trim();
@@ -244,6 +272,7 @@ export const AiDesignerChat: React.FC<AiDesignerChatProps> = ({
       createdAt: new Date().toISOString(),
     };
     setMessages((prev) => [...prev, optimistic]);
+    showThinking();
     if (pendingSendRef.current) clearTimeout(pendingSendRef.current.timer);
     pendingSendRef.current = {
       nonce,
@@ -267,6 +296,27 @@ export const AiDesignerChat: React.FC<AiDesignerChatProps> = ({
       e.preventDefault();
       handleSend();
     }
+  };
+
+  // Plan-card actions and intake-form submits bypass handleSend — give them
+  // the same instant thinking bubble.
+  const handleFormSubmit = (replyTo: string, values: Record<string, unknown>) => {
+    showThinking();
+    socket.submitForm(replyTo, values);
+  };
+
+  const handleAcceptPlan = (
+    replyTo: string,
+    variantId?: string,
+    texts?: Record<string, Record<string, string>>
+  ) => {
+    showThinking();
+    socket.acceptPlan(replyTo, variantId, texts);
+  };
+
+  const handleRevisePlan = (instruction: string, targetDesignId?: string) => {
+    showThinking();
+    socket.revisePlan(instruction, targetDesignId);
   };
 
   return (
@@ -318,16 +368,23 @@ export const AiDesignerChat: React.FC<AiDesignerChatProps> = ({
         className="flex-1 min-h-0 overflow-y-auto p-[16px] space-y-4"
       >
         {allMessages.length === 0 && !progress && !preview && (
-          <div className="text-center text-[14px] text-textColor/50 py-10">
-            {(displaySession?.mode ?? mode) === 'prompt'
-              ? t(
-                  'prompt_sent_agent_will_respond',
-                  'Your prompt has been sent. The agent will respond here.'
-                )
-              : t(
-                  'describe_what_you_want_to_design',
-                  'Describe what you want to design.'
-                )}
+          // Fresh session: the backend dispatches intake on start, so show the
+          // typing indicator right away instead of a dead empty state.
+          <div className="flex flex-col items-start gap-2">
+            <div className="max-w-[80%] rounded-2xl px-4 py-3 border bg-newBgColorInner border-studioBorder rounded-bl-md">
+              <TypingIndicator />
+            </div>
+            <div className="text-[12px] text-textColor/50 ps-1">
+              {(displaySession?.mode ?? mode) === 'prompt'
+                ? t(
+                    'prompt_sent_agent_will_respond',
+                    'Your prompt has been sent. The agent will respond here.'
+                  )
+                : t(
+                    'describe_what_you_want_to_design',
+                    'Describe what you want to design.'
+                  )}
+            </div>
           </div>
         )}
 
@@ -335,9 +392,9 @@ export const AiDesignerChat: React.FC<AiDesignerChatProps> = ({
           <MessageBubble key={msg.id} message={msg}>
             <MessageRenderer
               message={msg}
-              onAcceptPlan={socket.acceptPlan}
-              onRevisePlan={socket.revisePlan}
-              onFormSubmit={socket.submitForm}
+              onAcceptPlan={handleAcceptPlan}
+              onRevisePlan={handleRevisePlan}
+              onFormSubmit={handleFormSubmit}
             />
           </MessageBubble>
         ))}
@@ -346,10 +403,21 @@ export const AiDesignerChat: React.FC<AiDesignerChatProps> = ({
           <MessageBubble message={progressMessage}>
             <MessageRenderer
               message={progressMessage}
-              onAcceptPlan={socket.acceptPlan}
-              onRevisePlan={socket.revisePlan}
-              onFormSubmit={socket.submitForm}
+              onAcceptPlan={handleAcceptPlan}
+              onRevisePlan={handleRevisePlan}
+              onFormSubmit={handleFormSubmit}
             />
+            <div className="mt-2 flex justify-end">
+              <Button
+                type="button"
+                secondary
+                disabled={cancelSent}
+                onClick={handleCancel}
+                className="!h-[28px] !px-[12px] text-[12px]"
+              >
+                {t('cancel', 'Cancel')}
+              </Button>
+            </div>
           </MessageBubble>
         )}
 
@@ -357,9 +425,9 @@ export const AiDesignerChat: React.FC<AiDesignerChatProps> = ({
           <MessageBubble message={previewMessage}>
             <MessageRenderer
               message={previewMessage}
-              onAcceptPlan={socket.acceptPlan}
-              onRevisePlan={socket.revisePlan}
-              onFormSubmit={socket.submitForm}
+              onAcceptPlan={handleAcceptPlan}
+              onRevisePlan={handleRevisePlan}
+              onFormSubmit={handleFormSubmit}
             />
           </MessageBubble>
         )}

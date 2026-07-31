@@ -1,22 +1,63 @@
 'use client';
 
 import React, { useMemo, useState } from 'react';
+import dynamic from 'next/dynamic';
 import { SafeContent } from '@postmill-ai/frontend/components/shared/safe-content';
 import { Button } from '@postmill-ai/react/form/button';
+import { Input } from '@postmill-ai/react/form/input';
 import { useT } from '@postmill-ai/react/translation/get.transation.service.client';
+import { TranslatedLabel } from '@postmill-ai/react/translation/translated-label';
+import { useModals } from '@postmill-ai/frontend/components/layout/new-modal';
 import { InteractiveForm } from './interactive-form';
 import { markdownToHtml } from './markdown-lite';
+import { getStylePreset } from '@postmill-ai/nestjs-libraries/ai-designer/styles';
+import { isCopySlot } from '@postmill-ai/nestjs-libraries/ai-designer/ai-designer.types';
 import type {
   AiDesignerMessagePayload,
   AiDesignerMsgContent,
+  DesignPlan,
 } from '@postmill-ai/nestjs-libraries/ai-designer/ai-designer.types';
+
+// Lazy like the designer route — keeps Konva out of the chat's initial bundle.
+const Designer = dynamic(
+  () =>
+    import('@postmill-ai/frontend/components/media-tools/designer/designer').then(
+      (m) => m.Designer
+    ),
+  { ssr: false }
+);
+
+type MediaItem = Extract<AiDesignerMsgContent, { kind: 'media' }>['items'][number];
+
+/** Opens the full Designer in a modal with the design loaded — same modal
+ *  parameters as the files library's media editor (file.component.tsx). */
+const openDesignerModal = (
+  modal: ReturnType<typeof useModals>,
+  t: ReturnType<typeof useT>,
+  designId: string
+) => {
+  modal.openModal({
+    title: t('edit_in_designer', 'Edit in Designer'),
+    askClose: false,
+    closeOnEscape: true,
+    fullScreen: true,
+    size: 'calc(100% - 80px)',
+    height: 'calc(100% - 80px)',
+    children: (close: () => void) => (
+      <Designer designId={designId} closeModal={close} />
+    ),
+  });
+};
+
+/** Edited plan copy: variantId → slotId → text. */
+export type PlanTextsPayload = Record<string, Record<string, string>>;
 
 interface MessageRendererProps {
   message: AiDesignerMessagePayload;
   onAcceptPlan: (
     replyTo: string,
     variantId?: string,
-    saveTemplate?: boolean
+    texts?: PlanTextsPayload
   ) => void;
   onRevisePlan: (instruction: string, targetDesignId?: string) => void;
   onFormSubmit: (replyTo: string, values: Record<string, unknown>) => void;
@@ -86,6 +127,20 @@ const MediaMessage: React.FC<{
   items: Extract<AiDesignerMsgContent, { kind: 'media' }>['items'];
 }> = ({ items }) => {
   const t = useT();
+  const modal = useModals();
+
+  const openLightbox = (item: MediaItem) => {
+    modal.openModal({
+      title: item.caption || t('preview', 'Preview'),
+      closeOnClickOutside: true,
+      closeOnEscape: true,
+      withCloseButton: true,
+      classNames: { modal: 'w-[100%] max-w-[900px] text-textColor' },
+      children: (close) => <MediaLightbox item={item} close={close} />,
+      size: 'lg',
+    });
+  };
+
   return (
     <div className="flex flex-wrap gap-3">
       {items.map((item, idx) => (
@@ -99,28 +154,66 @@ const MediaMessage: React.FC<{
               <track kind="captions" src="" label={t('no_captions', 'No captions')} />
             </video>
           ) : (
-            // eslint-disable-next-line @next/next/no-img-element
-            <img
-              src={item.url}
-              alt={item.caption || t('preview', 'Preview')}
-              className="max-w-[280px] max-h-[200px] rounded-lg border border-studioBorder object-contain"
-            />
+            <button
+              type="button"
+              onClick={() => openLightbox(item)}
+              className="cursor-zoom-in rounded-lg ring-designerAccent hover:ring-2 transition-shadow"
+              aria-label={t('view_full_size', 'View full size')}
+            >
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img
+                src={item.url}
+                alt={item.caption || t('preview', 'Preview')}
+                className="max-w-[280px] max-h-[200px] rounded-lg border border-studioBorder object-contain"
+              />
+            </button>
           )}
           {item.caption && (
             <span className="text-[11px] text-textColor/60">{item.caption}</span>
           )}
           {item.designId && (
-            <a
-              href={`/media/designer?designId=${encodeURIComponent(item.designId)}`}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="text-[11px] text-btnPrimaryAccent hover:underline"
+            <button
+              type="button"
+              onClick={() => openDesignerModal(modal, t, item.designId!)}
+              className="text-[11px] text-btnPrimaryAccent hover:underline text-start"
             >
-              {t('open_in_designer', 'Open in Designer')}
-            </a>
+              {t('edit_in_designer', 'Edit in Designer')}
+            </button>
           )}
         </div>
       ))}
+    </div>
+  );
+};
+
+const MediaLightbox: React.FC<{
+  item: MediaItem;
+  close: () => void;
+}> = ({ item, close }) => {
+  const t = useT();
+  const modal = useModals();
+  return (
+    <div className="flex flex-col items-center gap-3">
+      {/* eslint-disable-next-line @next/next/no-img-element */}
+      <img
+        src={item.url}
+        alt={item.caption || t('preview', 'Preview')}
+        className="max-w-full max-h-[75vh] rounded-lg object-contain"
+      />
+      {item.caption && (
+        <div className="text-[13px] text-textColor/70">{item.caption}</div>
+      )}
+      {item.designId && (
+        <Button
+          type="button"
+          onClick={() => {
+            close();
+            openDesignerModal(modal, t, item.designId!);
+          }}
+        >
+          {t('edit_in_designer', 'Edit in Designer')}
+        </Button>
+      )}
     </div>
   );
 };
@@ -136,13 +229,16 @@ const ProgressMessage: React.FC<{
         <span className="font-medium">{content.agent}</span>
         <span className="text-textColor/50">{content.phase}</span>
       </div>
-      {pct !== null && (
+      {pct !== null ? (
         <div className="h-2 w-full rounded-full bg-studioBorder overflow-hidden">
           <div
             className="h-full bg-designerAccent transition-all"
             style={{ width: `${pct}%` }}
           />
         </div>
+      ) : (
+        // No percentage yet — the agent is thinking, not measuring.
+        <TypingIndicator />
       )}
       {content.note && (
         <div className="text-[12px] text-textColor/60">{content.note}</div>
@@ -151,23 +247,111 @@ const ProgressMessage: React.FC<{
   );
 };
 
+/** Animated typing indicator for "agent is thinking" states. */
+export const TypingIndicator: React.FC<{ label?: string }> = ({ label }) => (
+  <div className="flex items-center gap-2">
+    {/* eslint-disable-next-line @next/next/no-img-element -- local animated SVG */}
+    <img
+      src="/ai-designer/loading.svg"
+      alt=""
+      aria-hidden="true"
+      className="h-[28px] w-auto"
+    />
+    {label && (
+      <span className="text-[12px] text-textColor/60">{label}</span>
+    )}
+  </div>
+);
+
+const MORE_IDEAS_INSTRUCTION =
+  'Sketch a fresh set of concept directions, deliberately different from the current set.';
+
+/** 'hero-top' → 'Hero Top' */
+const humanize = (value: string) =>
+  value
+    .replace(/[-_]+/g, ' ')
+    .replace(/\b\w/g, (c) => c.toUpperCase());
+
+/** Slot roles that naturally hold multi-line copy (e.g. meme captions). */
+const CAPTION_ROLES = new Set(['top-caption', 'bottom-caption', 'caption']);
+
+/**
+ * Copy slots edit in a multi-line field when the copy already carries a line
+ * break (meme plans produce two-line captions) or the role is a caption.
+ */
+const isMultilineSlot = (role: string, value: string) =>
+  value.includes('\n') || CAPTION_ROLES.has(role);
+
+/**
+ * Read a plan's slot copy defensively: `DesignPlan.texts` (slotId → copy)
+ * lands with the backend plan-time-copy change, and plan messages persisted
+ * before it carry no texts at all.
+ */
+const planTexts = (plan: DesignPlan): Record<string, string> =>
+  (plan as DesignPlan & { texts?: Record<string, string> }).texts ?? {};
+
 const PlanMessage: React.FC<{
   content: Extract<AiDesignerMsgContent, { kind: 'plan' }>;
   replyTo: string;
-  onAccept: (replyTo: string, variantId?: string, saveTemplate?: boolean) => void;
+  onAccept: (replyTo: string, variantId?: string, texts?: PlanTextsPayload) => void;
   onRevise: (instruction: string, targetDesignId?: string) => void;
 }> = ({ content, replyTo, onAccept, onRevise }) => {
   const t = useT();
   const [reviseOpen, setReviseOpen] = useState(false);
   const [reviseText, setReviseText] = useState('');
-  const [selectedVariantId, setSelectedVariantId] = useState<string | undefined>(
-    content.plans[0]?.variantId
+  // Multi-select: every plan starts selected. Accepting with exactly one
+  // selected sends that variantId; with more (or all) selected it accepts
+  // the whole plan set (no variantId — the conductor runs every plan).
+  const [selectedIds, setSelectedIds] = useState<string[]>(
+    content.plans.map((p) => p.variantId)
   );
-  // Auto-save on accept (plan §10); unchecking is the "don't save" opt-out.
-  const [saveTemplate, setSaveTemplate] = useState(true);
+  // Inline copy editing: one input per copy slot, initialized from the
+  // plan's texts ('' when the plan predates plan-time copy).
+  const [editedTexts, setEditedTexts] = useState<PlanTextsPayload>(() => {
+    const init: PlanTextsPayload = {};
+    for (const plan of content.plans) {
+      const copySlots = plan.slots.filter(isCopySlot);
+      if (copySlots.length === 0) continue;
+      const texts = planTexts(plan);
+      init[plan.variantId] = Object.fromEntries(
+        copySlots.map((slot) => [slot.id, texts[slot.id] ?? ''])
+      );
+    }
+    return init;
+  });
 
   const canAccept = content.actions.includes('accept');
   const canRevise = content.actions.includes('revise');
+
+  const togglePlan = (variantId: string) =>
+    setSelectedIds((prev) =>
+      prev.includes(variantId)
+        ? prev.filter((id) => id !== variantId)
+        : [...prev, variantId]
+    );
+
+  const setSlotText = (variantId: string, slotId: string, value: string) =>
+    setEditedTexts((prev) => ({
+      ...prev,
+      [variantId]: { ...prev[variantId], [slotId]: value },
+    }));
+
+  // Edited copy for the selected plans only. Blank values are dropped so an
+  // untouched plan (e.g. one persisted before plan-time copy) never locks
+  // empty text in at execution.
+  const textsForSelected = (): PlanTextsPayload | undefined => {
+    const out: PlanTextsPayload = {};
+    for (const plan of content.plans) {
+      if (!selectedIds.includes(plan.variantId)) continue;
+      const slots = editedTexts[plan.variantId];
+      if (!slots) continue;
+      const entries = Object.entries(slots).filter(([, value]) => value.trim());
+      if (entries.length > 0) {
+        out[plan.variantId] = Object.fromEntries(entries);
+      }
+    }
+    return Object.keys(out).length > 0 ? out : undefined;
+  };
 
   return (
     <div className="flex flex-col gap-3">
@@ -177,59 +361,144 @@ const PlanMessage: React.FC<{
       </div>
       {content.plans.length > 0 && (
         <div className="flex flex-col gap-2">
-          {content.plans.map((plan) => (
-            <label
-              key={plan.variantId}
-              className={`flex items-center gap-3 rounded-lg border p-3 cursor-pointer transition-colors ${
-                selectedVariantId === plan.variantId
-                  ? 'border-designerAccent bg-designerAccent/10'
-                  : 'border-studioBorder bg-newBgColorInner'
-              }`}
-            >
-              <input
-                type="radio"
-                name={`variant-${replyTo}`}
-                value={plan.variantId}
-                checked={selectedVariantId === plan.variantId}
-                onChange={() => setSelectedVariantId(plan.variantId)}
-                className="accent-designerAccent"
-              />
-              <div>
-                <div className="text-[13px] font-medium text-textColor">
-                  {plan.concept}
-                </div>
-                {plan.slots.length > 0 && (
-                  <div className="mt-1 text-[12px] text-textColor/60">
-                    {t('n_slots_count', '{{count}} slot', {
-                      count: plan.slots.length,
+          {content.plans.map((plan) => {
+            const styleTitle = plan.styleId
+              ? getStylePreset(plan.styleId)?.title
+              : undefined;
+            const copySlots = plan.slots.filter(isCopySlot);
+            return (
+              <div
+                key={plan.variantId}
+                className={`rounded-lg border p-3 transition-colors ${
+                  selectedIds.includes(plan.variantId)
+                    ? 'border-designerAccent bg-designerAccent/10'
+                    : 'border-studioBorder bg-newBgColorInner'
+                }`}
+              >
+                <label className="flex items-start gap-3 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    value={plan.variantId}
+                    checked={selectedIds.includes(plan.variantId)}
+                    onChange={() => togglePlan(plan.variantId)}
+                    className="mt-0.5 accent-designerAccent"
+                  />
+                  <div className="min-w-0 text-[13px] font-medium text-textColor">
+                    {plan.concept}
+                    <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-[12px] font-normal text-textColor/60">
+                      {styleTitle && (
+                        <span className="px-1.5 py-0.5 rounded bg-designerAccent/15 text-[10px] font-medium text-textColor">
+                          {styleTitle}
+                        </span>
+                      )}
+                      {plan.slots.length > 0 && (
+                        <span>
+                          {t('n_slots_count', '{{count}} slot', {
+                            count: plan.slots.length,
+                          })}
+                        </span>
+                      )}
+                      {plan.formatTemplate && (
+                        <span>{humanize(plan.formatTemplate)}</span>
+                      )}
+                      {plan.palette.length > 0 && (
+                        <span className="flex items-center gap-1">
+                          {plan.palette.slice(0, 6).map((color) => (
+                            <span
+                              key={color}
+                              className="w-3 h-3 rounded-full border border-studioBorder"
+                              style={{ backgroundColor: color }}
+                              title={color}
+                            />
+                          ))}
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                </label>
+                {canAccept && copySlots.length > 0 && (
+                  // Outside the selection label so focusing an input never
+                  // toggles the plan checkbox.
+                  <div className="mt-2 flex flex-col gap-2 ps-[28px]">
+                    {copySlots.map((slot) => {
+                      const value = editedTexts[plan.variantId]?.[slot.id] ?? '';
+                      if (isMultilineSlot(slot.role, value)) {
+                        // Multi-line copy edits in an auto-height textarea
+                        // styled like the revise box; the label mirrors the
+                        // Input's own label markup.
+                        return (
+                          <div key={slot.id} className="flex flex-col gap-[6px]">
+                            <div className="text-[14px]">
+                              <TranslatedLabel label={humanize(slot.role)} />
+                            </div>
+                            <textarea
+                              name={`plan-text-${plan.variantId}-${slot.id}`}
+                              maxLength={500}
+                              value={value}
+                              rows={Math.max(
+                                2,
+                                Math.min(6, value.split('\n').length + 1)
+                              )}
+                              onChange={(e) =>
+                                setSlotText(
+                                  plan.variantId,
+                                  slot.id,
+                                  e.target.value
+                                )
+                              }
+                              className="rounded-lg border border-studioBorder bg-newBgColorInner p-3 text-[14px] text-textColor outline-none focus:border-designerAccent resize-none"
+                            />
+                          </div>
+                        );
+                      }
+                      return (
+                        <Input
+                          key={slot.id}
+                          disableForm
+                          removeError
+                          name={`plan-text-${plan.variantId}-${slot.id}`}
+                          label={humanize(slot.role)}
+                          maxLength={500}
+                          value={value}
+                          onChange={(e) =>
+                            setSlotText(plan.variantId, slot.id, e.target.value)
+                          }
+                        />
+                      );
                     })}
                   </div>
                 )}
               </div>
-            </label>
-          ))}
+            );
+          })}
         </div>
       )}
 
-      {canAccept && (
-        <label className="flex items-center gap-2 text-[13px] text-textColor cursor-pointer">
-          <input
-            type="checkbox"
-            checked={saveTemplate}
-            onChange={(e) => setSaveTemplate(e.target.checked)}
-            className="accent-designerAccent"
-          />
-          {t('save_as_reusable_template', 'Save as reusable template')}
-        </label>
+      {canAccept && selectedIds.length > 1 && (
+        <div className="text-[12px] text-textColor/60">
+          {t(
+            'all_plans_will_be_generated',
+            'All plans will be generated — select exactly one to generate only that variant.'
+          )}
+        </div>
       )}
 
       <div className="flex items-center gap-2">
         {canAccept && (
           <Button
             type="button"
-            onClick={() => onAccept(replyTo, selectedVariantId, saveTemplate)}
+            disabled={selectedIds.length === 0}
+            onClick={() =>
+              onAccept(
+                replyTo,
+                selectedIds.length === 1 ? selectedIds[0] : undefined,
+                textsForSelected()
+              )
+            }
           >
-            {t('accept_plan', 'Accept plan')}
+            {selectedIds.length === 1
+              ? t('accept_plan', 'Accept plan')
+              : t('accept_plans', 'Accept plans')}
           </Button>
         )}
         {canRevise && (
@@ -239,6 +508,15 @@ const PlanMessage: React.FC<{
             onClick={() => setReviseOpen((v) => !v)}
           >
             {t('revise', 'Revise')}
+          </Button>
+        )}
+        {canRevise && (
+          <Button
+            type="button"
+            secondary
+            onClick={() => onRevise(MORE_IDEAS_INSTRUCTION)}
+          >
+            {t('more_ideas', 'More ideas')}
           </Button>
         )}
       </div>
