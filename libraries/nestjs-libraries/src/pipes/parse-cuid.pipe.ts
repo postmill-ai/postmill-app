@@ -11,9 +11,16 @@ import {
  * `400 "Validation failed (uuid is expected)"` — which silently broke the post
  * detail modal, post analytics, and the whole social-comments feature. Use this
  * instead to validate ids in the actual format without breaking them.
+ *
+ * The in-repo demo seeder (dev/marketing captures) uses readable `demo-*` ids —
+ * those are accepted ONLY when NODE_ENV === 'development' (R2), so seeded dev
+ * environments behave like production without production accepting non-cuid ids.
  */
 export const isCuid = (value: unknown): value is string =>
-  typeof value === 'string' && /^[a-z0-9]{20,40}$/i.test(value);
+  typeof value === 'string' &&
+  (/^[a-z0-9]{20,40}$/i.test(value) ||
+    (process.env.NODE_ENV === 'development' &&
+      /^demo-[a-z0-9-]{4,80}$/.test(value)));
 
 @Injectable()
 export class ParseCuidPipe implements PipeTransform<string, string> {

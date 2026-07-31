@@ -51,6 +51,24 @@ const CHANNELS: ChannelSpec[] = [
   { identifier: 'telegram', name: 'Solstice Supply', profile: 'solsticesupply' },
 ];
 
+// Display names for the platform ProviderConfiguration rows (B2) — the composer
+// resolves channel availability through these; without them every seeded
+// channel toasts "Integration not available: <provider>".
+const PROVIDER_DISPLAY_NAMES: Record<string, string> = {
+  x: 'X',
+  linkedin: 'LinkedIn',
+  instagram: 'Instagram',
+  facebook: 'Facebook',
+  threads: 'Threads',
+  youtube: 'YouTube',
+  tiktok: 'TikTok',
+  pinterest: 'Pinterest',
+  mastodon: 'Mastodon',
+  discord: 'Discord',
+  bluesky: 'Bluesky',
+  telegram: 'Telegram',
+};
+
 // Channels the inbox can realistically show comments for (subset of the seeded
 // set that has comments capability in PROVIDER_CAPABILITIES).
 const COMMENT_CHANNELS = new Set([
@@ -98,18 +116,19 @@ const CAST = [
 ];
 
 // LLM provider grid for the AI-settings surface. Fake creds (encrypted), real
-// spend history. OpenAI is the active provider — at capture time Rick replaces
-// its credentials with a real key via the UI (the seeder never overwrites an
-// existing row, so a reseed keeps the real key).
+// spend history. Rows seed DISABLED and inactive (B6): fake keys must never
+// shadow a real setup with "invalid x-api-key" failures — with no active
+// provider the app cleanly reports AI as not configured. At capture time Rick
+// configures a real key via the UI (which flips enabled + active on that row;
+// the seeder never overwrites an existing row, so a reseed keeps the real key).
 const AI_PROVIDERS: {
   identifier: string;
   defaultModel: string;
   reasoningModel?: string;
-  isActive?: boolean;
   monthlyCap: number;
   spendTarget: number; // ~this month's seeded spend, USD
 }[] = [
-  { identifier: 'openai', defaultModel: 'gpt-5', reasoningModel: 'o4-mini', isActive: true, monthlyCap: 50, spendTarget: 31 },
+  { identifier: 'openai', defaultModel: 'gpt-5', reasoningModel: 'o4-mini', monthlyCap: 50, spendTarget: 31 },
   { identifier: 'anthropic', defaultModel: 'claude-sonnet-5', monthlyCap: 30, spendTarget: 12.3 },
   { identifier: 'google', defaultModel: 'gemini-3-flash', monthlyCap: 20, spendTarget: 3.6 },
   { identifier: 'groq', defaultModel: 'llama-4-70b', monthlyCap: 10, spendTarget: 1.2 },
@@ -201,10 +220,11 @@ export class DemoSeeder {
 
     const cast = await this._seedCast(orgId, userId);
     const integrations = await this._seedChannels(orgId);
-    const { files, folderIds } = await this._seedMediaLibrary(orgId);
+    await this._seedPlatformProviderConfigs();
+    const { files, videoFiles, folderIds } = await this._seedMediaLibrary(orgId);
     const brandProfileId = await this._seedBrandProfiles(orgId, files);
     const campaigns = await this._seedCampaigns(orgId, userId);
-    const posts = await this._seedPosts(orgId, userId, integrations, campaigns.launchId, files, rand);
+    const posts = await this._seedPosts(orgId, userId, integrations, campaigns.launchId, files, videoFiles, rand);
     await this._seedTags(orgId, posts, rand);
     await this._seedShortLinks(orgId, posts, rand);
     await this._seedCampaignExtras(orgId, userId, cast, campaigns.launchId, integrations[0]?.id, posts, files, brandProfileId);
@@ -377,11 +397,51 @@ export class DemoSeeder {
     return out;
   }
 
+  // ── platform channel provider configs (B2) ─────────────────────────────────
+  //
+  // Channel availability funnels through ProviderConfigManager (platform
+  // ProviderConfiguration rows) — IntegrationManager throws
+  // `Integration not available: <provider>` when no enabled row exists. Seed an
+  // enabled row per demo channel so the composer/preflight work out of the box.
+  // Create-only: an existing row (admin-curated, real OAuth app creds) is never
+  // touched. Seeded rows carry `demo-prov-*` ids so _resetDemoData can drop
+  // exactly them (ProviderConfiguration has no inbound FKs).
+  private async _seedPlatformProviderConfigs(): Promise<void> {
+    for (const ch of CHANNELS) {
+      const existing = await this._prisma.providerConfiguration.findUnique({
+        where: {
+          identifier_version: { identifier: ch.identifier, version: 'v1' },
+        },
+        select: { id: true },
+      });
+      if (existing) continue;
+      await this._prisma.providerConfiguration.create({
+        data: {
+          id: `${DEMO_ID_PREFIX}prov-${ch.identifier}`,
+          identifier: ch.identifier,
+          version: 'v1',
+          name: PROVIDER_DISPLAY_NAMES[ch.identifier] ?? ch.identifier,
+          enabled: true,
+          clientId: null,
+          clientSecret: null,
+          redirectUri: null,
+          scopes: null,
+          additionalConfig: null,
+          setupInstructions: null,
+        },
+      });
+    }
+  }
+
   // ── media library (folders + tagged files) ──────────────────────────────────
 
   private async _seedMediaLibrary(
     orgId: string,
-  ): Promise<{ files: { id: string; path: string; type: string }[]; folderIds: string[] }> {
+  ): Promise<{
+    files: { id: string; path: string; type: string }[];
+    videoFiles: { id: string; path: string; type: string }[];
+    folderIds: string[];
+  }> {
     const short = this._short(orgId);
     const folders = [
       { id: `${DEMO_ID_PREFIX}${short}-fold-brand`, name: 'Brand Assets', color: '#166534', tags: ['brand'] },
@@ -442,7 +502,43 @@ export class DemoSeeder {
       });
       files.push(row);
     }
-    return { files, folderIds: folders.map((f) => f.id) };
+
+    // Video/reel files (drive mediaType='video' on posts + the Video folder).
+    // Paths are public sample MP4s that actually load in a browser — the old
+    // gtv-videos-bucket URLs 403 now (Chrome shows ORB-blocked black boxes).
+    const videoSeeds = [
+      { name: 'ridgeline-launch-reel', path: 'https://test-videos.co.uk/vids/bigbuckbunny/mp4/h264/720/Big_Buck_Bunny_720_10s_1MB.mp4', alt: 'Ridgeline shell launch reel' },
+      { name: 'trail-blend-brew', path: 'https://interactive-examples.mdn.mozilla.net/media/cc0-videos/flower.mp4', alt: 'Trail Blend camp brew — 15s' },
+      { name: 'winter-drop-teaser', path: 'https://test-videos.co.uk/vids/sintel/mp4/h264/720/Sintel_720_10s_1MB.mp4', alt: 'Winter Drop teaser' },
+      { name: 'summit-sunrise', path: 'https://test-videos.co.uk/vids/jellyfish/mp4/h264/720/Jellyfish_720_10s_1MB.mp4', alt: 'Summit sunrise timelapse' },
+      { name: 'repair-program', path: 'https://interactive-examples.mdn.mozilla.net/media/cc0-videos/friday.mp4', alt: 'Inside the repair program' },
+    ];
+    const videoFiles: { id: string; path: string; type: string }[] = [];
+    for (let i = 0; i < videoSeeds.length; i++) {
+      const v = videoSeeds[i];
+      const id = `${DEMO_ID_PREFIX}${short}-vid-${i + 1}`;
+      const row = await this._prisma.file.upsert({
+        where: { id },
+        create: {
+          id,
+          organizationId: orgId,
+          name: `${DEMO_MEDIA_PREFIX}${v.name}.mp4`,
+          originalName: `${v.name}.mp4`,
+          path: v.path,
+          fileSize: 4200000 + i * 512000,
+          type: 'video',
+          alt: v.alt,
+          folderId: `${DEMO_ID_PREFIX}${short}-fold-video`,
+          tags: JSON.stringify(['video', 'reel']),
+          metadata: { mimeType: 'video/mp4', width: 1080, height: 1920, duration: 15 + i * 3 },
+        },
+        update: {},
+        select: { id: true, path: true, type: true },
+      });
+      videoFiles.push(row);
+    }
+
+    return { files, videoFiles, folderIds: folders.map((f) => f.id) };
   }
 
   // ── brand voices ──────────────────────────────────────────────────────────
@@ -742,6 +838,7 @@ export class DemoSeeder {
     integrations: { id: string; identifier: string }[],
     launchCampaignId: string,
     files: { id: string; path: string }[],
+    videoFiles: { id: string; path: string }[],
     rand: () => number,
   ): Promise<SeededPost[]> {
     if (!integrations.length) return [];
@@ -749,16 +846,213 @@ export class DemoSeeder {
     const out: SeededPost[] = [];
     let n = 0;
 
-    const attach = (i: number) => {
-      const f = files[i % files.length];
+    // ── media builders (cursors walk the library so posts don't all reuse one img) ──
+    let imgCursor = 0;
+    const nextImages = (k: number): string => {
+      const items: { id: string; path: string }[] = [];
+      for (let j = 0; j < k; j++) {
+        const f = files[imgCursor % files.length];
+        imgCursor++;
+        items.push({ id: f.id, path: f.path });
+      }
+      return JSON.stringify(items);
+    };
+    let vidCursor = 0;
+    const nextVideo = (): string => {
+      if (!videoFiles.length) return nextImages(1);
+      const f = videoFiles[vidCursor % videoFiles.length];
+      vidCursor++;
       return JSON.stringify([{ id: f.id, path: f.path }]);
     };
 
-    // Published history: a real brand posting SCHEDULE — five fixed weekly
-    // slots across HISTORY_DAYS (10 weeks), so best-time heatmap cells
-    // accumulate ~10 posts each (>=10 → 'high' confidence tier), plus a few
-    // off-schedule extras so the calendar doesn't read robotic. Stats rise
-    // with recency (growth rule: newer posts perform better).
+    // ── content-type variety (real threads via parentPostId chains; real polls
+    // in settings JSON — only on poll-capable channels; carousels/videos via media) ──
+    const THREAD_CHANNELS = new Set(['x', 'threads', 'bluesky', 'mastodon', 'linkedin']);
+    const POLL_CHANNELS = new Set(['x', 'linkedin']);
+    // Discord requires a selected channel in post settings (DiscordDto.channel);
+    // without it preflight blocks with "channel should not be null or undefined"
+    // (B3). A plausible fake snowflake — seeded channels can't publish anyway.
+    const DISCORD_DEMO_CHANNEL = '1140321789012345678';
+    const THREADS: string[][] = [
+      [
+        'Camp breakfast, three ways. 🍳 A thread 🧵',
+        '1/ Skillet hash — crispy potatoes, peppers, a fried egg on top.',
+        '2/ Overnight oats with a trail-mix crumble. Zero cook time.',
+        '3/ The 3-minute scramble that saved every summit morning.',
+      ],
+      [
+        'Pack light, go far — our 5 weekend essentials. 🧵',
+        '1/ The Ridgeline shell. Wind, rain, repeat.',
+        '2/ A merino midlayer that packs down to a fist.',
+        '3/ 600ml of Trail Blend, pre-ground.',
+        '4/ Wool socks — two pairs, always.',
+        '5/ The Fireside mug. Non-negotiable. 🔥',
+      ],
+      [
+        'Trail report: 34 miles, one sunrise, zero blisters. 🧵',
+        '1/ Day one — 14 miles to the ridge, cold wind up top.',
+        '2/ Night — cowboy camped under the Milky Way.',
+        '3/ Sunrise from 9,000ft made every mile worth it.',
+      ],
+    ];
+    const POLLS: { options: string[]; duration: number }[] = [
+      { options: ['Sunrise camp', 'Sunset camp'], duration: 24 },
+      { options: ['Merino', 'Fleece', 'Down'], duration: 168 },
+      { options: ['Trail Blend', 'Fireside Roast', 'Both ☕'], duration: 48 },
+      { options: ['Ridgeline 45', 'Summit 30'], duration: 72 },
+    ];
+    let threadCursor = 0;
+    let pollCursor = 0;
+    const pollSettings = (
+      identifier: string,
+      p: { options: string[]; duration: number },
+    ): string => {
+      if (identifier === 'x') {
+        return JSON.stringify({
+          __type: 'x',
+          who_can_reply_post: 'everyone',
+          made_with_ai: false,
+          paid_partnership: false,
+          poll: { options: p.options, duration: p.duration },
+        });
+      }
+      return JSON.stringify({
+        __type: 'linkedin',
+        post_as_images_carousel: false,
+        poll: { options: p.options, duration: p.duration },
+      });
+    };
+
+    // Emit one logical post. ~half are CROSS-POSTED to 2–4 channels (write
+    // once, publish everywhere): every channel is its own Post row sharing one
+    // `group`, so each shows as its own calendar card and the group opens as a
+    // single multi-channel post. Threads/polls stay single-channel (they're
+    // per-provider). Thread children (parentPostId chain) hang off the primary
+    // channel only and are NOT pushed to `out`.
+    const emit = async (a: {
+      offset: number;
+      hour: number;
+      minute: number;
+      state: State;
+      integration: { id: string; identifier: string };
+      campaign: boolean;
+      past: boolean;
+    }): Promise<void> => {
+      const baseN = n;
+      const group = `demo-${short}-g${baseN}`;
+      const publishDate = this._at(a.offset, a.hour, a.minute);
+
+      let type: 'text' | 'image' | 'carousel' | 'video' | 'thread' | 'poll';
+      const r = rand();
+      if (r < 0.24) type = 'text';
+      else if (r < 0.59) type = 'image';
+      else if (r < 0.74) type = 'carousel';
+      else if (r < 0.86) type = 'video';
+      else if (r < 0.94) type = 'thread';
+      else type = 'poll';
+      // Fall back where the primary channel can't do the picked type.
+      if (type === 'thread' && !THREAD_CHANNELS.has(a.integration.identifier)) type = 'image';
+      if (type === 'poll' && !POLL_CHANNELS.has(a.integration.identifier)) type = 'carousel';
+
+      let content = CAPTIONS[baseN % CAPTIONS.length];
+      let image = '[]';
+      let settings = '{}';
+      let threadItems: string[] = [];
+      if (type === 'image') image = nextImages(1);
+      else if (type === 'carousel') image = nextImages(2 + Math.floor(rand() * 3)); // 2–4
+      else if (type === 'video') image = nextVideo();
+      else if (type === 'poll') {
+        const p = POLLS[pollCursor % POLLS.length];
+        pollCursor++;
+        settings = pollSettings(a.integration.identifier, p);
+      } else if (type === 'thread') {
+        const t = THREADS[threadCursor % THREADS.length];
+        threadCursor++;
+        content = t[0];
+        threadItems = t.slice(1);
+        if (rand() < 0.5) image = nextImages(1);
+      }
+
+      // Build the channel set — cross-post most image/video/carousel/text posts.
+      const channels = [a.integration];
+      if (type !== 'thread' && type !== 'poll' && rand() < 0.5) {
+        const extra = 1 + Math.floor(rand() * 3); // +1..3 → 2..4 channels total
+        const others = integrations.filter((i) => i.id !== a.integration.id);
+        for (let c = 0; c < others.length && channels.length < 1 + extra; c++) {
+          const pick = others[(baseN + c) % others.length];
+          if (!channels.some((ch) => ch.id === pick.id)) channels.push(pick);
+        }
+      }
+
+      for (let ci = 0; ci < channels.length; ci++) {
+        const ch = channels[ci];
+        const id = `demo-${short}-p${n}`;
+        // Discord posts need a channel id in settings or preflight blocks (B3).
+        const postSettings =
+          ch.identifier === 'discord' && settings === '{}'
+            ? JSON.stringify({ __type: 'discord', channel: DISCORD_DEMO_CHANNEL })
+            : settings;
+        // Each channel row gets its own recency-scaled stats (growth rule).
+        const stats = a.past ? analyticsFor(a.offset) : undefined;
+        await this._upsertPost({
+          id,
+          orgId,
+          createdById: userId,
+          integrationId: ch.id,
+          state: a.state,
+          publishDate,
+          content,
+          group,
+          campaignId: a.campaign ? launchCampaignId : null,
+          image,
+          settings: postSettings,
+          views: stats?.views,
+          likes: stats?.likes,
+          comments: stats?.comments,
+        });
+        out.push({
+          id,
+          integrationId: ch.id,
+          identifier: ch.identifier,
+          state: a.state === State.PUBLISHED ? 'PUBLISHED' : 'QUEUE',
+          offset: a.offset,
+          views: stats?.views,
+          likes: stats?.likes,
+          comments: stats?.comments,
+          campaign: a.campaign,
+        });
+        n++;
+
+        // Thread items hang off the primary channel row only.
+        if (ci === 0 && threadItems.length) {
+          let parentId = id;
+          for (let ti = 0; ti < threadItems.length; ti++) {
+            const childId = `${id}-t${ti + 1}`;
+            await this._upsertPost({
+              id: childId,
+              orgId,
+              createdById: userId,
+              integrationId: ch.id,
+              state: a.state,
+              publishDate,
+              content: threadItems[ti],
+              group,
+              campaignId: a.campaign ? launchCampaignId : null,
+              image: '[]',
+              settings,
+              parentPostId: parentId,
+            });
+            parentId = childId;
+          }
+        }
+      }
+    };
+
+    // Posting cadence: weekly flagship slots concentrate the best-time heatmap
+    // to high confidence across the full history; a denser organic layer over
+    // the recent window (weekdays 3–5 posts, weekends 1–2, business hours,
+    // multiple channels/day) makes the calendar read busy but real. Past days
+    // publish (recency-scaled stats — growth rule); today + future queue.
     const weeklySlots = [
       { dow: 2, hour: 9, minute: 30 }, // Tue 9:30a
       { dow: 4, hour: 10, minute: 0 }, // Thu 10a
@@ -766,42 +1060,47 @@ export class DemoSeeder {
       { dow: 6, hour: 15, minute: 0 }, // Sat 3p
       { dow: 0, hour: 12, minute: 0 }, // Sun noon
     ];
-    const publishedSpecs: { offset: number; hour: number; minute: number }[] = [];
-    for (let d = HISTORY_DAYS; d >= 1; d -= 1) {
-      const dow = dayjs().tz(this._zone()).subtract(d, 'day').day();
-      const slot = weeklySlots.find((s) => s.dow === dow);
-      if (slot) publishedSpecs.push({ offset: -d, hour: slot.hour, minute: slot.minute });
-    }
-    // Off-schedule extras (recent, varied times) — organic feel.
-    for (const d of [3, 8, 13, 19, 26, 33]) {
-      publishedSpecs.push({ offset: -d, hour: 8 + (d % 9), minute: (d * 13) % 60 });
-    }
-    publishedSpecs.sort((a, b) => a.offset - b.offset);
-    for (const spec of publishedSpecs) {
-      const { offset } = spec;
-      const integration = integrations[n % integrations.length];
+    const DENSE_PAST = 28; // organic density reaches back this many days
+    const FUTURE_DAYS = 14; // scheduled queue extends this far ahead
+    const analyticsFor = (offset: number): { views: number; likes: number; comments: number } => {
       const recency = (HISTORY_DAYS + offset) / HISTORY_DAYS; // 0 old → 1 new
       const views = Math.round((900 + 6200 * recency) * (0.85 + rand() * 0.3));
       const likes = Math.round(views * (0.045 + rand() * 0.02));
       const comments = Math.round(likes * (0.09 + rand() * 0.05));
-      const inCampaign = offset >= -14 && n % 3 === 0;
-      const id = `demo-${short}-p${n}`;
-      await this._upsertPost({
-        id,
-        orgId,
-        integrationId: integration.id,
-        state: State.PUBLISHED,
-        publishDate: this._at(offset, spec.hour, spec.minute),
-        content: CAPTIONS[n % CAPTIONS.length],
-        group: `demo-${short}-g${n}`,
-        campaignId: inCampaign ? launchCampaignId : null,
-        image: n % 3 === 2 ? '[]' : attach(n), // ~2/3 of posts carry media
-        views,
-        likes,
-        comments,
-      });
-      out.push({ id, integrationId: integration.id, identifier: integration.identifier, state: 'PUBLISHED', offset, views, likes, comments, campaign: inCampaign });
-      n++;
+      return { views, likes, comments };
+    };
+
+    for (let offset = -HISTORY_DAYS; offset <= FUTURE_DAYS; offset++) {
+      const day = dayjs().tz(this._zone()).add(offset, 'day');
+      const dow = day.day();
+      const weekend = dow === 0 || dow === 6;
+      const past = offset < 0;
+
+      const times: { hour: number; minute: number }[] = [];
+      const slot = weeklySlots.find((s) => s.dow === dow);
+      if (past && slot) times.push({ hour: slot.hour, minute: slot.minute });
+      if (offset >= -DENSE_PAST) {
+        const target = weekend ? 1 + Math.floor(rand() * 2) : 3 + Math.floor(rand() * 3);
+        while (times.length < target) {
+          times.push({ hour: 8 + Math.floor(rand() * 11), minute: Math.floor(rand() * 60) });
+        }
+      }
+      times.sort((x, y) => x.hour - y.hour || x.minute - y.minute);
+
+      for (const t of times) {
+        const integration = integrations[n % integrations.length];
+        const state = past ? State.PUBLISHED : State.QUEUE;
+        const campaign = offset >= -21 && offset <= 12 && rand() < 0.33;
+        await emit({
+          offset,
+          hour: t.hour,
+          minute: t.minute,
+          state,
+          integration,
+          campaign,
+          past,
+        });
+      }
     }
 
     // The launch hero post: the spike-day outlier (biggest of the month).
@@ -811,13 +1110,14 @@ export class DemoSeeder {
       await this._upsertPost({
         id,
         orgId,
+        createdById: userId,
         integrationId: integration.id,
         state: State.PUBLISHED,
         publishDate: this._at(-SPIKE_DAYS_AGO, 10, 0),
         content: 'The Winter Drop is LIVE. New shells, merino layers, and the return of the Fireside mug. ❄️🔥',
         group: `demo-${short}-g-hero`,
         campaignId: launchCampaignId,
-        image: attach(2),
+        image: nextImages(3),
         views: 18400,
         likes: 1030,
         comments: 148,
@@ -830,13 +1130,14 @@ export class DemoSeeder {
       await this._upsertPost({
         id: sibId,
         orgId,
+        createdById: userId,
         integrationId: sibling.id,
         state: State.PUBLISHED,
         publishDate: this._at(-SPIKE_DAYS_AGO, 10, 0),
         content: 'The Winter Drop is LIVE. New shells, merino layers, and the return of the Fireside mug. ❄️🔥',
         group: `demo-${short}-g-hero`,
         campaignId: launchCampaignId,
-        image: attach(3),
+        image: nextImages(1),
         views: 9200,
         likes: 610,
         comments: 74,
@@ -853,6 +1154,7 @@ export class DemoSeeder {
       await this._upsertPost({
         id,
         orgId,
+        createdById: userId,
         integrationId: integration.id,
         state: State.ERROR,
         publishDate: this._at(offset, 11, 0),
@@ -864,49 +1166,6 @@ export class DemoSeeder {
       });
       out.push({ id, integrationId: integration.id, identifier: integration.identifier, state: 'ERROR', offset });
       n++;
-    }
-
-    // Scheduled future: 10 posts over the next 14 days (some campaign-tagged,
-    // a multi-channel group, a mix of times so week view looks organic).
-    const futureSpecs = [
-      { offset: 1, campaign: true }, { offset: 2 }, { offset: 3, group: true },
-      { offset: 4 }, { offset: 6, campaign: true }, { offset: 7 },
-      { offset: 9 }, { offset: 11 }, { offset: 12, campaign: true }, { offset: 14 },
-    ];
-    for (const s of futureSpecs) {
-      const integration = integrations[n % integrations.length];
-      const id = `demo-${short}-p${n}`;
-      const group = s.group ? `demo-${short}-g-future` : `demo-${short}-g${n}`;
-      await this._upsertPost({
-        id,
-        orgId,
-        integrationId: integration.id,
-        state: State.QUEUE,
-        publishDate: this._at(s.offset, 9 + (n % 9), (n * 11) % 60),
-        content: CAPTIONS[(n + 7) % CAPTIONS.length],
-        group,
-        campaignId: s.campaign ? launchCampaignId : null,
-        image: n % 2 === 0 ? attach(n) : '[]',
-      });
-      out.push({ id, integrationId: integration.id, identifier: integration.identifier, state: 'QUEUE', offset: s.offset, campaign: !!s.campaign });
-      n++;
-      if (s.group) {
-        const sibling = integrations[(n + 3) % integrations.length];
-        const sibId = `demo-${short}-p${n}`;
-        await this._upsertPost({
-          id: sibId,
-          orgId,
-          integrationId: sibling.id,
-          state: State.QUEUE,
-          publishDate: this._at(s.offset, 10, 30),
-          content: CAPTIONS[(n + 7) % CAPTIONS.length],
-          group,
-          campaignId: null,
-          image: attach(n),
-        });
-        out.push({ id: sibId, integrationId: sibling.id, identifier: sibling.identifier, state: 'QUEUE', offset: s.offset });
-        n++;
-      }
     }
 
     // Drafts — including the approval-flow set on the launch campaign:
@@ -925,13 +1184,14 @@ export class DemoSeeder {
       await this._upsertPost({
         id,
         orgId,
+        createdById: userId,
         integrationId: integration.id,
         state: State.DRAFT,
         publishDate: this._at(s.offset, 15, 0),
         content: s.content,
         group: `demo-${short}-g${n}`,
         campaignId: s.campaign ? launchCampaignId : null,
-        image: s.campaign ? attach(n) : '[]',
+        image: s.campaign ? nextImages(s.content.includes('carousel') ? 3 : 1) : '[]',
         approvalStatus: s.approval ?? null,
         approvedById: s.approval === 'approved' ? userId : null,
         approvedAt: s.approval === 'approved' ? dayjs().subtract(2, 'day').toDate() : null,
@@ -939,6 +1199,35 @@ export class DemoSeeder {
       out.push({ id, integrationId: integration.id, identifier: integration.identifier, state: 'DRAFT', offset: s.offset, campaign: !!s.campaign });
       n++;
     }
+
+    // Oldest → newest so downstream slice(-N) selectors (short links, comments)
+    // land on the most recent posts.
+    out.sort((a, b) => a.offset - b.offset);
+
+    // Published posts get platform-plausible release ids/URLs — the
+    // social-comments endpoint and the modal's "Open on platform" both gate on
+    // releaseId being present.
+    await this._prisma.$executeRaw`
+      UPDATE "Post" p
+      SET "releaseId" = 'rel-' || p.id,
+          "releaseURL" = CASE i."providerIdentifier"
+            WHEN 'x' THEN 'https://x.com/solsticesupply/status/' || p.id
+            WHEN 'instagram' THEN 'https://www.instagram.com/p/' || p.id
+            WHEN 'instagram-standalone' THEN 'https://www.instagram.com/p/' || p.id
+            WHEN 'youtube' THEN 'https://www.youtube.com/watch?v=' || p.id
+            WHEN 'facebook' THEN 'https://www.facebook.com/solsticesupply/posts/' || p.id
+            WHEN 'threads' THEN 'https://www.threads.net/@solsticesupply/post/' || p.id
+            WHEN 'linkedin' THEN 'https://www.linkedin.com/feed/update/' || p.id
+            WHEN 'linkedin-page' THEN 'https://www.linkedin.com/feed/update/' || p.id
+            WHEN 'tiktok' THEN 'https://www.tiktok.com/@solsticesupply/video/' || p.id
+            ELSE 'https://solstice.example/social/' || p.id
+          END
+      FROM "Integration" i
+      WHERE p."integrationId" = i.id
+        AND p.state = 'PUBLISHED'
+        AND p."releaseId" IS NULL
+        AND p.id LIKE 'demo-%'
+        AND p."organizationId" = ${orgId}`;
 
     return out;
   }
@@ -953,6 +1242,8 @@ export class DemoSeeder {
     group: string;
     campaignId: string | null;
     image: string;
+    settings?: string;
+    parentPostId?: string | null;
     error?: string;
     views?: number;
     likes?: number;
@@ -960,6 +1251,7 @@ export class DemoSeeder {
     approvalStatus?: string | null;
     approvedById?: string | null;
     approvedAt?: Date | null;
+    createdById?: string | null;
   }): Promise<void> {
     const data = {
       state: p.state,
@@ -969,7 +1261,8 @@ export class DemoSeeder {
       content: p.content,
       group: p.group,
       image: p.image,
-      settings: '{}',
+      settings: p.settings ?? '{}',
+      parentPostId: p.parentPostId ?? null,
       creationMethod: CreationMethod.CLI,
       campaignId: p.campaignId,
       error: p.error ?? null,
@@ -979,6 +1272,7 @@ export class DemoSeeder {
       approvalStatus: p.approvalStatus ?? null,
       approvedById: p.approvedById ?? null,
       approvedAt: p.approvedAt ?? null,
+      createdById: p.createdById ?? null,
     };
     await this._prisma.post.upsert({
       where: { id: p.id },
@@ -1041,11 +1335,11 @@ export class DemoSeeder {
     });
     await this._prisma.analyticsSnapshot.createMany({ data: snapshotRows });
 
-    // Per-post rising curves for the 8 biggest published posts.
+    // Per-post rising curves for the 16 biggest published posts.
     const top = posts
       .filter((p) => p.state === 'PUBLISHED' && (p.views ?? 0) > 0)
       .sort((a, b) => (b.views ?? 0) - (a.views ?? 0))
-      .slice(0, 8);
+      .slice(0, 16);
     const postRows: any[] = [];
     for (const p of top) {
       const daysLive = Math.min(Math.abs(p.offset), HISTORY_DAYS - 1);
@@ -1056,6 +1350,7 @@ export class DemoSeeder {
         postRows.push(
           { organizationId: orgId, postId: p.id, integrationId: p.integrationId, metric: 'views', value: Math.round((p.views ?? 0) * curve), date: date.toDate() },
           { organizationId: orgId, postId: p.id, integrationId: p.integrationId, metric: 'likes', value: Math.round((p.likes ?? 0) * curve), date: date.toDate() },
+          { organizationId: orgId, postId: p.id, integrationId: p.integrationId, metric: 'comments', value: Math.round((p.comments ?? 0) * curve), date: date.toDate() },
         );
       }
     }
@@ -1295,8 +1590,9 @@ export class DemoSeeder {
           organizationId: orgId,
           identifier: p.identifier,
           version: 'v1',
-          enabled: true,
-          isActive: !!p.isActive,
+          // B6: disabled + inactive — grid richness stays, fake-key shadowing dies.
+          enabled: false,
+          isActive: false,
           credentials: this._encryption.encrypt(
             JSON.stringify({ apiKey: `demo-${p.identifier}-key` }),
           ),
@@ -1551,6 +1847,11 @@ export class DemoSeeder {
     if (integrationIds.length) {
       await this._prisma.integration.deleteMany({ where: { id: { in: integrationIds } } });
     }
+    // Platform provider configs the seeder created (demo-prov-* ids only — an
+    // admin-curated row has a cuid id and is never touched). No inbound FKs.
+    await this._prisma.providerConfiguration.deleteMany({
+      where: { id: { startsWith: `${DEMO_ID_PREFIX}prov-` } },
+    });
     await this._prisma.analyticsAlertRule.deleteMany({
       where: { organizationId: orgId, id: { startsWith: DEMO_ID_PREFIX } },
     });
