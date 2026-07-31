@@ -11,6 +11,7 @@ interface MyDesign {
   id: string;
   name: string;
   updatedAt: string;
+  previewUrl?: string | null;
   previewDataUrl?: string | null;
 }
 
@@ -66,10 +67,10 @@ export const MyDesignsPanel: FC<MyDesignsPanelProps> = ({ onOpen, onClose }) => 
               }}
               className="group relative border border-[#2a2a4a] rounded-lg overflow-hidden hover:border-designerAccent/50 transition-colors cursor-pointer bg-newBgColorInner"
             >
-              {d.previewDataUrl ? (
-                // eslint-disable-next-line @next/next/no-img-element -- data URL preview
+              {d.previewUrl || d.previewDataUrl ? (
+                // eslint-disable-next-line @next/next/no-img-element -- file URL or data URL preview
                 <img
-                  src={d.previewDataUrl}
+                  src={d.previewUrl || d.previewDataUrl || undefined}
                   alt={d.name}
                   className="w-full aspect-square object-cover"
                 />

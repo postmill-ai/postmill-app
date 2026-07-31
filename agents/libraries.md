@@ -42,7 +42,7 @@ here. Tour of `libraries/nestjs-libraries/src/`:
 | `agent/` | LangGraph generator agent (`agent.graph.service.ts` — `StateGraph`, `agent.graph.insert.service.ts`, topics/categories) | Changes to the AI content-generation graph. |
 | `chat/` | Mastra chat agent + MCP: `mastra.service.ts`, `agents/`, `tools/`, `content-pipeline/`, `start.mcp.ts` (MCP entrypoint) | Chat-agent tools, MCP surface. |
 | `ai/` | `ai-model.provider.ts` (AI facade), `ai-settings.manager.ts`, `governance/`, `rag/`, `defaults/`, `ai-provider.interface.ts` | AI-call policy/facade changes. No env AI-key fallback — no active provider ⇒ AI off for that org. |
-| `ai-designer/` | AI Designer pipeline: `conductor/`, `agent-mesh/`, `agents/`, `skills/`, `guards/` | AI Designer orchestration work. |
+| `ai-designer/` | AI Designer pipeline: `conductor/`, `agent-mesh/`, `agents/`, `skills/`, `guards/`, `styles/` (style preset registry — fonts must come from the curated catalog in `media/design-render/font-loader.service.ts`), `util/` (per-aspect helpers) | AI Designer orchestration work. |
 | `analytics/` | Persisted analytics: aggregation, overview/detail/insights/export/share services, anomaly detection | Analytics computation or rollup changes. |
 | `media/` | `media.module.ts` + per-studio subdirs (`heygen`, `replicate-studio`, `deepgram`, `slide`, `caption`, `stock`, `stream`, `studio`, `design-render`, `designer-doc`), `media-provider-adapter.interface.ts` | Media-generation studio backend. |
 | `providers/` | `providers.module.ts` (re-exports `PROVIDER_KERNEL` token, defined in `provider-kernel.token.ts`), `provider-resolution.service.ts` — **sole provider resolution path**; `provider-catalog.service.ts`, `provider-health.service.ts` | Wiring providers into DI. Do not resolve providers anywhere else. |
@@ -130,8 +130,11 @@ path. Full mechanics, versioning lifecycle, and how to add a provider: `agents/p
   Detail: `agents/frontend.md`; component/design rules: `agents/ui-standards.md`.
 - **`apps/commands`** (`postmill-command`) — operator CLI: NestJS `nestjs-command` runner
   (`src/main.ts` + `src/command.module.ts`) with tasks in `src/tasks/`: `seed-demo.ts`,
-  `refresh.tokens.ts`, `configuration.ts`, `agent.run.ts`, `backfill-provider-versions.ts`. Touch
-  when adding an operator/maintenance command; **never** put request-path logic here.
+  `refresh.tokens.ts`, `configuration.ts`, `agent.run.ts`, `backfill-provider-versions.ts`,
+  `backfill-design-thumbnails.ts`. The command module imports the same `@Global` module set
+  as the backend app module (minus `ChatModule`) plus `ProvidersBootstrap` — without those,
+  `DatabaseModule` services and kernel resolution (`storage/local@v1`, …) fail standalone.
+  Touch when adding an operator/maintenance command; **never** put request-path logic here.
 - **`apps/extension`** (`postmill-extension`) — Vite + `@crxjs` browser extension for cookie-based
   platform auth. `src/background.ts` is the service worker; `src/providers/` holds the per-site
   cookie providers (`providers/list/`, e.g. `skool.provider.ts`), `cookie-provider.interface.ts`,

@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { BadRequestException, Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { DesignRepository } from '@postmill-ai/nestjs-libraries/database/prisma/design/design.repository';
 import { DesignerDocService } from '@postmill-ai/nestjs-libraries/media/designer-doc/designer-doc.service';
 import type { DesignerDoc } from '@postmill-ai/nestjs-libraries/media/designer-doc/designer-doc.schema';
@@ -6,6 +6,8 @@ import { FileService } from '@postmill-ai/nestjs-libraries/database/prisma/file/
 
 @Injectable()
 export class DesignService {
+  private readonly _logger = new Logger(DesignService.name);
+
   constructor(
     private readonly _designRepository: DesignRepository,
     private readonly _designerDocService: DesignerDocService,
@@ -21,7 +23,15 @@ export class DesignService {
       this._designRepository.findByOrg(orgId, page, limit),
       this._designRepository.countByOrg(orgId),
     ]);
-    return { designs, total, page, limit };
+    return {
+      designs: designs.map((design) => ({
+        ...design,
+        previewUrl: (design as any).previewFile?.path ?? design.previewDataUrl ?? null,
+      })),
+      total,
+      page,
+      limit,
+    };
   }
 
   async createDesign(orgId: string, userId: string, data: {
@@ -34,6 +44,9 @@ export class DesignService {
     campaignId?: string;
   }) {
     let payload: any = { ...data, organizationId: orgId, createdById: userId };
+    if (data.previewFileId) {
+      await this._assertOwnedFile(orgId, data.previewFileId);
+    }
     if (data.doc !== undefined) {
       const validatedDoc = this._designerDocService.validate(data.doc);
       const firstOutput = validatedDoc.outputs[0];
@@ -56,6 +69,13 @@ export class DesignService {
     previewFileId?: string;
   }) {
     let payload: any = { ...data };
+    if (data.previewFileId) {
+      await this._assertOwnedFile(orgId, data.previewFileId);
+    } else if (data.previewDataUrl) {
+      // The save fell back to a data-URL preview (thumbnail upload failed) —
+      // clear the stale file pointer so the fresher data URL wins in listings.
+      payload.previewFileId = null;
+    }
     if (data.doc !== undefined) {
       const validatedDoc = this._designerDocService.validate(data.doc);
       const firstOutput = validatedDoc.outputs[0];
@@ -66,7 +86,13 @@ export class DesignService {
         height: firstOutput.height,
       };
     }
-    return this._designRepository.update(id, orgId, payload);
+    // Only look up the previous row when this write moves the preview pointer.
+    const previous = payload.previewFileId !== undefined
+      ? await this._designRepository.findById(orgId, id)
+      : null;
+    const updated = await this._designRepository.update(id, orgId, payload);
+    await this._cleanupReplacedFile(orgId, previous?.previewFileId, payload.previewFileId);
+    return updated;
   }
 
   async deleteDesign(orgId: string, id: string) {
@@ -74,7 +100,11 @@ export class DesignService {
   }
 
   async listTemplates(orgId: string) {
-    return this._designRepository.findTemplatesByOrg(orgId);
+    const templates = await this._designRepository.findTemplatesByOrg(orgId);
+    return templates.map((t) => ({
+      ...t,
+      thumbnail: (t as any).thumbnailFile?.path ?? null,
+    }));
   }
 
   async getTemplate(orgId: string, id: string) {
@@ -87,7 +117,18 @@ export class DesignService {
     category: string;
     doc: any;
     isSystem?: boolean;
+    thumbnailFileId?: string;
   }) {
+    if (data.thumbnailFileId) {
+      // System templates have no organizationId; running the ownership check
+      // with `undefined` would let Prisma ignore it and pass any org's file.
+      if (!data.organizationId) {
+        throw new BadRequestException(
+          'A thumbnail file requires an owning organization'
+        );
+      }
+      await this._assertOwnedFile(data.organizationId, data.thumbnailFileId);
+    }
     const validatedDoc = this._designerDocService.validate(data.doc);
     return this._designRepository.createTemplate({
       ...data,
@@ -102,11 +143,20 @@ export class DesignService {
     thumbnailFileId?: string;
   }) {
     let payload: any = { ...data };
+    if (data.thumbnailFileId) {
+      await this._assertOwnedFile(orgId, data.thumbnailFileId);
+    }
     if (data.doc !== undefined) {
       const validatedDoc = this._designerDocService.validate(data.doc);
       payload = { ...payload, doc: validatedDoc };
     }
-    return this._designRepository.updateTemplate(id, orgId, payload);
+    // Only look up the previous row when this write moves the thumbnail pointer.
+    const previous = data.thumbnailFileId
+      ? await this._designRepository.findTemplateForOrg(id, orgId)
+      : null;
+    const updated = await this._designRepository.updateTemplate(id, orgId, payload);
+    await this._cleanupReplacedFile(orgId, previous?.thumbnailFileId, payload.thumbnailFileId);
+    return updated;
   }
 
   async deleteTemplate(orgId: string, id: string) {
@@ -121,6 +171,33 @@ export class DesignService {
     const validated = this._designerDocService.validate(template.doc);
     const stripped = this._stripIds(validated);
     return this._designerDocService.assignIdsAndNormalize(stripped);
+  }
+
+  private async _assertOwnedFile(orgId: string, fileId: string) {
+    const file = await this._fileService.getFileById(orgId, fileId);
+    if (!file) {
+      throw new BadRequestException('Invalid preview/thumbnail file');
+    }
+  }
+
+  // Autosave mints a fresh thumbnail File on every save; the replaced one
+  // would otherwise orphan and keep counting against the org storage quota.
+  // Best-effort: a deletion failure must never fail the design/template write.
+  private async _cleanupReplacedFile(
+    orgId: string,
+    previousFileId: string | null | undefined,
+    nextFileId: string | null | undefined
+  ) {
+    if (!previousFileId || previousFileId === nextFileId) {
+      return;
+    }
+    try {
+      await this._fileService.softDelete(previousFileId, orgId);
+    } catch (err) {
+      this._logger.warn(
+        `Could not delete replaced preview file ${previousFileId}: ${(err as Error)?.message}`
+      );
+    }
   }
 
   private _stripIds(doc: DesignerDoc): DesignerDoc {

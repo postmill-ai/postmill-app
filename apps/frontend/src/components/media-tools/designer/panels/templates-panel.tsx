@@ -135,7 +135,12 @@ export const TemplatesPanel: FC<TemplatesPanelProps> = ({ store, onClose, guard 
               className="rounded-lg border border-studioBorder bg-newBgColorInner overflow-hidden group"
             >
               <div className="aspect-[4/3] bg-studioBorder/10 flex items-center justify-center text-[20px] text-newTextColor/20">
-                {template.isSystem ? '◧' : '▣'}
+                {template.thumbnail ? (
+                  // eslint-disable-next-line @next/next/no-img-element -- server-rendered template thumbnail
+                  <img src={template.thumbnail} alt={template.name} className="w-full h-full object-cover" />
+                ) : (
+                  template.isSystem ? '◧' : '▣'
+                )}
               </div>
               <div className="p-2">
                 <div className="text-[11px] text-textColor truncate">{template.name}</div>

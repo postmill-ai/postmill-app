@@ -410,15 +410,52 @@ export const Designer: FC<DesignerProps> = ({
 
   const [debouncedDoc] = useDebounce(doc, 2000);
 
+  // Snapshot the stage canvas to a small JPEG and upload it as a File. Falls
+  // back to the raw data URL when the upload fails so a preview is never lost.
+  // ANY failure here (incl. a SecurityError from a tainted cross-origin canvas)
+  // must degrade to "no preview" — the doc save is never gated on a thumbnail.
+  const uploadPreview = useCallback(async (): Promise<{
+    previewFileId?: string;
+    previewDataUrl?: string;
+  }> => {
+    try {
+      const stageEl = document.querySelector('.konva-stage canvas') as HTMLCanvasElement;
+      const previewDataUrl = getThumbnailDataUrl(stageEl);
+      const previewBlob = previewDataUrl ? dataUrlToBlob(previewDataUrl) : null;
+      if (previewBlob) {
+        try {
+          const form = new FormData();
+          form.append('file', previewBlob, 'thumbnail.jpg');
+          const uploadRes = await fetch('/files/upload-simple', { method: 'POST', body: form });
+          if (uploadRes.ok) {
+            const uploadData = await uploadRes.json();
+            return { previewFileId: uploadData.id };
+          }
+        } catch {
+          // Fall back to the data URL below.
+        }
+      }
+      return previewDataUrl ? { previewDataUrl } : {};
+    } catch {
+      return {};
+    }
+  }, [fetch]);
+
   useEffect(() => {
     if (!debouncedDoc || !currentDesignId || !isDirty) return;
     const sentDoc = debouncedDoc;
     store.getState().setSaving(true);
-    fetch(`/media/designs/${currentDesignId}`, {
-      method: 'PUT',
-      body: JSON.stringify({ doc: sentDoc }),
-    })
-      .then((res) => res.json())
+    (async () => {
+      const preview = await uploadPreview();
+      // If a newer edit landed while the thumbnail upload was in flight, skip
+      // the preview fields — a stale thumbnail must not clobber the design.
+      const previewFields = store.getState().doc === sentDoc ? preview : {};
+      const res = await fetch(`/media/designs/${currentDesignId}`, {
+        method: 'PUT',
+        body: JSON.stringify({ doc: sentDoc, ...previewFields }),
+      });
+      await res.json();
+    })()
       .then(() => {
         // Only clear isDirty if no edit landed while the PUT was in flight —
         // zustand replaces the doc object on every edit, so a reference mismatch
@@ -432,7 +469,7 @@ export const Designer: FC<DesignerProps> = ({
       .catch(() => {
         store.getState().setSaving(false);
       });
-  }, [debouncedDoc, currentDesignId, isDirty, fetch, store]);
+  }, [debouncedDoc, currentDesignId, isDirty, fetch, store, uploadPreview]);
 
   const handleExport = useCallback(() => {
     const s = store.getState();
@@ -453,23 +490,7 @@ export const Designer: FC<DesignerProps> = ({
     }
     s.setSaving(true);
     try {
-      const stageEl = document.querySelector('.konva-stage canvas') as HTMLCanvasElement;
-      const previewDataUrl = getThumbnailDataUrl(stageEl);
-      let previewFileId: string | undefined;
-      const previewBlob = previewDataUrl ? dataUrlToBlob(previewDataUrl) : null;
-      if (previewBlob) {
-        try {
-          const form = new FormData();
-          form.append('file', previewBlob, 'thumbnail.jpg');
-          const uploadRes = await fetch('/files/upload-simple', { method: 'POST', body: form });
-          if (uploadRes.ok) {
-            const uploadData = await uploadRes.json();
-            previewFileId = uploadData.id;
-          }
-        } catch {
-          // Fall back to storing the data URL below.
-        }
-      }
+      const { previewFileId, previewDataUrl } = await uploadPreview();
       const payload: Record<string, unknown> = {
         name: s.designName,
         doc: s.doc,
@@ -502,7 +523,7 @@ export const Designer: FC<DesignerProps> = ({
     } finally {
       s.setSaving(false);
     }
-  }, [fetch, toaster, store, brandViolations, translate]);
+  }, [fetch, toaster, store, brandViolations, translate, uploadPreview]);
 
   const handleSaveAsTemplate = useCallback(async () => {
     const s = store.getState();

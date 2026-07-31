@@ -1,5 +1,6 @@
 import {
   IsObject,
+  IsOptional,
   IsString,
 } from 'class-validator';
 
@@ -12,4 +13,8 @@ export class CreateTemplateDto {
 
   @IsObject()
   doc!: Record<string, any>;
+
+  @IsOptional()
+  @IsString()
+  thumbnailFileId?: string;
 }
