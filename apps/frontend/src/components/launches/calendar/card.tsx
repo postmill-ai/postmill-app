@@ -7,7 +7,11 @@ import { useDrag } from 'react-dnd';
 import { Post, State, Tags, Integration } from '@prisma/client';
 import type { Integrations } from './context';
 import { useT } from '@postmill-ai/react/translation/get.transation.service.client';
+import { readableTextColor } from '@postmill-ai/frontend/components/shared/readable-text-color';
+import { useMediaDirectory } from '@postmill-ai/react/helpers/use.media.directory';
+import { VideoOrImage } from '@postmill-ai/react/helpers/video.or.image';
 import { stripHtmlValidation } from '@postmill-ai/helpers/utils/strip.html.validation';
+import { isVideoPath } from '@postmill-ai/helpers/utils/video.extensions';
 import { newDayjs } from '@postmill-ai/frontend/components/layout/set.timezone';
 import { isUSCitizen } from '@postmill-ai/frontend/components/launches/helpers/isuscitizen.utils';
 import { useVariables } from '@postmill-ai/react/helpers/variable.context';
@@ -51,6 +55,7 @@ export const CalendarItem: FC<{
     lastComments?: number | null;
     commentCount?: number;
     unreadComments?: number;
+    thumb?: { path: string; count: number } | null;
   };
 }> = memo(function CalendarItem(props) {
   const t = useT();
@@ -72,6 +77,10 @@ export const CalendarItem: FC<{
   } = props;
   // Per-post heading colour (falls back to a tag colour, then the default primary blue).
   const headerColor = post.color || post?.tags?.[0]?.tag?.color;
+  // WCAG-AA readable text on the coloured header band (was mix-blend-difference,
+  // which could land on mid-contrast text).
+  const headerTextColor = headerColor ? readableTextColor(headerColor) : '#ffffff';
+  const mediaDir = useMediaDirectory();
   const { disableXAnalytics } = useVariables();
   const user = useUser();
   const showCreationMethodBadge =
@@ -132,14 +141,64 @@ export const CalendarItem: FC<{
     danger: true,
   });
 
+  // Mini-post identity: the channel's real handle when it provides one. Page-style
+  // profiles with whitespace (e.g. a Facebook page name) are shown as-is — they are
+  // display names, not handles. No profile → no handle row segment (never a
+  // placeholder handle).
+  const profile = post.integration?.profile;
+  const handle = profile
+    ? profile.startsWith('@') || /\s/.test(profile)
+      ? profile
+      : `@${profile}`
+    : undefined;
+
+  // Publishing status as a coloured dot in the header band — green is published,
+  // red is failed (tooltip carries the error), blue is scheduled/publishing.
+  const statusDot = (() => {
+    switch (state) {
+      case 'PUBLISHED':
+        return { cls: 'bg-green-500', tip: t('published', 'Published') };
+      case 'QUEUE':
+        return { cls: 'bg-blue-500', tip: t('scheduled', 'Scheduled') };
+      case 'PUBLISHING':
+        return {
+          cls: 'bg-blue-500 animate-pulse',
+          tip: t('publishing', 'Publishing'),
+        };
+      case 'ERROR':
+        return {
+          cls: 'bg-red-500',
+          tip:
+            post.error ||
+            t(
+              'post_error_occurred',
+              'An error occurred while publishing this post'
+            ),
+        };
+      case 'DRAFT':
+        return { cls: 'bg-amber-500', tip: t('draft', 'Draft') };
+      default:
+        return null;
+    }
+  })();
+
+  const hasStats =
+    (post.lastViews !== undefined && post.lastViews !== null) ||
+    (post.lastLikes !== undefined && post.lastLikes !== null) ||
+    (post.lastComments !== undefined && post.lastComments !== null) ||
+    !!post.commentCount;
+
   return (
     <div
       // @ts-ignore
       ref={dragRef}
       className={clsx(
-        'w-full flex h-full flex-1 flex-col group',
-        'relative',
-        state === 'ERROR' && 'rounded-[10px] ring-2 ring-red-500'
+        // text-left: past-day cells sit inside a `text-center` overlay wrapper —
+        // keep every row of the mini post left-aligned regardless. No
+        // overflow-hidden here: the unread/error/creation badges hang over the
+        // card edges; the band and body carry the rounding instead.
+        'w-full flex flex-col group relative rounded-[10px] text-left',
+        state === 'ERROR' && 'ring-2 ring-red-500'
       )}
       style={{
         opacity,
@@ -179,112 +238,149 @@ export const CalendarItem: FC<{
           />
         </div>
       )}
+      {/* Header band: tag names · status dot · time · actions. */}
       <div
-        className={clsx(
-          'text-white text-[11px] max-h-[24px] h-[24px] min-h-[24px] w-full rounded-tr-[10px] rounded-tl-[10px] flex items-center justify-between gap-[4px] ps-[8px] pe-[3px] bg-btnPrimary'
-        )}
+        className="h-[20px] min-h-[20px] w-full rounded-tr-[10px] rounded-tl-[10px] flex items-center justify-between gap-[4px] ps-[6px] pe-[2px] bg-btnPrimary"
         style={{
           backgroundColor: headerColor,
+          color: headerTextColor,
         }}
       >
-        <div
-          className={clsx(headerColor ? 'mix-blend-difference' : '', 'truncate')}
-        >
+        <div className="truncate min-w-0 text-[9px] font-medium leading-[20px]">
           {post.tags.map((p) => p.tag.name).join(', ')}
         </div>
-        <KebabMenu
-          ariaLabel={t('post_actions', 'Post actions')}
-          align="right"
-          size={20}
-          width={188}
-          items={actionItems}
-          triggerClassName={clsx(
-            '!text-white hover:!bg-white/25',
-            headerColor && 'mix-blend-difference'
+        <div className="flex items-center gap-[3px] shrink-0">
+          {statusDot && (
+            <span
+              className={clsx('w-[6px] h-[6px] rounded-full', statusDot.cls)}
+              data-tooltip-id="tooltip"
+              data-tooltip-content={statusDot.tip}
+            />
           )}
-        />
+          {showTime && (
+            <span className="text-[9px] leading-none opacity-80 whitespace-nowrap">
+              {newDayjs(post.publishDate)
+                .local()
+                .format(isUSCitizen() ? 'hh:mm A' : 'HH:mm')}
+            </span>
+          )}
+          <KebabMenu
+            ariaLabel={t('post_actions', 'Post actions')}
+            align="right"
+            size={16}
+            width={188}
+            items={actionItems}
+            triggerClassName={clsx(
+              '!text-inherit',
+              headerTextColor === '#000000'
+                ? 'hover:!bg-black/10'
+                : 'hover:!bg-white/25'
+            )}
+          />
+        </div>
       </div>
+      {/* Mini post body: identity · content · media · stats. Vertical stack with
+          every row truncating/clamping — nothing can overflow the card. */}
       <div
         onClick={openPostDetail}
         className={clsx(
-          'gap-[5px] w-full flex h-full flex-1 rounded-br-[10px] rounded-bl-[10px] p-[8px] text-[14px] bg-newColColor cursor-pointer',
-          'relative',
-          isBeforeNow && '!grayscale'
+          'w-full flex flex-col gap-[3px] p-[5px] rounded-br-[10px] rounded-bl-[10px] bg-newColColor cursor-pointer',
+          // Muted style only for missed QUEUE/DRAFT slots — published and
+          // failed posts keep full colour.
+          isBeforeNow && (state === 'QUEUE' || state === 'DRAFT') && '!grayscale'
         )}
       >
-        <div className={clsx('relative min-w-[20px]')}>
-          {/* eslint-disable-next-line @next/next/no-img-element -- external channel avatar */}
-          <img
-            alt=""
-            className="w-[20px] h-[20px] rounded-[8px]"
-            src={post.integration.picture! || '/no-picture.jpg'}
-          />
-          <Image
-            alt=""
-            className="w-[12px] h-[12px] rounded-[8px] absolute z-10 top-[10px] end-0 border border-newTableBorder"
-            src={`/icons/platforms/${post.integration?.providerIdentifier}.png`}
-            width={12}
-            height={12}
-          />
-        </div>
-        <div className="w-full flex-1 flex flex-col min-h-[40px] gap-[2px]">
-          <div className="flex items-center gap-[6px] flex-wrap">
-            <div className="text-start text-[12px]">
-              {state === 'DRAFT' ? t('draft', 'Draft') + ': ' : ''}
+        <div className="flex items-center gap-[4px] min-w-0">
+          <div className="relative shrink-0 w-[18px] h-[18px]">
+            {/* eslint-disable-next-line @next/next/no-img-element -- external channel avatar */}
+            <img
+              alt=""
+              className="w-[18px] h-[18px] rounded-full"
+              src={post.integration.picture! || '/no-picture.jpg'}
+            />
+            <Image
+              alt=""
+              className="w-[9px] h-[9px] rounded-full absolute z-10 -bottom-[2px] -end-[2px] border border-newTableBorder"
+              src={`/icons/platforms/${post.integration?.providerIdentifier}.png`}
+              width={9}
+              height={9}
+            />
+          </div>
+          <div className="shrink-0 max-w-[55%] truncate text-[10px] font-semibold leading-[12px]">
+            {post.integration.name}
+          </div>
+          {handle && (
+            <div className="flex-1 min-w-0 truncate text-[9px] leading-[12px] text-textColor/60">
+              {handle}
             </div>
-            {state === 'PUBLISHED' && (
-              <div className="inline-flex items-center gap-[3px] bg-green-500 text-white text-[10px] px-[5px] py-[1px] rounded-full leading-[14px]">
-                <div className="w-[4px] h-[4px] rounded-full bg-white" />
-                {t('published', 'Published')}
+          )}
+        </div>
+        <div className="min-w-0 text-[10px] leading-[13px] whitespace-pre-wrap break-words line-clamp-3">
+          {stripHtmlValidation('none', post.content, false, true, false) ||
+            t('no_content', 'no content')}
+        </div>
+        {post.thumb && (
+          <div className="relative shrink-0 w-full h-[56px] rounded-[6px] overflow-hidden border border-newTableBorder">
+            <VideoOrImage
+              autoplay={false}
+              src={mediaDir.set(post.thumb.path)}
+              videoClassName="object-cover"
+            />
+            {/* Videos without a poster render a black first frame — a play
+                badge makes the strip read as a video either way. */}
+            {isVideoPath(post.thumb.path) && (
+              <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+                <div className="w-[18px] h-[18px] rounded-full bg-black/60 flex items-center justify-center">
+                  <svg width="7" height="8" viewBox="0 0 7 8" fill="white" aria-hidden="true">
+                    <path d="M1 0.8l5 3.2-5 3.2V0.8z" />
+                  </svg>
+                </div>
               </div>
             )}
-            {state === 'QUEUE' && (
-              <div className="inline-flex items-center gap-[3px] bg-blue-500 text-white text-[10px] px-[5px] py-[1px] rounded-full leading-[14px]">
-                <div className="w-[4px] h-[4px] rounded-full bg-white" />
-                {t('scheduled', 'Scheduled')}
-              </div>
-            )}
-            {state === 'DRAFT' && (
-              <div className="inline-flex items-center gap-[3px] bg-amber-500 text-white text-[10px] px-[5px] py-[1px] rounded-full leading-[14px]">
-                <div className="w-[4px] h-[4px] rounded-full bg-white" />
-                {t('draft', 'Draft')}
+            {post.thumb.count > 1 && (
+              <div className="absolute bottom-[2px] end-[2px] bg-black/60 text-white text-[8px] px-[3px] rounded-full leading-[11px]">
+                +{post.thumb.count - 1}
               </div>
             )}
           </div>
-            <div className="w-full text-ellipsis break-words line-clamp-1 text-start min-h-[18px]">
-              {stripHtmlValidation('none', post.content, false, true, false) ||
-                t('no_content', 'no content')}
-            </div>
-          {(post.lastViews !== undefined && post.lastViews !== null) ||
-          (post.lastLikes !== undefined && post.lastLikes !== null) ||
-          (post.lastComments !== undefined && post.lastComments !== null) ||
-          post.commentCount ? (
-            <div className="flex items-center gap-3 mt-2 text-[12px] text-textColor">
-              {post.lastViews !== undefined && post.lastViews !== null && (
-                <span className="flex items-center gap-1" title={t('views', 'Views')} aria-label={t('views', 'Views')}>
-                  <ViewsIcon /> {formatCompactNumber(post.lastViews)}
-                </span>
-              )}
-              {post.lastLikes !== undefined && post.lastLikes !== null && (
-                <span className="flex items-center gap-1" title={t('likes', 'Likes')} aria-label={t('likes', 'Likes')}>
-                  <LikesIcon /> {formatCompactNumber(post.lastLikes)}
-                </span>
-              )}
-              {post.lastComments !== undefined && post.lastComments !== null ? (
-                <span className="flex items-center gap-1" title={t('replies', 'Replies')} aria-label={t('replies', 'Replies')}>
-                  <CommentsIcon /> {formatCompactNumber(post.lastComments)}
-                </span>
-              ) : post.commentCount ? (
-                <span className="flex items-center gap-1" title={t('replies', 'Replies')} aria-label={t('replies', 'Replies')}>
-                  <CommentsIcon /> {formatCompactNumber(post.commentCount)}
-                </span>
-              ) : null}
-            </div>
-          ) : null}
-        </div>
-        {showTime && (
-          <div className="text-textColor/50 text-[12px] whitespace-nowrap flex items-center">
-            {newDayjs(post.publishDate).local().format(isUSCitizen() ? 'hh:mm A' : 'HH:mm')}
+        )}
+        {hasStats && (
+          <div className="flex items-center gap-[6px] overflow-hidden whitespace-nowrap text-[9px] leading-[12px] text-textColor/70 [&_svg]:h-[9px] [&_svg]:w-[9px]">
+            {post.lastViews !== undefined && post.lastViews !== null && (
+              <span
+                className="flex items-center gap-[2px] shrink-0"
+                title={t('views', 'Views')}
+                aria-label={t('views', 'Views')}
+              >
+                <ViewsIcon /> {formatCompactNumber(post.lastViews)}
+              </span>
+            )}
+            {post.lastLikes !== undefined && post.lastLikes !== null && (
+              <span
+                className="flex items-center gap-[2px] shrink-0"
+                title={t('likes', 'Likes')}
+                aria-label={t('likes', 'Likes')}
+              >
+                <LikesIcon /> {formatCompactNumber(post.lastLikes)}
+              </span>
+            )}
+            {post.lastComments !== undefined && post.lastComments !== null ? (
+              <span
+                className="flex items-center gap-[2px] shrink-0"
+                title={t('replies', 'Replies')}
+                aria-label={t('replies', 'Replies')}
+              >
+                <CommentsIcon /> {formatCompactNumber(post.lastComments)}
+              </span>
+            ) : post.commentCount ? (
+              <span
+                className="flex items-center gap-[2px] shrink-0"
+                title={t('replies', 'Replies')}
+                aria-label={t('replies', 'Replies')}
+              >
+                <CommentsIcon /> {formatCompactNumber(post.commentCount)}
+              </span>
+            ) : null}
           </div>
         )}
       </div>

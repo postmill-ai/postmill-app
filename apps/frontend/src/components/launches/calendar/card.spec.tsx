@@ -130,12 +130,20 @@ describe('CalendarItem card layout (C2)', () => {
     const statsPost = () =>
       basePost({ lastViews: 1500, lastLikes: 250, lastComments: 42 });
 
-    it('renders the title row, content text, and stats footer as separate elements', () => {
-      render(<CalendarItem {...baseProps()} post={statsPost()} />);
+    it('renders identity row, content text, and stats footer as separate elements', () => {
+      const { container } = render(
+        <CalendarItem {...baseProps()} post={statsPost()} />
+      );
 
-      // Title row (state pill)
-      const pill = screen.getByText('Published');
-      expect(pill).toBeTruthy();
+      // Status dot: green = published, state carried in the tooltip
+      const dot = container.querySelector('[data-tooltip-content="Published"]');
+      expect(dot).toBeTruthy();
+      expect(dot!.className).toContain('bg-green-500');
+
+      // Identity row: channel name; no profile → no handle segment, and never
+      // a literal '@username' placeholder.
+      expect(screen.getByText('X')).toBeTruthy();
+      expect(screen.queryByText('@username')).toBeNull();
 
       // Content text
       const content = screen.getByText('Hello card content');
@@ -149,13 +157,10 @@ describe('CalendarItem card layout (C2)', () => {
       expect(likes).toBeTruthy();
       expect(comments).toBeTruthy();
 
-      // All three are distinct DOM elements — none contains another.
-      const titleRow = pill.parentElement!;
+      // Content and stats are distinct DOM elements — neither contains the other.
       const statsFooter = views.closest('span')!.parentElement!;
-      expect(titleRow.contains(content)).toBe(false);
       expect(statsFooter.contains(content)).toBe(false);
       expect(content.contains(views)).toBe(false);
-      expect(titleRow).not.toBe(statsFooter);
     });
 
     it('content element is in normal flow — no absolute positioning class', () => {
@@ -173,6 +178,117 @@ describe('CalendarItem card layout (C2)', () => {
       expect(container.querySelector('span[title="Views"]')).toBeTruthy();
       expect(container.querySelector('span[title="Likes"]')).toBeTruthy();
       expect(container.querySelector('span[title="Replies"]')).toBeTruthy();
+    });
+  });
+
+  describe('mini post identity', () => {
+    it('renders the channel handle from integration.profile', () => {
+      render(
+        <CalendarItem
+          {...baseProps()}
+          post={basePost({
+            integration: {
+              id: 'int-1',
+              providerIdentifier: 'x',
+              picture: '/x.jpg',
+              name: 'X',
+              profile: 'maya.solstice',
+            },
+          })}
+        />
+      );
+
+      expect(screen.getByText('@maya.solstice')).toBeTruthy();
+    });
+
+    it('keeps an already-prefixed handle as-is', () => {
+      render(
+        <CalendarItem
+          {...baseProps()}
+          post={basePost({
+            integration: {
+              id: 'int-1',
+              providerIdentifier: 'x',
+              picture: '/x.jpg',
+              name: 'X',
+              profile: '@maya',
+            },
+          })}
+        />
+      );
+
+      expect(screen.getByText('@maya')).toBeTruthy();
+    });
+
+    it('shows page-style profiles (display names with spaces) without a prefix', () => {
+      render(
+        <CalendarItem
+          {...baseProps()}
+          post={basePost({
+            integration: {
+              id: 'int-1',
+              providerIdentifier: 'facebook',
+              picture: '/fb.jpg',
+              name: 'Solstice Community',
+              profile: 'Solstice Base Camp',
+            },
+          })}
+        />
+      );
+
+      expect(screen.getByText('Solstice Base Camp')).toBeTruthy();
+      expect(screen.queryByText('@Solstice Base Camp')).toBeNull();
+    });
+
+    it('hides the handle row segment when the integration has no profile', () => {
+      const { container } = render(
+        <CalendarItem {...baseProps()} post={basePost()} />
+      );
+
+      // basePost's integration carries no profile — only the channel name
+      // renders; no handle segment (and no placeholder) appears.
+      expect(screen.getByText('X')).toBeTruthy();
+      expect(screen.queryByText(/^@/)).toBeNull();
+      expect(
+        container.querySelector('.text-textColor\\/60')
+      ).toBeNull();
+    });
+  });
+
+  describe('media thumb', () => {
+    it('renders the media strip with a +N badge for extra items', () => {
+      const { container } = render(
+        <CalendarItem
+          {...baseProps()}
+          post={basePost({ thumb: { path: '/m.jpg', count: 3 } })}
+        />
+      );
+
+      expect(container.querySelector('img[alt="Media preview"]')).toBeTruthy();
+      expect(screen.getByText('+2')).toBeTruthy();
+    });
+
+    it('renders no media strip without a thumb', () => {
+      const { container } = render(
+        <CalendarItem {...baseProps()} post={basePost({ thumb: null })} />
+      );
+
+      expect(container.querySelector('img[alt="Media preview"]')).toBeNull();
+    });
+  });
+
+  describe('failed post', () => {
+    it('carries the error message in the failed status dot tooltip', () => {
+      const { container } = render(
+        <CalendarItem
+          {...baseProps({ state: 'ERROR' })}
+          post={basePost({ state: 'ERROR', error: 'boom' })}
+        />
+      );
+
+      const dot = container.querySelector('[data-tooltip-content="boom"]');
+      expect(dot).toBeTruthy();
+      expect(dot!.className).toContain('bg-red-500');
     });
   });
 
