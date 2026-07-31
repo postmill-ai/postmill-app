@@ -94,4 +94,71 @@ describe('AiDesignerCopywriterService', () => {
     expect(content.type).toBe('error');
     expect(content.message).toContain('Malformed agent input');
   });
+
+  it('returns locked texts verbatim and only writes the open slots', async () => {
+    // The model even "rewrites" the locked headline — it must not win.
+    model.generateText.mockResolvedValue(
+      '{"headline":"Model rewrite","cta":"Shop now"}'
+    );
+
+    const res = await handler(
+      JSON.stringify({
+        type: 'copy-request',
+        plan: makePlan(),
+        brand: null,
+        lockedTexts: { headline: 'Labor Day Sale' },
+      }),
+      'org1'
+    );
+
+    const content = JSON.parse(res.content);
+    expect(content.texts).toEqual({
+      headline: 'Labor Day Sale',
+      cta: 'Shop now',
+    });
+
+    // The locked slot is not part of the writing prompt at all.
+    const prompt = model.generateText.mock.calls[0][1] as string;
+    expect(prompt).toContain('- cta (role: cta)');
+    expect(prompt).not.toContain('- headline (role: headline)');
+  });
+
+  it('never calls the model when every copy slot is locked', async () => {
+    const res = await handler(
+      JSON.stringify({
+        type: 'copy-request',
+        plan: makePlan(),
+        brand: null,
+        lockedTexts: { headline: 'Labor Day Sale', cta: 'Shop now' },
+      }),
+      'org1'
+    );
+
+    const content = JSON.parse(res.content);
+    expect(content.texts).toEqual({
+      headline: 'Labor Day Sale',
+      cta: 'Shop now',
+    });
+    expect(model.generateText).not.toHaveBeenCalled();
+  });
+
+  it('ignores locked texts for slots the plan does not have', async () => {
+    model.generateText.mockResolvedValue('{"cta":"Shop now"}');
+
+    const res = await handler(
+      JSON.stringify({
+        type: 'copy-request',
+        plan: makePlan(),
+        brand: null,
+        lockedTexts: { headline: 'Labor Day Sale', ghost: 'no such slot' },
+      }),
+      'org1'
+    );
+
+    const content = JSON.parse(res.content);
+    expect(content.texts).toEqual({
+      headline: 'Labor Day Sale',
+      cta: 'Shop now',
+    });
+  });
 });

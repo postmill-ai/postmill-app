@@ -1,6 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import type { DesignBrief } from '../ai-designer.types';
-import { DESIGN_SKILLS } from './design-skill.registry';
+import { DESIGN_SKILLS, getDesignSkill } from './design-skill.registry';
+import type { DesignSkillLayoutHints } from './design-skill.interface';
 
 @Injectable()
 export class AiDesignerSkillRouter {
@@ -8,6 +9,9 @@ export class AiDesignerSkillRouter {
    * Score every registered skill against the brief and return the best fit.
    * If the top score is below `threshold`, signal low confidence so the
    * Conversationalist can ask the user to choose.
+   *
+   * A user-picked skill (`brief.preferredSkill`, collected by the intake
+   * choice form) is a hard override: it routes with full confidence.
    */
   route(
     brief: DesignBrief,
@@ -18,6 +22,19 @@ export class AiDesignerSkillRouter {
     lowConfidence: boolean;
     alternatives: { skillId: string; title: string; confidence: number }[];
   } {
+    const preferred =
+      typeof brief.preferredSkill === 'string'
+        ? getDesignSkill(brief.preferredSkill)
+        : undefined;
+    if (preferred) {
+      return {
+        skillId: preferred.id,
+        confidence: 1,
+        lowConfidence: false,
+        alternatives: [],
+      };
+    }
+
     const scored = DESIGN_SKILLS.map((skill) => ({
       skill,
       confidence: skill.match(brief),
@@ -39,10 +56,14 @@ export class AiDesignerSkillRouter {
   }
 
   getSkillPrompt(skillId: string): string {
-    return DESIGN_SKILLS.find((s) => s.id === skillId)?.systemPrompt ?? '';
+    return getDesignSkill(skillId)?.systemPrompt ?? '';
+  }
+
+  getLayoutHints(skillId: string): DesignSkillLayoutHints | undefined {
+    return getDesignSkill(skillId)?.layoutHints;
   }
 
   getRubric(skillId: string) {
-    return DESIGN_SKILLS.find((s) => s.id === skillId)?.rubric;
+    return getDesignSkill(skillId)?.rubric;
   }
 }

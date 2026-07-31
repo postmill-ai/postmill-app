@@ -9,10 +9,12 @@ import { AIModelProvider } from '@postmill-ai/nestjs-libraries/ai/ai-model.provi
 import { repair } from '@reaatech/structured-repair-core';
 import { z } from 'zod';
 import type { DesignPlan } from '../../ai-designer.types';
+import { isCopySlot } from '../../ai-designer.types';
 import {
   isAgentInputError,
   parseAgentInput,
 } from '../../util/parse-agent-input';
+import { matchSlotTexts } from '../../util/slot-keys';
 
 interface CopyBrand {
   instructions?: string;
@@ -26,6 +28,12 @@ interface CopywriterInput {
   plan: DesignPlan;
   brand: CopyBrand | null;
   slotTexts?: Record<string, string>;
+  /**
+   * User-approved copy from the accepted plan card. Locked slots are returned
+   * verbatim and never sent to the model for a rewrite — only the remaining
+   * (open) copy slots are written.
+   */
+  lockedTexts?: Record<string, string>;
 }
 
 @Injectable()
@@ -52,6 +60,7 @@ export class AiDesignerCopywriterService implements OnModuleInit {
       payload.plan,
       payload.brand,
       payload.slotTexts,
+      payload.lockedTexts,
       (context.metadata?.orgId as string | undefined) ?? undefined
     );
 
@@ -65,16 +74,33 @@ export class AiDesignerCopywriterService implements OnModuleInit {
     plan: DesignPlan,
     brand: CopyBrand | null,
     existingTexts: Record<string, string> | undefined,
+    lockedTexts: Record<string, string> | undefined,
     orgId: string | undefined
   ): Promise<Record<string, string>> {
-    const textSlots = plan.slots.filter((s) => s.kind === 'text');
+    const textSlots = plan.slots.filter(isCopySlot);
     if (textSlots.length === 0) {
       return {};
     }
 
+    // Locked copy (approved by the user on the plan card) is returned
+    // verbatim and never rewritten — the model only sees the open slots.
+    const locked: Record<string, string> = {};
+    if (lockedTexts) {
+      for (const slot of textSlots) {
+        const text = lockedTexts[slot.id];
+        if (typeof text === 'string' && text.trim()) {
+          locked[slot.id] = text;
+        }
+      }
+    }
+    const openSlots = textSlots.filter((slot) => !(slot.id in locked));
+    if (openSlots.length === 0) {
+      return locked;
+    }
+
     const reviseIds = new Set<string>();
     if (existingTexts && Object.keys(existingTexts).length > 0) {
-      for (const slot of textSlots) {
+      for (const slot of openSlots) {
         if (existingTexts[slot.id] !== undefined) {
           reviseIds.add(slot.id);
         }
@@ -82,18 +108,18 @@ export class AiDesignerCopywriterService implements OnModuleInit {
     }
 
     const system = this._buildSystemPrompt(plan, brand);
-    const prompt = this._buildPrompt(plan, textSlots, existingTexts, reviseIds);
+    const prompt = this._buildPrompt(plan, openSlots, existingTexts, reviseIds);
 
     const raw = await this._ai.generateText('utility', prompt, {
       system,
       orgId,
     });
 
-    const parsed = await this._parseRawCopy(raw, textSlots);
+    const parsed = await this._parseRawCopy(raw, openSlots);
 
     // For a revise request, keep unchanged slots from the existing copy.
     if (existingTexts) {
-      for (const slot of textSlots) {
+      for (const slot of openSlots) {
         if (!reviseIds.has(slot.id)) {
           parsed[slot.id] = existingTexts[slot.id] ?? parsed[slot.id] ?? '';
         } else {
@@ -102,9 +128,9 @@ export class AiDesignerCopywriterService implements OnModuleInit {
       }
     }
 
-    const result: Record<string, string> = {};
+    const result: Record<string, string> = { ...locked };
     const missing: string[] = [];
-    for (const slot of textSlots) {
+    for (const slot of openSlots) {
       if (parsed[slot.id]) {
         result[slot.id] = parsed[slot.id];
       } else {
@@ -243,27 +269,11 @@ export class AiDesignerCopywriterService implements OnModuleInit {
 
   /** Match model-returned keys to slots by exact id, then normalized id/role —
    *  models routinely key by the slot's ROLE (e.g. "primaryHeadline") instead
-   *  of its id ("headline"). */
+   *  of its id ("headline"). Shared with the conductor via util/slot-keys. */
   private _matchSlots(
     record: Record<string, unknown>,
     slots: { id: string; role?: string }[]
   ): Record<string, string> {
-    const norm = (v: string) => v.toLowerCase().replace(/[^a-z0-9]/g, '');
-    const out: Record<string, string> = {};
-    const entries = Object.entries(record).filter(
-      ([, v]) => typeof v === 'string' && (v as string).trim().length > 0
-    ) as [string, string][];
-    for (const slot of slots) {
-      const exact = entries.find(([k]) => k === slot.id);
-      if (exact) { out[slot.id] = exact[1]; continue; }
-      const wantId = norm(slot.id);
-      const wantRole = norm(slot.role || '');
-      const fuzzy = entries.find(([k]) => {
-        const nk = norm(k);
-        return nk === wantId || (wantRole && (nk === wantRole || nk.includes(wantRole) || wantRole.includes(nk)));
-      });
-      if (fuzzy) out[slot.id] = fuzzy[1];
-    }
-    return out;
+    return matchSlotTexts(record, slots);
   }
 }

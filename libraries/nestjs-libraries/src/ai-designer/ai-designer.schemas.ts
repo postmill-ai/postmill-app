@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { STYLE_PRESET_IDS } from './styles';
 
 /**
  * Runtime schemas for the JSON columns stored on AiDesignerSession.
@@ -23,17 +24,27 @@ const CustomSizeSchema = z.object({
   name: z.string().max(100).optional(),
 });
 
+const StylePresetIdSchema = z.enum(STYLE_PRESET_IDS);
+
 export const AiDesignerConfigSchema = z
   .object({
-    channels: z.array(z.string().max(100)).min(1).max(20),
+    channels: z.array(z.string().max(100)).max(20),
     customSizes: z.array(CustomSizeSchema).max(10).optional(),
     savePath: z.string().max(300).optional(),
     saveFolderId: z.string().max(100).optional(),
     brandProfileId: z.string().max(100).optional(),
     variants: z.number().int().min(1).max(10),
     referenceFileIds: z.array(z.string().max(100)).max(10).optional(),
+    styleId: StylePresetIdSchema.optional(),
   })
-  .strict();
+  .strict()
+  // Cross-field, mirroring the start DTO: the form allows custom-sizes-only
+  // sessions, so channels may be empty only when custom sizes are provided.
+  .refine(
+    (config) =>
+      config.channels.length > 0 || (config.customSizes?.length ?? 0) > 0,
+    { message: 'provide at least one channel or one custom size', path: ['channels'] }
+  );
 
 const BackgroundSchema = z
   .object({
@@ -43,13 +54,38 @@ const BackgroundSchema = z
   })
   .passthrough();
 
+const SlotStyleSchema = z
+  .object({
+    fontFamily: z.string().max(200).optional(),
+    fontWeight: z.number().int().min(100).max(900).optional(),
+    fill: z.string().max(100).optional(),
+    gradient: z.tuple([z.string().max(100), z.string().max(100)]).optional(),
+    stroke: z
+      .object({
+        color: z.string().max(100),
+        width: z.number().min(0).max(50),
+      })
+      .optional(),
+    shadow: z.boolean().optional(),
+    align: z.enum(['left', 'center', 'right']).optional(),
+    badgeStyle: z.enum(['pill', 'burst', 'ribbon']).optional(),
+  })
+  .passthrough();
+
 const DesignSlotSchema = z
   .object({
     id: z.string().max(200),
     role: z.string().max(100),
-    kind: z.enum(['text', 'image']),
+    kind: z.enum(['text', 'image', 'cta-button', 'badge', 'accent-shape']),
+    style: SlotStyleSchema.optional(),
   })
   .passthrough();
+
+// Layout intent is a hint consumed from Phase 2B on — an unknown value must
+// never sink an otherwise-valid plan, so it falls back instead of failing.
+const ChannelLayoutSchema = z
+  .enum(['stacked', 'side-by-side', 'hero-top', 'minimal-centered'])
+  .catch('stacked');
 
 const AssetNeedSchema = z
   .object({
@@ -61,18 +97,49 @@ const AssetNeedSchema = z
 
 const TypeScaleSchema = z.record(z.number().min(0).max(1000));
 
-const DesignPlanSchema = z
+export const DesignPlanSchema = z
   .object({
     variantId: z.string().max(200),
     skill: z.string().max(200),
     concept: z.string().max(2000),
     formatTemplate: z.string().max(200).optional(),
+    styleId: StylePresetIdSchema.optional(),
     palette: z.array(z.string().max(100)).max(64),
     typeScale: TypeScaleSchema,
     background: BackgroundSchema,
     slots: z.array(DesignSlotSchema).max(200),
     assetNeeds: z.array(AssetNeedSchema).max(200),
+    // Plan-time copy per copy-slot id — shown on the plan card and editable
+    // by the user before acceptance.
+    texts: z.record(z.string().max(200), z.string().max(500)).optional(),
     perChannel: z.record(z.object({ note: z.string().max(1000) })).optional(),
+    channelLayouts: z.record(z.string().max(100), ChannelLayoutSchema).optional(),
+    // Split/sidebar layouts: which side the TEXT panel sits on.
+    panelSide: z.enum(['left', 'right']).optional(),
+  })
+  .passthrough();
+
+/**
+ * Per-item guard for the v2 plan fields, used by the art director to drop a
+ * single malformed LLM plan without failing the batch. Only the fields added
+ * in schema v2 are asserted here — the legacy structural checks stay in the
+ * service so v1-shaped plans keep passing.
+ */
+export const DesignPlanV2FieldsSchema = z
+  .object({
+    styleId: StylePresetIdSchema.optional(),
+    channelLayouts: z
+      .record(z.string().max(100), ChannelLayoutSchema)
+      .optional(),
+    slots: z
+      .array(
+        z
+          .object({
+            style: SlotStyleSchema.optional(),
+          })
+          .passthrough()
+      )
+      .optional(),
   })
   .passthrough();
 
@@ -89,6 +156,7 @@ export const DesignBriefSchema = z
     pendingReviseTarget: z.string().max(200).optional(),
     answeredPromptIds: z.array(z.string().max(200)).max(100).optional(),
     skillId: z.string().max(200).optional(),
+    styleId: StylePresetIdSchema.optional(),
   })
   .passthrough();
 

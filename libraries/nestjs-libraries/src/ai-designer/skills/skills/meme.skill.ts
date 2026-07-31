@@ -11,11 +11,24 @@ export const MemeSkill: DesignSkill = {
   },
   requiredBriefFields: ['intent', 'tone'],
   systemPrompt: `You are an expert meme designer. Rules:
-- Use big, readable Impact-style sans-serif text.
-- Classic layouts: top/bottom caption, two-panel, or image-macro.
-- Keep copy short and punchy; the image carries the joke.
-- Ensure text has a dark stroke or sits on a high-contrast background.
-- Safe-zone: keep captions away from platform UI overlays (top/bottom 10%).`,
+- The image carries the joke; the captions only set it up and land it. Never let copy cover the subject's face or the visual punchline.
+- Use a heavy condensed display font (e.g. Anton) — bold, all-caps, readable at thumbnail size.
+- Classic layout: top/bottom caption bars (the "top-bottom" template). Top caption sets context, bottom caption delivers the punchline.
+- Keep each caption under 10 words; two short lines beat one long one.
+- Every caption gets a dark text stroke (3-5% of font size) or sits on a high-contrast band — memes get reposted onto busy feeds and must survive any background.
+- Scale captions to fill 70-90% of the canvas width; tiny meme text reads as a screenshot, not a meme.
+- Center captions horizontally; vertical-align top caption to the top band, bottom caption to the bottom band.
+- Safe-zone: keep captions inside the central 80% vertically — platform UI overlays eat the top and bottom 10%.
+- No CTAs, no badges, no gradients — meme grammar is image + two captions. Resist decorating it.
+- If the brief's joke needs more than two captions, it is not a meme — simplify the joke, don't add slots.`,
+  layoutHints: {
+    formatTemplates: ['top-bottom'],
+    slotSchema: [
+      { id: 'image', role: 'image', kind: 'image' },
+      { id: 'top', role: 'top-caption', kind: 'text' },
+      { id: 'bottom', role: 'bottom-caption', kind: 'text' },
+    ],
+  },
   rubric: {
     criteria: [
       { name: 'legibility', description: 'Text is readable at thumbnail size', weight: 0.3 },

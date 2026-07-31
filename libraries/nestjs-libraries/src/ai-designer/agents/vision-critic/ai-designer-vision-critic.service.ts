@@ -36,13 +36,64 @@ const VISION_CRITIC_SCHEMA_BLOCK = `Return ONLY a JSON object in this exact shap
         "scope": "format-only",
         "targetSlots": ["bottom-caption"],
         "geometry": { "y": 1500, "fontSize": 64 },
-        "style": { "fill": "#000000", "opacity": 1 },
+        "style": { "fill": "#000000", "opacity": 1, "textStroke": { "color": "#000000", "width": 4 }, "textShadow": false },
         "text": { "slotId": "bottom-caption", "newText": "Updated text" },
         "note": "Move caption above the bottom 200px safe zone and increase size for readability."
+      }
+    },
+    {
+      "formatId": "ig-reel",
+      "slotId": "image",
+      "issue": "The generated photo has a baked-in logo on the packaging.",
+      "fix": {
+        "scope": "shared",
+        "regenerateAsset": { "slotId": "image", "brief": "same subject on plain unbranded packaging" }
       }
     }
   ]
 }`;
+
+// Base criteria appended centrally to every skill's rubric — these defects
+// are genre-independent: text overflow, baked-in asset text, framed insets,
+// feed-thumbnail legibility, copy fidelity, and alignment/collision.
+const BASE_CRITERIA: { name: string; description: string; weight: number }[] = [
+  {
+    name: 'text_fit',
+    description:
+      'No text overflows its band or the canvas edges; every line of copy is fully visible inside its container.',
+    weight: 1,
+  },
+  {
+    name: 'no_baked_in_text',
+    description:
+      'Generated imagery contains NO baked-in text, letters, words, numbers, logos or watermarks — all copy must be crisp rendered text elements, never painted into an image.',
+    weight: 1,
+  },
+  {
+    name: 'no_framed_imagery',
+    description:
+      'No image sits in a floating framed inset or panel with canvas-colored margins around it; imagery is full-bleed or an edge-to-edge band.',
+    weight: 1,
+  },
+  {
+    name: 'feed_legibility',
+    description:
+      'All copy stays legible when the design is scaled down to 25% (feed-thumbnail size, listed per output below): the headline is clearly readable and supporting copy is not microscopic.',
+    weight: 1,
+  },
+  {
+    name: 'text_accuracy',
+    description:
+      'The rendered copy matches the expected copy below exactly — no missing, truncated, duplicated, misspelled or foreign (baked-in) text.',
+    weight: 1,
+  },
+  {
+    name: 'text_alignment',
+    description:
+      'Text is centered/aligned within its containing shape (badge bursts, buttons, pills) and never spills outside it; no text-on-text collisions; text over busy imagery needs a scrim or strong shadow/stroke for contrast.',
+    weight: 1,
+  },
+];
 
 interface CritiqueRequest {
   type: 'critique-request';
@@ -53,6 +104,27 @@ interface CritiqueRequest {
     criteria: { name: string; description: string; weight: number }[];
   };
   outputPreviews?: { formatId: string; url: string }[];
+  /**
+   * Authoritative per-output element data from the design doc (geometry,
+   * fills, z-order) — lets the critic catch low-contrast or occluded text
+   * that the rendered pixels hide.
+   */
+  docSummary?: {
+    formatId: string;
+    width: number;
+    height: number;
+    elements: {
+      originId?: string;
+      type: string;
+      text?: string;
+      fill?: string;
+      x: number;
+      y: number;
+      width: number;
+      height: number;
+      z: number;
+    }[];
+  }[];
 }
 
 interface InterpretRequest {
@@ -110,9 +182,19 @@ export class AiDesignerVisionCriticService implements OnModuleInit {
       };
     }
 
-    const findings = await this._critique(orgId, payload as CritiqueRequest);
+    const { findings, skipped } = await this._critique(
+      orgId,
+      payload as CritiqueRequest
+    );
     return {
-      content: JSON.stringify({ type: 'findings', findings }),
+      // `skipped` distinguishes "the pass never happened" (image not
+      // inlinable, unparseable reply) from a clean zero-finding pass — the
+      // conductor surfaces the former as a degradation note.
+      content: JSON.stringify({
+        type: 'findings',
+        findings,
+        ...(skipped ? { skipped: true } : {}),
+      }),
       workflow_complete: false,
     };
   };
@@ -148,28 +230,45 @@ export class AiDesignerVisionCriticService implements OnModuleInit {
   private async _critique(
     orgId: string,
     payload: CritiqueRequest
-  ): Promise<VisionFinding[]> {
+  ): Promise<{ findings: VisionFinding[]; skipped: boolean }> {
     const imageUrl = await this._resolveImageUrl(orgId, payload.contactSheetUrl);
     if (!imageUrl) {
-      return [];
+      // Not a clean pass: the evidence never reached the model (over the
+      // inline size cap, unreadable file, …) — flag it as skipped.
+      return { findings: [], skipped: true };
     }
 
     const prompt = this._buildPrompt(payload);
     const raw = await this._aiDefaults.vision(orgId, imageUrl, prompt);
 
-    const findings = this._extractFindings(raw);
+    const parsed = this._extractFindings(raw);
+    if (!parsed.parseable) {
+      // An unparseable reply is not a clean bill of health either.
+      return { findings: [], skipped: true };
+    }
+    const findings = parsed.findings;
     if (findings.length === 0 || !payload.outputPreviews) {
-      return findings;
+      return { findings, skipped: false };
     }
 
     // Tiered escalation: if the holistic contact-sheet pass flags detail or
     // legibility issues, run a full-res per-output pass for affected formats.
     const escalated = await this._escalate(orgId, payload, findings);
-    return [...findings, ...escalated];
+    return { findings: [...findings, ...escalated], skipped: false };
   }
 
   private _buildPrompt(payload: CritiqueRequest): string {
-    const criteria = payload.rubric.criteria
+    // Every skill's rubric gets the base criteria appended centrally (a
+    // headline spilling past its band, baked-in asset text, a framed inset,
+    // illegible-at-thumbnail copy, wrong copy, or misaligned/colliding text
+    // is a defect no matter the genre). The composer's font-size clamp and
+    // overlap guard are the deterministic backstops.
+    const criteria = [
+      ...payload.rubric.criteria,
+      ...BASE_CRITERIA.filter(
+        (base) => !payload.rubric.criteria.some((c) => c.name === base.name)
+      ),
+    ]
       .map(
         (c, i) =>
           `${i + 1}. ${c.name} (weight ${c.weight}): ${c.description}`
@@ -186,7 +285,7 @@ export class AiDesignerVisionCriticService implements OnModuleInit {
           )
           .join('\n');
         return [
-          `- ${o.formatId}: ${o.width}x${o.height}`,
+          `- ${o.formatId}: ${o.width}x${o.height} (at 25% feed scale: ${Math.round(o.width * 0.25)}x${Math.round(o.height * 0.25)}px)`,
           safeZones ? `    Safe zones:\n${safeZones}` : undefined,
         ]
           .filter(Boolean)
@@ -209,6 +308,43 @@ export class AiDesignerVisionCriticService implements OnModuleInit {
       })
       .join('\n\n');
 
+    // The expected copy per slot (plan-time `texts`, carried through revise
+    // re-checks on the stored plans) — the ground truth for text_accuracy.
+    const expectedCopy = (payload.plans ?? [])
+      .map((p) => {
+        const texts = Object.entries(p.texts ?? {}).filter(
+          ([, text]) => typeof text === 'string' && text.trim()
+        );
+        if (texts.length === 0) return undefined;
+        const lines = texts
+          .map(([slotId, text]) => `    - ${slotId}: "${text}"`)
+          .join('\n');
+        return `  - variant ${p.variantId}:\n${lines}`;
+      })
+      .filter(Boolean)
+      .join('\n');
+
+    // Authoritative element data from the design doc: the rendered pixels
+    // (especially a downscaled contact sheet) can hide a #000-on-#0A0A0A
+    // label or an occluding shape — the geometry/fills cannot.
+    const docSummary = (payload.docSummary ?? [])
+      .map((out) => {
+        const lines = out.elements
+          .map((el) =>
+            [
+              `    - [z${el.z}] ${el.type}${el.originId ? ` (${el.originId})` : ''}`,
+              `x=${el.x} y=${el.y} w=${el.width} h=${el.height}`,
+              el.fill ? `fill=${el.fill}` : undefined,
+              el.text ? `text="${el.text}"` : undefined,
+            ]
+              .filter(Boolean)
+              .join(' ')
+          )
+          .join('\n');
+        return `  - ${out.formatId} (${out.width}x${out.height}):\n${lines}`;
+      })
+      .join('\n');
+
     return `You are a meticulous visual-design critic reviewing a contact sheet of generated design variants.
 
 Evaluate the contact sheet against this rubric:
@@ -219,6 +355,10 @@ ${outputLines}
 
 ${planSummary ? `Design plans:\n${planSummary}` : ''}
 
+${expectedCopy ? `Expected copy (the render must show exactly this text; letter case may differ per the style preset — e.g. an all-caps headline transform — so judge text_accuracy case-insensitively):\n${expectedCopy}` : ''}
+
+${docSummary ? `Design doc elements (authoritative geometry/colors per output — use them to catch low-contrast fills and overlapping/occluding elements the pixels may hide):\n${docSummary}` : ''}
+
 Look at the contact sheet and identify concrete, actionable visual issues. For each issue, produce a finding with:
 - "formatId" (optional): which output format is affected, if known.
 - "slotId" (optional): which design slot is affected, if known.
@@ -227,8 +367,11 @@ Look at the contact sheet and identify concrete, actionable visual issues. For e
   - "scope": "shared" or "format-only"
   - "targetSlots": array of slot ids the fix applies to
   - "geometry": partial element geometry such as { x, y, width, height, fontSize }
-  - "style": partial style such as { fill, stroke, opacity }
-  - "text": { slotId, newText }
+  - "style": partial style such as { fill, stroke, opacity, fontFamily, align ("left"|"center"|"right"), verticalAlign ("top"|"middle"|"bottom"), textStroke { color, width }, textShadow (true = add a default shadow, false = remove it) }
+  - "text": { slotId, newText } — rewrite the copy of a TEXT slot only; never target an image slot with a text fix
+  - "regenerateAsset": { slotId, brief? } — regenerate the underlying imagery for that slot; the ONLY fix for a no_baked_in_text or text_accuracy defect inside a generated photo: imagery containing baked-in text, letters, logos or watermarks must be fixed with regenerateAsset targeting the image slot — never with a text fix. Optional "brief" adds guidance for the regeneration (subject, mood, what to avoid)
+  - "addElement": { slotId, type: "text" | "shape", text?, shape?, box? { x, y, width, height }, style? { fill, fontFamily, fontSize, align, textStroke, textShadow } } — add a small text/shape/badge-style element
+  - "removeElement": a slot id to remove from the targeted outputs
   - "note": free-text guidance when no numeric edit is possible
 
 ${VISION_CRITIC_SCHEMA_BLOCK}
@@ -242,7 +385,23 @@ If the contact sheet looks good, return { "findings": [] }.`;
     findings: VisionFinding[]
   ): Promise<VisionFinding[]> {
     const escalatedFormats = new Set<string>();
-    const detailKeywords = ['small', 'tiny', 'illegible', 'detail', 'blur', 'low resolution', 'hard to read'];
+    const detailKeywords = [
+      'small',
+      'tiny',
+      'illegible',
+      'detail',
+      'blur',
+      'low resolution',
+      'hard to read',
+      // Contrast/occlusion findings need the full-res pass too — they are
+      // exactly what the ≤400px contact sheet hides.
+      'contrast',
+      'unreadable',
+      'invisible',
+      'covered',
+      'overlap',
+      'occluded',
+    ];
 
     for (const f of findings) {
       const text = `${f.issue} ${f.fix?.note || ''}`.toLowerCase();
@@ -264,7 +423,7 @@ If the contact sheet looks good, return { "findings": [] }.`;
             const prompt = `Review this full-resolution design for the "${o.formatId}" output. Focus on legibility, safe-zone compliance, and whether any text or important detail would be lost at real size. ${VISION_CRITIC_SCHEMA_BLOCK}; keep it brief.`;
             const raw = await this._aiDefaults.vision(orgId, imageUrl, prompt);
             const parsed = this._extractFindings(raw);
-            for (const f of parsed) {
+            for (const f of parsed.findings) {
               if (!f.formatId) f.formatId = o.formatId;
               extra.push(f);
             }
@@ -279,17 +438,23 @@ If the contact sheet looks good, return { "findings": [] }.`;
     return extra;
   }
 
-  private _extractFindings(raw: string): VisionFinding[] {
+  private _extractFindings(raw: string): {
+    findings: VisionFinding[];
+    parseable: boolean;
+  } {
     try {
       const parsed = this._extractJson(raw) as { findings?: unknown } | null;
       if (!parsed || !Array.isArray(parsed.findings)) {
-        return [];
+        return { findings: [], parseable: false };
       }
-      return parsed.findings
-        .map((f) => this._normalizeFinding(f))
-        .filter((f): f is VisionFinding => f !== null);
+      return {
+        findings: parsed.findings
+          .map((f) => this._normalizeFinding(f))
+          .filter((f): f is VisionFinding => f !== null),
+        parseable: true,
+      };
     } catch {
-      return [];
+      return { findings: [], parseable: false };
     }
   }
 
@@ -355,6 +520,28 @@ If the contact sheet looks good, return { "findings": [] }.`;
       if (typeof src.opacity === 'number' && Number.isFinite(src.opacity)) {
         style.opacity = Math.max(0, Math.min(1, src.opacity));
       }
+      if (typeof src.fontFamily === 'string') style.fontFamily = src.fontFamily;
+      if (src.align === 'left' || src.align === 'center' || src.align === 'right') {
+        style.align = src.align;
+      }
+      if (
+        src.verticalAlign === 'top' ||
+        src.verticalAlign === 'middle' ||
+        src.verticalAlign === 'bottom'
+      ) {
+        style.verticalAlign = src.verticalAlign;
+      }
+      if (src.textStroke && typeof src.textStroke === 'object') {
+        const stroke = src.textStroke as Record<string, unknown>;
+        if (
+          typeof stroke.color === 'string' &&
+          typeof stroke.width === 'number' &&
+          Number.isFinite(stroke.width)
+        ) {
+          style.textStroke = { color: stroke.color, width: stroke.width };
+        }
+      }
+      if (typeof src.textShadow === 'boolean') style.textShadow = src.textShadow;
       if (Object.keys(style).length > 0) fix.style = style;
     }
 
@@ -370,11 +557,102 @@ If the contact sheet looks good, return { "findings": [] }.`;
       };
     }
 
+    if (raw.regenerateAsset && typeof raw.regenerateAsset === 'object') {
+      const src = raw.regenerateAsset as Record<string, unknown>;
+      if (typeof src.slotId === 'string' && src.slotId.trim()) {
+        fix.regenerateAsset = {
+          slotId: src.slotId.trim(),
+          // The brief rides into the regeneration prompt — cap it so a
+          // rambling critic can't balloon the image-model call.
+          ...(typeof src.brief === 'string' && src.brief.trim()
+            ? { brief: src.brief.trim().slice(0, 500) }
+            : {}),
+        };
+      }
+    }
+
+    if (raw.addElement && typeof raw.addElement === 'object') {
+      const addElement = this._normalizeAddElement(
+        raw.addElement as Record<string, unknown>
+      );
+      if (addElement) fix.addElement = addElement;
+    }
+
+    if (typeof raw.removeElement === 'string' && raw.removeElement.trim()) {
+      fix.removeElement = raw.removeElement.trim();
+    }
+
     if (typeof raw.note === 'string') {
       fix.note = raw.note;
     }
 
     return fix;
+  }
+
+  /**
+   * Sanitize a critic-proposed addElement to the constrained spec — anything
+   * outside text/shape/badge-style additions is dropped before it can reach
+   * the composer.
+   */
+  private _normalizeAddElement(
+    raw: Record<string, unknown>
+  ): Fix['addElement'] | undefined {
+    if (typeof raw.slotId !== 'string' || !raw.slotId.trim()) return undefined;
+    if (raw.type !== 'text' && raw.type !== 'shape') return undefined;
+
+    const spec: NonNullable<Fix['addElement']> = {
+      slotId: raw.slotId.trim(),
+      type: raw.type,
+    };
+
+    if (typeof raw.text === 'string') spec.text = raw.text;
+    if (
+      raw.shape === 'rect' ||
+      raw.shape === 'ellipse' ||
+      raw.shape === 'line' ||
+      raw.shape === 'star'
+    ) {
+      spec.shape = raw.shape;
+    }
+
+    if (raw.box && typeof raw.box === 'object') {
+      const src = raw.box as Record<string, unknown>;
+      const box: NonNullable<NonNullable<Fix['addElement']>['box']> = {};
+      for (const key of ['x', 'y', 'width', 'height'] as const) {
+        const value = src[key];
+        if (typeof value === 'number' && Number.isFinite(value)) {
+          box[key] = value;
+        }
+      }
+      if (Object.keys(box).length > 0) spec.box = box;
+    }
+
+    if (raw.style && typeof raw.style === 'object') {
+      const src = raw.style as Record<string, unknown>;
+      const style: NonNullable<NonNullable<Fix['addElement']>['style']> = {};
+      if (typeof src.fill === 'string') style.fill = src.fill;
+      if (typeof src.fontFamily === 'string') style.fontFamily = src.fontFamily;
+      if (typeof src.fontSize === 'number' && Number.isFinite(src.fontSize)) {
+        style.fontSize = src.fontSize;
+      }
+      if (src.align === 'left' || src.align === 'center' || src.align === 'right') {
+        style.align = src.align;
+      }
+      if (src.textStroke && typeof src.textStroke === 'object') {
+        const stroke = src.textStroke as Record<string, unknown>;
+        if (
+          typeof stroke.color === 'string' &&
+          typeof stroke.width === 'number' &&
+          Number.isFinite(stroke.width)
+        ) {
+          style.textStroke = { color: stroke.color, width: stroke.width };
+        }
+      }
+      if (typeof src.textShadow === 'boolean') style.textShadow = src.textShadow;
+      if (Object.keys(style).length > 0) spec.style = style;
+    }
+
+    return spec;
   }
 
   private _extractJson(raw: string): unknown {

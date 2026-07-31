@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { AiDesignerArtDirectorService } from './ai-designer-art-director.service';
+import { DesignPlanSchema } from '../../ai-designer.schemas';
 import type { DesignPlan } from '../../ai-designer.types';
 
 const makeRequest = () =>
@@ -21,6 +22,7 @@ describe('AiDesignerArtDirectorService', () => {
   let skillRouter: {
     route: ReturnType<typeof vi.fn>;
     getSkillPrompt: ReturnType<typeof vi.fn>;
+    getLayoutHints: ReturnType<typeof vi.fn>;
   };
   let brands: { getBrand: ReturnType<typeof vi.fn> };
   let model: { generateObject: ReturnType<typeof vi.fn> };
@@ -30,6 +32,7 @@ describe('AiDesignerArtDirectorService', () => {
     skillRouter = {
       route: vi.fn(() => ({ skillId: 'social-post' })),
       getSkillPrompt: vi.fn(() => 'skill prompt'),
+      getLayoutHints: vi.fn(() => undefined),
     };
     brands = { getBrand: vi.fn() };
     model = { generateObject: vi.fn() };
@@ -46,7 +49,7 @@ describe('AiDesignerArtDirectorService', () => {
       metadata: orgId ? { orgId } : {},
     });
 
-  it('replaces an invalid plan item with a fallback plan', async () => {
+  it('falls back to a single plan when every plan item is invalid', async () => {
     model.generateObject.mockResolvedValue({
       type: 'plans',
       plans: [{ concept: 'x' }],
@@ -59,9 +62,60 @@ describe('AiDesignerArtDirectorService', () => {
     expect(content.plans).toHaveLength(1);
     const plan: DesignPlan = content.plans[0];
     expect(plan.concept).toBe('A bold product launch graphic');
+    expect(plan.fallback).toBe(true);
     expect(Array.isArray(plan.slots)).toBe(true);
     expect(plan.slots.length).toBeGreaterThan(0);
     expect(plan.slots.every((s) => typeof s.id === 'string')).toBe(true);
+  });
+
+  it('drops invalid plan items instead of replacing them with fallbacks', async () => {
+    const validPlan: DesignPlan = {
+      variantId: 'orig',
+      skill: 'social-post',
+      concept: 'A valid plan',
+      palette: ['#fff'],
+      typeScale: { headline: 48 },
+      background: { kind: 'solid', value: '#fff' },
+      slots: [{ id: 'headline', role: 'headline', kind: 'text' }],
+      assetNeeds: [],
+    };
+    model.generateObject.mockResolvedValue({
+      type: 'plans',
+      plans: [validPlan, { concept: 'missing slots' }],
+    });
+
+    const res = await handler(makeRequest(), 'org1');
+    const content = JSON.parse(res.content);
+
+    expect(content.plans).toHaveLength(1);
+    expect(content.plans[0].concept).toBe('A valid plan');
+  });
+
+  it('never pads the response with duplicate plans when fewer than requested validate', async () => {
+    const validPlan: DesignPlan = {
+      variantId: 'orig',
+      skill: 'social-post',
+      concept: 'A valid plan',
+      palette: ['#fff'],
+      typeScale: { headline: 48 },
+      background: { kind: 'solid', value: '#fff' },
+      slots: [{ id: 'headline', role: 'headline', kind: 'text' }],
+      assetNeeds: [],
+    };
+    model.generateObject.mockResolvedValue({
+      type: 'plans',
+      plans: [validPlan],
+    });
+
+    const request = JSON.stringify({
+      ...JSON.parse(makeRequest()),
+      config: { channels: ['ig-square'], variants: 3 },
+    });
+    const res = await handler(request, 'org1');
+    const content = JSON.parse(res.content);
+
+    expect(content.plans).toHaveLength(1);
+    expect(content.plans[0].concept).toBe('A valid plan');
   });
 
   it('keeps valid plan items unchanged', async () => {
@@ -92,5 +146,783 @@ describe('AiDesignerArtDirectorService', () => {
     const content = JSON.parse(res.content);
     expect(content.type).toBe('error');
     expect(content.message).toContain('Malformed agent input');
+  });
+
+  it('keys custom sizes with the conductor formatId scheme (custom-WxH) and returns only the primary', () => {
+    const sizes = (service as any)._resolveSizes({
+      channels: [],
+      customSizes: [
+        { width: 1080, height: 1350, name: '1080×1350' },
+        { width: 300, height: 250 },
+      ],
+    });
+
+    // One original only: the first custom size is the primary format.
+    expect(sizes.map((s: any) => s.formatId)).toEqual(['custom-1080x1350']);
+  });
+
+  it('resolves the first channel as the one primary format', () => {
+    const sizes = (service as any)._resolveSizes({
+      channels: ['ig-post', 'ig-story'],
+      customSizes: [{ width: 300, height: 250 }],
+    });
+
+    expect(sizes).toHaveLength(1);
+    expect(sizes[0].formatId).toBe('ig-post');
+  });
+
+  it('prompts the planner for the primary format only', async () => {
+    const validPlan: DesignPlan = {
+      variantId: 'orig',
+      skill: 'social-post',
+      concept: 'A valid plan',
+      palette: ['#fff'],
+      typeScale: { headline: 48 },
+      background: { kind: 'solid', value: '#fff' },
+      slots: [{ id: 'headline', role: 'headline', kind: 'text' }],
+      assetNeeds: [],
+    };
+    model.generateObject.mockResolvedValue({ type: 'plans', plans: [validPlan] });
+
+    const request = JSON.stringify({
+      ...JSON.parse(makeRequest()),
+      config: { channels: ['ig-post', 'ig-story'], variants: 1 },
+    });
+    await handler(request, 'org1');
+
+    const prompt = model.generateObject.mock.calls[0][1] as string;
+    expect(prompt).toContain('## Output format (design for this ONE format only)');
+    expect(prompt).toContain('"ig-post"');
+    // The other formats are deliberately hidden from the planner.
+    expect(prompt).not.toContain('ig-story');
+    expect(prompt).not.toContain('channelLayouts');
+    expect(prompt).not.toContain('perChannel');
+  });
+
+  it('teaches the plan prompt the style presets when the user picked none', async () => {
+    const validPlan: DesignPlan = {
+      variantId: 'orig',
+      skill: 'social-post',
+      concept: 'A valid plan',
+      styleId: 'bold',
+      palette: ['#fff'],
+      typeScale: { headline: 48 },
+      background: { kind: 'solid', value: '#fff' },
+      slots: [{ id: 'headline', role: 'headline', kind: 'text' }],
+      assetNeeds: [],
+    };
+    model.generateObject.mockResolvedValue({ type: 'plans', plans: [validPlan] });
+
+    await handler(makeRequest(), 'org1');
+
+    const prompt = model.generateObject.mock.calls[0][1] as string;
+    expect(prompt).toContain('## Available style presets');
+    expect(prompt).toContain('"bold"');
+    expect(prompt).toContain('MUST set "styleId"');
+    expect(prompt).toContain('cta-button');
+  });
+
+  it('pins the prompt and every plan to the user-selected style', async () => {
+    const validPlan: DesignPlan = {
+      variantId: 'orig',
+      skill: 'social-post',
+      concept: 'A valid plan',
+      styleId: 'bold',
+      palette: ['#fff'],
+      typeScale: { headline: 48 },
+      background: { kind: 'solid', value: '#fff' },
+      slots: [{ id: 'headline', role: 'headline', kind: 'text' }],
+      assetNeeds: [],
+    };
+    model.generateObject.mockResolvedValue({ type: 'plans', plans: [validPlan] });
+
+    const request = JSON.stringify({
+      ...JSON.parse(makeRequest()),
+      brief: {
+        intent: 'A bold product launch graphic',
+        styleId: 'neon',
+      },
+    });
+    const res = await handler(request, 'org1');
+    const content = JSON.parse(res.content);
+
+    const prompt = model.generateObject.mock.calls[0][1] as string;
+    expect(prompt).toContain('user-selected');
+    expect(prompt).toContain('"styleId": "neon"');
+    // The model's own styleId choice is overridden by the user's pick.
+    expect(content.plans[0].styleId).toBe('neon');
+  });
+
+  it('drops a plan whose styleId is not in the registry', async () => {
+    model.generateObject.mockResolvedValue({
+      type: 'plans',
+      plans: [
+        {
+          variantId: 'orig',
+          skill: 'social-post',
+          concept: 'A plan with a bogus style',
+          styleId: 'grunge-core',
+          palette: ['#fff'],
+          typeScale: { headline: 48 },
+          background: { kind: 'solid', value: '#fff' },
+          slots: [{ id: 'headline', role: 'headline', kind: 'text' }],
+          assetNeeds: [],
+        },
+      ],
+    });
+
+    const res = await handler(makeRequest(), 'org1');
+    const content = JSON.parse(res.content);
+
+    expect(content.plans).toHaveLength(1);
+    expect(content.plans[0].fallback).toBe(true);
+    expect(content.plans[0].styleId).toBe('bold');
+  });
+
+  it('drops a plan with a malformed slot style override', async () => {
+    const validPlan: DesignPlan = {
+      variantId: 'orig',
+      skill: 'social-post',
+      concept: 'A valid plan',
+      palette: ['#fff'],
+      typeScale: { headline: 48 },
+      background: { kind: 'solid', value: '#fff' },
+      slots: [{ id: 'headline', role: 'headline', kind: 'text' }],
+      assetNeeds: [],
+    };
+    model.generateObject.mockResolvedValue({
+      type: 'plans',
+      plans: [
+        {
+          ...validPlan,
+          concept: 'A plan with a bad slot style',
+          slots: [
+            {
+              id: 'headline',
+              role: 'headline',
+              kind: 'text',
+              style: { align: 'justify' },
+            },
+          ],
+        },
+        validPlan,
+      ],
+    });
+
+    const res = await handler(makeRequest(), 'org1');
+    const content = JSON.parse(res.content);
+
+    expect(content.plans).toHaveLength(1);
+    expect(content.plans[0].concept).toBe('A valid plan');
+  });
+
+  it('forbids invented offers, discounts, and codes in the plan prompt', async () => {
+    const validPlan: DesignPlan = {
+      variantId: 'orig',
+      skill: 'social-post',
+      concept: 'A valid plan',
+      palette: ['#fff'],
+      typeScale: { headline: 48 },
+      background: { kind: 'solid', value: '#fff' },
+      slots: [{ id: 'headline', role: 'headline', kind: 'text' }],
+      assetNeeds: [],
+    };
+    model.generateObject.mockResolvedValue({ type: 'plans', plans: [validPlan] });
+
+    await handler(makeRequest(), 'org1');
+
+    const prompt = model.generateObject.mock.calls[0][1] as string;
+    // The S6 hallucination guard: no fabricated -30% / invented coupon codes.
+    expect(prompt).toContain('come from the brief verbatim');
+    expect(prompt).toContain('invent none');
+  });
+
+  it('tells the planner an image background IS the imagery (no duplicate image slot)', async () => {
+    const validPlan: DesignPlan = {
+      variantId: 'orig',
+      skill: 'social-post',
+      concept: 'A valid plan',
+      palette: ['#fff'],
+      typeScale: { headline: 48 },
+      background: { kind: 'solid', value: '#fff' },
+      slots: [{ id: 'headline', role: 'headline', kind: 'text' }],
+      assetNeeds: [],
+    };
+    model.generateObject.mockResolvedValue({ type: 'plans', plans: [validPlan] });
+
+    await handler(makeRequest(), 'org1');
+
+    const prompt = model.generateObject.mock.calls[0][1] as string;
+    // A plan with an image background must not also carry an image slot for
+    // the same subject — the conductor dedupes them into one asset, which
+    // then rendered twice (full-bleed bg + centered inset).
+    expect(prompt).toContain('background IS the imagery');
+    expect(prompt).toContain('do NOT also add an');
+    expect(prompt).toContain('distinct subjects');
+  });
+
+  it('demands per-slot texts and verbatim fixedCopy in the plan prompt', async () => {
+    const validPlan: DesignPlan = {
+      variantId: 'orig',
+      skill: 'social-post',
+      concept: 'A valid plan',
+      palette: ['#fff'],
+      typeScale: { headline: 48 },
+      background: { kind: 'solid', value: '#fff' },
+      slots: [{ id: 'headline', role: 'headline', kind: 'text' }],
+      assetNeeds: [],
+    };
+    model.generateObject.mockResolvedValue({ type: 'plans', plans: [validPlan] });
+
+    const request = JSON.stringify({
+      ...JSON.parse(makeRequest()),
+      brief: {
+        intent: 'Labor Day Sale social media post',
+        audience: 'followers',
+        tone: 'patriotic',
+        fixedCopy: 'LABOR26',
+      },
+    });
+    await handler(request, 'org1');
+
+    const prompt = model.generateObject.mock.calls[0][1] as string;
+    // Every copy slot must carry final copy at plan time…
+    expect(prompt).toContain('"texts" object mapping EVERY copy slot id');
+    // …grounded in the actual offer, not generic slogans…
+    expect(prompt).toContain('reference the actual event/offer/product');
+    // …with fixedCopy VERBATIM in an appropriate slot.
+    expect(prompt).toContain('VERBATIM');
+    expect(prompt).toContain('fixedCopy');
+    // The brief (and its coupon code) is part of the prompt, and the schema
+    // the planner answers against declares the texts map.
+    expect(prompt).toContain('LABOR26');
+    expect(prompt).toContain('final copy for every copy slot');
+  });
+
+  it('round-trips plan texts through the stored-plan schema', () => {
+    const plan = {
+      variantId: 'v1',
+      skill: 'social-post',
+      concept: 'c',
+      palette: ['#fff'],
+      typeScale: { headline: 48 },
+      background: { kind: 'solid' },
+      slots: [{ id: 'headline', role: 'headline', kind: 'text' }],
+      assetNeeds: [],
+      texts: { headline: 'Labor Day Sale' },
+    };
+
+    const parsed = DesignPlanSchema.parse(plan);
+    expect(parsed.texts).toEqual({ headline: 'Labor Day Sale' });
+
+    const without = { ...plan };
+    delete (without as any).texts;
+    expect(DesignPlanSchema.parse(without).texts).toBeUndefined();
+
+    // Values are bounded — oversized copy never persists.
+    expect(() =>
+      DesignPlanSchema.parse({
+        ...plan,
+        texts: { headline: 'x'.repeat(501) },
+      })
+    ).toThrow();
+  });
+});
+
+describe('AiDesignerArtDirectorService offer fidelity (workstream 5)', () => {
+  let skillRouter: {
+    route: ReturnType<typeof vi.fn>;
+    getSkillPrompt: ReturnType<typeof vi.fn>;
+    getLayoutHints: ReturnType<typeof vi.fn>;
+  };
+  let brands: { getBrand: ReturnType<typeof vi.fn> };
+  let model: { generateObject: ReturnType<typeof vi.fn> };
+  let service: AiDesignerArtDirectorService;
+
+  beforeEach(() => {
+    skillRouter = {
+      route: vi.fn(() => ({ skillId: 'social-post' })),
+      getSkillPrompt: vi.fn(() => 'skill prompt'),
+      getLayoutHints: vi.fn(() => undefined),
+    };
+    brands = { getBrand: vi.fn() };
+    model = { generateObject: vi.fn() };
+    service = new AiDesignerArtDirectorService(
+      skillRouter as any,
+      brands as any,
+      model as any
+    );
+  });
+
+  const planWithTexts = (texts: Record<string, string>): DesignPlan => ({
+    variantId: 'orig',
+    skill: 'social-post',
+    concept: 'A valid plan',
+    palette: ['#fff'],
+    typeScale: { headline: 48 },
+    background: { kind: 'solid', value: '#fff' },
+    slots: [{ id: 'headline', role: 'headline', kind: 'text' }],
+    assetNeeds: [],
+    texts,
+  });
+
+  const offerRequest = (intent: string) =>
+    JSON.stringify({
+      type: 'plan-request',
+      brief: { intent },
+      config: { channels: ['ig-square'], variants: 1 },
+      mode: 'prompt',
+    });
+
+  const handler = (raw_input: string, orgId?: string) =>
+    (service as any)._handler({
+      raw_input,
+      metadata: orgId ? { orgId } : {},
+    });
+
+  it('retries plan generation once when every plan drops the brief offer tokens', async () => {
+    model.generateObject
+      .mockResolvedValueOnce({
+        type: 'plans',
+        plans: [planWithTexts({ headline: 'Big news everyone' })],
+      })
+      .mockResolvedValueOnce({
+        type: 'plans',
+        plans: [planWithTexts({ headline: 'First box 30% off' })],
+      });
+
+    const res = await handler(
+      offerRequest('Subscription launch — first box 30% off at glowlab.shop'),
+      'org1'
+    );
+    const content = JSON.parse(res.content);
+
+    expect(model.generateObject).toHaveBeenCalledTimes(2);
+    const retryPrompt = model.generateObject.mock.calls[1][1] as string;
+    expect(retryPrompt).toContain('OFFER FIDELITY REPAIR');
+    expect(retryPrompt).toContain('30%');
+    expect(content.plans[0].texts.headline).toContain('30%');
+  });
+
+  it('injects the offer token when the retry still drops it — never keep+warn', async () => {
+    model.generateObject.mockResolvedValue({
+      type: 'plans',
+      plans: [planWithTexts({ headline: 'Big news everyone' })],
+    });
+
+    const res = await handler(
+      offerRequest('Subscription launch — first box 30% off'),
+      'org1'
+    );
+    const content = JSON.parse(res.content);
+
+    expect(model.generateObject).toHaveBeenCalledTimes(2);
+    expect(content.plans).toHaveLength(1);
+    // No badge/subhead slot — the token lands in the existing text slot.
+    expect(content.plans[0].texts.headline).toBe('Big news everyone • 30%');
+  });
+
+  it('does not retry when the brief states no offer tokens', async () => {
+    model.generateObject.mockResolvedValue({
+      type: 'plans',
+      plans: [planWithTexts({ headline: 'A bold product launch' })],
+    });
+
+    const res = await handler(
+      offerRequest('A bold product launch graphic'),
+      'org1'
+    );
+    const content = JSON.parse(res.content);
+
+    expect(model.generateObject).toHaveBeenCalledTimes(1);
+    expect(content.plans).toHaveLength(1);
+  });
+
+  it('does not retry only when the plan copy carries EVERY offer token', async () => {
+    model.generateObject.mockResolvedValue({
+      type: 'plans',
+      plans: [
+        planWithTexts({ headline: 'First box 30% off at glowlab.shop' }),
+      ],
+    });
+
+    await handler(offerRequest('first box 30% off at glowlab.shop'), 'org1');
+
+    expect(model.generateObject).toHaveBeenCalledTimes(1);
+  });
+
+  it('retries when the plan keeps one token but drops the rest, naming ONLY the missing ones', async () => {
+    model.generateObject
+      .mockResolvedValueOnce({
+        type: 'plans',
+        plans: [planWithTexts({ headline: '30% off tonight' })],
+      })
+      .mockResolvedValueOnce({
+        type: 'plans',
+        plans: [
+          planWithTexts({
+            headline: '30% off with code NIGHT40',
+            subhead: 'nightmarket.co',
+          }),
+        ],
+      });
+
+    const res = await handler(
+      offerRequest('Night market flash sale — 30% off with code NIGHT40 at nightmarket.co'),
+      'org1'
+    );
+    const content = JSON.parse(res.content);
+
+    // A plan keeping "30%" while dropping the code and the URL must retry
+    // (the old .some() coverage let it pass).
+    expect(model.generateObject).toHaveBeenCalledTimes(2);
+    const repair = (model.generateObject.mock.calls[1][1] as string).split(
+      'OFFER FIDELITY REPAIR'
+    )[1];
+    expect(repair).toContain('NIGHT40');
+    expect(repair).toContain('nightmarket.co');
+    // The token the plan already covered is not re-demanded.
+    expect(repair).not.toContain('30%');
+    expect(content.plans[0].texts.subhead).toBe('nightmarket.co');
+  });
+
+  it('keeps passing plans untouched and only replaces the failing ones on retry', async () => {
+    const passing = planWithTexts({
+      headline: '30% off with code NIGHT40 at nightmarket.co',
+    });
+    const failing = planWithTexts({ headline: 'Big vibes only' });
+    const repaired = planWithTexts({
+      headline: '30% off — code NIGHT40 — nightmarket.co',
+    });
+    model.generateObject
+      .mockResolvedValueOnce({ type: 'plans', plans: [passing, failing] })
+      .mockResolvedValueOnce({ type: 'plans', plans: [repaired] });
+
+    const request = JSON.stringify({
+      type: 'plan-request',
+      brief: {
+        intent: 'Night market flash sale — 30% off with code NIGHT40 at nightmarket.co',
+      },
+      config: { channels: ['ig-square'], variants: 2 },
+      mode: 'prompt',
+    });
+    const res = await handler(request, 'org1');
+    const content = JSON.parse(res.content);
+
+    expect(content.plans).toHaveLength(2);
+    // The plan that already passed coverage survives with its verified copy;
+    // only the failing plan was swapped for the retry output.
+    expect(content.plans[0].texts).toEqual(passing.texts);
+    expect(content.plans[1].texts).toEqual(repaired.texts);
+  });
+
+  it('injects still-missing tokens deterministically: code → badge, URL → subhead', async () => {
+    const stubborn = () => ({
+      ...planWithTexts({ headline: '30% off everything' }),
+      slots: [
+        { id: 'headline', role: 'headline', kind: 'text' },
+        { id: 'subhead', role: 'subhead', kind: 'text' },
+        { id: 'badge', role: 'offer-badge', kind: 'badge' },
+      ],
+    });
+    model.generateObject
+      .mockResolvedValueOnce({ type: 'plans', plans: [stubborn()] })
+      .mockResolvedValueOnce({ type: 'plans', plans: [stubborn()] });
+    const warn = vi.spyOn((service as any)._logger, 'warn');
+
+    const res = await handler(
+      offerRequest('Night market flash sale — 30% off with code NIGHT40 at nightmarket.co'),
+      'org1'
+    );
+    const content = JSON.parse(res.content);
+
+    expect(content.plans[0].texts.headline).toBe('30% off everything');
+    expect(content.plans[0].texts.badge).toBe('NIGHT40');
+    expect(content.plans[0].texts.subhead).toBe('nightmarket.co');
+    expect(
+      warn.mock.calls.some((call) => String(call[0]).includes('injected:'))
+    ).toBe(true);
+  });
+
+  it('injects into the original plans when the retry itself throws', async () => {
+    model.generateObject
+      .mockResolvedValueOnce({
+        type: 'plans',
+        plans: [planWithTexts({ headline: 'Big news everyone' })],
+      })
+      .mockRejectedValueOnce(new Error('model down'));
+
+    const res = await handler(
+      offerRequest('Subscription launch — first box 30% off'),
+      'org1'
+    );
+    const content = JSON.parse(res.content);
+
+    expect(content.plans).toHaveLength(1);
+    expect(content.plans[0].texts.headline).toBe('Big news everyone • 30%');
+  });
+
+  it('does not treat shouted plain ALL-CAPS words as offer tokens', async () => {
+    model.generateObject.mockResolvedValue({
+      type: 'plans',
+      plans: [planWithTexts({ headline: 'Everything must go' })],
+    });
+
+    await handler(offerRequest('HUGE SALE TODAY, everything must go'), 'org1');
+
+    expect(model.generateObject).toHaveBeenCalledTimes(1);
+  });
+
+  it('splits offer tokens into verbatim and offer classes', () => {
+    const tokens = (service as any)._extractOfferTokens({
+      intent:
+        '30% off and $5 shipping with code NIGHT40 at nightmarket.co, ends 5/1',
+      fixedCopy: 'Join now | BEAN30',
+    });
+
+    expect([...tokens.verbatim].sort()).toEqual([
+      'BEAN30',
+      'Join now',
+      'NIGHT40',
+    ]);
+    expect([...tokens.offer].sort()).toEqual([
+      '$5',
+      '30%',
+      '5/1',
+      'nightmarket.co',
+    ]);
+  });
+
+  it('teaches the planner to emit panelSide for side-by-side concepts', async () => {
+    model.generateObject.mockResolvedValue({
+      type: 'plans',
+      plans: [planWithTexts({ headline: 'Hello' })],
+    });
+
+    await handler(offerRequest('A bold product launch graphic'), 'org1');
+
+    const prompt = model.generateObject.mock.calls[0][1] as string;
+    expect(prompt).toContain('"panelSide"');
+    expect(prompt).toContain('photo left, text right');
+  });
+});
+
+describe('AiDesignerArtDirectorService brief constraints (workstream 3)', () => {
+  let skillRouter: {
+    route: ReturnType<typeof vi.fn>;
+    getSkillPrompt: ReturnType<typeof vi.fn>;
+    getLayoutHints: ReturnType<typeof vi.fn>;
+  };
+  let brands: { getBrand: ReturnType<typeof vi.fn> };
+  let model: { generateObject: ReturnType<typeof vi.fn> };
+  let service: AiDesignerArtDirectorService;
+
+  beforeEach(() => {
+    skillRouter = {
+      route: vi.fn(() => ({ skillId: 'social-post' })),
+      getSkillPrompt: vi.fn(() => 'skill prompt'),
+      getLayoutHints: vi.fn(() => undefined),
+    };
+    brands = { getBrand: vi.fn() };
+    model = { generateObject: vi.fn() };
+    service = new AiDesignerArtDirectorService(
+      skillRouter as any,
+      brands as any,
+      model as any
+    );
+  });
+
+  const makePlan = (overrides: Partial<DesignPlan> = {}): DesignPlan => ({
+    variantId: 'orig',
+    skill: 'social-post',
+    concept: 'A valid plan',
+    palette: ['#fff'],
+    typeScale: { headline: 48 },
+    background: { kind: 'solid', value: '#fff' },
+    slots: [{ id: 'headline', role: 'headline', kind: 'text' }],
+    assetNeeds: [],
+    texts: { headline: 'Hello' },
+    ...overrides,
+  });
+
+  const request = (intent: string) =>
+    JSON.stringify({
+      type: 'plan-request',
+      brief: { intent },
+      config: { channels: ['ig-square'], variants: 1 },
+      mode: 'prompt',
+    });
+
+  const handler = (raw_input: string, orgId?: string) =>
+    (service as any)._handler({
+      raw_input,
+      metadata: orgId ? { orgId } : {},
+    });
+
+  it('normalizes pipe compounds in plan texts before returning them', async () => {
+    model.generateObject.mockResolvedValue({
+      type: 'plans',
+      plans: [makePlan({ texts: { headline: 'Join now | Fresh roast' } })],
+    });
+
+    const res = await handler(request('A coffee promo'), 'org1');
+    const content = JSON.parse(res.content);
+
+    expect(content.plans[0].texts.headline).toBe('Join now • Fresh roast');
+  });
+
+  it('overrides panelSide on split layouts when the brief states explicit side language', async () => {
+    model.generateObject.mockResolvedValue({
+      type: 'plans',
+      plans: [
+        makePlan({ formatTemplate: 'split-panel', panelSide: 'right' }),
+      ],
+    });
+
+    const res = await handler(
+      request(
+        "Left side: bold headline 'COFFEE, PERFECTED' on cream. Right side: studio product photo of the bag."
+      ),
+      'org1'
+    );
+    const content = JSON.parse(res.content);
+
+    expect(content.plans[0].panelSide).toBe('left');
+  });
+
+  it('does not touch panelSide on ambiguous side language or non-split layouts', async () => {
+    // Conflicting side language: both readings fire, so the model's own
+    // choice stands.
+    model.generateObject.mockResolvedValue({
+      type: 'plans',
+      plans: [
+        makePlan({ formatTemplate: 'split-panel', panelSide: 'right' }),
+      ],
+    });
+    let res = await handler(
+      request('Something with text on the left and the photo on the left'),
+      'org1'
+    );
+    expect(JSON.parse(res.content).plans[0].panelSide).toBe('right');
+
+    // Explicit side language but not a split layout: no override.
+    model.generateObject.mockResolvedValue({
+      type: 'plans',
+      plans: [makePlan({ formatTemplate: 'hero-fullbleed' })],
+    });
+    res = await handler(
+      request('Left side: bold headline over the imagery'),
+      'org1'
+    );
+    expect(JSON.parse(res.content).plans[0].panelSide).toBeUndefined();
+  });
+
+  it('sets badgeStyle burst on badge slots for starburst briefs', async () => {
+    model.generateObject.mockResolvedValue({
+      type: 'plans',
+      plans: [
+        makePlan({
+          slots: [
+            { id: 'headline', role: 'headline', kind: 'text' },
+            { id: 'badge', role: 'badge', kind: 'badge' },
+          ],
+          texts: { headline: 'Hello', badge: 'New' },
+        }),
+      ],
+    });
+
+    const res = await handler(
+      request('Flash sale with a big starburst badge'),
+      'org1'
+    );
+    const content = JSON.parse(res.content);
+
+    const badge = content.plans[0].slots.find((s: any) => s.kind === 'badge');
+    expect(badge.style).toMatchObject({ badgeStyle: 'burst' });
+    // Text slots stay untouched.
+    const headline = content.plans[0].slots.find((s: any) => s.id === 'headline');
+    expect(headline.style?.badgeStyle).toBeUndefined();
+  });
+
+  it('adds the palette constraint to the repair retry for a warm brief with an all-cool palette', async () => {
+    model.generateObject
+      .mockResolvedValueOnce({
+        type: 'plans',
+        plans: [makePlan({ palette: ['#1d4ed8', '#ffffff', '#0ea5e9'] })],
+      })
+      .mockResolvedValueOnce({
+        type: 'plans',
+        plans: [makePlan({ palette: ['#f5e6d3', '#3a2618', '#c96f2f'] })],
+      });
+
+    const res = await handler(
+      request('Cozy coffee promo in warm cream and espresso tones'),
+      'org1'
+    );
+    const content = JSON.parse(res.content);
+
+    expect(model.generateObject).toHaveBeenCalledTimes(2);
+    const retryPrompt = model.generateObject.mock.calls[1][1] as string;
+    expect(retryPrompt).toContain('PALETTE REPAIR');
+    expect(content.plans[0].palette).toEqual(['#f5e6d3', '#3a2618', '#c96f2f']);
+  });
+
+  it('stays silent when the palette already honors the warm brief — and for cool briefs', async () => {
+    // Warm brief, warm surface: no retry.
+    model.generateObject.mockResolvedValue({
+      type: 'plans',
+      plans: [makePlan({ palette: ['#f5e6d3', '#3a2618', '#c96f2f'] })],
+    });
+    await handler(
+      request('Cozy coffee promo in warm cream and espresso tones'),
+      'org1'
+    );
+    expect(model.generateObject).toHaveBeenCalledTimes(1);
+
+    // No warm words: an all-cool palette is a free choice.
+    model.generateObject.mockClear();
+    model.generateObject.mockResolvedValue({
+      type: 'plans',
+      plans: [makePlan({ palette: ['#1d4ed8', '#ffffff', '#0ea5e9'] })],
+    });
+    await handler(request('A crisp tech launch promo'), 'org1');
+    expect(model.generateObject).toHaveBeenCalledTimes(1);
+  });
+
+  it('round-trips panelSide and slot badgeStyle through the stored-plan schema', () => {
+    const plan = {
+      variantId: 'v1',
+      skill: 'social-post',
+      concept: 'c',
+      palette: ['#fff'],
+      typeScale: { headline: 48 },
+      background: { kind: 'solid' },
+      slots: [
+        {
+          id: 'badge',
+          role: 'badge',
+          kind: 'badge',
+          style: { badgeStyle: 'burst' },
+        },
+      ],
+      assetNeeds: [],
+      panelSide: 'left',
+    };
+
+    const parsed = DesignPlanSchema.parse(plan);
+    expect(parsed.panelSide).toBe('left');
+    expect(parsed.slots[0].style?.badgeStyle).toBe('burst');
+
+    expect(() =>
+      DesignPlanSchema.parse({ ...plan, panelSide: 'center' })
+    ).toThrow();
+    expect(() =>
+      DesignPlanSchema.parse({
+        ...plan,
+        slots: [
+          { id: 'b', role: 'badge', kind: 'badge', style: { badgeStyle: 'star' } },
+        ],
+      })
+    ).toThrow();
   });
 });

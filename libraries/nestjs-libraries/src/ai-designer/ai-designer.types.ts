@@ -1,4 +1,5 @@
-import type { DesignerDoc, DesignerElement } from '@postmill-ai/nestjs-libraries/media/designer-doc/designer-doc.schema';
+import type { DesignerDoc, DesignerElement, DesignerTextStroke } from '@postmill-ai/nestjs-libraries/media/designer-doc/designer-doc.schema';
+import type { TextContrastViolation } from '@postmill-ai/nestjs-libraries/media/design-render/design-render.types';
 
 export type AiDesignerMode = 'chat' | 'prompt';
 
@@ -30,6 +31,8 @@ export interface AiDesignerConfig {
   brandProfileId?: string;
   variants: number;
   referenceFileIds?: string[];
+  /** User-selected style preset id (registry in `ai-designer/styles`); omitted = AI decides. */
+  styleId?: string;
 }
 
 export interface DesignBrief {
@@ -41,9 +44,33 @@ export interface DesignBrief {
   referenceCues?: string[];
   questionsAsked?: string[];
   lastPlans?: DesignPlan[];
+  /**
+   * Server-owned recap gate: set by the conductor when the conversationalist
+   * emits the brief recap, and the only thing that lets a later accept
+   * advance to planning. Reserved (clients/forms can't forge it).
+   */
+  recapShown?: boolean;
+  /**
+   * Server-owned record of the design ids the LATEST delivery presented.
+   * Template auto-save on accept scopes to these, not every id ever active
+   * (superseded revisions stay in `activeDesignIds` but are not saved).
+   */
+  lastDeliveredDesignIds?: string[];
   pendingReviseTarget?: string;
   answeredPromptIds?: string[];
   skillId?: string;
+  /**
+   * Server-owned count of CONSECUTIVE conversationalist classification
+   * failures during intake (reset on any success). Reserved.
+   */
+  classifierFailures?: number;
+  /**
+   * Server-owned one-time gate for the "trouble reaching your AI provider"
+   * intake note (set when the note is emitted). Reserved.
+   */
+  llmWarningShown?: boolean;
+  /** User-selected style preset (flows from config into the plan prompt). */
+  styleId?: string;
   [key: string]: unknown;
 }
 
@@ -52,6 +79,8 @@ export interface DesignPlan {
   skill: string;
   concept: string;
   formatTemplate?: string;
+  /** Style preset id from the registry; omitted plans use the default style. */
+  styleId?: string;
   palette: string[];
   typeScale: Record<string, number>;
   background: {
@@ -66,31 +95,140 @@ export interface DesignPlan {
     prefer: 'generate' | 'stock' | 'either';
   }[];
   perChannel?: Record<string, { note: string }>;
+  /**
+   * Final copy per copy-slot id, written at plan time so the user can read
+   * (and edit) the actual text before accepting. On accept the conductor
+   * locks these for the copywriter (locked slots are never rewritten).
+   */
+  texts?: Record<string, string>;
+  /** Per-channel layout intent (consumed by the composer from Phase 2B on). */
+  channelLayouts?: Record<
+    string,
+    'stacked' | 'side-by-side' | 'hero-top' | 'minimal-centered'
+  >;
+  /**
+   * Which side the solid panel/sidebar sits on for the split-panel and
+   * editorial-sidebar layouts. Optional and backwards compatible — plans
+   * without it default to a left panel. (The plan schema is passthrough, so
+   * art-director output carrying this field flows straight through.)
+   */
+  panelSide?: 'left' | 'right';
+  /** Set by the art director when this plan is a generic fallback (LLM planning failed). */
+  fallback?: boolean;
+}
+
+/** Optional per-slot style override — wins over the preset-derived defaults. */
+export interface DesignSlotStyle {
+  fontFamily?: string;
+  fontWeight?: number;
+  fill?: string;
+  gradient?: [string, string];
+  stroke?: { color: string; width: number };
+  shadow?: boolean;
+  align?: 'left' | 'center' | 'right';
+  /** Badge slot shape override — wins over the preset's badgeStyle treatment. */
+  badgeStyle?: 'pill' | 'burst' | 'ribbon';
 }
 
 export interface DesignSlot {
   id: string;
   role: 'top-caption' | 'bottom-caption' | 'image' | 'logo' | string;
-  kind: 'text' | 'image';
+  kind: 'text' | 'image' | 'cta-button' | 'badge' | 'accent-shape';
+  style?: DesignSlotStyle;
 }
 
+/** Slots that carry copy (everything except imagery and decorative shapes). */
+export const isCopySlot = (slot: Pick<DesignSlot, 'kind'>): boolean =>
+  slot.kind !== 'image' && slot.kind !== 'accent-shape';
+
 export type SlotTextMap = Record<string, string>;
+
+/** Aspect class of a generated asset / output format (see `util/aspect.ts`). */
+export type AssetAspect = 'square' | 'wide' | 'tall';
+
+/** One image generation request, scoped per plan (`${variantId}:${slotId}`) in the primary aspect by the conductor. */
+export interface AssetNeedRequest {
+  slotId: string;
+  brief: string;
+  prefer: 'generate' | 'stock' | 'either';
+  /** Aspect class this generation targets; the asset is keyed `slotId:aspect`. */
+  aspect?: AssetAspect;
+  /**
+   * Layout intent id (channelLayouts value or formatTemplate) for
+   * background/hero slots — drives the text-space guidance appended to the
+   * generation prompt. Absent for non-hero slots.
+   */
+  heroLayout?: string;
+}
 
 export interface AssetResult {
   slotId: string;
   fileId: string;
   path: string;
   type: 'image';
+  /** Where the asset actually came from — compared against the plan's `prefer` to surface fallbacks. */
+  source?: 'generate' | 'stock' | 'gradient';
+  /** Aspect class this asset was generated for (the map key carries it too). */
+  aspect?: AssetAspect;
+  /** Provider-supplied focal point for cover-cropping; the composer defaults to center. */
+  focalPoint?: { x: number; y: number };
 }
 
 export type FixScope = 'shared' | 'format-only';
+
+/** Style half of a critic fix. `textShadow: true` synthesizes a default
+ *  shadow scaled to the element's font size; `false` removes it. */
+export interface FixStyle {
+  fill?: string;
+  stroke?: string;
+  opacity?: number;
+  fontFamily?: string;
+  align?: 'left' | 'center' | 'right';
+  verticalAlign?: 'top' | 'middle' | 'bottom';
+  /** Text outline (maps to the element's `textStroke`). */
+  textStroke?: DesignerTextStroke;
+  textShadow?: boolean;
+}
+
+/**
+ * Constrained new-element spec for revise fixes: text/shape/badge-style
+ * additions only. The composer fills in safe defaults (centered box, required
+ * element fields) and validates the result through the doc schema, so a fix
+ * can never inject an arbitrary element.
+ */
+export interface FixAddElement {
+  /** Becomes the new element's originId, linking copies across outputs. */
+  slotId: string;
+  type: 'text' | 'shape';
+  text?: string;
+  shape?: 'rect' | 'ellipse' | 'line' | 'star';
+  box?: Partial<Pick<DesignerElement, 'x' | 'y' | 'width' | 'height'>>;
+  style?: {
+    fill?: string;
+    fontFamily?: string;
+    fontSize?: number;
+    align?: 'left' | 'center' | 'right';
+    textStroke?: DesignerTextStroke;
+    textShadow?: boolean;
+  };
+}
 
 export interface Fix {
   scope: FixScope;
   targetSlots?: string[];
   geometry?: Partial<Pick<DesignerElement, 'x' | 'y' | 'width' | 'height' | 'fontSize'>>;
-  style?: Partial<Pick<DesignerElement, 'fill' | 'stroke' | 'opacity'>>;
+  style?: FixStyle;
   text?: { slotId: string; newText: string };
+  /**
+   * Regenerate the slot's underlying imagery (the only sanctioned fix for
+   * baked-in text/logos/watermarks in a generated photo). `brief` is optional
+   * extra guidance for the regeneration prompt. Handled deterministically by
+   * the conductor — the composer never applies it.
+   */
+  regenerateAsset?: { slotId: string; brief?: string };
+  addElement?: FixAddElement;
+  /** Slot/originId (or element id) to remove from the targeted outputs. */
+  removeElement?: string;
   note?: string;
 }
 
@@ -276,6 +414,11 @@ export interface AiDesignerRenderResult {
   designId: string;
   variantId: string;
   outputPreviews: { formatId: string; fileId: string; url: string }[];
-  contactSheetFileId?: string;
+  /** QC artifact for the vision critic — a transient storage path, never a
+   *  user-visible `File` row in the org's library. */
   contactSheetUrl?: string;
+  /** Text-over-imagery contrast failures sampled off the rendered pages
+   *  (DesignRenderService.auditTextContrast) — the conductor's deterministic
+   *  fixContrast pass consumes these. */
+  contrastViolations?: TextContrastViolation[];
 }

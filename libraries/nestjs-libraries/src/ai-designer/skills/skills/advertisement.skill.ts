@@ -11,11 +11,27 @@ export const AdvertisementSkill: DesignSkill = {
   },
   requiredBriefFields: ['intent', 'audience'],
   systemPrompt: `You are a conversion-focused ad designer. Rules:
-- One clear hero image, one dominant headline, one CTA.
-- Use brand colors; keep 60-30-10 color ratio.
-- Headline max 8 words; CTA button text max 3 words.
-- Place CTA in the lower third, clear of safe zones.
-- Maintain visual hierarchy: headline → image → CTA.`,
+- One hero image, one dominant headline, one CTA — an ad with two messages converts nobody.
+- Visual hierarchy is strict: image stops the scroll, headline sells the benefit, CTA closes. Size them in that order.
+- Headline max 8 words and benefit-led ("Softer skin in 7 days"), never feature-led ("New formula v2").
+- Subhead is optional and strictly shorter than the headline — one line of proof or detail, nothing more.
+- The CTA is a cta-button slot (pill or high-contrast block), text max 3 words, verb-first ("Shop now", "Try free").
+- Place the CTA in the lower third, vertically centered in its band, clear of every platform safe zone.
+- Use brand colors in a 60-30-10 ratio: dominant field, secondary support, one accent reserved for the CTA and at most one badge.
+- A badge ("-30%", "Limited") is the only decoration allowed — small, upper corner or beside the CTA, never competing with the headline.
+- Keep 5-8% margin breathing room on all sides; ads that bleed text to the edges get cropped by feed previews.
+- Over a busy hero image, put text on a scrim/overlay band or add a subtle shadow — never raw text on noise.
+- If the brief names an offer, the offer goes in the headline or badge — not buried in the subhead.`,
+  layoutHints: {
+    formatTemplates: ['hero-fullbleed', 'split-panel'],
+    slotSchema: [
+      { id: 'image', role: 'image', kind: 'image' },
+      { id: 'headline', role: 'headline', kind: 'text' },
+      { id: 'subhead', role: 'subhead', kind: 'text' },
+      { id: 'cta', role: 'cta', kind: 'cta-button' },
+      { id: 'badge', role: 'offer-badge', kind: 'badge' },
+    ],
+  },
   rubric: {
     criteria: [
       { name: 'hierarchy', description: 'Headline, image, CTA are clearly ordered', weight: 0.3 },
