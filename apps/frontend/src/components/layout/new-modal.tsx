@@ -26,6 +26,10 @@ interface OpenModalInterface {
   title?: any;
   closeOnClickOutside?: boolean;
   removeLayout?: boolean;
+  /** Strip the container padding/gap (and clip to its rounded corners) so the
+   * child can render its own flush header — e.g. the post detail modal's
+   * coloured band. The child then owns its body padding. */
+  flush?: boolean;
   fullScreen?: boolean;
   top?: string | number;
   /** Vertically center the modal (content-sized; no fixed height required). */
@@ -287,8 +291,10 @@ export const Component: FC<{
             <div
               className={clsx(
                 !modal.removeLayout &&
+                  !modal.flush &&
                   'gap-[24px] p-[20px] md:gap-[40px] md:p-[32px]',
                 'bg-newBgColorInner border border-newTableBorder mx-auto flex flex-col w-fit rounded-[12px] relative',
+                modal.flush && 'overflow-hidden',
                 modal.size
                   ? 'max-w-[calc(100vw-24px)]'
                   : 'max-w-[calc(100vw-24px)] md:min-w-[600px] md:max-w-none',

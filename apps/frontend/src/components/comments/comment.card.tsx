@@ -7,6 +7,7 @@ import { useFetch } from '@postmill-ai/helpers/utils/custom.fetch';
 import { useT } from '@postmill-ai/react/translation/get.transation.service.client';
 import ProviderIcon from '@postmill-ai/frontend/components/shared/provider-icon';
 import { CommentComposer } from '@postmill-ai/frontend/components/launches/post-detail/comment.composer';
+import { useModals } from '@postmill-ai/frontend/components/layout/new-modal';
 import { TeamMemberItem } from '@postmill-ai/frontend/components/settings/roles/hooks/use-roles';
 
 dayjs.extend(relativeTime);
@@ -89,8 +90,32 @@ export const CommentCard: FC<CommentCardProps> = ({
 }) => {
   const t = useT();
   const fetch = useFetch();
+  const modal = useModals();
   const postId = comment.post?.id;
   const integration = comment.post?.integration;
+
+  // Open the post command-center modal (same chrome as the calendar's
+  // openPostDetail: flush header band, own close button, no card actions).
+  // The modal is lazy-loaded at click time — a static import would pull the
+  // whole composer/provider tree into the inbox bundle (and break vitest).
+  const openPost = useCallback(async () => {
+    if (!postId) return;
+    const { PostDetailModal } = await import(
+      '@postmill-ai/frontend/components/launches/post-detail/post.detail.modal'
+    );
+    modal.openModal({
+      title: '',
+      closeOnClickOutside: true,
+      closeOnEscape: true,
+      withCloseButton: false,
+      flush: true,
+      classNames: {
+        modal: 'w-[100%] max-w-[1100px] text-textColor',
+      },
+      children: <PostDetailModal postId={postId} />,
+      size: '80%',
+    });
+  }, [modal, postId]);
 
   const [replying, setReplying] = useState(false);
   const [assigning, setAssigning] = useState(false);
@@ -223,10 +248,28 @@ export const CommentCard: FC<CommentCardProps> = ({
 
         <p className="text-[13px] text-textColor break-words whitespace-pre-wrap mb-[8px]">{comment.content}</p>
 
-        {comment.post && (
-          <div className="text-[11px] text-newTableText mb-[8px] truncate">
-            {t('comment_inbox.post_label', 'Post')}: {comment.post.content?.substring(0, 100) || comment.post.id}
-          </div>
+        {postId && (
+          <button
+            type="button"
+            onClick={openPost}
+            className="inline-flex items-center gap-[3px] text-[11px] text-btnPrimary hover:underline mb-[8px]"
+          >
+            {t('view_post', 'View Post')}
+            <svg
+              width="10"
+              height="10"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2.5"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              aria-hidden="true"
+            >
+              <path d="M7 17L17 7" />
+              <path d="M7 7h10v10" />
+            </svg>
+          </button>
         )}
 
         <div className="flex items-center gap-[14px] flex-wrap">

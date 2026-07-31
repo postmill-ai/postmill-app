@@ -387,24 +387,6 @@ export const usePostActions = (onMutate?: () => void) => {
     [modal, t, mutate]
   );
 
-  const openPostDetail = useCallback(
-    (post: any) => (e: React.MouseEvent) => {
-      e.stopPropagation();
-      modal.openModal({
-        title: '',
-        closeOnClickOutside: true,
-        closeOnEscape: true,
-        withCloseButton: true,
-        classNames: {
-          modal: 'w-[100%] max-w-[1100px] text-textColor',
-        },
-        children: <PostDetailModal postId={post.id} />,
-        size: '80%',
-      });
-    },
-    [modal]
-  );
-
   const changeColor = useCallback(
     (post: Post & { color?: string | null }) => () => {
       modal.openModal({
@@ -436,6 +418,36 @@ export const usePostActions = (onMutate?: () => void) => {
       });
     },
     [modal, fetch, mutate, toaster, t]
+  );
+
+  const openPostDetail = useCallback(
+    (post: any) => (e: React.MouseEvent) => {
+      e.stopPropagation();
+      modal.openModal({
+        title: '',
+        closeOnClickOutside: true,
+        closeOnEscape: true,
+        // The detail modal renders its own coloured header band as THE modal
+        // header (flush, edge-to-edge, close button inside it) — hide the
+        // chrome's close and strip the container padding so the band is flush.
+        withCloseButton: false,
+        flush: true,
+        classNames: {
+          modal: 'w-[100%] max-w-[1100px] text-textColor',
+        },
+        children: (
+          <PostDetailModal
+            postId={post.id}
+            onEdit={editPost(post, false)}
+            onDuplicate={editPost(post, true)}
+            onDelete={deletePost(post)}
+            onChangeColor={changeColor(post)}
+          />
+        ),
+        size: '80%',
+      });
+    },
+    [modal, editPost, deletePost, changeColor]
   );
 
   const postAnalyticsDrawer = (
