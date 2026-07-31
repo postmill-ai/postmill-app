@@ -256,6 +256,7 @@ export class CampaignsController {
   @CheckPolicies([AuthorizationActions.Create, Sections.POSTS_PER_MONTH])
   async createDraft(
     @GetOrgFromRequest() org: Organization,
+    @GetUserFromRequest() user: User,
     @Param('id') id: string,
     @Body() body: CreatePostDto,
   ) {
@@ -263,6 +264,8 @@ export class CampaignsController {
       org.id,
       { ...body, type: 'draft', campaignId: id } as CreatePostDto,
       'WEB',
+      false,
+      user.id,
     );
   }
 

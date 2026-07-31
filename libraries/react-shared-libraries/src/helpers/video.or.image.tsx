@@ -1,6 +1,6 @@
 import { FC } from 'react';
 import { clsx } from 'clsx';
-import { hasExtension } from '@postmill-ai/helpers/utils/has.extension';
+import { isVideoPath } from '@postmill-ai/helpers/utils/video.extensions';
 export const VideoOrImage: FC<{
   src: string;
   autoplay: boolean;
@@ -9,7 +9,7 @@ export const VideoOrImage: FC<{
   videoClassName?: string;
 }> = (props) => {
   const { src, autoplay, isContain, imageClassName, videoClassName } = props;
-  if (hasExtension(src, 'mp4')) {
+  if (isVideoPath(src)) {
     return (
       <video
         src={src}

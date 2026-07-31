@@ -17,6 +17,7 @@ import utc from 'dayjs/plugin/utc';
 import { v4 as uuidv4 } from 'uuid';
 import { CreateTagDto } from '@postmill-ai/nestjs-libraries/dtos/posts/create.tag.dto';
 import { decryptPostIntegrationTokens } from '@postmill-ai/nestjs-libraries/database/prisma/integrations/integration-token.utils';
+import { isVideoPath } from '@postmill-ai/helpers/utils/video.extensions';
 
 dayjs.extend(isoWeek);
 dayjs.extend(weekOfYear);
@@ -235,6 +236,7 @@ export class PostsRepository {
         releaseURL: true,
         releaseId: true,
         state: true,
+        error: true,
         intervalInDays: true,
         group: true,
         creationMethod: true,
@@ -257,6 +259,8 @@ export class PostsRepository {
             providerIdentifier: true,
             name: true,
             picture: true,
+            // Channel handle — the calendar's mini-post cards render it as @handle.
+            profile: true,
           },
         },
       },
@@ -301,8 +305,32 @@ export class PostsRepository {
           color = null;
         }
       }
-      return { ...rest, mediaType: this._computeMediaType(image), color };
+      return {
+        ...rest,
+        mediaType: this._computeMediaType(image),
+        color,
+        thumb: this._computeThumb(image),
+      };
     });
+  }
+
+  // Lean media preview for the calendar cards: first media item's path plus the
+  // total media count. Never returns the full `image` JSON.
+  private _computeThumb(
+    imageJson?: string | null
+  ): { path: string; count: number } | null {
+    if (!imageJson) return null;
+    try {
+      const arr = JSON.parse(imageJson);
+      if (!Array.isArray(arr) || arr.length === 0) return null;
+      const first = arr.find(
+        (m: any) => typeof m?.path === 'string' && m.path.length > 0
+      );
+      if (!first) return null;
+      return { path: first.path, count: arr.length };
+    } catch {
+      return null;
+    }
   }
 
   private _computeMediaType(imageJson?: string | null): 'none' | 'image' | 'video' {
@@ -311,7 +339,7 @@ export class PostsRepository {
       const arr = JSON.parse(imageJson);
       if (!Array.isArray(arr) || arr.length === 0) return 'none';
       const isVideo = (m: any) =>
-        typeof m?.path === 'string' && /(mp4|mov|webm|m4v|avi|mkv)(\?|#|$)/i.test(m.path);
+        typeof m?.path === 'string' && isVideoPath(m.path);
       return arr.some(isVideo) ? 'video' : 'image';
     } catch {
       return 'none';
@@ -435,6 +463,8 @@ export class PostsRepository {
               providerIdentifier: true,
               name: true,
               picture: true,
+              // Channel handle — the list view renders the same mini-post cards.
+              profile: true,
             },
           },
         },
@@ -737,6 +767,7 @@ export class PostsRepository {
     inter?: number,
     campaignId?: string,
     brandId?: string,
+    createdById?: string,
   ) {
     const posts: Prisma.PostGetPayload<{
       select: {
@@ -783,6 +814,7 @@ export class PostsRepository {
         intervalInDays: inter ? +inter : null,
 
         ...(type === 'create' ? { creationMethod } : {}),
+        ...(type === 'create' && createdById ? { createdById } : {}),
         ...(state === 'update'
           ? {}
           : {

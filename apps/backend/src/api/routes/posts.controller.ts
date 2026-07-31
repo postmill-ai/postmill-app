@@ -260,9 +260,10 @@ export class PostsController {
   @CheckPolicies([AuthorizationActions.Create, Sections.POSTS_PER_MONTH])
   async createPost(
     @GetOrgFromRequest() org: Organization,
+    @GetUserFromRequest() user: User,
     @Body() body: CreatePostDto
   ) {
-    return this._postsService.validateAndCreatePost(org.id, body, 'WEB');
+    return this._postsService.validateAndCreatePost(org.id, body, 'WEB', false, user.id);
   }
 
   @Post('/generator/draft')

@@ -532,6 +532,9 @@ model Post {
   approvalStatus             String?                   // campaign draft approval: pending|approved|rejected
   approvedById               String?
   approvedAt                 DateTime?
+  // User who created the post (composer/campaign paths). Null for system,
+  // agent (MCP), API-key, and autopost creations — those surface creationMethod.
+  createdById                String?
   brandId                    String?
   brand                      AIBrandProfile?          @relation(fields: [brandId], references: [id])
   analyticsSnapshots         PostAnalyticsSnapshot[]
@@ -555,6 +558,7 @@ model Post {
   @@index([organizationId, state, publishDate])
   @@index([releaseId])
   @@index([approvedById])
+  @@index([createdById])
   @@index([brandId])
 }
 
