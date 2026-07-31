@@ -356,9 +356,9 @@ export class AiDefaultsService {
   // The success path (a default IS configured) is unchanged — `AiMediaService` still
   // re-resolves internally for the actual provider/model.
 
-  async textToImage(orgId: string, prompt: string) {
+  async textToImage(orgId: string, prompt: string, opts?: { aspect?: 'square' | 'wide' | 'tall' }) {
     await this._requireMedia(orgId, 'text-to-image');
-    return this._aiMediaService.generateImage(prompt, { orgId });
+    return this._aiMediaService.generateImage(prompt, { orgId, aspect: opts?.aspect });
   }
 
   async textToVideo(orgId: string, prompt: string) {

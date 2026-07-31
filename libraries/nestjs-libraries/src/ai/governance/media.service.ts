@@ -5,6 +5,7 @@ import { AiSettingsService } from '@postmill-ai/nestjs-libraries/database/prisma
 import { AiSettingsManager } from '@postmill-ai/nestjs-libraries/ai/ai-settings.manager';
 import { AIModelProvider } from '@postmill-ai/nestjs-libraries/ai/ai-model.provider';
 import { DefaultsResolutionService } from '@postmill-ai/nestjs-libraries/ai/defaults/defaults-resolution.service';
+import { IMAGE_SETTINGS_KEYS } from '@postmill-ai/nestjs-libraries/ai/defaults/defaults-settings.validator';
 import { OrgMediaProviderSettingsService } from '@postmill-ai/nestjs-libraries/database/prisma/media-providers/org-media-provider-settings.service';
 import { OrgAiSettingsRepository } from '@postmill-ai/nestjs-libraries/database/prisma/ai-settings/org-ai-settings.repository';
 import { EncryptionService } from '@postmill-ai/nestjs-libraries/encryption/encryption.service';
@@ -942,12 +943,33 @@ export class AiMediaService {
 
   // ── Image (synchronous, §10.3/§11.2) ──
 
+  // Aspect hint → gpt-image size token, used only on the AI-facade fallback
+  // path (the facade's image model takes a size, not an aspect). The media
+  // adapter path receives `aspect` directly and maps it per-provider.
+  private static readonly FACADE_ASPECT_SIZE: Record<string, string> = {
+    square: '1024x1024',
+    wide: '1536x1024',
+    tall: '1024x1536',
+  };
+
+  // Filter stored org default settings to the image-bucket keys before they are
+  // spread into an image adapter input (image path only — other operations pass
+  // their settings through unchanged).
+  private _imageSettings(
+    settings: Record<string, unknown> | undefined,
+  ): MediaGenerateOptions['input'] {
+    if (!settings) return settings as MediaGenerateOptions['input'];
+    return Object.fromEntries(
+      Object.entries(settings).filter(([key]) => IMAGE_SETTINGS_KEYS.has(key)),
+    ) as MediaGenerateOptions['input'];
+  }
+
   // All image generation routes through the media surface: org-configured image-capable
   // media providers first (standardized result), then the AI facade's imageModel() as a
   // behaviour-preserving fallback for orgs with no image-capable media provider.
   async generateImageResult(
     prompt: string,
-    options?: { size?: string; orgId?: string; userId?: string; isVertical?: boolean; sourceUrl?: string },
+    options?: { size?: string; aspect?: 'square' | 'wide' | 'tall'; orgId?: string; userId?: string; isVertical?: boolean; sourceUrl?: string },
   ): Promise<MediaGenerationResult> {
     const size = options?.size || (options?.isVertical ? '1024x1536' : undefined);
     const candidates = await this._resolveForOperation(options?.orgId, 'image', options?.sourceUrl);
@@ -958,8 +980,12 @@ export class AiMediaService {
         const result = await candidate.adapter.generateImage(prompt, {
           credentials: candidate.credentials,
           model: candidate.model,
-          input: candidate.settings as MediaGenerateOptions['input'],
+          // A stale org default row can carry another modality's keys (live
+          // 400s from an audio-only 'response_format') — strip to the image
+          // bucket here; the stored row is untouched.
+          input: this._imageSettings(candidate.settings),
           size,
+          aspect: options?.aspect,
           sourceUrl: options?.sourceUrl,
         });
         const first = result.image || result.images?.[0];
@@ -990,7 +1016,9 @@ export class AiMediaService {
     if (!model) {
       throw new CapabilityNotAvailable('Image generation is not available on the current AI provider', 'image');
     }
-    const url = await model.generate(prompt, { size });
+    const url = await model.generate(prompt, {
+      size: size || (options?.aspect ? AiMediaService.FACADE_ASPECT_SIZE[options.aspect] : undefined),
+    });
 
     const aiConfig = await this._aiModelProvider.resolveConfigForScope('utility', options?.orgId);
     if (!aiConfig) {
@@ -1010,7 +1038,7 @@ export class AiMediaService {
 
   async generateImage(
     prompt: string,
-    options?: { size?: string; orgId?: string; userId?: string; isVertical?: boolean; sourceUrl?: string },
+    options?: { size?: string; aspect?: 'square' | 'wide' | 'tall'; orgId?: string; userId?: string; isVertical?: boolean; sourceUrl?: string },
   ): Promise<string> {
     const result = await this.generateImageResult(prompt, options);
     return result.image || '';

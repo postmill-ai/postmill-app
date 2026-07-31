@@ -10,7 +10,6 @@ interface PriceEntry {
 }
 
 export const PRICE_MAP: Record<string, PriceEntry> = {
-  'black-forest-labs/flux-schnell': { kind: 'per-image', usd: 0.003 },
   'black-forest-labs/flux-dev': { kind: 'per-image', usd: 0.025 },
   'black-forest-labs/flux-1.1-pro': { kind: 'per-image', usd: 0.04 },
   'google/imagen-4': { kind: 'per-image', usd: 0.10 },

@@ -56,7 +56,7 @@ describe('ReplicateCatalogService', () => {
       mockSafeFetch.mockResolvedValue(
         jsonResponse({
           owner: 'black-forest-labs',
-          name: 'flux-schnell',
+          name: 'flux-dev',
           description: 'Fast image model',
           cover_image_url: 'https://cdn/cover.png',
           run_count: 1234,
@@ -66,23 +66,22 @@ describe('ReplicateCatalogService', () => {
 
       const result = await service.listModels('text-to-image', 'org1');
 
-      expect(result).toHaveLength(6);
+      expect(result).toHaveLength(5);
       const first = result[0];
       expect(first).toMatchObject({
-        id: 'black-forest-labs/flux-schnell',
-        name: 'flux-schnell',
+        id: 'black-forest-labs/flux-dev',
+        name: 'flux-dev',
         description: 'Fast image model',
         coverImageUrl: 'https://cdn/cover.png',
         runCount: 1234,
         warm: true,
         pricing: 'output',
-        price: { kind: 'per-image', usd: 0.003 },
+        price: { kind: 'per-image', usd: 0.025 },
       });
     });
 
     it('skips API fetch on per-model cache hit', async () => {
       const allowlist = [
-        'black-forest-labs/flux-schnell',
         'black-forest-labs/flux-dev',
         'black-forest-labs/flux-1.1-pro',
         'google/imagen-4',
@@ -108,13 +107,13 @@ describe('ReplicateCatalogService', () => {
 
       const result = await service.listModels('text-to-image', 'org1');
 
-      // The 6 curated models came from the per-model cache — none were fetched.
+      // The 5 curated models came from the per-model cache — none were fetched.
       // (The category collection is fetched separately, best-effort, for extras.)
       const modelFetches = mockSafeFetch.mock.calls.filter((c: any[]) =>
         String(c[0]).includes('/models/')
       );
       expect(modelFetches).toHaveLength(0);
-      expect(result).toHaveLength(6);
+      expect(result).toHaveLength(5);
       expect(result[0]).toMatchObject({ name: 'cached' });
     });
 
@@ -136,7 +135,7 @@ describe('ReplicateCatalogService', () => {
       mockSafeFetch.mockResolvedValue(
         jsonResponse({
           owner: 'black-forest-labs',
-          name: 'flux-schnell',
+          name: 'flux-dev',
           description: '',
           cover_image_url: null,
           run_count: 0,

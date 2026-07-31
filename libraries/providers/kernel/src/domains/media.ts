@@ -73,6 +73,11 @@ export interface MediaCredentialOptions {
 export interface MediaGenerateOptions extends MediaCredentialOptions {
   model?: string;
   size?: string;
+  // Coarse aspect hint ('square' | 'wide' | 'tall') for callers that don't know
+  // provider-specific size tokens. Each adapter maps it to its closest supported
+  // size/aspect parameter; adapters without aspect support silently ignore it.
+  // An explicit `size` always wins over `aspect`.
+  aspect?: 'square' | 'wide' | 'tall';
   n?: number;
   quality?: string;
   version?: string;

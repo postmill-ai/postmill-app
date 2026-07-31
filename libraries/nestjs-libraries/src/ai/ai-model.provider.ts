@@ -1170,12 +1170,7 @@ export class AIModelProvider {
             // LanguageModelV2 file part — the legacy {type:'image'} shape from
             // SDK v1 serializes into an invalid provider message
             // ("Invalid type for 'messages[0].content[1]'").
-            const dataUriMime = args.imageUrl.match(/^data:([^;]+);/)?.[1];
-            content.push({
-              type: 'file',
-              mediaType: dataUriMime || 'image/*',
-              data: args.imageUrl,
-            });
+            content.push(this._imageFilePart(args.imageUrl));
           }
           promptPayload = [{ role: 'user', content }];
         }
@@ -1197,6 +1192,36 @@ export class AIModelProvider {
       },
       { 'ai.provider': providerId, 'ai.model': effectiveModel },
     );
+  }
+
+  /**
+   * Build a LanguageModelV2 file part for a vision image. Provider adapters
+   * treat a string `data` as RAW base64 and prepend their own
+   * `data:<mime>;base64,` prefix (@ai-sdk/provider-utils convertToBase64
+   * passes strings through untouched), so a full data URI must be split into
+   * mime + payload first — otherwise the prefix doubles and OpenAI rejects
+   * the message ("Invalid base64 image_url"). Remote URLs go as URL
+   * instances so the adapter forwards the link instead of base64-wrapping
+   * the URL text.
+   */
+  private _imageFilePart(imageUrl: string): {
+    type: 'file';
+    mediaType: string;
+    data: string | URL;
+  } {
+    const dataUri = /^data:([^;,]+);base64,([\s\S]*)$/.exec(imageUrl);
+    if (dataUri) {
+      return {
+        type: 'file',
+        mediaType: dataUri[1] || 'image/png',
+        data: dataUri[2].replace(/\s+/g, ''),
+      };
+    }
+    if (/^https?:\/\//i.test(imageUrl)) {
+      return { type: 'file', mediaType: 'image/png', data: new URL(imageUrl) };
+    }
+    // Bare base64 payload (no scheme) — pass through as-is.
+    return { type: 'file', mediaType: 'image/png', data: imageUrl };
   }
 
   async generateObjectWithModel<T>(

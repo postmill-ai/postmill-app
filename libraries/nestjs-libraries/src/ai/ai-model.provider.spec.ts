@@ -876,6 +876,43 @@ describe('AIModelProvider', () => {
       expect(health.recordSuccess).toHaveBeenCalledWith('openai');
     });
 
+    it('splits a data-URI imageUrl into a raw-base64 file part (no doubled prefix)', async () => {
+      mockGetByIdentifier.mockResolvedValue({
+        credentials: { apiKey: 'sk-test' },
+      });
+      // 1x1 transparent PNG — provider adapters prepend their own
+      // `data:<mime>;base64,` to a string `data`, so the part must carry the
+      // raw payload only ("Invalid base64 image_url" otherwise).
+      const b64 =
+        'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==';
+
+      await provider.generateTextWithModel('org-123', 'openai', 'v1', 'gpt-4.1', {
+        prompt: 'describe this image',
+        imageUrl: `data:image/png;base64,${b64}`,
+      });
+
+      const prompt = mockDoGenerate.mock.calls.at(-1)![0].prompt;
+      const filePart = prompt[0].content.find((p: any) => p.type === 'file');
+      expect(filePart.mediaType).toBe('image/png');
+      expect(filePart.data).toBe(b64);
+    });
+
+    it('passes a remote imageUrl as a URL file part instead of base64-wrapping it', async () => {
+      mockGetByIdentifier.mockResolvedValue({
+        credentials: { apiKey: 'sk-test' },
+      });
+
+      await provider.generateTextWithModel('org-123', 'openai', 'v1', 'gpt-4.1', {
+        prompt: 'describe this image',
+        imageUrl: 'https://example.com/sheet.png',
+      });
+
+      const prompt = mockDoGenerate.mock.calls.at(-1)![0].prompt;
+      const filePart = prompt[0].content.find((p: any) => p.type === 'file');
+      expect(filePart.data).toBeInstanceOf(URL);
+      expect((filePart.data as URL).toString()).toBe('https://example.com/sheet.png');
+    });
+
     it('runs governance wrappers when generating an object with an explicit model', async () => {
       mockGetByIdentifier.mockResolvedValue({
         credentials: { apiKey: 'sk-test' },

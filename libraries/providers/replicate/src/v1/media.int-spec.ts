@@ -169,7 +169,7 @@ describe('replicate media adapter (async predictions)', () => {
     expect(out.image).toBe('https://cdn.replicate/img.png');
     const r = recs[0];
     expect(r.url).toBe(
-      'https://api.replicate.com/v1/models/black-forest-labs/flux-schnell/predictions',
+      'https://api.replicate.com/v1/models/black-forest-labs/flux-1.1-pro/predictions',
     );
     const body = JSON.parse(r.body);
     expect(body.version).toBeUndefined();

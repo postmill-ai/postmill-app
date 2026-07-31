@@ -231,6 +231,15 @@ describe('AiDefaultsService', () => {
       expect(mockMediaService.generateImage).toHaveBeenCalledWith('a cat', { orgId: 'org-1' });
     });
 
+    it('textToImage forwards the aspect option', async () => {
+      vi.mocked(mockMediaService.generateImage).mockResolvedValue('url');
+      await service.textToImage('org-1', 'a cat', { aspect: 'tall' });
+      expect(mockMediaService.generateImage).toHaveBeenCalledWith('a cat', {
+        orgId: 'org-1',
+        aspect: 'tall',
+      });
+    });
+
     it('imageToImage passes sourceUrl', async () => {
       vi.mocked(mockMediaService.generateImage).mockResolvedValue('url');
       await service.imageToImage('org-1', 'prompt', 'https://img');

@@ -124,6 +124,12 @@ const MEDIA_BUCKET_KEYS: Record<MediaBucket, Set<string>> = {
   ]),
 };
 
+// Image-bucket keys, exported for the image generation path: a stale org default
+// row can carry keys from another modality (e.g. the audio-only
+// 'response_format'), which 400s on image APIs — the image spread strips to
+// this set at the call site without touching the stored row.
+export const IMAGE_SETTINGS_KEYS: ReadonlySet<string> = MEDIA_BUCKET_KEYS.image;
+
 // AI model categories have no per-category settings UI, so only standard inference
 // tunables are accepted.
 const AI_SETTINGS_KEYS = new Set([

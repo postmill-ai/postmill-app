@@ -38,7 +38,6 @@ export const CATEGORIES: CategoryDefinition[] = [
 // Tag each with O (official) or C (community). OFFICIAL_MODELS = the O's.
 export const MODEL_ALLOWLIST: Record<string, string[]> = {
   'text-to-image': [
-    'black-forest-labs/flux-schnell',
     'black-forest-labs/flux-dev',
     'black-forest-labs/flux-1.1-pro',
     'google/imagen-4',
@@ -116,7 +115,6 @@ export const MODEL_ALLOWLIST: Record<string, string[]> = {
 // OFFICIAL_MODELS: subset of MODEL_ALLOWLIST that is genuinely Replicate-official (always-warm, output-priced)
 export const OFFICIAL_MODELS = new Set<string>([
   // Image
-  'black-forest-labs/flux-schnell',
   'black-forest-labs/flux-dev',
   'black-forest-labs/flux-1.1-pro',
   'google/imagen-4',
