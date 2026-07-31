@@ -500,7 +500,9 @@ export const ManageModal: FC<AddEditModalProps> = (props) => {
         const posts = allValues.map((post: any) => ({
           integration: { id: post.id },
           group,
-          settings: colorize(post.settings),
+          // `__type` discriminates the per-provider settings on the server;
+          // getAllValues returns `identifier` per post.
+          settings: { ...colorize(post.settings), __type: post.identifier },
           value: post.values.map((value: any) => ({
             ...(value.id ? { id: value.id } : {}),
             content: value.content,
@@ -548,7 +550,9 @@ export const ManageModal: FC<AddEditModalProps> = (props) => {
         // (@ValidateIf on Post.settings) — without it, a draft with X/provider settings is
         // rejected by forbidNonWhitelisted and silently fails to save (data loss).
         ...(type === 'draft' ? { type: 'draft' } : {}),
-        settings: colorize(post.settings),
+        // `__type` discriminates the per-provider settings on the server;
+        // getAllValues returns `identifier` per post.
+        settings: { ...colorize(post.settings), __type: post.identifier },
         value: post.values.map((value: any) => ({
           ...(value.id ? { id: value.id } : {}),
           content: value.content,
@@ -830,34 +834,46 @@ export const ManageModal: FC<AddEditModalProps> = (props) => {
                         {t('start_from', 'Start from…')}
                       </button>
                     )}
-                    {aiActive && (
-                      <button
-                        type="button"
-                        onClick={() => setAssistantOpen(true)}
-                        aria-label={t('your_assistant', 'Your Assistant')}
-                        data-tooltip-id="tooltip"
-                        data-tooltip-content={t('your_assistant', 'Your Assistant')}
-                        className="border border-newTableBorder bg-btnSimple text-textColor rounded-[8px] px-[12px] h-[40px] flex items-center gap-[6px] text-[13px] font-[500] hover:bg-boxHover"
+                    <button
+                      type="button"
+                      onClick={() => {
+                        // B4: no active AI provider → guide instead of a silent
+                        // no-op (CopilotKit must not mount without one).
+                        if (!aiActive) {
+                          toaster.show(
+                            t(
+                              'connect_ai_provider_for_assistant',
+                              'Connect an AI provider in Settings to use the assistant'
+                            ),
+                            'warning'
+                          );
+                          return;
+                        }
+                        setAssistantOpen(true);
+                      }}
+                      aria-label={t('your_assistant', 'Your Assistant')}
+                      data-tooltip-id="tooltip"
+                      data-tooltip-content={t('your_assistant', 'Your Assistant')}
+                      className="border border-newTableBorder bg-btnSimple text-textColor rounded-[8px] px-[12px] h-[40px] flex items-center gap-[6px] text-[13px] font-[500] hover:bg-boxHover"
+                    >
+                      <svg
+                        width="18"
+                        height="18"
+                        viewBox="0 0 24 24"
+                        fill="none"
+                        stroke="currentColor"
+                        strokeWidth="1.8"
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        className="text-btnPrimaryAccent"
                       >
-                        <svg
-                          width="18"
-                          height="18"
-                          viewBox="0 0 24 24"
-                          fill="none"
-                          stroke="currentColor"
-                          strokeWidth="1.8"
-                          strokeLinecap="round"
-                          strokeLinejoin="round"
-                          className="text-btnPrimaryAccent"
-                        >
-                          <path d="M12 3l1.9 4.6L18.5 9.5 13.9 11.4 12 16l-1.9-4.6L5.5 9.5l4.6-1.9L12 3Z" />
-                          <path d="M19 15l.7 1.8 1.8.7-1.8.7-.7 1.8-.7-1.8-1.8-.7 1.8-.7.7-1.8Z" />
-                        </svg>
-                        <span className="hidden sm:inline">
-                          {t('assistant', 'Assistant')}
-                        </span>
-                      </button>
-                    )}
+                        <path d="M12 3l1.9 4.6L18.5 9.5 13.9 11.4 12 16l-1.9-4.6L5.5 9.5l4.6-1.9L12 3Z" />
+                        <path d="M19 15l.7 1.8 1.8.7-1.8.7-.7 1.8-.7-1.8-1.8-.7 1.8-.7.7-1.8Z" />
+                      </svg>
+                      <span className="hidden sm:inline">
+                        {t('assistant', 'Assistant')}
+                      </span>
+                    </button>
                     <div>
                       {!dummy && (
                         <SelectCustomer

@@ -251,6 +251,7 @@ describe('ManageModal', () => {
     h.getAllValues = [
       {
         id: 'int1',
+        identifier: 'x-provider',
         settings: {},
         values: [{ id: 'v1', content: 'hi', delay: 0, media: [] }],
       },
@@ -295,6 +296,77 @@ describe('ManageModal', () => {
   const postCalls = () =>
     (h.fetchImpl as any).mock.calls.filter((c: any[]) => c[0] === '/posts')
       .length;
+
+  // P0 — POST /posts 400s: every post's settings must carry the `__type`
+  // discriminator (the provider identifier) so the server can route settings
+  // to the right provider DTO.
+  it('attaches __type per post on the preflight payload and the final POST /posts body', async () => {
+    h.getAllValues = [
+      {
+        id: 'int1',
+        identifier: 'x',
+        settings: { who_can_reply_post: 'everyone' },
+        values: [{ id: 'v1', content: 'hi', delay: 0, media: [] }],
+      },
+      {
+        id: 'int2',
+        identifier: 'bluesky',
+        settings: {},
+        values: [{ id: 'v2', content: 'hi', delay: 0, media: [] }],
+      },
+    ];
+
+    renderModal();
+    await act(async () => {
+      fireEvent.click(scheduleButton());
+    });
+    await waitFor(() => expect(postCalls()).toBe(1));
+
+    // Path 1: the preflight payload (built at the first submit site).
+    const preflightPayload = (h.runPreflightImpl as any).mock.calls[0][0];
+    expect(
+      preflightPayload.posts.map((p: any) => p.settings.__type)
+    ).toEqual(['x', 'bluesky']);
+
+    // Path 2: the final POST /posts body (built at the second submit site).
+    const postCall = (h.fetchImpl as any).mock.calls.find(
+      (c: any[]) => c[0] === '/posts'
+    );
+    const postedBody = JSON.parse(postCall[1].body);
+    expect(postedBody.posts.map((p: any) => p.settings.__type)).toEqual([
+      'x',
+      'bluesky',
+    ]);
+    // The provider's own settings keys survive alongside __type.
+    expect(postedBody.posts[0].settings).toEqual({
+      who_can_reply_post: 'everyone',
+      __type: 'x',
+    });
+
+    // /posts/valid sees the same discriminated settings.
+    const validCall = (h.fetchImpl as any).mock.calls.find(
+      (c: any[]) => c[0] === '/posts/valid'
+    );
+    const validBody = JSON.parse(validCall[1].body);
+    expect(validBody.posts.map((p: any) => p.settings.__type)).toEqual([
+      'x',
+      'bluesky',
+    ]);
+  });
+
+  it('attaches __type per post on a draft save (settings validation skipped server-side)', async () => {
+    renderModal();
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: /save as draft/i }));
+    });
+    await waitFor(() => expect(postCalls()).toBe(1));
+
+    const postCall = (h.fetchImpl as any).mock.calls.find(
+      (c: any[]) => c[0] === '/posts'
+    );
+    const postedBody = JSON.parse(postCall[1].body);
+    expect(postedBody.posts[0].settings.__type).toBe('x-provider');
+  });
 
   // 0.11 — save discards the POST Response.
   it('0.11: keeps the modal open and toasts the server message when the save fails', async () => {
@@ -428,5 +500,26 @@ describe('ManageModal', () => {
     await waitFor(() => expect(postCalls()).toBe(1));
     // Preflight ran once (the initial run), not again on Proceed.
     expect(h.runPreflightImpl).toHaveBeenCalledTimes(1);
+  });
+
+  // B4 — Assistant button must guide instead of silently no-op'ing when the
+  // org has no active AI provider.
+  it('B4: clicking Assistant without an active AI provider toasts guidance', () => {
+    h.aiActive = false;
+    renderModal();
+    fireEvent.click(screen.getByRole('button', { name: /your assistant/i }));
+    expect(h.toasterShow).toHaveBeenCalledWith(
+      'Connect an AI provider in Settings to use the assistant',
+      'warning'
+    );
+  });
+
+  it('B4: clicking Assistant with an active AI provider opens the panel', async () => {
+    h.aiActive = true;
+    renderModal();
+    fireEvent.click(screen.getByRole('button', { name: /your assistant/i }));
+    expect(h.toasterShow).not.toHaveBeenCalled();
+    // The assistant dialog header renders (portal to document.body).
+    expect(await screen.findByText('Your Assistant')).toBeTruthy();
   });
 });

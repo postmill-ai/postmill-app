@@ -11,6 +11,7 @@ import React, {
 import { useForm, FormProvider } from 'react-hook-form';
 import { IsOptional } from 'class-validator';
 import { classValidatorResolver } from '@hookform/resolvers/class-validator';
+import { sanitizeProviderSettings } from '@postmill-ai/nestjs-libraries/dtos/posts/providers-settings/sanitize.settings';
 import { useLaunchStore } from '@postmill-ai/frontend/components/composer/store';
 import { useShallow } from 'zustand/react/shallow';
 import { GeneralPreviewComponent } from '@postmill-ai/frontend/components/launches/general.preview.component';
@@ -226,7 +227,13 @@ export const withProvider = function <T extends object>(params: {
             id: props.id,
             identifier: selectedIntegration.integration.identifier,
             values: value,
-            settings: form.getValues(),
+            // The form registers shared fields (first comment, thread finisher)
+            // regardless of the provider's own settings DTO — strip any key the
+            // provider does not declare so only its own settings are submitted.
+            settings: sanitizeProviderSettings(
+              selectedIntegration.integration.identifier,
+              form.getValues()
+            ),
           };
         },
         trigger: () => {
