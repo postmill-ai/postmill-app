@@ -22,6 +22,7 @@ export * from './skool.dto';
 export * from './slack.dto';
 export * from './tiktok.dto';
 export * from './twitch.dto';
+export * from './threads.settings.dto';
 export * from './whop.dto';
 export * from './wordpress.dto';
 export * from './x.dto';

@@ -133,9 +133,27 @@ export { <Id>Dto } from '@postmill-ai/provider-kernel/domains/social-dtos';
 Register in `libraries/nestjs-libraries/src/dtos/posts/providers-settings/all.providers.settings.ts` — both places, lockstep:
 
 - the `AllProvidersSettings` union: `| ProviderExtension<'<id>', <Id>Dto>` (line 29), and
-- the `allProviders()` discriminator array: `{ value: <Id>Dto, name: '<id>' }` (line 69).
+- the `allProviders()` array: `{ value: <Id>Dto, name: '<id>' }` (line 69).
 
-Providers with no settings use the literal `None` type in the union and `{ value: setEmpty, name: '<id>' }` in the array (tumblr/pixelfed pattern, lines 63–64 and 104–106). The global validation pipe rejects unknown fields — every settings field must be declared on the DTO. Providers with a real DTO also set `dto = <Id>Dto` on the adapter class (e.g. `libraries/providers/reddit/src/v1/social.adapter.ts:42`).
+Providers with no settings use the literal `None` type in the union and `{ value: setEmpty, name: '<id>' }` in the array (tumblr/pixelfed pattern). Providers with a real DTO also set `dto = <Id>Dto` on the adapter class (e.g. `libraries/providers/reddit/src/v1/social.adapter.ts:42`).
+
+How settings are validated and cleaned at create time (`POST /posts`):
+
+- `Post.settings` (`create.post.dto.ts`) is checked by `ProviderSettingsConstraint`
+  (`dtos/posts/provider.settings.constraint.ts`): a present `__type` must be a known
+  provider identifier; a missing one is injected server-side. Unknown settings keys are
+  NOT rejected by the pipe.
+- `PostsService.mapTypeToPost` pins `settings.__type` to the integration's real
+  `providerIdentifier` and runs `sanitizeProviderSettings`
+  (`dtos/posts/providers-settings/sanitize.settings.ts`), which keeps only the keys the
+  provider's DTO declares (derived from class-validator metadata), the cross-cutting keys
+  `color` and `firstComment` (platform features stored in settings), and dynamic
+  internal-plug keys (`plug-` prefix). Everything else is stripped before persistence —
+  the composer's shared fields (first comment, thread finisher) leak foreign keys into
+  every provider's form, so both the client (`high.order.provider.tsx` `getValues()`) and
+  the server sanitize.
+- Value validation still happens per provider in `PostsService.validatePosts` via the
+  adapter's `dto`.
 
 ## 6. Optional: env OAuth mapping (click-connect)
 
