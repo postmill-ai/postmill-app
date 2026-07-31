@@ -11,6 +11,7 @@ import {
   DesignerOutput,
   DesignerMask,
   RenderOptions,
+  TextContrastViolation,
   TextRun,
 } from './design-render.types';
 import { FontLoaderService } from './font-loader.service';
@@ -34,6 +35,34 @@ const loadCanvasModule = async (): Promise<CanvasModule> => {
   }
   return _canvasModule;
 };
+
+// WCAG relative luminance of sRGB channels given as 0..1 floats.
+const srgbLuminance = (r: number, g: number, b: number): number => {
+  const channel = (c: number) =>
+    c <= 0.03928 ? c / 12.92 : Math.pow((c + 0.055) / 1.055, 2.4);
+  return 0.2126 * channel(r) + 0.7152 * channel(g) + 0.0722 * channel(b);
+};
+
+/** WCAG relative luminance of a #rrggbb color (unparseable → light). */
+const hexToLuminance = (hex: string): number => {
+  const m = /^#?([0-9a-f]{6})$/i.exec((hex || '').trim());
+  if (!m) return 1;
+  const n = parseInt(m[1], 16);
+  return srgbLuminance(
+    ((n >> 16) & 255) / 255,
+    ((n >> 8) & 255) / 255,
+    (n & 255) / 255
+  );
+};
+
+const aabbOverlap = (
+  a: { x: number; y: number; width: number; height: number },
+  b: { x: number; y: number; width: number; height: number }
+): boolean =>
+  a.x < b.x + b.width &&
+  a.x + a.width > b.x &&
+  a.y < b.y + b.height &&
+  a.y + a.height > b.y;
 
 // Canonical filter token vocabulary — must match the client tokens 1:1.
 // Each token is passed to ctx.filter as a CSS filter string.
@@ -563,6 +592,126 @@ export class DesignRenderService {
     return out;
   }
 
+  /**
+   * Deterministic WCAG contrast audit for text painted over IMAGERY (image
+   * elements, image or gradient backgrounds) — the doc-validator already
+   * covers solid-shape and solid-background backdrops, so those texts are
+   * skipped here. For each remaining visible text element the painted
+   * backdrop under its box is sampled from the rendered page (sharp
+   * extract + stats) and the contrast ratio against the text fill is
+   * computed (3:1 large text, 4.5:1 body). Pass `pages` (already-rendered
+   * page buffers, e.g. from the saver) to avoid re-rendering.
+   */
+  async auditTextContrast(
+    doc: DesignerDoc,
+    pages?: Buffer[]
+  ): Promise<TextContrastViolation[]> {
+    const violations: TextContrastViolation[] = [];
+    const rendered = pages ?? (await this.renderAllPages(doc));
+    const sharp = (await import('sharp')).default;
+
+    for (
+      let outputIndex = 0;
+      outputIndex < (doc.outputs?.length ?? 0);
+      outputIndex++
+    ) {
+      const out = doc.outputs[outputIndex] as DesignerOutput | undefined;
+      const page = rendered[outputIndex];
+      if (!out || !('children' in out) || !page) continue;
+
+      let meta: { width?: number; height?: number };
+      try {
+        meta = await sharp(page).metadata();
+      } catch {
+        continue;
+      }
+      const pageW = meta.width || out.width;
+      const pageH = meta.height || out.height;
+      const scaleX = pageW / out.width;
+      const scaleY = pageH / out.height;
+
+      for (let idx = 0; idx < out.children.length; idx++) {
+        const el = out.children[idx];
+        if (el.type !== 'text' || el.hidden || (el.opacity ?? 1) <= 0) continue;
+        const hasText = !!(el.text?.trim() || el.richText?.length);
+        if (!hasText || !(el.width > 0) || !(el.height > 0)) continue;
+        const fillMatch = /^#?[0-9a-f]{6}$/i.exec((el.fill || '').trim());
+        if (!fillMatch) continue;
+        const fill = fillMatch[0].startsWith('#')
+          ? fillMatch[0]
+          : `#${fillMatch[0]}`;
+
+        // Backdrop kind: the topmost earlier overlapping shape/image. A
+        // solid shape backdrop is the doc-validator's job — skip; imagery
+        // beneath (or an image/gradient output background) is what this
+        // pass samples.
+        let imagery = false;
+        let solidShape = false;
+        for (let k = idx - 1; k >= 0; k--) {
+          const other = out.children[k];
+          if (other.hidden) continue;
+          if (other.type !== 'shape' && other.type !== 'image') continue;
+          if (!aabbOverlap(el, other)) continue;
+          if (other.type === 'image') {
+            imagery = true;
+          } else if (other.fill || other.fillGradient) {
+            solidShape = true;
+          }
+          break;
+        }
+        if (!imagery) {
+          if (solidShape) continue;
+          const bgType = out.bg?.type;
+          if (bgType !== 'image' && bgType !== 'gradient') continue;
+        }
+
+        try {
+          const left = Math.min(Math.max(0, Math.round(el.x * scaleX)), pageW - 1);
+          const top = Math.min(Math.max(0, Math.round(el.y * scaleY)), pageH - 1);
+          const width = Math.min(
+            Math.max(1, Math.round(el.width * scaleX)),
+            pageW - left
+          );
+          const height = Math.min(
+            Math.max(1, Math.round(el.height * scaleY)),
+            pageH - top
+          );
+          const stats = await sharp(page)
+            .extract({ left, top, width, height })
+            .stats();
+          const [r, g, b] = stats.channels
+            .slice(0, 3)
+            .map((c) => (c?.mean ?? 255) / 255);
+          const backdropLuma = srgbLuminance(r, g, b);
+          const fillLuma = hexToLuminance(fill);
+          const ratio =
+            (Math.max(fillLuma, backdropLuma) + 0.05) /
+            (Math.min(fillLuma, backdropLuma) + 0.05);
+          const fontSize = el.fontSize || 16;
+          const isLarge =
+            fontSize >= 24 ||
+            ((el.fontWeight ?? 400) >= 700 && fontSize >= 18);
+          const required = isLarge ? 3 : 4.5;
+          if (ratio >= required) continue;
+          violations.push({
+            outputIndex,
+            elementId: el.id,
+            originId: el.originId,
+            fill,
+            ratio,
+            backdropLuma,
+          });
+        } catch (err) {
+          this._logger.warn(
+            `Contrast sampling failed for element ${el.id}: ${(err as Error)?.message}`
+          );
+        }
+      }
+    }
+
+    return violations;
+  }
+
   async renderContactSheet(
     doc: DesignerDoc,
     opts?: RenderOptions & { labels?: boolean; pages?: Buffer[] }
@@ -694,7 +843,13 @@ export class DesignRenderService {
       const img = await this.loadImageSafe(bg.src);
       if (img) {
         ctx.save();
-        ctx.drawImage(img, 0, 0, w, h);
+        // Cover-crop (uniform scale, focal-point crop) — never a non-uniform
+        // stretch. The crop centers when the bg carries no focalPoint (same
+        // math as image-element 'cover' fitMode below).
+        const srcW = (img as any).naturalWidth || img.width || w;
+        const srcH = (img as any).naturalHeight || img.height || h;
+        const { sx, sy, sw, sh } = computeCoverCrop(srcW, srcH, w, h, bg.focalPoint);
+        ctx.drawImage(img, sx, sy, sw, sh, 0, 0, w, h);
         ctx.restore();
         return;
       }
@@ -791,7 +946,6 @@ export class DesignRenderService {
     const fontWeight = el.fontWeight || 400;
     const fontStyle = el.fontStyle === 'italic' ? 'italic' : 'normal';
     const fontFamily = el.fontFamily || 'sans-serif';
-    const lineHeight = (el.lineHeight || 1.2) * fontSize;
     const align = el.align || 'left';
     const letterSpacing = el.letterSpacing || 0;
     const curve = el.curve || 0;
@@ -813,16 +967,53 @@ export class DesignRenderService {
       return;
     }
 
-    const lines = this.wrapLines(ctx, text, el.width, letterSpacing);
+    // Auto-fit: shrink the font (down to a floor) until the wrapped block
+    // fits the box height — a flat text element must never silently overflow
+    // its box bottom.
+    const fitted = this.fitFlatText(ctx, text, el, fontSize, fontStyle, fontWeight, fontFamily, letterSpacing);
+    ctx.font = `${fontStyle} ${fontWeight} ${fitted.fontSize}px ${fontFamily}`;
+
+    const contentHeight = fitted.lines.length * fitted.lineHeight;
     let y = 0;
-    for (const line of lines) {
+    if (el.verticalAlign === 'middle') y = Math.max(0, (el.height - contentHeight) / 2);
+    else if (el.verticalAlign === 'bottom') y = Math.max(0, el.height - contentHeight);
+
+    for (const line of fitted.lines) {
       const lineWidth = this.measureLine(ctx, line, letterSpacing);
       let x = 0;
       if (align === 'center') x = (el.width - lineWidth) / 2;
       else if (align === 'right') x = el.width - lineWidth;
       this.drawTextLine(ctx, line, x, y, letterSpacing, el);
-      y += lineHeight;
+      y += fitted.lineHeight;
     }
+  }
+
+  /**
+   * Measure (and shrink-to-fit) a flat text block: wraps `text` at
+   * `fontSize`; while the wrapped block is taller than the element box the
+   * font is stepped down 10% at a time, floored at ~60% of the original size
+   * (or 8px, whichever is larger). Returns the size to draw at, the wrapped
+   * lines and the per-line advance. The canvas font is left set to the
+   * returned size.
+   */
+  private fitFlatText(
+    ctx: any, text: string, el: DesignerElement,
+    fontSize: number, fontStyle: string, fontWeight: number,
+    fontFamily: string, letterSpacing: number
+  ): { fontSize: number; lines: string[]; lineHeight: number } {
+    const lineHeightFactor = el.lineHeight || 1.2;
+    const floor = Math.max(8, Math.floor(fontSize * 0.6));
+    let size = fontSize;
+    const wrapAt = (px: number) => {
+      ctx.font = `${fontStyle} ${fontWeight} ${px}px ${fontFamily}`;
+      return this.wrapLines(ctx, text, el.width, letterSpacing);
+    };
+    let lines = wrapAt(size);
+    while (size > floor && lines.length * lineHeightFactor * size > el.height) {
+      size = Math.max(floor, Math.floor(size * 0.9));
+      lines = wrapAt(size);
+    }
+    return { fontSize: size, lines, lineHeight: lineHeightFactor * size };
   }
 
   private drawRichText(ctx: any, el: DesignerElement): void {

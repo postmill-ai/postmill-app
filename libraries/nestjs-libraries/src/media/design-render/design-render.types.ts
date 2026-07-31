@@ -23,3 +23,19 @@ export interface RenderOptions {
   transparent?: boolean;
   orgId?: string;
 }
+
+/**
+ * One text-over-imagery contrast failure from
+ * `DesignRenderService.auditTextContrast`: the painted backdrop sampled under
+ * the text's box fails the WCAG ratio for its size class.
+ */
+export interface TextContrastViolation {
+  outputIndex: number;
+  elementId: string;
+  originId?: string;
+  fill: string;
+  /** Achieved contrast ratio vs the sampled backdrop. */
+  ratio: number;
+  /** WCAG relative luminance of the sampled backdrop (0..1). */
+  backdropLuma: number;
+}

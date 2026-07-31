@@ -132,6 +132,8 @@ export interface DesignerBackground {
   gradient?: DesignerGradient;
   src?: string;
   fileId?: string;
+  /** Cover-crop anchor (0–1) for image backgrounds; defaults to center. */
+  focalPoint?: { x: number; y: number };
 }
 
 export interface DesignerElement {
@@ -159,6 +161,8 @@ export interface DesignerElement {
   fontStyle?: 'normal' | 'italic';
   fill?: string;
   align?: 'left' | 'center' | 'right';
+  /** Vertical alignment of the wrapped text block inside the element box. */
+  verticalAlign?: 'top' | 'middle' | 'bottom';
   lineHeight?: number;
   letterSpacing?: number;
   textShadow?: DesignerTextShadow;
@@ -448,6 +452,21 @@ const { strict: StrictDesignerGradientSchema, lenient: LenientDesignerGradientSc
   );
 
 // ---------------------------------------------------------------------------
+// FocalPoint
+// ---------------------------------------------------------------------------
+const { strict: StrictFocalPointSchema, lenient: LenientFocalPointSchema } =
+  dualObject(
+    {
+      x: strictNum(0, 1),
+      y: strictNum(0, 1),
+    },
+    {
+      x: lenientNum(0, 1, 0.5),
+      y: lenientNum(0, 1, 0.5),
+    }
+  );
+
+// ---------------------------------------------------------------------------
 // DesignerBackground / DesignerPageBackground
 // ---------------------------------------------------------------------------
 const backgroundCommon = {
@@ -461,25 +480,14 @@ const { strict: StrictDesignerBackgroundSchema, lenient: LenientDesignerBackgrou
     {
       ...backgroundCommon,
       gradient: StrictDesignerGradientSchema.optional(),
+      // Cover-crop anchor for image backgrounds (renderer honors it, same as
+      // image-element focalPoint).
+      focalPoint: StrictFocalPointSchema.optional(),
     },
     {
       ...backgroundCommon,
       gradient: LenientDesignerGradientSchema.optional(),
-    }
-  );
-
-// ---------------------------------------------------------------------------
-// FocalPoint
-// ---------------------------------------------------------------------------
-const { strict: StrictFocalPointSchema, lenient: LenientFocalPointSchema } =
-  dualObject(
-    {
-      x: strictNum(0, 1),
-      y: strictNum(0, 1),
-    },
-    {
-      x: lenientNum(0, 1, 0.5),
-      y: lenientNum(0, 1, 0.5),
+      focalPoint: LenientFocalPointSchema.optional(),
     }
   );
 
@@ -500,6 +508,7 @@ const elementCommon = {
   fontStyle: z.enum(['normal', 'italic']).optional(),
   fill: ColorSchema.optional(),
   align: z.enum(['left', 'center', 'right']).optional(),
+  verticalAlign: z.enum(['top', 'middle', 'bottom']).optional(),
   textPath: z.string().max(MAX_TEXT_LEN).optional(),
 
   // image

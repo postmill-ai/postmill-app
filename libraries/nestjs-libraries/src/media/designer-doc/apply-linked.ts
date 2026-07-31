@@ -35,6 +35,32 @@ const isImageOutput = (
   out: DesignerOutput | VideoOutput
 ): out is DesignerOutput => 'children' in out;
 
+/** Uniform scale between two output canvases (same rule as smartReflow). */
+const outputScale = (
+  source: { width: number; height: number },
+  target: { width: number; height: number }
+): number => Math.min(target.width / source.width, target.height / source.height);
+
+/**
+ * Non-geometry updates propagate raw — except `fontSize`: a px value authored
+ * against one canvas is wrong on another, so linked copies get it scaled by
+ * their output's scale relative to the source (matching the reflow logic),
+ * floored at 10px like smartReflow.
+ */
+const scaledForOutput = (
+  shared: Partial<DesignerElement>,
+  source: { width: number; height: number },
+  target: { width: number; height: number }
+): Partial<DesignerElement> => {
+  if (typeof shared.fontSize !== 'number' || !Number.isFinite(shared.fontSize)) {
+    return shared;
+  }
+  return {
+    ...shared,
+    fontSize: Math.max(10, Math.round(shared.fontSize * outputScale(source, target))),
+  };
+};
+
 /**
  * Apply `updates` to the elements matched by `ids` on the current output, then
  * propagate any non-geometry updates to linked copies (same `originId`) on the
@@ -72,10 +98,11 @@ export const applyLinked = (
     if (!propagate || !isImageOutput(out)) return out;
 
     let changed = false;
+    const scaled = scaledForOutput(shared, current, out as DesignerOutput);
     const newChildren = (out as DesignerOutput).children.map((el) => {
       if (el.originId && origins.has(el.originId)) {
         changed = true;
-        return { ...el, ...shared };
+        return { ...el, ...scaled };
       }
       return el;
     });

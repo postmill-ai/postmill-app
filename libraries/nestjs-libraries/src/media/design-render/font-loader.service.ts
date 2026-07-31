@@ -20,12 +20,12 @@ export function safeFileId(fileId: string): string {
 // apps/frontend/src/components/media-tools/designer/fonts.ts.
 // The backend registers these on demand from Google Fonts so exports render
 // with the same glyphs as the canvas.
-interface CuratedFont {
+export interface CuratedFont {
   family: string;
   weights: number[];
 }
 
-const CURATED_FONTS: CuratedFont[] = [
+export const CURATED_FONTS: CuratedFont[] = [
   { family: 'Inter', weights: [300, 400, 500, 600, 700] },
   { family: 'Roboto', weights: [300, 400, 500, 700] },
   { family: 'Open Sans', weights: [300, 400, 500, 600, 700, 800] },
@@ -81,7 +81,11 @@ export class FontLoaderService {
   // Map caches font families per org; concurrency-safe only under single-threaded renders.
   private readonly _cache = new Map<string, FontCacheEntry>();
   private readonly _curatedLoaded = new Set<string>();
-  private readonly _curatedFailed = new Set<string>();
+  // family → failure timestamp. A failed Google Fonts fetch is retried after
+  // CURATED_RETRY_MS instead of blacklisting the family for the process
+  // lifetime; the current render still falls back to sans-serif.
+  private static readonly CURATED_RETRY_MS = 15 * 60_000;
+  private readonly _curatedFailed = new Map<string, number>();
   private readonly _tempDir = path.join(os.tmpdir(), 'postmill-fonts');
   private _dirEnsured = false;
 
@@ -177,7 +181,14 @@ export class FontLoaderService {
     await this._ensureTempDir();
 
     for (const [family, weights] of used) {
-      if (this._curatedLoaded.has(family) || this._curatedFailed.has(family)) continue;
+      if (this._curatedLoaded.has(family)) continue;
+      const failedAt = this._curatedFailed.get(family);
+      if (
+        failedAt !== undefined &&
+        Date.now() - failedAt < FontLoaderService.CURATED_RETRY_MS
+      ) {
+        continue;
+      }
       await this._loadCuratedFontFamily(family, Array.from(weights));
     }
   }
@@ -210,14 +221,14 @@ export class FontLoaderService {
       const res = await safeFetch(cssUrl);
       if (!res.ok) {
         this._logger.warn(`Failed to fetch curated font CSS for ${family}: ${res.status}`);
-        this._curatedFailed.add(family);
+        this._curatedFailed.set(family, Date.now());
         return;
       }
 
       const css = await res.text();
       const faceBlocks = css.match(/@font-face\s*\{[^}]+\}/g) || [];
       if (faceBlocks.length === 0) {
-        this._curatedFailed.add(family);
+        this._curatedFailed.set(family, Date.now());
         return;
       }
 
@@ -249,13 +260,14 @@ export class FontLoaderService {
 
       if (registeredAny) {
         this._curatedLoaded.add(family);
+        this._curatedFailed.delete(family);
         this._logger.log(`Registered curated font ${family}`);
       } else {
-        this._curatedFailed.add(family);
+        this._curatedFailed.set(family, Date.now());
         this._logger.warn(`No font files could be registered for curated family ${family}`);
       }
     } catch (err) {
-      this._curatedFailed.add(family);
+      this._curatedFailed.set(family, Date.now());
       this._logger.warn(`Failed to register curated font ${family}: ${(err as Error)?.message}`);
     }
   }

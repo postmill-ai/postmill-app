@@ -332,6 +332,78 @@ describe('DesignerDocService', () => {
     expect(added.children[0].y).toBe(257.5);
   });
 
+  it('addOutput seeds a grouped CTA pair through one shared anchor', () => {
+    const service = makeService();
+    const doc = service.validate({
+      version: 2,
+      mode: 'image',
+      outputs: [
+        {
+          id: 'out-primary',
+          formatId: 'custom',
+          name: 'Primary',
+          width: 1080,
+          height: 1080,
+          background: '#ffffff',
+          children: [
+            {
+              id: 'el-bar',
+              type: 'shape',
+              shape: 'rect',
+              x: 400,
+              y: 564,
+              width: 280,
+              height: 6,
+              rotation: 0,
+              opacity: 1,
+              locked: false,
+              hidden: false,
+              fill: '#8A6D3B',
+              groupId: 'cta',
+              originId: 'cta-underline',
+            },
+            {
+              id: 'el-label',
+              type: 'text',
+              x: 400,
+              y: 500,
+              width: 280,
+              height: 60,
+              rotation: 0,
+              opacity: 1,
+              locked: false,
+              hidden: false,
+              text: 'Shop now',
+              fontSize: 40,
+              groupId: 'cta',
+              originId: 'cta',
+            },
+          ],
+        },
+      ],
+    });
+
+    const result = service.applyOps(doc, [
+      {
+        op: 'addOutput',
+        preset: {
+          formatId: 'ig-story',
+          name: 'Story',
+          width: 1080,
+          height: 1920,
+        },
+      },
+    ]);
+
+    const added = result.outputs[1] as any;
+    const bar = added.children.find((el: any) => el.originId === 'cta-underline');
+    const label = added.children.find((el: any) => el.originId === 'cta');
+    // Individually derived anchors would split the pair (the bar would land
+    // ~37px off the label); the shared group anchor keeps the source offset.
+    expect(bar.y - label.y).toBe(564 - 500);
+    expect(bar.x - label.x).toBe(0);
+  });
+
   it('addOutput backfills originId on primary children when missing', () => {
     const service = makeService();
     const doc = service.validate({

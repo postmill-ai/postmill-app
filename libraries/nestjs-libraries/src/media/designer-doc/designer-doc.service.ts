@@ -20,6 +20,7 @@ import {
 import { DesignerDocOpError } from './designer-doc.errors';
 import { MAX_OPS_PER_REQUEST } from './designer-doc.limits';
 import { seedCopy } from './seed-copy';
+import { computeGroupBoxes, computeTextStackBoxes } from './reflow';
 import { applyLinked } from './apply-linked';
 
 const isImageOutput = (
@@ -171,8 +172,20 @@ export class DesignerDocService {
               ? el
               : { ...el, originId: `origin-${randomUUID()}` }
           );
+          // Grouped pairs (CTA label + pill/underline, badge + label) seed
+          // through one shared anchor derived from the group's combined bbox.
+          // Ungrouped copy stacks (headline/subhead columns) get a synthetic
+          // shared frame so the thirds-bucketing can't split them apart.
+          const groupBoxes = computeGroupBoxes(sourceChildren);
+          const stackBoxes = computeTextStackBoxes(sourceChildren, source);
           newOutput.children = sourceChildren.map((el) =>
-            seedCopy(el, source, newOutput, el.originId as string)
+            seedCopy(
+              el,
+              source,
+              newOutput,
+              el.originId as string,
+              el.groupId ? groupBoxes.get(el.groupId) : stackBoxes.get(el)
+            )
           );
           const outputs = doc.outputs.map((out, i) =>
             i === 0 ? { ...out, children: sourceChildren } : out

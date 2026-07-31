@@ -6,7 +6,7 @@ import {
   genId,
   matchPreset,
 } from '@postmill-ai/nestjs-libraries/media/designer-doc/designer-doc.migrate';
-import { smartReflow } from '@postmill-ai/nestjs-libraries/media/designer-doc/reflow';
+import { smartReflow, computeGroupBoxes } from '@postmill-ai/nestjs-libraries/media/designer-doc/reflow';
 import { seedCopy } from '@postmill-ai/nestjs-libraries/media/designer-doc/seed-copy';
 import { applyLinked, GEOMETRY_KEYS } from '@postmill-ai/nestjs-libraries/media/designer-doc/apply-linked';
 import type {
@@ -422,8 +422,9 @@ export const createDesignerStore = (
         const { doc, currentOutput } = get();
         const source = doc.outputs[currentOutput] as DesignerOutput;
         const sourceChildren = source.children.map((el) => (el.originId ? el : { ...el, originId: genId() }));
+        const groupBoxes = computeGroupBoxes(sourceChildren);
         const children = sourceChildren.map((el) =>
-          seedCopy(el, source, { ...preset, id: '', background: '#fff', children: [] } as DesignerOutput, el.originId as string),
+          seedCopy(el, source, { ...preset, id: '', background: '#fff', children: [] } as DesignerOutput, el.originId as string, el.groupId ? groupBoxes.get(el.groupId) : undefined),
         );
         const newOutput: DesignerOutput = {
           id: genId(), formatId: preset.formatId, name: preset.name,
@@ -450,7 +451,8 @@ export const createDesignerStore = (
         const out = doc.outputs[index] as DesignerOutput;
         if (!out) return;
         const resized: DesignerOutput = { ...out, width, height, formatId: formatId ?? out.formatId, name: name ?? out.name };
-        resized.children = out.children.map((el) => seedCopy(el, out, resized, el.originId || el.id));
+        const groupBoxes = computeGroupBoxes(out.children);
+        resized.children = out.children.map((el) => seedCopy(el, out, resized, el.originId || el.id, el.groupId ? groupBoxes.get(el.groupId) : undefined));
         const outs = [...doc.outputs]; outs[index] = resized;
         set({ doc: { ...doc, outputs: outs }, isDirty: true });
         get().pushHistory();
