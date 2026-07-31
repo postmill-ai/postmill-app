@@ -2,7 +2,14 @@ import { defineConfig } from 'vitepress'
 
 export default defineConfig({
   title: 'Postmill Docs',
-  description: 'Schedule social & chat posts across 36 channels',
+  description: 'Schedule to 36+ channels, reply from one inbox, design in-app, and run AI on your own keys.',
+  appearance: 'dark',
+  head: [
+    ['link', { rel: 'icon', type: 'image/svg+xml', href: '/favicon.svg' }],
+    ['link', { rel: 'preconnect', href: 'https://fonts.googleapis.com' }],
+    ['link', { rel: 'preconnect', href: 'https://fonts.gstatic.com', crossorigin: '' }],
+    ['link', { rel: 'stylesheet', href: 'https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap' }],
+  ],
   markdown: {
     languageAlias: {
       env: 'ini',
@@ -10,11 +17,22 @@ export default defineConfig({
     },
   },
   themeConfig: {
+    siteTitle: false,
+    logo: {
+      light: '/postmill-logo-light.svg',
+      dark: '/postmill-logo.svg',
+      alt: 'Postmill',
+    },
     nav: [
       { text: 'User Guide', link: '/user-guide/' },
       { text: 'Developer Docs', link: '/developer-docs/' },
       { text: 'Operations Guide', link: '/operations-guide/' },
+      { text: 'postmill.ai ↗', link: 'https://postmill.ai', target: '_blank', rel: 'noopener' },
     ],
+    footer: {
+      message: 'The AI-native social media management platform — <a href="https://postmill.ai" target="_blank" rel="noopener">postmill.ai</a>',
+      copyright: '© 2026 REAA Technologies Inc',
+    },
     sidebar: {
       '/user-guide/': [
         {

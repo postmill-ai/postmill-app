@@ -1,0 +1,175 @@
+/**
+ * Postmill brand theme for docs.postmill.ai — mirrors postmill.ai.
+ * Tokens: dark canvas #0e0e0e, panel #131318, blue #2b5cd3, sky #1d9bf0,
+ * magenta #aa0fa4, link-blue #7ba7f5. Font: Plus Jakarta Sans / JetBrains Mono.
+ * CSS-var overrides only — no structural changes, so VitePress upgrades stay safe.
+ */
+
+:root {
+  --vp-font-family-base: 'Plus Jakarta Sans', 'Inter', ui-sans-serif, system-ui, sans-serif;
+  --vp-font-family-mono: 'JetBrains Mono', ui-monospace, 'SF Mono', Menlo, monospace;
+
+  /* Brand (light mode values; dark overrides below) */
+  --vp-c-brand-1: #2b5cd3;
+  --vp-c-brand-2: #3b6de3;
+  --vp-c-brand-3: #2b5cd3;
+  --vp-c-brand: #2b5cd3;
+
+  /* Home hero — website headline gradient */
+  --vp-home-hero-name-color: transparent;
+  --vp-home-hero-name-background: linear-gradient(100deg, #2b5cd3 0%, #1d9bf0 48%, #aa0fa4 100%);
+
+  /* Buttons — website CTA style */
+  --vp-button-brand-border: transparent;
+  --vp-button-brand-text: #ffffff;
+  --vp-button-brand-bg: #2b5cd3;
+  --vp-button-brand-hover-border: transparent;
+  --vp-button-brand-hover-text: #ffffff;
+  --vp-button-brand-hover-bg: #3b6de3;
+  --vp-button-brand-active-border: transparent;
+  --vp-button-brand-active-text: #ffffff;
+  --vp-button-brand-active-bg: #2450bb;
+}
+
+.dark {
+  --vp-c-brand-1: #7ba7f5;
+  --vp-c-brand-2: #a8c4f8;
+  --vp-c-brand-3: #2b5cd3;
+
+  /* Surfaces — website dark canvas + panel */
+  --vp-c-bg: #0e0e0e;
+  --vp-c-bg-alt: #131318;
+  --vp-c-bg-elv: #131318;
+  --vp-c-bg-soft: #131318;
+  --vp-c-divider: rgba(255, 255, 255, 0.07);
+  --vp-c-border: rgba(255, 255, 255, 0.08);
+  --vp-c-gutter: rgba(255, 255, 255, 0.06);
+
+  --vp-c-text-1: #f0f0f4;
+  --vp-c-text-2: rgba(255, 255, 255, 0.58);
+  --vp-c-text-3: rgba(255, 255, 255, 0.35);
+
+  --vp-button-alt-border: rgba(255, 255, 255, 0.14);
+  --vp-button-alt-text: rgba(255, 255, 255, 0.82);
+  --vp-button-alt-bg: transparent;
+  --vp-button-alt-hover-border: rgba(255, 255, 255, 0.28);
+  --vp-button-alt-hover-text: #ffffff;
+  --vp-button-alt-hover-bg: rgba(255, 255, 255, 0.05);
+}
+
+/* ── Chrome ─────────────────────────────────────────── */
+
+/* Sticky nav — website's blurred dark header */
+.dark .VPNavBar:not(.home) .wrapper,
+.dark .VPNavBar.home.top .wrapper {
+  backdrop-filter: blur(20px) saturate(180%);
+  -webkit-backdrop-filter: blur(20px) saturate(180%);
+}
+.dark .VPNavBar {
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.VPNavBarTitle .vp-logo {
+  height: 26px;
+}
+
+.VPNavBarMenuLink.active,
+.VPNavBarMenuLink:hover {
+  color: var(--vp-c-brand-1);
+}
+
+/* Buttons get the website radius + brand glow */
+.VPButton {
+  border-radius: 12px;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+}
+.VPButton.brand {
+  box-shadow: 0 0 24px rgba(43, 92, 211, 0.35), 0 4px 14px rgba(0, 0, 0, 0.4);
+  transition: background 0.18s, box-shadow 0.18s, transform 0.18s;
+}
+.VPButton.brand:hover {
+  box-shadow: 0 0 40px rgba(43, 92, 211, 0.5), 0 8px 20px rgba(0, 0, 0, 0.4);
+  transform: translateY(-1px);
+}
+
+/* ── Home ───────────────────────────────────────────── */
+
+.VPHero .name,
+.VPHero .text {
+  letter-spacing: -0.035em;
+  font-weight: 800;
+}
+.VPHero .tagline {
+  font-weight: 500;
+}
+
+.dark .VPHome {
+  background:
+    radial-gradient(ellipse 50% 44% at 50% 0%, rgba(43, 92, 211, 0.16) 0%, transparent 74%),
+    var(--vp-c-bg);
+}
+
+/* Feature cards — website panel style */
+.dark .VPFeature {
+  background: #131318;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 16px;
+  transition: border-color 0.2s ease, transform 0.2s ease;
+}
+.dark .VPFeature:hover {
+  border-color: rgba(255, 255, 255, 0.16);
+  transform: translateY(-2px);
+}
+.VPFeature .title {
+  font-weight: 700;
+  letter-spacing: -0.01em;
+}
+
+/* ── Content ────────────────────────────────────────── */
+
+.vp-doc h1,
+.vp-doc h2,
+.vp-doc h3 {
+  letter-spacing: -0.02em;
+  font-weight: 800;
+}
+
+.vp-doc a {
+  font-weight: 600;
+  text-decoration: none;
+  border-bottom: 1px solid rgba(123, 167, 245, 0.35);
+  transition: border-color 0.15s;
+}
+.vp-doc a:hover {
+  border-bottom-color: var(--vp-c-brand-1);
+}
+
+.dark .vp-doc div[class*='language-'] {
+  background: #131318;
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  border-radius: 12px;
+}
+
+.dark .vp-doc .custom-block {
+  border-radius: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+/* Sidebar — quieter, website-like */
+.VPSidebarItem .text {
+  font-weight: 500;
+}
+.VPSidebarItem.is-active > .item > .text {
+  color: var(--vp-c-brand-1);
+  font-weight: 700;
+}
+
+/* Footer */
+.VPFooter {
+  border-top: 1px solid var(--vp-c-divider);
+}
+.VPFooter a {
+  color: var(--vp-c-brand-1);
+  font-weight: 600;
+}
