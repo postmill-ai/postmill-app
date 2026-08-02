@@ -49,6 +49,8 @@ interface CommentCardProps {
   enableLike?: boolean;
   enableStatusCycle?: boolean;
   teamMembers?: TeamMemberItem[];
+  /** Ring and scroll to this card — the target of `/replies?comment=<id>`. */
+  highlighted?: boolean;
 }
 
 const STATUS_DOT: Record<string, string> = {
@@ -87,6 +89,7 @@ export const CommentCard: FC<CommentCardProps> = ({
   enableLike,
   enableStatusCycle,
   teamMembers,
+  highlighted,
 }) => {
   const t = useT();
   const fetch = useFetch();
@@ -193,7 +196,16 @@ export const CommentCard: FC<CommentCardProps> = ({
   );
 
   return (
-    <div className="bg-newBgColorInner rounded-[8px] border border-newTableBorder p-[16px] flex items-start gap-[12px]">
+    <div
+      ref={
+        highlighted
+          ? (el) => el?.scrollIntoView?.({ block: 'center', behavior: 'smooth' })
+          : undefined
+      }
+      className={`bg-newBgColorInner rounded-[8px] border p-[16px] flex items-start gap-[12px] transition-colors ${
+        highlighted ? 'border-btnPrimary ring-2 ring-btnPrimary/40' : 'border-newTableBorder'
+      }`}
+    >
       {comment.authorPicture ? (
         // eslint-disable-next-line @next/next/no-img-element -- external comment author avatar
         <img

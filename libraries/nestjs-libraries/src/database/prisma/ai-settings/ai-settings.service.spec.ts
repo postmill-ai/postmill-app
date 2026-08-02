@@ -1170,8 +1170,20 @@ describe('AiSettingsService', () => {
 
       expect(result.jobs).toHaveLength(1);
       expect(result.counts).toEqual({ pending: 1, processing: 0, failed7d: 2 });
-      expect(mockRepo.getMediaJobs).toHaveBeenCalledWith('org-1', 20);
+      expect(mockRepo.getMediaJobs).toHaveBeenCalledWith('org-1', 20, {});
       expect(mockRepo.getMediaJobStatusCounts).toHaveBeenCalledWith('org-1');
+    });
+
+    it('filters the list but never the headline counts', async () => {
+      mockRepo.getMediaJobs.mockResolvedValue([]);
+      mockRepo.getMediaJobStatusCounts.mockResolvedValue({ pending: 1, processing: 0, failed7d: 2 });
+
+      const result = await service.getMediaJobsWithCounts('org-1', 20, { status: 'failed' });
+
+      expect(mockRepo.getMediaJobs).toHaveBeenCalledWith('org-1', 20, { status: 'failed' });
+      // Counts are the queue's totals — they must not move as you filter beneath them.
+      expect(mockRepo.getMediaJobStatusCounts).toHaveBeenCalledWith('org-1');
+      expect(result.counts).toEqual({ pending: 1, processing: 0, failed7d: 2 });
     });
   });
 });

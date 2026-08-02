@@ -146,8 +146,9 @@ describe('OverviewTab', () => {
     render(<OverviewTab {...baseProps} loading={false} data={sampleData} />);
     expect(screen.getByText('Impressions')).toBeTruthy();
     expect(screen.getByText('Engagement')).toBeTruthy();
-    expect(screen.getByText('50,000')).toBeTruthy();
-    expect(screen.getByText('2,500')).toBeTruthy();
+    // StatTile compacts so values fit narrow tiles; the exact figure is on hover.
+    expect(screen.getByText('50.0K')).toBeTruthy();
+    expect(screen.getByText('2.5K')).toBeTruthy();
   });
 
   it('renders chart containers', () => {

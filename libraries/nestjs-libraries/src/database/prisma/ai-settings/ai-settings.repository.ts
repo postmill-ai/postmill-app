@@ -279,11 +279,33 @@ export class AiSettingsRepository {
     });
   }
 
-  getMediaJobs(organizationId: string, limit = 50) {
+  getMediaJobs(
+    organizationId: string,
+    limit = 50,
+    opts: { status?: string; provider?: string; cursor?: string } = {}
+  ) {
+    // `[organizationId, status, createdAt]` and `[provider, createdAt]` are both
+    // indexed, so filtering here stays index-backed.
+    //
+    // Two writers, two vocabularies: the async lifecycle writes 'completed',
+    // while synchronous jobs (AiMediaService._persistJob) write 'done'. They
+    // mean the same thing, so a 'completed' filter must match both.
+    const statusWhere =
+      opts.status === 'completed'
+        ? { status: { in: ['completed', 'done'] } }
+        : opts.status
+          ? { status: opts.status }
+          : {};
     return this._aiMediaJob.model.aIMediaJob.findMany({
-      where: { organizationId },
+      where: {
+        organizationId,
+        ...statusWhere,
+        ...(opts.provider ? { provider: opts.provider } : {}),
+      },
       orderBy: { createdAt: 'desc' },
       take: limit,
+      // Skip the cursor row itself so pages don't repeat their boundary job.
+      ...(opts.cursor ? { cursor: { id: opts.cursor }, skip: 1 } : {}),
     });
   }
 

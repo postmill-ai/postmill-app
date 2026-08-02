@@ -23,6 +23,9 @@ import { AttentionFeed } from './widgets/attention.feed';
 import { useAiActive } from '@postmill-ai/frontend/components/layout/use-ai-active';
 import { DailyBrief } from './widgets/daily.brief';
 import { useT } from '@postmill-ai/react/translation/get.transation.service.client';
+import { useAttention } from './hooks/useAttention';
+import { useMediaJobs } from './hooks/useMediaJobs';
+import { ANALYTICS_USAGE_HREF, MEDIA_QUEUE_HREF } from './destinations';
 
 export { greetingForUser };
 
@@ -32,6 +35,9 @@ export const DashboardComponent = () => {
   const t = useT();
   const { data: summary, isLoading: summaryLoading } = useDashboardSummary();
   const { data: integrations } = useIntegrationList();
+  // Same SWR keys the widgets use, so these are cache reads, not extra requests.
+  const { data: attention } = useAttention();
+  const { data: mediaJobs } = useMediaJobs();
 
   const DASHBOARD_SECTIONS: DashboardSectionMeta[] = useMemo(
     () => [
@@ -116,7 +122,7 @@ export const DashboardComponent = () => {
 
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-[12px]">
         <div className="lg:col-span-12 order-first lg:order-1">
-          <DailyBrief open={briefOpen} />
+          <DailyBrief open={briefOpen} onOpenChange={setBriefOpen} />
         </div>
 
         <div className="lg:col-span-12 order-first lg:order-1">
@@ -124,7 +130,11 @@ export const DashboardComponent = () => {
         </div>
 
         <div className="lg:col-span-12 order-1 lg:order-2">
-          <SectionCard id="attention" title={t('needs_attention', 'Needs attention')}>
+          <SectionCard
+            id="attention"
+            title={t('needs_attention', 'Needs attention')}
+            badge={attention?.items?.length}
+          >
             <AttentionFeed />
           </SectionCard>
         </div>
@@ -199,6 +209,7 @@ export const DashboardComponent = () => {
           <SectionCard
             id="inbox"
             title={t('inbox', 'Inbox')}
+            badge={summary?.commentUnreadCount}
             viewAllHref="/replies"
             permission={['comments', 'read']}
           >
@@ -210,7 +221,8 @@ export const DashboardComponent = () => {
           <SectionCard
             id="media"
             title={t('media_queue', 'Media queue')}
-            viewAllHref="/media"
+            badge={mediaJobs?.counts?.failed7d}
+            viewAllHref={MEDIA_QUEUE_HREF}
             permission={['media', 'read']}
           >
             <MediaQueueWidget />
@@ -221,7 +233,7 @@ export const DashboardComponent = () => {
           <SectionCard
             id="usage"
             title={t('usage_budget', 'Usage & budget')}
-            viewAllHref="/billing"
+            viewAllHref={ANALYTICS_USAGE_HREF}
             permission={['billing', 'read']}
           >
             <UsageWidget />

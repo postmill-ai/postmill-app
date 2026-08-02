@@ -8,6 +8,7 @@ import { getTimezone } from '@postmill-ai/frontend/components/layout/set.timezon
 import { StreakComponent } from '@postmill-ai/frontend/components/layout/streak.component';
 import { Button } from '@postmill-ai/react/form/button';
 import { useT } from '@postmill-ai/react/translation/get.transation.service.client';
+import { KebabMenu } from '@postmill-ai/frontend/components/ui/kebab-menu';
 import { CustomizePopover, DashboardSectionMeta } from './customize.popover';
 import { greetingForUser } from './dashboard.utils';
 
@@ -75,6 +76,33 @@ export const DashboardHeader: FC<DashboardHeaderProps> = ({
         >
           + {t('new_campaign', 'New Campaign')}
         </Button>
+        {/* Two ways to make a design, so the button is a menu rather than a
+            guess at which one you wanted. Same secondary-button look as its
+            neighbours — KebabMenu supplies the menu behaviour. */}
+        <KebabMenu
+          ariaLabel={t('new_design_aria', 'New design')}
+          align="left"
+          width={200}
+          triggerClassName="bg-btnSimple text-btnText border border-newTableBorder hover:bg-boxHover px-[12px] h-[40px] text-[14px] font-[500] !rounded-[8px] gap-[6px] focus-visible:ring-2 ring-btnPrimary/40 outline-none"
+          trigger={
+            <>
+              + {t('new_design', 'New Design')}
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                <path d="m6 9 6 6 6-6" />
+              </svg>
+            </>
+          }
+          items={[
+            {
+              label: t('designer', 'Designer'),
+              onClick: () => router.push('/media/designer'),
+            },
+            {
+              label: t('ai_designer', 'AI Designer'),
+              onClick: () => router.push('/media/ai-designer'),
+            },
+          ]}
+        />
         <CustomizePopover sections={sections} />
       </div>
     </div>

@@ -5,63 +5,10 @@ import dayjs from 'dayjs';
 import relativeTime from 'dayjs/plugin/relativeTime';
 import { useRouter } from 'next/navigation';
 import { useMediaJobs, MediaJob } from '../hooks/useMediaJobs';
+import { MEDIA_QUEUE_HREF } from '../destinations';
 import ProviderIcon from '@postmill-ai/frontend/components/shared/provider-icon';
 import { EmptyState, TabSkeleton } from '@postmill-ai/frontend/components/analytics-v2/kit/states';
 import { useT } from '@postmill-ai/react/translation/get.transation.service.client';
-
-// Providers that have a dedicated /media/<slug> studio route.
-const MEDIA_STUDIO_ROUTES = new Set([
-  'ai-designer',
-  'designer',
-  'reelfarm',
-  'genviral',
-  'replicate',
-  'heygen',
-  'kling',
-  'higgsfield',
-  'ltx',
-  'luma',
-  'minimax',
-  'pika',
-  'qwen',
-  'togetherai',
-  'runway',
-  'suno',
-  'wan',
-  'siliconflow',
-  'groq',
-  'openrouter',
-  'fireworks',
-  'deepinfra',
-  'xai',
-  'gateway',
-  'bedrock',
-  'azure',
-  'google-ai',
-  'vertex',
-  'black-forest-labs',
-  'stability-ai',
-  'recraft',
-  'ideogram',
-  'leonardo',
-  'openai',
-  'sora',
-  'elevenlabs',
-  'did',
-  'deepgram',
-  'hedra',
-  'tavus',
-]);
-
-// Job provider ids that differ from their studio route segment.
-const MEDIA_ROUTE_OVERRIDES: Record<string, string> = {
-  google: 'google-ai',
-};
-
-const getMediaRoute = (provider: string) => {
-  const slug = MEDIA_ROUTE_OVERRIDES[provider] ?? provider;
-  return MEDIA_STUDIO_ROUTES.has(slug) ? `/media/${slug}` : '/media';
-};
 
 dayjs.extend(relativeTime);
 
@@ -105,11 +52,12 @@ const isImageOrVideo = (url: string | null) => {
 const MediaJobRow: FC<{ job: MediaJob }> = ({ job }) => {
   const router = useRouter();
   const t = useT();
-  const route = getMediaRoute(job.provider);
+  // The job itself is the destination, not the studio that produced it: the
+  // queue is where you can retry it, preview it or post it.
   return (
     <button
       type="button"
-      onClick={() => router.push(route)}
+      onClick={() => router.push(`${MEDIA_QUEUE_HREF}?job=${job.id}`)}
       className="flex items-center gap-[10px] p-[10px] rounded-[10px] bg-newTableHeader border border-newTableBorder hover:border-newTableText transition-colors text-start w-full"
     >
       <ProviderIcon identifier={job.provider} name={job.provider} size={28} />

@@ -353,7 +353,9 @@ describe('UsageWidget', () => {
 
     expect(screen.getByText('Spend by Provider')).toBeTruthy();
     expect(screen.getByText('openai')).toBeTruthy();
-    expect(screen.getByText('30 / 50')).toBeTruthy();
-    expect(screen.getByText('5 / 10')).toBeTruthy();
+    // Provider caps are dollars, so they read as dollars — a bare "30 / 50"
+    // beside plan counts is ambiguous.
+    expect(screen.getByText('$30.00 / $50.00')).toBeTruthy();
+    expect(screen.getByText('$5.00 / $10.00')).toBeTruthy();
   });
 });

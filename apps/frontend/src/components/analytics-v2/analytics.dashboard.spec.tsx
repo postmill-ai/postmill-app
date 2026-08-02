@@ -153,7 +153,7 @@ describe('AnalyticsDashboard', () => {
     expect(screen.getByRole('button', { name: /^Filter/ })).toBeTruthy();
   });
 
-  it('renders the six inline analytics tab buttons (no kebab)', () => {
+  it('keeps every analytics tab reachable, three inline and the rest in the ⋮', () => {
     render(<AnalyticsDashboard />);
 
     // Tabs carry role="tab" (a11y: they live in a role="tablist").
@@ -163,6 +163,15 @@ describe('AnalyticsDashboard', () => {
     expect(screen.getByRole('tab', { name: 'Insights' })).toBeTruthy();
     expect(screen.getByRole('tab', { name: 'Links' })).toBeTruthy();
     expect(screen.getByRole('tab', { name: 'Watchlist' })).toBeTruthy();
+    expect(screen.getByRole('tab', { name: 'Usage' })).toBeTruthy();
+
+    // jsdom applies no CSS, so the `mobile:hidden` copies are still queryable —
+    // assert the split through the slot marker instead. Watchlist and Usage used
+    // to be clipped off-screen here with no scrollbar and no menu.
+    const inline = [...document.querySelectorAll('[data-overflow-slot="inline"]')];
+    expect(inline.map((e) => e.textContent)).toEqual(['Overview', 'Channels', 'Posts']);
+    expect(screen.getByRole('button', { name: 'More analytics tabs' })).toBeTruthy();
+
     // Best time / Recommendations are now Insights sections, not top-level tabs.
     expect(screen.queryByRole('tab', { name: 'Best time' })).toBeNull();
     expect(screen.queryByRole('tab', { name: 'Recommendations' })).toBeNull();

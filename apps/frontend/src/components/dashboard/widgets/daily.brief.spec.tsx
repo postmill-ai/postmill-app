@@ -152,3 +152,66 @@ describe('DailyBrief', () => {
     expect(screen.getByText('Regenerate')).toBeTruthy();
   });
 });
+
+// The dashboard renders this controlled — `open` is always a boolean, never
+// undefined. Every expand test above renders it UNCONTROLLED, which is why the
+// production card shipped completely inert: the internal setter was a no-op, and
+// because expanding is what triggers generation, a workspace with no cached brief
+// could never produce one.
+describe('DailyBrief controlled mode', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockAiActive.mockReturnValue(true);
+    mockBriefHook.mockReturnValue({
+      data: { cached: false },
+      error: undefined,
+      isLoading: false,
+      generate: mockGenerate,
+    });
+  });
+
+  it('asks the parent to open when the header is clicked', () => {
+    const onOpenChange = vi.fn();
+    render(<DailyBrief open={false} onOpenChange={onOpenChange} />);
+
+    fireEvent.click(screen.getByRole('button', { name: /daily brief/i }));
+
+    expect(onOpenChange).toHaveBeenCalledWith(true);
+  });
+
+  it('generates a brief when opened with nothing cached', async () => {
+    const onOpenChange = vi.fn();
+    render(<DailyBrief open={false} onOpenChange={onOpenChange} />);
+
+    fireEvent.click(screen.getByRole('button', { name: /daily brief/i }));
+
+    await waitFor(() => expect(mockGenerate).toHaveBeenCalled());
+  });
+
+  it('asks the parent to close when it is already open', () => {
+    const onOpenChange = vi.fn();
+    render(<DailyBrief open onOpenChange={onOpenChange} />);
+
+    fireEvent.click(screen.getByRole('button', { name: /daily brief/i }));
+
+    expect(onOpenChange).toHaveBeenCalledWith(false);
+    // Collapsing must not kick off another generation.
+    expect(mockGenerate).not.toHaveBeenCalled();
+  });
+
+  it('does not re-generate when a brief is already cached', () => {
+    mockBriefHook.mockReturnValue({
+      data: { brief: 'cached text', generatedAt: '2026-01-01T00:00:00Z' },
+      error: undefined,
+      isLoading: false,
+      generate: mockGenerate,
+    });
+    const onOpenChange = vi.fn();
+    render(<DailyBrief open={false} onOpenChange={onOpenChange} />);
+
+    fireEvent.click(screen.getByRole('button', { name: /daily brief/i }));
+
+    expect(onOpenChange).toHaveBeenCalledWith(true);
+    expect(mockGenerate).not.toHaveBeenCalled();
+  });
+});

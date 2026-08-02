@@ -275,17 +275,50 @@ describe('DashboardController', () => {
 
   describe('GET /media-jobs', () => {
     it('returns media jobs from the dashboard service', async () => {
-      const jobs = { jobs: [{ id: 'j1' }], counts: {} };
+      const jobs = {
+        jobs: [{ id: 'j1' }],
+        counts: {},
+        nextCursor: null as string | null,
+      };
       dashboardService.getMediaJobs.mockResolvedValue(jobs);
 
-      const result = await controller.getMediaJobs(org);
+      const result = await controller.getMediaJobs(org, {});
 
-      expect(dashboardService.getMediaJobs).toHaveBeenCalledWith('org-1');
+      // The dashboard widget calls this bare; every option must be undefined so
+      // the service falls back to its original 20-job payload.
+      expect(dashboardService.getMediaJobs).toHaveBeenCalledWith('org-1', {
+        limit: undefined,
+        status: undefined,
+        provider: undefined,
+        cursor: undefined,
+      });
       expect(result).toEqual(jobs);
     });
 
+    it('passes the queue page filters and cursor through', async () => {
+      dashboardService.getMediaJobs.mockResolvedValue({
+        jobs: [],
+        counts: {},
+        nextCursor: null as string | null,
+      });
+
+      await controller.getMediaJobs(org, {
+        limit: 50,
+        status: 'failed',
+        provider: 'openai',
+        cursor: 'job-20',
+      });
+
+      expect(dashboardService.getMediaJobs).toHaveBeenCalledWith('org-1', {
+        limit: 50,
+        status: 'failed',
+        provider: 'openai',
+        cursor: 'job-20',
+      });
+    });
+
     it('throws UnauthorizedException when org is missing', async () => {
-      await expect(controller.getMediaJobs(undefined as any)).rejects.toThrow(
+      await expect(controller.getMediaJobs(undefined as any, {})).rejects.toThrow(
         UnauthorizedException,
       );
       expect(dashboardService.getMediaJobs).not.toHaveBeenCalled();

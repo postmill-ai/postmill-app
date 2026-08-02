@@ -11,6 +11,7 @@ import {
   UsePipes,
   ValidationPipe,
 } from '@nestjs/common';
+import { Throttle } from '@nestjs/throttler';
 import { GetUserFromRequest } from '@postmill-ai/nestjs-libraries/user/user.from.request';
 import { Organization, User } from '@prisma/client';
 import { GetOrgFromRequest } from '@postmill-ai/nestjs-libraries/user/org.from.request';
@@ -36,6 +37,9 @@ export class NotificationsController {
   ) {}
 
   @Get('/')
+  // The header bell polls the unread count every 30s and on every window focus; a long
+  // session with a lot of tab switching overruns the global 600/h backstop.
+  @Throttle({ default: { limit: 2000, ttl: 3600000 } })
   async mainPageList(
     @GetUserFromRequest() user: User,
     @GetOrgFromRequest() organization: Organization
@@ -48,6 +52,8 @@ export class NotificationsController {
   }
 
   @Get('/list')
+  // The open notification panel refreshes every 30s; same headroom as the count above.
+  @Throttle({ default: { limit: 2000, ttl: 3600000 } })
   async notifications(
     @GetUserFromRequest() user: User,
     @GetOrgFromRequest() organization: Organization,

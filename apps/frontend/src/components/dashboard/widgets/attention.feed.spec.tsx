@@ -108,7 +108,102 @@ describe('AttentionFeed', () => {
     render(<AttentionFeed />);
     fireEvent.click(screen.getByText('Fix'));
 
-    expect(push).toHaveBeenCalledWith('/settings?tab=channels');
+    // The backend still emits the `?tab=` shim (and /dashboard/attention is
+    // Redis-cached, so it will for a while); the UI normalises it so a click
+    // costs one navigation instead of two.
+    expect(push).toHaveBeenCalledWith('/settings/channels');
+  });
+
+  it('sends budget items to usage rather than the pages with no usage on them', () => {
+    // `/billing` renders no usage at all and `/settings?tab=ai` has no budget UI,
+    // so both backend links are dead ends.
+    mockHook.mockReturnValue({
+      data: {
+        items: [
+          makeItem({
+            kind: 'budget',
+            link: '/billing',
+            action: { label: 'View', type: 'navigate' as const },
+          }),
+        ],
+      },
+      isLoading: false,
+      retryPost: mockRetry,
+      dismissAnomaly: mockDismiss,
+    });
+
+    render(<AttentionFeed />);
+    fireEvent.click(screen.getByText('View'));
+
+    expect(push).toHaveBeenCalledWith('/analytics?tab=usage');
+  });
+
+  it('sends failed media jobs to the queue, filtered to failures', () => {
+    mockHook.mockReturnValue({
+      data: {
+        items: [
+          makeItem({
+            kind: 'failed-media-jobs',
+            link: '/media',
+            action: { label: 'View', type: 'navigate' as const },
+          }),
+        ],
+      },
+      isLoading: false,
+      retryPost: mockRetry,
+      dismissAnomaly: mockDismiss,
+    });
+
+    render(<AttentionFeed />);
+    fireEvent.click(screen.getByText('View'));
+
+    expect(push).toHaveBeenCalledWith('/media/queue?status=failed');
+  });
+
+  it('keeps a specific backend link instead of falling back to the kind', () => {
+    // pending-approvals used to discard item.link, so it could never reach a
+    // particular campaign even when the backend named one.
+    mockHook.mockReturnValue({
+      data: {
+        items: [
+          makeItem({
+            kind: 'pending-approvals',
+            link: '/campaigns/abc-123',
+            action: { label: 'Review', type: 'navigate' as const },
+          }),
+        ],
+      },
+      isLoading: false,
+      retryPost: mockRetry,
+      dismissAnomaly: mockDismiss,
+    });
+
+    render(<AttentionFeed />);
+    fireEvent.click(screen.getByText('Review'));
+
+    expect(push).toHaveBeenCalledWith('/campaigns/abc-123');
+  });
+
+  it('renders no action button when there is nowhere to go', () => {
+    // This used to push '#', which reads as a broken control.
+    mockHook.mockReturnValue({
+      data: {
+        items: [
+          makeItem({
+            kind: 'something-new' as AttentionItemDto['kind'],
+            link: undefined,
+            action: { label: 'Open', type: 'navigate' as const },
+          }),
+        ],
+      },
+      isLoading: false,
+      retryPost: mockRetry,
+      dismissAnomaly: mockDismiss,
+    });
+
+    render(<AttentionFeed />);
+
+    expect(screen.queryByText('Open')).toBeNull();
   });
 
   it('expands failed-posts items and calls retryPost', async () => {

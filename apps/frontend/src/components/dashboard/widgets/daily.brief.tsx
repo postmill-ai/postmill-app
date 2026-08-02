@@ -3,6 +3,7 @@
 import { FC, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useDailyBrief } from '../hooks/useDailyBrief';
+import { useDashboardPrefs } from '../hooks/useDashboardPrefs';
 import { useAiActive, AI_SETUP_HREF } from '@postmill-ai/frontend/components/layout/use-ai-active';
 import { useToaster } from '@postmill-ai/react/toaster/toaster';
 import { Button } from '@postmill-ai/react/form/button';
@@ -35,28 +36,46 @@ const SparkleIcon: FC<{ className?: string }> = ({ className }) => (
 
 interface DailyBriefProps {
   open?: boolean;
+  /**
+   * Required whenever `open` is passed. Without it a controlled `DailyBrief` is
+   * inert: the card can never be expanded from its own header, and because
+   * expanding is what triggers generation, a workspace with no cached brief can
+   * never produce one.
+   */
+  onOpenChange?: (open: boolean) => void;
 }
 
-export const DailyBrief: FC<DailyBriefProps> = ({ open }) => {
+export const DailyBrief: FC<DailyBriefProps> = ({ open, onOpenChange }) => {
   const router = useRouter();
   const aiActive = useAiActive();
   const { data, error, isLoading, generate } = useDailyBrief();
   const toaster = useToaster();
   const t = useT();
+  const { hidden } = useDashboardPrefs();
   const [internalExpanded, setInternalExpanded] = useState(false);
   const [generating, setGenerating] = useState(false);
   const expanded = open ?? internalExpanded;
-  const setExpanded = (v: boolean | ((prev: boolean) => boolean)) => {
-    if (open === undefined) setInternalExpanded(v);
+  const setExpanded = (next: boolean) => {
+    if (open === undefined) setInternalExpanded(next);
+    else onOpenChange?.(next);
   };
 
   if (aiActive === false) return null;
+  // The Customize popover lists a "brief" section; this widget renders outside a
+  // SectionCard, so it has to honour the pref itself.
+  if (hidden.includes('brief')) return null;
 
   const cached = data && 'brief' in data ? data : undefined;
   const empty = data && 'cached' in data ? data : undefined;
   const statusError = error as any;
 
   const handleExpand = async () => {
+    // Collapse when already open — this used to only ever set true, so the card
+    // could be opened but never closed.
+    if (expanded) {
+      setExpanded(false);
+      return;
+    }
     setExpanded(true);
     if (cached) return;
     setGenerating(true);

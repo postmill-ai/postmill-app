@@ -1,6 +1,7 @@
 'use client';
 
 import { FC, useCallback, useEffect, useMemo, useState } from 'react';
+import { useSearchParams } from 'next/navigation';
 import { useFetch } from '@postmill-ai/helpers/utils/custom.fetch';
 import useSWR from 'swr';
 import dayjs from 'dayjs';
@@ -34,14 +35,35 @@ interface ReplyFilters {
   sortBy?: 'priority';
 }
 
+/**
+ * Seed the filters from the URL so a link can land on a filtered inbox — and so
+ * a filtered inbox can be linked to at all. `/replies?comment=<id>` (from the
+ * dashboard inbox card) rides along: the comment is highlighted below.
+ */
+const filtersFromParams = (params: URLSearchParams): ReplyFilters => {
+  const list = (key: string) =>
+    (params.get(key) || '').split(',').map((v) => v.trim()).filter(Boolean);
+  return {
+    status: params.get('status') || undefined,
+    assigneeId: params.get('assigneeId') || undefined,
+    integrationIds: list('integrationId'),
+    campaignIds: list('campaignId'),
+    unreadOnly: params.get('unreadOnly') === 'true',
+    sentiment: (params.get('sentiment') as ReplyFilters['sentiment']) || undefined,
+    priority: (params.get('priority') as ReplyFilters['priority']) || undefined,
+  };
+};
+
 export const CommentInbox: FC = () => {
   const t = useT();
   const fetch = useFetch();
-  const [filters, setFilters] = useState<ReplyFilters>({
-    integrationIds: [],
-    campaignIds: [],
-    unreadOnly: false,
-  });
+  const searchParams = useSearchParams();
+  const highlightCommentId = searchParams.get('comment');
+  // Initial state only — after mount the filter bar owns the filters, so
+  // changing them doesn't fight the URL.
+  const [filters, setFilters] = useState<ReplyFilters>(() =>
+    filtersFromParams(new URLSearchParams(searchParams.toString()))
+  );
   const [prioritySort, setPrioritySort] = useState(false);
   const [search, setSearch] = useState('');
   const [statusCode, setStatusCode] = useState<number | null>(null);
@@ -373,6 +395,7 @@ export const CommentInbox: FC = () => {
             enableLike
             enableStatusCycle
             teamMembers={teamMembers}
+            highlighted={comment.id === highlightCommentId}
           />
         ))}
       </div>

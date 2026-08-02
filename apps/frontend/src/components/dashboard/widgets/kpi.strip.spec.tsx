@@ -32,8 +32,9 @@ vi.mock('@postmill-ai/frontend/components/analytics-v2/hooks/useOverview', () =>
   useOverview: vi.fn(),
 }));
 
+const mockPush = vi.fn();
 vi.mock('next/navigation', () => ({
-  useRouter: () => ({ push: vi.fn() }),
+  useRouter: () => ({ push: mockPush }),
 }));
 
 vi.mock('@postmill-ai/helpers/utils/custom.fetch', () => ({
@@ -103,7 +104,7 @@ describe('KpiStrip', () => {
     render(<KpiStrip {...defaultProps} />);
 
     expect(screen.getByText('Engagement (7d)')).toBeTruthy();
-    expect(screen.getByText('1,234')).toBeTruthy();
+    expect(screen.getByText('1.2K')).toBeTruthy();
     expect(screen.getByText('Published (7d)')).toBeTruthy();
     expect(screen.getByText('12')).toBeTruthy();
     expect(screen.getByText('Scheduled')).toBeTruthy();
@@ -159,7 +160,7 @@ describe('KpiStrip', () => {
     expect(within(tile).getByText('0')).toBeTruthy();
   });
 
-  it('renders tiles as non-interactive when no onClick is provided', () => {
+  it('makes every tile open the page that explains its number', () => {
     mockUseDashboardSummary.mockReturnValue({
       data: {
         publishedNext7: 1,
@@ -177,8 +178,14 @@ describe('KpiStrip', () => {
     render(<KpiStrip {...defaultProps} />);
 
     const tile = screen.getByTestId('kpi-tile-Engagement (7d)');
-    expect(tile).toBeTruthy();
-    expect(tile.querySelector('[role="button"]')).toBeNull();
-    expect(within(tile).getByText('1,234')).toBeTruthy();
+    expect(within(tile).getByText('1.2K')).toBeTruthy();
+
+    fireEvent.click(tile.querySelector('[role="button"]')!);
+    expect(mockPush).toHaveBeenCalledWith('/analytics');
+
+    fireEvent.click(
+      screen.getByTestId('kpi-tile-Unread replies').querySelector('[role="button"]')!
+    );
+    expect(mockPush).toHaveBeenCalledWith('/replies?unreadOnly=true');
   });
 });

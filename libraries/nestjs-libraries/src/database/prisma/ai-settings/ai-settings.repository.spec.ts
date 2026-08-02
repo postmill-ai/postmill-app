@@ -720,6 +720,38 @@ describe('AiSettingsRepository', () => {
         take: 10,
       });
     });
+
+    it('filters by status and provider', async () => {
+      await repository.getMediaJobs('org1', 10, { status: 'failed', provider: 'runway' });
+
+      expect(mockMediaJob.findMany).toHaveBeenCalledWith({
+        where: { organizationId: 'org1', status: 'failed', provider: 'runway' },
+        orderBy: { createdAt: 'desc' },
+        take: 10,
+      });
+    });
+
+    it("matches both spellings of finished when filtering by 'completed'", async () => {
+      await repository.getMediaJobs('org1', 10, { status: 'completed' });
+
+      expect(mockMediaJob.findMany).toHaveBeenCalledWith({
+        where: { organizationId: 'org1', status: { in: ['completed', 'done'] } },
+        orderBy: { createdAt: 'desc' },
+        take: 10,
+      });
+    });
+
+    it('skips the cursor row so pages do not repeat their boundary job', async () => {
+      await repository.getMediaJobs('org1', 10, { cursor: 'job-9' });
+
+      expect(mockMediaJob.findMany).toHaveBeenCalledWith({
+        where: { organizationId: 'org1' },
+        orderBy: { createdAt: 'desc' },
+        take: 10,
+        cursor: { id: 'job-9' },
+        skip: 1,
+      });
+    });
   });
 
   describe('countInFlightVideoExports (F4)', () => {

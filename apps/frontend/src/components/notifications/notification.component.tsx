@@ -118,7 +118,14 @@ export const NotificationOpenComponent: FC<{
 
   const loadNotifications = useCallback(
     async (): Promise<{ notifications: NotificationItem[] }> => {
-      return (await fetch('/notifications/list')).json();
+      const res = await fetch('/notifications/list');
+      // A non-2xx body (e.g. the throttler's 429 payload) has no `notifications`
+      // array — parsing it would render "No notifications" as if the list were
+      // genuinely empty. Throw so SWR keeps the last good data instead.
+      if (!res.ok) {
+        throw new Error(`Failed to load notifications: ${res.status}`);
+      }
+      return res.json();
     },
     [fetch]
   );
@@ -247,7 +254,13 @@ const NotificationComponent = () => {
   const [show, setShow] = useState(false);
 
   const loadUnreadCount = useCallback(async (): Promise<{ total: number }> => {
-    return (await fetch('/notifications')).json();
+    const res = await fetch('/notifications');
+    // Same guard as the list: a 429/5xx body has no `total`, which would silently
+    // clear the unread badge. Throw and let SWR hold the previous count.
+    if (!res.ok) {
+      throw new Error(`Failed to load unread count: ${res.status}`);
+    }
+    return res.json();
   }, [fetch]);
 
   const { data, mutate } = useSWR('notifications-count', loadUnreadCount, {

@@ -19,8 +19,12 @@ describe('formatCompactNumber', () => {
     expect(formatCompactNumber(1500)).toBe('1.5K');
   });
 
-  it('formats 999_999 as 1000.0K (below 1M threshold)', () => {
-    expect(formatCompactNumber(999_999)).toBe('1000.0K');
+  it('promotes 999_999 to 1.0M rather than the wider 1000.0K', () => {
+    // The whole point is fitting a narrow tile; "1000.0K" is six glyphs where
+    // "1.0M" is four, so the naive threshold defeated itself.
+    expect(formatCompactNumber(999_999)).toBe('1.0M');
+    expect(formatCompactNumber(999_499)).toBe('999.5K');
+    expect(formatCompactNumber(999_999_999)).toBe('1.0B');
   });
 
   it('formats 1_000_000 as 1.0M', () => {
@@ -39,10 +43,10 @@ describe('formatCompactNumber', () => {
     expect(formatCompactNumber(2_500_000_000)).toBe('2.5B');
   });
 
-  it('handles negative numbers', () => {
+  it('compacts negatives too, so they fit the same tile', () => {
     expect(formatCompactNumber(-500)).toBe('-500');
-    expect(formatCompactNumber(-1_500)).toBe('-1,500');
-    expect(formatCompactNumber(-2_000_000)).toBe('-2,000,000');
+    expect(formatCompactNumber(-1_500)).toBe('-1.5K');
+    expect(formatCompactNumber(-2_000_000)).toBe('-2.0M');
   });
 });
 
