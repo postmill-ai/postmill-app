@@ -5,7 +5,7 @@ import { useFetch } from '@postmill-ai/helpers/utils/custom.fetch';
 import { useToaster } from '@postmill-ai/react/toaster/toaster';
 import { useT } from '@postmill-ai/react/translation/get.transation.service.client';
 import { Slider } from '@postmill-ai/react/form/slider';
-import { MediaSelectorModal } from '@postmill-ai/frontend/components/media-tools/media-selector-modal';
+import { useMediaPicker } from '@postmill-ai/frontend/components/media-tools/use-media-picker';
 
 interface BrandAsset {
   fileId?: string;
@@ -42,7 +42,6 @@ export const BrandAssets = ({
     !!initial?.enforcement?.enabled
   );
   const [newColor, setNewColor] = useState('#2B5CD3');
-  const [showMedia, setShowMedia] = useState(false);
   const [saving, setSaving] = useState(false);
 
   const addColor = useCallback(() => {
@@ -52,31 +51,14 @@ export const BrandAssets = ({
     }
   }, [newColor, palette]);
 
-  const handleAssetSelect = useCallback(
-    async (item: { source: string; url: string; fileId?: string; type: string }) => {
-      setShowMedia(false);
-      if (item.type !== 'image') {
-        toaster.show(t('brand_assets_image_only', 'Brand assets must be images'), 'warning');
-        return;
-      }
-      let fileId = item.fileId;
-      let url = item.url;
-      // Stock picks aren't Files yet — import so the asset persists.
-      if (!fileId) {
-        const res = await fetch('/files/import', {
-          method: 'POST',
-          body: JSON.stringify({ url: item.url, name: 'brand-asset', type: 'image' }),
-        });
-        if (res.ok) {
-          const f = await res.json();
-          fileId = f.id;
-          url = f.path || item.url;
-        }
-      }
-      setAssets((a) => [...a, { fileId, url, caption: '' }]);
-    },
-    [fetch, toaster, t]
-  );
+  const assetPicker = useMediaPicker({
+    title: t('brand_asset', 'Brand asset'),
+    kinds: ['image'],
+    requireFile: true,
+    importName: 'brand-asset',
+    onSelect: (item) =>
+      setAssets((a) => [...a, { fileId: item.fileId, url: item.url, caption: '' }]),
+  });
 
   const save = useCallback(async () => {
     setSaving(true);
@@ -196,7 +178,7 @@ export const BrandAssets = ({
             </div>
           ))}
           <button
-            onClick={() => setShowMedia(true)}
+            onClick={assetPicker.open}
             className="border border-dashed border-newTableBorder rounded-[10px] h-[100px] flex flex-col items-center justify-center gap-[6px] text-[12px] text-newTableText hover:bg-boxHover transition-colors"
           >
             <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
@@ -232,11 +214,7 @@ export const BrandAssets = ({
         </button>
       </div>
 
-      <MediaSelectorModal
-        open={showMedia}
-        onClose={() => setShowMedia(false)}
-        onSelect={handleAssetSelect}
-      />
+      {assetPicker.element}
     </div>
   );
 };

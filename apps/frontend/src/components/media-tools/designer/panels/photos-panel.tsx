@@ -7,7 +7,7 @@ import { useDebounce } from 'use-debounce';
 import type { DesignerElement } from '../designer.store';
 import { PanelSkeletonGrid, PanelError } from './panel-states';
 import { fitWithin } from './fit-within';
-import { MediaSelectorModal } from '../../media-selector-modal';
+import { useMediaPicker } from '../../use-media-picker';
 import { getDefaultClipEndMs, getVideoDurationMs } from './video-clip-duration';
 import { useT } from '@postmill-ai/react/translation/get.transation.service.client';
 
@@ -48,7 +48,6 @@ export const PhotosPanel: FC<PhotosPanelProps> = ({ store, onClose }) => {
   const [query, setQuery] = useState('');
   const [debouncedQuery] = useDebounce(query, 300);
   const [page, setPage] = useState(1);
-  const [modalOpen, setModalOpen] = useState(false);
 
   const params = new URLSearchParams();
   if (debouncedQuery) params.set('query', debouncedQuery);
@@ -179,7 +178,6 @@ export const PhotosPanel: FC<PhotosPanelProps> = ({ store, onClose }) => {
         naturalHeight: item.height || out.height,
       };
       store.getState().addClip(state2.currentOutput, track.id, clip as any);
-      setModalOpen(false);
       onClose?.();
       return;
     }
@@ -211,25 +209,24 @@ export const PhotosPanel: FC<PhotosPanelProps> = ({ store, onClose }) => {
     };
 
     state.addElement(el);
-    setModalOpen(false);
     onClose?.();
   }, [store, onClose]);
+
+  const mediaPicker = useMediaPicker({
+    title: t('add_media', 'Add media'),
+    onSelect: handleModalSelect,
+  });
 
   return (
     <div className="flex flex-col gap-3">
       <button
         type="button"
-        onClick={() => setModalOpen(true)}
+        onClick={mediaPicker.open}
         className="w-full px-3 py-2 rounded-lg text-[12px] font-medium bg-designerAccent text-white hover:bg-designerAccent/80"
       >
         {t('browse_media_library', 'Browse media library…')}
       </button>
-
-      <MediaSelectorModal
-        open={modalOpen}
-        onClose={() => setModalOpen(false)}
-        onSelect={handleModalSelect}
-      />
+      {mediaPicker.element}
 
       <div className="flex gap-1 bg-studioBorder/10 rounded-lg p-1">
         <button

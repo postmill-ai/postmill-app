@@ -64,6 +64,25 @@ describe('ReplicateMediaAdapter.generateImage aspect mapping', () => {
     expect(lastRequestBody(fetchMock).input.aspect_ratio).toBeUndefined();
   });
 
+  it('reports the resolved model in the result metadata', async () => {
+    // Callers persist this with the job; without it "which model painted
+    // that?" can only be reverse-engineered from the adapter default.
+    const explicit = await adapter.generateImage('a cat', {
+      credentials: { apiKey: 'k' },
+      model: 'black-forest-labs/flux-schnell',
+    });
+    expect(explicit.metadata).toMatchObject({
+      model: 'black-forest-labs/flux-schnell',
+    });
+
+    const defaulted = await adapter.generateImage('a cat', {
+      credentials: { apiKey: 'k' },
+    });
+    expect(defaulted.metadata).toMatchObject({
+      model: 'black-forest-labs/flux-1.1-pro',
+    });
+  });
+
   it('defaults to flux-1.1-pro when no model is given (flux-schnell is retired upstream)', async () => {
     await adapter.generateImage('a cat', {
       credentials: { apiKey: 'k' },

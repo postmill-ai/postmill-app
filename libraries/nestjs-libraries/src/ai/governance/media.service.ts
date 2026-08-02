@@ -17,6 +17,7 @@ import { FileService } from '@postmill-ai/nestjs-libraries/database/prisma/file/
 import { BrandsService } from '@postmill-ai/nestjs-libraries/brands/brands.service';
 import { ioRedis } from '@postmill-ai/nestjs-libraries/redis/redis.service';
 import { safeFetch } from '@postmill-ai/nestjs-libraries/dtos/webhooks/safe.fetch';
+import { resolveVisionImageUrl } from '@postmill-ai/nestjs-libraries/ai/vision-image-url';
 import {
   MediaProviderAdapter,
   MediaProviderCapabilities,
@@ -447,6 +448,22 @@ export class AiMediaService {
       return fallback;
     }
 
+    // The vision provider downloads the image from ITS infrastructure, so a URL
+    // served off this instance's own storage host is unreachable — every
+    // lookup on a self-hosted/dev deployment failed with "Error while
+    // downloading http://localhost:4200/uploads/…". Local uploads are inlined
+    // as a data URI by the same helper the vision critic uses; a remote URL is
+    // passed straight through (nothing here fetches it, and the provider is the
+    // better judge of whether it can reach a third-party host).
+    const resolvedUrl = await resolveVisionImageUrl(imageUrl, {
+      warn: (message) => this._logger.warn(message),
+      label: 'detectFocalPoint',
+      allowUnverifiedRemote: true,
+    });
+    if (!resolvedUrl) {
+      return fallback;
+    }
+
     try {
       const visionDefault = await this._defaultsResolution.resolve(
         'ai',
@@ -463,7 +480,7 @@ export class AiMediaService {
         visionDefault.version,
         visionDefault.model,
         {
-          imageUrl,
+          imageUrl: resolvedUrl,
           prompt:
             'You are an image-composition assistant. Given an image, identify the main subject or area of interest and return its normalized center coordinates as JSON: {"x": number, "y": number} where each value is between 0 and 1. Return only the JSON object, no markdown or explanation.',
         },

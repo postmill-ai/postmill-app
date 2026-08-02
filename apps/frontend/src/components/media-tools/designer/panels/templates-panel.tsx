@@ -21,8 +21,8 @@ interface DesignTemplate {
 interface TemplatesPanelProps {
   store: ReturnType<typeof import('../designer.store').createDesignerStore>;
   onClose?: () => void;
-  /** Returns false to abort applying (unsaved-changes guard). */
-  guard?: () => boolean;
+  /** Resolves false to abort applying (unsaved-changes guard). */
+  guard?: () => Promise<boolean>;
 }
 
 export const TemplatesPanel: FC<TemplatesPanelProps> = ({ store, onClose, guard }) => {
@@ -42,7 +42,7 @@ export const TemplatesPanel: FC<TemplatesPanelProps> = ({ store, onClose, guard 
   );
 
   const applyTemplate = useCallback(async (template: DesignTemplate) => {
-    if (guard && !guard()) return;
+    if (guard && !(await guard())) return;
     const res = await fetch('/media/designs', {
       method: 'POST',
       body: JSON.stringify({

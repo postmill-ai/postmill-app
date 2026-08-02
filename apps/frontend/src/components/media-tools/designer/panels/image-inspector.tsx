@@ -13,7 +13,7 @@ import type {
   DesignerMask,
   DesignerTextShadow,
 } from '../designer.store';
-import { MediaSelectorModal } from '../../media-selector-modal';
+import { useMediaPicker } from '../../use-media-picker';
 
 interface ImageInspectorProps {
   element: DesignerElement;
@@ -46,7 +46,20 @@ export const ImageInspector: FC<ImageInspectorProps> = ({
   const [upscaleScale, setUpscaleScale] = useState(2);
   const [inpaintPrompt, setInpaintPrompt] = useState('');
   const [imageToImagePrompt, setImageToImagePrompt] = useState('');
-  const [mediaModalOpen, setMediaModalOpen] = useState(false);
+  const replacePicker = useMediaPicker({
+    title: t('replace_image', 'Replace image'),
+    kinds: ['image'],
+    onSelect: (item) => {
+      updateElement(element.id, {
+        src: item.url,
+        fileId: item.fileId,
+        naturalWidth: item.width || undefined,
+        naturalHeight: item.height || undefined,
+        crop: undefined,
+        mask: undefined,
+      });
+    },
+  });
 
   const [inpaintMaskUrl, setInpaintMaskUrl] = useState<string | null>(null);
   const [masking, setMasking] = useState(false);
@@ -391,7 +404,7 @@ export const ImageInspector: FC<ImageInspectorProps> = ({
       </div>
 
       <button
-        onClick={() => setMediaModalOpen(true)}
+        onClick={replacePicker.open}
         className="w-full px-3 py-2 rounded-md text-[12px] border border-designerAccent text-btnPrimaryAccent hover:bg-designerAccent/10 transition-colors"
       >
         {t('designer_replace_image', 'Replace image…')}
@@ -1022,21 +1035,7 @@ export const ImageInspector: FC<ImageInspectorProps> = ({
         </div>
       </div>
     </div>
-    <MediaSelectorModal
-      open={mediaModalOpen}
-      onClose={() => setMediaModalOpen(false)}
-      onSelect={(item) => {
-        updateElement(element.id, {
-          src: item.url,
-          fileId: item.fileId,
-          naturalWidth: item.width || undefined,
-          naturalHeight: item.height || undefined,
-          crop: undefined,
-          mask: undefined,
-        });
-        setMediaModalOpen(false);
-      }}
-    />
+    {replacePicker.element}
     </>
   );
 };

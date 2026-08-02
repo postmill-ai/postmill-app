@@ -8,7 +8,7 @@ import { useToaster } from '@postmill-ai/react/toaster/toaster';
 import type { DesignerElement, StickerFrame } from '../designer.store';
 import { PanelSkeletonGrid, PanelError } from './panel-states';
 import { fitWithin } from './fit-within';
-import { MediaSelectorModal } from '../../media-selector-modal';
+import { useMediaPicker } from '../../use-media-picker';
 import { useT } from '@postmill-ai/react/translation/get.transation.service.client';
 
 async function decodeStickerFrames(src: string): Promise<StickerFrame[]> {
@@ -71,7 +71,6 @@ export const UploadsPanel: FC<UploadsPanelProps> = ({ store, onClose }) => {
   const user = useUser();
   const toaster = useToaster();
   const t = useT();
-  const [modalOpen, setModalOpen] = useState(false);
   const [uploadingFile, setUploadingFile] = useState(false);
 
   const { data, error, isLoading, mutate } = useSWR(
@@ -338,7 +337,6 @@ export const UploadsPanel: FC<UploadsPanelProps> = ({ store, onClose }) => {
         height: out.height,
       };
       store.getState().addClip(state2.currentOutput, track.id, clip as any);
-      setModalOpen(false);
       onClose?.();
       return;
     }
@@ -368,25 +366,24 @@ export const UploadsPanel: FC<UploadsPanelProps> = ({ store, onClose }) => {
     };
 
     state.addElement(el);
-    setModalOpen(false);
     onClose?.();
   }, [store, onClose]);
+
+  const mediaPicker = useMediaPicker({
+    title: t('add_media', 'Add media'),
+    onSelect: handleModalSelect,
+  });
 
   return (
     <div className="flex flex-col gap-3">
       <button
         type="button"
-        onClick={() => setModalOpen(true)}
+        onClick={mediaPicker.open}
         className="w-full px-3 py-2 rounded-lg text-[12px] font-medium bg-designerAccent text-white hover:bg-designerAccent/80"
       >
         {t('browse_media_library', 'Browse media library…')}
       </button>
-
-      <MediaSelectorModal
-        open={modalOpen}
-        onClose={() => setModalOpen(false)}
-        onSelect={handleModalSelect}
-      />
+      {mediaPicker.element}
 
       {isLoading && !data ? (
         <PanelSkeletonGrid count={6} />

@@ -1,10 +1,9 @@
 'use client';
 
 import React, { FC } from 'react';
-import { useModals } from '@postmill-ai/frontend/components/layout/new-modal';
 import { useToaster } from '@postmill-ai/react/toaster/toaster';
 import { useT } from '@postmill-ai/react/translation/get.transation.service.client';
-import { MediaSelectorModal } from '@postmill-ai/frontend/components/media-tools/media-selector-modal';
+import { useMediaPicker } from '@postmill-ai/frontend/components/media-tools/use-media-picker';
 import { ModelSelect } from './model-select';
 import { studioFieldKey, studioOptionKey } from './i18n-keys';
 import type { FileFieldValue, StudioField, StudioFieldValue } from './types';
@@ -40,36 +39,30 @@ const MediaPicker: FC<{ field: StudioField & { type: 'media' }; value?: FileFiel
   value,
   onChange,
 }) => {
-  const modals = useModals();
   const toaster = useToaster();
   const t = useT();
   const display = value?.url || value?.fileId;
   const kind = t(`media_kind_${field.accept}`, field.accept);
 
-  const choose = () => {
-    modals.openModal({
-      title: t('studio_media_select_title', 'Select {{kind}} file', { kind }),
-      removeLayout: true,
-      children: (close: () => void) => (
-        <MediaSelectorModal
-          open
-          onClose={close}
-          kinds={[field.accept]}
-          onSelect={(item) => {
-            if (item.type !== field.accept) {
-              toaster.show(
-                t('studio_media_wrong_kind', 'Please choose a {{kind}} file', { kind }),
-                'warning'
-              );
-              return;
-            }
-            onChange({ fileId: item.fileId, url: item.url, type: item.type });
-            close();
-          }}
-        />
-      ),
-    });
-  };
+  // Was wrapped in `openModal({ removeLayout: true })`, which never renders a
+  // title — so this heading has been invisible (and `aria-labelledby` dangling)
+  // since it was written. The picker renders it now.
+  const picker = useMediaPicker({
+    title: t('studio_media_select_title', 'Select {{kind}} file', { kind }),
+    kinds: [field.accept],
+    requireFile: true,
+    onSelect: (item) => {
+      if (item.type !== field.accept) {
+        toaster.show(
+          t('studio_media_wrong_kind', 'Please choose a {{kind}} file', { kind }),
+          'warning'
+        );
+        return;
+      }
+      onChange({ fileId: item.fileId, url: item.url, type: item.type });
+    },
+  });
+  const choose = picker.open;
 
   return (
     <div className="flex gap-[8px]">
@@ -94,6 +87,7 @@ const MediaPicker: FC<{ field: StudioField & { type: 'media' }; value?: FileFiel
           ✕
         </button>
       )}
+      {picker.element}
     </div>
   );
 };

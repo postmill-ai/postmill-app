@@ -27,7 +27,7 @@ const elementLabel = (el: DesignerElement, t: ReturnType<typeof useT>): string =
   return t('layers_panel_element', 'Element');
 };
 
-export const LayersPanel: FC<LayersPanelProps> = ({ store }) => {
+export const LayersPanel: FC<LayersPanelProps> = ({ store, onClose }) => {
   const t = useT();
   const currentOutput = store((s) => s.currentOutput);
   const elements = store(
@@ -139,6 +139,14 @@ export const LayersPanel: FC<LayersPanelProps> = ({ store }) => {
   const handlePanelKeyDown = useCallback(
     (e: React.KeyboardEvent) => {
       if (editingId) return;
+      // Escape dismisses the whole panel when it is floating (the docked rail
+      // version passes no onClose, so this is a no-op there).
+      if (e.key === 'Escape' && onClose) {
+        e.preventDefault();
+        e.stopPropagation();
+        onClose();
+        return;
+      }
       const target = e.target as HTMLElement;
       const row = target.closest('[data-layer-row]') as HTMLDivElement | null;
       if (!row) return;
@@ -178,7 +186,7 @@ export const LayersPanel: FC<LayersPanelProps> = ({ store }) => {
           break;
       }
     },
-    [editingId, selectElement, startRename, getCurrentChildren]
+    [editingId, selectElement, startRename, getCurrentChildren, onClose]
   );
 
   if (!elements.length) {

@@ -10,7 +10,7 @@ import ProviderIcon from '@postmill-ai/frontend/components/shared/provider-icon'
 import { PanelSkeletonGrid, PanelError } from './panel-states';
 import { useCustomFonts, CustomFontEntry } from './use-brand-fonts';
 import { getBrandViolations } from '../brand-compliance';
-import { MediaSelectorModal } from '../../media-selector-modal';
+import { useMediaPicker } from '../../use-media-picker';
 
 interface BrandProfile {
   id: string;
@@ -42,7 +42,6 @@ export const BrandPanel: FC<BrandPanelProps> = ({ store }) => {
   const selectedIds = store((s: any) => s.selectedIds);
   const out = store((s: any) => s.doc.outputs[s.currentOutput]);
   const [saving, setSaving] = useState(false);
-  const [modalOpen, setModalOpen] = useState(false);
 
   const { fonts: customFonts, mutate: mutateCustomFonts } = useCustomFonts();
   const [uploading, setUploading] = useState(false);
@@ -234,8 +233,12 @@ export const BrandPanel: FC<BrandPanelProps> = ({ store }) => {
   }) => {
     if (item.type !== 'image') return;
     addLogoToCanvas({ id: item.fileId || '', path: item.url, name: 'Logo' });
-    setModalOpen(false);
   }, [addLogoToCanvas]);
+
+  const mediaPicker = useMediaPicker({
+    title: t('brand_logo', 'Brand logo'),
+    onSelect: handleModalSelect,
+  });
 
   const handleFontUpload = useCallback(
     async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -412,17 +415,12 @@ export const BrandPanel: FC<BrandPanelProps> = ({ store }) => {
 
         <button
           type="button"
-          onClick={() => setModalOpen(true)}
+          onClick={mediaPicker.open}
           className="w-full px-3 py-2 rounded-lg text-[12px] font-medium bg-designerAccent text-white hover:bg-designerAccent/80"
         >
           {t('designer_add_logo_from_media', 'Add logo from media…')}
         </button>
-
-        <MediaSelectorModal
-          open={modalOpen}
-          onClose={() => setModalOpen(false)}
-          onSelect={handleModalSelect}
-        />
+      {mediaPicker.element}
 
         {logoFileIds.length > 0 && (
           <div className="grid grid-cols-3 gap-2">

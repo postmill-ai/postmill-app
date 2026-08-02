@@ -4,7 +4,7 @@ import React, { useCallback, useMemo, useState } from 'react';
 import { useFetch } from '@postmill-ai/helpers/utils/custom.fetch';
 import { useToaster } from '@postmill-ai/react/toaster/toaster';
 import { useModals } from '@postmill-ai/frontend/components/layout/new-modal';
-import { MediaSelectorModal } from '@postmill-ai/frontend/components/media-tools/media-selector-modal';
+import { useMediaPicker } from '@postmill-ai/frontend/components/media-tools/use-media-picker';
 import { openInDesigner } from '@postmill-ai/frontend/components/media-tools/open-in-designer';
 import type { StudioCustomProps } from '@postmill-ai/frontend/components/media-tools/studio-kit/types';
 import { useT } from '@postmill-ai/react/translation/get.transation.service.client';
@@ -72,7 +72,6 @@ export const DeepgramPanel: React.FC<StudioCustomProps> = ({ onGenerated }) => {
   const modal = useModals();
   const t = useT();
 
-  const [pickerOpen, setPickerOpen] = useState(false);
   const [source, setSource] = useState<SelectedSource | null>(null);
   const [model, setModel] = useState('nova-2');
   const [language, setLanguage] = useState('');
@@ -80,23 +79,14 @@ export const DeepgramPanel: React.FC<StudioCustomProps> = ({ onGenerated }) => {
   const [result, setResult] = useState<TranscriptResult | null>(null);
   const [transcript, setTranscript] = useState('');
 
-  const onSelect = useCallback(
-    (item: {
-      source: string;
-      url: string;
-      fileId?: string;
-      type: 'image' | 'video' | 'audio';
-      width: number;
-      height: number;
-    }) => {
-      if (item.type !== 'audio' && item.type !== 'video') {
-        toaster.show(t('deepgram_pick_audio_or_video', 'Pick an audio or video file to transcribe'), 'warning');
-        return;
-      }
-      if (!item.fileId) {
-        toaster.show(t('deepgram_needs_library_file', 'Transcription needs a file from your library'), 'warning');
-        return;
-      }
+  // `kinds` now constrains the tabs up front, and `requireFile` guarantees the
+  // fileId that transcription needs — both used to be checked after the fact.
+  const sourcePicker = useMediaPicker({
+    title: t('select_audio_or_video', 'Select audio or video'),
+    kinds: ['audio', 'video'],
+    requireFile: true,
+    onSelect: (item) => {
+      if (!item.fileId) return;
       setSource({
         fileId: item.fileId,
         url: item.url,
@@ -107,8 +97,7 @@ export const DeepgramPanel: React.FC<StudioCustomProps> = ({ onGenerated }) => {
       setResult(null);
       setTranscript('');
     },
-    [toaster]
-  );
+  });
 
   const transcribe = useCallback(async () => {
     if (!source?.fileId) return;
@@ -233,7 +222,7 @@ export const DeepgramPanel: React.FC<StudioCustomProps> = ({ onGenerated }) => {
           <button
             id="deepgram-source"
             type="button"
-            onClick={() => setPickerOpen(true)}
+            onClick={sourcePicker.open}
             className="px-[14px] py-[9px] rounded-[8px] border border-studioBorder text-[13px] text-textColor hover:bg-boxHover transition-all"
           >
             {source ? t('deepgram_change_file', 'Change file') : t('deepgram_pick_audio_video', 'Pick audio / video')}
@@ -341,7 +330,7 @@ export const DeepgramPanel: React.FC<StudioCustomProps> = ({ onGenerated }) => {
         </div>
       )}
 
-      <MediaSelectorModal open={pickerOpen} onClose={() => setPickerOpen(false)} onSelect={onSelect} />
+      {sourcePicker.element}
     </div>
   );
 };

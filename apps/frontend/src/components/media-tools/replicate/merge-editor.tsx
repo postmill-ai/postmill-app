@@ -5,7 +5,7 @@ import useSWR from 'swr';
 import { useFetch } from '@postmill-ai/helpers/utils/custom.fetch';
 import { useModals } from '@postmill-ai/frontend/components/layout/new-modal';
 import { useToaster } from '@postmill-ai/react/toaster/toaster';
-import { MediaSelectorModal } from '@postmill-ai/frontend/components/media-tools/media-selector-modal';
+import { useMediaPicker } from '@postmill-ai/frontend/components/media-tools/use-media-picker';
 import { useT } from '@postmill-ai/react/translation/get.transation.service.client';
 import { useReplicateStore } from './replicate.store';
 import { VideoPlayer } from './players/video-player';
@@ -107,6 +107,19 @@ export function MergeEditor() {
   const toaster = useToaster();
   const saveFolderId = useReplicateStore((s) => s.saveFolderId);
   const [clips, setClips] = useState<MergeClip[]>([]);
+  const picker = useMediaPicker({
+    title: t('select_video_clip', 'Select video clip'),
+    kinds: ['video'],
+    requireFile: true,
+    onSelect: (item) => {
+      if (item.type !== 'video') {
+        toaster.show(t('please_choose_video_clip', 'Please choose a video clip'), 'warning');
+        return;
+      }
+      setClips((prev) => (prev.length >= 6 ? prev : [...prev, { fileId: item.fileId }]));
+      appendTransitionIfNeeded();
+    },
+  });
   const [transitions, setTransitions] = useState<MergeTransition[]>([]);
   const [selected, setSelected] = useState<number | null>(null);
   const [running, setRunning] = useState(false);
@@ -138,27 +151,8 @@ export function MergeEditor() {
 
   const addFileClip = useCallback(() => {
     if (clips.length >= 6) return;
-    modals.openModal({
-      title: t('select_video_clip', 'Select video clip'),
-      removeLayout: true,
-      children: (close) => (
-        <MediaSelectorModal
-          open
-          onClose={close}
-          kinds={['video']}
-          onSelect={(item) => {
-            if (item.type !== 'video') {
-              toaster.show(t('please_choose_video_clip', 'Please choose a video clip'), 'warning');
-              return;
-            }
-            setClips((prev) => (prev.length >= 6 ? prev : [...prev, { fileId: item.fileId }]));
-            appendTransitionIfNeeded();
-            close();
-          }}
-        />
-      ),
-    });
-  }, [clips.length, modals, toaster, appendTransitionIfNeeded, t]);
+    picker.open();
+  }, [picker]);
 
   const addUrlClip = useCallback(() => {
     if (clips.length >= 6) return;
@@ -384,6 +378,7 @@ export function MergeEditor() {
           )}
         </div>
       )}
+      {picker.element}
     </EditorShell>
   );
 }

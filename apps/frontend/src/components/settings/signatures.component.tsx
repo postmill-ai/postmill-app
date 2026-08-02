@@ -10,7 +10,7 @@ import { useToaster } from '@postmill-ai/react/toaster/toaster';
 import { useT } from '@postmill-ai/react/translation/get.transation.service.client';
 import { createFetchError } from '@postmill-ai/frontend/components/settings/shared/fetch-error';
 import { deleteDialog } from '@postmill-ai/react/helpers/delete.dialog';
-import { MediaSelectorModal } from '@postmill-ai/frontend/components/media-tools/media-selector-modal';
+import { useMediaPicker } from '@postmill-ai/frontend/components/media-tools/use-media-picker';
 import { CampaignSelector } from '@postmill-ai/frontend/components/campaigns/selector/campaign-selector';
 
 const PAGE_SIZE = 25;
@@ -108,7 +108,6 @@ const AddOrEditSignature: FC<{
   const [picture, setPicture] = useState<SignaturePicture | null>(
     data?.picture || null
   );
-  const [showMedia, setShowMedia] = useState(false);
   const [saving, setSaving] = useState(false);
 
   const toggleChannel = useCallback((id: string) => {
@@ -120,31 +119,16 @@ const AddOrEditSignature: FC<{
     });
   }, []);
 
-  const handleLogoSelect = useCallback(
-    async (item: { source: string; url: string; fileId?: string; type: string }) => {
-      setShowMedia(false);
-      if (item.type !== 'image') {
-        toast.show(t('logo_must_be_image', 'A logo must be an image'), 'warning');
-        return;
-      }
-      let fileId = item.fileId;
-      let path = item.url;
-      // Stock picks aren't Files yet — import to get a stable File id/path.
-      if (!fileId) {
-        const res = await fetch('/files/import', {
-          method: 'POST',
-          body: JSON.stringify({ url: item.url, name: 'signature-logo', type: 'image' }),
-        });
-        if (res.ok) {
-          const f = await res.json();
-          fileId = f.id;
-          path = f.path || item.url;
-        }
-      }
-      if (fileId) setPicture({ id: fileId, path });
+  // `requireFile` imports stock picks for us, so this only has to store the result.
+  const logoPicker = useMediaPicker({
+    title: t('signature_logo', 'Signature logo'),
+    kinds: ['image'],
+    requireFile: true,
+    importName: 'signature-logo',
+    onSelect: (item) => {
+      if (item.fileId) setPicture({ id: item.fileId, path: item.url });
     },
-    [fetch, toast, t]
-  );
+  });
 
   const save = useCallback(async () => {
     if (!content.trim()) return;
@@ -227,7 +211,7 @@ const AddOrEditSignature: FC<{
             />
             <button
               type="button"
-              onClick={() => setShowMedia(true)}
+              onClick={logoPicker.open}
               className="text-[12px] text-btnPrimaryAccent hover:underline"
             >
               {t('replace', 'Replace')}
@@ -243,7 +227,7 @@ const AddOrEditSignature: FC<{
         ) : (
           <button
             type="button"
-            onClick={() => setShowMedia(true)}
+            onClick={logoPicker.open}
             className="flex items-center gap-[8px] px-[12px] py-[8px] rounded-[8px] border border-dashed border-newTableBorder text-[13px] text-newTableText hover:bg-boxHover transition-colors"
           >
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
@@ -327,11 +311,7 @@ const AddOrEditSignature: FC<{
         {saving ? t('saving', 'Saving...') : t('save', 'Save')}
       </Button>
 
-      <MediaSelectorModal
-        open={showMedia}
-        onClose={() => setShowMedia(false)}
-        onSelect={handleLogoSelect}
-      />
+      {logoPicker.element}
     </div>
   );
 };

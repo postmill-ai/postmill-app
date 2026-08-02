@@ -149,8 +149,12 @@ export class ReplicateMediaAdapter implements MediaProviderAdapter {
     const aspectRatio = options?.aspect
       ? ReplicateMediaAdapter.ASPECT_RATIO[options.aspect]
       : undefined;
+    // The resolved model rides back in the metadata: callers persist it with
+    // the job, and "which model painted this?" is otherwise unanswerable from
+    // the logs (the default is implicit).
+    const model = options?.version || options?.model || DEFAULT_IMAGE_MODEL;
     const created = await this._createPrediction(
-      { ...options, version: options?.version || options?.model || DEFAULT_IMAGE_MODEL },
+      { ...options, version: model },
       { prompt, ...(aspectRatio ? { aspect_ratio: aspectRatio } : {}) },
       PREFER_WAIT_SECONDS,
     );
@@ -164,10 +168,10 @@ export class ReplicateMediaAdapter implements MediaProviderAdapter {
     if (Array.isArray(output)) {
       const urls = output.filter((u): u is string => typeof u === 'string');
       if (urls.length === 0) throw new Error('Replicate returned no image URLs');
-      return { multi: urls.length > 1, image: urls[0], images: urls, metadata: { provider: this.identifier } };
+      return { multi: urls.length > 1, image: urls[0], images: urls, metadata: { provider: this.identifier, model } };
     }
     if (typeof output === 'string') {
-      return { multi: false, image: output, images: [output], metadata: { provider: this.identifier } };
+      return { multi: false, image: output, images: [output], metadata: { provider: this.identifier, model } };
     }
     throw new Error(`Unexpected Replicate output format: ${JSON.stringify(output)}`);
   }

@@ -9,7 +9,7 @@ import type { DesignerGradient } from '../designer.store';
 import { ColorSwatch, Slider, SegmentedControl } from '../controls';
 import { PanelSkeletonGrid, PanelError } from './panel-states';
 import { useBrandColors } from './use-brand-colors';
-import { MediaSelectorModal } from '../../media-selector-modal';
+import { useMediaPicker } from '../../use-media-picker';
 import { useT } from '@postmill-ai/react/translation/get.transation.service.client';
 
 interface BackgroundPanelProps {
@@ -60,7 +60,6 @@ export const BackgroundPanel: FC<BackgroundPanelProps> = ({ store }) => {
 
   // Image-from-URL state.
   const [imageUrl, setImageUrl] = useState('');
-  const [modalOpen, setModalOpen] = useState(false);
 
   const setColor = useCallback(
     (color: string) => {
@@ -99,8 +98,12 @@ export const BackgroundPanel: FC<BackgroundPanelProps> = ({ store }) => {
   }) => {
     if (item.type !== 'image') return;
     setImage(item.url, item.fileId);
-    setModalOpen(false);
   }, [setImage]);
+
+  const mediaPicker = useMediaPicker({
+    title: t('background_image', 'Background image'),
+    onSelect: handleModalSelect,
+  });
 
   // CSS preview of the gradient.
   const gradientCss =
@@ -229,17 +232,12 @@ export const BackgroundPanel: FC<BackgroundPanelProps> = ({ store }) => {
 
           <button
             type="button"
-            onClick={() => setModalOpen(true)}
+            onClick={mediaPicker.open}
             className="w-full px-3 py-2 rounded-lg text-[12px] font-medium bg-designerAccent text-white hover:bg-designerAccent/80"
           >
             {t('designer_choose_from_media_library', 'Choose from media library…')}
           </button>
-
-          <MediaSelectorModal
-            open={modalOpen}
-            onClose={() => setModalOpen(false)}
-            onSelect={handleModalSelect}
-          />
+      {mediaPicker.element}
 
           <div className="text-[11px] text-newTextColor/60">{t('designer_from_your_files', 'From your files')}</div>
 

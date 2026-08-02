@@ -4,6 +4,7 @@ import React, { FC, useCallback } from 'react';
 import type { DesignerElement, VideoClip } from '../designer.store';
 import { ensureFontLoaded } from '../fonts';
 import { TEXT_STYLE_PRESETS, type TextStylePreset } from '../text-styles';
+import { defaultTextBox } from '../measure-text';
 import { useT } from '@postmill-ai/react/translation/get.transation.service.client';
 
 interface TextPanelProps {
@@ -34,6 +35,17 @@ export const TextPanel: FC<TextPanelProps> = ({ store, onClose }) => {
 
       void ensureFontLoaded(preset.fontFamily);
 
+      // Size the box from the preset's font so the text fits it from birth —
+      // a hardcoded 200×40 overflowed every heading preset.
+      const box = defaultTextBox({
+        text: preset.name,
+        fontSize: preset.fontSize,
+        fontWeight: preset.fontWeight,
+        fontFamily: preset.fontFamily,
+        lineHeight: preset.lineHeight,
+        letterSpacing: preset.letterSpacing,
+      });
+
       if (state.doc.mode === 'video') {
         const vo = out as any;
         let textTrack = vo.tracks?.find((t: any) => t.type === 'text');
@@ -53,10 +65,10 @@ export const TextPanel: FC<TextPanelProps> = ({ store, onClose }) => {
           fontSize: preset.fontSize,
           fontWeight: preset.fontWeight,
           fill: preset.fill || '#000000',
-          x: (out.width - 200) / 2,
-          y: (out.height - 40) / 2,
-          width: 200,
-          height: 40,
+          x: (out.width - box.width) / 2,
+          y: (out.height - box.height) / 2,
+          width: box.width,
+          height: box.height,
           opacity: 1,
         };
         store.getState().addClip(state.currentOutput, textTrack.id, clip);
@@ -64,16 +76,16 @@ export const TextPanel: FC<TextPanelProps> = ({ store, onClose }) => {
         return;
       }
 
-      const cx = out.width / 2 - 100;
-      const cy = out.height / 2 - 16;
+      const cx = out.width / 2 - box.width / 2;
+      const cy = out.height / 2 - box.height / 2;
 
       const el: DesignerElement = {
         id: '',
         type: 'text',
         x: cx,
         y: cy,
-        width: 200,
-        height: 40,
+        width: box.width,
+        height: box.height,
         rotation: 0,
         opacity: 1,
         locked: false,
@@ -121,8 +133,14 @@ export const TextPanel: FC<TextPanelProps> = ({ store, onClose }) => {
                         fontSize: preset.fontSize,
                         fontWeight: preset.fontWeight,
                         fontFamily: preset.fontFamily,
-                        width: 200,
-                        height: 40,
+                        ...defaultTextBox({
+                          text: preset.name,
+                          fontSize: preset.fontSize,
+                          fontWeight: preset.fontWeight,
+                          fontFamily: preset.fontFamily,
+                          lineHeight: preset.lineHeight,
+                          letterSpacing: preset.letterSpacing,
+                        }),
                         fill: preset.fill || '#000000',
                         align: 'center',
                         lineHeight: preset.lineHeight,

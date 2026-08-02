@@ -33,6 +33,9 @@ export class MediaStudioController {
   @Get('/:provider/jobs')
   @CheckPolicies([AuthorizationActions.Read, Sections.MEDIA])
   @RequirePermission('media', 'read')
+  // The studio render queue polls this every 5s while a job is running (720/h), which
+  // overruns the global per-handler/per-org backstop of 600/h.
+  @Throttle({ default: { limit: 2000, ttl: 3600000 } })
   getJobs(
     @Param('provider') provider: string,
     @GetOrgFromRequest() org: Organization,

@@ -5,7 +5,7 @@ import { useT } from '@postmill-ai/react/translation/get.transation.service.clie
 import { useFetch } from '@postmill-ai/helpers/utils/custom.fetch';
 import { useToaster } from '@postmill-ai/react/toaster/toaster';
 import { useMediaDirectory } from '@postmill-ai/react/helpers/use.media.directory';
-import { MediaSelectorModal } from '@postmill-ai/frontend/components/media-tools/media-selector-modal';
+import { useMediaPicker } from '@postmill-ai/frontend/components/media-tools/use-media-picker';
 import { useHeygenTranslateLanguages } from './use-heygen';
 
 interface TranslateProps {
@@ -22,7 +22,15 @@ export const Translate: FC<TranslateProps> = ({ onGenerated }) => {
   const [source, setSource] = useState<{ fileId: string; previewUrl: string } | null>(null);
   const [selected, setSelected] = useState<string[]>([]);
   const [query, setQuery] = useState('');
-  const [picking, setPicking] = useState(false);
+  const sourcePicker = useMediaPicker({
+    title: t('select_video_to_translate', 'Select video to translate'),
+    kinds: ['video'],
+    requireFile: true,
+    onSelect: (item) => {
+      if (!item.fileId) return;
+      setSource({ fileId: item.fileId, previewUrl: mediaDirectory.set(item.url) });
+    },
+  });
   const [generating, setGenerating] = useState(false);
 
   const languages = useMemo(() => {
@@ -71,7 +79,7 @@ export const Translate: FC<TranslateProps> = ({ onGenerated }) => {
 
       <button
         type="button"
-        onClick={() => setPicking(true)}
+        onClick={sourcePicker.open}
         className="flex items-center gap-[12px] p-[12px] rounded-[10px] border border-studioBorder hover:border-[#2B5CD3] transition-all text-left"
       >
         <div className="w-[96px] h-[54px] rounded-[8px] bg-black overflow-hidden flex items-center justify-center shrink-0">
@@ -132,22 +140,7 @@ export const Translate: FC<TranslateProps> = ({ onGenerated }) => {
         {generating ? t('heygen_starting', 'Starting…') : t('heygen_translate_to_files', 'Translate → Files')}
       </button>
 
-      <MediaSelectorModal
-        open={picking}
-        onClose={() => setPicking(false)}
-        onSelect={(item) => {
-          if (item.source !== 'file' || !item.fileId) {
-            toaster.show(t('heygen_save_video_to_files_first', 'Save the video to Files first, then pick it here'), 'warning');
-            return;
-          }
-          if (item.type !== 'video') {
-            toaster.show(t('heygen_translation_needs_video', 'Translation needs a video'), 'warning');
-            return;
-          }
-          setSource({ fileId: item.fileId, previewUrl: mediaDirectory.set(item.url) });
-          setPicking(false);
-        }}
-      />
+      {sourcePicker.element}
     </div>
   );
 };

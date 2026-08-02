@@ -1,9 +1,8 @@
 'use client';
 
 import React, { useMemo } from 'react';
-import { useModals } from '@postmill-ai/frontend/components/layout/new-modal';
 import { useToaster } from '@postmill-ai/react/toaster/toaster';
-import { MediaSelectorModal } from '@postmill-ai/frontend/components/media-tools/media-selector-modal';
+import { useMediaPicker } from '@postmill-ai/frontend/components/media-tools/use-media-picker';
 import { useT } from '@postmill-ai/react/translation/get.transation.service.client';
 
 function mediaTypeNoun(t: (key: string, fallback: string) => string, type: string): string {
@@ -35,8 +34,27 @@ interface FileInputProps {
 
 export function FileInput({ value, onChange, label, required, acceptType = 'image' }: FileInputProps) {
   const t = useT();
-  const modals = useModals();
   const toaster = useToaster();
+
+  // Title was invisible before: the old `openModal({ removeLayout: true })`
+  // wrapper never renders one.
+  const picker = useMediaPicker({
+    title: t('select_x_file', 'Select {{type}} file', { type: mediaTypeNoun(t, acceptType) }),
+    kinds: [acceptType],
+    requireFile: true,
+    onSelect: (item) => {
+      if (item.type !== acceptType) {
+        toaster.show(
+          t('please_choose_x_file', 'Please choose a {{type}} file', {
+            type: mediaTypeNoun(t, acceptType),
+          }),
+          'warning'
+        );
+        return;
+      }
+      onChange({ fileId: item.fileId, url: item.url, type: item.type });
+    },
+  });
 
   const selected = useMemo<FileValue | undefined>(() => {
     if (!value) return undefined;
@@ -47,34 +65,7 @@ export function FileInput({ value, onChange, label, required, acceptType = 'imag
   const display = selected?.url || selected?.fileId;
 
   const handleChooseFile = () => {
-    modals.openModal({
-      title: t('select_x_file', 'Select {{type}} file', { type: mediaTypeNoun(t, acceptType) }),
-      removeLayout: true,
-      children: (close) => (
-        <MediaSelectorModal
-          open
-          onClose={close}
-          kinds={[acceptType]}
-          onSelect={(item) => {
-            if (item.type !== acceptType) {
-              toaster.show(
-                t('please_choose_x_file', 'Please choose a {{type}} file', {
-                  type: mediaTypeNoun(t, acceptType),
-                }),
-                'warning'
-              );
-              return;
-            }
-            onChange({
-              fileId: item.fileId,
-              url: item.url,
-              type: item.type,
-            });
-            close();
-          }}
-        />
-      ),
-    });
+    picker.open();
   };
 
   const handleClear = () => {
@@ -116,6 +107,7 @@ export function FileInput({ value, onChange, label, required, acceptType = 'imag
         // eslint-disable-next-line @next/next/no-img-element -- external media preview
         <img src={selected.url} alt={t('preview', 'Preview')} className="mt-2 w-full max-h-32 object-cover rounded-lg" />
       )}
+      {picker.element}
     </div>
   );
 }
