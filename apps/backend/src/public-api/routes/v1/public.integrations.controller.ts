@@ -10,7 +10,6 @@ import {
   Query,
   UploadedFile,
   UseInterceptors,
-  UsePipes,
 } from '@nestjs/common';
 import { CustomFileValidationPipe } from '@postmill-ai/nestjs-libraries/upload/custom.upload.validation';
 import {
@@ -112,15 +111,16 @@ export class PublicIntegrationsController {
   })
   @ApiResponse({ status: 201, description: 'The saved file record.' })
   @UseInterceptors(FileInterceptor('file'))
-  @UsePipes(new CustomFileValidationPipe())
   async uploadSimple(
     @GetOrgFromRequest() org: Organization,
-    @UploadedFile('file') file: Express.Multer.File
+    // The pipe must be bound to the FILE param, never via @UsePipes: method-scoped
+    // pipes also run on custom param decorators (createParamDecorator assigns a
+    // string paramtype, which Nest's isPipeable() accepts), so the file-only
+    // validation would reject `org` and 400 every upload. The pipe also rejects a
+    // missing file, so no separate `!file` guard is reachable here.
+    @UploadedFile(new CustomFileValidationPipe()) file: Express.Multer.File
   ) {
     Sentry.metrics.count('public_api-request', 1);
-    if (!file) {
-      throw new HttpException({ msg: 'No file provided' }, 400);
-    }
 
     const adapter = await this._storageService.getLocalAdapterForOrg(org.id);
     const getFile = await adapter.uploadFile(file);
