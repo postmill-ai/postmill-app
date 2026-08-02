@@ -29,6 +29,13 @@ export const TagsComponent: FC<{
       name: string;
     };
   }) => void;
+  /**
+   * Reports the colour of the first selected tag (null when the selection
+   * empties). Kept separate from `onChange` on purpose: that payload is
+   * submitted, and the global validation pipe is whitelist +
+   * forbidNonWhitelisted, so an extra `color` key would 400 the save.
+   */
+  onTagColor?: (color: string | null) => void;
 }> = (props) => {
   const fetch = useFetch();
 
@@ -57,7 +64,8 @@ export const TagsComponentInner: FC<{
       name: string;
     };
   }) => void;
-}> = ({ initial, onChange, name, mutate, allTags: data }) => {
+  onTagColor?: (color: string | null) => void;
+}> = ({ initial, onChange, onTagColor, name, mutate, allTags: data }) => {
   const t = useT();
   const fetch = useFetch();
   const [isOpen, setIsOpen] = useState(false);
@@ -75,6 +83,21 @@ export const TagsComponentInner: FC<{
     }
     setIsOpen(false);
   });
+
+  // Single exit point for a selection change, so the submitted payload and the
+  // reported colour can never disagree.
+  const emitSelection = useCallback(
+    (modify: any[]) => {
+      onChange({
+        target: {
+          value: modify.map((p: any) => ({ label: p.name, value: p.name })),
+          name,
+        },
+      });
+      onTagColor?.(modify[0]?.color ?? null);
+    },
+    [onChange, onTagColor, name]
+  );
 
   const addTag = useCallback(async () => {
     const val: string | undefined = await new Promise((resolve) => {
@@ -100,19 +123,11 @@ export const TagsComponentInner: FC<{
       // normalized `{label,value}` shape the toggle handlers use.
       setTagValue((prev) => {
         const modify = [...prev, newTag];
-        onChange({
-          target: {
-            value: modify.map((p: any) => ({
-              label: p.name,
-              value: p.name,
-            })),
-            name,
-          },
-        });
+        emitSelection(modify);
         return modify;
       });
     }
-  }, [modals, mutate, onChange, name, t]);
+  }, [modals, mutate, emitSelection, t]);
 
   const deleteTag = useCallback(
     async (tag: any, e: React.MouseEvent) => {
@@ -146,15 +161,7 @@ export const TagsComponentInner: FC<{
       const modify = tagValue.filter((a) => a.id !== tag.id);
       if (modify.length !== tagValue.length) {
         setTagValue(modify);
-        onChange({
-          target: {
-            value: modify.map((p: any) => ({
-              label: p.name,
-              value: p.name,
-            })),
-            name,
-          },
-        });
+        emitSelection(modify);
       }
 
       await mutate();
@@ -163,7 +170,7 @@ export const TagsComponentInner: FC<{
         setAllowClose(true);
       }, 500);
     },
-    [tagValue, name, onChange, mutate, fetch, modals, t]
+    [tagValue, emitSelection, mutate, fetch, modals, t]
   );
 
   return (
@@ -219,15 +226,7 @@ export const TagsComponentInner: FC<{
                       modify = [...tagValue, p];
                     }
                     setTagValue(modify);
-                    onChange({
-                      target: {
-                        value: modify.map((p: any) => ({
-                          label: p.name,
-                          value: p.name,
-                        })),
-                        name,
-                      },
-                    });
+                    emitSelection(modify);
                   }}
                   className="flex-1 flex gap-[8px] items-center text-left"
                 >

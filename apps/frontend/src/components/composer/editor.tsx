@@ -39,6 +39,8 @@ import { deleteDialog } from '@postmill-ai/react/helpers/delete.dialog';
 import { useExistingData } from '@postmill-ai/frontend/components/launches/helpers/use.existing.data';
 import { useAiActive } from '@postmill-ai/frontend/components/layout/use-ai-active';
 import { EditorCopilotBridge } from '@postmill-ai/frontend/components/launches/copilot-bridges';
+import { GhostCompletion } from '@postmill-ai/frontend/components/composer/ghost-completion/ghost-completion.extension';
+import { useGhostCompletion } from '@postmill-ai/frontend/components/composer/ghost-completion/use-ghost-completion';
 import { useDropzone } from 'react-dropzone';
 import { useUppyUploader } from '@postmill-ai/frontend/components/files/new.uploader';
 import { Dashboard } from '@uppy/react';
@@ -349,7 +351,12 @@ export const EditorWrapper: FC<{
     <Fragment key={mountKey}>
       <div
         className={clsx(
-          'relative flex-col gap-[20px] flex-1',
+          // min-w-0 all the way down this chain: flex items default to
+          // min-width:auto, so the editor card refused to shrink below its
+          // intrinsic width and #social-content (overflow-x-hidden) silently
+          // clipped 41px on mobile — the reorder/delete column and the
+          // character counter were cut off the right edge.
+          'relative flex-col gap-[20px] flex-1 min-w-0',
           (items.length === 1 || !canEdit || !comments) && 'flex',
           ((!canEdit && !isCreateSet) || !comments) &&
             'bg-newSettings rounded-[12px]'
@@ -410,15 +417,17 @@ export const EditorWrapper: FC<{
         <div
           key={g.id}
           className={clsx(
-            'relative flex flex-col gap-[20px] flex-1 bg-newSettings',
+            'relative flex flex-col gap-[20px] flex-1 min-w-0 bg-newSettings',
             index === 0 && 'rounded-t-[12px]',
             (index === items.length - 1 || !comments) && 'rounded-b-[12px]',
             !canEdit && !isCreateSet && 'blur-s',
             ((!canEdit && index > 0) || (!comments && index > 0)) && 'hidden'
           )}
         >
-          <div className="flex gap-[5px] flex-1 w-full">
-            <div className="flex-1 flex w-full">
+          {/* w-full on a flex child that already sits beside the 32px
+              reorder/delete column is what pushed this row past its container. */}
+          <div className="flex gap-[5px] flex-1 min-w-0">
+            <div className="flex-1 flex min-w-0">
               {index > 0 && (
                 <div className="flex justify-center pl-[12px] text-newSep">
                   <ConnectionLineIcon />
@@ -709,10 +718,10 @@ export const Editor: FC<{
 
   return (
     <Fragment key={editorType}>
-      <div className="flex flex-col gap-[20px] flex-1">
+      <div className="flex flex-col gap-[20px] flex-1 min-w-0">
         <div
           className={clsx(
-            'relative flex-1 px-[12px] pt-[12px] pb-[12px] flex flex-col',
+            'relative flex-1 min-w-0 px-[12px] pt-[12px] pb-[12px] flex flex-col',
             num > 0 && '!rounded-bs-[0]'
           )}
           id={id}
@@ -1061,6 +1070,10 @@ export const OnlyEditor = forwardRef<
             }),
           ]
         : []),
+      // After Mention on purpose: TipTap resolves keyboard shortcuts in
+      // extension order, so the @-suggestion popup keeps Escape and the arrow
+      // keys while it is open.
+      GhostCompletion,
       ...(editorType === 'html' || editorType === 'markdown'
         ? [
             Heading.configure({
@@ -1087,6 +1100,9 @@ export const OnlyEditor = forwardRef<
       onChange?.(innerProps.editor.getHTML());
     },
   });
+
+  // Owns the debounce + request for the ghost text the extension renders.
+  useGhostCompletion(editor);
 
   useImperativeHandle(ref, () => ({
     editor,

@@ -178,6 +178,8 @@ const INTENTIONALLY_UNGATED = new Set<string>([
   'AiUserController.translateContent',
   'AiUserController.searchBrandMemory',
   'AiUserController.generateVariants',
+  // Inline composer completion: returns one throwaway sentence, writes nothing.
+  'AiUserController.suggestCompletion',
 
   // Announcements are global/platform-level and are restricted to super-admin via an
   // in-handler `isSuperAdmin` check (the org RBAC guard does not apply here).

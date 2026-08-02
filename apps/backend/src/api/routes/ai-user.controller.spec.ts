@@ -451,4 +451,104 @@ describe('AiUserController', () => {
       expect(result).toEqual({ hits: [] });
     });
   });
+
+  describe('suggestCompletion', () => {
+    const prefix = 'Our new summer drop lands Friday and it is';
+
+    it('returns the completion for a long-enough draft', async () => {
+      const result = await controller.suggestCompletion(mockOrg, mockUser, {
+        prefix,
+      } as any);
+      expect(result).toEqual({ suggestion: 'Suggested reply from AI' });
+    });
+
+    it('passes the composer brand and platform through to the model', async () => {
+      // Without these the completion silently uses the org's DEFAULT brand,
+      // which is the whole point of the feature.
+      await controller.suggestCompletion(mockOrg, mockUser, {
+        prefix,
+        platform: 'linkedin',
+        brandId: 'brand-1',
+      } as any);
+
+      expect(aiModelProvider.generateText).toHaveBeenCalledWith(
+        'utility',
+        expect.stringContaining(prefix),
+        expect.objectContaining({
+          orgId: 'org-1',
+          userId: 'user-1',
+          platform: 'linkedin',
+          brandId: 'brand-1',
+        }),
+      );
+    });
+
+    it('never asks the model for a draft too short to continue', async () => {
+      const result = await controller.suggestCompletion(mockOrg, mockUser, {
+        prefix: 'Dogs',
+      } as any);
+      expect(result).toEqual({ suggestion: '' });
+      expect(aiModelProvider.generateText).not.toHaveBeenCalled();
+    });
+
+    it('accepts a short real opening — the composer must not out-gate the server', async () => {
+      // The composer's MIN_PREFIX_CHARS and this route's AI_SUGGEST_MIN_PREFIX
+      // have to agree; when this was the higher of the two, every suggestion
+      // for a normal mid-sentence pause came back empty.
+      const result = await controller.suggestCompletion(mockOrg, mockUser, {
+        prefix: 'Dogs love going',
+      } as any);
+      expect(result).toEqual({ suggestion: 'Suggested reply from AI' });
+    });
+
+    it('sends only the tail of a long draft', async () => {
+      await controller.suggestCompletion(mockOrg, mockUser, {
+        prefix: `${'x'.repeat(3000)} the ending matters`,
+      } as any);
+
+      const sentPrompt = (aiModelProvider.generateText as any).mock.calls[0][1];
+      expect(sentPrompt).toContain('the ending matters');
+      expect(sentPrompt.length).toBeLessThan(1500);
+    });
+
+    it('resolves empty instead of throwing when the provider fails', async () => {
+      // This route is fired by typing. A thrown error would reach the frontend's
+      // afterRequest, which turns non-2xx into toasts, billing dialogs or a
+      // logout redirect — mid-sentence.
+      (aiModelProvider.generateText as any).mockRejectedValueOnce(
+        new Error('AI is not configured for this organization'),
+      );
+
+      await expect(
+        controller.suggestCompletion(mockOrg, mockUser, { prefix } as any),
+      ).resolves.toEqual({ suggestion: '' });
+    });
+
+    it('resolves empty when the budget is exhausted', async () => {
+      (aiModelProvider.generateText as any).mockRejectedValueOnce(
+        new Error('Budget exceeded'),
+      );
+
+      await expect(
+        controller.suggestCompletion(mockOrg, mockUser, { prefix } as any),
+      ).resolves.toEqual({ suggestion: '' });
+    });
+
+    it('caps an over-long model response', async () => {
+      (aiModelProvider.generateText as any).mockResolvedValueOnce('y'.repeat(900));
+
+      const result = await controller.suggestCompletion(mockOrg, mockUser, {
+        prefix,
+      } as any);
+      expect(result.suggestion).toHaveLength(200);
+    });
+
+    it('tolerates an empty model response', async () => {
+      (aiModelProvider.generateText as any).mockResolvedValueOnce('');
+
+      await expect(
+        controller.suggestCompletion(mockOrg, mockUser, { prefix } as any),
+      ).resolves.toEqual({ suggestion: '' });
+    });
+  });
 });

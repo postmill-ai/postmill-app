@@ -637,6 +637,18 @@ html[dir='rtl'] [dir='ltr'] {
   color: var(--new-btn-primary);
 }
 
+/* Inline AI completion. Rendered as a ProseMirror decoration, so it is never
+   part of the document — see ghost-completion.extension.ts. It has to read as
+   "not yours yet": dimmed, unselectable, and transparent to pointer events so a
+   stray tap can't steal the caret. */
+.ProseMirror .ghost-suggestion {
+  opacity: 0.45;
+  user-select: none;
+  pointer-events: none;
+  font-style: italic;
+  white-space: break-spaces;
+}
+
 .ProseMirror ul,
 .preview ul {
   list-style: disc;

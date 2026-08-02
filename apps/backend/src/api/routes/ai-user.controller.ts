@@ -12,7 +12,14 @@ import {
   Query,
 } from '@nestjs/common';
 import { Throttle } from '@nestjs/throttler';
-import { IsString, IsOptional, IsNumber, IsBoolean, Min } from 'class-validator';
+import {
+  IsString,
+  IsOptional,
+  IsNumber,
+  IsBoolean,
+  Min,
+  MaxLength,
+} from 'class-validator';
 import { Organization, User } from '@prisma/client';
 import { ApiTags } from '@nestjs/swagger';
 import { z } from 'zod';
@@ -32,6 +39,36 @@ import { AiDefaultsService } from '@postmill-ai/nestjs-libraries/ai/defaults/ai-
 import { PROMPT_CONSTANTS } from '@postmill-ai/nestjs-libraries/ai/prompt-constants.const';
 import { BrandMemorySearchDto } from '@postmill-ai/backend/dtos/ai/brand-memory-search.dto';
 import dayjs from 'dayjs';
+
+/**
+ * Below this there is nothing to continue. Keep in step with MIN_PREFIX_CHARS in
+ * `composer/ghost-completion/should-suggest.ts` — if this is the higher of the
+ * two, the composer fires requests that always come back empty.
+ */
+const AI_SUGGEST_MIN_PREFIX = 10;
+/** Only the tail of the draft is sent — cheaper, and a better cache key. */
+const AI_SUGGEST_CONTEXT_CHARS = 800;
+/** Hard ceiling on what goes back over the wire. */
+const AI_SUGGEST_MAX_CHARS = 200;
+
+class SuggestCompletionDto {
+  /** The draft so far, up to the caret. */
+  @IsString()
+  @MaxLength(4000)
+  prefix!: string;
+
+  /** Channel identifier, so the brand's per-platform override applies. */
+  @IsOptional()
+  @IsString()
+  @MaxLength(32)
+  platform?: string;
+
+  /** The brand selected in the composer; falls back to the org default. */
+  @IsOptional()
+  @IsString()
+  @MaxLength(64)
+  brandId?: string;
+}
 
 class UpsertBrandProfileDto {
   @IsOptional()
@@ -908,6 +945,83 @@ Choose ${count} distinct tones from options like: professional, casual, humorous
         'Variant generation is temporarily unavailable',
         HttpStatus.INTERNAL_SERVER_ERROR,
       );
+    }
+  }
+
+  /**
+   * Inline ghost-text completion for the composer.
+   *
+   * Two things make this route different from every other one in this file:
+   *
+   * It is on by default in the composer, so the spend controls matter: the
+   * minimum prefix below, the client's 1.2s debounce and prefix cache, and
+   * `generateText`'s semantic cache. Note `BudgetMiddleware` does NOT block —
+   * it logs and calls next() — so enforcement is `checkBudget` inside
+   * `generateText`, whose throw the catch below turns into an empty suggestion.
+   *
+   * 1. It is fired by *typing*, not by a click, so it must NEVER surface an
+   *    error. The frontend's `afterRequest` turns a 429 into a toast, a 402/406
+   *    into a modal dialog and a 401 into a logout redirect — any of which,
+   *    triggered mid-sentence, would be worse than no suggestion. Every failure
+   *    path therefore returns 200 with an empty suggestion.
+   * 2. It passes `platform` and `brandId` through to the model provider, so the
+   *    completion is written in the voice of the brand selected in the composer
+   *    rather than the org default.
+   */
+  @Post('/suggest')
+  @Throttle({ default: { limit: 60, ttl: 60000 } })
+  async suggestCompletion(
+    @GetOrgFromRequest() org: Organization,
+    @GetUserFromRequest() user: User,
+    @Body() body: SuggestCompletionDto,
+  ): Promise<{ suggestion: string }> {
+    const prefix = (body.prefix || '').trim();
+    if (prefix.length < AI_SUGGEST_MIN_PREFIX) {
+      return { suggestion: '' };
+    }
+
+    try {
+      // Only the tail matters for continuing a sentence, and a shorter prompt
+      // is both cheaper and a better semantic-cache key.
+      const context = prefix.slice(-AI_SUGGEST_CONTEXT_CHARS);
+
+      const suggestion = await this._aiModelProvider.generateText(
+        'utility',
+        `Continue this social media post from exactly where it stops.
+
+Post so far:
+"""
+${context}
+"""
+
+Rules:
+- Output ONLY the continuation, nothing else.
+- Do not repeat any of the text above.
+- No preamble, no quotes, no explanation.
+- At most 12 words, and stay on the same thought.
+- Do not add hashtags, emoji or a call to action unless the post already uses them.`,
+        {
+          system:
+            'You are an inline writing assistant. You complete a sentence the user is in the middle of typing, matching their voice, register and language exactly.',
+          orgId: org.id,
+          userId: user.id,
+          platform: body.platform,
+          brandId: body.brandId,
+        },
+      );
+
+      return {
+        suggestion: (suggestion || '')
+          .trim()
+          .slice(0, AI_SUGGEST_MAX_CHARS),
+      };
+    } catch (err) {
+      // Includes guardrail rejections and BudgetExceeded — all of which mean
+      // "no suggestion", never "interrupt the writer".
+      this._logger.warn(
+        `suggest failed for org ${org.id}: ${(err as Error).message}`,
+      );
+      return { suggestion: '' };
     }
   }
 }

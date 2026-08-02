@@ -1,13 +1,13 @@
 'use client';
 
-import { FC, useCallback, useEffect, useMemo } from 'react';
+import { FC, useCallback, useEffect, useMemo, useRef } from 'react';
 import { orderBy } from 'lodash';
 import { CalendarWeekProvider } from '@postmill-ai/frontend/components/launches/calendar.context';
 import { useCalendar } from '@postmill-ai/frontend/components/launches/calendar';
 import { pushAgentUiContext } from '@postmill-ai/frontend/components/agent/agent-context-bridge';
 import { Filters } from '@postmill-ai/frontend/components/launches/filters';
 import { LoadingComponent } from '@postmill-ai/frontend/components/layout/loading';
-import { useSearchParams } from 'next/navigation';
+import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import { useToaster } from '@postmill-ai/react/toaster/toaster';
 import { useFireEvents } from '@postmill-ai/helpers/utils/use.fire.events';
 import { Calendar } from './calendar';
@@ -15,6 +15,7 @@ import { DNDProvider } from '@postmill-ai/frontend/components/launches/helpers/d
 import { useT } from '@postmill-ai/react/translation/get.transation.service.client';
 import { useIntegrationList } from '@postmill-ai/frontend/components/launches/helpers/use.integration.list';
 import { useAddProvider } from '@postmill-ai/frontend/components/launches/add.provider.component';
+import { useModals } from '@postmill-ai/frontend/components/layout/new-modal';
 
 // Kept as a shared export — imported by agents/agent.tsx.
 export const SVGLine = () => {
@@ -81,6 +82,51 @@ const LaunchesAgentContext: FC = () => {
       visiblePostIds,
     });
   }, [startDate, endDate, visiblePostIds]);
+  return null;
+};
+
+/**
+ * `/posts?post=<id>` — a shareable URL for one post, which the calendar had no
+ * way to express. The dashboard's schedule chips link here.
+ *
+ * The modal is lazy-loaded at open time (same reason as the inbox card: a static
+ * import pulls the whole composer tree into this bundle), and the param is
+ * dropped once opened so closing the modal doesn't leave a URL that reopens it.
+ */
+const PostDeepLink: FC = () => {
+  const search = useSearchParams();
+  const router = useRouter();
+  const pathname = usePathname();
+  const modal = useModals();
+  const postId = search.get('post');
+  const openedFor = useRef<string | null>(null);
+
+  useEffect(() => {
+    if (!postId || openedFor.current === postId) return;
+    openedFor.current = postId;
+    let cancelled = false;
+    (async () => {
+      const { PostDetailModal } = await import(
+        '@postmill-ai/frontend/components/launches/post-detail/post.detail.modal'
+      );
+      if (cancelled) return;
+      modal.openModal({
+        title: '',
+        closeOnClickOutside: true,
+        closeOnEscape: true,
+        withCloseButton: false,
+        flush: true,
+        classNames: { modal: 'w-[100%] max-w-[1100px] text-textColor' },
+        children: <PostDetailModal postId={postId} />,
+        size: '80%',
+      });
+      router.replace(pathname, { scroll: false });
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [postId, modal, router, pathname]);
+
   return null;
 };
 
@@ -165,6 +211,7 @@ export const LaunchesComponent = () => {
     <DNDProvider>
       <CalendarWeekProvider integrations={sortedIntegrations}>
         <LaunchesAgentContext />
+        <PostDeepLink />
         <div className="bg-newBgColorInner flex-1 flex-col flex p-[20px] mobile:p-[12px] gap-[12px]">
           {error ? (
             <div className="flex-1 flex items-center justify-center">

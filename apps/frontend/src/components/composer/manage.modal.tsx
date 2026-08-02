@@ -26,6 +26,7 @@ import { useToaster } from '@postmill-ai/react/toaster/toaster';
 import { deleteDialog } from '@postmill-ai/react/helpers/delete.dialog';
 import { useFetch } from '@postmill-ai/helpers/utils/custom.fetch';
 import { stripHtmlTags } from '@postmill-ai/helpers/utils/strip.tags';
+import { hasLinks } from '@postmill-ai/helpers/utils/strip.links';
 import { makeId } from '@postmill-ai/nestjs-libraries/services/make.is';
 import { useModals } from '@postmill-ai/frontend/components/layout/new-modal';
 import { capitalize } from 'lodash';
@@ -107,6 +108,9 @@ export const ManageModal: FC<AddEditModalProps> = (props) => {
     return parsed?.color ?? null;
   };
   const [groupColor, setGroupColor] = useState<string | null>(readInitialColor);
+  // Once the user picks a colour themselves, tag selection stops overriding it.
+  // Editing a post that already carries a colour counts as a deliberate choice.
+  const colorUserToggled = useRef(readInitialColor() !== null);
   const groupColorRef = useRef<string | null>(groupColor);
   groupColorRef.current = groupColor;
   const colorize = (settings: any) => {
@@ -165,6 +169,18 @@ export const ManageModal: FC<AddEditModalProps> = (props) => {
       setHide(false);
     }
   }, [hide, setHide]);
+
+  // The short-link picker only makes sense once there's something to shorten.
+  // `hasLinks` shares its pattern with the short-link service, so the pill shows
+  // exactly when the shortener would actually act on the post.
+  const contentHasLink = useMemo(
+    () =>
+      [
+        ...global,
+        ...internal.flatMap((i) => i.integrationValue),
+      ].some((v) => hasLinks(v?.content)),
+    [global, internal]
+  );
 
   // Default the short-link picker from the org's saved preference (YES = on)
   // until the user explicitly chooses in the composer.
@@ -807,10 +823,18 @@ export const ManageModal: FC<AddEditModalProps> = (props) => {
                   id="social-content"
                   className="gap-[12px] md:gap-[32px] flex flex-col pe-[8px] pt-[12px] md:pt-[20px] ps-[20px] absolute top-0 left-0 w-full h-full overflow-x-hidden overflow-y-scroll scrollbar scrollbar-thumb-newColColor scrollbar-track-newBgColorInner"
                 >
+                  {/* Two groups, reordered on mobile: the destination pickers
+                      (channels + brand) sit on their own full-width row below
+                      the actions, which is the only way three pills and two
+                      buttons fit a phone without wrapping mid-group. */}
                   <div className="flex w-full items-center gap-[8px] flex-wrap">
-                    <div className="flex flex-1 min-w-0">
-                      <PicksSocialsComponent toolTip={true} />
+                    <div className="order-2 lg:order-1 w-full lg:w-auto lg:flex-1 flex items-center gap-[8px] min-w-0">
+                      <div className="flex min-w-0">
+                        <PicksSocialsComponent toolTip={true} />
+                      </div>
+                      {!dummy && <BrandPicker openDirection="down" />}
                     </div>
+                    <div className="order-1 lg:order-2 flex items-center gap-[8px] flex-wrap">
                     {!dummy && !addEditSets && (
                       <button
                         type="button"
@@ -829,7 +853,7 @@ export const ManageModal: FC<AddEditModalProps> = (props) => {
                             ),
                           })
                         }
-                        className="border border-newTableBorder bg-btnSimple text-textColor rounded-[8px] px-[14px] h-[40px] text-[13px] font-[500] hover:bg-boxHover"
+                        className="border border-newTableBorder bg-btnSimple text-textColor rounded-[8px] px-[12px] lg:px-[16px] h-[36px] lg:h-[44px] text-[13px] lg:text-[15px] font-[500] hover:bg-boxHover"
                       >
                         {t('start_from', 'Start from…')}
                       </button>
@@ -854,7 +878,7 @@ export const ManageModal: FC<AddEditModalProps> = (props) => {
                       aria-label={t('your_assistant', 'Your Assistant')}
                       data-tooltip-id="tooltip"
                       data-tooltip-content={t('your_assistant', 'Your Assistant')}
-                      className="border border-newTableBorder bg-btnSimple text-textColor rounded-[8px] px-[12px] h-[40px] flex items-center gap-[6px] text-[13px] font-[500] hover:bg-boxHover"
+                      className="border border-newTableBorder bg-btnSimple text-textColor rounded-[8px] px-[12px] lg:px-[16px] h-[36px] lg:h-[44px] flex items-center gap-[6px] text-[13px] lg:text-[15px] font-[500] hover:bg-boxHover"
                     >
                       <svg
                         width="18"
@@ -881,6 +905,7 @@ export const ManageModal: FC<AddEditModalProps> = (props) => {
                           integrations={integrations}
                         />
                       )}
+                    </div>
                     </div>
                   </div>
                   <div className="flex flex-1 gap-[6px] flex-col">
@@ -946,7 +971,11 @@ export const ManageModal: FC<AddEditModalProps> = (props) => {
           </div>
           <div
             className={clsx(
-              'w-full lg:w-[580px] flex flex-col min-h-0',
+              // flex-1 is load-bearing on mobile: the parent switches to
+              // flex-col there, so height becomes the main axis and without a
+              // grow factor this column collapsed to 0px — the preview rendered
+              // as a 40px sliver of padding. Desktop keeps the fixed 580px.
+              'w-full lg:w-[580px] flex-1 lg:flex-none flex flex-col min-h-0',
               mobileTab === 'compose' ? 'hidden lg:flex' : 'flex'
             )}
           >
@@ -963,7 +992,15 @@ export const ManageModal: FC<AddEditModalProps> = (props) => {
             </div>
           </div>
         </div>
-        <div className="select-none h-auto lg:h-[84px] py-[10px] lg:py-[20px] border-t border-newBorder flex flex-col lg:flex-row items-start lg:items-center gap-[8px] lg:gap-0">
+        <div
+          className={clsx(
+            // min-h, not h: the pills wrap on narrow desktops and a fixed
+            // 84px sliced the second row in half.
+            'select-none h-auto lg:min-h-[84px] py-[10px] lg:py-[20px] border-t border-newBorder flex-col lg:flex-row items-start lg:items-center gap-[8px] lg:gap-0',
+            // Preview is a preview: no fields, no actions.
+            mobileTab === 'preview' ? 'hidden lg:flex' : 'flex'
+          )}
+        >
           <div className="flex-1 flex ps-[20px] gap-[8px] flex-wrap">
             {!dummy && (
               <TagsComponent
@@ -973,13 +1010,16 @@ export const ManageModal: FC<AddEditModalProps> = (props) => {
                 onChange={(e) => {
                   setTags(e.target.value);
                 }}
+                onTagColor={(color) => {
+                  // The tag's colour becomes the post colour — until the user
+                  // picks one themselves, after which theirs wins for good.
+                  if (colorUserToggled.current || !color) {
+                    return;
+                  }
+                  setGroupColor(color);
+                }}
               />
             )}
-
-            {!dummy && (
-              <RepeatComponent repeat={repeater} onChange={setRepeater} />
-            )}
-            {!dummy && <BrandPicker />}
             {!dummy && (
               <button
                 type="button"
@@ -992,6 +1032,7 @@ export const ManageModal: FC<AddEditModalProps> = (props) => {
                       <ColorPick
                         initial={groupColor}
                         onApply={(color) => {
+                          colorUserToggled.current = true;
                           setGroupColor(color);
                           modal.closeAll();
                         }}
@@ -1008,7 +1049,13 @@ export const ManageModal: FC<AddEditModalProps> = (props) => {
                 {t('color', 'Color')}
               </button>
             )}
-            {!dummy && !addEditSets && (
+            {!dummy && (
+              <RepeatComponent repeat={repeater} onChange={setRepeater} />
+            )}
+            {/* Nothing to shorten without a link — including the "connect a
+                provider" call-to-action, which otherwise advertises a feature
+                this post can't use. */}
+            {!dummy && !addEditSets && contentHasLink && (
               <ShortlinkPicker
                 enabled={shortLinkEnabled}
                 onChange={(v) => {

@@ -32,11 +32,10 @@ export const convertTimeFormatBasedOnLocality = (time: number) => {
 
 export const hours = Array.from({ length: 24 }, (_, i) => i);
 
-export const formatCompactNumber = (n: number) => {
-  if (n >= 1000000) return `${(n / 1000000).toFixed(1)}M`;
-  if (n >= 1000) return `${(n / 1000).toFixed(1)}K`;
-  return n.toString();
-};
+// Re-exported from the analytics kit rather than duplicated: this copy had no
+// B tier and used toString() instead of locale grouping, so a calendar card and
+// an analytics tile could render the same count differently.
+export { formatCompactNumber } from '@postmill-ai/frontend/components/analytics-v2/utils';
 
 export const ViewsIcon = () => (
   <svg width="15" height="15" viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg">
