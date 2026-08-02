@@ -14,8 +14,10 @@ import React, {
   useId,
   useMemo,
   useRef,
+  useState,
 } from 'react';
 import { Button } from '@postmill-ai/react/form/button';
+import { Input } from '@postmill-ai/react/form/input';
 import { useHotkeys } from 'react-hotkeys-hook';
 import clsx from 'clsx';
 import { EventEmitter } from 'events';
@@ -531,6 +533,103 @@ export const useDecisionModal = () => {
               description={description}
               approveLabel={approveLabel}
               cancelLabel={cancelLabel}
+            />
+          ),
+        });
+      });
+    },
+    [modals, t]
+  );
+
+  return { open };
+};
+
+export const PromptModal: FC<{
+  label: string;
+  placeholder?: string;
+  initialValue: string;
+  approveLabel: string;
+  cancelLabel: string;
+  resolution: (value: string | null) => void;
+}> = ({
+  label,
+  placeholder,
+  initialValue,
+  approveLabel,
+  cancelLabel,
+  resolution,
+}) => {
+  const { closeCurrent } = useModals();
+  const [value, setValue] = useState(initialValue);
+  const submit = () => {
+    resolution(value.trim());
+    closeCurrent();
+  };
+  return (
+    <div className="flex flex-col w-[420px] max-w-full">
+      <Input
+        name="prompt-modal-value"
+        label={label}
+        disableForm={true}
+        removeError={true}
+        autoFocus={true}
+        placeholder={placeholder}
+        value={value}
+        onChange={(e) => setValue(e.target.value)}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter') {
+            e.preventDefault();
+            submit();
+          }
+        }}
+      />
+      <div className="flex gap-[12px] mt-[16px]">
+        <Button onClick={submit}>{approveLabel}</Button>
+        <Button
+          secondary={true}
+          onClick={() => {
+            // Cancel resolves null, not '' — callers distinguish "aborted" from
+            // "submitted empty" (e.g. clearing a link vs. leaving it alone).
+            resolution(null);
+            closeCurrent();
+          }}
+        >
+          {cancelLabel}
+        </Button>
+      </div>
+    </div>
+  );
+};
+
+/**
+ * The app's replacement for the native `prompt()`. Resolves the trimmed value
+ * (possibly `''`) on submit, and `null` when cancelled or dismissed.
+ */
+export const usePromptModal = () => {
+  const modals = useModals();
+  const t = useT();
+  const open = useCallback(
+    ({
+      title = t('enter_a_value', 'Enter a value'),
+      label = '',
+      placeholder = undefined as string | undefined,
+      initialValue = '',
+      approveLabel = t('ok', 'OK'),
+      cancelLabel = t('cancel', 'Cancel'),
+    } = {}) => {
+      return new Promise<string | null>((res) => {
+        modals.openModal({
+          title,
+          askClose: false,
+          onClose: () => res(null),
+          children: (
+            <PromptModal
+              label={label}
+              placeholder={placeholder}
+              initialValue={initialValue}
+              approveLabel={approveLabel}
+              cancelLabel={cancelLabel}
+              resolution={res}
             />
           ),
         });

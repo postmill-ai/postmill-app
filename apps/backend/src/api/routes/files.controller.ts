@@ -12,7 +12,6 @@ import {
   Query,
   UploadedFile,
   UseInterceptors,
-  UsePipes,
 } from '@nestjs/common';
 import { GetOrgFromRequest } from '@postmill-ai/nestjs-libraries/user/org.from.request';
 import { Organization } from '@prisma/client';
@@ -99,10 +98,13 @@ export class FilesController {
       }),
       limits: { fileSize: UPLOAD_LIMITS.maxBytes }
   }))
-  @UsePipes(new CustomFileValidationPipe())
   async uploadServer(
     @GetOrgFromRequest() org: Organization,
-    @UploadedFile() file: Express.Multer.File,
+    // The pipe must be bound to the FILE param, never via @UsePipes: method-scoped
+    // pipes also run on @Body() and on custom param decorators (createParamDecorator
+    // assigns a string paramtype, which Nest's isPipeable() accepts), so the
+    // file-only validation would reject the org/body and 400 every upload.
+    @UploadedFile(new CustomFileValidationPipe()) file: Express.Multer.File,
     @Body() body: UploadServerBodyDto
   ) {
     const folderId = body.folderId;
@@ -146,10 +148,10 @@ export class FilesController {
   )
   @RequirePermission('media', 'create')
   @UseInterceptors(FileInterceptor('file', { limits: { fileSize: UPLOAD_LIMITS.maxBytes } }))
-  @UsePipes(new CustomFileValidationPipe())
   async uploadSimple(
     @GetOrgFromRequest() org: Organization,
-    @UploadedFile('file') file: Express.Multer.File,
+    // See uploadServer: the pipe belongs on the FILE param, not on the method.
+    @UploadedFile(new CustomFileValidationPipe()) file: Express.Multer.File,
     @Body() body: UploadSimpleBodyDto
   ) {
     const folderId = body.folderId;

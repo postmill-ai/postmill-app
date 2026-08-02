@@ -645,10 +645,19 @@ export class FileRepository {
     });
   }
 
-  renameFile(org: string, fileId: string, name: string) {
+  /**
+   * Renames the *display* name only.
+   *
+   * Every browse surface shows `originalName || name`, and uploads always
+   * populate `originalName` — so writing `name` alone (as this used to) changed
+   * nothing the user could see. `name` stays untouched on purpose: it holds the
+   * randomized storage filename whose extension backs the list view's Type
+   * column and the `@@index([name])` search path.
+   */
+  renameFile(org: string, fileId: string, originalName: string) {
     return this._file.model.file.update({
       where: { id: fileId, organizationId: org },
-      data: { name },
+      data: { originalName },
     });
   }
 

@@ -265,7 +265,9 @@ export function useUppyUploader(props: {
       setLockedRef.current(true);
       uppy.setFileMeta(file.id, {
         addedOrder: fileOrderIndex++, // Track original order for sorting after upload
-        folderId: folderIdRef.current ?? undefined,
+        // Uppy appends allowed meta fields to the FormData verbatim, so
+        // `undefined` would be sent as the literal string "undefined".
+        folderId: folderIdRef.current ?? '',
       });
     });
     uppy.on('error', (result) => {

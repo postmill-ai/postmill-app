@@ -28,6 +28,7 @@ import { AiBestTime } from '@postmill-ai/frontend/components/launches/ai.best-ti
 import { AiContentTools } from '@postmill-ai/frontend/components/launches/ai.content.tools';
 import { AiPromptLibraryInsert } from '@postmill-ai/frontend/components/launches/ai.prompt-library.insert';
 import { AiSearch } from '@postmill-ai/frontend/components/launches/ai.search';
+import { InlineSuggestToggle } from '@postmill-ai/frontend/components/composer/ghost-completion/inline-suggest-toggle';
 import {
   ToolbarDropdown,
   MenuItem,
@@ -45,10 +46,8 @@ import {
 } from '@postmill-ai/frontend/components/ui/icons';
 import { useLaunchStore } from '@postmill-ai/frontend/components/composer/store';
 import { useShallow } from 'zustand/react/shallow';
-import {
-  MediaSelectorItem,
-  MediaSelectorModal,
-} from '@postmill-ai/frontend/components/media-tools/media-selector-modal';
+import { MediaSelectorItem } from '@postmill-ai/frontend/components/media-tools/media-selector-modal';
+import { useMediaPicker } from '@postmill-ai/frontend/components/media-tools/use-media-picker';
 import { useComposerImportFolder } from '@postmill-ai/frontend/components/composer/use-composer-import-folder';
 const Designer = dynamic(
   () => import('@postmill-ai/frontend/components/media-tools/designer/designer').then(
@@ -233,7 +232,6 @@ export const MultiFileComponent: FC<{
   const toaster = useToaster();
   const fetch = useFetch();
   const findOrCreateImportFolder = useComposerImportFolder();
-  const [pickerOpen, setPickerOpen] = useState(false);
   // Per-tool media availability — optimistic while loading, fail-open on error (a status
   // outage must not silently kill the AI buttons). Gates AI Image / AI Video so we don't
   // offer a generation the org has no provider for (it would 409 server-side).
@@ -298,7 +296,6 @@ export const MultiFileComponent: FC<{
 
   const handleConfirm = useCallback(
     async (items: MediaSelectorItem[]) => {
-      setPickerOpen(false);
       if (items.length === 0) return;
 
       const fileItems = items.filter((i) => i.source === 'file');
@@ -369,6 +366,18 @@ export const MultiFileComponent: FC<{
     },
     [changeMedia, findOrCreateImportFolder, importStock, t, toaster]
   );
+
+  const mediaPicker = useMediaPicker({
+    title: t('insert_media', 'Insert media'),
+    multiple: true,
+    kinds: ['image', 'video'],
+    // Canonical tab identifiers; the displayed labels are translated inside the
+    // picker via TAB_LABEL_KEYS. Icons are SVG, which /files/import rejects.
+    excludeTabs: ['Stock Stickers', 'Stock Icons'],
+    // Deliberately no `requireFile`: this flow imports stock into a dated
+    // "Composer imports" folder itself, with placeholder tiles while it runs.
+    onConfirm: handleConfirm,
+  });
 
   const clearMedia = useCallback(
     (topIndex: number) => () => {
@@ -490,7 +499,7 @@ export const MultiFileComponent: FC<{
             <div className="flex flex-nowrap shrink-0 py-[10px] b2 items-center gap-[4px]">
               <button
                 type="button"
-                onClick={() => setPickerOpen(true)}
+                onClick={mediaPicker.open}
                 aria-label={t('insert_media', 'Insert Media')}
                 className="cursor-pointer h-[30px] rounded-[6px] justify-center items-center flex bg-newColColor px-[8px]"
               >
@@ -534,6 +543,12 @@ export const MultiFileComponent: FC<{
                   <MenuItem nested label={t('ai_search', 'AI Search')}>
                     <AiSearch />
                   </MenuItem>
+                  <MenuItem
+                    nested
+                    label={t('suggest_while_typing', 'Suggest while I type')}
+                  >
+                    <InlineSuggestToggle />
+                  </MenuItem>
                 </ToolbarDropdown>
               )}
             </div>
@@ -555,16 +570,7 @@ export const MultiFileComponent: FC<{
           )}
         </div>
       </div>
-      <MediaSelectorModal
-        open={pickerOpen}
-        onClose={() => setPickerOpen(false)}
-        multiple
-        onConfirm={handleConfirm}
-        kinds={['image', 'video']}
-        // Canonical tab identifiers used by MediaSelectorModal; displayed labels
-        // are translated inside the modal via TAB_LABEL_KEYS.
-        excludeTabs={['Stock Stickers', 'Stock Icons']}
-      />
+      {mediaPicker.element}
       <div className="text-[12px] text-dangerText">{error}</div>
     </>
   );
@@ -597,8 +603,6 @@ export const FileComponent: FC<{
   const permissions = usePermissions();
   const fetch = useFetch();
   const toaster = useToaster();
-  const [pickerOpen, setPickerOpen] = useState(false);
-  const [importing, setImporting] = useState(false);
   const modals = useModals();
   const mediaDirectory = useMediaDirectory();
 
@@ -634,49 +638,17 @@ export const FileComponent: FC<{
     });
   }, [t, permissions, width, height, modals, changeMedia]);
 
-  const handleSelect = useCallback(
-    async (item: MediaSelectorItem) => {
-      setPickerOpen(false);
-      if (item.source === 'file') {
-        changeMedia([{ id: item.fileId!, path: item.url }]);
-        return;
-      }
-      setImporting(true);
-      try {
-        const res = await fetch('/files/import', {
-          method: 'POST',
-          body: JSON.stringify({
-            url: item.url,
-            name:
-              item.name ||
-              i18next.t('stock_import_fallback', 'stock-import', { lng: i18next.resolvedLanguage || 'en' }),
-            type: item.type,
-            source: item.stockSource,
-            attribution: item.attribution,
-            ...(item.downloadLocation
-              ? { downloadLocation: item.downloadLocation }
-              : {}),
-          }),
-        });
-        if (!res.ok) {
-          const text = await res.text().catch(() => 'Import failed');
-          throw new Error(text);
-        }
-        const imported = (await res.json()) as { id: string; path: string };
-        changeMedia([{ id: imported.id, path: imported.path }]);
-      } catch (err) {
-        toaster.show(
-          t('import_failed_with_message', 'Import failed: {{message}}', {
-            message: (err as Error).message,
-          }),
-          'warning'
-        );
-      } finally {
-        setImporting(false);
-      }
+  // `requireFile` does the stock import that used to be re-implemented here.
+  const mediaPicker = useMediaPicker({
+    title: t('select_x_file', 'Select {{type}} file', {
+      type: type || t('media_noun_image', 'image'),
+    }),
+    kinds: type ? [type === 'audio' ? 'audio' : type === 'video' ? 'video' : 'image'] : undefined,
+    requireFile: true,
+    onSelect: (item: MediaSelectorItem) => {
+      if (item.fileId) changeMedia([{ id: item.fileId, path: item.url }]);
     },
-    [changeMedia, fetch, t, toaster]
-  );
+  });
 
   const clearMedia = useCallback(() => {
     onChange({
@@ -725,24 +697,17 @@ export const FileComponent: FC<{
         </div>
       )}
       <div className="flex gap-[5px]">
-        <Button onClick={() => setPickerOpen(true)} disabled={importing}>
-          {importing ? t('importing', 'Importing…') : t('select', 'Select')}
-        </Button>
+        <Button onClick={mediaPicker.open}>{t('select', 'Select')}</Button>
         {permissions.hasPermission('media', 'read') && (
           <Button onClick={showDesignModal} className="!bg-btnPrimary">
             {t('editor', 'Editor')}
           </Button>
         )}
-        <Button secondary={true} onClick={clearMedia} disabled={importing}>
+        <Button secondary={true} onClick={clearMedia}>
           {t('clear', 'Clear')}
         </Button>
       </div>
-      <MediaSelectorModal
-        open={pickerOpen}
-        onClose={() => setPickerOpen(false)}
-        onSelect={handleSelect}
-        kinds={type ? [type === 'audio' ? 'audio' : type === 'video' ? 'video' : 'image'] : undefined}
-      />
+      {mediaPicker.element}
     </div>
   );
 };

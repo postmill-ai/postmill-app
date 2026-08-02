@@ -1,4 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { mkdtempSync, writeFileSync, rmSync, ReadStream } from 'fs';
+import { tmpdir } from 'os';
+import { join } from 'path';
 
 const s3ClientMock = {
   send: vi.fn(),
@@ -230,6 +233,67 @@ describe('S3StorageBase', () => {
 
       const cmd = s3ClientMock.send.mock.calls[0][0];
       expect(cmd.config.Key).toBe('path/to/file.png');
+    });
+  });
+
+  describe('uploadFile', () => {
+    // `/files/upload-simple` uses multer memoryStorage (file.buffer);
+    // `/files/upload-server` uses diskStorage (file.path, no buffer). Sniffing
+    // only from the buffer made every upload-server request fail with
+    // "Unsupported file type." on S3-backed orgs.
+    const PNG = Buffer.concat([
+      Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]),
+      Buffer.alloc(64),
+    ]);
+
+    it('uploads from a memory buffer', async () => {
+      s3ClientMock.send.mockResolvedValue({});
+      const adapter = make('us-east-1', 'my-bucket');
+
+      const result = await adapter.uploadFile({ buffer: PNG, size: PNG.length });
+
+      const cmd = s3ClientMock.send.mock.calls[0][0];
+      expect(cmd.config.ContentType).toBe('image/png');
+      expect(cmd.config.Body).toBe(PNG);
+      expect(result.path).toContain('.png');
+    });
+
+    it('uploads from a disk path when there is no buffer (upload-server)', async () => {
+      s3ClientMock.send.mockResolvedValue({});
+      const dir = mkdtempSync(join(tmpdir(), 's3-upload-'));
+      const filePath = join(dir, 'upload.tmp');
+      writeFileSync(filePath, PNG);
+
+      try {
+        const adapter = make('us-east-1', 'my-bucket');
+        const result = await adapter.uploadFile({
+          path: filePath,
+          size: PNG.length,
+        });
+
+        const cmd = s3ClientMock.send.mock.calls[0][0];
+        expect(cmd.config.ContentType).toBe('image/png');
+        expect(cmd.config.ContentLength).toBe(PNG.length);
+        expect(cmd.config.Body).toBeInstanceOf(ReadStream);
+        expect(result.path).toContain('.png');
+
+        // `send` is mocked, so nothing consumed the stream. Drain it here — both
+        // to prove the right bytes would be uploaded and so the temp dir isn't
+        // removed while the lazily-opened fd is still pending.
+        const chunks: Buffer[] = [];
+        for await (const chunk of cmd.config.Body) chunks.push(chunk as Buffer);
+        expect(Buffer.concat(chunks).equals(PNG)).toBe(true);
+      } finally {
+        rmSync(dir, { recursive: true, force: true });
+      }
+    });
+
+    it('rejects a file with neither a buffer nor a path', async () => {
+      const adapter = make();
+      await expect(adapter.uploadFile({ size: 10 })).rejects.toThrow(
+        'Invalid file upload.'
+      );
+      expect(s3ClientMock.send).not.toHaveBeenCalled();
     });
   });
 

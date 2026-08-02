@@ -1,6 +1,6 @@
 'use client';
 
-import React, { FC, useCallback, useEffect, useState } from 'react';
+import React, { FC, useCallback, useEffect, useState, useSyncExternalStore } from 'react';
 import useSWR from 'swr';
 import { useFetch } from '@postmill-ai/helpers/utils/custom.fetch';
 import { useDebounce } from 'use-debounce';
@@ -17,6 +17,15 @@ import { TrashComponent } from '@postmill-ai/frontend/components/files/trash.com
 import clsx from 'clsx';
 import { PageHeader } from '@postmill-ai/frontend/components/ui/page-header';
 import { useT } from '@postmill-ai/react/translation/get.transation.service.client';
+import { useToaster } from '@postmill-ai/react/toaster/toaster';
+import { childrenOf, useFolderDropTarget, type FolderItem } from '@postmill-ai/frontend/components/files/folder.utils';
+import { ContextMenu, type ContextMenuItem } from '@postmill-ai/frontend/components/ui/context-menu';
+import { useContextMenu } from '@postmill-ai/frontend/components/ui/use-context-menu';
+import { RenameDialog } from '@postmill-ai/frontend/components/files/rename-dialog';
+import { useMediaDirectory } from '@postmill-ai/react/helpers/use.media.directory';
+import { hasExtension } from '@postmill-ai/helpers/utils/has.extension';
+import { openInDesigner } from '@postmill-ai/frontend/components/media-tools/open-in-designer';
+import { useRouter } from 'next/navigation';
 
 type ViewMode = 'grid' | 'list';
 
@@ -26,6 +35,12 @@ const GridIcon: FC<{ className?: string }> = ({ className }) => (
     <rect x="9.5" y="1" width="5.5" height="5.5" rx="1" stroke="currentColor" strokeWidth="1.5" />
     <rect x="1" y="9.5" width="5.5" height="5.5" rx="1" stroke="currentColor" strokeWidth="1.5" />
     <rect x="9.5" y="9.5" width="5.5" height="5.5" rx="1" stroke="currentColor" strokeWidth="1.5" />
+  </svg>
+);
+
+const FolderIcon: FC = () => (
+  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z" />
   </svg>
 );
 
@@ -54,20 +69,48 @@ export type FileItem = {
   folder?: { id: string; name: string } | null;
 };
 
+const SIDEBAR_STORAGE_KEY = 'files:sidebar';
+
+const readStoredSidebar = () => {
+  try {
+    return localStorage.getItem(SIDEBAR_STORAGE_KEY) !== 'collapsed';
+  } catch {
+    return true;
+  }
+};
+
+// Other tabs are the only external writer; `storage` is enough to stay in sync.
+const subscribeToStorage = (onChange: () => void) => {
+  window.addEventListener('storage', onChange);
+  return () => window.removeEventListener('storage', onChange);
+};
+
 export const FileManager: FC<{
   standalone?: boolean;
   onSelect?: (items: FileItem[]) => void;
   onFolderChange?: (folderId: string | null) => void;
   refreshKey?: number | string;
+  /**
+   * `inline` keeps the 240px folder column beside the grid (the /files page);
+   * `drawer` drops it entirely and reaches folders through the overlay drawer.
+   * Modal hosts must use `drawer`: the inline column is gated on `lg:` — a
+   * *viewport* query — so inside a 720px dialog it would still render on any
+   * desktop and leave ~440px for the browse area.
+   */
+  sidebarMode?: 'inline' | 'drawer';
 }> = ({
   standalone,
   onSelect,
   onFolderChange,
   refreshKey,
+  sidebarMode,
 }) => {
   const fetch = useFetch();
   const t = useT();
+  const toaster = useToaster();
   const modals = useModals();
+  const router = useRouter();
+  const mediaDirectory = useMediaDirectory();
   const [page, setPage] = useState(0);
   const [search, setSearch] = useState('');
   const [debouncedSearch] = useDebounce(search, 300);
@@ -81,6 +124,31 @@ export const FileManager: FC<{
   const [detailsFile, setDetailsFile] = useState<FileItem | null>(null);
   const [showTrash, setShowTrash] = useState(false);
   const [folderDrawerOpen, setFolderDrawerOpen] = useState(false);
+  // `undefined` until the stored preference is read. The component is
+  // server-rendered, so reading localStorage in the useState initializer would
+  // be a hydration mismatch; `useSyncExternalStore` gives the server/first-paint
+  // value and the client value without a setState-in-effect cascade.
+  const storedSidebar = useSyncExternalStore(
+    subscribeToStorage,
+    readStoredSidebar,
+    () => true
+  );
+  const [sidebarOverride, setSidebarOverride] = useState<boolean | null>(null);
+  const sidebarOpen = sidebarOverride ?? storedSidebar;
+
+  const resolvedSidebarMode = sidebarMode ?? (standalone ? 'inline' : 'drawer');
+  const inlineSidebar = resolvedSidebarMode === 'inline';
+
+  const toggleSidebar = useCallback(() => {
+    const next = !sidebarOpen;
+    setSidebarOverride(next);
+    try {
+      localStorage.setItem(SIDEBAR_STORAGE_KEY, next ? 'expanded' : 'collapsed');
+    } catch {
+      // Storage can be unavailable (private mode, blocked cookies) — the
+      // preference simply won't persist.
+    }
+  }, [sidebarOpen]);
 
   const setSearchAndReset = useCallback((value: string) => {
     setSearch(value);
@@ -155,26 +223,221 @@ export const FileManager: FC<{
     mutateFolders();
   }, [mutate, mutateFolders]);
 
+  const moveFileToFolder = useCallback(
+    async (fileId: string, folderId: string | null) => {
+      const res = await fetch(`/files/${fileId}/move`, {
+        method: 'PUT',
+        body: JSON.stringify({ folderId }),
+      });
+      if (!res.ok) {
+        toaster.show(t('failed_to_move_file', 'Failed to move file'), 'warning');
+        return;
+      }
+      toaster.show(t('file_moved_successfully', 'File moved successfully'), 'success');
+      refresh();
+    },
+    [fetch, refresh, toaster, t]
+  );
+
+  const { dropProps: folderDropProps, isOver: isFolderOver } =
+    useFolderDropTarget(moveFileToFolder);
+
+  // Subfolders of the current folder, derived from the tree the sidebar already
+  // fetched. Hidden whenever the file list is filtered or paged, since folders
+  // aren't part of that result set and showing them would misrepresent it.
+  const foldersFiltered =
+    !!debouncedSearch.trim() || !!filterType || !!filterTag || page > 0;
+  const visibleFolders = foldersFiltered
+    ? []
+    : childrenOf(foldersData || [], selectedFolderId);
+
+  // ── Context menus (right-click on desktop, long-press on touch) ──────────
+  const fileMenu = useContextMenu<FileItem>();
+  const folderMenu = useContextMenu<FolderItem>();
+
+  const openRenameDialog = useCallback(
+    (initialName: string, label: string, onSubmit: (name: string) => void) => {
+      modals.openModal({
+        title: label,
+        closeOnClickOutside: true,
+        closeOnEscape: true,
+        withCloseButton: true,
+        center: true,
+        children: (close) => (
+          <RenameDialog
+            initialName={initialName}
+            label={label}
+            onSubmit={onSubmit}
+            onClose={close}
+          />
+        ),
+      });
+    },
+    [modals]
+  );
+
+  const renameFile = useCallback(
+    (file: FileItem) =>
+      openRenameDialog(
+        file.originalName || file.name,
+        t('rename_file', 'Rename file'),
+        async (name) => {
+          await fetch(`/files/${file.id}/rename`, {
+            method: 'PUT',
+            body: JSON.stringify({ name }),
+          });
+          refresh();
+        }
+      ),
+    [openRenameDialog, fetch, refresh, t]
+  );
+
+  const renameFolder = useCallback(
+    (folder: FolderItem) =>
+      openRenameDialog(folder.name, t('rename_folder', 'Rename folder'), async (name) => {
+        await fetch(`/files/folders/${folder.id}`, {
+          method: 'PUT',
+          body: JSON.stringify({ name }),
+        });
+        refresh();
+      }),
+    [openRenameDialog, fetch, refresh, t]
+  );
+
+  const deleteFile = useCallback(
+    async (file: FileItem) => {
+      const res = await fetch(`/files/${file.id}/trash`, { method: 'POST' });
+      if (!res.ok) {
+        toaster.show(t('failed_to_delete_file', 'Failed to delete file'), 'warning');
+        return;
+      }
+      toaster.show(t('file_moved_to_trash', 'File moved to trash'), 'success');
+      if (detailsFile?.id === file.id) setDetailsFile(null);
+      refresh();
+    },
+    [fetch, refresh, toaster, t, detailsFile]
+  );
+
+  const deleteFolder = useCallback(
+    async (folder: FolderItem) => {
+      const res = await fetch(`/files/folders/${folder.id}`, { method: 'DELETE' });
+      if (!res.ok) {
+        const text = await res.text();
+        toaster.show(
+          text || t('cannot_delete_non_empty_folder', 'Cannot delete non-empty folder'),
+          'warning'
+        );
+      } else {
+        toaster.show(t('folder_deleted', 'Folder deleted'), 'success');
+        if (selectedFolderId === folder.id) handleFolderSelect(null);
+      }
+      refresh();
+    },
+    [fetch, refresh, toaster, t, selectedFolderId, handleFolderSelect]
+  );
+
+  const openInDesignerFromFile = useCallback(
+    (file: FileItem) => {
+      const isVideo = hasExtension(file.path, 'mp4', 'mov', 'webm');
+      const isAudio = hasExtension(file.path, 'mp3', 'wav', 'ogg', 'm4a');
+      openInDesigner(
+        {
+          operation: isVideo ? 'video' : isAudio ? 'audio' : 'image',
+          artifactUrl: mediaDirectory.set(file.path),
+          fileId: file.id,
+          source: 'files',
+          thumbUrl: isVideo && file.thumbnail ? mediaDirectory.set(file.thumbnail) : undefined,
+        },
+        router.push
+      );
+    },
+    [mediaDirectory, router]
+  );
+
+  const fileMenuItems = useCallback(
+    (file: FileItem): ContextMenuItem[] => [
+      // Preview and Designer are suppressed in picker mode, where a click means
+      // "choose this file" and navigating away would drop the selection.
+      ...(!onSelect
+        ? ([
+            { label: t('preview', 'Preview'), onClick: () => handleFileClick(file) },
+            {
+              label: t('open_in_designer', 'Open in Designer'),
+              onClick: () => openInDesignerFromFile(file),
+            },
+            { label: t('details', 'Details'), onClick: () => setDetailsFile(file) },
+            { divider: true },
+          ] as ContextMenuItem[])
+        : []),
+      { label: t('rename', 'Rename'), onClick: () => renameFile(file) },
+      {
+        label: t('download', 'Download'),
+        onClick: () => window.open(mediaDirectory.set(file.path), '_blank'),
+      },
+      ...(!onSelect
+        ? ([
+            { divider: true },
+            { label: t('delete', 'Delete'), onClick: () => deleteFile(file), danger: true },
+          ] as ContextMenuItem[])
+        : []),
+    ],
+    [
+      onSelect,
+      t,
+      handleFileClick,
+      openInDesignerFromFile,
+      renameFile,
+      deleteFile,
+      mediaDirectory,
+    ]
+  );
+
+  const folderMenuItems = useCallback(
+    (folder: FolderItem): ContextMenuItem[] => [
+      { label: t('open', 'Open'), onClick: () => handleFolderSelect(folder.id) },
+      { label: t('rename', 'Rename'), onClick: () => renameFolder(folder) },
+      { divider: true },
+      { label: t('delete', 'Delete'), onClick: () => deleteFolder(folder), danger: true },
+    ],
+    [t, handleFolderSelect, renameFolder, deleteFolder]
+  );
+
   const pages = data?.pages || 0;
 
   return (
     <div className="flex flex-1 h-full gap-[15px]">
-      {/* Desktop sidebar */}
-      <div className="hidden lg:block">
-        <FolderTree
-          folders={foldersData || []}
-          selectedFolderId={selectedFolderId}
-          onSelectFolder={handleFolderSelect}
-          onRefresh={mutateFolders}
-          onFileMoved={refresh}
-        />
-      </div>
+      {/* Desktop sidebar — inline hosts only, and only while expanded.
+          The app shell scrolls the document (`min-h-screen`), so there is no
+          bounded ancestor for `h-full` to resolve against: the column is made
+          sticky and `self-start` instead, which stops it stretching to the (very
+          tall) grid row and keeps it in view while the page scrolls. The height
+          bound itself lives on FolderTree — a percentage max-height would not
+          resolve against a parent that only has a max-height. */}
+      {inlineSidebar && sidebarOpen && (
+        <div
+          id="files-folder-sidebar"
+          className="hidden lg:flex lg:flex-col self-start sticky top-[20px] min-h-0"
+        >
+          <FolderTree
+            folders={foldersData || []}
+            selectedFolderId={selectedFolderId}
+            onSelectFolder={handleFolderSelect}
+            onRefresh={mutateFolders}
+            onFileMoved={refresh}
+          />
+        </div>
+      )}
 
-      {/* Mobile folder drawer */}
+      {/* Folder drawer — the only folder surface in drawer mode, and the
+          small-screen surface everywhere else. */}
       <div
+        id="files-folder-drawer"
         aria-hidden={!folderDrawerOpen}
+        // Without inert the closed drawer's buttons stay in the tab order.
+        inert={!folderDrawerOpen}
         className={clsx(
-          'fixed inset-0 z-[210] flex justify-start lg:hidden',
+          'fixed inset-0 z-[210] flex justify-start',
+          inlineSidebar && 'lg:hidden',
           !folderDrawerOpen && 'pointer-events-none'
         )}
       >
@@ -231,17 +494,23 @@ export const FileManager: FC<{
       </div>
 
       <div className="flex-1 flex flex-col min-w-0">
-        <PageHeader
-          title={t('media_library', 'Media Library')}
-          description={t('manage_your_images_videos_and_files', 'Manage your images, videos, and files')}
-          action={
-            <FileUploader
-              folderId={selectedFolderId}
-              onUploadComplete={refresh}
-              variant="header"
-            />
-          }
-        />
+        {/* Page chrome belongs to the /files page, not to a picker. Embedded in
+            the media picker this rendered a "File Library" heading and a second
+            Upload button inside the dialog, on top of the picker's own header
+            and drop zone. */}
+        {standalone && (
+          <PageHeader
+            title={t('file_library', 'File Library')}
+            description={t('manage_your_images_videos_and_files', 'Manage your images, videos, and files')}
+            action={
+              <FileUploader
+                folderId={selectedFolderId}
+                onUploadComplete={refresh}
+                variant="header"
+              />
+            }
+          />
+        )}
         <div className="flex flex-wrap items-center gap-[12px] mb-[15px]">
           <div className="flex flex-1 items-center gap-[8px] min-w-0 mobile:flex-none mobile:w-full">
             <div className="flex-1 relative min-w-0">
@@ -300,23 +569,52 @@ export const FileManager: FC<{
             </div>
 
             <div className="flex items-center gap-[8px] mobile:order-1">
+              {/* Two triggers rather than a JS media query: below lg (and in
+                  drawer-mode hosts) folders live in the overlay drawer; at lg
+                  and above an inline host collapses/expands the column. */}
               <button
                 type="button"
                 onClick={() => setFolderDrawerOpen(true)}
-                className="lg:hidden px-[12px] h-[44px] rounded-[8px] border border-newColColor text-[13px] text-textColor hover:bg-boxHover transition-colors flex items-center gap-[6px]"
+                aria-expanded={folderDrawerOpen}
+                aria-controls="files-folder-drawer"
+                className={clsx(
+                  'px-[12px] h-[44px] rounded-[8px] border border-newColColor text-[13px] text-textColor hover:bg-boxHover transition-colors flex items-center gap-[6px]',
+                  inlineSidebar && 'lg:hidden'
+                )}
               >
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                  <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z" />
-                </svg>
-                <span>{t('folder', 'Folder')}</span>
+                <FolderIcon />
+                <span>{t('folders', 'Folders')}</span>
               </button>
 
-              <button
-                onClick={() => setShowTrash(!showTrash)}
-                className="px-[12px] h-[44px] rounded-[8px] border border-newColColor text-[13px] text-textColor hover:bg-boxHover transition-colors"
-              >
-                🗑️ {t('trash', 'Trash')}
-              </button>
+              {inlineSidebar && (
+                <button
+                  type="button"
+                  onClick={toggleSidebar}
+                  aria-expanded={sidebarOpen}
+                  aria-controls="files-folder-sidebar"
+                  className={clsx(
+                    'hidden lg:flex px-[12px] h-[44px] rounded-[8px] border text-[13px] transition-colors items-center gap-[6px]',
+                    sidebarOpen
+                      ? 'border-[#2B5CD3] text-btnPrimaryAccent bg-[#2B5CD3]/10'
+                      : 'border-newColColor text-textColor hover:bg-boxHover'
+                  )}
+                >
+                  <FolderIcon />
+                  <span>
+                    {sidebarOpen ? t('hide_folders', 'Hide folders') : t('show_folders', 'Show folders')}
+                  </span>
+                </button>
+              )}
+
+              {/* Emptying the bin is a library task, not a picking one. */}
+              {standalone && (
+                <button
+                  onClick={() => setShowTrash(!showTrash)}
+                  className="px-[12px] h-[44px] rounded-[8px] border border-newColColor text-[13px] text-textColor hover:bg-boxHover transition-colors"
+                >
+                  🗑️ {t('trash', 'Trash')}
+                </button>
+              )}
             </div>
           </div>
         </div>
@@ -331,7 +629,7 @@ export const FileManager: FC<{
         <div className="flex-1 relative min-h-0">
           {isLoading ? (
             <LoadingComponent />
-          ) : !data?.results?.length ? (
+          ) : !data?.results?.length && !visibleFolders.length ? (
             <div className="flex flex-col items-center justify-center h-full gap-[15px] text-textColor/60">
               <svg width="64" height="64" viewBox="0 0 64 64" fill="none">
                 <rect x="8" y="12" width="48" height="40" rx="6" stroke="currentColor" strokeWidth="2" strokeOpacity="0.3" />
@@ -346,19 +644,32 @@ export const FileManager: FC<{
             </div>
           ) : viewMode === 'grid' ? (
             <FileGrid
-              files={data.results}
+              files={data?.results || []}
               selectedFiles={selectedFiles}
               onToggleSelect={toggleFileSelection}
               onFileClick={handleFileClick}
               standalone={standalone}
               onSelect={onSelect}
+              folders={visibleFolders}
+              onFolderOpen={handleFolderSelect}
+              folderDropProps={folderDropProps}
+              isFolderOver={isFolderOver}
+              onFileMenu={fileMenu.openAt}
+              onFolderMenu={folderMenu.openAt}
             />
           ) : (
             <FileList
-              files={data.results}
+              files={data?.results || []}
               selectedFiles={selectedFiles}
               onToggleSelect={toggleFileSelection}
               onFileClick={handleFileClick}
+              folders={visibleFolders}
+              onFolderOpen={handleFolderSelect}
+              folderDropProps={folderDropProps}
+              isFolderOver={isFolderOver}
+              onFileMenu={fileMenu.openAt}
+              onFolderMenu={folderMenu.openAt}
+              onRefresh={refresh}
               sortField={sortField}
               sortOrder={sortOrder}
               onSort={(field) => {
@@ -457,6 +768,26 @@ export const FileManager: FC<{
             />
           </div>
         </div>
+      )}
+
+      {fileMenu.menu && (
+        <ContextMenu
+          x={fileMenu.menu.x}
+          y={fileMenu.menu.y}
+          items={fileMenuItems(fileMenu.menu.target)}
+          onClose={fileMenu.close}
+          ariaLabel={t('file_actions', 'File actions')}
+        />
+      )}
+
+      {folderMenu.menu && (
+        <ContextMenu
+          x={folderMenu.menu.x}
+          y={folderMenu.menu.y}
+          items={folderMenuItems(folderMenu.menu.target)}
+          onClose={folderMenu.close}
+          ariaLabel={t('folder_actions', 'Folder actions')}
+        />
       )}
 
       {showTrash && (
