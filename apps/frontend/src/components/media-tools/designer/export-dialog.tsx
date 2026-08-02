@@ -986,14 +986,13 @@ export const ExportDialog: FC<ExportDialogProps> = ({ store, onClose }) => {
       blob: Blob,
       fileName: string
     ): Promise<{ id: string; path: string } | null> => {
-      const attribution = store.getState().doc.attribution;
       const formData = new FormData();
       formData.append('file', blob, fileName);
-      if (attribution?.source) formData.append('source', attribution.source);
-      if (attribution?.downloadLocation)
-        formData.append('downloadLocation', attribution.downloadLocation);
-      if (attribution?.author) formData.append('author', attribution.author);
-      if (attribution?.authorUrl) formData.append('authorUrl', attribution.authorUrl);
+      // Attribution fields are deliberately not sent: the upload DTOs don't
+      // declare them, so the global validation pipe (forbidNonWhitelisted)
+      // rejected the whole request — and saveFile has no metadata parameter, so
+      // they were never stored anyway. The Unsplash download obligation is
+      // discharged separately by pingDownload().
       if (selectedFolderId) formData.append('folderId', selectedFolderId);
 
       // upload-simple is capped at 10 MB; fall back to the server-side endpoint for larger files.
@@ -1002,7 +1001,7 @@ export const ExportDialog: FC<ExportDialogProps> = ({ store, onClose }) => {
       if (!res.ok) return null;
       return res.json();
     },
-    [store, fetch, selectedFolderId]
+    [fetch, selectedFolderId]
   );
 
   // --- Thumbnail generation (for step 3) ---

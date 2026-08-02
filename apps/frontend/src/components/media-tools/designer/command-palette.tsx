@@ -137,6 +137,8 @@ export const CommandPalette: React.FC<CommandPaletteProps> = ({ actions }) => {
     >
       <div
         ref={containerRef}
+        role="dialog"
+        aria-modal="true"
         className="bg-studioBg border border-studioBorder rounded-xl w-[560px] max-h-[400px] flex flex-col shadow-2xl"
         onClick={(e) => e.stopPropagation()}
       >

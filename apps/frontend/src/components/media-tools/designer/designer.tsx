@@ -8,7 +8,10 @@ import { CollaborationCursors, type PeerTimelineState } from './collaboration-cu
 import { DesignerCanvas } from './canvas';
 import { setImageFetch, clearImageCache } from './elements';
 import { useFetch } from '@postmill-ai/helpers/utils/custom.fetch';
-import { useModals } from '@postmill-ai/frontend/components/layout/new-modal';
+import {
+  useDecisionModal,
+  useModals,
+} from '@postmill-ai/frontend/components/layout/new-modal';
 import { useToaster } from '@postmill-ai/react/toaster/toaster';
 import { useT } from '@postmill-ai/react/translation/get.transation.service.client';
 import { useDebounce } from 'use-debounce';
@@ -22,6 +25,8 @@ import { PhotosPanel } from './panels/photos-panel';
 import { UploadsPanel } from './panels/uploads-panel';
 import { BackgroundPanel } from './panels/background-panel';
 import { LayersPanel } from './panels/layers-panel';
+import { FloatingPanel } from './floating-panel';
+import { useFloatingPanelState } from './use-floating-panel-state';
 import { AiPanel } from './panels/ai-panel';
 import { BrandPanel } from './panels/brand-panel';
 import { IconsPanel } from './panels/icons-panel';
@@ -37,13 +42,13 @@ import { MenuBar } from './menu-bar';
 import { useDesignerActions, type DesignerActionCtx } from './actions';
 import { NewDesignDialog } from './new-design-dialog';
 import { CanvasInspector } from './panels/canvas-inspector';
-import { MediaSelectorModal } from '../media-selector-modal';
+import { useMediaPicker } from '../use-media-picker';
 import { StartDialog } from './start-dialog';
 import { aiRemoveBackground, aiUpscale, aiDetectSubject } from './ai-image-actions';
 import { addMediaToTimeline } from './add-media-to-timeline';
 import { Logo } from '@postmill-ai/frontend/components/new-layout/logo';
 import { FullscreenButton } from '@postmill-ai/frontend/components/media-tools/fullscreen-button';
-import { useFullscreen } from '@postmill-ai/frontend/components/media-tools/use-fullscreen';
+import { useFullscreenSurface } from '@postmill-ai/frontend/components/media-tools/use-fullscreen';
 import { getBrandViolations } from './brand-compliance';
 import { useBrandColors } from './panels/use-brand-colors';
 import { useBrandFonts } from './panels/use-brand-fonts';
@@ -202,6 +207,7 @@ export const Designer: FC<DesignerProps> = ({
   const toaster = useToaster();
   const translate = useT();
   const modals = useModals();
+  const decision = useDecisionModal();
   const [activePanel, setActivePanel] = useState<string | null>(null);
   const [showSafeZones, setShowSafeZones] = useState(false);
   const [showRulers, setShowRulers] = useState(true);
@@ -233,6 +239,14 @@ export const Designer: FC<DesignerProps> = ({
     [mediaToolsStatus]
   );
   const user = useUser();
+  // Layers floats instead of docking in the rail; its position and open state
+  // persist per org.
+  const layersPanel = useFloatingPanelState('layers', user?.orgId, {
+    x: 72,
+    y: 16,
+    height: 360,
+    open: false,
+  });
   const brandColors = useBrandColors();
   const brandFonts = useBrandFonts();
   const storeRef = useRef<ReturnType<typeof createDesignerStore> | null>(null);
@@ -730,12 +744,16 @@ export const Designer: FC<DesignerProps> = ({
   }, [initialTimelineMedia, store, toaster, translate]);
 
   // --- Unsaved-changes guard shared by New / Open / Templates (D-7b) ---
-  const confirmDiscardIfDirty = useCallback(() => {
+  const confirmDiscardIfDirty = useCallback(async () => {
     if (store.getState().isDirty) {
-      return window.confirm(translate('discard_unsaved_changes_confirm', 'Discard unsaved changes? Your current design will be replaced.'));
+      // Title/labels are left at the decision modal's defaults so the copy the
+      // user sees is exactly what the native confirm() showed (message only).
+      return decision.open({
+        description: translate('discard_unsaved_changes_confirm', 'Discard unsaved changes? Your current design will be replaced.'),
+      });
     }
     return true;
-  }, [store, translate]);
+  }, [store, translate, decision]);
 
   // Reusable image-from-media placement (centered + aspect-correct) — shared by
   // the Insert/Import media modal and the canvas "Add Image" (D-8).
@@ -769,21 +787,13 @@ export const Designer: FC<DesignerProps> = ({
     [store]
   );
 
-  const onOpenMedia = useCallback(() => {
-    modals.openModal({
-      title: translate('add_media', 'Add media'),
-      children: (close: () => void) => (
-        <MediaSelectorModal
-          open
-          onClose={close}
-          onSelect={(item) => {
-            addImageFromMedia(item as any);
-            close();
-          }}
-        />
-      ),
-    });
-  }, [modals, addImageFromMedia, translate]);
+  // The picker owns its own dialog; wrapping it in `openModal` stacked a titled
+  // modal around an untitled one.
+  const mediaPicker = useMediaPicker({
+    title: translate('add_media', 'Add media'),
+    onSelect: (item) => addImageFromMedia(item as any),
+  });
+  const onOpenMedia = mediaPicker.open;
 
   const selectedImageId = useCallback(() => {
     const st = store.getState();
@@ -814,8 +824,8 @@ export const Designer: FC<DesignerProps> = ({
       canShare: !!currentDesignId,
       collabEnabled,
       inModal: !!(setMedia || closeModal),
-      onNew: (mode) => {
-        if (!confirmDiscardIfDirty()) return;
+      onNew: async (mode) => {
+        if (!(await confirmDiscardIfDirty())) return;
         const st = store.getState();
         st.reset(1080, 1080);
         if (mode === 'video') st.setMode('video');
@@ -833,7 +843,7 @@ export const Designer: FC<DesignerProps> = ({
           children: (close: () => void) => (
             <MyDesignsPanel
               onOpen={async (d) => {
-                if (!confirmDiscardIfDirty()) return;
+                if (!(await confirmDiscardIfDirty())) return;
                 const res = await fetch(`/media/designs/${d.id}`);
                 if (!res.ok) return;
                 const full = await res.json();
@@ -860,7 +870,15 @@ export const Designer: FC<DesignerProps> = ({
         store.getState().setSelectedIds([]);
         setInspectorCollapsed(false);
       },
-      onTogglePanel: (id) => setActivePanel((p) => (p === id ? null : id)),
+      onTogglePanel: (id) => {
+        // Layers is a floating window rather than a rail panel, but it is still
+        // reached through the same Window-menu / ⌘K action id.
+        if (id === 'layers') {
+          layersPanel.toggle();
+          return;
+        }
+        setActivePanel((p) => (p === id ? null : id));
+      },
       onToggleInspector: () => setInspectorCollapsed((c) => !c),
       onToggleSafeZones: () => setShowSafeZones((v) => !v),
       onToggleRulers: () => setShowRulers((v) => !v),
@@ -874,7 +892,7 @@ export const Designer: FC<DesignerProps> = ({
         modals.openModal({
           children: (close: () => void) => <ShortcutsOverlay onClose={close} />,
         }),
-      onConvertMode: () => {
+      onConvertMode: async () => {
         const st = store.getState();
         const cur = st.doc.mode;
         const target = cur === 'image' ? 'video' : 'image';
@@ -882,7 +900,7 @@ export const Designer: FC<DesignerProps> = ({
           cur === 'image'
             ? translate('convert_to_video_mode_confirm', 'Convert to video mode? All image elements will be lost.')
             : translate('convert_to_image_mode_confirm', 'Convert to image mode? All video tracks and clips will be lost.');
-        if (window.confirm(msg)) st.setMode(target);
+        if (await decision.open({ description: msg })) st.setMode(target);
       },
       onToggleShare: () => setCollabEnabled((v) => !v),
       onAiGenerate: () => setActivePanel('ai'),
@@ -911,6 +929,8 @@ export const Designer: FC<DesignerProps> = ({
       closeModal,
       store,
       modals,
+      decision,
+      layersPanel,
       fetch,
       toaster,
       handleSave,
@@ -929,25 +949,17 @@ export const Designer: FC<DesignerProps> = ({
   const hasInspectorTarget =
     selectedIds.length >= 1 || (doc.mode === 'video' && !!selectedClip);
 
-  const onSetBackgroundImage = useCallback(() => {
-    modals.openModal({
-      title: translate('background_image', 'Background image'),
-      children: (close: () => void) => (
-        <MediaSelectorModal
-          open
-          onClose={close}
-          onSelect={(item) => {
-            store.getState().setOutputBackground({
-              type: 'image',
-              src: (item as any).url,
-              fileId: (item as any).fileId,
-            });
-            close();
-          }}
-        />
-      ),
-    });
-  }, [modals, store, translate]);
+  const backgroundPicker = useMediaPicker({
+    title: translate('background_image', 'Background image'),
+    onSelect: (item) => {
+      store.getState().setOutputBackground({
+        type: 'image',
+        src: (item as any).url,
+        fileId: (item as any).fileId,
+      });
+    },
+  });
+  const onSetBackgroundImage = backgroundPicker.open;
 
   const panels = [
     { id: 'text', icon: 'T', label: translate('provider_chip_text', 'Text') },
@@ -956,7 +968,8 @@ export const Designer: FC<DesignerProps> = ({
     { id: 'photos', icon: '▣', label: translate('panel_photos', 'Photos') },
     { id: 'uploads', icon: '☰', label: translate('panel_uploads', 'Uploads') },
     { id: 'background', icon: '◨', label: translate('panel_background', 'Background') },
-    { id: 'layers', icon: '≡', label: translate('panel_layers', 'Layers') },
+    // Layers is not in the rail — it lives in a floating window, opened from
+    // the Window menu / ⌘K (see `layersPanel` below).
     // AI panel only when the org has an active AI provider (E4).
     ...(aiActive ? [{ id: 'ai', icon: '✦', label: translate('ai', 'AI') }] : []),
     { id: 'brand', icon: '♥', label: translate('brand_label', 'Brand') },
@@ -978,13 +991,13 @@ export const Designer: FC<DesignerProps> = ({
     return () => window.removeEventListener('keydown', handler);
   }, [handleExport]);
 
-  // Full-screen fills the canvas app, not the page: the document goes fullscreen and the
-  // Designer root goes immersive (fixed inset-0) to cover the app chrome. Modals/dialogs
-  // mount at the app root (z 200+) and stay above this z-[100] layer.
-  const { isFullscreen } = useFullscreen();
+  // Full screen fills the browser window, not the display: the root goes immersive
+  // (fixed inset-0) to cover the app chrome. Modals/dialogs mount at the app root
+  // (z 200+) and stay above this z-[100] layer.
+  const surface = useFullscreenSurface('relative mobile:h-[calc(100vh-200px)]');
 
   return (
-    <div className={`flex flex-col h-full w-full overflow-hidden bg-newBgColorInner ${isFullscreen ? 'fixed inset-0 z-[100]' : 'relative mobile:h-[calc(100vh-200px)]'}`}>
+    <div className={`flex flex-col h-full w-full overflow-hidden bg-newBgColorInner ${surface}`}>
       <div className="flex items-center gap-3 px-3 py-1.5 border-b border-studioBorder bg-newBgColorInner shrink-0">
         <div className="flex items-center gap-2 shrink-0">
           <Logo size={26} className="" />
@@ -1122,10 +1135,23 @@ export const Designer: FC<DesignerProps> = ({
             {activePanel === 'photos' && <PhotosPanel store={store as any} />}
             {activePanel === 'uploads' && <UploadsPanel store={store as any} />}
             {activePanel === 'background' && <BackgroundPanel store={store as any} />}
-            {activePanel === 'layers' && <LayersPanel store={store as any} />}
             {activePanel === 'ai' && <AiPanel store={store as any} />}
             {activePanel === 'brand' && <BrandPanel store={store as any} />}
           </div>
+        )}
+
+        {layersPanel.state.open && (
+          <FloatingPanel
+            title={translate('panel_layers', 'Layers')}
+            onClose={() => layersPanel.setOpen(false)}
+            position={layersPanel.state}
+            onPositionChange={layersPanel.setPosition}
+          >
+            <LayersPanel
+              store={store as any}
+              onClose={() => layersPanel.setOpen(false)}
+            />
+          </FloatingPanel>
         )}
 
         <div className="flex-1 flex flex-col min-w-0">
@@ -1203,6 +1229,8 @@ export const Designer: FC<DesignerProps> = ({
       {showStart && (
         <StartDialog store={store} fetchFn={fetch} onDone={() => setShowStart(false)} />
       )}
+      {mediaPicker.element}
+      {backgroundPicker.element}
     </div>
   );
 };

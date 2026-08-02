@@ -2,6 +2,7 @@
 
 import { useMemo } from 'react';
 import type { DesignerOutput, DesignerElement } from './designer.store';
+import { defaultTextBox } from './measure-text';
 
 type DesignerStoreApi = ReturnType<
   typeof import('./designer.store').createDesignerStore
@@ -203,13 +204,19 @@ export const useDesignerActions = (
     const addText = () => {
       const st = store.getState();
       const out = st.doc.outputs[st.currentOutput];
+      const box = defaultTextBox({
+        text: 'Text',
+        fontSize: 32,
+        fontWeight: 700,
+        fontFamily: 'Inter',
+      });
       st.addElement({
         id: '',
         type: 'text',
-        x: out.width / 2 - 100,
-        y: out.height / 2 - 16,
-        width: 200,
-        height: 40,
+        x: out.width / 2 - box.width / 2,
+        y: out.height / 2 - box.height / 2,
+        width: box.width,
+        height: box.height,
         rotation: 0,
         opacity: 1,
         locked: false,
