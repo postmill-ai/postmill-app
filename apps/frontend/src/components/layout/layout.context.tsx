@@ -1,8 +1,10 @@
 'use client';
 
 import { ReactNode, useCallback } from 'react';
+import { SWRConfig } from 'swr';
 import { FetchWrapperComponent } from '@postmill-ai/helpers/utils/custom.fetch';
 import { deleteDialog } from '@postmill-ai/react/helpers/delete.dialog';
+import { useToaster } from '@postmill-ai/react/toaster/toaster';
 import { useReturnUrl } from '@postmill-ai/frontend/app/(app)/auth/return.url.component';
 import { useVariables } from '@postmill-ai/react/helpers/variable.context';
 import { useT } from '@postmill-ai/react/translation/get.transation.service.client';
@@ -27,6 +29,14 @@ export function setClientCookie(cname: string, cvalue: string, exdays: number) {
   document.cookie = cname + '=' + cvalue + ';' + expires + ';path=/';
 }
 export const setCookie = setClientCookie;
+
+// A throttled burst can fire dozens of 429s in a second (every in-flight SWR poll
+// fails at once). The toaster shows one message at a time, so without a window the
+// user would get a stuttering wall of identical toasts. Module scope, because
+// afterRequest is rebuilt whenever its deps change.
+const RATE_LIMIT_TOAST_WINDOW_MS = 15000;
+let lastRateLimitToastAt = 0;
+
 function LayoutContextInner(params: { children: ReactNode }) {
   const returnUrl = useReturnUrl();
   // useReturnUrl returns a fresh object per render, but its getAndClear member is a
@@ -34,6 +44,7 @@ function LayoutContextInner(params: { children: ReactNode }) {
   const { getAndClear: getAndClearReturnUrl } = returnUrl;
   const { backendUrl, isGeneral, isSecured } = useVariables();
   const t = useT();
+  const toaster = useToaster();
   const afterRequest = useCallback(
     async (url: string, options: RequestInit, response: Response) => {
       if (
@@ -121,13 +132,43 @@ function LayoutContextInner(params: { children: ReactNode }) {
         }
         return true;
       }
+
+      // Rate limited. Tell the user what happened instead of letting the caller
+      // silently render an error/empty state — and never navigate: a 429 on a
+      // background poll is not a reason to move someone off the page they're on.
+      if (response.status === 429) {
+        const now = Date.now();
+        if (now - lastRateLimitToastAt > RATE_LIMIT_TOAST_WINDOW_MS) {
+          lastRateLimitToastAt = now;
+          const retryAfter = Number(response?.headers?.get('retry-after'));
+          toaster.show(
+            retryAfter > 0
+              ? t(
+                  'rate_limited_retry_after',
+                  'Too many requests. Please try again in {{seconds}} seconds.',
+                  { seconds: retryAfter }
+                )
+              : t(
+                  'rate_limited',
+                  'Too many requests. Please slow down and try again in a moment.'
+                ),
+            'warning'
+          );
+        }
+        return true;
+      }
       return true;
     },
-    [t, isSecured, getAndClearReturnUrl]
+    [t, isSecured, getAndClearReturnUrl, toaster]
   );
   return (
-    <FetchWrapperComponent baseUrl={backendUrl} afterRequest={afterRequest}>
-      {params?.children || <></>}
-    </FetchWrapperComponent>
+    // Bound SWR's retry loop app-wide. The default is unlimited exponential
+    // retries, which keeps a saturated throttle bucket saturated. Per-hook
+    // options still win over these context defaults.
+    <SWRConfig value={{ errorRetryCount: 3 }}>
+      <FetchWrapperComponent baseUrl={backendUrl} afterRequest={afterRequest}>
+        {params?.children || <></>}
+      </FetchWrapperComponent>
+    </SWRConfig>
   );
 }
