@@ -31,39 +31,6 @@ const PLATFORM_OPTIONS = [
   { value: 'slack', label: 'Slack' },
 ];
 
-interface ScopeSummary {
-  scope: string;
-  _sum: {
-    costUsd: number | null;
-    inputTokens: number | null;
-    outputTokens: number | null;
-  };
-}
-
-interface BudgetInfo {
-  monthlyCap: number | null;
-  dailyCap: number | null;
-  remainingMonthly: number | null;
-  remainingDaily: number | null;
-}
-
-interface ProviderUsage {
-  provider: string;
-  monthlySpendUsd: number;
-  dailySpendUsd: number;
-  monthlyCap: number | null;
-  dailyCap: number | null;
-  remainingMonthly: number | null;
-  remainingDaily: number | null;
-}
-
-interface UsageResponse {
-  byScope: ScopeSummary[];
-  byProvider: ProviderUsage[];
-  totalSpendUsd: number;
-  budget: BudgetInfo | null;
-}
-
 interface PromptTemplate {
   id: string;
   key: string;
@@ -124,23 +91,6 @@ const useBrandProfile = () => {
     return res.json();
   }, [fetch]);
   return useSWR<BrandProfile>('ai-brand-profile', load, {
-    revalidateOnFocus: false,
-    revalidateOnReconnect: false,
-    revalidateIfStale: false,
-    revalidateOnMount: true,
-    refreshWhenHidden: false,
-    refreshWhenOffline: false,
-  });
-};
-
-const useUsage = () => {
-  const fetch = useFetch();
-  const load = useCallback(async () => {
-    const res = await fetch('/ai/usage');
-    if (!res.ok) throw createFetchError('failed_to_load_ai_usage', 'Failed to load AI usage');
-    return res.json();
-  }, [fetch]);
-  return useSWR<UsageResponse>('ai-usage', load, {
     revalidateOnFocus: false,
     revalidateOnReconnect: false,
     revalidateIfStale: false,
@@ -404,181 +354,6 @@ export const BrandVoiceSection = () => {
         >
           {t('save', 'Save')}
         </button>
-      </div>
-    </div>
-  );
-};
-
-export const UsageSection = () => {
-  const t = useT();
-  const { data, isLoading } = useUsage();
-
-  if (isLoading) {
-    return (
-      <div className="my-[16px] mt-[16px] bg-newBgColorInner border-newTableBorder border rounded-[12px] p-[24px]">
-        <div className="animate-pulse">{t('loading', 'Loading')}</div>
-      </div>
-    );
-  }
-
-  const scopeLabels: Record<string, string> = {
-    utility: t('utility', 'Utility'),
-    generator: t('generator', 'Generator'),
-    agent: t('agent', 'Agent'),
-    mcp: t('mcp', 'MCP'),
-  };
-
-  const maxScopeCost =
-    data?.byScope?.reduce((max, s) => Math.max(max, s._sum?.costUsd || 0), 0) || 1;
-
-  return (
-    <div className="my-[16px] mt-[16px] bg-newBgColorInner border-newTableBorder border rounded-[12px] p-[24px] flex flex-col gap-[24px]">
-      <div className="mt-[4px]">{t('usage_and_spend', 'Usage & Spend')}</div>
-
-      <div className="flex flex-col gap-[8px]">
-        <div className="text-[14px]">
-          {t('total_spend', 'Total Spend')}:{' '}
-          <span className="font-semibold">
-            ${(data?.totalSpendUsd || 0).toFixed(4)}
-          </span>
-        </div>
-
-        {data?.budget && (
-          <div className="flex flex-col gap-[4px] text-[12px] text-newTableText">
-            {data.budget.monthlyCap != null && (
-              <div>
-                {t('monthly_cap', 'Monthly cap')}: ${data.budget.monthlyCap.toFixed(2)}
-                {' '}
-                ({t('remaining', 'remaining')}: ${data.budget.remainingMonthly?.toFixed(4)})
-              </div>
-            )}
-            {data.budget.dailyCap != null && (
-              <div>
-                {t('daily_cap', 'Daily cap')}: ${data.budget.dailyCap.toFixed(2)}
-                {' '}
-                ({t('remaining', 'remaining')}: ${data.budget.remainingDaily?.toFixed(4)})
-              </div>
-            )}
-          </div>
-        )}
-      </div>
-
-      <div className="flex flex-col gap-[12px]">
-        <div className="text-[14px]">{t('spend_by_scope', 'Spend by Scope')}</div>
-        {data?.byScope?.map((scope) => {
-          const cost = scope._sum?.costUsd || 0;
-          const barWidth = maxScopeCost > 0 ? (cost / maxScopeCost) * 100 : 0;
-          return (
-            <div key={scope.scope} className="flex items-center gap-[12px]">
-              <div className="w-[80px] text-[13px]">
-                {scopeLabels[scope.scope] || scope.scope}
-              </div>
-              <div className="flex-1 h-[20px] bg-newTableHeader rounded-[4px] overflow-hidden">
-                <div
-                  className="h-full bg-btnPrimary rounded-[4px] transition-all"
-                  style={{ width: `${barWidth}%` }}
-                />
-              </div>
-              <div className="w-[80px] text-[12px] text-right">
-                ${cost.toFixed(4)}
-              </div>
-            </div>
-          );
-        })}
-        {(!data?.byScope || data.byScope.length === 0) && (
-          <div className="text-[12px] text-newTableText">
-            {t('no_spend_data', 'No spend data yet')}
-          </div>
-        )}
-      </div>
-
-      <div className="flex flex-col gap-[12px]">
-        <div className="text-[14px]">{t('spend_by_provider', 'Spend by Provider')}</div>
-        {data?.byProvider?.map((provider) => {
-          const monthlySpend = provider.monthlySpendUsd || 0;
-          const dailySpend = provider.dailySpendUsd || 0;
-          const monthlyCap = provider.monthlyCap;
-          const dailyCap = provider.dailyCap;
-          const monthlyWidth =
-            monthlyCap != null && monthlyCap > 0
-              ? Math.min(100, (monthlySpend / monthlyCap) * 100)
-              : 0;
-          const dailyWidth =
-            dailyCap != null && dailyCap > 0
-              ? Math.min(100, (dailySpend / dailyCap) * 100)
-              : 0;
-          return (
-            <div
-              key={provider.provider}
-              className="flex flex-col gap-[8px] bg-newTableHeader border border-newTableBorder rounded-[8px] p-[12px]"
-            >
-              <div className="text-[13px] font-medium capitalize">
-                {provider.provider}
-              </div>
-
-              <div className="flex flex-col gap-[4px]">
-                <div className="flex justify-between text-[12px]">
-                  <span className="text-newTableText">
-                    {t('ai_budget_monthly_cap', 'Monthly cap')}
-                  </span>
-                  <span className="text-textColor">
-                    ${monthlySpend.toFixed(4)}
-                    {monthlyCap != null
-                      ? ` / $${monthlyCap.toFixed(2)} (${t('remaining', 'remaining')}: $${provider.remainingMonthly?.toFixed(4)})`
-                      : ` (${t('no_cap', 'no cap')})`}
-                  </span>
-                </div>
-                {monthlyCap != null && (
-                  <div className="flex-1 h-[8px] bg-newTableBorder rounded-[4px] overflow-hidden">
-                    <div
-                      className={`h-full rounded-[4px] transition-all ${
-                        monthlyWidth >= 100
-                          ? 'bg-[var(--negative,#f97066)]'
-                          : monthlyWidth >= 80
-                            ? 'bg-amber-500'
-                            : 'bg-btnPrimary'
-                      }`}
-                      style={{ width: `${monthlyWidth}%` }}
-                    />
-                  </div>
-                )}
-              </div>
-
-              <div className="flex flex-col gap-[4px]">
-                <div className="flex justify-between text-[12px]">
-                  <span className="text-newTableText">
-                    {t('ai_budget_daily_cap', 'Daily cap')}
-                  </span>
-                  <span className="text-textColor">
-                    ${dailySpend.toFixed(4)}
-                    {dailyCap != null
-                      ? ` / $${dailyCap.toFixed(2)} (${t('remaining', 'remaining')}: $${provider.remainingDaily?.toFixed(4)})`
-                      : ` (${t('no_cap', 'no cap')})`}
-                  </span>
-                </div>
-                {dailyCap != null && (
-                  <div className="flex-1 h-[8px] bg-newTableBorder rounded-[4px] overflow-hidden">
-                    <div
-                      className={`h-full rounded-[4px] transition-all ${
-                        dailyWidth >= 100
-                          ? 'bg-[var(--negative,#f97066)]'
-                          : dailyWidth >= 80
-                            ? 'bg-amber-500'
-                            : 'bg-btnPrimary'
-                      }`}
-                      style={{ width: `${dailyWidth}%` }}
-                    />
-                  </div>
-                )}
-              </div>
-            </div>
-          );
-        })}
-        {(!data?.byProvider || data.byProvider.length === 0) && (
-          <div className="text-[12px] text-newTableText">
-            {t('no_provider_spend_data', 'No provider spend data yet')}
-          </div>
-        )}
       </div>
     </div>
   );
@@ -1006,7 +781,6 @@ export const BrandAISettings = () => {
       <h3 className="text-[20px]">{t('brand_ai', 'Brand & AI')}</h3>
       <BrandVoiceSection />
       <MediaProvidersSection />
-      <UsageSection />
       <PromptTemplatesSection />
       <PromptLibrarySection />
     </div>

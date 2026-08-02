@@ -28,6 +28,31 @@ export interface SettingsNavItem {
 
 export const SETTINGS_SECTION_ORDER = ['Workspace', 'Automation', 'Developer'];
 
+/**
+ * The nav items this user can see, in rail order: gate-filtered, then grouped by
+ * section and sorted alphabetically by *translated* label within each group.
+ *
+ * Both the settings rail and the /settings index call this, so the two can't
+ * drift. Kept a pure function (the `t` resolver is passed in) so this stays a
+ * hook-free data module.
+ *
+ * Note items with no `section` sort first — `indexOf('')` is `-1` — which is
+ * deliberate: they render ungrouped above the labelled groups.
+ */
+export const visibleSettingsNav = (
+  ctx: SettingsGateCtx,
+  t: (key: string, fallback: string) => string
+): SettingsNavItem[] => {
+  const visible = SETTINGS_NAV.filter((i) => (i.gate ? i.gate(ctx) : true));
+  return [...visible].sort((a, b) => {
+    const sectionDiff =
+      SETTINGS_SECTION_ORDER.indexOf(a.section || '') -
+      SETTINGS_SECTION_ORDER.indexOf(b.section || '');
+    if (sectionDiff !== 0) return sectionDiff;
+    return t(a.labelKey, a.labelDefault).localeCompare(t(b.labelKey, b.labelDefault));
+  });
+};
+
 export const SETTINGS_NAV: SettingsNavItem[] = [
   {
     key: 'subscription',

@@ -14,7 +14,7 @@ import {
 } from '@postmill-ai/frontend/components/settings/shared/use-provider-catalog';
 import { useModals } from '@postmill-ai/frontend/components/layout/new-modal';
 import { usePermissions } from '@postmill-ai/frontend/components/layout/use-permissions';
-import SafeImage from '@postmill-ai/react/helpers/safe.image';
+import { PlatformIcon } from '@postmill-ai/frontend/components/shared/platform-icon';
 import { useT } from '@postmill-ai/react/translation/get.transation.service.client';
 import { CapabilityBadges as KitCapabilityBadges } from '@postmill-ai/frontend/components/settings/shared/kit/capabilities';
 import { ProviderSearchToolbar } from '@postmill-ai/frontend/components/settings/shared/kit/provider-search-toolbar';
@@ -121,27 +121,13 @@ const useProviders = () => {
   );
 };
 
+// Channel rows show the platform mark circular; PlatformIcon defaults to square
+// because format cards and catalog tiles look wrong cropped.
 const ChannelProviderIcon: FC<{ identifier: string; name: string; size?: number }> = ({
   identifier,
   name,
   size = 40,
-}) => {
-  const src = identifier === 'youtube'
-    ? '/icons/platforms/youtube.svg'
-    : `/icons/platforms/${identifier}.png`;
-
-  return (
-    <SafeImage
-      className="rounded-full"
-      style={{ width: size, height: size }}
-      src={src}
-      alt={name}
-      onError={(e) => {
-        (e.target as HTMLImageElement).style.display = 'none';
-      }}
-    />
-  );
-};
+}) => <PlatformIcon identifier={identifier} name={name} size={size} rounded />;
 
 const CapabilityBadges: FC<{ capabilities: ProviderCapability | null }> = ({ capabilities }) => {
   const keys = CAPABILITY_KEYS.filter((c) => capabilities?.[c]);
