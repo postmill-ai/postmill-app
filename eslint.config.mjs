@@ -74,6 +74,34 @@ const eslintConfig = [
       // no accepted role for that shape, so these two are tracked as warnings.
       'jsx-a11y/no-noninteractive-element-interactions': 'warn',
       'jsx-a11y/no-noninteractive-tabindex': 'warn',
+      // Native browser dialogs are banned (agents/ui-standards.md hard rule 6):
+      // they block the event loop, ignore the theme tokens, can't be translated
+      // through useT(), can't be focus-trapped alongside the app's stacked
+      // modals, and are silently auto-dismissed by Playwright in e2e/.
+      // Use useDecisionModal()/areYouSure() to confirm, usePromptModal() to
+      // collect text, and useToaster().show(…) to report.
+      //
+      // no-alert is the rule that does the real work here — it is the only one
+      // of the two that catches the `window.`-qualified forms. no-restricted-
+      // globals matches bare `alert(`/`confirm(`/`prompt(` only, and is kept
+      // purely for its more actionable messages.
+      'no-alert': 'error',
+      'no-restricted-globals': [
+        'error',
+        {
+          name: 'alert',
+          message:
+            'Use useToaster().show(…), or useDecisionModal().open({ onlyApprove: true }) when it must block.',
+        },
+        {
+          name: 'confirm',
+          message: 'Use useDecisionModal() / areYouSure().',
+        },
+        {
+          name: 'prompt',
+          message: 'Use usePromptModal().',
+        },
+      ],
     },
   },
   {
