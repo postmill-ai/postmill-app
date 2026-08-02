@@ -1817,6 +1817,123 @@ describe('AiDesignerConductorService vision-critic rubric resolution', () => {
     expect(criticCall).toBeDefined();
     expect(criticCall![2].rubric).toEqual(skillRouter.getRubric('meme'));
   });
+
+  // Round 8 C5: `results = [revised]` on the revise path, and the caption used
+  // a hardcoded array index — so a revision of variant 3 always shipped
+  // captioned "Variant 1".
+  describe('revise targeting and captions', () => {
+    const makeReviseConductor = (activeDesignIds: string[]) => {
+      const service = {
+        getSessionForUser: vi.fn().mockResolvedValue({
+          id: SESSION_ID,
+          state: 'delivered',
+          mode: 'prompt',
+          brief: { intent: 'x', lastPlans: [] },
+          activeDesignIds,
+        }),
+        updateSession: vi.fn().mockResolvedValue(undefined),
+        appendMessage: vi.fn().mockResolvedValue({ id: 'msg-1' }),
+      };
+      const designService = {
+        getDesign: vi
+          .fn()
+          .mockResolvedValue({ id: 'd', doc: { metadata: {}, layers: [] } }),
+      };
+      const composer = {
+        reviseByInstruction: vi.fn().mockResolvedValue({ metadata: {}, layers: [] }),
+        applyFixes: vi.fn(),
+        canResolveFormatScope: vi.fn().mockReturnValue(true),
+      };
+      const saver = {
+        saveDesign: vi.fn().mockResolvedValue({
+          designId: 'design-C-revised',
+          variantId: 'revised',
+          contactSheetUrl: 'https://example.com/revised-sheet.png',
+          outputPreviews: [
+            {
+              formatId: 'ig-post',
+              fileId: 'file-revised',
+              url: 'https://example.com/revised.png',
+            },
+          ],
+        }),
+        updateDesign: vi.fn(),
+      };
+      const { conductor } = makeConductor({ service });
+      (conductor as any)._skillRouter = new AiDesignerSkillRouter();
+      (conductor as any)._designService = designService;
+      (conductor as any)._composer = composer;
+      (conductor as any)._saver = saver;
+      (conductor as any)._dispatchAgent = vi.fn().mockImplementation((_, agentId) =>
+        Promise.resolve({
+          content:
+            agentId === 'vision-critic'
+              ? JSON.stringify({ type: 'findings', findings: [] })
+              : '{}',
+        })
+      );
+      const mediaOf = () =>
+        (service.appendMessage as ReturnType<typeof vi.fn>).mock.calls
+          .map(([arg]: any) => arg?.content)
+          .find((c: any) => c?.kind === 'media');
+      const notesOf = () =>
+        (service.appendMessage as ReturnType<typeof vi.fn>).mock.calls
+          .map(([arg]: any) => arg?.content?.md)
+          .filter(Boolean)
+          .join('\n');
+      return { conductor, service, mediaOf, notesOf };
+    };
+
+    it('captions a revised variant with its SOURCE ordinal, not index 0', async () => {
+      const { conductor, mediaOf } = makeReviseConductor([
+        'design-A',
+        'design-B',
+        'design-C',
+      ]);
+
+      await conductor.handleRevise(
+        SESSION_ID,
+        ctx,
+        { instruction: 'make it bigger', targetDesignId: 'design-C', nonce: 'n1' },
+        makeEmitter()
+      );
+
+      expect(mediaOf().items[0].caption).toBe('Variant 3 · ig-post');
+    });
+
+    it('tells the user which variant it revised and that the others remain', async () => {
+      const { conductor, notesOf } = makeReviseConductor([
+        'design-A',
+        'design-B',
+        'design-C',
+      ]);
+
+      await conductor.handleRevise(
+        SESSION_ID,
+        ctx,
+        { instruction: 'make it bigger', targetDesignId: 'design-B', nonce: 'n1' },
+        makeEmitter()
+      );
+
+      const notes = notesOf();
+      expect(notes).toContain('I revised variant 2');
+      expect(notes).toContain('your other variants are still available');
+    });
+
+    it('says nothing extra when there is only one variant', async () => {
+      const { conductor, notesOf, mediaOf } = makeReviseConductor(['design-A']);
+
+      await conductor.handleRevise(
+        SESSION_ID,
+        ctx,
+        { instruction: 'make it bigger', targetDesignId: 'design-A', nonce: 'n1' },
+        makeEmitter()
+      );
+
+      expect(notesOf()).not.toContain('I revised variant');
+      expect(mediaOf().items[0].caption).toBe('Variant 1 · ig-post');
+    });
+  });
 });
 
 describe('AiDesignerConductorService plan-stage revision', () => {
@@ -2916,6 +3033,8 @@ describe('AiDesignerConductorService variant expansion', () => {
     const composer = {
       applyFixes: vi.fn((doc: any) => Promise.resolve(doc)),
       sanitizeDoc: vi.fn((doc: any) => ({ doc, violations: [] })),
+      refitSeededOutputs: vi.fn((doc: any) => doc),
+      applySubjectFocalPoints: vi.fn(async (doc: any) => doc),
     };
     // Real designer-doc seeding (seedCopy/smartReflow) so the test sees what
     // the expansion actually produces, not a canned expanded doc.
@@ -3178,6 +3297,78 @@ describe('AiDesignerConductorService variant expansion', () => {
     );
   });
 
+  it('re-fits the seeded outputs to their own aspect before anything renders', async () => {
+    const emitter = makeEmitter();
+    const { conductor, composer, docService } = makeExpansionConductor(() => []);
+
+    await conductor.handleAcceptPlan(SESSION_ID, ctx, 'reply-1', undefined, false, undefined, emitter);
+
+    expect(composer.refitSeededOutputs).toHaveBeenCalledTimes(1);
+    const [docArg] = composer.refitSeededOutputs.mock.calls[0];
+    expect(docArg.outputs).toHaveLength(2);
+    // Between the addOutput seeding and the sanitizer: the seed places every
+    // element independently, so the re-fit is what makes the secondary format
+    // the SAME design on a different canvas rather than a scattered one.
+    expect(
+      composer.refitSeededOutputs.mock.invocationCallOrder[0]
+    ).toBeGreaterThan(docService.applyOps.mock.invocationCallOrder[0]);
+    expect(
+      composer.refitSeededOutputs.mock.invocationCallOrder[0]
+    ).toBeLessThan(composer.sanitizeDoc.mock.invocationCallOrder[0]);
+  });
+
+  // Round 8 C2: the focal-point gate ran only inside compose, which sees the
+  // PRIMARY format alone — the one output least likely to need it. A banner
+  // secondary throwing away 85.7% of its source was never even eligible.
+  it('runs the subject focal-point pass over the EXPANDED doc', async () => {
+    const emitter = makeEmitter();
+    const { conductor, composer, docService } = makeExpansionConductor(() => []);
+
+    await conductor.handleAcceptPlan(SESSION_ID, ctx, 'reply-1', undefined, false, undefined, emitter);
+
+    expect(composer.applySubjectFocalPoints).toHaveBeenCalledTimes(1);
+    const [docArg, orgArg] = composer.applySubjectFocalPoints.mock.calls[0];
+    // Every planned format, not just the primary.
+    expect(docArg.outputs).toHaveLength(2);
+    expect(orgArg).toBe(ctx.orgId);
+    // After the re-fit (so each output carries its own final box) and before
+    // the sanitizer/render.
+    expect(
+      composer.applySubjectFocalPoints.mock.invocationCallOrder[0]
+    ).toBeGreaterThan(composer.refitSeededOutputs.mock.invocationCallOrder[0]);
+    expect(
+      composer.applySubjectFocalPoints.mock.invocationCallOrder[0]
+    ).toBeLessThan(composer.sanitizeDoc.mock.invocationCallOrder[0]);
+    expect(docService.applyOps).toHaveBeenCalled();
+  });
+
+  // Round 8 C6: the seeded multi-output doc is persisted BEFORE the per-format
+  // QC loop, so a failure left the DB holding never-quality-checked outputs
+  // while the user was told the variant shipped in its original format alone.
+  it('rolls the persisted doc back when the expansion fails after saving', async () => {
+    const emitter = makeEmitter();
+    const { conductor, saver, service, docService, composer } =
+      makeExpansionConductor(() => [
+        { issue: 'caption is too low', fix: { scope: 'format-only' } },
+      ]);
+    // The expanded doc is persisted, THEN the per-format QC loop blows up.
+    composer.applyFixes.mockRejectedValue(new Error('fixes exploded'));
+
+    await conductor.handleAcceptPlan(SESSION_ID, ctx, 'reply-1', undefined, false, undefined, emitter);
+
+    const notes = (service.appendMessage as ReturnType<typeof vi.fn>).mock.calls
+      .map(([arg]: any) => arg?.content?.md)
+      .filter(Boolean)
+      .join('\n');
+    expect(notes).toContain('could only be delivered in its original format');
+
+    // The last write restores the doc the expansion started from, so the row
+    // matches the note the user was given.
+    const restore = saver.updateDesign.mock.calls.at(-1)!;
+    expect(restore[3]).toEqual(docService.applyOps.mock.calls[0][0]);
+    expect(restore[3].outputs).toHaveLength(1);
+  });
+
   it('posts a degradation note when the sanitizer cannot repair a seeded output', async () => {
     const emitter = makeEmitter();
     const { conductor, composer, service } = makeExpansionConductor(() => []);
@@ -3377,6 +3568,8 @@ describe('AiDesignerConductorService regenerateAsset fixes', () => {
     channels?: string[];
     criticFindings: (callIndex: number) => any[];
     regenAssets?: Record<string, any>;
+    /** Assets the INITIAL compose resolves — the stock ids a regeneration excludes. */
+    initialAssets?: Record<string, any>;
     doc?: any;
     plan?: any;
   }) => {
@@ -3416,6 +3609,8 @@ describe('AiDesignerConductorService regenerateAsset fixes', () => {
     const composer = {
       applyFixes: vi.fn((d: any) => Promise.resolve(d)),
       sanitizeDoc: vi.fn((d: any) => ({ doc: d, violations: [] })),
+      refitSeededOutputs: vi.fn((d: any) => d),
+      applySubjectFocalPoints: vi.fn(async (d: any) => d),
     };
     const realDocService = new DesignerDocService();
     const docService = {
@@ -3445,7 +3640,12 @@ describe('AiDesignerConductorService regenerateAsset fixes', () => {
             }),
           });
         }
-        return Promise.resolve({ content: JSON.stringify({ type: 'assets', assets: {} }) });
+        return Promise.resolve({
+          content: JSON.stringify({
+            type: 'assets',
+            assets: opts.initialAssets ?? {},
+          }),
+        });
       }
       if (agentId === 'copywriter') {
         return Promise.resolve({ content: JSON.stringify({ type: 'copy', texts: {} }) });
@@ -3515,9 +3715,101 @@ describe('AiDesignerConductorService regenerateAsset fixes', () => {
     expect(composer.applyFixes.mock.calls[0][1]).toEqual([]);
   });
 
-  it('refuses a second regenerateAsset for the same slot in the same run, with a degradation note', async () => {
+  it('drops the scrims sitting over swapped imagery, keeping the ones that are not', async () => {
     const emitter = makeEmitter();
-    // Both variant passes flag the same slot.
+    // A contrast scrim is a judgement about ONE photo. Left behind after the
+    // swap it is never re-opened: the backdrop-only render hides TEXT but
+    // keeps SHAPES, so the stale scrim becomes the backdrop the next audit
+    // measures (stdev ≈ 0, crossing 0) and the contrast fix early-returns
+    // forever. The live ordering was: regenerated imagery → scrim added over
+    // it → regenerated imagery again.
+    const doc = {
+      mode: 'image',
+      outputs: [
+        {
+          formatId: 'ig-post',
+          name: 'Instagram Post',
+          width: 1080,
+          height: 1080,
+          background: '#ffffff',
+          children: [
+            {
+              id: 'e-hero',
+              originId: 'hero',
+              type: 'image',
+              x: 0,
+              y: 0,
+              width: 1080,
+              height: 540,
+              rotation: 0,
+              opacity: 1,
+              locked: false,
+              hidden: false,
+              src: 'https://example.com/hero.png',
+              fileId: 'f-hero',
+              fitMode: 'cover',
+            },
+            {
+              id: 'e-scrim-over',
+              originId: 'headline-scrim',
+              type: 'shape',
+              shape: 'rect',
+              x: 54,
+              y: 200,
+              width: 972,
+              height: 200,
+              rotation: 0,
+              opacity: 0.55,
+              locked: false,
+              hidden: false,
+              fill: '#000000',
+            },
+            {
+              id: 'e-scrim-clear',
+              originId: 'legal-scrim',
+              type: 'shape',
+              shape: 'rect',
+              x: 54,
+              y: 800,
+              width: 972,
+              height: 120,
+              rotation: 0,
+              opacity: 0.55,
+              locked: false,
+              hidden: false,
+              fill: '#000000',
+            },
+          ],
+        },
+      ],
+    };
+
+    const { conductor, saver, regenDispatches } = makeRegenConductor({
+      criticFindings: (call) => (call === 2 ? [REGEN_FINDING] : []),
+      doc,
+    });
+
+    await conductor.handleAcceptPlan(SESSION_ID, ctx, 'reply-1', undefined, false, undefined, emitter);
+
+    expect(regenDispatches()).toHaveLength(1);
+    const patchedDoc = saver.updateDesign.mock.calls.at(-1)![3];
+    for (const out of patchedDoc.outputs) {
+      const ids = out.children.map((el: any) => el.originId);
+      // The scrim judged against the replaced photo is gone — the decision is
+      // re-made against the new one by the contrast pass that follows.
+      expect(ids).not.toContain('headline-scrim');
+      // The one clear of the swapped imagery was judged against something
+      // else and stays.
+      expect(ids).toContain('legal-scrim');
+      expect(
+        out.children.find((el: any) => el.originId === 'hero').fileId
+      ).toBe('f-new');
+    }
+  });
+
+  it('discloses a defect that SURVIVED a successful regeneration, exactly once', async () => {
+    const emitter = makeEmitter();
+    // Both variant passes flag the same slot; the first one regenerates fine.
     const { conductor, regenDispatches, headsUpNotes } = makeRegenConductor({
       criticFindings: (call) => (call === 1 ? [] : [REGEN_FINDING]),
     });
@@ -3525,11 +3817,263 @@ describe('AiDesignerConductorService regenerateAsset fixes', () => {
     await conductor.handleAcceptPlan(SESSION_ID, ctx, 'reply-1', undefined, false, undefined, emitter);
 
     expect(regenDispatches()).toHaveLength(1);
+    // The cap refusal is not a failure of the dispatch, so no "couldn't
+    // regenerate" line — but the swap DID happen and the critic flagged the
+    // slot again, which is the only signal that the defect survived. Staying
+    // silent here shipped a design carrying a brand mark as "clean".
+    const md = headsUpNotes()
+      .map((call) => call[0].content.md)
+      .join('\n');
+    expect(md).not.toContain("couldn't regenerate");
+    expect(md).toContain(
+      'we replaced the imagery for variant 1 but the review flagged it again'
+    );
+  });
+
+  it('says nothing when a successful regeneration was never flagged again', async () => {
+    const emitter = makeEmitter();
+    // Flagged on the ig-story pass, clean on the re-check: the replacement was
+    // re-examined and passed — claiming otherwise would be knowledge we lack.
+    const { conductor, regenDispatches, headsUpNotes } = makeRegenConductor({
+      criticFindings: (call) => (call === 2 ? [REGEN_FINDING] : []),
+    });
+
+    await conductor.handleAcceptPlan(SESSION_ID, ctx, 'reply-1', undefined, false, undefined, emitter);
+
+    expect(regenDispatches()).toHaveLength(1);
+    const md = headsUpNotes()
+      .map((call) => call[0].content.md)
+      .join('\n');
+    expect(md).not.toContain('the review flagged it again');
+  });
+
+  it('emits the survival disclosure ONCE however many passes hit the cap', async () => {
+    const emitter = makeEmitter();
+    // Two secondary formats × two passes each = three separate cap refusals
+    // after the one successful regeneration. The old per-refusal push turned
+    // that into the same line three times.
+    const { conductor, saver, headsUpNotes } = makeRegenConductor({
+      channels: ['ig-post', 'ig-story', 'x-post'],
+      criticFindings: (call) => (call === 1 ? [] : [REGEN_FINDING]),
+    });
+    saver.updateDesign.mockResolvedValue({
+      designId: 'design-v1',
+      variantId: 'v1-expanded',
+      contactSheetUrl: 'https://example.com/expanded-sheet.png',
+      outputPreviews: [
+        { formatId: 'ig-post', fileId: 'f-post', url: 'https://example.com/post.png' },
+        { formatId: 'ig-story', fileId: 'f-story', url: 'https://example.com/story.png' },
+        { formatId: 'x-post', fileId: 'f-x', url: 'https://example.com/x.png' },
+      ],
+    });
+
+    await conductor.handleAcceptPlan(SESSION_ID, ctx, 'reply-1', undefined, false, undefined, emitter);
+
+    const md = headsUpNotes()
+      .map((call) => call[0].content.md)
+      .join('\n');
+    expect(
+      md.match(/we replaced the imagery for variant 1 but the review flagged it again/g)
+    ).toHaveLength(1);
+  });
+
+  const BRAND_FINDING = {
+    ...REGEN_FINDING,
+    criterion: 'brand_safety',
+    issue: 'The sneaker carries a recognizable brand swoosh',
+  };
+
+  it('switches a brand_safety regeneration to stock instead of re-rolling the image model', async () => {
+    const emitter = makeEmitter();
+    // First flag: a generic defect → generate. Second: brand_safety → the
+    // technique changes, so a SECOND attempt is allowed (and only then).
+    const { conductor, saver, regenDispatches, headsUpNotes } = makeRegenConductor({
+      channels: ['ig-post', 'ig-story', 'x-post'],
+      criticFindings: (call) =>
+        call === 1 ? [] : call === 2 ? [REGEN_FINDING] : [BRAND_FINDING],
+    });
+    saver.updateDesign.mockResolvedValue({
+      designId: 'design-v1',
+      variantId: 'v1-expanded',
+      contactSheetUrl: 'https://example.com/expanded-sheet.png',
+      outputPreviews: [
+        { formatId: 'ig-post', fileId: 'f-post', url: 'https://example.com/post.png' },
+        { formatId: 'ig-story', fileId: 'f-story', url: 'https://example.com/story.png' },
+        { formatId: 'x-post', fileId: 'f-x', url: 'https://example.com/x.png' },
+      ],
+    });
+
+    await conductor.handleAcceptPlan(SESSION_ID, ctx, 'reply-1', undefined, false, undefined, emitter);
+
+    const regens = regenDispatches();
+    expect(regens).toHaveLength(2);
+    expect(regens[0][2].assetNeeds[0].prefer).toBe('generate');
+    const stockNeed = regens[1][2].assetNeeds[0];
+    // prefer + stockOnly: without the flag the asset agent promotes a
+    // regeneration's 'stock' back to 'either' and generates anyway.
+    expect(stockNeed.prefer).toBe('stock');
+    expect(stockNeed.stockOnly).toBe(true);
+    expect(stockNeed.brief).toContain('generic unbranded');
+    // …and the third+ refusals (technique exhausted) disclose once.
+    const md = headsUpNotes()
+      .map((call) => call[0].content.md)
+      .join('\n');
+    expect(
+      md.match(/we replaced the imagery for variant 1 but the review flagged it again/g)
+    ).toHaveLength(1);
+  });
+
+  it('caps a brand_safety slot at ONE stock attempt — the technique must change', async () => {
+    const emitter = makeEmitter();
+    const { conductor, regenDispatches } = makeRegenConductor({
+      criticFindings: (call) => (call === 1 ? [] : [BRAND_FINDING]),
+    });
+
+    await conductor.handleAcceptPlan(SESSION_ID, ctx, 'reply-1', undefined, false, undefined, emitter);
+
+    // Every pass asks for the same technique, so exactly one dispatch — a
+    // stock search is cheap but re-running it is the same dice.
+    const regens = regenDispatches();
+    expect(regens).toHaveLength(1);
+    expect(regens[0][2].assetNeeds[0].prefer).toBe('stock');
+  });
+
+  it('never says "image image" for the canonical image slot', async () => {
+    const emitter = makeEmitter();
+    const imagePlan = {
+      ...REGEN_PLAN,
+      slots: [
+        { id: 'headline', role: 'headline', kind: 'text' },
+        { id: 'image', role: 'image', kind: 'image' },
+      ],
+      assetNeeds: [
+        { slotId: 'image', brief: 'coffee beans on wood', prefer: 'generate' },
+      ],
+    };
+    const imageDoc = {
+      ...HERO_DOC,
+      outputs: [
+        {
+          ...HERO_DOC.outputs[0],
+          children: [
+            { ...HERO_DOC.outputs[0].children[0], originId: 'image' },
+          ],
+        },
+      ],
+    };
+    const { conductor, headsUpNotes } = makeRegenConductor({
+      plan: imagePlan,
+      doc: imageDoc,
+      criticFindings: (call) =>
+        call === 2
+          ? [
+              {
+                issue: 'The photo has a baked-in logo',
+                slotId: 'image',
+                fix: {
+                  scope: 'shared',
+                  regenerateAsset: { slotId: 'image', brief: 'unbranded' },
+                },
+              },
+            ]
+          : [],
+      regenAssets: {}, // force the genuine-failure note
+    });
+
+    await conductor.handleAcceptPlan(SESSION_ID, ctx, 'reply-1', undefined, false, undefined, emitter);
+
     const notes = headsUpNotes();
     expect(notes).toHaveLength(1);
     expect(notes[0][0].content.md).toContain(
-      "couldn't regenerate the hero image — the original may contain unwanted text"
+      "couldn't regenerate the image — the original may contain unwanted text"
     );
+    expect(notes[0][0].content.md).not.toContain('image image');
+  });
+
+  // Round 8 C7a: a regenerateAsset fix against a slot with NO imagery is a
+  // critic error, but the note claimed "the original may contain unwanted
+  // text" about vector badge/accent slots that have no original at all.
+  it('says nothing when the flagged slot carries no imagery at all', async () => {
+    const emitter = makeEmitter();
+    const vectorDoc = {
+      ...HERO_DOC,
+      outputs: [
+        {
+          ...HERO_DOC.outputs[0],
+          children: [
+            {
+              id: 'e-badge',
+              originId: 'badge',
+              type: 'shape',
+              shape: 'star',
+              x: 0,
+              y: 0,
+              width: 200,
+              height: 200,
+              rotation: 0,
+              opacity: 1,
+              locked: false,
+              hidden: false,
+              fill: '#ff0000',
+            },
+          ],
+        },
+      ],
+    };
+    const { conductor, headsUpNotes, dispatchAgent } = makeRegenConductor({
+      doc: vectorDoc,
+      criticFindings: (call: number) =>
+        call === 2
+          ? [
+              {
+                issue: 'The badge has baked-in text',
+                slotId: 'badge',
+                fix: {
+                  scope: 'shared',
+                  regenerateAsset: { slotId: 'badge', brief: 'no text' },
+                },
+              },
+            ]
+          : [],
+      regenAssets: {},
+    });
+
+    await conductor.handleAcceptPlan(SESSION_ID, ctx, 'reply-1', undefined, false, undefined, emitter);
+
+    // No regeneration note about a slot that has no original, and no image
+    // spend either — the finding is dropped outright.
+    const md = headsUpNotes()
+      .map(([arg]: any) => arg.content.md)
+      .join('\n');
+    expect(md).not.toContain("couldn't regenerate");
+    expect(
+      dispatchAgent.mock.calls.filter(([, agentId]: any) => agentId === 'asset')
+    ).toHaveLength(1); // the initial compose asset call only
+  });
+
+  it('dedupes identical degradation notes at delivery', async () => {
+    const emitter = makeEmitter();
+    const { conductor } = makeRegenConductor({ criticFindings: () => [] });
+    const note = "couldn't regenerate the hero image — the original may contain unwanted text";
+    const labelled = 'variant 1 used a simplified fallback layout';
+    // Belt-and-braces backstop at the READ site: every other note interpolates
+    // a per-variant label, so two identical strings are the same message
+    // repeated, never two distinct degradations.
+    (conductor as any)._executePipeline = vi.fn(async (sessionId: string) => {
+      (conductor as any)._degradationNotes.set(sessionId, [
+        note,
+        labelled,
+        note,
+      ]);
+      return [{ designId: 'design-v1', variantId: 'v1', outputPreviews: [] }];
+    });
+    const emitDelivery = vi.fn().mockResolvedValue(undefined);
+    (conductor as any)._emitDelivery = emitDelivery;
+
+    await conductor.handleAcceptPlan(SESSION_ID, ctx, 'reply-1', undefined, false, undefined, emitter);
+
+    expect(emitDelivery).toHaveBeenCalledTimes(1);
+    expect(emitDelivery.mock.calls[0][4]).toEqual([note, labelled]);
   });
 
   it('keeps the old image and posts a degradation note when regeneration fails', async () => {
@@ -3553,6 +4097,109 @@ describe('AiDesignerConductorService regenerateAsset fixes', () => {
     expect(notes[0][0].content.md).toContain(
       "couldn't regenerate the hero image — the original may contain unwanted text"
     );
+  });
+
+  const STOCK_ASSET = (stockId: string, fileId: string, url: string) => ({
+    slotId: 'v1:hero',
+    fileId,
+    path: url,
+    type: 'image',
+    source: 'stock',
+    aspect: 'square',
+    stockId,
+  });
+
+  it('passes the previous stock pick to the asset agent as an exclusion', async () => {
+    const emitter = makeEmitter();
+    const { conductor, regenDispatches } = makeRegenConductor({
+      criticFindings: (call) => (call === 2 ? [REGEN_FINDING] : []),
+      initialAssets: {
+        'v1:hero:square': STOCK_ASSET('photo-1', 'f-hero', 'https://example.com/hero.png'),
+      },
+      regenAssets: {
+        'v1:hero:square': STOCK_ASSET('photo-2', 'f-new', 'https://example.com/new.png'),
+      },
+    });
+
+    await conductor.handleAcceptPlan(SESSION_ID, ctx, 'reply-1', undefined, false, undefined, emitter);
+
+    // Without it, the deterministic (and 60s-Redis-cached) stock search hands
+    // the identical photo straight back under a fresh fileId.
+    expect(regenDispatches()[0][2].assetNeeds[0].excludeStockId).toBe('photo-1');
+  });
+
+  it('treats a regenerated stock asset with the SAME stockId as a failure', async () => {
+    const emitter = makeEmitter();
+    const { conductor, saver, regenDispatches, headsUpNotes } = makeRegenConductor({
+      criticFindings: (call) => (call === 2 ? [REGEN_FINDING] : []),
+      initialAssets: {
+        'v1:hero:square': STOCK_ASSET('photo-1', 'f-hero', 'https://example.com/hero.png'),
+      },
+      // The exclusion is best-effort — a one-result search has nothing else to
+      // offer and hands back the rejected photo under a new fileId.
+      regenAssets: {
+        'v1:hero:square': STOCK_ASSET('photo-1', 'f-new', 'https://example.com/new.png'),
+      },
+    });
+
+    await conductor.handleAcceptPlan(SESSION_ID, ctx, 'reply-1', undefined, false, undefined, emitter);
+
+    expect(regenDispatches()).toHaveLength(1);
+    // Original imagery kept — a fileId swap to the same photo is not a fix.
+    const finalDoc = saver.updateDesign.mock.calls.at(-1)![3];
+    for (const out of finalDoc.outputs) {
+      const hero = out.children.find((el: any) => el.originId === 'hero');
+      expect(hero.fileId).toBe('f-hero');
+      expect(hero.src).toBe('https://example.com/hero.png');
+    }
+    // …and the user hears about it instead of a false "regenerated" success.
+    const notes = headsUpNotes();
+    expect(notes).toHaveLength(1);
+    expect(notes[0][0].content.md).toContain(
+      "couldn't regenerate the hero image — the original may contain unwanted text"
+    );
+  });
+
+  it('accepts a genuinely DIFFERENT stock photo', async () => {
+    const emitter = makeEmitter();
+    const { conductor, saver, headsUpNotes } = makeRegenConductor({
+      criticFindings: (call) => (call === 2 ? [REGEN_FINDING] : []),
+      initialAssets: {
+        'v1:hero:square': STOCK_ASSET('photo-1', 'f-hero', 'https://example.com/hero.png'),
+      },
+      regenAssets: {
+        'v1:hero:square': STOCK_ASSET('photo-2', 'f-new', 'https://example.com/new.png'),
+      },
+    });
+
+    await conductor.handleAcceptPlan(SESSION_ID, ctx, 'reply-1', undefined, false, undefined, emitter);
+
+    const finalDoc = saver.updateDesign.mock.calls.at(-1)![3];
+    for (const out of finalDoc.outputs) {
+      expect(
+        out.children.find((el: any) => el.originId === 'hero').fileId
+      ).toBe('f-new');
+    }
+    // (The initial compose still notes the stock-instead-of-generated
+    // degradation; what must NOT appear is a regeneration failure.)
+    const md = headsUpNotes()
+      .map((call) => call[0].content.md)
+      .join('\n');
+    expect(md).not.toContain("couldn't regenerate");
+  });
+
+  it('clears the session stock-id ledger with the pipeline', async () => {
+    const emitter = makeEmitter();
+    const { conductor } = makeRegenConductor({
+      criticFindings: () => [],
+      initialAssets: {
+        'v1:hero:square': STOCK_ASSET('photo-1', 'f-hero', 'https://example.com/hero.png'),
+      },
+    });
+
+    await conductor.handleAcceptPlan(SESSION_ID, ctx, 'reply-1', undefined, false, undefined, emitter);
+
+    expect((conductor as any)._assetStockIds.has(SESSION_ID)).toBe(false);
   });
 
   it('routes the non-regenerate findings of a mixed batch through applyFixes', async () => {
@@ -3632,5 +4279,389 @@ describe('AiDesignerConductorService regenerateAsset fixes', () => {
       fileId: 'f-new',
       focalPoint: { x: 0.5, y: 0.5 },
     });
+  });
+});
+
+// Round 7 C5: the formatId (`custom-${w}x${h}`) is the addressing key for
+// per-format critiques, revise targeting and the expansion's
+// `outputPreviews.find(...)`. Two identical custom sizes produced two outputs
+// sharing one id, so the second was permanently unaddressable.
+describe('AiDesignerConductorService._resolveOutputs formatId uniqueness (round 7 C5)', () => {
+  const resolve = (config: any) => {
+    const { conductor } = makeConductor({});
+    return (conductor as any)._resolveOutputs(config);
+  };
+
+  it('collapses two identical custom sizes into one output', () => {
+    const outs = resolve({
+      channels: [],
+      customSizes: [
+        { width: 1080, height: 1080, name: 'A' },
+        { width: 1080, height: 1080, name: 'B' },
+      ],
+    });
+
+    expect(outs.map((o: any) => o.formatId)).toEqual(['custom-1080x1080']);
+    // First wins — the user's original entry keeps its name.
+    expect(outs[0].name).toBe('A');
+  });
+
+  it('keeps genuinely different custom sizes', () => {
+    const outs = resolve({
+      channels: [],
+      customSizes: [
+        { width: 1080, height: 1080 },
+        { width: 1080, height: 1350 },
+      ],
+    });
+
+    expect(outs.map((o: any) => o.formatId)).toEqual([
+      'custom-1080x1080',
+      'custom-1080x1350',
+    ]);
+  });
+
+  it('collapses a repeated channel id from a stored config too', () => {
+    const outs = resolve({ channels: ['ig-post', 'ig-post'] });
+    expect(outs.map((o: any) => o.formatId)).toEqual(['ig-post']);
+  });
+});
+
+// Round 7 C6: a format-only revision naming no output this doc actually has
+// used to filter every emitted op away and no-op in silence.
+describe('AiDesignerConductorService format-only revise degradation (round 7 C6)', () => {
+  const DOC = {
+    mode: 'image',
+    outputs: [
+      { id: 'a', formatId: 'ig-square', name: 'IG', width: 1080, height: 1080, background: '#fff', children: [] },
+      { id: 'b', formatId: 'fb-post', name: 'FB', width: 1200, height: 630, background: '#fff', children: [] },
+    ],
+  } as any;
+
+  const setup = () => {
+    const { conductor, service } = makeConductor({});
+    const reviseByInstruction = vi.fn().mockResolvedValue(DOC);
+    (conductor as any)._composer = {
+      reviseByInstruction,
+      canResolveFormatScope: (doc: any, targetOutputs?: string[]) =>
+        (targetOutputs ?? []).some((id) =>
+          doc.outputs.some((o: any) => o.formatId === id)
+        ),
+    };
+    (conductor as any)._loadDesignDoc = vi.fn().mockResolvedValue(DOC);
+    (conductor as any)._resolveSaveFolder = vi.fn().mockResolvedValue(null);
+    (conductor as any)._saver = {
+      saveDesign: vi.fn().mockResolvedValue({
+        designId: 'd1',
+        variantId: 'v1',
+        outputPreviews: [],
+      }),
+    };
+    (conductor as any)._service = {
+      ...service,
+      getSessionForUser: vi.fn().mockResolvedValue({ config: {}, brief: {} }),
+    };
+    return { conductor, reviseByInstruction };
+  };
+
+  it('honors a format-only revision that names a real output', async () => {
+    const { conductor, reviseByInstruction } = setup();
+    const notes: string[] = [];
+
+    await (conductor as any)._reviseDesign(
+      SESSION_ID,
+      ctx,
+      'design-1',
+      {
+        instruction: 'make the headline bigger',
+        scope: 'format-only',
+        targetOutputs: ['fb-post'],
+      },
+      makeEmitter(),
+      notes
+    );
+
+    expect(reviseByInstruction).toHaveBeenCalledWith(
+      DOC,
+      'make the headline bigger',
+      'format-only',
+      ORG_ID,
+      ['fb-post'],
+      undefined,
+      undefined
+    );
+    expect(notes).toEqual([]);
+  });
+
+  it('degrades an unresolvable format-only revision to shared WITH a note', async () => {
+    const { conductor, reviseByInstruction } = setup();
+    const notes: string[] = [];
+
+    await (conductor as any)._reviseDesign(
+      SESSION_ID,
+      ctx,
+      'design-1',
+      {
+        instruction: 'make the headline bigger',
+        scope: 'format-only',
+        targetOutputs: ['tiktok-vertical'],
+      },
+      makeEmitter(),
+      notes
+    );
+
+    // Applied everywhere instead of nowhere.
+    expect(reviseByInstruction).toHaveBeenCalledWith(
+      DOC,
+      'make the headline bigger',
+      'shared',
+      ORG_ID,
+      undefined,
+      undefined,
+      undefined
+    );
+    expect(notes).toHaveLength(1);
+    expect(notes[0]).toContain('every size');
+  });
+
+  it('degrades a format-only revision that names no output at all', async () => {
+    const { conductor, reviseByInstruction } = setup();
+    const notes: string[] = [];
+
+    await (conductor as any)._reviseDesign(
+      SESSION_ID,
+      ctx,
+      'design-1',
+      { instruction: 'brighten it', scope: 'format-only' },
+      makeEmitter(),
+      notes
+    );
+
+    expect(reviseByInstruction.mock.calls[0][2]).toBe('shared');
+    expect(notes).toHaveLength(1);
+  });
+
+  it('leaves a shared revision (and its notes) alone', async () => {
+    const { conductor, reviseByInstruction } = setup();
+    const notes: string[] = [];
+
+    await (conductor as any)._reviseDesign(
+      SESSION_ID,
+      ctx,
+      'design-1',
+      { instruction: 'brighten it', scope: 'shared', targetOutputs: ['nope'] },
+      makeEmitter(),
+      notes
+    );
+
+    expect(reviseByInstruction.mock.calls[0][2]).toBe('shared');
+    expect(reviseByInstruction.mock.calls[0][4]).toEqual(['nope']);
+    expect(notes).toEqual([]);
+  });
+});
+
+// Round 7 C3: `referenceFileIds` rode into the asset dispatch and was never
+// read — no image provider in use accepts an init/reference image on the
+// text-to-image path. References remain an interpreted-cue feature; the
+// dispatch stops pretending otherwise and the user is told what they got.
+describe('AiDesignerConductorService reference images are cue-only (round 7 C3)', () => {
+  const runPipeline = async (config: Record<string, unknown>) => {
+    const emitter = makeEmitter();
+    const service = {
+      getSessionForUser: vi.fn().mockResolvedValue({
+        id: SESSION_ID,
+        state: 'awaiting_plan',
+        mode: 'prompt',
+        brief: { intent: 'x' },
+        config,
+        activeDesignIds: null,
+      }),
+      updateSession: vi.fn().mockResolvedValue(undefined),
+      appendMessage: vi.fn().mockResolvedValue({ id: 'msg-1' }),
+    };
+    const { conductor } = makeConductor({ service });
+    (conductor as any)._saver = {
+      saveDesign: vi.fn().mockResolvedValue({
+        designId: 'design-v1',
+        variantId: 'v1',
+        outputPreviews: [],
+      }),
+    };
+    const dispatches: { agentId: string; payload: any }[] = [];
+    (conductor as any)._dispatchAgent = vi
+      .fn()
+      .mockImplementation((_: unknown, agentId: string, payload: any) => {
+        dispatches.push({ agentId, payload });
+        if (agentId === 'art-director') {
+          return Promise.resolve({
+            content: JSON.stringify({
+              type: 'plans',
+              plans: [
+                {
+                  variantId: 'v1',
+                  skill: 'meme',
+                  slots: [{ id: 'hero', role: 'image', kind: 'image' }],
+                  assetNeeds: [
+                    { slotId: 'hero', brief: 'a hero image', prefer: 'generate' },
+                  ],
+                },
+              ],
+            }),
+          });
+        }
+        if (agentId === 'asset') {
+          return Promise.resolve({
+            content: JSON.stringify({
+              type: 'assets',
+              assets: {
+                'v1:hero:square': {
+                  slotId: 'v1:hero',
+                  fileId: 'f1',
+                  path: 'https://example.com/i.png',
+                  type: 'image',
+                  source: 'generate',
+                  aspect: 'square',
+                },
+              },
+            }),
+          });
+        }
+        if (agentId === 'copywriter') {
+          return Promise.resolve({
+            content: JSON.stringify({ type: 'copy', texts: {} }),
+          });
+        }
+        return Promise.resolve({ content: '{}' });
+      });
+    (conductor as any)._parseDesignDoc = vi.fn().mockReturnValue({ layers: [] });
+    const emitDelivery = vi.fn().mockResolvedValue(undefined);
+    (conductor as any)._emitDelivery = emitDelivery;
+
+    await conductor.handleAcceptPlan(
+      SESSION_ID,
+      ctx,
+      'reply-1',
+      undefined,
+      false,
+      undefined,
+      emitter
+    );
+
+    return { dispatches, emitDelivery };
+  };
+
+  it('never forwards referenceFileIds to the asset agent, and says so', async () => {
+    const { dispatches, emitDelivery } = await runPipeline({
+      channels: ['ig-post'],
+      variants: 1,
+      referenceFileIds: ['file-a', 'file-b'],
+    });
+
+    const assetDispatch = dispatches.find((d) => d.agentId === 'asset');
+    expect(assetDispatch).toBeDefined();
+    expect(assetDispatch!.payload).not.toHaveProperty('referenceFileIds');
+
+    const notes: string[] = emitDelivery.mock.calls[0][4];
+    expect(notes.some((n) => n.includes('reference images guided the brief'))).toBe(
+      true
+    );
+  });
+
+  it('posts no reference note when the user supplied none', async () => {
+    const { emitDelivery } = await runPipeline({
+      channels: ['ig-post'],
+      variants: 1,
+    });
+
+    const notes: string[] = emitDelivery.mock.calls[0][4];
+    expect(notes.some((n) => n.includes('reference images'))).toBe(false);
+  });
+});
+
+// Round 8 C7b: a pinned style preset and a selected brand are both honoured by
+// the art director in the same breath, so plans could come back entirely in the
+// preset's colours with nothing telling the user the brand was dropped.
+describe('AiDesignerConductorService brand-palette override note', () => {
+  const withBrand = (palette: unknown) => {
+    const { conductor } = makeConductor();
+    (conductor as any)._brands = {
+      getBrand: vi.fn().mockResolvedValue({ palette }),
+    };
+    return conductor;
+  };
+
+  const note = (
+    conductor: any,
+    config: any,
+    brief: any,
+    plans: any[]
+  ): Promise<string | undefined> =>
+    conductor._brandPaletteOverrideNote(ctx, config, brief, plans);
+
+  const CONFIG = { brandProfileId: 'brand-1', variants: 1 } as any;
+  const BRIEF = { intent: 'x', styleId: 'editorial-mono' } as any;
+
+  it('warns when no plan palette entry is a brand colour', async () => {
+    const conductor = withBrand(['#0A7D5B', '#F3E9DC']);
+
+    expect(
+      await note(conductor, CONFIG, BRIEF, [{ palette: ['#111111', '#ffffff'] }])
+    ).toContain('brand palette wasn\'t used');
+  });
+
+  it('names the style the user actually pinned', async () => {
+    const conductor = withBrand(['#0A7D5B']);
+
+    expect(
+      await note(conductor, CONFIG, BRIEF, [{ palette: ['#111111'] }])
+    ).toContain('"editorial-mono"');
+  });
+
+  it('stays quiet when a brand colour DID survive into the plans', async () => {
+    const conductor = withBrand(['#0A7D5B', '#F3E9DC']);
+
+    expect(
+      await note(conductor, CONFIG, BRIEF, [{ palette: ['#0a7d5b', '#ffffff'] }])
+    ).toBeUndefined();
+  });
+
+  it('stays quiet with no pinned style, no brand, or an empty brand palette', async () => {
+    const conductor = withBrand(['#0A7D5B']);
+    const plans = [{ palette: ['#111111'] }];
+
+    expect(
+      await note(conductor, CONFIG, { intent: 'x' }, plans)
+    ).toBeUndefined();
+    expect(
+      await note(conductor, { variants: 1 } as any, BRIEF, plans)
+    ).toBeUndefined();
+    expect(
+      await note(withBrand([]), CONFIG, BRIEF, plans)
+    ).toBeUndefined();
+  });
+
+  it('stays quiet when the plans carry no palette to compare', async () => {
+    const conductor = withBrand(['#0A7D5B']);
+
+    expect(await note(conductor, CONFIG, BRIEF, [{}])).toBeUndefined();
+  });
+
+  it('never throws when the brand lookup fails', async () => {
+    const { conductor } = makeConductor();
+    (conductor as any)._brands = {
+      getBrand: vi.fn().mockRejectedValue(new Error('db down')),
+    };
+
+    expect(
+      await note(conductor, CONFIG, BRIEF, [{ palette: ['#111111'] }])
+    ).toBeUndefined();
+  });
+
+  it('is inert when no BrandsService is wired in', async () => {
+    const { conductor } = makeConductor();
+
+    expect(
+      await note(conductor, CONFIG, BRIEF, [{ palette: ['#111111'] }])
+    ).toBeUndefined();
   });
 });

@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { AiDesignerComposerService } from './ai-designer-composer.service';
 import { DesignerDocService } from '@postmill-ai/nestjs-libraries/media/designer-doc/designer-doc.service';
+import { canvasMarginPx } from '@postmill-ai/nestjs-libraries/media/designer-doc/reflow';
 import type { DesignPlan, VisionFinding } from '../../ai-designer.types';
 
 const makeDoc = () =>
@@ -350,7 +351,8 @@ const makeCopy = () => ({
 const composeWith = async (
   plan: DesignPlan,
   outputs = [SQUARE],
-  copy = makeCopy()
+  copy = makeCopy(),
+  assets: Record<string, any> = makeAssets()
 ) => {
   const service = new AiDesignerComposerService(
     new DesignerDocService() as any,
@@ -359,7 +361,7 @@ const composeWith = async (
   const doc = await service.compose({
     plan,
     copy,
-    assets: makeAssets(),
+    assets,
     outputs,
     orgId: 'o1',
     userId: 'u1',
@@ -1044,6 +1046,36 @@ describe('AiDesignerComposerService.applyFixes targetOutputs pinning', () => {
       },
     ]);
   });
+
+  it('re-links alignment across outputs — it is a design property, not a per-canvas one', async () => {
+    const real = new AiDesignerComposerService(
+      new DesignerDocService() as any,
+      model as any
+    );
+    const doc = makeTwoOutputDoc();
+    // The drift a format-scoped critic fix used to bake in: the same slot
+    // left-aligned on one output and centered on the other.
+    doc.outputs[0].children[0].align = 'left';
+    doc.outputs[1].children[0].align = 'center';
+
+    const { doc: healed } = real.sanitizeDoc(doc);
+
+    expect((healed.outputs[1] as any).children[0].align).toBe('left');
+  });
+
+  it('never writes align onto a shape element', () => {
+    const service2 = new AiDesignerComposerService(
+      new DesignerDocService() as any,
+      model as any
+    );
+    const patch = (service2 as any)._stylePatch(
+      { align: 'center', fill: '#FF0000' },
+      { type: 'shape', originId: 'badge-bg' }
+    );
+
+    expect(patch.align).toBeUndefined();
+    expect(patch.fill).toBe('#FF0000');
+  });
 });
 
 
@@ -1387,10 +1419,11 @@ describe('AiDesignerComposerService.applyFixes op vocabulary (Phase 4)', () => {
     expect(ops[0].element).not.toHaveProperty('id');
     expect(ops[0].element.text).toBe('NEW');
     expect(ops[0].element.fill).toBe('#FFFFFF');
-    // fontSize authored against the primary (1080x1080) scales to the
-    // 1200x675 output by min(1200/1080, 675/1080) = 0.625.
+    // fontSize authored against the primary (1080x1080) is re-fit onto the
+    // 1200x675 output through the shared type basis (900/1080 = 0.833), not
+    // the old min(1200/1080, 675/1080) = 0.625 short-edge scale.
     expect(ops[0].element.fontSize).toBe(40);
-    expect(ops[1].element.fontSize).toBe(25);
+    expect(ops[1].element.fontSize).toBe(33);
   });
 
   it('rejects an addElement spec missing its required text', async () => {
@@ -1531,6 +1564,74 @@ describe('AiDesignerComposerService.applyFixes op vocabulary (Phase 4)', () => {
     expect(ops[0].element.groupId).toBe('cta');
   });
 
+  // ROUND 8 (A3c): most copy slots carry NO groupId, so a companion added to
+  // one inherited nothing and reflowed on its own `deriveAnchor` thirds — a
+  // `headline-*` rule seeded from a banner landed dead centre on the story and
+  // struck through the headline. The group is backfilled onto the base so the
+  // pair shares one frame.
+  it('backfills a move group onto an UNGROUPED base when adding its companion', async () => {
+    const doc = {
+      mode: 'image',
+      outputs: [
+        {
+          id: 'o1',
+          formatId: 'ig-square',
+          name: 'IG',
+          width: 1080,
+          height: 1080,
+          background: '#ffffff',
+          children: [
+            {
+              id: 'e1',
+              originId: 'headline',
+              type: 'text',
+              x: 54,
+              y: 400,
+              width: 972,
+              height: 200,
+              rotation: 0,
+              opacity: 1,
+              locked: false,
+              hidden: false,
+              text: 'Office hours changed',
+              fontSize: 88,
+            },
+          ],
+        },
+      ],
+    } as any;
+    const findings: VisionFinding[] = [
+      {
+        issue: 'The headline needs an accent rule',
+        fix: {
+          scope: 'shared',
+          addElement: {
+            slotId: 'headline-underline',
+            type: 'shape',
+            shape: 'rect',
+            box: { x: 54, y: 610, width: 200, height: 4 },
+            style: { fill: '#B23A48' },
+          },
+        },
+      },
+    ];
+
+    await service.applyFixes(doc, findings, 'org1');
+
+    const ops = opsOf();
+    expect(ops).toHaveLength(2);
+    // The base is grouped first, then the companion joins the same group.
+    expect(ops[0]).toEqual({
+      op: 'updateElement',
+      outputIndex: 0,
+      elementId: 'e1',
+      scope: 'format-only',
+      patch: { groupId: 'headline' },
+    });
+    expect(ops[1].op).toBe('addElement');
+    expect(ops[1].element.groupId).toBe('headline');
+  });
+
   it('re-derives a `-bg` companion box from the label instead of copying it verbatim', async () => {
     const doc = {
       mode: 'image',
@@ -1597,9 +1698,42 @@ describe('AiDesignerComposerService.applyFixes scoped fontSize propagation (Phas
     );
 
     const [primary, secondary] = result.outputs as any[];
-    // Primary keeps the authored px; the 1200x675 output gets 64 * 0.625 = 40.
+    // Primary keeps the authored px; the 1200x675 output is re-fit through the
+    // shared type basis: 64 × (900/1080) = 53 (the old short-edge scale gave 40).
     expect(primary.children[0].fontSize).toBe(64);
-    expect(secondary.children[0].fontSize).toBe(40);
+    expect(secondary.children[0].fontSize).toBe(53);
+  });
+
+  it('re-fits a shared GEOMETRY box per output instead of writing it verbatim', async () => {
+    const findings: VisionFinding[] = [
+      {
+        issue: 'Headline sits too high everywhere',
+        fix: {
+          scope: 'shared',
+          targetSlots: ['headline'],
+          geometry: { y: 800, height: 200 },
+        },
+      },
+    ];
+
+    const result = await realService().applyFixes(
+      makeTwoOutputDoc(),
+      findings,
+      'org1'
+    );
+
+    const [primary, secondary] = result.outputs as any[];
+    expect(primary.children[0]).toMatchObject({ y: 800, height: 200 });
+    // The box is authored against the primary's 1080² canvas. Written verbatim
+    // (what shipped before) it put the headline at y=800 on a 675-tall output —
+    // off-canvas. Sizes re-fit through the shared type basis (200 → 167),
+    // positions per-axis (800 × 675/1080 = 500), and the result is clamped
+    // into the TITLE-SAFE area: 500 + 167 = 667 clears the canvas but sits
+    // 8px off the bottom edge, so the validator pulls it to 641.25 - 167.
+    expect(secondary.children[0]).toMatchObject({ y: 474.25, height: 167 });
+    expect(
+      secondary.children[0].y + secondary.children[0].height
+    ).toBeLessThanOrEqual(675 * 0.95);
   });
 
   it('keeps raw px for a format-only fontSize fix', async () => {
@@ -1875,6 +2009,88 @@ describe('AiDesignerComposerService framing & legibility', () => {
     }
   });
 
+  // A `legal` slot is the one copy role whose placement is an edge contract.
+  // Before it had a layout model it packed as another line under the CTA (or,
+  // when the vision critic added it, sat wherever the model put it) and the
+  // copy stack balanced against a band that still spanned it — a live
+  // split-panel shipped its legal line at y=1050 on a 1080 canvas with a
+  // 429px (39.7% of canvas height) void above it.
+  const planWithFooter = (formatTemplate: string) => {
+    const plan = makePlan({ formatTemplate, styleId: 'editorial' } as any);
+    plan.slots.push({ id: 'badge', role: 'badge', kind: 'badge' } as any);
+    plan.slots.push({ id: 'legal', role: 'legal', kind: 'text' } as any);
+    return plan;
+  };
+  const footerCopy = { ...makeCopy(), legal: 'northbean.shop' };
+
+  it('anchors a legal slot on the bottom margin in every layout', async () => {
+    for (const template of [
+      'split-panel',
+      'editorial-sidebar',
+      'hero-fullbleed',
+      'top-bottom',
+      'badge-burst',
+      'minimal-centered',
+    ]) {
+      const doc = await composeWith(
+        planWithFooter(template),
+        [SQUARE],
+        footerCopy
+      );
+      const legal = byOrigin(doc, 'legal');
+      // Bottom-anchored on the canvas margin (1080 − 5%), never flush with
+      // the edge, and never packed into the middle of the copy stack.
+      expect(legal.y + legal.height).toBe(1026);
+      expect(byOrigin(doc, 'cta').y).toBeLessThan(legal.y);
+    }
+  });
+
+  it('carves the footer out of the copy band instead of leaving a dead void above it', async () => {
+    const doc = await composeWith(
+      planWithFooter('split-panel'),
+      [SQUARE],
+      footerCopy
+    );
+
+    const legal = byOrigin(doc, 'legal');
+    const badge = byOrigin(doc, 'badge-bg');
+    const stack = childrenOf(doc).filter(
+      (el: any) =>
+        el.originId &&
+        ['headline', 'sub', 'cta', 'cta-underline'].includes(el.originId)
+    );
+    const stackTop = Math.min(...stack.map((el: any) => el.y));
+    const stackBottom = Math.max(...stack.map((el: any) => el.y + el.height));
+
+    const voidAbove = stackTop - (badge.y + badge.height);
+    const voidBelow = legal.y - stackBottom;
+    // The void above the footer is what shipped at 39.7% of canvas height.
+    expect(voidBelow / 1080).toBeLessThan(0.3);
+    // …and it is the band's own balance, not a dead end: the copy sits
+    // between its two neighbours, not packed against the top of a band that
+    // still spans the footer.
+    expect(Math.abs(voidAbove - voidBelow)).toBeLessThanOrEqual(1080 * 0.02);
+  });
+
+  it('leaves a footer-free layout on the capped balance shift', async () => {
+    // The uncapped centring is scoped to a footer-bounded band — without one
+    // the leftover below the stack is dead space, and the round-6 cap
+    // (STACK_BALANCE_MAX_SHIFT) still owns it.
+    const plan = makePlan({
+      formatTemplate: 'split-panel',
+      styleId: 'editorial',
+    } as any);
+    plan.slots.push({ id: 'badge', role: 'badge', kind: 'badge' } as any);
+    const doc = await composeWith(plan, [SQUARE], makeCopy());
+
+    const headline = byOrigin(doc, 'headline');
+    const badge = byOrigin(doc, 'badge-bg');
+    const cta = byOrigin(doc, 'cta-underline');
+    const above = headline.y - (badge.y + badge.height);
+    const below = 1026 - (cta.y + cta.height);
+    expect(above).toBeLessThan(below);
+  });
+
   it('clamps every role up to its per-role floor (% of min(w,h))', async () => {
     const doc = await composeWith(
       makePlan({ typeScale: { headline: 12, subhead: 12, cta: 12 } })
@@ -1891,7 +2107,12 @@ describe('AiDesignerComposerService framing & legibility', () => {
     );
   });
 
-  it('keeps burst badge text inside the star inner area, centered both ways', async () => {
+  // WAS: 'keeps burst badge text inside the star inner area, centered both ways'.
+  // Round 8 (D1) retired the starburst badge: every star in the render corpus
+  // was worse than its pill equivalent, and the label-inside-the-points problem
+  // this test policed is gone with the star. It now asserts the replacement —
+  // a pill whose label stays inside it and centered.
+  it('composes a long retro/badge-burst badge as a pill with its label inside, centered both ways', async () => {
     const plan = makePlan({ styleId: 'retro', formatTemplate: 'badge-burst' });
     plan.slots.push({ id: 'badge', role: 'badge', kind: 'badge' });
     const doc = await composeWith(plan, [SQUARE], {
@@ -1901,14 +2122,15 @@ describe('AiDesignerComposerService framing & legibility', () => {
 
     const shape = byOrigin(doc, 'badge-bg');
     const text = byOrigin(doc, 'badge');
-    expect(shape.shape).toBe('star');
-    // The text box sits in the burst's ~60% inner safe area.
+    expect(shape.shape).toBe('rect');
+    // A pill: fully rounded ends, and never the square star frame.
+    expect(shape.borderRadius).toBe(Math.round(shape.height / 2));
+    expect(shape.width).toBeGreaterThan(shape.height);
+    // The label stays inside the pill horizontally and shares its band.
     expect(text.x).toBeGreaterThan(shape.x);
-    expect(text.y).toBeGreaterThan(shape.y);
     expect(text.x + text.width).toBeLessThan(shape.x + shape.width);
-    expect(text.y + text.height).toBeLessThan(shape.y + shape.height);
-    expect(text.width).toBeLessThanOrEqual(Math.ceil(shape.width * 0.6) + 2);
-    expect(text.height).toBeLessThanOrEqual(Math.ceil(shape.height * 0.6) + 2);
+    expect(text.y).toBeGreaterThanOrEqual(shape.y);
+    expect(text.y + text.height).toBeLessThanOrEqual(shape.y + shape.height);
     expect(text.align).toBe('center');
     expect(text.verticalAlign).toBe('middle');
   });
@@ -1992,7 +2214,35 @@ describe('AiDesignerComposerService framing & legibility', () => {
   });
 
   it('honors a slot-level badgeStyle override over the preset treatment', async () => {
-    // The 'bold' preset badges are pills — the plan's slot-level burst wins.
+    // The 'bold' preset badges are pills — the plan's slot-level ribbon wins.
+    // (This used to assert a slot-level 'burst' produced a star; the override
+    // MECHANISM is what matters and is still live, so the test keeps its
+    // coverage using a treatment that still renders distinctly — see the
+    // burst-resolves-to-pill test below for the retired value.)
+    const plan = makePlan({ styleId: 'bold' });
+    plan.slots.push({
+      id: 'badge',
+      role: 'badge',
+      kind: 'badge',
+      style: { badgeStyle: 'ribbon' },
+    });
+    const doc = await composeWith(plan, [SQUARE], {
+      ...makeCopy(),
+      badge: 'NEW',
+    });
+
+    const shape = byOrigin(doc, 'badge-bg');
+    expect(shape.shape).toBe('rect');
+    // A ribbon is a barely-rounded rect, NOT the preset's fully-rounded pill.
+    expect(shape.borderRadius).toBe(Math.round(shape.height * 0.12));
+    expect(shape.borderRadius).not.toBe(Math.round(shape.height / 2));
+  });
+
+  // Round 8 (D1): the `burst` enum value is deliberately KEPT (stored plans,
+  // presets and the brief's "starburst" detection still carry it) but must
+  // never reach a star. Both the plan-authored override and the layout-forced
+  // treatment resolve to a pill.
+  it('resolves a slot-level badgeStyle:"burst" to a pill — no star is composed', async () => {
     const plan = makePlan({ styleId: 'bold' });
     plan.slots.push({
       id: 'badge',
@@ -2005,10 +2255,12 @@ describe('AiDesignerComposerService framing & legibility', () => {
       badge: 'NEW',
     });
 
-    expect(byOrigin(doc, 'badge-bg').shape).toBe('star');
+    const shape = byOrigin(doc, 'badge-bg');
+    expect(shape.shape).toBe('rect');
+    expect(shape.borderRadius).toBe(Math.round(shape.height / 2));
   });
 
-  it('badge-burst layout forces the burst treatment for pill-badge presets', async () => {
+  it('badge-burst layout composes a PILL badge, not a star', async () => {
     const plan = makePlan({ styleId: 'bold', formatTemplate: 'badge-burst' });
     plan.slots.push({ id: 'badge', role: 'badge', kind: 'badge' });
     const doc = await composeWith(plan, [SQUARE], {
@@ -2016,7 +2268,138 @@ describe('AiDesignerComposerService framing & legibility', () => {
       badge: 'NEW',
     });
 
-    expect(byOrigin(doc, 'badge-bg').shape).toBe('star');
+    const shape = byOrigin(doc, 'badge-bg');
+    expect(shape.shape).toBe('rect');
+    expect(shape.borderRadius).toBe(Math.round(shape.height / 2));
+  });
+
+  it('composes no star shape on the happy path, whatever the preset asks for', async () => {
+    // The retro and neobrutalism presets used to ask for a burst treatment.
+    // Nothing they compose may reach `shape: 'star'` any more. (A plan with
+    // explicit `accent-shape` slots can still cycle a decorative star — that is
+    // a different feature and this plan carries none.)
+    for (const styleId of ['retro', 'neobrutalism'] as const) {
+      const plan = makePlan({ styleId });
+      plan.slots.push({ id: 'badge', role: 'badge', kind: 'badge' });
+      const doc = await composeWith(plan, [SQUARE], {
+        ...makeCopy(),
+        badge: 'SINCE 2019',
+      });
+
+      const stars = doc.outputs.flatMap((out: any) =>
+        (out.children ?? []).filter((el: any) => el.shape === 'star')
+      );
+      expect(stars, `${styleId} composed a star badge`).toEqual([]);
+    }
+  });
+
+  it('parks the CTA underline rule BELOW its label box, as a hairline', () => {
+    // 'editorial' is the underline-CTA preset.
+    const service = new AiDesignerComposerService(
+      new DesignerDocService() as any,
+      { generateText: vi.fn() } as any
+    );
+    const elements = (service as any)._buildElements(
+      makePlan({ styleId: 'editorial' }),
+      makeCopy(),
+      makeAssets(),
+      { width: 1080, height: 1080 },
+      'hero-fullbleed',
+      (service as any)._resolveStyle(makePlan({ styleId: 'editorial' }))
+    ) as any[];
+
+    const label = elements.find((el) => el.originId === 'cta');
+    const bar = elements.find((el) => el.originId === 'cta-underline');
+    // Below the label box (never inside it, cutting through the descenders)
+    // and thin — a rule, not a slab.
+    expect(bar.y).toBeGreaterThanOrEqual(label.y + label.height);
+    expect(bar.height).toBeLessThanOrEqual(Math.round(label.fontSize * 0.1));
+    expect(bar.x).toBe(label.x);
+    expect(bar.width).toBe(label.width);
+  });
+
+  it('keeps the underline rule below the label (and thin) after a geometry fix', () => {
+    const service = new AiDesignerComposerService(
+      new DesignerDocService() as any,
+      { generateText: vi.fn() } as any
+    );
+    const out = {
+      width: 1080,
+      height: 1080,
+      children: [
+        {
+          id: 't1',
+          originId: 'cta',
+          type: 'text',
+          x: 100,
+          y: 400,
+          width: 300,
+          height: 48,
+          text: 'Shop now',
+          fontSize: 30,
+        },
+      ],
+    } as any;
+    const bar = { originId: 'cta-underline' } as any;
+
+    const patch = (service as any)._deriveCompanionGeometry(out, bar, 'cta', {
+      y: 400,
+      height: 48,
+    });
+
+    // Derived from the label's BOTTOM, and the rule keeps its own hairline
+    // height instead of inheriting the label's box height.
+    expect(patch.y).toBe(400 + 48 + Math.max(2, Math.round(30 * 0.12)));
+    expect(patch.height).toBe(Math.max(2, Math.round(30 * 0.07)));
+  });
+
+  // Changed deliberately (round 6): this used to assert `|above − below| <= 2`
+  // measured from the panel MARGIN — i.e. it pinned "centre the stack in the
+  // whole panel", which is precisely what opened a ~300px dead gap between the
+  // badge and the copy (plus an equal void under it) on the live docs. The
+  // band is now measured from the badge's real extent, and the drift into it is
+  // capped at STACK_BALANCE_MAX_SHIFT so the copy lands at the band's optical
+  // centre instead of its geometric one.
+  it('drifts a short copy stack into the band the badge leaves, not to its geometric centre', async () => {
+    // One short line in the split panel's tall band: packed top-down it ends in
+    // the top third and leaves the panel's lower half dead.
+    const plan = makePlan({ formatTemplate: 'split-panel' });
+    plan.slots = plan.slots.filter((s) => s.id === 'img' || s.id === 'headline');
+    plan.slots.push({ id: 'badge', role: 'badge', kind: 'badge' });
+    const doc = await composeWith(plan, [SQUARE], {
+      headline: 'Big launch',
+      badge: 'New',
+    });
+
+    const headline = byOrigin(doc, 'headline');
+    const badge = byOrigin(doc, 'badge-bg');
+    const margin = Math.round(1080 * 0.05);
+    const badgeBottom = badge.y + badge.height;
+    // The copy band starts below the badge (measured, not estimated) and runs
+    // to the panel's bottom margin.
+    const band = 1080 - margin - badgeBottom;
+    const drift = headline.y - badgeBottom;
+
+    // It balanced — the stack is not packed flush under the badge…
+    expect(drift).toBeGreaterThan(band * 0.05);
+    // …but geometric centering (drift ≈ band / 2) is exactly the dead gap.
+    expect(drift).toBeLessThan(band * 0.25);
+    // …and the copy still clears the badge.
+    expect(headline.y).toBeGreaterThanOrEqual(badgeBottom);
+  });
+
+  it('keeps a full copy stack packed from the top of its band', async () => {
+    const doc = await composeWith(
+      makePlan({
+        formatTemplate: 'split-panel',
+        typeScale: { headline: 160, subhead: 100, cta: 60 },
+      })
+    );
+
+    // Big type fills the panel — nothing to balance, so the stack keeps
+    // hugging the top of its band.
+    const headline = byOrigin(doc, 'headline');
+    expect(headline.y).toBe(Math.round(1080 * 0.05));
   });
 });
 
@@ -2198,12 +2581,10 @@ describe('AiDesignerComposerService overlap guard', () => {
     const result = (realService() as any)._resolveOverlaps(doc);
 
     const text = result.outputs[0].children[1];
-    // Pushed below the burst (100 + 220 + gap, incl. the +2 margin above the
-    // near-touch floor), no longer overlapping it.
-    expect(text.y).toBeGreaterThanOrEqual(322);
-    expect(text.y).toBeLessThanOrEqual(
-      320 + Math.max(8, Math.round(40 * 0.2)) + 2
-    );
+    // Pushed below the burst's VISIBLE box, not its raw AABB: a star only
+    // paints its five points, so the collider is the 70% inner box
+    // (100 + 33 inset + 154 = 287) plus the 8px floor and the +2px margin.
+    expect(text.y).toBe(287 + 8 + 2);
   });
 
   it('leaves text on a big background panel (split-panel-bg) alone', () => {
@@ -2408,11 +2789,14 @@ describe('AiDesignerComposerService overlap guard', () => {
     expect(result).toBe(doc);
   });
 
+  // Role-less slot ids on purpose: the copy-stack order assertion would
+  // otherwise re-pack a headline/subhead pair left inverted by this cascade
+  // (covered by its own test below) and hide the above-move being tested here.
   it('moves the text above the collider when there is no room below', () => {
     const doc = guardDoc([
       guardEl({
         id: 'h1',
-        originId: 'headline',
+        originId: 'block',
         x: 100,
         y: 400,
         width: 400,
@@ -2422,9 +2806,101 @@ describe('AiDesignerComposerService overlap guard', () => {
       }),
       guardEl({
         id: 's1',
-        originId: 'sub',
+        originId: 'note',
         x: 100,
         y: 960,
+        width: 400,
+        height: 80,
+        text: 'Note',
+        fontSize: 20,
+      }),
+    ]);
+
+    const result = (realService() as any)._resolveOverlaps(doc);
+    const sub = result.outputs[0].children[1];
+
+    // Below the collider (y=1008) would overflow the canvas — the text went
+    // above it instead (8px gap + the 2px margin above the floor).
+    expect(sub.y).toBe(400 - 10 - 80);
+    expect(sub.y + sub.height).toBeLessThanOrEqual(400);
+  });
+
+  it('keeps a nudge inside the title-safe area instead of flush with the canvas edge', () => {
+    const doc = guardDoc([
+      guardEl({
+        id: 'b1',
+        originId: 'block',
+        x: 100,
+        y: 900,
+        width: 400,
+        height: 60,
+        text: 'Lower block',
+        fontSize: 40,
+      }),
+      guardEl({
+        id: 'n1',
+        originId: 'note',
+        x: 100,
+        y: 940,
+        width: 400,
+        height: 80,
+        text: 'Overlapping note',
+        fontSize: 20,
+      }),
+    ]);
+
+    const result = (realService() as any)._resolveOverlaps(doc);
+    const note = result.outputs[0].children[1];
+
+    // Below would land at 970..1050 — inside the raw 1080 canvas but past the
+    // 5% title-safe bottom (1026), i.e. under the platform's UI chrome. The
+    // guard measures against the safe rect, so it goes above instead.
+    expect(note.y).toBe(810);
+    expect(note.y + note.height).toBeLessThanOrEqual(1026);
+  });
+
+  it('re-packs a copy stack left out of role order by an above-cascade', () => {
+    const doc = guardDoc([
+      guardEl({
+        id: 'h1',
+        originId: 'headline',
+        x: 100,
+        y: 100,
+        width: 400,
+        height: 100,
+        text: 'Headline',
+        fontSize: 40,
+      }),
+      guardEl({
+        id: 'p1',
+        originId: 'cta-bg',
+        type: 'shape',
+        shape: 'rect',
+        x: 100,
+        y: 300,
+        width: 200,
+        height: 60,
+        fill: '#FF4D00',
+        groupId: 'cta',
+      }),
+      guardEl({
+        id: 't1',
+        originId: 'cta',
+        x: 100,
+        y: 300,
+        width: 200,
+        height: 60,
+        text: 'Shop now',
+        fontSize: 20,
+        groupId: 'cta',
+      }),
+      // Collides with the CTA pill and gets nudged BELOW it — a subhead under
+      // its own call to action.
+      guardEl({
+        id: 's1',
+        originId: 'sub',
+        x: 100,
+        y: 290,
         width: 400,
         height: 80,
         text: 'Subhead',
@@ -2433,12 +2909,162 @@ describe('AiDesignerComposerService overlap guard', () => {
     ]);
 
     const result = (realService() as any)._resolveOverlaps(doc);
-    const sub = result.outputs[0].children[1];
+    const [headline, pill, label, sub] = result.outputs[0].children;
 
-    // Below the collider (y=1008) would overflow the 1080 canvas — the text
-    // went above it instead (8px gap + the 2px margin above the floor).
-    expect(sub.y).toBe(400 - 10 - 80);
-    expect(sub.y + sub.height).toBeLessThanOrEqual(400);
+    // Headline → subhead → CTA, re-packed top-down; the CTA pair still moves
+    // as one unit.
+    expect(headline.y).toBeLessThan(sub.y);
+    expect(sub.y).toBeLessThan(label.y);
+    expect(sub.y).toBe(210);
+    expect(label.y).toBe(pill.y);
+    expect(sub.y + sub.height).toBeLessThanOrEqual(label.y);
+  });
+
+  it('ranks a footer/legal line LAST when it re-packs a column', () => {
+    // Without a stack rank the footer dropped out of the column entirely, so
+    // a re-pack could leave it above the CTA it has to sit under.
+    const doc = guardDoc([
+      guardEl({
+        id: 'h1',
+        originId: 'headline',
+        x: 100,
+        y: 100,
+        width: 400,
+        height: 100,
+        text: 'Headline',
+        fontSize: 40,
+      }),
+      guardEl({
+        id: 'l1',
+        originId: 'legal',
+        x: 100,
+        y: 300,
+        width: 400,
+        height: 40,
+        text: 'terms apply',
+        fontSize: 16,
+      }),
+      // Out of order: the CTA sits BELOW the legal line.
+      guardEl({
+        id: 'c1',
+        originId: 'cta',
+        x: 100,
+        y: 400,
+        width: 200,
+        height: 60,
+        text: 'Shop now',
+        fontSize: 20,
+      }),
+      guardEl({
+        id: 's1',
+        originId: 'sub',
+        x: 100,
+        y: 500,
+        width: 400,
+        height: 60,
+        text: 'Subhead',
+        fontSize: 20,
+      }),
+    ]);
+
+    const result = (realService() as any)._resolveOverlaps(doc);
+    const [headline, legal, cta, sub] = result.outputs[0].children;
+
+    // headline → subhead → CTA → legal, top-down.
+    expect(headline.y).toBeLessThan(sub.y);
+    expect(sub.y).toBeLessThan(cta.y);
+    expect(cta.y).toBeLessThan(legal.y);
+    expect(legal.y + legal.height).toBeLessThanOrEqual(1026);
+  });
+
+  it('re-tests an earlier collider after a later one dragged the group back (fixpoint)', () => {
+    const doc = guardDoc([
+      guardEl({
+        id: 'h1',
+        originId: 'headline',
+        x: 100,
+        y: 100,
+        width: 400,
+        height: 50,
+        text: 'Headline',
+        fontSize: 20,
+      }),
+      // Group member A — clear of the headline to start (50px gap).
+      guardEl({
+        id: 'g1',
+        originId: 'promo',
+        x: 100,
+        y: 200,
+        width: 400,
+        height: 40,
+        text: 'Promo line',
+        fontSize: 20,
+        groupId: 'promo',
+      }),
+      guardEl({
+        id: 'b1',
+        originId: 'block',
+        x: 100,
+        y: 400,
+        width: 400,
+        height: 626,
+        text: 'Wall of body copy',
+        fontSize: 20,
+      }),
+      // Group member B collides with the wall and has no room below, so the
+      // WHOLE group is moved up — dragging member A to 6px under the headline,
+      // an earlier collider the single-pass sweep never re-tested.
+      guardEl({
+        id: 'g2',
+        originId: 'promo-note',
+        x: 100,
+        y: 380,
+        width: 400,
+        height: 50,
+        text: 'Promo note',
+        fontSize: 60,
+        groupId: 'promo',
+      }),
+    ]);
+
+    const result = (realService() as any)._resolveOverlaps(doc);
+    const memberA = result.outputs[0].children[1];
+
+    // Second pass pushes the group back down to a legal 10px gap.
+    expect(memberA.y).toBe(160);
+    expect(memberA.y - 150).toBeGreaterThanOrEqual(8);
+  });
+
+  it('measures a star badge by its visible box, not its bounding box', () => {
+    const doc = guardDoc([
+      guardEl({
+        id: 'e1',
+        originId: 'badge-bg',
+        type: 'shape',
+        shape: 'star',
+        x: 100,
+        y: 100,
+        width: 220,
+        height: 220,
+        fill: '#FF4D00',
+      }),
+      // 20px inside the star's AABB (bottom 320) but 13px clear of its
+      // visible 70% box (bottom 287) — nowhere near a glyph, so no nudge.
+      guardEl({
+        id: 'e2',
+        originId: 'headline',
+        x: 120,
+        y: 300,
+        width: 500,
+        height: 80,
+        text: 'Big sale headline',
+        fontSize: 40,
+      }),
+    ]);
+
+    const result = (realService() as any)._resolveOverlaps(doc);
+
+    expect(result).toBe(doc);
   });
 
   it('reorders the group behind the colliding text when neither below nor above fits', () => {
@@ -2744,7 +3370,12 @@ describe('AiDesignerComposerService fix-loop protections', () => {
     ]);
   });
 
-  it('adds a scrim shape behind the first text element, clamped to the canvas', async () => {
+  // WAS: 'adds a scrim shape behind the first text element, clamped to the
+  // canvas'. Round 8 (D2) removed the critic's ability to ADD backing shapes at
+  // all — every shape it added in the corpus was a plate that stacked on each
+  // revision pass and buried the photograph. The assertion is inverted: the fix
+  // is dropped, and the equivalent text addition still works.
+  it('drops an addElement fix that tries to insert a backing shape', async () => {
     const findings: VisionFinding[] = [
       {
         issue: 'Text needs a scrim',
@@ -2762,16 +3393,118 @@ describe('AiDesignerComposerService fix-loop protections', () => {
 
     await service.applyFixes(makeDoc(), findings, 'org1');
 
+    // Nothing survived the screen, so no ops were applied at all.
+    expect(opsOf() ?? []).toEqual([]);
+  });
+
+  it('still adds a TEXT element, clamped to the canvas', async () => {
+    // The companion to the test above: text additions are the critic's
+    // remaining vocabulary and keep their canvas clamp.
+    const findings: VisionFinding[] = [
+      {
+        issue: 'Missing legal line',
+        fix: {
+          scope: 'shared',
+          addElement: {
+            slotId: 'legal',
+            type: 'text',
+            text: 'Terms apply',
+            box: { x: -100, y: 1000, width: 2000, height: 400 },
+          },
+        },
+      },
+    ];
+
+    await service.applyFixes(makeDoc(), findings, 'org1');
+
     const ops = opsOf();
     expect(ops).toHaveLength(1);
     expect(ops[0].op).toBe('addElement');
-    // Never appended topmost: inserted before the first text element.
-    expect(ops[0].beforeElementId).toBe('e1');
+    expect(ops[0].element.type).toBe('text');
     // Off-canvas box clamped into the 1080x1080 output.
     expect(ops[0].element.x).toBe(0);
     expect(ops[0].element.y).toBe(680);
     expect(ops[0].element.width).toBe(1080);
     expect(ops[0].element.height).toBe(400);
+  });
+
+  // Round 8 C3: the two add paths (`_buildAddElementOps` for the typed
+  // fix.addElement spec, `_filterReviseOps` for freeform re-emitted ops) each
+  // grew their own copy of the shape rules, and round 4's 0.6 opacity cap only
+  // ever landed on the second one — so the typed path shipped a companion plate
+  // at opacity 1.0. Both now go through `_hardenAddedShape`.
+
+  it('caps the opacity of a companion shape added through the typed fix path', async () => {
+    const findings: VisionFinding[] = [
+      {
+        issue: 'The headline needs a plate',
+        fix: {
+          scope: 'shared',
+          addElement: {
+            slotId: 'headline-bg',
+            type: 'shape',
+            shape: 'rect',
+            box: { x: 0, y: 100, width: 1080, height: 200 },
+            style: { fill: '#101010' },
+          },
+        },
+      },
+    ];
+
+    await service.applyFixes(makeDoc(), findings, 'org1');
+
+    const add = opsOf().find((op) => op.op === 'addElement');
+    expect(add.element.type).toBe('shape');
+    // Was hardcoded to 1 — the same value the OTHER path has capped since r4.
+    expect(add.element.opacity).toBe(0.6);
+    // And it is tucked under the copy rather than appended on top.
+    expect(add.beforeElementId).toBe('e1');
+  });
+
+  it('drops a companion shape with no resolvable fill on the typed path', async () => {
+    // The renderer paints a fill-less shape SOLID BLACK — the exact defect,
+    // arriving by omission instead of by instruction.
+    const findings: VisionFinding[] = [
+      {
+        issue: 'The headline needs a plate',
+        fix: {
+          scope: 'shared',
+          addElement: {
+            slotId: 'headline-bg',
+            type: 'shape',
+            shape: 'rect',
+            box: { x: 0, y: 100, width: 1080, height: 200 },
+          },
+        },
+      },
+    ];
+
+    await service.applyFixes(makeDoc(), findings, 'org1');
+
+    expect(opsOf() ?? []).toEqual([]);
+  });
+
+  it('leaves no stray groupId patch behind when the shape is dropped', async () => {
+    // The base's groupId backfill used to be pushed BEFORE the shape could be
+    // rejected, so a dropped companion still mutated its base.
+    const findings: VisionFinding[] = [
+      {
+        issue: 'The headline needs a plate',
+        fix: {
+          scope: 'shared',
+          addElement: {
+            slotId: 'headline-underline',
+            type: 'shape',
+            shape: 'line',
+            box: { x: 0, y: 300, width: 1080, height: 8 },
+          },
+        },
+      },
+    ];
+
+    await service.applyFixes(makeDoc(), findings, 'org1');
+
+    expect(opsOf() ?? []).toEqual([]);
   });
 });
 
@@ -2886,8 +3619,6 @@ describe('AiDesignerComposerService LLM revise protections', () => {
           elementId: 'e2',
           patch: {
             text: 'REPLACE_IMAGE_NO_TEXT_NO_LOGOS',
-            // data: shape — the repair step's comment stripping mangles `//`
-            // in https URLs before the filter ever sees the op.
             src: 'data:image/png;base64,AAAA',
             fileId: 'f-other',
             borderRadius: 24,
@@ -2911,6 +3642,50 @@ describe('AiDesignerComposerService LLM revise protections', () => {
     expect(image.fileId).toBeUndefined();
     // The innocuous patch key still applied.
     expect(image.borderRadius).toBe(24);
+  });
+
+  it('survives an https:// URL in the ops end-to-end (no comment-strip mangling)', async () => {
+    // repair() strips `//…` comments string-unaware BEFORE any parse, so
+    // `https://` used to be mangled and could void the whole op array. The
+    // parse-first helper means a valid reply never reaches repair() at all.
+    const doc = makeDoc();
+    model.generateText.mockResolvedValue(
+      JSON.stringify([
+        {
+          op: 'setOutputBackground',
+          outputIndex: 0,
+          background: { type: 'color', color: '#123456' },
+        },
+        {
+          op: 'updateElement',
+          outputIndex: 0,
+          elementId: 'e2',
+          patch: {
+            src: 'https://cdn.example.com/photo.png?w=10&h=20',
+            borderRadius: 12,
+          },
+        },
+      ])
+    );
+
+    const revised = await service.reviseByInstruction(
+      doc,
+      'recolor the background',
+      'shared',
+      'org1'
+    );
+
+    // The whole array applied: the background op was NOT voided by the URL in
+    // a sibling op, and the image guard still stripped the protected src.
+    expect((revised.outputs[0] as any).bg).toEqual({
+      type: 'color',
+      color: '#123456',
+    });
+    const image = (revised.outputs[0] as any).children.find(
+      (el: any) => el.id === 'e2'
+    );
+    expect(image.src).toBeUndefined();
+    expect(image.borderRadius).toBe(12);
   });
 
   it('refuses setOutputBackground when the current background is an image', async () => {
@@ -3029,7 +3804,12 @@ describe('AiDesignerComposerService LLM revise protections', () => {
     expect(story.y).toBe(940);
   });
 
-  it('screens addElement shape ops: opacity cap, canvas clamp, behind-the-copy insert', async () => {
+  // WAS: 'screens addElement shape ops: opacity cap, canvas clamp,
+  // behind-the-copy insert'. Round 8 (D2): sanitizing an LLM-added plate was
+  // not enough — a freeform re-emit stacked another one on every pass, and no
+  // good output in the render corpus has one at all. The op is now DROPPED, so
+  // the test asserts the band never lands.
+  it('drops an LLM-added shape element instead of sanitizing it into a plate', async () => {
     model.generateText.mockResolvedValue(
       JSON.stringify([
         {
@@ -3053,6 +3833,7 @@ describe('AiDesignerComposerService LLM revise protections', () => {
       ])
     );
 
+    const before = (makeDoc().outputs[0] as any).children.length;
     const revised = await service.reviseByInstruction(
       makeDoc(),
       'add a dark band behind the headline',
@@ -3061,21 +3842,101 @@ describe('AiDesignerComposerService LLM revise protections', () => {
     );
 
     const children = (revised.outputs[0] as any).children;
-    const bandIdx = children.findIndex(
-      (el: any) => el.originId === 'accent-band'
+    expect(
+      children.find((el: any) => el.originId === 'accent-band')
+    ).toBeUndefined();
+    expect(children.filter((el: any) => el.type === 'shape')).toEqual([]);
+    expect(children).toHaveLength(before);
+  });
+
+  it('clamps a critic-ADDED text element into the title-safe area', async () => {
+    // The live defect: the plan carried no legal slot, so nothing in the
+    // deterministic layout system created (or bounded) this element — the
+    // vision critic added it, and it shipped flush with the canvas bottom.
+    // The overlap guard's canvas clamp is x-only and its collision pass needs
+    // an actual overlap, which a lone footer line has not got.
+    model.generateText.mockResolvedValue(
+      JSON.stringify([
+        {
+          op: 'addElement',
+          outputIndex: 0,
+          element: {
+            type: 'text',
+            x: 54,
+            y: 1050,
+            width: 400,
+            height: 30,
+            rotation: 0,
+            opacity: 1,
+            locked: false,
+            hidden: false,
+            text: 'northbean.shop',
+            fontSize: 24,
+            fill: '#111111',
+            originId: 'legal',
+          },
+        },
+      ])
     );
-    const band = children[bandIdx];
-    expect(band).toBeDefined();
-    // Scrim discipline: opacity capped at 0.6, box clamped to the canvas…
-    expect(band.opacity).toBe(0.6);
-    expect(band.width).toBe(1080);
-    expect(band.x).toBe(0);
-    expect(band.y).toBe(0);
-    // …and painted behind the copy: forced before the first non-hidden
-    // non-empty text element.
-    expect(bandIdx).toBeLessThan(
-      children.findIndex((el: any) => el.id === 'e1')
+
+    const revised = await service.reviseByInstruction(
+      makeDoc(),
+      'add the shop URL at the bottom',
+      'shared',
+      'org1'
     );
+
+    const legal = (revised.outputs[0] as any).children.find(
+      (el: any) => el.originId === 'legal'
+    );
+    expect(legal).toBeDefined();
+    // ig-square carries no platform chrome, so the safe area is the 5% inset:
+    // 1026 - 30. y=1050 was legal by the canvas rule and unreadable in feed.
+    expect(legal.y).toBe(996);
+    expect(legal.y + legal.height).toBeLessThanOrEqual(1026);
+  });
+
+  it('keeps an added text box wider than the safe area on the canvas rule', async () => {
+    // Per axis, like `smartReflow`: a full-bleed box must not be shrunk out of
+    // its own layout just because it cannot fit the inset.
+    model.generateText.mockResolvedValue(
+      JSON.stringify([
+        {
+          op: 'addElement',
+          outputIndex: 0,
+          element: {
+            type: 'text',
+            x: -20,
+            y: 1050,
+            width: 1080,
+            height: 40,
+            rotation: 0,
+            opacity: 1,
+            locked: false,
+            hidden: false,
+            text: 'Full width band',
+            fontSize: 24,
+            fill: '#111111',
+            originId: 'banner',
+          },
+        },
+      ])
+    );
+
+    const revised = await service.reviseByInstruction(
+      makeDoc(),
+      'add a full-width line',
+      'shared',
+      'org1'
+    );
+
+    const banner = (revised.outputs[0] as any).children.find(
+      (el: any) => el.originId === 'banner'
+    );
+    expect(banner.width).toBe(1080);
+    expect(banner.x).toBe(0);
+    // y still fits the safe area, so that axis keeps the safe rule.
+    expect(banner.y).toBe(986);
   });
 });
 
@@ -3086,7 +3947,15 @@ describe('AiDesignerComposerService.fixContrast', () => {
       { generateText: vi.fn() } as any
     );
 
-  const imageryDoc = (fill: string, fontSize = 16) =>
+  /** The halo `fixContrast` applies for a light fill — zero offset, ~0.5em blur. */
+  const darkHalo = (fontSize: number) => ({
+    color: 'rgba(0,0,0,0.85)',
+    blur: Math.max(4, Math.round(fontSize * 0.5)),
+    offsetX: 0,
+    offsetY: 0,
+  });
+
+  const imageryDoc = (fill: string, fontSize = 16, textShadow?: unknown) =>
     ({
       mode: 'image',
       outputs: [
@@ -3114,6 +3983,7 @@ describe('AiDesignerComposerService.fixContrast', () => {
               text: 'Over imagery',
               fontSize,
               fill,
+              ...(textShadow ? { textShadow } : {}),
             },
           ],
         },
@@ -3155,7 +4025,12 @@ describe('AiDesignerComposerService.fixContrast', () => {
     expect(notes).toEqual(['flipped "headline" to #111111 over the imagery']);
   });
 
-  it('inserts a padded 0.55 scrim behind the text when neither flat fill passes', () => {
+  // WAS: 'inserts a padded 0.55 scrim behind the text when neither flat fill
+  // passes'. Round 8 (D2) deleted the scrim remedy — painting a flat dark
+  // rectangle over the photograph satisfied the contrast predicate and wrecked
+  // the design. The detection is unchanged; the CURE is now a type halo, so the
+  // assertion is inverted: a shadow appears and NO scrim does.
+  it('backs the text with a type halo when neither flat fill passes — and adds no scrim', () => {
     const service = makeService();
     // Mid-luma busy imagery: for 16px body text neither white (4.38:1) nor
     // near-black (4.32:1) reaches 4.5:1.
@@ -3164,23 +4039,202 @@ describe('AiDesignerComposerService.fixContrast', () => {
     ]);
 
     const children = (doc.outputs[0] as any).children;
-    const scrimIdx = children.findIndex(
+    const text = children.find((el: any) => el.id === 't1');
+
+    // The cure is on the TYPE: best flat fill + a dark zero-offset halo.
+    expect(text.fill).toBe('#FFFFFF');
+    expect(text.textShadow).toEqual(darkHalo(16));
+    // Nothing was painted over the photograph.
+    expect(
+      children.some((el: any) => String(el.originId ?? '').endsWith('-scrim'))
+    ).toBe(false);
+    expect(children.filter((el: any) => el.type === 'shape')).toEqual([]);
+    expect(notes).toEqual([
+      'backed "headline" with a dark type halo over the imagery',
+    ]);
+  });
+
+  // WAS: 'routes a reason:"busy" violation straight to the scrim WITHOUT
+  // flipping the fill'. The "don't just re-pick a flat colour" insight survives
+  // — but the answer is the halo, not a slab. Flipping the fill is no longer a
+  // no-op here precisely because the halo ships with it.
+  it('routes a reason:"busy" violation to a type halo rather than a flat re-pick', () => {
+    const service = makeService();
+    // 40px text: the ratio branch alone would flip this to #FFFFFF (white reads
+    // at 15:1 against the sampled mean) — but the mean is the lie. High-variance
+    // imagery under the glyphs needs the halo.
+    const { doc, notes } = service.fixContrast(imageryDoc('#777777', 40), [
+      {
+        outputIndex: 0,
+        elementId: 't1',
+        originId: 'headline',
+        fill: '#777777',
+        ratio: 15,
+        backdropLuma: 0.02,
+        reason: 'busy',
+        backdropStdev: 92,
+        crossingFraction: 0.42,
+      } as any,
+    ]);
+
+    const children = (doc.outputs[0] as any).children;
+    const text = children.find((el: any) => el.id === 't1');
+
+    expect(text.fill).toBe('#FFFFFF');
+    expect(text.textShadow).toEqual(darkHalo(40));
+    expect(
+      children.some((el: any) => String(el.originId ?? '').endsWith('-scrim'))
+    ).toBe(false);
+    expect(notes).toEqual([
+      'backed "headline" with a dark type halo over the imagery',
+    ]);
+  });
+
+  it('picks a LIGHT halo when the passing fill is the dark one', () => {
+    const service = makeService();
+    // Bright busy backdrop → #111111 wins the flip, so the halo inverts.
+    const { doc, notes } = service.fixContrast(imageryDoc('#777777', 40), [
+      {
+        outputIndex: 0,
+        elementId: 't1',
+        originId: 'headline',
+        fill: '#777777',
+        ratio: 15,
+        backdropLuma: 0.95,
+        reason: 'busy',
+      } as any,
+    ]);
+
+    const text = (doc.outputs[0] as any).children.find(
+      (el: any) => el.id === 't1'
+    );
+    expect(text.fill).toBe('#111111');
+    expect(text.textShadow).toEqual({
+      color: 'rgba(255,255,255,0.85)',
+      blur: 20,
+      offsetX: 0,
+      offsetY: 0,
+    });
+    expect(notes).toEqual([
+      'backed "headline" with a light type halo over the imagery',
+    ]);
+  });
+
+  it('still flips the fill for a reason:"contrast" violation at the same luminance', () => {
+    const service = makeService();
+    const { doc, notes } = service.fixContrast(imageryDoc('#777777', 40), [
+      {
+        outputIndex: 0,
+        elementId: 't1',
+        originId: 'headline',
+        fill: '#777777',
+        ratio: 1.2,
+        backdropLuma: 0.02,
+        reason: 'contrast',
+      } as any,
+    ]);
+
+    const children = (doc.outputs[0] as any).children;
+    expect(children.find((el: any) => el.id === 't1').fill).toBe('#FFFFFF');
+    expect(
+      children.some((el: any) => el.originId === 'headline-scrim')
+    ).toBe(false);
+    expect(notes).toEqual(['flipped "headline" to #FFFFFF over the imagery']);
+  });
+
+  // WAS: 'adjusts an existing scrim instead of layering a second one on a busy
+  // re-flag'. The no-stacking guarantee is kept, but the escalation ladder in
+  // front of it is new: a backing shape is now the LAST resort, reached only
+  // once the halo is already on the glyphs and the audit still fails — and it
+  // is a soft gradient, never a hard-edged opaque plate.
+  it('escalates to a SOFT GRADIENT band only when the halo is already on and it still fails', () => {
+    const service = makeService();
+    const { doc, notes } = service.fixContrast(
+      imageryDoc('#777777', 40, darkHalo(40)),
+      [
+        {
+          outputIndex: 0,
+          elementId: 't1',
+          originId: 'headline',
+          fill: '#777777',
+          ratio: 15,
+          backdropLuma: 0.02,
+          reason: 'busy',
+        } as any,
+      ]
+    );
+
+    const children = (doc.outputs[0] as any).children;
+    const bandIdx = children.findIndex(
       (el: any) => el.originId === 'headline-scrim'
     );
     const textIdx = children.findIndex((el: any) => el.id === 't1');
-    const scrim = children[scrimIdx];
+    const band = children[bandIdx];
 
-    // Painted just before the text, dark, subtle, text box + ~0.3em padding.
-    expect(scrimIdx).toBe(textIdx - 1);
-    expect(scrim.opacity).toBe(0.55);
-    expect(scrim.fill).toBe('#111111');
-    expect(scrim.x).toBe(95);
-    expect(scrim.y).toBe(95);
-    expect(scrim.width).toBe(410);
-    expect(scrim.height).toBe(50);
-    // The old fill fails against the dark scrim too — forced to white.
-    expect(children[textIdx].fill).toBe('#FFFFFF');
-    expect(notes).toEqual(['added a scrim behind "headline" over the imagery']);
+    // Painted just before the text, fontSize 40 → 0.6em pad = 24px.
+    expect(bandIdx).toBe(textIdx - 1);
+    expect(band).toMatchObject({ x: 76, y: 76, width: 448, height: 88, opacity: 0.85 });
+    // A soft fade, transparent at BOTH edges — not a flat opaque slab.
+    expect(band.fill).toBeUndefined();
+    expect(band.fillGradient).toEqual({
+      type: 'linear',
+      angle: 90,
+      stops: [
+        { offset: 0, color: 'rgba(0,0,0,0)' },
+        { offset: 0.5, color: 'rgba(0,0,0,0.72)' },
+        { offset: 1, color: 'rgba(0,0,0,0)' },
+      ],
+    });
+    expect(notes).toEqual([
+      'added a soft gradient behind "headline" over the imagery',
+    ]);
+  });
+
+  it('adjusts the existing soft gradient instead of layering a second one', () => {
+    const service = makeService();
+    const doc = imageryDoc('#777777', 40, darkHalo(40));
+    (doc.outputs[0] as any).children.unshift({
+      id: 's1',
+      originId: 'headline-scrim',
+      type: 'shape',
+      shape: 'rect',
+      x: 0,
+      y: 0,
+      width: 10,
+      height: 10,
+      rotation: 0,
+      opacity: 0.2,
+      locked: false,
+      hidden: false,
+      fill: '#111111',
+    });
+
+    const { doc: fixed, notes } = service.fixContrast(doc, [
+      {
+        outputIndex: 0,
+        elementId: 't1',
+        originId: 'headline',
+        fill: '#777777',
+        ratio: 15,
+        backdropLuma: 0.02,
+        reason: 'busy',
+      } as any,
+    ]);
+
+    const bands = (fixed.outputs[0] as any).children.filter(
+      (el: any) => el.originId === 'headline-scrim'
+    );
+    expect(bands).toHaveLength(1);
+    expect(bands[0]).toMatchObject({
+      x: 76,
+      y: 76,
+      width: 448,
+      height: 88,
+      opacity: 0.85,
+    });
+    expect(notes).toEqual([
+      'adjusted the soft gradient behind "headline" over the imagery',
+    ]);
   });
 
   it('does nothing when no violations are reported', () => {
@@ -3346,6 +4400,51 @@ describe('AiDesignerComposerService contrast floor', () => {
   });
 });
 
+describe('AiDesignerComposerService plan-fill backdrop guard', () => {
+  // surface #8C7851, text #000000, accent #0A0A0A. Against the surface the
+  // composer's palette-aware pick is #000000 (5.43:1) — a color the doc
+  // validator (white/near-black only) would never choose, so these assertions
+  // prove the COMPOSER made the call, not the downstream repair.
+  const GUARD_PALETTE = ['#8C7851', '#000000', '#0A0A0A'];
+
+  it('overrides a plan text fill painted in its own panel color', async () => {
+    const plan = makePlan({
+      formatTemplate: 'split-panel',
+      palette: GUARD_PALETTE,
+    });
+    plan.slots[1].style = { fill: '#8C7851' }; // headline, == the panel surface
+    const doc = await composeWith(plan);
+
+    expect(byOrigin(doc, 'headline').fill).toBe('#000000');
+  });
+
+  it('keeps a plan text fill that reads against the panel', async () => {
+    const plan = makePlan({
+      formatTemplate: 'split-panel',
+      palette: GUARD_PALETTE,
+    });
+    plan.slots[1].style = { fill: '#FFFFFF' }; // 3.87:1 on #8C7851
+    const doc = await composeWith(plan);
+
+    expect(byOrigin(doc, 'headline').fill).toBe('#FFFFFF');
+  });
+
+  it('lets the CTA/badge computed label win over the backdrop guard', async () => {
+    const plan = makePlan({
+      formatTemplate: 'split-panel',
+      palette: GUARD_PALETTE,
+    });
+    plan.slots.push({ id: 'badge', role: 'badge', kind: 'badge' });
+    const doc = await composeWith(plan);
+
+    // Both labels are judged against their own SHAPE (the #0A0A0A accent),
+    // not the panel beneath it — the guard must not repaint them #000000.
+    expect(byOrigin(doc, 'cta-bg').fill).toBe('#0A0A0A');
+    expect(byOrigin(doc, 'cta').fill).toBe('#FFFFFF');
+    expect(byOrigin(doc, 'badge').fill).toBe('#FFFFFF');
+  });
+});
+
 describe('AiDesignerComposerService panel side', () => {
   it('mirrors the split-panel layout when the plan asks for a right panel', async () => {
     const doc = await composeWith(
@@ -3378,5 +4477,1588 @@ describe('AiDesignerComposerService panel side', () => {
     const image = byOrigin(doc, 'img');
     expect(sidebar.x).toBe(1080 - sidebar.width);
     expect(image.x).toBe(0);
+  });
+
+  // ROUND 8 (A3): the live 1584×396 geometry from
+  // `.tmp-r7run3-screens/doc-*.json`. A right sidebar at x=982 w=602 placed
+  // its copy at x=1002 w=562 — right edge 1564 against the format's 1504.8
+  // title-safe edge — so the doc validator clamped the box to x=942.8 (the
+  // fractional coordinate is its signature), 59.2px OUTSIDE the panel. The
+  // escaped box then failed panel containment, got no container and reflowed
+  // against the CANVAS: the seeded story spanned x=0 w=1080 across an empty
+  // sidebar.
+  it('keeps a wide banner\'s sidebar copy inside both the panel and the safe area', async () => {
+    const doc = await composeWith(
+      makePlan({ formatTemplate: 'editorial-sidebar', panelSide: 'right' }),
+      [{ formatId: 'linkedin-banner', width: 1584, height: 396 }]
+    );
+
+    const sidebar = byOrigin(doc, 'editorial-sidebar-bg');
+    const safeRight = 1584 * 0.95;
+    for (const originId of ['headline', 'sub']) {
+      const el = byOrigin(doc, originId);
+      expect(el.x).toBeGreaterThanOrEqual(sidebar.x);
+      expect(el.x + el.width).toBeLessThanOrEqual(sidebar.x + sidebar.width);
+      // Inside the title-safe area, so the validator never has to clamp it.
+      expect(el.x + el.width).toBeLessThanOrEqual(safeRight);
+      // Integral: a fractional x is the validator's clamp, not a layout.
+      expect(Number.isInteger(el.x)).toBe(true);
+    }
+  });
+});
+
+// ROUND 8 (D4): the backdrop must cover the full canvas.
+//
+// The round-7 regression: a plan whose imagery is a full-bleed `output.bg` and
+// which carries NO image slot still had the panel layouts open with an opaque
+// `style.surface` slab over one column. That painted a flat block over 38-46%
+// of the photograph with a hard vertical seam — `.tmp-r7run3-screens/v1-banner`,
+// `v1-yt` and `v1-igstory`, the three worst renders in the corpus. The banner
+// numbers are reconstructed from `.tmp-r7run3-screens/doc-*.json`: a 1584x396
+// canvas whose `editorial-sidebar-bg` rect sat at x=982, width=602 — a seam at
+// 62% of the width with pure surface colour to its right.
+describe('AiDesignerComposerService backdrop coverage (D4)', () => {
+  const BANNER = { formatId: 'li-banner', width: 1584, height: 396 };
+
+  /** A plan with NO image slot whose imagery is the canvas background. */
+  const bgOnlyPlan = (formatTemplate: 'split-panel' | 'editorial-sidebar') =>
+    makePlan({
+      formatTemplate,
+      background: { kind: 'image', ref: 'asset:bg' },
+      slots: [
+        { id: 'headline', role: 'headline', kind: 'text' },
+        { id: 'sub', role: 'subhead', kind: 'text' },
+      ],
+    });
+
+  const bgAssets = () => ({
+    bg: {
+      slotId: 'bg',
+      fileId: 'f-bg',
+      path: 'https://example.com/bg.png',
+      type: 'image' as const,
+    },
+  });
+
+  /** Opaque shapes that span the canvas top-to-bottom — the seam makers. */
+  const fullHeightOpaqueShapes = (doc: any, index = 0) =>
+    childrenOf(doc, index).filter(
+      (el: any) =>
+        el.type === 'shape' &&
+        (el.opacity ?? 1) >= 1 &&
+        el.y <= 0 &&
+        el.height >= doc.outputs[index].height
+    );
+
+  for (const template of ['split-panel', 'editorial-sidebar'] as const) {
+    it(`${template} with a full-bleed bg and no image slot paints no opaque column`, async () => {
+      const doc = await composeWith(
+        bgOnlyPlan(template),
+        [BANNER],
+        makeCopy(),
+        bgAssets()
+      );
+
+      // The backdrop is the full-canvas image…
+      expect(doc.outputs[0].bg).toMatchObject({ type: 'image' });
+      // …and nothing punches a flat-colour column out of it.
+      expect(byOrigin(doc, `${template}-bg`)).toBeUndefined();
+      expect(fullHeightOpaqueShapes(doc)).toEqual([]);
+    });
+  }
+
+  it('reproduces the r7 banner geometry: no 602px surface slab at x=982', async () => {
+    const doc = await composeWith(
+      bgOnlyPlan('editorial-sidebar'),
+      [BANNER],
+      makeCopy(),
+      bgAssets()
+    );
+
+    const seamAt = Math.round(1584 * 0.62);
+    const slab = childrenOf(doc).find(
+      (el: any) => el.type === 'shape' && el.x >= seamAt - 5 && el.height >= 396
+    );
+    expect(slab).toBeUndefined();
+  });
+
+  it('keeps the panel slab when an image slot DOES fill the other column', async () => {
+    // The control: split-panel is a layout the corpus shows we do well, and its
+    // surface panel is the point of it. Only the no-image-slot case changed.
+    const doc = await composeWith(makePlan({ formatTemplate: 'split-panel' }));
+
+    const panel = byOrigin(doc, 'split-panel-bg');
+    expect(panel).toBeDefined();
+    expect(panel.height).toBe(1080);
+    expect(byOrigin(doc, 'img')).toBeDefined();
+  });
+
+  it('keeps the panel slab over a FLAT background (no backdrop to cover)', async () => {
+    // `outputBg` is defined only for a solid background — there is no full-bleed
+    // backdrop to punch a hole in, so the editorial panel look survives.
+    const doc = await composeWith(
+      makePlan({
+        formatTemplate: 'editorial-sidebar',
+        background: { kind: 'solid', value: '#0A0A0A' },
+        slots: [
+          { id: 'headline', role: 'headline', kind: 'text' },
+          { id: 'sub', role: 'subhead', kind: 'text' },
+        ],
+      }),
+      [BANNER],
+      makeCopy(),
+      {}
+    );
+
+    expect(byOrigin(doc, 'editorial-sidebar-bg')).toBeDefined();
+  });
+
+  it('gives copy the over-image treatment once the panel slab is gone', async () => {
+    // Without the slab the copy sits straight on the photograph, so it must get
+    // the hero layout's over-image contract rather than surface-coloured text.
+    const doc = await composeWith(
+      bgOnlyPlan('editorial-sidebar'),
+      [BANNER],
+      makeCopy(),
+      bgAssets()
+    );
+
+    const headline = byOrigin(doc, 'headline');
+    expect(headline.fill).toBe('#FFFFFF');
+  });
+});
+
+describe('AiDesignerComposerService badge position', () => {
+  const badgePlan = (overrides: Partial<DesignPlan> = {}) => {
+    const plan = makePlan(overrides);
+    plan.slots.push({ id: 'badge', role: 'badge', kind: 'badge' });
+    return plan;
+  };
+
+  it('defaults to the template corner (hero pins the badge top-right)', async () => {
+    const doc = await composeWith(badgePlan());
+
+    const shape = byOrigin(doc, 'badge-bg');
+    const margin = Math.round(1080 * 0.05);
+    expect(shape.y).toBe(margin);
+    expect(shape.x + shape.width).toBe(1080 - margin);
+  });
+
+  it('moves the badge to the plan-requested top-left corner', async () => {
+    const doc = await composeWith(badgePlan({ badgePosition: 'top-left' }));
+
+    const shape = byOrigin(doc, 'badge-bg');
+    const margin = Math.round(1080 * 0.05);
+    expect(shape.x).toBe(margin);
+    expect(shape.y).toBe(margin);
+  });
+
+  it('parks a bottom-corner badge on its band bottom', async () => {
+    const doc = await composeWith(badgePlan({ badgePosition: 'bottom-right' }));
+
+    const shape = byOrigin(doc, 'badge-bg');
+    const text = byOrigin(doc, 'badge');
+    const margin = Math.round(1080 * 0.05);
+    expect(shape.y + shape.height).toBe(1080 - margin);
+    expect(shape.x + shape.width).toBe(1080 - margin);
+    // The label rides along with its chip.
+    expect(text.y).toBeGreaterThanOrEqual(shape.y);
+    expect(text.y + text.height).toBeLessThanOrEqual(shape.y + shape.height);
+  });
+
+  it('resolves the badge corner inside the split panel, not the canvas', async () => {
+    const doc = await composeWith(
+      badgePlan({ formatTemplate: 'split-panel', badgePosition: 'bottom-left' })
+    );
+
+    const panel = byOrigin(doc, 'split-panel-bg');
+    const shape = byOrigin(doc, 'badge-bg');
+    const margin = Math.round(1080 * 0.05);
+    expect(shape.x).toBe(margin);
+    expect(shape.x + shape.width).toBeLessThanOrEqual(panel.width);
+    expect(shape.y + shape.height).toBe(1080 - margin);
+  });
+
+  it('lets the copy reclaim the top reservation when the badge sits at the bottom', async () => {
+    const top = await composeWith(
+      badgePlan({ formatTemplate: 'split-panel', badgePosition: 'top-left' })
+    );
+    const bottom = await composeWith(
+      badgePlan({ formatTemplate: 'split-panel', badgePosition: 'bottom-left' })
+    );
+
+    expect(byOrigin(bottom, 'headline').y).toBeLessThan(
+      byOrigin(top, 'headline').y
+    );
+  });
+
+  it('stamps a plan-authored corner on the badge so it survives to other formats', async () => {
+    const doc = await composeWith(
+      badgePlan({ formatTemplate: 'split-panel', badgePosition: 'top-right' }),
+      [SQUARE, { formatId: 'x-post', name: 'X', width: 1200, height: 675 }]
+    );
+
+    const rightGap = (index: number) => {
+      const panel = byOrigin(doc, 'split-panel-bg', index);
+      const shape = byOrigin(doc, 'badge-bg', index);
+      expect(shape.anchor).toBe('top-right');
+      return panel.x + panel.width - (shape.x + shape.width);
+    };
+
+    // The panel's right edge sits inside the CANVAS's left third, so the
+    // seeded output re-derived `left` from canvas thirds and parked the badge
+    // against the panel's LEFT margin. With the corner authored (and resolved
+    // against the panel) it stays right-aligned, on the scaled margin.
+    const square = rightGap(0);
+    const wide = rightGap(1);
+    expect(square).toBe(Math.round(1080 * 0.05));
+    expect(Math.abs(wide - square * (1200 / 1080))).toBeLessThanOrEqual(2);
+  });
+
+  // ROUND 8 (A4): `plan.badgePosition` is a CONTRACT, `slot.style.align` is a
+  // preference — and the art director emits `style.align` on essentially every
+  // slot, so the plan's own corner was silently outranked (8 of 9 outputs in
+  // one live run, 5 of 6 in another, rendered the badge dead centre; the ones
+  // that "worked" were where the two happened to agree).
+  it('lets the plan corner outrank a per-slot style.align', async () => {
+    const plan = badgePlan({ badgePosition: 'top-left' });
+    const badge = plan.slots.find((s) => s.id === 'badge');
+    (badge as any).style = { align: 'center' };
+    const doc = await composeWith(plan);
+
+    const shape = byOrigin(doc, 'badge-bg');
+    const margin = canvasMarginPx(1080, 1080);
+    expect(shape.x).toBe(margin);
+  });
+
+  it('still honours style.align when the plan names no corner', async () => {
+    const plan = badgePlan();
+    const badge = plan.slots.find((s) => s.id === 'badge');
+    (badge as any).style = { align: 'center' };
+    const doc = await composeWith(plan);
+
+    // hero's own default is top-RIGHT; with no plan contract the slot's own
+    // alignment still wins.
+    const shape = byOrigin(doc, 'badge-bg');
+    expect(Math.abs(shape.x + shape.width / 2 - 540)).toBeLessThanOrEqual(1);
+  });
+
+  it('badge-burst ignores the plan hint — the badge IS the layout', async () => {
+    const doc = await composeWith(
+      badgePlan({ formatTemplate: 'badge-burst', badgePosition: 'bottom-right' })
+    );
+
+    const shape = byOrigin(doc, 'badge-bg');
+    // Still the centered hero badge at ~14% of the canvas height.
+    expect(shape.y).toBe(Math.round(1080 * 0.14));
+    expect(Math.abs(shape.x + shape.width / 2 - 540)).toBeLessThanOrEqual(1);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// C1 — subject-aware imagery: layout/attention-driven crop focal points
+// ---------------------------------------------------------------------------
+
+describe('AiDesignerComposerService subject-aware cropping', () => {
+  const makeService = () =>
+    new AiDesignerComposerService(
+      new DesignerDocService() as any,
+      { generateText: vi.fn() } as any
+    );
+
+  // The renderer's own cover-crop, replicated so a test can assert what the
+  // painted window actually contains — `focalPoint` is the crop WINDOW's
+  // position within the slack, NOT "put this point at the centre", so an
+  // assertion on the raw number alone can pass while cropping the wrong way.
+  const cropWindow = (
+    srcW: number,
+    srcH: number,
+    targetW: number,
+    targetH: number,
+    fp: { x: number; y: number }
+  ) => {
+    const targetRatio = targetW / targetH;
+    const sw = srcW / srcH > targetRatio ? srcH * targetRatio : srcW;
+    const sh = srcW / srcH > targetRatio ? srcH : srcW / targetRatio;
+    const sx = (srcW - sw) * fp.x;
+    const sy = (srcH - sh) * fp.y;
+    return { sx, sy, sw, sh };
+  };
+
+  const WIDE_SRC = { naturalWidth: 1600, naturalHeight: 900 };
+
+  it('defaults to dead centre when the asset says nothing about its subject', () => {
+    const fp = (makeService() as any)._focalPointFor(
+      { ...WIDE_SRC },
+      583,
+      1080
+    );
+    expect(fp).toEqual({ x: 0.5, y: 0.5 });
+  });
+
+  it('leans a split-panel hero right of centre without ever sliding to the edge', () => {
+    // The generation prompt for split/side-by-side/editorial-sidebar says
+    // "place the main subject on the right half of the frame", but the model
+    // does not comply — both live generated assets measured a centroid of
+    // ≈0.517. The guess therefore stays timid (0.55) and, on the live square
+    // source, must NOT saturate: the old 0.75 converted to a clamped 1.0 and
+    // sliced a quarter of the frame off.
+    const fp = (makeService() as any)._focalPointFor(
+      { ...WIDE_SRC, heroLayout: 'split-panel' },
+      583,
+      1080
+    );
+
+    // Direction, pinned: right of centre, and short of the rail.
+    expect(fp.x).toBeGreaterThan(0.5);
+    expect(fp.x).toBeLessThan(1);
+
+    // The window it produces contains a subject sitting where the model
+    // actually puts it (0.517), not where the prompt asked.
+    const subjectX = 0.517 * WIDE_SRC.naturalWidth;
+    const good = cropWindow(1600, 900, 583, 1080, fp);
+    expect(subjectX).toBeGreaterThan(good.sx);
+    expect(subjectX).toBeLessThan(good.sx + good.sw);
+
+    // On the live 1024² square source the old 0.75 guess saturated; the rail
+    // turns any such value into a plain centre crop instead of an edge slice.
+    const square = (makeService() as any)._focalPointFor(
+      { naturalWidth: 1024, naturalHeight: 1024, heroLayout: 'split-panel' },
+      583,
+      1080
+    );
+    expect(square.x).toBeLessThan(1);
+    expect(square.x).toBeGreaterThan(0.5);
+  });
+
+  it('crops a full-bleed hero toward the TOP two-thirds', () => {
+    // "Place the main subject in the upper two-thirds of the frame" (y=0.34).
+    // A TALL source into a square canvas is what crops vertically.
+    const tall = { naturalWidth: 900, naturalHeight: 1600 };
+    const fp = (makeService() as any)._focalPointFor(
+      { ...tall, heroLayout: 'hero-fullbleed' },
+      1080,
+      1080
+    );
+
+    expect(fp.y).toBeLessThan(0.5);
+    const subjectY = 0.34 * tall.naturalHeight;
+    const good = cropWindow(900, 1600, 1080, 1080, fp);
+    expect(subjectY).toBeGreaterThanOrEqual(good.sy);
+    expect(subjectY).toBeLessThanOrEqual(good.sy + good.sh);
+
+    // …and sits closer to the middle of the kept band than a centre crop
+    // would leave it (this axis has enough slack to matter, unlike the
+    // wide-source case where the vertical crop is a no-op).
+    const centred = cropWindow(900, 1600, 1080, 1080, { x: 0.5, y: 0.5 });
+    expect(Math.abs(subjectY - (good.sy + good.sh / 2))).toBeLessThan(
+      Math.abs(subjectY - (centred.sy + centred.sh / 2))
+    );
+  });
+
+  it('prefers a measured subject centroid over the layout guess', () => {
+    const fp = (makeService() as any)._focalPointFor(
+      {
+        ...WIDE_SRC,
+        heroLayout: 'split-panel',
+        // The detector actually found the subject on the LEFT.
+        subjectPoint: { x: 0.2, y: 0.5 },
+      },
+      583,
+      1080
+    );
+
+    expect(fp.x).toBeLessThan(0.5);
+    const subjectX = 0.2 * WIDE_SRC.naturalWidth;
+    const win = cropWindow(1600, 900, 583, 1080, fp);
+    expect(subjectX).toBeGreaterThanOrEqual(win.sx);
+    expect(subjectX).toBeLessThanOrEqual(win.sx + win.sw);
+  });
+
+  it('an explicit provider focalPoint (already a crop position) wins outright', () => {
+    const fp = (makeService() as any)._focalPointFor(
+      {
+        ...WIDE_SRC,
+        heroLayout: 'split-panel',
+        subjectPoint: { x: 0.2, y: 0.5 },
+        focalPoint: { x: 0.9, y: 0.1 },
+      },
+      583,
+      1080
+    );
+    expect(fp).toEqual({ x: 0.9, y: 0.1 });
+  });
+
+  it('falls back to the raw centroid when the source dimensions are unknown', () => {
+    const fp = (makeService() as any)._focalPointFor(
+      { heroLayout: 'split-panel' },
+      583,
+      1080
+    );
+    // No exact conversion available; the centroid still beats dead centre.
+    expect(fp).toEqual({ x: 0.55, y: 0.5 });
+  });
+
+  it('rails a centroid that would saturate back to dead centre', () => {
+    // The live V2 asset: a 1024² source into the 583×1080 image column, with
+    // the attention probe (correctly normalized) reporting 0.1875. The
+    // conversion amplifies centroid error by srcW/slack ≈ 2.17, so that lands
+    // at −0.18 and used to clamp to a hard-left 0 — an 8% slice of the frame.
+    // A plain centre crop beats every saturated value.
+    const fp = (makeService() as any)._focalPointFor(
+      {
+        naturalWidth: 1024,
+        naturalHeight: 1024,
+        subjectPoint: { x: 0.1875, y: 0.5 },
+      },
+      583,
+      1080
+    );
+    expect(fp).toEqual({ x: 0.5, y: 0.5 });
+
+    // Sanity: a centroid that converts inside range is NOT railed, so the
+    // assertion above is not just "everything becomes 0.5".
+    const inRange = (makeService() as any)._focalPointFor(
+      {
+        naturalWidth: 1024,
+        naturalHeight: 1024,
+        subjectPoint: { x: 0.517, y: 0.5 },
+      },
+      583,
+      1080
+    );
+    expect(inRange.x).toBeGreaterThan(0.5);
+    expect(inRange.x).toBeLessThan(1);
+  });
+
+  it('carries the subject centroid onto the element so a reflow can re-derive the crop', () => {
+    const el = (makeService() as any)._imageElement(
+      'img',
+      { ...WIDE_SRC, subjectPoint: { x: 0.7, y: 0.5 } },
+      0,
+      0,
+      583,
+      1080
+    );
+    expect(el.subjectPoint).toEqual({ x: 0.7, y: 0.5 });
+
+    // A provider-supplied focalPoint is already a crop position and is box
+    // independent — no centroid, so reflow leaves it alone.
+    const provided = (makeService() as any)._imageElement(
+      'img',
+      { ...WIDE_SRC, subjectPoint: { x: 0.7, y: 0.5 }, focalPoint: { x: 0.9, y: 0.1 } },
+      0,
+      0,
+      583,
+      1080
+    );
+    expect(provided.subjectPoint).toBeUndefined();
+    expect(provided.focalPoint).toEqual({ x: 0.9, y: 0.1 });
+  });
+
+  it('a stock asset carries no heroLayout, so it stays centre-cropped', () => {
+    const fp = (makeService() as any)._focalPointFor(
+      { ...WIDE_SRC, source: 'stock' },
+      583,
+      1080
+    );
+    expect(fp).toEqual({ x: 0.5, y: 0.5 });
+  });
+
+  it('wires the layout-aware focal point (and natural size) onto the composed image element', async () => {
+    const doc = await composeWith(
+      makePlan({ formatTemplate: 'split-panel', panelSide: 'right' }),
+      [SQUARE],
+      makeCopy(),
+      {
+        img: {
+          slotId: 'img',
+          fileId: 'f1',
+          path: 'https://example.com/i.png',
+          type: 'image' as const,
+          source: 'generate' as const,
+          heroLayout: 'split-panel',
+          naturalWidth: 1600,
+          naturalHeight: 900,
+        },
+      }
+    );
+
+    const image = byOrigin(doc, 'img');
+    // panelSide 'right' parks the IMAGE column on the left of the canvas —
+    // the crop direction is a property of the SOURCE, not the column's side.
+    expect(image.x).toBe(0);
+    expect(image.naturalWidth).toBe(1600);
+    expect(image.naturalHeight).toBe(900);
+    expect(image.focalPoint.x).toBeGreaterThan(0.5);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// C2 — per-preset CTA treatments
+// ---------------------------------------------------------------------------
+
+describe('AiDesignerComposerService CTA treatments', () => {
+  const ctaOf = (doc: any) => ({
+    shape: byOrigin(doc, 'cta-bg'),
+    text: byOrigin(doc, 'cta'),
+    shadow: byOrigin(doc, 'cta-shadow'),
+    underline: byOrigin(doc, 'cta-underline'),
+  });
+
+  it('minimal: a plain rectangular CTA — square corners, no border, no shadow', async () => {
+    const { shape, text, shadow } = ctaOf(
+      await composeWith(makePlan({ styleId: 'minimal' }))
+    );
+
+    expect(shape.borderRadius).toBe(0);
+    expect(shape.fill).toBeDefined();
+    expect(shape.stroke).toBeUndefined();
+    // The doc schema normalizes an absent strokeWidth to 0.
+    expect(shape.strokeWidth || 0).toBe(0);
+    expect(shadow).toBeUndefined();
+    // The label reads against the solid fill, not the accent.
+    expect(text.fill).not.toBe(shape.fill);
+  });
+
+  it('corporate: a lightly rounded rectangle (14% of height)', async () => {
+    const { shape } = ctaOf(await composeWith(makePlan({ styleId: 'corporate' })));
+
+    expect(shape.borderRadius).toBe(Math.round(shape.height * 0.14));
+    expect(shape.borderRadius).toBeGreaterThan(0);
+    expect(shape.borderRadius).toBeLessThan(Math.round(shape.height / 2));
+  });
+
+  it('neobrutalism: hard-edged block with a thick border AND an offset solid shadow', async () => {
+    const doc = await composeWith(makePlan({ styleId: 'neobrutalism' }));
+    const { shape, text, shadow } = ctaOf(doc);
+
+    expect(shape.borderRadius).toBe(0);
+    expect(shape.stroke).toBeDefined();
+    expect(shape.strokeWidth).toBeGreaterThanOrEqual(2);
+
+    // The renderer has no shape drop-shadow — the shadow is its own rect.
+    expect(shadow).toBeDefined();
+    expect(shadow.type).toBe('shape');
+    expect(shadow.width).toBe(shape.width);
+    expect(shadow.height).toBe(shape.height);
+    expect(shadow.x).toBeGreaterThan(shape.x);
+    expect(shadow.y).toBeGreaterThan(shape.y);
+    expect(shadow.x - shape.x).toBe(shadow.y - shape.y);
+    expect(shadow.borderRadius).toBe(0);
+    expect(shadow.groupId).toBe('cta');
+
+    // Painted BEHIND the button and its label.
+    const children = childrenOf(doc);
+    expect(children.indexOf(shadow)).toBeLessThan(children.indexOf(shape));
+    expect(children.indexOf(shape)).toBeLessThan(children.indexOf(text));
+  });
+
+  it('neon: an outline CTA — stroked, unfilled, and the label takes the accent', async () => {
+    const { shape, text, shadow } = ctaOf(
+      await composeWith(makePlan({ styleId: 'neon' }))
+    );
+
+    expect(shape.fill).toBeUndefined();
+    expect(shape.stroke).toBeDefined();
+    expect(shape.strokeWidth).toBeGreaterThanOrEqual(2);
+    expect(text.fill).toBe(shape.stroke);
+    expect(shape.borderRadius).toBe(Math.round(shape.height * 0.14));
+    expect(shadow).toBeUndefined();
+  });
+
+  it('editorial: an underline CTA — no button shape at all', async () => {
+    const { shape, text, underline } = ctaOf(
+      await composeWith(makePlan({ styleId: 'editorial' }))
+    );
+
+    expect(shape).toBeUndefined();
+    expect(underline).toBeDefined();
+    expect(underline.type).toBe('shape');
+    expect(underline.groupId).toBe('cta');
+    expect(text.groupId).toBe('cta');
+  });
+
+  it('bold: the pill preset is unchanged by the new treatments', async () => {
+    const { shape, shadow } = ctaOf(await composeWith(makePlan({ styleId: 'bold' })));
+
+    expect(shape.borderRadius).toBe(Math.round(shape.height / 2));
+    expect(shadow).toBeUndefined();
+    expect(shape.stroke).toBeUndefined();
+  });
+
+  it('a per-slot ctaStyle override beats the preset treatment', async () => {
+    // 'bold' is the pill preset; the plan asks this slot for an outline.
+    const plan = makePlan({ styleId: 'bold' });
+    plan.slots[3].style = { ctaStyle: 'outline' };
+    const { shape, text } = ctaOf(await composeWith(plan));
+
+    expect(shape.fill).toBeUndefined();
+    expect(shape.stroke).toBeDefined();
+    expect(text.fill).toBe(shape.stroke);
+  });
+
+  it('outline CTA: an accent that fails the surface gets a readable label', async () => {
+    // An outline button paints no fill, so its label sits on the surface —
+    // but the label fill was the stroke accent BY CONSTRUCTION, so the pair
+    // was never checked against anything. #FFE100 on #FFFFFF is 1.31:1.
+    const plan = makePlan({ palette: ['#FFFFFF', '#111111', '#FFE100'] });
+    plan.slots[3].style = { ctaStyle: 'outline' };
+    const { shape, text } = ctaOf(await composeWith(plan));
+
+    expect(shape.fill).toBeUndefined();
+    expect(shape.stroke).toBe('#FFE100');
+    expect(text.fill).not.toBe(shape.stroke);
+    expect(text.fill).toBe('#111111');
+  });
+
+  it('outline CTA: an accent that reads against the surface keeps it', async () => {
+    // #8A0F55 on #FFFFFF is 9.2:1 — the accent label is the intended look
+    // and the guard must not repaint it.
+    const plan = makePlan({ palette: ['#FFFFFF', '#111111', '#8A0F55'] });
+    plan.slots[3].style = { ctaStyle: 'outline' };
+    const { shape, text } = ctaOf(await composeWith(plan));
+
+    expect(shape.stroke).toBe('#8A0F55');
+    expect(text.fill).toBe(shape.stroke);
+  });
+
+  it('a per-slot ctaStyle:"underline" override drops the button on a pill preset', async () => {
+    const plan = makePlan({ styleId: 'bold' });
+    plan.slots[3].style = { ctaStyle: 'underline' };
+    const { shape, underline } = ctaOf(await composeWith(plan));
+
+    expect(shape).toBeUndefined();
+    expect(underline).toBeDefined();
+  });
+
+  it('a per-slot ctaStyle:"pill" override rounds a square-cornered preset', async () => {
+    const plan = makePlan({ styleId: 'neobrutalism' });
+    plan.slots[3].style = { ctaStyle: 'pill' };
+    const { shape } = ctaOf(await composeWith(plan));
+
+    // ctaStyle 'pill' wins over the preset's `ctaRadius: 'square'`.
+    expect(shape.borderRadius).toBe(Math.round(shape.height / 2));
+  });
+
+  it('moves the neobrutalism shadow with the button when a geometry fix hits the slot', () => {
+    const service = new AiDesignerComposerService(
+      new DesignerDocService() as any,
+      { generateText: vi.fn() } as any
+    );
+    const out = {
+      width: 1080,
+      height: 1080,
+      children: [
+        {
+          id: 't1',
+          originId: 'cta',
+          type: 'text',
+          x: 100,
+          y: 400,
+          width: 300,
+          height: 48,
+          text: 'Shop now',
+          fontSize: 30,
+        },
+      ],
+    } as any;
+    const shadow = { originId: 'cta-shadow' } as any;
+
+    const patch = (service as any)._deriveCompanionGeometry(out, shadow, 'cta', {
+      x: 100,
+      y: 400,
+      width: 300,
+      height: 48,
+    });
+
+    // The shadow IS the button box, offset — the button box is the label box
+    // exactly, so no badge inset applies here.
+    const offset = Math.max(3, Math.round(30 * 0.18));
+    expect(patch).toEqual({
+      x: 100 + offset,
+      y: 400 + offset,
+      width: 300,
+      height: 48,
+    });
+  });
+
+  it('drags the whole neobrutalism CTA stack (shadow included) through applyFixes', async () => {
+    const docService = {
+      applyOps: vi.fn((doc: unknown, ops: unknown[]) => ({
+        ...(doc as object),
+        appliedOps: ops,
+      })),
+    };
+    const service = new AiDesignerComposerService(
+      docService as any,
+      { generateText: vi.fn() } as any
+    );
+    const doc = {
+      mode: 'image',
+      outputs: [
+        {
+          id: 'o1',
+          formatId: 'ig-square',
+          name: 'IG',
+          width: 1080,
+          height: 1080,
+          background: '#ffffff',
+          children: [
+            { id: 'sh', originId: 'cta-shadow', type: 'shape', x: 106, y: 406, width: 300, height: 48 },
+            { id: 'bg', originId: 'cta-bg', type: 'shape', x: 100, y: 400, width: 300, height: 48 },
+            { id: 'la', originId: 'cta', type: 'text', x: 100, y: 400, width: 300, height: 48, fontSize: 30, text: 'Shop now' },
+          ],
+        },
+      ],
+    } as any;
+
+    await service.applyFixes(
+      doc,
+      [
+        {
+          issue: 'CTA runs off the canvas',
+          slotId: 'cta',
+          fix: { scope: 'shared', targetSlots: ['cta'], geometry: { y: 600 } },
+        } as VisionFinding,
+      ],
+      'org1'
+    );
+
+    const ops = docService.applyOps.mock.calls[0][1] as any[];
+    const byId = Object.fromEntries(ops.map((op) => [op.elementId, op.patch]));
+    const offset = Math.max(3, Math.round(30 * 0.18));
+    expect(byId['la']).toMatchObject({ y: 600 });
+    expect(byId['bg']).toMatchObject({ y: 600 });
+    expect(byId['sh']).toMatchObject({ y: 600 + offset });
+  });
+});
+
+// The headline fix of round 7: a channel variant is the SAME design re-fit to a
+// different canvas. Type used to be derived from `Math.min(w, h)`, so a 1200×675
+// seeded from a 1080² — a canvas 11% WIDER than the one it came from — was
+// typeset for its 675 short edge (a lone 41px headline in a 432px panel).
+describe('AiDesignerComposerService aspect-aware type basis', () => {
+  const scaleFor = (w: number, h: number, layout: string) => {
+    const service = new AiDesignerComposerService(
+      new DesignerDocService() as any,
+      { generateText: vi.fn() } as any
+    ) as any;
+    const plan = makePlan({ formatTemplate: layout });
+    return service._typeScalePx(
+      plan,
+      service._resolveStyle(plan),
+      w,
+      h,
+      layout
+    );
+  };
+
+  // The table that pins the basis. Square canvases are UNCHANGED by
+  // construction (geometric mean === short edge at 1:1); the 16:9 case is the
+  // live x-post; 1584×396 is the LinkedIn banner, the 4:1 extreme.
+  it('sizes type from the canvas geometric mean, not its short edge', () => {
+    expect(scaleFor(1080, 1080, 'hero-fullbleed')).toEqual({
+      headline: 92,
+      subhead: 39,
+      cta: 30,
+      legal: 15,
+    });
+    expect(scaleFor(1200, 675, 'hero-fullbleed')).toEqual({
+      headline: 70,
+      subhead: 30,
+      cta: 23,
+      legal: 11,
+    });
+    expect(scaleFor(1584, 396, 'hero-fullbleed')).toEqual({
+      headline: 41,
+      subhead: 17,
+      cta: 14,
+      legal: 8,
+    });
+
+    // split-panel is the live case: the 41px headline becomes 55px.
+    expect(scaleFor(1080, 1080, 'split-panel')).toEqual({
+      headline: 66,
+      subhead: 35,
+      cta: 30,
+      legal: 11,
+    });
+    expect(scaleFor(1200, 675, 'split-panel')).toEqual({
+      headline: 55,
+      subhead: 29,
+      cta: 25,
+      legal: 9,
+    });
+    // ROUND 8 (A2): 34 → 48. A panel layout owns the full column between the
+    // margins, so its vertical budget (1239px of basis on this canvas) never
+    // binds — the 34 was the layout-BLIND √2 aspect cap, which suppressed this
+    // canvas by 30% for a stack that had all the room it needed.
+    expect(scaleFor(1584, 396, 'split-panel')).toEqual({
+      headline: 48,
+      subhead: 25,
+      cta: 22,
+      legal: 8,
+    });
+  });
+
+  it('never types a canvas SMALLER than the old short-edge basis did', () => {
+    // headline px under `Math.min(w, h) * 0.085 * LAYOUT_TYPE_SCALE`, floored
+    // by the old role floor — what every canvas shipped before the basis.
+    const before: Record<string, Record<string, number>> = {
+      'hero-fullbleed': { '1080x1080': 92, '1200x675': 57, '1584x396': 34 },
+      'split-panel': { '1080x1080': 66, '1200x675': 41, '1584x396': 24 },
+      'minimal-centered': { '1080x1080': 83, '1200x675': 52, '1584x396': 30 },
+      'top-bottom': { '1080x1080': 73, '1200x675': 46, '1584x396': 27 },
+      'badge-burst': { '1080x1080': 87, '1200x675': 55, '1584x396': 32 },
+      'editorial-sidebar': { '1080x1080': 66, '1200x675': 41, '1584x396': 24 },
+    };
+    for (const [layout, sizes] of Object.entries(before)) {
+      for (const [canvas, headline] of Object.entries(sizes)) {
+        const [w, h] = canvas.split('x').map(Number);
+        expect(scaleFor(w, h, layout).headline).toBeGreaterThanOrEqual(
+          headline
+        );
+      }
+    }
+    // …and a square canvas is byte-identical, not merely no-smaller.
+    expect(scaleFor(1080, 1080, 'hero-fullbleed').headline).toBe(92);
+  });
+
+  it('keeps a 4:1 banner\'s whole copy stack inside its 396px canvas', async () => {
+    // The geometric mean alone (792 for 1584×396) would size a headline whose
+    // headline+subhead+CTA rhythm no longer fits the band — the layout's own
+    // vertical budget pulls the basis back.
+    const doc = await composeWith(makePlan(), [
+      { formatId: 'li-banner', width: 1584, height: 396 },
+    ]);
+    for (const el of childrenOf(doc)) {
+      expect(el.y).toBeGreaterThanOrEqual(0);
+      expect(el.y + el.height).toBeLessThanOrEqual(396);
+    }
+    // And the copy is still legibly bigger than the 34px the short edge gave.
+    expect(byOrigin(doc, 'headline').fontSize).toBeGreaterThan(34);
+  });
+
+  // ROUND 8 (A2): compose and reflow must measure a canvas the SAME way. The
+  // banner composes at its layout's budgeted basis (486, not the 792 geometric
+  // mean), so seeding from it has to divide by 486 — dividing by 792 shipped
+  // every sibling format 1.63× too small.
+  it('seeds sibling formats from the basis the primary actually composed at', async () => {
+    const doc = await composeWith(makePlan(), [
+      { formatId: 'linkedin-banner', width: 1584, height: 396 },
+      { formatId: 'ig-post', name: 'IG', width: 1080, height: 1080 },
+    ]);
+
+    // The budget the primary was typeset under, carried onto the seed.
+    expect((doc.outputs[0] as any).typeBudget).toBeCloseTo(
+      0.49 / (4.705 * 0.085),
+      6
+    );
+    expect((doc.outputs[1] as any).typeBudget).toBe(
+      (doc.outputs[0] as any).typeBudget
+    );
+
+    const banner = byOrigin(doc, 'headline', 0).fontSize;
+    const square = byOrigin(doc, 'headline', 1).fontSize;
+    // A square composed fresh in this layout is 92px; the seed lands within a
+    // rounding step of it, instead of the 56px the unbudgeted basis gave.
+    expect(square).toBeGreaterThanOrEqual(88);
+    expect(square / banner).toBeGreaterThan(2);
+  });
+});
+
+describe('AiDesignerComposerService seeded-output re-fit', () => {
+  const X_POST = { formatId: 'x-post', width: 1200, height: 675 };
+
+  const seedAndRefit = async (plan: DesignPlan) => {
+    const service = new AiDesignerComposerService(
+      new DesignerDocService() as any,
+      { generateText: vi.fn() } as any
+    );
+    const seeded = await service.compose({
+      plan,
+      copy: makeCopy(),
+      assets: makeAssets(),
+      outputs: [SQUARE, X_POST],
+      orgId: 'o1',
+      userId: 'u1',
+    } as any);
+    return { seeded, refit: service.refitSeededOutputs(seeded) };
+  };
+
+  /** Largest empty vertical run between consecutive copy units in the band. */
+  const largestGap = (els: any[]) => {
+    const sorted = [...els].sort((a, b) => a.y - b.y);
+    let gap = 0;
+    for (let i = 1; i < sorted.length; i++) {
+      const prevBottom = Math.max(
+        ...sorted.slice(0, i).map((el) => el.y + el.height)
+      );
+      gap = Math.max(gap, sorted[i].y - prevBottom);
+    }
+    return gap;
+  };
+
+  it('closes the dead bands independent per-element anchoring opens', () => {
+    const service = new AiDesignerComposerService(
+      new DesignerDocService() as any,
+      { generateText: vi.fn() } as any
+    );
+    const text = (over: any) => ({
+      type: 'text',
+      rotation: 0,
+      opacity: 1,
+      locked: false,
+      hidden: false,
+      ...over,
+    });
+    // A copy column that the seed scattered: the headline anchored to the top
+    // of the new canvas, the subhead to its centre, the CTA to the bottom —
+    // the 26.7% / 24.9% voids measured on the live x-post.
+    const doc: any = {
+      mode: 'image',
+      outputs: [
+        {
+          id: 'o1',
+          formatId: 'ig-square',
+          name: 'IG',
+          width: 1080,
+          height: 1080,
+          background: '#ffffff',
+          children: [
+            text({ id: 'a1', originId: 'headline', x: 54, y: 267, width: 972, height: 165, fontSize: 66, text: 'Big launch' }),
+            text({ id: 'a2', originId: 'sub', x: 54, y: 462, width: 972, height: 63, fontSize: 35, text: 'Now brewing' }),
+            text({ id: 'a3', originId: 'cta', x: 54, y: 541, width: 400, height: 63, fontSize: 30, text: 'Shop now' }),
+          ],
+        },
+        {
+          id: 'o2',
+          formatId: 'x-post',
+          name: 'X',
+          width: 1200,
+          height: 675,
+          background: '#ffffff',
+          children: [
+            text({ id: 'b1', originId: 'headline', x: 60, y: 34, width: 810, height: 138, fontSize: 55, text: 'Big launch' }),
+            text({ id: 'b2', originId: 'sub', x: 60, y: 300, width: 810, height: 53, fontSize: 29, text: 'Now brewing' }),
+            text({ id: 'b3', originId: 'cta', x: 60, y: 600, width: 333, height: 53, fontSize: 25, text: 'Shop now' }),
+          ],
+        },
+      ],
+    };
+
+    const before = largestGap(doc.outputs[1].children);
+    const wide = service.refitSeededOutputs(doc).outputs[1] as any;
+    const after = largestGap(wide.children);
+
+    // Before: a 247px void (37% of the canvas) between the subhead and the
+    // CTA. After: the composer's own rhythm gap (round(fontSize × 0.45)).
+    expect(before).toBeGreaterThan(675 * 0.3);
+    expect(after).toBeLessThan(675 * 0.08);
+    // The column is packed top-down inside the band and balanced into it, so
+    // it neither hugs the top margin nor spills past the bottom one.
+    const margin = canvasMarginPx(1200, 675);
+    const sorted = [...wide.children].sort((a: any, b: any) => a.y - b.y);
+    expect(sorted[0].y).toBeGreaterThan(margin);
+    expect(sorted[2].y + sorted[2].height).toBeLessThanOrEqual(675 - margin);
+    // …and the column is re-margined to the target canvas on both sides.
+    expect(sorted[0].x).toBe(margin);
+    expect(sorted[0].x + sorted[0].width).toBe(1200 - margin);
+  });
+
+  it('keeps the copy column tight inside the band it is re-fit into', async () => {
+    const plan = makePlan({ formatTemplate: 'split-panel' });
+    plan.slots.push({ id: 'badge', role: 'badge', kind: 'badge' });
+    const { refit } = await seedAndRefit(plan);
+    const copy = (refit.outputs[1] as any).children.filter((el: any) =>
+      ['headline', 'sub', 'cta', 'cta-bg'].includes(el.originId)
+    );
+    expect(largestGap(copy)).toBeLessThan(675 * 0.08);
+  });
+
+  it('still re-fits a doc carrying a bottom-anchored footer', async () => {
+    // A footer is bottom-anchored like a bottom badge but carves the band
+    // from the OTHER end. Counted as a badge it made the badge bounding box
+    // span the whole panel (top badge + bottom footer), the carve returned a
+    // zero-height band, and the whole re-fit was silently skipped.
+    const plan = makePlan({ formatTemplate: 'split-panel' });
+    plan.slots.push({ id: 'badge', role: 'badge', kind: 'badge' } as any);
+    plan.slots.push({ id: 'legal', role: 'legal', kind: 'text' } as any);
+    const service = new AiDesignerComposerService(
+      new DesignerDocService() as any,
+      { generateText: vi.fn() } as any
+    );
+    const seeded = await service.compose({
+      plan,
+      copy: { ...makeCopy(), legal: 'northbean.shop' },
+      assets: makeAssets(),
+      outputs: [SQUARE, X_POST],
+      orgId: 'o1',
+      userId: 'u1',
+    } as any);
+    const refit = service.refitSeededOutputs(seeded);
+
+    expect(refit).not.toBe(seeded);
+    const wide = (refit.outputs[1] as any).children;
+    const legal = wide.find((el: any) => el.originId === 'legal');
+    const copy = wide.filter((el: any) =>
+      ['headline', 'sub', 'cta', 'cta-bg', 'cta-underline'].includes(
+        el.originId
+      )
+    );
+    const margin = canvasMarginPx(1200, 675);
+    // The footer keeps the bottom margin and the column stays above it.
+    expect(legal.y + legal.height).toBe(675 - margin);
+    expect(Math.max(...copy.map((el: any) => el.y + el.height))).toBeLessThan(
+      legal.y
+    );
+    expect(largestGap(copy)).toBeLessThan(675 * 0.08);
+  });
+
+  it('re-derives the margins for the target canvas instead of scaling them', async () => {
+    const { refit } = await seedAndRefit(
+      makePlan({ formatTemplate: 'split-panel' })
+    );
+    const wide = refit.outputs[1] as any;
+    const panel = wide.children.find(
+      (el: any) => el.originId === 'split-panel-bg'
+    );
+    const headline = wide.children.find(
+      (el: any) => el.originId === 'headline'
+    );
+    // The canvas's OWN margin — round(typeBasis(1200, 675) × 0.05) = 45 — on
+    // both sides of the panel, not the 60/34 anisotropy a per-axis scale
+    // leaves. (A1: off the type basis, not the short edge.)
+    const margin = canvasMarginPx(1200, 675);
+    expect(headline.x - panel.x).toBe(margin);
+    expect(panel.x + panel.width - (headline.x + headline.width)).toBe(margin);
+    expect(headline.y).toBeGreaterThanOrEqual(margin);
+  });
+
+  it('re-fits without recomposing: ids, originIds, copy and z-order survive', async () => {
+    const { seeded, refit } = await seedAndRefit(
+      makePlan({ formatTemplate: 'split-panel' })
+    );
+    const before = (seeded.outputs[1] as any).children;
+    const after = (refit.outputs[1] as any).children;
+    expect(after.map((el: any) => el.id)).toEqual(
+      before.map((el: any) => el.id)
+    );
+    expect(after.map((el: any) => el.originId)).toEqual(
+      before.map((el: any) => el.originId)
+    );
+    expect(after.map((el: any) => el.text)).toEqual(
+      before.map((el: any) => el.text)
+    );
+  });
+
+  it('leaves a single-format doc alone', async () => {
+    const service = new AiDesignerComposerService(
+      new DesignerDocService() as any,
+      { generateText: vi.fn() } as any
+    );
+    const doc = await composeWith(makePlan());
+    expect(service.refitSeededOutputs(doc)).toBe(doc);
+  });
+});
+
+// Round 7 C2: `background.ref` naming a slot no assetNeed produced used to
+// fall straight through to a flat #1f2937 — live, a plan asked for
+// `asset:image-bg-01` while its own need was for slot `image`.
+describe('AiDesignerComposerService dangling background ref (round 7 C2)', () => {
+  const makeService = () =>
+    new AiDesignerComposerService(
+      new DesignerDocService() as any,
+      { generateText: vi.fn() } as any
+    );
+
+  const oneAsset = {
+    'v1:image:square': {
+      slotId: 'v1:image',
+      fileId: 'f-img',
+      path: 'https://example.com/img.png',
+      type: 'image' as const,
+      aspect: 'square' as const,
+    },
+  };
+
+  it('uses the variant\'s only image when the ref resolves nothing', () => {
+    const service = makeService();
+    const bg = (service as any)._backgroundToDesignerBg(
+      { kind: 'image', ref: 'asset:image-bg-01' },
+      oneAsset,
+      SQUARE,
+      'v1'
+    );
+
+    expect(bg.bg).toMatchObject({
+      type: 'image',
+      src: 'https://example.com/img.png',
+      fileId: 'f-img',
+    });
+    expect(bg.background).toBe('#000000');
+  });
+
+  it('keeps the solid fallback when two distinct images could be meant', () => {
+    const service = makeService();
+    const warnSpy = vi
+      .spyOn((service as any)._logger, 'warn')
+      .mockImplementation(() => undefined);
+
+    const bg = (service as any)._backgroundToDesignerBg(
+      { kind: 'image', ref: 'asset:image-bg-01' },
+      {
+        ...oneAsset,
+        'v1:product:square': {
+          slotId: 'v1:product',
+          fileId: 'f-prod',
+          path: 'https://example.com/prod.png',
+          type: 'image' as const,
+          aspect: 'square' as const,
+        },
+      },
+      SQUARE,
+      'v1'
+    );
+
+    expect(bg.bg).toBeUndefined();
+    expect(bg.background).toBe('#1f2937');
+    expect(warnSpy).toHaveBeenCalledWith(
+      expect.stringContaining('2 distinct images are available'),
+      expect.anything()
+    );
+  });
+
+  it('ignores another variant\'s images (scoped by variantId)', () => {
+    const service = makeService();
+    const bg = (service as any)._backgroundToDesignerBg(
+      { kind: 'image', ref: 'asset:nope' },
+      {
+        'v2:image:square': {
+          slotId: 'v2:image',
+          fileId: 'f-other',
+          path: 'https://example.com/other.png',
+          type: 'image' as const,
+          aspect: 'square' as const,
+        },
+      },
+      SQUARE,
+      'v1'
+    );
+
+    expect(bg.bg).toBeUndefined();
+    expect(bg.background).toBe('#1f2937');
+  });
+
+  it('refuses to steal a sibling slot\'s image when the plan asked for two', () => {
+    // The other single-asset shape: the plan wanted a background AND a product
+    // shot and the BACKGROUND generation failed. Promoting the product to a
+    // full-bleed background would then delete the product element
+    // (`_dropBackgroundDuplicateImages`) and destroy the composition.
+    const service = makeService();
+    const warnSpy = vi
+      .spyOn((service as any)._logger, 'warn')
+      .mockImplementation(() => undefined);
+
+    const bg = (service as any)._backgroundToDesignerBg(
+      { kind: 'image', ref: 'asset:background' },
+      {
+        'v1:product:square': {
+          slotId: 'v1:product',
+          fileId: 'f-prod',
+          path: 'https://example.com/prod.png',
+          type: 'image' as const,
+          aspect: 'square' as const,
+        },
+      },
+      SQUARE,
+      'v1',
+      2
+    );
+
+    expect(bg.bg).toBeUndefined();
+    expect(bg.background).toBe('#1f2937');
+    expect(warnSpy).toHaveBeenCalledWith(
+      expect.stringContaining('the plan asked for 2 images'),
+      expect.anything()
+    );
+  });
+
+  it('a resolvable ref still wins over the rescue path', () => {
+    const service = makeService();
+    const bg = (service as any)._backgroundToDesignerBg(
+      { kind: 'image', ref: 'asset:image' },
+      oneAsset,
+      SQUARE,
+      'v1'
+    );
+    expect(bg.bg).toMatchObject({ fileId: 'f-img' });
+  });
+
+  it('rescues end-to-end without shipping the same picture twice', async () => {
+    // A dangling ref PLUS an image slot on the same asset: the rescue makes
+    // the background the picture, and `_dropBackgroundDuplicateImages` must
+    // then remove the element so it is not painted on top of itself.
+    const doc = await composeWith(
+      makePlan({ background: { kind: 'image', ref: 'asset:image-bg-01' } }),
+      [SQUARE],
+      makeCopy(),
+      makeAssets()
+    );
+
+    expect((doc.outputs[0] as any).bg).toMatchObject({
+      type: 'image',
+      fileId: 'f1',
+    });
+    expect(
+      childrenOf(doc).filter((el) => el.type === 'image' && el.fileId === 'f1')
+    ).toHaveLength(0);
+  });
+});
+
+// Round 7 C6: a format-only fix whose formatId was missing or unknown
+// returned `[]` behind a `logger.warn` — a silent no-op. Nothing derived a
+// formatId from the request's own `targetOutputs` either.
+describe('AiDesignerComposerService format-only scope resolution (round 7 C6)', () => {
+  const service = () =>
+    new AiDesignerComposerService(
+      new DesignerDocService() as any,
+      { generateText: vi.fn() } as any
+    );
+
+  const twoOutputDoc = () =>
+    ({
+      mode: 'image',
+      outputs: [
+        { id: 'a', formatId: 'ig-square', name: 'IG', width: 1080, height: 1080, background: '#fff', children: [] },
+        { id: 'b', formatId: 'fb-post', name: 'FB', width: 1200, height: 630, background: '#fff', children: [] },
+      ],
+    } as any);
+
+  const resolve = (scope: any, formatId?: string, targetOutputs?: string[]) =>
+    (service() as any)._resolveTargetOutputIndexes(
+      twoOutputDoc(),
+      scope,
+      formatId,
+      targetOutputs
+    );
+
+  it('pins to the finding\'s own formatId when it names a real output', () => {
+    expect(resolve('format-only', 'fb-post')).toEqual([1]);
+  });
+
+  it('derives the target from targetOutputs when the finding carries none', () => {
+    expect(resolve('format-only', undefined, ['fb-post'])).toEqual([1]);
+  });
+
+  it('falls back to shared scope (not a no-op) when nothing resolves', () => {
+    const svc = service();
+    const warnSpy = vi
+      .spyOn((svc as any)._logger, 'warn')
+      .mockImplementation(() => undefined);
+
+    const unknown = (svc as any)._resolveTargetOutputIndexes(
+      twoOutputDoc(),
+      'format-only',
+      'li-story',
+      ['also-unknown']
+    );
+    const missing = (svc as any)._resolveTargetOutputIndexes(
+      twoOutputDoc(),
+      'format-only'
+    );
+
+    expect(unknown).toEqual([0, 1]);
+    expect(missing).toEqual([0, 1]);
+    expect(warnSpy).toHaveBeenCalledWith(
+      expect.stringContaining('falling back to shared scope'),
+      expect.anything()
+    );
+  });
+
+  it('shared scope still spans every output', () => {
+    expect(resolve('shared')).toEqual([0, 1]);
+  });
+
+  it('canResolveFormatScope answers for the conductor\'s degradation note', () => {
+    const svc = service();
+    expect(svc.canResolveFormatScope(twoOutputDoc(), ['fb-post'])).toBe(true);
+    expect(svc.canResolveFormatScope(twoOutputDoc(), ['nope'])).toBe(false);
+    expect(svc.canResolveFormatScope(twoOutputDoc(), [])).toBe(false);
+    expect(svc.canResolveFormatScope(twoOutputDoc(), undefined)).toBe(false);
+  });
+
+  // Round 8 C4: both resolvers went through strict formatId equality, so the
+  // words users actually say ("Facebook", "the story") pinned nothing and every
+  // format-scoped revision degraded to shared.
+
+  it('pins a format the user named by channel, not by id', () => {
+    expect(resolve('format-only', undefined, ['Facebook'])).toEqual([1]);
+    expect(resolve('format-only', 'Facebook Post')).toEqual([1]);
+  });
+
+  it('canResolveFormatScope agrees with the index resolver on aliases', () => {
+    // The two MUST agree: the conductor promises the scope off
+    // canResolveFormatScope and the composer then applies it off the indexes.
+    const svc = service();
+    for (const alias of ['Facebook', 'Facebook Post', 'fb-post', 'the FB one']) {
+      expect(svc.canResolveFormatScope(twoOutputDoc(), [alias])).toBe(true);
+      expect(
+        (svc as any)._resolveTargetOutputIndexes(
+          twoOutputDoc(),
+          'format-only',
+          undefined,
+          [alias]
+        )
+      ).toEqual([1]);
+    }
+  });
+
+  it('still degrades to shared for a format the doc does not carry', () => {
+    const svc = service();
+    vi.spyOn((svc as any)._logger, 'warn').mockImplementation(() => undefined);
+    expect(svc.canResolveFormatScope(twoOutputDoc(), ['LinkedIn'])).toBe(false);
+    expect(
+      (svc as any)._resolveTargetOutputIndexes(
+        twoOutputDoc(),
+        'format-only',
+        undefined,
+        ['LinkedIn']
+      )
+    ).toEqual([0, 1]);
+  });
+
+  it('applies a format-only fix that names no format to every output', async () => {
+    const svc = service();
+    const doc = {
+      mode: 'image',
+      outputs: [
+        {
+          id: 'a', formatId: 'ig-square', name: 'IG', width: 1080, height: 1080, background: '#fff',
+          children: [{ id: 'e1', originId: 'headline', type: 'text', x: 0, y: 0, width: 100, height: 40, text: 'Hi' }],
+        },
+        {
+          id: 'b', formatId: 'fb-post', name: 'FB', width: 1200, height: 630, background: '#fff',
+          children: [{ id: 'e2', originId: 'headline', type: 'text', x: 0, y: 0, width: 100, height: 40, text: 'Hi' }],
+        },
+      ],
+    } as any;
+
+    const findings: VisionFinding[] = [
+      {
+        issue: 'headline too low',
+        severity: 'major',
+        slotId: 'headline',
+        fix: { scope: 'format-only', geometry: { y: 200 }, targetSlots: ['headline'] },
+      } as any,
+    ];
+
+    const patched = await svc.applyFixes(doc, findings, 'org-1');
+
+    expect((patched.outputs[0] as any).children[0].y).toBe(200);
+    expect((patched.outputs[1] as any).children[0].y).toBe(200);
+  });
+});
+
+// Round 7 D: the offline saliency probe is gone; the real VLM detector runs
+// only where a cover crop actually risks losing the subject.
+describe('AiDesignerComposerService risky-crop subject detection (round 7 D)', () => {
+  const makeService = (imageFocalPoint?: any) =>
+    new AiDesignerComposerService(
+      new DesignerDocService() as any,
+      { generateText: vi.fn() } as any,
+      imageFocalPoint ? ({ imageFocalPoint } as any) : undefined
+    );
+
+  const docWith = (
+    element: Record<string, unknown>,
+    output: Record<string, unknown> = {}
+  ) =>
+    ({
+      mode: 'image',
+      outputs: [
+        {
+          id: 'o1',
+          formatId: 'ig-story',
+          width: 1080,
+          height: 1920,
+          background: '#fff',
+          children: [
+            {
+              id: 'e1',
+              originId: 'image',
+              type: 'image',
+              src: 'https://example.com/i.png',
+              fileId: 'f1',
+              x: 0,
+              y: 0,
+              rotation: 0,
+              opacity: 1,
+              focalPoint: { x: 0.5, y: 0.5 },
+              ...element,
+            },
+          ],
+          ...output,
+        },
+      ],
+    } as any);
+
+  it('never calls the detector for a full-bleed crop with no slack', async () => {
+    const imageFocalPoint = vi.fn();
+    const service = makeService(imageFocalPoint);
+    // 1080x1920 source into a 1080x1920 box: slack 0.
+    const doc = docWith({ naturalWidth: 1080, naturalHeight: 1920, width: 1080, height: 1920 });
+
+    const out = await service.applySubjectFocalPoints(doc, 'org-1');
+
+    expect(imageFocalPoint).not.toHaveBeenCalled();
+    expect(out).toBe(doc);
+  });
+
+  it('never calls the detector for a mildly-cropped square in a 4:5 box', async () => {
+    const imageFocalPoint = vi.fn();
+    const service = makeService(imageFocalPoint);
+    // 1024² into 1080x1350 discards ~20% of the width — under the rail.
+    const doc = docWith({ naturalWidth: 1024, naturalHeight: 1024, width: 1080, height: 1350 });
+
+    await service.applySubjectFocalPoints(doc, 'org-1');
+
+    expect(imageFocalPoint).not.toHaveBeenCalled();
+  });
+
+  it('calls the detector for a narrow split-panel column and uses its point', async () => {
+    // 1024² into a 583x1080 column discards ~46% of the width — the live case
+    // that cropped 45% off a product.
+    const imageFocalPoint = vi
+      .fn()
+      .mockResolvedValue({ x: 0.3, y: 0.5, source: 'provider' });
+    const service = makeService(imageFocalPoint);
+    const doc = docWith({ naturalWidth: 1024, naturalHeight: 1024, width: 583, height: 1080 });
+
+    const out = await service.applySubjectFocalPoints(doc, 'org-1');
+
+    expect(imageFocalPoint).toHaveBeenCalledWith('org-1', 'https://example.com/i.png');
+    const el = (out.outputs[0] as any).children[0];
+    expect(el.subjectPoint).toEqual({ x: 0.3, y: 0.5 });
+    // The centroid converts to a crop position LEFT of centre.
+    expect(el.focalPoint.x).toBeLessThan(0.5);
+  });
+
+  it('applies the detected point to an image BACKGROUND too', async () => {
+    const imageFocalPoint = vi
+      .fn()
+      .mockResolvedValue({ x: 0.7, y: 0.5, source: 'provider' });
+    const service = makeService(imageFocalPoint);
+    const doc = {
+      mode: 'image',
+      outputs: [
+        {
+          id: 'o1',
+          formatId: 'ig-story',
+          width: 583,
+          height: 1080,
+          background: '#000',
+          bg: {
+            type: 'image',
+            src: 'https://example.com/bg.png',
+            fileId: 'f-bg',
+            naturalWidth: 1024,
+            naturalHeight: 1024,
+            focalPoint: { x: 0.5, y: 0.5 },
+          },
+          children: [],
+        },
+      ],
+    } as any;
+
+    const out = await service.applySubjectFocalPoints(doc, 'org-1');
+
+    expect((out.outputs[0] as any).bg.subjectPoint).toEqual({ x: 0.7, y: 0.5 });
+    expect((out.outputs[0] as any).bg.focalPoint.x).toBeGreaterThan(0.5);
+  });
+
+  it('centres when no vision provider is wired at all', async () => {
+    const service = makeService();
+    const doc = docWith({ naturalWidth: 1024, naturalHeight: 1024, width: 583, height: 1080 });
+
+    const out = await service.applySubjectFocalPoints(doc, 'org-1');
+
+    expect(out).toBe(doc);
+    expect((out.outputs[0] as any).children[0].focalPoint).toEqual({ x: 0.5, y: 0.5 });
+  });
+
+  it('centres (never throws) when the detector rejects or answers fallback', async () => {
+    const rejecting = makeService(
+      vi.fn().mockRejectedValue(new Error('no vision default'))
+    );
+    const doc = docWith({ naturalWidth: 1024, naturalHeight: 1024, width: 583, height: 1080 });
+    vi.spyOn((rejecting as any)._logger, 'warn').mockImplementation(() => undefined);
+
+    await expect(
+      rejecting.applySubjectFocalPoints(doc, 'org-1')
+    ).resolves.toBe(doc);
+
+    const fallback = makeService(
+      vi.fn().mockResolvedValue({ x: 0.5, y: 0.5, source: 'fallback' })
+    );
+    await expect(
+      fallback.applySubjectFocalPoints(doc, 'org-1')
+    ).resolves.toBe(doc);
+
+    const malformed = makeService(vi.fn().mockResolvedValue({ nope: true }));
+    await expect(
+      malformed.applySubjectFocalPoints(doc, 'org-1')
+    ).resolves.toBe(doc);
+  });
+
+  it('skips the lookup when the intrinsic size is unknown', async () => {
+    const imageFocalPoint = vi.fn();
+    const service = makeService(imageFocalPoint);
+    const doc = docWith({ width: 583, height: 1080 });
+
+    await service.applySubjectFocalPoints(doc, 'org-1');
+
+    expect(imageFocalPoint).not.toHaveBeenCalled();
+  });
+
+  it('looks a source up ONCE however many outputs paint it', async () => {
+    const imageFocalPoint = vi
+      .fn()
+      .mockResolvedValue({ x: 0.3, y: 0.5, source: 'provider' });
+    const service = makeService(imageFocalPoint);
+    const risky = {
+      id: 'e1', originId: 'image', type: 'image',
+      src: 'https://example.com/i.png', fileId: 'f1',
+      x: 0, y: 0, width: 583, height: 1080, rotation: 0, opacity: 1,
+      naturalWidth: 1024, naturalHeight: 1024,
+    };
+    const doc = {
+      mode: 'image',
+      outputs: [
+        { id: 'a', formatId: 'ig-story', name: 'A', width: 583, height: 1080, background: '#fff', children: [risky] },
+        { id: 'b', formatId: 'x', name: 'B', width: 583, height: 1080, background: '#fff', children: [{ ...risky, id: 'e2' }] },
+      ],
+    } as any;
+
+    await service.applySubjectFocalPoints(doc, 'org-1');
+
+    expect(imageFocalPoint).toHaveBeenCalledTimes(1);
+  });
+
+  it('the saturation rail still applies to a detected point', async () => {
+    // A centroid hard against the edge would convert to a value outside
+    // [0,1]; the rail turns that into a plain centre crop.
+    const imageFocalPoint = vi
+      .fn()
+      .mockResolvedValue({ x: 0.02, y: 0.5, source: 'provider' });
+    const service = makeService(imageFocalPoint);
+    const doc = docWith({ naturalWidth: 1024, naturalHeight: 1024, width: 583, height: 1080 });
+
+    const out = await service.applySubjectFocalPoints(doc, 'org-1');
+
+    const el = (out.outputs[0] as any).children[0];
+    expect(el.subjectPoint).toEqual({ x: 0.02, y: 0.5 });
+    expect(el.focalPoint).toEqual({ x: 0.5, y: 0.5 });
   });
 });

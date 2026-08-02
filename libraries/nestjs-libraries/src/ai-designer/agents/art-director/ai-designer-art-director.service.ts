@@ -194,6 +194,9 @@ export class AiDesignerArtDirectorService implements OnModuleInit {
         sizes.push({
           // Canonical formatId shared with the conductor's `_resolveOutputs`
           // (`custom-${w}x${h}`) so perChannel notes keyed by formatId match.
+          // Duplicates need no filtering here — only `sizes[0]` is ever used
+          // (see the one-original slice below); `_resolveOutputs` is the site
+          // that dedupes, because it builds the full multi-output list.
           formatId: `custom-${custom.width}x${custom.height}`,
           width: custom.width,
           height: custom.height,
@@ -274,6 +277,15 @@ export class AiDesignerArtDirectorService implements OnModuleInit {
       'come from the brief verbatim (intent/fixedCopy). If the brief names no offer, discount,',
       'or code, invent none — never fabricate a promotion the user did not state.',
       '',
+      'Fact fidelity: the same rule for EVERY factual claim, not just promotions. Opening times,',
+      'dates, days of the week, hours, addresses, locations, phone numbers, URLs, and prices-as-',
+      'facts MUST come from the brief (intent/fixedCopy) — verbatim, and never rounded, reworded,',
+      'or "completed". If the brief says 8am, the design says 8am; it must never become "9-5" or',
+      '"Mon-Fri". If the brief does not supply a fact a slot would carry, OMIT THAT SLOT rather',
+      'than invent one: a plan may drop any optional slot, and a missing date badge is always',
+      'better than a wrong one. Plausible-sounding filler ("Effective Monday", "Open 9-5") is the',
+      'single most damaging thing a plan can produce — the user ships it believing it is true.',
+      '',
       'Palette fidelity: when the brief names explicit colors or palette words (e.g. warm,',
       "cream, espresso, terracotta), every plan's palette MUST honor them — never substitute a",
       'different temperature family (a warm-toned brief must never get an all-cool palette).',
@@ -281,6 +293,8 @@ export class AiDesignerArtDirectorService implements OnModuleInit {
       'Layout: when the concept describes a side-by-side layout with a specific side for text and',
       'imagery (e.g. "photo left, text right"), set "panelSide" to the TEXT panel side ("left" =',
       'text panel on the left, "right" = text panel on the right); omit it for non-split layouts.',
+      'When the concept places the badge/sticker in a specific corner (e.g. "offer badge top right",',
+      '"seal in the lower left"), set "badgePosition" to that corner; omit it otherwise.',
       '',
       'DesignPlan schema:',
       JSON.stringify(this._designPlanSchema(), null, 2),
@@ -366,6 +380,15 @@ export class AiDesignerArtDirectorService implements OnModuleInit {
       this._normalizePlanTextPipes(plan);
     }
 
+    // Slot-shape copy limits, LAST of the copy steps so it also cleans up
+    // whatever the injection backstop above appended: a badge/CTA carrying a
+    // whole compound offer is unreadable at feed scale, so the overflow moves
+    // to the subhead. Coverage is slot-agnostic, so moving whole tokens keeps
+    // every required token accounted for.
+    for (const plan of validPlans) {
+      this._enforceSlotCopyLimits(plan);
+    }
+
     // Explicit brief constraints (side language, burst badges) are hard
     // constraints like styleId below — deterministically override what the
     // model picked when the brief is unambiguous.
@@ -386,6 +409,9 @@ export class AiDesignerArtDirectorService implements OnModuleInit {
             slot.style = { ...slot.style, badgeStyle: constraints.badgeStyle };
           }
         }
+      }
+      if (constraints.badgePosition) {
+        plan.badgePosition = constraints.badgePosition;
       }
     }
 
@@ -414,12 +440,32 @@ export class AiDesignerArtDirectorService implements OnModuleInit {
           covered.add(slot.id);
         }
       }
-      if (plan.background?.kind === 'image' && !plan.background.ref && needs.length === 0) {
-        needs.push({
-          slotId: 'background',
-          brief: `${plan.concept} — full-bleed background image, on-palette`,
-          prefer: 'either',
-        });
+      // Image background ref coherence. A ref that names no assetNeed is as
+      // dead as no ref at all: `_backgroundToDesignerBg` resolves nothing and
+      // ships a flat solid, and the conductor's `_replaceSlotImagery`
+      // (`plan.background.ref === 'asset:${slotId}'`) never matches on a
+      // regeneration either. Observed live: `ref: 'asset:image-bg-01'` beside
+      // an assetNeed for slot `image`. Point the ref at a need that exists —
+      // synthesizing one only when the plan requested nothing at all.
+      if (plan.background?.kind === 'image') {
+        const ref = (plan.background.ref || '').replace(/^asset:/, '');
+        if (!ref || !covered.has(ref)) {
+          if (needs.length === 0) {
+            needs.push({
+              slotId: 'background',
+              brief: `${plan.concept} — full-bleed background image, on-palette`,
+              prefer: 'either',
+            });
+            covered.add('background');
+          }
+          this._logger.warn(
+            `Plan background ref "${plan.background.ref ?? '(none)'}" names no assetNeed; repointing at "${needs[0].slotId}".`
+          );
+          // The composer's `_dropBackgroundDuplicateImages` removes the image
+          // ELEMENT that now shares the background's asset, so this repair
+          // cannot double-print the same picture.
+          plan.background.ref = `asset:${needs[0].slotId}`;
+        }
       }
     }
 
@@ -484,9 +530,19 @@ export class AiDesignerArtDirectorService implements OnModuleInit {
     const offer = new Set<string>();
     for (const unit of fixedCopy.split(FIXED_COPY_SEPARATOR)) {
       const trimmed = unit.trim();
-      // Same 2..80-char window as the quoted-span extraction — a compound
-      // blob is not an atomic unit and must not become a required token.
-      if (trimmed.length >= 2 && trimmed.length <= 80) verbatim.add(trimmed);
+      // Atomic units only. A compound blob ("First box 30% off with code
+      // BEAN30") that becomes a REQUIRED VERBATIM token forces the planner to
+      // place the whole sentence in one slot — live, that was the badge, and
+      // the burst shrank the label to the font floor. Fidelity is preserved
+      // without it: the unit's %/$ amounts and ALL-CAPS-with-digit codes are
+      // extracted below as required tokens in their own right.
+      if (
+        trimmed.length >= 2 &&
+        trimmed.length <= 40 &&
+        trimmed.split(/\s+/).filter(Boolean).length <= 4
+      ) {
+        verbatim.add(trimmed);
+      }
     }
     for (const m of text.matchAll(/\b[A-Z][A-Z0-9]{3,}\b/g)) {
       if (/\d/.test(m[0]) || fixedCopy.includes(m[0])) verbatim.add(m[0]);
@@ -531,29 +587,75 @@ export class AiDesignerArtDirectorService implements OnModuleInit {
    */
   private _injectMissingTokens(plan: DesignPlan, missing: string[]): string[] {
     const texts = (plan.texts = plan.texts ?? {});
-    const textSlotIds = (plan.slots ?? [])
-      .filter((slot) => isCopySlot(slot))
-      .map((slot) => slot.id);
-    const resolveSlot = (preferred: string): string => {
-      if (textSlotIds.includes(preferred) || preferred in texts) {
-        return preferred;
-      }
-      return (
-        textSlotIds.find((id) => texts[id]) ??
-        textSlotIds[0] ??
-        Object.keys(texts)[0] ??
-        'headline'
-      );
-    };
+    // A URL is long, unreadable at badge size, and never belongs in a burst —
+    // it must never FALL BACK into the badge (or the CTA) when the plan has no
+    // subhead slot. Codes/amounts are badge-shaped and keep the old behaviour.
+    const noUrlSlots = new Set([
+      ...this._badgeSlotIds(plan),
+      ...this._ctaSlotIds(plan),
+    ]);
     const injected: string[] = [];
     for (const token of missing) {
-      const slotId = resolveSlot(
-        FULL_URL_TOKEN_RE.test(token) ? 'subhead' : 'badge'
-      );
+      const slotId = FULL_URL_TOKEN_RE.test(token)
+        ? this._resolveTextSlot(plan, 'subhead', noUrlSlots)
+        : this._resolveTextSlot(plan, 'badge');
       texts[slotId] = texts[slotId] ? `${texts[slotId]} • ${token}` : token;
       injected.push(`"${token}" → ${slotId}`);
     }
     return injected;
+  }
+
+  /**
+   * Pick the text slot a token/phrase should land in: the preferred slot when
+   * the plan actually has it, else the first text-bearing copy slot, else any
+   * copy slot, else any keyed text, else "headline". `exclude` drops slots the
+   * caller must not use (a URL may not land in a badge; a relocation may not
+   * land back in the slot it came from).
+   */
+  private _resolveTextSlot(
+    plan: DesignPlan,
+    preferred: string,
+    exclude: ReadonlySet<string> = new Set()
+  ): string {
+    const texts = (plan.texts = plan.texts ?? {});
+    const textSlotIds = (plan.slots ?? [])
+      .filter((slot) => isCopySlot(slot))
+      .map((slot) => slot.id)
+      .filter((id) => !exclude.has(id));
+    if (
+      !exclude.has(preferred) &&
+      (textSlotIds.includes(preferred) || preferred in texts)
+    ) {
+      return preferred;
+    }
+    return (
+      textSlotIds.find((id) => texts[id]) ??
+      textSlotIds[0] ??
+      Object.keys(texts).find((id) => !exclude.has(id)) ??
+      'headline'
+    );
+  }
+
+  /** Slot ids that render as a badge/burst — kind, or the canonical id. */
+  private _badgeSlotIds(plan: DesignPlan): Set<string> {
+    const ids = new Set<string>();
+    for (const slot of plan.slots ?? []) {
+      if (slot.kind === 'badge') ids.add(slot.id);
+    }
+    if (plan.texts && 'badge' in plan.texts) ids.add('badge');
+    return ids;
+  }
+
+  /** Slot ids that render as a CTA button — kind, role, or the canonical id. */
+  private _ctaSlotIds(plan: DesignPlan): Set<string> {
+    const ids = new Set<string>();
+    for (const slot of plan.slots ?? []) {
+      if (slot.kind === 'cta-button' || /cta|call.to.action/i.test(slot.role ?? '')) {
+        ids.add(slot.id);
+      }
+    }
+    if (plan.texts && 'cta' in plan.texts) ids.add('cta');
+    return ids;
   }
 
   /**
@@ -562,6 +664,158 @@ export class AiDesignerArtDirectorService implements OnModuleInit {
    * literal glyphs — and the conductor locks plan texts verbatim, so the plan
    * card is the last place to clean them.
    */
+  /** A badge burst fits a few words before the shape's auto-shrink drives the
+   *  label to the font floor and it goes unreadable at 25% feed scale. */
+  private static readonly MAX_BADGE_WORDS = 5;
+  /** A CTA button is a verb-first phrase ("Shop now", "Get the deal"). */
+  private static readonly MAX_CTA_WORDS = 3;
+
+  /** Words in a slot text — bullet/pipe separators are punctuation, not words. */
+  private _wordCount(text: string): number {
+    return text
+      .replace(/[•|]/g, ' ')
+      .split(/\s+/)
+      .filter(Boolean).length;
+  }
+
+  /** Short, badge-shaped offer tokens inside a text: %/$ amounts and
+   *  ALL-CAPS-with-digit coupon codes (same shapes `_extractOfferTokens`
+   *  treats as required, so keeping one never drops coverage). */
+  private _badgeOfferCandidates(text: string): string[] {
+    const out: string[] = [];
+    for (const m of text.matchAll(/\d+\s?%/g)) out.push(m[0].trim());
+    for (const m of text.matchAll(/\$\s?\d+(?:\.\d{1,2})?/g)) out.push(m[0].trim());
+    for (const m of text.matchAll(/\b[A-Z][A-Z0-9]{3,}\b/g)) {
+      if (/\d/.test(m[0])) out.push(m[0]);
+    }
+    return out;
+  }
+
+  /** Index of the first offer/URL token in a text, when it has copy before it
+   *  — the only place a CTA may be cut, so no token is ever split. */
+  private _firstOfferTokenIndex(text: string): number | undefined {
+    const spots: number[] = [];
+    for (const m of text.matchAll(/\d+\s?%/g)) {
+      spots.push(m.index ?? -1);
+      break;
+    }
+    for (const m of text.matchAll(/\$\s?\d+(?:\.\d{1,2})?/g)) {
+      spots.push(m.index ?? -1);
+      break;
+    }
+    for (const m of text.matchAll(/\b[A-Z][A-Z0-9]{3,}\b/g)) {
+      if (/\d/.test(m[0])) {
+        spots.push(m.index ?? -1);
+        break;
+      }
+    }
+    for (const m of text.matchAll(URL_TOKEN_RE)) {
+      spots.push(m.index ?? -1);
+      break;
+    }
+    const valid = spots.filter((i) => i > 0);
+    return valid.length > 0 ? Math.min(...valid) : undefined;
+  }
+
+  /**
+   * Slot-shape copy limits. The planner must place required verbatim tokens
+   * SOMEWHERE, and it routinely dumps a whole compound offer ("First box 30%
+   * off with code BEAN30 northbean.shop") into the badge — the burst shape
+   * then auto-shrinks the label to the font floor and it is unreadable at 25%
+   * feed scale. Badge copy over `MAX_BADGE_WORDS` keeps the shortest offer
+   * token and the rest moves to the subhead; CTA copy over `MAX_CTA_WORDS`
+   * keeps its leading verb-first phrase and the offer/URL tail moves.
+   *
+   * Safe by construction: coverage (`_planMissingTokens`) joins ALL slot texts
+   * before matching, so relocating a WHOLE token between slots never drops it.
+   * Only whole units/tokens move — a text is cut solely at an offer-token
+   * boundary, never mid-phrase.
+   */
+  private _enforceSlotCopyLimits(plan: DesignPlan): void {
+    const texts = plan.texts;
+    if (!texts) return;
+    const badgeIds = this._badgeSlotIds(plan);
+    const ctaIds = this._ctaSlotIds(plan);
+    const shrinkable = new Set([...badgeIds, ...ctaIds]);
+    const moved: string[] = [];
+    const flatten = (value: string) =>
+      value.toLowerCase().replace(/\s+/g, ' ').trim();
+
+    /** Append `chunk` to the best non-badge/non-CTA slot. Returns false when
+     *  there is nowhere to put it — the source slot then keeps its copy. */
+    const relocate = (from: string, chunk: string): boolean => {
+      const to = this._resolveTextSlot(
+        plan,
+        'subhead',
+        new Set([...shrinkable, from])
+      );
+      if (to === from) return false;
+      const existing = texts[to] ?? '';
+      if (!flatten(existing).includes(flatten(chunk))) {
+        texts[to] = existing ? `${existing} • ${chunk}` : chunk;
+      }
+      moved.push(`"${chunk}" ${from} → ${to}`);
+      return true;
+    };
+
+    for (const badgeId of badgeIds) {
+      const text = texts[badgeId];
+      if (
+        typeof text !== 'string' ||
+        this._wordCount(text) <=
+          AiDesignerArtDirectorService.MAX_BADGE_WORDS
+      ) {
+        continue;
+      }
+      // No offer token to fall back on means no safe cut — long prose in a
+      // badge is the planner's call, and mangling it would risk coverage.
+      const keep = [...this._badgeOfferCandidates(text)].sort(
+        (a, b) => a.length - b.length
+      )[0];
+      if (!keep) continue;
+      const rest = text
+        .split('•')
+        .map((unit) => unit.trim())
+        .filter((unit) => unit && unit !== keep);
+      if (rest.length === 0) continue;
+      if (relocate(badgeId, rest.join(' • '))) texts[badgeId] = keep;
+    }
+
+    for (const ctaId of ctaIds) {
+      const text = texts[ctaId];
+      if (
+        typeof text !== 'string' ||
+        this._wordCount(text) <= AiDesignerArtDirectorService.MAX_CTA_WORDS
+      ) {
+        continue;
+      }
+      const units = text
+        .split('•')
+        .map((unit) => unit.trim())
+        .filter(Boolean);
+      if (units.length > 1) {
+        if (relocate(ctaId, units.slice(1).join(' • '))) texts[ctaId] = units[0];
+        continue;
+      }
+      const cut = this._firstOfferTokenIndex(text);
+      if (cut === undefined) continue;
+      const head = text
+        .slice(0, cut)
+        .replace(/[\s•|,–—-]+$/, '')
+        .replace(/\s+\b(at|with|using|from|on|for|and)\b$/i, '')
+        .trim();
+      const tail = text.slice(cut).trim();
+      if (!head || !tail) continue;
+      if (relocate(ctaId, tail)) texts[ctaId] = head;
+    }
+
+    if (moved.length > 0) {
+      this._logger.log(
+        `Slot copy limits: relocated ${moved.join(', ')}.`
+      );
+    }
+  }
+
   private _normalizePlanTextPipes(plan: DesignPlan): void {
     if (!plan.texts) return;
     for (const [slotId, text] of Object.entries(plan.texts)) {
@@ -589,13 +843,20 @@ export class AiDesignerArtDirectorService implements OnModuleInit {
    * intent. Only unambiguous side language sets `panelSide` ("Left side: bold
    * headline …", "text on the left", "photo on the right" — and mirrors);
    * conflicting or vague phrasing sets nothing and the model's choice stands.
+   * `badgePosition` is even stricter: the brief must name the badge AND a
+   * corner in the same breath ("badge top right", "offer badge lower left").
    */
   private _extractBriefConstraints(brief: EnrichedBrief): {
     panelSide?: 'left' | 'right';
     badgeStyle?: 'burst';
+    badgePosition?: DesignPlan['badgePosition'];
   } {
     const intent = typeof brief.intent === 'string' ? brief.intent : '';
-    const out: { panelSide?: 'left' | 'right'; badgeStyle?: 'burst' } = {};
+    const out: {
+      panelSide?: 'left' | 'right';
+      badgeStyle?: 'burst';
+      badgePosition?: DesignPlan['badgePosition'];
+    } = {};
     const textLeft =
       /left side[:,]?\s+(?:bold\s+)?(?:headline|text)/i.test(intent) ||
       /\btext\s+(?:on\s+the\s+)?left\b/i.test(intent) ||
@@ -607,6 +868,23 @@ export class AiDesignerArtDirectorService implements OnModuleInit {
     if (textLeft && !textRight) out.panelSide = 'left';
     else if (textRight && !textLeft) out.panelSide = 'right';
     if (/star\s?burst|burst\s+badge/i.test(intent)) out.badgeStyle = 'burst';
+    // "badge/sticker/seal/burst … top right", "lower-left offer badge" — the
+    // badge word and the corner must sit in the same short, comma-free clause,
+    // so a corner stated about the photo or the headline never moves the badge.
+    const corner =
+      /\b(?:badge|sticker|seal|burst)\b[^.!?,]{0,24}?\b(top|upper|bottom|lower)[\s-]+(left|right)\b/i.exec(
+        intent
+      ) ??
+      /\b(top|upper|bottom|lower)[\s-]+(left|right)\b[^.!?,]{0,24}?\b(?:badge|sticker|seal|burst)\b/i.exec(
+        intent
+      );
+    if (corner) {
+      const vertical = /top|upper/i.test(corner[1]) ? 'top' : 'bottom';
+      const horizontal = corner[2].toLowerCase() === 'left' ? 'left' : 'right';
+      out.badgePosition = `${vertical}-${horizontal}` as NonNullable<
+        DesignPlan['badgePosition']
+      >;
+    }
     return out;
   }
 
@@ -777,6 +1055,8 @@ export class AiDesignerArtDirectorService implements OnModuleInit {
       styleId: 'string — a style preset id (required)',
       panelSide:
         "'left' | 'right' (optional) — split/sidebar layouts only: the side the TEXT panel sits on",
+      badgePosition:
+        "'top-left' | 'top-right' | 'bottom-left' | 'bottom-right' | 'center' (optional) — the corner the badge sits in, inside the text panel for split/sidebar layouts and inside the full canvas otherwise",
       palette: 'string[]',
       typeScale: 'Record<string, number>',
       background: {

@@ -31,6 +31,17 @@ export interface AiDesignerStylePreset {
     textStroke?: { color: 'dark' | 'light'; width: number } | null;
     textShadow?: boolean;
     ctaStyle: 'pill' | 'rect' | 'underline' | 'outline';
+    /**
+     * Corner treatment for the non-pill CTA shapes (`rect`/`outline`). One
+     * shared 14%-of-height constant used to serve all of them, which shipped
+     * a 9px radius on presets whose own promptFragment demands hard edges.
+     * Omitted → `pill` for `ctaStyle: 'pill'`, `small` otherwise.
+     */
+    ctaRadius?: 'square' | 'small' | 'pill';
+    /** Thick border on a solid CTA (neobrutalism's hard-edged block). */
+    ctaBorder?: boolean;
+    /** Offset solid shadow rect behind the CTA (neobrutalism). */
+    ctaShadow?: boolean;
     badgeStyle?: 'pill' | 'burst' | 'ribbon' | null;
     /** Allow decorative geometric accents. */
     accentShapes?: boolean;

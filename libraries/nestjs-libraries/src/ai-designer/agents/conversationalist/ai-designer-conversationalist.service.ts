@@ -16,6 +16,7 @@ import {
   parseAgentInput,
 } from '../../util/parse-agent-input';
 import { isDeliveredAccept } from '../../util/accept-phrases';
+import { FIXED_COPY_SEPARATOR } from '../../conductor/brief-values';
 import { AiDesignerSkillRouter } from '../../skills/ai-designer-skill-router.service';
 import { getDesignSkill } from '../../skills/design-skill.registry';
 
@@ -30,7 +31,27 @@ interface ChatInput {
     brief: DesignBrief;
     questionsAsked: string[];
     activeDesignIds?: string[];
+    /**
+     * The delivered designs, LABELLED. `activeDesignIds` alone is a bare array
+     * of opaque cuids with nothing to pick from — asked for "the Facebook
+     * version" the classifier simply named one, and the only validation was set
+     * membership, so a wrong pick was indistinguishable from a right one.
+     */
+    designs?: DesignCatalogueEntry[];
   };
+}
+
+/** One delivered design, as the classifier sees it. */
+export interface DesignCatalogueEntry {
+  /** 1-based, and the SAME number the delivery captions used. */
+  ordinal: number;
+  designId: string;
+  /** The formats this design actually carries ("fb-post", "ig-story"). */
+  formatIds?: string[];
+  /** Display names for those formats ("Facebook Post"). */
+  formatNames?: string[];
+  /** The plan concept this design was built from, when known. */
+  concept?: string;
 }
 
 interface ClassificationResult {
@@ -132,6 +153,9 @@ export class AiDesignerConversationalistService implements OnModuleInit {
         brief: parsed.session?.brief ?? { intent: '' },
         questionsAsked: parsed.session?.questionsAsked ?? [],
         activeDesignIds: parsed.session?.activeDesignIds,
+        designs: Array.isArray(parsed.session?.designs)
+          ? parsed.session.designs
+          : undefined,
       },
     };
   }
@@ -175,17 +199,22 @@ export class AiDesignerConversationalistService implements OnModuleInit {
       '- ALWAYS populate "extracted" with any brief fields the message supplies — intent (what the design is about), audience (who it is for), tone (the desired mood), plus any other concrete detail (e.g. fixedCopy). Extract on EVERY turn, including answers to earlier questions; omit keys the message does not supply.',
       '- The intent MUST preserve the user\'s concrete specifics — event/occasion names, offers, dates, themes — never compress it to a generic category like "social media post". If the user\'s wording carries the specifics, reuse it.',
       '- Extract "tone" from casual phrasing too — "patriotic themed" → tone: "patriotic"; "make it funny" → tone: "funny"; "warm, heartfelt" → tone: "warm and heartfelt".',
+      '- Style, mood, and aesthetic adjectives ARE the tone, in ANY intake turn: "minimal Scandinavian, warm" → tone: "minimal Scandinavian, warm"; "clean and editorial" → tone: "clean and editorial".',
+      '- A field that already has a value may be REPLACED. When the user states a new style/tone/aesthetic, emit "tone" with their new wording even though the brief already carries one — the latest answer wins. "Never re-ask a question" means do not ASK again; it does NOT mean the field can never be updated.',
       '- Keep schedule, date, and recurrence specifics verbatim in the "intent". "first Friday of every month" must survive exactly; never compress it to "monthly". Compound schedule/offer sentences belong in the intent, NOT in "fixedCopy".',
       '- Extract "fixedCopy" as ATOMIC verbatim units — a coupon code, a CTA phrase, a tagline — each kept EXACTLY as the user wrote it. One unit per concept; join several units with " | ". NEVER a compound sentence gluing offer + CTA + code together.',
       '- Example: "social media post for our Labor Day Sale, coupon code LABOR26" → { "intent": "Labor Day Sale social media post", "fixedCopy": "LABOR26" }.',
       '- Example: "say Join now, 30% off with code BEAN30" → { "fixedCopy": "Join now | 30% off | BEAN30" } — three atomic units, never the whole sentence.',
+      '- An offer sentence is NOT one unit, even with no CTA in it: "First box 30% off with code BEAN30" → { "fixedCopy": "30% off | BEAN30" } — the amount and the code are separate units and the framing words ("First box…with code") stay in the intent.',
       '- When the prompt below names the question the user is answering, interpret the message as an answer to THAT question when extracting fields — a short reply like "followers" to "Who is the audience?" IS the audience, even though it would not look like one out of context.',
       '- When required brief fields are still missing, intent is "clarify" and text asks ONE natural follow-up question for the next missing field, in this order: intent, audience, tone. Never re-ask a question that already has an answer in the brief.',
       '- When every required brief field is present, text is a one-line summary of the brief followed by a "ready for concepts?" confirmation ask.',
       '- When the user confirms the summary ("yes", "go ahead", "looks good"), intent is "accept".',
       '',
       'For revise scope, use "shared" for changes that should apply to every output (copy, colors, overall layout) and "format-only" for changes that target specific formats or sizes.',
-      'If the user refers to "this one", "the first one", or similar without an id, prefer the first activeDesignId.',
+      'When the user names a channel, size, or format ("only on Facebook", "the story version", "the square one"), set scope to "format-only" and put what they said into "targetOutputs" — one entry per format they named. Prefer the formatId from the design catalogue below when you can tell which one they mean; the plain word they used ("Facebook", "the story") also resolves, so ALWAYS populate it rather than leaving it empty.',
+      '"targetDesignId" MUST be one of the designIds in the catalogue below, and you must be able to point at the catalogue entry that justifies it — the user named its ordinal ("variant 2", "the second one"), its concept, or a format only that design carries. If the message does not identify one, OMIT "targetDesignId" entirely; do not guess. Omitting it is correct and safe.',
+      'If the user refers to "this one", "the first one", or similar without an id, prefer the first design in the catalogue.',
     ].join('\n');
 
     const prompt = [
@@ -199,7 +228,13 @@ export class AiDesignerConversationalistService implements OnModuleInit {
       `- state: ${session.state}`,
       `- brief so far: ${JSON.stringify(session.brief)}`,
       `- questions already asked: ${JSON.stringify(session.questionsAsked)}`,
-      `- active design ids: ${JSON.stringify(session.activeDesignIds ?? [])}`,
+      // The catalogue, not the bare id array: an id with an ordinal, its
+      // formats and its concept is something a revision request can actually be
+      // matched against. The bare list is kept for sessions/paths that supply
+      // no catalogue.
+      session.designs?.length
+        ? `- delivered designs (catalogue): ${JSON.stringify(session.designs)}`
+        : `- active design ids: ${JSON.stringify(session.activeDesignIds ?? [])}`,
       '',
       'What is the user\'s intent? Return the JSON object described in your instructions.',
     ].join('\n');
@@ -302,6 +337,26 @@ export class AiDesignerConversationalistService implements OnModuleInit {
           [answeringField]: input.text.trim().slice(0, 2000),
         };
       }
+      // Tone CORRECTION backstop. The fill-only branch above cannot help once
+      // tone already has a value, and it keys off `questionsAsked`, which
+      // stops growing at the recap stage — so a user answering the tone
+      // question with a style ("minimal Scandinavian, warm") kept the stale
+      // tone whenever the classifier stayed silent on that turn. Keyed off
+      // `lastQuestion` (what the assistant actually just asked) and applied
+      // even when tone is already set: the latest answer wins. The
+      // classifier's own extraction still takes precedence when it has one.
+      if (
+        !extracted?.tone &&
+        input.lastQuestion &&
+        input.lastQuestion.trim().toLowerCase() ===
+          this._questionFor('tone').toLowerCase() &&
+        this._isSubstantiveAnswer(input.text)
+      ) {
+        extracted = {
+          ...(extracted ?? {}),
+          tone: input.text.trim().slice(0, 2000),
+        };
+      }
       const brief: DesignBrief = { ...session.brief, ...extracted };
       const routed = this._skillRouter.route(brief);
       const skill = getDesignSkill(routed.skillId);
@@ -323,7 +378,16 @@ export class AiDesignerConversationalistService implements OnModuleInit {
         !routed.lowConfidence &&
         session.brief.recapShown
       ) {
-        return { type: 'chat-turn', confirmed: true };
+        // `fields` rides the accept too. This was the ONE intake return shape
+        // that dropped the extraction, so a confirming message that ALSO
+        // carried substance ("yes, and add the fine print '…'") lost it
+        // wholesale. The conductor merges before it checks `confirmed`, so the
+        // extra fields land in the brief that goes straight into planning.
+        return {
+          type: 'chat-turn',
+          confirmed: true,
+          ...(extracted ? { fields: extracted } : {}),
+        };
       }
 
       if (missingFields.length > 0) {
@@ -408,7 +472,8 @@ export class AiDesignerConversationalistService implements OnModuleInit {
         const revision = this._normalizeRevision(
           classification.revision,
           input.text,
-          session.activeDesignIds
+          session.activeDesignIds,
+          session.designs
         );
         return { type: 'revision', revision };
       }
@@ -491,9 +556,18 @@ export class AiDesignerConversationalistService implements OnModuleInit {
     for (const [key, value] of Object.entries(brief)) {
       if (SUMMARY_SKIP_KEYS.has(key)) continue;
       if (typeof value !== 'string' || !value.trim()) continue;
+      // `fixedCopy` is stored as atomic units joined by a MACHINE separator.
+      // Rendering it verbatim leaked that separator into the recap sentence
+      // ('with the exact copy "with love, the whole crew | Since 2019"'), which
+      // reads as if the pipe were part of the copy the user asked for.
       parts.push(
         key === 'fixedCopy'
-          ? `with the exact copy "${value}"`
+          ? `with the exact copy ${value
+              .split(FIXED_COPY_SEPARATOR)
+              .map((unit) => unit.trim())
+              .filter(Boolean)
+              .map((unit) => `"${unit}"`)
+              .join(' and ')}`
           : `with ${key} "${value}"`
       );
     }
@@ -557,10 +631,44 @@ export class AiDesignerConversationalistService implements OnModuleInit {
       .filter((field): field is FormField => !!field);
   }
 
+  /**
+   * The 1-based variant number the user named, if any — "variant 2", "the
+   * second one", "#3". Deterministic and language-simple on purpose: it only
+   * has to beat a guess.
+   */
+  private _spokenOrdinal(text: string): number | undefined {
+    const words: Record<string, number> = {
+      first: 1,
+      second: 2,
+      third: 3,
+      fourth: 4,
+      fifth: 5,
+      sixth: 6,
+      seventh: 7,
+      eighth: 8,
+      ninth: 9,
+      tenth: 10,
+    };
+    const wordMatch = new RegExp(
+      `\\b(${Object.keys(words).join('|')})\\b`,
+      'i'
+    ).exec(text);
+    if (wordMatch) return words[wordMatch[1].toLowerCase()];
+    const numeric = /\b(?:variant|version|option|design|#)\s*#?\s*(\d{1,2})\b/i.exec(
+      text
+    );
+    if (numeric) {
+      const value = Number(numeric[1]);
+      if (value >= 1 && value <= 10) return value;
+    }
+    return undefined;
+  }
+
   private _normalizeRevision(
     revision: Partial<RevisionRequest> | undefined,
     fallbackText: string,
-    activeDesignIds?: string[]
+    activeDesignIds?: string[],
+    designs?: DesignCatalogueEntry[]
   ): RevisionRequest {
     const instruction =
       typeof revision?.instruction === 'string' && revision.instruction.trim().length > 0
@@ -572,6 +680,28 @@ export class AiDesignerConversationalistService implements OnModuleInit {
         ? revision.targetDesignId
         : undefined;
 
+    // An ordinal the user actually said ("variant 2", "the second one") beats
+    // the classifier's pick: the pick is an opaque cuid chosen from a list, and
+    // set membership — the only check there has ever been — cannot tell a right
+    // one from a wrong one. Live, "the Facebook version" came back as V2's id.
+    const ordinal = this._spokenOrdinal(fallbackText);
+    const named = ordinal
+      ? designs?.find((entry) => entry.ordinal === ordinal)
+      : undefined;
+    if (named) {
+      targetDesignId = named.designId;
+    } else if (
+      targetDesignId &&
+      designs?.length &&
+      !designs.some((entry) => entry.designId === targetDesignId)
+    ) {
+      // The classifier invented an id that is not in the catalogue at all.
+      targetDesignId = undefined;
+    }
+
+    if (!targetDesignId && designs?.length) {
+      targetDesignId = designs[0].designId;
+    }
     if (!targetDesignId && activeDesignIds && activeDesignIds.length > 0) {
       targetDesignId = activeDesignIds[0];
     }

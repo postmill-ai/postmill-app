@@ -113,6 +113,18 @@ export interface DesignPlan {
    * art-director output carrying this field flows straight through.)
    */
   panelSide?: 'left' | 'right';
+  /**
+   * Where the badge sits inside its layout band (the text panel for
+   * split/sidebar layouts, the full canvas otherwise). Optional and backwards
+   * compatible — plans without it keep each template's hardcoded corner. The
+   * badge-burst layout ignores it (the badge IS its centerpiece).
+   */
+  badgePosition?:
+    | 'top-left'
+    | 'top-right'
+    | 'bottom-left'
+    | 'bottom-right'
+    | 'center';
   /** Set by the art director when this plan is a generic fallback (LLM planning failed). */
   fallback?: boolean;
 }
@@ -128,6 +140,8 @@ export interface DesignSlotStyle {
   align?: 'left' | 'center' | 'right';
   /** Badge slot shape override — wins over the preset's badgeStyle treatment. */
   badgeStyle?: 'pill' | 'burst' | 'ribbon';
+  /** CTA slot shape override — wins over the preset's ctaStyle treatment. */
+  ctaStyle?: 'pill' | 'rect' | 'underline' | 'outline';
 }
 
 export interface DesignSlot {
@@ -159,6 +173,19 @@ export interface AssetNeedRequest {
    * generation prompt. Absent for non-hero slots.
    */
   heroLayout?: string;
+  /**
+   * Stock id the caller already used for this slot. A regeneration passes the
+   * previous pick so the (Redis-cached, deterministic) stock search cannot
+   * hand back the identical photo — the silent regeneration no-op.
+   */
+  excludeStockId?: string;
+  /**
+   * Honor `prefer: 'stock'` verbatim on a REGENERATION instead of promoting it
+   * to `'either'`. Set when the caller switched technique on purpose (the
+   * brand_safety path: the image model already failed on that defect, so
+   * re-generating is the same dice, not an escalation).
+   */
+  stockOnly?: boolean;
 }
 
 export interface AssetResult {
@@ -170,8 +197,35 @@ export interface AssetResult {
   source?: 'generate' | 'stock' | 'gradient';
   /** Aspect class this asset was generated for (the map key carries it too). */
   aspect?: AssetAspect;
-  /** Provider-supplied focal point for cover-cropping; the composer defaults to center. */
+  /** Provider-supplied focal point for cover-cropping; wins over `subjectPoint`. */
   focalPoint?: { x: number; y: number };
+  /**
+   * Provider item id for a `source: 'stock'` asset. Lets a caller detect (and
+   * exclude) a repeat pick across regenerations.
+   */
+  stockId?: string;
+  /**
+   * Layout intent the GENERATION prompt targeted (`LAYOUT_TEXT_SPACE` key).
+   * Only set for `source: 'generate'` — it records where the model was told to
+   * put the subject, which the composer crops toward. Stock/gradient assets
+   * never obeyed that instruction, so they never carry it.
+   */
+  heroLayout?: string;
+  /**
+   * Subject centroid, normalized 0..1 in SOURCE image space. Not a crop focal
+   * point — the composer converts it per target box (see `_focalPointFor`).
+   *
+   * No longer produced by asset resolution: the offline sharp-`attention`
+   * probe that used to fill it was a saliency heuristic that measured drop
+   * shadows, not subjects. The composer now sets it from the real VLM
+   * detector, and only for crops that risk losing the subject
+   * (`applySubjectFocalPoints`). Still read here so a provider that supplies
+   * a centroid, and a regenerated asset carrying one, both keep working.
+   */
+  subjectPoint?: { x: number; y: number };
+  /** Intrinsic pixel dimensions of the resolved file, when they could be read. */
+  naturalWidth?: number;
+  naturalHeight?: number;
 }
 
 export type FixScope = 'shared' | 'format-only';
@@ -236,6 +290,13 @@ export interface VisionFinding {
   formatId?: string;
   slotId?: string;
   issue: string;
+  /**
+   * Rubric criterion this finding violates (`brand_safety`, `text_fit`, …).
+   * Optional — the model may omit it. The conductor uses it to pick the
+   * REGENERATION TECHNIQUE: a `brand_safety` defect re-rolls stock instead of
+   * the image model, which has already failed on that defect.
+   */
+  criterion?: string;
   fix?: Fix;
 }
 

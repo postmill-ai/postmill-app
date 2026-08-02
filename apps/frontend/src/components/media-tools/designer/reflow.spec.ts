@@ -83,7 +83,9 @@ describe('smartReflow', () => {
   it('keeps a top headline readable and inside the title-safe zone', () => {
     const result = smartReflow(headlineEl, squareSource, storyTarget);
     expect(result.fontSize).toBeGreaterThanOrEqual(10);
-    const expectedW = Math.round(600 * (1080 / 1080)); // scale = min(1, 0.5625) = 0.5625
+    // Text is type-sized, so it re-fits at the canvas TYPE BASIS (the
+    // geometric mean, 1440/1080 = 4/3 on a story), not the min-axis scale.
+    const expectedW = Math.round(600 * (1440 / 1080));
     expect(result.width).toBe(expectedW);
     // Anchor is top-center, so centered horizontally.
     expect(result.x).toBe((storyTarget.width - (result.width as number)) / 2);

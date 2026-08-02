@@ -130,11 +130,20 @@ export const extractQuotedSpans = (text: string): string[] => {
 /** Merge sanitized form values into the brief, bounded by the caps above.
  *  `replyTo` (a prompt id, the intake field just asked, or — from the intake
  *  form path — the submitted field names) is appended to `questionsAsked`
- *  when given. */
+ *  when given.
+ *
+ *  `rawText` is THIS turn's user message, when there is one. `intent` is
+ *  pinned to the first substantive turn on purpose (so "yes" / "looks good"
+ *  can never pollute skill routing or the downstream prompts), which means
+ *  scanning `intent` alone re-reads message 1 forever: a quoted fine-print
+ *  line or badge the user adds on turn 2+ never reached `fixedCopy` at all.
+ *  Passing the raw message here scans it for quoted spans WITHOUT letting it
+ *  near `intent`. */
 export const mergeBriefValues = (
   existing: DesignBrief,
   values: Record<string, unknown>,
-  replyTo?: string | string[]
+  replyTo?: string | string[],
+  rawText?: string
 ): DesignBrief => {
   const asked = replyTo
     ? Array.isArray(replyTo)
@@ -159,15 +168,24 @@ export const mergeBriefValues = (
       (merged as Record<string, unknown>)[key] = normalizeSpokenUrls(value);
     }
   }
-  // Quoted spans in the intent become fixedCopy atomic units, deterministic
-  // and classifier-independent. Runs AFTER the spoken-URL normalization so a
-  // quoted "northbean dot shop" lands already dotted. Spans the existing
+  // Quoted spans become fixedCopy atomic units, deterministic and
+  // classifier-independent. Runs AFTER the spoken-URL normalization so a
+  // quoted "northbean dot shop" lands already dotted (the raw message gets the
+  // same normalization here). Scanned across the pinned `intent` UNION this
+  // turn's raw message — see the note on `rawText` above. Spans the existing
   // fixedCopy already carries (case-insensitive, whitespace-normalized
-  // containment) are skipped.
-  if (typeof merged.intent === 'string' && merged.intent) {
+  // containment) are skipped, so re-scanning the intent every turn is a no-op.
+  const spanSources = [
+    typeof merged.intent === 'string' ? merged.intent : '',
+    typeof rawText === 'string' && rawText ? normalizeSpokenUrls(rawText) : '',
+  ].filter(Boolean);
+  if (spanSources.length > 0) {
     let fixedCopy =
       typeof merged.fixedCopy === 'string' ? merged.fixedCopy : '';
-    for (const span of extractQuotedSpans(merged.intent)) {
+    const spans = [
+      ...new Set(spanSources.flatMap((source) => extractQuotedSpans(source))),
+    ];
+    for (const span of spans) {
       if (normalizeForContainment(fixedCopy).includes(normalizeForContainment(span))) {
         continue;
       }

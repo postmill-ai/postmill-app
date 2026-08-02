@@ -74,6 +74,8 @@ const STYLE_PRESETS: AiDesignerStylePreset[] = [
       textStroke: null,
       textShadow: false,
       ctaStyle: 'rect',
+      // "a plain rectangular CTA at most" — no corner rounding at all.
+      ctaRadius: 'square',
       badgeStyle: null,
       accentShapes: false,
     },
@@ -101,6 +103,7 @@ const STYLE_PRESETS: AiDesignerStylePreset[] = [
       textStroke: null,
       textShadow: true,
       ctaStyle: 'outline',
+      ctaRadius: 'small',
       badgeStyle: 'pill',
       accentShapes: true,
     },
@@ -128,7 +131,9 @@ const STYLE_PRESETS: AiDesignerStylePreset[] = [
       textStroke: { color: 'light', width: 2 },
       textShadow: true,
       ctaStyle: 'pill',
-      badgeStyle: 'burst',
+      // Was 'burst'. The starburst badge was retired in round 8 (D1): every
+      // star in the render corpus was worse than its pill equivalent.
+      badgeStyle: 'pill',
       accentShapes: true,
     },
     promptFragment: [
@@ -155,7 +160,12 @@ const STYLE_PRESETS: AiDesignerStylePreset[] = [
       textStroke: null,
       textShadow: false,
       ctaStyle: 'rect',
-      badgeStyle: 'burst',
+      // "a hard-edged rectangle with a thick border and an offset solid shadow".
+      ctaRadius: 'square',
+      ctaBorder: true,
+      ctaShadow: true,
+      // Was 'burst' — retired in round 8 (D1), see the retro preset above.
+      badgeStyle: 'pill',
       accentShapes: true,
     },
     promptFragment: [
@@ -182,6 +192,9 @@ const STYLE_PRESETS: AiDesignerStylePreset[] = [
       textStroke: null,
       textShadow: false,
       ctaStyle: 'rect',
+      // "a solid or lightly rounded rectangle" — the only preset the old
+      // shared 14%-of-height radius was ever right for.
+      ctaRadius: 'small',
       badgeStyle: 'pill',
       accentShapes: false,
     },
@@ -209,6 +222,7 @@ const STYLE_PRESETS: AiDesignerStylePreset[] = [
       textStroke: null,
       textShadow: false,
       ctaStyle: 'outline',
+      ctaRadius: 'small',
       badgeStyle: 'ribbon',
       accentShapes: false,
     },

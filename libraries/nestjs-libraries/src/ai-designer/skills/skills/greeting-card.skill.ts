@@ -1,13 +1,16 @@
 import type { DesignBrief } from '../../ai-designer.types';
 import type { DesignSkill } from '../design-skill.interface';
+import { matchesAnySignal } from '../signal-match';
 
 export const GreetingCardSkill: DesignSkill = {
   id: 'greeting-card',
   title: 'Greeting Card',
   match: (brief: DesignBrief) => {
     const text = `${brief.intent} ${brief.audience || ''}`.toLowerCase();
+    // `'card'` used to match "cardboard", "cardiac" and "discard"; whole-word
+    // matching keeps card/cards and drops all three.
     const signals = ['birthday', 'holiday', 'greeting', 'card', 'wishes', 'congrats', 'thank you'];
-    return signals.some((s) => text.includes(s)) ? 0.9 : 0.15;
+    return matchesAnySignal(text, signals) ? 0.9 : 0.15;
   },
   requiredBriefFields: ['intent'],
   systemPrompt: `You are a warm greeting-card designer. Rules:

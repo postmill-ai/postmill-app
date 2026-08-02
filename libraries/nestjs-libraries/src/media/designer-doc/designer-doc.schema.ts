@@ -134,6 +134,15 @@ export interface DesignerBackground {
   fileId?: string;
   /** Cover-crop anchor (0–1) for image backgrounds; defaults to center. */
   focalPoint?: { x: number; y: number };
+  /**
+   * Subject centroid in SOURCE-image space (0–1) behind `focalPoint`, plus the
+   * intrinsic size needed to convert it. Same contract as the image ELEMENT
+   * fields: `focalPoint` is only valid for the box aspect it was computed
+   * against, so a seeded output re-derives it from these.
+   */
+  subjectPoint?: { x: number; y: number };
+  naturalWidth?: number;
+  naturalHeight?: number;
 }
 
 export interface DesignerElement {
@@ -178,6 +187,13 @@ export interface DesignerElement {
   borderRadius?: number;
   fitMode?: 'contain' | 'cover' | 'fill';
   focalPoint?: { x: number; y: number };
+  /**
+   * Subject centroid in SOURCE-image space (0..1) behind `focalPoint`. Unlike
+   * `focalPoint` — which is the crop window's position and therefore only
+   * valid for the box aspect it was computed against — this survives a reflow,
+   * so `smartReflow` can re-derive the focal point for the new box.
+   */
+  subjectPoint?: { x: number; y: number };
   mask?: DesignerMask;
   alt?: string;
   naturalWidth?: number;
@@ -293,6 +309,15 @@ export interface DesignerOutput {
   background: string;
   bg?: DesignerBackground;
   children: DesignerElement[];
+  /**
+   * Vertical budget of this design's copy stack, as a multiple of the canvas
+   * height — see `designer-doc/reflow`'s `typeBasisPx`. Stamped by the AI
+   * Designer's composer (it is the only writer that knows the layout) and
+   * carried onto every seeded format so a re-fit measures both canvases with
+   * the rule the primary was actually composed under. Absent on manually
+   * authored docs, which fall back to the plain geometric-mean basis.
+   */
+  typeBudget?: number;
 }
 
 export interface DesignerAttribution {
@@ -481,13 +506,20 @@ const { strict: StrictDesignerBackgroundSchema, lenient: LenientDesignerBackgrou
       ...backgroundCommon,
       gradient: StrictDesignerGradientSchema.optional(),
       // Cover-crop anchor for image backgrounds (renderer honors it, same as
-      // image-element focalPoint).
+      // image-element focalPoint), plus the centroid/intrinsic size a reflow
+      // re-derives it from.
       focalPoint: StrictFocalPointSchema.optional(),
+      subjectPoint: StrictFocalPointSchema.optional(),
+      naturalWidth: strictNum(0, MAX_DIMENSION).optional(),
+      naturalHeight: strictNum(0, MAX_DIMENSION).optional(),
     },
     {
       ...backgroundCommon,
       gradient: LenientDesignerGradientSchema.optional(),
       focalPoint: LenientFocalPointSchema.optional(),
+      subjectPoint: LenientFocalPointSchema.optional(),
+      naturalWidth: lenientNum(0, MAX_DIMENSION, 0).optional(),
+      naturalHeight: lenientNum(0, MAX_DIMENSION, 0).optional(),
     }
   );
 
@@ -587,6 +619,7 @@ const elementStrictNested = {
   textStroke: StrictDesignerTextStrokeSchema.optional(),
   crop: StrictDesignerCropSchema.optional(),
   focalPoint: StrictFocalPointSchema.optional(),
+  subjectPoint: StrictFocalPointSchema.optional(),
   mask: StrictDesignerMaskSchema.optional(),
   fillGradient: StrictDesignerGradientSchema.optional(),
   // drift-resolved: boxShadow present in frontend, absent server copy
@@ -600,6 +633,7 @@ const elementLenientNested = {
   textStroke: LenientDesignerTextStrokeSchema.optional(),
   crop: LenientDesignerCropSchema.optional(),
   focalPoint: LenientFocalPointSchema.optional(),
+  subjectPoint: LenientFocalPointSchema.optional(),
   mask: LenientDesignerMaskSchema.optional(),
   fillGradient: LenientDesignerGradientSchema.optional(),
   boxShadow: LenientDesignerTextShadowSchema.optional(),
@@ -851,6 +885,7 @@ const { strict: StrictDesignerOutputSchema, lenient: LenientDesignerOutputSchema
       width: strictNum(1, MAX_DIMENSION),
       height: strictNum(1, MAX_DIMENSION),
       bg: StrictDesignerBackgroundSchema.optional(),
+      typeBudget: strictNum(0, 100).optional(),
       children: z.array(StrictDesignerElementSchema).max(MAX_ELEMENTS_PER_OUTPUT),
     },
     {
@@ -858,6 +893,7 @@ const { strict: StrictDesignerOutputSchema, lenient: LenientDesignerOutputSchema
       width: lenientNum(1, MAX_DIMENSION, 1080),
       height: lenientNum(1, MAX_DIMENSION, 1080),
       bg: LenientDesignerBackgroundSchema.optional(),
+      typeBudget: lenientNum(0, 100, 0).optional(),
       children: z.array(LenientDesignerElementSchema).max(MAX_ELEMENTS_PER_OUTPUT),
     }
   );

@@ -6,7 +6,7 @@ import { useToaster } from '@postmill-ai/react/toaster/toaster';
 import { useT } from '@postmill-ai/react/translation/get.transation.service.client';
 import { Logo } from '@postmill-ai/frontend/components/new-layout/logo';
 import { FullscreenButton } from '@postmill-ai/frontend/components/media-tools/fullscreen-button';
-import { useFullscreen } from '@postmill-ai/frontend/components/media-tools/use-fullscreen';
+import { useFullscreenSurface } from '@postmill-ai/frontend/components/media-tools/use-fullscreen';
 import { MessageRenderer, TypingIndicator } from './message-renderer';
 import { useAiDesignerSession } from './ai-designer.hooks';
 import {
@@ -26,6 +26,8 @@ interface AiDesignerChatProps {
   sessionId: string;
   mode: AiDesignerMode;
   onReset?: () => void;
+  /** Opens the previous-sessions drawer (owned by the page, which holds sessionId). */
+  onOpenSessions?: () => void;
 }
 
 /** Local messages carry the emit nonce so the server echo can reconcile them. */
@@ -37,10 +39,11 @@ export const AiDesignerChat: React.FC<AiDesignerChatProps> = ({
   sessionId,
   mode,
   onReset,
+  onOpenSessions,
 }) => {
   const toaster = useToaster();
   const t = useT();
-  const { isFullscreen } = useFullscreen();
+  const surface = useFullscreenSurface('rounded-[12px] overflow-hidden');
   const { data: hydrate } = useAiDesignerSession(sessionId);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [sessionState, setSessionState] = useState<AiDesignerSessionDto | null>(null);
@@ -180,7 +183,19 @@ export const AiDesignerChat: React.FC<AiDesignerChatProps> = ({
     const map = new Map<string, ChatMessage>();
     for (const m of hydrate?.messages || []) map.set(m.id, m);
     for (const m of messages) map.set(m.id, m);
-    return Array.from(map.values()).sort((a, b) => a.seq - b.seq);
+    return (
+      Array.from(map.values())
+        // The conductor persists a `progress` row per phase transition, and
+        // neither read path (REST hydrate or the socket's after-seq replay)
+        // filters by kind — so every historical "Thinking…" came back and
+        // re-rendered as a live-looking animated indicator. Thinking is a
+        // transient state, never transcript. Dropping it here covers both read
+        // paths at once; filtering server-side in getMessagesAfterSeq would
+        // risk the client never acking those seqs. The live indicator is a
+        // separate pseudo-message (id 'progress') and is unaffected.
+        .filter((m) => m.kind !== 'progress')
+        .sort((a, b) => a.seq - b.seq)
+    );
   }, [hydrate?.messages, messages]);
 
   const handleScroll = () => {
@@ -321,9 +336,7 @@ export const AiDesignerChat: React.FC<AiDesignerChatProps> = ({
 
   return (
     <div
-      className={`flex flex-col h-full bg-studioBg${
-        isFullscreen ? ' fixed inset-0 z-[100]' : ' rounded-[12px] overflow-hidden'
-      }`}
+      className={`flex flex-col h-full bg-studioBg ${surface}`}
     >
       <div className="flex items-center justify-between gap-[10px] px-[16px] h-[52px] border-b border-studioBorder shrink-0">
         <div className="flex items-center gap-[10px] min-w-0">
@@ -351,6 +364,11 @@ export const AiDesignerChat: React.FC<AiDesignerChatProps> = ({
           {!socket.connected && (
             <Button type="button" secondary onClick={socket.reconnect}>
               {t('reconnect', 'Reconnect')}
+            </Button>
+          )}
+          {onOpenSessions && (
+            <Button type="button" secondary onClick={onOpenSessions}>
+              {t('previous_sessions', 'Previous sessions')}
             </Button>
           )}
           {onReset && (
@@ -399,26 +417,26 @@ export const AiDesignerChat: React.FC<AiDesignerChatProps> = ({
           </MessageBubble>
         ))}
 
+        {/* Thinking is a state, not a message — no bubble, no agent caption.
+            Just the indicator and a way out of it. */}
         {progressMessage && (
-          <MessageBubble message={progressMessage}>
+          <div className="flex items-center gap-3">
             <MessageRenderer
               message={progressMessage}
               onAcceptPlan={handleAcceptPlan}
               onRevisePlan={handleRevisePlan}
               onFormSubmit={handleFormSubmit}
             />
-            <div className="mt-2 flex justify-end">
-              <Button
-                type="button"
-                secondary
-                disabled={cancelSent}
-                onClick={handleCancel}
-                className="!h-[28px] !px-[12px] text-[12px]"
-              >
-                {t('cancel', 'Cancel')}
-              </Button>
-            </div>
-          </MessageBubble>
+            <Button
+              type="button"
+              secondary
+              disabled={cancelSent}
+              onClick={handleCancel}
+              className="!h-[28px] !px-[12px] text-[12px]"
+            >
+              {t('cancel', 'Cancel')}
+            </Button>
+          </div>
         )}
 
         {previewMessage && (

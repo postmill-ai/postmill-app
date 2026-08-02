@@ -3,7 +3,10 @@ import type {
   DesignerElement,
   DesignerOutput,
 } from '@postmill-ai/nestjs-libraries/media/designer-doc/designer-doc.schema';
-import { getSafeZoneInset } from '@postmill-ai/nestjs-libraries/media/designer-doc/reflow';
+import {
+  getSafeZoneInset,
+  groupKeyOf,
+} from '@postmill-ai/nestjs-libraries/media/designer-doc/reflow';
 import type { DesignPlan } from '../ai-designer.types';
 
 /**
@@ -64,6 +67,32 @@ const boxInside = (inner: Box, outer: Box): boolean =>
   inner.x + inner.width <= outer.x + outer.width + 1 &&
   inner.y + inner.height <= outer.y + outer.height + 1;
 
+/** Star label-safe inner area — the ~60% box a burst badge's copy must fit. */
+export const STAR_LABEL_SAFE_RATIO = 0.6;
+
+/**
+ * The VISIBLE box of a star badge, as a share of its AABB. A star's glyph only
+ * fills its bounding box at the five points; the corners are empty. Collision
+ * and label-fit logic that treats the raw AABB as solid either nudges copy that
+ * is nowhere near the star (collision, default ~70%) or pins a label onto the
+ * points (label fit, `STAR_LABEL_SAFE_RATIO`). Shared by the composer's overlap
+ * guard / badge builder and this validator's badge inner-fit so all three use
+ * one convention.
+ */
+export const starVisualBox = (
+  star: { x: number; y: number; width: number; height: number },
+  ratio = 0.7
+): { x: number; y: number; width: number; height: number } => {
+  const insetX = Math.round((star.width * (1 - ratio)) / 2);
+  const insetY = Math.round((star.height * (1 - ratio)) / 2);
+  return {
+    x: star.x + insetX,
+    y: star.y + insetY,
+    width: Math.max(10, star.width - insetX * 2),
+    height: Math.max(10, star.height - insetY * 2),
+  };
+};
+
 const isVisibleText = (el: DesignerElement): boolean =>
   el.type === 'text' &&
   !el.hidden &&
@@ -103,6 +132,26 @@ const contrastRatio = (a: string, b: string): number => {
   const l1 = hexLuminance(a);
   const l2 = hexLuminance(b);
   return (Math.max(l1, l2) + 0.05) / (Math.min(l1, l2) + 0.05);
+};
+
+/**
+ * A shape fill the given TEXT color reads against at `required`:1 — a plan
+ * palette color when one clears the bar (design-preserving), else whichever
+ * of white/near-black does. Undefined when neither can (an unreachable pair).
+ */
+const backdropFor = (
+  text: string,
+  required: number,
+  palette?: string[]
+): string | undefined => {
+  const fromPalette = (palette ?? [])
+    .map(parseSolidHex)
+    .find((c): c is string => !!c && contrastRatio(text, c) >= required);
+  if (fromPalette) return fromPalette;
+  const white = contrastRatio(text, '#FFFFFF');
+  const black = contrastRatio(text, '#111111');
+  if (Math.max(white, black) < required) return undefined;
+  return white >= black ? '#FFFFFF' : '#111111';
 };
 
 const clamp = (v: number, min: number, max: number) =>
@@ -172,26 +221,90 @@ function validateOutput(
   let changed = false;
   const tag = `output "${out.formatId}"`;
 
-  let children: DesignerElement[] = out.children.map((el) => {
-    // (1) Canvas bounds: nothing clamps today — an element's AABB must stay
-    // inside its output rect.
-    if (!hasBox(el) || !isFiniteNum(out.width) || !isFiniteNum(out.height)) {
-      return el;
-    }
-    const width = clamp(el.width, 0, out.width);
-    const height = clamp(el.height, 0, out.height);
-    const x = clamp(el.x, 0, Math.max(0, out.width - width));
-    const y = clamp(el.y, 0, Math.max(0, out.height - height));
-    if (x === el.x && y === el.y && width === el.width && height === el.height) {
-      return el;
-    }
-    changed = true;
-    violations.push(
-      `Clamped element "${elLabel(el)}" on ${tag} into the canvas bounds ` +
-        `(${el.x},${el.y} ${el.width}x${el.height} → ${x},${y} ${width}x${height}).`
+  // TEXT is bounded by the title-safe area rather than the raw canvas: a 30px
+  // legal line at y=1050 on a 1080 canvas is "in bounds" by the canvas rule
+  // and still ships flush with the edge (or, on a story format, under the
+  // platform's UI chrome). Per axis and only where the box FITS the safe area
+  // — the same rule `smartReflow` applies — so a deliberately full-bleed text
+  // box is not shrunk out of its own layout. Non-text keeps the canvas: a
+  // scrim is supposed to be able to bleed to the edge.
+  const safeZone =
+    isFiniteNum(out.width) && isFiniteNum(out.height)
+      ? getSafeZoneInset(out.formatId || '', out.width, out.height)
+      : undefined;
+
+  // (1) Canvas bounds: nothing clamps today — an element's AABB must stay
+  // inside its output rect.
+  //
+  // Clamped BY MOVE UNIT (`groupKeyOf`: a badge pill and its label, a CTA
+  // plate and its label/underline/shadow), not per element. Clamping members
+  // independently moved a badge label to y=80 while its pill stayed at 54 —
+  // 26px out of register, with the pill still sitting under the very chrome
+  // the label was pulled out of — and did the same on the x axis for wide
+  // banners. The unit's combined box is clamped under the strictest rule any
+  // member needs (the title-safe area as soon as one of them is text) and
+  // every member takes the SAME translation. Only sizes stay per element, so
+  // an oversized member is the only one shrunk.
+  let children: DesignerElement[] = out.children;
+  if (isFiniteNum(out.width) && isFiniteNum(out.height)) {
+    const sized = out.children.map((el) =>
+      hasBox(el)
+        ? {
+            ...el,
+            width: clamp(el.width, 0, out.width),
+            height: clamp(el.height, 0, out.height),
+          }
+        : el
     );
-    return { ...el, x, y, width, height };
-  });
+    const units = new Map<string, number[]>();
+    sized.forEach((el, idx) => {
+      if (!hasBox(el)) return;
+      const key = groupKeyOf(el) ?? `#${idx}`;
+      const list = units.get(key);
+      if (list) list.push(idx);
+      else units.set(key, [idx]);
+    });
+    const next = [...sized];
+    for (const indexes of units.values()) {
+      const members = indexes.map((i) => sized[i]);
+      const bx = Math.min(...members.map((m) => m.x));
+      const by = Math.min(...members.map((m) => m.y));
+      const bw = Math.max(...members.map((m) => m.x + m.width)) - bx;
+      const bh = Math.max(...members.map((m) => m.y + m.height)) - by;
+      const safe = members.some((m) => m.type === 'text') ? safeZone : undefined;
+      const safeX = !!safe && bw <= safe.right - safe.left;
+      const safeY = !!safe && bh <= safe.bottom - safe.top;
+      const x = safeX
+        ? clamp(bx, safe!.left, Math.max(safe!.left, safe!.right - bw))
+        : clamp(bx, 0, Math.max(0, out.width - bw));
+      const y = safeY
+        ? clamp(by, safe!.top, Math.max(safe!.top, safe!.bottom - bh))
+        : clamp(by, 0, Math.max(0, out.height - bh));
+      const dx = x - bx;
+      const dy = y - by;
+      for (const i of indexes) {
+        const el = out.children[i];
+        const moved = { ...sized[i], x: sized[i].x + dx, y: sized[i].y + dy };
+        if (
+          moved.x === el.x &&
+          moved.y === el.y &&
+          moved.width === el.width &&
+          moved.height === el.height
+        ) {
+          continue;
+        }
+        changed = true;
+        violations.push(
+          `Clamped element "${elLabel(el)}" on ${tag} into the ` +
+            `${safeX || safeY ? 'title-safe area' : 'canvas bounds'} ` +
+            `(${el.x},${el.y} ${el.width}x${el.height} → ` +
+            `${moved.x},${moved.y} ${moved.width}x${moved.height}).`
+        );
+        next[i] = moved;
+      }
+    }
+    children = changed ? next : out.children;
+  }
 
   // (1b) Identical-element dedupe: repeated critic passes can add the exact
   // same scrim/accent twice (one per pass). Elements identical in (type,
@@ -386,16 +499,8 @@ function validateOutput(
       10,
       Math.round(Math.min(out.width, out.height) * 0.014)
     );
-    const innerFor = (star: Box): Box => {
-      const insetX = Math.round(star.width * 0.2);
-      const insetY = Math.round(star.height * 0.2);
-      return {
-        x: star.x + insetX,
-        y: star.y + insetY,
-        width: Math.max(10, star.width - insetX * 2),
-        height: Math.max(10, star.height - insetY * 2),
-      };
-    };
+    const innerFor = (star: Box): Box =>
+      starVisualBox(star, STAR_LABEL_SAFE_RATIO);
     const fitsAt = (inner: Box, size: number): boolean =>
       estimateWrappedLines(label.text as string, inner.width, size) *
         (label.lineHeight || 1.2) *
@@ -405,6 +510,46 @@ function validateOutput(
     let star: Box = { x: el.x, y: el.y, width: el.width, height: el.height };
     let starChanged = false;
     let revertedToPill = false;
+
+    // (3a) SQUARE INVARIANT. A star's glyph is drawn in a square frame; a
+    // stretched AABB renders as a splayed blob and pins its label onto the
+    // points. The ladder below has no aspect term — a 4.59:1 star satisfies
+    // `boxInside` perfectly and only the label ever gets shrunk — so the
+    // deformation ratcheted across passes (1.22 → 2.04 → 2.75 → 4.59 measured
+    // over four re-fits). Square it on the larger axis about its own centre,
+    // then clamp back inside the title-safe area.
+    if (Math.abs(star.width - star.height) > 2) {
+      const safe = getSafeZoneInset(out.formatId || '', out.width, out.height);
+      const side = Math.min(
+        Math.max(star.width, star.height),
+        Math.max(10, Math.floor(safe.right - safe.left)),
+        Math.max(10, Math.floor(safe.bottom - safe.top))
+      );
+      const cx = star.x + star.width / 2;
+      const cy = star.y + star.height / 2;
+      violations.push(
+        `Squared the star badge "${elLabel(el)}" on ${tag} from ` +
+          `${star.width}x${star.height} to ${side}x${side} — a star frame is ` +
+          `square.`
+      );
+      star = {
+        x: clamp(
+          Math.round(cx - side / 2),
+          Math.ceil(safe.left),
+          Math.max(Math.ceil(safe.left), Math.floor(safe.right - side))
+        ),
+        y: clamp(
+          Math.round(cy - side / 2),
+          Math.ceil(safe.top),
+          Math.max(Math.ceil(safe.top), Math.floor(safe.bottom - side))
+        ),
+        width: side,
+        height: side,
+      };
+      starChanged = true;
+      changed = true;
+    }
+
     let inner = innerFor(star);
 
     if (!boxInside(label, inner)) {
@@ -547,8 +692,13 @@ function validateOutput(
       if (other.type !== 'shape' && other.type !== 'image') continue;
       if (!hasBox(other) || !overlaps(el, other)) continue;
       if (other.type === 'image') return el; // imagery beneath — no flat-fill fix
+      // A shape with neither `fill` nor `fillGradient` paints nothing across
+      // its box, so it is transparent to this scan — keep looking DOWN the
+      // stack. Stopping here hid an IMAGE under an unfilled shape and judged
+      // the chip against the output background instead (same bug as §4).
+      if (!other.fill && !other.fillGradient) continue;
       beneath = parseSolidHex(other.fill);
-      break; // a fill-less shape is transparent: fall through to the bg
+      break; // a gradient has no single hex to judge: fall through to the bg
     }
     const backdrop = beneath ?? bgSolid;
     if (!backdrop || contrastRatio(fill, backdrop) >= 1.15) return el;
@@ -623,10 +773,14 @@ function validateOutput(
   // (4) Contrast: text must read against whatever is painted directly
   // beneath it (topmost earlier overlapping shape fill, else a solid output
   // background). Image backdrops can't be pixel-sampled — skipped.
+  // Backing shapes to recolor once the text pass is done (see below) —
+  // index → new fill.
+  const backdropRecolors = new Map<number, string>();
   children = children.map((el, idx) => {
     if (!isVisibleText(el) || !hasBox(el)) return el;
 
     let underlying: string | undefined;
+    let underlyingIdx = -1;
     let unknown = false;
     for (let k = idx - 1; k >= 0; k--) {
       const other = children[k];
@@ -637,8 +791,15 @@ function validateOutput(
         unknown = true; // imagery beneath — pixel sampling is out of scope
         break;
       }
+      // A shape with neither `fill` nor `fillGradient` paints nothing across
+      // its box (a stroke-only outline CTA), so it is transparent to this
+      // scan — keep looking DOWN the stack. Stopping here hid the IMAGE under
+      // an unfilled button and silently judged the text against the output bg
+      // instead: a #FF00E5 label shipped on a magenta photo at 1.73:1.
+      if (!other.fill && !other.fillGradient) continue;
       underlying = parseSolidHex(other.fill);
-      break; // a fill-less shape is transparent: fall through to the bg
+      underlyingIdx = k;
+      break; // a gradient has no single hex to judge: fall through to the bg
     }
     const backdrop = underlying ?? bgSolid;
     if (unknown || !backdrop) return el;
@@ -650,17 +811,68 @@ function validateOutput(
     const fill = parseSolidHex(el.fill) ?? '#000000';
     if (contrastRatio(fill, backdrop) >= required) return el;
 
+    const current = contrastRatio(fill, backdrop);
     const white = contrastRatio('#FFFFFF', backdrop);
     const black = contrastRatio('#111111', backdrop);
     const fixed = white >= black ? '#FFFFFF' : '#111111';
-    changed = true;
-    violations.push(
+    const problem =
       `Low contrast on ${tag}: text "${elLabel(el)}" ${fill} on ${backdrop} ` +
-        `(${contrastRatio(fill, backdrop).toFixed(2)}:1, needs ${required}:1) ` +
-        `— flipped the fill to ${fixed}.`
+      `(${current.toFixed(2)}:1, needs ${required}:1)`;
+
+    if (Math.max(white, black) >= required && fixed !== fill) {
+      changed = true;
+      violations.push(`${problem} — flipped the fill to ${fixed}.`);
+      return { ...el, fill: fixed };
+    }
+
+    // NEITHER candidate reads against this backdrop (a mid-tone fill puts
+    // both white and near-black under the ratio), so flipping the TEXT is
+    // useless — and when the winner already IS the current fill it is a pure
+    // no-op that used to log a "flip" and force a re-save/re-render on every
+    // pass. Recolor the backing SHAPE instead, exactly as rule 3.5 does for a
+    // blended badge plate; layout-sized panels stay exempt (recoloring one
+    // recolors half the design).
+    const backing = underlyingIdx >= 0 ? children[underlyingIdx] : undefined;
+    if (
+      backing &&
+      underlying &&
+      !backdropRecolors.has(underlyingIdx) &&
+      backing.width * backing.height < out.width * out.height * 0.25
+    ) {
+      const recolor = backdropFor(fill, required, opts?.plan?.palette);
+      if (recolor && recolor !== underlying) {
+        backdropRecolors.set(underlyingIdx, recolor);
+        changed = true;
+        violations.push(
+          `${problem} — recolored the shape "${elLabel(backing)}" beneath it ` +
+            `from ${underlying} to ${recolor}.`
+        );
+        return el;
+      }
+    }
+
+    // Nothing recolorable beneath it: take the best candidate anyway, but say
+    // what it actually achieves instead of claiming the defect is fixed.
+    if (fixed !== fill) {
+      changed = true;
+      violations.push(
+        `${problem} — could not reach ${required}:1; used ${fixed} at ` +
+          `${Math.max(white, black).toFixed(2)}:1.`
+      );
+      return { ...el, fill: fixed };
+    }
+    violations.push(
+      `${problem} — could not reach ${required}:1; kept ${fill} at ` +
+        `${current.toFixed(2)}:1 (no recolorable shape beneath it).`
     );
-    return { ...el, fill: fixed };
+    return el;
   });
+  if (backdropRecolors.size > 0) {
+    children = children.map((el, idx) => {
+      const recolor = backdropRecolors.get(idx);
+      return recolor ? { ...el, fill: recolor } : el;
+    });
+  }
 
   // (5) Degenerate output — reported, never auto-fixed.
   const planTexts = opts?.plan?.texts;

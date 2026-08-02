@@ -62,3 +62,73 @@ describe('AiDesignerSkillRouter', () => {
     }
   });
 });
+
+// Round 7 C1: signals were matched with `String.includes`, so the
+// advertisement skill's `'ad'` fired on "he-ad-line", "re-ad-y", "gr-ad-ient"
+// and scored 0.9 for essentially every brief. Six consecutive live runs all
+// routed to `advertisement`; four of the five skills had never executed.
+describe('AiDesignerSkillRouter word-boundary signal matching (round 7 C1)', () => {
+  const router = new AiDesignerSkillRouter();
+  const score = (skillId: string, brief: DesignBrief) =>
+    DESIGN_SKILLS.find((s) => s.id === skillId)!.match(brief);
+
+  it.each([
+    ['headline', 'a bold headline for our page'],
+    ['ready', 'something ready for the weekend'],
+    ['gradient', 'a soft gradient backdrop'],
+    ['made', 'a design made for our page'],
+    ['loaded', 'a fully loaded overview'],
+    ['shade', 'a calm shade of green'],
+  ])('no longer scores advertisement 0.9 on "%s"', (_word, intent) => {
+    expect(score('advertisement', { intent })).toBe(0.25);
+    expect(router.route({ intent }).skillId).not.toBe('advertisement');
+  });
+
+  it('still routes a real ad brief to advertisement', () => {
+    for (const intent of [
+      'an ad for our new roast',
+      'run some ads this weekend',
+      'a weekend sale on all beans',
+      'promote the 20% discount',
+      'get people to buy the sampler',
+    ]) {
+      expect(score('advertisement', { intent }), intent).toBe(0.9);
+      expect(router.route({ intent }).skillId, intent).toBe('advertisement');
+    }
+  });
+
+  it('matches every skill on its own signals', () => {
+    expect(router.route({ intent: 'a funny meme', tone: 'playful' }).skillId).toBe('meme');
+    expect(router.route({ intent: 'a birthday card for Ana' }).skillId).toBe('greeting-card');
+    expect(router.route({ intent: 'show off our new product line' }).skillId).toBe(
+      'product-promo'
+    );
+    expect(router.route({ intent: 'announce our new opening hours' }).skillId).toBe(
+      'announcement'
+    );
+  });
+
+  it('keeps multi-word signals working', () => {
+    expect(score('greeting-card', { intent: 'a thank you note for the team' })).toBe(0.9);
+    expect(score('announcement', { intent: 'we are hiring two designers' })).toBe(0.9);
+    expect(score('announcement', { intent: 'the studio is now open' })).toBe(0.9);
+    expect(score('product-promo', { intent: 'our new arrivals for autumn' })).toBe(0.9);
+    // …and only as a phrase: the words apart are not the signal.
+    expect(score('announcement', { intent: 'open a new tab now' })).toBe(0.25);
+  });
+
+  it('tolerates plurals without re-opening the substring hole', () => {
+    expect(score('meme', { intent: 'a few jokes about standups' })).toBe(0.95);
+    expect(score('product-promo', { intent: 'three items on offer' })).toBe(0.9);
+    // "discard"/"cardboard" must not read as a greeting card.
+    expect(score('greeting-card', { intent: 'a cardboard packaging shot' })).toBe(0.15);
+    expect(score('greeting-card', { intent: 'discard the old layout' })).toBe(0.15);
+    // "itemised" must not read as a product promo.
+    expect(score('product-promo', { intent: 'an itemised receipt graphic' })).toBe(0.3);
+  });
+
+  it('is case-insensitive', () => {
+    expect(score('advertisement', { intent: 'A SALE this weekend' })).toBe(0.9);
+    expect(score('meme', { intent: 'A MEME about Mondays' })).toBe(0.95);
+  });
+});

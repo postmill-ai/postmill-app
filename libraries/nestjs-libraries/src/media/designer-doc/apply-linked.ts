@@ -4,6 +4,7 @@ import type {
   DesignerOutput,
   VideoOutput,
 } from './designer-doc.schema';
+import { typeScaleRatio } from './reflow';
 
 // Geometry is per-format and never propagates; everything else (style/content)
 // syncs to same-originId copies in the other outputs.
@@ -35,17 +36,13 @@ const isImageOutput = (
   out: DesignerOutput | VideoOutput
 ): out is DesignerOutput => 'children' in out;
 
-/** Uniform scale between two output canvases (same rule as smartReflow). */
-const outputScale = (
-  source: { width: number; height: number },
-  target: { width: number; height: number }
-): number => Math.min(target.width / source.width, target.height / source.height);
-
 /**
  * Non-geometry updates propagate raw — except `fontSize`: a px value authored
- * against one canvas is wrong on another, so linked copies get it scaled by
- * their output's scale relative to the source (matching the reflow logic),
- * floored at 10px like smartReflow.
+ * against one canvas is wrong on another, so linked copies get it re-fit
+ * through the shared aspect-aware basis (`typeScaleRatio`, the same rule as
+ * smartReflow and the conductor's variant re-fit), floored at 10px. The old
+ * `min(scaleX, scaleY)` here silently re-imposed short-edge typography on
+ * every linked edit — undoing the per-format type of every wider output.
  */
 const scaledForOutput = (
   shared: Partial<DesignerElement>,
@@ -57,7 +54,10 @@ const scaledForOutput = (
   }
   return {
     ...shared,
-    fontSize: Math.max(10, Math.round(shared.fontSize * outputScale(source, target))),
+    fontSize: Math.max(
+      10,
+      Math.round(shared.fontSize * typeScaleRatio(source, target))
+    ),
   };
 };
 

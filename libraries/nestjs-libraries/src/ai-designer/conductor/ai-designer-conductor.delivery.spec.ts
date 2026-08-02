@@ -264,7 +264,10 @@ describe('AiDesignerConductorService delivery state machine', () => {
       ctx,
       'design-v3',
       expect.objectContaining({ instruction: 'make the headline bigger' }),
-      emitter
+      emitter,
+      // Round 7 C6: the revise path now carries its own degradation-note sink
+      // (a format-only revision that can't be pinned degrades to shared).
+      expect.any(Array)
     );
     expect(sessionState.state).toBe('delivered');
     expect(sessionState.activeDesignIds).toContain('design-v3-revised');

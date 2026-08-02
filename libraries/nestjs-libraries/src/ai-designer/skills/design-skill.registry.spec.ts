@@ -51,4 +51,17 @@ describe('DESIGN_SKILLS registry', () => {
       expect(skill.systemPrompt.length).toBeGreaterThan(200);
     }
   });
+
+  it('never lets the announcement skill demand a detail or date it was not given', () => {
+    // Round 8 B3: the skill DEMANDED a supporting detail line and welcomed a
+    // date badge unconditionally, so a brief with no date got an invented one
+    // ("Effective Monday") straight onto the canvas.
+    const announcement = DESIGN_SKILLS.find((s) => s.id === 'announcement');
+    expect(announcement).toBeDefined();
+    const prompt = announcement!.systemPrompt;
+    expect(prompt).not.toContain('One supporting detail line:');
+    expect(prompt).toContain('ONLY when the brief supplies');
+    expect(prompt).toContain('Never invent a date, time, or place');
+    expect(prompt).toContain('No date in the brief means no badge');
+  });
 });

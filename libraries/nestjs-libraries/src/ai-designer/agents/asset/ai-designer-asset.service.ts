@@ -6,6 +6,8 @@ import {
 } from '@reaatech/agent-mesh-router';
 import type { AgentResponse } from '@reaatech/agent-mesh';
 import sharp from 'sharp';
+import { readFile } from 'fs/promises';
+import * as path from 'path';
 import { AiDefaultsService } from '@postmill-ai/nestjs-libraries/ai/defaults/ai-defaults.service';
 import { FileService } from '@postmill-ai/nestjs-libraries/database/prisma/file/file.service';
 import { StorageService } from '@postmill-ai/nestjs-libraries/database/prisma/storage/storage.service';
@@ -45,16 +47,19 @@ const ASPECT_COMPOSITION: Record<AssetAspect, string> = {
 
 // Appended to every GENERATED image prompt (never to stock searches): image
 // models love painting headline text, logos and watermarks into the asset,
-// which then collides with the composer's own rendered copy.
+// which then collides with the composer's own rendered copy — and they reach
+// for real-world branded products (observed: sneakers rendered with clear
+// Nike swooshes), which is a trademark problem, not just a visual one.
 const NO_BAKED_IN_TEXT_SUFFIX =
-  'No text, no words, no letters, no typography, no watermark, no logo.';
+  'No text, no words, no letters, no typography, no watermark, no logo. No recognizable brand logos, trademarks, or real-world branded products — generic unbranded designs only.';
 
 // Appended ON TOP of the standard suffix when the vision critic flagged the
-// previous generation for baked-in text/logos (regenerateAsset fix): the
-// first attempt already carried NO_BAKED_IN_TEXT_SUFFIX and the model painted
-// branding anyway, so the regeneration prompt gets a harder negative.
+// previous generation for baked-in text/logos/brand marks (regenerateAsset
+// fix): the first attempt already carried NO_BAKED_IN_TEXT_SUFFIX and the
+// model painted branding anyway, so the regeneration prompt gets a harder
+// negative.
 const REGENERATE_NO_TEXT_SUFFIX =
-  'Plain unbranded packaging or surfaces — absolutely no printed text, labels, or logos on any object.';
+  'Plain unbranded packaging or surfaces — absolutely no printed text, labels, or logos on any object. No brand marks, emblems, monograms, logo-shaped details or real celebrity likenesses of any kind; every product must be an unbranded generic design.';
 
 // Layout intent → subject-placement guidance for the image model. Covers both
 // channelLayouts intent ids and gallery template ids. Composition ONLY — never
@@ -80,15 +85,62 @@ const STOCK_ORIENTATION: Record<AssetAspect, string> = {
   tall: 'portrait',
 };
 
+// Brand-signal words stripped from a STOCK query before it reaches the
+// provider. Generated prompts get an explicit negative instead
+// (NO_BAKED_IN_TEXT_SUFFIX) — a search engine has no negatives, so the only
+// lever is not asking for branding in the first place. Deliberately generic:
+// a hardcoded list of real brand names would be unmaintainable and would
+// mangle legitimate queries, so this only removes words that ASK for a mark.
+const STOCK_BRAND_TOKENS = new Set([
+  'brand',
+  'brands',
+  'branded',
+  'branding',
+  'emblem',
+  'emblems',
+  'insignia',
+  'logo',
+  'logos',
+  'logotype',
+  'monogram',
+  'monograms',
+  'trademark',
+  'trademarks',
+  'trademarked',
+  'watermark',
+  'watermarks',
+]);
+
+// Gradient placeholder geometry per aspect class. A fixed 512x512 shipped a
+// SQUARE placeholder for a portrait or ultra-wide run, and its wrong
+// `naturalWidth`/`naturalHeight` then fed the composer's focal-point maths —
+// so the last-resort fallback also mis-aimed the crop. Exact 16:9 / 9:16.
+const FALLBACK_GRADIENT_SIZE: Record<AssetAspect, { width: number; height: number }> = {
+  square: { width: 512, height: 512 },
+  wide: { width: 896, height: 504 },
+  tall: { width: 504, height: 896 },
+};
+
 type AssetNeed = AssetNeedRequest;
 
 interface AssetRequestInput {
   type: 'asset-request';
   assetNeeds: AssetNeed[];
-  referenceFileIds?: string[];
   /** Conductor regenerateAsset dispatch: same resolve path, harder no-text prompt. */
   regenerate?: boolean;
 }
+
+// NOTE on reference images: this agent takes NO `referenceFileIds`. Neither
+// image provider in use can condition a generation on a source image through
+// the text-to-image path — the OpenAI adapter posts to
+// `/v1/images/generations` (no image input; `edits` is a different endpoint
+// it does not implement) and the Replicate adapter builds its prediction body
+// from `{ prompt, aspect_ratio }` only, dropping `options.sourceUrl`
+// entirely, and none of its six text-to-image model descriptors declares an
+// image/init-image/reference field. References therefore reach the design as
+// ENGLISH CUES (the vision critic's `interpret-request` → `brief.referenceCues`
+// → the art director's plan), which is honest and useful; they do not steer
+// the pixels. The conductor says so in its degradation trail.
 
 @Injectable()
 export class AiDesignerAssetService implements OnModuleInit {
@@ -180,7 +232,17 @@ export class AiDesignerAssetService implements OnModuleInit {
     need: AssetNeed,
     regenerate = false
   ): Promise<AssetResult | null> {
-    if (need.prefer === 'generate' || need.prefer === 'either') {
+    // A `prefer: 'stock'` need used to skip the generate block entirely, so a
+    // regeneration (which exists precisely because the critic rejected the
+    // previous imagery) could never reach the strengthened negative prompt —
+    // it just re-ran the same deterministic search. Promote it for this pass,
+    // UNLESS the caller switched to stock deliberately (`stockOnly`): there
+    // the point is to stop re-rolling the image model.
+    const prefer =
+      regenerate && need.prefer === 'stock' && !need.stockOnly
+        ? 'either'
+        : need.prefer;
+    if (prefer === 'generate' || prefer === 'either') {
       // One retry before stock: transient provider failures (rate limits,
       // timeouts) are the common case and a second attempt usually lands.
       for (let attempt = 1; attempt <= 2; attempt++) {
@@ -191,11 +253,11 @@ export class AiDesignerAssetService implements OnModuleInit {
               url,
               name: need.brief.slice(0, 40),
             });
-            return this._toResult(need, file, 'generate');
+            return await this._toResult(need, file, 'generate');
           }
           if (url.startsWith('data:')) {
             const file = await this._importDataUrl(orgId, url, need.brief);
-            if (file) return this._toResult(need, file, 'generate');
+            if (file) return await this._toResult(need, file, 'generate');
           }
           // An unusable URL shape won't change on a retry — go to stock.
           break;
@@ -210,7 +272,7 @@ export class AiDesignerAssetService implements OnModuleInit {
       }
     }
 
-    const stock = await this._tryStock(orgId, need);
+    const stock = await this._tryStock(orgId, need, regenerate);
     if (stock) return stock;
 
     this._logger.warn(
@@ -257,16 +319,28 @@ export class AiDesignerAssetService implements OnModuleInit {
 
   private async _tryStock(
     orgId: string,
-    need: AssetNeed
+    need: AssetNeed,
+    regenerate = false
   ): Promise<AssetResult | null> {
     try {
       const response = await this._stockMedia.searchPhotos(
         orgId,
-        need.brief,
+        this._sanitizeStockQuery(need.brief),
         1,
         need.aspect ? STOCK_ORIENTATION[need.aspect] : undefined
       );
-      const item = response.results[0];
+      const results = Array.isArray(response.results) ? response.results : [];
+      // The stock search is deterministic AND Redis-cached for 60s, so a
+      // regeneration that re-ran it verbatim returned the SAME photo under a
+      // fresh fileId and reported a successful swap. Drop the previous pick
+      // (or, when the caller recorded none, the first hit — that IS the
+      // repeat); running out of candidates degrades honestly instead.
+      const candidates = regenerate
+        ? need.excludeStockId
+          ? results.filter((item) => item.id !== need.excludeStockId)
+          : results.slice(1)
+        : results;
+      const item = candidates[0];
       if (!item) {
         return null;
       }
@@ -278,10 +352,33 @@ export class AiDesignerAssetService implements OnModuleInit {
         attribution: item.attribution,
       });
 
-      return this._toResult(need, file, 'stock', this._stockFocalPoint(item));
+      return await this._toResult(need, file, 'stock', {
+        focalPoint: this._stockFocalPoint(item),
+        stockId: typeof item.id === 'string' ? item.id : undefined,
+      });
     } catch {
       return null;
     }
+  }
+
+  /**
+   * Strip brand/logo/trademark words from a STOCK query. Generated prompts
+   * carry an explicit no-branding negative; a search API has no such lever, so
+   * the query itself must not ask for a mark. Pure and conservative — an
+   * all-brand-token brief keeps its original text rather than searching for
+   * nothing.
+   */
+  private _sanitizeStockQuery(brief: string): string {
+    const kept = brief
+      .split(/\s+/)
+      .filter((word) => {
+        const bare = word.toLowerCase().replace(/[^a-z]/g, '');
+        return bare.length === 0 || !STOCK_BRAND_TOKENS.has(bare);
+      })
+      .join(' ')
+      .replace(/\s+/g, ' ')
+      .trim();
+    return kept || brief;
   }
 
   // Stock providers don't currently return a focal point; pass one through if
@@ -330,10 +427,10 @@ export class AiDesignerAssetService implements OnModuleInit {
     need: AssetNeed
   ): Promise<AssetResult | null> {
     try {
-      const size = 512;
-      const svg = this._buildFallbackSvg(need.brief, size);
+      const { width, height } = FALLBACK_GRADIENT_SIZE[need.aspect ?? 'square'];
+      const svg = this._buildFallbackSvg(need.brief, width, height);
       const buffer = await sharp(Buffer.from(svg))
-        .resize(size, size, { fit: 'fill' })
+        .resize(width, height, { fit: 'fill' })
         .png()
         .toBuffer();
 
@@ -347,7 +444,7 @@ export class AiDesignerAssetService implements OnModuleInit {
         fileSize: buffer.length,
       });
 
-      return this._toResult(need, file, 'gradient');
+      return await this._toResult(need, file, 'gradient');
     } catch (err) {
       // The last-resort fallback failed: the slot gets NOTHING. This is an
       // error-level event (sharp/storage broken), not routine degradation —
@@ -362,17 +459,17 @@ export class AiDesignerAssetService implements OnModuleInit {
     }
   }
 
-  private _buildFallbackSvg(brief: string, size: number): string {
+  private _buildFallbackSvg(brief: string, width: number, height: number): string {
     const { from, to } = this._colorsFromBrief(brief);
     return `<?xml version="1.0" encoding="UTF-8"?>
-<svg xmlns="http://www.w3.org/2000/svg" width="${size}" height="${size}" viewBox="0 0 ${size} ${size}">
+<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}" viewBox="0 0 ${width} ${height}">
   <defs>
     <linearGradient id="g" x1="0%" y1="0%" x2="100%" y2="100%">
       <stop offset="0%" stop-color="${from}"/>
       <stop offset="100%" stop-color="${to}"/>
     </linearGradient>
   </defs>
-  <rect width="${size}" height="${size}" fill="url(#g)"/>
+  <rect width="${width}" height="${height}" fill="url(#g)"/>
 </svg>`;
   }
 
@@ -390,12 +487,16 @@ export class AiDesignerAssetService implements OnModuleInit {
     return { from: '#e5e7eb', to: '#9ca3af' };
   }
 
-  private _toResult(
+  private async _toResult(
     need: AssetNeed,
     file: { id: string; path: string },
     source: AssetResult['source'],
-    focalPoint?: { x: number; y: number }
-  ): AssetResult {
+    opts: {
+      focalPoint?: { x: number; y: number };
+      stockId?: string;
+    } = {}
+  ): Promise<AssetResult> {
+    const analysis = await this._analyzeImage(file.path);
     return {
       slotId: need.slotId,
       fileId: file.id,
@@ -403,7 +504,72 @@ export class AiDesignerAssetService implements OnModuleInit {
       type: 'image',
       source,
       aspect: need.aspect,
-      focalPoint,
+      focalPoint: opts.focalPoint,
+      stockId: opts.stockId,
+      // Only a GENERATED asset was actually told where to put its subject.
+      heroLayout: source === 'generate' ? need.heroLayout : undefined,
+      ...analysis,
     };
+  }
+
+  /**
+   * Intrinsic size of a freshly resolved asset, read from local storage.
+   *
+   * It used to ALSO run sharp's `attention` strategy and store the result as
+   * the asset's `subjectPoint`. That signal is a saliency heuristic, not a
+   * subject detector, and it was wrong in the field: on two live assets it
+   * reported centroids of 0.0625 and 0.281 where the true subject centroids
+   * were 0.398 and 0.520 (both locking onto the product's drop shadow), and
+   * one output cropped away 45% of a product that plain centring kept whole.
+   * The probe is gone: the crop now defaults to CENTRE, and the composer
+   * escalates to the real VLM detector only for crops that actually risk
+   * losing the subject (`applySubjectFocalPoints`).
+   *
+   * The size is still needed — `subjectPointToFocalPoint` cannot convert a
+   * centroid without the source geometry.
+   *
+   * Fail-soft by construction: a non-local path, an unreadable file or any
+   * sharp error returns `{}` and never blocks asset resolution.
+   */
+  private async _analyzeImage(filePath: string): Promise<{
+    naturalWidth?: number;
+    naturalHeight?: number;
+  }> {
+    try {
+      const localPath = this._localUploadPath(filePath);
+      if (!localPath) return {};
+      const buffer = await readFile(localPath);
+      const meta = await sharp(buffer).metadata();
+      const width = meta.width ?? 0;
+      const height = meta.height ?? 0;
+      if (width < 2 || height < 2) return {};
+      return { naturalWidth: width, naturalHeight: height };
+    } catch (err) {
+      this._logger.warn(
+        `Asset size analysis skipped for ${filePath}: ${(err as Error)?.message}`
+      );
+      return {};
+    }
+  }
+
+  /** Map a local-storage upload URL to its on-disk path (null when the file
+   *  is not local storage). Resolved path must stay inside UPLOAD_DIRECTORY —
+   *  same traversal guard as the render service and the vision critic. */
+  private _localUploadPath(src: string): string | null {
+    const frontendUrl = (process.env.FRONTEND_URL || '').replace(/\/$/, '');
+    let key: string | null = null;
+    if (frontendUrl && src.startsWith(`${frontendUrl}/uploads/`)) {
+      key = src.slice(`${frontendUrl}/uploads/`.length);
+    } else if (src.startsWith('/uploads/')) {
+      key = src.slice('/uploads/'.length);
+    }
+    if (!key) return null;
+    const uploadDirectory = path.resolve(process.env.UPLOAD_DIRECTORY || './uploads');
+    const resolved = path.resolve(uploadDirectory, decodeURIComponent(key));
+    if (resolved !== uploadDirectory && !resolved.startsWith(uploadDirectory + path.sep)) {
+      this._logger.warn(`Blocked upload path traversal in asset analysis: ${src}`);
+      return null;
+    }
+    return resolved;
   }
 }

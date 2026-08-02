@@ -500,6 +500,91 @@ describe('AiDesignerConversationalistService intake', () => {
     expect(res.reply).toBe('No worries — what tone feels right?');
   });
 
+  const TONE_QUESTION =
+    'What tone should it have — for example funny, professional, or inspiring?';
+
+  it('REPLACES an already-set tone when the user answers the tone question', async () => {
+    // Live: the user answered the style question with "minimal Scandinavian,
+    // warm" and the stored brief kept tone "energetic". The classifier stayed
+    // silent on that turn, and the old backstop was fill-only AND keyed off
+    // questionsAsked, which stops growing once nothing is missing.
+    ai.generateText.mockResolvedValue(
+      JSON.stringify({ intent: 'general', text: 'ok' })
+    );
+
+    const res = await handle(
+      makeInput(
+        { intent: 'a coffee subscription launch', audience: 'foodies', tone: 'energetic' },
+        'intake',
+        'minimal Scandinavian, warm',
+        [],
+        TONE_QUESTION
+      )
+    );
+
+    expect(res.fields).toEqual({ tone: 'minimal Scandinavian, warm' });
+  });
+
+  it('keeps the classifier tone over the raw text on a correction turn', async () => {
+    ai.generateText.mockResolvedValue(
+      JSON.stringify({
+        intent: 'clarify',
+        text: 'Got it.',
+        extracted: { tone: 'minimal Scandinavian and warm' },
+      })
+    );
+
+    const res = await handle(
+      makeInput(
+        { intent: 'a coffee subscription launch', audience: 'foodies', tone: 'energetic' },
+        'intake',
+        'make it minimal Scandinavian, warm',
+        [],
+        TONE_QUESTION
+      )
+    );
+
+    expect(res.fields).toEqual({ tone: 'minimal Scandinavian and warm' });
+  });
+
+  it('does not adopt a hedge as a tone correction', async () => {
+    ai.generateText.mockResolvedValue(
+      JSON.stringify({ intent: 'general', text: 'ok' })
+    );
+
+    const res = await handle(
+      makeInput(
+        { intent: 'a coffee subscription launch', audience: 'foodies', tone: 'energetic' },
+        'intake',
+        'not sure',
+        [],
+        TONE_QUESTION
+      )
+    );
+
+    expect(res.fields).toBeUndefined();
+  });
+
+  it('leaves a filled audience alone — the correction path is tone-only', async () => {
+    // The fill-only backstop for intent/audience is unchanged: only tone may
+    // be REPLACED, because only tone has the style/aesthetic restatement case.
+    ai.generateText.mockResolvedValue(
+      JSON.stringify({ intent: 'general', text: 'ok' })
+    );
+
+    const res = await handle(
+      makeInput(
+        CONFIDENT_BRIEF,
+        'intake',
+        'actually, small business owners',
+        ['audience'],
+        'Who is the audience?'
+      )
+    );
+
+    expect(res.fields).toBeUndefined();
+  });
+
   it('never fills preferredSkill from raw text (form-controlled)', async () => {
     const res = await handle(
       makeInput(CONFIDENT_BRIEF, 'intake', 'meme', ['preferredSkill'])
@@ -622,6 +707,75 @@ describe('AiDesignerConversationalistService intake', () => {
     expect(res.fields[0].name).toBe('preferredSkill');
     expect(res.extracted).toEqual({ audience: 'followers' });
   });
+
+  // ── The accept short-circuit forwards its extraction (round 8 B2) ──
+
+  it('forwards the extraction on the confirming turn', async () => {
+    // The accept branch was the ONE intake return shape that omitted
+    // fields/extracted, so a "yes" that ALSO carried substance lost it.
+    ai.generateText.mockResolvedValue(
+      JSON.stringify({
+        intent: 'accept',
+        text: 'On it',
+        extracted: { fixedCopy: 'Open from 8am' },
+      })
+    );
+
+    const res = await handle(
+      makeInput(
+        { ...CONFIDENT_BRIEF, recapShown: true },
+        'intake',
+        'yes, and it must say Open from 8am',
+        ['intent', 'audience', 'tone']
+      )
+    );
+
+    expect(res.confirmed).toBe(true);
+    expect(res.fields).toEqual({ fixedCopy: 'Open from 8am' });
+  });
+
+  it('still confirms with no fields when the accept carries nothing', async () => {
+    ai.generateText.mockResolvedValue(
+      JSON.stringify({ intent: 'accept', text: 'On it' })
+    );
+
+    const res = await handle(
+      makeInput({ ...CONFIDENT_BRIEF, recapShown: true }, 'intake', 'yes', [
+        'intent',
+        'audience',
+        'tone',
+      ])
+    );
+
+    expect(res).toEqual({ type: 'chat-turn', confirmed: true });
+  });
+
+  // ── Recap rendering (round 8 C7c) ──
+
+  it('renders multi-unit fixedCopy as a quoted list, not the raw separator', async () => {
+    const summary = (service as any)._summaryFor({
+      intent: 'a anniversary card',
+      audience: 'customers',
+      tone: 'warm',
+      fixedCopy: 'with love, the whole crew | Since 2019',
+    });
+
+    expect(summary).toContain(
+      'with the exact copy "with love, the whole crew" and "Since 2019"'
+    );
+    expect(summary).not.toContain(' | ');
+  });
+
+  it('renders a single fixedCopy unit as one quoted string', async () => {
+    const summary = (service as any)._summaryFor({
+      intent: 'a launch post',
+      audience: 'followers',
+      tone: 'bold',
+      fixedCopy: 'BEAN30',
+    });
+
+    expect(summary).toContain('with the exact copy "BEAN30"');
+  });
 });
 
 describe('AiDesignerConversationalistService delivered state', () => {
@@ -675,5 +829,76 @@ describe('AiDesignerConversationalistService delivered state', () => {
         scope: 'shared',
       })
     );
+  });
+
+  // ── Labelled design catalogue (round 8 C5) ──
+
+  const CATALOGUE = [
+    { ordinal: 1, designId: 'design-A', formatIds: ['ig-post'] },
+    { ordinal: 2, designId: 'design-B', formatIds: ['fb-post'] },
+    { ordinal: 3, designId: 'design-C', formatIds: ['ig-story'] },
+  ];
+
+  const makeDeliveredInput = (text: string, revision: unknown) => {
+    ai.generateText.mockResolvedValue(
+      JSON.stringify({ intent: 'revise', text: 'Sure', revision })
+    );
+    return JSON.stringify({
+      type: 'chat',
+      text,
+      session: {
+        mode: 'chat',
+        state: 'delivered',
+        brief: CONFIDENT_BRIEF,
+        questionsAsked: [],
+        activeDesignIds: ['design-A', 'design-B', 'design-C'],
+        designs: CATALOGUE,
+      },
+    });
+  };
+
+  it('prefers the ordinal the user actually said over the classifier pick', async () => {
+    // Live: asked for "the Facebook version" the classifier answered with a
+    // different variant's id, and set membership could not tell.
+    const res = await handle(
+      makeDeliveredInput('make the headline bigger on variant 3', {
+        instruction: 'make the headline bigger',
+        targetDesignId: 'design-A',
+      })
+    );
+
+    expect(res.revision.targetDesignId).toBe('design-C');
+  });
+
+  it('resolves a spoken ordinal ("the second one")', async () => {
+    const res = await handle(
+      makeDeliveredInput('tweak the second one', {
+        instruction: 'tweak it',
+      })
+    );
+
+    expect(res.revision.targetDesignId).toBe('design-B');
+  });
+
+  it('drops a targetDesignId that is not in the catalogue at all', async () => {
+    const res = await handle(
+      makeDeliveredInput('make the headline bigger', {
+        instruction: 'make the headline bigger',
+        targetDesignId: 'design-does-not-exist',
+      })
+    );
+
+    expect(res.revision.targetDesignId).toBe('design-A');
+  });
+
+  it('keeps a catalogue id the user did not contradict', async () => {
+    const res = await handle(
+      makeDeliveredInput('make the headline bigger', {
+        instruction: 'make the headline bigger',
+        targetDesignId: 'design-B',
+      })
+    );
+
+    expect(res.revision.targetDesignId).toBe('design-B');
   });
 });

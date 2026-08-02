@@ -80,3 +80,80 @@ describe('AI Designer style preset registry', () => {
     }
   );
 });
+
+describe('AI Designer style preset CTA treatments', () => {
+  const presets = listStylePresets();
+  const byId = (id: string) => presets.find((p) => p.id === id)!;
+
+  it.each(presets.map((p) => [p.id, p] as const))(
+    '%s: cta treatment fields are well-formed',
+    (_id, preset) => {
+      if (preset.treatments.ctaRadius !== undefined) {
+        expect(['square', 'small', 'pill']).toContain(
+          preset.treatments.ctaRadius
+        );
+      }
+      for (const flag of [
+        preset.treatments.ctaBorder,
+        preset.treatments.ctaShadow,
+      ]) {
+        if (flag !== undefined) expect(typeof flag).toBe('boolean');
+      }
+      // A border/shadow only renders on a filled button — the outline and
+      // underline branches skip both.
+      if (preset.treatments.ctaBorder || preset.treatments.ctaShadow) {
+        expect(preset.treatments.ctaStyle).toBe('rect');
+      }
+    }
+  );
+
+  it('neobrutalism: "a hard-edged rectangle with a thick border and an offset solid shadow"', () => {
+    const { treatments, promptFragment } = byId('neobrutalism');
+    expect(promptFragment).toContain(
+      'CTA is a hard-edged rectangle with a thick border and an offset solid shadow.'
+    );
+    expect(treatments.ctaStyle).toBe('rect');
+    expect(treatments.ctaRadius).toBe('square');
+    expect(treatments.ctaBorder).toBe(true);
+    expect(treatments.ctaShadow).toBe(true);
+  });
+
+  it('minimal: "a plain rectangular CTA at most" — no rounding, no border, no shadow', () => {
+    const { treatments, promptFragment } = byId('minimal');
+    expect(promptFragment).toContain('a plain rectangular CTA at most');
+    expect(promptFragment).toContain('No decorative shapes, shadows, or strokes');
+    expect(treatments.ctaStyle).toBe('rect');
+    expect(treatments.ctaRadius).toBe('square');
+    expect(treatments.ctaBorder).toBeUndefined();
+    expect(treatments.ctaShadow).toBeUndefined();
+  });
+
+  it('corporate: "a solid or lightly rounded rectangle"', () => {
+    const { treatments, promptFragment } = byId('corporate');
+    expect(promptFragment).toContain(
+      'CTA is a solid or lightly rounded rectangle in the accent color.'
+    );
+    expect(treatments.ctaStyle).toBe('rect');
+    expect(treatments.ctaRadius).toBe('small');
+    expect(treatments.ctaBorder).toBeUndefined();
+    expect(treatments.ctaShadow).toBeUndefined();
+  });
+
+  it('every rect/outline preset states a corner treatment (no shared default)', () => {
+    // One shared round(height * 0.14) used to serve all of them, which shipped
+    // a 9px radius on the presets whose own prompt demands hard edges.
+    for (const preset of presets) {
+      if (preset.treatments.ctaStyle === 'rect' || preset.treatments.ctaStyle === 'outline') {
+        expect(preset.treatments.ctaRadius).toBeDefined();
+      }
+    }
+  });
+
+  it('the pill and underline presets carry no corner override', () => {
+    for (const preset of presets) {
+      if (preset.treatments.ctaStyle === 'pill' || preset.treatments.ctaStyle === 'underline') {
+        expect(preset.treatments.ctaRadius).toBeUndefined();
+      }
+    }
+  });
+});

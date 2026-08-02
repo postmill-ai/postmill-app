@@ -10,6 +10,7 @@ import {
   Query,
   Res,
 } from '@nestjs/common';
+import { Throttle } from '@nestjs/throttler';
 import { Organization, User } from '@prisma/client';
 import { GetOrgFromRequest } from '@postmill-ai/nestjs-libraries/user/org.from.request';
 import { GetUserFromRequest } from '@postmill-ai/nestjs-libraries/user/user.from.request';
@@ -209,6 +210,9 @@ export class DesignController {
   @Get('/render-video/:jobId')
   @CheckPolicies([AuthorizationActions.Read, Sections.MEDIA])
   @RequirePermission('media', 'read')
+  // The Designer export dialog polls this every 2s, once per queued output (1800/h per
+  // job), far over the global per-handler/per-org backstop of 600/h.
+  @Throttle({ default: { limit: 2000, ttl: 3600000 } })
   async getVideoRenderStatus(
     @GetOrgFromRequest() org: Organization,
     @Param('jobId') jobId: string,

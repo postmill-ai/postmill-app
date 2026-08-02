@@ -1,5 +1,6 @@
 import type { DesignBrief, DesignPlan } from '../../ai-designer.types';
 import type { DesignSkill } from '../design-skill.interface';
+import { matchesAnySignal } from '../signal-match';
 
 export const MemeSkill: DesignSkill = {
   id: 'meme',
@@ -7,7 +8,7 @@ export const MemeSkill: DesignSkill = {
   match: (brief: DesignBrief) => {
     const text = `${brief.intent} ${brief.audience || ''} ${brief.tone || ''}`.toLowerCase();
     const signals = ['meme', 'funny', 'joke', 'viral', 'reaction'];
-    return signals.some((s) => text.includes(s)) ? 0.95 : 0.2;
+    return matchesAnySignal(text, signals) ? 0.95 : 0.2;
   },
   requiredBriefFields: ['intent', 'tone'],
   systemPrompt: `You are an expert meme designer. Rules:

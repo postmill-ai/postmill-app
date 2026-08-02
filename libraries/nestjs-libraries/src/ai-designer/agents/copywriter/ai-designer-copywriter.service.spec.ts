@@ -142,6 +142,31 @@ describe('AiDesignerCopywriterService', () => {
     expect(model.generateText).not.toHaveBeenCalled();
   });
 
+  it('keeps an https:// URL in the copy — the repair layer no longer shadows an intact parse', async () => {
+    // repair() strips `//…` comments string-unaware, so it returned a MANGLED
+    // partial map ("Shop now at https:" losing the host) and — because it ran
+    // first and succeeded — returned early, shadowing the intact JSON.parse at
+    // Layer 2. Parse-first is the fix.
+    model.generateText.mockResolvedValue(
+      '{"headline":"Summer Sale","cta":"Shop now at https://northbean.shop"}'
+    );
+
+    const res = await handler(
+      JSON.stringify({
+        type: 'copy-request',
+        plan: makePlan(),
+        brand: null,
+      }),
+      'org1'
+    );
+
+    const content = JSON.parse(res.content);
+    expect(content.texts).toEqual({
+      headline: 'Summer Sale',
+      cta: 'Shop now at https://northbean.shop',
+    });
+  });
+
   it('ignores locked texts for slots the plan does not have', async () => {
     model.generateText.mockResolvedValue('{"cta":"Shop now"}');
 

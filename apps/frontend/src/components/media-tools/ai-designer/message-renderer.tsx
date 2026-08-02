@@ -223,23 +223,23 @@ const ProgressMessage: React.FC<{
 }> = ({ content }) => {
   const pct =
     typeof content.pct === 'number' ? Math.max(0, Math.min(100, content.pct)) : null;
+  // No percentage — the agent is thinking, not measuring. Thinking shows the
+  // indicator alone: no agent name, no phase text, no container. Anything more
+  // reads as a message the user is meant to keep.
+  if (pct === null) return <TypingIndicator />;
+
   return (
     <div className="flex flex-col gap-2 min-w-[220px]">
       <div className="flex items-center justify-between text-[12px] text-textColor/80">
         <span className="font-medium">{content.agent}</span>
         <span className="text-textColor/50">{content.phase}</span>
       </div>
-      {pct !== null ? (
-        <div className="h-2 w-full rounded-full bg-studioBorder overflow-hidden">
-          <div
-            className="h-full bg-designerAccent transition-all"
-            style={{ width: `${pct}%` }}
-          />
-        </div>
-      ) : (
-        // No percentage yet — the agent is thinking, not measuring.
-        <TypingIndicator />
-      )}
+      <div className="h-2 w-full rounded-full bg-studioBorder overflow-hidden">
+        <div
+          className="h-full bg-designerAccent transition-all"
+          style={{ width: `${pct}%` }}
+        />
+      </div>
       {content.note && (
         <div className="text-[12px] text-textColor/60">{content.note}</div>
       )}
@@ -247,7 +247,13 @@ const ProgressMessage: React.FC<{
   );
 };
 
-/** Animated typing indicator for "agent is thinking" states. */
+/**
+ * Animated "agent is thinking" indicator.
+ *
+ * The asset's viewBox is cropped to the dots' animated bounds, so height alone
+ * controls their size — the original 280×160 box was ~2/3 empty padding, which
+ * is why this used to render at ~3px per dot.
+ */
 export const TypingIndicator: React.FC<{ label?: string }> = ({ label }) => (
   <div className="flex items-center gap-2">
     {/* eslint-disable-next-line @next/next/no-img-element -- local animated SVG */}
@@ -255,7 +261,7 @@ export const TypingIndicator: React.FC<{ label?: string }> = ({ label }) => (
       src="/ai-designer/loading.svg"
       alt=""
       aria-hidden="true"
-      className="h-[28px] w-auto"
+      className="h-[32px] w-auto"
     />
     {label && (
       <span className="text-[12px] text-textColor/60">{label}</span>

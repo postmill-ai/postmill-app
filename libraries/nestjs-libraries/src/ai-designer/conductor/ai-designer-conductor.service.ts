@@ -1,5 +1,5 @@
 import '@postmill-ai/nestjs-libraries/ai-designer/agent-mesh/agent-mesh-env.shim';
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable, Logger, Optional } from '@nestjs/common';
 import { dispatchToAgent } from '@reaatech/agent-mesh-router';
 import { registryState } from '@reaatech/agent-mesh-registry';
 import type { AgentResponse } from '@reaatech/agent-mesh';
@@ -13,6 +13,7 @@ import { DesignerDocService } from '@postmill-ai/nestjs-libraries/media/designer
 import type { DesignerDocOp } from '@postmill-ai/nestjs-libraries/media/designer-doc/designer-doc-ops.schema';
 import { CHANNEL_PRESETS } from '@postmill-ai/nestjs-libraries/integrations/social/channel-presets';
 import { GuardrailViolation } from '@postmill-ai/nestjs-libraries/ai/governance/errors';
+import { BrandsService } from '@postmill-ai/nestjs-libraries/brands/brands.service';
 import { AiDesignerService } from '../ai-designer.service';
 import {
   MAX_INTENT_LENGTH,
@@ -21,6 +22,7 @@ import {
 } from './brief-values';
 import { AiDesignerSaverService } from '../ai-designer-saver.service';
 import { AiDesignerComposerService } from '../agents/composer/ai-designer-composer.service';
+import type { DesignCatalogueEntry } from '../agents/conversationalist/ai-designer-conversationalist.service';
 import { AiDesignerBudgetGuard } from '../guards/ai-designer-budget.guard';
 import { AiDesignerSkillRouter } from '../skills/ai-designer-skill-router.service';
 import { getDesignSkill } from '../skills/design-skill.registry';
@@ -54,6 +56,34 @@ export interface AiDesignerEmitter {
   error(code: string, message?: string, nonce?: string): void;
 }
 
+interface Box {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+}
+
+const aabbOverlap = (a: Box, b: Box): boolean =>
+  a.x < b.x + b.width &&
+  a.x + a.width > b.x &&
+  a.y < b.y + b.height &&
+  a.y + a.height > b.y;
+
+/** One variant×slot's asset-regeneration history within a pipeline run. */
+interface RegeneratedSlot {
+  variantId: string;
+  slotId: string;
+  /** Dispatches consumed (capped at REGENERATE_MAX_ATTEMPTS). */
+  attempts: number;
+  /** Techniques already tried — a repeat of one is refused, not re-rolled. */
+  techniques: ('generate' | 'stock')[];
+  /** A replacement actually landed on the doc at least once. */
+  succeeded: boolean;
+  /** The critic flagged the slot AGAIN after the last landed replacement and
+   *  no further technique was available — the defect survived. */
+  reFlagged: boolean;
+}
+
 /** Thrown between pipeline steps when the user cancelled the session's run. */
 class PipelineCancelledError extends Error {
   constructor() {
@@ -85,11 +115,24 @@ export class AiDesignerConductorService {
   // cleared) by handleAcceptPlan so delivery can tell the user what fell
   // back. Keyed by session — concurrent sessions never share notes.
   private readonly _degradationNotes = new Map<string, string[]>();
-  // Variant×slot keys already sent to asset regeneration this session (the
-  // critic's regenerateAsset fix). ONE attempt per slot: a critic that keeps
-  // disliking the imagery must never loop image-generation spend. Keyed by
-  // session like _degradationNotes; cleared with the pipeline in _release.
-  private readonly _regeneratedSlots = new Map<string, Set<string>>();
+  // Per variant×slot regeneration record for this session (the critic's
+  // regenerateAsset fix): the spend cap AND the survival signal behind the
+  // honest degradation note. A critic that keeps disliking the imagery must
+  // never loop image spend, so a slot gets at most REGENERATE_MAX_ATTEMPTS and
+  // only while the TECHNIQUE changes. Keyed by session like
+  // _degradationNotes; cleared with the pipeline in _release.
+  private readonly _regeneratedSlots = new Map<
+    string,
+    Map<string, RegeneratedSlot>
+  >();
+  private static readonly REGENERATE_MAX_ATTEMPTS = 2;
+  // Stock provider item id per asset key for the assets this session composed
+  // with. A regeneration passes it back to the asset agent as an exclusion (the
+  // stock search is deterministic AND Redis-cached, so an unguarded re-run
+  // returned the identical photo under a fresh fileId and the swap "succeeded")
+  // and compares it against the replacement to detect the repeat. Keyed by
+  // session like _regeneratedSlots; cleared with the pipeline in _release.
+  private readonly _assetStockIds = new Map<string, Map<string, string>>();
   // Per-session abort controller for the in-flight pipeline, so `cancel`
   // actually stops the run (between steps) instead of only rolling back the
   // session state while the pipeline keeps dispatching and rendering.
@@ -153,8 +196,60 @@ export class AiDesignerConductorService {
     private readonly _budgetGuard: AiDesignerBudgetGuard,
     private readonly _fileService: FileService,
     private readonly _policy: AiDesignerInputPolicyService,
-    private readonly _docService: DesignerDocService
+    private readonly _docService: DesignerDocService,
+    // Only used to detect the pinned-style-vs-brand-palette collision below;
+    // optional so every existing construction site (and spec) is unaffected.
+    @Optional() private readonly _brands?: BrandsService
   ) {}
+
+  /**
+   * A pinned style preset silently overrode the org's selected brand palette.
+   *
+   * Both inputs are honoured by the art director in the same breath ("only
+   * diverge when the brand enrichment demands it"), so when a user pins a style
+   * AND selects a brand the plans can come back entirely in the preset's
+   * colours with no sign that the brand was dropped. Deterministic to detect:
+   * a brand is configured, a style is pinned, and NOT ONE plan palette entry is
+   * a brand colour. Best-effort and never throws — an undetectable collision
+   * just produces no note, same as today.
+   */
+  private async _brandPaletteOverrideNote(
+    ctx: AiDesignerAgentContext,
+    config: AiDesignerConfig,
+    brief: DesignBrief,
+    plans: DesignPlan[]
+  ): Promise<string | undefined> {
+    if (!this._brands || !config.brandProfileId || !brief.styleId) {
+      return undefined;
+    }
+    try {
+      const brand = await this._brands.getBrand(
+        ctx.orgId,
+        config.brandProfileId
+      );
+      const brandPalette = (
+        Array.isArray(brand?.palette) ? (brand.palette as unknown[]) : []
+      )
+        .filter((c): c is string => typeof c === 'string' && !!c.trim())
+        .map((c) => c.trim().toLowerCase());
+      if (brandPalette.length === 0) return undefined;
+      const planned = new Set(
+        plans
+          .flatMap((plan) => plan.palette ?? [])
+          .filter((c): c is string => typeof c === 'string')
+          .map((c) => c.trim().toLowerCase())
+      );
+      if (planned.size === 0) return undefined;
+      if (brandPalette.some((color) => planned.has(color))) return undefined;
+      return `the "${brief.styleId}" style you pinned set the colours, so your brand palette wasn't used — clear the style to design on brand`;
+    } catch (err) {
+      this._logger.warn(
+        `Brand-palette override check skipped: ${(err as Error).message}`,
+        AiDesignerConductorService.name
+      );
+      return undefined;
+    }
+  }
 
   private _config(session: { config?: unknown }): AiDesignerConfig {
     return (session.config ?? {}) as unknown as AiDesignerConfig;
@@ -496,7 +591,9 @@ export class AiDesignerConductorService {
       );
 
       // One consolidated degradation note, posted with the delivery below.
-      const notes = this._degradationNotes.get(sessionId) ?? [];
+      // Deduped: every other note interpolates a per-variant label, so two
+      // identical strings are genuinely the same message repeated.
+      const notes = [...new Set(this._degradationNotes.get(sessionId) ?? [])];
       this._degradationNotes.delete(sessionId);
 
       const activeDesignIds = results.map((r) => r.designId);
@@ -690,7 +787,8 @@ export class AiDesignerConductorService {
         ctx,
         instruction,
         activeDesignIds,
-        session.mode
+        session.mode,
+        this._brief(session)
       );
 
       // Conversational accept (the removed delivery form's "Looks good"):
@@ -718,21 +816,60 @@ export class AiDesignerConductorService {
         `Revising: ${instruction}`
       );
 
+      // Honest-degradation trail for the revise path (the pipeline has its own
+      // in `_executePipeline`): anything the revision could not honour
+      // verbatim rides out with the delivery message.
+      const reviseNotes: string[] = [];
+
       // The conversationalist's extracted target wins when it names an active
       // design ("make the headline bigger on variant 2"); otherwise the
-      // payload target / first active design stands.
-      const revisionTarget =
-        intent.revision.targetDesignId &&
-        activeDesignIds.includes(intent.revision.targetDesignId)
-          ? intent.revision.targetDesignId
-          : targetDesignId;
-
+      // payload target / first active design stands — and the user is TOLD, so
+      // a revision that landed on the wrong variant is visible rather than
+      // silent (it used to be neither validated beyond set membership nor
+      // reported).
+      let revisionTarget = targetDesignId;
+      if (intent.revision.targetDesignId) {
+        if (activeDesignIds.includes(intent.revision.targetDesignId)) {
+          revisionTarget = intent.revision.targetDesignId;
+        } else {
+          this._logger.warn(
+            `Revision named design ${intent.revision.targetDesignId}, which is not active in this session; falling back to ${targetDesignId}.`,
+            AiDesignerConductorService.name
+          );
+        }
+      }
+      // Did ANYTHING actually identify a design — the caller's payload or the
+      // classifier? If not, the target is a positional default and the user
+      // deserves to know which one it landed on.
+      const targetWasIdentified = Boolean(
+        payload.targetDesignId || intent.revision.targetDesignId
+      );
+      // The variant number the user knows this design by — the delivery
+      // captions are 1-based over `activeDesignIds`, and the revise path used a
+      // hardcoded array index (`results = [revised]`, so ALWAYS "Variant 1")
+      // regardless of which design it actually revised.
+      const sourceOrdinal = Math.max(
+        1,
+        activeDesignIds.indexOf(revisionTarget) + 1
+      );
+      if (activeDesignIds.length > 1) {
+        if (!targetWasIdentified) {
+          reviseNotes.push(
+            `you have ${activeDesignIds.length} variants and I couldn't tell which one you meant, so I revised variant ${sourceOrdinal} — say "variant 2" (or another number) to change a different one`
+          );
+        } else {
+          reviseNotes.push(
+            `I revised variant ${sourceOrdinal}; your other variants are still available — say "variant 2" (or another number) to change one of those instead`
+          );
+        }
+      }
       const revised = await this._reviseDesign(
         sessionId,
         ctx,
         revisionTarget,
         intent.revision,
-        emitter
+        emitter,
+        reviseNotes
       );
 
       if (!revised) {
@@ -765,7 +902,9 @@ export class AiDesignerConductorService {
           lastDeliveredDesignIds: [revised.designId],
         },
       });
-      await this._emitDelivery(sessionId, ctx, emitter, results);
+      await this._emitDelivery(sessionId, ctx, emitter, results, reviseNotes, [
+        sourceOrdinal,
+      ]);
     } catch (err) {
       if (this._wasCancelled(err)) {
         this._logger.log(`AI Designer revise cancelled for session ${sessionId}`);
@@ -975,7 +1114,17 @@ export class AiDesignerConductorService {
         ...brief,
         ...safeValues,
       } as DesignBrief)[0];
-      const merged = mergeBriefValues(brief, safeValues, asked);
+      // The raw message rides along as the quoted-span source ONLY: `intent`
+      // stays pinned to the first substantive turn (a later "yes" must never
+      // become the brief), but a tagline or fine-print line the user quotes on
+      // turn 2+ has to reach `fixedCopy` — scanning the pinned intent alone
+      // re-read message 1 forever.
+      const merged = mergeBriefValues(
+        brief,
+        safeValues,
+        asked,
+        typeof text === 'string' ? text : undefined
+      );
       // The recap gate is server-owned: the conversationalist marks its recap
       // turn with `recap: true`, and only that turn persists `recapShown`
       // (a forged value in client/form input is stripped upstream by
@@ -1197,6 +1346,14 @@ export class AiDesignerConductorService {
       );
     }
 
+    const brandOverrideNote = await this._brandPaletteOverrideNote(
+      ctx,
+      config,
+      brief,
+      plans
+    );
+    if (brandOverrideNote) notes.push(brandOverrideNote);
+
     const outputs = this._resolveOutputs(config);
     if (outputs.length === 0) {
       throw new Error('No valid output formats');
@@ -1221,10 +1378,19 @@ export class AiDesignerConductorService {
         `only the ${AiDesignerConductorService.MAX_ASSET_NEEDS} most-needed images were generated — the remaining slots have no generated imagery`
       );
     }
+    // `referenceFileIds` used to ride along here and was never read by the
+    // asset agent — see the note on `AssetRequestInput`: no image provider in
+    // use accepts an init/reference image on the text-to-image path. The
+    // references DO shape the design, as interpreted cues on the brief; say
+    // so rather than letting the user believe the imagery was matched.
+    if ((config.referenceFileIds ?? []).length > 0) {
+      notes.push(
+        'your reference images guided the brief (style, mood, subject) — the image generator cannot copy them directly, so the generated imagery is an interpretation'
+      );
+    }
     const assetResponse = await this._dispatchAgent(ctx, 'asset', {
       type: 'asset-request',
       assetNeeds: assetNeeds.needs,
-      referenceFileIds: config.referenceFileIds,
     });
     const { assets, wellFormed: assetsWellFormed } =
       this._parseAssets(assetResponse);
@@ -1243,8 +1409,17 @@ export class AiDesignerConductorService {
     } else {
       const notedSlots = new Set<string>();
       for (const need of assetNeeds.needs) {
+        const key = assetKey(need.slotId, need.aspect);
+        // Remember every stock pick so a later regeneration can exclude it.
+        const stockId = assets[key]?.stockId;
+        if (stockId) {
+          const perSession =
+            this._assetStockIds.get(sessionId) ?? new Map<string, string>();
+          perSession.set(key, stockId);
+          this._assetStockIds.set(sessionId, perSession);
+        }
         if (notedSlots.has(need.slotId)) continue;
-        const asset = assets[assetKey(need.slotId, need.aspect)];
+        const asset = assets[key];
         const briefLabel = need.brief.slice(0, 60);
         if (!asset?.source) {
           // Missing from the map entirely (generate + stock + gradient all
@@ -1374,7 +1549,7 @@ export class AiDesignerConductorService {
           }
         );
         // Deterministic contrast repair over imagery (no LLM): flip the fill
-        // or back the failing text with a scrim, then ONE re-render.
+        // or halo the failing text, then ONE re-render.
         const contrastFixed = await this._fixContrastOverImagery(
           ctx,
           render.designId,
@@ -1546,6 +1721,21 @@ export class AiDesignerConductorService {
       notes
     );
 
+    // Surviving-defect disclosure, emitted from exactly ONE place so no
+    // number of capped passes can duplicate it. A regeneration that landed
+    // and was then flagged AGAIN (with no technique left to try) is the only
+    // case reported: the expansion loop re-critiques, so a re-flag there is
+    // real evidence the defect survived. A replacement that was never
+    // re-examined stays silent — the primary quality pass is single-shot and
+    // claiming it is clean would be knowledge we don't have.
+    for (const state of this._regeneratedSlots.get(sessionId)?.values() ?? []) {
+      if (!state.succeeded || !state.reFlagged) continue;
+      const idx = results.findIndex((r) => r.variantId === state.variantId);
+      notes.push(
+        `we replaced the imagery for variant ${idx >= 0 ? idx + 1 : 1} but the review flagged it again — please check it before publishing`
+      );
+    }
+
     if (notes.length > 0) {
       this._degradationNotes.set(sessionId, notes);
     } else {
@@ -1583,10 +1773,20 @@ export class AiDesignerConductorService {
       const plan = plans.find((p) => p.variantId === result.variantId);
       if (!plan) continue;
 
+      // The doc as it stood BEFORE any output was seeded. The expanded doc is
+      // persisted before the per-format QC loop runs, so a failure in that loop
+      // used to leave the DB holding outputs nothing ever quality-checked while
+      // the user was told the variant "could only be delivered in its original
+      // format" — the note and the data disagreed. Restoring this is what makes
+      // the note true.
+      let preExpansionDoc: DesignerDoc | undefined;
+      let expansionPersisted = false;
+
       try {
         this._throwIfCancelled(sessionId);
 
         let doc = await this._loadDesignDoc(ctx.orgId, result.designId);
+        preExpansionDoc = doc;
         doc = this._docService.applyOps(
           doc,
           secondaryOutputs.map((out) => ({
@@ -1603,6 +1803,23 @@ export class AiDesignerConductorService {
         // fileIds, same elements. The renderer cover-crops the shared asset
         // per format (computeCoverCrop + focalPoint), so no per-aspect asset
         // swap is needed — the passes below only align/resize/reposition.
+
+        // The seed places every element independently against the new canvas,
+        // which scatters the copy column and leaves anisotropic margins. Re-fit
+        // each seeded output to its own aspect (re-margin, re-pack, balance)
+        // before anything else looks at it — a channel variant is the SAME
+        // design on a different canvas, not a squashed one.
+        doc = this._composer.refitSeededOutputs(doc);
+
+        // Subject-aware crop repair, run HERE rather than only inside compose:
+        // compose sees the primary format alone (it is handed
+        // `outputs.slice(0, 1)`), which is the output least likely to need a
+        // focal-point lookup — a banner secondary throwing away 85.7% of its
+        // source was never even eligible while the portrait primary discarding
+        // 1.6% was. The centroid is box-independent and the pass keeps its own
+        // per-src dedupe and lookup cap, so re-running it over the expanded doc
+        // repairs every format from (at most) the same handful of lookups.
+        doc = await this._composer.applySubjectFocalPoints(doc, ctx.orgId);
 
         // Seeded outputs otherwise get zero geometric QC: run the composer's
         // deterministic sanitizer (text-fit clamp, overlap guard, doc
@@ -1632,6 +1849,7 @@ export class AiDesignerConductorService {
             saveFolderId,
           }
         );
+        expansionPersisted = true;
         const expandedFixed = await this._fixContrastOverImagery(
           ctx,
           result.designId,
@@ -1740,6 +1958,36 @@ export class AiDesignerConductorService {
         notes.push(
           `variant ${i + 1} could only be delivered in its original format`
         );
+        // Roll the persisted doc back to its pre-expansion state so the row
+        // matches the note. Without this the design keeps outputs that no
+        // quality pass ever saw — the user is told one format and opens three.
+        // (The same hazard exists inside the per-format pass loop below: each
+        // pass persists before the NEXT one can fail. There the outputs have at
+        // least been critiqued once, so they are stale rather than unchecked,
+        // and rolling the whole expansion back would throw away good work.)
+        if (expansionPersisted && preExpansionDoc) {
+          try {
+            const restored = await this._saver.updateDesign(
+              ctx.orgId,
+              result.designId,
+              `${result.variantId}-unexpanded`,
+              preExpansionDoc,
+              {
+                name: `${plan.skill}-${result.variantId}`,
+                saveFolderId,
+              }
+            );
+            results[i] = { ...restored, variantId: result.variantId };
+            emitter.preview(results[i]);
+          } catch (rollbackErr) {
+            this._logger.warn(
+              `Could not roll back the expanded doc for ${result.variantId}: ${
+                (rollbackErr as Error).message
+              }`,
+              AiDesignerConductorService.name
+            );
+          }
+        }
       }
     }
   }
@@ -1747,7 +1995,7 @@ export class AiDesignerConductorService {
   /**
    * Deterministic text-over-imagery contrast repair after a save/update:
    * when the saver's render-time audit flagged violations, the composer's
-   * `fixContrast` (NO LLM — fill flip or a subtle scrim) repairs them and
+   * `fixContrast` (NO LLM — fill flip, then a type halo) repairs them and
    * the design is re-rendered ONCE. Bounded and non-fatal: any failure
    * delivers the un-fixed render with the original doc. A degradation note
    * is added whenever the fix had to intervene.
@@ -1960,8 +2208,19 @@ export class AiDesignerConductorService {
    * agent with the regenerate flag — the same plumbing (and budget gate) as
    * initial compose — and on success swap the new src/fileId onto EVERY
    * output that used the old asset, preserving the same-fileId-across-formats
-   * variant invariant. ONE attempt per variant×slot per pipeline run; a cap
-   * hit or any failure keeps the old image and pushes a degradation note.
+   * variant invariant.
+   *
+   * Spend cap: at most REGENERATE_MAX_ATTEMPTS per variant×slot per run, and
+   * only while the TECHNIQUE changes. A `brand_safety` defect switches to a
+   * stock search rather than re-rolling the image model: the model in use is
+   * guidance-distilled and exposes no negative prompt, so a harsher brief is
+   * not an escalation — it is the same dice that already came up branded.
+   *
+   * A genuine failure keeps the old image and pushes a degradation note here.
+   * A cap hit pushes nothing HERE but records `reFlagged`, and `_runQualityPass`
+   * turns that into exactly one honest note per slot — a successful swap the
+   * critic then flagged again used to produce zero user-visible output, which
+   * is how a design with a surviving brand mark was delivered as "clean".
    * Non-fatal except for user cancels.
    */
   private async _regenerateFlaggedAssets(
@@ -1973,9 +2232,9 @@ export class AiDesignerConductorService {
     notes: string[]
   ): Promise<DesignerDoc> {
     if (findings.length === 0) return doc;
-    const attempted =
-      this._regeneratedSlots.get(sessionId) ?? new Set<string>();
-    this._regeneratedSlots.set(sessionId, attempted);
+    const tracked =
+      this._regeneratedSlots.get(sessionId) ?? new Map<string, RegeneratedSlot>();
+    this._regeneratedSlots.set(sessionId, tracked);
     // One dispatch per slot even when several findings flag it.
     const seen = new Set<string>();
 
@@ -1985,21 +2244,63 @@ export class AiDesignerConductorService {
       const slotId = regen.slotId;
       if (seen.has(slotId)) continue;
       seen.add(slotId);
-      const failNote = `couldn't regenerate the ${slotId} image — the original may contain unwanted text`;
+      // A regenerateAsset fix against a slot that carries NO imagery is a
+      // critic error, not a degradation: the note claims "the original may
+      // contain unwanted text" about a vector `badge`/`accent` that has no
+      // original at all. Drop the finding with a warn rather than spending a
+      // dispatch and then telling the user something untrue about their design.
+      if (!this._slotHasImagery(doc, plan, slotId)) {
+        this._logger.warn(
+          `Ignoring a regenerateAsset fix for slot "${slotId}": it carries no image on this doc.`,
+          AiDesignerConductorService.name
+        );
+        continue;
+      }
+      // The canonical image slot id IS "image" — interpolating it blindly
+      // shipped "couldn't regenerate the image image" to the user.
+      const failNote = `couldn't regenerate the ${slotId === 'image' ? 'image' : `${slotId} image`} — the original may contain unwanted text`;
       if (!plan) {
         notes.push(failNote);
         continue;
       }
       const slotKey = `${plan.variantId}:${slotId}`;
-      if (attempted.has(slotKey)) {
-        this._logger.warn(
-          `Refusing repeat asset regeneration for ${slotKey} — one attempt per slot per run.`,
-          AiDesignerConductorService.name
-        );
-        notes.push(failNote);
-        continue;
+      // Technique for THIS attempt. Stock is not brand-free either (editorial
+      // libraries are full of branded goods) — it is a genuinely different
+      // draw, and the disclosure below is what closes the risk.
+      const technique: 'generate' | 'stock' =
+        finding.criterion === 'brand_safety' ? 'stock' : 'generate';
+      const state = tracked.get(slotKey);
+      if (state) {
+        // Reaching a second finding for the SAME slot IS the survival signal:
+        // the critic re-examined the replacement and still dislikes it.
+        state.reFlagged = true;
+        if (
+          state.techniques.includes(technique) ||
+          state.attempts >= AiDesignerConductorService.REGENERATE_MAX_ATTEMPTS
+        ) {
+          // NO note here — one push site (in _runQualityPass) means the
+          // per-format loop (2 passes × secondary formats) cannot spam the
+          // same line once per refusal.
+          this._logger.warn(
+            `Refusing repeat asset regeneration for ${slotKey} — technique "${technique}" already tried (${state.attempts} attempt(s) this run).`,
+            AiDesignerConductorService.name
+          );
+          continue;
+        }
+        state.attempts++;
+        state.techniques.push(technique);
+        // The new replacement has not been judged yet.
+        state.reFlagged = false;
+      } else {
+        tracked.set(slotKey, {
+          variantId: plan.variantId,
+          slotId,
+          attempts: 1,
+          techniques: [technique],
+          succeeded: false,
+          reFlagged: false,
+        });
       }
-      attempted.add(slotKey);
 
       try {
         const primary = doc.outputs[0];
@@ -2011,25 +2312,54 @@ export class AiDesignerConductorService {
         // appended as extra guidance.
         const need: AssetNeedRequest = {
           slotId: slotKey,
-          brief: [planNeed?.brief ?? plan.concept, regen.brief]
+          brief: [
+            // The stock switch searches a library, so the query says what it
+            // needs to exclude in words the library indexes.
+            technique === 'stock' ? 'generic unbranded' : undefined,
+            planNeed?.brief ?? plan.concept,
+            regen.brief,
+          ]
             .filter(Boolean)
             .join('. '),
-          prefer: planNeed?.prefer ?? 'generate',
+          prefer: technique === 'stock' ? 'stock' : planNeed?.prefer ?? 'generate',
+          ...(technique === 'stock' ? { stockOnly: true } : {}),
           aspect: primary
             ? aspectClass(primary.width, primary.height)
             : 'square',
           heroLayout: this._heroLayoutForNeed(plan, slotId, primary?.formatId),
         };
+        // The stock pick this slot already composed with. Passing it as an
+        // exclusion is what stops the (deterministic, Redis-cached) search
+        // from handing the identical photo straight back.
+        const key = assetKey(need.slotId, need.aspect);
+        const previousStockId = this._assetStockIds.get(sessionId)?.get(key);
+        if (previousStockId) need.excludeStockId = previousStockId;
         const response = await this._dispatchAgent(ctx, 'asset', {
           type: 'asset-request',
           assetNeeds: [need],
           regenerate: true,
         });
         const { assets } = this._parseAssets(response);
-        const asset = assets[assetKey(need.slotId, need.aspect)];
+        const asset = assets[key];
         // A gradient placeholder is not a usable replacement for a photo the
         // critic disliked — keep the original imagery instead.
         if (!asset?.fileId || !asset.path || asset.source === 'gradient') {
+          notes.push(failNote);
+          continue;
+        }
+        // Same guard, one step further out: the exclusion is best-effort (a
+        // one-result search has nothing else to offer), so a replacement that
+        // IS the rejected photo counts as a failure too — swapping it in
+        // would report a successful regeneration that changed nothing.
+        if (
+          asset.source === 'stock' &&
+          asset.stockId &&
+          asset.stockId === previousStockId
+        ) {
+          this._logger.warn(
+            `Stock regeneration for ${slotKey} returned the same photo (${asset.stockId}) — keeping the original.`,
+            AiDesignerConductorService.name
+          );
           notes.push(failNote);
           continue;
         }
@@ -2039,6 +2369,18 @@ export class AiDesignerConductorService {
           continue;
         }
         doc = patched;
+        // A replacement landed: if the critic flags this slot again and no
+        // technique is left, _runQualityPass tells the user about it.
+        const landed = tracked.get(slotKey);
+        if (landed) landed.succeeded = true;
+        // Remember the replacement too, so a later run's exclusion tracks the
+        // photo actually on screen rather than the one it displaced.
+        if (asset.stockId) {
+          const perSession =
+            this._assetStockIds.get(sessionId) ?? new Map<string, string>();
+          perSession.set(key, asset.stockId);
+          this._assetStockIds.set(sessionId, perSession);
+        }
         this._logger.log(
           `Regenerated imagery for ${slotKey} (source=${asset.source}).`,
           AiDesignerConductorService.name
@@ -2053,6 +2395,42 @@ export class AiDesignerConductorService {
       }
     }
     return doc;
+  }
+
+  /**
+   * Does this slot actually resolve to an image on the doc? Mirrors the match
+   * `_replaceSlotImagery` uses (the plan's image background, or a child image
+   * element by originId/id) — a slot the swap could never touch must not earn
+   * a "couldn't regenerate the …" note either.
+   */
+  private _slotHasImagery(
+    doc: DesignerDoc,
+    plan: DesignPlan | undefined,
+    slotId: string
+  ): boolean {
+    const bgIsSlot =
+      plan?.background?.kind === 'image' &&
+      plan.background.ref === `asset:${slotId}`;
+    for (const out of doc.outputs) {
+      if (!('children' in out)) continue;
+      if (
+        bgIsSlot &&
+        out.bg?.type === 'image' &&
+        (out.bg.src || out.bg.fileId)
+      ) {
+        return true;
+      }
+      for (const el of out.children) {
+        if (
+          el.type === 'image' &&
+          (el.originId === slotId || el.id === slotId) &&
+          (el.src || el.fileId)
+        ) {
+          return true;
+        }
+      }
+    }
+    return false;
   }
 
   /**
@@ -2094,10 +2472,19 @@ export class AiDesignerConductorService {
     const ops: DesignerDocOp[] = [];
     doc.outputs.forEach((out, outputIndex) => {
       if (!('children' in out)) return;
+      // The imagery this swap repaints on THIS output — the scrims judged
+      // against the old photo are the ones overlapping it.
+      const repainted: {
+        x: number;
+        y: number;
+        width: number;
+        height: number;
+      }[] = [];
       if (
         out.bg?.type === 'image' &&
         (bgIsSlot || (out.bg.fileId && oldFileIds.has(out.bg.fileId)))
       ) {
+        repainted.push({ x: 0, y: 0, width: out.width, height: out.height });
         ops.push({
           op: 'setOutputBackground',
           outputIndex,
@@ -2128,8 +2515,42 @@ export class AiDesignerConductorService {
             src: asset.path,
             fileId: asset.fileId,
             ...(asset.focalPoint ? { focalPoint: asset.focalPoint } : {}),
+            // The source geometry describes the IMAGE, so it has to travel
+            // with the swap — a leftover `naturalWidth`/`subjectPoint` from
+            // the replaced image mis-aims both the render-time cover crop and
+            // the reflow-time focal point re-derivation.
+            ...(asset.naturalWidth && asset.naturalHeight
+              ? {
+                  naturalWidth: asset.naturalWidth,
+                  naturalHeight: asset.naturalHeight,
+                }
+              : {}),
+            ...(asset.subjectPoint ? { subjectPoint: asset.subjectPoint } : {}),
           },
         });
+        repainted.push({
+          x: el.x,
+          y: el.y,
+          width: el.width,
+          height: el.height,
+        });
+      }
+
+      // A contrast scrim is a judgement about ONE photo: it was added because
+      // the copy could not be read against the pixels underneath. Swapping the
+      // photo invalidates that judgement, and nothing else can re-open it —
+      // the backdrop-only render keeps SHAPES, so once a scrim exists it IS
+      // the backdrop the next audit measures (stdev ≈ 0, crossing 0), and the
+      // contrast fix early-returns forever. Dropping the overlapping scrims
+      // here re-poses the question against the NEW photo: both call sites
+      // follow this with updateDesign + _fixContrastOverImagery, so the
+      // decision is re-made for zero extra renders.
+      if (repainted.length > 0) {
+        for (const el of out.children) {
+          if (el.type !== 'shape' || !el.originId?.endsWith('-scrim')) continue;
+          if (!repainted.some((box) => aabbOverlap(el, box))) continue;
+          ops.push({ op: 'removeElement', outputIndex, elementId: el.id });
+        }
       }
     });
 
@@ -2174,7 +2595,25 @@ export class AiDesignerConductorService {
       });
     }
 
-    return outs;
+    // The formatId is the addressing key for per-format critiques, revise
+    // targeting (`_resolveTargetOutputIndexes`) and the expansion's
+    // `outputPreviews.find(...)`. Two entries sharing one id (two identical
+    // custom sizes, or a stored config with a repeated channel) make the
+    // second output permanently unaddressable — every lookup answers with the
+    // first. Collapse them here; the art director's `_resolveSizes` dedupes
+    // the same way so both id-construction sites stay consistent.
+    const seen = new Set<string>();
+    return outs.filter((out) => {
+      if (seen.has(out.formatId)) {
+        this._logger.warn(
+          `Dropping duplicate output format "${out.formatId}" — one format id addresses exactly one output.`,
+          AiDesignerConductorService.name
+        );
+        return false;
+      }
+      seen.add(out.formatId);
+      return true;
+    });
   }
 
   private async _emitDelivery(
@@ -2182,7 +2621,14 @@ export class AiDesignerConductorService {
     _ctx: AiDesignerAgentContext,
     emitter: AiDesignerEmitter,
     results: AiDesignerRenderResult[],
-    notes: string[] = []
+    notes: string[] = [],
+    /**
+     * Variant number to caption each result with. Defaults to its position,
+     * which is right for the initial delivery and WRONG for a revision — that
+     * path delivers a one-element `results`, so the hardcoded index captioned
+     * a revised variant 3 as "Variant 1".
+     */
+    ordinals?: number[]
   ) {
     // One honest heads-up for everything that degraded during the pipeline —
     // never a message per note.
@@ -2206,7 +2652,7 @@ export class AiDesignerConductorService {
       r.outputPreviews.map((o) => ({
         url: o.url,
         type: 'image' as const,
-        caption: `Variant ${index + 1} · ${o.formatId}`,
+        caption: `Variant ${ordinals?.[index] ?? index + 1} · ${o.formatId}`,
         designId: r.designId,
         fileId: o.fileId,
       }))
@@ -2313,11 +2759,64 @@ export class AiDesignerConductorService {
    * request, or an accept ("looks good"). Anything unparseable keeps the
    * historical fallback — treat the raw text as a shared-scope revision.
    */
+  /**
+   * The delivered designs as a LABELLED catalogue for the classifier.
+   *
+   * `activeDesignIds` is a bare array of opaque cuids: asked to revise "the
+   * Facebook version" the classifier could only name one, and the sole check
+   * was set membership — so a wrong pick looked exactly like a right one, and
+   * the revision landed on the wrong design. The ordinal is the number the
+   * delivery captions already show the user; the formats come off each doc; the
+   * concept comes from the stored plans, which are recorded in the same order
+   * the designs were delivered.
+   *
+   * Best-effort by construction: a doc that will not load contributes an entry
+   * with just its ordinal rather than failing the whole revise turn.
+   */
+  private async _designCatalogue(
+    ctx: AiDesignerAgentContext,
+    activeDesignIds: string[],
+    brief: DesignBrief
+  ): Promise<DesignCatalogueEntry[]> {
+    const lastPlans = (brief.lastPlans as DesignPlan[] | undefined) ?? [];
+    return Promise.all(
+      activeDesignIds.map(async (designId, index) => {
+        const entry: DesignCatalogueEntry = {
+          ordinal: index + 1,
+          designId,
+        };
+        const concept = lastPlans[index]?.concept;
+        if (typeof concept === 'string' && concept.trim()) {
+          entry.concept = concept.slice(0, 200);
+        }
+        try {
+          const doc = await this._loadDesignDoc(ctx.orgId, designId);
+          entry.formatIds = doc.outputs.map((out) => out.formatId);
+          entry.formatNames = doc.outputs.map(
+            (out) =>
+              CHANNEL_PRESETS.find((p) => p.id === out.formatId)?.name ||
+              out.name ||
+              out.formatId
+          );
+        } catch (err) {
+          this._logger.warn(
+            `Could not read design ${designId} for the revise catalogue: ${
+              (err as Error).message
+            }`,
+            AiDesignerConductorService.name
+          );
+        }
+        return entry;
+      })
+    );
+  }
+
   private async _classifyDeliveredChat(
     ctx: AiDesignerAgentContext,
     instruction: string,
     activeDesignIds: string[],
-    mode: string
+    mode: string,
+    brief?: DesignBrief
   ): Promise<
     | { kind: 'revise'; revision: RevisionRequest }
     | { kind: 'accept'; text?: string }
@@ -2330,6 +2829,13 @@ export class AiDesignerConductorService {
     }
 
     if (mode === 'chat') {
+      // Built HERE, after the deterministic accept short-circuit: it costs one
+      // design read per active variant and an accept needs none of them.
+      const designs = await this._designCatalogue(
+        ctx,
+        activeDesignIds,
+        brief ?? { intent: '' }
+      );
       const convResponse = await this._dispatchAgent(ctx, 'conversationalist', {
         type: 'chat',
         text: instruction,
@@ -2339,6 +2845,7 @@ export class AiDesignerConductorService {
           brief: { intent: instruction },
           questionsAsked: [],
           activeDesignIds,
+          ...(designs?.length ? { designs } : {}),
         },
       });
       const parsed = this._safeJson(convResponse.content) as any;
@@ -2356,8 +2863,12 @@ export class AiDesignerConductorService {
     return {
       kind: 'revise',
       revision: {
+        // NO targetDesignId: this is the blind fallback (prompt mode, or an
+        // unparseable classification) and it identifies nothing. Synthesizing
+        // `activeDesignIds[0]` here made the fallback OVERRIDE the caller's
+        // explicit `payload.targetDesignId` in `handleRevise`, so an API/MCP
+        // revise aimed at variant 3 silently landed on variant 1.
         instruction,
-        targetDesignId: activeDesignIds[0],
         scope: 'shared',
       },
     };
@@ -2427,9 +2938,31 @@ export class AiDesignerConductorService {
     ctx: AiDesignerAgentContext,
     targetDesignId: string,
     revision: RevisionRequest,
-    emitter: AiDesignerEmitter
+    emitter: AiDesignerEmitter,
+    notes: string[] = []
   ): Promise<AiDesignerRenderResult | null> {
     const doc = await this._loadDesignDoc(ctx.orgId, targetDesignId);
+
+    // A `format-only` revision that names no output this doc actually has
+    // used to filter every emitted op away (`_filterReviseOps` allows an
+    // EMPTY index set through nothing) and no-op in silence. Applying the
+    // user's change to every format is the lesser evil — but say so.
+    let scope = revision.scope;
+    let targetOutputs = revision.targetOutputs;
+    if (
+      scope === 'format-only' &&
+      !this._composer.canResolveFormatScope(doc, targetOutputs)
+    ) {
+      this._logger.warn(
+        `Revision asked for format-only scope but named no known output (${(targetOutputs ?? []).join(', ') || 'none'}); applying it to every format.`,
+        AiDesignerConductorService.name
+      );
+      scope = 'shared';
+      targetOutputs = undefined;
+      notes.push(
+        "I couldn't tell which format you meant, so the change was applied to every size"
+      );
+    }
 
     emitter.progress('composer', 'Applying revision', undefined, revision.instruction);
     // Real LLM re-emit of updateElement ops (not a note-only no-op): honors
@@ -2437,9 +2970,9 @@ export class AiDesignerConductorService {
     let revisedDoc = await this._composer.reviseByInstruction(
       doc,
       revision.instruction,
-      revision.scope,
+      scope,
       ctx.orgId,
-      revision.targetOutputs,
+      targetOutputs,
       revision.targetSlots,
       this._aborts.get(sessionId)?.signal
     );
@@ -2676,6 +3209,7 @@ export class AiDesignerConductorService {
     this._inFlight.delete(sessionId);
     this._aborts.delete(sessionId);
     this._regeneratedSlots.delete(sessionId);
+    this._assetStockIds.delete(sessionId);
   }
 
   private _throwIfCancelled(sessionId: string) {

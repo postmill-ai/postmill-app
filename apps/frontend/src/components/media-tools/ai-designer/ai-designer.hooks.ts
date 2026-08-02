@@ -3,7 +3,6 @@
 import { useCallback } from 'react';
 import useSWR from 'swr';
 import { useFetch } from '@postmill-ai/helpers/utils/custom.fetch';
-import type { MediaSelectorItem } from '@postmill-ai/frontend/components/media-tools/media-selector-modal';
 import type {
   AiDesignerSessionDto,
   AiDesignerMessagePayload,
@@ -29,42 +28,37 @@ export const useAiDesignerSession = (sessionId: string | null) => {
   );
 };
 
-/**
- * Import a stock-sourced media item into the org's `/files` library so it has a
- * real `fileId` — required before it can be referenced by the AI Designer backend.
- * File-sourced items pass through unchanged.
- */
-export const useImportStockMedia = () => {
+export interface AiDesignerSessionList {
+  sessions: AiDesignerSessionDto[];
+  total: number;
+}
+
+/** Previous sessions for the current org + user, newest first. */
+export const useAiDesignerSessions = (limit = 30) => {
+  const fetch = useFetch();
+  const load = useCallback(async () => {
+    const res = await fetch(`/ai-designer/sessions?page=1&limit=${limit}`);
+    if (!res.ok) return { sessions: [], total: 0 };
+    return (await res.json()) as AiDesignerSessionList;
+  }, [fetch, limit]);
+  return useSWR<AiDesignerSessionList>('ai-designer-sessions', load, {
+    revalidateOnFocus: false,
+  });
+};
+
+export const useDeleteAiDesignerSession = () => {
   const fetch = useFetch();
   return useCallback(
-    async (item: MediaSelectorItem): Promise<MediaSelectorItem> => {
-      if (item.source === 'file' && item.fileId) return item;
-      const body: Record<string, unknown> = {
-        url: item.url,
-        name: item.name || 'Reference',
-        type: item.type,
-      };
-      if (item.stockSource) body.source = item.stockSource;
-      if (item.downloadLocation) body.downloadLocation = item.downloadLocation;
-      if (item.attribution) body.attribution = item.attribution;
-
-      const res = await fetch('/files/import', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(body),
+    async (sessionId: string) => {
+      const res = await fetch(`/ai-designer/sessions/${sessionId}`, {
+        method: 'DELETE',
       });
-      if (!res.ok) {
-        const text = await res.text().catch(() => '');
-        throw new Error(text || `Import failed (${res.status})`);
-      }
-      const file = (await res.json()) as { id: string; path: string };
-      return {
-        ...item,
-        source: 'file',
-        fileId: file.id,
-        url: file.path,
-      };
+      if (!res.ok) throw new Error(`Delete failed (${res.status})`);
     },
     [fetch]
   );
 };
+
+// Moved to media-tools/media-import.ts — six surfaces need it, not just this one.
+// Re-exported here so existing importers (and their specs) keep working.
+export { useImportStockMedia } from '@postmill-ai/frontend/components/media-tools/media-import';

@@ -20,7 +20,12 @@ import {
 import { DesignerDocOpError } from './designer-doc.errors';
 import { MAX_OPS_PER_REQUEST } from './designer-doc.limits';
 import { seedCopy } from './seed-copy';
-import { computeGroupBoxes, computeTextStackBoxes } from './reflow';
+import {
+  computeContainerBoxes,
+  computeGroupBoxes,
+  computeTextStackBoxes,
+  reflowBackground,
+} from './reflow';
 import { applyLinked } from './apply-linked';
 
 const isImageOutput = (
@@ -163,8 +168,16 @@ export class DesignerDocService {
           height: op.preset.height,
           background: source?.background ?? '#ffffff',
           bg: source?.bg,
+          // The copy stack's vertical budget belongs to the DESIGN, not to one
+          // canvas — carried over so this format's type is measured with the
+          // same rule the primary was composed under (see `typeBasisPx`).
+          typeBudget: source?.typeBudget,
           children: [],
         };
+        // An image background is cover-cropped like an image element, so its
+        // focal point is only valid for the aspect it was computed against —
+        // re-derive it for this canvas when the centroid rode along.
+        newOutput.bg = reflowBackground(newOutput.bg, newOutput);
 
         if (source) {
           const sourceChildren = source.children.map((el) =>
@@ -172,19 +185,29 @@ export class DesignerDocService {
               ? el
               : { ...el, originId: `origin-${randomUUID()}` }
           );
-          // Grouped pairs (CTA label + pill/underline, badge + label) seed
-          // through one shared anchor derived from the group's combined bbox.
-          // Ungrouped copy stacks (headline/subhead columns) get a synthetic
-          // shared frame so the thirds-bucketing can't split them apart.
+          // Copy stacks (headline/subhead columns, plus any grouped CTA that
+          // sits in the same column rhythm) seed through one synthetic shared
+          // frame so the thirds-bucketing can't split them apart — stack
+          // membership WINS, because a group inside a stack must follow the
+          // stack (its own members still share that one frame, so the pair
+          // stays glued). A group outside any stack falls back to its own
+          // combined bbox.
           const groupBoxes = computeGroupBoxes(sourceChildren);
           const stackBoxes = computeTextStackBoxes(sourceChildren, source);
+          // Elements inside a layout panel (split-panel / editorial-sidebar)
+          // reflow horizontally against the PANEL — which scales per-axis —
+          // instead of the canvas, whose uniform ratio shrank the copy away
+          // from the panel's margins and left a dead gutter.
+          const containerBoxes = computeContainerBoxes(sourceChildren);
           newOutput.children = sourceChildren.map((el) =>
             seedCopy(
               el,
               source,
               newOutput,
               el.originId as string,
-              el.groupId ? groupBoxes.get(el.groupId) : stackBoxes.get(el)
+              stackBoxes.get(el) ??
+                (el.groupId ? groupBoxes.get(el.groupId) : undefined),
+              containerBoxes.get(el)
             )
           );
           const outputs = doc.outputs.map((out, i) =>

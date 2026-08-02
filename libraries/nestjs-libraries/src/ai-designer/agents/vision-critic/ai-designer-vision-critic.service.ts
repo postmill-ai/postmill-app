@@ -5,13 +5,10 @@ import {
   type InProcessHandler,
 } from '@reaatech/agent-mesh-router';
 import type { AgentResponse, ContextPacket } from '@reaatech/agent-mesh';
-import { readFile } from 'fs/promises';
-import path from 'path';
 import { AiDefaultsService } from '@postmill-ai/nestjs-libraries/ai/defaults/ai-defaults.service';
 import { FileService } from '@postmill-ai/nestjs-libraries/database/prisma/file/file.service';
 import { CHANNEL_PRESETS } from '@postmill-ai/nestjs-libraries/integrations/social/channel-presets';
-import { isSafePublicHttpsUrl } from '@postmill-ai/nestjs-libraries/dtos/webhooks/webhook.url.validator';
-import { fromBuffer } from '@postmill-ai/nestjs-libraries/upload/file-type.compat';
+import { resolveVisionImageUrl } from '@postmill-ai/nestjs-libraries/ai/vision-image-url';
 import type {
   DesignPlan,
   Fix,
@@ -31,6 +28,7 @@ const VISION_CRITIC_SCHEMA_BLOCK = `Return ONLY a JSON object in this exact shap
     {
       "formatId": "ig-reel",
       "slotId": "bottom-caption",
+      "criterion": "text_fit",
       "issue": "Caption text is positioned too low and overlaps the bottom UI safe zone.",
       "fix": {
         "scope": "format-only",
@@ -44,6 +42,7 @@ const VISION_CRITIC_SCHEMA_BLOCK = `Return ONLY a JSON object in this exact shap
     {
       "formatId": "ig-reel",
       "slotId": "image",
+      "criterion": "brand_safety",
       "issue": "The generated photo has a baked-in logo on the packaging.",
       "fix": {
         "scope": "shared",
@@ -55,7 +54,8 @@ const VISION_CRITIC_SCHEMA_BLOCK = `Return ONLY a JSON object in this exact shap
 
 // Base criteria appended centrally to every skill's rubric — these defects
 // are genre-independent: text overflow, baked-in asset text, framed insets,
-// feed-thumbnail legibility, copy fidelity, and alignment/collision.
+// feed-thumbnail legibility, copy fidelity, third-party brand marks, and
+// alignment/collision.
 const BASE_CRITERIA: { name: string; description: string; weight: number }[] = [
   {
     name: 'text_fit',
@@ -88,9 +88,15 @@ const BASE_CRITERIA: { name: string; description: string; weight: number }[] = [
     weight: 1,
   },
   {
+    name: 'brand_safety',
+    description:
+      'Generated imagery carries NO recognizable third-party brand logos, trademarks, brand marks, product branding or celebrity likenesses — a real-world branded product (a sportswear swoosh or stripes on a shoe, a phone maker\'s logo, a soda label) is a defect even when no readable text is present. Products and surfaces must be generic and unbranded.',
+    weight: 1,
+  },
+  {
     name: 'text_alignment',
     description:
-      'Text is centered/aligned within its containing shape (badge bursts, buttons, pills) and never spills outside it; no text-on-text collisions; text over busy imagery needs a scrim or strong shadow/stroke for contrast.',
+      'Text is centered/aligned within its containing shape (badges, buttons, pills) and never spills outside it; no text-on-text collisions; text over busy imagery needs a strong shadow/stroke for contrast — never ask for a scrim, plate or band behind copy.',
     weight: 1,
   },
 ];
@@ -362,6 +368,7 @@ ${docSummary ? `Design doc elements (authoritative geometry/colors per output �
 Look at the contact sheet and identify concrete, actionable visual issues. For each issue, produce a finding with:
 - "formatId" (optional): which output format is affected, if known.
 - "slotId" (optional): which design slot is affected, if known.
+- "criterion" (optional): the name of the rubric criterion above that this finding violates (e.g. "brand_safety", "text_fit") — always include it when the finding maps to one; the repair strategy depends on it.
 - "issue": a short, specific description of the problem (e.g. "Bottom caption is too close to the Instagram Reel bottom-UI safe zone and may be covered by captions", "Headline text is too small to read at thumbnail size", "Light text on a bright background lacks contrast").
 - "fix" (optional): an object describing the fix, with one of these shapes:
   - "scope": "shared" or "format-only"
@@ -369,7 +376,7 @@ Look at the contact sheet and identify concrete, actionable visual issues. For e
   - "geometry": partial element geometry such as { x, y, width, height, fontSize }
   - "style": partial style such as { fill, stroke, opacity, fontFamily, align ("left"|"center"|"right"), verticalAlign ("top"|"middle"|"bottom"), textStroke { color, width }, textShadow (true = add a default shadow, false = remove it) }
   - "text": { slotId, newText } — rewrite the copy of a TEXT slot only; never target an image slot with a text fix
-  - "regenerateAsset": { slotId, brief? } — regenerate the underlying imagery for that slot; the ONLY fix for a no_baked_in_text or text_accuracy defect inside a generated photo: imagery containing baked-in text, letters, logos or watermarks must be fixed with regenerateAsset targeting the image slot — never with a text fix. Optional "brief" adds guidance for the regeneration (subject, mood, what to avoid)
+  - "regenerateAsset": { slotId, brief? } — regenerate the underlying imagery for that slot; the ONLY fix for a no_baked_in_text, text_accuracy or brand_safety defect inside a generated photo: imagery containing baked-in text, letters, logos, watermarks, or a recognizable third-party brand mark / branded product / celebrity likeness must be fixed with regenerateAsset targeting the image slot — never with a text fix. Optional "brief" adds guidance for the regeneration (subject, mood, what to avoid — e.g. "generic unbranded sneaker, no logos or brand marks")
   - "addElement": { slotId, type: "text" | "shape", text?, shape?, box? { x, y, width, height }, style? { fill, fontFamily, fontSize, align, textStroke, textShadow } } — add a small text/shape/badge-style element
   - "removeElement": a slot id to remove from the targeted outputs
   - "note": free-text guidance when no numeric edit is possible
@@ -420,7 +427,10 @@ If the contact sheet looks good, return { "findings": [] }.`;
           try {
             const imageUrl = await this._resolveImageUrl(orgId, o.url);
             if (!imageUrl) return;
-            const prompt = `Review this full-resolution design for the "${o.formatId}" output. Focus on legibility, safe-zone compliance, and whether any text or important detail would be lost at real size. ${VISION_CRITIC_SCHEMA_BLOCK}; keep it brief.`;
+            // The escalation carries only the schema block, not the criteria
+            // list — brand_safety has to be restated inline or a swoosh that
+            // the contact sheet was too small to show goes unflagged here too.
+            const prompt = `Review this full-resolution design for the "${o.formatId}" output. Focus on legibility, safe-zone compliance, and whether any text or important detail would be lost at real size. Also flag brand_safety defects: any recognizable third-party brand logo, trademark, brand mark, branded product or celebrity likeness in the generated imagery — fix those with "regenerateAsset" targeting the image slot, never with a text fix, and set "criterion" to "brand_safety". ${VISION_CRITIC_SCHEMA_BLOCK}; keep it brief.`;
             const raw = await this._aiDefaults.vision(orgId, imageUrl, prompt);
             const parsed = this._extractFindings(raw);
             for (const f of parsed.findings) {
@@ -475,6 +485,11 @@ If the contact sheet looks good, return { "findings": [] }.`;
     if (typeof candidate.slotId === 'string') {
       finding.slotId = candidate.slotId;
     }
+    // The criterion drives the conductor's regeneration technique — keep it,
+    // bounded (a rambling model must not smuggle a paragraph through it).
+    if (typeof candidate.criterion === 'string' && candidate.criterion.trim()) {
+      finding.criterion = candidate.criterion.trim().slice(0, 60);
+    }
     if (candidate.fix && typeof candidate.fix === 'object') {
       finding.fix = this._normalizeFix(candidate.fix as Record<string, unknown>);
     }
@@ -521,7 +536,14 @@ If the contact sheet looks good, return { "findings": [] }.`;
         style.opacity = Math.max(0, Math.min(1, src.opacity));
       }
       if (typeof src.fontFamily === 'string') style.fontFamily = src.fontFamily;
-      if (src.align === 'left' || src.align === 'center' || src.align === 'right') {
+      // Alignment is a property of the DESIGN, not of one canvas: applying it
+      // format-only leaves the same slot left-aligned on one output and
+      // centered on another. The critic keeps the vocabulary — a genuinely
+      // global alignment problem still gets fixed through a shared-scope fix.
+      if (
+        scope === 'shared' &&
+        (src.align === 'left' || src.align === 'center' || src.align === 'right')
+      ) {
         style.align = src.align;
       }
       if (
@@ -663,62 +685,20 @@ If the contact sheet looks good, return { "findings": [] }.`;
     return JSON.parse(trimmed.slice(start, end + 1));
   }
 
+  /**
+   * Public-URL passthrough / local-upload inlining — see
+   * `ai/vision-image-url`, which the focal-point detector shares. The `orgId`
+   * stays on the signature: resolution is per-call, not per-org, but every
+   * call site already threads it and dropping it would churn them all.
+   */
   private async _resolveImageUrl(
-    orgId: string,
+    _orgId: string,
     url: string
   ): Promise<string | null> {
-    if (await isSafePublicHttpsUrl(url)) {
-      return url;
-    }
-
-    if (!this._isLocalStorageUrl(url)) {
-      this._logger.warn(
-        `Vision critic skipping non-public, non-local image URL: ${url}`
-      );
-      return null;
-    }
-
-    try {
-      const buffer = await readFile(this._localPathFromUrl(url));
-      if (buffer.length > VISION_CRITIC_MAX_INLINE_BYTES) {
-        this._logger.warn(
-          'vision critic disabled: storage not provider-reachable'
-        );
-        return null;
-      }
-      const detected = await fromBuffer(buffer);
-      const mime = detected?.mime || 'image/png';
-      return `data:${mime};base64,${buffer.toString('base64')}`;
-    } catch (err) {
-      this._logger.warn(
-        `Vision critic failed to inline local image: ${(err as Error).message}`
-      );
-      return null;
-    }
-  }
-
-  private _isLocalStorageUrl(url: string): boolean {
-    const frontendUrl = (process.env.FRONTEND_URL || '').replace(/\/$/, '');
-    return (
-      (frontendUrl && url.startsWith(`${frontendUrl}/uploads/`)) ||
-      url.startsWith('/uploads/')
-    );
-  }
-
-  /** Resolved path must stay inside UPLOAD_DIRECTORY (traversal guard). */
-  private _localPathFromUrl(url: string): string {
-    const frontendUrl = (process.env.FRONTEND_URL || '').replace(/\/$/, '');
-    let key = url;
-    if (frontendUrl && key.startsWith(`${frontendUrl}/uploads/`)) {
-      key = key.slice(`${frontendUrl}/uploads/`.length);
-    } else if (key.startsWith('/uploads/')) {
-      key = key.slice('/uploads/'.length);
-    }
-    const uploadDirectory = path.resolve(process.env.UPLOAD_DIRECTORY || './uploads');
-    const resolved = path.resolve(uploadDirectory, decodeURIComponent(key));
-    if (resolved !== uploadDirectory && !resolved.startsWith(uploadDirectory + path.sep)) {
-      throw new Error(`upload path escapes storage root: ${url}`);
-    }
-    return resolved;
+    return resolveVisionImageUrl(url, {
+      warn: (message) => this._logger.warn(message),
+      label: 'Vision critic',
+      maxInlineBytes: VISION_CRITIC_MAX_INLINE_BYTES,
+    });
   }
 }

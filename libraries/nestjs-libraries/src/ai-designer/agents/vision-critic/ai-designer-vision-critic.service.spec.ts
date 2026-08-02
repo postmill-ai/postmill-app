@@ -125,6 +125,28 @@ describe('AiDesignerVisionCriticService', () => {
     expect(escalationPrompt).not.toContain('same shape as before');
   });
 
+  it('restates brand_safety in the escalation prompt (it carries no criteria list)', async () => {
+    aiDefaults.vision
+      .mockResolvedValueOnce(
+        '{"findings": [{"issue": "Headline is too small to read", "formatId": "ig-square"}]}'
+      )
+      .mockResolvedValueOnce('{"findings": []}');
+
+    await handler(
+      makeRequest({
+        outputPreviews: [
+          { formatId: 'ig-square', url: 'https://example.com/preview.png' },
+        ],
+      }),
+      'org1'
+    );
+
+    const escalationPrompt = aiDefaults.vision.mock.calls[1][2] as string;
+    expect(escalationPrompt).toContain('brand_safety');
+    expect(escalationPrompt).toContain('brand logo');
+    expect(escalationPrompt).toContain('regenerateAsset');
+  });
+
   it('appends the base text_fit criterion to every critique prompt', async () => {
     aiDefaults.vision.mockResolvedValue('{"findings": []}');
 
@@ -154,11 +176,28 @@ describe('AiDesignerVisionCriticService', () => {
       'feed_legibility',
       'text_accuracy',
       'text_alignment',
+      'brand_safety',
     ]) {
       expect(prompt).toContain(name);
     }
     expect(prompt).toContain('baked-in text');
     expect(prompt).toContain('framed inset');
+    // A photoreal branded product (live: sneakers with clear Nike swooshes)
+    // does not read as "baked-in text/graphics", so it needs its own criterion.
+    expect(prompt).toContain('third-party brand logos');
+    expect(prompt).toContain('celebrity likenesses');
+  });
+
+  it('routes a brand_safety defect to regenerateAsset in the fix vocabulary', async () => {
+    aiDefaults.vision.mockResolvedValue('{"findings": []}');
+
+    await handler(makeRequest(), 'org1');
+
+    const prompt = aiDefaults.vision.mock.calls[0][2] as string;
+    const vocabulary = prompt.slice(prompt.indexOf('"regenerateAsset"'));
+    expect(vocabulary).toContain('brand_safety');
+    expect(vocabulary).toContain('branded product');
+    expect(vocabulary).toContain('never with a text fix');
   });
 
   it('lists each output with its 25% feed-scale pixel size', async () => {
@@ -323,6 +362,69 @@ describe('AiDesignerVisionCriticService', () => {
     const fix = content.findings[0].fix;
     expect(fix.regenerateAsset.slotId).toBe('image');
     expect(fix.regenerateAsset.brief).toHaveLength(500);
+  });
+
+  it('carries the rubric criterion through to the finding', async () => {
+    aiDefaults.vision.mockResolvedValue(
+      JSON.stringify({
+        findings: [
+          {
+            issue: 'The sneaker carries a recognizable brand swoosh',
+            slotId: 'image',
+            criterion: '  brand_safety  ',
+            fix: {
+              scope: 'shared',
+              regenerateAsset: { slotId: 'image' },
+            },
+          },
+          { issue: 'No criterion given' },
+        ],
+      })
+    );
+
+    const res = await handler(makeRequest(), 'org1');
+
+    // The conductor picks the regeneration TECHNIQUE off this: brand_safety
+    // switches to a stock search instead of re-rolling the image model.
+    const content = JSON.parse(res.content);
+    expect(content.findings[0].criterion).toBe('brand_safety');
+    expect(content.findings[1].criterion).toBeUndefined();
+  });
+
+  it('drops align from a format-only style fix but keeps it on a shared one', async () => {
+    aiDefaults.vision.mockResolvedValue(
+      JSON.stringify({
+        findings: [
+          {
+            issue: 'Headline alignment fights the panel on this format',
+            formatId: 'x-post',
+            fix: {
+              scope: 'format-only',
+              targetSlots: ['headline'],
+              style: { align: 'center', fill: '#FFFFFF' },
+            },
+          },
+          {
+            issue: 'Copy alignment is inconsistent across the design',
+            fix: {
+              scope: 'shared',
+              targetSlots: ['headline'],
+              style: { align: 'left' },
+            },
+          },
+        ],
+      })
+    );
+
+    const res = await handler(makeRequest(), 'org1');
+
+    const content = JSON.parse(res.content);
+    // Alignment is a property of the design, not of one canvas: applying it to
+    // a single output is what left the same slot left-aligned on one format
+    // and centered on another. The rest of the style fix still applies.
+    expect(content.findings[0].fix.style.align).toBeUndefined();
+    expect(content.findings[0].fix.style.fill).toBe('#FFFFFF');
+    expect(content.findings[1].fix.style.align).toBe('left');
   });
 
   it('drops a regenerateAsset fix with an empty slotId', async () => {

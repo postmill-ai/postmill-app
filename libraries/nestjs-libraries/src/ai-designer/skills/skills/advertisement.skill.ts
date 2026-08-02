@@ -1,13 +1,30 @@
 import type { DesignBrief } from '../../ai-designer.types';
 import type { DesignSkill } from '../design-skill.interface';
+import { matchesAnySignal } from '../signal-match';
 
 export const AdvertisementSkill: DesignSkill = {
   id: 'advertisement',
   title: 'Advertisement',
   match: (brief: DesignBrief) => {
     const text = `${brief.intent} ${brief.audience || ''}`.toLowerCase();
-    const signals = ['ad', 'advert', 'promote', 'promotion', 'sale', 'discount', 'buy'];
-    return signals.some((s) => text.includes(s)) ? 0.9 : 0.25;
+    // `'ad'` was the worst offender of the old substring matching: it hit
+    // "headline", "ready", "made", "gradient", "loaded" — every brief. It is
+    // now a whole word; the longer forms it used to cover as a substring
+    // (advertising, advertisement) are spelled out.
+    const signals = [
+      'ad',
+      'advert',
+      'advertising',
+      'advertisement',
+      'promote',
+      'promoting',
+      'promotion',
+      'sale',
+      'discount',
+      'discounted',
+      'buy',
+    ];
+    return matchesAnySignal(text, signals) ? 0.9 : 0.25;
   },
   requiredBriefFields: ['intent', 'audience'],
   systemPrompt: `You are a conversion-focused ad designer. Rules:
@@ -20,7 +37,7 @@ export const AdvertisementSkill: DesignSkill = {
 - Use brand colors in a 60-30-10 ratio: dominant field, secondary support, one accent reserved for the CTA and at most one badge.
 - A badge ("-30%", "Limited") is the only decoration allowed — small, upper corner or beside the CTA, never competing with the headline.
 - Keep 5-8% margin breathing room on all sides; ads that bleed text to the edges get cropped by feed previews.
-- Over a busy hero image, put text on a scrim/overlay band or add a subtle shadow — never raw text on noise.
+- Over a busy hero image, give the text a shadow or glow so it reads against the picture — never raw text on noise, and never a scrim/overlay band over the photo.
 - If the brief names an offer, the offer goes in the headline or badge — not buried in the subhead.`,
   layoutHints: {
     formatTemplates: ['hero-fullbleed', 'split-panel'],

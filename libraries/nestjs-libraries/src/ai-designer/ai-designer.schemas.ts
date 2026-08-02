@@ -69,6 +69,7 @@ const SlotStyleSchema = z
     shadow: z.boolean().optional(),
     align: z.enum(['left', 'center', 'right']).optional(),
     badgeStyle: z.enum(['pill', 'burst', 'ribbon']).optional(),
+    ctaStyle: z.enum(['pill', 'rect', 'underline', 'outline']).optional(),
   })
   .passthrough();
 
@@ -116,6 +117,10 @@ export const DesignPlanSchema = z
     channelLayouts: z.record(z.string().max(100), ChannelLayoutSchema).optional(),
     // Split/sidebar layouts: which side the TEXT panel sits on.
     panelSide: z.enum(['left', 'right']).optional(),
+    // Where the badge sits inside its layout band.
+    badgePosition: z
+      .enum(['top-left', 'top-right', 'bottom-left', 'bottom-right', 'center'])
+      .optional(),
   })
   .passthrough();
 

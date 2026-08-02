@@ -212,4 +212,67 @@ describe('mergeBriefValues', () => {
     expect(merged.intent).toBe("launch post — visit 'northbean.shop' tonight");
     expect(merged.fixedCopy).toBe('northbean.shop');
   });
+
+  // ── Quoted spans from a LATER turn (the raw-message source) ──
+
+  it('extracts quoted spans from a later turn\'s raw message', () => {
+    // Turn 1 set the intent; turn 2 answers a question and adds the fine print
+    // and a badge. Scanning the (pinned) intent alone re-reads turn 1 forever,
+    // so neither string ever reached the brief.
+    const merged = mergeBriefValues(
+      { intent: 'a September reopening announcement' },
+      { audience: 'local customers' },
+      'audience',
+      'our regulars — put \'Times shown in local time; terms apply\' at the bottom and a badge saying "From Sep 1"'
+    );
+    // Unit ORDER follows the quote-kind scan order (double before single), the
+    // pre-existing extractor behaviour — what matters is that both survived.
+    expect(merged.fixedCopy).toBe(
+      'From Sep 1 | Times shown in local time; terms apply'
+    );
+  });
+
+  it('keeps the intent pinned when a raw message is supplied', () => {
+    const merged = mergeBriefValues(
+      { intent: 'a September reopening announcement' },
+      { tone: 'warm' },
+      'tone',
+      'yes, looks good — and add "Open from 8am"'
+    );
+    // The raw text is a quoted-span SOURCE only. Round 5 pinned the intent on
+    // purpose: a "yes" turn must never become the brief.
+    expect(merged.intent).toBe('a September reopening announcement');
+    expect(merged.fixedCopy).toBe('Open from 8am');
+  });
+
+  it('never lets an unquoted greeting become the brief or the copy', () => {
+    const merged = mergeBriefValues(
+      { intent: 'a September reopening announcement' },
+      {},
+      undefined,
+      'hi there, thanks!'
+    );
+    expect(merged.intent).toBe('a September reopening announcement');
+    expect(merged.fixedCopy).toBeUndefined();
+  });
+
+  it('normalizes spoken URLs inside a raw-message span', () => {
+    const merged = mergeBriefValues(
+      { intent: 'a launch post' },
+      {},
+      undefined,
+      'also say "visit northbean dot shop"'
+    );
+    expect(merged.fixedCopy).toBe('visit northbean.shop');
+  });
+
+  it('does not re-append an intent span the fixedCopy already carries', () => {
+    const merged = mergeBriefValues(
+      { intent: 'a promo that says "Join now"', fixedCopy: 'Join now' },
+      {},
+      undefined,
+      'and add "BEAN30"'
+    );
+    expect(merged.fixedCopy).toBe('Join now | BEAN30');
+  });
 });

@@ -52,7 +52,7 @@ const makeDoc = (): DesignerDoc =>
   } as any);
 
 describe('applyLinked fontSize propagation', () => {
-  it('scales a shared fontSize by each output\'s scale relative to the source', () => {
+  it('re-fits a shared fontSize through the aspect-aware type basis', () => {
     const { outputs, affected } = applyLinked(
       makeDoc(),
       0,
@@ -62,9 +62,27 @@ describe('applyLinked fontSize propagation', () => {
     );
 
     expect((outputs[0] as any).children[0].fontSize).toBe(64);
-    // 64 * min(1200/1080, 675/1080) = 64 * 0.625 = 40.
-    expect((outputs[1] as any).children[0].fontSize).toBe(40);
+    // 64 × (typeBasis(1200,675) / typeBasis(1080,1080)) = 64 × (900/1080) = 53.
+    // The old min(scaleX, scaleY) = 0.625 gave 40 — short-edge typography
+    // re-imposed on a canvas 11% WIDER than the one the value was authored on.
+    expect((outputs[1] as any).children[0].fontSize).toBe(53);
     expect(affected).toEqual([1]);
+  });
+
+  it('never re-imposes short-edge type on a wider linked output', () => {
+    const { outputs } = applyLinked(
+      makeDoc(),
+      0,
+      new Set(['e1']),
+      { fontSize: 64 },
+      false
+    );
+    // The wider canvas gets MORE type than the min-axis scale would have
+    // given it, not less — the whole point of the shared basis.
+    const minAxisScale = Math.min(1200 / 1080, 675 / 1080);
+    expect((outputs[1] as any).children[0].fontSize).toBeGreaterThan(
+      Math.round(64 * minAxisScale)
+    );
   });
 
   it('propagates non-fontSize style updates raw', () => {

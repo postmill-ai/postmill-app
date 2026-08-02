@@ -15,6 +15,7 @@ import { useT } from '@postmill-ai/react/translation/get.transation.service.clie
 import type { DesignerElement, DesignerOutput } from './designer.store';
 import { VideoCanvasOverlay } from './video-canvas-overlay';
 import { sharedStageRef } from './stage-ref';
+import { buildResizePatch } from './transform-resize';
 
 interface CanvasProps {
   store: ReturnType<typeof import('./designer.store').createDesignerStore>;
@@ -171,6 +172,14 @@ export const DesignerCanvas: FC<CanvasProps> = ({
     };
   }, []);
 
+  // Which elements exist, as a stable key. Depending on the whole `doc` re-ran
+  // the attach effect on EVERY store write — including the per-frame writes of
+  // a live transform, detaching and re-binding the transformer each frame. Node
+  // identity for a given id is stable, so only the membership matters.
+  const childIdsKey = ((output as DesignerOutput | undefined)?.children || [])
+    .map((c) => c.id)
+    .join(',');
+
   // Attach transformer to the current selection.
   useEffect(() => {
     if (!transformerRef.current) return;
@@ -181,7 +190,7 @@ export const DesignerCanvas: FC<CanvasProps> = ({
       .filter(Boolean) as Konva.Node[];
     transformerRef.current.nodes(nodes);
     transformerRef.current.getLayer()?.batchDraw();
-  }, [selectedIds, doc, currentOutput]);
+  }, [selectedIds, childIdsKey, currentOutput]);
 
   // Resolve a click into a selection, honoring group membership and additive (shift/meta) clicks.
   const handleElementSelect = useCallback(
@@ -350,26 +359,84 @@ export const DesignerCanvas: FC<CanvasProps> = ({
     [pushHistory, updateElement]
   );
 
-  const handleTransform = useCallback((e: Konva.KonvaEventObject<Event>) => {
-    const node = e.target;
-    const w = Math.round(node.width() * node.scaleX());
-    const h = Math.round(node.height() * node.scaleY());
-    setHud({ x: node.x(), y: node.y() - 22, text: `${w} × ${h}` });
-    if (rafIdRef.current) return;
-    rafIdRef.current = requestAnimationFrame(() => {
-      const id = node.id();
-      if (id) {
-        updateElement(id, {
-          x: node.x(),
-          y: node.y(),
-          width: Math.max(node.width() * node.scaleX(), 10),
-          height: Math.max(node.height() * node.scaleY(), 10),
-          rotation: node.rotation(),
+  /**
+   * Bake every transforming node's live scale into absolute width/height (and,
+   * for corner-dragged flat text, fontSize) and hand the numbers to the store.
+   *
+   * Two things here are load-bearing:
+   *
+   * 1. The scale reset is SYNCHRONOUS. The store write may be throttled, but
+   *    the node's scale must go back to 1 in the same tick it was read, because
+   *    react-konva re-applies `width` from the store and never touches `scale`
+   *    — deferring the reset let the new width stack on top of the old scale
+   *    and the box grew on every frame.
+   * 2. Every attached node is processed. Konva fires `transformend` once, with
+   *    the transformer's first node as the target, so keying off `e.target`
+   *    left the rest of a multi-selection permanently scaled with stale stored
+   *    geometry — corruption that persisted into saves and exports.
+   */
+  const bakeTransform = useCallback(
+    (e: Konva.KonvaEventObject<Event>) => {
+      const trNodes = transformerRef.current?.nodes() || [];
+      const nodes = trNodes.length > 0 ? trNodes : [e.target];
+      const anchor = transformerRef.current?.getActiveAnchor();
+      const children =
+        (store.getState().doc.outputs[store.getState().currentOutput] as
+          | DesignerOutput
+          | undefined)?.children || [];
+
+      const patches: { id: string; patch: ReturnType<typeof buildResizePatch> }[] = [];
+      nodes.forEach((node) => {
+        const id = node.id();
+        if (!id) return;
+        const el = children.find((c) => c.id === id);
+        if (!el) return;
+        const patch = buildResizePatch(
+          el,
+          {
+            x: node.x(),
+            y: node.y(),
+            width: node.width(),
+            height: node.height(),
+            scaleX: node.scaleX(),
+            scaleY: node.scaleY(),
+            rotation: node.rotation(),
+          },
+          anchor
+        );
+        patches.push({ id, patch });
+        // Synchronous: fold the scale into the node's own size so the next
+        // mousemove measures from a scale of 1 (see note 1 above).
+        node.width(patch.width);
+        node.height(patch.height);
+        node.scaleX(1);
+        node.scaleY(1);
+      });
+      return patches;
+    },
+    [store]
+  );
+
+  const handleTransform = useCallback(
+    (e: Konva.KonvaEventObject<Event>) => {
+      const patches = bakeTransform(e);
+      const first = patches[0];
+      if (first) {
+        setHud({
+          x: first.patch.x,
+          y: first.patch.y - 22,
+          text: `${Math.round(first.patch.width)} × ${Math.round(first.patch.height)}`,
         });
       }
-      rafIdRef.current = null;
-    });
-  }, [updateElement]);
+      // Throttle only the store write; the node attrs above are already correct.
+      if (rafIdRef.current) return;
+      rafIdRef.current = requestAnimationFrame(() => {
+        patches.forEach(({ id, patch }) => updateElement(id, patch));
+        rafIdRef.current = null;
+      });
+    },
+    [bakeTransform, updateElement]
+  );
 
   const handleTransformEnd = useCallback(
     (e: Konva.KonvaEventObject<Event>) => {
@@ -378,22 +445,12 @@ export const DesignerCanvas: FC<CanvasProps> = ({
         cancelAnimationFrame(rafIdRef.current);
         rafIdRef.current = null;
       }
-      const node = e.target;
-      const id = node.id();
-      if (id) {
-        updateElement(id, {
-          x: node.x(),
-          y: node.y(),
-          width: Math.max(node.width() * node.scaleX(), 10),
-          height: Math.max(node.height() * node.scaleY(), 10),
-          rotation: node.rotation(),
-        });
-        pushHistory();
-        node.scaleX(1);
-        node.scaleY(1);
-      }
+      const patches = bakeTransform(e);
+      if (!patches.length) return;
+      patches.forEach(({ id, patch }) => updateElement(id, patch));
+      pushHistory();
     },
-    [pushHistory, updateElement]
+    [bakeTransform, pushHistory, updateElement]
   );
 
   const handleWheel = useCallback(

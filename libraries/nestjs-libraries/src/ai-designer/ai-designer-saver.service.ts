@@ -92,7 +92,25 @@ export class AiDesignerSaverService {
     // buffers. Non-fatal: a sampling failure must never block a save.
     let contrastViolations: AiDesignerRenderResult['contrastViolations'];
     try {
-      const found = await this._renderService.auditTextContrast(doc, pages);
+      // The audit judges each text box against a BACKDROP render (the doc
+      // with text hidden) so a box's own glyphs don't dominate its measured
+      // variance. Rendered here and threaded through so the pipeline renders
+      // exactly twice — composite + backdrop — however often it audits.
+      // Fail-soft: a backdrop failure falls back to the composite.
+      let backdrops = pages;
+      try {
+        backdrops = await this._renderService.renderAllPages(doc, {
+          orgId,
+          hideText: true,
+        });
+      } catch {
+        backdrops = pages;
+      }
+      const found = await this._renderService.auditTextContrast(
+        doc,
+        pages,
+        backdrops
+      );
       if (found.length > 0) contrastViolations = found;
     } catch {
       contrastViolations = undefined;

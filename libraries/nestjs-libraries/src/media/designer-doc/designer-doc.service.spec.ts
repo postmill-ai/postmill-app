@@ -399,9 +399,175 @@ describe('DesignerDocService', () => {
     const bar = added.children.find((el: any) => el.originId === 'cta-underline');
     const label = added.children.find((el: any) => el.originId === 'cta');
     // Individually derived anchors would split the pair (the bar would land
-    // ~37px off the label); the shared group anchor keeps the source offset.
-    expect(bar.y - label.y).toBe(564 - 500);
+    // ~37px off the label); the shared group anchor keeps the source offset,
+    // re-fit at the pair's content scale (the story's 4/3 type basis, each
+    // member rounding independently: the 64px offset becomes 86).
+    expect(bar.y - label.y).toBe(86);
     expect(bar.x - label.x).toBe(0);
+  });
+
+  it('addOutput reflows panel contents against the panel, not the canvas', () => {
+    const service = makeService();
+    const doc = service.validate({
+      version: 2,
+      mode: 'image',
+      outputs: [
+        {
+          id: 'out-primary',
+          formatId: 'ig-post',
+          name: 'Primary',
+          width: 1080,
+          height: 1080,
+          background: '#ffffff',
+          children: [
+            {
+              id: 'el-panel',
+              type: 'shape',
+              shape: 'rect',
+              x: 0,
+              y: 0,
+              width: 497,
+              height: 1080,
+              rotation: 0,
+              opacity: 1,
+              locked: false,
+              hidden: false,
+              fill: '#111111',
+              originId: 'split-panel-bg',
+            },
+            {
+              id: 'el-headline',
+              type: 'text',
+              x: 54,
+              y: 415,
+              width: 389,
+              height: 225,
+              rotation: 0,
+              opacity: 1,
+              locked: false,
+              hidden: false,
+              text: 'Big launch',
+              fontSize: 90,
+              originId: 'headline',
+            },
+          ],
+        },
+      ],
+    });
+
+    const result = service.applyOps(doc, [
+      {
+        op: 'addOutput',
+        preset: { formatId: 'x-post', name: 'X', width: 1200, height: 675 },
+      },
+    ]);
+
+    const added = result.outputs[1] as any;
+    const panel = added.children.find(
+      (el: any) => el.originId === 'split-panel-bg'
+    );
+    const headline = added.children.find(
+      (el: any) => el.originId === 'headline'
+    );
+    // The panel scales per-axis (497 → 552). Its copy used to take the uniform
+    // ratio (389 → 243) and leave a 249px dead gutter against a 60px one.
+    expect(panel.width).toBe(552);
+    expect(headline.x).toBe(60);
+    expect(panel.width - (headline.x + headline.width)).toBe(60);
+  });
+
+  it('addOutput re-derives an image background focal point for the new aspect', () => {
+    const service = makeService();
+    const doc = service.validate({
+      version: 2,
+      mode: 'image',
+      outputs: [
+        {
+          id: 'out-primary',
+          formatId: 'ig-post',
+          name: 'Primary',
+          width: 1080,
+          height: 1080,
+          background: '#000000',
+          bg: {
+            type: 'image',
+            src: 'https://example.com/hero.png',
+            focalPoint: { x: 0.5, y: 0.5 },
+            subjectPoint: { x: 0.5, y: 0.3 },
+            naturalWidth: 1024,
+            naturalHeight: 1024,
+          },
+          children: [],
+        },
+      ],
+    });
+
+    const result = service.applyOps(doc, [
+      {
+        op: 'addOutput',
+        preset: { formatId: 'x-post', name: 'X', width: 1200, height: 675 },
+      },
+    ]);
+
+    // A full-bleed background is cover-cropped like an image element, so the
+    // inherited 0.5 was computed for a square box and crops the wrong band.
+    expect((result.outputs[1] as any).bg.focalPoint.y).toBeCloseTo(0.042857, 5);
+    expect((result.outputs[0] as any).bg.focalPoint.y).toBe(0.5);
+  });
+
+  it('addOutput keeps alignment on the seeded copies', () => {
+    const service = makeService();
+    const doc = service.validate({
+      version: 2,
+      mode: 'image',
+      outputs: [
+        {
+          id: 'out-primary',
+          formatId: 'custom',
+          name: 'Primary',
+          width: 1080,
+          height: 1080,
+          background: '#ffffff',
+          children: [
+            {
+              id: 'el-headline',
+              type: 'text',
+              x: 100,
+              y: 200,
+              width: 400,
+              height: 120,
+              rotation: 0,
+              opacity: 1,
+              locked: false,
+              hidden: false,
+              text: 'Left aligned',
+              fontSize: 48,
+              align: 'left',
+              verticalAlign: 'middle',
+              originId: 'headline',
+            },
+          ],
+        },
+      ],
+    });
+
+    const result = service.applyOps(doc, [
+      {
+        op: 'addOutput',
+        preset: {
+          formatId: 'x-post',
+          name: 'X',
+          width: 1200,
+          height: 675,
+        },
+      },
+    ]);
+
+    // Alignment is a linked design property — a seeded copy inherits it
+    // verbatim (the composer re-asserts the same invariant on every pass).
+    const seeded = (result.outputs[1] as any).children[0];
+    expect(seeded.align).toBe('left');
+    expect(seeded.verticalAlign).toBe('middle');
   });
 
   it('addOutput backfills originId on primary children when missing', () => {

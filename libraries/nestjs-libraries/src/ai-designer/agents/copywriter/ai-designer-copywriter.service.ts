@@ -6,7 +6,6 @@ import {
 } from '@reaatech/agent-mesh-router';
 import type { AgentResponse, ContextPacket } from '@reaatech/agent-mesh';
 import { AIModelProvider } from '@postmill-ai/nestjs-libraries/ai/ai-model.provider';
-import { repair } from '@reaatech/structured-repair-core';
 import { z } from 'zod';
 import type { DesignPlan } from '../../ai-designer.types';
 import { isCopySlot } from '../../ai-designer.types';
@@ -14,6 +13,7 @@ import {
   isAgentInputError,
   parseAgentInput,
 } from '../../util/parse-agent-input';
+import { parseOrRepair } from '../../util/parse-or-repair';
 import { matchSlotTexts } from '../../util/slot-keys';
 
 interface CopyBrand {
@@ -226,9 +226,13 @@ export class AiDesignerCopywriterService implements OnModuleInit {
     raw: string,
     slots: { id: string; role?: string }[]
   ): Promise<Record<string, string>> {
-    // Layer 1: structured repair (fenced/malformed JSON normalized).
+    // Layer 1: plain parse first, structured repair second (fenced/malformed
+    // JSON normalized). The order matters: repair() strips `//…` comments
+    // string-unaware, so copy carrying an https:// URL comes back mangled —
+    // and a mangled input still "repairs" into a partial map that used to
+    // return early and shadow the intact parse below.
     try {
-      const repaired = await repair(z.record(z.string()), raw);
+      const repaired = await parseOrRepair(z.record(z.string()), raw);
       if (repaired && typeof repaired === 'object' && !Array.isArray(repaired)) {
         const matched = this._matchSlots(repaired as Record<string, string>, slots);
         if (Object.keys(matched).length > 0) return matched;
@@ -237,7 +241,8 @@ export class AiDesignerCopywriterService implements OnModuleInit {
       // Fall through to JSON.parse / line extraction.
     }
 
-    // Layer 2: plain JSON.
+    // Layer 2: plain JSON (no schema constraint — a map with non-string
+    // values still yields usable copy through _matchSlots).
     try {
       const parsed = JSON.parse(raw);
       if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {

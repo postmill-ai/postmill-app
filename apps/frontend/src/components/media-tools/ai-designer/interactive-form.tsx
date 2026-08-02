@@ -4,10 +4,8 @@ import React, { useMemo, useState } from 'react';
 import { Button } from '@postmill-ai/react/form/button';
 import { useToaster } from '@postmill-ai/react/toaster/toaster';
 import { useT } from '@postmill-ai/react/translation/get.transation.service.client';
-import {
-  MediaSelectorModal,
-  type MediaSelectorItem,
-} from '@postmill-ai/frontend/components/media-tools/media-selector-modal';
+import { type MediaSelectorItem } from '@postmill-ai/frontend/components/media-tools/media-selector-modal';
+import { useMediaPicker } from '@postmill-ai/frontend/components/media-tools/use-media-picker';
 import { useImportStockMedia } from './ai-designer.hooks';
 import type { FormField } from '@postmill-ai/nestjs-libraries/ai-designer/ai-designer.types';
 
@@ -50,6 +48,40 @@ export const InteractiveForm: React.FC<InteractiveFormProps> = ({
 
   const [values, setValues] = useState<Record<string, unknown>>(initialValues);
   const [mediaPickField, setMediaPickField] = useState<string | null>(null);
+  // Imports the pick itself (keeping stock attribution for the socket payload),
+  // so no `requireFile` — that would import twice.
+  const mediaPicker = useMediaPicker({
+    kinds: ['image'],
+    onSelect: async (item: MediaSelectorItem) => {
+      const field = mediaPickField;
+      if (!field) return;
+      mediaPicker.close();
+      setMediaImporting(true);
+      try {
+        const imported = await importStockMedia(item);
+        // Ship only what the server consumes — never the whole selector item
+        // (thumbnails, …) over the socket. Keep stock metadata so the backend
+        // can record attribution when present.
+        const value: MediaValue = {
+          fileId: imported.fileId,
+          url: imported.url,
+          type: imported.type,
+          name: imported.name,
+          stockSource: imported.stockSource,
+          attribution: imported.attribution,
+          downloadLocation: imported.downloadLocation,
+        };
+        setValue(field, value);
+      } catch (e) {
+        toaster.show(
+          (e as Error).message || t('failed_to_import_media', 'Failed to import media'),
+          'warning'
+        );
+      } finally {
+        setMediaImporting(false);
+      }
+    },
+  });
   const [mediaImporting, setMediaImporting] = useState(false);
   const toaster = useToaster();
   const importStockMedia = useImportStockMedia();
@@ -196,7 +228,10 @@ export const InteractiveForm: React.FC<InteractiveFormProps> = ({
             <div>
               <button
                 type="button"
-                onClick={() => setMediaPickField(field.name)}
+                onClick={() => {
+                  setMediaPickField(field.name);
+                  mediaPicker.openWith({ title: field.label });
+                }}
                 disabled={mediaImporting}
                 className="px-3 py-2 rounded-lg border border-studioBorder bg-newBgColorInner text-[13px] text-textColor hover:border-designerAccent transition-colors disabled:opacity-60"
               >
@@ -226,40 +261,7 @@ export const InteractiveForm: React.FC<InteractiveFormProps> = ({
         </Button>
       </div>
 
-      {mediaPickField && (
-        <MediaSelectorModal
-          open
-          onClose={() => setMediaPickField(null)}
-          kinds={['image']}
-          onSelect={async (item) => {
-            setMediaPickField(null);
-            setMediaImporting(true);
-            try {
-              const imported = await importStockMedia(item);
-              // Ship only what the server consumes — never the whole selector
-              // item (thumbnails, …) over the socket. Keep stock metadata so
-              // the backend can record attribution when present.
-              const value: MediaValue = {
-                fileId: imported.fileId,
-                url: imported.url,
-                type: imported.type,
-                name: imported.name,
-                stockSource: imported.stockSource,
-                attribution: imported.attribution,
-                downloadLocation: imported.downloadLocation,
-              };
-              setValue(mediaPickField, value);
-            } catch (e) {
-              toaster.show(
-                (e as Error).message || t('failed_to_import_media', 'Failed to import media'),
-                'warning'
-              );
-            } finally {
-              setMediaImporting(false);
-            }
-          }}
-        />
-      )}
+      {mediaPicker.element}
     </form>
   );
 };

@@ -6,6 +6,7 @@ const hoisted = vi.hoisted(() => ({
   socketCallbacks: {} as any,
   socket: {} as any,
   lastRendererProps: {} as any,
+  hydrate: undefined as any,
 }));
 
 vi.mock('./use-ai-designer-socket', () => ({
@@ -16,7 +17,7 @@ vi.mock('./use-ai-designer-socket', () => ({
 }));
 
 vi.mock('./ai-designer.hooks', () => ({
-  useAiDesignerSession: () => ({ data: undefined }),
+  useAiDesignerSession: () => ({ data: hoisted.hydrate }),
 }));
 
 vi.mock('@postmill-ai/react/toaster/toaster', () => ({
@@ -35,8 +36,12 @@ vi.mock('@postmill-ai/frontend/components/media-tools/fullscreen-button', () => 
   FullscreenButton: () => <div data-testid="fullscreen-button" />,
 }));
 
-vi.mock('./use-fullscreen', () => ({
-  useFullscreen: () => ({ isFullscreen: false }),
+// Must be the alias path the component actually imports — this used to target
+// './use-fullscreen', which resolves to a file that doesn't exist beside this
+// spec, so the factory never applied and the real hook ran.
+vi.mock('@postmill-ai/frontend/components/media-tools/use-fullscreen', () => ({
+  useFullscreen: () => ({ isFullscreen: false, toggle: vi.fn() }),
+  useFullscreenSurface: () => 'rounded-[12px] overflow-hidden',
 }));
 
 // Light stand-in for the real renderer: progress bubbles show agent + phase,
@@ -93,6 +98,7 @@ describe('AiDesignerChat thinking bubble', () => {
       reconnect: vi.fn(),
     };
     hoisted.lastRendererProps = {};
+    hoisted.hydrate = undefined;
   });
 
   it('shows the thinking bubble immediately when a message is sent', () => {
@@ -231,6 +237,7 @@ describe('AiDesignerChat cancel affordance', () => {
       reconnect: vi.fn(),
     };
     hoisted.lastRendererProps = {};
+    hoisted.hydrate = undefined;
   });
 
   it('renders a Cancel button while progress is shown, not when idle', () => {
@@ -293,5 +300,93 @@ describe('AiDesignerChat cancel affordance', () => {
     expect((button as HTMLButtonElement).disabled).toBe(false);
     fireEvent.click(button);
     expect(hoisted.socket.cancel).toHaveBeenCalledTimes(2);
+  });
+});
+
+// The conductor persists a `progress` row per phase transition, and neither read
+// path (REST hydrate or the socket's after-seq replay) filters by kind — so every
+// historical "Thinking…" came back on reload and re-rendered as a live-looking
+// animated indicator. Thinking is a transient state, never transcript.
+describe('AiDesignerChat thinking never persists', () => {
+  const progressRow = (id: string, seq: number) => ({
+    id,
+    seq,
+    sessionId: SESSION_ID,
+    role: 'agent',
+    agent: 'art-director',
+    kind: 'progress',
+    content: { kind: 'progress', agent: 'art-director', phase: 'Sketching concepts…' },
+    createdAt: new Date().toISOString(),
+  });
+
+  const textRow = (id: string, seq: number) => ({
+    id,
+    seq,
+    sessionId: SESSION_ID,
+    role: 'assistant',
+    kind: 'text',
+    content: 'Here are some concepts.',
+    createdAt: new Date().toISOString(),
+  });
+
+  beforeEach(() => {
+    hoisted.socket = {
+      connected: true,
+      sendMessage: vi.fn().mockReturnValue('nonce-1'),
+      submitForm: vi.fn(),
+      acceptPlan: vi.fn(),
+      revisePlan: vi.fn(),
+      cancel: vi.fn(),
+      ack: vi.fn(),
+      reconnect: vi.fn(),
+    };
+    hoisted.hydrate = undefined;
+  });
+
+  it('drops hydrated progress rows from the transcript', () => {
+    hoisted.hydrate = {
+      session: { id: SESSION_ID, mode: 'chat', state: 'designing' },
+      messages: [progressRow('p1', 1), textRow('m1', 2), progressRow('p2', 3)],
+    };
+
+    render(<AiDesignerChat sessionId={SESSION_ID} mode="chat" />);
+
+    // The real message survives; neither stored thinking row renders.
+    expect(screen.getByTestId('msg-m1')).toBeTruthy();
+    expect(screen.queryByTestId('progress-bubble')).toBeNull();
+  });
+
+  it('drops progress rows replayed over the socket after a reconnect', () => {
+    render(<AiDesignerChat sessionId={SESSION_ID} mode="chat" />);
+
+    act(() => {
+      hoisted.socketCallbacks.onSessionState(
+        { id: SESSION_ID, mode: 'chat', state: 'designing' },
+        [progressRow('p9', 7), textRow('m9', 8)]
+      );
+    });
+
+    expect(screen.getByTestId('msg-m9')).toBeTruthy();
+    expect(screen.queryByTestId('progress-bubble')).toBeNull();
+  });
+
+  it('still shows the live indicator while a turn is in flight', () => {
+    hoisted.hydrate = {
+      session: { id: SESSION_ID, mode: 'chat', state: 'designing' },
+      messages: [progressRow('p1', 1)],
+    };
+
+    render(<AiDesignerChat sessionId={SESSION_ID} mode="chat" />);
+    expect(screen.queryByTestId('progress-bubble')).toBeNull();
+
+    fireEvent.change(screen.getByLabelText('Message'), {
+      target: { value: 'another one' },
+    });
+    fireEvent.click(screen.getByText('Send'));
+
+    // Ephemeral, and distinct from anything that was stored.
+    expect(screen.getByTestId('progress-bubble').textContent).toBe(
+      'assistant: Thinking…'
+    );
   });
 });

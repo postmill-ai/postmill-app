@@ -5,6 +5,7 @@ import { Image as KonvaImage, Rect, Ellipse, Line, Star, Text as KonvaText, Text
 import Konva from 'konva';
 import type { DesignerElement, DesignerGradient, TextRun } from './designer.store';
 import { computeCoverCrop } from './reflow';
+import { fittedFontSize } from './measure-text';
 import { parseDesignerFilterToken } from '@postmill-ai/nestjs-libraries/media/design-render/filter-tokens';
 
 type SelectHandler = (id: string, evt?: Konva.KonvaEventObject<any>) => void;
@@ -751,10 +752,16 @@ export const CanvasElements: FC<ElementsProps> = ({ elements, onSelect, onContex
                 {...commonProps}
                 text={el.text || ''}
                 fontFamily={el.fontFamily || 'Arial'}
-                fontSize={el.fontSize || 16}
+                // Shrink-to-fit through the same helper the exporter uses, so
+                // the glyphs stay inside el.width × el.height — which is the
+                // box the Transformer draws. Without this the text overflows
+                // its own selection box and the canvas disagrees with the PNG.
+                fontSize={fittedFontSize(el)}
                 fontStyle={fontStyle}
                 fill={el.fill || '#000000'}
                 align={el.align || 'left'}
+                verticalAlign={el.verticalAlign || 'top'}
+                wrap="word"
                 lineHeight={el.lineHeight || 1.2}
                 letterSpacing={el.letterSpacing || 0}
                 shadowColor={shadow?.color}

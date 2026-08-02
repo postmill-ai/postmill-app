@@ -20,8 +20,86 @@ import {
   parseDesignerFilterToken,
 } from './filter-tokens';
 import { MAX_CANVAS_DIMENSION } from '../designer-doc/designer-doc.limits';
+import {
+  fitTextToBox,
+  measureLineWidth,
+  type FittedText,
+} from '../designer-doc/fit-text';
 
 const MAX_IMAGE_BYTES = 25 * 1024 * 1024;
+
+// "Busy backdrop" thresholds for `auditTextContrast`. The WCAG ratio is
+// computed against the MEAN of the sampled box, so a photograph with bright
+// and dark detail averages to a mid tone that PASSES while the glyphs
+// themselves sit on high-frequency edges — the live serum-bottle headline,
+// legible only because it happened to carry a text shadow.
+//
+// Both signals are measured on a BACKDROP-ONLY render (text elements hidden),
+// never on the composite: a text box's own glyphs dominate the composite's
+// spread, so a clean white panel WITH glyphs measured stdev 71.9 while a
+// genuinely busy bokeh photo WITHOUT glyphs measured 86.3 — the signals do not
+// separate the cases at all until the glyphs are taken out.
+//
+//   * `BUSY_BACKDROP_CROSSING` — fraction of the sampled pixels whose WCAG
+//     ratio against the TEXT FILL is below the size-class requirement, i.e.
+//     the direct measure of "some glyphs land on backdrop they cannot be read
+//     against". This is the signal that does the discriminating.
+//   * `BUSY_BACKDROP_STDEV` — largest per-channel standard deviation of the
+//     glyph-free crop. A sanity gate ("the backdrop under the ink actually
+//     varies"), not the discriminator.
+//
+// Both are measured over the GLYPH FOOTPRINT — the per-line ink rects
+// `glyphLineRects` lays out with the renderer's own metrics — never the whole
+// text box. A box is mostly air: a centered short line in a full-width box,
+// the leading between wrapped lines, the ragged right edge. Those pixels are
+// backdrop no glyph ever touches, and averaging them in reports a different
+// backdrop from the one the reader sees. Re-measured on the live imagery,
+// glyph-footprint vs box: crossing 14.9% vs 11.1% (v1 subhead), 17.2% vs 6.9%
+// (v1 headline), 43.7% vs 29.2% (v2 headline); stdev 43.3 vs 46.0, 95.4 vs
+// 85.8. It moves in BOTH directions — it is a localization, not a correction.
+//
+// The thresholds are therefore re-derived on glyph-footprint numbers (the box
+// numbers the old pair came from no longer describe what is measured):
+//   * stdev — the glyph-footprint population separates cleanly: flat panel
+//     0.0, ink sitting inside a uniform region 1.1–7.7, genuinely textured
+//     photo 30.7–95.4. 25 sits in the empty gap. The old 45 was a BOX number
+//     and now cuts through the middle of the textured population, which would
+//     have silently un-flagged a live failure that measured 43.3 under its
+//     glyphs (46.0 over its box).
+//   * crossing — for the same population the calm cases measure ≤5.0% and the
+//     genuine failures 14.9%, 15.5%, 17.2%, 40.6%+. 0.12 sits in that gap and
+//     catches the two live failures the box measure hid (13.8% and 32.8%),
+//     while a well-lit bokeh headline at 5.0% stays clean.
+//
+// A flat backdrop still cannot be flagged busy however the mean lands: its
+// pixels are all the same, so crossing is 0 (mean passes) or 1 (mean fails,
+// and then the ratio check owns it) — and the stdev gate is 0 either way.
+//
+// The retired signals and why:
+//   * sharp's `sharpness` was a REQUIRED conjunct and is inverted against
+//     reality — the bokeh photo scores 0.83, the clean white panel 6.41. Edge
+//     energy measures focus, not legibility.
+//   * a ratio-headroom ceiling (`ratio < required * 1.6`) gated the variance
+//     check behind the contrast check, making it unsatisfiable for the exact
+//     failure case it was meant to catch: white-on-dark imagery measures 5.1
+//     to 8.5 against a 4.8 bar. Crossing fraction subsumes it — a backdrop
+//     that no glyph fails against scores 0.
+const BUSY_BACKDROP_STDEV = 25;
+const BUSY_BACKDROP_CROSSING = 0.12;
+
+// Each line's ink band is inset from the top of its leading by this share of an
+// em (with a `top` baseline the em box starts at the line top and the cap
+// height sits below it) and cut at one em, which is where the descender ends.
+const GLYPH_ASCENDER_INSET_EM = 0.15;
+
+// Precomputed WCAG sRGB channel transform for 0..255. The audit walks every
+// pixel of every sampled text box, so the pow() comes out of the loop.
+const SRGB_CHANNEL_LUT = new Float64Array(256);
+for (let i = 0; i < 256; i++) {
+  const c = i / 255;
+  SRGB_CHANNEL_LUT[i] =
+    c <= 0.03928 ? c / 12.92 : Math.pow((c + 0.055) / 1.055, 2.4);
+}
 
 // node-canvas is a native module whose binary may not be built in every
 // environment. Load it lazily so a missing binary only disables the render
@@ -569,6 +647,7 @@ export class DesignRenderService {
 
     for (const el of output.children ?? []) {
       if (el.hidden) continue;
+      if (opts?.hideText && el.type === 'text') continue;
       try {
         await this.drawElement(ctx, el);
       } catch (err) {
@@ -598,17 +677,48 @@ export class DesignRenderService {
    * covers solid-shape and solid-background backdrops, so those texts are
    * skipped here. For each remaining visible text element the painted
    * backdrop under its box is sampled from the rendered page (sharp
-   * extract + stats) and the contrast ratio against the text fill is
-   * computed (3:1 large text, 4.5:1 body). Pass `pages` (already-rendered
-   * page buffers, e.g. from the saver) to avoid re-rendering.
+   * extract) and the contrast ratio against the text fill is computed (3:1
+   * large text, 4.5:1 body).
+   *
+   * Sampling is done on a BACKDROP render — the same doc with every text
+   * element hidden — so a text box's own glyphs never pollute the pixels the
+   * audit judges it against. Pass `pages` (already-rendered composites, e.g.
+   * from the saver) and `backdropPages` (the `hideText: true` render) to avoid
+   * re-rendering; a missing backdrop page falls back to the composite rather
+   * than skipping the element.
    */
   async auditTextContrast(
     doc: DesignerDoc,
-    pages?: Buffer[]
+    pages?: Buffer[],
+    backdropPages?: Buffer[]
   ): Promise<TextContrastViolation[]> {
     const violations: TextContrastViolation[] = [];
     const rendered = pages ?? (await this.renderAllPages(doc));
+    let backdrops = backdropPages;
+    if (!backdrops) {
+      try {
+        backdrops = await this.renderAllPages(doc, { hideText: true });
+      } catch (err) {
+        this._logger.warn(
+          `Backdrop render failed; sampling the composite instead: ${(err as Error)?.message}`
+        );
+      }
+    }
     const sharp = (await import('sharp')).default;
+
+    // A 1×1 canvas used only for text metrics — the glyph footprints below are
+    // laid out with the renderer's own wrap/shrink-to-fit/align code, never a
+    // second render. A missing native binary only costs the audit its glyph
+    // precision (it falls back to the text box).
+    let measureCtx: any = null;
+    try {
+      const { createCanvas } = await loadCanvasModule();
+      measureCtx = createCanvas(1, 1).getContext('2d');
+    } catch (err) {
+      this._logger.warn(
+        `Text metrics unavailable; measuring contrast over the whole text box: ${(err as Error)?.message}`
+      );
+    }
 
     for (
       let outputIndex = 0;
@@ -616,7 +726,7 @@ export class DesignRenderService {
       outputIndex++
     ) {
       const out = doc.outputs[outputIndex] as DesignerOutput | undefined;
-      const page = rendered[outputIndex];
+      const page = backdrops?.[outputIndex] ?? rendered[outputIndex];
       if (!out || !('children' in out) || !page) continue;
 
       let meta: { width?: number; height?: number };
@@ -656,6 +766,12 @@ export class DesignRenderService {
             imagery = true;
           } else if (other.fill || other.fillGradient) {
             solidShape = true;
+          } else {
+            // Stroke-only shape (an outline CTA): it paints nothing across
+            // its box, so it is transparent to this scan. Keep looking down —
+            // stopping here hid the IMAGE under an unfilled button and shipped
+            // a #FF00E5 label on a magenta photo at 1.73:1.
+            continue;
           }
           break;
         }
@@ -666,33 +782,63 @@ export class DesignRenderService {
         }
 
         try {
-          const left = Math.min(Math.max(0, Math.round(el.x * scaleX)), pageW - 1);
-          const top = Math.min(Math.max(0, Math.round(el.y * scaleY)), pageH - 1);
-          const width = Math.min(
-            Math.max(1, Math.round(el.width * scaleX)),
-            pageW - left
-          );
-          const height = Math.min(
-            Math.max(1, Math.round(el.height * scaleY)),
-            pageH - top
-          );
-          const stats = await sharp(page)
-            .extract({ left, top, width, height })
-            .stats();
-          const [r, g, b] = stats.channels
-            .slice(0, 3)
-            .map((c) => (c?.mean ?? 255) / 255);
-          const backdropLuma = srgbLuminance(r, g, b);
-          const fillLuma = hexToLuminance(fill);
-          const ratio =
-            (Math.max(fillLuma, backdropLuma) + 0.05) /
-            (Math.min(fillLuma, backdropLuma) + 0.05);
           const fontSize = el.fontSize || 16;
           const isLarge =
             fontSize >= 24 ||
             ((el.fontWeight ?? 400) >= 700 && fontSize >= 18);
           const required = isLarge ? 3 : 4.5;
-          if (ratio >= required) continue;
+          const fillLuma = hexToLuminance(fill);
+
+          // The GLYPH footprint, not the box: a text element's box is mostly
+          // air (a centered short line in a full-width box, the leading
+          // between wrapped lines, the ragged right edge), and every one of
+          // those pixels dilutes both signals with backdrop no glyph ever
+          // touches. Measured on live designs the box understated the
+          // under-glyph crossing fraction by up to 11.6 points. The rects are
+          // laid out with the renderer's OWN metrics on a 1×1 measuring
+          // canvas — no extra render. Curved / path / rich text falls back to
+          // the box, where its box is the only honest bound.
+          const regions =
+            (measureCtx && this.glyphLineRects(measureCtx, el)) || [
+              { x: el.x, y: el.y, width: el.width, height: el.height },
+            ];
+          const sample = await this._sampleBackdropRegions(
+            page,
+            regions,
+            { scaleX, scaleY, pageW, pageH },
+            fillLuma,
+            required
+          );
+          if (!sample) continue;
+          const { mean, backdropStdev, crossingFraction } = sample;
+
+          const backdropLuma = srgbLuminance(
+            mean[0] / 255,
+            mean[1] / 255,
+            mean[2] / 255
+          );
+          const ratio =
+            (Math.max(fillLuma, backdropLuma) + 0.05) /
+            (Math.min(fillLuma, backdropLuma) + 0.05);
+          if (ratio >= required) {
+            if (
+              backdropStdev >= BUSY_BACKDROP_STDEV &&
+              crossingFraction >= BUSY_BACKDROP_CROSSING
+            ) {
+              violations.push({
+                outputIndex,
+                elementId: el.id,
+                originId: el.originId,
+                fill,
+                ratio,
+                backdropLuma,
+                reason: 'busy',
+                backdropStdev,
+                crossingFraction,
+              });
+            }
+            continue;
+          }
           violations.push({
             outputIndex,
             elementId: el.id,
@@ -700,6 +846,9 @@ export class DesignRenderService {
             fill,
             ratio,
             backdropLuma,
+            reason: 'contrast',
+            backdropStdev,
+            crossingFraction,
           });
         } catch (err) {
           this._logger.warn(
@@ -710,6 +859,218 @@ export class DesignRenderService {
     }
 
     return violations;
+  }
+
+  /**
+   * The per-LINE ink rects of a flat text element, in ELEMENT coordinates.
+   *
+   * Laid out with the renderer's own metrics — `fitFlatText` for the wrapped
+   * lines and the shrunk-to-fit size, `measureLine` for each line's advance,
+   * and the same `verticalAlign` / `align` offsets `drawText` applies — so the
+   * rects land where the glyphs actually paint. Each line is inset vertically
+   * by `GLYPH_ASCENDER_INSET_EM` (the air above the cap height with a `top`
+   * baseline) and cut at one em (the descender), leaving the band the glyphs
+   * occupy rather than the full leading.
+   *
+   * Returns null when the element is not laid out this way (rich text, text on
+   * a path, curved text) — there the box is the only honest bound.
+   */
+  private glyphLineRects(
+    ctx: any,
+    el: DesignerElement
+  ): { x: number; y: number; width: number; height: number }[] | null {
+    if (el.richText?.length || el.textPath || (el.curve || 0) !== 0) return null;
+    const text = el.text ?? '';
+    if (!text.trim() || !(el.width > 0) || !(el.height > 0)) return null;
+
+    const fontSize = el.fontSize || 16;
+    const fontWeight = el.fontWeight || 400;
+    const fontStyle = el.fontStyle === 'italic' ? 'italic' : 'normal';
+    const fontFamily = el.fontFamily || 'sans-serif';
+    const letterSpacing = el.letterSpacing || 0;
+    const align = el.align || 'left';
+
+    const fitted = this.fitFlatText(
+      ctx, text, el, fontSize, fontStyle, fontWeight, fontFamily, letterSpacing
+    );
+    ctx.font = `${fontStyle} ${fontWeight} ${fitted.fontSize}px ${fontFamily}`;
+
+    const contentHeight = fitted.lines.length * fitted.lineHeight;
+    let y = 0;
+    if (el.verticalAlign === 'middle') {
+      y = Math.max(0, (el.height - contentHeight) / 2);
+    } else if (el.verticalAlign === 'bottom') {
+      y = Math.max(0, el.height - contentHeight);
+    }
+
+    const inset = fitted.fontSize * GLYPH_ASCENDER_INSET_EM;
+    const rects: { x: number; y: number; width: number; height: number }[] = [];
+    for (const line of fitted.lines) {
+      const lineWidth = this.measureLine(ctx, line, letterSpacing);
+      if (line.trim() && lineWidth > 0) {
+        let x = 0;
+        if (align === 'center') x = (el.width - lineWidth) / 2;
+        else if (align === 'right') x = el.width - lineWidth;
+        const left = Math.max(el.x, el.x + x);
+        const top = Math.max(el.y, el.y + y + inset);
+        rects.push({
+          x: left,
+          y: top,
+          width: Math.max(1, Math.min(lineWidth, el.x + el.width - left)),
+          height: Math.max(
+            1,
+            Math.min(fitted.fontSize - inset, el.y + el.height - top)
+          ),
+        });
+      }
+      y += fitted.lineHeight;
+    }
+    return rects.length > 0 ? rects : null;
+  }
+
+  /**
+   * Sample the painted backdrop under a set of ELEMENT-space rects: ONE crop
+   * of their union, its rows compacted down to the rects themselves, then a
+   * single statistics pass. One decode however many lines the text wrapped
+   * to, and the gaps between the lines never reach the statistics.
+   */
+  private async _sampleBackdropRegions(
+    page: Buffer,
+    regions: { x: number; y: number; width: number; height: number }[],
+    frame: { scaleX: number; scaleY: number; pageW: number; pageH: number },
+    fillLuma: number,
+    required: number
+  ): Promise<{
+    mean: [number, number, number];
+    backdropStdev: number;
+    crossingFraction: number;
+  } | null> {
+    const { scaleX, scaleY, pageW, pageH } = frame;
+    const boxes = regions
+      .map((r) => {
+        const left = Math.min(Math.max(0, Math.round(r.x * scaleX)), pageW - 1);
+        const top = Math.min(Math.max(0, Math.round(r.y * scaleY)), pageH - 1);
+        return {
+          left,
+          top,
+          right: Math.min(
+            pageW,
+            Math.max(left + 1, Math.round((r.x + r.width) * scaleX))
+          ),
+          bottom: Math.min(
+            pageH,
+            Math.max(top + 1, Math.round((r.y + r.height) * scaleY))
+          ),
+        };
+      })
+      .filter((b) => b.right > b.left && b.bottom > b.top);
+    if (boxes.length === 0) return null;
+
+    const uLeft = Math.min(...boxes.map((b) => b.left));
+    const uTop = Math.min(...boxes.map((b) => b.top));
+    const uRight = Math.max(...boxes.map((b) => b.right));
+    const uBottom = Math.max(...boxes.map((b) => b.bottom));
+
+    // `.extract().stats()` reads the INPUT image and silently ignores the
+    // queued crop, so the audit used to measure the WHOLE PAGE for every
+    // element. Materialize the crop to raw pixels — one decode, and the
+    // per-pixel pass needs them anyway.
+    const sharp = (await import('sharp')).default;
+    const { data, info } = await sharp(page)
+      .extract({
+        left: uLeft,
+        top: uTop,
+        width: uRight - uLeft,
+        height: uBottom - uTop,
+      })
+      .raw()
+      .toBuffer({ resolveWithObject: true });
+
+    const channels = info.channels;
+    if (
+      boxes.length === 1 &&
+      boxes[0].left === uLeft &&
+      boxes[0].top === uTop &&
+      boxes[0].right === uRight &&
+      boxes[0].bottom === uBottom
+    ) {
+      return this._sampleBackdropCrop(data, channels, fillLuma, required);
+    }
+
+    const unionWidth = uRight - uLeft;
+    const total = boxes.reduce(
+      (n, b) => n + (b.right - b.left) * (b.bottom - b.top),
+      0
+    );
+    const packed = Buffer.allocUnsafe(total * channels);
+    let offset = 0;
+    for (const b of boxes) {
+      const rowBytes = (b.right - b.left) * channels;
+      for (let y = b.top; y < b.bottom; y++) {
+        const start = ((y - uTop) * unionWidth + (b.left - uLeft)) * channels;
+        data.copy(packed, offset, start, start + rowBytes);
+        offset += rowBytes;
+      }
+    }
+    return this._sampleBackdropCrop(
+      packed.subarray(0, offset),
+      channels,
+      fillLuma,
+      required
+    );
+  }
+
+  /**
+   * One pass over a raw RGB(A) crop: per-channel mean, the largest
+   * per-channel standard deviation, and the fraction of pixels whose WCAG
+   * ratio against `fillLuma` falls below `required`. Returns null for an
+   * empty crop.
+   */
+  private _sampleBackdropCrop(
+    data: Buffer,
+    channels: number,
+    fillLuma: number,
+    required: number
+  ): {
+    mean: [number, number, number];
+    backdropStdev: number;
+    crossingFraction: number;
+  } | null {
+    const pixels = Math.floor(data.length / channels);
+    if (pixels <= 0) return null;
+
+    const sum = [0, 0, 0];
+    const sumSq = [0, 0, 0];
+    let crossings = 0;
+    for (let p = 0; p < pixels; p++) {
+      const i = p * channels;
+      const r = data[i];
+      const g = channels > 1 ? data[i + 1] : r;
+      const b = channels > 2 ? data[i + 2] : r;
+      sum[0] += r;
+      sum[1] += g;
+      sum[2] += b;
+      sumSq[0] += r * r;
+      sumSq[1] += g * g;
+      sumSq[2] += b * b;
+      const luma =
+        0.2126 * SRGB_CHANNEL_LUT[r] +
+        0.7152 * SRGB_CHANNEL_LUT[g] +
+        0.0722 * SRGB_CHANNEL_LUT[b];
+      const pixelRatio =
+        (Math.max(fillLuma, luma) + 0.05) / (Math.min(fillLuma, luma) + 0.05);
+      if (pixelRatio < required) crossings++;
+    }
+
+    const mean: [number, number, number] = [
+      sum[0] / pixels,
+      sum[1] / pixels,
+      sum[2] / pixels,
+    ];
+    const backdropStdev = Math.max(
+      ...mean.map((m, c) => Math.sqrt(Math.max(0, sumSq[c] / pixels - m * m)))
+    );
+    return { mean, backdropStdev, crossingFraction: crossings / pixels };
   }
 
   async renderContactSheet(
@@ -989,31 +1350,29 @@ export class DesignRenderService {
   }
 
   /**
-   * Measure (and shrink-to-fit) a flat text block: wraps `text` at
-   * `fontSize`; while the wrapped block is taller than the element box the
-   * font is stepped down 10% at a time, floored at ~60% of the original size
-   * (or 8px, whichever is larger). Returns the size to draw at, the wrapped
-   * lines and the per-line advance. The canvas font is left set to the
-   * returned size.
+   * Measure (and shrink-to-fit) a flat text block. The algorithm lives in
+   * `designer-doc/fit-text` so the Designer canvas lays text out identically —
+   * see that module. The canvas font is left set to the returned size.
    */
   private fitFlatText(
     ctx: any, text: string, el: DesignerElement,
     fontSize: number, fontStyle: string, fontWeight: number,
     fontFamily: string, letterSpacing: number
-  ): { fontSize: number; lines: string[]; lineHeight: number } {
-    const lineHeightFactor = el.lineHeight || 1.2;
-    const floor = Math.max(8, Math.floor(fontSize * 0.6));
-    let size = fontSize;
-    const wrapAt = (px: number) => {
-      ctx.font = `${fontStyle} ${fontWeight} ${px}px ${fontFamily}`;
-      return this.wrapLines(ctx, text, el.width, letterSpacing);
-    };
-    let lines = wrapAt(size);
-    while (size > floor && lines.length * lineHeightFactor * size > el.height) {
-      size = Math.max(floor, Math.floor(size * 0.9));
-      lines = wrapAt(size);
-    }
-    return { fontSize: size, lines, lineHeight: lineHeightFactor * size };
+  ): FittedText {
+    return fitTextToBox(
+      {
+        text,
+        width: el.width,
+        height: el.height,
+        fontSize,
+        lineHeight: el.lineHeight,
+        letterSpacing,
+      },
+      (line, size) => {
+        ctx.font = `${fontStyle} ${fontWeight} ${size}px ${fontFamily}`;
+        return ctx.measureText(line).width;
+      }
+    );
   }
 
   private drawRichText(ctx: any, el: DesignerElement): void {
@@ -1428,30 +1787,13 @@ export class DesignRenderService {
     ctx.closePath();
   }
 
+  /**
+   * Width of one line at the font ALREADY set on `ctx` — callers set the fitted
+   * size before calling, so the size argument to the shared helper is unused
+   * here.
+   */
   private measureLine(ctx: any, line: string, letterSpacing: number): number {
-    if (!letterSpacing) return ctx.measureText(line).width;
-    let w = 0;
-    for (const ch of line) w += ctx.measureText(ch).width + letterSpacing;
-    return w;
-  }
-
-  private wrapLines(ctx: any, text: string, maxWidth: number, letterSpacing: number): string[] {
-    const out: string[] = [];
-    for (const rawLine of text.split('\n')) {
-      const words = rawLine.split(' ');
-      let current = '';
-      for (const word of words) {
-        const candidate = current ? `${current} ${word}` : word;
-        if (this.measureLine(ctx, candidate, letterSpacing) > maxWidth && current) {
-          out.push(current);
-          current = word;
-        } else {
-          current = candidate;
-        }
-      }
-      out.push(current);
-    }
-    return out;
+    return measureLineWidth(line, 0, letterSpacing, (t) => ctx.measureText(t).width);
   }
 
   private async loadImageSafe(src?: string): Promise<any | null> {
