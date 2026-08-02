@@ -84,11 +84,23 @@ export const LayoutComponent = ({ children }: { children: ReactNode }) => {
   const searchParams = useSearchParams();
   const load = useCallback(
     async (path: string) => {
-      return await (await fetch(path)).json();
+      const res = await fetch(path);
+      // Without this check a non-2xx body (notably the throttler's
+      // `{"statusCode":429,...}`) is parsed as the user object; `setupCompleted`
+      // is then `undefined` and the layout ejects a perfectly healthy user to
+      // /setup. Throwing keeps `user` undefined and lets SWR retry instead.
+      if (!res.ok) {
+        throw new Error(`Failed to load ${path}: ${res.status}`);
+      }
+      return await res.json();
     },
     [fetch]
   );
-  const { data: user, mutate } = useSWR('/user/self', load, {
+  const {
+    data: user,
+    error: userError,
+    mutate,
+  } = useSWR('/user/self', load, {
     revalidateOnFocus: false,
     revalidateOnReconnect: false,
     revalidateIfStale: false,
@@ -122,10 +134,41 @@ export const LayoutComponent = ({ children }: { children: ReactNode }) => {
     }
   }, [mustSetup, router]);
 
-  if (!user) return null;
+  if (!user) {
+    // SWR has run out of retries (a throttled or otherwise failing /user/self).
+    // Offer a way back instead of leaving the user on a permanently blank page.
+    if (userError) {
+      return (
+        <div
+          className={clsx(
+            'min-h-screen flex flex-col gap-[12px] items-center justify-center text-newTextColor',
+            jakartaSans.className
+          )}
+        >
+          <div className="text-[14px]">
+            {t(
+              'could_not_load_your_account',
+              'We could not load your account. Please try again.'
+            )}
+          </div>
+          <button
+            type="button"
+            onClick={() => mutate()}
+            className="h-[36px] px-[16px] rounded-[8px] border border-newTableBorder hover:bg-boxHover text-[13px]"
+          >
+            {t('retry', 'Retry')}
+          </button>
+        </div>
+      );
+    }
+    return null;
+  }
   // Hold rendering while setup is incomplete and we don't yet know the role — avoids briefly
-  // flashing the app to someone who is about to be redirected to /setup.
-  if (setupIncomplete && !permissions.isResolved) return null;
+  // flashing the app to someone who is about to be redirected to /setup. Gate on `isLoaded`,
+  // not `isResolved`: a failed /settings/roles/me (e.g. throttled) leaves `isResolved` false
+  // forever, which used to blank the page permanently. Once the lookup has settled either way
+  // we render the app — an unresolvable role simply can't complete setup.
+  if (setupIncomplete && !permissions.isLoaded) return null;
   if (mustSetup) return null;
 
   return (

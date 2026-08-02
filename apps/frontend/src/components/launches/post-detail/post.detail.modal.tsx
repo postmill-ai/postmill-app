@@ -15,6 +15,7 @@ import {
   KebabMenu,
   KebabMenuItem,
 } from '@postmill-ai/frontend/components/ui/kebab-menu';
+import { OverflowTabs } from '@postmill-ai/frontend/components/ui/overflow-tabs';
 import { useModals } from '@postmill-ai/frontend/components/layout/new-modal';
 import { IntegrationContext } from '@postmill-ai/frontend/components/launches/helpers/use.integration';
 import { GeneralPreviewComponent } from '@postmill-ai/frontend/components/launches/general.preview.component';
@@ -908,35 +909,45 @@ export const PostDetailModal: FC<PostDetailModalProps> = ({
 
       {/* Channel tabs (multi-channel groups only) */}
       {channels.length > 1 && (
-        <div
-          className="flex items-center gap-[6px] flex-wrap"
-          role="tablist"
-          aria-label={t('channels', 'Channels')}
-        >
-          {channels.map((channel, index) => (
-            <button
-              key={channel.root.id}
-              type="button"
-              role="tab"
-              aria-selected={index === channelIndex}
-              onClick={() => setChannelIndex(index)}
-              className={clsx(
-                'flex items-center gap-[6px] ps-[4px] pe-[10px] py-[3px] rounded-full border text-[12px] transition-colors',
-                index === channelIndex
-                  ? 'border-btnPrimary bg-btnPrimary/10 text-textColor'
-                  : 'border-newTableBorder text-newTableText hover:text-textColor'
-              )}
-            >
-              {/* eslint-disable-next-line @next/next/no-img-element -- external channel avatar */}
-              <img
-                src={channel.integration?.picture || '/no-picture.jpg'}
-                alt=""
-                className="w-[20px] h-[20px] rounded-full"
-              />
-              {channel.integration?.name}
-            </button>
-          ))}
-        </div>
+        <OverflowTabs
+          items={channels.map((channel) => ({
+            key: channel.root.id,
+            label: channel.integration?.name ?? '',
+          }))}
+          activeKey={channels[channelIndex]?.root.id}
+          onSelect={(key) => setChannelIndex(channels.findIndex((c) => c.root.id === key))}
+          variant="pill"
+          ariaLabel={t('more_channels', 'More channels')}
+          listAriaLabel={t('channels', 'Channels')}
+          renderItem={(item, { active, slotProps }) => {
+            const channel = channels.find((c) => c.root.id === item.key);
+            return (
+              <button
+                key={item.key}
+                type="button"
+                role="tab"
+                aria-selected={active}
+                data-overflow-slot={slotProps['data-overflow-slot']}
+                onClick={() => setChannelIndex(channels.findIndex((c) => c.root.id === item.key))}
+                className={clsx(
+                  'flex items-center gap-[6px] shrink-0 ps-[4px] pe-[10px] py-[3px] rounded-full border text-[12px] whitespace-nowrap transition-colors',
+                  slotProps.className,
+                  active
+                    ? 'border-btnPrimary bg-btnPrimary/10 text-textColor'
+                    : 'border-newTableBorder text-newTableText hover:text-textColor'
+                )}
+              >
+                {/* eslint-disable-next-line @next/next/no-img-element -- external channel avatar */}
+                <img
+                  src={channel?.integration?.picture || '/no-picture.jpg'}
+                  alt=""
+                  className="w-[20px] h-[20px] rounded-full"
+                />
+                {item.label}
+              </button>
+            );
+          }}
+        />
       )}
 
       {/* Preview + analytics */}

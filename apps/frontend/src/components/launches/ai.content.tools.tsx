@@ -10,9 +10,18 @@ import { useToaster } from '@postmill-ai/react/toaster/toaster';
 import { useModals } from '@postmill-ai/frontend/components/layout/new-modal';
 import { AiErrorDisplay } from '@postmill-ai/frontend/components/ai/ai-error-display';
 import { AiHashtags } from './ai.hashtags';
+import { OverflowTabs } from '@postmill-ai/frontend/components/ui/overflow-tabs';
 
 const tabs = ['Repurpose', 'Translate', 'A/B Variants', 'Hashtags'] as const;
 type Tab = (typeof tabs)[number];
+
+// The labels were hardcoded English; in an overflow menu that is conspicuous.
+const TAB_LABEL_KEYS: Record<Tab, string> = {
+  Repurpose: 'ai_tool_repurpose',
+  Translate: 'ai_tool_translate',
+  'A/B Variants': 'ai_tool_ab_variants',
+  Hashtags: 'ai_tool_hashtags',
+};
 
 const platforms = [
   'Twitter/X',
@@ -156,27 +165,18 @@ const ContentToolsModal: FC<{ close: () => void }> = (props) => {
 
   return (
     <div className="flex flex-col gap-[16px]">
-      <div className="flex gap-[4px] bg-newBgColor rounded-[8px] p-[4px]">
-        {tabs.map((tab) => (
-          <button
-            type="button"
-            key={tab}
-            onClick={() => {
-              setActiveTab(tab);
-              setResults(null);
-              setError(null);
-            }}
-            className={clsx(
-              'm-0 p-0 border-0 bg-transparent cursor-pointer rounded-[6px] px-[12px] h-[32px] flex items-center text-[12px] font-[500] transition-all',
-              activeTab === tab
-                ? 'bg-[#2B5CD3] text-white'
-                : 'text-newTextColor/60 hover:text-newTextColor'
-            )}
-          >
-            {tab}
-          </button>
-        ))}
-      </div>
+      <OverflowTabs
+        items={tabs.map((tab) => ({ key: tab, label: t(TAB_LABEL_KEYS[tab], tab) }))}
+        activeKey={activeTab}
+        onSelect={(key) => {
+          setActiveTab(key as Tab);
+          setResults(null);
+          setError(null);
+        }}
+        variant="pill"
+        ariaLabel={t('more_ai_tools', 'More AI tools')}
+        listAriaLabel={t('ai_tools', 'AI')}
+      />
 
       <div className="flex flex-col gap-[6px]">
         <div className="text-[14px]">{t('content', 'Content')}</div>

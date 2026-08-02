@@ -5,8 +5,14 @@ import clsx from 'clsx';
 
 export type KebabMenuItem =
   | { divider: true }
+  /**
+   * Non-interactive group label, for menus long enough to need scanning — e.g.
+   * the `/media` overflow, which can hold 40+ studios grouped by section.
+   */
+  | { header: ReactNode }
   | {
       divider?: false;
+      header?: undefined;
       label: ReactNode;
       onClick?: () => void;
       /** Render as a link (e.g. a download) instead of a button. */
@@ -32,6 +38,11 @@ interface KebabMenuProps {
   size?: number;
   /** Extra classes for the trigger button (e.g. `!text-white` on a coloured bar). */
   triggerClassName?: string;
+  /**
+   * Replaces the kebab icon — e.g. a labelled "New Design" button. `size` and
+   * the icon-button styling are skipped, so `triggerClassName` owns the look.
+   */
+  trigger?: ReactNode;
 }
 
 const KebabIcon = (
@@ -55,6 +66,7 @@ export const KebabMenu: FC<KebabMenuProps> = ({
   className,
   size = 28,
   triggerClassName,
+  trigger,
 }) => {
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
@@ -93,21 +105,24 @@ export const KebabMenu: FC<KebabMenuProps> = ({
           cancel(e);
           setOpen((v) => !v);
         }}
-        style={{ width: size, height: size }}
+        style={trigger ? undefined : { width: size, height: size }}
         className={clsx(
-          'flex items-center justify-center rounded-[6px] hover:bg-newTableBorder/40 transition-colors',
-          active ? 'text-btnPrimary' : 'text-newTableText hover:text-textColor',
+          'flex items-center justify-center rounded-[6px] transition-colors',
+          !trigger && 'hover:bg-newTableBorder/40',
+          !trigger && (active ? 'text-btnPrimary' : 'text-newTableText hover:text-textColor'),
           triggerClassName
         )}
       >
-        {KebabIcon}
+        {trigger ?? KebabIcon}
       </button>
       {open && (
         <div
           role="menu"
           style={{ width }}
           className={clsx(
-            'absolute top-[calc(100%+4px)] z-[50] py-[4px] bg-newBgColorInner border border-newTableBorder rounded-[8px] shadow-lg',
+            // Capped and scrollable: a grouped overflow menu can hold 40+ entries,
+            // which would otherwise run straight off the bottom of a phone.
+            'absolute top-[calc(100%+4px)] z-[50] py-[4px] bg-newBgColorInner border border-newTableBorder rounded-[8px] shadow-lg max-h-[70vh] overflow-y-auto',
             align === 'right' ? 'right-0' : 'left-0'
           )}
         >
@@ -115,7 +130,17 @@ export const KebabMenu: FC<KebabMenuProps> = ({
             if ('divider' in item && item.divider) {
               return <div key={`d-${i}`} className="my-[4px] border-t border-newTableBorder" />;
             }
-            const it = item as Exclude<KebabMenuItem, { divider: true }>;
+            if ('header' in item && item.header !== undefined) {
+              return (
+                <div
+                  key={`h-${i}`}
+                  className="px-[12px] pt-[8px] pb-[4px] text-[10px] font-semibold uppercase tracking-wider text-newTableText select-none"
+                >
+                  {item.header}
+                </div>
+              );
+            }
+            const it = item as Exclude<KebabMenuItem, { divider: true } | { header: ReactNode }>;
             const cls = clsx(itemCls, it.danger ? 'text-red-700 dark:text-red-400 hover:bg-red-500/10' : 'text-textColor');
             const itemKey = it.href || (typeof it.label === 'string' ? it.label : `item-${i}`);
             if (it.href) {

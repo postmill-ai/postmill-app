@@ -8,8 +8,9 @@ import { Node, mergeAttributes } from '@tiptap/core';
 import { useEditor, EditorContent } from '@tiptap/react';
 import EmojiPicker, { Theme } from 'emoji-picker-react';
 import { useT } from '@postmill-ai/react/translation/get.transation.service.client';
-import { MediaSelectorModal } from '@postmill-ai/frontend/components/media-tools/media-selector-modal';
+import { useMediaPicker } from '@postmill-ai/frontend/components/media-tools/use-media-picker';
 import { suggestion } from '@postmill-ai/frontend/components/composer/mention.component';
+import { usePromptModal } from '@postmill-ai/frontend/components/layout/new-modal';
 
 // Minimal atom nodes so picked media embeds inline in the note HTML. Both tags
 // (img / video[controls]) are in the SafeContent allowlist used to render notes.
@@ -94,8 +95,13 @@ export const DiscussionEditor: FC<DiscussionEditorProps> = ({
   loadList,
 }) => {
   const t = useT();
+  const prompt = usePromptModal();
   const [emojiOpen, setEmojiOpen] = useState(false);
-  const [pickerOpen, setPickerOpen] = useState(false);
+  const mediaPicker = useMediaPicker({
+    title: t('insert_media', 'Insert media'),
+    kinds: ['image', 'video'],
+    onSelect: (item) => insertMedia(item as any),
+  });
   const resolvedSubmitLabel = submitLabel ?? t('send', 'Send');
 
   const editor = useEditor({
@@ -145,17 +151,21 @@ export const DiscussionEditor: FC<DiscussionEditorProps> = ({
     [editor]
   );
 
-  const setLink = useCallback(() => {
+  const setLink = useCallback(async () => {
     if (!editor) return;
     const prev = editor.getAttributes('link')?.href || '';
-    const url = window.prompt(t('link_url', 'Link URL'), prev);
+    const url = await prompt.open({
+      title: t('link', 'Link'),
+      label: t('link_url', 'Link URL'),
+      initialValue: prev,
+    });
     if (url === null) return;
     if (url === '') {
       editor.chain().focus().extendMarkRange('link').unsetLink().run();
       return;
     }
     editor.chain().focus().extendMarkRange('link').setLink({ href: url }).run();
-  }, [editor, t]);
+  }, [editor, t, prompt]);
 
   const submit = useCallback(async () => {
     if (!editor || submitting) return;
@@ -203,7 +213,7 @@ export const DiscussionEditor: FC<DiscussionEditorProps> = ({
         <ToolbarButton title={t('emoji', 'Emoji')} onClick={() => setEmojiOpen((v) => !v)}>
           😊
         </ToolbarButton>
-        <ToolbarButton title={t('insert_media_tooltip', 'Insert media')} onClick={() => setPickerOpen(true)}>
+        <ToolbarButton title={t('insert_media_tooltip', 'Insert media')} onClick={mediaPicker.open}>
           🖼️
         </ToolbarButton>
         {emojiOpen && (
@@ -244,15 +254,7 @@ export const DiscussionEditor: FC<DiscussionEditorProps> = ({
         </button>
       </div>
 
-      <MediaSelectorModal
-        open={pickerOpen}
-        onClose={() => setPickerOpen(false)}
-        onSelect={(item: any) => {
-          insertMedia(item);
-          setPickerOpen(false);
-        }}
-        kinds={['image', 'video']}
-      />
+      {mediaPicker.element}
     </div>
   );
 };

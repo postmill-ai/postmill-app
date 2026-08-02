@@ -10,11 +10,11 @@ import { useToaster } from '@postmill-ai/react/toaster/toaster';
 import { useT } from '@postmill-ai/react/translation/get.transation.service.client';
 import i18next from '@postmill-ai/react/translation/i18next';
 import { deleteDialog } from '@postmill-ai/react/helpers/delete.dialog';
-import clsx from 'clsx';
 import { ProfileComponent } from '@postmill-ai/frontend/components/settings/profile.component';
 import MetricComponent from '@postmill-ai/frontend/components/settings/metric.component';
 import ChangePasswordComponent from '@postmill-ai/frontend/components/settings/change-password.component';
 import { NotificationPreferencesPanel } from '@postmill-ai/frontend/components/settings/notifications/notification-preferences.panel';
+import { OverflowTabs } from '@postmill-ai/frontend/components/ui/overflow-tabs';
 
 const tabs = [
   { key: 'profile', label: 'Profile' },
@@ -56,23 +56,14 @@ export default function ProfilePage() {
   return (
     <div className="flex flex-col max-w-[800px] mx-auto w-full p-[24px]">
       <h1 className="text-[24px] font-[700] mb-[24px]">{t('settings', 'Settings')}</h1>
-      <div className="flex gap-[8px] border-b border-newTableBorder mb-[24px]">
-        {tabs.map(({ key, label }) => (
-          <button
-            key={key}
-            type="button"
-            onClick={() => setTab(key)}
-            className={clsx(
-              'pb-[12px] px-[4px] text-[14px] font-[500] border-b-2 transition-colors',
-              tab === key
-                ? 'border-btnPrimary text-textColor'
-                : 'border-transparent text-textColor/50 hover:text-textColor/80'
-            )}
-          >
-            {t(key, label)}
-          </button>
-        ))}
-      </div>
+      <OverflowTabs
+        items={tabs.map(({ key, label }) => ({ key, label: t(key, label) }))}
+        activeKey={tab}
+        onSelect={(key) => setTab(key as (typeof tabs)[number]['key'])}
+        ariaLabel={t('more_tabs', 'More tabs')}
+        listAriaLabel={t('settings', 'Settings')}
+        className="mb-[24px]"
+      />
 
       {tab === 'profile' && (
         <FormProvider {...form}>

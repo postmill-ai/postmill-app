@@ -4,9 +4,9 @@ import { FC, useEffect, useMemo, useState } from 'react';
 import { useParams } from 'next/navigation';
 import { pushAgentUiContext } from '@postmill-ai/frontend/components/agent/agent-context-bridge';
 import Link from 'next/link';
-import clsx from 'clsx';
 import { Button } from '@postmill-ai/react/form/button';
 import { useT } from '@postmill-ai/react/translation/get.transation.service.client';
+import { OverflowTabs } from '@postmill-ai/frontend/components/ui/overflow-tabs';
 import { useCampaignDashboard } from '@postmill-ai/frontend/components/campaigns/hooks/campaign.hooks';
 import { DashboardHeader } from '@postmill-ai/frontend/components/campaigns/dashboard/dashboard-header';
 import { DashboardKpis } from '@postmill-ai/frontend/components/campaigns/dashboard/dashboard-kpis';
@@ -22,7 +22,6 @@ import { ChangelogPanel } from '@postmill-ai/frontend/components/campaigns/dashb
 import { CampaignCommentsSection } from '@postmill-ai/frontend/components/campaigns/dashboard/campaign-comments-section';
 import { CampaignDiscussionSection } from '@postmill-ai/frontend/components/campaigns/dashboard/campaign-discussion-section';
 import { ChannelOption } from '@postmill-ai/frontend/components/comments/comment.inbox.filters';
-import { KebabMenu } from '@postmill-ai/frontend/components/ui/kebab-menu';
 
 type TabKey =
   | 'posts'
@@ -124,29 +123,6 @@ export const CampaignDashboardPage: FC = () => {
     { key: 'comments', label: t('replies', 'Replies') },
     { key: 'activity', label: t('activity', 'Activity') },
   ];
-  // On mobile only the first three are shown inline; the rest fold into a menu.
-  const primaryTabs = tabs.slice(0, 3);
-  const overflowTabs = tabs.slice(3);
-  const overflowActive = overflowTabs.some((o) => o.key === tab);
-
-  const renderTab = (item: { key: TabKey; label: string }, extra = '') => (
-    <button
-      key={item.key}
-      type="button"
-      onClick={() => setTab(item.key)}
-      aria-current={tab === item.key ? 'page' : undefined}
-      className={clsx(
-        'px-[16px] py-[10px] text-[14px] font-[500] whitespace-nowrap border-b-2 -mb-[1px] transition-colors',
-        extra,
-        tab === item.key
-          ? 'border-btnPrimary text-textColor'
-          : 'border-transparent text-newTableText hover:text-textColor'
-      )}
-    >
-      {item.label}
-    </button>
-  );
-
   return (
     <div className="w-full flex flex-col gap-[24px] p-[24px]">
       <DashboardHeader campaign={data.campaign} onMutate={mutate} />
@@ -157,32 +133,13 @@ export const CampaignDashboardPage: FC = () => {
         endDate={data.campaign?.endDate}
       />
 
-      {/* Section tabs — first 3 inline; the rest fold into a kebab on mobile, inline on desktop.
-          The kebab lives OUTSIDE the horizontally-scrolling track so its menu isn't clipped. */}
-      <div className="flex items-stretch border-b border-newTableBorder">
-        <div className="flex-1 overflow-x-auto overflow-y-hidden">
-          <div className="flex items-center gap-[2px] min-w-max">
-            {primaryTabs.map((item) => renderTab(item))}
-            {overflowTabs.map((item) => renderTab(item, 'hidden lg:block'))}
-          </div>
-        </div>
-        <div className="lg:hidden flex items-center shrink-0 ps-[8px]">
-          <KebabMenu
-            ariaLabel={t('more_sections', 'More sections')}
-            active={overflowActive}
-            align="right"
-            items={overflowTabs.map((item) => ({
-              label:
-                tab === item.key ? (
-                  <span className="text-btnPrimary">{item.label}</span>
-                ) : (
-                  item.label
-                ),
-              onClick: () => setTab(item.key),
-            }))}
-          />
-        </div>
-      </div>
+      <OverflowTabs
+        items={tabs.map((item) => ({ key: item.key, label: item.label }))}
+        activeKey={tab}
+        onSelect={(key) => setTab(key as TabKey)}
+        ariaLabel={t('more_sections', 'More sections')}
+        listAriaLabel={t('campaign_sections', 'Campaign sections')}
+      />
 
       {tab === 'posts' && (
         <CampaignPostsSection campaignId={id} posts={data.posts} />
