@@ -1,4 +1,5 @@
 import { randomBytes } from 'crypto';
+import { readFile } from 'fs/promises';
 import { metadata as providerMetadata } from './metadata';
 import {
   ProviderModule,
@@ -10,6 +11,8 @@ import {
   LoggerPort,
   parseDataUrl,
   fromBuffer,
+  fromFile,
+  DetectedFileType,
 } from '@postmill-ai/provider-kernel';
 
 const TYPE = 'MEDIALOCKER';
@@ -303,7 +306,23 @@ export class MediaLockerStorage implements StorageCapability {
 
   async uploadFile(file: any): Promise<any> {
     try {
-      const detected = await fromBuffer(file.buffer);
+      // `/files/upload-simple` uses multer's memoryStorage (file.buffer), while
+      // `/files/upload-server` uses diskStorage (file.path, no buffer) — sniff
+      // from whichever the caller supplied (same fix as S3StorageBase.uploadFile).
+      // The presign flow needs the full body (signed headers + size up front), so
+      // a disk upload is read back into a buffer rather than streamed.
+      const hasBuffer = !!file.buffer && Buffer.isBuffer(file.buffer);
+      let detected: DetectedFileType;
+      let body: Buffer;
+      if (hasBuffer) {
+        body = file.buffer;
+        detected = await fromBuffer(body);
+      } else if (file.path) {
+        detected = await fromFile(file.path);
+        body = await readFile(file.path);
+      } else {
+        throw new Error('Invalid file upload.');
+      }
       if (!detected || !ALLOWED_MIME_TYPES.has(detected.mime)) {
         throw new Error('Unsupported file type.');
       }
@@ -312,7 +331,7 @@ export class MediaLockerStorage implements StorageCapability {
       const safeContentType = detected.mime;
       const key = `${id}.${extension}`;
 
-      await this.uploadWithPresign(key, file.buffer, safeContentType);
+      await this.uploadWithPresign(key, body, safeContentType);
 
       const ref = this.stableRef(key);
       return {

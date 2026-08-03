@@ -13,6 +13,7 @@ import {
 } from '@aws-sdk/client-s3';
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 import { randomBytes } from 'crypto';
+import { createReadStream, statSync } from 'fs';
 import { metadata as providerMetadata } from './metadata';
 import {
   ProviderModule,
@@ -24,6 +25,8 @@ import {
   LoggerPort,
   parseDataUrl,
   fromBuffer,
+  fromFile,
+  DetectedFileType,
 } from '@postmill-ai/provider-kernel';
 
 const TYPE = 'CLOUDFLARE_R2';
@@ -226,7 +229,18 @@ export class R2Storage implements StorageCapability {
 
   async uploadFile(file: any): Promise<any> {
     try {
-      const detected = await fromBuffer(file.buffer);
+      // `/files/upload-simple` uses multer's memoryStorage (file.buffer), while
+      // `/files/upload-server` uses diskStorage (file.path, no buffer) — sniff
+      // from whichever the caller supplied (same fix as S3StorageBase.uploadFile).
+      const hasBuffer = !!file.buffer && Buffer.isBuffer(file.buffer);
+      let detected: DetectedFileType;
+      if (hasBuffer) {
+        detected = await fromBuffer(file.buffer);
+      } else if (file.path) {
+        detected = await fromFile(file.path);
+      } else {
+        throw new Error('Invalid file upload.');
+      }
       if (!detected || !ALLOWED_MIME_TYPES.has(detected.mime)) {
         throw new Error('Unsupported file type.');
       }
@@ -235,12 +249,19 @@ export class R2Storage implements StorageCapability {
       const safeContentType = detected.mime;
       const key = `${id}.${extension}`;
 
+      // PutObjectCommand cannot compute the length of a stream, so pass it
+      // explicitly when streaming from disk.
+      const contentLength = hasBuffer
+        ? undefined
+        : file.size || statSync(file.path).size;
+
       await this.client.send(
         new PutObjectCommand({
           Bucket: this.bucket,
           Key: key,
-          Body: file.buffer,
+          Body: hasBuffer ? file.buffer : createReadStream(file.path),
           ContentType: safeContentType,
+          ...(contentLength ? { ContentLength: contentLength } : {}),
         }),
       );
 
