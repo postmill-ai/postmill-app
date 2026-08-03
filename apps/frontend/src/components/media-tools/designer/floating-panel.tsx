@@ -35,6 +35,11 @@ interface FloatingPanelProps {
   title: string;
   onClose: () => void;
   children: ReactNode;
+  /**
+   * Pinned below the scroll area — an action row belongs to the panel, not to
+   * its content, so it must not scroll away with a long list.
+   */
+  footer?: ReactNode;
   /** Fixed panel width in px. */
   width?: number;
   position: FloatingPanelPosition;
@@ -49,6 +54,7 @@ export const FloatingPanel: FC<FloatingPanelProps> = ({
   title,
   onClose,
   children,
+  footer,
   width = 260,
   position,
   onPositionChange,
@@ -216,6 +222,10 @@ export const FloatingPanel: FC<FloatingPanelProps> = ({
       </div>
 
       <div className="flex-1 min-h-0 overflow-y-auto p-3">{children}</div>
+
+      {footer && (
+        <div className="shrink-0 border-t border-studioBorder">{footer}</div>
+      )}
 
       <div
         onPointerDown={onResizePointerDown}

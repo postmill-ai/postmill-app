@@ -19,12 +19,8 @@ import { useAiActive } from '@postmill-ai/frontend/components/layout/use-ai-acti
 import { useMediaToolsStatus } from '@postmill-ai/frontend/components/layout/use-media-tools-status';
 import { TemplatesPanel } from './panels/templates-panel';
 import { MyDesignsPanel } from './panels/my-designs-panel';
-import { TextPanel } from './panels/text-panel';
-import { ElementsPanel } from './panels/elements-panel';
-import { PhotosPanel } from './panels/photos-panel';
-import { UploadsPanel } from './panels/uploads-panel';
-import { BackgroundPanel } from './panels/background-panel';
 import { LayersPanel } from './panels/layers-panel';
+import { LayersFooter } from './panels/layers-footer';
 import { FloatingPanel } from './floating-panel';
 import { useFloatingPanelState } from './use-floating-panel-state';
 import { ToolRail } from './tool-rail';
@@ -210,7 +206,6 @@ export const Designer: FC<DesignerProps> = ({
   const translate = useT();
   const modals = useModals();
   const decision = useDecisionModal();
-  const [activePanel, setActivePanel] = useState<string | null>(null);
   const [showSafeZones, setShowSafeZones] = useState(false);
   const [showRulers, setShowRulers] = useState(true);
   // Default the inspector collapsed on mobile so it doesn't cover the canvas
@@ -247,6 +242,14 @@ export const Designer: FC<DesignerProps> = ({
     x: 72,
     y: 16,
     height: 360,
+    open: false,
+  });
+  // Brand floats too — it is a reference surface you keep open while working,
+  // not a one-shot picker.
+  const brandPanel = useFloatingPanelState('brand', user?.orgId, {
+    x: 360,
+    y: 16,
+    height: 420,
     open: false,
   });
   const brandColors = useBrandColors();
@@ -878,13 +881,34 @@ export const Designer: FC<DesignerProps> = ({
         setInspectorCollapsed(false);
       },
       onTogglePanel: (id) => {
-        // Layers is a floating window rather than a rail panel, but it is still
-        // reached through the same Window-menu / ⌘K action id.
+        // Persistent surfaces float; one-shot pickers are modals. Both are still
+        // reached through the same Window-menu / ⌘K action ids.
         if (id === 'layers') {
           layersPanel.toggle();
           return;
         }
-        setActivePanel((p) => (p === id ? null : id));
+        if (id === 'brand') {
+          brandPanel.toggle();
+          return;
+        }
+        if (id === 'icons') {
+          modals.openModal({
+            title: translate('panel_icons', 'Icons'),
+            children: (close: () => void) => (
+              <IconsPanel store={store as any} onClose={close} />
+            ),
+          });
+          return;
+        }
+        if (id === 'ai') {
+          modals.openModal({
+            title: translate('ai', 'AI'),
+            children: (close: () => void) => (
+              <AiPanel store={store as any} onClose={close} />
+            ),
+          });
+          return;
+        }
       },
       onToggleInspector: () => setInspectorCollapsed((c) => !c),
       onToggleSafeZones: () => setShowSafeZones((v) => !v),
@@ -910,7 +934,13 @@ export const Designer: FC<DesignerProps> = ({
         if (await decision.open({ description: msg })) st.setMode(target);
       },
       onToggleShare: () => setCollabEnabled((v) => !v),
-      onAiGenerate: () => setActivePanel('ai'),
+      onAiGenerate: () =>
+        modals.openModal({
+          title: translate('ai', 'AI'),
+          children: (close: () => void) => (
+            <AiPanel store={store as any} onClose={close} />
+          ),
+        }),
       onAiRemoveBg: () =>
         runAi((id) => aiRemoveBackground({ fetch, store, elementId: id }), translate('background_removal_failed', 'Background removal failed')),
       onAiUpscale: (scale) =>
@@ -918,7 +948,6 @@ export const Designer: FC<DesignerProps> = ({
       onAiInpaint: () => {
         const id = selectedImageId();
         if (!id) return;
-        setActivePanel(null);
         setInspectorCollapsed(false);
         toaster.show(translate('draw_mask_ai_tools_inpaint', 'Draw a mask in the inspector’s AI Tools, then Inpaint'), 'success');
       },
@@ -938,6 +967,7 @@ export const Designer: FC<DesignerProps> = ({
       modals,
       decision,
       layersPanel,
+      brandPanel,
       fetch,
       toaster,
       handleSave,
@@ -955,32 +985,6 @@ export const Designer: FC<DesignerProps> = ({
 
   const hasInspectorTarget =
     selectedIds.length >= 1 || (doc.mode === 'video' && !!selectedClip);
-
-  const backgroundPicker = useMediaPicker({
-    title: translate('background_image', 'Background image'),
-    onSelect: (item) => {
-      store.getState().setOutputBackground({
-        type: 'image',
-        src: (item as any).url,
-        fileId: (item as any).fileId,
-      });
-    },
-  });
-  const onSetBackgroundImage = backgroundPicker.open;
-
-  const panels = [
-    { id: 'text', icon: 'T', label: translate('provider_chip_text', 'Text') },
-    { id: 'elements', icon: '◇', label: translate('panel_elements', 'Elements') },
-    { id: 'icons', icon: '★', label: translate('panel_icons', 'Icons') },
-    { id: 'photos', icon: '▣', label: translate('panel_photos', 'Photos') },
-    { id: 'uploads', icon: '☰', label: translate('panel_uploads', 'Uploads') },
-    { id: 'background', icon: '◨', label: translate('panel_background', 'Background') },
-    // Layers is not in the rail — it lives in a floating window, opened from
-    // the Window menu / ⌘K (see `layersPanel` below).
-    // AI panel only when the org has an active AI provider (E4).
-    ...(aiActive ? [{ id: 'ai', icon: '✦', label: translate('ai', 'AI') }] : []),
-    { id: 'brand', icon: '♥', label: translate('brand_label', 'Brand') },
-  ];
 
   // Global ⌘E → Export and ? → Keyboard Shortcuts (⌘S/⌘K already handled
   // elsewhere; the rest of the shortcut map is canvas-focus-scoped). Ignore
@@ -1117,70 +1121,34 @@ export const Designer: FC<DesignerProps> = ({
 
       {/* Tool options for the active tool — Photoshop's options bar. Image mode
           only: video mode drives the timeline, which owns its own bindings. */}
-      {doc.mode !== 'video' && (
-        <ToolOptionsBar
-          activeTool={activeTool}
-          options={{
-            ...defaultToolOptions(activeTool),
-            ...(toolOptions[activeTool] || {}),
-          }}
-          onChange={(key, value) => setToolOption(activeTool, key, value)}
-        />
-      )}
+      <ToolOptionsBar
+        activeTool={activeTool}
+        options={{
+          ...defaultToolOptions(activeTool),
+          ...(toolOptions[activeTool] || {}),
+        }}
+        onChange={(key, value) => setToolOption(activeTool, key, value)}
+      />
 
       <div className="relative flex flex-1 min-h-0 w-full overflow-hidden">
-        {doc.mode !== 'video' && (
-          <ToolRail
-            activeTool={activeTool}
-            lastToolPerGroup={lastToolPerGroup}
-            onSelect={setActiveTool}
-            aiAvailable={aiActive}
-          />
-        )}
-        <div className="w-[48px] shrink-0 flex flex-col items-center pt-2 gap-1 border-r border-studioBorder bg-newBgColorInner z-30">
-          {panels.map((p) => (
-            <button
-              key={p.id}
-              tabIndex={0}
-              onClick={() => setActivePanel(activePanel === p.id ? null : p.id)}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter' || e.key === ' ') {
-                  e.preventDefault();
-                  setActivePanel(activePanel === p.id ? null : p.id);
-                }
-              }}
-              className={`w-9 h-9 flex items-center justify-center rounded-lg text-[15px] transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-designerAccent ${
-                activePanel === p.id
-                  ? 'bg-designerAccent/20 text-btnPrimaryAccent'
-                  : 'text-textColor/60 hover:bg-studioBorder/30 hover:text-textColor'
-              }`}
-              title={p.label}
-              aria-label={translate('panel_aria_label', '{{label}} panel', { label: p.label })}
-            >
-              {p.icon}
-            </button>
-          ))}
-        </div>
-
-        {activePanel && (
-          <div
-            // Offset past the panel rail, plus the tool rail when it is shown
-            // (image mode only) — both are 48px.
-            style={{ left: doc.mode === 'video' ? 48 : 96 }}
-            className="absolute top-0 bottom-0 w-[260px] z-20 border-r border-studioBorder bg-newBgColorInner overflow-y-auto p-3 shadow-xl"
+        {/* The tools apply to video as much as to images — a clip is a canvas
+            object like any other. */}
+        <ToolRail
+          activeTool={activeTool}
+          lastToolPerGroup={lastToolPerGroup}
+          onSelect={setActiveTool}
+          aiAvailable={aiActive}
+        />
+        {brandPanel.state.open && (
+          <FloatingPanel
+            title={translate('brand_label', 'Brand')}
+            onClose={() => brandPanel.setOpen(false)}
+            position={brandPanel.state}
+            onPositionChange={brandPanel.setPosition}
+            width={300}
           >
-            <div className="text-[12px] font-medium text-textColor/60 uppercase tracking-wider mb-3">
-              {panels.find((p) => p.id === activePanel)?.label}
-            </div>
-            {activePanel === 'text' && <TextPanel store={store as any} />}
-            {activePanel === 'elements' && <ElementsPanel store={store as any} />}
-            {activePanel === 'icons' && <IconsPanel store={store as any} />}
-            {activePanel === 'photos' && <PhotosPanel store={store as any} />}
-            {activePanel === 'uploads' && <UploadsPanel store={store as any} />}
-            {activePanel === 'background' && <BackgroundPanel store={store as any} />}
-            {activePanel === 'ai' && <AiPanel store={store as any} />}
-            {activePanel === 'brand' && <BrandPanel store={store as any} />}
-          </div>
+            <BrandPanel store={store as any} />
+          </FloatingPanel>
         )}
 
         {layersPanel.state.open && (
@@ -1189,6 +1157,7 @@ export const Designer: FC<DesignerProps> = ({
             onClose={() => layersPanel.setOpen(false)}
             position={layersPanel.state}
             onPositionChange={layersPanel.setPosition}
+            footer={<LayersFooter store={store as any} />}
           >
             <LayersPanel
               store={store as any}
@@ -1247,7 +1216,6 @@ export const Designer: FC<DesignerProps> = ({
                   <CanvasInspector
                     key={`canvas-${currentOutput}-${(doc.outputs[currentOutput] as any)?.width}x${(doc.outputs[currentOutput] as any)?.height}`}
                     store={store}
-                    onSetBackgroundImage={onSetBackgroundImage}
                   />
                 )}
               </div>
@@ -1273,7 +1241,6 @@ export const Designer: FC<DesignerProps> = ({
         <StartDialog store={store} fetchFn={fetch} onDone={() => setShowStart(false)} />
       )}
       {mediaPicker.element}
-      {backgroundPicker.element}
     </div>
   );
 };

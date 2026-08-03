@@ -12,13 +12,14 @@ import { fitWithin } from './panels/fit-within';
 import { useToaster } from '@postmill-ai/react/toaster/toaster';
 import { useFetch } from '@postmill-ai/helpers/utils/custom.fetch';
 import { useT } from '@postmill-ai/react/translation/get.transation.service.client';
-import type { DesignerElement, DesignerOutput } from './designer.store';
+import type { DesignerElement, DesignerOutput, VideoOutput } from './designer.store';
+import { composeClipsAtPlayhead } from './video-preview';
 import { VideoCanvasOverlay } from './video-canvas-overlay';
 import { sharedStageRef } from './stage-ref';
 import { buildResizePatch } from './transform-resize';
 import { getTool, resolveToolShortcut } from './tools';
-import { rectFromDrag, isMeaningfulDraw, buildShapeElement } from './tool-draw';
-import { defaultTextBox } from './measure-text';
+import { rectFromDrag, isMeaningfulDraw, buildShapeElement, buildShapeClip } from './tool-draw';
+import { addText } from './add-text';
 import { CropOverlay } from './crop-overlay';
 import { getImageNaturalSize } from './elements';
 import {
@@ -151,14 +152,43 @@ export const DesignerCanvas: FC<CanvasProps> = ({
     fetchFn: fetch,
   });
   const isVideo = doc.mode === 'video';
-  const activeTool = store((s) => s.activeTool);
-  // Video mode has no tool palette, so it always behaves as the Move tool.
-  const effectiveTool = isVideo ? 'move' : activeTool;
+  // Tools apply to video as well as image documents: a clip is a canvas object
+  // like any other, so nothing is forced to the Move tool any more.
+  const effectiveTool = store((s) => s.activeTool);
   const toolCursor = getTool(effectiveTool)?.cursor || 'default';
+  const selectedClip = store((s) => s.selectedClip);
+  // Read here rather than at the transformer: it must re-attach when the
+  // playhead moves, since a clip that scrolls out from under it is unmounted
+  // and would leave the transformer on a dead node.
+  const playheadMs = store((s) => s.playheadMs);
   // The Crop tool acts on the single selected element; with nothing selected it
   // simply has no target and the overlay stays hidden.
-  const cropTarget =
-    effectiveTool === 'crop' && selectedIds.length === 1
+  // In video the target is the selected clip, adapted into the element shape the
+  // overlay reads — geometry plus src/crop is all it touches.
+  const cropClip =
+    isVideo && effectiveTool === 'crop' && selectedClip
+      ? (output as unknown as VideoOutput | undefined)?.tracks
+          ?.find((tr) => tr.id === selectedClip.trackId)
+          ?.clips.find((c) => c.id === selectedClip.clipId)
+      : undefined;
+  const cropTarget = isVideo
+    ? cropClip
+      ? ({
+          id: cropClip.id,
+          type: 'image',
+          x: cropClip.x ?? 0,
+          y: cropClip.y ?? 0,
+          width: cropClip.width ?? 100,
+          height: cropClip.height ?? 100,
+          rotation: cropClip.rotation ?? 0,
+          opacity: 1,
+          locked: false,
+          hidden: false,
+          src: cropClip.src,
+          crop: cropClip.crop,
+        } as DesignerElement)
+      : undefined
+    : effectiveTool === 'crop' && selectedIds.length === 1
       ? ((output as DesignerOutput | undefined)?.children || []).find(
           (c) => c.id === selectedIds[0]
         )
@@ -321,17 +351,24 @@ export const DesignerCanvas: FC<CanvasProps> = ({
     stageRef.current?.getLayers()?.forEach((l) => l.batchDraw());
   }, [paint.paintNonce]);
 
-  // Attach transformer to the current selection.
+  // Attach transformer to the current selection. In video mode the selection is
+  // a clip rather than a list of elements, but the node lookup is the same — the
+  // overlay gives each clip node its clip id.
   useEffect(() => {
     if (!transformerRef.current) return;
     const stage = stageRef.current;
     if (!stage) return;
-    const nodes = selectedIds
+    const ids = isVideo
+      ? selectedClip?.clipId
+        ? [selectedClip.clipId]
+        : []
+      : selectedIds;
+    const nodes = ids
       .map((id) => stage.findOne('#' + id))
       .filter(Boolean) as Konva.Node[];
     transformerRef.current.nodes(nodes);
     transformerRef.current.getLayer()?.batchDraw();
-  }, [selectedIds, childIdsKey, currentOutput]);
+  }, [selectedIds, childIdsKey, currentOutput, isVideo, selectedClip, playheadMs]);
 
   // Resolve a click into a selection, honoring group membership and additive (shift/meta) clicks.
   const handleElementSelect = useCallback(
@@ -466,41 +503,23 @@ export const DesignerCanvas: FC<CanvasProps> = ({
       }
 
       // Type tools place a text box at the click and go straight into editing —
-      // the click-to-place path the panel presets never had.
+      // the click-to-place path the panel presets never had. In a video document
+      // this makes a text CLIP instead; `addText` owns that difference.
       if (effectiveTool.startsWith('type-') && pos) {
         const opts = store.getState().toolOptions[effectiveTool] || {};
         const fontSize = Number(opts.fontSize ?? 32);
-        const box = defaultTextBox({ text: 'Text', fontSize, fontWeight: 700, fontFamily: 'Inter' });
-        const before = new Set(
-          ((store.getState().doc.outputs[store.getState().currentOutput] as DesignerOutput)
-            ?.children || []).map((c) => c.id)
+        const created = addText(
+          store as never,
+          { fontSize, ...(effectiveTool === 'type-vertical' ? {} : {}) },
+          { at: { x: Math.round(pos.x), y: Math.round(pos.y) } }
         );
-        store.getState().addElement({
-          id: '',
-          type: 'text',
-          x: Math.round(pos.x),
-          y: Math.round(pos.y),
-          width: box.width,
-          height: box.height,
-          rotation: 0,
-          opacity: 1,
-          locked: false,
-          hidden: false,
-          text: 'Text',
-          fontSize,
-          fontWeight: 700,
-          fontFamily: 'Inter',
-          fill: '#000000',
-          align: 'left',
-          ...(effectiveTool === 'type-vertical' ? { verticalAlign: 'top' as const } : {}),
-        });
-        // addElement assigns the id internally, so find the one that appeared.
-        const after = ((store.getState().doc.outputs[store.getState().currentOutput] as DesignerOutput)
-          ?.children || []);
-        const created = after.find((c) => !before.has(c.id));
-        if (created) {
-          store.getState().setSelectedIds([created.id]);
-          setEditingTextId(created.id);
+        if (created && !isVideo) {
+          store.getState().setSelectedIds([created]);
+          store.getState().updateElement(created, {
+            align: 'left',
+            ...(effectiveTool === 'type-vertical' ? { verticalAlign: 'top' as const } : {}),
+          });
+          setEditingTextId(created);
         }
         store.getState().setActiveTool('move');
         return;
@@ -519,6 +538,9 @@ export const DesignerCanvas: FC<CanvasProps> = ({
         }
         setSelectedIds([]);
         setEditingTextId(null);
+        // Video keeps its selection in `selectedClip`, so clearing ids alone
+        // would leave the transformer attached to a clip nothing is selecting.
+        if (isVideo) store.getState().setSelectedClip(null);
       }
     },
     [
@@ -665,13 +687,28 @@ export const DesignerCanvas: FC<CanvasProps> = ({
         ? { x: marquee.x, y: marquee.y, width: marquee.w, height: marquee.h }
         : null;
       if (rect && isMeaningfulDraw(rect)) {
-        store.getState().addElement(
-          buildShapeElement(
-            effectiveTool,
-            rect,
-            store.getState().toolOptions[effectiveTool] || {}
-          )
-        );
+        const opts = store.getState().toolOptions[effectiveTool] || {};
+        if (isVideo) {
+          // A shape drawn on a timeline is a clip on a shape track, created on
+          // demand — the same shape, expressed in the other document model.
+          const st = store.getState();
+          const vo = st.doc.outputs[st.currentOutput] as unknown as VideoOutput;
+          let track = vo.tracks?.find((tr) => tr.type === 'shape');
+          if (!track) {
+            st.addTrack(st.currentOutput, 'shape');
+            const refreshed = store.getState().doc.outputs[st.currentOutput] as unknown as VideoOutput;
+            track = refreshed.tracks.find((tr) => tr.type === 'shape');
+          }
+          if (track) {
+            store.getState().addClip(
+              st.currentOutput,
+              track.id,
+              buildShapeClip(effectiveTool, rect, st.playheadMs, vo.durationMs, opts)
+            );
+          }
+        } else {
+          store.getState().addElement(buildShapeElement(effectiveTool, rect, opts));
+        }
         store.getState().pushHistory();
         // Photoshop keeps the shape tool active after drawing; switching to
         // Move here would fight anyone laying out several shapes in a row.
@@ -859,6 +896,9 @@ export const DesignerCanvas: FC<CanvasProps> = ({
 
   const handleTransform = useCallback(
     (e: Konva.KonvaEventObject<Event>) => {
+      // Clips write their own geometry from the overlay, which knows the track
+      // and the keyframe rule; these element patches would target a clip id.
+      if (isVideo) return;
       const patches = bakeTransform(e);
       const first = patches[0];
       if (first) {
@@ -875,12 +915,13 @@ export const DesignerCanvas: FC<CanvasProps> = ({
         rafIdRef.current = null;
       });
     },
-    [bakeTransform, updateElement]
+    [bakeTransform, updateElement, isVideo]
   );
 
   const handleTransformEnd = useCallback(
     (e: Konva.KonvaEventObject<Event>) => {
       setHud(null);
+      if (isVideo) return;
       if (rafIdRef.current) {
         cancelAnimationFrame(rafIdRef.current);
         rafIdRef.current = null;
@@ -890,7 +931,7 @@ export const DesignerCanvas: FC<CanvasProps> = ({
       patches.forEach(({ id, patch }) => updateElement(id, patch));
       pushHistory();
     },
-    [bakeTransform, pushHistory, updateElement]
+    [bakeTransform, pushHistory, updateElement, isVideo]
   );
 
   const handleWheel = useCallback(
@@ -981,6 +1022,7 @@ export const DesignerCanvas: FC<CanvasProps> = ({
         st.removeElements(selectedIds);
       } else if (e.key === 'Escape') {
         setSelectedIds([]);
+        if (isVideo) st.setSelectedClip(null);
       } else if (mod && e.key.toLowerCase() === 'a') {
         e.preventDefault();
         setSelectedIds(((output as any)?.children || []).filter((c: any) => !c.hidden).map((c: any) => c.id));
@@ -1286,6 +1328,8 @@ export const DesignerCanvas: FC<CanvasProps> = ({
               store={store}
               width={output.width}
               height={output.height}
+              interactive={effectiveTool === 'move' && !isSpacePressed}
+              onEditText={setEditingTextId}
             />
           )}
           {guides.map((g) => (
@@ -1460,7 +1504,16 @@ export const DesignerCanvas: FC<CanvasProps> = ({
               zoom={zoom}
               ratio={String(store.getState().toolOptions['crop']?.ratio ?? 'free')}
               onCommit={(patch) => {
-                updateElement(cropTarget.id, patch);
+                if (isVideo && selectedClip) {
+                  store.getState().updateClip(
+                    selectedClip.outputIndex,
+                    selectedClip.trackId,
+                    selectedClip.clipId,
+                    patch as never
+                  );
+                } else {
+                  updateElement(cropTarget.id, patch);
+                }
                 pushHistory();
                 store.getState().setActiveTool('move');
               }}
@@ -1471,7 +1524,10 @@ export const DesignerCanvas: FC<CanvasProps> = ({
           {/* Transform handles belong to the Move tool. Other tools keep the
               selection but hide the handles, so a stray anchor can't swallow a
               brush stroke or a marquee drag. */}
-          {selectedIds.length > 0 && effectiveTool === 'move' && (
+          {/* A video document selects a CLIP rather than element ids, so the
+              handles have to key off whichever selection this document uses. */}
+          {(isVideo ? !!selectedClip : selectedIds.length > 0) &&
+            effectiveTool === 'move' && (
             <Transformer
               ref={transformerRef}
               rotateEnabled={true}
@@ -1531,7 +1587,7 @@ export const DesignerCanvas: FC<CanvasProps> = ({
         </div>
       )}
 
-      {editingTextId && (() => {
+      {editingTextId && !isVideo && (() => {
         const el = ((output as any)?.children || []).find((c: any) => c.id === editingTextId);
         if (!el || el.type !== 'text') return null;
         return (
@@ -1539,6 +1595,53 @@ export const DesignerCanvas: FC<CanvasProps> = ({
             element={el}
             stageRect={{ x: viewportX, y: viewportY, scale: zoom }}
             onUpdate={updateElement}
+            onComplete={() => setEditingTextId(null)}
+          />
+        );
+      })()}
+
+      {/* Same editor over a text CLIP. The overlay only reads geometry and type
+          fields, so a clip is adapted into that shape rather than the component
+          being taught about two document models. Geometry comes from the
+          COMPOSED props so the editor sits over an animated clip correctly. */}
+      {editingTextId && isVideo && (() => {
+        const vo = output as unknown as VideoOutput | undefined;
+        if (!vo?.tracks) return null;
+        const track = vo.tracks.find((tr) =>
+          tr.clips.some((c) => c.id === editingTextId)
+        );
+        const clip = track?.clips.find((c) => c.id === editingTextId);
+        if (!track || !clip) return null;
+        const composed = composeClipsAtPlayhead(vo, playheadMs).find(
+          (c) => c.clip.id === editingTextId
+        );
+        const boxProps = composed?.props;
+        const pseudo = {
+          id: clip.id,
+          type: 'text',
+          x: boxProps?.x ?? clip.x ?? 0,
+          y: boxProps?.y ?? clip.y ?? 0,
+          width: boxProps?.width ?? clip.width ?? 200,
+          height: boxProps?.height ?? clip.height ?? 40,
+          rotation: boxProps?.rotation ?? clip.rotation ?? 0,
+          opacity: 1,
+          locked: false,
+          hidden: false,
+          text: clip.text || '',
+          fontFamily: clip.fontFamily,
+          fontSize: clip.fontSize,
+          fontWeight: clip.fontWeight,
+          fill: clip.fill,
+        } as DesignerElement;
+        return (
+          <TextEditingOverlay
+            element={pseudo}
+            stageRect={{ x: viewportX, y: viewportY, scale: zoom }}
+            onUpdate={(id, updates) =>
+              store.getState().updateClip(currentOutput, track.id, id, {
+                text: updates.text,
+              })
+            }
             onComplete={() => setEditingTextId(null)}
           />
         );

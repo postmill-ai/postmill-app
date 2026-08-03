@@ -32,6 +32,10 @@ export const MAX_FILTERS_PER_ELEMENT = 16;
  * v4 adds Photoshop-parity layers: `group`/`fill`/`adjustment` element types,
  * `parentId`, blend modes and layer styles. Also additive — no rewrite.
  *
+ * v5 adds shape clips to video documents (a `shape` track type plus the shape
+ * geometry fields on `VideoClip`), so the tool palette's shape tools work on a
+ * timeline as well as an artboard. Additive again — no rewrite.
+ *
  * `parentId` and `groupId` are deliberately SEPARATE concepts and both stay:
  *   - `groupId` is the cross-format reflow move-unit ("these travel together
  *     when the design is re-fitted to another format"). Reflow and the AI
@@ -42,7 +46,7 @@ export const MAX_FILTERS_PER_ELEMENT = 16;
  * every AI-generated design under dozens of folders it never asked for. When a
  * user makes a layer group we set both, so a folder also reflows as a unit.
  */
-export const DESIGNER_DOC_VERSION = 4;
+export const DESIGNER_DOC_VERSION = 5;
 
 /** Maximum text length on a text element. */
 export const MAX_TEXT_LEN = 20000;

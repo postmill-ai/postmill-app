@@ -109,3 +109,30 @@ export const pointsForShape = (
 /** Flatten to the `[x0, y0, x1, y1, …]` array Konva's `Line` expects. */
 export const flattenPoints = (points: ShapePoint[]): number[] =>
   points.flatMap((p) => [p.x, p.y]);
+
+/**
+ * These same functions as JavaScript source.
+ *
+ * The video frame renderer runs in a headless-Chromium page and cannot import
+ * anything — its script is injected as text. Shipping the source instead of a
+ * hand-written copy is what keeps the THIRD renderer honest: a triangle in the
+ * editor, in the PDF and in an exported mp4 all come out of this one file.
+ *
+ * Everything the exported functions close over is included, so the block is
+ * self-contained and can simply be prepended to a script.
+ */
+export const shapeGeometrySource = (): string => {
+  const decl = (name: string, value: unknown) => `const ${name} = ${String(value)};`;
+  return [
+    `const START_ANGLE = ${START_ANGLE};`,
+    `const DEFAULT_POLYGON_SIDES = ${DEFAULT_POLYGON_SIDES};`,
+    `const DEFAULT_STAR_POINTS = ${DEFAULT_STAR_POINTS};`,
+    `const DEFAULT_STAR_INNER_RATIO = ${DEFAULT_STAR_INNER_RATIO};`,
+    decl('ellipsePoint', ellipsePoint),
+    decl('polygonPoints', polygonPoints),
+    decl('trianglePoints', trianglePoints),
+    decl('starPoints', starPoints),
+    decl('pointsForShape', pointsForShape),
+    decl('flattenPoints', flattenPoints),
+  ].join('\n');
+};

@@ -2,7 +2,7 @@
 
 import { useMemo } from 'react';
 import type { DesignerOutput, DesignerElement } from './designer.store';
-import { defaultTextBox } from './measure-text';
+import { addText as addTextTo } from './add-text';
 import { layerActions } from './layer-actions';
 
 type DesignerStoreApi = ReturnType<
@@ -211,34 +211,10 @@ export const useDesignerActions = (
       };
     };
 
+    // Works in both modes: an image doc gets an element, a video doc gets a text
+    // clip on its text track. See `add-text.ts`.
     const addText = () => {
-      const st = store.getState();
-      const out = st.doc.outputs[st.currentOutput];
-      const box = defaultTextBox({
-        text: 'Text',
-        fontSize: 32,
-        fontWeight: 700,
-        fontFamily: 'Inter',
-      });
-      st.addElement({
-        id: '',
-        type: 'text',
-        x: out.width / 2 - box.width / 2,
-        y: out.height / 2 - box.height / 2,
-        width: box.width,
-        height: box.height,
-        rotation: 0,
-        opacity: 1,
-        locked: false,
-        hidden: false,
-        text: 'Text',
-        fontSize: 32,
-        fontWeight: 700,
-        fontFamily: 'Inter',
-        fontStyle: 'normal',
-        fill: '#000000',
-        align: 'center',
-      });
+      addTextTo(store as never);
     };
 
     const addShape = () => {
@@ -304,11 +280,10 @@ export const useDesignerActions = (
       { id: 'command-palette', label: 'Command Palette', menu: 'view', group: 'cmd', shortcut: '⌘K', keywords: ['command', 'palette'], run: () => { if (typeof window !== 'undefined') window.dispatchEvent(new KeyboardEvent('keydown', { key: 'k', metaKey: true })); } },
 
       // ---------------- Insert ----------------
-      { id: 'insert-text', label: 'Text', menu: 'insert', keywords: ['text'], enabled: () => live().mode === 'image', run: addText },
+      { id: 'insert-text', label: 'Text', menu: 'insert', keywords: ['text'], run: addText },
       { id: 'insert-shape', label: 'Shape', menu: 'insert', keywords: ['shape', 'rectangle'], enabled: () => live().mode === 'image', run: addShape },
       { id: 'insert-image', label: 'Image…', menu: 'insert', keywords: ['image', 'photo'], enabled: () => live().mode === 'image', run: ctx.onOpenMedia },
       { id: 'insert-icon', label: 'Icon', menu: 'insert', keywords: ['icon'], run: () => ctx.onTogglePanel('icons') },
-      { id: 'insert-background', label: 'Background', menu: 'insert', keywords: ['background'], run: () => ctx.onTogglePanel('background') },
 
       // ---------------- Format ----------------
       { id: 'canvas-properties', label: 'Canvas Properties…', menu: 'format', group: 'canvas', keywords: ['canvas', 'properties', 'size', 'background'], run: ctx.onCanvasProperties },
@@ -351,9 +326,6 @@ export const useDesignerActions = (
       { id: 'win-layers', label: 'Layers', menu: 'window', group: 'panels', keywords: ['layers'], run: () => ctx.onTogglePanel('layers') },
       { id: 'win-brand', label: 'Brand', menu: 'window', group: 'panels', keywords: ['brand'], run: () => ctx.onTogglePanel('brand') },
       { id: 'win-inspector', label: 'Properties / Inspector', menu: 'window', group: 'panels', keywords: ['inspector', 'properties'], run: ctx.onToggleInspector },
-      { id: 'win-uploads', label: 'Uploads', menu: 'window', group: 'panels2', keywords: ['uploads'], run: () => ctx.onTogglePanel('uploads') },
-      { id: 'win-photos', label: 'Photos', menu: 'window', group: 'panels2', keywords: ['photos'], run: () => ctx.onTogglePanel('photos') },
-      { id: 'win-elements', label: 'Elements', menu: 'window', group: 'panels2', keywords: ['elements', 'shapes'], run: () => ctx.onTogglePanel('elements') },
       { id: 'win-icons', label: 'Icons', menu: 'window', group: 'panels2', keywords: ['icons'], run: () => ctx.onTogglePanel('icons') },
       ...(ctx.aiActive ? [{ id: 'win-ai', label: 'AI', menu: 'window' as const, group: 'panels2', keywords: ['ai'], run: () => ctx.onTogglePanel('ai') }] : []),
       ...(ctx.canShare ? [{ id: 'win-share', label: () => (ctx.collabEnabled ? 'Stop Sharing' : 'Share / Collaborate'), menu: 'window' as const, group: 'share', keywords: ['share', 'collaborate'], checked: () => ctx.collabEnabled, run: ctx.onToggleShare }] : []),

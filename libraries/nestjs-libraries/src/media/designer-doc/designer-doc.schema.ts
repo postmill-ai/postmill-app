@@ -403,11 +403,29 @@ export interface VideoClip {
   filters?: string[];
   frames?: StickerFrame[];
   words?: CaptionWord[];
+  /**
+   * Shape clips (doc v5). A shape track's clips carry the same geometry the
+   * shape ELEMENTS use, so both renderers trace them through the shared
+   * `shape-geometry` helper rather than reimplementing the maths.
+   */
+  shape?: 'rect' | 'ellipse' | 'line' | 'star' | 'triangle' | 'polygon';
+  sides?: number;
+  innerRatio?: number;
+  stroke?: string;
+  strokeWidth?: number;
+  borderRadius?: number;
+  /**
+   * Explicit source-pixel crop (doc v5), same meaning as an element's — it wins
+   * over `fitMode`'s automatic cover crop. Lets the Crop tool work on a clip.
+   */
+  crop?: DesignerCrop;
+  fitMode?: 'contain' | 'cover' | 'fill';
+  focalPoint?: { x: number; y: number };
 }
 
 export interface VideoTrack {
   id: string;
-  type: 'video' | 'image' | 'text' | 'audio' | 'sticker' | 'caption';
+  type: 'video' | 'image' | 'text' | 'audio' | 'sticker' | 'caption' | 'shape' | 'raster';
   clips: VideoClip[];
   gain?: number;
   autoDuck?: boolean;
@@ -975,6 +993,14 @@ const clipCommon = {
   fontFamily: z.string().max(200).optional(),
   fill: ColorSchema.optional(),
   reverse: z.boolean().optional(),
+  // The frame renderer already honours these on clips; they were only ever
+  // missing from the contract.
+  fitMode: z.enum(['contain', 'cover', 'fill']).optional(),
+  // Shape clips (doc v5) — additive, so v4 documents keep validating.
+  shape: z
+    .enum(['rect', 'ellipse', 'line', 'star', 'triangle', 'polygon'])
+    .optional(),
+  stroke: ColorSchema.optional(),
 };
 
 
@@ -996,6 +1022,10 @@ const clipStrictOptionalNumeric = {
   fontSize: strictNum(1, MAX_FONT_SIZE).optional(),
   // drift-resolved: fontWeight present in frontend, absent server copy
   fontWeight: strictNum(1, 1000).optional(),
+  sides: strictNum(3, 64).optional(),
+  innerRatio: strictNum(0.05, 0.95).optional(),
+  strokeWidth: strictNum(0, MAX_DIMENSION).optional(),
+  borderRadius: strictNum(0, MAX_DIMENSION).optional(),
   volume: strictNum(0, 1).optional(),
   fadeInMs: strictNum(0, MAX_VIDEO_DURATION_MS).optional(),
   fadeOutMs: strictNum(0, MAX_VIDEO_DURATION_MS).optional(),
@@ -1018,6 +1048,10 @@ const clipLenientNumeric = {
   opacity: lenientNum(0, 1, 1),
   fontSize: lenientNum(1, MAX_FONT_SIZE, 16),
   fontWeight: lenientNum(1, 1000, 400),
+  sides: lenientNum(3, 64, 6),
+  innerRatio: lenientNum(0.05, 0.95, 0.5),
+  strokeWidth: lenientNum(0, MAX_DIMENSION, 0),
+  borderRadius: lenientNum(0, MAX_DIMENSION, 0),
   volume: lenientNum(0, 1, 1),
   fadeInMs: lenientNum(0, MAX_VIDEO_DURATION_MS, 0),
   fadeOutMs: lenientNum(0, MAX_VIDEO_DURATION_MS, 0),
@@ -1028,6 +1062,8 @@ const clipLenientNumeric = {
 };
 
 const clipStrictNested = {
+  crop: StrictDesignerCropSchema.optional(),
+  focalPoint: StrictFocalPointSchema.optional(),
   keyframes: z.array(StrictKeyframeSchema).max(1000).optional(),
   transitionIn: StrictTransitionSchema.optional(),
   transitionOut: StrictTransitionSchema.optional(),
@@ -1037,6 +1073,8 @@ const clipStrictNested = {
 };
 
 const clipLenientNested = {
+  crop: LenientDesignerCropSchema.optional(),
+  focalPoint: LenientFocalPointSchema.optional(),
   keyframes: z.array(LenientKeyframeSchema).max(1000).optional(),
   transitionIn: LenientTransitionSchema.optional(),
   transitionOut: LenientTransitionSchema.optional(),
@@ -1065,7 +1103,7 @@ const { strict: StrictVideoClipSchema, lenient: LenientVideoClipSchema } =
 // ---------------------------------------------------------------------------
 const trackCommon = {
   id: z.string().max(200),
-  type: z.enum(['video', 'image', 'text', 'audio', 'sticker', 'caption']),
+  type: z.enum(['video', 'image', 'text', 'audio', 'sticker', 'caption', 'shape', 'raster']),
   autoDuck: z.boolean().optional(),
 };
 const { strict: StrictVideoTrackSchema, lenient: LenientVideoTrackSchema } =

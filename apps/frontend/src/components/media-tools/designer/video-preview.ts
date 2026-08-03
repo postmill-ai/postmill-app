@@ -181,6 +181,8 @@ export function findTransitionWindows(track: VideoTrack): TransitionWindow[] {
 
 export interface ComposedClip {
   clip: VideoClip;
+  /** Needed to write back through `updateClip`, which is keyed by track. */
+  trackId: string;
   trackType: VideoTrack['type'];
   props: ReturnType<typeof interpolateKeyframes>;
 }
@@ -249,7 +251,7 @@ export function composeClipsAtPlayhead(vo: VideoOutput, playheadMs: number): Com
         props.opacity = Math.max(0, Math.min(1, props.opacity));
       }
 
-      result.push({ clip, trackType: track.type, props });
+      result.push({ clip, trackId: track.id, trackType: track.type, props });
     }
   }
   return result;

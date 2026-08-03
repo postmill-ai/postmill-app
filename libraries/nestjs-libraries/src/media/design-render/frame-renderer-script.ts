@@ -21,8 +21,12 @@ export function escapeForScriptTag(value: unknown): string {
     .replace(/\u2029/g, '\\u2029');
 }
 
+import { shapeGeometrySource } from '../designer-doc/shape-geometry';
+
 export const FRAME_RENDERER_SCRIPT = /* js */ `
 (function () {
+${shapeGeometrySource()}
+
   const output = window.__DATA.output;
   const baseUrl = window.__DATA.baseUrl || '';
   const canvas = document.getElementById('frame-canvas');
@@ -329,7 +333,22 @@ export const FRAME_RENDERER_SCRIPT = /* js */ `
     applyFilters(ctx, clip.filters);
     ctx.globalAlpha = props.opacity;
 
-    if (fitMode === 'cover') {
+    if (clip.crop) {
+      // An explicit crop is what the Crop tool wrote and beats fitMode's
+      // automatic cover window — same precedence the canvas uses.
+      const c = clip.crop;
+      ctx.drawImage(
+        element,
+        Math.max(0, c.x),
+        Math.max(0, c.y),
+        Math.max(1, c.width),
+        Math.max(1, c.height),
+        0,
+        0,
+        props.width,
+        props.height
+      );
+    } else if (fitMode === 'cover') {
       const { sx, sy, sw, sh } = computeCoverCrop(nw, nh, props.width, props.height, clip.focalPoint);
       ctx.drawImage(element, sx, sy, sw, sh, 0, 0, props.width, props.height);
     } else if (fitMode === 'fill') {
@@ -363,6 +382,49 @@ export const FRAME_RENDERER_SCRIPT = /* js */ `
     }
     if (current) lines.push(current);
     return lines;
+  }
+
+  // Shape clips. Polygon geometry comes from the injected shape-geometry
+  // source, so this traces exactly what the canvas and the PDF renderer trace.
+  function drawShapeClip(ctx, clip, props) {
+    const w = props.width;
+    const h = props.height;
+    ctx.save();
+    ctx.globalAlpha = props.opacity;
+    ctx.fillStyle = clip.fill || '#2B5CD3';
+    ctx.strokeStyle = clip.stroke || clip.fill || '#2B5CD3';
+    ctx.lineWidth = clip.strokeWidth || 0;
+
+    const points = pointsForShape(clip.shape, w, h, clip.sides, clip.innerRatio);
+    if (points) {
+      ctx.beginPath();
+      points.forEach(function (p, i) {
+        if (i === 0) ctx.moveTo(p.x, p.y);
+        else ctx.lineTo(p.x, p.y);
+      });
+      ctx.closePath();
+      ctx.fill();
+      if (clip.strokeWidth) ctx.stroke();
+    } else if (clip.shape === 'ellipse') {
+      ctx.beginPath();
+      ctx.ellipse(w / 2, h / 2, w / 2, h / 2, 0, 0, Math.PI * 2);
+      ctx.fill();
+      if (clip.strokeWidth) ctx.stroke();
+    } else if (clip.shape === 'line') {
+      ctx.beginPath();
+      ctx.moveTo(0, h / 2);
+      ctx.lineTo(w, h / 2);
+      ctx.lineWidth = clip.strokeWidth || 2;
+      ctx.stroke();
+    } else {
+      const r = Math.min(clip.borderRadius || 0, w / 2, h / 2);
+      ctx.beginPath();
+      if (r > 0 && ctx.roundRect) ctx.roundRect(0, 0, w, h, r);
+      else ctx.rect(0, 0, w, h);
+      ctx.fill();
+      if (clip.strokeWidth) ctx.stroke();
+    }
+    ctx.restore();
   }
 
   function drawTextClip(ctx, clip, props) {
@@ -433,7 +495,9 @@ export const FRAME_RENDERER_SCRIPT = /* js */ `
     if (props.rotation) ctx.rotate((props.rotation * Math.PI) / 180);
     ctx.translate(-props.width / 2, -props.height / 2);
 
-    if (trackType === 'text') {
+    if (trackType === 'shape') {
+      drawShapeClip(ctx, clip, props);
+    } else if (trackType === 'text') {
       drawTextClip(ctx, clip, props);
     } else if (trackType === 'caption') {
       await drawCaptionClip(ctx, clip, props, window.__CURRENT_TIME);

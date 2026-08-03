@@ -291,3 +291,89 @@ export const RotateViewIcon = toolIcon(
     <path d="M16.8 2.5v3.2h-3.2" />
   </>
 );
+
+// ── Layers panel ─────────────────────────────────────────────────────────────
+// Row and footer controls. Same 20×20 currentColor stroke as the tools above, so
+// the panel's text-colour utilities theme them in both modes.
+
+export const EyeIcon = toolIcon(
+  <>
+    <path d="M1.8 10S4.9 4.8 10 4.8 18.2 10 18.2 10 15.1 15.2 10 15.2 1.8 10 1.8 10z" />
+    <circle cx="10" cy="10" r="2.4" />
+  </>
+);
+export const EyeOffIcon = toolIcon(
+  <>
+    <path d="M7.3 5.4A7.6 7.6 0 0 1 10 4.8c5.1 0 8.2 5.2 8.2 5.2a15 15 0 0 1-2.6 3.1M4.6 6.9A15.2 15.2 0 0 0 1.8 10S4.9 15.2 10 15.2a7.7 7.7 0 0 0 3-.6" />
+    <path d="M8.3 8.3a2.4 2.4 0 0 0 3.4 3.4" />
+    <path d="M3 3l14 14" />
+  </>
+);
+export const LockIcon = toolIcon(
+  <>
+    <rect x="4.5" y="8.8" width="11" height="7.7" rx="1.2" />
+    <path d="M7 8.8V6.6a3 3 0 0 1 6 0v2.2" />
+  </>
+);
+export const UnlockIcon = toolIcon(
+  <>
+    <rect x="4.5" y="8.8" width="11" height="7.7" rx="1.2" />
+    <path d="M7 8.8V6.6a3 3 0 0 1 5.8-1" />
+  </>
+);
+
+/** Footer: link this layer's edits across formats (our stand-in for Photoshop's link-layers). */
+export const LinkLayersIcon = toolIcon(
+  <>
+    <path d="M8.4 11.6a2.8 2.8 0 0 0 4.2.3l2.2-2.2a2.9 2.9 0 0 0-4.1-4.1l-1.2 1.2" />
+    <path d="M11.6 8.4a2.8 2.8 0 0 0-4.2-.3L5.2 10.3a2.9 2.9 0 0 0 4.1 4.1l1.2-1.2" />
+  </>
+);
+/** Footer: layer style. Drawn as letters rather than a glyph, matching Photoshop's "fx". */
+export const LayerStyleIcon: FC<IconProps> = ({ size = 18, className, ...props }) => (
+  <svg {...ICON_BASE} width={size} height={size} className={className} {...props}>
+    <text
+      x="10"
+      y="14"
+      textAnchor="middle"
+      fontSize="11"
+      fontStyle="italic"
+      fontFamily="serif"
+      fill="currentColor"
+      stroke="none"
+    >
+      fx
+    </text>
+  </svg>
+);
+/** Footer: clipping mask — an arrow tucking under the layer below (our layer-mask slot). */
+export const ClippingMaskIcon = toolIcon(
+  <>
+    <rect x="8" y="3.5" width="8.5" height="6" rx="1" />
+    <rect x="3.5" y="10.5" width="8.5" height="6" rx="1" />
+    <path d="M6 7.5v3.5" />
+  </>
+);
+/** Footer: new fill or adjustment layer — Photoshop's half-filled circle. */
+export const FillAdjustmentIcon = toolIcon(
+  <>
+    <circle cx="10" cy="10" r="6.5" />
+    <path d="M10 3.5a6.5 6.5 0 0 1 0 13z" fill="currentColor" stroke="none" />
+  </>
+);
+export const NewGroupIcon = toolIcon(
+  <path d="M2.5 15.5v-9a1 1 0 0 1 1-1h3.6l1.6 2h6.8a1 1 0 0 1 1 1v7a1 1 0 0 1-1 1h-12a1 1 0 0 1-1-1z" />
+);
+export const NewLayerIcon = toolIcon(
+  <>
+    <rect x="3.5" y="3.5" width="13" height="13" rx="1.5" />
+    <path d="M10 7v6M7 10h6" />
+  </>
+);
+export const DeleteLayerIcon = toolIcon(
+  <>
+    <path d="M3.8 5.8h12.4" />
+    <path d="M5.6 5.8 6.3 16a1 1 0 0 0 1 .9h5.4a1 1 0 0 0 1-.9l.7-10.2" />
+    <path d="M7.8 5.8V4.2a1 1 0 0 1 1-1h2.4a1 1 0 0 1 1 1v1.6" />
+  </>
+);

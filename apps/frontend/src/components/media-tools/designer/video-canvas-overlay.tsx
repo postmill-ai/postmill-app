@@ -1,14 +1,35 @@
 'use client';
 
 import React, { FC, useEffect, useMemo, useState, useSyncExternalStore } from 'react';
-import { Group, Image as KonvaImage, Text as KonvaText } from 'react-konva';
+import {
+  Group,
+  Image as KonvaImage,
+  Text as KonvaText,
+  Rect as KonvaRect,
+  Ellipse as KonvaEllipse,
+  Line as KonvaLine,
+} from 'react-konva';
+import type Konva from 'konva';
 import type { VideoClip, VideoOutput } from './designer.store';
 import { composeClipsAtPlayhead, sourceTimeForPlayhead } from './video-preview';
+import { clipGeometryUpdate, type ClipBox } from './clip-geometry';
+import { getBuffer } from './raster-layers';
+import {
+  pointsForShape,
+  flattenPoints,
+} from '@postmill-ai/nestjs-libraries/media/designer-doc/shape-geometry';
 
 interface VideoCanvasOverlayProps {
   store: ReturnType<typeof import('./designer.store').createDesignerStore>;
   width: number;
   height: number;
+  /**
+   * Clips only take pointer events under the Move tool. Every other tool needs
+   * the press for itself — the same rule `CanvasElements` follows for elements.
+   */
+  interactive?: boolean;
+  /** Double-click on a text clip asks the host to open the inline editor. */
+  onEditText?: (clipId: string) => void;
 }
 
 const videoElements = new Map<string, HTMLVideoElement>();
@@ -161,13 +182,19 @@ const FilteredClipImage: FC<FilteredClipImageProps> = ({ clip, width, height, ti
     store.getVersion
   );
 
+  // A painted clip draws from its live paint buffer while the stroke is in
+  // progress: `src` only catches up on commit, so drawing from it would lag a
+  // whole stroke behind the cursor (same rule as raster ELEMENTS).
+  const liveBuffer = getBuffer(clip.id);
   const isVideoClip = /\.(mp4|webm|mov|mkv|avi|m4v)$/i.test(clip.src || '') && !clip.frames;
   const isSticker = !!clip.frames;
   const relativeMs = Math.max(0, playheadMs - clip.startMs);
   const stickerFrameUrl = isSticker ? getStickerFrameUrl(clip, relativeMs) : undefined;
-  const source = isVideoClip
-    ? getOrCreateVideo(clip)
-    : getOrCreateImage(stickerFrameUrl ?? clip.src);
+  const source = liveBuffer
+    ? (liveBuffer as unknown as HTMLImageElement)
+    : isVideoClip
+      ? getOrCreateVideo(clip)
+      : getOrCreateImage(stickerFrameUrl ?? clip.src);
   const filterString = useMemo(() => mapFiltersToCss(clip.filters), [clip.filters]);
 
   useEffect(() => {
@@ -185,10 +212,25 @@ const FilteredClipImage: FC<FilteredClipImageProps> = ({ clip, width, height, ti
 
     ctx.clearRect(0, 0, c.width, c.height);
     ctx.filter = filterString;
-    ctx.drawImage(source, 0, 0, c.width, c.height);
+    const cr = clip.crop;
+    if (cr) {
+      ctx.drawImage(
+        source,
+        Math.max(0, cr.x),
+        Math.max(0, cr.y),
+        Math.max(1, cr.width),
+        Math.max(1, cr.height),
+        0,
+        0,
+        c.width,
+        c.height
+      );
+    } else {
+      ctx.drawImage(source, 0, 0, c.width, c.height);
+    }
     ctx.filter = 'none';
     store.emit();
-  }, [source, filterString, width, height, tick, canvasId, store]);
+  }, [source, filterString, width, height, tick, canvasId, store, clip.crop]);
 
   useEffect(() => {
     return () => {
@@ -204,6 +246,18 @@ const FilteredClipImage: FC<FilteredClipImageProps> = ({ clip, width, height, ti
         image={source}
         width={width}
         height={height}
+        // Konva's crop is in source pixels, the same space the schema and the
+        // frame renderer use — so the Crop tool's numbers mean one thing.
+        crop={
+          clip.crop
+            ? {
+                x: Math.max(0, clip.crop.x),
+                y: Math.max(0, clip.crop.y),
+                width: Math.max(1, clip.crop.width),
+                height: Math.max(1, clip.crop.height),
+              }
+            : undefined
+        }
         listening={false}
       />
     );
@@ -308,6 +362,8 @@ export const VideoCanvasOverlay: FC<VideoCanvasOverlayProps> = ({
   store,
   width,
   height,
+  interactive = false,
+  onEditText,
 }) => {
   const doc = store((s) => s.doc);
   const currentOutput = store((s) => s.currentOutput);
@@ -385,22 +441,82 @@ export const VideoCanvasOverlay: FC<VideoCanvasOverlayProps> = ({
     return () => clearOverlayMedia();
   }, []);
 
+  const selectClip = (trackId: string, clipId: string) => {
+    store.getState().setSelectedClip({ outputIndex: currentOutput, trackId, clipId });
+  };
+
+  /**
+   * Fold a finished drag/transform back into the clip.
+   *
+   * Konva reports a resize as a SCALE, so it is baked into width/height here and
+   * the node's scale reset — exactly what `bakeTransform` does for elements, and
+   * for the same reason: a persisted scale would compound on the next gesture.
+   */
+  const commitGeometry = (
+    trackId: string,
+    clip: VideoClip,
+    before: ClipBox,
+    node: Konva.Node
+  ) => {
+    const after: ClipBox = {
+      x: node.x(),
+      y: node.y(),
+      width: Math.max(1, before.width * node.scaleX()),
+      height: Math.max(1, before.height * node.scaleY()),
+      rotation: node.rotation(),
+    };
+    node.scaleX(1);
+    node.scaleY(1);
+
+    const update = clipGeometryUpdate(clip, before, after, playheadMs);
+    if (!update) return;
+    store.getState().updateClip(currentOutput, trackId, clip.id, update);
+  };
+
   if (!isVideo) return null;
 
   return (
     <>
-      {clipsAtPlayhead.map(({ clip, trackType, props }) => {
+      {clipsAtPlayhead.map(({ clip, trackId, trackType, props }) => {
+        // Selection/drag wiring, identical for every clip type.
+        const box: ClipBox = {
+          x: props.x,
+          y: props.y,
+          width: props.width,
+          height: props.height,
+          rotation: props.rotation,
+        };
+        const nodeProps = {
+          id: clip.id,
+          name: 'video-clip',
+          listening: interactive,
+          draggable: interactive,
+          onClick: () => selectClip(trackId, clip.id),
+          onTap: () => selectClip(trackId, clip.id),
+          onDragStart: () => selectClip(trackId, clip.id),
+          onDragEnd: (e: Konva.KonvaEventObject<DragEvent>) =>
+            commitGeometry(trackId, clip, box, e.target),
+          onTransformEnd: (e: Konva.KonvaEventObject<Event>) =>
+            commitGeometry(trackId, clip, box, e.target),
+          ...(trackType === 'text' && onEditText
+            ? {
+                onDblClick: () => onEditText(clip.id),
+                onDblTap: () => onEditText(clip.id),
+              }
+            : {}),
+        };
+
         if (trackType === 'caption') {
           return (
             <Group
               key={clip.id}
+              {...nodeProps}
               x={props.x}
               y={props.y}
               width={props.width}
               height={props.height}
               rotation={props.rotation}
               opacity={props.opacity}
-              listening={false}
             >
               <CaptionClip
                 clip={clip}
@@ -412,10 +528,63 @@ export const VideoCanvasOverlay: FC<VideoCanvasOverlayProps> = ({
           );
         }
 
+        if (trackType === 'shape') {
+          const common = {
+            fill: clip.fill || '#2B5CD3',
+            stroke: clip.stroke,
+            strokeWidth: clip.strokeWidth || (clip.stroke ? 1 : 0),
+          };
+          const points = pointsForShape(
+            clip.shape,
+            props.width,
+            props.height,
+            clip.sides,
+            clip.innerRatio
+          );
+          return (
+            <Group
+              key={clip.id}
+              {...nodeProps}
+              x={props.x}
+              y={props.y}
+              width={props.width}
+              height={props.height}
+              rotation={props.rotation}
+              opacity={props.opacity}
+            >
+              {points ? (
+                <KonvaLine points={flattenPoints(points)} closed {...common} />
+              ) : clip.shape === 'ellipse' ? (
+                <KonvaEllipse
+                  x={props.width / 2}
+                  y={props.height / 2}
+                  radiusX={props.width / 2}
+                  radiusY={props.height / 2}
+                  {...common}
+                />
+              ) : clip.shape === 'line' ? (
+                <KonvaLine
+                  points={[0, props.height / 2, props.width, props.height / 2]}
+                  stroke={clip.stroke || clip.fill || '#2B5CD3'}
+                  strokeWidth={clip.strokeWidth || 2}
+                />
+              ) : (
+                <KonvaRect
+                  width={props.width}
+                  height={props.height}
+                  cornerRadius={clip.borderRadius || 0}
+                  {...common}
+                />
+              )}
+            </Group>
+          );
+        }
+
         if (trackType === 'text') {
           return (
             <KonvaText
               key={clip.id}
+              {...nodeProps}
               x={props.x}
               y={props.y}
               width={props.width}
@@ -427,7 +596,6 @@ export const VideoCanvasOverlay: FC<VideoCanvasOverlayProps> = ({
               fill={clip.fill || '#000000'}
               rotation={props.rotation}
               opacity={props.opacity}
-              listening={false}
             />
           );
         }
@@ -435,13 +603,13 @@ export const VideoCanvasOverlay: FC<VideoCanvasOverlayProps> = ({
         return (
           <Group
             key={clip.id}
+            {...nodeProps}
             x={props.x}
             y={props.y}
             width={props.width}
             height={props.height}
             rotation={props.rotation}
             opacity={props.opacity}
-            listening={false}
           >
             <FilteredClipImage
               clip={clip}

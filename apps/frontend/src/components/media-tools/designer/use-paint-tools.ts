@@ -2,7 +2,7 @@
 
 import { useCallback, useRef, useState } from 'react';
 import type Konva from 'konva';
-import type { DesignerElement, DesignerOutput } from './designer.store';
+import type { DesignerElement, DesignerOutput, VideoOutput } from './designer.store';
 import {
   ensureBuffer,
   getBuffer,
@@ -55,6 +55,9 @@ const MARQUEE_TOOLS = new Set<string>([
 const LASSO_TOOLS = new Set<string>([
   'lasso-polygonal', 'lasso-magnetic', 'lasso-free', 'lasso-brush',
 ]);
+
+/** How long a painted clip lasts when the stroke creates one. */
+const RASTER_CLIP_MS = 4000;
 
 export const isPaintTool = (id: string) => PAINT_TOOLS.has(id);
 export const isMarqueeTool = (id: string) => MARQUEE_TOOLS.has(id);
@@ -137,9 +140,93 @@ export const usePaintTools = ({ store, stageRef, output, fetchFn }: UsePaintTool
     [stageRef, output]
   );
 
-  /** The raster layer to paint into, creating one above the selection if needed. */
+  /**
+   * Where a painted clip lives, so the stroke can be committed back to it.
+   * Null for image documents, which paint into elements.
+   */
+  const rasterClipTrack = useRef<string | null>(null);
+
+  /**
+   * The raster layer to paint into, creating one above the selection if needed.
+   *
+   * A video document has no elements, so the target is a raster CLIP on a raster
+   * track instead. It is adapted into the element shape the paint engine works
+   * with — id and box are all it reads — which keeps one implementation of the
+   * brush maths for both document kinds.
+   */
   const resolveRasterTarget = useCallback((): DesignerElement | null => {
     const state = store.getState();
+    const w = output?.width ?? 1080;
+    const h = output?.height ?? 1080;
+
+    if (state.doc.mode === 'video') {
+      const vo = state.doc.outputs[state.currentOutput] as unknown as VideoOutput;
+      let track = vo.tracks?.find((tr) => tr.type === 'raster');
+      if (!track) {
+        state.addTrack(state.currentOutput, 'raster');
+        const refreshed = store.getState().doc.outputs[state.currentOutput] as unknown as VideoOutput;
+        track = refreshed.tracks.find((tr) => tr.type === 'raster');
+      }
+      if (!track) return null;
+      rasterClipTrack.current = track.id;
+
+      // Paint into the clip under the playhead when there is one, so successive
+      // strokes build up on the same layer rather than stacking new clips.
+      const playheadMs = state.playheadMs;
+      const existing = track.clips.find(
+        (c) => playheadMs >= c.startMs && playheadMs <= c.endMs
+      );
+      if (existing) {
+        return {
+          id: existing.id,
+          type: 'raster',
+          x: existing.x ?? 0,
+          y: existing.y ?? 0,
+          width: existing.width ?? w,
+          height: existing.height ?? h,
+          rotation: 0,
+          opacity: 1,
+          locked: false,
+          hidden: false,
+        } as DesignerElement;
+      }
+
+      const startMs = Math.max(0, Math.min(playheadMs, Math.max(0, (vo.durationMs || 10000) - 1000)));
+      const before = new Set(track.clips.map((c) => c.id));
+      store.getState().addClip(state.currentOutput, track.id, {
+        id: '',
+        startMs,
+        endMs: Math.min(startMs + RASTER_CLIP_MS, vo.durationMs || startMs + RASTER_CLIP_MS),
+        x: 0,
+        y: 0,
+        width: w,
+        height: h,
+        opacity: 1,
+      });
+      const after = (store.getState().doc.outputs[state.currentOutput] as unknown as VideoOutput)
+        .tracks.find((tr) => tr.id === track!.id);
+      const created = after?.clips.find((c) => !before.has(c.id));
+      if (!created) return null;
+      store.getState().setSelectedClip({
+        outputIndex: state.currentOutput,
+        trackId: track.id,
+        clipId: created.id,
+      });
+      return {
+        id: created.id,
+        type: 'raster',
+        x: 0,
+        y: 0,
+        width: w,
+        height: h,
+        rotation: 0,
+        opacity: 1,
+        locked: false,
+        hidden: false,
+      } as DesignerElement;
+    }
+
+    rasterClipTrack.current = null;
     const children = (state.doc.outputs[state.currentOutput] as DesignerOutput)?.children || [];
     const selected = children.find(
       (c: DesignerElement) => c.id === state.selectedIds[0] && c.type === 'raster'
@@ -147,9 +234,7 @@ export const usePaintTools = ({ store, stageRef, output, fetchFn }: UsePaintTool
     if (selected) return selected;
 
     const before = new Set(children.map((c: DesignerElement) => c.id));
-    state.addElement(
-      buildRasterElement(output?.width ?? 1080, output?.height ?? 1080)
-    );
+    state.addElement(buildRasterElement(w, h));
     const after =
       (store.getState().doc.outputs[state.currentOutput] as DesignerOutput)?.children || [];
     const created = after.find((c: DesignerElement) => !before.has(c.id));
@@ -261,7 +346,15 @@ export const usePaintTools = ({ store, stageRef, output, fetchFn }: UsePaintTool
 
     const result = await commitBuffer(id, fetchFn);
     if (result) {
-      store.getState().updateElement(id, { src: result.src, fileId: result.fileId });
+      const trackId = rasterClipTrack.current;
+      if (trackId) {
+        store.getState().updateClip(store.getState().currentOutput, trackId, id, {
+          src: result.src,
+          fileId: result.fileId,
+        });
+      } else {
+        store.getState().updateElement(id, { src: result.src, fileId: result.fileId });
+      }
       store.getState().pushHistory();
     }
   }, [fetchFn, store]);

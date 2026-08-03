@@ -7,7 +7,6 @@ import { useUser } from '@postmill-ai/frontend/components/layout/user.context';
 import { useToaster } from '@postmill-ai/react/toaster/toaster';
 import { useT } from '@postmill-ai/react/translation/get.transation.service.client';
 import ProviderIcon from '@postmill-ai/frontend/components/shared/provider-icon';
-import { PanelSkeletonGrid, PanelError } from './panel-states';
 import { useCustomFonts, CustomFontEntry } from './use-brand-fonts';
 import { getBrandViolations } from '../brand-compliance';
 import { useMediaPicker } from '../../use-media-picker';
@@ -121,7 +120,6 @@ export const BrandPanel: FC<BrandPanelProps> = ({ store }) => {
   const {
     data: files,
     error: filesError,
-    isLoading: filesLoading,
     mutate: mutateFiles,
   } = useSWR(
     `brand-logo-files-${user.orgId}`,
@@ -233,11 +231,36 @@ export const BrandPanel: FC<BrandPanelProps> = ({ store }) => {
   }) => {
     if (item.type !== 'image') return;
     addLogoToCanvas({ id: item.fileId || '', path: item.url, name: 'Logo' });
-  }, [addLogoToCanvas]);
+    // Remember it as a brand logo too. Picking used to only place the image;
+    // saving one was the job of the file browser this replaced.
+    if (item.fileId && !logoFileIds.includes(item.fileId)) {
+      persist({ logoFileIds: [...logoFileIds, item.fileId] });
+      void mutateFiles();
+    }
+  }, [addLogoToCanvas, logoFileIds, persist, mutateFiles]);
+
+  const setBrandVideo = useCallback(
+    (slot: 'introFileId' | 'outroFileId', fileId: string | null) => {
+      persist({ [slot]: fileId } as Partial<BrandProfile>);
+      if (fileId) void mutateFiles();
+    },
+    [persist, mutateFiles]
+  );
 
   const mediaPicker = useMediaPicker({
     title: t('brand_logo', 'Brand logo'),
     onSelect: handleModalSelect,
+  });
+
+  const introPicker = useMediaPicker({
+    title: t('designer_brand_intro', 'Intro video'),
+    kinds: ['video'],
+    onSelect: (item) => setBrandVideo('introFileId', item.fileId || null),
+  });
+  const outroPicker = useMediaPicker({
+    title: t('designer_brand_outro', 'Outro video'),
+    kinds: ['video'],
+    onSelect: (item) => setBrandVideo('outroFileId', item.fileId || null),
   });
 
   const handleFontUpload = useCallback(
@@ -453,49 +476,6 @@ export const BrandPanel: FC<BrandPanelProps> = ({ store }) => {
           </div>
         )}
 
-        <div className="text-[11px] text-newTextColor/60">{t('designer_pick_from_files', 'Pick from files')}</div>
-        {filesLoading && !files ? (
-          <PanelSkeletonGrid count={3} columnsClassName="grid-cols-3" aspectClassName="aspect-square" />
-        ) : filesError && !files ? (
-          <PanelError message={t('designer_couldnt_load_files', "Couldn't load files")} onRetry={() => mutateFiles()} />
-        ) : !files?.results?.length ? (
-          <div className="text-[12px] text-newTextColor/60 text-center py-2">
-            {t('no_files_found', 'No files found')}
-          </div>
-        ) : (
-          <div className="grid grid-cols-3 gap-2">
-            {files.results.map((file) => {
-              const picked = logoFileIds.includes(file.id);
-              return (
-                <button
-                  key={file.id}
-                  type="button"
-                  onClick={() => toggleLogo(file.id)}
-                  aria-pressed={picked}
-                  title={file.name}
-                  className={`relative aspect-square rounded-lg overflow-hidden border-2 transition-all ${
-                    picked
-                      ? 'border-designerAccent ring-1 ring-designerAccent'
-                      : 'border-studioBorder hover:border-designerAccent'
-                  }`}
-                >
-                  {/* eslint-disable-next-line @next/next/no-img-element -- external media file */}
-                  <img
-                    src={file.path}
-                    alt={file.name}
-                    className="w-full h-full object-cover"
-                    loading="lazy"
-                  />
-                  {picked && (
-                    <span className="absolute top-1 right-1 w-4 h-4 rounded-full bg-designerAccent text-white text-[10px] flex items-center justify-center">
-                      ✓
-                    </span>
-                  )}
-                </button>
-              );
-            })}
-          </div>
-        )}
       </div>
 
       {/* Intro / Outro */}
@@ -507,59 +487,42 @@ export const BrandPanel: FC<BrandPanelProps> = ({ store }) => {
           </span>
         </div>
 
-        <div className="text-[11px] text-newTextColor/60">{t('designer_pick_from_video_files', 'Pick from video files')}</div>
-        {filesLoading && !files ? (
-          <PanelSkeletonGrid count={3} columnsClassName="grid-cols-3" aspectClassName="aspect-square" />
-        ) : filesError && !files ? (
-          <PanelError message={t('designer_couldnt_load_files', "Couldn't load files")} onRetry={() => mutateFiles()} />
-        ) : !files?.results?.length ? (
-          <div className="text-[12px] text-newTextColor/60 text-center py-2">
-            {t('no_files_found', 'No files found')}
-          </div>
-        ) : (
-          <div className="grid grid-cols-2 gap-2">
-            {files.results
-              .filter((f) => /\.(mp4|webm|mov|mkv|avi|m4v)$/i.test(f.path))
-              .map((file) => {
-                const isIntro = activeBrand?.introFileId === file.id;
-                const isOutro = activeBrand?.outroFileId === file.id;
-                return (
-                  <button
-                    key={file.id}
-                    type="button"
-                    onClick={() => {
-                      if (isIntro) persist({ introFileId: null });
-                      else if (isOutro) persist({ outroFileId: null });
-                      else persist({ introFileId: file.id });
-                    }}
-                    onContextMenu={(e) => {
-                      e.preventDefault();
-                      if (isOutro) persist({ outroFileId: null });
-                      else persist({ outroFileId: file.id });
-                    }}
-                    title={t('designer_intro_outro_hint', '{{name}} — click=intro, right-click=outro', { name: file.name })}
-                    className={`relative aspect-video rounded-lg overflow-hidden border-2 transition-all ${
-                      isIntro || isOutro
-                        ? 'border-designerAccent ring-1 ring-designerAccent'
-                        : 'border-studioBorder hover:border-designerAccent'
-                    }`}
-                  >
-                    <video
-                      src={file.path}
-                      className="w-full h-full object-cover"
-                      muted
-                      preload="metadata"
-                    />
-                    {(isIntro || isOutro) && (
-                      <span className="absolute bottom-1 left-1 px-1.5 py-0.5 rounded text-[9px] bg-designerAccent text-white">
-                        {isIntro ? t('designer_intro_badge', 'INTRO') : t('designer_outro_badge', 'OUTRO')}
-                      </span>
-                    )}
-                  </button>
-                );
-              })}
-          </div>
-        )}
+        {/* Chosen intro/outro, set through the media picker — the panel holds
+            settings, not a file browser. */}
+        {(['intro', 'outro'] as const).map((slot) => {
+          const key = slot === 'intro' ? 'introFileId' : 'outroFileId';
+          const fileId = (activeBrand as BrandProfile | undefined)?.[key] || null;
+          const file = fileId ? fileById.get(fileId) : undefined;
+          const picker = slot === 'intro' ? introPicker : outroPicker;
+          return (
+            <div key={slot} className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={picker.open}
+                className="flex-1 px-3 py-2 rounded-lg text-[12px] border border-studioBorder text-textColor hover:bg-boxHover transition-colors text-start truncate"
+              >
+                {file?.name ||
+                  (fileId
+                    ? t('designer_brand_video_set', '{{slot}} set', { slot })
+                    : slot === 'intro'
+                      ? t('designer_choose_intro', 'Choose intro video…')
+                      : t('designer_choose_outro', 'Choose outro video…'))}
+              </button>
+              {fileId && (
+                <button
+                  type="button"
+                  onClick={() => setBrandVideo(key, null)}
+                  aria-label={t('remove', 'Remove')}
+                  className="shrink-0 w-7 h-7 rounded-md text-textColor/60 hover:bg-studioBorder/40 hover:text-textColor"
+                >
+                  ✕
+                </button>
+              )}
+            </div>
+          );
+        })}
+        {introPicker.element}
+        {outroPicker.element}
 
         {doc.mode === 'video' && (
           <div className="flex gap-2">

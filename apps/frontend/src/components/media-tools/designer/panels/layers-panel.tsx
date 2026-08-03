@@ -12,6 +12,12 @@ import {
 } from '@postmill-ai/nestjs-libraries/media/designer-doc/layer-tree';
 import { SELECTABLE_BLEND_MODES } from '@postmill-ai/nestjs-libraries/media/designer-doc/pixel-ops';
 import { layerThumbnail } from './layer-thumbnail';
+import {
+  EyeIcon,
+  EyeOffIcon,
+  LockIcon,
+  UnlockIcon,
+} from '@postmill-ai/frontend/components/ui/icons/designer-tools';
 
 interface LayersPanelProps {
   store: ReturnType<typeof import('../designer.store').createDesignerStore>;
@@ -359,9 +365,9 @@ export const LayersPanel: FC<LayersPanelProps> = ({ store, onClose }) => {
                   store.getState().updateElement(el.id, { hidden: !el.hidden });
                   store.getState().pushHistory();
                 }}
-                className="shrink-0 w-5 text-[11px] text-textColor/55 hover:text-textColor"
+                className="shrink-0 w-5 h-5 flex items-center justify-center text-textColor/55 hover:text-textColor"
               >
-                {el.hidden ? '◌' : '◎'}
+                {el.hidden ? <EyeOffIcon size={13} /> : <EyeIcon size={13} />}
               </button>
               <button
                 type="button"
@@ -372,9 +378,9 @@ export const LayersPanel: FC<LayersPanelProps> = ({ store, onClose }) => {
                   store.getState().updateElement(el.id, { locked: !el.locked });
                   store.getState().pushHistory();
                 }}
-                className="shrink-0 w-5 text-[11px] text-textColor/55 hover:text-textColor"
+                className="shrink-0 w-5 h-5 flex items-center justify-center text-textColor/55 hover:text-textColor"
               >
-                {el.locked ? '◉' : '○'}
+                {el.locked ? <LockIcon size={13} /> : <UnlockIcon size={13} />}
               </button>
             </div>
           );

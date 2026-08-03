@@ -160,16 +160,25 @@ Gate composer/UI features per channel on the shared capability matrix, not on ad
   `apps/frontend/src/components/composer/providers/show.all.providers.tsx`.
 - Full walkthrough: `agents/providers/social.md`.
 
-## Designer: two renderers, one document
+## Designer: three renderers, one document
 
-`/media/designer` draws every document **twice** — client-side through Konva
-(`components/media-tools/designer/elements.tsx`, used by the canvas *and* the PNG/JPEG/WebP export)
-and server-side through node-canvas
-(`libraries/nestjs-libraries/src/media/design-render/design-render.service.ts`, used for PDF, video
-and bulk generation). The two must produce the same picture, so **every rule either side needs goes
-in a shared pure module under `designer-doc/`** — `fit-text`, `shape-geometry`, `path-geometry`,
-`layer-tree`, `pixel-ops`, `layer-styles`, `pattern-tiles`. Reimplementing one of those rules on one
-side is how the exports drift.
+`/media/designer` draws every document **three times**:
+
+| Path | Where | Used for |
+|---|---|---|
+| Konva | `designer/elements.tsx`, `designer/video-canvas-overlay.tsx` | the canvas *and* PNG/JPEG/WebP export |
+| node-canvas | `design-render/design-render.service.ts` | PDF and bulk generation |
+| a browser script | `design-render/frame-renderer-script.ts` | video frames, in headless Chromium |
+
+All three must produce the same picture, so **every rule any of them needs goes in a shared pure
+module under `designer-doc/`** — `fit-text`, `shape-geometry`, `path-geometry`, `layer-tree`,
+`pixel-ops`, `layer-styles`, `pattern-tiles`. Reimplementing one of those rules in one renderer is
+how the exports drift.
+
+The frame renderer is injected into a page as text and cannot import, so it takes the shared code as
+**source**: `shapeGeometrySource()` stringifies the geometry functions (and everything they close
+over) for the script to prepend. A spec evaluates that source and diffs it against the real
+functions, which is what stops the third path silently forking.
 
 Layer semantics that are easy to get wrong, and that the renderers must agree on:
 
@@ -184,6 +193,12 @@ Layer semantics that are easy to get wrong, and that the renderers must agree on
   `backdrop` (so it joins the fold) rather than rendering it as a sibling.
 - **Server readbacks are in DEVICE pixels.** `ctx.scale(ratio, ratio)` is applied once at page setup
   and never undone, so `getImageData` with logical coordinates reads the wrong region.
+- **Video clips are canvas objects too.** The tool palette applies to both document kinds: a clip
+  carries the same geometry an element does, and a drag writes back through `clip-geometry.ts` as a
+  DELTA — writing absolute values would collapse a keyframed clip's animation onto whichever frame
+  was showing. A keyframe sitting under the playhead is edited in place; otherwise the base props
+  move. Track types `shape` and `raster` (doc v5) exist so shape and paint tools have somewhere to
+  put their output on a timeline.
 
 Acceptance test for any change here: render the same document through **both** paths and diff them —
 a document with a blended group, a clipped adjustment and a layer style is the case that catches

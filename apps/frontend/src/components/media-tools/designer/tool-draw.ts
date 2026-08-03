@@ -1,4 +1,4 @@
-import type { DesignerElement } from './designer.store';
+import type { DesignerElement, VideoClip } from './designer.store';
 import {
   DEFAULT_POLYGON_SIDES,
   DEFAULT_STAR_POINTS,
@@ -28,6 +28,9 @@ export interface DrawModifiers {
 
 /** Smallest drag that counts as a draw rather than a click. */
 export const MIN_DRAW_SIZE = 4;
+
+/** How long a shape drawn on a timeline lasts by default. */
+const SHAPE_CLIP_MS = 4000;
 
 /**
  * Turn a drag into a normalised rect, honouring Shift (constrain) and Alt
@@ -141,4 +144,42 @@ export const buildShapeElement = (
   }
 
   return el;
+};
+
+/**
+ * The same drag, expressed as a video CLIP.
+ *
+ * A shape is a shape whichever kind of document it lands in, so the geometry is
+ * taken straight off the element builder and only the timing fields are added.
+ * Deriving it rather than duplicating the option handling means the tool
+ * options bar keeps working identically in both modes.
+ */
+export const buildShapeClip = (
+  toolId: string,
+  rect: DrawRect,
+  playheadMs: number,
+  durationMs: number,
+  options: Record<string, unknown> = {}
+): VideoClip => {
+  const el = buildShapeElement(toolId, rect, options);
+  const startMs = Math.max(0, Math.min(playheadMs, Math.max(0, durationMs - 1000)));
+
+  return {
+    id: '',
+    startMs,
+    endMs: Math.min(startMs + SHAPE_CLIP_MS, durationMs || startMs + SHAPE_CLIP_MS),
+    x: el.x,
+    y: el.y,
+    width: el.width,
+    height: el.height,
+    rotation: 0,
+    opacity: 1,
+    shape: el.shape,
+    sides: el.sides,
+    innerRatio: el.innerRatio,
+    fill: el.fill,
+    stroke: el.stroke,
+    strokeWidth: el.strokeWidth,
+    borderRadius: el.borderRadius,
+  };
 };
