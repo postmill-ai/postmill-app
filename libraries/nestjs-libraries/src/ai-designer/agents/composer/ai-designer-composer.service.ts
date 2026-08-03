@@ -73,6 +73,7 @@ import {
   wrapMoveUnitsInGroups,
 } from '../../util/layer-groups';
 import { markTemplateSlots } from '../../util/template-slots';
+import { buildExtraSlots } from './extra-slots';
 import {
   applySlotRecipes,
   emitDecor,
@@ -4268,6 +4269,31 @@ export class AiDesignerComposerService implements OnModuleInit {
         break;
     }
 
+    // The slot kinds nothing else builds — `shape`, `icon`, `divider`, `logo`,
+    // `frame`. Declared across forty-one skills and read by none of the three
+    // buckets above, so every one was dropped before this point.
+    const headlineBox = elements.find(
+      (el) => el.type === 'text' && (el.originId || '').includes('headline')
+    );
+    elements = elements.concat(
+      buildExtraSlots(plan.slots, {
+        w,
+        h,
+        margin,
+        accents: style.accents,
+        ink: style.text,
+        headline: headlineBox
+          ? {
+              x: headlineBox.x,
+              y: headlineBox.y,
+              width: headlineBox.width,
+              height: headlineBox.height,
+            }
+          : undefined,
+        logo: this._logoAsset(assets),
+      })
+    );
+
     const withOrigins = elements.map((el) => ({
       ...el,
       originId: el.originId || el.id,
@@ -4318,6 +4344,27 @@ export class AiDesignerComposerService implements OnModuleInit {
    * re-render is needed; allocating unconditionally would make every one of
    * them think the document had changed.
    */
+  /**
+   * The brand logo, when the asset agent resolved one.
+   *
+   * Matched by slot id rather than by kind: the asset map is keyed by the slot
+   * that asked for the asset, and a `logo` slot is the only thing that asks.
+   */
+  private _logoAsset(assets: Record<string, AssetResult>):
+    | { src?: string; fileId?: string; naturalWidth?: number; naturalHeight?: number }
+    | undefined {
+    const asset =
+      assets['logo'] ||
+      Object.values(assets).find((a) => (a.slotId || '').toLowerCase().includes('logo'));
+    if (!asset?.path) return undefined;
+    return {
+      src: asset.path,
+      fileId: asset.fileId,
+      naturalWidth: asset.naturalWidth,
+      naturalHeight: asset.naturalHeight,
+    };
+  }
+
   private _recoupleAdjustments(doc: DesignerDoc): DesignerDoc {
     let moved = false;
     const outputs = doc.outputs.map((out) => {

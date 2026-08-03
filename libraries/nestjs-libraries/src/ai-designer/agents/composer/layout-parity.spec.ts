@@ -179,3 +179,43 @@ describe('the same plan across aspects', () => {
     expect(sizeOf(square)).toBeGreaterThan(0);
   });
 });
+
+/**
+ * The defect this batch fixes, stated end to end.
+ *
+ * `shape`, `icon`, `divider`, `logo` and `frame` were added to `DesignSlot` and
+ * declared across forty-one skills, and `_buildElements` read `plan.slots` in
+ * three places that matched none of them. The slots were dropped before
+ * anything was built, silently, in every design that asked for one.
+ */
+describe('slot kinds that used to vanish', () => {
+  const withKinds = planFor('type-dominant', [
+    { id: 'headline', role: 'headline', kind: 'text' },
+    { id: 'sub', role: 'subhead', kind: 'text' },
+    { id: 'rule', role: 'decor', kind: 'divider' },
+    { id: 'mark', role: 'decor', kind: 'shape' },
+    { id: 'edge', role: 'decor', kind: 'frame' },
+  ]);
+
+  it('composes an element for every declared kind', async () => {
+    const doc = await compose(withKinds, CANVASES[0]);
+    const origins = geometry(doc).children.map((c) => c.originId);
+    for (const id of ['rule', 'mark', 'edge']) {
+      expect(origins, `${id} was dropped`).toContain(id);
+    }
+  });
+
+  it('keeps them inside the canvas', async () => {
+    const doc = await compose(withKinds, CANVASES[1]);
+    for (const el of geometry(doc).children) {
+      expect(el.x, el.originId as string).toBeGreaterThanOrEqual(-1);
+      expect(el.y, el.originId as string).toBeGreaterThanOrEqual(-1);
+    }
+  });
+
+  it('still composes when a plan declares none of them', async () => {
+    // The fix must be inert for every plan written before it.
+    const doc = await compose(planFor('hero-fullbleed', SLOT_SETS.full), CANVASES[0]);
+    expect(geometry(doc).children.length).toBeGreaterThan(0);
+  });
+});
