@@ -1,4 +1,4 @@
-import { getSafeZoneInset } from '../../media/designer-doc/reflow';
+import { canvasMarginPx, getSafeZoneInset } from '../../media/designer-doc/reflow';
 
 /**
  * The modular grid a composition is laid out on.
@@ -67,16 +67,6 @@ export const columnsFor = (width: number, height: number): number => {
 export const canvasTypeBasis = (width: number, height: number): number =>
   Math.sqrt(Math.max(1, width) * Math.max(1, height));
 
-/**
- * Margins as a share of the type basis rather than of the canvas.
- *
- * A percentage-of-width margin looks correct on one aspect and wrong on the
- * next; tying it to the same basis the type uses keeps the relationship between
- * the text and the edge constant, which is what actually reads as "the same
- * design".
- */
-const MARGIN_RATIO = 0.055;
-
 export const buildGrid = (canvas: {
   width: number;
   height: number;
@@ -91,7 +81,12 @@ export const buildGrid = (canvas: {
   // edge — a story's bottom 200px belongs to the caption UI whatever the
   // margin says.
   const safe = getSafeZoneInset(canvas.formatId || '', width, height);
-  const margin = typeBasis * MARGIN_RATIO;
+  // `canvasMarginPx`, NOT a margin of the engine's own. The composer has always
+  // used it, every element the factories place is measured against it, and its
+  // own assertions pin copy to it — an engine margin a few pixels away from the
+  // established one puts every ported layout marginally out of true against the
+  // half of the design it does not yet own.
+  const margin = canvasMarginPx(width, height);
 
   const left = Math.max(margin, safe.left);
   const top = Math.max(margin, safe.top);

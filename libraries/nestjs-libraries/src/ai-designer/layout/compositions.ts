@@ -89,15 +89,19 @@ export const COMPOSITIONS: Composition[] = [
     typeScale: 0.8,
     label: 'Top and Bottom',
     description: 'A caption band above and below the image. Meme grammar.',
-    roles: ['image', 'headline', 'subhead', 'legal'],
+    // `cta` is placed even though meme grammar rarely uses one: the legacy
+    // builder allowed its bottom slot to be a CTA, and a composition that
+    // declares fewer roles than the layout it replaces drops copy silently.
+    roles: ['image', 'headline', 'subhead', 'cta', 'legal'],
     requires: [],
     build: (ctx) => ({
       kind: 'stack',
       gap: 2,
       children: present(ctx, [
         slot('headline'),
-        slot('image', { fill: true }),
+        slot('image', { fill: true, bleed: true }),
         slot('subhead'),
+        slot('cta'),
         slot('legal', { rigid: true }),
       ]),
     }),
@@ -106,6 +110,10 @@ export const COMPOSITIONS: Composition[] = [
     id: 'badge-burst',
     copyBandRatio: 0.59,
     typeScale: 0.95,
+    badgeAlign: 'center',
+    badgeStyle: 'pill',
+    badgeIgnoresPlanPosition: true,
+    badgeTopRatio: 0.14,
     label: 'Badge Burst',
     description: 'A large badge is the centrepiece, with copy stacked beneath it.',
     roles: ['image', 'badge', 'headline', 'subhead', 'cta', 'legal'],
@@ -149,20 +157,32 @@ export const COMPOSITIONS: Composition[] = [
     id: 'minimal-centered',
     copyBandRatio: 0.52,
     typeScale: 0.9,
+    textVerticalAlign: 'middle',
+    badgeAlign: 'center',
     label: 'Minimal Centred',
     description: 'A small image above centred copy, with generous space around it.',
     roles: ['image', 'headline', 'subhead', 'cta', 'badge', 'legal'],
     requires: [],
     build: (ctx) => ({
       kind: 'stack',
-      justify: 'center',
-      align: 'center',
       gap: 4,
       children: present(ctx, [
-        slot('image', { aspect: 1.6 }),
-        slot('headline'),
-        slot('subhead'),
-        slot('cta'),
+        // An edge-to-edge band, never an inset panel. `aspect` sizes it; `bleed`
+        // takes it out to the canvas edges.
+        slot('image', { aspect: 2.6, bleed: true }),
+        {
+          kind: 'stack',
+          fill: true,
+          justify: 'center',
+          align: 'center',
+          gap: 3,
+          children: present(ctx, [
+            slot('badge'),
+            slot('headline'),
+            slot('subhead'),
+            slot('cta'),
+          ]),
+        },
         slot('legal', { rigid: true }),
       ]),
     }),

@@ -8,6 +8,7 @@ import {
   snapToBaseline,
   canvasTypeBasis,
 } from './grid';
+import { canvasMarginPx } from '../../media/designer-doc/reflow';
 
 /**
  * The grid every composition is measured against. Its job is to make one
@@ -88,13 +89,15 @@ describe('buildGrid', () => {
     expect(story.left / story.typeBasis).toBeCloseTo(square.left / square.typeBasis, 3);
   });
 
-  it('never lets the design margin be squeezed below its ratio', () => {
-    // The other half of the same rule: a safe zone may push content further in,
-    // never let it drift closer to the edge than the design allows.
+  it('uses the composer′s established margin, not one of its own', () => {
+    // The engine briefly invented a margin from the type basis, a few pixels
+    // away from `canvasMarginPx`. Every element the factories place is measured
+    // against the latter, and the composer's assertions pin copy to it — so an
+    // engine margin of its own put every ported layout marginally out of true
+    // against the half of the design the engine did not yet own.
     for (const canvas of [SQUARE, STORY, BANNER]) {
       const grid = buildGrid(canvas);
-      expect(grid.left).toBeGreaterThanOrEqual(grid.typeBasis * 0.055 - 0.001);
-      expect(grid.top).toBeGreaterThanOrEqual(grid.typeBasis * 0.055 - 0.001);
+      expect(grid.left).toBeGreaterThanOrEqual(canvasMarginPx(canvas.width, canvas.height) - 0.001);
     }
   });
 

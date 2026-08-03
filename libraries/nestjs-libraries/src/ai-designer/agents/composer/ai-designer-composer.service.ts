@@ -165,6 +165,26 @@ type LayoutId =
 
 // Legacy template ids from stored/v1 plans map into the gallery so older
 // plans still compose.
+/**
+ * Legacy layouts the engine has taken over.
+ *
+ * Ported one at a time, each behind its own reviewed snapshot diff, because
+ * these six encode about eight rounds of live remediation. A layout leaves this
+ * set only by having its geometry justified box by box.
+ */
+const ENGINE_OWNED_LEGACY = new Set<string>([
+  'minimal-centered',
+  'top-bottom',
+  'hero-fullbleed',
+  'badge-burst',
+  // NOT the two panel layouts. Both paint a solid slab over one column
+  // (`split-panel-bg` / `editorial-sidebar-bg`) and lay their copy inside it,
+  // and the engine has no concept of a background panel — twelve assertions
+  // depend on the slab, the panel side, the image column filling the
+  // complement, and the uncapped balance shift that only applies inside a
+  // panel. That is a composition feature to build, not a flag to flip.
+]);
+
 const LAYOUT_ALIASES: Record<string, LayoutId> = {
   'top-bottom-text': 'top-bottom',
   'two-panel': 'split-panel',
@@ -4450,11 +4470,25 @@ export class AiDesignerComposerService implements OnModuleInit {
     // those names include the new compositions. Reading only `composition`
     // would leave the engine unreachable for everything except a plan written
     // after schema v3.
-    const requested = plan.composition || plan.formatTemplate;
-    // A plan naming nothing, or naming one of the six, stays on the builders:
-    // those are locked by the golden snapshots and ported one reviewed diff at
-    // a time.
-    if (!requested || LAYOUT_TEMPLATE_IDS.includes(requested as LayoutId)) return undefined;
+    // A per-channel override arrives as an `effectiveLayout` that differs from
+    // the plan's own template, and it must WIN — otherwise a story told to use
+    // `side-by-side` silently composes the primary's arrangement instead, and
+    // the whole point of `channelLayouts` is lost.
+    const planTemplate = this._resolveTemplate(plan);
+    const overridden = effectiveLayout !== planTemplate;
+    const requested = overridden
+      ? effectiveLayout
+      : plan.composition || plan.formatTemplate;
+    // The legacy six are ported one at a time, each behind its own reviewed
+    // snapshot diff. Anything still absent from `ENGINE_OWNED_LEGACY` stays on
+    // its hand-written builder.
+    if (!requested) return undefined;
+    if (
+      LAYOUT_TEMPLATE_IDS.includes(requested as LayoutId) &&
+      !ENGINE_OWNED_LEGACY.has(requested)
+    ) {
+      return undefined;
+    }
 
     const bound = this._boundSlots(canvas.copy, plan);
     const byRole = groupByRole(bound);
@@ -4463,10 +4497,13 @@ export class AiDesignerComposerService implements OnModuleInit {
       has: (role) => (byRole.get(role)?.length ?? 0) > 0,
     }, effectiveLayout);
 
-    // `resolveCompositionFor` falls back to the effective layout when the
-    // requested one does not fit; if it landed on one of the six, the builders
-    // own it.
-    return LAYOUT_TEMPLATE_IDS.includes(composition.id as LayoutId) ? undefined : composition;
+    // `resolveCompositionFor` falls back when the requested one does not fit;
+    // if it landed on a legacy layout the engine does not own yet, the builders
+    // keep it.
+    return LAYOUT_TEMPLATE_IDS.includes(composition.id as LayoutId) &&
+      !ENGINE_OWNED_LEGACY.has(composition.id)
+      ? undefined
+      : composition;
   }
 
   /** Every slot the engine can place, with its resolved role and copy. */
@@ -4532,33 +4569,74 @@ export class AiDesignerComposerService implements OnModuleInit {
 
     elements.push(...accents);
 
+    // BADGES and the FOOTER stay with `_pushBadges` and `_pushFooter`.
+    //
+    // Those two carry the bulk of the remediation — plan-requested corners,
+    // parking a bottom corner on its band bottom, stamping `anchor` so the
+    // corner survives a re-fit to another format, and the footer's bottom-edge
+    // contract measured against `canvasMarginPx`. None of that is layout in the
+    // sense the engine means; it is edge and corner arithmetic, already correct,
+    // and reimplementing it would be re-deriving eight rounds of fixes for
+    // nothing. The engine owns the copy stack and the imagery, which is where
+    // the templates actually constrained it.
+    const column = this._safeColumn(ctx, ctx.margin, ctx.w - ctx.margin * 2);
+    const badges = this._pushBadges(
+      ctx,
+      elements,
+      badgeSlots,
+      roles,
+      {
+        x: column.x,
+        y: composition.badgeTopRatio
+          ? Math.round(ctx.h * composition.badgeTopRatio)
+          : ctx.margin,
+        width: column.width,
+        bottom: ctx.h - ctx.margin,
+      },
+      composition.badgeAlign ?? 'right',
+      composition.badgeStyle,
+      composition.badgeIgnoresPlanPosition
+    );
+    const footers = this._pushFooter(
+      ctx,
+      elements,
+      legalSlots,
+      roles,
+      { x: column.x, width: column.width, bottom: this._footerBottom(ctx) },
+      { align: 'center', backdrop: ctx.outputBg }
+    );
+
+    const claimed = new Set([...badgeSlots, ...legalSlots]);
     for (const b of bound) {
       const box = boxes.get(b.slot.id);
       if (!box || b.slot.kind === 'image' || b.slot.role === 'image') continue;
-      if (!b.text.trim()) continue;
+      if (!b.text.trim() || claimed.has(b.slot)) continue;
 
-      if (badgeSlots.includes(b.slot)) {
-        elements.push(
-          ...this._badgeElements(b.slot, b.text, { x: box.x, y: box.y, width: box.width }, ctx, {})
-        );
-        continue;
-      }
+      // Keep the copy clear of whatever the badge and footer took.
+      const band = this._carveCopyBand(
+        badges.map((el) => ({ y: el.y, height: el.height })),
+        box.y,
+        this._bandBottom(ctx, footers, box.y + box.height),
+        Math.round(ctx.scale.cta * 0.9),
+        this._badgeAtBottom(ctx)
+      );
+      const placed = { ...box, y: Math.max(box.y, band.y) };
+
       if (b.role === 'cta') {
         elements.push(
-          ...this._ctaElements(b.slot, b.text, { x: box.x, y: box.y, width: box.width }, ctx, {})
+          ...this._ctaElements(b.slot, b.text, { x: placed.x, y: placed.y, width: placed.width }, ctx, {})
         );
         continue;
       }
-      const isLegal = legalSlots.includes(b.slot);
       elements.push(
-        this._styledTextElement(b.slot, isLegal ? 'legal' : b.role, b.text, box, ctx, {
+        this._styledTextElement(b.slot, b.role, b.text, placed, ctx, {
           align: b.slot.style?.align,
+          verticalAlign: composition.textVerticalAlign,
         })
       );
     }
 
     void textSlots;
-    void roles;
     return elements;
   }
 

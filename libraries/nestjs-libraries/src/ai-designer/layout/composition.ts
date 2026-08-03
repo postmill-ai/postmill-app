@@ -62,6 +62,21 @@ export interface Composition {
    * half the width, so its headline has to be smaller to say the same thing.
    */
   typeScale: number;
+  /**
+   * Vertical alignment for this arrangement's copy inside its box.
+   *
+   * `minimal-centered` sets `middle`, and its own spec pins that: a centred
+   * arrangement whose type hangs from the top of its box is not centred.
+   */
+  textVerticalAlign?: 'top' | 'middle' | 'bottom';
+  /** Where this arrangement pins its badge when the plan does not say. */
+  badgeAlign?: 'left' | 'center' | 'right';
+  /** Badge shape this arrangement forces, over the preset's own. */
+  badgeStyle?: 'pill' | 'burst' | 'ribbon';
+  /** The badge IS the layout, so a plan-requested corner is ignored. */
+  badgeIgnoresPlanPosition?: boolean;
+  /** Where the badge band starts, as a share of canvas height. */
+  badgeTopRatio?: number;
   /** The tree, built against a canvas whose aspect is known. */
   build(ctx: CompositionContext): LayoutNode;
 }

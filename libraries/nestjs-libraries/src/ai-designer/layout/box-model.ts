@@ -53,6 +53,14 @@ export interface LeafNode {
   /** Do not shrink this node when a stack overflows. */
   rigid?: boolean;
   /**
+   * Ignore the copy margin and run to the canvas edge.
+   *
+   * Imagery is edge-to-edge or it is a framed inset, and a framed inset is a
+   * defect three separate assertions already forbid. The grid's margin exists
+   * for TYPE; a photograph inset by it reads as a mistake.
+   */
+  bleed?: boolean;
+  /**
    * Take whatever height the stack has left over instead of reporting an
    * intrinsic one — a hero image filling the space below the copy.
    *

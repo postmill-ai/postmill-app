@@ -124,6 +124,9 @@ export interface LayoutRequest {
  * an element is built.
  */
 export const layoutSlots = (request: LayoutRequest): Map<string, Box> => {
+  // Which slots asked to run to the canvas edge, collected before binding
+  // rewrites the leaf ids.
+  const bleeding = new Set<string>();
   const { composition, grid, slots, measureSlot } = request;
   const byRole = groupByRole(slots);
   const bySlotId = new Map(slots.map((b) => [b.slot.id, b]));
@@ -152,12 +155,31 @@ export const layoutSlots = (request: LayoutRequest): Map<string, Box> => {
     height: Math.max(1, grid.bottom - grid.top),
   };
 
+  collectBleeding(tree, bleeding);
+
   for (const placement of arrange(tree, canvas, measureCtx)) {
     // A slot placed twice would mean the composition bound it in two branches;
     // the first wins, which is the branch nearer the top of the tree.
-    if (!out.has(placement.slotId)) out.set(placement.slotId, placement.box);
+    if (out.has(placement.slotId)) continue;
+    out.set(
+      placement.slotId,
+      bleeding.has(placement.slotId)
+        ? // Keep the vertical band the engine computed; take the width out to
+          // the canvas edges. Imagery is edge-to-edge or it is a framed inset.
+          { x: 0, y: placement.box.y <= grid.top + 1 ? 0 : placement.box.y, width: grid.width, height: placement.box.height + (placement.box.y <= grid.top + 1 ? placement.box.y : 0) }
+        : placement.box
+    );
   }
   return out;
+};
+
+/** Slot ids whose leaf asked to bleed. */
+const collectBleeding = (node: LayoutNode, into: Set<string>): void => {
+  if (node.kind === 'leaf') {
+    if (node.bleed) into.add(node.slotId);
+    return;
+  }
+  for (const child of node.children) collectBleeding(child, into);
 };
 
 /**
