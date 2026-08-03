@@ -13,6 +13,11 @@ import { useUser } from '@postmill-ai/frontend/components/layout/user.context';
 import { useBrandColors } from './panels/use-brand-colors';
 import { useBrandFonts } from './panels/use-brand-fonts';
 import { getBrandViolations } from './brand-compliance';
+import type { SymbolDefinition } from '@postmill-ai/nestjs-libraries/media/designer-doc/symbols';
+import {
+  layersNeedingRaster,
+  outputToSvg,
+} from '@postmill-ai/nestjs-libraries/media/designer-doc/svg-export';
 import { CanvasElements, gradientFillProps, getImageNaturalSize } from './elements';
 import type { DesignerDoc, DesignerOutput, VideoOutput } from './designer.store';
 import { getThumbnailDataUrl } from './designer';
@@ -56,7 +61,7 @@ interface ExportDialogProps {
 }
 
 type Step = 'options' | 'folder' | 'export' | 'done' | 'draft-posts' | 'video-render' | 'video-rendering';
-type FormatValue = 'png' | 'jpeg' | 'transparent' | 'webp' | 'pdf' | 'gif' | 'webp-animated' | 'mp4' | 'webm';
+type FormatValue = 'png' | 'jpeg' | 'transparent' | 'webp' | 'pdf' | 'svg' | 'gif' | 'webp-animated' | 'mp4' | 'webm';
 
 interface FormatDef {
   value: FormatValue;
@@ -74,6 +79,9 @@ const FORMATS: FormatDef[] = [
   { value: 'transparent', label: 'Transparent PNG', showQuality: false, showScale: true },
   { value: 'webp', label: 'WebP', showQuality: true, showScale: true },
   { value: 'pdf', label: 'PDF', showQuality: false, showScale: false },
+  // Vector, so scale is meaningless — an SVG is resolution-independent by
+  // construction. Layers SVG cannot express are embedded as bitmaps.
+  { value: 'svg', label: 'SVG', showQuality: false, showScale: false },
 ];
 
 const VIDEO_FORMATS: FormatDef[] = [
@@ -112,6 +120,7 @@ const mimeFor = (format: FormatValue): string => {
     'transparent': 'image/png',
     'gif': 'image/gif',
     'webp-animated': 'image/webp',
+    'svg': 'image/svg+xml',
   };
   return mimeMap[format] || 'image/png';
 };
@@ -124,6 +133,7 @@ const extFor = (format: FormatValue): string => {
     'transparent': 'png',
     'gif': 'gif',
     'webp-animated': 'webp',
+    'svg': 'svg',
   };
   return extMap[format] || format;
 };
@@ -166,7 +176,10 @@ const renderOutputToBlob = async (
   output: DesignerOutput,
   format: FormatValue,
   quality: number,
-  pixelRatio: number
+  pixelRatio: number,
+  // Threaded through so an exported PNG contains the symbol instances the
+  // canvas shows. Without it they would silently vanish on export.
+  symbols?: SymbolDefinition[]
 ): Promise<Blob | null> => {
   await preloadImages(output);
 
@@ -206,6 +219,7 @@ const renderOutputToBlob = async (
                 page back, so a sibling background would export differently. */}
             <CanvasElements
               elements={output.children}
+              symbols={symbols}
               onSelect={() => {}}
               backdrop={
                 transparent ? undefined : (
@@ -280,16 +294,56 @@ const renderOutputToBlob = async (
   }
 };
 
+/**
+ * SVG export: translate the document, and bake only what SVG cannot carry.
+ *
+ * `layersNeedingRaster` names those layers; each is rendered ALONE, at its own
+ * box with no rotation, because the `<g>` wrapper in the SVG re-applies both.
+ * Baking a rotated layer would rotate it twice.
+ */
+const renderOutputAsSvg = async (
+  output: DesignerOutput,
+  symbols?: SymbolDefinition[]
+): Promise<string> => {
+  const ids = layersNeedingRaster(output);
+  const rasterized: Record<string, string> = {};
+
+  for (const id of ids) {
+    const el = output.children.find((c) => c.id === id);
+    if (!el) continue;
+    const solo: DesignerOutput = {
+      ...output,
+      width: Math.max(1, Math.round(el.width)),
+      height: Math.max(1, Math.round(el.height)),
+      background: '#ffffff',
+      bg: undefined,
+      children: [{ ...el, x: 0, y: 0, rotation: 0, opacity: 1, blendMode: undefined }],
+    };
+    const blob = await renderOutputToBlob(solo, 'transparent', 1, 1, symbols);
+    if (!blob) continue;
+    rasterized[id] = await new Promise<string>((resolve) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(String(reader.result || ''));
+      reader.onerror = () => resolve('');
+      reader.readAsDataURL(blob);
+    });
+    if (!rasterized[id]) delete rasterized[id];
+  }
+
+  return outputToSvg(output, { rasterized });
+};
+
 const MAX_UPLOAD_BYTES = 10 * 1024 * 1024;
 
 const renderOutputWithFallback = async (
   output: DesignerOutput,
   format: FormatValue,
   quality: number,
-  scale: number
+  scale: number,
+  symbols?: SymbolDefinition[]
 ): Promise<{ blob: Blob; usedFormat: FormatValue; usedQuality: number; usedScale: number }> => {
   const tryRender = async (f: FormatValue, q: number, s: number) => {
-    const blob = await renderOutputToBlob(output, f, q, s);
+    const blob = await renderOutputToBlob(output, f, q, s, symbols);
     if (!blob) throw new Error('Render failed');
     return blob;
   };
@@ -328,7 +382,10 @@ const renderOutputWithFallback = async (
 
 // --- Thumbnail renderer ---
 
-const renderOutputThumbnail = async (output: DesignerOutput): Promise<string | undefined> => {
+const renderOutputThumbnail = async (
+  output: DesignerOutput,
+  symbols?: SymbolDefinition[]
+): Promise<string | undefined> => {
   await preloadImages(output);
 
   const host = document.createElement('div');
@@ -377,7 +434,7 @@ const renderOutputThumbnail = async (output: DesignerOutput): Promise<string | u
                 listening={false}
               />
             )}
-            <CanvasElements elements={output.children} onSelect={() => {}} />
+            <CanvasElements elements={output.children} symbols={symbols} onSelect={() => {}} />
           </Layer>
         </Stage>
       );
@@ -1024,7 +1081,7 @@ export const ExportDialog: FC<ExportDialogProps> = ({ store, onClose }) => {
     for (let i = 0; i < selectedOutputs.length; i++) {
       const out = selectedOutputs[i];
       if (!('children' in out)) continue;
-      const dataUrl = await renderOutputThumbnail(out as DesignerOutput);
+      const dataUrl = await renderOutputThumbnail(out as DesignerOutput, doc.symbols);
       if (dataUrl) result.push({ idx: i, dataUrl });
     }
     setPreviews(result);
@@ -1098,6 +1155,18 @@ export const ExportDialog: FC<ExportDialogProps> = ({ store, onClose }) => {
             // A per-output PDF (in a mixed selection) must go through the server
             // renderer — Konva's toBlob can't emit PDF and would otherwise write a
             // PNG named ".pdf".
+            if (fmt === 'svg') {
+              const svg = await renderOutputAsSvg(output as DesignerOutput, doc.symbols);
+              const fileName = `${baseName} - ${outputName}.svg`;
+              const saved = await uploadBlob(
+                new Blob([svg], { type: 'image/svg+xml' }),
+                fileName
+              );
+              if (saved) {
+                results.push({ id: saved.id, path: saved.path, name: fileName, outputId: output.id });
+              }
+              continue;
+            }
             if (fmt === 'pdf') {
               const pdfBlob = await renderPdfOnServer([output as DesignerOutput]);
               if (!pdfBlob) throw new Error('PDF render failed');
@@ -1112,7 +1181,8 @@ export const ExportDialog: FC<ExportDialogProps> = ({ store, onClose }) => {
               output as DesignerOutput,
               fmt,
               quality,
-              scale
+              scale,
+              doc.symbols
             );
             const ext = extFor(usedFormat);
             const fileName = `${baseName} - ${outputName}.${ext}`;

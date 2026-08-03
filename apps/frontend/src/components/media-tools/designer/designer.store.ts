@@ -70,6 +70,12 @@ export interface DesignerState {
   currentOutput: number;
   zoom: number; viewportX: number; viewportY: number;
   history: DesignerDoc[]; historyIndex: number;
+  /**
+   * What each history entry DID, parallel to `history`. Optional at every call
+   * site — an unlabelled push reads as a generic edit rather than forcing all
+   * ~60 callers to be touched at once.
+   */
+  historyLabels: string[];
   // The history index that matches the last persisted doc, so undo/redo back to a
   // saved state clears isDirty instead of always reporting unsaved.
   savedHistoryIndex: number;
@@ -108,6 +114,12 @@ export interface DesignerState {
   /** The last non-empty selection, for Select ▸ Reselect. */
   lastSelection: SelectionMask | null;
   /**
+   * The layer whose MASK the paint tools should write into, rather than its
+   * pixels. Editor state — which of a layer's two surfaces is armed is not part
+   * of the document.
+   */
+  maskTargetId: string | null;
+  /**
    * A generation the Tools menu asked the timeline to open.
    *
    * The dialogs and their result-landing logic live in `video-timeline`, which
@@ -137,6 +149,12 @@ export interface DesignerActions {
   setOutputBackground: (bg: DesignerBackground) => void;
   copySelection: () => void; cutSelection: () => void; paste: () => void;
   groupSelection: () => void; ungroupSelection: () => void;
+  /** Turn the selection into a reusable symbol, replacing it with an instance. */
+  createSymbol: (name?: string) => void;
+  /** Place another instance of an existing symbol. */
+  placeSymbol: (symbolId: string) => void;
+  /** Push edits back into the definition, updating every instance at once. */
+  updateSymbolDefinition: (symbolId: string, children: DesignerElement[]) => void;
   reorder: (ids: string[], dir: 'front' | 'back' | 'forward' | 'backward') => void;
   /** Drag-to-reorder / reparent. `reorder` can only nudge front/back. */
   moveLayersTo: (ids: string[], targetIndex: number, parentId?: string) => void;
@@ -168,7 +186,11 @@ export interface DesignerActions {
   /** Replace the pixel selection. Remembers the outgoing one for Reselect. */
   setSelection: (mask: SelectionMask | null) => void;
   requestGenerate: (kind: 'video' | 'music' | 'voiceover' | null) => void;
-  undo: () => void; redo: () => void; pushHistory: () => void;
+  /** Arm a layer's mask as the paint target (null = paint the pixels). */
+  setMaskTarget: (id: string | null) => void;
+  undo: () => void; redo: () => void; pushHistory: (label?: string) => void;
+  /** Jump straight to a history entry, as Photoshop's History panel does. */
+  jumpToHistory: (index: number) => void;
   markSaved: () => void; setSaving: (saving: boolean) => void;
   reset: (width?: number, height?: number) => void;
   loadDesign: (doc: any, id: string, name: string, templateId?: string | null) => void;
@@ -250,7 +272,7 @@ export const createDesignerStore = (
       renamingId: null,
       currentOutput: 0,
       zoom: 1, viewportX: 0, viewportY: 0,
-      history: [JSON.parse(JSON.stringify(initialDoc))], historyIndex: 0,
+      history: [JSON.parse(JSON.stringify(initialDoc))], historyIndex: 0, historyLabels: ['Open'],
       savedHistoryIndex: 0,
       designId: null, designTemplateId: null, templateId: null,
       designName: 'Untitled Design',
@@ -269,6 +291,7 @@ export const createDesignerStore = (
       selection: null,
       lastSelection: null,
       generateRequest: null,
+      maskTargetId: null,
       clipboard: [],
       setDoc: (doc) => set({ doc: migrateDoc(doc), isDirty: true }),
       setDesignName: (name) => set({ designName: name, isDirty: true }),
@@ -488,6 +511,108 @@ export const createDesignerStore = (
        * cross-format reflow move-unit), and a Photoshop folder should also
        * travel as one when the design is re-fitted to another format.
        */
+      createSymbol: (name) => {
+        const { doc, currentOutput, selectedIds } = get();
+        const out = doc.outputs[currentOutput] as DesignerOutput;
+        if (!('children' in out) || selectedIds.length === 0) return;
+
+        const members = out.children.filter((c) => selectedIds.includes(c.id));
+        if (!members.length) return;
+
+        // The definition is authored in its own coordinate space, so an
+        // instance can be moved and resized without touching it.
+        const minX = Math.min(...members.map((m) => m.x));
+        const minY = Math.min(...members.map((m) => m.y));
+        const maxX = Math.max(...members.map((m) => m.x + m.width));
+        const maxY = Math.max(...members.map((m) => m.y + m.height));
+
+        const symbolId = `sym-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 7)}`;
+        const definition = {
+          id: symbolId,
+          name: name || 'Symbol',
+          width: Math.max(1, maxX - minX),
+          height: Math.max(1, maxY - minY),
+          children: members.map((m) => ({
+            ...JSON.parse(JSON.stringify(m)),
+            x: m.x - minX,
+            y: m.y - minY,
+            parentId: undefined,
+          })),
+        };
+
+        const instance: DesignerElement = {
+          id: `inst-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 7)}`,
+          type: 'symbol',
+          symbolId,
+          name: definition.name,
+          x: minX,
+          y: minY,
+          width: definition.width,
+          height: definition.height,
+          rotation: 0,
+          opacity: 1,
+          locked: false,
+          hidden: false,
+        };
+
+        const outputs = doc.outputs.map((o, i) =>
+          i === currentOutput
+            ? {
+                ...(o as DesignerOutput),
+                children: [
+                  ...(o as DesignerOutput).children.filter((c) => !selectedIds.includes(c.id)),
+                  instance,
+                ],
+              }
+            : o
+        );
+        set({
+          doc: { ...doc, outputs, symbols: [...(doc.symbols || []), definition] },
+          selectedIds: [instance.id],
+          isDirty: true,
+        });
+        get().pushHistory('Create symbol');
+      },
+
+      placeSymbol: (symbolId) => {
+        const { doc, currentOutput } = get();
+        const definition = (doc.symbols || []).find((s) => s.id === symbolId);
+        const out = doc.outputs[currentOutput] as DesignerOutput;
+        if (!definition || !('children' in out)) return;
+
+        const instance: DesignerElement = {
+          id: `inst-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 7)}`,
+          type: 'symbol',
+          symbolId,
+          name: definition.name,
+          // Centred, like every other insert.
+          x: Math.round((out.width - definition.width) / 2),
+          y: Math.round((out.height - definition.height) / 2),
+          width: definition.width,
+          height: definition.height,
+          rotation: 0,
+          opacity: 1,
+          locked: false,
+          hidden: false,
+        };
+        get().addElement(instance);
+      },
+
+      updateSymbolDefinition: (symbolId, children) => {
+        const { doc } = get();
+        if (!(doc.symbols || []).some((s) => s.id === symbolId)) return;
+        set({
+          doc: {
+            ...doc,
+            symbols: (doc.symbols || []).map((s) =>
+              s.id === symbolId ? { ...s, children } : s
+            ),
+          },
+          isDirty: true,
+        });
+        get().pushHistory('Edit symbol');
+      },
+
       groupSelection: () => {
         if (isVideoMode()) return;
         const { selectedIds } = get();
@@ -744,6 +869,8 @@ export const createDesignerStore = (
 
       requestGenerate: (kind) => set({ generateRequest: kind }),
 
+      setMaskTarget: (id) => set({ maskTargetId: id }),
+
       setSelection: (mask) => {
         const previous = get().selection;
         set({
@@ -754,17 +881,38 @@ export const createDesignerStore = (
         });
       },
 
-      pushHistory: () => {
-        const { doc, history, historyIndex, savedHistoryIndex } = get();
+      pushHistory: (label) => {
+        const { doc, history, historyLabels, historyIndex, savedHistoryIndex } = get();
         const snapshot = JSON.parse(JSON.stringify(doc));
         const newHistory = history.slice(0, historyIndex + 1);
+        const newLabels = historyLabels.slice(0, historyIndex + 1);
         newHistory.push(snapshot);
+        newLabels.push(label || 'Edit');
         let savedIdx = savedHistoryIndex;
         if (newHistory.length > 50) {
           newHistory.shift();
+          newLabels.shift();
           savedIdx -= 1; // indices shifted down; -1 → saved snapshot evicted
         }
-        set({ history: newHistory, historyIndex: newHistory.length - 1, savedHistoryIndex: savedIdx });
+        set({
+          history: newHistory,
+          historyLabels: newLabels,
+          historyIndex: newHistory.length - 1,
+          savedHistoryIndex: savedIdx,
+        });
+      },
+
+      jumpToHistory: (index) => {
+        const { history, historyIndex, savedHistoryIndex, currentOutput } = get();
+        if (index < 0 || index >= history.length || index === historyIndex) return;
+        const nextDoc = JSON.parse(JSON.stringify(history[index]));
+        set({
+          doc: nextDoc,
+          historyIndex: index,
+          selectedIds: [],
+          isDirty: index !== savedHistoryIndex,
+          currentOutput: Math.max(0, Math.min(currentOutput, (nextDoc.outputs?.length ?? 1) - 1)),
+        });
       },
 
       undo: () => {
@@ -805,7 +953,7 @@ export const createDesignerStore = (
           // Ask the canvas to fit. Bumped here rather than at the call sites so
           // every route into a new document gets it — there are four.
           fitNonce: get().fitNonce + 1,
-          history: [JSON.parse(JSON.stringify(newDoc))], historyIndex: 0, savedHistoryIndex: 0,
+          history: [JSON.parse(JSON.stringify(newDoc))], historyLabels: ['New'], historyIndex: 0, savedHistoryIndex: 0,
           designId: null, designTemplateId: null, templateId: null,
           designName: 'Untitled Design', isDirty: false, isSaving: false, lastSaved: null,
           editFormatOnly: false,
@@ -828,7 +976,7 @@ export const createDesignerStore = (
           // before the fit lands reads as a flash.
           zoom: 1, viewportX: 0, viewportY: 0,
           fitNonce: get().fitNonce + 1,
-          history: [JSON.parse(JSON.stringify(migrated))], historyIndex: 0, savedHistoryIndex: 0, isDirty: false,
+          history: [JSON.parse(JSON.stringify(migrated))], historyLabels: ['Open'], historyIndex: 0, savedHistoryIndex: 0, isDirty: false,
           playheadMs: 0,
           selectedClip: null,
           linkedUpdateFlash: {},

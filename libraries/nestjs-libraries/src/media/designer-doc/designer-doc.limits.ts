@@ -29,6 +29,9 @@ export const MAX_FILTERS_PER_ELEMENT = 16;
  * the `triangle`/`polygon` shapes — all additive, so v2 documents needed no
  * rewrite.
  *
+ * v6 adds `symbol` instances plus reusable definitions on the doc, and `slot`
+ * markers for template placeholders. Additive: v5 documents keep validating.
+ *
  * v4 adds Photoshop-parity layers: `group`/`fill`/`adjustment` element types,
  * `parentId`, blend modes and layer styles. Also additive — no rewrite.
  *
@@ -46,7 +49,7 @@ export const MAX_FILTERS_PER_ELEMENT = 16;
  * every AI-generated design under dozens of folders it never asked for. When a
  * user makes a layer group we set both, so a folder also reflows as a unit.
  */
-export const DESIGNER_DOC_VERSION = 5;
+export const DESIGNER_DOC_VERSION = 6;
 
 /** Maximum text length on a text element. */
 export const MAX_TEXT_LEN = 20000;
@@ -75,6 +78,13 @@ export const MAX_GROUP_RENDER_DEPTH = 16;
  * compositing a single element can force per render.
  */
 export const MAX_LAYER_STYLES = 24;
+
+/**
+ * Maximum entries in a layer's non-destructive filter stack. Every entry is
+ * re-run on the client whenever any of them changes, so this bounds how long a
+ * single slider drag can take to re-bake.
+ */
+export const MAX_SMART_FILTERS = 16;
 
 /**
  * Maximum logical single dimension (width/height) for an output or element.

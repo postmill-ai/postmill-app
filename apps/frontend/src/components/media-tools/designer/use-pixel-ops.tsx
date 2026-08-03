@@ -1,10 +1,10 @@
 'use client';
 
-import React, { useCallback, useRef } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { useDecisionModal, useModals } from '@postmill-ai/frontend/components/layout/new-modal';
 import { useToaster } from '@postmill-ai/react/toaster/toaster';
 import { useT } from '@postmill-ai/react/translation/get.transation.service.client';
-import type { DesignerElement, DesignerOutput } from './designer.store';
+import type { DesignerElement, DesignerOutput, VideoClip, VideoTrack } from './designer.store';
 import { sharedStageRef } from './stage-ref';
 import {
   ensureBuffer,
@@ -35,6 +35,11 @@ import {
   defaultFilterParams,
 } from '@postmill-ai/nestjs-libraries/media/designer-doc/filter-descriptors';
 import type { FilterParams } from '@postmill-ai/nestjs-libraries/media/designer-doc/filter-ops';
+import {
+  addSmartFilter,
+  flattenSmartFilters,
+  rebakeSmartFilters,
+} from './smart-filters';
 
 /**
  * The operations that act on PIXELS rather than on the document: the Select
@@ -80,11 +85,19 @@ const DEFAULT_STROKE: StrokeSettings = {
   location: 'inside',
 };
 
+/** A layer's filter recipe, for spotting that it changed. `src` is deliberately
+ *  not part of it: the re-bake writes `src`, and including it would loop. */
+const stackSignature = (el: Pick<DesignerElement, 'smartFilters'>): string =>
+  JSON.stringify(el.smartFilters || []);
+
 export const usePixelOps = ({ store, fetchFn }: UsePixelOpsArgs) => {
   const decision = useDecisionModal();
   const modals = useModals();
   const toaster = useToaster();
   const t = useT();
+
+  /** The layer currently being re-baked, so the UI can say so. */
+  const [baking, setBaking] = useState<string | null>(null);
 
   // ── Select menu ──────────────────────────────────────────────────────────
 
@@ -358,17 +371,158 @@ export const usePixelOps = ({ store, fetchFn }: UsePixelOpsArgs) => {
    * including the ones (blur, distort) whose output depends on pixels just
    * outside the selection.
    */
+  /**
+   * Whether a filter should go onto the layer's non-destructive stack.
+   *
+   * Only when the whole layer is the subject: the stack is a recipe with no
+   * mask, so a filter aimed at a selection has nowhere to record WHERE it
+   * applied and must bake through the coverage map as it always has.
+   */
+  const canSmartFilter = useCallback((): DesignerElement | null => {
+    if (store.getState().selection) return null;
+    const el = selectedLayer();
+    if (!el || el.locked) return null;
+    return el.type === 'image' || el.type === 'raster' ? el : null;
+  }, [store, selectedLayer]);
+
+  /**
+   * The selected clip, when it is one a filter stack can be baked onto.
+   *
+   * A bake is one bitmap, so it is only truthful for a clip whose pixels are
+   * the same at every playhead — an image, sticker, shape or text clip. A
+   * moving video keeps the native `filters` tokens, which both renderers apply
+   * per frame.
+   */
+  const smartFilterClip = useCallback(() => {
+    const st = store.getState();
+    const sel = st.selectedClip;
+    if (!sel) return null;
+    const out = st.doc.outputs[sel.outputIndex] as { tracks?: VideoTrack[] } | undefined;
+    const track = out?.tracks?.find((tr) => tr.id === sel.trackId);
+    const clip = track?.clips.find((c) => c.id === sel.clipId);
+    if (!clip || !track) return null;
+    const moving =
+      track.type === 'video' ||
+      /\.(mp4|webm|mov|mkv|avi|m4v)(\?.*)?$/i.test(clip.src || '');
+    if (moving) return null;
+    return { sel, clip };
+  }, [store]);
+
+  /**
+   * Re-run a layer's whole stack from its original pixels and store the result.
+   *
+   * Every stack edit — add, toggle, reorder, retune — comes back through here,
+   * so there is one place that knows a bake always starts from `originalSrc`.
+   */
+  const rebake = useCallback(
+    async (elementId: string) => {
+      const el = (activeOutput(store)?.children || []).find((c) => c.id === elementId);
+      if (!el) return;
+      setBaking(elementId);
+      try {
+        const result = await rebakeSmartFilters(el, fetchFn);
+        if (!result) {
+          toaster.show(
+            t('designer_filter_failed', "Couldn't apply that filter"),
+            'warning'
+          );
+          return;
+        }
+        store.getState().updateElement(elementId, {
+          src: result.src,
+          fileId: result.fileId,
+        });
+        store.getState().pushHistory();
+      } finally {
+        setBaking(null);
+      }
+    },
+    [store, fetchFn, toaster, t]
+  );
+
+  /** Re-bake a clip's stack, the clip-shaped twin of `rebake`. */
+  const rebakeClip = useCallback(
+    async (sel: { outputIndex: number; trackId: string; clipId: string }) => {
+      const st = store.getState();
+      const out = st.doc.outputs[sel.outputIndex] as { tracks?: VideoTrack[] } | undefined;
+      const clip = out?.tracks
+        ?.find((tr) => tr.id === sel.trackId)
+        ?.clips.find((c) => c.id === sel.clipId);
+      if (!clip) return;
+      setBaking(sel.clipId);
+      try {
+        const result = await rebakeSmartFilters(
+          {
+            id: clip.id,
+            width: clip.width ?? 0,
+            height: clip.height ?? 0,
+            originalSrc: clip.originalSrc,
+            src: clip.src,
+            smartFilters: clip.smartFilters,
+          },
+          fetchFn
+        );
+        if (!result) {
+          toaster.show(t('designer_filter_failed', "Couldn't apply that filter"), 'warning');
+          return;
+        }
+        store
+          .getState()
+          .updateClip(sel.outputIndex, sel.trackId, sel.clipId, {
+            src: result.src,
+            fileId: result.fileId,
+          });
+        store.getState().pushHistory();
+      } finally {
+        setBaking(null);
+      }
+    },
+    [store, fetchFn, toaster, t]
+  );
+
   const applyFilterById = useCallback(
     async (id: string, params: FilterParams) => {
+      lastFilter.current = { id, params };
+
+      const clipTarget = smartFilterClip();
+      if (clipTarget) {
+        const { sel, clip } = clipTarget;
+        const patch: Partial<VideoClip> = {
+          smartFilters: addSmartFilter(clip.smartFilters, id, params),
+        };
+        if (!clip.originalSrc && clip.src) {
+          patch.originalSrc = clip.src;
+          patch.originalFileId = clip.fileId;
+        }
+        store.getState().updateClip(sel.outputIndex, sel.trackId, sel.clipId, patch);
+        await rebakeClip(sel);
+        return;
+      }
+
+      const smartTarget = canSmartFilter();
+      if (smartTarget) {
+        // The first smart filter is what freezes the original: after this the
+        // layer's `src` is a bake, and re-baking from a bake compounds.
+        const patch: Partial<DesignerElement> = {
+          smartFilters: addSmartFilter(smartTarget.smartFilters, id, params),
+        };
+        if (!smartTarget.originalSrc && smartTarget.src) {
+          patch.originalSrc = smartTarget.src;
+          patch.originalFileId = smartTarget.fileId;
+        }
+        store.getState().updateElement(smartTarget.id, patch);
+        await rebake(smartTarget.id);
+        return;
+      }
+
       const controller = new AbortController();
       await applyToLayer(async (data, coverage) => {
         const result = await runFilter(data, id, params, { signal: controller.signal });
         if (!result) return;
         blendThroughCoverage(data, result, coverage);
       });
-      lastFilter.current = { id, params };
     },
-    [applyToLayer]
+    [applyToLayer, canSmartFilter, rebake, smartFilterClip, rebakeClip, store]
   );
 
   /** What Filter ▸ Last Filter re-runs. */
@@ -409,6 +563,86 @@ export const usePixelOps = ({ store, fetchFn }: UsePixelOpsArgs) => {
     if (last) void applyFilterById(last.id, last.params);
   }, [applyFilterById]);
 
+  // ── Smart filters ────────────────────────────────────────────────────────
+
+  /**
+   * Re-bake whenever a layer's recipe changes, wherever the change came from.
+   *
+   * The stack is edited from the layers panel, the Filter menu and (later) the
+   * parameter dialog; watching the document means one re-bake path instead of
+   * one per editing surface, and no surface can forget to trigger it.
+   */
+  const signatures = useRef<Map<string, string> | null>(null);
+  useEffect(() => {
+    const sync = () => {
+      const st = store.getState();
+      const next = new Map<string, string>();
+      const changedLayers: string[] = [];
+      const changedClips: {
+        outputIndex: number;
+        trackId: string;
+        clipId: string;
+      }[] = [];
+
+      const note = (id: string, sig: string, hasOriginal: boolean) => {
+        next.set(id, sig);
+        const previous = signatures.current?.get(id);
+        // A first sighting is a load or a paste — its `src` already matches.
+        return previous !== undefined && previous !== sig && hasOriginal;
+      };
+
+      for (const el of (activeOutput(store)?.children || []) as DesignerElement[]) {
+        if (note(el.id, stackSignature(el), !!el.originalSrc)) changedLayers.push(el.id);
+      }
+
+      // Clips carry the same stack, and are re-baked the same way.
+      st.doc.outputs.forEach((out, outputIndex) => {
+        const tracks = (out as { tracks?: VideoTrack[] }).tracks;
+        if (!tracks) return;
+        for (const track of tracks) {
+          for (const clip of track.clips) {
+            if (note(clip.id, stackSignature(clip as never), !!clip.originalSrc)) {
+              changedClips.push({ outputIndex, trackId: track.id, clipId: clip.id });
+            }
+          }
+        }
+      });
+
+      signatures.current = next;
+      for (const id of changedLayers) void rebake(id);
+      for (const sel of changedClips) void rebakeClip(sel);
+    };
+
+    sync();
+    return store.subscribe(sync);
+  }, [store, rebake, rebakeClip]);
+
+  /**
+   * Discard the recipe and keep the pixels. Photoshop's Rasterize Smart Filters
+   * — the way out when the stack has done its job and the layer should stop
+   * carrying a second copy of itself.
+   */
+  const onFlattenFilters = useCallback(async () => {
+    const el = selectedLayer();
+    if (!el?.smartFilters?.length) return;
+    const ok = await decision.open({
+      title: t('designer_flatten_filters', 'Flatten filters?'),
+      description: t(
+        'designer_flatten_filters_body',
+        'The filters become part of the layer. They can no longer be retuned or removed.'
+      ),
+      approveLabel: t('designer_flatten', 'Flatten'),
+    });
+    if (!ok) return;
+    store.getState().updateElement(el.id, flattenSmartFilters());
+    store.getState().pushHistory();
+  }, [selectedLayer, decision, t, store]);
+
+  const hasSmartFilters = useCallback(
+    () => !!selectedLayer()?.smartFilters?.length,
+    [selectedLayer]
+  );
+
   const hasLastFilter = useCallback(() => !!lastFilter.current, []);
 
   const lastFilterLabel = useCallback(() => {
@@ -429,6 +663,9 @@ export const usePixelOps = ({ store, fetchFn }: UsePixelOpsArgs) => {
     onLastFilter,
     hasLastFilter,
     lastFilterLabel,
+    onFlattenFilters,
+    hasSmartFilters,
+    baking,
     applyToLayer,
     ensureBufferFor: ensureBuffer,
   };

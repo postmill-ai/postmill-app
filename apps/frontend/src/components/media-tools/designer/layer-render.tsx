@@ -1,7 +1,7 @@
 'use client';
 
 import React, { FC, ReactNode, useEffect, useRef } from 'react';
-import { Group } from 'react-konva';
+import { Group, Shape } from 'react-konva';
 import type Konva from 'konva';
 import type {
   DesignerAdjustment,
@@ -150,4 +150,63 @@ export const layerStyleProps = (
   }
 
   return props;
+};
+
+/**
+ * A layer with a painted mask over it.
+ *
+ * The mask is a greyscale bitmap composited `destination-in`, which is the same
+ * stencil trick the text/shape mask already uses — the difference is that this
+ * one wraps the WHOLE layer, so it works for text, shapes and paths and not
+ * just images.
+ *
+ * The group must be cached: `globalCompositeOperation` composites against
+ * whatever is beneath it in the Konva layer, so without a buffer of its own the
+ * mask would erase everything painted under it too.
+ */
+export const MaskedLayer: FC<{
+  element: DesignerElement;
+  mask: HTMLImageElement | HTMLCanvasElement;
+  children: ReactNode;
+  cacheKey?: string | number;
+}> = ({ element, mask, children, cacheKey }) => {
+  const ref = useRef<Konva.Group>(null);
+
+  useEffect(() => {
+    const node = ref.current;
+    if (!node) return;
+    try {
+      node.cache();
+    } catch {
+      node.clearCache();
+    }
+    node.getLayer()?.batchDraw();
+  }, [cacheKey, mask, element.width, element.height]);
+
+  return (
+    <Group ref={ref} listening={!element.locked}>
+      {children}
+      <Shape
+        x={element.x}
+        y={element.y}
+        width={element.width}
+        height={element.height}
+        listening={false}
+        sceneFunc={(ctx) => {
+          ctx.save();
+          ctx.globalCompositeOperation = 'destination-in';
+          // Drawn at the layer's box, so a mask painted at layer resolution
+          // lines up whatever the element's own transform is.
+          ctx.drawImage(
+            mask as CanvasImageSource,
+            element.x,
+            element.y,
+            element.width,
+            element.height
+          );
+          ctx.restore();
+        }}
+      />
+    </Group>
+  );
 };

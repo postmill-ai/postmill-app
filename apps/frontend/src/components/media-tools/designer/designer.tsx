@@ -20,6 +20,8 @@ import { useMediaToolsStatus } from '@postmill-ai/frontend/components/layout/use
 import { TemplatesPanel } from './panels/templates-panel';
 import { MyDesignsPanel } from './panels/my-designs-panel';
 import { LayersPanel } from './panels/layers-panel';
+import { HistoryPanel } from './panels/history-panel';
+import { TemplateFillPanel } from './panels/template-fill-panel';
 import { LayersFooter } from './panels/layers-footer';
 import { usePixelOps } from './use-pixel-ops';
 import { FloatingPanel } from './floating-panel';
@@ -258,6 +260,22 @@ export const Designer: FC<DesignerProps> = ({
     x: 360,
     y: 16,
     height: 420,
+    open: false,
+  });
+  // History floats as well: it is a navigation surface you keep open while
+  // experimenting, and it needs the room a rail cannot give it.
+  const historyPanel = useFloatingPanelState('history', user?.orgId, {
+    x: 360,
+    y: 16,
+    height: 360,
+    open: false,
+  });
+  // The fill-in-the-blanks form for a slotted template. Floats like the rest,
+  // and stays closed until a template actually has slots.
+  const templatePanel = useFloatingPanelState('template', user?.orgId, {
+    x: 660,
+    y: 16,
+    height: 320,
     open: false,
   });
   const brandColors = useBrandColors();
@@ -817,6 +835,58 @@ export const Designer: FC<DesignerProps> = ({
   });
   const onOpenMedia = mediaPicker.open;
 
+  /**
+   * Insert ▸ Image / Sticker / Vector / Video / Audio.
+   *
+   * One picker instance, narrowed per call through `openWith` — which is what
+   * that API exists for. Image-kind picks become elements; video and audio go to
+   * `addMediaToTimeline`, which finds or creates the track and probes the clip's
+   * real duration.
+   */
+  const onInsertMedia = useCallback(
+    (kind: 'image' | 'sticker' | 'vector' | 'video' | 'audio') => {
+      const TABS = {
+        image: ['My Files', 'Stock Photos'],
+        sticker: ['Stock Stickers'],
+        vector: ['Stock Vectors'],
+        video: ['My Files', 'Stock Videos'],
+        audio: ['My Files', 'Stock Audio'],
+      } as const;
+      const TITLES = {
+        image: translate('insert_image', 'Insert image'),
+        sticker: translate('insert_sticker', 'Insert sticker'),
+        vector: translate('insert_vector', 'Insert vector'),
+        video: translate('insert_video', 'Insert video'),
+        audio: translate('insert_audio', 'Insert audio'),
+      };
+      const isTimelineMedia = kind === 'video' || kind === 'audio';
+
+      mediaPicker.openWith({
+        title: TITLES[kind],
+        tabs: TABS[kind],
+        onSelect: (item) => {
+          if (isTimelineMedia) {
+            void addMediaToTimeline(store, {
+              type: kind,
+              url: item.url,
+              fileId: item.fileId,
+              width: item.width,
+              height: item.height,
+            }).catch(() => {
+              toaster.show(
+                translate('couldnt_add_to_timeline', "Couldn't add that to the timeline"),
+                'warning'
+              );
+            });
+            return;
+          }
+          addImageFromMedia(item as never);
+        },
+      });
+    },
+    [mediaPicker, translate, addImageFromMedia, store, toaster]
+  );
+
   const selectedImageId = useCallback(() => {
     const st = store.getState();
     const out = st.doc.outputs[st.currentOutput] as any;
@@ -886,6 +956,7 @@ export const Designer: FC<DesignerProps> = ({
       onSave: handleSave,
       onSaveAsTemplate: handleSaveAsTemplate,
       onOpenMedia,
+      onInsertMedia,
       onExport: handleExport,
       onUseInPost: setMedia ? handleExport : undefined,
       onClose: closeModal,
@@ -898,6 +969,14 @@ export const Designer: FC<DesignerProps> = ({
         // reached through the same Window-menu / ⌘K action ids.
         if (id === 'layers') {
           layersPanel.toggle();
+          return;
+        }
+        if (id === 'history') {
+          historyPanel.toggle();
+          return;
+        }
+        if (id === 'template') {
+          templatePanel.toggle();
           return;
         }
         if (id === 'brand') {
@@ -956,6 +1035,8 @@ export const Designer: FC<DesignerProps> = ({
       onLastFilter: pixelOps.onLastFilter,
       hasLastFilter: pixelOps.hasLastFilter,
       lastFilterLabel: pixelOps.lastFilterLabel,
+      onFlattenFilters: pixelOps.onFlattenFilters,
+      hasSmartFilters: pixelOps.hasSmartFilters,
       onAiGenerate: () =>
         modals.openModal({
           title: translate('ai', 'AI'),
@@ -990,6 +1071,8 @@ export const Designer: FC<DesignerProps> = ({
       modals,
       decision,
       layersPanel,
+      historyPanel,
+      templatePanel,
       brandPanel,
       pixelOps,
       fetch,
@@ -998,6 +1081,7 @@ export const Designer: FC<DesignerProps> = ({
       handleSaveAsTemplate,
       handleExport,
       onOpenMedia,
+      onInsertMedia,
       confirmDiscardIfDirty,
       selectedImageId,
       runAi,
@@ -1057,11 +1141,18 @@ export const Designer: FC<DesignerProps> = ({
         <MenuBar actions={actions} />
 
         <div className="mobile:hidden flex items-center text-[11px] min-w-0 shrink-0">
-          {isSaving && <span className="text-newTextColor/60">{translate('saving_ellipsis', 'Saving…')}</span>}
-          {!isSaving && !isDirty && currentDesignId && (
+          {/* A smart-filter re-bake replays the whole stack and uploads; on a
+              large layer that is seconds of apparently nothing happening. */}
+          {pixelOps.baking && (
+            <span className="text-btnPrimaryAccent">
+              {translate('designer_applying_filters', 'Applying filters…')}
+            </span>
+          )}
+          {!pixelOps.baking && isSaving && <span className="text-newTextColor/60">{translate('saving_ellipsis', 'Saving…')}</span>}
+          {!pixelOps.baking && !isSaving && !isDirty && currentDesignId && (
             <span className="text-green-500">{translate('saved_status', 'Saved')}</span>
           )}
-          {!isSaving && isDirty && <span className="text-amber-600">{translate('unsaved_status', 'Unsaved')}</span>}
+          {!pixelOps.baking && !isSaving && isDirty && <span className="text-amber-600">{translate('unsaved_status', 'Unsaved')}</span>}
         </div>
 
         <div className="flex-1" />
@@ -1172,6 +1263,30 @@ export const Designer: FC<DesignerProps> = ({
             width={300}
           >
             <BrandPanel store={store as any} />
+          </FloatingPanel>
+        )}
+
+        {templatePanel.state.open && (
+          <FloatingPanel
+            title={translate('designer_template_fields', 'Template fields')}
+            onClose={() => templatePanel.setOpen(false)}
+            position={templatePanel.state}
+            onPositionChange={templatePanel.setPosition}
+            width={280}
+          >
+            <TemplateFillPanel store={store as any} />
+          </FloatingPanel>
+        )}
+
+        {historyPanel.state.open && (
+          <FloatingPanel
+            title={translate('designer_history', 'History')}
+            onClose={() => historyPanel.setOpen(false)}
+            position={historyPanel.state}
+            onPositionChange={historyPanel.setPosition}
+            width={260}
+          >
+            <HistoryPanel store={store as any} />
           </FloatingPanel>
         )}
 

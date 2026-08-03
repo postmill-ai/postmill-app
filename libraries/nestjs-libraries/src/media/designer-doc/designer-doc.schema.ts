@@ -10,6 +10,7 @@
 
 import { z } from 'zod';
 import { parseDesignerFilterToken } from '../design-render/filter-tokens';
+import { MAX_MOTION_BLUR_SAMPLES } from './motion-blur';
 import {
   DESIGNER_DOC_VERSION,
   MAX_CLIPS_PER_TRACK,
@@ -18,6 +19,7 @@ import {
   MAX_FILTERS_PER_ELEMENT,
   MAX_FONT_SIZE,
   MAX_LAYER_STYLES,
+  MAX_SMART_FILTERS,
   MAX_OPS_PER_REQUEST,
   MAX_OUTPUTS,
   MAX_PATH_NODES,
@@ -70,6 +72,84 @@ const FiltersSchema = z
   .max(MAX_FILTERS_PER_ELEMENT)
   .optional();
 
+
+/** Symbol definitions live on the doc, referenced by every instance. */
+const symbolDefinitionShape = (element: z.ZodTypeAny) =>
+  z.object({
+    id: z.string().max(200),
+    name: z.string().max(200),
+    width: z.number().finite().min(1).max(MAX_DIMENSION),
+    height: z.number().finite().min(1).max(MAX_DIMENSION),
+    children: z.array(element).max(MAX_ELEMENTS_PER_OUTPUT),
+  });
+
+const SymbolOverridesSchema = z
+  .record(
+    z.string().max(200),
+    z.object({
+      text: z.string().max(MAX_TEXT_LEN).optional(),
+      src: SrcSchema.optional(),
+      fileId: z.string().max(200).optional(),
+      fill: ColorSchema.optional(),
+    })
+  )
+  .optional();
+
+const SlotSchema = z
+  .object({
+    name: z.string().max(120),
+    kind: z.enum(['text', 'image', 'color']),
+    order: z.number().finite().min(0).max(10000).optional(),
+  })
+  .optional();
+
+const CaptionStyleSchema = z
+  .object({
+    preset: z
+      .enum(['plain', 'karaoke', 'word-pop', 'bold-highlight', 'box-highlight'])
+      .optional(),
+    activeColor: ColorSchema.optional(),
+    inactiveColor: ColorSchema.optional(),
+    spokenColor: ColorSchema.optional(),
+    highlightColor: ColorSchema.optional(),
+  })
+  .optional();
+
+const BeatsSchema = z
+  .array(z.number().finite().min(0).max(MAX_VIDEO_DURATION_MS))
+  .max(4000)
+  .optional();
+
+/** One definition for the element and clip stroke options alike. */
+const StrokeStyleSchema = z
+  .object({
+    dash: z.array(z.number().finite().min(0).max(1000)).max(8).optional(),
+    dashOffset: z.number().finite().optional(),
+    lineCap: z.enum(['butt', 'round', 'square']).optional(),
+    lineJoin: z.enum(['miter', 'round', 'bevel']).optional(),
+    miterLimit: z.number().finite().min(1).max(100).optional(),
+    arrowStart: z.enum(['none', 'arrow', 'triangle', 'circle', 'square', 'bar']).optional(),
+    arrowEnd: z.enum(['none', 'arrow', 'triangle', 'circle', 'square', 'bar']).optional(),
+  })
+  .optional();
+
+/** One definition, shared by layers and clips — they carry the same stack. */
+const SmartFilterStackSchema = z
+  .array(
+    z.object({
+      id: z.string().max(60),
+      params: z
+        .record(
+          z.string().max(40),
+          z.union([z.number(), z.string().max(200), z.boolean()])
+        )
+        .optional(),
+      enabled: z.boolean().optional(),
+    })
+  )
+  .max(MAX_SMART_FILTERS)
+  .optional();
+
 // ---------------------------------------------------------------------------
 // Explicit TypeScript contract
 // ---------------------------------------------------------------------------
@@ -106,6 +186,16 @@ export interface DesignerTextStroke {
 // here so `DesignerElement` consumers get it from the one contract module (see
 // designer-doc.drift.spec.ts).
 export type { DesignerPathNode } from './path-geometry';
+export type { KeyframeEase, EaseHandles, EasePreset } from './keyframes';
+export type { MotionBlur } from './motion-blur';
+export type { StrokeStyle, ArrowHead, LineCap, LineJoin } from './stroke-style';
+export type { CaptionStyle, CaptionPreset } from './caption-styles';
+export type { SymbolDefinition, SymbolOverrides, SlotDefinition } from './symbols';
+import type { SymbolDefinition, SymbolOverrides, SlotDefinition } from './symbols';
+import type { CaptionStyle } from './caption-styles';
+import type { StrokeStyle } from './stroke-style';
+import type { MotionBlur } from './motion-blur';
+import type { KeyframeEase } from './keyframes';
 import type { DesignerPathNode } from './path-geometry';
 
 export interface DesignerCrop {
@@ -229,10 +319,21 @@ export interface DesignerAdjustment {
     | 'threshold' | 'gradient-map' | 'vibrance' | 'clarity-dehaze';
   /** Op-specific scalars, e.g. `{ brightness: 10, contrast: -5 }`. */
   values?: Record<string, number>;
+  /** Photo Filter's tint. */
+  color?: string;
   /** Gradient Map's ramp. */
   gradient?: DesignerGradient;
   /** Curves control points per channel, 0–255 in and out. */
   curves?: Record<string, { x: number; y: number }[]>;
+}
+
+/** One entry in a layer's non-destructive filter stack. */
+export interface DesignerSmartFilter {
+  /** A `FILTER_DESCRIPTORS` id. */
+  id: string;
+  params?: Record<string, number | string | boolean>;
+  /** Default true; false keeps the entry but skips it when re-baking. */
+  enabled?: boolean;
 }
 
 export interface DesignerElement {
@@ -240,7 +341,9 @@ export interface DesignerElement {
   type:
     | 'text' | 'image' | 'shape' | 'icon' | 'path' | 'raster'
     // Added in doc v4 for Photoshop-parity layers.
-    | 'group' | 'fill' | 'adjustment';
+    | 'group' | 'fill' | 'adjustment'
+    // Added in doc v6: an instance of a reusable `symbol` definition.
+    | 'symbol';
   x: number;
   y: number;
   width: number;
@@ -269,6 +372,16 @@ export interface DesignerElement {
   fillStyle?: DesignerFillStyle;
   /** `adjustment` layers only. */
   adjustment?: DesignerAdjustment;
+  /** `symbol` instances: which definition on the doc this is an instance of. */
+  symbolId?: string;
+  /**
+   * Per-instance content overrides, keyed by the id of the element INSIDE the
+   * symbol. Content only — structure is shared, which is the rule that keeps
+   * symbols comprehensible.
+   */
+  symbolOverrides?: SymbolOverrides;
+  /** Marks this element as a template placeholder. */
+  slot?: SlotDefinition;
   flipX?: boolean;
   flipY?: boolean;
 
@@ -306,6 +419,35 @@ export interface DesignerElement {
    */
   subjectPoint?: { x: number; y: number };
   mask?: DesignerMask;
+  /**
+   * A painted greyscale LAYER MASK — black hides, white reveals, grey is
+   * partial. Distinct from `mask` above, which is a preset shape/text
+   * silhouette; a layer can carry both.
+   *
+   * Stored as an uploaded bitmap so all three renderers can composite it with
+   * `destination-in`, exactly as they already do for the text/shape stencil.
+   */
+  maskSrc?: string;
+  maskFileId?: string;
+  /** Shift-click the mask thumbnail to disable it without discarding it. */
+  maskEnabled?: boolean;
+  /**
+   * A non-destructive filter stack, applied in list order.
+   *
+   * The recipe is stored; the pixels are not. Whenever the stack changes the
+   * client re-runs it from `originalSrc` and uploads the result to `src`, so
+   * all three renderers keep drawing a plain bitmap and need no filter code of
+   * their own — the reason 47 filters can be editable-forever for the price of
+   * one implementation.
+   */
+  smartFilters?: DesignerSmartFilter[];
+  /**
+   * The pre-filter pixels the stack is evaluated from. Written once, when the
+   * first smart filter is added, and never overwritten — re-baking from the
+   * already-baked bitmap would compound the effect on every edit.
+   */
+  originalSrc?: string;
+  originalFileId?: string;
   alt?: string;
   naturalWidth?: number;
   naturalHeight?: number;
@@ -328,6 +470,8 @@ export interface DesignerElement {
   fillGradient?: DesignerGradient;
   stroke?: string;
   strokeWidth?: number;
+  /** Dash, cap, join and arrowheads — see `designer-doc/stroke-style`. */
+  strokeStyle?: StrokeStyle;
 
   // reflow / linked-by-default
   originId?: string;
@@ -365,6 +509,22 @@ export interface VideoClip {
   trimOutMs?: number;
   src?: string;
   fileId?: string;
+  /**
+   * A non-destructive filter stack, exactly as on a layer (see `smartFilters`
+   * on `DesignerElement`). Only meaningful for clips whose pixels do not change
+   * over their own duration — image, shape, text and sticker clips — because a
+   * bake is one bitmap. A moving video keeps the native `filters` tokens, which
+   * both renderers apply per frame.
+   */
+  smartFilters?: DesignerSmartFilter[];
+  originalSrc?: string;
+  originalFileId?: string;
+  /**
+   * Shutter-based motion blur, derived from this clip's own keyframes. Applied
+   * by the frame renderer at export — the live preview draws one sample, the
+   * same trade every editor makes.
+   */
+  motionBlur?: MotionBlur;
   x?: number;
   y?: number;
   width?: number;
@@ -383,7 +543,12 @@ export interface VideoClip {
   keyframes?: {
     tMs: number;
     props: Record<string, number>;
-    ease?: 'linear' | 'easeInOut' | 'easeIn' | 'easeOut';
+    /**
+     * A preset name, or bezier handles for the graph editor. A segment uses the
+     * OUTgoing handle of the keyframe it leaves and the INcoming handle of the
+     * one it arrives at; see `designer-doc/keyframes`.
+     */
+    ease?: KeyframeEase;
   }[];
   naturalWidth?: number;
   naturalHeight?: number;
@@ -403,6 +568,17 @@ export interface VideoClip {
   filters?: string[];
   frames?: StickerFrame[];
   words?: CaptionWord[];
+  /**
+   * Caption look — karaoke, word-pop and the rest. Resolved into per-word draw
+   * state by `designer-doc/caption-styles`, which both renderers call.
+   */
+  captionStyle?: CaptionStyle;
+  /**
+   * Beats detected in this AUDIO clip, in ms from its own start. Stored so the
+   * analysis runs once rather than on every drag, and so a saved project keeps
+   * its grid.
+   */
+  beats?: number[];
   /**
    * Shape clips (doc v5). A shape track's clips carry the same geometry the
    * shape ELEMENTS use, so both renderers trace them through the shared
@@ -475,6 +651,11 @@ export interface DesignerDoc {
   mode: 'image' | 'video';
   outputs: (DesignerOutput | VideoOutput)[];
   attribution?: DesignerAttribution;
+  /**
+   * Reusable symbol definitions, stored once for the whole document. Instances
+   * reference them by id; editing one updates every instance.
+   */
+  symbols?: SymbolDefinition[];
 }
 
 /** Public aliases preserved from the former design-render.types.ts surface. */
@@ -735,6 +916,8 @@ const adjustmentShape = (gradient: z.ZodTypeAny) =>
       'threshold', 'gradient-map', 'vibrance', 'clarity-dehaze',
     ]),
     values: z.record(z.string().max(40), z.number()).optional(),
+    /** Photo Filter's tint. `applyAdjustment` has always read it. */
+    color: ColorSchema.optional(),
     gradient: gradient.optional(),
     curves: z
       .record(
@@ -756,11 +939,14 @@ const elementCommon = {
   type: z.enum([
     'text', 'image', 'shape', 'icon', 'path', 'raster',
     'group', 'fill', 'adjustment',
+    // doc v6 — additive, so v5 documents keep validating unchanged.
+    'symbol',
   ]),
   name: z.string().max(200).optional(),
   /** @deprecated v3 grouping; migrated to `parentId` in v4. */
   groupId: z.string().max(200).optional(),
   parentId: z.string().max(200).optional(),
+  symbolId: z.string().max(200).optional(),
   blendMode: BlendModeSchema.optional(),
   clipped: z.boolean().optional(),
   collapsed: z.boolean().optional(),
@@ -781,6 +967,16 @@ const elementCommon = {
   fileId: z.string().max(200).optional(),
   fitMode: z.enum(['contain', 'cover', 'fill']).optional(),
   alt: z.string().max(500).optional(),
+
+  // Painted layer mask (bitmap stencil) — see `maskSrc` on DesignerElement.
+  maskSrc: SrcSchema.optional(),
+  maskFileId: z.string().max(200).optional(),
+  maskEnabled: z.boolean().optional(),
+
+  // Non-destructive filter stack — see `smartFilters` on DesignerElement.
+  smartFilters: SmartFilterStackSchema,
+  originalSrc: SrcSchema.optional(),
+  originalFileId: z.string().max(200).optional(),
 
   // shape
   shape: z
@@ -880,6 +1076,9 @@ const elementStrictNested = {
   styles: z.array(layerStyleShape(StrictDesignerGradientSchema)).max(MAX_LAYER_STYLES).optional(),
   fillStyle: fillStyleShape(StrictDesignerGradientSchema).optional(),
   adjustment: adjustmentShape(StrictDesignerGradientSchema).optional(),
+  strokeStyle: StrokeStyleSchema,
+  symbolOverrides: SymbolOverridesSchema,
+  slot: SlotSchema,
   filters: FiltersSchema,
 };
 
@@ -896,6 +1095,9 @@ const elementLenientNested = {
   styles: z.array(layerStyleShape(LenientDesignerGradientSchema)).max(MAX_LAYER_STYLES).optional(),
   fillStyle: fillStyleShape(LenientDesignerGradientSchema).optional(),
   adjustment: adjustmentShape(LenientDesignerGradientSchema).optional(),
+  strokeStyle: StrokeStyleSchema,
+  symbolOverrides: SymbolOverridesSchema,
+  slot: SlotSchema,
   filters: FiltersSchema,
 };
 
@@ -968,17 +1170,23 @@ const { strict: StrictTransitionSchema, lenient: LenientTransitionSchema } =
 // ---------------------------------------------------------------------------
 // Keyframe
 // ---------------------------------------------------------------------------
+const easeHandle = z.tuple([z.number().finite(), z.number().finite()]);
+const EaseSchema = z.union([
+  z.enum(['linear', 'easeInOut', 'easeIn', 'easeOut']),
+  z.object({ in: easeHandle.optional(), out: easeHandle.optional() }).strict(),
+]);
+
 const { strict: StrictKeyframeSchema, lenient: LenientKeyframeSchema } =
   dualObject(
     {
       tMs: strictNum(0, MAX_VIDEO_DURATION_MS),
       props: z.record(z.number().finite()),
-      ease: z.enum(['linear', 'easeInOut', 'easeIn', 'easeOut']).optional(),
+      ease: EaseSchema.optional(),
     },
     {
       tMs: lenientNum(0, MAX_VIDEO_DURATION_MS, 0),
       props: z.record(z.number().finite()),
-      ease: z.enum(['linear', 'easeInOut', 'easeIn', 'easeOut']).optional(),
+      ease: EaseSchema.optional(),
     }
   );
 
@@ -989,6 +1197,16 @@ const clipCommon = {
   id: z.string().max(200),
   src: SrcSchema.optional(),
   fileId: z.string().max(200).optional(),
+  smartFilters: SmartFilterStackSchema,
+  originalSrc: SrcSchema.optional(),
+  originalFileId: z.string().max(200).optional(),
+  motionBlur: z
+    .object({
+      enabled: z.boolean().optional(),
+      shutterAngle: z.number().finite().min(0).max(360).optional(),
+      samples: z.number().finite().min(1).max(MAX_MOTION_BLUR_SAMPLES).optional(),
+    })
+    .optional(),
   text: z.string().max(MAX_TEXT_LEN).optional(),
   fontFamily: z.string().max(200).optional(),
   fill: ColorSchema.optional(),
@@ -1070,6 +1288,8 @@ const clipStrictNested = {
   filters: FiltersSchema,
   frames: z.array(StrictStickerFrameSchema).max(1000).optional(),
   words: z.array(StrictCaptionWordSchema).max(10000).optional(),
+  captionStyle: CaptionStyleSchema,
+  beats: BeatsSchema,
 };
 
 const clipLenientNested = {
@@ -1081,6 +1301,8 @@ const clipLenientNested = {
   filters: FiltersSchema,
   frames: z.array(LenientStickerFrameSchema).max(1000).optional(),
   words: z.array(LenientCaptionWordSchema).max(10000).optional(),
+  captionStyle: CaptionStyleSchema,
+  beats: BeatsSchema,
 };
 
 const { strict: StrictVideoClipSchema, lenient: LenientVideoClipSchema } =
@@ -1202,11 +1424,13 @@ const { strict: ImageDocStrictSchema, lenient: ImageDocLenientSchema } = dualObj
     ...docCommon,
     outputs: z.array(StrictDesignerOutputSchema).min(1).max(MAX_OUTPUTS),
     attribution: StrictDesignerAttributionSchema.optional(),
+    symbols: z.array(symbolDefinitionShape(StrictDesignerElementSchema)).max(200).optional(),
   },
   {
     ...docCommon,
     outputs: z.array(LenientDesignerOutputSchema).min(1).max(MAX_OUTPUTS),
     attribution: LenientDesignerAttributionSchema.optional(),
+    symbols: z.array(symbolDefinitionShape(LenientDesignerElementSchema)).max(200).optional(),
   }
 );
 
@@ -1219,11 +1443,13 @@ const { strict: VideoDocStrictSchema, lenient: VideoDocLenientSchema } = dualObj
     ...videoDocCommon,
     outputs: z.array(StrictVideoOutputSchema).min(1).max(MAX_OUTPUTS),
     attribution: StrictDesignerAttributionSchema.optional(),
+    symbols: z.array(symbolDefinitionShape(StrictDesignerElementSchema)).max(200).optional(),
   },
   {
     ...videoDocCommon,
     outputs: z.array(LenientVideoOutputSchema).min(1).max(MAX_OUTPUTS),
     attribution: LenientDesignerAttributionSchema.optional(),
+    symbols: z.array(symbolDefinitionShape(LenientDesignerElementSchema)).max(200).optional(),
   }
 );
 

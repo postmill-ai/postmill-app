@@ -7,6 +7,7 @@ import { ShapeInspector } from './shape-inspector';
 import { IconInspector } from './icon-inspector';
 import { TextInspector } from './text-inspector';
 import { ClipInspector } from './clip-inspector';
+import { AdjustmentInspector } from './adjustment-inspector';
 import { useT } from '@postmill-ai/react/translation/get.transation.service.client';
 import type { DesignerElement } from '../designer.store';
 
@@ -138,6 +139,11 @@ export const InspectorPanel: FC<InspectorProps> = ({ store }) => {
 
       {!isMixedType && primary.type === 'icon' && (
         <IconInspector element={primary} ids={ids} store={store} />
+      )}
+
+      {/* Settings apply to the one layer — averaging two Curves is meaningless. */}
+      {selected.length === 1 && primary.type === 'adjustment' && (
+        <AdjustmentInspector element={primary} store={store} />
       )}
 
       <CommonInspector selected={selected} ids={ids} store={store} />

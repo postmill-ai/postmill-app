@@ -77,6 +77,82 @@ describe('DesignRenderService', () => {
     expect(data[i + 1]).toBeLessThan(60);
   });
 
+  it('composites a painted layer mask, hiding where the mask is black', async () => {
+    // A 1x2 mask: left half transparent (hides), right half opaque (reveals).
+    const raw = Buffer.alloc(2 * 1 * 4);
+    raw[3] = 0;    // left pixel alpha
+    raw[7] = 255;  // right pixel alpha
+    raw[4] = raw[5] = raw[6] = 255;
+    const maskPng = await sharp(raw, { raw: { width: 2, height: 1, channels: 4 } })
+      .png()
+      .toBuffer();
+
+    const service = makeService();
+    const doc: any = {
+      version: 5,
+      mode: 'image',
+      outputs: [
+        {
+          id: 'o', formatId: 'square', name: 'S',
+          width: 100, height: 100, background: '#ffffff',
+          children: [
+            {
+              id: 'masked', type: 'shape', shape: 'rect',
+              x: 0, y: 0, width: 100, height: 100,
+              rotation: 0, opacity: 1, locked: false, hidden: false,
+              fill: '#ff0000',
+              maskSrc: `data:image/png;base64,${maskPng.toString('base64')}`,
+            },
+          ],
+        },
+      ],
+    };
+
+    const png = await service.renderPage(doc, 0, { pixelRatio: 1 });
+    const { data, info } = await sharp(png).ensureAlpha().raw().toBuffer({ resolveWithObject: true });
+    const at = (x: number, y: number) => {
+      const i = (y * info.width + x) * info.channels;
+      return [data[i], data[i + 1], data[i + 2]];
+    };
+
+    // Left half masked out -> the white background shows through.
+    expect(at(20, 50)[0]).toBeGreaterThan(200);
+    expect(at(20, 50)[1]).toBeGreaterThan(200);
+    // Right half revealed -> red.
+    expect(at(80, 50)[0]).toBeGreaterThan(200);
+    expect(at(80, 50)[1]).toBeLessThan(80);
+  });
+
+  it('draws the layer unmasked rather than erasing it when the mask cannot load', async () => {
+    const service = makeService();
+    const doc: any = {
+      version: 5,
+      mode: 'image',
+      outputs: [
+        {
+          id: 'o', formatId: 'square', name: 'S',
+          width: 50, height: 50, background: '#ffffff',
+          children: [
+            {
+              id: 'masked', type: 'shape', shape: 'rect',
+              x: 0, y: 0, width: 50, height: 50,
+              rotation: 0, opacity: 1, locked: false, hidden: false,
+              fill: '#0000ff',
+              maskSrc: 'https://unreachable.invalid/mask.png',
+            },
+          ],
+        },
+      ],
+    };
+
+    const png = await service.renderPage(doc, 0, { pixelRatio: 1 });
+    const { data, info } = await sharp(png).ensureAlpha().raw().toBuffer({ resolveWithObject: true });
+    const i = (25 * info.width + 25) * info.channels;
+    // Blue, not white — a missing mask must not silently delete the layer.
+    expect(data[i + 2]).toBeGreaterThan(200);
+    expect(data[i]).toBeLessThan(80);
+  });
+
   it('keeps a blend mode working on a layer that also has a layer style', async () => {
     // A styled layer is rendered into an offscreen buffer so its effects can
     // read its silhouette. Compositing that buffer back with a plain drawImage

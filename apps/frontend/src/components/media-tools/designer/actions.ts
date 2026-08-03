@@ -9,6 +9,10 @@ import {
   filtersInFamily,
 } from '@postmill-ai/nestjs-libraries/media/designer-doc/filter-descriptors';
 import { layerActions } from './layer-actions';
+import {
+  distribute,
+  type DistributeMode,
+} from '@postmill-ai/nestjs-libraries/media/designer-doc/align-distribute';
 
 type DesignerStoreApi = ReturnType<
   typeof import('./designer.store').createDesignerStore
@@ -79,6 +83,8 @@ export interface DesignerActionCtx {
   onSave: () => void;
   onSaveAsTemplate: () => void;
   onOpenMedia: () => void;
+  /** Insert media of a specific kind, with the picker narrowed to match. */
+  onInsertMedia: (kind: 'image' | 'sticker' | 'vector' | 'video' | 'audio') => void;
   onExport: () => void;
   onUseInPost?: () => void;
   onClose?: () => void;
@@ -107,6 +113,9 @@ export interface DesignerActionCtx {
   onLastFilter: () => void;
   hasLastFilter: () => boolean;
   lastFilterLabel: () => string;
+  /** Discard a layer's non-destructive filter recipe, keeping the pixels. */
+  onFlattenFilters: () => void;
+  hasSmartFilters: () => boolean;
   // AI image tools (operate on the single selected image)
   onAiGenerate: () => void;
   onAiRemoveBg: () => void;
@@ -274,6 +283,22 @@ export const useDesignerActions = (
       });
     };
 
+    /**
+     * Spread the selection evenly. The geometry is shared and pure; what
+     * happens here is only turning the answer back into element updates.
+     */
+    const distributeSelected = (mode: DistributeMode) => {
+      const st = store.getState();
+      const out = st.doc.outputs[st.currentOutput] as DesignerOutput;
+      const boxes = st.selectedIds
+        .map((id) => out.children.find((c) => c.id === id))
+        .filter((e): e is DesignerElement => !!e)
+        .map((e) => ({ id: e.id, x: e.x, y: e.y, width: e.width, height: e.height }));
+      const moves = distribute(boxes, mode);
+      for (const [id, patch] of Object.entries(moves)) st.updateElement(id, patch);
+      st.pushHistory('Distribute');
+    };
+
     const a: DesignerAction[] = [
       // ---------------- File ----------------
       { id: 'new-image', label: 'Image', menu: 'file', submenu: 'New', keywords: ['new', 'blank'], run: () => ctx.onNew('image') },
@@ -313,6 +338,7 @@ export const useDesignerActions = (
       // Generated from the descriptor table so the menu and the implementations
       // cannot drift; each family becomes a submenu, as Photoshop lays them out.
       { id: 'filter-last', label: ctx.lastFilterLabel, menu: 'filter', group: 'last', shortcut: '⌃⌘F', keywords: ['last filter', 'repeat'], enabled: () => ctx.hasLastFilter() && ctx.canEditPixels(), run: ctx.onLastFilter },
+      { id: 'filter-flatten', label: 'Flatten Filters', menu: 'filter', group: 'last', keywords: ['flatten', 'rasterize', 'smart filters'], enabled: () => ctx.hasSmartFilters(), run: ctx.onFlattenFilters },
       ...FILTER_FAMILY_ORDER.flatMap((family) =>
         filtersInFamily(family).map((f) => ({
           id: `filter-${f.id}`,
@@ -338,11 +364,22 @@ export const useDesignerActions = (
       // ---------------- Insert ----------------
       { id: 'insert-text', label: 'Text', menu: 'insert', keywords: ['text'], run: addText },
       { id: 'insert-shape', label: 'Shape', menu: 'insert', keywords: ['shape', 'rectangle'], enabled: () => live().mode === 'image', run: addShape },
-      { id: 'insert-image', label: 'Image…', menu: 'insert', keywords: ['image', 'photo'], enabled: () => live().mode === 'image', run: ctx.onOpenMedia },
+      { id: 'insert-image', label: 'Image…', menu: 'insert', keywords: ['image', 'photo'], enabled: () => live().mode === 'image', run: () => ctx.onInsertMedia('image') },
+      // Timeline media: only a video document has somewhere to put these.
+      { id: 'insert-video', label: 'Video…', menu: 'insert', keywords: ['video', 'clip', 'footage'], enabled: () => live().mode === 'video', run: () => ctx.onInsertMedia('video') },
+      { id: 'insert-audio', label: 'Audio…', menu: 'insert', keywords: ['audio', 'music', 'sound', 'track'], enabled: () => live().mode === 'video', run: () => ctx.onInsertMedia('audio') },
       { id: 'insert-icon', label: 'Icon', menu: 'insert', keywords: ['icon'], run: () => ctx.onTogglePanel('icons') },
+      { id: 'insert-sticker', label: 'Sticker…', menu: 'insert', keywords: ['sticker'], enabled: () => live().mode === 'image', run: () => ctx.onInsertMedia('sticker') },
+      { id: 'insert-vector', label: 'Vector…', menu: 'insert', keywords: ['vector', 'svg', 'illustration'], enabled: () => live().mode === 'image', run: () => ctx.onInsertMedia('vector') },
 
       // ---------------- Format ----------------
       { id: 'canvas-properties', label: 'Canvas Properties…', menu: 'file', submenuPath: ['Format'], group: 'canvas', keywords: ['canvas', 'properties', 'size', 'background'], run: ctx.onCanvasProperties },
+      // Distribute — align's missing half. Three or more, because the two
+      // outermost define the span and never move.
+      { id: 'distribute-h-centers', label: 'Horizontal Centers', menu: 'file', submenuPath: ['Format'], group: 'distribute', keywords: ['distribute', 'horizontal', 'spread'], enabled: () => store.getState().selectedIds.length >= 3, run: () => distributeSelected('horizontal-centers') },
+      { id: 'distribute-v-centers', label: 'Vertical Centers', menu: 'file', submenuPath: ['Format'], group: 'distribute', keywords: ['distribute', 'vertical', 'spread'], enabled: () => store.getState().selectedIds.length >= 3, run: () => distributeSelected('vertical-centers') },
+      { id: 'distribute-h-gaps', label: 'Horizontal Spacing', menu: 'file', submenuPath: ['Format'], group: 'distribute', keywords: ['distribute', 'spacing', 'gaps'], enabled: () => store.getState().selectedIds.length >= 3, run: () => distributeSelected('horizontal-gaps') },
+      { id: 'distribute-v-gaps', label: 'Vertical Spacing', menu: 'file', submenuPath: ['Format'], group: 'distribute', keywords: ['distribute', 'spacing', 'gaps'], enabled: () => store.getState().selectedIds.length >= 3, run: () => distributeSelected('vertical-gaps') },
       { id: 'align-left', label: 'Left', menu: 'file', submenuPath: ['Format'], group: 'align', keywords: ['align left'], enabled: () => live().hasSelection, run: () => alignSelected(() => ({ x: 0 })) },
       { id: 'align-center-h', label: 'Center', menu: 'file', submenuPath: ['Format'], group: 'align', keywords: ['align center'], enabled: () => live().hasSelection, run: () => alignSelected((el, out) => ({ x: (out.width - el.width) / 2 })) },
       { id: 'align-right', label: 'Right', menu: 'file', submenuPath: ['Format'], group: 'align', keywords: ['align right'], enabled: () => live().hasSelection, run: () => alignSelected((el, out) => ({ x: out.width - el.width })) },
@@ -384,6 +421,8 @@ export const useDesignerActions = (
       // ---------------- Window ----------------
       { id: 'win-templates', label: 'Templates', menu: 'view', group: 'win-panels', keywords: ['templates'], run: ctx.onBrowseTemplates },
       { id: 'win-layers', label: 'Layers', menu: 'view', group: 'win-panels', keywords: ['layers'], run: () => ctx.onTogglePanel('layers') },
+      { id: 'win-history', label: 'History', menu: 'view', group: 'win-panels', keywords: ['history', 'undo', 'states'], run: () => ctx.onTogglePanel('history') },
+      { id: 'win-template', label: 'Template Fields', menu: 'view', group: 'win-panels', keywords: ['template', 'slots', 'fields'], run: () => ctx.onTogglePanel('template') },
       { id: 'win-brand', label: 'Brand', menu: 'view', group: 'win-panels', keywords: ['brand'], run: () => ctx.onTogglePanel('brand') },
       { id: 'win-inspector', label: 'Properties / Inspector', menu: 'view', group: 'win-panels', keywords: ['inspector', 'properties'], run: ctx.onToggleInspector },
       { id: 'win-icons', label: 'Icons', menu: 'view', group: 'win-panels2', keywords: ['icons'], run: () => ctx.onTogglePanel('icons') },

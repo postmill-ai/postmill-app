@@ -12,6 +12,7 @@ import {
 } from '@postmill-ai/nestjs-libraries/media/designer-doc/layer-tree';
 import { SELECTABLE_BLEND_MODES } from '@postmill-ai/nestjs-libraries/media/designer-doc/pixel-ops';
 import { layerThumbnail } from './layer-thumbnail';
+import { SmartFilterList } from './smart-filter-list';
 import {
   EyeIcon,
   EyeOffIcon,
@@ -134,6 +135,7 @@ export const LayersPanel: FC<LayersPanelProps> = ({ store, onClose }) => {
   // here. Derived rather than copied into state so opening it never costs a
   // second render pass.
   const renamingId = store((s) => s.renamingId);
+  const maskTargetId = store((s) => s.maskTargetId);
   const editingId =
     localEditingId ?? (elements.some((e) => e.id === renamingId) ? renamingId : null);
 
@@ -253,8 +255,8 @@ export const LayersPanel: FC<LayersPanelProps> = ({ store, onClose }) => {
           const dimmed = isEffectivelyHidden(elements, el) && !el.hidden;
 
           return (
+            <React.Fragment key={el.id}>
             <div
-              key={el.id}
               data-layer-row
               data-element-id={el.id}
               role="option"
@@ -314,7 +316,47 @@ export const LayersPanel: FC<LayersPanelProps> = ({ store, onClose }) => {
                 </span>
               )}
 
-              <span className="w-7 h-7 shrink-0 rounded border border-studioBorder bg-newBgColor overflow-hidden flex items-center justify-center text-[11px] text-textColor/60">
+              {/* The mask thumbnail. Clicking it arms the mask as the paint
+                  target; the ring makes which surface is armed unmistakable,
+                  because painting into the wrong one is invisible until it
+                  isn't. ⇧-click disables, ⌥-click is handled by the row. */}
+              {el.maskSrc && (
+                <button
+                  type="button"
+                  data-row-action
+                  aria-label={t('designer_layer_mask', 'Layer mask')}
+                  aria-pressed={maskTargetId === el.id}
+                  title={
+                    el.maskEnabled === false
+                      ? t('designer_mask_disabled', 'Mask disabled — shift-click to enable')
+                      : t('designer_paint_mask', 'Paint the mask — shift-click to disable')
+                  }
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    const st = store.getState();
+                    if (e.shiftKey) {
+                      st.updateElement(el.id, { maskEnabled: el.maskEnabled === false });
+                      st.pushHistory();
+                      return;
+                    }
+                    st.setMaskTarget(maskTargetId === el.id ? null : el.id);
+                  }}
+                  className={`w-7 h-7 shrink-0 rounded border overflow-hidden flex items-center justify-center bg-newBgColor ${
+                    maskTargetId === el.id
+                      ? 'border-designerAccent ring-2 ring-designerAccent'
+                      : 'border-studioBorder'
+                  } ${el.maskEnabled === false ? 'opacity-40' : ''}`}
+                >
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img src={el.maskSrc} alt="" className="max-w-full max-h-full object-contain" />
+                </button>
+              )}
+
+              <span className={`w-7 h-7 shrink-0 rounded border overflow-hidden flex items-center justify-center text-[11px] text-textColor/60 bg-newBgColor ${
+                el.maskSrc && maskTargetId !== el.id
+                  ? 'border-designerAccent ring-2 ring-designerAccent'
+                  : 'border-studioBorder'
+              }`}>
                 {thumb ? (
                   // eslint-disable-next-line @next/next/no-img-element
                   <img src={thumb} alt="" className="max-w-full max-h-full object-contain" />
@@ -383,6 +425,16 @@ export const LayersPanel: FC<LayersPanelProps> = ({ store, onClose }) => {
                 {el.locked ? <LockIcon size={13} /> : <UnlockIcon size={13} />}
               </button>
             </div>
+
+            <SmartFilterList
+              stack={el.smartFilters}
+              depth={node.depth}
+              onChange={(next) => {
+                store.getState().updateElement(el.id, { smartFilters: next });
+                store.getState().pushHistory();
+              }}
+            />
+            </React.Fragment>
           );
         })}
       </div>

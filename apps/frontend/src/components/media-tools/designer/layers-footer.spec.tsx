@@ -35,19 +35,49 @@ const withLayers = (count: number) => {
 const button = (label: string) => screen.getByRole('button', { name: label });
 
 describe('LayersFooter', () => {
-  it('renders Photoshop\'s seven slots in order', () => {
+  it('renders the footer slots in Photoshop\'s order', () => {
+    // Eight rather than Photoshop's seven: we have BOTH mask kinds, so the
+    // single mask slot becomes two — layer mask then clipping mask.
     render(<LayersFooter store={withLayers(1)} />);
     const labels = screen
       .getAllByRole('button')
       .map((b) => b.getAttribute('aria-label'));
-    expect(labels).toHaveLength(7);
+    expect(labels).toHaveLength(8);
     expect(labels[0]).toMatch(/Formats|Unlink/);
     expect(labels[1]).toBe('Layer Style');
-    expect(labels[2]).toBe('Create Clipping Mask');
-    expect(labels[3]).toBe('New Fill or Adjustment Layer');
-    expect(labels[4]).toBe('New Group');
-    expect(labels[5]).toBe('New Layer');
-    expect(labels[6]).toBe('Delete');
+    expect(labels[2]).toBe('Add Layer Mask');
+    expect(labels[3]).toBe('Create Clipping Mask');
+    expect(labels[4]).toBe('New Fill or Adjustment Layer');
+    expect(labels[5]).toBe('New Group');
+    expect(labels[6]).toBe('New Layer');
+    expect(labels[7]).toBe('Delete');
+  });
+
+  it('adds a mask that reveals everything, and arms it for painting', () => {
+    const store = withLayers(1);
+    const [el] = store.getState().doc.outputs[0].children;
+    store.getState().setSelectedIds([el.id]);
+    render(<LayersFooter store={store} />);
+
+    fireEvent.click(button('Add Layer Mask'));
+
+    const after = store.getState().doc.outputs[0].children[0];
+    expect(after.maskSrc).toBeTruthy();
+    expect(after.maskEnabled).toBe(true);
+    // Armed, so the next brush stroke goes into the mask rather than the layer.
+    expect(store.getState().maskTargetId).toBe(el.id);
+  });
+
+  it('does not replace a mask that already exists', () => {
+    const store = withLayers(1);
+    const [el] = store.getState().doc.outputs[0].children;
+    store.getState().updateElement(el.id, { maskSrc: 'https://x/mine.png' });
+    store.getState().setSelectedIds([el.id]);
+    render(<LayersFooter store={store} />);
+
+    fireEvent.click(button('Add Layer Mask'));
+
+    expect(store.getState().doc.outputs[0].children[0].maskSrc).toBe('https://x/mine.png');
   });
 
   it('disables the selection-dependent buttons with nothing selected', () => {

@@ -1,7 +1,11 @@
 'use client';
 
 import React, { FC, useCallback, useRef, useEffect, useState } from 'react';
-import { Stage, Layer, Transformer, Rect, Group, Line as KonvaLine, Image as KonvaImage, Shape } from 'react-konva';
+import { Stage, Layer, Transformer, Rect, Group, Line as KonvaLine, Image as KonvaImage, Shape, Text as KonvaText } from 'react-konva';
+import {
+  findEqualSpacing,
+  type SpacingGuide,
+} from '@postmill-ai/nestjs-libraries/media/designer-doc/align-distribute';
 import type Konva from 'konva';
 import { CanvasElements, gradientFillProps } from './elements';
 import { TextEditingOverlay } from './text-editing';
@@ -92,6 +96,10 @@ export const DesignerCanvas: FC<CanvasProps> = ({
   const [isSpacePressed, setIsSpacePressed] = useState(false);
   const [isPanning, setIsPanning] = useState(false);
   const [guides, setGuides] = useState<{ points: number[] }[]>([]);
+  /** Equal-spacing guide: the two matching gaps, plus where to draw the badge. */
+  const [spacingGuide, setSpacingGuide] = useState<
+    (SpacingGuide & { cross: number }) | null
+  >(null);
   const [hud, setHud] = useState<{ x: number; y: number; text: string } | null>(null);
   const [marquee, setMarquee] = useState<{ x: number; y: number; w: number; h: number } | null>(null);
   const marqueeStart = useRef<{ x: number; y: number } | null>(null);
@@ -757,7 +765,7 @@ export const DesignerCanvas: FC<CanvasProps> = ({
   const computeSnap = useCallback(
     (node: Konva.Node) => {
       if (!output || isVideo) return;
-      if (!snapEnabled) { setGuides([]); return; }
+      if (!snapEnabled) { setGuides([]); setSpacingGuide(null); return; }
       const others = ((output as DesignerOutput | undefined)?.children || []).filter((el) => !selectedIds.includes(el.id) && !el.hidden);
       const w = node.width() * node.scaleX();
       const h = node.height() * node.scaleY();
@@ -790,6 +798,25 @@ export const DesignerCanvas: FC<CanvasProps> = ({
       });
       if (snapDX !== null) node.x(node.x() + snapDX);
       if (snapDY !== null) node.y(node.y() + snapDY);
+
+      // Equal-spacing detection, on top of the edge/centre snaps. This is what
+      // separates a smart guide from a plain one: it can tell you three cards
+      // are evenly spread, which no edge comparison can.
+      const spacing = findEqualSpacing(
+        { id: '__moving', x: node.x(), y: node.y(), width: w, height: h },
+        others.map((el) => ({ id: el.id, x: el.x, y: el.y, width: el.width, height: el.height })),
+        SNAP
+      );
+      setSpacingGuide(
+        spacing
+          ? {
+              ...spacing,
+              // The badge sits on the axis the gap runs along, centred in it.
+              cross: spacing.axis === 'x' ? node.y() + h / 2 : node.x() + w / 2,
+            }
+          : null
+      );
+
       setGuides(lines);
       setHud({ x: node.x(), y: node.y() - 22, text: `${Math.round(node.x())}, ${Math.round(node.y())}` });
     },
@@ -821,6 +848,7 @@ export const DesignerCanvas: FC<CanvasProps> = ({
   const handleDragEnd = useCallback(
     (e: Konva.KonvaEventObject<DragEvent>) => {
       setGuides([]);
+      setSpacingGuide(null);
       setHud(null);
       if (rafIdRef.current) {
         cancelAnimationFrame(rafIdRef.current);
@@ -1314,6 +1342,7 @@ export const DesignerCanvas: FC<CanvasProps> = ({
           />
           <CanvasElements
             elements={isVideo ? [] : (output?.children || [])}
+            symbols={doc.symbols}
             // The Rect above keeps the page drop-shadow (editor chrome, which
             // must never be filtered); this fill-only copy is what an
             // adjustment layer sees, matching the server's page readback.
@@ -1354,6 +1383,34 @@ export const DesignerCanvas: FC<CanvasProps> = ({
           {guides.map((g) => (
             <KonvaLine key={g.points.join(',')} points={g.points} stroke="#FF3B7F" strokeWidth={1 / zoom} dash={[4, 4]} listening={false} />
           ))}
+          {/* Equal-spacing measurement: a bar across each matching gap, with the
+              distance stated once. Illustrator draws the same thing. */}
+          {spacingGuide?.spans.map((span, i) => {
+            const horizontal = spacingGuide.axis === 'x';
+            const mid = (span.from + span.to) / 2;
+            return (
+              <React.Fragment key={`${span.from}-${span.to}-${i}`}>
+                <KonvaLine
+                  points={
+                    horizontal
+                      ? [span.from, spacingGuide.cross, span.to, spacingGuide.cross]
+                      : [spacingGuide.cross, span.from, spacingGuide.cross, span.to]
+                  }
+                  stroke="#FF3B7F"
+                  strokeWidth={1 / zoom}
+                  listening={false}
+                />
+                <KonvaText
+                  x={horizontal ? mid : spacingGuide.cross + 4 / zoom}
+                  y={horizontal ? spacingGuide.cross - 14 / zoom : mid}
+                  text={String(Math.round(spacingGuide.gap))}
+                  fontSize={11 / zoom}
+                  fill="#FF3B7F"
+                  listening={false}
+                />
+              </React.Fragment>
+            );
+          })}
           {showSafeZones && safeZonePreset && (
             <SafeZoneOverlay presetId={safeZonePreset} width={output.width} height={output.height} visible={true} />
           )}

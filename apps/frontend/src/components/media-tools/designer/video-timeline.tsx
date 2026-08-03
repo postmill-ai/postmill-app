@@ -9,6 +9,7 @@ import { useModals } from '@postmill-ai/frontend/components/layout/new-modal';
 import { useMediaToolsStatus } from '@postmill-ai/frontend/components/layout/use-media-tools-status';
 import { VoiceoverDialog } from './voiceover-dialog';
 import { addMediaToTimeline } from './add-media-to-timeline';
+import { timelineBeats } from './beat-sync';
 import { isArtifactPath } from '@postmill-ai/frontend/components/launches/ai.video';
 import { useMediaPicker } from '@postmill-ai/frontend/components/media-tools/use-media-picker';
 import { useT } from '@postmill-ai/react/translation/get.transation.service.client';
@@ -838,6 +839,9 @@ export const VideoTimeline: FC<VideoTimelineProps> = ({ store, sendTimelineAware
           snapCandidates.push(c.startMs, c.endMs + (c.freezeAtMs || 0));
         }
       }
+      // Beats join the clip edges as snap targets, so a cut lands on the music
+      // rather than near it. Empty until an audio clip has been analysed.
+      snapCandidates.push(...timelineBeats(vo.tracks));
       const threshold = SNAP_THRESHOLD_MS / pixelsPerMs;
       let best = value;
       let bestDelta = threshold;

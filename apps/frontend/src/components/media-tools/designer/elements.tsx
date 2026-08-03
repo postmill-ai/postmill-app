@@ -19,9 +19,17 @@ import {
   flattenPoints,
 } from '@postmill-ai/nestjs-libraries/media/designer-doc/shape-geometry';
 import { tracePathNodes } from '@postmill-ai/nestjs-libraries/media/designer-doc/path-geometry';
+import {
+  arrowHeadPoints,
+  strokeEndpoints,
+} from '@postmill-ai/nestjs-libraries/media/designer-doc/stroke-style';
 import { getBuffer } from './raster-layers';
 import { buildLayerTree, type LayerNode } from '@postmill-ai/nestjs-libraries/media/designer-doc/layer-tree';
-import { LayerGroup, AdjustmentScope, blendPropFor, layerStyleProps } from './layer-render';
+import {
+  expandSymbols,
+  type SymbolDefinition,
+} from '@postmill-ai/nestjs-libraries/media/designer-doc/symbols';
+import { LayerGroup, AdjustmentScope, MaskedLayer, blendPropFor, layerStyleProps } from './layer-render';
 import { patternFillProps } from './patterns';
 import { parseDesignerFilterToken } from '@postmill-ai/nestjs-libraries/media/design-render/filter-tokens';
 
@@ -29,6 +37,8 @@ type SelectHandler = (id: string, evt?: Konva.KonvaEventObject<any>) => void;
 
 interface ElementsProps {
   elements: DesignerElement[];
+  /** Symbol definitions from the document, for expanding instances. */
+  symbols?: SymbolDefinition[];
   onSelect: SelectHandler;
   onContextMenu?: (elementId: string, clientX: number, clientY: number) => void;
   /**
@@ -173,7 +183,7 @@ export const getImageNaturalSize = (src?: string): { width: number; height: numb
   return img ? { width: img.naturalWidth, height: img.naturalHeight } : null;
 };
 
-const useLoadedImage = (src: string | undefined) => {
+export const useLoadedImage = (src: string | undefined) => {
   const image = useSyncExternalStore(
     subscribeToCache,
     () => getCachedImage(src),
@@ -655,14 +665,98 @@ const IconNode: FC<IconNodeProps> = ({ element, onSelect, onContextMenu, interac
   );
 };
 
+/**
+ * The stroke options Konva expresses natively. Anything absent stays absent
+ * rather than being defaulted, so a layer without stroke options renders
+ * exactly as it did before they existed.
+ */
+export const konvaStrokeProps = (
+  style: DesignerElement['strokeStyle']
+): Record<string, unknown> => {
+  if (!style) return {};
+  const props: Record<string, unknown> = {};
+  if (style.dash?.length) props.dash = style.dash;
+  if (style.dashOffset) props.dashOffset = style.dashOffset;
+  if (style.lineCap) props.lineCap = style.lineCap;
+  if (style.lineJoin) props.lineJoin = style.lineJoin;
+  if (style.miterLimit) props.miterLimit = style.miterLimit;
+  return props;
+};
+
+/**
+ * Arrowheads, which neither Konva nor canvas has. Traced from the shared
+ * geometry so the head is the same shape here, in the PDF and in a rendered
+ * frame.
+ */
+const ArrowHeads: FC<{ element: DesignerElement; points: { x: number; y: number }[] }> = ({
+  element,
+  points,
+}) => {
+  const style = element.strokeStyle;
+  if (!style?.arrowStart && !style?.arrowEnd) return null;
+  const ends = strokeEndpoints(points);
+  if (!ends) return null;
+  const width = element.strokeWidth || 1;
+  const heads = [
+    arrowHeadPoints(style.arrowStart || 'none', ends.start, ends.startAngle, width),
+    arrowHeadPoints(style.arrowEnd || 'none', ends.end, ends.endAngle, width),
+  ].filter((p) => p.length);
+  if (!heads.length) return null;
+
+  return (
+    <>
+      {heads.map((pts, i) => (
+        <Line
+          key={i}
+          x={element.x}
+          y={element.y}
+          rotation={element.rotation}
+          points={pts.flatMap((p) => [p.x, p.y])}
+          closed
+          fill={element.stroke || element.fill || '#000000'}
+          listening={false}
+        />
+      ))}
+    </>
+  );
+};
+
+/**
+ * Wraps a leaf in its painted layer mask, if it has one.
+ *
+ * A component rather than a branch inside `renderLeaf` because loading the mask
+ * bitmap needs a hook, and `renderLeaf` is a plain function called in a loop.
+ */
+const MaskedLeaf: FC<{ element: DesignerElement; children: ReactNode }> = ({
+  element,
+  children,
+}) => {
+  const mask = useLoadedImage(
+    element.maskEnabled === false ? undefined : element.maskSrc
+  );
+  const live = getBuffer(`${element.id}:mask`);
+  const stencil = (live as HTMLCanvasElement | undefined) || mask;
+  if (!stencil || element.maskEnabled === false) return <>{children}</>;
+  return (
+    <MaskedLayer element={element} mask={stencil} cacheKey={element.maskSrc}>
+      {children}
+    </MaskedLayer>
+  );
+};
+
 export const CanvasElements: FC<ElementsProps> = ({
   elements,
+  symbols,
   onSelect,
   onContextMenu,
   interactive = true,
   backdrop,
 }) => {
-  const tree = useMemo(() => buildLayerTree(elements), [elements]);
+  // Symbol instances expand to ordinary elements before the tree is built, so
+  // nothing below here needs to know symbols exist — the same contract the
+  // server renderer follows.
+  const expanded = useMemo(() => expandSymbols(elements, symbols), [elements, symbols]);
+  const tree = useMemo(() => buildLayerTree(expanded), [expanded]);
 
   const renderLeaf = (el: DesignerElement): ReactNode => {
         const commonProps = {
@@ -678,6 +772,9 @@ export const CanvasElements: FC<ElementsProps> = ({
           // they are deliberately not selectable in the UI — see
           // SELECTABLE_BLEND_MODES.
           globalCompositeOperation: blendPropFor(el.blendMode) as never,
+          // Dash, cap and join map straight onto Konva; arrowheads do not, and
+          // are drawn as their own Shape below.
+          ...konvaStrokeProps(el.strokeStyle),
           // Drop shadow / stroke / colour overlay map onto Konva's own props.
           ...layerStyleProps(el),
           draggable: !el.locked && interactive,
@@ -851,16 +948,24 @@ export const CanvasElements: FC<ElementsProps> = ({
                 );
               case 'line':
                 return (
-                  <Line
-                    key={el.id}
-                    {...commonProps}
-                    x={el.x}
-                    y={el.y}
-                    points={[0, 0, el.width, el.height]}
-                    stroke={el.stroke || '#000000'}
-                    strokeWidth={el.strokeWidth || 2}
-                    fill={el.fill}
-                  />
+                  <React.Fragment key={el.id}>
+                    <Line
+                      {...commonProps}
+                      x={el.x}
+                      y={el.y}
+                      points={[0, 0, el.width, el.height]}
+                      stroke={el.stroke || '#000000'}
+                      strokeWidth={el.strokeWidth || 2}
+                      fill={el.fill}
+                    />
+                    <ArrowHeads
+                      element={el}
+                      points={[
+                        { x: 0, y: 0 },
+                        { x: el.width, y: el.height },
+                      ]}
+                    />
+                  </React.Fragment>
                 );
               case 'star':
               case 'triangle':
@@ -1007,7 +1112,7 @@ export const CanvasElements: FC<ElementsProps> = ({
         ];
       }
 
-      return [...acc, renderLeaf(el)];
+      return [...acc, <MaskedLeaf key={el.id} element={el}>{renderLeaf(el)}</MaskedLeaf>];
     }, seed);
 
   return <>{renderNodes(tree, backdrop ? [backdrop] : [])}</>;

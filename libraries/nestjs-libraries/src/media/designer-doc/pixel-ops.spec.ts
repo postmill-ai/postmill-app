@@ -232,11 +232,48 @@ describe('adjustments — behaviour', () => {
 const spread = ([r, g, b]: number[]) => Math.max(r, g, b) - Math.min(r, g, b);
 
 describe('helpers', () => {
-  it('curveLut is identity for a straight line', () => {
+  it('curveLut is identity for a straight line, at EVERY level', () => {
+    // Checking only 0/128/255 is what let a smoothstep interpolation pass while
+    // crushing shadows and blowing highlights — 10 became 1, 250 became 255.
     const lut = curveLut([{ x: 0, y: 0 }, { x: 255, y: 255 }]);
-    expect(lut[0]).toBe(0);
-    expect(lut[255]).toBe(255);
-    expect(Math.abs(lut[128] - 128)).toBeLessThanOrEqual(1);
+    for (let v = 0; v < 256; v++) {
+      expect(lut[v], `level ${v}`).toBe(v);
+    }
+  });
+
+  it('curveLut is linear between any two collinear points', () => {
+    const lut = curveLut([
+      { x: 0, y: 0 },
+      { x: 128, y: 64 },
+      { x: 255, y: 127.5 },
+    ]);
+    for (let v = 0; v < 256; v++) {
+      expect(Math.abs(lut[v] - v / 2), `level ${v}`).toBeLessThanOrEqual(1);
+    }
+  });
+
+  it('curveLut stays monotone and never overshoots its control points', () => {
+    // A raw cubic spline through this shape rings above 255 and below 0.
+    const lut = curveLut([
+      { x: 0, y: 0 },
+      { x: 60, y: 10 },
+      { x: 70, y: 245 },
+      { x: 255, y: 255 },
+    ]);
+    for (let v = 1; v < 256; v++) {
+      expect(lut[v], `level ${v} went backwards`).toBeGreaterThanOrEqual(lut[v - 1]);
+    }
+    expect(Math.min(...lut)).toBeGreaterThanOrEqual(0);
+    expect(Math.max(...lut)).toBeLessThanOrEqual(255);
+  });
+
+  it('curveLut holds a flat segment flat', () => {
+    const lut = curveLut([
+      { x: 0, y: 128 },
+      { x: 128, y: 128 },
+      { x: 255, y: 255 },
+    ]);
+    for (let v = 0; v <= 128; v++) expect(lut[v], `level ${v}`).toBe(128);
   });
 
   it('curveLut clamps outside its control points', () => {

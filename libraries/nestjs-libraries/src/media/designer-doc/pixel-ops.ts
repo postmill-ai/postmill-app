@@ -188,16 +188,56 @@ const buildLut = (fn: (v: number) => number): Uint8ClampedArray => {
 export const curveLut = (points: { x: number; y: number }[]): Uint8ClampedArray => {
   const pts = [...points].sort((a, b) => a.x - b.x);
   if (pts.length < 2) return buildLut((v) => v);
+
+  // Monotone cubic Hermite (Fritsch–Carlson). A plain spline overshoots and
+  // smoothstep is not linear even between collinear points — which made the
+  // default straight line crush shadows and blow highlights. This is linear
+  // when the control points are collinear and never overshoots when they are
+  // not, which is exactly what a curves editor promises.
+  const n = pts.length;
+  const slopes: number[] = [];
+  for (let i = 0; i < n - 1; i++) {
+    const dx = Math.max(1e-6, pts[i + 1].x - pts[i].x);
+    slopes.push((pts[i + 1].y - pts[i].y) / dx);
+  }
+  const tangents: number[] = new Array(n);
+  tangents[0] = slopes[0];
+  tangents[n - 1] = slopes[n - 2];
+  for (let i = 1; i < n - 1; i++) {
+    tangents[i] =
+      slopes[i - 1] * slopes[i] <= 0 ? 0 : (slopes[i - 1] + slopes[i]) / 2;
+  }
+  for (let i = 0; i < n - 1; i++) {
+    if (slopes[i] === 0) {
+      tangents[i] = 0;
+      tangents[i + 1] = 0;
+      continue;
+    }
+    const a = tangents[i] / slopes[i];
+    const b = tangents[i + 1] / slopes[i];
+    const s = a * a + b * b;
+    if (s > 9) {
+      const tau = 3 / Math.sqrt(s);
+      tangents[i] = tau * a * slopes[i];
+      tangents[i + 1] = tau * b * slopes[i];
+    }
+  }
+
   return buildLut((v) => {
     if (v <= pts[0].x) return pts[0].y;
-    if (v >= pts[pts.length - 1].x) return pts[pts.length - 1].y;
+    if (v >= pts[n - 1].x) return pts[n - 1].y;
     let i = 0;
-    while (i < pts.length - 2 && v > pts[i + 1].x) i++;
-    const p0 = pts[i];
-    const p1 = pts[i + 1];
-    const t = (v - p0.x) / Math.max(1e-6, p1.x - p0.x);
-    // Smoothstep between control points — no overshoot, unlike a raw spline.
-    return p0.y + (p1.y - p0.y) * (t * t * (3 - 2 * t));
+    while (i < n - 2 && v > pts[i + 1].x) i++;
+    const h = Math.max(1e-6, pts[i + 1].x - pts[i].x);
+    const t = (v - pts[i].x) / h;
+    const t2 = t * t;
+    const t3 = t2 * t;
+    return (
+      (2 * t3 - 3 * t2 + 1) * pts[i].y +
+      (t3 - 2 * t2 + t) * h * tangents[i] +
+      (-2 * t3 + 3 * t2) * pts[i + 1].y +
+      (t3 - t2) * h * tangents[i + 1]
+    );
   });
 };
 
@@ -410,9 +450,7 @@ export const applyAdjustment = (
 
     case 'photo-filter': {
       const [fr, fg, fb] = parseHex(
-        typeof (adjustment as { color?: string }).color === 'string'
-          ? ((adjustment as { color?: string }).color as string)
-          : '#ec8a00'
+        typeof adjustment.color === 'string' ? adjustment.color : '#ec8a00'
       );
       const density = clamp01(num(v, 'density', 25) / 100);
       const preserve = num(v, 'preserveLuminosity', 1) >= 0.5;

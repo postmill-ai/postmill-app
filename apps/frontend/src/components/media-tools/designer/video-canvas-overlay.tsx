@@ -14,6 +14,7 @@ import type { VideoClip, VideoOutput } from './designer.store';
 import { composeClipsAtPlayhead, sourceTimeForPlayhead } from './video-preview';
 import { clipGeometryUpdate, type ClipBox } from './clip-geometry';
 import { getBuffer } from './raster-layers';
+import { captionWordStates } from '@postmill-ai/nestjs-libraries/media/designer-doc/caption-styles';
 import {
   pointsForShape,
   flattenPoints,
@@ -324,21 +325,34 @@ const CaptionClip: FC<{ clip: VideoClip; width: number; height: number; playhead
     ctx.textBaseline = 'top';
     const lineHeight = fontSize * 1.35;
     const spaceWidth = ctx.measureText(' ').width;
+    // Per-word styling comes from the shared module, which the frame renderer
+    // is handed as source — so a karaoke caption in the preview is the one that
+    // gets rendered.
+    const states = captionWordStates(words, relativeMs, clip.captionStyle, clip.fill || '#ffffff');
     let x = 0;
     let y = 0;
     for (let i = 0; i < words.length; i++) {
       const w = words[i];
+      const state = states[i];
+      const scaled = fontSize * state.scale;
+      ctx.font = `${state.weight || fontWeight} ${scaled}px ${fontFamily}`;
       const wordWidth = ctx.measureText(w.word).width;
       if (x + wordWidth > width && x > 0) {
         x = 0;
         y += lineHeight;
       }
-      ctx.fillStyle = i === activeIndex ? '#facc15' : (clip.fill || '#ffffff');
-      ctx.fillText(w.word, x, y);
+      if (state.background) {
+        ctx.fillStyle = state.background;
+        ctx.fillRect(x - 2, y - 2, wordWidth + 4, scaled + 4);
+      }
+      ctx.fillStyle = state.color;
+      // Grown from the baseline, not the top, or the line jumps as the
+      // highlight moves along it.
+      ctx.fillText(w.word, x, y + (fontSize - scaled));
       x += wordWidth + spaceWidth;
     }
     store.emit();
-  }, [clip, words, width, height, activeIndex, canvasId, store]);
+  }, [clip, words, width, height, activeIndex, relativeMs, canvasId, store]);
 
   useEffect(() => {
     return () => {

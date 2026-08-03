@@ -9,6 +9,7 @@ import type { DesignerAction } from '../actions';
 import {
   LinkLayersIcon,
   LayerStyleIcon,
+  LayerMaskIcon,
   ClippingMaskIcon,
   FillAdjustmentIcon,
   NewGroupIcon,
@@ -36,6 +37,15 @@ interface LayersFooterProps {
  */
 
 /** A footer button that opens a small menu of actions above itself. */
+/**
+ * A 1x1 opaque white PNG — a mask that reveals everything.
+ *
+ * Inlined rather than uploaded: a fresh mask has no painted content yet, and the
+ * first stroke replaces it with a real upload through `commitBuffer`.
+ */
+const WHITE_MASK =
+  'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==';
+
 const MenuButton: FC<{
   label: string;
   icon: FC<{ size?: number; className?: string }>;
@@ -175,6 +185,22 @@ export const LayersFooter: FC<LayersFooterProps> = ({ store }) => {
         label={t('layer_style', 'Layer Style')}
         icon={LayerStyleIcon}
         actions={byPath('Layer Style')}
+      />
+      <ActionButton
+        label={t('designer_add_layer_mask', 'Add Layer Mask')}
+        icon={LayerMaskIcon}
+        disabled={!hasSelection}
+        onClick={() => {
+          // A blank white mask reveals everything — you then paint black to
+          // hide, which is the direction Photoshop starts you in.
+          const st = store.getState();
+          for (const el of selectedEls) {
+            if (el.maskSrc) continue;
+            st.updateElement(el.id, { maskEnabled: true, maskSrc: WHITE_MASK });
+          }
+          st.pushHistory();
+          if (selectedEls[0]) st.setMaskTarget(selectedEls[0].id);
+        }}
       />
       <ActionButton
         label={t('designer_create_clipping_mask', 'Create Clipping Mask')}

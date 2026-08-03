@@ -1,7 +1,12 @@
 'use client';
 
 import React, { FC } from 'react';
-import { ColorSwatch, Slider, Stepper } from '../controls';
+import { ColorSwatch, SegmentedControl, Slider, Stepper } from '../controls';
+import type {
+  ArrowHead,
+  LineCap,
+  LineJoin,
+} from '@postmill-ai/nestjs-libraries/media/designer-doc/stroke-style';
 import type { DesignerElement, DesignerTextShadow } from '../designer.store';
 import { useBrandColors } from './use-brand-colors';
 import { useT } from '@postmill-ai/react/translation/get.transation.service.client';
@@ -11,6 +16,22 @@ interface ShapeInspectorProps {
   ids: string[];
   store: any;
 }
+
+/** The three dash patterns worth a one-click preset; the rest is Illustrator. */
+const DASH_PRESETS: { key: string; label: string; labelKey: string; dash?: number[] }[] = [
+  { key: 'solid', label: 'Solid', labelKey: 'designer_dash_solid' },
+  { key: 'dashed', label: 'Dashed', labelKey: 'designer_dash_dashed', dash: [10, 6] },
+  { key: 'dotted', label: 'Dotted', labelKey: 'designer_dash_dotted', dash: [1, 5] },
+];
+
+const ARROW_HEADS: { value: ArrowHead; label: string; labelKey: string }[] = [
+  { value: 'none', label: 'None', labelKey: 'designer_arrow_none' },
+  { value: 'arrow', label: 'Arrow', labelKey: 'designer_arrow_arrow' },
+  { value: 'triangle', label: 'Triangle', labelKey: 'designer_arrow_triangle' },
+  { value: 'circle', label: 'Circle', labelKey: 'designer_arrow_circle' },
+  { value: 'square', label: 'Square', labelKey: 'designer_arrow_square' },
+  { value: 'bar', label: 'Bar', labelKey: 'designer_arrow_bar' },
+];
 
 const DEFAULT_SHADOW: DesignerTextShadow = {
   color: '#000000',
@@ -30,6 +51,14 @@ export const ShapeInspector: FC<ShapeInspectorProps> = ({
   const brandEnforcement = store((s: any) => s.brandEnforcement);
 
   const set = (u: Partial<DesignerElement>) => updateElements(ids, u);
+  /** Stroke options merge — writing the whole object would drop the other keys. */
+  const setStroke = (u: Partial<NonNullable<DesignerElement['strokeStyle']>>) =>
+    set({ strokeStyle: { ...(element.strokeStyle || {}), ...u } });
+
+  const dashKey =
+    DASH_PRESETS.find(
+      (d) => JSON.stringify(d.dash || []) === JSON.stringify(element.strokeStyle?.dash || [])
+    )?.key || 'solid';
 
   const shadow = element.boxShadow;
 
@@ -63,6 +92,84 @@ export const ShapeInspector: FC<ShapeInspectorProps> = ({
           value={element.strokeWidth || 0}
           onChange={(n) => set({ strokeWidth: n })}
         />
+
+        {/* The Illustrator options. Only worth showing once there is a stroke
+            to shape — a dash pattern on a zero-width line is invisible. */}
+        {(element.strokeWidth || 0) > 0 && (
+          <div className="space-y-2">
+            <SegmentedControl
+              value={dashKey}
+              options={DASH_PRESETS.map((d) => ({
+                value: d.key,
+                label: t(d.labelKey, d.label),
+              }))}
+              onChange={(key) => {
+                const preset = DASH_PRESETS.find((d) => d.key === key);
+                setStroke({ dash: preset?.dash });
+              }}
+            />
+            <div className="grid grid-cols-2 gap-2">
+              <label className="flex flex-col gap-1">
+                <span className="text-[11px] text-textColor/50">{t('designer_line_cap', 'Cap')}</span>
+                <select
+                  value={element.strokeStyle?.lineCap || 'butt'}
+                  onChange={(e) => setStroke({ lineCap: e.target.value as LineCap })}
+                  className="h-[28px] px-2 rounded-md bg-newBgColor border border-studioBorder text-[12px] text-textColor outline-none"
+                >
+                  <option value="butt">{t('designer_cap_butt', 'Butt')}</option>
+                  <option value="round">{t('designer_cap_round', 'Round')}</option>
+                  <option value="square">{t('designer_cap_square', 'Square')}</option>
+                </select>
+              </label>
+              <label className="flex flex-col gap-1">
+                <span className="text-[11px] text-textColor/50">{t('designer_line_join', 'Join')}</span>
+                <select
+                  value={element.strokeStyle?.lineJoin || 'miter'}
+                  onChange={(e) => setStroke({ lineJoin: e.target.value as LineJoin })}
+                  className="h-[28px] px-2 rounded-md bg-newBgColor border border-studioBorder text-[12px] text-textColor outline-none"
+                >
+                  <option value="miter">{t('designer_join_miter', 'Miter')}</option>
+                  <option value="round">{t('designer_join_round', 'Round')}</option>
+                  <option value="bevel">{t('designer_join_bevel', 'Bevel')}</option>
+                </select>
+              </label>
+            </div>
+
+            {/* Arrowheads only mean anything on an open stroke. */}
+            {(element.shape === 'line' || element.type === 'path') && (
+              <div className="grid grid-cols-2 gap-2">
+                <label className="flex flex-col gap-1">
+                  <span className="text-[11px] text-textColor/50">
+                    {t('designer_arrow_start', 'Start')}
+                  </span>
+                  <select
+                    value={element.strokeStyle?.arrowStart || 'none'}
+                    onChange={(e) => setStroke({ arrowStart: e.target.value as ArrowHead })}
+                    className="h-[28px] px-2 rounded-md bg-newBgColor border border-studioBorder text-[12px] text-textColor outline-none"
+                  >
+                    {ARROW_HEADS.map((h) => (
+                      <option key={h.value} value={h.value}>{t(h.labelKey, h.label)}</option>
+                    ))}
+                  </select>
+                </label>
+                <label className="flex flex-col gap-1">
+                  <span className="text-[11px] text-textColor/50">
+                    {t('designer_arrow_end', 'End')}
+                  </span>
+                  <select
+                    value={element.strokeStyle?.arrowEnd || 'none'}
+                    onChange={(e) => setStroke({ arrowEnd: e.target.value as ArrowHead })}
+                    className="h-[28px] px-2 rounded-md bg-newBgColor border border-studioBorder text-[12px] text-textColor outline-none"
+                  >
+                    {ARROW_HEADS.map((h) => (
+                      <option key={h.value} value={h.value}>{t(h.labelKey, h.label)}</option>
+                    ))}
+                  </select>
+                </label>
+              </div>
+            )}
+          </div>
+        )}
       </div>
 
       <Stepper

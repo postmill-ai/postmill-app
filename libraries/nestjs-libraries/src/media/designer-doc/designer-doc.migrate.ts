@@ -69,6 +69,9 @@ export const migrateDoc = (raw: any): DesignerDoc => {
       mode: raw.mode || 'image',
       outputs: raw.outputs,
       attribution: raw.attribution,
+      // Symbol definitions live on the doc; omitting them here would drop every
+      // symbol instance in the document on the next load.
+      ...(Array.isArray(raw.symbols) ? { symbols: raw.symbols } : {}),
     } as DesignerDoc;
   }
   const w = raw?.width || 1080;

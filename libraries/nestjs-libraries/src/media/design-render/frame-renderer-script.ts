@@ -22,10 +22,16 @@ export function escapeForScriptTag(value: unknown): string {
 }
 
 import { shapeGeometrySource } from '../designer-doc/shape-geometry';
+import { keyframesSource } from '../designer-doc/keyframes';
+import { motionBlurSource } from '../designer-doc/motion-blur';
+import { captionStylesSource } from '../designer-doc/caption-styles';
 
 export const FRAME_RENDERER_SCRIPT = /* js */ `
 (function () {
 ${shapeGeometrySource()}
+${keyframesSource()}
+${motionBlurSource()}
+${captionStylesSource()}
 
   const output = window.__DATA.output;
   const baseUrl = window.__DATA.baseUrl || '';
@@ -148,66 +154,9 @@ ${shapeGeometrySource()}
     return frames[frames.length - 1].url;
   }
 
-  function interpolateKeyframes(clip, relativeMs) {
-    const defaults = {
-      x: clip.x || 0,
-      y: clip.y || 0,
-      width: clip.width || 1,
-      height: clip.height || 1,
-      rotation: clip.rotation || 0,
-      opacity: clip.opacity == null ? 1 : clip.opacity,
-    };
-    const kfs = clip.keyframes || [];
-    if (kfs.length === 0) return defaults;
-    const sorted = [...kfs].sort((a, b) => a.tMs - b.tMs);
-    if (relativeMs <= sorted[0].tMs) {
-      const kf = sorted[0];
-      return {
-        x: kf.props.x == null ? defaults.x : kf.props.x,
-        y: kf.props.y == null ? defaults.y : kf.props.y,
-        width: kf.props.width == null ? defaults.width : kf.props.width,
-        height: kf.props.height == null ? defaults.height : kf.props.height,
-        rotation: kf.props.rotation == null ? defaults.rotation : kf.props.rotation,
-        opacity: kf.props.opacity == null ? defaults.opacity : kf.props.opacity,
-      };
-    }
-    if (relativeMs >= sorted[sorted.length - 1].tMs) {
-      const kf = sorted[sorted.length - 1];
-      return {
-        x: kf.props.x == null ? defaults.x : kf.props.x,
-        y: kf.props.y == null ? defaults.y : kf.props.y,
-        width: kf.props.width == null ? defaults.width : kf.props.width,
-        height: kf.props.height == null ? defaults.height : kf.props.height,
-        rotation: kf.props.rotation == null ? defaults.rotation : kf.props.rotation,
-        opacity: kf.props.opacity == null ? defaults.opacity : kf.props.opacity,
-      };
-    }
-    let prev = sorted[0];
-    let next = sorted[0];
-    let ease = 'linear';
-    for (let i = 0; i < sorted.length - 1; i++) {
-      if (relativeMs >= sorted[i].tMs && relativeMs <= sorted[i + 1].tMs) {
-        prev = sorted[i];
-        next = sorted[i + 1];
-        ease = next.ease || prev.ease || 'linear';
-        break;
-      }
-    }
-    const range = next.tMs - prev.tMs;
-    let t = range > 0 ? (relativeMs - prev.tMs) / range : 0;
-    if (ease === 'easeInOut') t = t < 0.5 ? 2 * t * t : 1 - Math.pow(-2 * t + 2, 2) / 2;
-    else if (ease === 'easeIn') t = t * t;
-    else if (ease === 'easeOut') t = 1 - (1 - t) * (1 - t);
-    const lerp = (a, b, t) => a + (b - a) * t;
-    return {
-      x: lerp(prev.props.x == null ? defaults.x : prev.props.x, next.props.x == null ? defaults.x : next.props.x, t),
-      y: lerp(prev.props.y == null ? defaults.y : prev.props.y, next.props.y == null ? defaults.y : next.props.y, t),
-      width: lerp(prev.props.width == null ? defaults.width : prev.props.width, next.props.width == null ? defaults.width : next.props.width, t),
-      height: lerp(prev.props.height == null ? defaults.height : prev.props.height, next.props.height == null ? defaults.height : next.props.height, t),
-      rotation: lerp(prev.props.rotation == null ? defaults.rotation : prev.props.rotation, next.props.rotation == null ? defaults.rotation : next.props.rotation, t),
-      opacity: lerp(prev.props.opacity == null ? defaults.opacity : prev.props.opacity, next.props.opacity == null ? defaults.opacity : next.props.opacity, t),
-    };
-  }
+  // Keyframe interpolation and easing come from the shared module as source
+  // (see keyframesSource), so the preview and an exported mp4 ease identically.
+  const interpolateKeyframes = interpolateClipKeyframes;
 
   function getClipDuration(clip) { return clip.endMs - clip.startMs; }
   function getEffectiveEnd(clip) { return clip.endMs + (clip.freezeAtMs || 0); }
@@ -463,24 +412,28 @@ ${shapeGeometrySource()}
     const lineHeight = fontSize * 1.35;
     const spaceWidth = ctx.measureText(' ').width;
     const relativeMs = Math.max(0, playheadMs - clip.startMs);
-    let activeIndex = -1;
-    for (let i = 0; i < words.length; i++) {
-      const w = words[i];
-      if (relativeMs >= w.startMs && relativeMs <= w.endMs) {
-        activeIndex = i;
-        break;
-      }
-    }
+    // Per-word styling comes from the shared module (see captionStylesSource),
+    // so a karaoke caption looks the same here as in the editor.
+    const states = captionWordStates(words, relativeMs, clip.captionStyle, clip.fill || '#ffffff');
     let x = 0;
     let y = 0;
     for (let i = 0; i < words.length; i++) {
+      const state = states[i];
+      const scaled = fontSize * state.scale;
+      ctx.font = (state.weight || fontWeight) + ' ' + scaled + 'px ' + (clip.fontFamily || 'Arial');
       const wordWidth = ctx.measureText(words[i].word).width;
       if (x + wordWidth > props.width && x > 0) {
         x = 0;
         y += lineHeight;
       }
-      ctx.fillStyle = i === activeIndex ? '#facc15' : (clip.fill || '#ffffff');
-      ctx.fillText(words[i].word, x, y);
+      if (state.background) {
+        ctx.fillStyle = state.background;
+        ctx.fillRect(x - 2, y - 2, wordWidth + 4, scaled + 4);
+      }
+      ctx.fillStyle = state.color;
+      // A scaled word grows from its own baseline, not its top, or the line
+      // visibly jumps as the highlight moves along it.
+      ctx.fillText(words[i].word, x, y + (fontSize - scaled));
       x += wordWidth + spaceWidth;
     }
     ctx.restore();
@@ -547,7 +500,27 @@ ${shapeGeometrySource()}
 
     const composed = composeClipsAtPlayhead(output, timeMs);
     for (const item of composed) {
-      await drawClip(ctx, item.clip, item.trackType, item.props);
+      // Motion blur is an accumulation: the same clip drawn at several
+      // sub-frame times inside the shutter window, each at a fraction of the
+      // opacity. A clip without it samples once and costs nothing extra.
+      const times = motionBlurSampleTimes(timeMs, output.fps || 30, item.clip.motionBlur);
+      if (times.length < 2) {
+        await drawClip(ctx, item.clip, item.trackType, item.props);
+        continue;
+      }
+      const wasTime = window.__CURRENT_TIME;
+      for (const sampleMs of times) {
+        window.__CURRENT_TIME = sampleMs;
+        const relativeMs = Math.max(0, sampleMs - item.clip.startMs);
+        const sampled = interpolateKeyframes(item.clip, relativeMs);
+        await drawClip(
+          ctx,
+          item.clip,
+          item.trackType,
+          { ...sampled, opacity: (item.props.opacity == null ? 1 : item.props.opacity) / times.length }
+        );
+      }
+      window.__CURRENT_TIME = wasTime;
     }
   }
 

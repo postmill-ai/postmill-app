@@ -377,3 +377,11 @@ export const DeleteLayerIcon = toolIcon(
     <path d="M7.8 5.8V4.2a1 1 0 0 1 1-1h2.4a1 1 0 0 1 1 1v1.6" />
   </>
 );
+
+/** Footer: add a layer mask — a filled rect with a knocked-out circle. */
+export const LayerMaskIcon = toolIcon(
+  <>
+    <rect x="3" y="4.5" width="14" height="11" rx="1.2" />
+    <circle cx="10" cy="10" r="3" fill="currentColor" stroke="none" />
+  </>
+);

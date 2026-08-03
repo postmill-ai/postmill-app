@@ -156,6 +156,8 @@ export const usePaintTools = ({ store, stageRef, output, fetchFn }: UsePaintTool
    * Null for image documents, which paint into elements.
    */
   const rasterClipTrack = useRef<string | null>(null);
+  /** Set when the active stroke is going into a layer mask, not a layer. */
+  const maskOwnerId = useRef<string | null>(null);
 
   /**
    * The raster layer to paint into, creating one above the selection if needed.
@@ -169,6 +171,23 @@ export const usePaintTools = ({ store, stageRef, output, fetchFn }: UsePaintTool
     const state = store.getState();
     const w = output?.width ?? 1080;
     const h = output?.height ?? 1080;
+
+    // A layer's MASK is armed: paint into it instead of the layer's pixels.
+    // Returned as a pseudo-element keyed `${id}:mask` so the whole brush engine
+    // — buffers, undo, clipping — works on it unchanged.
+    if (state.maskTargetId) {
+      const children = (state.doc.outputs[state.currentOutput] as DesignerOutput)?.children || [];
+      const owner = children.find((c) => c.id === state.maskTargetId);
+      if (owner) {
+        maskOwnerId.current = owner.id;
+        return {
+          ...owner,
+          id: `${owner.id}:mask`,
+          type: 'raster',
+        } as DesignerElement;
+      }
+    }
+    maskOwnerId.current = null;
 
     if (state.doc.mode === 'video') {
       const vo = state.doc.outputs[state.currentOutput] as unknown as VideoOutput;
@@ -357,6 +376,16 @@ export const usePaintTools = ({ store, stageRef, output, fetchFn }: UsePaintTool
 
     const result = await commitBuffer(id, fetchFn);
     if (result) {
+      const owner = maskOwnerId.current;
+      if (owner) {
+        store.getState().updateElement(owner, {
+          maskSrc: result.src,
+          maskFileId: result.fileId,
+          maskEnabled: true,
+        });
+        store.getState().pushHistory();
+        return;
+      }
       const trackId = rasterClipTrack.current;
       if (trackId) {
         store.getState().updateClip(store.getState().currentOutput, trackId, id, {

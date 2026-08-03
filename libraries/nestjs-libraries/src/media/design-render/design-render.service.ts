@@ -32,8 +32,10 @@ import {
   type FittedText,
 } from '../designer-doc/fit-text';
 import { pointsForShape, starPoints } from '../designer-doc/shape-geometry';
+import { arrowHeadPoints, strokeEndpoints } from '../designer-doc/stroke-style';
 import { tracePathNodes } from '../designer-doc/path-geometry';
 import { buildLayerTree, groupBounds, type LayerNode } from '../designer-doc/layer-tree';
+import { expandSymbols } from '../designer-doc/symbols';
 import {
   applyAdjustment,
   blendPixels,
@@ -638,10 +640,14 @@ export class DesignRenderService {
       throw new Error(`Output ${outputIndex} is a video output; use /render-video`);
     }
 
+    // Symbol instances expand to ordinary elements before anything reads the
+    // layer list, so nothing below this line needs to know symbols exist.
+    const children = expandSymbols(output.children ?? [], doc.symbols);
+
     if (opts?.orgId) {
       await this._fontLoaderService.loadOrgFonts(opts.orgId);
     }
-    await this._fontLoaderService.loadCuratedFonts(output.children ?? []);
+    await this._fontLoaderService.loadCuratedFonts(children);
 
     const ratio = opts?.pixelRatio && opts.pixelRatio > 0 ? opts.pixelRatio : 1;
     const width = Math.max(
@@ -665,8 +671,8 @@ export class DesignRenderService {
     await this.drawLayerTree(
       ctx,
       canvas,
-      buildLayerTree(output.children ?? []),
-      output.children ?? [],
+      buildLayerTree(children),
+      children,
       ratio,
       opts
     );
@@ -1316,7 +1322,9 @@ export class DesignRenderService {
           continue;
         }
 
-        if (el.styles?.length) {
+        if (el.maskSrc && el.maskEnabled !== false) {
+          await this.drawMaskedElement(ctx, el, ratio);
+        } else if (el.styles?.length) {
           await this.drawElementWithStyles(ctx, el, ratio);
         } else {
           await this.drawElement(ctx, el);
@@ -1381,6 +1389,44 @@ export class DesignRenderService {
     ctx.save();
     this.applyBlend(ctx, stack, el.blendMode, ratio);
     ctx.restore();
+  }
+
+  /**
+   * Draw an element through its painted layer mask.
+   *
+   * The layer goes into an offscreen buffer, the mask bitmap is composited
+   * `destination-in`, and the result is drawn onto the page — the same stencil
+   * the canvas applies through a cached Konva group. It wraps the WHOLE layer,
+   * styles included, so a masked layer's drop shadow is masked too.
+   */
+  private async drawMaskedElement(
+    ctx: any,
+    el: DesignerElement,
+    ratio: number
+  ): Promise<void> {
+    const mask = await this.loadImageSafe(el.maskSrc);
+    if (!mask) {
+      // An unreachable mask must not silently erase the layer.
+      if (el.styles?.length) await this.drawElementWithStyles(ctx, el, ratio);
+      else await this.drawElement(ctx, el);
+      return;
+    }
+
+    const { createCanvas } = await loadCanvasModule();
+    const w = ctx.canvas.width;
+    const h = ctx.canvas.height;
+    const buffer = createCanvas(w, h);
+    const bctx: any = buffer.getContext('2d');
+    bctx.scale(ratio, ratio);
+
+    if (el.styles?.length) await this.drawElementWithStyles(bctx, el, ratio);
+    else await this.drawElement(bctx, el);
+
+    bctx.globalCompositeOperation = 'destination-in';
+    bctx.drawImage(mask, el.x, el.y, el.width, el.height);
+    bctx.globalCompositeOperation = 'source-over';
+
+    ctx.drawImage(buffer, 0, 0, w / ratio, h / ratio);
   }
 
   /** Drop Shadow / Outer Glow — the layer's silhouette, blurred behind it. */
@@ -1740,8 +1786,52 @@ export class DesignRenderService {
     if (el.stroke && (el.strokeWidth || 0) > 0) {
       ctx.strokeStyle = el.stroke;
       ctx.lineWidth = el.strokeWidth as number;
+      this.applyStrokeStyle(ctx, el);
       ctx.stroke();
+      ctx.setLineDash([]);
     }
+    this.drawArrowHeads(ctx, el, (el.nodes || []).map((n) => ({ x: n.x, y: n.y })));
+  }
+
+  /**
+   * Apply the Illustrator-grade stroke options canvas2d supports natively.
+   * Arrowheads are not among them; `drawArrowHeads` traces those.
+   */
+  private applyStrokeStyle(ctx: any, el: DesignerElement): void {
+    const st = el.strokeStyle;
+    ctx.setLineDash(st?.dash?.length ? st.dash : []);
+    ctx.lineDashOffset = st?.dashOffset || 0;
+    ctx.lineCap = st?.lineCap || 'butt';
+    ctx.lineJoin = st?.lineJoin || 'miter';
+    ctx.miterLimit = st?.miterLimit || 10;
+  }
+
+  /**
+   * Arrowheads at the ends of a line or open path, filled with the stroke
+   * colour. Shared geometry (designer-doc/stroke-style) so the head is the same
+   * shape in the editor, the PDF and an exported frame.
+   */
+  private drawArrowHeads(ctx: any, el: DesignerElement, points: { x: number; y: number }[]): void {
+    const st = el.strokeStyle;
+    if (!st || (!st.arrowStart && !st.arrowEnd)) return;
+    const ends = strokeEndpoints(points);
+    if (!ends) return;
+    const width = el.strokeWidth || 1;
+    ctx.save();
+    ctx.setLineDash([]);
+    ctx.fillStyle = el.stroke || el.fill || '#000000';
+    for (const [head, tip, angle] of [
+      [st.arrowStart, ends.start, ends.startAngle] as const,
+      [st.arrowEnd, ends.end, ends.endAngle] as const,
+    ]) {
+      const pts = arrowHeadPoints(head || 'none', tip, angle, width);
+      if (!pts.length) continue;
+      ctx.beginPath();
+      pts.forEach((p, i) => (i === 0 ? ctx.moveTo(p.x, p.y) : ctx.lineTo(p.x, p.y)));
+      ctx.closePath();
+      ctx.fill();
+    }
+    ctx.restore();
   }
 
   private drawShape(ctx: any, el: DesignerElement): void {
@@ -1756,7 +1846,13 @@ export class DesignRenderService {
       ctx.lineTo(el.width, el.height / 2);
       ctx.strokeStyle = el.stroke || el.fill || '#000000';
       ctx.lineWidth = el.strokeWidth || 1;
+      this.applyStrokeStyle(ctx, el);
       ctx.stroke();
+      ctx.setLineDash([]);
+      this.drawArrowHeads(ctx, el, [
+        { x: 0, y: el.height / 2 },
+        { x: el.width, y: el.height / 2 },
+      ]);
       return;
     }
 
@@ -1776,7 +1872,9 @@ export class DesignRenderService {
     if (el.stroke && (el.strokeWidth || 0) > 0) {
       ctx.strokeStyle = el.stroke;
       ctx.lineWidth = el.strokeWidth as number;
+      this.applyStrokeStyle(ctx, el);
       ctx.stroke();
+      ctx.setLineDash([]);
     }
   }
 
