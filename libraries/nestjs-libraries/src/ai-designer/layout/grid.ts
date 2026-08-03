@@ -52,6 +52,11 @@ export const columnsFor = (width: number, height: number): number => {
 /**
  * The length type scales from.
  *
+ * NOT called `typeBasisPx` — `reflow.ts` exports a function of that name which
+ * takes a `typeBudget` and means something different. Two functions with one
+ * name, one of which is the source of the squashed-variant bug, is exactly how
+ * the wrong one gets imported.
+ *
  * The geometric mean of the two sides, NOT `Math.min(width, height)`. The min
  * rule is what made a 1200x675 banner size its headline for 675px — type
  * scaled for the short axis on a canvas whose whole character is the long one —
@@ -59,7 +64,7 @@ export const columnsFor = (width: number, height: number): number => {
  * area, so a wider canvas genuinely gets larger type instead of the same type
  * with more empty space beside it.
  */
-export const typeBasisPx = (width: number, height: number): number =>
+export const canvasTypeBasis = (width: number, height: number): number =>
   Math.sqrt(Math.max(1, width) * Math.max(1, height));
 
 /**
@@ -79,7 +84,7 @@ export const buildGrid = (canvas: {
 }): Grid => {
   const width = Math.max(1, canvas.width);
   const height = Math.max(1, canvas.height);
-  const typeBasis = typeBasisPx(width, height);
+  const typeBasis = canvasTypeBasis(width, height);
 
   // Two independent constraints on the usable box: the designer's margin, and
   // the platform's own chrome. Take whichever is more conservative on each

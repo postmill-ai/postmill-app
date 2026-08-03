@@ -41,15 +41,23 @@ export const recoupleClippedAdjustments = (
   if (!clipped.length) return children;
 
   const claimed = new Set(clipped.map((el) => el.id));
+  const emittedAdj = new Set<string>();
   const out: DesignerElement[] = [];
 
   for (const el of children) {
     if (claimed.has(el.id)) continue;
     out.push(el);
-    // A base is the last non-adjustment layer of its unit, so its grades
-    // follow it directly.
+    // A grade follows the FIRST non-adjustment layer of its unit (the layer
+    // it grades — clipping binds to whatever sits directly beneath). Emit
+    // each adjustment once: without the guard a unit with two non-adjustment
+    // members (image + plate) re-emitted the grade per member, duplicating
+    // the element — id included — and double-applying the grade.
     if (el.type !== 'adjustment' && el.groupId) {
-      out.push(...clipped.filter((adj) => adj.groupId === el.groupId));
+      for (const adj of clipped) {
+        if (adj.groupId !== el.groupId || emittedAdj.has(adj.id)) continue;
+        emittedAdj.add(adj.id);
+        out.push(adj);
+      }
     }
   }
 

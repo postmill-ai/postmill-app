@@ -132,7 +132,7 @@ export const YoutubeThumbnailSkill = defineSkill({
 export const PodcastEpisodeSkill = defineSkill({
   id: 'podcast-episode',
   title: 'Podcast Episode',
-  signals: ['podcast', 'episode', 'listen', 'audio', 'ep.'],
+  signals: ['podcast', 'episode', 'listen', 'audio', 'ep'],
   direction:
     'Aim at a record sleeve. Square, a strong central mark or portrait, episode number treated as typography rather than metadata. Consistency across episodes matters more than novelty in any one.',
   rules: [

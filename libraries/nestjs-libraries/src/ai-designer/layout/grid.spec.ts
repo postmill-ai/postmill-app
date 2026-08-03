@@ -6,7 +6,7 @@ import {
   columnX,
   columnsFor,
   snapToBaseline,
-  typeBasisPx,
+  canvasTypeBasis,
 } from './grid';
 
 /**
@@ -19,25 +19,25 @@ const SQUARE = { width: 1080, height: 1080, formatId: 'ig-post' };
 const STORY = { width: 1080, height: 1920, formatId: 'ig-story' };
 const BANNER = { width: 1200, height: 675, formatId: 'tw-post' };
 
-describe('typeBasisPx', () => {
+describe('canvasTypeBasis', () => {
   it('tracks area, not the short side', () => {
     // The bug this replaces: `Math.min(w, h)` sized a 1200x675 banner's
     // headline for 675px, so every wide channel variant read as the square
     // design squashed. The mean gives a wider canvas genuinely larger type.
-    expect(typeBasisPx(1200, 675)).toBeGreaterThan(675);
-    expect(typeBasisPx(1200, 675)).toBeLessThan(1200);
+    expect(canvasTypeBasis(1200, 675)).toBeGreaterThan(675);
+    expect(canvasTypeBasis(1200, 675)).toBeLessThan(1200);
   });
 
   it('is symmetric in its arguments', () => {
-    expect(typeBasisPx(1080, 1920)).toBeCloseTo(typeBasisPx(1920, 1080), 6);
+    expect(canvasTypeBasis(1080, 1920)).toBeCloseTo(canvasTypeBasis(1920, 1080), 6);
   });
 
   it('is the identity on a square', () => {
-    expect(typeBasisPx(1080, 1080)).toBeCloseTo(1080, 6);
+    expect(canvasTypeBasis(1080, 1080)).toBeCloseTo(1080, 6);
   });
 
   it('never returns zero for a degenerate canvas', () => {
-    expect(typeBasisPx(0, 0)).toBeGreaterThan(0);
+    expect(canvasTypeBasis(0, 0)).toBeGreaterThan(0);
   });
 });
 

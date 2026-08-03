@@ -1375,6 +1375,29 @@ describe('AiDesignerComposerService.applyFixes op vocabulary (Phase 4)', () => {
     expect(patch.textShadow).toBeUndefined();
   });
 
+  it('a design-language fix with a note stays typed (no freeform re-emit)', async () => {
+    // The critic is taught to pair effects/treatment with a `note`. The
+    // typed-check used to omit the design-language fields, so exactly that
+    // fix shape fell into the freeform LLM re-emit and the grade was dropped.
+    const findings: VisionFinding[] = [
+      {
+        issue: 'Headline has no separation from the photo',
+        slotId: 'headline',
+        fix: {
+          scope: 'shared',
+          effects: ['soft-lift'],
+          note: 'lift the headline off the busy image',
+        },
+      },
+    ];
+
+    await service.applyFixes(makeDoc(), findings, 'org1');
+
+    expect(docService.applyOps).toHaveBeenCalled();
+    expect(opsOf()[0].op).toBe('updateElement');
+    expect(model.generateText).not.toHaveBeenCalled();
+  });
+
   it('still rejects unknown style keys instead of poisoning the ops array', async () => {
     const findings: VisionFinding[] = [
       {
@@ -3739,6 +3762,46 @@ describe('AiDesignerComposerService LLM revise protections', () => {
       type: 'color',
       color: '#0B3D2E',
     });
+  });
+
+  it('drops op types the revise prompt never sanctions (setDoc, placeImage, …)', async () => {
+    // The filter is the stated backstop for the prompt's op vocabulary, but
+    // any schema-valid op used to fall through to the doc: an off-script
+    // reply could replace the whole doc or place an arbitrary image URL.
+    const doc = makeDoc();
+    model.generateText.mockResolvedValue(
+      JSON.stringify([
+        { op: 'removeOutput', outputIndex: 0 },
+        {
+          op: 'placeImage',
+          outputIndex: 0,
+          src: 'https://evil.example.com/tracker.png',
+        },
+        {
+          op: 'updateElement',
+          outputIndex: 0,
+          elementId: 'e1',
+          patch: { fill: '#222222' },
+        },
+      ])
+    );
+
+    const revised = await service.reviseByInstruction(
+      doc,
+      'darken the headline',
+      'shared',
+      'org1'
+    );
+
+    // The sanctioned op survived; the output was not removed and nothing was placed.
+    expect(revised.outputs.length).toBe(1);
+    const headline = (revised.outputs[0] as any).children.find(
+      (el: any) => el.id === 'e1'
+    );
+    expect(headline.fill).toBe('#222222');
+    expect(
+      JSON.stringify(revised).includes('evil.example.com')
+    ).toBe(false);
   });
 
   it('forces locked copy over an LLM patch.text rewrite', async () => {

@@ -25,6 +25,13 @@ const CustomSizeSchema = z.object({
 });
 
 const StylePresetIdSchema = z.enum(STYLE_PRESET_IDS);
+// For PERSISTED values (plans, briefs): a preset id retired by a future
+// release must not fail the session parse — fall back to the first preset,
+// matching the `.catch` pattern of the sibling enums. Request-boundary
+// schemas keep the strict enum so a bad client value still 400s.
+const PersistedStylePresetIdSchema = StylePresetIdSchema.catch(
+  STYLE_PRESET_IDS[0]
+);
 
 export const AiDesignerConfigSchema = z
   .object({
@@ -129,7 +136,7 @@ export const DesignPlanSchema = z
     skill: z.string().max(200),
     concept: z.string().max(2000),
     formatTemplate: z.string().max(200).optional(),
-    styleId: StylePresetIdSchema.optional(),
+    styleId: PersistedStylePresetIdSchema.optional(),
     palette: z.array(z.string().max(100)).max(64),
     typeScale: TypeScaleSchema,
     background: BackgroundSchema,
@@ -191,7 +198,7 @@ export const DesignBriefSchema = z
     pendingReviseTarget: z.string().max(200).optional(),
     answeredPromptIds: z.array(z.string().max(200)).max(100).optional(),
     skillId: z.string().max(200).optional(),
-    styleId: StylePresetIdSchema.optional(),
+    styleId: PersistedStylePresetIdSchema.optional(),
   })
   .passthrough();
 

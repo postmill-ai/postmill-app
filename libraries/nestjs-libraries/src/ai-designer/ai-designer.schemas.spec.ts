@@ -64,12 +64,17 @@ describe('DesignPlanSchema v2', () => {
     expect(res.success).toBe(true);
   });
 
-  it('rejects an unknown styleId', () => {
+  it('tolerates an unknown styleId instead of sinking the persisted plan', () => {
+    // Plans persist inside sessions; a preset retired by a future release must
+    // not fail the parse — it falls back to the first preset.
     const res = DesignPlanSchema.safeParse({
       ...makeV1Plan(),
       styleId: 'grunge-core',
     });
-    expect(res.success).toBe(false);
+    expect(res.success).toBe(true);
+    if (res.success) {
+      expect(res.data.styleId).toBe(STYLE_PRESET_IDS[0]);
+    }
   });
 
   it('rejects a malformed slot style override', () => {
@@ -121,12 +126,15 @@ describe('DesignBriefSchema v2', () => {
     expect(res.success).toBe(true);
   });
 
-  it('rejects an unknown styleId', () => {
+  it('tolerates an unknown styleId instead of sinking the persisted brief', () => {
     const res = DesignBriefSchema.safeParse({
       intent: 'Launch post',
       styleId: 'not-a-style',
     });
-    expect(res.success).toBe(false);
+    expect(res.success).toBe(true);
+    if (res.success) {
+      expect(res.data.styleId).toBe(STYLE_PRESET_IDS[0]);
+    }
   });
 });
 

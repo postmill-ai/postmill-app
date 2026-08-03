@@ -203,6 +203,18 @@ describe('recoupleClippedAdjustments', () => {
     expect(out.map((e) => e.id)).toContain('orphan');
   });
 
+  it('emits a grade once when its unit has two non-adjustment members', () => {
+    // Without the emission guard the grade was re-emitted per member —
+    // [image, adj, plate, adj] — duplicating the element id and
+    // double-applying the grade.
+    const out = recoupleClippedAdjustments([
+      el({ id: 'img', type: 'image', groupId: 'hero' }),
+      el({ id: 'plate', type: 'shape', groupId: 'hero' }),
+      el({ id: 'grade', type: 'adjustment', clipped: true, groupId: 'hero' }),
+    ]);
+    expect(out.map((e) => e.id)).toEqual(['img', 'grade', 'plate']);
+  });
+
   it('is a no-op for a document with no clipped grades', () => {
     const input = [el({ id: 'a' }), el({ id: 'b' })];
     expect(recoupleClippedAdjustments(input)).toBe(input);

@@ -195,9 +195,16 @@ export interface DesignSlot {
   rotation?: number;
 }
 
-/** Slots that carry copy (everything except imagery and decorative shapes). */
+/**
+ * Slots that carry copy — the kinds the copywriter writes text for, the
+ * composer lays out as type, and the plan card lets the user edit. Decorative
+ * and structural kinds (divider/logo/frame/shape/icon, imagery, accent
+ * shapes) are NOT copy: treating them as such asks the copywriter for divider
+ * "copy" and renders it as a stray body line. Matches the fill-panel mapping
+ * in `util/template-slots.ts`.
+ */
 export const isCopySlot = (slot: Pick<DesignSlot, 'kind'>): boolean =>
-  slot.kind !== 'image' && slot.kind !== 'accent-shape';
+  slot.kind === 'text' || slot.kind === 'cta-button' || slot.kind === 'badge';
 
 export type SlotTextMap = Record<string, string>;
 

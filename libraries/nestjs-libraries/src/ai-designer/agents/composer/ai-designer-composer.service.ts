@@ -1231,7 +1231,15 @@ export class AiDesignerComposerService implements OnModuleInit {
         fix.text ||
         fix.regenerateAsset ||
         fix.addElement ||
-        fix.removeElement
+        fix.removeElement ||
+        // Design-language repairs are typed too — the critic is taught to pair
+        // them with a `note`, and without these keys here such a fix would
+        // route whole into the freeform LLM re-emit, silently dropping the
+        // grade (`_designLanguagePatch` below never saw it).
+        fix.effects ||
+        fix.treatment ||
+        fix.mask ||
+        fix.blend
       );
       if (fix.note && !hasTyped) {
         noteFixes.push({
@@ -2223,6 +2231,25 @@ export class AiDesignerComposerService implements OnModuleInit {
 
     const filtered: DesignerDocOp[] = [];
     for (const op of ops) {
+      // Fail-closed for real: only the op types the revise prompt sanctions
+      // may reach the doc. Anything else the model emits — setDoc,
+      // addOutput/removeOutput/resizeOutput, reorderElement, placeImage —
+      // validates against the ops schema and used to fall through to the doc,
+      // letting an off-script reply replace the whole doc, delete outputs, or
+      // place an arbitrary image URL.
+      if (
+        op.op !== 'updateElement' &&
+        op.op !== 'addElement' &&
+        op.op !== 'removeElement' &&
+        op.op !== 'setOutputBackground'
+      ) {
+        this._logger.warn(
+          `Dropping revise op "${op.op}" — not a sanctioned revise op.`,
+          AiDesignerComposerService.name
+        );
+        continue;
+      }
+
       if (
         'outputIndex' in op &&
         allowedIndexes &&
@@ -2636,7 +2663,13 @@ export class AiDesignerComposerService implements OnModuleInit {
         template,
         style,
         buildOpts
-      ).map((el) => ({ ...el, id: randomUUID() }));
+      ).map((el) => ({
+        ...el,
+        // Keep an id the builder already minted — `wrapMoveUnitsInGroups`
+        // gives every group container a `grp-*` id its members reference via
+        // `parentId`; regenerating those ids orphans the folder.
+        id: el.id || randomUUID(),
+      }));
       // Composed fresh with a different template — so is its type budget.
       const typeBudget = this._typeBudget(
         this._effectiveLayout(plan, template, buildOpts),

@@ -38,6 +38,8 @@ export const COMPOSITIONS: Composition[] = [
   // ── The original six ────────────────────────────────────────────────────
   {
     id: 'hero-fullbleed',
+    copyBandRatio: 0.49,
+    typeScale: 1,
     label: 'Hero Full-bleed',
     description: 'Photograph fills the canvas; copy sits over its lower third.',
     roles: ['image', 'headline', 'subhead', 'cta', 'badge', 'legal'],
@@ -63,6 +65,8 @@ export const COMPOSITIONS: Composition[] = [
   },
   {
     id: 'split-panel',
+    copyBandRatio: 0.9,
+    typeScale: 0.72,
     label: 'Split Panel',
     description: 'Two columns: imagery on one side, a solid panel of copy on the other.',
     roles: ['image', 'headline', 'subhead', 'cta', 'badge', 'legal'],
@@ -81,6 +85,8 @@ export const COMPOSITIONS: Composition[] = [
   },
   {
     id: 'top-bottom',
+    copyBandRatio: 0.55,
+    typeScale: 0.8,
     label: 'Top and Bottom',
     description: 'A caption band above and below the image. Meme grammar.',
     roles: ['image', 'headline', 'subhead', 'legal'],
@@ -98,6 +104,8 @@ export const COMPOSITIONS: Composition[] = [
   },
   {
     id: 'badge-burst',
+    copyBandRatio: 0.59,
+    typeScale: 0.95,
     label: 'Badge Burst',
     description: 'A large badge is the centrepiece, with copy stacked beneath it.',
     roles: ['image', 'badge', 'headline', 'subhead', 'cta', 'legal'],
@@ -122,6 +130,8 @@ export const COMPOSITIONS: Composition[] = [
   },
   {
     id: 'editorial-sidebar',
+    copyBandRatio: 0.9,
+    typeScale: 0.72,
     label: 'Editorial Sidebar',
     description: 'A narrow column of copy beside a dominant image; magazine-like.',
     roles: ['image', 'headline', 'subhead', 'cta', 'badge', 'legal'],
@@ -137,6 +147,8 @@ export const COMPOSITIONS: Composition[] = [
   },
   {
     id: 'minimal-centered',
+    copyBandRatio: 0.52,
+    typeScale: 0.9,
     label: 'Minimal Centred',
     description: 'A small image above centred copy, with generous space around it.',
     roles: ['image', 'headline', 'subhead', 'cta', 'badge', 'legal'],
@@ -159,6 +171,8 @@ export const COMPOSITIONS: Composition[] = [
   // ── New ─────────────────────────────────────────────────────────────────
   {
     id: 'type-dominant',
+    copyBandRatio: 0.8,
+    typeScale: 1.05,
     label: 'Type Dominant',
     description: 'No imagery at all — the typography is the design. Quotes, statements, statistics.',
     roles: ['headline', 'subhead', 'cta', 'badge', 'legal', 'decor'],
@@ -180,6 +194,8 @@ export const COMPOSITIONS: Composition[] = [
   },
   {
     id: 'overlap-card',
+    copyBandRatio: 0.55,
+    typeScale: 0.85,
     label: 'Overlap Card',
     description: 'A copy card floats over the lower part of a photograph, breaking its edge.',
     roles: ['image', 'headline', 'subhead', 'cta', 'badge', 'legal'],
@@ -199,6 +215,8 @@ export const COMPOSITIONS: Composition[] = [
   },
   {
     id: 'banner-strip',
+    copyBandRatio: 0.45,
+    typeScale: 0.8,
     label: 'Banner Strip',
     description: 'A wide horizontal band of copy across a full-bleed image. Built for landscape.',
     roles: ['image', 'headline', 'subhead', 'cta', 'badge'],
@@ -222,6 +240,8 @@ export const COMPOSITIONS: Composition[] = [
   },
   {
     id: 'stacked-thirds',
+    copyBandRatio: 0.6,
+    typeScale: 0.8,
     label: 'Stacked Thirds',
     description: 'Three equal horizontal bands. Orderly, editorial, good for portrait canvases.',
     roles: ['image', 'headline', 'subhead', 'cta', 'badge', 'legal'],
@@ -240,6 +260,8 @@ export const COMPOSITIONS: Composition[] = [
   },
   {
     id: 'centred-emblem',
+    copyBandRatio: 0.5,
+    typeScale: 0.9,
     label: 'Centred Emblem',
     description: 'A small mark or logo centred above a short line of copy. Quiet and formal.',
     roles: ['logo', 'headline', 'subhead', 'legal', 'decor'],
@@ -260,6 +282,8 @@ export const COMPOSITIONS: Composition[] = [
   },
   {
     id: 'poster-frame',
+    copyBandRatio: 0.6,
+    typeScale: 0.85,
     label: 'Poster Frame',
     description: 'An inset image with a generous border and copy below; gallery-print feel.',
     roles: ['image', 'headline', 'subhead', 'cta', 'legal'],

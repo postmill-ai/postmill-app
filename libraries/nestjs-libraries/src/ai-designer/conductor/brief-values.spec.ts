@@ -169,6 +169,32 @@ describe('mergeBriefValues', () => {
     );
   });
 
+  it('does not fabricate domains from prose that names a TLD word', () => {
+    // The name group matches any lowercase word, so "a polka dot shop
+    // aesthetic" and "the dot com boom" would otherwise become
+    // "a polka.shop aesthetic" / "the.com boom" in the persisted brief.
+    for (const prose of [
+      'a polka dot shop aesthetic',
+      'the dot com boom',
+      'use a dot app style icon',
+    ]) {
+      const merged = mergeBriefValues({ intent: '' }, { intent: prose }, 'intent');
+      expect(merged.intent).toBe(prose);
+    }
+  });
+
+  it('does not turn a negated quote into required verbatim copy', () => {
+    // 'avoid "neon green"' quoted the words to EXCLUDE — fixedCopy is
+    // append-only, so without the guard the rejected words became required
+    // tokens the art director forced into every plan.
+    const merged = mergeBriefValues(
+      { intent: '' },
+      { intent: 'a poster, avoid "neon green" and no "sale" wording' },
+      'intent'
+    );
+    expect(merged.fixedCopy).toBeUndefined();
+  });
+
   it('extracts single-, double-, and curly-quoted intent spans into fixedCopy', () => {
     const merged = mergeBriefValues(
       { intent: '' },

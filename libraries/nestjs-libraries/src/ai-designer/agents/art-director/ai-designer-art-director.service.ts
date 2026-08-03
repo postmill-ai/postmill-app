@@ -555,6 +555,14 @@ export class AiDesignerArtDirectorService implements OnModuleInit {
       offer.add(m[0].trim());
     }
     for (const m of text.matchAll(/\b\d{1,2}[/.-]\d{1,2}(?:[/.-]\d{2,4})?\b/g)) {
+      // Two-part matches are only date-shaped as M/D (or M.D): a dash pair
+      // is far more often a range ("8-10"), a first component over 12 a
+      // version or service claim ("17.2", "24/7"). Three-part matches
+      // (8-10-2026, 24.12.26) are unambiguous enough to keep.
+      const parts = m[0].split(/[/.-]/);
+      if (parts.length === 2) {
+        if (m[0].includes('-') || Number(parts[0]) > 12) continue;
+      }
       offer.add(m[0]);
     }
     for (const m of text.matchAll(

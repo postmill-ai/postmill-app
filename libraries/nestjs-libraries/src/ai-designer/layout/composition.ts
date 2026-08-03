@@ -48,6 +48,20 @@ export interface Composition {
    * on a 9:16 story gives two unusably narrow columns.
    */
   aspect?: { min?: number; max?: number };
+  /**
+   * Share of the canvas HEIGHT this arrangement leaves for its copy stack.
+   *
+   * Feeds `typeBudget`, which is stamped on every output and consumed by
+   * `reflow.ts` to re-fit type onto other formats. It is a CONTRACT with the
+   * re-fit, not an internal detail: get it wrong and every channel variant is
+   * typeset for the wrong canvas.
+   */
+  copyBandRatio: number;
+  /**
+   * Headline multiplier against the canvas type basis. A two-column layout has
+   * half the width, so its headline has to be smaller to say the same thing.
+   */
+  typeScale: number;
   /** The tree, built against a canvas whose aspect is known. */
   build(ctx: CompositionContext): LayoutNode;
 }

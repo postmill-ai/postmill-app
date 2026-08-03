@@ -83,10 +83,49 @@ const SPOKEN_URL_RE = new RegExp(
   'gi'
 );
 
+/**
+ * The name group matches ANY lowercase word, so unguarded prose becomes a
+ * fake domain: "a polka dot shop aesthetic" → "a polka.shop aesthetic", "the
+ * dot com boom" → "the.com boom". A function word (or the "polka dot"
+ * compound) in the name position is never a dictated domain — skip those.
+ */
+const SPOKEN_URL_NAME_STOPWORDS = new Set([
+  'a',
+  'an',
+  'the',
+  'and',
+  'or',
+  'but',
+  'of',
+  'to',
+  'in',
+  'on',
+  'at',
+  'for',
+  'with',
+  'it',
+  'its',
+  'is',
+  'this',
+  'that',
+  'these',
+  'those',
+  'my',
+  'your',
+  'our',
+  'we',
+  'you',
+  'they',
+  'he',
+  'she',
+  'polka',
+]);
+
 export const normalizeSpokenUrls = (value: string): string =>
-  value.replace(
-    SPOKEN_URL_RE,
-    (_match, name: string, tld: string) => `${name}.${tld.toLowerCase()}`
+  value.replace(SPOKEN_URL_RE, (match, name: string, tld: string) =>
+    SPOKEN_URL_NAME_STOPWORDS.has(name.toLowerCase())
+      ? match
+      : `${name}.${tld.toLowerCase()}`
   );
 
 /**
@@ -103,6 +142,16 @@ const QUOTED_SPAN_RES = [
   /(?<![\p{L}\p{N}])'([^'\n]{2,80})'(?![\p{L}\p{N}])/gu,
   /(?<![\p{L}\p{N}])‘([^‘’\n]{2,80})’(?![\p{L}\p{N}])/gu,
 ];
+
+/**
+ * A span the user quoted to EXCLUDE is not fixed copy: 'avoid "neon green"'
+ * or 'no "sale" wording' would otherwise make the rejected words REQUIRED
+ * verbatim tokens, injected into every plan. Checked against the words right
+ * before the opening quote — a negation anywhere earlier in the message does
+ * not disqualify a later genuine quote.
+ */
+const SPAN_NEGATION_RE =
+  /\b(?:no|not|never|avoid|without|don't|dont|doesn't|doesnt|won't|wont|remove|exclude|excluding|except|skip)\b[^\n"'“‘]{0,40}$/i;
 
 /** Separator between atomic fixed-copy units ("Join now | BEAN30"). */
 export const FIXED_COPY_SEPARATOR = ' | ';
@@ -121,7 +170,10 @@ export const extractQuotedSpans = (text: string): string[] => {
   for (const re of QUOTED_SPAN_RES) {
     for (const m of text.matchAll(re)) {
       const span = m[1].trim();
-      if (span.length >= 2) spans.push(span);
+      if (span.length < 2) continue;
+      const prefix = text.slice(0, m.index ?? 0);
+      if (SPAN_NEGATION_RE.test(prefix)) continue;
+      spans.push(span);
     }
   }
   return spans;

@@ -726,6 +726,18 @@ describe('AiDesignerArtDirectorService offer fidelity (workstream 5)', () => {
     ]);
   });
 
+  it('does not treat ranges, versions, or "24/7" as date offer tokens', () => {
+    // The numeric date pattern matched any `\d{1,2}[/.-]\d{1,2}` pair, so
+    // "24/7 support" or "sizes 8-10" became REQUIRED tokens — a plan that
+    // correctly omitted them burned a repair retry and then had the token
+    // deterministically injected into a badge/subhead.
+    const tokens = (service as any)._extractOfferTokens({
+      intent: '24/7 support, sizes 8-10, now on v17.2 — sale ends 12/25',
+      fixedCopy: '',
+    });
+    expect(tokens.offer).toEqual(['12/25']);
+  });
+
   it('moves a >5-word badge to the subhead, keeping the shortest offer token — coverage still passes', async () => {
     // The live round-4 defect: the planner placed the whole compound offer in
     // the badge, the burst auto-shrank the label to the font floor, and it was

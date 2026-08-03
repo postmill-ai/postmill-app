@@ -654,9 +654,12 @@ export class AiDesignerConversationalistService implements OnModuleInit {
       'i'
     ).exec(text);
     if (wordMatch) return words[wordMatch[1].toLowerCase()];
-    const numeric = /\b(?:variant|version|option|design|#)\s*#?\s*(\d{1,2})\b/i.exec(
-      text
-    );
+    const numeric =
+      // `#` needs its own alternative: `\b` never precedes a non-word
+      // character, so inside the word-boundaried group "#3" could never match.
+      /(?:\b(?:variant|version|option|design)\s*#?\s*|#\s*)(\d{1,2})\b/i.exec(
+        text
+      );
     if (numeric) {
       const value = Number(numeric[1]);
       if (value >= 1 && value <= 10) return value;

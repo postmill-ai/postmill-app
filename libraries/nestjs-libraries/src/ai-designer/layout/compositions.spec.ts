@@ -167,3 +167,49 @@ describe('resolveComposition', () => {
     expect(compositionFits(resolveComposition(undefined, ctx), ctx)).toBe(true);
   });
 });
+
+describe('type budget', () => {
+  it('gives every composition a copy band and a type scale', () => {
+    // Both feed `typeBudget`, which is stamped on the output and consumed by
+    // reflow to re-fit type onto every other format. A missing one silently
+    // typesets the channel variants for the wrong canvas.
+    for (const c of COMPOSITIONS) {
+      expect(c.copyBandRatio, `${c.id} copyBandRatio`).toBeGreaterThan(0);
+      expect(c.copyBandRatio, `${c.id} copyBandRatio`).toBeLessThanOrEqual(1);
+      expect(c.typeScale, `${c.id} typeScale`).toBeGreaterThan(0);
+    }
+  });
+
+  it('keeps the legacy six on their exact original numbers', () => {
+    // Lifted verbatim from LAYOUT_COPY_BAND_RATIO and LAYOUT_TYPE_SCALE. These
+    // are the type sizes eight rounds of remediation settled on; the port must
+    // not quietly re-tune them under cover of a refactor.
+    const legacy: Record<string, [number, number]> = {
+      'hero-fullbleed': [0.49, 1],
+      'badge-burst': [0.59, 0.95],
+      'top-bottom': [0.55, 0.8],
+      'split-panel': [0.9, 0.72],
+      'editorial-sidebar': [0.9, 0.72],
+      'minimal-centered': [0.52, 0.9],
+    };
+    for (const [id, [band, scale]] of Object.entries(legacy)) {
+      const c = compositionById(id)!;
+      expect([c.copyBandRatio, c.typeScale], id).toEqual([band, scale]);
+    }
+  });
+
+  it('gives a two-column arrangement smaller type than a full-bleed one', () => {
+    // Half the width has to say the same thing.
+    expect(compositionById('split-panel')!.typeScale).toBeLessThan(
+      compositionById('hero-fullbleed')!.typeScale
+    );
+  });
+
+  it('gives the type-led arrangement the largest type and the deepest band', () => {
+    const typeLed = compositionById('type-dominant')!;
+    expect(typeLed.typeScale).toBeGreaterThanOrEqual(
+      Math.max(...COMPOSITIONS.map((c) => c.typeScale))
+    );
+    expect(typeLed.copyBandRatio).toBeGreaterThan(compositionById('hero-fullbleed')!.copyBandRatio);
+  });
+});

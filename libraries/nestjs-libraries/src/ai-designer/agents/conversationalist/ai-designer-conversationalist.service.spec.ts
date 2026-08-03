@@ -880,6 +880,18 @@ describe('AiDesignerConversationalistService delivered state', () => {
     expect(res.revision.targetDesignId).toBe('design-B');
   });
 
+  it('resolves a bare hash ordinal ("use #3")', async () => {
+    // The `#` alternative used to sit behind `\b`, which can never precede a
+    // non-word character — a bare "#3" never matched.
+    const res = await handle(
+      makeDeliveredInput('use #3 but darker', {
+        instruction: 'make it darker',
+      })
+    );
+
+    expect(res.revision.targetDesignId).toBe('design-C');
+  });
+
   it('drops a targetDesignId that is not in the catalogue at all', async () => {
     const res = await handle(
       makeDeliveredInput('make the headline bigger', {
