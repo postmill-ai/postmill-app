@@ -114,9 +114,43 @@ describe('frame', () => {
   });
 
   it('sits inside the margin', () => {
+    // A path's element box is the CANVAS — the nodes carry the position — so
+    // the margin is checked against the geometry, not the box.
     const [el] = buildExtraSlot(slot('frame'), 0, ctx());
-    expect(el.x).toBeGreaterThanOrEqual(60);
-    expect(el.x + el.width).toBeLessThanOrEqual(1020);
+    const xs = el.nodes!.map((n) => n.x);
+    expect(Math.min(...xs)).toBeGreaterThanOrEqual(60 - 0.001);
+    expect(Math.max(...xs)).toBeLessThanOrEqual(1020 + 0.001);
+  });
+
+  it('rounds its corners with Live Corners rather than a border radius', () => {
+    // `roundCorners` and `offsetPath` are shared, spec-covered, and were never
+    // called by the composer until now. A real path is also what makes the
+    // inner keyline below possible at all.
+    const [el] = buildExtraSlot(slot('frame'), 0, ctx());
+    expect(el.type).toBe('path');
+    expect(el.nodes!.length).toBeGreaterThan(4);
+  });
+
+  it('draws a second, inset rule when there is room for one', () => {
+    // Two lines a few pixels apart read as deliberate; one heavy line reads as
+    // a browser border.
+    const els = buildExtraSlot(slot('frame'), 0, ctx());
+    expect(els).toHaveLength(2);
+    expect(els[1].strokeWidth!).toBeLessThan(els[0].strokeWidth!);
+    const outer = Math.min(...els[0].nodes!.map((n) => n.x));
+    const inner = Math.min(...els[1].nodes!.map((n) => n.x));
+    expect(inner).toBeGreaterThan(outer);
+  });
+
+  it('drops the inner rule on a frame too small to carry it', () => {
+    // Inset on a small frame, the second line collides with the first.
+    const small = buildExtraSlot(slot('frame'), 0, ctx(), {
+      x: 10,
+      y: 10,
+      width: 40,
+      height: 40,
+    });
+    expect(small).toHaveLength(1);
   });
 });
 

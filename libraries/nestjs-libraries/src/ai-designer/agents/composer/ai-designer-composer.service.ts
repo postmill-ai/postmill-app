@@ -75,6 +75,7 @@ import {
 import { markTemplateSlots } from '../../util/template-slots';
 import { buildExtraSlots } from './extra-slots';
 import { emphasise, emphasisTokens } from './rich-text';
+import { applyKnockouts, knockoutRequests } from './subject-knockout';
 import {
   groupByRole,
   layoutSlots,
@@ -521,9 +522,10 @@ export class AiDesignerComposerService implements OnModuleInit {
       const composed = rawOps
         ? await this._composeFromRawOps(rawOps, outputs, plan, copy, assets)
         : this._composeDeterministic(plan, copy, assets, outputs);
+      const sanitized = this.sanitizeDoc(composed, plan).doc;
       return {
         doc: await this.applySubjectFocalPoints(
-          this.sanitizeDoc(composed, plan).doc,
+          await this._applySubjectKnockouts(sanitized, plan, input.orgId),
           input.orgId
         ),
         usedFallback: false,
@@ -4758,6 +4760,66 @@ export class AiDesignerComposerService implements OnModuleInit {
       });
       return { ...out, children };
     });
+
+    return changed ? ({ ...doc, outputs } as DesignerDoc) : doc;
+  }
+
+  /**
+   * Cut the subject out of its background where the plan asked for it.
+   *
+   * `mask-recipes.ts` has returned `knockout: true` since the design language
+   * landed and nothing consumed it — the silhouette masks were applied and this
+   * one was dropped on the floor. It needs a real background-removal call, so it
+   * runs HERE rather than in `_buildElements`: this is the async boundary that
+   * already has an org id.
+   *
+   * Every failure path is the fallback the recipe declared. The org may have no
+   * background-removal provider, the provider may be down, the budget may be
+   * spent — an uncut photograph is the same design with less depth, and a thrown
+   * exception is no design at all.
+   */
+  private async _applySubjectKnockouts(
+    doc: DesignerDoc,
+    plan: DesignPlan,
+    orgId?: string
+  ): Promise<DesignerDoc> {
+    const media = this._aiDefaults;
+    if (!media || typeof (media as { removeBackground?: unknown }).removeBackground !== 'function') {
+      return doc;
+    }
+
+    let changed = false;
+    const outputs = await Promise.all(
+      doc.outputs.map(async (out) => {
+        if (!('children' in out) || !Array.isArray(out.children)) return out;
+
+        const requests = knockoutRequests(plan.slots, out.children);
+        if (!requests.length) return out;
+
+        const patches = await applyKnockouts(
+          requests,
+          {
+            removeBackground: (url, org) =>
+              (media as unknown as {
+                removeBackground(u: string, o?: { orgId?: string }): Promise<string | undefined>;
+              }).removeBackground(url, { orgId: org }),
+            importFromUrl: async (url) => ({ path: url }),
+            warn: (message) => this._logger.warn(message, AiDesignerComposerService.name),
+          },
+          orgId
+        );
+        if (!patches.size) return out;
+
+        changed = true;
+        return {
+          ...out,
+          children: out.children.map((el) => {
+            const patch = patches.get(el.id) || patches.get(el.originId || '');
+            return patch ? { ...el, ...patch } : el;
+          }),
+        };
+      })
+    );
 
     return changed ? ({ ...doc, outputs } as DesignerDoc) : doc;
   }

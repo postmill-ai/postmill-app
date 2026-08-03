@@ -1,6 +1,8 @@
 import type { DesignerElement } from '../../../media/designer-doc/designer-doc.schema';
 import type { DesignSlot } from '../../ai-designer.types';
 import { expandDecor, decorRecipeById } from '../../design-language/decor-recipes';
+import { offsetPath, roundCorners } from '../../../media/designer-doc/path-offset';
+import type { DesignerPathNode } from '../../../media/designer-doc/designer-doc.schema';
 
 /**
  * Builders for the slot kinds the composer never learned to draw.
@@ -130,7 +132,7 @@ export const buildExtraSlot = (
     }
 
     case 'frame': {
-      // A stroked rectangle inside the margin. Deliberately unfilled: a filled
+      // A stroked outline inside the margin. Deliberately unfilled: a filled
       // frame is a panel, and a panel over imagery is the framed-inset defect
       // three separate assertions already forbid.
       const anchor = box ?? {
@@ -139,14 +141,50 @@ export const buildExtraSlot = (
         width: ctx.w - ctx.margin * 2,
         height: ctx.h - ctx.margin * 2,
       };
+      const weight = Math.max(1, Math.round(unit * 0.008));
+
+      // Rounded corners come from `roundCorners` — Illustrator's Live Corners,
+      // already shared and spec-covered and, until now, never called by the
+      // composer. A `borderRadius` on a rect would do for a plain frame, but a
+      // real path is what lets `offsetPath` produce the inner keyline below.
+      const rect: DesignerPathNode[] = [
+        { x: anchor.x, y: anchor.y },
+        { x: anchor.x + anchor.width, y: anchor.y },
+        { x: anchor.x + anchor.width, y: anchor.y + anchor.height },
+        { x: anchor.x, y: anchor.y + anchor.height },
+      ];
+      const radius = Math.min(anchor.width, anchor.height) * 0.04;
+      const outline = roundCorners(rect, radius);
+
+      const frame: DesignerElement = {
+        ...base(slot, { x: 0, y: 0, width: ctx.w, height: ctx.h }),
+        type: 'path',
+        name: 'Frame',
+        nodes: outline,
+        closed: true,
+        stroke: accent,
+        strokeWidth: weight,
+      } as DesignerElement;
+
+      // A double rule when there is room for one: two lines a few pixels apart
+      // read as deliberate where a single heavy one reads as a border. Skipped
+      // on a small frame, where the inner line would collide with the outer.
+      const inset = weight * 3;
+      if (Math.min(anchor.width, anchor.height) <= inset * 6) return [frame];
+
+      const inner = offsetPath(outline, -inset);
+      if (!inner.length) return [frame];
       return [
+        frame,
         {
-          ...base(slot, anchor),
-          type: 'shape',
-          shape: 'rect',
+          ...base(slot, { x: 0, y: 0, width: ctx.w, height: ctx.h }),
+          type: 'path',
+          name: 'Frame inner',
+          originId: `${slot.id}-inner`,
+          nodes: inner,
+          closed: true,
           stroke: accent,
-          strokeWidth: Math.max(1, Math.round(unit * 0.008)),
-          // No `fill` — see above.
+          strokeWidth: Math.max(1, Math.round(weight / 2)),
         } as DesignerElement,
       ];
     }
