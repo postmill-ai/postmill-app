@@ -15,6 +15,8 @@ import { AIModelProvider } from '@postmill-ai/nestjs-libraries/ai/ai-model.provi
 import { z } from 'zod';
 import { AiDesignerSkillRouter } from '../../skills/ai-designer-skill-router.service';
 import { DesignPlanV2FieldsSchema } from '../../ai-designer.schemas';
+import { designLanguagePrompt } from '../../design-language';
+import { compositionCatalogPrompt } from '../../layout/compositions';
 import {
   DEFAULT_STYLE_ID,
   getStylePreset,
@@ -244,6 +246,7 @@ export class AiDesignerArtDirectorService implements OnModuleInit {
       JSON.stringify(sizes[0], null, 2),
       '',
       ...this._skillLayoutGuidance(skillId),
+      ...this._designLanguageGuidance(),
       '',
       ...this._styleGuidance(brief),
       '',
@@ -963,6 +966,29 @@ export class AiDesignerArtDirectorService implements OnModuleInit {
   }
 
   /**
+   * The design-language section of the plan prompt.
+   *
+   * GENERATED from the recipe and composition tables rather than written here.
+   * A hand-maintained capability list drifts the moment a recipe is renamed,
+   * and the failure is silent and expensive: the model keeps confidently asking
+   * for an effect that no longer exists, the composer drops it, and the design
+   * is quietly plainer than the plan promised.
+   */
+  private _designLanguageGuidance(): string[] {
+    return [
+      '## Design language',
+      'These are the ONLY named treatments that exist. Asking for anything not on these lists does nothing.',
+      '',
+      '### COMPOSITIONS — pick one for "composition".',
+      compositionCatalogPrompt(),
+      '',
+      designLanguagePrompt(),
+      '',
+      'Restraint is the difference between designed and decorated. Two effects on one element is the ceiling and one is usually right; a treatment exists so imagery belongs to the palette, not so every photo is filtered; "none" is a real answer for both.',
+    ];
+  }
+
+  /**
    * Style-preset section of the plan prompt. A user-selected preset pins every
    * plan to it; otherwise the model must vary styles so the variants are
    * genuinely distinct options.
@@ -1064,13 +1090,22 @@ export class AiDesignerArtDirectorService implements OnModuleInit {
         value: 'string (optional)',
         ref: 'asset:{id} (optional)',
       },
+      composition:
+        'string (optional) — an arrangement id from the COMPOSITIONS list. Omit to let the composer choose.',
+      depth:
+        "'flat' | 'layered' | 'deep' (optional) — how much the design should separate foreground from background",
+      decor:
+        'string[] (optional) — decoration recipe ids from the DECOR list. At most one "loud" mark.',
       slots: [
         {
           id: 'string',
           role: 'string',
-          kind: "'text' | 'image' | 'cta-button' | 'badge' | 'accent-shape'",
+          kind: "'text' | 'image' | 'cta-button' | 'badge' | 'accent-shape' | 'shape' | 'icon' | 'divider' | 'logo' | 'frame'",
           style:
             'optional per-slot override: { fontFamily?, fontWeight?, fill?, gradient?: [string, string], stroke?: { color, width }, shadow?: boolean, align?: "left" | "center" | "right", badgeStyle?: "pill" | "burst" | "ribbon" (badge slots only) }',
+          effects: 'string[] (optional) — at most two EFFECT ids',
+          treatment: 'string (optional) — one TREATMENT id; image slots only',
+          mask: 'string (optional) — one MASK id; image slots only',
         },
       ],
       assetNeeds: [

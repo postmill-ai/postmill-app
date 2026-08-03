@@ -294,3 +294,23 @@ export const decorRestraint = (id: string): DecorRestraint =>
 /** The catalog as the planning model sees it — generated, never hand-listed. */
 export const decorCatalogPrompt = (): string =>
   DECOR_RECIPES.map((d) => `- ${d.id} (${d.restraint}): ${d.description}`).join('\n');
+
+/**
+ * Trim a plan's decoration to what a design can carry.
+ *
+ * One loud mark is a decision; two is noise. Enforced in code rather than asked
+ * for in the prompt, because a model told to show restraint will not reliably
+ * comply, and the cost of it not complying is every design looking shouty.
+ */
+export const limitDecor = (ids: string[] | undefined): string[] => {
+  const out: string[] = [];
+  let loud = 0;
+  for (const id of ids || []) {
+    if (decorRestraint(id) === 'loud') {
+      if (loud >= MAX_LOUD_DECOR) continue;
+      loud++;
+    }
+    out.push(id);
+  }
+  return out;
+};

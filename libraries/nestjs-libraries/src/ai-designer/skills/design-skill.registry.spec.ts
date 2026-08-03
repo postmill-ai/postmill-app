@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { DESIGN_SKILLS } from './design-skill.registry';
-import { LAYOUT_TEMPLATE_IDS } from '../agents/composer/ai-designer-composer.service';
+import { COMPOSITION_IDS } from '../layout/compositions';
 
 const VALID_SLOT_KINDS = new Set([
   'text',
@@ -8,11 +8,17 @@ const VALID_SLOT_KINDS = new Set([
   'cta-button',
   'badge',
   'accent-shape',
+  // Added with the design language; the DesignSlot union grew to match.
+  'shape',
+  'icon',
+  'divider',
+  'logo',
+  'frame',
 ]);
 
 describe('DESIGN_SKILLS registry', () => {
   it('gives every skill layoutHints referencing real gallery templates', () => {
-    const gallery = new Set<string>(LAYOUT_TEMPLATE_IDS);
+    const gallery = new Set<string>(COMPOSITION_IDS);
     for (const skill of DESIGN_SKILLS) {
       expect(
         skill.layoutHints.formatTemplates.length,

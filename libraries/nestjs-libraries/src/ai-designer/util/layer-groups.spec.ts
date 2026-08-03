@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { wrapMoveUnitsInGroups } from './layer-groups';
+import { recoupleClippedAdjustments, wrapMoveUnitsInGroups } from './layer-groups';
 import type { DesignerElement } from '../../media/designer-doc/designer-doc.schema';
 import { buildLayerTree } from '../../media/designer-doc/layer-tree';
 
@@ -145,5 +145,66 @@ describe('wrapMoveUnitsInGroups', () => {
     expect(group).toBeDefined();
     expect(group!.children.map((c) => c.element.id)).toEqual(['a', 'b']);
     expect(tree).toHaveLength(2);
+  });
+});
+
+describe('recoupleClippedAdjustments', () => {
+  it('puts a displaced grade back above the layer it grades', () => {
+    // A clipped adjustment binds to whatever is directly beneath it, so a
+    // reorder that lands anything in between silently re-points it — the photo
+    // returns to its original colours and nothing errors.
+    const out = recoupleClippedAdjustments([
+      el({ id: 'img', type: 'image', groupId: 'hero' }),
+      el({ id: 'intruder' }),
+      el({ id: 'grade', type: 'adjustment', clipped: true, groupId: 'hero' }),
+    ]);
+    expect(out.map((e) => e.id)).toEqual(['img', 'grade', 'intruder']);
+  });
+
+  it('leaves a correctly ordered document untouched', () => {
+    const input = [
+      el({ id: 'img', type: 'image', groupId: 'hero' }),
+      el({ id: 'grade', type: 'adjustment', clipped: true, groupId: 'hero' }),
+      el({ id: 'copy', type: 'text' }),
+    ];
+    expect(recoupleClippedAdjustments(input).map((e) => e.id)).toEqual([
+      'img',
+      'grade',
+      'copy',
+    ]);
+  });
+
+  it('keeps several grades in their original sequence', () => {
+    // duotone is black-and-white THEN a ramp; swapped, the ramp is applied to
+    // colour and then thrown away.
+    const out = recoupleClippedAdjustments([
+      el({ id: 'img', type: 'image', groupId: 'hero' }),
+      el({ id: 'intruder' }),
+      el({ id: 'bw', type: 'adjustment', clipped: true, groupId: 'hero' }),
+      el({ id: 'ramp', type: 'adjustment', clipped: true, groupId: 'hero' }),
+    ]);
+    expect(out.map((e) => e.id)).toEqual(['img', 'bw', 'ramp', 'intruder']);
+  });
+
+  it('does not move an unclipped adjustment, which grades everything below it', () => {
+    const input = [
+      el({ id: 'img', type: 'image', groupId: 'hero' }),
+      el({ id: 'intruder' }),
+      el({ id: 'global', type: 'adjustment', groupId: 'hero' }),
+    ];
+    expect(recoupleClippedAdjustments(input).map((e) => e.id)).toEqual(input.map((e) => e.id));
+  });
+
+  it('keeps a grade whose base has been removed rather than dropping it', () => {
+    const out = recoupleClippedAdjustments([
+      el({ id: 'copy', type: 'text' }),
+      el({ id: 'orphan', type: 'adjustment', clipped: true, groupId: 'gone' }),
+    ]);
+    expect(out.map((e) => e.id)).toContain('orphan');
+  });
+
+  it('is a no-op for a document with no clipped grades', () => {
+    const input = [el({ id: 'a' }), el({ id: 'b' })];
+    expect(recoupleClippedAdjustments(input)).toBe(input);
   });
 });

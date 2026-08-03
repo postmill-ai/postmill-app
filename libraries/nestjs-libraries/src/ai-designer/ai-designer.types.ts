@@ -125,6 +125,26 @@ export interface DesignPlan {
     | 'bottom-left'
     | 'bottom-right'
     | 'center';
+  /**
+   * Which arrangement to use, from the composition gallery.
+   *
+   * Supersedes `formatTemplate` and `channelLayouts`, which named one of six
+   * hard-coded templates. Both are still read, so stored plans keep composing;
+   * a composition that does not suit the canvas is replaced rather than forced.
+   */
+  composition?: string;
+  /**
+   * How much depth the design should carry. Drives whether imagery is pushed
+   * back behind copy, whether the subject is knocked out to sit in front of
+   * type, and how freely effects are applied.
+   */
+  depth?: 'flat' | 'layered' | 'deep';
+  /**
+   * Vector decoration for the design as a whole, by recipe name. At most one
+   * "loud" mark survives — restraint has to be structural, because a model told
+   * to decorate tastefully will not comply reliably.
+   */
+  decor?: string[];
   /** Set by the art director when this plan is a generic fallback (LLM planning failed). */
   fallback?: boolean;
 }
@@ -147,8 +167,32 @@ export interface DesignSlotStyle {
 export interface DesignSlot {
   id: string;
   role: 'top-caption' | 'bottom-caption' | 'image' | 'logo' | string;
-  kind: 'text' | 'image' | 'cta-button' | 'badge' | 'accent-shape';
+  kind:
+    | 'text'
+    | 'image'
+    | 'cta-button'
+    | 'badge'
+    | 'accent-shape'
+    // Added with the design language. Additive: the five above still compose.
+    | 'shape'
+    | 'icon'
+    | 'divider'
+    | 'logo'
+    | 'frame';
   style?: DesignSlotStyle;
+  /**
+   * Layer-style recipes by name, from the effect catalog. At most two per
+   * element; unknown names are dropped rather than failing the plan.
+   */
+  effects?: string[];
+  /** Image treatment recipe by name. Images only. */
+  treatment?: string;
+  /** Mask recipe by name. Images only. */
+  mask?: string;
+  /** Blend mode, for elements that should interact with what is beneath them. */
+  blend?: string;
+  /** Rotation in degrees. Decorative and badge elements only. */
+  rotation?: number;
 }
 
 /** Slots that carry copy (everything except imagery and decorative shapes). */
@@ -253,7 +297,7 @@ export interface FixStyle {
 export interface FixAddElement {
   /** Becomes the new element's originId, linking copies across outputs. */
   slotId: string;
-  type: 'text' | 'shape';
+  type: 'text' | 'shape' | 'icon' | 'divider';
   text?: string;
   shape?: 'rect' | 'ellipse' | 'line' | 'star';
   box?: Partial<Pick<DesignerElement, 'x' | 'y' | 'width' | 'height'>>;
@@ -270,6 +314,19 @@ export interface FixAddElement {
 export interface Fix {
   scope: FixScope;
   targetSlots?: string[];
+  /**
+   * Design-language repairs. Without these the critic can SEE that imagery
+   * fights the palette or that a headline has no separation from a busy photo,
+   * and has no way to ask for the thing that would fix it — so it re-requests a
+   * geometry nudge every round instead. A capability the critic cannot request
+   * is a capability it can never repair.
+   */
+  effects?: string[];
+  treatment?: string;
+  mask?: string;
+  blend?: string;
+  /** Swap the whole arrangement, when the problem is the layout itself. */
+  recompose?: string;
   geometry?: Partial<Pick<DesignerElement, 'x' | 'y' | 'width' | 'height' | 'fontSize'>>;
   style?: FixStyle;
   text?: { slotId: string; newText: string };

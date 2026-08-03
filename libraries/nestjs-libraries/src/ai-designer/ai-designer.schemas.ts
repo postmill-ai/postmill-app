@@ -73,12 +73,37 @@ const SlotStyleSchema = z
   })
   .passthrough();
 
+// An unknown recipe name must never sink an otherwise-valid plan: the catalog
+// is generated from tables that change, and stored plans outlive them. The
+// composer drops what it does not recognise, so the guard only bounds size.
+const RecipeNameSchema = z.string().max(100);
+
 const DesignSlotSchema = z
   .object({
     id: z.string().max(200),
     role: z.string().max(100),
-    kind: z.enum(['text', 'image', 'cta-button', 'badge', 'accent-shape']),
+    kind: z
+      .enum([
+        'text',
+        'image',
+        'cta-button',
+        'badge',
+        'accent-shape',
+        'shape',
+        'icon',
+        'divider',
+        'logo',
+        'frame',
+      ])
+      // A kind this build does not know degrades to text rather than dropping
+      // the slot, which would silently lose the copy it carries.
+      .catch('text'),
     style: SlotStyleSchema.optional(),
+    effects: z.array(RecipeNameSchema).max(4).optional(),
+    treatment: RecipeNameSchema.optional(),
+    mask: RecipeNameSchema.optional(),
+    blend: z.string().max(40).optional(),
+    rotation: z.number().min(-180).max(180).optional(),
   })
   .passthrough();
 
@@ -115,6 +140,11 @@ export const DesignPlanSchema = z
     texts: z.record(z.string().max(200), z.string().max(500)).optional(),
     perChannel: z.record(z.object({ note: z.string().max(1000) })).optional(),
     channelLayouts: z.record(z.string().max(100), ChannelLayoutSchema).optional(),
+    // Plan schema v3 — the design language. All optional, so v1/v2 plans keep
+    // composing unchanged.
+    composition: z.string().max(100).optional(),
+    depth: z.enum(['flat', 'layered', 'deep']).catch('layered').optional(),
+    decor: z.array(RecipeNameSchema).max(6).optional(),
     // Split/sidebar layouts: which side the TEXT panel sits on.
     panelSide: z.enum(['left', 'right']).optional(),
     // Where the badge sits inside its layout band.

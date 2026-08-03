@@ -88,12 +88,25 @@ describe('AiDesignerSkillRouter word-boundary signal matching (round 7 C1)', () 
     for (const intent of [
       'an ad for our new roast',
       'run some ads this weekend',
-      'a weekend sale on all beans',
-      'promote the 20% discount',
       'get people to buy the sampler',
     ]) {
       expect(score('advertisement', { intent }), intent).toBe(0.9);
       expect(router.route({ intent }).skillId, intent).toBe('advertisement');
+    }
+  });
+
+  it('hands a brief that names a specific genre to that genre', () => {
+    // DELIBERATE CHANGE. These two used to route to `advertisement`, because
+    // it was the only genre that claimed "sale" and "discount". Now that the
+    // catalog has genres for them, the specific one wins — which is the entire
+    // reason for adding them: `sale-discount` carries art direction for a
+    // discount (the figure leads, one accent, an expiry), and `advertisement`
+    // carries art direction for an ad in general.
+    //
+    // `advertisement` still matches these; it just no longer wins them.
+    for (const intent of ['a weekend sale on all beans', 'promote the 20% discount']) {
+      expect(score('advertisement', { intent }), intent).toBe(0.9);
+      expect(router.route({ intent }).skillId, intent).toBe('sale-discount');
     }
   });
 
@@ -102,6 +115,9 @@ describe('AiDesignerSkillRouter word-boundary signal matching (round 7 C1)', () 
     expect(router.route({ intent: 'a birthday card for Ana' }).skillId).toBe('greeting-card');
     expect(router.route({ intent: 'show off our new product line' }).skillId).toBe(
       'product-promo'
+    );
+    expect(router.route({ intent: 'a testimonial from a happy client' }).skillId).toBe(
+      'testimonial'
     );
     expect(router.route({ intent: 'announce our new opening hours' }).skillId).toBe(
       'announcement'

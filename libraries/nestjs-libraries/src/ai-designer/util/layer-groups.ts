@@ -21,6 +21,51 @@ import type { DesignerElement } from '../../media/designer-doc/designer-doc.sche
 /** Members fewer than this are left alone: a folder of one is panel noise. */
 const MIN_GROUP_MEMBERS = 2;
 
+/**
+ * Put every clipped adjustment back immediately above the layer it grades.
+ *
+ * A clipped adjustment binds to whatever sits directly beneath it — that is
+ * the whole mechanism. So anything that reorders children can silently
+ * re-point one: the doc validator's z-order repair moves an occluding shape
+ * behind text, and if it lands between an image and the grade clipped to it,
+ * the grade now applies to the shape and the photograph goes back to its
+ * original colours. Nothing errors; the design is just wrong.
+ *
+ * Run after any pass that may reorder. Adjustments are matched to their base by
+ * `groupId`, which the composer sets from the image they were built for.
+ */
+export const recoupleClippedAdjustments = (
+  children: DesignerElement[]
+): DesignerElement[] => {
+  const clipped = children.filter((el) => el.type === 'adjustment' && el.clipped && el.groupId);
+  if (!clipped.length) return children;
+
+  const claimed = new Set(clipped.map((el) => el.id));
+  const out: DesignerElement[] = [];
+
+  for (const el of children) {
+    if (claimed.has(el.id)) continue;
+    out.push(el);
+    // A base is the last non-adjustment layer of its unit, so its grades
+    // follow it directly.
+    if (el.type !== 'adjustment' && el.groupId) {
+      out.push(...clipped.filter((adj) => adj.groupId === el.groupId));
+    }
+  }
+
+  // Any grade whose base vanished entirely would otherwise be dropped here.
+  const emitted = new Set(out.map((el) => el.id));
+  for (const adj of clipped) if (!emitted.has(adj.id)) out.push(adj);
+
+  // Hand back the ORIGINAL array when nothing actually moved. Callers compare
+  // documents by identity to decide whether a re-render is needed, so
+  // reallocating an unchanged list makes every one of them think the design
+  // changed.
+  const unchanged =
+    out.length === children.length && out.every((el, i) => el === children[i]);
+  return unchanged ? children : out;
+};
+
 export interface WrapOptions {
   /** Stable id source. The group's id is referenced by `parentId`, so unlike
    *  every other element the composer emits it cannot be left blank for the

@@ -68,7 +68,17 @@ import {
   parseAgentInput,
 } from '../../util/parse-agent-input';
 import { parseOrRepair } from '../../util/parse-or-repair';
-import { wrapMoveUnitsInGroups } from '../../util/layer-groups';
+import {
+  recoupleClippedAdjustments,
+  wrapMoveUnitsInGroups,
+} from '../../util/layer-groups';
+import { markTemplateSlots } from '../../util/template-slots';
+import {
+  applySlotRecipes,
+  emitDecor,
+  strengthForDepth,
+  treatmentAdjustmentLayers,
+} from '../../design-language';
 import {
   STAR_LABEL_SAFE_RATIO,
   starVisualBox,
@@ -147,6 +157,21 @@ const LAYOUT_ALIASES: Record<string, LayoutId> = {
   'top-bottom-text': 'top-bottom',
   'two-panel': 'split-panel',
   'image-macro': 'hero-fullbleed',
+
+  // The composition gallery names arrangements this file does not implement
+  // yet — the layout engine exists but the composer still runs the six
+  // templates. Mapping each new id to its nearest built-in means a plan (or a
+  // skill's art direction) naming one gets the closest thing rather than
+  // silently falling through to the default hero, which would make every genre
+  // that prefers a type-led arrangement look identical.
+  //
+  // These go away when `_buildElements` is switched to the engine.
+  'type-dominant': 'minimal-centered',
+  'centred-emblem': 'minimal-centered',
+  'poster-frame': 'minimal-centered',
+  'stacked-thirds': 'top-bottom',
+  'overlap-card': 'hero-fullbleed',
+  'banner-strip': 'hero-fullbleed',
 };
 
 // Per-channel layout intent (plan.channelLayouts) → gallery template.
@@ -342,6 +367,21 @@ const boundingBox = (els: Box[]): Box => {
 const containsBox = (box: Box, inner: Box): boolean =>
   boxOverlapRatio(inner, box) >= CONTAINED_RATIO;
 
+/**
+ * A solid `#rrggbb`, or undefined for anything else.
+ *
+ * Deliberately refuses rgba, gradients and named colours: callers use this to
+ * recover a palette from a composed document, and a half-understood colour is
+ * worse than none — it would ship a recipe built on a value that does not mean
+ * what the caller thinks it means.
+ */
+const parseSolidHexColor = (color: unknown): string | undefined => {
+  if (typeof color !== 'string') return undefined;
+  const trimmed = color.trim();
+  if (!/^#?[0-9a-f]{6}$/i.test(trimmed)) return undefined;
+  return trimmed.startsWith('#') ? trimmed : `#${trimmed}`;
+};
+
 /** WCAG relative luminance of a #rrggbb color (unparseable → light). */
 const hexLuminance = (hex: string): number => {
   const m = /^#?([0-9a-f]{6})$/i.exec((hex || '').trim());
@@ -490,7 +530,10 @@ export class AiDesignerComposerService implements OnModuleInit {
         );
       }
       return {
-        doc: this._clampTextToFit(result.doc),
+        // Re-couple after the validator: its z-order repair can move a layer
+        // between an image and the grade clipped to it, which silently
+        // re-points the grade at whatever landed in between.
+        doc: this._recoupleAdjustments(this._clampTextToFit(result.doc)),
         violations: result.violations,
       };
     } catch (err) {
@@ -1313,6 +1356,12 @@ export class AiDesignerComposerService implements OnModuleInit {
           }
           if (fix.style && targetIds?.has(el.originId || el.id)) {
             Object.assign(patch, this._stylePatch(fix.style, el));
+          }
+          // Design-language repairs. Without these the critic can SEE that a
+          // photograph fights the palette and has no way to ask for the grade
+          // that fixes it, so it re-requests a geometry nudge every round.
+          if (targetIds?.has(el.originId || el.id)) {
+            Object.assign(patch, this._designLanguagePatch(fix, el, out));
           }
           if (fix.text && (el.originId === fix.text.slotId || el.id === fix.text.slotId)) {
             // Imagery never carries copy — a critic that wants different
@@ -2853,6 +2902,71 @@ export class AiDesignerComposerService implements OnModuleInit {
     };
   }
 
+  /** `[surface, ink, accent]` recovered from a composed output. */
+  private _paletteFromOutput(out: DesignerOutput, el: DesignerElement): string[] {
+    const surface = parseSolidHexColor(out.background) || '#ffffff';
+    const ink = parseSolidHexColor(el.fill) || (hexLuminance(surface) < 0.5 ? '#ffffff' : '#111111');
+    const accent =
+      out.children
+        .map((c) => parseSolidHexColor(c.fill))
+        .find((c): c is string => !!c && c !== surface && c !== ink) || ink;
+    return [surface, ink, accent];
+  }
+
+  /**
+   * The document fields a critic's design-language fix contributes.
+   *
+   * Deliberately narrow: a fix may re-grade, re-mask, re-blend or add an effect
+   * to an element that already exists. It may NOT introduce an adjustment
+   * LAYER, because inserting a layer mid-repair would re-point every clipped
+   * grade below it — the treatment here therefore applies through the element's
+   * own filter stack, which needs no ordering.
+   */
+  private _designLanguagePatch(
+    fix: Fix,
+    el: DesignerElement,
+    out: DesignerOutput
+  ): Partial<DesignerElement> {
+    if (!fix.effects && !fix.treatment && !fix.mask && !fix.blend) return {};
+
+    const kind: 'text' | 'image' | 'shape' | 'other' =
+      el.type === 'text'
+        ? 'text'
+        : el.type === 'image'
+          ? 'image'
+          : el.type === 'shape'
+            ? 'shape'
+            : 'other';
+    const basis =
+      kind === 'text'
+        ? el.fontSize || Math.min(el.width, el.height)
+        : Math.min(el.width, el.height);
+
+    // A repair runs long after the style preset has been resolved away, so the
+    // palette is recovered from the document itself. Without it every
+    // critic-applied effect would fall back to black-and-white and quietly
+    // undo the brand colour the plan chose.
+    const surface = parseSolidHexColor(out.background);
+    const backdrop: 'light' | 'dark' =
+      surface && hexLuminance(surface) < 0.5 ? 'dark' : 'light';
+
+    const patch = applySlotRecipes(
+      { effects: fix.effects, treatment: fix.treatment, mask: fix.mask, blend: fix.blend },
+      { width: el.width, height: el.height },
+      { basis, palette: this._paletteFromOutput(out, el), backdrop, kind },
+      el.text
+    );
+
+    // Freeze the original the first time a stack is attached, exactly as the
+    // build path does — otherwise the next re-bake reads already-filtered
+    // pixels and the effect compounds.
+    if (patch.smartFilters?.length && el.src && !el.originalSrc) {
+      patch.originalSrc = el.src;
+      if (el.fileId) patch.originalFileId = el.fileId;
+    }
+    return patch;
+  }
+
   /** Default drop shadow for `textShadow: true` fixes (mirrors the light-surface preset shadow). */
   private _defaultShadow(fontSize: number): DesignerTextShadow {
     return {
@@ -4126,6 +4240,8 @@ export class AiDesignerComposerService implements OnModuleInit {
       originId: el.originId || el.id,
     }));
 
+    const styled = this._applyDesignLanguage(withOrigins, ctx);
+
     // Companions already share a `groupId` so they travel together through a
     // re-fit; this gives them a real folder as well, so the design opens in the
     // Designer as a CTA rather than as two unrelated rows in the layers panel.
@@ -4134,7 +4250,119 @@ export class AiDesignerComposerService implements OnModuleInit {
     // container is zero-sized by design (its extent is derived from its
     // members), so anything that takes a bounding box over the children would
     // drag the box back to the origin.
-    return wrapMoveUnitsInGroups(withOrigins, { genId: () => `grp-${randomUUID()}` });
+    // Decoration goes UNDER everything: a mark that lands on top of a headline
+    // is not decoration. Placed after the copy exists so a rule can attach to
+    // the headline it belongs to rather than to a guessed band.
+    const headline = styled.find(
+      (el) => el.type === 'text' && (el.originId || '').includes('headline')
+    );
+    const decorated = [
+      ...emitDecor(ctx.plan.decor, {
+        canvas: { width: w, height: h },
+        margin,
+        headline: headline
+          ? { x: headline.x, y: headline.y, width: headline.width, height: headline.height }
+          : undefined,
+        palette: ctx.style.palette,
+      }),
+      ...styled,
+    ];
+
+    // Declare the fillable fields last, so a delivered design opens straight
+    // into the Designer's Template Fill panel instead of as a canvas of loose
+    // layers the user has to hunt through.
+    const marked = markTemplateSlots(decorated, ctx.plan.slots);
+
+    return wrapMoveUnitsInGroups(marked, { genId: () => `grp-${randomUUID()}` });
+  }
+
+  /**
+   * Keep every clipped adjustment directly above the layer it grades.
+   *
+   * Returns the doc UNCHANGED — same reference — when nothing moved.
+   * `sanitizeDoc` is called on paths whose contract is "no edits means the same
+   * object back", and several callers compare by identity to decide whether a
+   * re-render is needed; allocating unconditionally would make every one of
+   * them think the document had changed.
+   */
+  private _recoupleAdjustments(doc: DesignerDoc): DesignerDoc {
+    let moved = false;
+    const outputs = doc.outputs.map((out) => {
+      if (!('children' in out) || !Array.isArray(out.children)) return out;
+      const children = recoupleClippedAdjustments(out.children);
+      if (children === out.children) return out;
+      moved = true;
+      return { ...out, children };
+    });
+    return moved ? ({ ...doc, outputs } as DesignerDoc) : doc;
+  }
+
+  /**
+   * Apply the plan's named recipes to the elements that were just built.
+   *
+   * A post-pass keyed by `originId` rather than an argument threaded through
+   * nine element factories: the factories are about geometry, and the design
+   * language is about surface. Keeping them apart is what stops every new
+   * recipe kind from touching every builder.
+   *
+   * Runs BEFORE the group wrap, so an image and the adjustment layers clipped
+   * to it end up inside the same folder.
+   */
+  private _applyDesignLanguage(
+    elements: DesignerElement[],
+    ctx: ComposeContext
+  ): DesignerElement[] {
+    const slots = new Map(ctx.plan.slots.map((s) => [s.id, s]));
+    if (!slots.size) return elements;
+
+    const strength = strengthForDepth(ctx.plan.depth);
+    const backdrop: 'light' | 'dark' = ctx.style.surfaceIsDark ? 'dark' : 'light';
+    const out: DesignerElement[] = [];
+
+    for (const el of elements) {
+      const slot = el.originId ? slots.get(el.originId) : undefined;
+      if (!slot) {
+        out.push(el);
+        continue;
+      }
+
+      const kind: 'text' | 'image' | 'shape' | 'other' =
+        el.type === 'text' ? 'text' : el.type === 'image' ? 'image' : el.type === 'shape' ? 'shape' : 'other';
+
+      // Effect geometry scales from the TYPE for text and from the box
+      // otherwise. A headline's shadow belongs to its letterforms; deriving it
+      // from a 1200x200 banner box would shadow 96px type as if it were 200px.
+      const basis = kind === 'text' ? el.fontSize || Math.min(el.width, el.height) : Math.min(el.width, el.height);
+
+      const patch = applySlotRecipes(
+        slot,
+        { width: el.width, height: el.height },
+        { basis, palette: ctx.style.palette, backdrop, kind, strength },
+        el.text
+      );
+
+      const next = { ...el, ...patch } as DesignerElement;
+
+      // Freeze the pre-filter pixels the moment a stack is attached. Nothing
+      // has been baked yet, so `src` IS the original — but saying so explicitly
+      // is what lets the client re-bake later without having to guess, and
+      // stops the first parameter tweak in the Designer from evaluating the
+      // stack over its own output.
+      if (next.smartFilters?.length && next.src && !next.originalSrc) {
+        next.originalSrc = next.src;
+        if (next.fileId) next.originalFileId = next.fileId;
+      }
+
+      out.push(next);
+
+      // An adjustment is a LAYER, not a property, so it is emitted above the
+      // image it grades rather than folded into it.
+      if (kind === 'image') {
+        out.push(...treatmentAdjustmentLayers(slot, next, { palette: ctx.style.palette, strength }));
+      }
+    }
+
+    return out;
   }
 
   /** hero-fullbleed: the image is full-bleed (0,0,w,h) by design — there is

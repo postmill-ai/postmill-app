@@ -48,6 +48,30 @@ const VISION_CRITIC_SCHEMA_BLOCK = `Return ONLY a JSON object in this exact shap
         "scope": "shared",
         "regenerateAsset": { "slotId": "image", "brief": "same subject on plain unbranded packaging" }
       }
+    },
+    {
+      "formatId": "ig-post",
+      "slotId": "image",
+      "criterion": "imagery_integration",
+      "issue": "The stock photo's colours have nothing to do with the palette and fight the headline.",
+      "fix": {
+        "scope": "shared",
+        "targetSlots": ["image"],
+        "treatment": "duotone-brand",
+        "note": "Grade the photo into the brand palette so the type reads against it."
+      }
+    },
+    {
+      "formatId": "ig-post",
+      "slotId": "headline",
+      "criterion": "depth_hierarchy",
+      "issue": "The headline sits flat on a busy photograph with no separation.",
+      "fix": {
+        "scope": "shared",
+        "targetSlots": ["headline"],
+        "effects": ["legibility-halo"],
+        "note": "Separate the type from the imagery without adding a plate."
+      }
     }
   ]
 }`;
@@ -57,6 +81,32 @@ const VISION_CRITIC_SCHEMA_BLOCK = `Return ONLY a JSON object in this exact shap
 // feed-thumbnail legibility, copy fidelity, third-party brand marks, and
 // alignment/collision.
 const BASE_CRITERIA: { name: string; description: string; weight: number }[] = [
+  {
+    name: 'imagery_integration',
+    description:
+      'The photograph belongs to this design: its colour and contrast sit with the palette rather than fighting it. A stock image dropped in untouched, clashing with the type around it, fails — fix with a "treatment".',
+    // Weighted below the correctness criteria: a design that reads is worth
+    // more than a design that is beautifully graded and illegible.
+    weight: 0.7,
+  },
+  {
+    name: 'depth_hierarchy',
+    description:
+      'The eye is led. Foreground copy separates from its background, and the most important element reads first. Everything on one flat plane with nothing to separate it fails — fix with an "effects" recipe, not with a plate.',
+    weight: 0.7,
+  },
+  {
+    name: 'type_hierarchy',
+    description:
+      'Headline, subhead and supporting copy are clearly different in weight and size. Two competing sizes, or a subhead as loud as its headline, fails.',
+    weight: 0.7,
+  },
+  {
+    name: 'decoration_restraint',
+    description:
+      'Decoration is deliberate and sparse. Competing decorative marks, or ornament with no purpose, fails — the fix is to REMOVE, never to add.',
+    weight: 0.5,
+  },
   {
     name: 'text_fit',
     description:
@@ -510,6 +560,23 @@ If the contact sheet looks good, return { "findings": [] }.`;
         (s): s is string => typeof s === 'string'
       );
       if (slots.length > 0) fix.targetSlots = slots;
+    }
+
+    // Design-language repairs. Names are carried through verbatim and bounded;
+    // the composer is what decides whether a name means anything, so an id from
+    // a newer catalog is dropped there rather than rejected here.
+    if (Array.isArray(raw.effects)) {
+      const effects = raw.effects
+        .filter((e): e is string => typeof e === 'string')
+        .slice(0, 4)
+        .map((e) => e.slice(0, 100));
+      if (effects.length) fix.effects = effects;
+    }
+    for (const key of ['treatment', 'mask', 'blend', 'recompose'] as const) {
+      const value = raw[key];
+      if (typeof value === 'string' && value.trim()) {
+        fix[key] = value.trim().slice(0, 100);
+      }
     }
 
     // Sanitize to the Fix shape rather than casting: an off-shape key or a
