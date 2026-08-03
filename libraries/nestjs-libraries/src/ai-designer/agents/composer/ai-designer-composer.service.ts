@@ -68,6 +68,7 @@ import {
   parseAgentInput,
 } from '../../util/parse-agent-input';
 import { parseOrRepair } from '../../util/parse-or-repair';
+import { wrapMoveUnitsInGroups } from '../../util/layer-groups';
 import {
   STAR_LABEL_SAFE_RATIO,
   starVisualBox,
@@ -3692,7 +3693,12 @@ export class AiDesignerComposerService implements OnModuleInit {
       fontWeight,
       fill,
       align,
-      lineHeight: 1.1,
+      // Leading belongs to the size of the type, not to the document. 1.1 is
+      // right for a display headline, where tight leading is the whole look,
+      // and wrong for everything else: a two-line subhead or a legal line set
+      // solid reads as a block rather than as lines, which is the single most
+      // common way otherwise-correct copy looks amateur.
+      lineHeight: isDisplay ? 1.1 : 1.35,
       letterSpacing: isDisplay ? treatments.letterSpacing || 0 : undefined,
       textStroke,
       textShadow,
@@ -4115,7 +4121,20 @@ export class AiDesignerComposerService implements OnModuleInit {
         break;
     }
 
-    return elements.map((el) => ({ ...el, originId: el.originId || el.id }));
+    const withOrigins = elements.map((el) => ({
+      ...el,
+      originId: el.originId || el.id,
+    }));
+
+    // Companions already share a `groupId` so they travel together through a
+    // re-fit; this gives them a real folder as well, so the design opens in the
+    // Designer as a CTA rather than as two unrelated rows in the layers panel.
+    //
+    // Runs LAST, after every geometry pass in this method has finished: a
+    // container is zero-sized by design (its extent is derived from its
+    // members), so anything that takes a bounding box over the children would
+    // drag the box back to the origin.
+    return wrapMoveUnitsInGroups(withOrigins, { genId: () => `grp-${randomUUID()}` });
   }
 
   /** hero-fullbleed: the image is full-bleed (0,0,w,h) by design — there is

@@ -354,8 +354,16 @@ export interface DesignerElement {
   hidden: boolean;
   name?: string;
   /**
-   * @deprecated Superseded by `parentId` + a `group` element in doc v4. The
-   * migration converts it; kept on the type only so v3 documents still parse.
+   * The cross-format **reflow move-unit**: elements sharing a `groupId` travel
+   * together when a design is re-fitted to a different canvas.
+   *
+   * NOT deprecated, and NOT superseded by `parentId` — an earlier version of
+   * this comment claimed both, and that a v4 migration converted it. No such
+   * migration exists (`designer-doc.migrate.ts` never touches the field), and
+   * `groupLayers` deliberately writes BOTH: a Photoshop folder should also
+   * travel as one unit. They answer different questions. `parentId` is "which
+   * folder is this in"; `groupId` is "what must never be separated" — a CTA's
+   * plate and its label are one move-unit whether or not anyone grouped them.
    */
   groupId?: string;
   /** The `group` element this layer belongs to. Undefined = top level. */

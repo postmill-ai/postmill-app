@@ -500,6 +500,14 @@ export const smartReflow = (
   groupBox?: GroupBox,
   containerBox?: GroupBox
 ): Partial<DesignerElement> => {
+  // A group container has no geometry of its own to re-fit: `groupBounds`
+  // derives a folder's extent from its members and explicitly ignores the
+  // container's stored box. Re-fitting it anyway is not just wasted work — the
+  // minimum-size clamp below inflates a deliberately zero-sized container to
+  // 2x2, which leaves a second, stale source of truth for the same geometry
+  // sitting in the document waiting for someone to trust it.
+  if (el.type === 'group') return {};
+
   const scaleX = target.width / source.width;
   const scaleY = target.height / source.height;
   const scale = Math.min(scaleX, scaleY);
