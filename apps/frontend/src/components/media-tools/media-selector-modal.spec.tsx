@@ -115,11 +115,53 @@ describe('MediaSelectorModal tabs', () => {
     );
   });
 
+  it('takes an explicit tab list verbatim, in order', () => {
+    // `kinds` can't separate the image sub-sources — Photos, Vectors, Stickers
+    // and Icons are all 'image' — so "My Files and stock photos, nothing else"
+    // needs an allow-list.
+    render(
+      <MediaSelectorModal open onClose={noop} tabs={['My Files', 'Stock Photos']} />
+    );
+    expect(tabNames()).toEqual(['My Files', 'Photos']);
+  });
+
+  it('lets the tab list beat kinds and excludeTabs', () => {
+    render(
+      <MediaSelectorModal
+        open
+        onClose={noop}
+        tabs={['Stock Videos']}
+        kinds={['image']}
+        excludeTabs={['Stock Videos']}
+      />
+    );
+    expect(tabNames()).toEqual(['Videos']);
+  });
+
+  it('ignores a tab name it does not have', () => {
+    render(
+      <MediaSelectorModal
+        open
+        onClose={noop}
+        tabs={['My Files', 'Stock Nonsense' as never]}
+      />
+    );
+    expect(tabNames()).toEqual(['My Files']);
+  });
+
+  it('labels the stock group once rather than on every tab', () => {
+    render(<MediaSelectorModal open onClose={noop} />);
+    // The whole point of the change: no tab repeats the word.
+    expect(tabNames().some((n) => n?.startsWith('Stock '))).toBe(false);
+    expect(screen.getAllByText('Stock:')).toHaveLength(1);
+  });
+
   it('still leads with My Files when kinds filters the stock tabs away', () => {
     render(<MediaSelectorModal open onClose={noop} kinds={['audio']} />);
 
-    // Every stock tab is image/video, so audio leaves only My Files.
-    expect(tabNames()).toEqual(['My Files']);
+    // Audio now has a stock source of its own, so the tab list is My Files
+    // plus Stock: Audio.
+    expect(tabNames()).toEqual(['My Files', 'Audio']);
   });
 
   it('drops individual stock tabs via excludeTabs', () => {
@@ -132,9 +174,9 @@ describe('MediaSelectorModal tabs', () => {
       />
     );
 
-    expect(tabNames()).not.toContain('Stock Stickers');
-    expect(tabNames()).not.toContain('Stock Icons');
-    expect(tabNames()).toContain('Stock Photos');
+    expect(tabNames()).not.toContain('Stickers');
+    expect(tabNames()).not.toContain('Icons');
+    expect(tabNames()).toContain('Photos');
   });
 });
 
@@ -178,7 +220,7 @@ describe('MediaSelectorModal requireFile', () => {
       <MediaSelectorModal open onClose={noop} onSelect={onSelect} requireFile importName="logo" />
     );
 
-    fireEvent.click(screen.getByRole('tab', { name: 'Stock Photos' }));
+    fireEvent.click(screen.getByRole('tab', { name: 'Photos' }));
     fireEvent.click(screen.getByTestId('stock-photo'));
 
     await waitFor(() => expect(onSelect).toHaveBeenCalled());
@@ -207,7 +249,7 @@ describe('MediaSelectorModal requireFile', () => {
     const onClose = vi.fn();
     render(<MediaSelectorModal open onClose={onClose} onSelect={onSelect} requireFile />);
 
-    fireEvent.click(screen.getByRole('tab', { name: 'Stock Photos' }));
+    fireEvent.click(screen.getByRole('tab', { name: 'Photos' }));
     fireEvent.click(screen.getByTestId('stock-photo'));
 
     await waitFor(() => expect(mockToast).toHaveBeenCalled());

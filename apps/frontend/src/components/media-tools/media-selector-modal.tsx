@@ -2,6 +2,7 @@
 
 import React, { useEffect, useId, useMemo, useRef, useState } from 'react';
 import clsx from 'clsx';
+import { StockAudio } from './stock-audio';
 import { StockPhotos } from './stock-photos';
 import { StockVideos } from './stock-videos';
 import { StockVectors } from './stock-vectors';
@@ -38,34 +39,55 @@ export interface MediaSelectorItem {
 // which makes it the default everywhere without extra logic.
 const ALL_TABS = [
   'My Files',
-  'Stock Photos',
-  'Stock Videos',
-  'Stock Vectors',
-  'Stock Stickers',
+  'Stock Audio',
   'Stock Icons',
+  'Stock Photos',
+  'Stock Stickers',
+  'Stock Vectors',
+  'Stock Videos',
 ] as const;
 
 export type MediaTab = (typeof ALL_TABS)[number];
 
 const TAB_TO_KIND: Record<MediaTab, MediaKind | null> = {
   'My Files': null,
-  'Stock Photos': 'image',
-  'Stock Videos': 'video',
-  'Stock Vectors': 'image',
-  'Stock Stickers': 'image',
+  'Stock Audio': 'audio',
   'Stock Icons': 'image',
+  'Stock Photos': 'image',
+  'Stock Stickers': 'image',
+  'Stock Vectors': 'image',
+  'Stock Videos': 'video',
 };
 
 // Tabs are compared/keyed by their canonical English value (ALL_TABS) — only the
 // displayed label is translated, via this lookup.
 const TAB_LABEL_KEYS: Record<MediaTab, string> = {
   'My Files': 'my_files_tab',
-  'Stock Photos': 'stock_photos_tab',
-  'Stock Videos': 'stock_videos_tab',
+  'Stock Audio': 'audio',
+  'Stock Icons': 'icons',
+  'Stock Photos': 'photos',
+  'Stock Stickers': 'stickers',
   'Stock Vectors': 'stock_vectors_tab',
-  'Stock Stickers': 'stock_stickers_tab',
-  'Stock Icons': 'stock_icons_tab',
+  'Stock Videos': 'videos',
 };
+
+/**
+ * Displayed labels drop the word "Stock" — the bar carries it once as a group
+ * label instead of repeating it on every tab.
+ */
+const TAB_LABELS: Record<MediaTab, string> = {
+  'My Files': 'My Files',
+  'Stock Audio': 'Audio',
+  'Stock Icons': 'Icons',
+  'Stock Photos': 'Photos',
+  'Stock Stickers': 'Stickers',
+  'Stock Vectors': 'Vectors',
+  'Stock Videos': 'Videos',
+};
+
+/** Everything but My Files sits under one "Stock" heading. */
+const tabSection = (tab: MediaTab): string | undefined =>
+  tab === 'My Files' ? undefined : 'Stock';
 
 const useFocusTrap = (
   containerRef: React.RefObject<HTMLElement | null>,
@@ -126,6 +148,15 @@ export interface MediaSelectorModalProps {
   multiple?: boolean;
   /** Multi-select confirmation callback. Receives the accumulated batch. */
   onConfirm?: (items: MediaSelectorItem[]) => void | Promise<void>;
+  /**
+   * Exactly these tabs, in this order — an allow-list that beats `kinds` and
+   * `excludeTabs` when given.
+   *
+   * `kinds` can't separate the image sub-sources (Photos/Vectors/Stickers/Icons
+   * all map to `'image'`), so a caller that wants "My Files and stock photos,
+   * nothing else" had to spell it out as three exclusions. This says it once.
+   */
+  tabs?: readonly MediaTab[];
   /** Restrict visible tabs to post-appropriate kinds. Default = all tabs. */
   kinds?: MediaKind[];
   /**
@@ -154,6 +185,7 @@ export const MediaSelectorModal: React.FC<MediaSelectorModalProps> = ({
   onSelect,
   multiple,
   onConfirm,
+  tabs: tabsProp,
   kinds,
   excludeTabs,
   requireFile,
@@ -165,6 +197,8 @@ export const MediaSelectorModal: React.FC<MediaSelectorModalProps> = ({
   const importStockMedia = useImportStockMedia();
   const titleId = useId();
   const tabs = useMemo(() => {
+    // An explicit list is the caller being specific; honour it verbatim.
+    if (tabsProp?.length) return tabsProp.filter((tab) => ALL_TABS.includes(tab));
     const kindFiltered = !kinds?.length
       ? ALL_TABS
       : ALL_TABS.filter((tab) => {
@@ -173,7 +207,20 @@ export const MediaSelectorModal: React.FC<MediaSelectorModalProps> = ({
         });
     if (!excludeTabs?.length) return kindFiltered;
     return kindFiltered.filter((tab) => !excludeTabs.includes(tab));
-  }, [kinds, excludeTabs]);
+  }, [tabsProp, kinds, excludeTabs]);
+
+  /**
+   * The one kind this picker accepts, if it accepts exactly one — either stated
+   * outright via `kinds`, or implied by a tab list that only has one kind in it.
+   * My Files is filtered to that, so you can't pick a file the caller rejects.
+   */
+  const lockedKind = useMemo((): MediaKind | undefined => {
+    if (kinds?.length === 1) return kinds[0];
+    const fromTabs = new Set(
+      tabs.map((tab) => TAB_TO_KIND[tab as MediaTab]).filter(Boolean) as MediaKind[]
+    );
+    return fromTabs.size === 1 ? [...fromTabs][0] : undefined;
+  }, [kinds, tabs]);
   const [activeTab, setActiveTab] = useState<string>(tabs[0]);
   const [selection, setSelection] = useState<MediaSelectorItem[]>([]);
   const [myFilesFolderId, setMyFilesFolderId] = useState<string | null>(null);
@@ -407,9 +454,14 @@ export const MediaSelectorModal: React.FC<MediaSelectorModalProps> = ({
             </button>
           </div>
           <OverflowTabs
-            items={tabs.map((tab) => ({ key: tab, label: t(TAB_LABEL_KEYS[tab], tab) }))}
+            items={tabs.map((tab) => ({
+              key: tab,
+              label: t(TAB_LABEL_KEYS[tab], TAB_LABELS[tab]),
+              section: tabSection(tab),
+            }))}
             activeKey={activeTab}
             onSelect={setActiveTab}
+            showSectionLabels
             ariaLabel={t('more_media_sources', 'More media sources')}
             listAriaLabel={t('media_source_aria', 'Media source')}
             className="mt-3 pb-2"
@@ -435,6 +487,9 @@ export const MediaSelectorModal: React.FC<MediaSelectorModalProps> = ({
           />
         </div>
         <div className="flex-1 overflow-y-auto p-4">
+          {activeTab === 'Stock Audio' && (
+            <StockAudio mode="select" onSelectFull={handleStockSelect} />
+          )}
           {activeTab === 'Stock Photos' && (
             <StockPhotos mode="select" onSelectFull={handleStockSelect} />
           )}
@@ -516,6 +571,7 @@ export const MediaSelectorModal: React.FC<MediaSelectorModalProps> = ({
                 onFolderChange={setMyFilesFolderId}
                 refreshKey={myFilesRefreshKey}
                 sidebarMode="drawer"
+                lockedType={lockedKind}
               />
             </div>
           )}

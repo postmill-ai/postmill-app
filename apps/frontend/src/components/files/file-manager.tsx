@@ -98,12 +98,21 @@ export const FileManager: FC<{
    * desktop and leave ~440px for the browse area.
    */
   sidebarMode?: 'inline' | 'drawer';
+  /**
+   * Pin the type filter and hide its control.
+   *
+   * For a host that has already decided what it can accept — a picker opened as
+   * "insert a video" — offering an All-types escape hatch only lets you choose a
+   * file the caller must then reject.
+   */
+  lockedType?: 'image' | 'video' | 'audio' | 'document';
 }> = ({
   standalone,
   onSelect,
   onFolderChange,
   refreshKey,
   sidebarMode,
+  lockedType,
 }) => {
   const fetch = useFetch();
   const t = useT();
@@ -119,7 +128,7 @@ export const FileManager: FC<{
   const [viewMode, setViewMode] = useState<ViewMode>('grid');
   const [sortField, setSortField] = useState('createdAt');
   const [sortOrder, setSortOrder] = useState('desc');
-  const [filterType, setFilterType] = useState('');
+  const [filterType, setFilterType] = useState(lockedType || '');
   const [filterTag, setFilterTag] = useState('');
   const [detailsFile, setDetailsFile] = useState<FileItem | null>(null);
   const [showTrash, setShowTrash] = useState(false);
@@ -246,7 +255,10 @@ export const FileManager: FC<{
   // fetched. Hidden whenever the file list is filtered or paged, since folders
   // aren't part of that result set and showing them would misrepresent it.
   const foldersFiltered =
-    !!debouncedSearch.trim() || !!filterType || !!filterTag || page > 0;
+    !!debouncedSearch.trim() ||
+    (!!filterType && filterType !== lockedType) ||
+    !!filterTag ||
+    page > 0;
   const visibleFolders = foldersFiltered
     ? []
     : childrenOf(foldersData || [], selectedFolderId);
@@ -530,18 +542,21 @@ export const FileManager: FC<{
               </svg>
             </div>
 
-            <select
-              value={filterType}
-              aria-label={t('filter_by_file_type', 'Filter by file type')}
-              onChange={e => setFilterTypeAndReset(e.target.value)}
-              className="h-[44px] px-[12px] rounded-[8px] bg-newBgColorInner border border-newColColor text-[13px] text-textColor outline-none focus:border-[#2B5CD3] shrink-0"
-            >
-              <option value="">{t('all_types', 'All types')}</option>
-              <option value="image">{t('images', 'Images')}</option>
-              <option value="video">{t('videos', 'Videos')}</option>
-              <option value="audio">{t('audio', 'Audio')}</option>
-              <option value="document">{t('documents', 'Documents')}</option>
-            </select>
+            {/* Hidden when the host locked the type — there is nothing to choose. */}
+            {!lockedType && (
+              <select
+                value={filterType}
+                aria-label={t('filter_by_file_type', 'Filter by file type')}
+                onChange={e => setFilterTypeAndReset(e.target.value)}
+                className="h-[44px] px-[12px] rounded-[8px] bg-newBgColorInner border border-newColColor text-[13px] text-textColor outline-none focus:border-[#2B5CD3] shrink-0"
+              >
+                <option value="">{t('all_types', 'All types')}</option>
+                <option value="image">{t('images', 'Images')}</option>
+                <option value="video">{t('videos', 'Videos')}</option>
+                <option value="audio">{t('audio', 'Audio')}</option>
+                <option value="document">{t('documents', 'Documents')}</option>
+              </select>
+            )}
           </div>
 
           <div className="flex items-center gap-[8px] mobile:w-full mobile:justify-between">

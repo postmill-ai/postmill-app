@@ -73,6 +73,16 @@ export interface OverflowTabsProps {
    * that could never be seen.
    */
   mobileOnly?: boolean;
+  /**
+   * Render `section` as an inline label in the row, not just as a heading in the
+   * ⋮ menu.
+   *
+   * Off by default: the settings and media nav rails use `section` purely to
+   * group their overflow menus, and would sprout labels they were never
+   * designed around. The media picker opts in so its bar can say "Stock:" once
+   * instead of prefixing five tabs with it.
+   */
+  showSectionLabels?: boolean;
   className?: string;
 }
 
@@ -125,6 +135,7 @@ export const OverflowTabs: FC<OverflowTabsProps> = ({
   listAriaLabel,
   renderItem,
   mobileOnly,
+  showSectionLabels,
   className,
 }) => {
   const { visible, overflow } = splitOverflowItems(items, activeKey);
@@ -254,9 +265,32 @@ export const OverflowTabs: FC<OverflowTabsProps> = ({
           item is inline.
         */}
         <div role="presentation" className="flex items-center gap-[2px] min-w-max">
-          {(mobileOnly ? visible : items).map((item) =>
-            renderOne(item, !visibleKeys.has(item.key))
-          )}
+          {(mobileOnly ? visible : items).map((item, i, list) => {
+            // A run of items sharing a `section` gets one inline label at its
+            // head, so the bar says "Stock:" once instead of every tab
+            // repeating it. Mirrors what `toMenuItems` does for the ⋮ menu.
+            const startsSection =
+              !!showSectionLabels && !!item.section && item.section !== list[i - 1]?.section;
+            const tab = renderOne(item, !visibleKeys.has(item.key));
+            if (!startsSection) return tab;
+            return (
+              <Fragment key={`section-${item.section}-${item.key}`}>
+                <span
+                  aria-hidden="true"
+                  data-slot="tabs-section"
+                  className={clsx(
+                    'shrink-0 whitespace-nowrap text-[12px] font-[600] text-newTextColor/50 ps-[10px] pe-[4px]',
+                    // The label belongs to the items after it; when they are all
+                    // desktop-only it must hide with them.
+                    !visibleKeys.has(item.key) && 'mobile:hidden'
+                  )}
+                >
+                  {item.section}:
+                </span>
+                {tab}
+              </Fragment>
+            );
+          })}
         </div>
       </div>
       {overflow.length > 0 && (

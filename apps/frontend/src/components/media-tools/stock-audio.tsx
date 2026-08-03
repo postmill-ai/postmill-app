@@ -15,9 +15,23 @@ const SUGGESTED_SEARCHES = ['Upbeat', 'Cinematic', 'Lo-fi', 'Ambient', 'Corporat
 interface StockAudioProps {
   mode?: 'browse' | 'select';
   onSelect?: (item: { url: string; name?: string }) => void;
+  /**
+   * The payload the media picker needs, matching the other stock browsers.
+   * Audio has no dimensions, so width/height are 0 — callers that lay media out
+   * must treat that as "unknown", not as an empty box.
+   */
+  onSelectFull?: (item: {
+    url: string;
+    width: number;
+    height: number;
+    type: 'audio';
+    name?: string;
+    source?: string;
+    attribution?: Record<string, unknown>;
+  }) => void;
 }
 
-export const StockAudio: FC<StockAudioProps> = ({ mode = 'browse', onSelect }) => {
+export const StockAudio: FC<StockAudioProps> = ({ mode = 'browse', onSelect, onSelectFull }) => {
   const t = useT();
   const modal = useModals();
   const [query, setQuery] = useState('');
@@ -178,11 +192,26 @@ export const StockAudio: FC<StockAudioProps> = ({ mode = 'browse', onSelect }) =
                 </div>
                 <button
                   type="button"
-                  onClick={() =>
-                    mode === 'select' && onSelect
-                      ? onSelect({ url: item.url, name: decodeEntities(item.name) })
-                      : saveToFiles(item)
-                  }
+                  onClick={() => {
+                    if (mode !== 'select' || (!onSelect && !onSelectFull)) {
+                      saveToFiles(item);
+                      return;
+                    }
+                    // Prefer the download URL, as SaveToFiles does — `url` is a
+                    // streaming/preview endpoint on some providers.
+                    const url = item.downloadUrl || item.url;
+                    const name = decodeEntities(item.name);
+                    onSelectFull?.({
+                      url,
+                      width: 0,
+                      height: 0,
+                      type: 'audio',
+                      name,
+                      source: item.source || 'jamendo',
+                      attribution: item.attribution as Record<string, unknown> | undefined,
+                    });
+                    onSelect?.({ url, name });
+                  }}
                   className="shrink-0 px-[14px] py-[8px] rounded-[8px] bg-[#2B5CD3] text-white text-[12px] font-[500] hover:bg-[#2B5CD3]/80 transition-all flex items-center gap-[6px]"
                 >
                   <svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
