@@ -125,13 +125,18 @@ export const flattenForDisplay = (nodes: LayerNode[]): LayerNode[] => {
 /** Every descendant id of a group, for select/move/delete of a whole group. */
 export const descendantIds = (
   children: DesignerElement[],
-  groupId: string
+  groupId: string,
+  seen: Set<string> = new Set()
 ): string[] => {
   const out: string[] = [];
   const direct = children.filter((c) => c.parentId === groupId);
   for (const child of direct) {
+    // A cyclic parentId chain (possible after a bad edit or a merge — see
+    // buildLayerTree) must terminate here too, not stack-overflow.
+    if (seen.has(child.id)) continue;
+    seen.add(child.id);
     out.push(child.id);
-    if (isGroup(child)) out.push(...descendantIds(children, child.id));
+    if (isGroup(child)) out.push(...descendantIds(children, child.id, seen));
   }
   return out;
 };

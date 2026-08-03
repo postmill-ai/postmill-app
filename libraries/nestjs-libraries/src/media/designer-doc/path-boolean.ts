@@ -299,8 +299,16 @@ export const booleanPolygons = (
 ): BooleanResult => {
   const valid = subject.length >= 3 && clip.length >= 3;
   if (!valid) {
-    // An open or degenerate input has no interior to reason about.
-    return { polygons: subject.length >= 3 ? [subject] : [] };
+    // An open or degenerate input has no interior to reason about. A
+    // degenerate CLIP leaves the subject untouched; a degenerate SUBJECT has
+    // no interior, so intersect/subtract empty out but the ops that keep
+    // geometry still return the valid clip — dropping it would silently
+    // delete a shape from the document.
+    if (subject.length >= 3) return { polygons: [subject] };
+    if (clip.length >= 3 && (op === 'unite' || op === 'exclude' || op === 'divide' || op === 'outline')) {
+      return { polygons: [clip] };
+    }
+    return { polygons: [] };
   }
 
   if (op === 'outline') {

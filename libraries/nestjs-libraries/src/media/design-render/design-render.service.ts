@@ -781,8 +781,13 @@ export class DesignRenderService {
       const scaleX = pageW / out.width;
       const scaleY = pageH / out.height;
 
-      for (let idx = 0; idx < out.children.length; idx++) {
-        const el = out.children[idx];
+      // The render path draws expandSymbols(children) — the audit must read
+      // the same layer list, or text inside a symbol instance is never
+      // checked and symbol-provided imagery is invisible to the backdrop scan.
+      const children = expandSymbols(out.children ?? [], doc.symbols);
+
+      for (let idx = 0; idx < children.length; idx++) {
+        const el = children[idx];
         if (el.type !== 'text' || el.hidden || (el.opacity ?? 1) <= 0) continue;
         const hasText = !!(el.text?.trim() || el.richText?.length);
         if (!hasText || !(el.width > 0) || !(el.height > 0)) continue;
@@ -799,7 +804,7 @@ export class DesignRenderService {
         let imagery = false;
         let solidShape = false;
         for (let k = idx - 1; k >= 0; k--) {
-          const other = out.children[k];
+          const other = children[k];
           if (other.hidden) continue;
           if (other.type !== 'shape' && other.type !== 'image') continue;
           if (!aabbOverlap(el, other)) continue;
@@ -914,13 +919,23 @@ export class DesignRenderService {
    * occupy rather than the full leading.
    *
    * Returns null when the element is not laid out this way (rich text, text on
-   * a path, curved text) — there the box is the only honest bound.
+   * a path, curved or rotated text) — there the box is the only honest bound.
    */
   private glyphLineRects(
     ctx: any,
     el: DesignerElement
   ): { x: number; y: number; width: number; height: number }[] | null {
-    if (el.richText?.length || el.textPath || (el.curve || 0) !== 0) return null;
+    // Rotated text paints its glyphs rotated about the centre, so unrotated
+    // line rects would sample backdrop the glyphs never touch — fall back to
+    // the box, as rich/path/curved text already do.
+    if (
+      el.richText?.length ||
+      el.textPath ||
+      (el.curve || 0) !== 0 ||
+      (el.rotation || 0) !== 0
+    ) {
+      return null;
+    }
     const text = el.text ?? '';
     if (!text.trim() || !(el.width > 0) || !(el.height > 0)) return null;
 
@@ -1447,7 +1462,12 @@ export class DesignRenderService {
     bctx.drawImage(mask, el.x, el.y, el.width, el.height);
     bctx.globalCompositeOperation = 'source-over';
 
-    ctx.drawImage(buffer, 0, 0, w / ratio, h / ratio);
+    // Composite through the layer's own blend mode, exactly as a styled or
+    // grouped layer does — drawing the buffer bare would silently render a
+    // masked `multiply` layer as `normal`.
+    ctx.save();
+    this.applyBlend(ctx, buffer, el.blendMode, ratio);
+    ctx.restore();
   }
 
   /** Drop Shadow / Outer Glow — the layer's silhouette, blurred behind it. */
@@ -2215,8 +2235,9 @@ export class DesignRenderService {
   }
 
   private async drawImage(ctx: any, el: DesignerElement): Promise<void> {
-    const img = await this.loadElementImage(el);
-    if (!img) return;
+    const loaded = await this.loadElementImage(el);
+    if (!loaded) return;
+    const { img } = loaded;
 
     ctx.save();
 
@@ -2255,8 +2276,10 @@ export class DesignRenderService {
     } else if (el.fitMode === 'fill') {
       ctx.drawImage(img, 0, 0, el.width, el.height);
     } else {
-      // 'contain' or default — letterbox behaviour
-      const crop = el.crop;
+      // 'contain' or default — letterbox behaviour. A smart-filtered bitmap
+      // was already cropped at evaluation time; applying el.crop again would
+      // read outside it.
+      const crop = loaded.preCropped ? undefined : el.crop;
       if (crop) {
         ctx.drawImage(img, crop.x, crop.y, crop.width, crop.height, 0, 0, el.width, el.height);
       } else {
@@ -2447,15 +2470,27 @@ export class DesignRenderService {
    * optimisation rather than a correctness requirement: whichever way the
    * document arrived, this is what it looks like.
    */
-  private async loadElementImage(el: DesignerElement): Promise<any | null> {
-    if (!hasSmartFilters(el)) return this.loadImageSafe(el.src);
+  private async loadElementImage(
+    el: DesignerElement
+  ): Promise<{ img: any; preCropped: boolean } | null> {
+    if (!hasSmartFilters(el)) {
+      const img = await this.loadImageSafe(el.src);
+      return img ? { img, preCropped: false } : null;
+    }
 
     const source = smartFilterSource(el);
     if (!source) return null;
 
-    const key = smartFilterCacheKey(source, el.smartFilters);
+    // An explicit crop is in ORIGINAL source pixels, so it must be applied
+    // BEFORE the stack is evaluated (and before any downscale): evaluating the
+    // full >16MP source at the capped size would leave the crop coordinates
+    // pointing at pixels the cached bitmap no longer has.
+    const crop = el.crop;
+    const key =
+      smartFilterCacheKey(source, el.smartFilters) +
+      (crop ? `|crop:${crop.x},${crop.y},${crop.width},${crop.height}` : '');
     const cached = this._smartFilterCache.get(key);
-    if (cached) return cached;
+    if (cached) return { img: cached, preCropped: !!crop };
 
     const img = await this.loadImageSafe(source);
     if (!img) return null;
@@ -2464,32 +2499,39 @@ export class DesignRenderService {
       const { createCanvas } = await loadCanvasModule();
       const srcW = Math.max(1, Math.round(img.naturalWidth || img.width));
       const srcH = Math.max(1, Math.round(img.naturalHeight || img.height));
+      // The crop rect, clamped into the source — a crop can outlive a
+      // re-uploaded image's dimensions.
+      const sx = crop ? Math.min(Math.max(0, crop.x), srcW - 1) : 0;
+      const sy = crop ? Math.min(Math.max(0, crop.y), srcH - 1) : 0;
+      const baseW = crop ? Math.min(Math.max(1, crop.width), srcW - sx) : srcW;
+      const baseH = crop ? Math.min(Math.max(1, crop.height), srcH - sy) : srcH;
 
-      // Evaluate at the SOURCE's own resolution, not the element's box. A stack
-      // is a pixel operation, not a geometry one: keeping the source dimensions
-      // is what leaves `naturalWidth`/`naturalHeight`, `crop`, `fitMode` and
-      // `focalPoint` still meaning what they meant before a filter was added.
-      const area = srcW * srcH;
+      // Evaluate at the (possibly cropped) SOURCE's own resolution, not the
+      // element's box. A stack is a pixel operation, not a geometry one:
+      // keeping the source dimensions is what leaves `naturalWidth`/
+      // `naturalHeight`, `crop`, `fitMode` and `focalPoint` still meaning what
+      // they meant before a filter was added.
+      const area = baseW * baseH;
       const scale = area > MAX_SMART_FILTER_PIXELS ? Math.sqrt(MAX_SMART_FILTER_PIXELS / area) : 1;
-      const w = Math.max(1, Math.round(srcW * scale));
-      const h = Math.max(1, Math.round(srcH * scale));
+      const w = Math.max(1, Math.round(baseW * scale));
+      const h = Math.max(1, Math.round(baseH * scale));
 
       const canvas = createCanvas(w, h);
       const cctx = canvas.getContext('2d');
-      cctx.drawImage(img, 0, 0, w, h);
+      cctx.drawImage(img, sx, sy, baseW, baseH, 0, 0, w, h);
       const data = cctx.getImageData(0, 0, w, h);
       applySmartFilters(data, el.smartFilters);
       cctx.putImageData(data, 0, 0);
 
       this._cacheSmartFilter(key, canvas);
-      return canvas;
+      return { img: canvas, preCropped: !!crop };
     } catch (err) {
       // Fail soft, as everything else on the draw path does: an unfiltered
       // image is a worse design, a missing one is a broken render.
       this._logger.warn(
         `Smart filters skipped for element ${el?.id}: ${(err as Error)?.message}`
       );
-      return img;
+      return { img, preCropped: false };
     }
   }
 

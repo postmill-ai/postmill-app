@@ -10,10 +10,12 @@ import {
   hashRandom,
   hashGaussian,
   nearestCellMap,
+  cellField,
   luminance,
   clamp,
   type PixelBuffer,
 } from './filter-primitives';
+import { filterById } from './filter-descriptors';
 
 /**
  * The Filter menu, as pure pixel operations.
@@ -395,6 +397,34 @@ const wind = (buf: PixelBuffer, method: string, direction: string): void => {
   }
 };
 
+/**
+ * Clamp stored numeric params to their descriptor's range.
+ *
+ * The schema bounds a param only to "a finite-ish number" — a saved document
+ * can carry `radius: 1e9`, and an unclamped value is an availability bug, not
+ * a cosmetic one: a blur's window seed is O(radius) per row, a motion blur is
+ * O(distance) per pixel, a rank filter allocates (2r+1)² entries. Anything the
+ * dialog produced is already inside its slider's range, so clamping only ever
+ * bites hand-authored or corrupted documents.
+ */
+const clampToDescriptor = (id: string, params: FilterParams): FilterParams => {
+  const descriptor = filterById(id);
+  if (!descriptor) return params;
+  let out: FilterParams | null = null;
+  for (const p of descriptor.params) {
+    const v = params[p.key];
+    if (typeof v !== 'number' || !Number.isFinite(v)) continue;
+    const lo = typeof p.min === 'number' ? p.min : -Infinity;
+    const hi = typeof p.max === 'number' ? p.max : Infinity;
+    const clamped = Math.min(hi, Math.max(lo, v));
+    if (clamped !== v) {
+      out = out || { ...params };
+      out[p.key] = clamped;
+    }
+  }
+  return out || params;
+};
+
 // ── Dispatch ────────────────────────────────────────────────────────────────
 
 /**
@@ -408,6 +438,7 @@ export const applyFilter = (
   id: string,
   params: FilterParams = {}
 ): void => {
+  params = clampToDescriptor(id, params);
   switch (id) {
     // ── Blur ────────────────────────────────────────────────────────────────
     case 'blur':
@@ -468,8 +499,11 @@ export const applyFilter = (
         const dy = y - cy;
         const d = Math.hypot(dx, dy);
         if (d === 0 || d > max) return { x, y };
-        // Curve the radius: positive pinches inward, negative bulges.
-        const t = Math.pow(d / max, 1 + amt);
+        // Curve the radius. This is a PULL map (a destination pixel reads the
+        // source), so Photoshop's positive Pinch — content squeezed TOWARD the
+        // centre — needs scale > 1 (read from further out), i.e. an exponent
+        // BELOW 1. `1 + amt` bulged, the exact inverse of the label.
+        const t = Math.pow(d / max, 1 - amt);
         const scale = (t * max) / d;
         return { x: cx + dx * scale, y: cy + dy * scale };
       });
@@ -530,8 +564,11 @@ export const applyFilter = (
         const d = Math.hypot(dx, dy);
         if (d === 0 || d > max) return { x, y };
         const nd = d / max;
-        // Project through a sphere: the classic bulge.
-        const scale = 1 - amt * (1 - Math.sin((nd * Math.PI) / 2) / Math.max(1e-6, nd));
+        // Project through a sphere: the classic bulge. Again a pull map —
+        // near the centre sin(nd·π/2)/nd → π/2, so this reads from a SMALLER
+        // radius (scale < 1) for a positive amount, which is what pushes
+        // features outward. The subtracted form pinched, the label's inverse.
+        const scale = 1 + amt * (1 - Math.sin((nd * Math.PI) / 2) / Math.max(1e-6, nd));
         return { x: cx + dx * scale, y: cy + dy * scale };
       });
       return;
@@ -696,6 +733,10 @@ export const applyFilter = (
       const map = nearestCellMap(buf.width, buf.height, size);
       const averages = cellAverages(buf, map);
       const dotted = id === 'pointillize';
+      // Pointillize needs the cell CENTRES; `nearestCellMap` returns only the
+      // assignment map, but `cellField` is deterministic, so the same call
+      // reproduces the exact centres the map was built from.
+      const cells = dotted ? cellField(buf.width, buf.height, size) : null;
       const cellRadius = Math.max(1, size / 2);
 
       for (let y = 0; y < buf.height; y++) {
@@ -705,16 +746,12 @@ export const applyFilter = (
           const i = px * 4;
           if (!avg) continue;
           if (dotted) {
-            // Pointillize paints round dots on a background, so pixels far from
-            // their cell centre fall back to the average rather than the dot.
-            const cell = map[px];
-            const centre = averages.get(cell);
-            const dist = Math.hypot(
-              x - ((cell % buf.width) || x),
-              y - ((cell / buf.width) | 0 || y)
-            );
-            if (!centre || dist > cellRadius * 1.6) {
-              buf.data[i + 3] = buf.data[i + 3] * 0.9;
+            // Round dots of the cell's average colour: pixels past the dot
+            // radius keep their original colour — the gap between the dots is
+            // what separates Pointillize from Crystallize.
+            const centre = cells?.[map[px]];
+            if (!centre || Math.hypot(x - centre.x, y - centre.y) > cellRadius) {
+              continue;
             }
           }
           buf.data[i] = avg[0];

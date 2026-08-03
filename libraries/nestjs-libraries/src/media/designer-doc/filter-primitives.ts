@@ -88,6 +88,11 @@ export const sampleBilinear = (
  * Three box passes approximate a Gaussian closely enough that Photoshop itself
  * does the same thing, and a box pass is O(1) per pixel via a running sum —
  * which is what makes a 200px radius blur feasible at all.
+ *
+ * RGB is accumulated PREMULTIPLIED: a fully transparent pixel's (often stale)
+ * colour must not bleed into its neighbours, or every blurred logo on
+ * transparency grows a dark halo. For opaque pixels the weighted mean reduces
+ * to the plain average, so opaque renders are unchanged.
  */
 const boxPass = (
   src: PixelBuffer,
@@ -113,25 +118,30 @@ const boxPass = (
     // Seed the window, clamping at the leading edge.
     for (let i = -r; i <= r; i++) {
       const p = at(i);
-      sr += src.data[p];
-      sg += src.data[p + 1];
-      sb += src.data[p + 2];
-      sa += src.data[p + 3];
+      const a = src.data[p + 3];
+      sr += src.data[p] * a;
+      sg += src.data[p + 1] * a;
+      sb += src.data[p + 2] * a;
+      sa += a;
     }
 
     for (let i = 0; i < inner; i++) {
       const p = at(i);
-      dst.data[p] = sr / span;
-      dst.data[p + 1] = sg / span;
-      dst.data[p + 2] = sb / span;
+      // sr/sa is the alpha-weighted mean colour (sa > 0 whenever any pixel in
+      // the window is visible); alpha itself averages normally.
+      dst.data[p] = sa > 0 ? sr / sa : 0;
+      dst.data[p + 1] = sa > 0 ? sg / sa : 0;
+      dst.data[p + 2] = sa > 0 ? sb / sa : 0;
       dst.data[p + 3] = sa / span;
 
       const leaving = at(i - r);
       const entering = at(i + r + 1);
-      sr += src.data[entering] - src.data[leaving];
-      sg += src.data[entering + 1] - src.data[leaving + 1];
-      sb += src.data[entering + 2] - src.data[leaving + 2];
-      sa += src.data[entering + 3] - src.data[leaving + 3];
+      const aIn = src.data[entering + 3];
+      const aOut = src.data[leaving + 3];
+      sr += src.data[entering] * aIn - src.data[leaving] * aOut;
+      sg += src.data[entering + 1] * aIn - src.data[leaving + 1] * aOut;
+      sb += src.data[entering + 2] * aIn - src.data[leaving + 2] * aOut;
+      sa += aIn - aOut;
     }
   }
 };

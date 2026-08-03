@@ -951,7 +951,9 @@ const elementCommon = {
     'symbol',
   ]),
   name: z.string().max(200).optional(),
-  /** @deprecated v3 grouping; migrated to `parentId` in v4. */
+  // NOT deprecated: the cross-format reflow move-unit, deliberately separate
+  // from `parentId` (the Photoshop layer folder). See the field's doc comment
+  // on `DesignerElement` — no migration converts one into the other.
   groupId: z.string().max(200).optional(),
   parentId: z.string().max(200).optional(),
   symbolId: z.string().max(200).optional(),

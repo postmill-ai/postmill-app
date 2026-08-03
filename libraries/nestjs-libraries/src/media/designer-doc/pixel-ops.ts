@@ -55,7 +55,12 @@ export const isNativeBlend = (mode?: DesignerBlendMode): boolean =>
 export const canvasCompositeFor = (mode?: DesignerBlendMode): string =>
   !mode || mode === 'normal' ? 'source-over' : mode;
 
-/** Per-channel blend for the 9 separable modes canvas doesn't implement. */
+/**
+ * Per-channel blend for every separable mode — including the ones canvas
+ * composites natively, because `blendPixels` is also called where there is no
+ * canvas (Edit ▸ Fill/Stroke), and those must not fall through to `normal`.
+ * Formulas per the W3C compositing spec, channels in 0..255.
+ */
 const separableBlend = (
   mode: DesignerBlendMode,
   b: number,
@@ -64,6 +69,38 @@ const separableBlend = (
   const bn = b / 255;
   const sn = s / 255;
   switch (mode) {
+    case 'multiply':
+      return clamp255(bn * sn * 255);
+    case 'screen':
+      return clamp255((bn + sn - bn * sn) * 255);
+    case 'overlay':
+      return clamp255(
+        (bn <= 0.5 ? 2 * bn * sn : 1 - 2 * (1 - bn) * (1 - sn)) * 255
+      );
+    case 'darken':
+      return Math.min(b, s);
+    case 'lighten':
+      return Math.max(b, s);
+    case 'color-dodge':
+      return clamp255((sn === 1 ? 1 : Math.min(1, bn / (1 - sn))) * 255);
+    case 'color-burn':
+      return clamp255((sn === 0 ? 0 : 1 - Math.min(1, (1 - bn) / sn)) * 255);
+    case 'hard-light':
+      return clamp255(
+        (sn <= 0.5 ? 2 * bn * sn : 1 - 2 * (1 - bn) * (1 - sn)) * 255
+      );
+    case 'soft-light': {
+      const d = bn <= 0.25 ? ((16 * bn - 12) * bn + 4) * bn : Math.sqrt(bn);
+      return clamp255(
+        (sn <= 0.5
+          ? bn - (1 - 2 * sn) * bn * (1 - bn)
+          : bn + (2 * sn - 1) * (d - bn)) * 255
+      );
+    }
+    case 'difference':
+      return Math.abs(b - s);
+    case 'exclusion':
+      return clamp255((bn + sn - 2 * bn * sn) * 255);
     case 'linear-burn':
       return clamp255((bn + sn - 1) * 255);
     case 'linear-dodge':
@@ -97,12 +134,97 @@ const separableBlend = (
   }
 };
 
+// ---------------------------------------------------------------------------
+// Non-separable blends (hue / saturation / color / luminosity), W3C helpers.
+// These use the spec's 0.3/0.59/0.11 luma — NOT the Rec. 709 `luma` above —
+// so the result matches what canvas does when the same mode goes through
+// `globalCompositeOperation`.
+// ---------------------------------------------------------------------------
+
+const specLum = (r: number, g: number, b: number) => 0.3 * r + 0.59 * g + 0.11 * b;
+
+const clipColor = (c: [number, number, number]): [number, number, number] => {
+  let [r, g, b] = c;
+  const l = specLum(r, g, b);
+  const n = Math.min(r, g, b);
+  const x = Math.max(r, g, b);
+  if (n < 0) {
+    r = l + ((r - l) * l) / (l - n);
+    g = l + ((g - l) * l) / (l - n);
+    b = l + ((b - l) * l) / (l - n);
+  }
+  if (x > 1) {
+    r = l + ((r - l) * (1 - l)) / (x - l);
+    g = l + ((g - l) * (1 - l)) / (x - l);
+    b = l + ((b - l) * (1 - l)) / (x - l);
+  }
+  return [r, g, b];
+};
+
+const setLum = (
+  c: [number, number, number],
+  l: number
+): [number, number, number] => {
+  const d = l - specLum(c[0], c[1], c[2]);
+  return clipColor([c[0] + d, c[1] + d, c[2] + d]);
+};
+
+const setSat = (
+  c: [number, number, number],
+  s: number
+): [number, number, number] => {
+  // Sort channel values, rescale the spread to `s`, unsort.
+  const pairs: [number, number][] = [
+    [c[0], 0],
+    [c[1], 1],
+    [c[2], 2],
+  ];
+  const order = pairs.sort((p, q) => p[0] - q[0]);
+  const out = [0, 0, 0];
+  const [mn, md, mx] = order;
+  if (mx[0] > mn[0]) {
+    out[md[1]] = ((md[0] - mn[0]) * s) / (mx[0] - mn[0]);
+    out[mx[1]] = s;
+  }
+  return out as [number, number, number];
+};
+
+const specSat = (c: [number, number, number]) =>
+  Math.max(c[0], c[1], c[2]) - Math.min(c[0], c[1], c[2]);
+
+/** Whole-colour blend for the four non-separable modes, channels 0..255. */
+const nonSeparableBlend = (
+  mode: DesignerBlendMode,
+  b: [number, number, number],
+  s: [number, number, number]
+): [number, number, number] => {
+  const bn: [number, number, number] = [b[0] / 255, b[1] / 255, b[2] / 255];
+  const sn: [number, number, number] = [s[0] / 255, s[1] / 255, s[2] / 255];
+  let out: [number, number, number];
+  if (mode === 'hue') out = setLum(setSat(sn, specSat(bn)), specLum(...bn));
+  else if (mode === 'saturation') out = setLum(setSat(bn, specSat(sn)), specLum(...bn));
+  else if (mode === 'color') out = setLum(sn, specLum(...bn));
+  else out = setLum(bn, specLum(...sn)); // luminosity
+  return [
+    clamp255(out[0] * 255),
+    clamp255(out[1] * 255),
+    clamp255(out[2] * 255),
+  ];
+};
+
 /**
- * Blend `source` onto `backdrop` in place (writing into `backdrop`) for the
- * modes canvas cannot do natively. Both must be the same size.
+ * Blend `source` onto `backdrop` in place (writing into `backdrop`). Both must
+ * be the same size.
  *
- * `dissolve`, `darker-color` and `lighter-color` are whole-pixel decisions
- * rather than per-channel, so they're handled separately.
+ * Compositing follows the W3C formula — co = αs(1−αb)·Cs + αs·αb·B(Cb,Cs) +
+ * αb(1−αs)·Cb, αo = αs + αb(1−αs) — which the old "lerp the colour, max the
+ * alpha" shortcut only matched for a fully opaque backdrop: a 50% fill onto a
+ * transparent pixel came out twice as dark and fully opaque. Over an opaque
+ * backdrop the formula reduces to that same lerp, so page compositing (where
+ * the backdrop is the painted canvas) is unchanged.
+ *
+ * `dissolve` is a per-pixel coin flip weighted by alpha rather than a blend,
+ * so it's handled separately.
  */
 export const blendPixels = (
   backdrop: ImageData,
@@ -115,6 +237,11 @@ export const blendPixels = (
   const b = backdrop.data;
   const s = source.data;
   const alpha = clamp01(opacity);
+  const nonSeparable =
+    mode === 'hue' ||
+    mode === 'saturation' ||
+    mode === 'color' ||
+    mode === 'luminosity';
 
   for (let i = 0; i < b.length; i += 4) {
     const sa = (s[i + 3] / 255) * alpha;
@@ -132,24 +259,42 @@ export const blendPixels = (
       continue;
     }
 
+    // The blended colour B(Cb, Cs), per channel.
+    let br: number;
+    let bg: number;
+    let bb: number;
     if (mode === 'darker-color' || mode === 'lighter-color') {
       const lb = luma(b[i], b[i + 1], b[i + 2]);
       const ls = luma(s[i], s[i + 1], s[i + 2]);
       const takeSource = mode === 'darker-color' ? ls < lb : ls > lb;
-      if (takeSource) {
-        b[i] += (s[i] - b[i]) * sa;
-        b[i + 1] += (s[i + 1] - b[i + 1]) * sa;
-        b[i + 2] += (s[i + 2] - b[i + 2]) * sa;
-      }
-      b[i + 3] = Math.max(b[i + 3], s[i + 3]);
-      continue;
+      br = takeSource ? s[i] : b[i];
+      bg = takeSource ? s[i + 1] : b[i + 1];
+      bb = takeSource ? s[i + 2] : b[i + 2];
+    } else if (nonSeparable) {
+      [br, bg, bb] = nonSeparableBlend(
+        mode,
+        [b[i], b[i + 1], b[i + 2]],
+        [s[i], s[i + 1], s[i + 2]]
+      );
+    } else {
+      br = separableBlend(mode, b[i], s[i]);
+      bg = separableBlend(mode, b[i + 1], s[i + 1]);
+      bb = separableBlend(mode, b[i + 2], s[i + 2]);
     }
 
-    for (let c = 0; c < 3; c++) {
-      const blended = separableBlend(mode, b[i + c], s[i + c]);
-      b[i + c] = clamp255(b[i + c] + (blended - b[i + c]) * sa);
-    }
-    b[i + 3] = Math.max(b[i + 3], s[i + 3]);
+    const ba = b[i + 3] / 255;
+    const ao = sa + ba * (1 - sa);
+    if (ao <= 0) continue;
+    b[i] = clamp255(
+      (sa * (1 - ba) * s[i] + sa * ba * br + ba * (1 - sa) * b[i]) / ao
+    );
+    b[i + 1] = clamp255(
+      (sa * (1 - ba) * s[i + 1] + sa * ba * bg + ba * (1 - sa) * b[i + 1]) / ao
+    );
+    b[i + 2] = clamp255(
+      (sa * (1 - ba) * s[i + 2] + sa * ba * bb + ba * (1 - sa) * b[i + 2]) / ao
+    );
+    b[i + 3] = clamp255(ao * 255);
   }
 };
 

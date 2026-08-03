@@ -509,18 +509,30 @@ ${captionStylesSource()}
         continue;
       }
       const wasTime = window.__CURRENT_TIME;
+      // Accumulate the sub-frame samples ADDITIVELY at 1/N in an offscreen
+      // buffer, then composite once. Drawing them onto the page with
+      // source-over at opacity/N is not an average — overlapping samples
+      // compound to 1-(1-o/N)^N (66% at N=8), darkening every blurred clip
+      // against the already-painted background. Each sample also carries its
+      // OWN keyframed opacity, not the playhead's.
+      const acc = document.createElement('canvas');
+      acc.width = canvas.width;
+      acc.height = canvas.height;
+      const actx = acc.getContext('2d');
+      actx.globalCompositeOperation = 'lighter';
       for (const sampleMs of times) {
         window.__CURRENT_TIME = sampleMs;
         const relativeMs = Math.max(0, sampleMs - item.clip.startMs);
         const sampled = interpolateKeyframes(item.clip, relativeMs);
         await drawClip(
-          ctx,
+          actx,
           item.clip,
           item.trackType,
-          { ...sampled, opacity: (item.props.opacity == null ? 1 : item.props.opacity) / times.length }
+          { ...sampled, opacity: (sampled.opacity == null ? 1 : sampled.opacity) / times.length }
         );
       }
       window.__CURRENT_TIME = wasTime;
+      ctx.drawImage(acc, 0, 0);
     }
   }
 

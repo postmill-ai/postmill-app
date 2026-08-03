@@ -95,7 +95,12 @@ export const arrowHeadPoints = (
 export const arrowInset = (head: ArrowHead, strokeWidth: number): number => {
   if (!head || head === 'none' || head === 'bar' || head === 'circle') return 0;
   const size = arrowSize(strokeWidth);
-  return head === 'arrow' ? size * 0.7 : size;
+  // Inset to the head's BACK edge so the shaft does not poke through: the
+  // barbed arrow's notch sits at 0.7·size, the triangle's base at size, and
+  // the square's back edge at 0.4·size (see `arrowHeadPoints`).
+  if (head === 'arrow') return size * 0.7;
+  if (head === 'square') return size * 0.4;
+  return size;
 };
 
 /** The direction of the line at an endpoint, in radians. */

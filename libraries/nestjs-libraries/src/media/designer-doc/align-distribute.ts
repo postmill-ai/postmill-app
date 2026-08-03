@@ -125,24 +125,30 @@ export const findEqualSpacing = (
       };
     }
 
-    // The moving box at one end: match the gap the others already share.
-    const neighbourGaps: number[] = [];
-    for (let i = 0; i < row.length - 1; i++) {
-      if (i === index || i + 1 === index) continue;
-      neighbourGaps.push(gapBetween(row[i], row[i + 1]));
-    }
+    // The moving box at one end: match the gap the others already share, and
+    // display THAT span — not a hardcoded neighbour, which can be a different
+    // (unequal) gap and would render a guide that contradicts its own badge.
     const own = index === 0 ? after : index === row.length - 1 ? before : null;
-    if (own != null && neighbourGaps.some((g) => Math.abs(g - own) <= tolerance)) {
-      const pairIndex = index === 0 ? 0 : row.length - 2;
-      const otherIndex = neighbourGaps.length ? (index === 0 ? 1 : row.length - 3) : pairIndex;
-      return {
-        axis,
-        gap: own,
-        spans: [
-          { from: end(row[pairIndex]), to: start(row[pairIndex + 1]) },
-          { from: end(row[otherIndex]), to: start(row[otherIndex + 1]) },
-        ],
-      };
+    if (own != null) {
+      let matchIndex = -1;
+      for (let i = 0; i < row.length - 1; i++) {
+        if (i === index || i + 1 === index) continue;
+        if (Math.abs(gapBetween(row[i], row[i + 1]) - own) <= tolerance) {
+          matchIndex = i;
+          break;
+        }
+      }
+      if (matchIndex >= 0) {
+        const pairIndex = index === 0 ? 0 : row.length - 2;
+        return {
+          axis,
+          gap: own,
+          spans: [
+            { from: end(row[pairIndex]), to: start(row[pairIndex + 1]) },
+            { from: end(row[matchIndex]), to: start(row[matchIndex + 1]) },
+          ],
+        };
+      }
     }
   }
   return null;

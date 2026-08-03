@@ -97,6 +97,11 @@ export const expandSymbolInstance = (
  * Called once before render, so the renderers keep seeing a flat list of
  * ordinary elements. An instance whose definition has gone is dropped rather
  * than drawn as an empty box.
+ *
+ * A definition may itself contain an instance of ANOTHER symbol, so expansion
+ * recurses; `visiting` tracks the definitions on the current expansion stack
+ * and drops a cycle (a symbol containing itself, directly or transitively)
+ * instead of recursing forever.
  */
 export const expandSymbols = (
   children: DesignerElement[],
@@ -105,17 +110,28 @@ export const expandSymbols = (
   if (!definitions?.length) return children.filter((el) => el.type !== 'symbol');
   const byId = new Map(definitions.map((d) => [d.id, d]));
 
-  const out: DesignerElement[] = [];
-  for (const el of children) {
-    if (el.type !== 'symbol') {
-      out.push(el);
-      continue;
+  const expand = (
+    els: DesignerElement[],
+    visiting: ReadonlySet<string>
+  ): DesignerElement[] => {
+    const out: DesignerElement[] = [];
+    for (const el of els) {
+      if (el.type !== 'symbol') {
+        out.push(el);
+        continue;
+      }
+      const definition = el.symbolId ? byId.get(el.symbolId) : undefined;
+      if (!definition || visiting.has(definition.id)) continue;
+      out.push(
+        ...expand(
+          expandSymbolInstance(el, definition),
+          new Set([...visiting, definition.id])
+        )
+      );
     }
-    const definition = el.symbolId ? byId.get(el.symbolId) : undefined;
-    if (!definition) continue;
-    out.push(...expandSymbolInstance(el, definition));
-  }
-  return out;
+    return out;
+  };
+  return expand(children, new Set());
 };
 
 export interface TemplateField {

@@ -81,7 +81,9 @@ export const tracePathNodes = (
   for (let i = 0; i < nodes.length - 1; i++) {
     traceSegment(ctx, nodes[i], nodes[i + 1]);
   }
-  if (closed && nodes.length > 2) {
+  // A 2-node path can be closed too (the Pen tool allows it) — match
+  // `svg-export`, which closes for any count, or canvas and SVG diverge.
+  if (closed && nodes.length >= 2) {
     traceSegment(ctx, nodes[nodes.length - 1], nodes[0]);
     ctx.closePath();
   }
