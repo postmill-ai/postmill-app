@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { act, renderHook } from '@testing-library/react';
 import { createDesignerStore, migrateDoc, type DesignerStore } from './designer.store';
+import { DESIGNER_DOC_VERSION } from '@postmill-ai/nestjs-libraries/media/designer-doc/designer-doc.limits';
 
 /**
  * Simulates the designer export flow as implemented in Designer.tsx:
@@ -60,7 +61,7 @@ describe('createDesignerStore', () => {
     const state = store.getState();
 
     expect(state.doc).toMatchObject({
-      version: 2,
+      version: DESIGNER_DOC_VERSION,
       mode: 'image',
       outputs: [
         expect.objectContaining({
@@ -260,6 +261,57 @@ describe('createDesignerStore', () => {
   });
 });
 
+describe('grouping a single layer', () => {
+  it('wraps one selected layer in a group, as Photoshop does', () => {
+    const store = createDesignerStore();
+    const { result } = renderHook(() => store());
+
+    act(() => {
+      result.current.addElement({
+        id: '', type: 'text', x: 0, y: 0, width: 100, height: 30,
+        rotation: 0, opacity: 1, locked: false, hidden: false, text: 'Solo',
+      });
+    });
+    const soloId = result.current.doc.outputs[0].children[0].id;
+
+    act(() => {
+      result.current.setSelectedIds([soloId]);
+      result.current.groupSelection();
+    });
+
+    const children = result.current.doc.outputs[0].children;
+    const group = children.find((el) => el.type === 'group');
+    expect(group).toBeTruthy();
+    expect(children.find((el) => el.id === soloId)?.parentId).toBe(group?.id);
+    expect(result.current.selectedIds).toEqual([group?.id]);
+  });
+
+  it('does nothing with an empty selection', () => {
+    const store = createDesignerStore();
+    const { result } = renderHook(() => store());
+
+    act(() => {
+      result.current.setSelectedIds([]);
+      result.current.groupSelection();
+    });
+
+    expect(result.current.doc.outputs[0].children).toHaveLength(0);
+  });
+});
+
+describe('rename requests', () => {
+  it('carries the target to the layers panel and clears', () => {
+    const store = createDesignerStore();
+    const { result } = renderHook(() => store());
+
+    expect(result.current.renamingId).toBeNull();
+    act(() => result.current.requestRename('abc'));
+    expect(result.current.renamingId).toBe('abc');
+    act(() => result.current.requestRename(null));
+    expect(result.current.renamingId).toBeNull();
+  });
+});
+
 describe('migrateDoc', () => {
   it('migrates a legacy page-based doc to the new outputs shape', () => {
     const legacy = {
@@ -280,7 +332,9 @@ describe('migrateDoc', () => {
     const doc = migrateDoc(legacy);
 
     expect(doc.mode).toBe('image');
-    expect(doc.version).toBe(2);
+    // A legacy doc is stamped with whatever the current schema version is;
+    // asserting the constant keeps this from going stale on every bump.
+    expect(doc.version).toBe(DESIGNER_DOC_VERSION);
     expect(doc.outputs).toHaveLength(1);
     expect(doc.outputs[0].width).toBe(1080);
     expect(doc.outputs[0].height).toBe(1080);
@@ -293,7 +347,7 @@ describe('migrateDoc', () => {
 
   it('leaves a new outputs-based doc unchanged', () => {
     const newDoc = {
-      version: 2,
+      version: DESIGNER_DOC_VERSION,
       mode: 'image',
       outputs: [{ id: 'out-1', formatId: 'x-post', name: 'X Post', width: 1600, height: 900, background: '#ffffff', children: [] }],
     };

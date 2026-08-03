@@ -160,6 +160,35 @@ Gate composer/UI features per channel on the shared capability matrix, not on ad
   `apps/frontend/src/components/composer/providers/show.all.providers.tsx`.
 - Full walkthrough: `agents/providers/social.md`.
 
+## Designer: two renderers, one document
+
+`/media/designer` draws every document **twice** — client-side through Konva
+(`components/media-tools/designer/elements.tsx`, used by the canvas *and* the PNG/JPEG/WebP export)
+and server-side through node-canvas
+(`libraries/nestjs-libraries/src/media/design-render/design-render.service.ts`, used for PDF, video
+and bulk generation). The two must produce the same picture, so **every rule either side needs goes
+in a shared pure module under `designer-doc/`** — `fit-text`, `shape-geometry`, `path-geometry`,
+`layer-tree`, `pixel-ops`, `layer-styles`, `pattern-tiles`. Reimplementing one of those rules on one
+side is how the exports drift.
+
+Layer semantics that are easy to get wrong, and that the renderers must agree on:
+
+- **Groups are flat.** `output.children` stays a flat array; nesting is expressed by `parentId` and
+  resolved by `buildLayerTree`. A group renders at the position of its **first** member. Never add a
+  nested `children[]` to an element — ~87 call sites iterate the flat array.
+- **A clipped adjustment masks by the base layer's ALPHA, not its bounding box.** The canvas caches
+  the base layer alone and filters that bitmap, so its transparent gaps keep the backdrop; the server
+  mirrors this by rendering the base node alone and feathering the write-back by that mask.
+- **An unclipped adjustment includes the artboard background**, because in this document model the
+  background sits below every layer. On the client that means passing it to `CanvasElements` as
+  `backdrop` (so it joins the fold) rather than rendering it as a sibling.
+- **Server readbacks are in DEVICE pixels.** `ctx.scale(ratio, ratio)` is applied once at page setup
+  and never undone, so `getImageData` with logical coordinates reads the wrong region.
+
+Acceptance test for any change here: render the same document through **both** paths and diff them —
+a document with a blended group, a clipped adjustment and a layer style is the case that catches
+divergence.
+
 ## Forms
 
 - `react-hook-form` + `FormProvider` is the standard; shared form primitives self-register against the

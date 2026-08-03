@@ -40,6 +40,148 @@ const makeDoc = (): any => ({
 });
 
 describe('DesignRenderService', () => {
+  it('survives pathologically deep group nesting', async () => {
+    // One page-size buffer per nesting level, and nesting is unbounded in the
+    // document: each Group Layers wraps the previous group, so a deep chain is
+    // trivial to author. Past the cap members draw inline instead.
+    const service = makeService();
+    const depth = 60;
+    const children: any[] = [];
+    for (let i = 0; i < depth; i++) {
+      children.push({
+        id: `g${i}`, type: 'group', name: `G${i}`,
+        x: 0, y: 0, width: 0, height: 0,
+        rotation: 0, opacity: 1, locked: false, hidden: false,
+        parentId: i === 0 ? undefined : `g${i - 1}`,
+      });
+    }
+    children.push({
+      id: 'leaf', type: 'shape', shape: 'rect', parentId: `g${depth - 1}`,
+      x: 10, y: 10, width: 80, height: 80,
+      rotation: 0, opacity: 1, locked: false, hidden: false, fill: '#ff0000',
+    });
+
+    const doc: any = {
+      version: 4, mode: 'image',
+      outputs: [{
+        id: 'out-1', formatId: 'square', name: 'Square',
+        width: 100, height: 100, background: '#ffffff', children,
+      }],
+    };
+
+    const png = await service.renderPage(doc, 0, { pixelRatio: 1 });
+    const { data, info } = await sharp(png).ensureAlpha().raw().toBuffer({ resolveWithObject: true });
+    const i = (50 * info.width + 50) * info.channels;
+    // The deeply nested leaf still renders.
+    expect(data[i]).toBeGreaterThan(200);
+    expect(data[i + 1]).toBeLessThan(60);
+  });
+
+  it('keeps a blend mode working on a layer that also has a layer style', async () => {
+    // A styled layer is rendered into an offscreen buffer so its effects can
+    // read its silhouette. Compositing that buffer back with a plain drawImage
+    // drops the layer's own blend mode, so `multiply` silently rendered as
+    // `normal` for any layer carrying an effect.
+    const service = makeService();
+    const doc = (blendMode?: string): any => ({
+      version: 4,
+      mode: 'image',
+      outputs: [
+        {
+          id: 'out-1', formatId: 'square', name: 'Square',
+          width: 100, height: 100, background: '#ffffff',
+          children: [
+            {
+              id: 'base', type: 'shape', shape: 'rect',
+              x: 0, y: 0, width: 100, height: 100,
+              rotation: 0, opacity: 1, locked: false, hidden: false, fill: '#3a7bd5',
+            },
+            {
+              id: 'top', type: 'shape', shape: 'rect',
+              x: 20, y: 20, width: 60, height: 60,
+              rotation: 0, opacity: 1, locked: false, hidden: false, fill: '#808080',
+              blendMode,
+              styles: [{ type: 'drop-shadow', color: '#000000', distance: 2, size: 2 }],
+            },
+          ],
+        },
+      ],
+    });
+
+    const centre = async (blendMode?: string) => {
+      const png = await service.renderPage(doc(blendMode), 0, { pixelRatio: 1 });
+      const { data, info } = await sharp(png).ensureAlpha().raw().toBuffer({ resolveWithObject: true });
+      const i = (50 * info.width + 50) * info.channels;
+      return [data[i], data[i + 1], data[i + 2]];
+    };
+
+    const plain = await centre(undefined);
+    const multiplied = await centre('multiply');
+
+    // Normal: the layer's own grey. Multiply against the blue below: darker on
+    // every channel, and no longer neutral.
+    expect(plain[0]).toBeGreaterThan(120);
+    expect(multiplied[0]).toBeLessThan(plain[0]);
+    expect(multiplied[1]).toBeLessThan(plain[1]);
+    expect(multiplied[2]).toBeLessThan(plain[2]);
+  });
+
+  it('clips an adjustment to the base layer\'s pixels, not its bounding box', async () => {
+    // The Designer canvas clips by filtering the base layer's own cached
+    // bitmap, so an ellipse's transparent bbox corners keep the backdrop. The
+    // server has to agree or the exported PNG stops matching the canvas.
+    const service = makeService();
+    const doc: any = {
+      version: 4,
+      mode: 'image',
+      outputs: [
+        {
+          id: 'out-1',
+          formatId: 'square',
+          name: 'Square',
+          width: 200,
+          height: 200,
+          background: '#ffffff',
+          children: [
+            {
+              id: 'base', type: 'shape', shape: 'rect',
+              x: 0, y: 0, width: 200, height: 200,
+              rotation: 0, opacity: 1, locked: false, hidden: false, fill: '#000000',
+            },
+            {
+              id: 'disc', type: 'shape', shape: 'ellipse',
+              x: 40, y: 40, width: 120, height: 120,
+              rotation: 0, opacity: 1, locked: false, hidden: false, fill: '#000000',
+            },
+            {
+              id: 'adj', type: 'adjustment', name: 'Invert',
+              x: 0, y: 0, width: 0, height: 0,
+              rotation: 0, opacity: 1, locked: false, hidden: false,
+              clipped: true, adjustment: { type: 'invert' },
+            },
+          ],
+        },
+      ],
+    };
+
+    const png = await service.renderPage(doc, 0, { pixelRatio: 1 });
+    const { data, info } = await sharp(png)
+      .ensureAlpha()
+      .raw()
+      .toBuffer({ resolveWithObject: true });
+    const at = (x: number, y: number) => {
+      const i = (y * info.width + x) * info.channels;
+      return [data[i], data[i + 1], data[i + 2]];
+    };
+
+    // Centre of the disc: inverted black -> white.
+    expect(at(100, 100)[0]).toBeGreaterThan(200);
+    // Inside the disc's bounding box but outside the disc itself: untouched.
+    expect(at(45, 45)[0]).toBeLessThan(55);
+    // Well outside: untouched.
+    expect(at(10, 10)[0]).toBeLessThan(55);
+  });
+
   it('renders a contact sheet as a PNG buffer', async () => {
     const service = makeService();
     const sheet = await service.renderContactSheet(makeDoc());

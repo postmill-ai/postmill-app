@@ -171,7 +171,18 @@ export const CommandPalette: React.FC<CommandPaletteProps> = ({ actions }) => {
                     onClick={() => executeAction(action)}
                     onMouseEnter={() => setSelectedIndex(globalIndex)}
                   >
-                    <span className="flex-1">{t(actionLabelKey(action), actionLabel(action))}</span>
+                    <span className="flex-1">
+                      {/* The palette flattens submenus, so a nested item like
+                          Layer ▸ New ▸ Layer would otherwise read as a bare,
+                          ambiguous "Layer". Show its path. */}
+                      {!!(action.submenuPath?.length || action.submenu) && (
+                        <span className="text-textColor/45">
+                          {(action.submenuPath || [action.submenu as string]).join(' ▸ ')}
+                          {' ▸ '}
+                        </span>
+                      )}
+                      {t(actionLabelKey(action), actionLabel(action))}
+                    </span>
                     {action.shortcut && (
                       <span className="text-xs text-textColor/50">{action.shortcut}</span>
                     )}

@@ -3,6 +3,7 @@
 import { useMemo } from 'react';
 import type { DesignerOutput, DesignerElement } from './designer.store';
 import { defaultTextBox } from './measure-text';
+import { layerActions } from './layer-actions';
 
 type DesignerStoreApi = ReturnType<
   typeof import('./designer.store').createDesignerStore
@@ -13,6 +14,7 @@ export type DesignerMenu =
   | 'edit'
   | 'view'
   | 'insert'
+  | 'layer'
   | 'format'
   | 'options'
   | 'tools'
@@ -25,6 +27,11 @@ export interface DesignerAction {
   menu: DesignerMenu;
   /** Groups items into a flyout sub-menu (e.g. 'New', 'Align', 'Arrange', 'Upscale'). */
   submenu?: string;
+  /**
+   * Deeper nesting, outermost first — e.g. `['New', 'Layer']` renders as
+   * `Layer ▸ New ▸ Layer`. Takes precedence over `submenu`.
+   */
+  submenuPath?: string[];
   /** Divider key — a new value vs the previous item draws a separator. */
   group?: string;
   /** Display-only shortcut hint (the real keys live on the canvas / window handlers). */
@@ -93,6 +100,7 @@ const MENU_LABELS: Record<DesignerMenu, string> = {
   edit: 'Edit',
   view: 'View',
   insert: 'Insert',
+  layer: 'Layer',
   format: 'Format',
   options: 'Options',
   tools: 'Tools',
@@ -107,6 +115,7 @@ const MENU_LABEL_KEYS: Record<DesignerMenu, string> = {
   edit: 'designer_menu_edit',
   view: 'designer_menu_view',
   insert: 'designer_menu_insert',
+  layer: 'designer_menu_layer',
   format: 'designer_menu_format',
   options: 'designer_menu_options',
   tools: 'designer_menu_tools',
@@ -167,6 +176,7 @@ export const MENU_ORDER: DesignerMenu[] = [
   'edit',
   'view',
   'insert',
+  'layer',
   'format',
   'options',
   'tools',
@@ -308,13 +318,16 @@ export const useDesignerActions = (
       { id: 'align-top', label: 'Top', menu: 'format', submenu: 'Align', group: 'arrange', keywords: ['align top'], enabled: () => live().hasSelection, run: () => alignSelected(() => ({ y: 0 })) },
       { id: 'align-middle', label: 'Middle', menu: 'format', submenu: 'Align', group: 'arrange', keywords: ['align middle'], enabled: () => live().hasSelection, run: () => alignSelected((el, out) => ({ y: (out.height - el.height) / 2 })) },
       { id: 'align-bottom', label: 'Bottom', menu: 'format', submenu: 'Align', group: 'arrange', keywords: ['align bottom'], enabled: () => live().hasSelection, run: () => alignSelected((el, out) => ({ y: out.height - el.height })) },
+      // ── Layer menu ────────────────────────────────────────────────────────
+      // Group / Ungroup / Lock live here rather than on Format, matching
+      // Photoshop and keeping one home per command (the ⌘K palette flattens
+      // submenus, so duplicates there read as ambiguous).
+      ...layerActions(store, live),
+
       { id: 'bring-front', label: 'Bring to Front', menu: 'format', submenu: 'Arrange', group: 'arrange', keywords: ['front', 'order'], enabled: () => live().hasSelection, run: () => { const st = store.getState(); st.reorder(st.selectedIds, 'front'); } },
       { id: 'bring-forward', label: 'Bring Forward', menu: 'format', submenu: 'Arrange', group: 'arrange', keywords: ['forward', 'order'], enabled: () => live().hasSelection, run: () => { const st = store.getState(); st.reorder(st.selectedIds, 'forward'); } },
       { id: 'send-backward', label: 'Send Backward', menu: 'format', submenu: 'Arrange', group: 'arrange', keywords: ['backward', 'order'], enabled: () => live().hasSelection, run: () => { const st = store.getState(); st.reorder(st.selectedIds, 'backward'); } },
       { id: 'send-back', label: 'Send to Back', menu: 'format', submenu: 'Arrange', group: 'arrange', keywords: ['back', 'order'], enabled: () => live().hasSelection, run: () => { const st = store.getState(); st.reorder(st.selectedIds, 'back'); } },
-      { id: 'group', label: 'Group', menu: 'format', group: 'group', shortcut: '⌘G', keywords: ['group'], enabled: () => store.getState().selectedIds.length >= 2, run: () => store.getState().groupSelection() },
-      { id: 'ungroup', label: 'Ungroup', menu: 'format', group: 'group', shortcut: '⇧⌘G', keywords: ['ungroup'], enabled: () => { const l = live(); return l.selectedEls.some((e) => e.groupId); }, run: () => store.getState().ungroupSelection() },
-      { id: 'lock-toggle', label: () => { const l = live(); return l.selectedEls.length > 0 && l.selectedEls.every((e) => e.locked) ? 'Unlock' : 'Lock'; }, menu: 'format', group: 'group', keywords: ['lock', 'unlock'], enabled: () => live().hasSelection, run: () => { const st = store.getState(); const l = live(); const allLocked = l.selectedEls.length > 0 && l.selectedEls.every((e) => e.locked); st.updateElements(st.selectedIds, { locked: !allLocked }); } },
       { id: 'convert-mode', label: () => (store.getState().doc.mode === 'image' ? 'Convert to Video Mode' : 'Convert to Image Mode'), menu: 'format', group: 'mode', keywords: ['convert', 'video', 'image', 'mode'], run: ctx.onConvertMode },
 
       // ---------------- Options ----------------

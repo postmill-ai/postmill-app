@@ -2,7 +2,10 @@ import { CHANNEL_PRESETS } from '@postmill-ai/nestjs-libraries/integrations/soci
 import type { DesignerDoc } from './designer-doc.schema';
 
 /** Current DesignerDoc schema version. */
-export const DESIGNER_DOC_VERSION = 2;
+// Defined in designer-doc.limits so the schema can bound `version` by it
+// without importing this module (which imports the schema's types).
+export { DESIGNER_DOC_VERSION } from './designer-doc.limits';
+import { DESIGNER_DOC_VERSION } from './designer-doc.limits';
 
 let elementCounter = 0;
 

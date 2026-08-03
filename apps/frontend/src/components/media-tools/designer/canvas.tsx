@@ -1,7 +1,7 @@
 'use client';
 
 import React, { FC, useCallback, useRef, useEffect, useState } from 'react';
-import { Stage, Layer, Transformer, Rect, Line as KonvaLine, Image as KonvaImage } from 'react-konva';
+import { Stage, Layer, Transformer, Rect, Group, Line as KonvaLine, Image as KonvaImage, Shape } from 'react-konva';
 import type Konva from 'konva';
 import { CanvasElements, gradientFillProps } from './elements';
 import { TextEditingOverlay } from './text-editing';
@@ -16,6 +16,33 @@ import type { DesignerElement, DesignerOutput } from './designer.store';
 import { VideoCanvasOverlay } from './video-canvas-overlay';
 import { sharedStageRef } from './stage-ref';
 import { buildResizePatch } from './transform-resize';
+import { getTool, resolveToolShortcut } from './tools';
+import { rectFromDrag, isMeaningfulDraw, buildShapeElement } from './tool-draw';
+import { defaultTextBox } from './measure-text';
+import { CropOverlay } from './crop-overlay';
+import { getImageNaturalSize } from './elements';
+import {
+  type PenDraft,
+  emptyDraft,
+  penClick,
+  penDragHandle,
+  curvatureFinish,
+  freeformFinish,
+  buildPathElement,
+  refitPathElement,
+  addAnchorAt,
+  deleteAnchorAt,
+  convertAnchorAt,
+  findNodeAt,
+} from './pen-tools';
+import { tracePathNodes } from '@postmill-ai/nestjs-libraries/media/designer-doc/path-geometry';
+import {
+  usePaintTools,
+  isPaintTool,
+  isSelectionTool,
+  isMarqueeTool,
+} from './use-paint-tools';
+import { maskOutline } from './selection-mask';
 
 interface CanvasProps {
   store: ReturnType<typeof import('./designer.store').createDesignerStore>;
@@ -61,6 +88,33 @@ export const DesignerCanvas: FC<CanvasProps> = ({
   const [hud, setHud] = useState<{ x: number; y: number; text: string } | null>(null);
   const [marquee, setMarquee] = useState<{ x: number; y: number; w: number; h: number } | null>(null);
   const marqueeStart = useRef<{ x: number; y: number } | null>(null);
+  // Non-null only while a shape tool is drawing, which is what distinguishes a
+  // draw-drag from the Move tool's object rubber-band (both use `marquee` to
+  // render their preview).
+  const drawStart = useRef<{ x: number; y: number } | null>(null);
+  /** Non-null while the Gradient tool is dragging out its angle. */
+  const gradientStart = useRef<{ x: number; y: number } | null>(null);
+  /** Live outline while the Artboard tool resizes the frame. */
+  const [artboardPreview, setArtboardPreview] = useState<{ w: number; h: number } | null>(null);
+  /** In-progress Pen path, in document space, until it is finished. */
+  const [penDraft, setPenDraft] = useState<PenDraft | null>(null);
+  /** True between an anchor's mousedown and mouseup, while handles can be pulled. */
+  const penDragging = useRef(false);
+  /** Raw pointer trail for the Freeform Pen, simplified on release. */
+  const freeformTrail = useRef<{ x: number; y: number }[] | null>(null);
+  // Mirror of penDraft for the window key handler, which is registered once and
+  // must not re-bind on every anchor.
+  const penDraftRef = useRef<PenDraft | null>(null);
+  /**
+   * Rotate View angle. Deliberately component state rather than store state:
+   * it is a property of looking at the document, not of the document, and must
+   * never reach the renderer.
+   */
+  const viewRotation = store((s) =>
+    s.activeTool === 'rotate-view'
+      ? Number(s.toolOptions['rotate-view']?.angle ?? 0)
+      : 0
+  );
   const [bgImage, setBgImage] = useState<HTMLImageElement | null>(null);
   const [contextMenu, setContextMenu] = useState<{ x: number; y: number; targetType: 'element' | 'canvas'; elementId?: string } | null>(null);
   const [dragOver, setDragOver] = useState(false);
@@ -90,7 +144,32 @@ export const DesignerCanvas: FC<CanvasProps> = ({
   const fitNonce = store((s) => s.fitNonce);
 
   const output: any = doc.outputs[currentOutput];
+  const paint = usePaintTools({
+    store,
+    stageRef,
+    output: output as DesignerOutput | undefined,
+    fetchFn: fetch,
+  });
   const isVideo = doc.mode === 'video';
+  const activeTool = store((s) => s.activeTool);
+  // Video mode has no tool palette, so it always behaves as the Move tool.
+  const effectiveTool = isVideo ? 'move' : activeTool;
+  const toolCursor = getTool(effectiveTool)?.cursor || 'default';
+  // The Crop tool acts on the single selected element; with nothing selected it
+  // simply has no target and the overlay stays hidden.
+  const cropTarget =
+    effectiveTool === 'crop' && selectedIds.length === 1
+      ? ((output as DesignerOutput | undefined)?.children || []).find(
+          (c) => c.id === selectedIds[0]
+        )
+      : undefined;
+  /** The selected path, for the anchor-editing pens and Direct Selection. */
+  const penEditTarget =
+    selectedIds.length === 1
+      ? ((output as DesignerOutput | undefined)?.children || []).find(
+          (c) => c.id === selectedIds[0] && c.type === 'path'
+        )
+      : undefined;
 
   const mousePosRef = useRef({ x: 0, y: 0 });
   const awarenessThrottleRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -151,14 +230,61 @@ export const DesignerCanvas: FC<CanvasProps> = ({
   }, [output?.bg]);
 
   useEffect(() => {
+    const isTypingTarget = (t: EventTarget | null) =>
+      !!(t as HTMLElement)?.matches?.('input,textarea,select') ||
+      !!(t as HTMLElement)?.isContentEditable;
+
     const handleKeyDown = (e: KeyboardEvent) => {
-      if (
-        e.code === 'Space' &&
-        !(e.target as HTMLElement)?.matches?.('input,textarea') &&
-        !(e.target as HTMLElement)?.isContentEditable
-      ) {
+      if (e.code === 'Space' && !isTypingTarget(e.target)) {
         e.preventDefault();
         setIsSpacePressed(true);
+        return;
+      }
+
+      // Enter finishes an open Pen path; Escape abandons it. Handled before the
+      // tool shortcuts so `p` can't restart a path you were trying to close.
+      if (penDraftRef.current && (e.key === 'Enter' || e.key === 'Escape')) {
+        e.preventDefault();
+        const draft = penDraftRef.current;
+        if (e.key === 'Enter' && draft.nodes.length >= 2) {
+          const finalDraft =
+            store.getState().activeTool === 'pen-curvature' ? curvatureFinish(draft) : draft;
+          const el = buildPathElement(
+            finalDraft,
+            store.getState().toolOptions[store.getState().activeTool] || {}
+          );
+          if (el) {
+            store.getState().addElement(el);
+            store.getState().pushHistory();
+          }
+        }
+        setPenDraft(null);
+        return;
+      }
+
+      // Bare-letter tool shortcuts; Shift cycles within the group. Safe because
+      // every pre-existing letter binding in image mode requires ⌘/Ctrl. Video
+      // mode is excluded — the timeline owns bare `s` and Space there — and
+      // inline text editing must keep its letters.
+      if (
+        isVideo ||
+        editingTextId ||
+        e.metaKey ||
+        e.ctrlKey ||
+        e.altKey ||
+        isTypingTarget(e.target)
+      ) {
+        return;
+      }
+      const next = resolveToolShortcut(
+        e.key,
+        e.shiftKey,
+        store.getState().activeTool,
+        store.getState().lastToolPerGroup
+      );
+      if (next) {
+        e.preventDefault();
+        store.getState().setActiveTool(next);
       }
     };
     const handleKeyUp = (e: KeyboardEvent) => {
@@ -170,7 +296,9 @@ export const DesignerCanvas: FC<CanvasProps> = ({
       window.removeEventListener('keydown', handleKeyDown);
       window.removeEventListener('keyup', handleKeyUp);
     };
-  }, []);
+    // Read tool state through getState() so switching tools doesn't re-bind the
+    // window listener on every keystroke.
+  }, [isVideo, editingTextId, store]);
 
   // Which elements exist, as a stable key. Depending on the whole `doc` re-ran
   // the attach effect on EVERY store write — including the per-frame writes of
@@ -179,6 +307,19 @@ export const DesignerCanvas: FC<CanvasProps> = ({
   const childIdsKey = ((output as DesignerOutput | undefined)?.children || [])
     .map((c) => c.id)
     .join(',');
+
+  // Keep the window key handler's view of the draft current without re-binding
+  // the listener on every anchor. Writing the ref in an effect rather than
+  // during render is what react-hooks/refs requires.
+  useEffect(() => {
+    penDraftRef.current = penDraft;
+  }, [penDraft]);
+
+  // A paint stroke mutates the raster buffer in place, so the Konva image prop
+  // keeps the same object identity and React alone won't trigger a repaint.
+  useEffect(() => {
+    stageRef.current?.getLayers()?.forEach((l) => l.batchDraw());
+  }, [paint.paintNonce]);
 
   // Attach transformer to the current selection.
   useEffect(() => {
@@ -218,11 +359,157 @@ export const DesignerCanvas: FC<CanvasProps> = ({
 
   const handleStageMouseDown = useCallback(
     (e: Konva.KonvaEventObject<MouseEvent>) => {
-      if (isSpacePressed) {
+      if (isSpacePressed || effectiveTool === 'hand') {
         setIsPanning(true);
         return;
       }
-      // Empty-canvas press starts a marquee selection.
+
+      const stage = stageRef.current;
+      const pos = stage?.getRelativePointerPosition();
+
+      // Shape tools draw by dragging a box; the preview reuses the marquee rect
+      // so there is only one rubber-band implementation on the stage.
+      if (effectiveTool.startsWith('shape-') && pos) {
+        drawStart.current = { x: pos.x, y: pos.y };
+        marqueeStart.current = { x: pos.x, y: pos.y };
+        setMarquee({ x: pos.x, y: pos.y, w: 0, h: 0 });
+        setSelectedIds([]);
+        return;
+      }
+
+      // Paint tools: brush-family strokes and the bucket.
+      if (isPaintTool(effectiveTool) && pos) {
+        paint.beginPaint(effectiveTool, pos, e.evt);
+        return;
+      }
+
+      // Selection tools: marquee, lasso, quick/object selection.
+      if (isSelectionTool(effectiveTool) && pos) {
+        if (effectiveTool === 'object-select') {
+          if (selectedIds.length === 1) void paint.runObjectSelection(selectedIds[0]);
+          return;
+        }
+        paint.beginSelection(effectiveTool, pos, e.evt);
+        if (isMarqueeTool(effectiveTool)) {
+          marqueeStart.current = { x: pos.x, y: pos.y };
+          setMarquee({ x: pos.x, y: pos.y, w: 0, h: 0 });
+        }
+        return;
+      }
+
+      // Pen group. The standard and curvature pens accumulate anchors across
+      // clicks; the freeform pen traces a trail. Add/Delete/Convert Anchor edit
+      // the selected path in place.
+      if (effectiveTool.startsWith('pen') && pos) {
+        const opts = store.getState().toolOptions[effectiveTool] || {};
+        const target = penEditTarget;
+
+        if (effectiveTool === 'pen-add-anchor' && target) {
+          const local = { x: pos.x - target.x, y: pos.y - target.y };
+          updateElement(target.id, refitPathElement(target, addAnchorAt(target.nodes || [], !!target.closed, local)));
+          pushHistory();
+          return;
+        }
+        if (effectiveTool === 'pen-delete-anchor' && target) {
+          const local = { x: pos.x - target.x, y: pos.y - target.y };
+          const idx = findNodeAt(target.nodes || [], local);
+          if (idx >= 0) {
+            updateElement(target.id, refitPathElement(target, deleteAnchorAt(target.nodes || [], idx)));
+            pushHistory();
+          }
+          return;
+        }
+        if (effectiveTool === 'pen-convert-point' && target) {
+          const local = { x: pos.x - target.x, y: pos.y - target.y };
+          const idx = findNodeAt(target.nodes || [], local);
+          if (idx >= 0) {
+            updateElement(target.id, refitPathElement(target, convertAnchorAt(target.nodes || [], idx, !!target.closed)));
+            pushHistory();
+          }
+          return;
+        }
+
+        if (effectiveTool === 'pen-freeform') {
+          freeformTrail.current = [{ x: pos.x, y: pos.y }];
+          return;
+        }
+
+        // Pen / Curvature Pen: add an anchor, or close onto the first one.
+        // Read the draft from the ref, not the state variable: this callback is
+        // memoised without `penDraft` in its deps, so the captured value would
+        // be a stale null and every click would restart a one-anchor path.
+        const { draft, finished } = penClick(penDraftRef.current ?? emptyDraft(), pos);
+        if (finished) {
+          const finalDraft =
+            effectiveTool === 'pen-curvature' ? curvatureFinish(draft) : draft;
+          const el = buildPathElement(finalDraft, opts);
+          if (el) {
+            addElement(el);
+            pushHistory();
+          }
+          setPenDraft(null);
+        } else {
+          setPenDraft(draft);
+          penDragging.current = true;
+        }
+        return;
+      }
+
+      // Gradient: drag across the selected element to set the gradient angle.
+      // `fillGradient` already exists in the schema and both renderers draw it,
+      // so this tool is purely a way to author the angle by dragging.
+      if (effectiveTool === 'gradient' && pos) {
+        if (selectedIds.length === 1) {
+          gradientStart.current = { x: pos.x, y: pos.y };
+        }
+        return;
+      }
+
+      // Type tools place a text box at the click and go straight into editing —
+      // the click-to-place path the panel presets never had.
+      if (effectiveTool.startsWith('type-') && pos) {
+        const opts = store.getState().toolOptions[effectiveTool] || {};
+        const fontSize = Number(opts.fontSize ?? 32);
+        const box = defaultTextBox({ text: 'Text', fontSize, fontWeight: 700, fontFamily: 'Inter' });
+        const before = new Set(
+          ((store.getState().doc.outputs[store.getState().currentOutput] as DesignerOutput)
+            ?.children || []).map((c) => c.id)
+        );
+        store.getState().addElement({
+          id: '',
+          type: 'text',
+          x: Math.round(pos.x),
+          y: Math.round(pos.y),
+          width: box.width,
+          height: box.height,
+          rotation: 0,
+          opacity: 1,
+          locked: false,
+          hidden: false,
+          text: 'Text',
+          fontSize,
+          fontWeight: 700,
+          fontFamily: 'Inter',
+          fill: '#000000',
+          align: 'left',
+          ...(effectiveTool === 'type-vertical' ? { verticalAlign: 'top' as const } : {}),
+        });
+        // addElement assigns the id internally, so find the one that appeared.
+        const after = ((store.getState().doc.outputs[store.getState().currentOutput] as DesignerOutput)
+          ?.children || []);
+        const created = after.find((c) => !before.has(c.id));
+        if (created) {
+          store.getState().setSelectedIds([created.id]);
+          setEditingTextId(created.id);
+        }
+        store.getState().setActiveTool('move');
+        return;
+      }
+
+      // Empty-canvas press starts an OBJECT rubber-band. This is Move-tool
+      // behaviour and is a different thing from the Marquee tool group, which
+      // selects pixels — see the selection work in a later batch.
+      if (effectiveTool !== 'move') return;
       if (e.target === e.target.getStage()) {
         const stage = stageRef.current;
         const pos = stage?.getRelativePointerPosition();
@@ -234,25 +521,167 @@ export const DesignerCanvas: FC<CanvasProps> = ({
         setEditingTextId(null);
       }
     },
-    [isSpacePressed, setSelectedIds]
+    [
+      isSpacePressed,
+      effectiveTool,
+      setSelectedIds,
+      store,
+      penEditTarget,
+      selectedIds,
+      addElement,
+      updateElement,
+      pushHistory,
+      paint,
+    ]
   );
 
-  const handleStageMouseMove = useCallback(() => {
-    if (!marqueeStart.current) return;
-    const stage = stageRef.current;
-    const pos = stage?.getRelativePointerPosition();
-    if (!pos) return;
-    const s = marqueeStart.current;
-    setMarquee({
-      x: Math.min(s.x, pos.x),
-      y: Math.min(s.y, pos.y),
-      w: Math.abs(pos.x - s.x),
-      h: Math.abs(pos.y - s.y),
-    });
-  }, []);
+  const handleStageMouseMove = useCallback(
+    (e: Konva.KonvaEventObject<MouseEvent>) => {
+      const stagePos = stageRef.current?.getRelativePointerPosition();
 
-  const handleStageMouseUp = useCallback(() => {
+      if (stagePos && isPaintTool(effectiveTool)) {
+        paint.movePaint(effectiveTool, stagePos);
+        return;
+      }
+      if (stagePos && isSelectionTool(effectiveTool)) {
+        paint.moveSelection(effectiveTool, stagePos);
+        // Marquee tools still draw the rubber-band preview below.
+        if (!isMarqueeTool(effectiveTool)) return;
+      }
+
+      // Freeform Pen collects a dense trail; it is simplified on release.
+      if (freeformTrail.current && stagePos) {
+        freeformTrail.current.push({ x: stagePos.x, y: stagePos.y });
+        setPenDraft({ nodes: freeformTrail.current.map((p) => ({ ...p })), closed: false });
+        return;
+      }
+
+      // Dragging just after placing an anchor pulls its bezier handles out.
+      if (penDragging.current && stagePos) {
+        setPenDraft((d) => (d ? penDragHandle(d, stagePos) : d));
+        return;
+      }
+
+      if (!marqueeStart.current) return;
+      const stage = stageRef.current;
+      const pos = stage?.getRelativePointerPosition();
+      if (!pos) return;
+      const s = marqueeStart.current;
+
+      // While drawing a shape the preview honours Shift/Alt so what you see is
+      // what gets inserted.
+      if (drawStart.current) {
+        const r = rectFromDrag(drawStart.current, pos, {
+          shift: e.evt?.shiftKey,
+          alt: e.evt?.altKey,
+        });
+        setMarquee({ x: r.x, y: r.y, w: r.width, h: r.height });
+        return;
+      }
+
+      setMarquee({
+        x: Math.min(s.x, pos.x),
+        y: Math.min(s.y, pos.y),
+        w: Math.abs(pos.x - s.x),
+        h: Math.abs(pos.y - s.y),
+      });
+    },
+    // Empty deps here silently froze the handler on the first render's tool, so
+    // paint strokes only ever stamped once (on mousedown) and never dragged.
+    [effectiveTool, paint]
+  );
+
+  const handleStageMouseUp = useCallback((e?: Konva.KonvaEventObject<MouseEvent>) => {
     setIsPanning(false);
+    penDragging.current = false;
+
+    const stagePos = stageRef.current?.getRelativePointerPosition();
+    if (isPaintTool(effectiveTool)) {
+      void paint.endPaint();
+      return;
+    }
+    if (isSelectionTool(effectiveTool) && stagePos) {
+      paint.endSelection(effectiveTool, stagePos, (e?.evt || {}) as MouseEvent);
+      marqueeStart.current = null;
+      setMarquee(null);
+      return;
+    }
+
+    // Freeform Pen: simplify the trail into anchors and commit it in one go.
+    if (freeformTrail.current) {
+      const trail = freeformTrail.current;
+      freeformTrail.current = null;
+      setPenDraft(null);
+      if (trail.length > 2) {
+        const el = buildPathElement(
+          freeformFinish(trail),
+          store.getState().toolOptions['pen-freeform'] || {}
+        );
+        if (el) {
+          addElement(el);
+          pushHistory();
+        }
+      }
+      return;
+    }
+
+    // Commit a gradient drag: the angle of the drag becomes the gradient angle
+    // on the selected element.
+    if (gradientStart.current) {
+      const stage = stageRef.current;
+      const pos = stage?.getRelativePointerPosition();
+      const s = gradientStart.current;
+      gradientStart.current = null;
+      if (pos && selectedIds.length === 1) {
+        const dx = pos.x - s.x;
+        const dy = pos.y - s.y;
+        if (Math.hypot(dx, dy) >= 4) {
+          const el = ((output as DesignerOutput | undefined)?.children || []).find(
+            (c) => c.id === selectedIds[0]
+          );
+          const angle = Math.round((Math.atan2(dy, dx) * 180) / Math.PI);
+          const opts = store.getState().toolOptions['gradient'] || {};
+          updateElement(selectedIds[0], {
+            fillGradient: {
+              type: (opts.type as 'linear' | 'radial') || 'linear',
+              angle,
+              // Seed from the element's own fill so the drag reads as "fade my
+              // colour out" rather than replacing it with arbitrary colours.
+              stops: [
+                { offset: 0, color: el?.fill || '#2B5CD3' },
+                { offset: 1, color: '#FFFFFF' },
+              ],
+            },
+          });
+          pushHistory();
+        }
+      }
+      return;
+    }
+
+    // Commit a drawn shape.
+    if (drawStart.current) {
+      const rect = marquee
+        ? { x: marquee.x, y: marquee.y, width: marquee.w, height: marquee.h }
+        : null;
+      if (rect && isMeaningfulDraw(rect)) {
+        store.getState().addElement(
+          buildShapeElement(
+            effectiveTool,
+            rect,
+            store.getState().toolOptions[effectiveTool] || {}
+          )
+        );
+        store.getState().pushHistory();
+        // Photoshop keeps the shape tool active after drawing; switching to
+        // Move here would fight anyone laying out several shapes in a row.
+      }
+      drawStart.current = null;
+      marqueeStart.current = null;
+      setMarquee(null);
+      return;
+    }
+
     if (marqueeStart.current && marquee && (marquee.w > 3 || marquee.h > 3)) {
       const hits = ((output as DesignerOutput | undefined)?.children || [])
         .filter((el) => !el.hidden && !el.locked)
@@ -268,7 +697,18 @@ export const DesignerCanvas: FC<CanvasProps> = ({
     }
     marqueeStart.current = null;
     setMarquee(null);
-  }, [marquee, output, setSelectedIds]);
+  }, [
+    marquee,
+    output,
+    setSelectedIds,
+    effectiveTool,
+    store,
+    selectedIds,
+    updateElement,
+    pushHistory,
+    addElement,
+    paint,
+  ]);
 
   // Snapping during drag: align edges/centers to other elements + output guides (B3).
   const computeSnap = useCallback(
@@ -710,9 +1150,18 @@ export const DesignerCanvas: FC<CanvasProps> = ({
     // eslint-disable-next-line jsx-a11y/no-noninteractive-element-interactions
     <div
       ref={containerRef}
-      className={`flex-1 min-w-0 relative overflow-hidden bg-[#e5e7eb] designer-canvas-container ${
-        isPanning ? 'cursor-grabbing' : isSpacePressed ? 'cursor-grab' : 'cursor-default'
-      }`}
+      className="flex-1 min-w-0 relative overflow-hidden bg-[#e5e7eb] designer-canvas-container"
+      // Space-to-pan always wins over the tool's own cursor, so the transient
+      // Hand reads correctly no matter which tool is selected.
+      style={{
+        cursor: isPanning
+          ? 'grabbing'
+          : isSpacePressed
+            ? 'grab'
+            : isVideo
+              ? 'default'
+              : toolCursor,
+      }}
       tabIndex={0} // eslint-disable-line jsx-a11y/no-noninteractive-tabindex
       role="application"
       aria-label={t('design_canvas', 'Design canvas')}
@@ -760,10 +1209,15 @@ export const DesignerCanvas: FC<CanvasProps> = ({
         y={viewportY}
         scaleX={zoom}
         scaleY={zoom}
+        // Rotate View turns the CANVAS, never the document — it is a viewing
+        // aid, so nothing here is persisted or exported.
+        rotation={viewRotation}
         onWheel={handleWheel}
         onDblClick={handleStageDblClick}
         onDblTap={handleStageDblClick}
-        draggable={isSpacePressed}
+        // The Hand tool pans the same way Space does; both route through the
+        // Stage's own drag and commit via onDragEnd below.
+        draggable={isSpacePressed || effectiveTool === 'hand'}
         onMouseDown={handleStageMouseDown}
         onMouseMove={handleStageMouseMove}
         onMouseUp={handleStageMouseUp}
@@ -797,15 +1251,35 @@ export const DesignerCanvas: FC<CanvasProps> = ({
             shadowBlur={20}
             shadowOffset={{ x: 0, y: 4 }}
           />
-          {bg?.type === 'image' && bgImage && (
-            <KonvaImage image={bgImage} x={0} y={0} width={output.width} height={output.height} listening={false} />
-          )}
           <CanvasElements
             elements={isVideo ? [] : (output?.children || [])}
+            // The Rect above keeps the page drop-shadow (editor chrome, which
+            // must never be filtered); this fill-only copy is what an
+            // adjustment layer sees, matching the server's page readback.
+            backdrop={
+              <Group key="__backdrop" listening={false}>
+                <Rect
+                  x={0}
+                  y={0}
+                  width={output.width}
+                  height={output.height}
+                  fill={bg?.type === 'gradient' ? undefined : bg?.color || output?.background || '#ffffff'}
+                  {...bgGrad}
+                  listening={false}
+                />
+                {bg?.type === 'image' && bgImage && (
+                  <KonvaImage image={bgImage} x={0} y={0} width={output.width} height={output.height} listening={false} />
+                )}
+              </Group>
+            }
             onSelect={handleElementSelect}
             onContextMenu={(elementId, clientX, clientY) => {
               setContextMenu({ x: clientX, y: clientY, targetType: 'element', elementId });
             }}
+            // Only the Move tool drags elements; every other tool needs the
+            // press for itself. Space-pan also suspends dragging so a pan that
+            // starts over an element doesn't move it.
+            interactive={effectiveTool === 'move' && !isSpacePressed}
           />
           {isVideo && (
             <VideoCanvasOverlay
@@ -832,7 +1306,172 @@ export const DesignerCanvas: FC<CanvasProps> = ({
               listening={false}
             />
           )}
-          {selectedIds.length > 0 && (
+          {/* Marching ants for the active pixel selection. Drawn as boundary
+              segments rather than a re-rasterised outline so it stays crisp at
+              any zoom. */}
+          {paint.selection && (
+            <KonvaLine
+              points={[]}
+              listening={false}
+              sceneFunc={(ctx: Konva.Context, shape: Konva.Shape) => {
+                ctx.beginPath();
+                for (const [x1, y1, x2, y2] of maskOutline(paint.selection!)) {
+                  ctx.moveTo(x1, y1);
+                  ctx.lineTo(x2, y2);
+                }
+                ctx.strokeShape(shape);
+              }}
+              stroke="#ffffff"
+              strokeWidth={1 / zoom}
+              dash={[4 / zoom, 4 / zoom]}
+              shadowColor="#000000"
+              shadowBlur={2 / zoom}
+            />
+          )}
+
+          {/* In-progress lasso trail. */}
+          {paint.lassoPoints && paint.lassoPoints.length > 1 && (
+            <KonvaLine
+              points={paint.lassoPoints.flatMap((p) => [p.x, p.y])}
+              stroke="#2B5CD3"
+              strokeWidth={1.5 / zoom}
+              dash={[4 / zoom, 3 / zoom]}
+              listening={false}
+            />
+          )}
+
+          {/* In-progress Pen path: the curve so far plus its anchors, so the
+              user can see what closing the path would produce. */}
+          {penDraft && penDraft.nodes.length > 0 && (
+            <>
+              <Shape
+                listening={false}
+                sceneFunc={(ctx: Konva.Context, shape: Konva.Shape) => {
+                  tracePathNodes(ctx as never, penDraft.nodes, penDraft.closed);
+                  ctx.strokeShape(shape);
+                }}
+                stroke="#2B5CD3"
+                strokeWidth={1.5 / zoom}
+              />
+              {penDraft.nodes.map((n, i) => (
+                <Rect
+                  key={`pen-anchor-${i}`}
+                  x={n.x - 3 / zoom}
+                  y={n.y - 3 / zoom}
+                  width={6 / zoom}
+                  height={6 / zoom}
+                  fill={i === 0 ? '#2B5CD3' : '#ffffff'}
+                  stroke="#2B5CD3"
+                  strokeWidth={1 / zoom}
+                  listening={false}
+                />
+              ))}
+            </>
+          )}
+
+          {/* Direct Selection: expose the selected path's anchors for dragging. */}
+          {effectiveTool === 'direct-select' && penEditTarget && (
+            <>
+              {(penEditTarget.nodes || []).map((n, i) => (
+                <Rect
+                  key={`node-${i}`}
+                  x={penEditTarget.x + n.x - 4 / zoom}
+                  y={penEditTarget.y + n.y - 4 / zoom}
+                  width={8 / zoom}
+                  height={8 / zoom}
+                  fill="#ffffff"
+                  stroke="#2B5CD3"
+                  strokeWidth={1 / zoom}
+                  draggable={true}
+                  onDragEnd={(e) => {
+                    const node = e.target;
+                    const nodes = (penEditTarget.nodes || []).slice();
+                    const dx = node.x() + 4 / zoom - (penEditTarget.x + nodes[i].x);
+                    const dy = node.y() + 4 / zoom - (penEditTarget.y + nodes[i].y);
+                    nodes[i] = {
+                      ...nodes[i],
+                      x: nodes[i].x + dx,
+                      y: nodes[i].y + dy,
+                      ...(typeof nodes[i].inX === 'number'
+                        ? { inX: (nodes[i].inX as number) + dx, inY: (nodes[i].inY as number) + dy }
+                        : {}),
+                      ...(typeof nodes[i].outX === 'number'
+                        ? { outX: (nodes[i].outX as number) + dx, outY: (nodes[i].outY as number) + dy }
+                        : {}),
+                    };
+                    updateElement(penEditTarget.id, refitPathElement(penEditTarget, nodes));
+                    pushHistory();
+                  }}
+                />
+              ))}
+            </>
+          )}
+
+          {/* Artboard tool: drag the frame's corner to resize the output. The
+              inspector's numeric Width/Height stay the precise route; this is
+              the direct-manipulation one. */}
+          {effectiveTool === 'artboard' && output && (
+            <Rect
+              x={output.width - 14 / zoom}
+              y={output.height - 14 / zoom}
+              width={14 / zoom}
+              height={14 / zoom}
+              fill="#ffffff"
+              stroke="#2B5CD3"
+              strokeWidth={1.5 / zoom}
+              draggable={true}
+              onDragMove={(e) => {
+                const node = e.target;
+                const w = Math.max(16, Math.round(node.x() + 14 / zoom));
+                const h = Math.max(16, Math.round(node.y() + 14 / zoom));
+                setArtboardPreview({ w, h });
+              }}
+              onDragEnd={(e) => {
+                const node = e.target;
+                const w = Math.max(16, Math.round(node.x() + 14 / zoom));
+                const h = Math.max(16, Math.round(node.y() + 14 / zoom));
+                setArtboardPreview(null);
+                store.getState().resizeOutput(currentOutput, w, h);
+                pushHistory();
+              }}
+            />
+          )}
+          {artboardPreview && (
+            <Rect
+              x={0}
+              y={0}
+              width={artboardPreview.w}
+              height={artboardPreview.h}
+              stroke="#2B5CD3"
+              strokeWidth={1.5 / zoom}
+              dash={[6 / zoom, 4 / zoom]}
+              listening={false}
+            />
+          )}
+
+          {/* Crop tool: direct-manipulation overlay over the selected element.
+              The inspector's percentage sliders remain the numeric route; both
+              compose onto any existing crop through crop-geometry. */}
+          {effectiveTool === 'crop' && cropTarget && (
+            <CropOverlay
+              key={cropTarget.id}
+              element={cropTarget}
+              natural={getImageNaturalSize(cropTarget.src)}
+              zoom={zoom}
+              ratio={String(store.getState().toolOptions['crop']?.ratio ?? 'free')}
+              onCommit={(patch) => {
+                updateElement(cropTarget.id, patch);
+                pushHistory();
+                store.getState().setActiveTool('move');
+              }}
+              onCancel={() => store.getState().setActiveTool('move')}
+            />
+          )}
+
+          {/* Transform handles belong to the Move tool. Other tools keep the
+              selection but hide the handles, so a stray anchor can't swallow a
+              brush stroke or a marquee drag. */}
+          {selectedIds.length > 0 && effectiveTool === 'move' && (
             <Transformer
               ref={transformerRef}
               rotateEnabled={true}

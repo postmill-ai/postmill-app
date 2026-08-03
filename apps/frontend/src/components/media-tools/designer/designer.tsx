@@ -27,6 +27,8 @@ import { BackgroundPanel } from './panels/background-panel';
 import { LayersPanel } from './panels/layers-panel';
 import { FloatingPanel } from './floating-panel';
 import { useFloatingPanelState } from './use-floating-panel-state';
+import { ToolRail } from './tool-rail';
+import { ToolOptionsBar, defaultToolOptions } from './tool-options-bar';
 import { AiPanel } from './panels/ai-panel';
 import { BrandPanel } from './panels/brand-panel';
 import { IconsPanel } from './panels/icons-panel';
@@ -310,6 +312,11 @@ export const Designer: FC<DesignerProps> = ({
   const isDirty = store((s) => s.isDirty);
   const isSaving = store((s) => s.isSaving);
   const doc = store((s) => s.doc);
+  const activeTool = store((s) => s.activeTool);
+  const lastToolPerGroup = store((s) => s.lastToolPerGroup);
+  const toolOptions = store((s) => s.toolOptions);
+  const setActiveTool = store((s) => s.setActiveTool);
+  const setToolOption = store((s) => s.setToolOption);
   const currentOutput = store((s) => s.currentOutput);
   const selectedIds = store((s) => s.selectedIds);
   const selectedClip = store((s) => s.selectedClip);
@@ -975,21 +982,31 @@ export const Designer: FC<DesignerProps> = ({
     { id: 'brand', icon: '♥', label: translate('brand_label', 'Brand') },
   ];
 
-  // Global ⌘E → Export (⌘S/⌘K already handled elsewhere; the rest of the
-  // shortcut map is canvas-focus-scoped). Ignore while typing in a field.
+  // Global ⌘E → Export and ? → Keyboard Shortcuts (⌘S/⌘K already handled
+  // elsewhere; the rest of the shortcut map is canvas-focus-scoped). Ignore
+  // while typing in a field.
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
+      const t = e.target as HTMLElement | null;
+      const tag = t?.tagName;
+      const typing = tag === 'INPUT' || tag === 'TEXTAREA' || t?.isContentEditable;
       if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'e') {
-        const t = e.target as HTMLElement | null;
-        const tag = t?.tagName;
-        if (tag === 'INPUT' || tag === 'TEXTAREA' || t?.isContentEditable) return;
+        if (typing) return;
         e.preventDefault();
         handleExport();
+        return;
+      }
+      // `?` was advertised in the Help menu but never bound.
+      if (e.key === '?' && !e.metaKey && !e.ctrlKey && !e.altKey && !typing) {
+        e.preventDefault();
+        modals.openModal({
+          children: (close: () => void) => <ShortcutsOverlay onClose={close} />,
+        });
       }
     };
     window.addEventListener('keydown', handler);
     return () => window.removeEventListener('keydown', handler);
-  }, [handleExport]);
+  }, [handleExport, modals]);
 
   // Full screen fills the browser window, not the display: the root goes immersive
   // (fixed inset-0) to cover the app chrome. Modals/dialogs mount at the app root
@@ -1098,7 +1115,28 @@ export const Designer: FC<DesignerProps> = ({
         </div>
       </div>
 
+      {/* Tool options for the active tool — Photoshop's options bar. Image mode
+          only: video mode drives the timeline, which owns its own bindings. */}
+      {doc.mode !== 'video' && (
+        <ToolOptionsBar
+          activeTool={activeTool}
+          options={{
+            ...defaultToolOptions(activeTool),
+            ...(toolOptions[activeTool] || {}),
+          }}
+          onChange={(key, value) => setToolOption(activeTool, key, value)}
+        />
+      )}
+
       <div className="relative flex flex-1 min-h-0 w-full overflow-hidden">
+        {doc.mode !== 'video' && (
+          <ToolRail
+            activeTool={activeTool}
+            lastToolPerGroup={lastToolPerGroup}
+            onSelect={setActiveTool}
+            aiAvailable={aiActive}
+          />
+        )}
         <div className="w-[48px] shrink-0 flex flex-col items-center pt-2 gap-1 border-r border-studioBorder bg-newBgColorInner z-30">
           {panels.map((p) => (
             <button
@@ -1125,7 +1163,12 @@ export const Designer: FC<DesignerProps> = ({
         </div>
 
         {activePanel && (
-          <div className="absolute left-[48px] top-0 bottom-0 w-[260px] z-20 border-r border-studioBorder bg-newBgColorInner overflow-y-auto p-3 shadow-xl">
+          <div
+            // Offset past the panel rail, plus the tool rail when it is shown
+            // (image mode only) — both are 48px.
+            style={{ left: doc.mode === 'video' ? 48 : 96 }}
+            className="absolute top-0 bottom-0 w-[260px] z-20 border-r border-studioBorder bg-newBgColorInner overflow-y-auto p-3 shadow-xl"
+          >
             <div className="text-[12px] font-medium text-textColor/60 uppercase tracking-wider mb-3">
               {panels.find((p) => p.id === activePanel)?.label}
             </div>

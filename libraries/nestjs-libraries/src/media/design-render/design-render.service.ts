@@ -10,6 +10,9 @@ import {
   DesignerGradient,
   DesignerOutput,
   DesignerMask,
+  DesignerBlendMode,
+  DesignerPattern,
+  DesignerLayerStyle,
   RenderOptions,
   TextContrastViolation,
   TextRun,
@@ -19,12 +22,26 @@ import {
   cssFilterForToken,
   parseDesignerFilterToken,
 } from './filter-tokens';
-import { MAX_CANVAS_DIMENSION } from '../designer-doc/designer-doc.limits';
+import {
+  MAX_CANVAS_DIMENSION,
+  MAX_GROUP_RENDER_DEPTH,
+} from '../designer-doc/designer-doc.limits';
 import {
   fitTextToBox,
   measureLineWidth,
   type FittedText,
 } from '../designer-doc/fit-text';
+import { pointsForShape, starPoints } from '../designer-doc/shape-geometry';
+import { tracePathNodes } from '../designer-doc/path-geometry';
+import { buildLayerTree, groupBounds, type LayerNode } from '../designer-doc/layer-tree';
+import {
+  applyAdjustment,
+  blendPixels,
+  canvasCompositeFor,
+  isNativeBlend,
+} from '../designer-doc/pixel-ops';
+import { drawPatternTile, tileSizeFor } from '../designer-doc/pattern-tiles';
+import { splitStyles, styleOffset, styleBlur, stylePadding } from '../designer-doc/layer-styles';
 
 const MAX_IMAGE_BYTES = 25 * 1024 * 1024;
 
@@ -645,17 +662,14 @@ export class DesignRenderService {
       await this.drawBackground(ctx, output);
     }
 
-    for (const el of output.children ?? []) {
-      if (el.hidden) continue;
-      if (opts?.hideText && el.type === 'text') continue;
-      try {
-        await this.drawElement(ctx, el);
-      } catch (err) {
-        this._logger.warn(
-          `Skipping element ${el?.id} (${el?.type}) during render: ${(err as Error)?.message}`
-        );
-      }
-    }
+    await this.drawLayerTree(
+      ctx,
+      canvas,
+      buildLayerTree(output.children ?? []),
+      output.children ?? [],
+      ratio,
+      opts
+    );
 
     return canvas.toBuffer('image/png');
   }
@@ -1223,9 +1237,20 @@ export class DesignRenderService {
     ctx.restore();
   }
 
-  private async drawElement(ctx: any, el: DesignerElement): Promise<void> {
+  private async drawElement(
+    ctx: any,
+    el: DesignerElement,
+    ignoreBlend = false
+  ): Promise<void> {
     ctx.save();
     ctx.globalAlpha = el.opacity ?? 1;
+    // Native blends composite for free here; the custom ones are handled by
+    // `applyBlend` when the layer is drawn through an offscreen buffer.
+    // Callers rendering the element into an EMPTY buffer pass `ignoreBlend`,
+    // since blending against nothing erases the layer.
+    if (!ignoreBlend && isNativeBlend(el.blendMode)) {
+      ctx.globalCompositeOperation = canvasCompositeFor(el.blendMode);
+    }
 
     const cx = el.x + el.width / 2;
     const cy = el.y + el.height / 2;
@@ -1238,11 +1263,485 @@ export class DesignRenderService {
       this.drawShape(ctx, el);
     } else if (el.type === 'text') {
       this.drawText(ctx, el);
-    } else if (el.type === 'image' || el.type === 'icon') {
+    } else if (el.type === 'path') {
+      this.drawPath(ctx, el);
+    } else if (el.type === 'fill') {
+      await this.drawFill(ctx, el);
+    } else if (el.type === 'image' || el.type === 'icon' || el.type === 'raster') {
+      // A raster layer is a flattened bitmap referenced by `src`, so it draws
+      // through exactly the same path as an image — which is what makes painted
+      // pixels survive PDF and video render, not just the Konva PNG export.
       await this.drawImage(ctx, el);
     }
 
     ctx.restore();
+  }
+
+  /**
+   * Render a layer tree onto `ctx`.
+   *
+   * Groups composite as a unit: their members are drawn into an offscreen
+   * canvas which is then blended onto the parent with the group's own opacity
+   * and blend mode. That is the whole reason groups exist — a group opacity of
+   * 50% must fade the composite, not each member independently.
+   *
+   * Adjustment layers transform the pixels ALREADY drawn beneath them in this
+   * scope, which is why the loop needs the canvas as well as the context.
+   */
+  private async drawLayerTree(
+    ctx: any,
+    canvas: any,
+    nodes: LayerNode[],
+    allChildren: DesignerElement[],
+    ratio: number,
+    opts?: RenderOptions,
+    depth = 0
+  ): Promise<void> {
+    for (let i = 0; i < nodes.length; i++) {
+      const node = nodes[i];
+      const el = node.element;
+      if (el.hidden) continue;
+      if (opts?.hideText && el.type === 'text') continue;
+
+      try {
+        if (el.type === 'group') {
+          await this.drawGroup(ctx, canvas, node, allChildren, ratio, opts, depth);
+          continue;
+        }
+
+        if (el.type === 'adjustment') {
+          // Bound to the layer below when clipped, otherwise the whole scope.
+          const below = el.clipped ? nodes[i - 1] : undefined;
+          await this.applyAdjustmentLayer(ctx, canvas, el, allChildren, ratio, opts, below);
+          continue;
+        }
+
+        if (el.styles?.length) {
+          await this.drawElementWithStyles(ctx, el, ratio);
+        } else {
+          await this.drawElement(ctx, el);
+        }
+      } catch (err) {
+        this._logger.warn(
+          `Skipping element ${el?.id} (${el?.type}) during render: ${(err as Error)?.message}`
+        );
+      }
+    }
+  }
+
+  /**
+   * Draw one element with its layer styles.
+   *
+   * The layer is rendered once into an offscreen buffer, and that buffer's
+   * ALPHA is what every effect keys off — a drop shadow is the silhouette blurred
+   * and offset, an inner shadow is the same silhouette inverted and clipped back
+   * in. Working from the buffer is what lets these apply to any element type
+   * (text, image, path, shape) with one implementation.
+   */
+  private async drawElementWithStyles(
+    ctx: any,
+    el: DesignerElement,
+    ratio: number
+  ): Promise<void> {
+    const { under, over } = splitStyles(el.styles);
+    if (!under.length && !over.length) {
+      await this.drawElement(ctx, el);
+      return;
+    }
+
+    const { createCanvas } = await loadCanvasModule();
+    const w = ctx.canvas.width;
+    const h = ctx.canvas.height;
+
+    // The layer alone, at page scale, so effects can read its silhouette.
+    // `ignoreBlend` matters: inside an empty buffer there is nothing to blend
+    // against, so a `multiply` layer would composite with transparent black and
+    // vanish. The blend belongs to the finished stack, applied below.
+    const layer = createCanvas(w, h);
+    const layerCtx: any = layer.getContext('2d');
+    layerCtx.scale(ratio, ratio);
+    await this.drawElement(layerCtx, el, true);
+
+    // Effects and layer composite into one buffer so the element's blend mode
+    // applies to the whole stack, exactly as a group's does.
+    const stack = createCanvas(w, h);
+    const sctx: any = stack.getContext('2d');
+    sctx.scale(ratio, ratio);
+
+    for (const style of under) {
+      this.drawUnderStyle(sctx, layer, style, ratio, createCanvas);
+    }
+
+    sctx.drawImage(layer, 0, 0, w / ratio, h / ratio);
+
+    for (const style of over) {
+      await this.drawOverStyle(sctx, layer, el, style, ratio, createCanvas);
+    }
+
+    ctx.save();
+    this.applyBlend(ctx, stack, el.blendMode, ratio);
+    ctx.restore();
+  }
+
+  /** Drop Shadow / Outer Glow — the layer's silhouette, blurred behind it. */
+  private drawUnderStyle(
+    ctx: any,
+    layer: any,
+    style: DesignerLayerStyle,
+    ratio: number,
+    createCanvas: (w: number, h: number) => any
+  ): void {
+    const w = ctx.canvas.width;
+    const h = ctx.canvas.height;
+    const shadow = createCanvas(w, h);
+    const sctx: any = shadow.getContext('2d');
+
+    // Tint the silhouette: draw it, then flood the colour through source-in.
+    sctx.drawImage(layer, 0, 0);
+    sctx.globalCompositeOperation = 'source-in';
+    sctx.fillStyle = style.color || '#000000';
+    sctx.fillRect(0, 0, w, h);
+
+    const offset = styleOffset(style);
+    const blur = styleBlur(style);
+    ctx.save();
+    ctx.globalAlpha = style.opacity ?? 0.75;
+    if (blur > 0) ctx.filter = `blur(${blur}px)`;
+    ctx.drawImage(shadow, offset.x, offset.y, w / ratio, h / ratio);
+    ctx.filter = 'none';
+    ctx.restore();
+  }
+
+  /** Overlays, inner shadow/glow, stroke, bevel and satin — all clipped to the layer. */
+  private async drawOverStyle(
+    ctx: any,
+    layer: any,
+    el: DesignerElement,
+    style: DesignerLayerStyle,
+    ratio: number,
+    createCanvas: (w: number, h: number) => any
+  ): Promise<void> {
+    const w = ctx.canvas.width;
+    const h = ctx.canvas.height;
+    const buf = createCanvas(w, h);
+    const bctx: any = buf.getContext('2d');
+
+    if (style.type === 'color-overlay' || style.type === 'gradient-overlay' || style.type === 'pattern-overlay') {
+      bctx.drawImage(layer, 0, 0);
+      bctx.globalCompositeOperation = 'source-in';
+      bctx.scale(ratio, ratio);
+      if (style.type === 'gradient-overlay' && style.gradient) {
+        bctx.fillStyle = this.buildGradient(bctx, style.gradient, el.width, el.height);
+      } else if (style.type === 'pattern-overlay' && style.pattern) {
+        const tile = await this.buildPatternTile(style.pattern);
+        bctx.fillStyle = tile ? bctx.createPattern(tile, 'repeat') : (style.color || '#000000');
+      } else {
+        bctx.fillStyle = style.color || '#000000';
+      }
+      bctx.translate(el.x, el.y);
+      bctx.fillRect(-el.x, -el.y, w / ratio, h / ratio);
+    } else if (style.type === 'inner-shadow' || style.type === 'inner-glow' || style.type === 'satin') {
+      // Inner effects light the INVERSE silhouette, then clip back inside the
+      // layer — the same destination-in trick the text mask uses.
+      const inverse = createCanvas(w, h);
+      const ictx: any = inverse.getContext('2d');
+      ictx.fillStyle = style.color || '#000000';
+      ictx.fillRect(0, 0, w, h);
+      ictx.globalCompositeOperation = 'destination-out';
+      ictx.drawImage(layer, 0, 0);
+
+      const offset = style.type === 'inner-glow' ? { x: 0, y: 0 } : styleOffset(style);
+      const blur = styleBlur(style) || 4;
+      bctx.filter = `blur(${blur}px)`;
+      bctx.drawImage(inverse, offset.x * ratio, offset.y * ratio);
+      bctx.filter = 'none';
+      bctx.globalCompositeOperation = 'destination-in';
+      bctx.drawImage(layer, 0, 0);
+    } else if (style.type === 'stroke') {
+      // Approximate an outline by stamping the silhouette around a ring, then
+      // removing the interior — no path data needed, so it works for images too.
+      const size = Math.max(1, style.size ?? 1) * ratio;
+      bctx.fillStyle = style.color || '#000000';
+      for (let a = 0; a < Math.PI * 2; a += Math.PI / 8) {
+        bctx.drawImage(layer, Math.cos(a) * size, Math.sin(a) * size);
+      }
+      bctx.globalCompositeOperation = 'source-in';
+      bctx.fillRect(0, 0, w, h);
+      if (style.position !== 'center') {
+        bctx.globalCompositeOperation =
+          style.position === 'inside' ? 'destination-in' : 'destination-out';
+        bctx.drawImage(layer, 0, 0);
+      }
+    } else if (style.type === 'bevel-emboss') {
+      // Offset highlight and shadow copies of the silhouette in opposite
+      // directions, clipped inside — a cheap but recognisable bevel.
+      const offset = styleOffset({ ...style, distance: (style.depth ?? 100) / 20 });
+      bctx.globalAlpha = 0.6;
+      bctx.drawImage(layer, -offset.x * ratio, -offset.y * ratio);
+      bctx.globalCompositeOperation = 'source-in';
+      bctx.fillStyle = style.highlightColor || '#ffffff';
+      bctx.fillRect(0, 0, w, h);
+      bctx.globalCompositeOperation = 'destination-in';
+      bctx.drawImage(layer, 0, 0);
+    }
+
+    ctx.save();
+    ctx.globalAlpha = style.opacity ?? 1;
+    if (isNativeBlend(style.blendMode)) {
+      ctx.globalCompositeOperation = canvasCompositeFor(style.blendMode);
+    }
+    ctx.drawImage(buf, 0, 0, w / ratio, h / ratio);
+    ctx.restore();
+  }
+
+  /** Draw a group's members offscreen, then composite the result as one layer. */
+  private async drawGroup(
+    ctx: any,
+    canvas: any,
+    node: LayerNode,
+    allChildren: DesignerElement[],
+    ratio: number,
+    opts?: RenderOptions,
+    depth = 0
+  ): Promise<void> {
+    if (!node.children.length) return;
+
+    // Each level costs a page-size buffer, and nesting is unbounded in the
+    // document. Past the cap, members draw straight into the parent: group
+    // opacity and blend stop applying to the composite, which is a far better
+    // failure than exhausting memory on a pathological document.
+    if (depth >= MAX_GROUP_RENDER_DEPTH) {
+      this._logger.warn(
+        `Group nesting deeper than ${MAX_GROUP_RENDER_DEPTH}; drawing members inline`
+      );
+      await this.drawLayerTree(ctx, canvas, node.children, allChildren, ratio, opts, depth + 1);
+      return;
+    }
+
+    const { createCanvas } = await loadCanvasModule();
+    const groupCanvas = createCanvas(ctx.canvas.width, ctx.canvas.height);
+    const groupCtx: any = groupCanvas.getContext('2d');
+    groupCtx.scale(ratio, ratio);
+
+    await this.drawLayerTree(
+      groupCtx, groupCanvas, node.children, allChildren, ratio, opts, depth + 1
+    );
+
+    ctx.save();
+    ctx.globalAlpha = node.element.opacity ?? 1;
+    this.applyBlend(ctx, groupCanvas, node.element.blendMode, ratio);
+    ctx.restore();
+  }
+
+  /**
+   * Composite an offscreen canvas onto `ctx` under a blend mode.
+   *
+   * Native modes go through `globalCompositeOperation`; the rest are evaluated
+   * per pixel by the shared `pixel-ops` module, which the Designer canvas uses
+   * too — that shared implementation is what keeps PNG and PDF identical.
+   */
+  private applyBlend(ctx: any, source: any, mode: DesignerBlendMode | undefined, ratio: number): void {
+    if (isNativeBlend(mode)) {
+      ctx.globalCompositeOperation = canvasCompositeFor(mode);
+      // The context is scaled; draw in logical units.
+      ctx.drawImage(source, 0, 0, ctx.canvas.width / ratio, ctx.canvas.height / ratio);
+      ctx.globalCompositeOperation = 'source-over';
+      return;
+    }
+
+    // Custom blend: read both sides in DEVICE pixels. `ctx.scale(ratio)` is
+    // applied once at page setup and never undone, so logical coordinates would
+    // read the wrong region on a hi-dpi render.
+    const w = ctx.canvas.width;
+    const h = ctx.canvas.height;
+    const backdrop = ctx.getImageData(0, 0, w, h);
+    const src = source.getContext('2d').getImageData(0, 0, w, h);
+    blendPixels(backdrop, src, mode as DesignerBlendMode, ctx.globalAlpha ?? 1);
+    ctx.putImageData(backdrop, 0, 0);
+  }
+
+  /**
+   * Transform everything drawn so far. Reads back in DEVICE pixels for the same
+   * `ctx.scale(ratio)` reason as above.
+   *
+   * A CLIPPED adjustment reaches only the pixels its base layer actually
+   * painted — not that layer's bounding box. The Designer canvas clips by
+   * caching the base layer alone and filtering that bitmap, so its transparent
+   * gaps are untouched; masking by the box here instead would recolour the
+   * backdrop showing through those gaps and the PNG would stop matching the PDF.
+   */
+  private async applyAdjustmentLayer(
+    ctx: any,
+    canvas: any,
+    el: DesignerElement,
+    allChildren: DesignerElement[],
+    ratio: number,
+    opts?: RenderOptions,
+    clipTo?: LayerNode
+  ): Promise<void> {
+    if (!el.adjustment) return;
+    if (canvas.width <= 0 || canvas.height <= 0) return;
+
+    // Unclipped: the whole scope. Clipped: only the region its base layer can
+    // reach, so a small clipped adjustment costs a small readback rather than a
+    // full page one — this runs on the shared render endpoint.
+    const region = clipTo
+      ? this.nodeRegion(clipTo, allChildren, canvas, ratio)
+      : { x: 0, y: 0, w: canvas.width, h: canvas.height };
+    if (!region || region.w <= 0 || region.h <= 0) return;
+
+    const data = ctx.getImageData(region.x, region.y, region.w, region.h);
+    const before = clipTo ? Uint8ClampedArray.from(data.data) : null;
+    applyAdjustment(data, el.adjustment);
+
+    if (clipTo && before) {
+      const mask = await this.renderNodeAlone(clipTo, allChildren, region, canvas, ratio, opts);
+      const px = data.data;
+      for (let i = 0; i < px.length; i += 4) {
+        const a = mask[i + 3] / 255;
+        if (a >= 1) continue;
+        // Feather with the base layer's own alpha so antialiased edges blend
+        // instead of stepping.
+        px[i] = before[i] + (px[i] - before[i]) * a;
+        px[i + 1] = before[i + 1] + (px[i + 1] - before[i + 1]) * a;
+        px[i + 2] = before[i + 2] + (px[i + 2] - before[i + 2]) * a;
+        px[i + 3] = before[i + 3] + (px[i + 3] - before[i + 3]) * a;
+      }
+    }
+
+    ctx.putImageData(data, region.x, region.y);
+  }
+
+  /**
+   * The device-pixel region a node's own drawing can reach, clamped to the
+   * canvas: its rotated bounding box plus whatever its effects and stroke add.
+   * Returns null when the node lands entirely off-page.
+   */
+  private nodeRegion(
+    node: LayerNode,
+    allChildren: DesignerElement[],
+    canvas: any,
+    ratio: number
+  ): { x: number; y: number; w: number; h: number } | null {
+    const el = node.element;
+    const box =
+      el.type === 'group'
+        ? groupBounds(allChildren, el.id)
+        : { x: el.x, y: el.y, width: el.width, height: el.height };
+    if (!box) return null;
+
+    // Rotation is applied about the element's centre, so the axis-aligned box
+    // it occupies is wider than width/height.
+    const rot = ((el.rotation || 0) * Math.PI) / 180;
+    const cos = Math.abs(Math.cos(rot));
+    const sin = Math.abs(Math.sin(rot));
+    const bw = box.width * cos + box.height * sin;
+    const bh = box.width * sin + box.height * cos;
+
+    // Slack for anything that paints outside the box: layer effects, a stroke
+    // straddling the edge, a text shadow, plus a couple of pixels of
+    // antialiasing. Too generous only costs a little memory; too tight would
+    // silently crop the adjustment.
+    const shadow = el.textShadow;
+    const pad =
+      stylePadding(el.styles) +
+      (el.strokeWidth || 0) +
+      (shadow
+        ? (shadow.blur || 0) + Math.abs(shadow.offsetX || 0) + Math.abs(shadow.offsetY || 0)
+        : 0) +
+      4;
+
+    const cx = box.x + box.width / 2;
+    const cy = box.y + box.height / 2;
+    const x = Math.max(0, Math.floor((cx - bw / 2 - pad) * ratio));
+    const y = Math.max(0, Math.floor((cy - bh / 2 - pad) * ratio));
+    const w = Math.min(canvas.width - x, Math.ceil((bw + pad * 2) * ratio) + 2);
+    const h = Math.min(canvas.height - y, Math.ceil((bh + pad * 2) * ratio) + 2);
+    if (w <= 0 || h <= 0) return null;
+    return { x, y, w, h };
+  }
+
+  /**
+   * One layer (or group subtree) drawn alone, for use as a clipping mask; only
+   * `region` is read back.
+   *
+   * The buffer is page-sized rather than region-sized on purpose. Every
+   * offscreen buffer below this point (group compositing, layer styles) is
+   * built from `ctx.canvas` dimensions and assumes the page origin, so handing
+   * this path a translated context would misplace a styled or grouped base
+   * layer. Only the readback is bounded, which is where the cost actually is.
+   */
+  private async renderNodeAlone(
+    node: LayerNode,
+    allChildren: DesignerElement[],
+    region: { x: number; y: number; w: number; h: number },
+    canvas: any,
+    ratio: number,
+    opts?: RenderOptions
+  ): Promise<Uint8ClampedArray> {
+    const { createCanvas } = await loadCanvasModule();
+    const maskCanvas = createCanvas(canvas.width, canvas.height);
+    const maskCtx: any = maskCanvas.getContext('2d');
+    maskCtx.scale(ratio, ratio);
+    await this.drawLayerTree(maskCtx, maskCanvas, [node], allChildren, ratio, opts);
+    return maskCtx.getImageData(region.x, region.y, region.w, region.h).data;
+  }
+
+  /**
+   * A repeatable tile for a pattern — either the uploaded image it names, or a
+   * procedural preset drawn through the shared generator.
+   */
+  private async buildPatternTile(pattern: DesignerPattern): Promise<any | null> {
+    if (pattern.src) {
+      return this.loadImageSafe(pattern.src);
+    }
+    if (!pattern.preset) return null;
+
+    const { createCanvas } = await loadCanvasModule();
+    const size = tileSizeFor(pattern);
+    const tile = createCanvas(size, size);
+    drawPatternTile(tile.getContext('2d') as never, pattern, size);
+    return tile;
+  }
+
+  /** A `fill` layer paints its box with a solid colour, gradient or pattern. */
+  private async drawFill(ctx: any, el: DesignerElement): Promise<void> {
+    const style = el.fillStyle;
+    if (!style) return;
+
+    if (style.type === 'gradient' && style.gradient) {
+      ctx.fillStyle = this.buildGradient(ctx, style.gradient, el.width, el.height);
+    } else if (style.type === 'pattern' && style.pattern) {
+      const tile = await this.buildPatternTile(style.pattern);
+      ctx.fillStyle = tile ? ctx.createPattern(tile, 'repeat') : (style.color || '#000000');
+    } else {
+      ctx.fillStyle = style.color || '#000000';
+    }
+    ctx.fillRect(0, 0, el.width, el.height);
+  }
+
+  /**
+   * Pen-tool path. Traced through the shared `path-geometry` helper so the
+   * exported curve is byte-for-byte the curve the canvas drew.
+   */
+  private drawPath(ctx: any, el: DesignerElement): void {
+    const nodes = el.nodes;
+    if (!nodes?.length) return;
+    const fill = el.fillGradient
+      ? this.buildGradient(ctx, el.fillGradient, el.width, el.height)
+      : el.fill;
+
+    tracePathNodes(ctx, nodes, !!el.closed);
+    // Only a closed path is fillable; an open one would fill its implicit chord.
+    if (fill && el.closed) {
+      ctx.fillStyle = fill;
+      ctx.fill();
+    }
+    if (el.stroke && (el.strokeWidth || 0) > 0) {
+      ctx.strokeStyle = el.stroke;
+      ctx.lineWidth = el.strokeWidth as number;
+      ctx.stroke();
+    }
   }
 
   private drawShape(ctx: any, el: DesignerElement): void {
@@ -1264,8 +1763,11 @@ export class DesignRenderService {
     if (shape === 'ellipse') {
       ctx.beginPath();
       ctx.ellipse(el.width / 2, el.height / 2, el.width / 2, el.height / 2, 0, 0, Math.PI * 2);
-    } else if (shape === 'star') {
-      this.tracePath(ctx, this.starPoints(el.width, el.height));
+    } else if (shape === 'star' || shape === 'triangle' || shape === 'polygon') {
+      // Shared with the canvas (designer-doc/shape-geometry) so the exported
+      // polygon is the one the user drew.
+      const pts = pointsForShape(shape, el.width, el.height, el.sides, el.innerRatio);
+      this.tracePath(ctx, (pts || []).map((p) => [p.x, p.y] as [number, number]));
     } else {
       this.traceRoundRect(ctx, 0, 0, el.width, el.height, el.borderRadius || 0);
     }
@@ -1703,7 +2205,10 @@ export class DesignRenderService {
     } else if (shape === 'triangle') {
       this.tracePath(ctx, [[w / 2, 0], [w, h], [0, h]]);
     } else if (shape === 'star') {
-      this.tracePath(ctx, this.starPoints(w, h));
+      this.tracePath(
+        ctx,
+        starPoints(w, h).map((p) => [p.x, p.y] as [number, number])
+      );
     } else if (shape === 'hexagon') {
       this.tracePath(ctx, this.hexagonPoints(w, h));
     } else if (shape === 'heart') {
@@ -1763,20 +2268,6 @@ export class DesignRenderService {
     ctx.arcTo(x, y + h, x, y, radius);
     ctx.arcTo(x, y, x + w, y, radius);
     ctx.closePath();
-  }
-
-  private starPoints(w: number, h: number): Array<[number, number]> {
-    const cx = w / 2, cy = h / 2;
-    const outerX = w / 2, outerY = h / 2;
-    const inner = 0.5;
-    const points: Array<[number, number]> = [];
-    for (let i = 0; i < 10; i++) {
-      const angle = (Math.PI / 5) * i - Math.PI / 2;
-      const rx = i % 2 === 0 ? outerX : outerX * inner;
-      const ry = i % 2 === 0 ? outerY : outerY * inner;
-      points.push([cx + Math.cos(angle) * rx, cy + Math.sin(angle) * ry]);
-    }
-    return points;
   }
 
   private tracePath(ctx: any, points: Array<[number, number]>): void {

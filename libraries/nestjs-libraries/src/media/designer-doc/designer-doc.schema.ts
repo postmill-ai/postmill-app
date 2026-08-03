@@ -11,13 +11,16 @@
 import { z } from 'zod';
 import { parseDesignerFilterToken } from '../design-render/filter-tokens';
 import {
+  DESIGNER_DOC_VERSION,
   MAX_CLIPS_PER_TRACK,
   MAX_DIMENSION,
   MAX_ELEMENTS_PER_OUTPUT,
   MAX_FILTERS_PER_ELEMENT,
   MAX_FONT_SIZE,
+  MAX_LAYER_STYLES,
   MAX_OPS_PER_REQUEST,
   MAX_OUTPUTS,
+  MAX_PATH_NODES,
   MAX_TEXT_LEN,
   MAX_TRACKS,
   MAX_VIDEO_DURATION_MS,
@@ -99,6 +102,12 @@ export interface DesignerTextStroke {
   width: number;
 }
 
+// The path node shape lives with the tracing code it belongs to; re-exported
+// here so `DesignerElement` consumers get it from the one contract module (see
+// designer-doc.drift.spec.ts).
+export type { DesignerPathNode } from './path-geometry';
+import type { DesignerPathNode } from './path-geometry';
+
 export interface DesignerCrop {
   x: number;
   y: number;
@@ -145,9 +154,93 @@ export interface DesignerBackground {
   naturalHeight?: number;
 }
 
+/**
+ * Photoshop's blend modes. The first 16 map straight to canvas
+ * `globalCompositeOperation`; the rest are evaluated by `pixel-ops` on both the
+ * client and the server so they render identically.
+ */
+export type DesignerBlendMode =
+  | 'normal' | 'multiply' | 'screen' | 'overlay' | 'darken' | 'lighten'
+  | 'color-dodge' | 'color-burn' | 'hard-light' | 'soft-light'
+  | 'difference' | 'exclusion' | 'hue' | 'saturation' | 'color' | 'luminosity'
+  | 'dissolve' | 'linear-burn' | 'linear-dodge' | 'vivid-light' | 'linear-light'
+  | 'pin-light' | 'hard-mix' | 'subtract' | 'divide'
+  | 'darker-color' | 'lighter-color';
+
+/** One layer style (effect). `enabled: false` keeps settings while hiding it. */
+export interface DesignerLayerStyle {
+  type:
+    | 'drop-shadow' | 'inner-shadow' | 'outer-glow' | 'inner-glow'
+    | 'stroke' | 'bevel-emboss' | 'satin'
+    | 'color-overlay' | 'gradient-overlay' | 'pattern-overlay';
+  enabled?: boolean;
+  color?: string;
+  opacity?: number;
+  blendMode?: DesignerBlendMode;
+  /** Shadow/glow geometry. Angle is degrees; `useGlobalLight` follows the doc. */
+  angle?: number;
+  useGlobalLight?: boolean;
+  distance?: number;
+  spread?: number;
+  size?: number;
+  /** Stroke placement. */
+  position?: 'outside' | 'inside' | 'center';
+  /** Bevel shape and depth. */
+  style?: 'outer-bevel' | 'inner-bevel' | 'emboss' | 'pillow-emboss';
+  depth?: number;
+  soften?: number;
+  highlightColor?: string;
+  shadowColor?: string;
+  gradient?: DesignerGradient;
+  pattern?: DesignerPattern;
+}
+
+/** A pattern source — a built-in procedural one, or an uploaded image. */
+export interface DesignerPattern {
+  /** Built-in generators; omitted when `src`/`fileId` supply an image. */
+  preset?: 'stripes' | 'dots' | 'grid' | 'checker' | 'noise';
+  src?: string;
+  fileId?: string;
+  scale?: number;
+  angle?: number;
+  offsetX?: number;
+  offsetY?: number;
+  color?: string;
+  background?: string;
+}
+
+/** What a `fill` layer paints across its box. */
+export interface DesignerFillStyle {
+  type: 'solid' | 'gradient' | 'pattern';
+  color?: string;
+  gradient?: DesignerGradient;
+  pattern?: DesignerPattern;
+}
+
+/**
+ * An `adjustment` layer's operation. It transforms the pixels of everything
+ * beneath it (within its group, or just the layer below when `clipped`).
+ */
+export interface DesignerAdjustment {
+  type:
+    | 'brightness-contrast' | 'levels' | 'curves' | 'exposure'
+    | 'hue-saturation' | 'color-balance' | 'black-white' | 'photo-filter'
+    | 'channel-mixer' | 'selective-color' | 'invert' | 'posterize'
+    | 'threshold' | 'gradient-map' | 'vibrance' | 'clarity-dehaze';
+  /** Op-specific scalars, e.g. `{ brightness: 10, contrast: -5 }`. */
+  values?: Record<string, number>;
+  /** Gradient Map's ramp. */
+  gradient?: DesignerGradient;
+  /** Curves control points per channel, 0–255 in and out. */
+  curves?: Record<string, { x: number; y: number }[]>;
+}
+
 export interface DesignerElement {
   id: string;
-  type: 'text' | 'image' | 'shape' | 'icon';
+  type:
+    | 'text' | 'image' | 'shape' | 'icon' | 'path' | 'raster'
+    // Added in doc v4 for Photoshop-parity layers.
+    | 'group' | 'fill' | 'adjustment';
   x: number;
   y: number;
   width: number;
@@ -157,7 +250,25 @@ export interface DesignerElement {
   locked: boolean;
   hidden: boolean;
   name?: string;
+  /**
+   * @deprecated Superseded by `parentId` + a `group` element in doc v4. The
+   * migration converts it; kept on the type only so v3 documents still parse.
+   */
   groupId?: string;
+  /** The `group` element this layer belongs to. Undefined = top level. */
+  parentId?: string;
+  /** How this layer composites onto what is beneath it. Default `normal`. */
+  blendMode?: DesignerBlendMode;
+  /** Clipped to the layer directly below, Photoshop-style. */
+  clipped?: boolean;
+  /** Non-destructive effects, rendered in list order. */
+  styles?: DesignerLayerStyle[];
+  /** Group-only: collapsed in the layers panel (editor state, harmless to store). */
+  collapsed?: boolean;
+  /** `fill` layers only. */
+  fillStyle?: DesignerFillStyle;
+  /** `adjustment` layers only. */
+  adjustment?: DesignerAdjustment;
   flipX?: boolean;
   flipY?: boolean;
 
@@ -200,7 +311,20 @@ export interface DesignerElement {
   naturalHeight?: number;
 
   // shape
-  shape?: 'rect' | 'ellipse' | 'line' | 'star';
+  /**
+   * Pen-tool path, in element-local coordinates. Paths stay vectors because
+   * both renderers trace them identically (see `path-geometry`); painted
+   * pixels, which cannot be, become a `raster` element instead.
+   */
+  nodes?: DesignerPathNode[];
+  /** Whether the path's last node joins back to its first. */
+  closed?: boolean;
+
+  shape?: 'rect' | 'ellipse' | 'line' | 'star' | 'triangle' | 'polygon';
+  /** Side count for `polygon`, point count for `star`. Defaults: 6 and 5. */
+  sides?: number;
+  /** Star inner-radius as a fraction of the outer radius (0–1). Default 0.5. */
+  innerRatio?: number;
   fillGradient?: DesignerGradient;
   stroke?: string;
   strokeWidth?: number;
@@ -524,13 +648,104 @@ const { strict: StrictDesignerBackgroundSchema, lenient: LenientDesignerBackgrou
   );
 
 // ---------------------------------------------------------------------------
+// Layer compositing (doc v4)
+// ---------------------------------------------------------------------------
+
+export const BLEND_MODES = [
+  'normal', 'multiply', 'screen', 'overlay', 'darken', 'lighten',
+  'color-dodge', 'color-burn', 'hard-light', 'soft-light',
+  'difference', 'exclusion', 'hue', 'saturation', 'color', 'luminosity',
+  'dissolve', 'linear-burn', 'linear-dodge', 'vivid-light', 'linear-light',
+  'pin-light', 'hard-mix', 'subtract', 'divide',
+  'darker-color', 'lighter-color',
+] as const;
+
+const BlendModeSchema = z.enum(BLEND_MODES);
+
+const PatternSchema = z.object({
+  preset: z.enum(['stripes', 'dots', 'grid', 'checker', 'noise']).optional(),
+  src: SrcSchema.optional(),
+  fileId: z.string().max(200).optional(),
+  scale: z.number().min(0.01).max(100).optional(),
+  angle: z.number().optional(),
+  offsetX: z.number().optional(),
+  offsetY: z.number().optional(),
+  color: ColorSchema.optional(),
+  background: ColorSchema.optional(),
+});
+
+const layerStyleShape = (gradient: z.ZodTypeAny) =>
+  z.object({
+    type: z.enum([
+      'drop-shadow', 'inner-shadow', 'outer-glow', 'inner-glow',
+      'stroke', 'bevel-emboss', 'satin',
+      'color-overlay', 'gradient-overlay', 'pattern-overlay',
+    ]),
+    enabled: z.boolean().optional(),
+    color: ColorSchema.optional(),
+    opacity: z.number().min(0).max(1).optional(),
+    blendMode: BlendModeSchema.optional(),
+    angle: z.number().optional(),
+    useGlobalLight: z.boolean().optional(),
+    distance: z.number().min(0).max(MAX_DIMENSION).optional(),
+    spread: z.number().min(0).max(100).optional(),
+    size: z.number().min(0).max(MAX_DIMENSION).optional(),
+    position: z.enum(['outside', 'inside', 'center']).optional(),
+    style: z.enum(['outer-bevel', 'inner-bevel', 'emboss', 'pillow-emboss']).optional(),
+    depth: z.number().min(0).max(1000).optional(),
+    soften: z.number().min(0).max(100).optional(),
+    highlightColor: ColorSchema.optional(),
+    shadowColor: ColorSchema.optional(),
+    gradient: gradient.optional(),
+    pattern: PatternSchema.optional(),
+  });
+
+const fillStyleShape = (gradient: z.ZodTypeAny) =>
+  z.object({
+    type: z.enum(['solid', 'gradient', 'pattern']),
+    color: ColorSchema.optional(),
+    gradient: gradient.optional(),
+    pattern: PatternSchema.optional(),
+  });
+
+const adjustmentShape = (gradient: z.ZodTypeAny) =>
+  z.object({
+    type: z.enum([
+      'brightness-contrast', 'levels', 'curves', 'exposure',
+      'hue-saturation', 'color-balance', 'black-white', 'photo-filter',
+      'channel-mixer', 'selective-color', 'invert', 'posterize',
+      'threshold', 'gradient-map', 'vibrance', 'clarity-dehaze',
+    ]),
+    values: z.record(z.string().max(40), z.number()).optional(),
+    gradient: gradient.optional(),
+    curves: z
+      .record(
+        z.string().max(20),
+        z.array(z.object({ x: z.number(), y: z.number() })).max(32)
+      )
+      .optional(),
+  });
+
+// ---------------------------------------------------------------------------
 // DesignerElement
 // ---------------------------------------------------------------------------
 const elementCommon = {
   id: z.string().max(200),
-  type: z.enum(['text', 'image', 'shape', 'icon']),
+  // `path` (Pen tools) and `raster` (paint tools) were added in doc v3. Both are
+  // additive: v2 documents keep validating unchanged.
+  // `group`/`fill`/`adjustment` were added in doc v4 for Photoshop-parity
+  // layers. Additive: v2/v3 documents keep validating unchanged.
+  type: z.enum([
+    'text', 'image', 'shape', 'icon', 'path', 'raster',
+    'group', 'fill', 'adjustment',
+  ]),
   name: z.string().max(200).optional(),
+  /** @deprecated v3 grouping; migrated to `parentId` in v4. */
   groupId: z.string().max(200).optional(),
+  parentId: z.string().max(200).optional(),
+  blendMode: BlendModeSchema.optional(),
+  clipped: z.boolean().optional(),
+  collapsed: z.boolean().optional(),
   flipX: z.boolean().optional(),
   flipY: z.boolean().optional(),
 
@@ -550,7 +765,27 @@ const elementCommon = {
   alt: z.string().max(500).optional(),
 
   // shape
-  shape: z.enum(['rect', 'ellipse', 'line', 'star']).optional(),
+  shape: z
+    .enum(['rect', 'ellipse', 'line', 'star', 'triangle', 'polygon'])
+    .optional(),
+  sides: z.number().int().min(3).max(64).optional(),
+
+  // path (Pen tools) — bezier nodes in element-local coordinates
+  nodes: z
+    .array(
+      z.object({
+        x: z.number(),
+        y: z.number(),
+        inX: z.number().optional(),
+        inY: z.number().optional(),
+        outX: z.number().optional(),
+        outY: z.number().optional(),
+      })
+    )
+    .max(MAX_PATH_NODES)
+    .optional(),
+  closed: z.boolean().optional(),
+  innerRatio: z.number().min(0.05).max(0.95).optional(),
   stroke: ColorSchema.optional(),
 
   // reflow / linked-by-default
@@ -624,6 +859,9 @@ const elementStrictNested = {
   fillGradient: StrictDesignerGradientSchema.optional(),
   // drift-resolved: boxShadow present in frontend, absent server copy
   boxShadow: StrictDesignerTextShadowSchema.optional(),
+  styles: z.array(layerStyleShape(StrictDesignerGradientSchema)).max(MAX_LAYER_STYLES).optional(),
+  fillStyle: fillStyleShape(StrictDesignerGradientSchema).optional(),
+  adjustment: adjustmentShape(StrictDesignerGradientSchema).optional(),
   filters: FiltersSchema,
 };
 
@@ -637,6 +875,9 @@ const elementLenientNested = {
   mask: LenientDesignerMaskSchema.optional(),
   fillGradient: LenientDesignerGradientSchema.optional(),
   boxShadow: LenientDesignerTextShadowSchema.optional(),
+  styles: z.array(layerStyleShape(LenientDesignerGradientSchema)).max(MAX_LAYER_STYLES).optional(),
+  fillStyle: fillStyleShape(LenientDesignerGradientSchema).optional(),
+  adjustment: adjustmentShape(LenientDesignerGradientSchema).optional(),
   filters: FiltersSchema,
 };
 
@@ -915,7 +1156,7 @@ const { strict: StrictDesignerAttributionSchema, lenient: LenientDesignerAttribu
 // Doc
 // ---------------------------------------------------------------------------
 const docCommon = {
-  version: z.number().int().min(1).max(2),
+  version: z.number().int().min(1).max(DESIGNER_DOC_VERSION),
   mode: z.literal('image'),
 };
 const { strict: ImageDocStrictSchema, lenient: ImageDocLenientSchema } = dualObject(
@@ -932,7 +1173,7 @@ const { strict: ImageDocStrictSchema, lenient: ImageDocLenientSchema } = dualObj
 );
 
 const videoDocCommon = {
-  version: z.number().int().min(1).max(2),
+  version: z.number().int().min(1).max(DESIGNER_DOC_VERSION),
   mode: z.literal('video'),
 };
 const { strict: VideoDocStrictSchema, lenient: VideoDocLenientSchema } = dualObject(
@@ -969,13 +1210,26 @@ export { StrictDesignerAttributionSchema, LenientDesignerAttributionSchema };
 export { ImageDocStrictSchema, ImageDocLenientSchema };
 export { VideoDocStrictSchema, VideoDocLenientSchema };
 
-export const DesignerDocStrictSchema = z.discriminatedUnion('mode', [
-  ImageDocStrictSchema,
-  VideoDocStrictSchema,
-]);
+/**
+ * Explicitly annotated because the inferred union type is now large enough that
+ * TypeScript refuses to serialize it into the emitted `.d.ts` (TS7056) — the
+ * v4 layer fields pushed it over. `z.ZodType<DesignerDoc, …>` is also a better
+ * public contract than the inferred shape: as the note at the top of this file
+ * explains, `z.infer` marks every field optional under this repo's
+ * `strictNullChecks: false`, so callers were already relying on the explicit
+ * interfaces rather than the inferred ones.
+ *
+ * The runtime schemas are unchanged; only their declared type is pinned.
+ */
+export const DesignerDocStrictSchema: z.ZodType<DesignerDoc, z.ZodTypeDef, unknown> =
+  z.discriminatedUnion('mode', [
+    ImageDocStrictSchema,
+    VideoDocStrictSchema,
+  ]) as unknown as z.ZodType<DesignerDoc, z.ZodTypeDef, unknown>;
 
-export const DesignerDocLenientSchema = z.discriminatedUnion('mode', [
-  ImageDocLenientSchema,
-  VideoDocLenientSchema,
-]);
+export const DesignerDocLenientSchema: z.ZodType<DesignerDoc, z.ZodTypeDef, unknown> =
+  z.discriminatedUnion('mode', [
+    ImageDocLenientSchema,
+    VideoDocLenientSchema,
+  ]) as unknown as z.ZodType<DesignerDoc, z.ZodTypeDef, unknown>;
 

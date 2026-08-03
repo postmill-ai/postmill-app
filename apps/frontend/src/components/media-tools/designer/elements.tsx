@@ -1,11 +1,28 @@
 'use client';
 
-import React, { FC, useEffect, useRef, useState, useSyncExternalStore } from 'react';
+import React, {
+  FC,
+  ReactNode,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  useSyncExternalStore,
+} from 'react';
 import { Image as KonvaImage, Rect, Ellipse, Line, Star, Text as KonvaText, TextPath, Group, Shape } from 'react-konva';
 import Konva from 'konva';
 import type { DesignerElement, DesignerGradient, TextRun } from './designer.store';
 import { computeCoverCrop } from './reflow';
 import { fittedFontSize } from './measure-text';
+import {
+  pointsForShape,
+  flattenPoints,
+} from '@postmill-ai/nestjs-libraries/media/designer-doc/shape-geometry';
+import { tracePathNodes } from '@postmill-ai/nestjs-libraries/media/designer-doc/path-geometry';
+import { getBuffer } from './raster-layers';
+import { buildLayerTree, type LayerNode } from '@postmill-ai/nestjs-libraries/media/designer-doc/layer-tree';
+import { LayerGroup, AdjustmentScope, blendPropFor, layerStyleProps } from './layer-render';
+import { patternFillProps } from './patterns';
 import { parseDesignerFilterToken } from '@postmill-ai/nestjs-libraries/media/design-render/filter-tokens';
 
 type SelectHandler = (id: string, evt?: Konva.KonvaEventObject<any>) => void;
@@ -14,6 +31,21 @@ interface ElementsProps {
   elements: DesignerElement[];
   onSelect: SelectHandler;
   onContextMenu?: (elementId: string, clientX: number, clientY: number) => void;
+  /**
+   * Elements are only draggable under the Move tool. Every other tool needs the
+   * pointer for its own interaction, so leaving nodes draggable would steal the
+   * press before the tool's handler ever saw it.
+   */
+  interactive?: boolean;
+  /**
+   * The artboard background, folded in as the bottom-most layer.
+   *
+   * An UNCLIPPED adjustment layer transforms everything below it, and in this
+   * document model the canvas background IS below everything — so it has to sit
+   * inside the fold or the canvas stops matching the server export, which reads
+   * the background back with the rest of the page.
+   */
+  backdrop?: ReactNode;
 }
 
 const imageCache = new Map<string, HTMLImageElement>();
@@ -317,10 +349,16 @@ interface ImageNodeProps {
   element: DesignerElement;
   onSelect: SelectHandler;
   onContextMenu?: (elementId: string, clientX: number, clientY: number) => void;
+  interactive: boolean;
 }
 
-const ImageNode: FC<ImageNodeProps> = ({ element, onSelect, onContextMenu }) => {
-  const image = useLoadedImage(element.src);
+const ImageNode: FC<ImageNodeProps> = ({ element, onSelect, onContextMenu, interactive }) => {
+  const loaded = useLoadedImage(element.src);
+  // A raster layer draws from its live paint buffer while it is being edited —
+  // the uploaded `src` only catches up when the stroke commits, so rendering
+  // from `src` alone would lag a whole stroke behind the cursor.
+  const liveBuffer = element.type === 'raster' ? getBuffer(element.id) : undefined;
+  const image = (liveBuffer as unknown as HTMLImageElement | undefined) || loaded;
   const imageRef = useRef<Konva.Image>(null);
   const flipX = element.flipX ? -1 : 1;
   const flipY = element.flipY ? -1 : 1;
@@ -494,7 +532,7 @@ const ImageNode: FC<ImageNodeProps> = ({ element, onSelect, onContextMenu }) => 
       height={element.height}
       rotation={element.rotation}
       opacity={element.opacity}
-      draggable={!element.locked}
+      draggable={!element.locked && interactive}
       clipFunc={clipFunc}
       onClick={(e) => onSelect(element.id, e)}
       onTap={(e) => onSelect(element.id, e)}
@@ -557,9 +595,10 @@ interface IconNodeProps {
   element: DesignerElement;
   onSelect: SelectHandler;
   onContextMenu?: (elementId: string, clientX: number, clientY: number) => void;
+  interactive: boolean;
 }
 
-const IconNode: FC<IconNodeProps> = ({ element, onSelect, onContextMenu }) => {
+const IconNode: FC<IconNodeProps> = ({ element, onSelect, onContextMenu, interactive }) => {
   const imageRef = useRef<Konva.Image>(null);
   const [imageObj, setImageObj] = useState<HTMLImageElement | null>(null);
 
@@ -584,7 +623,7 @@ const IconNode: FC<IconNodeProps> = ({ element, onSelect, onContextMenu }) => {
       height={element.height}
       rotation={element.rotation}
       opacity={element.opacity}
-      draggable={!element.locked}
+      draggable={!element.locked && interactive}
       onClick={(e) => onSelect(element.id, e)}
       onTap={(e) => onSelect(element.id, e)}
       onContextMenu={(e) => {
@@ -616,11 +655,16 @@ const IconNode: FC<IconNodeProps> = ({ element, onSelect, onContextMenu }) => {
   );
 };
 
-export const CanvasElements: FC<ElementsProps> = ({ elements, onSelect, onContextMenu }) => {
-  return (
-    <>
-      {elements.map((el) => {
-        if (el.hidden) return null;
+export const CanvasElements: FC<ElementsProps> = ({
+  elements,
+  onSelect,
+  onContextMenu,
+  interactive = true,
+  backdrop,
+}) => {
+  const tree = useMemo(() => buildLayerTree(elements), [elements]);
+
+  const renderLeaf = (el: DesignerElement): ReactNode => {
         const commonProps = {
           id: el.id,
           x: el.x,
@@ -629,7 +673,14 @@ export const CanvasElements: FC<ElementsProps> = ({ elements, onSelect, onContex
           height: el.height,
           rotation: el.rotation,
           opacity: el.opacity,
-          draggable: !el.locked,
+          // Native blends composite for free. The non-native ones resolve to
+          // undefined (= normal) here: Konva can't give a node its backdrop, so
+          // they are deliberately not selectable in the UI — see
+          // SELECTABLE_BLEND_MODES.
+          globalCompositeOperation: blendPropFor(el.blendMode) as never,
+          // Drop shadow / stroke / colour overlay map onto Konva's own props.
+          ...layerStyleProps(el),
+          draggable: !el.locked && interactive,
           onClick: (e: Konva.KonvaEventObject<MouseEvent>) => onSelect(el.id, e),
           onTap: (e: Konva.KonvaEventObject<TouchEvent>) => onSelect(el.id, e),
           onContextMenu: (e: Konva.KonvaEventObject<MouseEvent>) => {
@@ -777,7 +828,7 @@ export const CanvasElements: FC<ElementsProps> = ({ elements, onSelect, onContex
           }
 
           case 'image':
-            return <ImageNode key={el.id} element={el} onSelect={onSelect} onContextMenu={onContextMenu} />;
+            return <ImageNode key={el.id} element={el} onSelect={onSelect} onContextMenu={onContextMenu} interactive={interactive} />;
 
           case 'shape': {
             const grad = gradientFillProps(el.fillGradient, el.width, el.height);
@@ -812,21 +863,32 @@ export const CanvasElements: FC<ElementsProps> = ({ elements, onSelect, onContex
                   />
                 );
               case 'star':
+              case 'triangle':
+              case 'polygon': {
+                // Drawn as an explicit point list rather than Konva's Star /
+                // RegularPolygon, which take a single scalar radius and would
+                // ignore el.height — a star in a wide box has to stretch with
+                // it. The generator is shared with the server renderer.
+                const pts = pointsForShape(
+                  el.shape,
+                  el.width,
+                  el.height,
+                  el.sides,
+                  el.innerRatio
+                );
                 return (
-                  <Star
+                  <Line
                     key={el.id}
                     {...commonProps}
-                    x={el.x + el.width / 2}
-                    y={el.y + el.height / 2}
-                    numPoints={5}
-                    innerRadius={el.width / 4}
-                    outerRadius={el.width / 2}
+                    points={flattenPoints(pts || [])}
+                    closed={true}
                     fill={hasGrad ? undefined : el.fill || '#2B5CD3'}
                     {...grad}
                     stroke={el.stroke}
                     strokeWidth={el.strokeWidth}
                   />
                 );
+              }
               default:
                 return (
                   <Rect
@@ -842,13 +904,111 @@ export const CanvasElements: FC<ElementsProps> = ({ elements, onSelect, onContex
             }
           }
 
+          case 'path': {
+            const grad = gradientFillProps(el.fillGradient, el.width, el.height);
+            const hasGrad = !!el.fillGradient;
+            return (
+              <Shape
+                key={el.id}
+                {...commonProps}
+                // Traced through the shared helper the server uses, so the
+                // exported curve matches the one on screen.
+                sceneFunc={(ctx, shape) => {
+                  tracePathNodes(ctx as never, el.nodes || [], !!el.closed);
+                  // Only a closed path is fillable; filling an open one would
+                  // paint its implicit closing chord.
+                  if (el.closed) ctx.fillStrokeShape(shape);
+                  else ctx.strokeShape(shape);
+                }}
+                fill={hasGrad ? undefined : el.fill}
+                {...grad}
+                stroke={el.stroke || '#000000'}
+                strokeWidth={el.strokeWidth ?? 2}
+                hitStrokeWidth={Math.max(12, (el.strokeWidth ?? 2) + 8)}
+              />
+            );
+          }
+
+          case 'fill': {
+            const style = el.fillStyle;
+            if (!style) return null;
+            const grad =
+              style.type === 'gradient' && style.gradient
+                ? gradientFillProps(style.gradient, el.width, el.height)
+                : {};
+            return (
+              <Rect
+                key={el.id}
+                {...commonProps}
+                fill={
+                  style.type === 'solid'
+                    ? style.color || '#000000'
+                    : style.type === 'pattern'
+                      ? undefined
+                      : undefined
+                }
+                {...grad}
+                {...(style.type === 'pattern' && style.pattern
+                  ? patternFillProps(style.pattern)
+                  : {})}
+              />
+            );
+          }
+
+          // A raster layer is just a bitmap; it renders through the image node
+          // so crop/filters/opacity all keep working on painted content.
+          case 'raster':
           case 'icon':
-            return <IconNode key={el.id} element={el} onSelect={onSelect} onContextMenu={onContextMenu} />;
+            return el.type === 'raster' ? (
+              <ImageNode key={el.id} element={el} onSelect={onSelect} onContextMenu={onContextMenu} interactive={interactive} />
+            ) : (
+              <IconNode key={el.id} element={el} onSelect={onSelect} onContextMenu={onContextMenu} interactive={interactive} />
+            );
 
           default:
             return null;
         }
-      })}
-    </>
-  );
+  };
+
+  /**
+   * Render one scope of the layer tree.
+   *
+   * An adjustment layer transforms everything ALREADY accumulated in its scope,
+   * so the accumulated nodes get folded into an `AdjustmentScope` when one is
+   * reached — matching Photoshop, and matching what the server does by reading
+   * back the canvas at the same point. A clipped adjustment folds in only the
+   * single layer directly beneath it.
+   */
+  const renderNodes = (nodes: LayerNode[], seed: ReactNode[] = []): ReactNode[] =>
+    nodes.reduce<ReactNode[]>((acc, node) => {
+      const el = node.element;
+      if (el.hidden) return acc;
+
+      if (el.type === 'group') {
+        return [
+          ...acc,
+          <LayerGroup key={el.id} element={el} cacheKey={node.children.length}>
+            {renderNodes(node.children)}
+          </LayerGroup>,
+        ];
+      }
+
+      if (el.type === 'adjustment') {
+        if (!el.adjustment || !acc.length) return acc;
+        // Clipped: only the layer directly beneath. Otherwise: everything
+        // accumulated in this scope so far.
+        const scoped = el.clipped ? acc.slice(-1) : acc;
+        const kept = el.clipped ? acc.slice(0, -1) : [];
+        return [
+          ...kept,
+          <AdjustmentScope key={`adj-${el.id}`} adjustment={el.adjustment}>
+            {scoped}
+          </AdjustmentScope>,
+        ];
+      }
+
+      return [...acc, renderLeaf(el)];
+    }, seed);
+
+  return <>{renderNodes(tree, backdrop ? [backdrop] : [])}</>;
 };

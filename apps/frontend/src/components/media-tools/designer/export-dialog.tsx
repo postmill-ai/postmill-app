@@ -2,7 +2,7 @@
 
 import React, { FC, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { createRoot } from 'react-dom/client';
-import { Stage, Layer, Rect, Image as KonvaImage } from 'react-konva';
+import { Stage, Layer, Rect, Group, Image as KonvaImage } from 'react-konva';
 import type Konva from 'konva';
 import useSWR from 'swr';
 import { useFetch } from '@postmill-ai/helpers/utils/custom.fetch';
@@ -201,27 +201,37 @@ const renderOutputToBlob = async (
       root.render(
         <Stage ref={stageRef} width={output.width} height={output.height}>
           <Layer>
-            {!transparent && (
-              <Rect
-                x={0}
-                y={0}
-                width={output.width}
-                height={output.height}
-                fill={solidBg}
-                {...bgGrad}
-              />
-            )}
-            {!transparent && bg?.type === 'image' && bgImageEl && (
-              <KonvaImage
-                image={bgImageEl}
-                x={0}
-                y={0}
-                width={output.width}
-                height={output.height}
-                listening={false}
-              />
-            )}
-            <CanvasElements elements={output.children} onSelect={() => {}} />
+            {/* Passed as the backdrop rather than a sibling so an unclipped
+                adjustment layer transforms it too — the server reads the whole
+                page back, so a sibling background would export differently. */}
+            <CanvasElements
+              elements={output.children}
+              onSelect={() => {}}
+              backdrop={
+                transparent ? undefined : (
+                  <Group key="__backdrop" listening={false}>
+                    <Rect
+                      x={0}
+                      y={0}
+                      width={output.width}
+                      height={output.height}
+                      fill={solidBg}
+                      {...bgGrad}
+                    />
+                    {bg?.type === 'image' && bgImageEl && (
+                      <KonvaImage
+                        image={bgImageEl}
+                        x={0}
+                        y={0}
+                        width={output.width}
+                        height={output.height}
+                        listening={false}
+                      />
+                    )}
+                  </Group>
+                )
+              }
+            />
           </Layer>
         </Stage>
       );
