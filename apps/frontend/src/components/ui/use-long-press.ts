@@ -57,6 +57,28 @@ export function useLongPress<T = void>(
     e.stopPropagation();
   }, []);
 
+  const onTouchEnd = useCallback(
+    (e: React.TouchEvent) => {
+      if (firedRef.current) {
+        // The press fired and the menu is open. Cancelling touchend suppresses
+        // the whole compatibility mouse stream (mouseover/mousedown/mouseup/
+        // click) the browser would otherwise dispatch to this tile on finger
+        // release — the mousedown would hit ContextMenu's outside-listener and
+        // close the menu the moment the user lifts their finger, and the click
+        // would activate the tile underneath it.
+        e.preventDefault();
+        // A browser that still emits the click gets it swallowed by
+        // onClickCapture; if none comes, clear the flag on the next tick so a
+        // later tap isn't eaten.
+        setTimeout(() => {
+          firedRef.current = false;
+        }, 0);
+      }
+      clear();
+    },
+    [clear]
+  );
+
   /**
    * Handlers for one pressable element. A single hook instance can serve a whole
    * list — only one touch press can be in flight at a time — which is what lets
@@ -77,11 +99,11 @@ export function useLongPress<T = void>(
         }, delay);
       },
       onTouchMove,
-      onTouchEnd: clear,
+      onTouchEnd,
       onTouchCancel: clear,
       onClickCapture,
     }),
-    [onLongPress, delay, clear, onTouchMove, onClickCapture]
+    [onLongPress, delay, clear, onTouchMove, onTouchEnd, onClickCapture]
   );
 
   return { bind };

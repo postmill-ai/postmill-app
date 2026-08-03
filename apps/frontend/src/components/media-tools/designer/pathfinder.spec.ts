@@ -81,6 +81,19 @@ describe('pathfinder', () => {
     expect(pathfinder(a, b, 'divide')!.extra.length).toBeGreaterThan(0);
   });
 
+  it('keeps a disjoint unite as two elements instead of dropping the clip', () => {
+    const far = shape({ id: 'b', x: 200, y: 200 });
+    const r = pathfinder(a, far, 'unite')!;
+    expect(r.extra).toHaveLength(1);
+    expect(r.extra[0].x).toBeCloseTo(200, 3);
+  });
+
+  it('rejects a subtract that would punch a hole the path model cannot express', () => {
+    const inner = shape({ id: 'b', x: 10, y: 10, width: 20, height: 20 });
+    // clip wholly inside the subject → [subject, clip] rings, a hole.
+    expect(pathfinder(a, inner, 'subtract')).toBeNull();
+  });
+
   it('returns null when the operation leaves nothing', () => {
     const inner = shape({ id: 'a', x: 10, y: 10, width: 20, height: 20 });
     expect(pathfinder(inner, a, 'subtract')).toBeNull();

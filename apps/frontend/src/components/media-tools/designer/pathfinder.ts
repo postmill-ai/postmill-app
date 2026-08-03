@@ -3,6 +3,7 @@
 import {
   booleanPolygons,
   flattenPath,
+  pointInPolygon,
   polygonToNodes,
   type BooleanOp,
   type Point,
@@ -69,8 +70,9 @@ export interface PathfinderResult {
   /** The element to add, and the ids it replaces. */
   element: Partial<DesignerElement>;
   /**
-   * Extra subpaths, when the operation produced more than one region. `divide`
-   * is the reason this exists — it returns each region as its own element.
+   * Extra subpaths, when the operation produced more than one region.
+   * `divide` is the common case — it returns each region as its own
+   * element — but a disjoint unite/exclude lands here too.
    */
   extra: Partial<DesignerElement>[];
 }
@@ -119,18 +121,29 @@ export const pathfinder = (
     };
   };
 
-  // `divide` and a subtract-with-hole return several regions; every other op
-  // returns one outline, whose extra rings are holes of the same element.
+  // `divide` returns each region as its own element. Every other op yields one
+  // outline — but a disjoint unite/exclude still produces several STANDALONE
+  // regions, which must become their own elements or the shapes are silently
+  // lost (the clip element is consumed by the caller either way).
   const separate = op === 'divide';
-  const first = toElement(separate ? [result.polygons[0]] : result.polygons);
+  const rings = result.polygons;
+  if (!separate && rings.length > 1) {
+    // A ring fully inside the first is a HOLE (subtract/exclude with the clip
+    // contained in the subject). The single-ring path model cannot express
+    // holes, so reject rather than render the hole solid — wrong pixels are
+    // worse than no-op.
+    const hole = rings
+      .slice(1)
+      .some((ring) => ring.length > 0 && pointInPolygon(ring[0], rings[0]));
+    if (hole) return null;
+  }
+  const first = toElement([rings[0]]);
   if (!first) return null;
 
-  const extra = separate
-    ? result.polygons
-        .slice(1)
-        .map((poly) => toElement([poly]))
-        .filter((e): e is Partial<DesignerElement> => !!e)
-    : [];
+  const extra = rings
+    .slice(1)
+    .map((poly) => toElement([poly]))
+    .filter((e): e is Partial<DesignerElement> => !!e);
 
   return { element: first, extra };
 };

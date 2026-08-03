@@ -97,6 +97,10 @@ export const usePaintTools = ({ store, stageRef, output, fetchFn }: UsePaintTool
   const cloneAnchor = useRef<{ x: number; y: number } | null>(null);
   const selectionStart = useRef<{ x: number; y: number } | null>(null);
   const edgeField = useRef<{ edges: Uint8ClampedArray; w: number; h: number } | null>(null);
+  /** Per-stroke selection stencil, in layer space, built once at stroke start. */
+  const strokeMask = useRef<HTMLCanvasElement | null>(null);
+  /** Pre-stroke layer content outside the selection, restored after each batch. */
+  const strokeBase = useRef<HTMLCanvasElement | null>(null);
   /** Bumped after every stroke so the Konva image re-reads the buffer. */
   const [paintNonce, setPaintNonce] = useState(0);
 
@@ -308,17 +312,36 @@ export const usePaintTools = ({ store, stageRef, output, fetchFn }: UsePaintTool
         }
         if (data) {
           const o = store.getState().toolOptions['paint-bucket'] || {};
-          floodFill(
+          const rgb = hexToRgb(settings.color);
+          const filledMask = new Uint8Array(canvas.width * canvas.height);
+          const filled = floodFill(
             data,
             local.x,
             local.y,
-            hexToRgb(settings.color),
+            rgb,
             Number(o.tolerance ?? 32),
-            selection?.data
+            selection?.data,
+            filledMask
           );
-          // Write back only the filled pixels by using the result as the layer.
-          ctx.putImageData(data, 0, 0);
-          setPaintNonce((n) => n + 1);
+          if (filled > 0) {
+            // Write back ONLY the filled pixels: the composite the fill matched
+            // against contains the backdrop, and committing that would bake a
+            // copy of every layer beneath into this one.
+            const base = ctx.getImageData(0, 0, canvas.width, canvas.height);
+            for (let p = 0; p < filledMask.length; p++) {
+              if (!filledMask[p]) continue;
+              const off = p * 4;
+              base.data[off] = rgb[0];
+              base.data[off + 1] = rgb[1];
+              base.data[off + 2] = rgb[2];
+              base.data[off + 3] = 255;
+            }
+            ctx.putImageData(base, 0, 0);
+            // The bucket is a click, not a stroke — but it still commits
+            // through the stroke path (upload + history) on mouseup.
+            painting.current = true;
+            setPaintNonce((n) => n + 1);
+          }
         }
         return;
       }
@@ -329,9 +352,9 @@ export const usePaintTools = ({ store, stageRef, output, fetchFn }: UsePaintTool
       pushUndoRegion(target.id, local.x - r, local.y - r, r * 2, r * 2);
       const ctx = canvas.getContext('2d');
       if (ctx) {
-        applyClip(ctx, canvas, selection, target);
+        beginStrokeClip(canvas, selection, target, strokeMask, strokeBase);
         stamp(toolId as PaintToolId, { ctx, backdrop: backdrop.current, settings }, local.x, local.y);
-        ctx.restore();
+        applyStrokeClip(ctx, strokeMask, strokeBase);
         setPaintNonce((n) => n + 1);
       }
     },
@@ -342,25 +365,45 @@ export const usePaintTools = ({ store, stageRef, output, fetchFn }: UsePaintTool
     (toolId: string, point: { x: number; y: number }) => {
       if (!painting.current || !activeRasterId.current) return;
       const state = store.getState();
-      const target = ((state.doc.outputs[state.currentOutput] as DesignerOutput)?.children || [])
-        .find((c: DesignerElement) => c.id === activeRasterId.current);
+      const out = state.doc.outputs[state.currentOutput];
+      const children = (out as DesignerOutput)?.children || [];
+      // Only the target's position is read, and three kinds of paint target
+      // exist: an element, a layer mask (keyed `${owner.id}:mask`, so the
+      // owner's box), or a raster CLIP in a video document (no children at
+      // all). Looking only at elements left the last two stamping once and
+      // never dragging.
+      let origin: { x: number; y: number } | undefined = children.find(
+        (c: DesignerElement) => c.id === activeRasterId.current
+      );
+      if (!origin && maskOwnerId.current) {
+        origin = children.find((c: DesignerElement) => c.id === maskOwnerId.current);
+      }
+      if (!origin) {
+        const tracks = (out as unknown as VideoOutput)?.tracks || [];
+        for (const track of tracks) {
+          const clip = track.clips.find((c) => c.id === activeRasterId.current);
+          if (clip) {
+            origin = { x: clip.x ?? 0, y: clip.y ?? 0 };
+            break;
+          }
+        }
+      }
       const canvas = getBuffer(activeRasterId.current);
       const ctx = canvas?.getContext('2d');
-      if (!target || !canvas || !ctx) return;
+      if (!origin || !canvas || !ctx) return;
 
-      const local = { x: point.x - target.x, y: point.y - target.y };
+      const local = { x: point.x - origin.x, y: point.y - origin.y };
       const settings = settingsFor(toolId);
       const from = lastPoint.current || local;
 
-      applyClip(ctx, canvas, selection, target);
       for (const p of stampPositions(from, local, settings.size)) {
         stamp(toolId as PaintToolId, { ctx, backdrop: backdrop.current, settings }, p.x, p.y);
       }
-      ctx.restore();
+      applyStrokeClip(ctx, strokeMask, strokeBase);
       lastPoint.current = local;
       setPaintNonce((n) => n + 1);
     },
-    [settingsFor, selection, store]
+    [settingsFor, store]
   );
 
   /** Flush the painted buffer to storage so it survives reload and export. */
@@ -373,6 +416,8 @@ export const usePaintTools = ({ store, stageRef, output, fetchFn }: UsePaintTool
     lastPoint.current = null;
     const id = activeRasterId.current;
     backdrop.current = null;
+    strokeMask.current = null;
+    strokeBase.current = null;
 
     const result = await commitBuffer(id, fetchFn);
     if (result) {
@@ -598,41 +643,79 @@ export const usePaintTools = ({ store, stageRef, output, fetchFn }: UsePaintTool
 };
 
 /**
- * Clip subsequent drawing to the active selection. Leaves the context saved —
- * callers restore. This is what makes "paint only inside the marching ants"
- * work for every brush-family tool at once.
+ * Snapshot the selection constraint for a stroke.
+ *
+ * The previous approach painted the stencil INTO the layer and relied on
+ * `source-atop` for the stamps — but the stencil itself stayed in the layer
+ * (the whole selection ended up painted black), and the eraser's own
+ * `destination-out` overwrote the composite op, so it ignored the selection
+ * entirely. Instead the constraint is kept as two canvases: the selection
+ * resampled into the layer's pixel space, and the layer's pre-stroke content
+ * with the selected region knocked out.
  */
-const applyClip = (
-  ctx: CanvasRenderingContext2D,
+const beginStrokeClip = (
   canvas: HTMLCanvasElement,
   selection: SelectionMask | null,
-  target: DesignerElement
+  target: DesignerElement,
+  strokeMask: { current: HTMLCanvasElement | null },
+  strokeBase: { current: HTMLCanvasElement | null }
 ): void => {
-  ctx.save();
+  strokeMask.current = null;
+  strokeBase.current = null;
   if (!selection) return;
 
-  const clip = document.createElement('canvas');
-  clip.width = canvas.width;
-  clip.height = canvas.height;
-  const cctx = clip.getContext('2d');
-  if (!cctx) return;
+  const mask = document.createElement('canvas');
+  mask.width = canvas.width;
+  mask.height = canvas.height;
+  const mctx = mask.getContext('2d');
+  if (!mctx) return;
 
-  const img = cctx.createImageData(clip.width, clip.height);
-  for (let y = 0; y < clip.height; y++) {
-    for (let x = 0; x < clip.width; x++) {
+  const img = mctx.createImageData(mask.width, mask.height);
+  for (let y = 0; y < mask.height; y++) {
+    for (let x = 0; x < mask.width; x++) {
       const docX = Math.round(x + target.x);
       const docY = Math.round(y + target.y);
       const inside =
         docX >= 0 && docY >= 0 && docX < selection.width && docY < selection.height
           ? selection.data[docY * selection.width + docX]
           : 0;
-      const p = (y * clip.width + x) * 4;
-      img.data[p + 3] = inside;
+      // Binary on purpose: `destination-in` multiplies alpha, so a feathered
+      // stencil would decay a little more on every batch it is re-applied.
+      img.data[(y * mask.width + x) * 4 + 3] = inside ? 255 : 0;
     }
   }
-  cctx.putImageData(img, 0, 0);
-  // Everything drawn from here is masked by the selection's alpha.
-  ctx.globalCompositeOperation = 'source-over';
-  ctx.drawImage(clip, 0, 0);
-  ctx.globalCompositeOperation = 'source-atop';
+  mctx.putImageData(img, 0, 0);
+
+  const base = document.createElement('canvas');
+  base.width = canvas.width;
+  base.height = canvas.height;
+  const bctx = base.getContext('2d');
+  if (!bctx) return;
+  bctx.drawImage(canvas, 0, 0);
+  bctx.globalCompositeOperation = 'destination-out';
+  bctx.drawImage(mask, 0, 0);
+
+  strokeMask.current = mask;
+  strokeBase.current = base;
+};
+
+/**
+ * Re-impose the selection after a stamp batch: keep what the stroke painted
+ * inside the ants, put back what was there outside them. Idempotent, so it
+ * can run after every pointer move of the stroke.
+ */
+const applyStrokeClip = (
+  ctx: CanvasRenderingContext2D,
+  strokeMask: { current: HTMLCanvasElement | null },
+  strokeBase: { current: HTMLCanvasElement | null }
+): void => {
+  const mask = strokeMask.current;
+  const base = strokeBase.current;
+  if (!mask || !base) return;
+  ctx.save();
+  ctx.globalCompositeOperation = 'destination-in';
+  ctx.drawImage(mask, 0, 0);
+  ctx.globalCompositeOperation = 'destination-over';
+  ctx.drawImage(base, 0, 0);
+  ctx.restore();
 };

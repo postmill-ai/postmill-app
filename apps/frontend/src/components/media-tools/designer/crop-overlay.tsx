@@ -99,10 +99,6 @@ export const CropOverlay: FC<CropOverlayProps> = ({
       if (id.includes('right')) { width += dxFrac; }
       if (id.includes('top')) { y += dyFrac; height -= dyFrac; }
       if (id.includes('bottom')) { height += dyFrac; }
-      if (id === 'left') { x += dxFrac; width -= dxFrac; }
-      if (id === 'right') { width += dxFrac; }
-      if (id === 'top') { y += dyFrac; height -= dyFrac; }
-      if (id === 'bottom') { height += dyFrac; }
       const next = normaliseFraction({ x, y, width, height });
       return constrainFractionToRatio(next, ratioValue, element.width, element.height);
     });

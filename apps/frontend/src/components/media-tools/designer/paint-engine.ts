@@ -306,7 +306,10 @@ export const hexToRgb = (hex: string): [number, number, number] => {
  * Scanline flood fill for the Paint Bucket.
  *
  * `mask`, when supplied, is the active pixel selection: fill never escapes it,
- * which is how selections constrain painting.
+ * which is how selections constrain painting. `outFilled`, when supplied, is
+ * set to 1 at every filled pixel — the caller fills against a composite (so
+ * the colour match sees what the user sees) but must write only these pixels
+ * back to the layer.
  */
 export const floodFill = (
   data: ImageData,
@@ -314,7 +317,8 @@ export const floodFill = (
   startY: number,
   color: [number, number, number],
   tolerance = 32,
-  mask?: Uint8ClampedArray
+  mask?: Uint8ClampedArray,
+  outFilled?: Uint8Array
 ): number => {
   const { width: w, height: h } = data;
   const d = data.data;
@@ -353,6 +357,7 @@ export const floodFill = (
       if (mask && mask[p] === 0) continue;
       const o = p * 4;
       d[o] = color[0]; d[o + 1] = color[1]; d[o + 2] = color[2]; d[o + 3] = 255;
+      if (outFilled) outFilled[p] = 1;
       filled++;
       if (y > 0 && !seen[(y - 1) * w + i] && matches(((y - 1) * w + i) * 4)) stack.push(i, y - 1);
       if (y < h - 1 && !seen[(y + 1) * w + i] && matches(((y + 1) * w + i) * 4)) stack.push(i, y + 1);

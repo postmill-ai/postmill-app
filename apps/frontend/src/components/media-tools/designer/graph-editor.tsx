@@ -170,11 +170,13 @@ export const GraphEditor: FC<GraphEditorProps> = ({
 
   const path = useMemo(() => {
     if (!active) return '';
+    // Inlined from `toY` so the dependency list is complete without a disable.
+    const y = (v: number) =>
+      H - ((v - range.min) / Math.max(1e-6, range.max - range.min)) * H;
     const samples = graphSamples(clip, active, totalMs);
     return samples
-      .map((v, i) => `${i === 0 ? 'M' : 'L'}${(i / (samples.length - 1)) * W},${toY(v)}`)
+      .map((v, i) => `${i === 0 ? 'M' : 'L'}${(i / (samples.length - 1)) * W},${y(v)}`)
       .join(' ');
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [clip, active, totalMs, range.min, range.max]);
 
   if (!active) {

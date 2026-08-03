@@ -1122,8 +1122,15 @@ export const DesignerCanvas: FC<CanvasProps> = ({
   );
 
   const handleStageDblClick = useCallback(
-     
+
     (e: Konva.KonvaEventObject<any>) => {
+      // The polygonal lasso's gesture spans several clicks; a double-click is
+      // what closes it (the two extra vertices it adds are coincident and
+      // harmless to the polygon fill).
+      if (effectiveTool === 'lasso-polygonal') {
+        paint.closePolygonalLasso(!!e.evt?.shiftKey, !!e.evt?.altKey);
+        return;
+      }
       const target = e.target;
       const id = target.id() || target.getParent()?.id();
       if (id) {
@@ -1131,7 +1138,7 @@ export const DesignerCanvas: FC<CanvasProps> = ({
         if (el?.type === 'text') setEditingTextId(id);
       }
     },
-    [output]
+    [output, effectiveTool, paint]
   );
 
   // Drop from panels (designer elements) and OS file drops.

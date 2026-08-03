@@ -92,6 +92,34 @@ describe('useLongPress', () => {
     expect(onLongPress).not.toHaveBeenCalled();
   });
 
+  it('cancels the touchend after firing, suppressing the compatibility mouse stream', () => {
+    // A fired long-press opens the context menu while the finger is still down.
+    // Without preventDefault the browser dispatches a synthetic mousedown to the
+    // tile on finger release, which ContextMenu's outside-listener reads as
+    // "tap away" — the menu would close the instant the user lifts their finger.
+    // (fireEvent returns false when the handler called preventDefault.)
+    const onLongPress = vi.fn();
+    render(<Tile onLongPress={onLongPress} onClick={vi.fn()} />);
+    const tile = screen.getByRole('button');
+
+    fireEvent.touchStart(tile, touch(0, 0));
+    vi.advanceTimersByTime(500);
+
+    expect(fireEvent.touchEnd(tile)).toBe(false);
+  });
+
+  it('does not cancel the touchend of a normal tap', () => {
+    // The tap's synthesized click is what activates the tile.
+    const onLongPress = vi.fn();
+    render(<Tile onLongPress={onLongPress} onClick={vi.fn()} />);
+    const tile = screen.getByRole('button');
+
+    fireEvent.touchStart(tile, touch(0, 0));
+    vi.advanceTimersByTime(120);
+
+    expect(fireEvent.touchEnd(tile)).toBe(true);
+  });
+
   it('is cancelled by finger drift beyond the tolerance (a scroll)', () => {
     const onLongPress = vi.fn();
     render(<Tile onLongPress={onLongPress} onClick={vi.fn()} />);
