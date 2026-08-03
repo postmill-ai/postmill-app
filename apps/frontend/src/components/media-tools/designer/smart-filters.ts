@@ -2,7 +2,10 @@
 
 import { runFilter } from './filter-runner';
 import { commitBuffer, seedBufferFromImage } from './raster-layers';
-import { filterById } from '@postmill-ai/nestjs-libraries/media/designer-doc/filter-descriptors';
+import {
+  enabledSmartFilters,
+  smartFilterSource,
+} from '@postmill-ai/nestjs-libraries/media/designer-doc/smart-filter-stack';
 import { MAX_SMART_FILTERS } from '@postmill-ai/nestjs-libraries/media/designer-doc/designer-doc.limits';
 import type {
   DesignerElement,
@@ -67,15 +70,41 @@ export const reorderSmartFilter = (
   return list;
 };
 
+/**
+ * What size a bake runs at: the SOURCE's own dimensions, never the element's
+ * box.
+ *
+ * Baking into the box stretched the source to fit — the 5-argument `drawImage`
+ * ignores aspect — so adding any filter to a `fitMode: 'cover'` photo whose
+ * aspect differed from its frame silently squashed it, and left
+ * `naturalWidth`/`naturalHeight` describing an image that no longer existed. A
+ * stack is a pixel operation; it must not move geometry.
+ *
+ * It also has to match what the server renderer does with the same recipe, or
+ * one document renders two ways — and spatial filters are resolution-dependent,
+ * so "the source's own size" is the only definition both can reach without also
+ * agreeing on layout.
+ */
+export const bakeDimensions = (img: {
+  naturalWidth?: number;
+  naturalHeight?: number;
+  width?: number;
+  height?: number;
+}): { width: number; height: number } => ({
+  width: Math.max(1, Math.round(img.naturalWidth || img.width || 1)),
+  height: Math.max(1, Math.round(img.naturalHeight || img.height || 1)),
+});
+
 /** Load an image URL into a fresh canvas, or null if it cannot be read. */
-const loadToCanvas = (src: string, width: number, height: number) =>
+const loadToCanvas = (src: string) =>
   new Promise<HTMLCanvasElement | null>((resolve) => {
     const img = new Image();
     img.crossOrigin = 'anonymous';
     img.onload = () => {
       const canvas = document.createElement('canvas');
-      canvas.width = Math.max(1, Math.round(width || img.naturalWidth));
-      canvas.height = Math.max(1, Math.round(height || img.naturalHeight));
+      const { width, height } = bakeDimensions(img);
+      canvas.width = width;
+      canvas.height = height;
       canvas.getContext('2d')?.drawImage(img, 0, 0, canvas.width, canvas.height);
       resolve(canvas);
     };
@@ -91,14 +120,10 @@ export interface RebakeResult {
 /**
  * Which pixels a re-bake reads from.
  *
- * `originalSrc` always wins. Falling back to `src` is only for the very first
- * bake, before the original has been frozen — after that, reading `src` would
- * feed the already-filtered bitmap back through the stack and compound the
- * effect on every parameter tweak.
+ * Re-exported from the shared module so the client and the server renderer
+ * cannot drift on the one rule that matters most here.
  */
-export const bakeSource = (
-  element: Pick<DesignerElement, 'originalSrc' | 'src'>
-): string | undefined => element.originalSrc || element.src;
+export const bakeSource = smartFilterSource;
 
 /**
  * Re-run a layer's whole stack from its original pixels and upload the result.
@@ -106,6 +131,10 @@ export const bakeSource = (
  * Always from `originalSrc`, never from the current `src` — re-baking the
  * already-baked bitmap compounds the effect on every parameter tweak, which is
  * the trap this whole design exists to avoid.
+ *
+ * This runs the stack through the WORKER, which the server cannot do; what both
+ * sides share is which entries apply and in what order (`enabledSmartFilters`)
+ * and which pixels they start from (`smartFilterSource`).
  */
 export const rebakeSmartFilters = async (
   element: Pick<
@@ -119,7 +148,7 @@ export const rebakeSmartFilters = async (
   if (!source) return null;
 
   const bakeId = `${element.id}:smart`;
-  const canvas = await loadToCanvas(source, element.width, element.height);
+  const canvas = await loadToCanvas(source);
   if (!canvas) return null;
   const ctx = canvas.getContext('2d');
   if (!ctx) return null;
@@ -132,9 +161,7 @@ export const rebakeSmartFilters = async (
     return null;
   }
 
-  for (const entry of element.smartFilters || []) {
-    if (entry.enabled === false) continue;
-    if (!filterById(entry.id)) continue;
+  for (const entry of enabledSmartFilters(element.smartFilters)) {
     if (options.signal?.aborted) return null;
     const result = await runFilter(
       data,

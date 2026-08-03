@@ -44,8 +44,29 @@ import {
 } from '../designer-doc/pixel-ops';
 import { drawPatternTile, tileSizeFor } from '../designer-doc/pattern-tiles';
 import { splitStyles, styleOffset, styleBlur, stylePadding } from '../designer-doc/layer-styles';
+import {
+  applySmartFilters,
+  hasSmartFilters,
+  smartFilterCacheKey,
+  smartFilterSource,
+} from '../designer-doc/smart-filter-stack';
 
 const MAX_IMAGE_BYTES = 25 * 1024 * 1024;
+
+/**
+ * Pixel ceiling for evaluating a smart-filter stack.
+ *
+ * `MAX_IMAGE_BYTES` bounds the COMPRESSED bytes; a 25 MB JPEG can decode to
+ * well over 100 megapixels, and the spatial filters are super-linear in area.
+ * Past this ceiling the source is evaluated downscaled and drawn back up, which
+ * costs sharpness on an image that is almost certainly being drawn into a much
+ * smaller box anyway — and is a great deal better than either stalling the
+ * render or dropping the treatment silently.
+ */
+const MAX_SMART_FILTER_PIXELS = 16_000_000;
+
+/** How many evaluated stacks to keep. Each entry holds a decoded canvas. */
+const SMART_FILTER_CACHE_MAX = 6;
 
 // "Busy backdrop" thresholds for `auditTextContrast`. The WCAG ratio is
 // computed against the MEAN of the sampled box, so a photograph with bright
@@ -2194,7 +2215,7 @@ export class DesignRenderService {
   }
 
   private async drawImage(ctx: any, el: DesignerElement): Promise<void> {
-    const img = await this.loadImageSafe(el.src);
+    const img = await this.loadElementImage(el);
     if (!img) return;
 
     ctx.save();
@@ -2383,6 +2404,93 @@ export class DesignRenderService {
    */
   private measureLine(ctx: any, line: string, letterSpacing: number): number {
     return measureLineWidth(line, 0, letterSpacing, (t) => ctx.measureText(t).width);
+  }
+
+  /**
+   * Evaluated smart-filter stacks, keyed by source URL + recipe.
+   *
+   * CONTENT-ADDRESSED, which is what makes a single shared cache safe here: the
+   * key names the exact pixels in and the exact operations over them, so two
+   * concurrent renders — or two orgs that happen to reference the same URL —
+   * asking for the same key genuinely want the same answer. Scoping it to one
+   * render pass instead would need either a context threaded through every draw
+   * call or a mutable field that two overlapping renders would stomp on.
+   *
+   * The one assumption is that a URL's bytes do not change under it. That holds
+   * by contract: `originalSrc` is written once and never rewritten, and a
+   * re-bake uploads to a new file rather than overwriting.
+   */
+  private readonly _smartFilterCache = new Map<string, any>();
+
+  private _cacheSmartFilter(key: string, canvas: any): void {
+    this._smartFilterCache.set(key, canvas);
+    while (this._smartFilterCache.size > SMART_FILTER_CACHE_MAX) {
+      const oldest = this._smartFilterCache.keys().next().value;
+      if (oldest === undefined) break;
+      this._smartFilterCache.delete(oldest);
+    }
+  }
+
+  /**
+   * The bitmap an element draws, with its smart-filter stack applied.
+   *
+   * Smart filters are stored as a RECIPE plus the pre-filter pixels, and the
+   * client re-bakes them into `src` to keep the canvas responsive. That made the
+   * renderers' job free — they drew a plain bitmap — but it also meant the
+   * recipe only ever became pixels if a browser was involved. A document built
+   * through `POST /media/apply-ops`, through the SDK, or by the AI Designer
+   * rendered completely unfiltered, and since the AI Designer's vision critic
+   * reviews the SERVER render, a treatment it asked for was invisible to the
+   * design, the preview and the critique alike.
+   *
+   * So the recipe is evaluated here too. The client bake stays, but as an
+   * optimisation rather than a correctness requirement: whichever way the
+   * document arrived, this is what it looks like.
+   */
+  private async loadElementImage(el: DesignerElement): Promise<any | null> {
+    if (!hasSmartFilters(el)) return this.loadImageSafe(el.src);
+
+    const source = smartFilterSource(el);
+    if (!source) return null;
+
+    const key = smartFilterCacheKey(source, el.smartFilters);
+    const cached = this._smartFilterCache.get(key);
+    if (cached) return cached;
+
+    const img = await this.loadImageSafe(source);
+    if (!img) return null;
+
+    try {
+      const { createCanvas } = await loadCanvasModule();
+      const srcW = Math.max(1, Math.round(img.naturalWidth || img.width));
+      const srcH = Math.max(1, Math.round(img.naturalHeight || img.height));
+
+      // Evaluate at the SOURCE's own resolution, not the element's box. A stack
+      // is a pixel operation, not a geometry one: keeping the source dimensions
+      // is what leaves `naturalWidth`/`naturalHeight`, `crop`, `fitMode` and
+      // `focalPoint` still meaning what they meant before a filter was added.
+      const area = srcW * srcH;
+      const scale = area > MAX_SMART_FILTER_PIXELS ? Math.sqrt(MAX_SMART_FILTER_PIXELS / area) : 1;
+      const w = Math.max(1, Math.round(srcW * scale));
+      const h = Math.max(1, Math.round(srcH * scale));
+
+      const canvas = createCanvas(w, h);
+      const cctx = canvas.getContext('2d');
+      cctx.drawImage(img, 0, 0, w, h);
+      const data = cctx.getImageData(0, 0, w, h);
+      applySmartFilters(data, el.smartFilters);
+      cctx.putImageData(data, 0, 0);
+
+      this._cacheSmartFilter(key, canvas);
+      return canvas;
+    } catch (err) {
+      // Fail soft, as everything else on the draw path does: an unfiltered
+      // image is a worse design, a missing one is a broken render.
+      this._logger.warn(
+        `Smart filters skipped for element ${el?.id}: ${(err as Error)?.message}`
+      );
+      return img;
+    }
   }
 
   private async loadImageSafe(src?: string): Promise<any | null> {

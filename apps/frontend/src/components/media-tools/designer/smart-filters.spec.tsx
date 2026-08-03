@@ -3,6 +3,7 @@ import { render, screen, fireEvent, cleanup } from '@testing-library/react';
 import React from 'react';
 import {
   addSmartFilter,
+  bakeDimensions,
   bakeSource,
   flattenSmartFilters,
   removeSmartFilter,
@@ -123,6 +124,31 @@ describe('bakeSource', () => {
 
   it('has nothing to read when the layer has no pixels', () => {
     expect(bakeSource({})).toBeUndefined();
+  });
+});
+
+describe('bakeDimensions', () => {
+  it('bakes at the source resolution, not the element box', () => {
+    // The regression: baking into the box stretched the source to fit, so
+    // adding any filter to a cover-fit photo whose aspect differed from its
+    // frame silently squashed it. A stack is a pixel operation, never a
+    // geometry one — and the server renderer evaluates the same recipe at
+    // source resolution, so anything else renders one document two ways.
+    expect(bakeDimensions({ naturalWidth: 4000, naturalHeight: 1000 })).toEqual({
+      width: 4000,
+      height: 1000,
+    });
+  });
+
+  it('falls back to width/height when natural dimensions are unavailable', () => {
+    expect(bakeDimensions({ width: 320, height: 240 })).toEqual({ width: 320, height: 240 });
+  });
+
+  it('rounds and never returns a zero-sized canvas', () => {
+    expect(bakeDimensions({ naturalWidth: 10.4, naturalHeight: 0 })).toEqual({
+      width: 10,
+      height: 1,
+    });
   });
 });
 
