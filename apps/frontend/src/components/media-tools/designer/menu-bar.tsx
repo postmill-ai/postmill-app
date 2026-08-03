@@ -89,8 +89,10 @@ const ItemButton: FC<{ action: DesignerAction; onRun: () => void; indent?: boole
       className={clsx(
         'w-full flex items-center gap-3 px-3 py-1.5 text-left text-[13px] rounded transition-colors',
         indent && 'pl-6',
+        // Disabled still has to be READABLE, just clearly inert — it names the
+        // command you'd get if you selected something first.
         disabled
-          ? 'text-textColor/30 cursor-default'
+          ? 'text-textColor/45 cursor-default'
           : 'text-textColor hover:bg-studioBorder/30'
       )}
     >
@@ -99,7 +101,15 @@ const ItemButton: FC<{ action: DesignerAction; onRun: () => void; indent?: boole
       </span>
       <span className="flex-1 truncate">{t(actionLabelKey(action), actionLabel(action))}</span>
       {action.shortcut && (
-        <span className="text-[11px] text-textColor/40 shrink-0">{action.shortcut}</span>
+        <span
+          className={clsx(
+            'text-[11px] shrink-0',
+            // Never brighter than the label it belongs to.
+            disabled ? 'text-textColor/30' : 'text-textColor/40'
+          )}
+        >
+          {action.shortcut}
+        </span>
       )}
     </button>
   );
