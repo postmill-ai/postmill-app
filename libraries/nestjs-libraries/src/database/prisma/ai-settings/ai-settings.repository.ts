@@ -279,7 +279,7 @@ export class AiSettingsRepository {
     });
   }
 
-  getMediaJobs(
+  async getMediaJobs(
     organizationId: string,
     limit = 50,
     opts: { status?: string; provider?: string; cursor?: string } = {}
@@ -296,17 +296,30 @@ export class AiSettingsRepository {
         : opts.status
           ? { status: opts.status }
           : {};
-    return this._aiMediaJob.model.aIMediaJob.findMany({
+    const query = {
       where: {
         organizationId,
         ...statusWhere,
         ...(opts.provider ? { provider: opts.provider } : {}),
       },
-      orderBy: { createdAt: 'desc' },
+      orderBy: { createdAt: 'desc' as const },
       take: limit,
       // Skip the cursor row itself so pages don't repeat their boundary job.
       ...(opts.cursor ? { cursor: { id: opts.cursor }, skip: 1 } : {}),
-    });
+    };
+    try {
+      return await this._aiMediaJob.model.aIMediaJob.findMany(query);
+    } catch (err) {
+      // A stale or forged cursor id makes Prisma throw (the anchor row no
+      // longer exists); serve the first page instead of 500-ing the endpoint.
+      if (opts.cursor) {
+        return this.getMediaJobs(organizationId, limit, {
+          ...opts,
+          cursor: undefined,
+        });
+      }
+      throw err;
+    }
   }
 
   async getMediaJobStatusCounts(organizationId: string) {

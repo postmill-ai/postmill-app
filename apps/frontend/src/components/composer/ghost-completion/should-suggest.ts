@@ -19,6 +19,15 @@
 export const MIN_PREFIX_CHARS = 10;
 
 /**
+ * The server's SuggestCompletionDto caps `prefix` at 4000 chars
+ * (`@MaxLength(4000)` under a whitelist + forbidNonWhitelisted pipe), and the
+ * route only reads the last 800 chars anyway. Send more than the cap and every
+ * debounced pause on a long draft 400s — no suggestion, ever. Keep in step
+ * with the DTO in `ai-user.controller.ts`.
+ */
+export const MAX_PREFIX_CHARS = 4000;
+
+/**
  * How long typing must be still before a request goes out.
  *
  * This is added to the model round-trip, so it dominates how responsive the

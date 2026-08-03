@@ -752,6 +752,28 @@ describe('AiSettingsRepository', () => {
         skip: 1,
       });
     });
+
+    it('falls back to the first page when the cursor row no longer exists', async () => {
+      mockMediaJob.findMany
+        .mockRejectedValueOnce(new Error('RecordNotFound'))
+        .mockResolvedValueOnce([{ id: 'job-1' }]);
+
+      const result = await repository.getMediaJobs('org1', 10, { cursor: 'gone' });
+
+      expect(mockMediaJob.findMany).toHaveBeenCalledTimes(2);
+      expect(mockMediaJob.findMany).toHaveBeenLastCalledWith({
+        where: { organizationId: 'org1' },
+        orderBy: { createdAt: 'desc' },
+        take: 10,
+      });
+      expect(result).toEqual([{ id: 'job-1' }]);
+    });
+
+    it('rethrows when the failure is not cursor-related', async () => {
+      mockMediaJob.findMany.mockRejectedValueOnce(new Error('connection lost'));
+
+      await expect(repository.getMediaJobs('org1', 10)).rejects.toThrow('connection lost');
+    });
   });
 
   describe('countInFlightVideoExports (F4)', () => {

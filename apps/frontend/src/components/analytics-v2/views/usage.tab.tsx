@@ -49,7 +49,10 @@ export const UsageTab: FC = () => {
   const { data: usage, isLoading: usageLoading, error: usageError } = useUsage();
   const { data: aiUsage, error: aiError, isLoading: aiLoading } = useAiUsage();
 
-  if (usageLoading && aiLoading) return <TabSkeleton variant="list" />;
+  // `||`, not `&&`: when billing is off (or forbidden) the plan half settles
+  // immediately, and `&&` would flash the "unavailable"/"billing access" empty
+  // state while the AI half is still loading, then swap.
+  if (usageLoading || aiLoading) return <TabSkeleton variant="list" />;
 
   const hasPlan = hasPlanUsage(usage);
   const hasAi = !aiError && !!aiUsage;

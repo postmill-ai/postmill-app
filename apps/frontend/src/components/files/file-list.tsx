@@ -4,6 +4,7 @@ import React, { FC, useCallback, useEffect, useMemo, useRef, useState } from 're
 import { useMediaDirectory } from '@postmill-ai/react/helpers/use.media.directory';
 import { hasExtension } from '@postmill-ai/helpers/utils/has.extension';
 import { useFetch } from '@postmill-ai/helpers/utils/custom.fetch';
+import { useToaster } from '@postmill-ai/react/toaster/toaster';
 import { useT } from '@postmill-ai/react/translation/get.transation.service.client';
 import i18next from '@postmill-ai/react/translation/i18next';
 import clsx from 'clsx';
@@ -77,6 +78,7 @@ export const FileList: FC<{
 }) => {
   const mediaDirectory = useMediaDirectory();
   const fetch = useFetch();
+  const toaster = useToaster();
   const t = useT();
   const [renamingId, setRenamingId] = useState<string | null>(null);
   const [renamingName, setRenamingName] = useState('');
@@ -100,15 +102,19 @@ export const FileList: FC<{
     if (!name) return;
     savingRef.current = true;
     try {
-      await fetch(`/files/${id}/rename`, {
+      const res = await fetch(`/files/${id}/rename`, {
         method: 'PUT',
         body: JSON.stringify({ name }),
       });
+      if (!res.ok) {
+        toaster.show(t('failed_to_rename_file', 'Failed to rename file'), 'warning');
+        return;
+      }
       onRefresh?.();
     } finally {
       savingRef.current = false;
     }
-  }, [fetch, onRefresh]);
+  }, [fetch, onRefresh, toaster, t]);
 
   const startRename = useCallback((file: FileItem) => {
     setRenamingId(file.id);

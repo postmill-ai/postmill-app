@@ -16,6 +16,7 @@ import {
   normalizeSuggestion,
   withJoiningSpace,
   SUGGEST_DEBOUNCE_MS,
+  MAX_PREFIX_CHARS,
 } from './should-suggest';
 import { useInlineSuggestPref } from './use-inline-suggest-pref';
 
@@ -173,7 +174,10 @@ export const useGhostCompletion = (editor: any) => {
 
       timerRef.current = setTimeout(() => {
         timerRef.current = null;
-        request(textBefore, cacheKey)
+        // Slice to the DTO's @MaxLength(4000): the server only reads the tail,
+        // and an over-cap prefix 400s under forbidNonWhitelisted. The cache key
+        // already keys on the tail, so this changes nothing but the wire size.
+        request(textBefore.slice(-MAX_PREFIX_CHARS), cacheKey)
           .then((raw) => {
             // Everything below guards against acting on a stale world. The
             // composer remounts this editor aggressively (channel switch,

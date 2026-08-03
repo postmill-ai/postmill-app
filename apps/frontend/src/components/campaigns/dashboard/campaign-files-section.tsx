@@ -321,7 +321,7 @@ export const CampaignFilesSection: FC<{
         </div>
       ) : count === 0 ? (
         <div className="text-[13px] text-newTableText text-center py-[24px]">
-          {t('no_tagged_files', 'No files yet. Click Upload to add files to this campaign.')}
+          {t('no_tagged_files', 'No files yet. Click Add files to attach files to this campaign.')}
         </div>
       ) : (
         <div

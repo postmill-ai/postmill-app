@@ -294,26 +294,34 @@ export const FileManager: FC<{
         file.originalName || file.name,
         t('rename_file', 'Rename file'),
         async (name) => {
-          await fetch(`/files/${file.id}/rename`, {
+          const res = await fetch(`/files/${file.id}/rename`, {
             method: 'PUT',
             body: JSON.stringify({ name }),
           });
+          if (!res.ok) {
+            toaster.show(t('failed_to_rename_file', 'Failed to rename file'), 'warning');
+            return;
+          }
           refresh();
         }
       ),
-    [openRenameDialog, fetch, refresh, t]
+    [openRenameDialog, fetch, refresh, toaster, t]
   );
 
   const renameFolder = useCallback(
     (folder: FolderItem) =>
       openRenameDialog(folder.name, t('rename_folder', 'Rename folder'), async (name) => {
-        await fetch(`/files/folders/${folder.id}`, {
+        const res = await fetch(`/files/folders/${folder.id}`, {
           method: 'PUT',
           body: JSON.stringify({ name }),
         });
+        if (!res.ok) {
+          toaster.show(t('failed_to_rename_folder', 'Failed to rename folder'), 'warning');
+          return;
+        }
         refresh();
       }),
-    [openRenameDialog, fetch, refresh, t]
+    [openRenameDialog, fetch, refresh, toaster, t]
   );
 
   const deleteFile = useCallback(

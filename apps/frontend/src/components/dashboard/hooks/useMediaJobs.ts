@@ -32,7 +32,7 @@ export interface MediaJobsResponse {
 const isActive = (status: string) =>
   status === 'pending' || status === 'processing';
 
-export const useMediaJobs = () => {
+export const useMediaJobs = (enabled = true) => {
   const fetch = useFetch();
   const load = useCallback(
     async (url: string): Promise<MediaJobsResponse> => {
@@ -44,8 +44,10 @@ export const useMediaJobs = () => {
     },
     [fetch]
   );
+  // A null key disables the fetch entirely (SWR) — used by callers that already
+  // know the user lacks media:read, so they don't fire a 403 every mount.
   const { data, error, isLoading, mutate } = useSWR<MediaJobsResponse>(
-    '/dashboard/media-jobs',
+    enabled ? '/dashboard/media-jobs' : null,
     load,
     {
       revalidateOnFocus: false,

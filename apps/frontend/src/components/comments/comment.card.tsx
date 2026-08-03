@@ -97,6 +97,14 @@ export const CommentCard: FC<CommentCardProps> = ({
   const postId = comment.post?.id;
   const integration = comment.post?.integration;
 
+  // A stable callback identity matters here: an inline ref is detached and
+  // re-attached on every render, so scrollIntoView would re-fire (smooth
+  // scrolling the viewport back to this card) on each unrelated inbox state
+  // change. A stable ref runs once, on mount.
+  const scrollIntoViewRef = useCallback((el: HTMLDivElement | null) => {
+    el?.scrollIntoView?.({ block: 'center', behavior: 'smooth' });
+  }, []);
+
   // Open the post command-center modal (same chrome as the calendar's
   // openPostDetail: flush header band, own close button, no card actions).
   // The modal is lazy-loaded at click time — a static import would pull the
@@ -197,11 +205,7 @@ export const CommentCard: FC<CommentCardProps> = ({
 
   return (
     <div
-      ref={
-        highlighted
-          ? (el) => el?.scrollIntoView?.({ block: 'center', behavior: 'smooth' })
-          : undefined
-      }
+      ref={highlighted ? scrollIntoViewRef : undefined}
       className={`bg-newBgColorInner rounded-[8px] border p-[16px] flex items-start gap-[12px] transition-colors ${
         highlighted ? 'border-btnPrimary ring-2 ring-btnPrimary/40' : 'border-newTableBorder'
       }`}

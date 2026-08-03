@@ -25,6 +25,7 @@ import { DailyBrief } from './widgets/daily.brief';
 import { useT } from '@postmill-ai/react/translation/get.transation.service.client';
 import { useAttention } from './hooks/useAttention';
 import { useMediaJobs } from './hooks/useMediaJobs';
+import { usePermissions } from '@postmill-ai/frontend/components/layout/use-permissions';
 import { ANALYTICS_USAGE_HREF, MEDIA_QUEUE_HREF } from './destinations';
 
 export { greetingForUser };
@@ -37,7 +38,13 @@ export const DashboardComponent = () => {
   const { data: integrations } = useIntegrationList();
   // Same SWR keys the widgets use, so these are cache reads, not extra requests.
   const { data: attention } = useAttention();
-  const { data: mediaJobs } = useMediaJobs();
+  // Same optimistic gate SectionCard applies to the media widget: fetch until
+  // permissions resolve, then stop if the user lacks media:read — otherwise a
+  // restricted user's dashboard fires (and SWR retries) a 403 on every mount.
+  const permissions = usePermissions();
+  const canReadMedia =
+    !permissions.isResolved || permissions.hasPermission('media', 'read');
+  const { data: mediaJobs } = useMediaJobs(canReadMedia);
 
   const DASHBOARD_SECTIONS: DashboardSectionMeta[] = useMemo(
     () => [
