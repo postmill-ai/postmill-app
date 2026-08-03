@@ -177,12 +177,13 @@ const ENGINE_OWNED_LEGACY = new Set<string>([
   'top-bottom',
   'hero-fullbleed',
   'badge-burst',
-  // NOT the two panel layouts. Both paint a solid slab over one column
-  // (`split-panel-bg` / `editorial-sidebar-bg`) and lay their copy inside it,
-  // and the engine has no concept of a background panel — twelve assertions
-  // depend on the slab, the panel side, the image column filling the
-  // complement, and the uncapped balance shift that only applies inside a
-  // panel. That is a composition feature to build, not a flag to flip.
+  // NOT the two panel layouts, though the slab they need is now built (see
+  // `composition.panel`). What still stops them is `_copyStack`'s BALANCE PASS:
+  // a short stack drifts into the band its badge leaves, a full one stays
+  // packed to the top, and the shift is capped EXCEPT inside a panel. Eight
+  // assertions pin that, and the engine's stack has no equivalent. Porting the
+  // balance pass is the last piece; flipping these on without it would mean
+  // loosening the assertions that caught it.
 ]);
 
 const LAYOUT_ALIASES: Record<string, LayoutId> = {
@@ -4551,7 +4552,34 @@ export class AiDesignerComposerService implements OnModuleInit {
 
     const elements: DesignerElement[] = [];
 
-    // Imagery first: it is the backdrop, and z-order is array order.
+    // A panel arrangement IS its slab: without it the copy sits on the
+    // photograph instead of on a surface, which is a different design. The
+    // panel takes one column and the imagery fills the complement, edge to
+    // edge — never an inset.
+    const panel = composition.panel;
+    const panelRight = ctx.plan.panelSide === 'right';
+    const panelW = panel ? Math.round(ctx.w * panel.widthRatio) : 0;
+    const panelX = panel ? (panelRight ? ctx.w - panelW : 0) : 0;
+
+    if (panel) {
+      elements.push({
+        id: '',
+        type: 'shape',
+        shape: 'rect',
+        x: panelX,
+        y: 0,
+        width: panelW,
+        height: ctx.h,
+        rotation: 0,
+        opacity: 1,
+        locked: false,
+        hidden: false,
+        fill: ctx.style.surface,
+        originId: `${composition.id}-bg`,
+      } as DesignerElement);
+    }
+
+    // Imagery next: it is the backdrop, and z-order is array order.
     if (imageSlot) {
       const box = boxes.get(imageSlot.id);
       const asset = this._assetFor(ctx, imageSlot.id);
@@ -4560,7 +4588,16 @@ export class AiDesignerComposerService implements OnModuleInit {
         // photograph inset by the copy margin is the framed-inset defect.
         const bleeds =
           box.width >= grid.right - grid.left - 1 && box.height >= grid.bottom - grid.top - 1;
-        const target = bleeds ? { x: 0, y: 0, width: ctx.w, height: ctx.h } : box;
+        const target = panel
+          ? {
+              x: panelRight ? 0 : panelW,
+              y: 0,
+              width: ctx.w - panelW,
+              height: ctx.h,
+            }
+          : bleeds
+            ? { x: 0, y: 0, width: ctx.w, height: ctx.h }
+            : box;
         elements.push(
           this._imageElement(imageSlot.id, asset, target.x, target.y, target.width, target.height)
         );
@@ -4579,7 +4616,9 @@ export class AiDesignerComposerService implements OnModuleInit {
     // and reimplementing it would be re-deriving eight rounds of fixes for
     // nothing. The engine owns the copy stack and the imagery, which is where
     // the templates actually constrained it.
-    const column = this._safeColumn(ctx, ctx.margin, ctx.w - ctx.margin * 2);
+    const column = panel
+      ? this._safeColumn(ctx, panelX + ctx.margin, panelW - ctx.margin * 2)
+      : this._safeColumn(ctx, ctx.margin, ctx.w - ctx.margin * 2);
     const badges = this._pushBadges(
       ctx,
       elements,
@@ -4620,7 +4659,13 @@ export class AiDesignerComposerService implements OnModuleInit {
         Math.round(ctx.scale.cta * 0.9),
         this._badgeAtBottom(ctx)
       );
-      const placed = { ...box, y: Math.max(box.y, band.y) };
+      const placed = {
+        ...box,
+        // Inside the panel, not across the canvas: a copy box that keeps the
+        // engine's full-width geometry would run straight over the photograph.
+        ...(panel ? { x: column.x, width: column.width } : {}),
+        y: Math.max(box.y, band.y),
+      };
 
       if (b.role === 'cta') {
         elements.push(

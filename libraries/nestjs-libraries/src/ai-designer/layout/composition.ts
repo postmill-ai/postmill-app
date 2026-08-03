@@ -69,6 +69,14 @@ export interface Composition {
    * arrangement whose type hangs from the top of its box is not centred.
    */
   textVerticalAlign?: 'top' | 'middle' | 'bottom';
+  /**
+   * A solid slab over one column, with the copy laid out inside it.
+   *
+   * The two panel arrangements ARE this slab: without it the copy sits on the
+   * photograph rather than on a surface, and the layout is a different design.
+   * `widthRatio` is the share of the canvas the panel takes.
+   */
+  panel?: { widthRatio: number };
   /** Where this arrangement pins its badge when the plan does not say. */
   badgeAlign?: 'left' | 'center' | 'right';
   /** Badge shape this arrangement forces, over the preset's own. */
