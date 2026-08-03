@@ -74,6 +74,7 @@ import {
 } from '../../util/layer-groups';
 import { markTemplateSlots } from '../../util/template-slots';
 import { buildExtraSlots } from './extra-slots';
+import { emphasise, emphasisTokens } from './rich-text';
 import {
   groupByRole,
   layoutSlots,
@@ -549,7 +550,9 @@ export class AiDesignerComposerService implements OnModuleInit {
         // Re-couple after the validator: its z-order repair can move a layer
         // between an image and the grade clipped to it, which silently
         // re-points the grade at whatever landed in between.
-        doc: this._recoupleAdjustments(this._clampTextToFit(result.doc)),
+        doc: this._recoupleAdjustments(
+          this._emphasiseHeadlines(this._clampTextToFit(result.doc), plan)
+        ),
         violations: result.violations,
       };
     } catch (err) {
@@ -4562,6 +4565,46 @@ export class AiDesignerComposerService implements OnModuleInit {
 
   private async _ensureMeasurer(): Promise<void> {
     if (!this._measurer) this._measurer = await createTextMeasurer();
+  }
+
+  /**
+   * Set the offer apart inside each headline.
+   *
+   * Runs AFTER `_clampTextToFit`, and that ordering is the whole point:
+   * the clamp skips any element carrying `richText`, because runs may set their
+   * own font sizes and its line estimate would be wrong. Emphasising during
+   * element construction therefore opted every headline out of overflow
+   * correction — headlines came back 12% larger and overflowing, which is how
+   * this was caught.
+   *
+   * Applying it afterwards costs nothing: these runs change weight and colour
+   * only, never geometry.
+   */
+  private _emphasiseHeadlines(doc: DesignerDoc, plan?: DesignPlan): DesignerDoc {
+    const accent = plan ? this._resolveStyle(plan).accents[0] : undefined;
+    if (!accent) return doc;
+
+    let changed = false;
+    const outputs = doc.outputs.map((out) => {
+      if (!('children' in out) || !Array.isArray(out.children)) return out;
+      const children = out.children.map((el) => {
+        // Headline only: emphasis inside supporting copy competes with the
+        // headline rather than reinforcing it, and on a CTA or a legal line it
+        // is just noise.
+        if (el.type !== 'text' || el.richText?.length || !el.text) return el;
+        if (!(el.originId || '').includes('headline')) return el;
+        const runs = emphasise(el.text, emphasisTokens(el.text), {
+          fontWeight: Math.min(900, (el.fontWeight || 700) + 200),
+          fill: accent,
+        });
+        if (!runs) return el;
+        changed = true;
+        return { ...el, richText: runs };
+      });
+      return { ...out, children };
+    });
+
+    return changed ? ({ ...doc, outputs } as DesignerDoc) : doc;
   }
 
   private _recoupleAdjustments(doc: DesignerDoc): DesignerDoc {

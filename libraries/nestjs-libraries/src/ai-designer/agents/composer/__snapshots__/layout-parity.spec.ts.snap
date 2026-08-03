@@ -3019,6 +3019,99 @@ exports[`composition type-dominant > lays out on 'tw-post' 1`] = `
 }
 `;
 
+exports[`headline emphasis > does not change any geometry 1`] = `
+{
+  "children": [
+    {
+      "h": 1080,
+      "originId": "img",
+      "type": "image",
+      "w": 1080,
+      "x": 0,
+      "y": 0,
+    },
+    {
+      "h": 0,
+      "originId": "badge-group",
+      "type": "group",
+      "w": 0,
+      "x": 0,
+      "y": 0,
+    },
+    {
+      "h": 52,
+      "originId": "badge-bg",
+      "type": "shape",
+      "w": 178,
+      "x": 848,
+      "y": 54,
+    },
+    {
+      "fontSize": 26,
+      "h": 52,
+      "originId": "badge",
+      "type": "text",
+      "w": 146,
+      "x": 864,
+      "y": 54,
+    },
+    {
+      "fontSize": 15,
+      "h": 27,
+      "originId": "legal",
+      "type": "text",
+      "w": 972,
+      "x": 54,
+      "y": 999,
+    },
+    {
+      "fontSize": 92,
+      "h": 230,
+      "originId": "headline",
+      "type": "text",
+      "w": 972,
+      "x": 54,
+      "y": 497,
+    },
+    {
+      "fontSize": 35,
+      "h": 70,
+      "originId": "sub",
+      "type": "text",
+      "w": 972,
+      "x": 54,
+      "y": 768,
+    },
+    {
+      "h": 0,
+      "originId": "cta-group",
+      "type": "group",
+      "w": 0,
+      "x": 0,
+      "y": 0,
+    },
+    {
+      "h": 63,
+      "originId": "cta-bg",
+      "type": "shape",
+      "w": 296,
+      "x": 392,
+      "y": 856,
+    },
+    {
+      "fontSize": 30,
+      "h": 63,
+      "originId": "cta",
+      "type": "text",
+      "w": 296,
+      "x": 392,
+      "y": 856,
+    },
+  ],
+  "typeBudget": 1.2252297305744826,
+}
+`;
+
 exports[`legacy composition badge-burst slot variants > with no imagery at all, which redirects the panel layouts 1`] = `
 {
   "children": [

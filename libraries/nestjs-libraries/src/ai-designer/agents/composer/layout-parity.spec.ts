@@ -219,3 +219,33 @@ describe('slot kinds that used to vanish', () => {
     expect(geometry(doc).children.length).toBeGreaterThan(0);
   });
 });
+
+describe('headline emphasis', () => {
+  it('sets the offer apart inside the headline', async () => {
+    // "Half price this week only" gave equal weight to the offer and the
+    // filler around it. One word set heavier is the most basic typographic
+    // move there is, and the composer could not make it.
+    const doc = await compose(planFor('hero-fullbleed', SLOT_SETS.full), CANVASES[0]);
+    const headline = (doc.outputs[0] as any).children.find(
+      (c: any) => c.originId === 'headline'
+    );
+    expect(headline.richText?.length).toBeGreaterThan(1);
+    const emphasised = headline.richText.filter((r: any) => r.fontWeight || r.fill);
+    expect(emphasised.length).toBeGreaterThan(0);
+    expect(emphasised.length).toBeLessThan(headline.richText.length);
+  });
+
+  it('does not change any geometry', async () => {
+    // Emphasis runs AFTER `_clampTextToFit`, because the clamp skips elements
+    // carrying `richText` — emphasising during construction opted headlines out
+    // of overflow correction and returned them 12% larger.
+    const doc = await compose(planFor('hero-fullbleed', SLOT_SETS.full), CANVASES[0]);
+    expect(geometry(doc)).toMatchSnapshot();
+  });
+
+  it('leaves supporting copy alone', async () => {
+    const doc = await compose(planFor('hero-fullbleed', SLOT_SETS.full), CANVASES[0]);
+    const sub = (doc.outputs[0] as any).children.find((c: any) => c.originId === 'sub');
+    expect(sub.richText).toBeUndefined();
+  });
+});
