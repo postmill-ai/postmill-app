@@ -75,6 +75,16 @@ import {
 import { markTemplateSlots } from '../../util/template-slots';
 import { buildExtraSlots } from './extra-slots';
 import {
+  groupByRole,
+  layoutSlots,
+  resolveCompositionFor,
+  type BoundSlot,
+} from './layout-bridge';
+import { buildGrid } from '../../layout/grid';
+import type { Composition } from '../../layout/composition';
+import { wrapTextLines } from '@postmill-ai/nestjs-libraries/media/designer-doc/fit-text';
+import { createTextMeasurer, type FaceMeasurer } from './measure-text';
+import {
   applySlotRecipes,
   emitDecor,
   strengthForDepth,
@@ -481,6 +491,11 @@ export class AiDesignerComposerService implements OnModuleInit {
     }
 
     try {
+      // Real glyph advances need a font load and a canvas, so they are awaited
+      // HERE — once, at the async boundary — and the layout pass below stays
+      // synchronous. Measuring inside the engine would make every caller async
+      // and force a canvas into every layout spec.
+      await this._ensureMeasurer();
       const composed = rawOps
         ? await this._composeFromRawOps(rawOps, outputs, plan, copy, assets)
         : this._composeDeterministic(plan, copy, assets, outputs);
@@ -4247,6 +4262,25 @@ export class AiDesignerComposerService implements OnModuleInit {
       .map((s, i) => this._accentShapeElement(s, i, ctx));
 
     let elements: DesignerElement[];
+
+    // Compositions the six hand-written builders do not implement are laid out
+    // by the ENGINE. The legacy six keep their builders for now: those encode
+    // about eight rounds of live remediation and are locked by 48 golden
+    // snapshots, so each is ported behind its own reviewed diff rather than all
+    // at once under cover of this change.
+    const engineComposition = this._engineComposition(plan, effectiveLayout, ctx);
+    if (engineComposition) {
+      elements = this._layoutViaEngine(
+        engineComposition,
+        ctx,
+        imageSlot,
+        textSlots,
+        badgeSlots,
+        legalSlots,
+        accents,
+        roles
+      );
+    } else
     switch (effectiveLayout) {
       case 'split-panel':
         elements = this._layoutSplitPanel(ctx, imageSlot, textSlots, badgeSlots, legalSlots, accents, roles);
@@ -4363,6 +4397,171 @@ export class AiDesignerComposerService implements OnModuleInit {
       naturalWidth: asset.naturalWidth,
       naturalHeight: asset.naturalHeight,
     };
+  }
+
+  /**
+   * The composition to lay this plan out with, when the engine owns it.
+   *
+   * Returns undefined for the six the legacy builders still implement — the
+   * switch is incremental, gated per layout by the golden snapshots.
+   */
+  private _engineComposition(
+    plan: DesignPlan,
+    effectiveLayout: LayoutId,
+    ctx: ComposeContext
+  ): Composition | undefined {
+    // `formatTemplate` is read as well as `composition`: it is where every
+    // stored plan and every skill's layout hint names its arrangement, and
+    // those names include the new compositions. Reading only `composition`
+    // would leave the engine unreachable for everything except a plan written
+    // after schema v3.
+    const requested = plan.composition || plan.formatTemplate;
+    // A plan naming nothing, or naming one of the six, stays on the builders:
+    // those are locked by the golden snapshots and ported one reviewed diff at
+    // a time.
+    if (!requested || LAYOUT_TEMPLATE_IDS.includes(requested as LayoutId)) return undefined;
+
+    const bound = this._boundSlots(ctx, plan);
+    const byRole = groupByRole(bound);
+    const composition = resolveCompositionFor([requested], {
+      aspect: ctx.w / Math.max(1, ctx.h),
+      has: (role) => (byRole.get(role)?.length ?? 0) > 0,
+    }, effectiveLayout);
+
+    // `resolveCompositionFor` falls back to the effective layout when the
+    // requested one does not fit; if it landed on one of the six, the builders
+    // own it.
+    return LAYOUT_TEMPLATE_IDS.includes(composition.id as LayoutId) ? undefined : composition;
+  }
+
+  /** Every slot the engine can place, with its resolved role and copy. */
+  private _boundSlots(ctx: ComposeContext, plan: DesignPlan): BoundSlot[] {
+    const copySlots = plan.slots.filter((s) => isCopySlot(s) && s.role !== 'image');
+    const out: BoundSlot[] = [];
+    copySlots.forEach((slot, i) => {
+      const role = this._slotRole(slot, i);
+      out.push({ slot, role, text: this._slotText(ctx.copy, slot, plan, i) });
+    });
+    for (const slot of plan.slots) {
+      if (slot.kind === 'image' || slot.role === 'image') {
+        out.push({ slot, role: 'body', text: '' });
+      }
+    }
+    return out;
+  }
+
+  /**
+   * Lay a composition out through the engine and build its elements.
+   *
+   * The factories are unchanged: they already take a box (text, image) or an
+   * anchor band (CTA, badge) and size themselves within it. What changes is
+   * only where the box comes from.
+   */
+  private _layoutViaEngine(
+    composition: Composition,
+    ctx: ComposeContext,
+    imageSlot: DesignSlot | undefined,
+    textSlots: DesignSlot[],
+    badgeSlots: DesignSlot[],
+    legalSlots: DesignSlot[],
+    accents: DesignerElement[],
+    roles: Map<string, SlotRole>
+  ): DesignerElement[] {
+    const grid = buildGrid({ width: ctx.w, height: ctx.h, formatId: ctx.formatId });
+    const bound = this._boundSlots(ctx, ctx.plan);
+
+    const boxes = layoutSlots({
+      composition,
+      grid,
+      slots: bound,
+      measureSlot: (b, width) => this._measureBound(b, width, ctx),
+    });
+
+    const elements: DesignerElement[] = [];
+
+    // Imagery first: it is the backdrop, and z-order is array order.
+    if (imageSlot) {
+      const box = boxes.get(imageSlot.id);
+      const asset = this._assetFor(ctx, imageSlot.id);
+      if (box) {
+        // Full-bleed when the composition gave it the whole usable box — a
+        // photograph inset by the copy margin is the framed-inset defect.
+        const bleeds =
+          box.width >= grid.right - grid.left - 1 && box.height >= grid.bottom - grid.top - 1;
+        const target = bleeds ? { x: 0, y: 0, width: ctx.w, height: ctx.h } : box;
+        elements.push(
+          this._imageElement(imageSlot.id, asset, target.x, target.y, target.width, target.height)
+        );
+      }
+    }
+
+    elements.push(...accents);
+
+    for (const b of bound) {
+      const box = boxes.get(b.slot.id);
+      if (!box || b.slot.kind === 'image' || b.slot.role === 'image') continue;
+      if (!b.text.trim()) continue;
+
+      if (badgeSlots.includes(b.slot)) {
+        elements.push(
+          ...this._badgeElements(b.slot, b.text, { x: box.x, y: box.y, width: box.width }, ctx, {})
+        );
+        continue;
+      }
+      if (b.role === 'cta') {
+        elements.push(
+          ...this._ctaElements(b.slot, b.text, { x: box.x, y: box.y, width: box.width }, ctx, {})
+        );
+        continue;
+      }
+      const isLegal = legalSlots.includes(b.slot);
+      elements.push(
+        this._styledTextElement(b.slot, isLegal ? 'legal' : b.role, b.text, box, ctx, {
+          align: b.slot.style?.align,
+        })
+      );
+    }
+
+    void textSlots;
+    void roles;
+    return elements;
+  }
+
+  /**
+   * How tall a slot's content is at a given width.
+   *
+   * Text is measured for REAL — wrapped at the width the engine is offering,
+   * with the actual font — which is the whole reason the measurer exists. The
+   * old estimate derived a box from `fontSize x 2.5` regardless of how many
+   * lines the copy actually took, which is why copy overflowed.
+   */
+  private _measureBound(b: BoundSlot, width: number, ctx: ComposeContext): number {
+    if (b.slot.kind === 'image' || b.slot.role === 'image') {
+      return Math.round(width * 0.66);
+    }
+    const fontSize = this._roleFontSize(b.role, ctx.scale);
+    if (!b.text.trim()) return 0;
+    const measure = this._measurer;
+    const lines = measure
+      ? wrapTextLines(b.text, width, fontSize, 0, (t, size) =>
+          measure(t, size, { fontFamily: ctx.style.preset.fonts.body })
+        ).length
+      : Math.max(1, Math.ceil((b.text.length * fontSize * 0.56) / Math.max(1, width)));
+    const lineHeight = b.role === 'headline' ? 1.1 : 1.35;
+    return Math.round(Math.max(1, lines) * lineHeight * fontSize * 1.25);
+  }
+
+  /**
+   * Real glyph advances, built once per process.
+   *
+   * Undefined until the first compose has awaited it; `_measureBound` falls
+   * back to the old approximation until then rather than blocking layout on a
+   * font load it cannot await from a synchronous call.
+   */
+  private _measurer?: FaceMeasurer;
+
+  private async _ensureMeasurer(): Promise<void> {
+    if (!this._measurer) this._measurer = await createTextMeasurer();
   }
 
   private _recoupleAdjustments(doc: DesignerDoc): DesignerDoc {
