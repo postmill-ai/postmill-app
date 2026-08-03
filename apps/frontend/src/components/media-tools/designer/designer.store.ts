@@ -2,6 +2,7 @@ import { create } from 'zustand';
 import { CHANNEL_PRESETS } from '@postmill-ai/nestjs-libraries/integrations/social/channel-presets';
 import { detectFocalPoint } from './reflow';
 import { DEFAULT_TOOL_ID, getTool } from './tools';
+import type { SelectionMask } from './selection-mask';
 import { DESIGNER_DOC_VERSION } from '@postmill-ai/nestjs-libraries/media/designer-doc/designer-doc.limits';
 import {
   migrateDoc,
@@ -32,6 +33,7 @@ import type {
   DesignerFillStyle,
   DesignerAdjustment,
 } from '@postmill-ai/nestjs-libraries/media/designer-doc/designer-doc.schema';
+import type { FillContents } from '@postmill-ai/nestjs-libraries/media/designer-doc/fill-stroke';
 
 export type {
   DesignerDoc,
@@ -52,6 +54,7 @@ export type {
   DesignerPattern,
   DesignerFillStyle,
   DesignerAdjustment,
+  FillContents,
 };
 export { migrateDoc };
 
@@ -93,6 +96,26 @@ export interface DesignerState {
   lastToolPerGroup: Record<string, string>;
   /** Per-tool settings shown in the options bar, keyed by tool id. */
   toolOptions: Record<string, Record<string, unknown>>;
+  /**
+   * The pixel selection — Photoshop's marching ants.
+   *
+   * Editor state, NOT document content: it lives here rather than inside the
+   * paint hook only so the Select menu and the filter runner can reach it, and
+   * it must never be written into `doc`, or every marquee drag would land in
+   * undo history and in the saved design.
+   */
+  selection: SelectionMask | null;
+  /** The last non-empty selection, for Select ▸ Reselect. */
+  lastSelection: SelectionMask | null;
+  /**
+   * A generation the Tools menu asked the timeline to open.
+   *
+   * The dialogs and their result-landing logic live in `video-timeline`, which
+   * the menu can't reach — so the menu names what it wants and the timeline
+   * opens its own dialog, then clears this. Same request/consume shape as
+   * `renamingId`.
+   */
+  generateRequest: 'video' | 'music' | 'voiceover' | null;
 }
 
 export interface DesignerActions {
@@ -142,6 +165,9 @@ export interface DesignerActions {
   /** Select a tool; also remembers it as its group's last-used option. */
   setActiveTool: (toolId: string) => void;
   setToolOption: (toolId: string, key: string, value: unknown) => void;
+  /** Replace the pixel selection. Remembers the outgoing one for Reselect. */
+  setSelection: (mask: SelectionMask | null) => void;
+  requestGenerate: (kind: 'video' | 'music' | 'voiceover' | null) => void;
   undo: () => void; redo: () => void; pushHistory: () => void;
   markSaved: () => void; setSaving: (saving: boolean) => void;
   reset: (width?: number, height?: number) => void;
@@ -240,6 +266,9 @@ export const createDesignerStore = (
       activeTool: DEFAULT_TOOL_ID,
       lastToolPerGroup: {},
       toolOptions: {},
+      selection: null,
+      lastSelection: null,
+      generateRequest: null,
       clipboard: [],
       setDoc: (doc) => set({ doc: migrateDoc(doc), isDirty: true }),
       setDesignName: (name) => set({ designName: name, isDirty: true }),
@@ -713,6 +742,18 @@ export const createDesignerStore = (
           },
         }),
 
+      requestGenerate: (kind) => set({ generateRequest: kind }),
+
+      setSelection: (mask) => {
+        const previous = get().selection;
+        set({
+          selection: mask,
+          // Only a real selection is worth restoring; clearing an already-empty
+          // one must not wipe what Reselect had to offer.
+          lastSelection: previous ?? get().lastSelection,
+        });
+      },
+
       pushHistory: () => {
         const { doc, history, historyIndex, savedHistoryIndex } = get();
         const snapshot = JSON.parse(JSON.stringify(doc));
@@ -761,6 +802,9 @@ export const createDesignerStore = (
         const newDoc = createEmptyDoc(w, h);
         set({
           doc: newDoc, selectedIds: [], currentOutput: 0, zoom: 1, viewportX: 0, viewportY: 0,
+          // Ask the canvas to fit. Bumped here rather than at the call sites so
+          // every route into a new document gets it — there are four.
+          fitNonce: get().fitNonce + 1,
           history: [JSON.parse(JSON.stringify(newDoc))], historyIndex: 0, savedHistoryIndex: 0,
           designId: null, designTemplateId: null, templateId: null,
           designName: 'Untitled Design', isDirty: false, isSaving: false, lastSaved: null,
@@ -778,7 +822,12 @@ export const createDesignerStore = (
         set({
           doc: migrated, designId: id, designName: name,
           templateId, designTemplateId: templateId,
-          selectedIds: [], currentOutput: 0, zoom: 1,
+          selectedIds: [], currentOutput: 0,
+          // The zoom and viewport belonged to whatever was open before. Reset
+          // them and ask for a fit: leaving a stale zoom on screen for a frame
+          // before the fit lands reads as a flash.
+          zoom: 1, viewportX: 0, viewportY: 0,
+          fitNonce: get().fitNonce + 1,
           history: [JSON.parse(JSON.stringify(migrated))], historyIndex: 0, savedHistoryIndex: 0, isDirty: false,
           playheadMs: 0,
           selectedClip: null,

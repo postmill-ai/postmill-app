@@ -293,3 +293,106 @@ export const maskOutline = (mask: SelectionMask): number[][] => {
   }
   return segments;
 };
+
+/** Everything selected — Photoshop's Select ▸ All. */
+export const fullMask = (width: number, height: number): SelectionMask => {
+  const mask = createMask(width, height);
+  mask.data.fill(255);
+  return mask;
+};
+
+/**
+ * Select ▸ Inverse. Partially-selected pixels invert proportionally rather than
+ * snapping to on/off, so a feathered edge stays feathered through a round trip.
+ */
+export const invertMask = (mask: SelectionMask): SelectionMask => {
+  const out = createMask(mask.width, mask.height);
+  for (let i = 0; i < out.data.length; i++) out.data[i] = 255 - mask.data[i];
+  return out;
+};
+
+/**
+ * Grow (positive) or shrink (negative) a selection by `radius` pixels, using a
+ * chebyshev-neighbourhood max/min.
+ *
+ * Edit ▸ Stroke is the difference between a grown and a shrunk copy, which is
+ * why this lives with the mask rather than in the stroke code: tracing
+ * `maskOutline` breaks down on disjoint or feathered selections.
+ */
+export const expandMask = (mask: SelectionMask, radius: number): SelectionMask => {
+  const r = Math.round(radius);
+  if (r === 0) return mask;
+  const { width: w, height: h } = mask;
+  const grow = r > 0;
+  const k = Math.abs(r);
+
+  // Separable: a square structuring element is one horizontal pass plus one
+  // vertical, which turns O(k²) per pixel into O(k).
+  const pass = (src: Uint8ClampedArray, horizontal: boolean): Uint8ClampedArray => {
+    const dst = new Uint8ClampedArray(src.length);
+    for (let y = 0; y < h; y++) {
+      for (let x = 0; x < w; x++) {
+        let best = grow ? 0 : 255;
+        for (let d = -k; d <= k; d++) {
+          const sx = horizontal ? x + d : x;
+          const sy = horizontal ? y : y + d;
+          if (sx < 0 || sy < 0 || sx >= w || sy >= h) {
+            // Outside the canvas counts as unselected, so shrinking pulls away
+            // from the edges instead of clinging to them.
+            if (!grow) best = 0;
+            continue;
+          }
+          const v = src[sy * w + sx];
+          best = grow ? Math.max(best, v) : Math.min(best, v);
+        }
+        dst[y * w + x] = best;
+      }
+    }
+    return dst;
+  };
+
+  const out = createMask(w, h);
+  out.data.set(pass(pass(mask.data, true), false));
+  return out;
+};
+
+/** The band between a grown and a shrunk copy — Edit ▸ Stroke's footprint. */
+export const strokeBand = (
+  mask: SelectionMask,
+  width: number,
+  location: 'inside' | 'center' | 'outside'
+): SelectionMask => {
+  const w = Math.max(1, Math.round(width));
+  const outer =
+    location === 'inside' ? mask
+    : location === 'outside' ? expandMask(mask, w)
+    : expandMask(mask, Math.floor(w / 2));
+  const inner =
+    location === 'inside' ? expandMask(mask, -w)
+    : location === 'outside' ? mask
+    : expandMask(mask, -Math.ceil(w / 2));
+
+  const out = createMask(mask.width, mask.height);
+  for (let i = 0; i < out.data.length; i++) {
+    out.data[i] = Math.max(0, outer.data[i] - inner.data[i]);
+  }
+  return out;
+};
+
+/** The tightest rect containing every selected pixel, or null if none are. */
+export const maskBounds = (
+  mask: SelectionMask
+): { x: number; y: number; width: number; height: number } | null => {
+  let minX = mask.width, minY = mask.height, maxX = -1, maxY = -1;
+  for (let y = 0; y < mask.height; y++) {
+    for (let x = 0; x < mask.width; x++) {
+      if (!mask.data[y * mask.width + x]) continue;
+      if (x < minX) minX = x;
+      if (x > maxX) maxX = x;
+      if (y < minY) minY = y;
+      if (y > maxY) maxY = y;
+    }
+  }
+  if (maxX < 0) return null;
+  return { x: minX, y: minY, width: maxX - minX + 1, height: maxY - minY + 1 };
+};

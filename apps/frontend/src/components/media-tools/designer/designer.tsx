@@ -21,6 +21,7 @@ import { TemplatesPanel } from './panels/templates-panel';
 import { MyDesignsPanel } from './panels/my-designs-panel';
 import { LayersPanel } from './panels/layers-panel';
 import { LayersFooter } from './panels/layers-footer';
+import { usePixelOps } from './use-pixel-ops';
 import { FloatingPanel } from './floating-panel';
 import { useFloatingPanelState } from './use-floating-panel-state';
 import { ToolRail } from './tool-rail';
@@ -235,6 +236,13 @@ export const Designer: FC<DesignerProps> = ({
       mediaToolsStatus ? !!mediaToolsStatus.operations?.[operation]?.available : true,
     [mediaToolsStatus]
   );
+  // Video/audio generation is described under `tools`, not `operations` — the
+  // two halves of the payload are keyed differently.
+  const mediaToolAvailable = useCallback(
+    (category: string): boolean =>
+      mediaToolsStatus ? !!mediaToolsStatus.tools?.[category]?.available : true,
+    [mediaToolsStatus]
+  );
   const user = useUser();
   // Layers floats instead of docking in the rail; its position and open state
   // persist per org.
@@ -309,6 +317,10 @@ export const Designer: FC<DesignerProps> = ({
     captionHeight,
     fetch,
   ]);
+
+  // Select / Fill / Stroke / Filter — they need the stage and the modals, which
+  // the action layer can't reach, so they are built here and passed in.
+  const pixelOps = usePixelOps({ store, fetchFn: fetch });
 
   const designName = store((s) => s.designName);
   const currentDesignId = store((s) => s.designId);
@@ -831,6 +843,7 @@ export const Designer: FC<DesignerProps> = ({
       showRulers,
       aiActive,
       mediaOperationAvailable,
+      mediaToolAvailable,
       canShare: !!currentDesignId,
       collabEnabled,
       inModal: !!(setMedia || closeModal),
@@ -934,6 +947,15 @@ export const Designer: FC<DesignerProps> = ({
         if (await decision.open({ description: msg })) st.setMode(target);
       },
       onToggleShare: () => setCollabEnabled((v) => !v),
+      onSelectAll: pixelOps.onSelectAll,
+      onSelectInverse: pixelOps.onSelectInverse,
+      canEditPixels: pixelOps.canEditPixels,
+      onFill: pixelOps.onFill,
+      onStroke: pixelOps.onStroke,
+      onFilter: pixelOps.onFilter,
+      onLastFilter: pixelOps.onLastFilter,
+      hasLastFilter: pixelOps.hasLastFilter,
+      lastFilterLabel: pixelOps.lastFilterLabel,
       onAiGenerate: () =>
         modals.openModal({
           title: translate('ai', 'AI'),
@@ -959,6 +981,7 @@ export const Designer: FC<DesignerProps> = ({
       showRulers,
       aiActive,
       mediaOperationAvailable,
+      mediaToolAvailable,
       currentDesignId,
       collabEnabled,
       setMedia,
@@ -968,6 +991,7 @@ export const Designer: FC<DesignerProps> = ({
       decision,
       layersPanel,
       brandPanel,
+      pixelOps,
       fetch,
       toaster,
       handleSave,

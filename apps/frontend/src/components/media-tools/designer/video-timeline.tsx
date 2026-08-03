@@ -1344,6 +1344,26 @@ export const VideoTimeline: FC<VideoTimelineProps> = ({ store, sendTimelineAware
     });
   }, [modals, fetch, toaster, landOrPoll, translate]);
 
+  /**
+   * Open a dialog the Tools menu asked for.
+   *
+   * The menu can't reach these handlers — they close over `landOrPoll`, which
+   * lands a finished asset on a track — so it names what it wants on the store
+   * and this clears the request once it has been served.
+   */
+  const generateRequest = store((s) => s.generateRequest);
+  const openRequested = useRef<((kind: string) => void) | null>(null);
+  openRequested.current = (kind: string) => {
+    if (kind === 'video') handleGenerateVideo();
+    else if (kind === 'music') handleGenerateMusic();
+    else if (kind === 'voiceover') handleGenerateVoiceover();
+  };
+  useEffect(() => {
+    if (!generateRequest) return;
+    openRequested.current?.(generateRequest);
+    store.getState().requestGenerate(null);
+  }, [generateRequest, store]);
+
   if (!isVideo || !vo) {
     return null;
   }

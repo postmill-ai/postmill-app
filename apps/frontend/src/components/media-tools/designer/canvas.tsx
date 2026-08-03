@@ -43,7 +43,13 @@ import {
   isSelectionTool,
   isMarqueeTool,
 } from './use-paint-tools';
-import { maskOutline } from './selection-mask';
+import { maskOutline, fullMask, invertMask } from './selection-mask';
+
+/**
+ * How much of the viewport a fitted artboard fills, leaving the rest as margin.
+ * Anything at 1 would butt the canvas against the chrome on every side.
+ */
+const FIT_PADDING = 0.85;
 
 interface CanvasProps {
   store: ReturnType<typeof import('./designer.store').createDesignerStore>;
@@ -965,7 +971,7 @@ export const DesignerCanvas: FC<CanvasProps> = ({
     if (!stageSize.width || !stageSize.height) return;
     const scaleX = stageSize.width / output.width;
     const scaleY = stageSize.height / output.height;
-    const next = Math.min(scaleX, scaleY) * 0.9;
+    const next = Math.min(scaleX, scaleY) * FIT_PADDING;
     setZoom(next);
     setViewport(
       (stageSize.width - output.width * next) / 2,
@@ -1025,7 +1031,12 @@ export const DesignerCanvas: FC<CanvasProps> = ({
         if (isVideo) st.setSelectedClip(null);
       } else if (mod && e.key.toLowerCase() === 'a') {
         e.preventDefault();
-        setSelectedIds(((output as any)?.children || []).filter((c: any) => !c.hidden).map((c: any) => c.id));
+        // Photoshop: ⌘A selects PIXELS, ⌥⌘A selects layers.
+        if (e.altKey) {
+          setSelectedIds(((output as any)?.children || []).filter((c: any) => !c.hidden).map((c: any) => c.id));
+        } else if (output) {
+          st.setSelection(fullMask(output.width, output.height));
+        }
       } else if (mod && e.key.toLowerCase() === 'c') {
         e.preventDefault();
         st.copySelection();
@@ -1041,7 +1052,15 @@ export const DesignerCanvas: FC<CanvasProps> = ({
         else st.groupSelection();
       } else if (mod && e.key.toLowerCase() === 'd') {
         e.preventDefault();
-        selectedIds.forEach((id) => duplicateElement(id));
+        // ⌘D deselects, ⇧⌘D reselects — Duplicate keeps ⌘J on the Layer menu.
+        if (e.shiftKey) {
+          if (!st.selection && st.lastSelection) st.setSelection(st.lastSelection);
+        } else {
+          st.setSelection(null);
+        }
+      } else if (mod && e.key.toLowerCase() === 'i' && e.shiftKey) {
+        e.preventDefault();
+        if (st.selection) st.setSelection(invertMask(st.selection));
       } else if (mod && e.key.toLowerCase() === 'z') {
         e.preventDefault();
         if (e.shiftKey) st.redo();

@@ -73,7 +73,18 @@ interface UsePaintToolsArgs {
 }
 
 export const usePaintTools = ({ store, stageRef, output, fetchFn }: UsePaintToolsArgs) => {
-  const [selection, setSelection] = useState<SelectionMask | null>(null);
+  // The mask lives in the store so the Select menu and the filter runner can
+  // reach it; this hook is just one of its writers now.
+  const selection = store((s: { selection: SelectionMask | null }) => s.selection);
+  const setSelection = useCallback(
+    (next: SelectionMask | null | ((prev: SelectionMask | null) => SelectionMask | null)) => {
+      const state = store.getState();
+      state.setSelection(
+        typeof next === 'function' ? next(state.selection) : next
+      );
+    },
+    [store]
+  );
   const [lassoPoints, setLassoPoints] = useState<{ x: number; y: number }[] | null>(null);
 
   const painting = useRef(false);
