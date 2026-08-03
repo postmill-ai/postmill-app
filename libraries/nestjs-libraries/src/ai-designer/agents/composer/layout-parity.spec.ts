@@ -249,3 +249,23 @@ describe('headline emphasis', () => {
     expect(sub.richText).toBeUndefined();
   });
 });
+
+describe('typeBudget follows the arrangement that actually composed', () => {
+  it('stamps an engine composition′s own band ratio, not its legacy fallback′s', async () => {
+    // Invisible on the primary output and wrong on every other one:
+    // `typeBudget` is what reflow re-fits the channel variants from, so a
+    // type-dominant design stamped with minimal-centered's 0.52 would typeset
+    // all its siblings for an arrangement it is not.
+    const typeLed = await compose(planFor('type-dominant', SLOT_SETS.copyOnly), CANVASES[0]);
+    const centred = await compose(planFor('minimal-centered', SLOT_SETS.copyOnly), CANVASES[0]);
+    expect((typeLed.outputs[0] as any).typeBudget).not.toBeCloseTo(
+      (centred.outputs[0] as any).typeBudget,
+      3
+    );
+  });
+
+  it('leaves the legacy six on the budget they always had', async () => {
+    const doc = await compose(planFor('hero-fullbleed', SLOT_SETS.full), CANVASES[0]);
+    expect((doc.outputs[0] as any).typeBudget).toBeGreaterThan(0);
+  });
+});

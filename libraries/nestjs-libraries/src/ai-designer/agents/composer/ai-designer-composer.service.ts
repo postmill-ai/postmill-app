@@ -2596,8 +2596,10 @@ export class AiDesignerComposerService implements OnModuleInit {
       // The rule this output's type was sized under, so the seeded formats are
       // re-fit from the basis the primary actually composed at — not from the
       // unbounded geometric mean (see `typeBasisPx`).
-      typeBudget: this._typeBudget(
+      typeBudget: this._typeBudgetFor(
+        plan,
         this._effectiveLayout(plan, layout, primaryOpts),
+        { w: primaryPreset.width, h: primaryPreset.height, copy },
         this._stackSlotCount(plan)
       ),
       children: primaryElements,
@@ -3592,6 +3594,32 @@ export class AiDesignerComposerService implements OnModuleInit {
    * of the height the band leaves has to hold `stackHeightFactor` base-type
    * multiples of copy.
    */
+  /**
+   * The type budget for whichever arrangement actually composed this output.
+   *
+   * When the ENGINE owns the composition, its own `copyBandRatio` and
+   * `typeScale` are used — not the legacy layout it happens to fall back to.
+   * Getting this wrong is invisible on the primary output and wrong on every
+   * other one: `typeBudget` is what `reflow.ts` re-fits the channel variants
+   * from, so a `type-dominant` design stamped with `minimal-centered`'s 0.52
+   * would typeset all its siblings for an arrangement it is not.
+   */
+  private _typeBudgetFor(
+    plan: DesignPlan,
+    effectiveLayout: LayoutId,
+    canvas: { w: number; h: number; copy: SlotTextMap },
+    stackSlots: number
+  ): number {
+    const composition = this._engineComposition(plan, effectiveLayout, canvas);
+    if (composition) {
+      return (
+        composition.copyBandRatio /
+        (stackHeightFactor(stackSlots) * BASE_TYPE_RATIO * composition.typeScale)
+      );
+    }
+    return this._typeBudget(effectiveLayout, stackSlots);
+  }
+
   private _typeBudget(layout: LayoutId, stackSlots: number): number {
     return (
       LAYOUT_COPY_BAND_RATIO[layout] /
@@ -4271,7 +4299,11 @@ export class AiDesignerComposerService implements OnModuleInit {
     // about eight rounds of live remediation and are locked by 48 golden
     // snapshots, so each is ported behind its own reviewed diff rather than all
     // at once under cover of this change.
-    const engineComposition = this._engineComposition(plan, effectiveLayout, ctx);
+    const engineComposition = this._engineComposition(plan, effectiveLayout, {
+      w,
+      h,
+      copy,
+    });
     if (engineComposition) {
       elements = this._layoutViaEngine(
         engineComposition,
@@ -4411,7 +4443,7 @@ export class AiDesignerComposerService implements OnModuleInit {
   private _engineComposition(
     plan: DesignPlan,
     effectiveLayout: LayoutId,
-    ctx: ComposeContext
+    canvas: { w: number; h: number; copy: SlotTextMap }
   ): Composition | undefined {
     // `formatTemplate` is read as well as `composition`: it is where every
     // stored plan and every skill's layout hint names its arrangement, and
@@ -4424,10 +4456,10 @@ export class AiDesignerComposerService implements OnModuleInit {
     // a time.
     if (!requested || LAYOUT_TEMPLATE_IDS.includes(requested as LayoutId)) return undefined;
 
-    const bound = this._boundSlots(ctx, plan);
+    const bound = this._boundSlots(canvas.copy, plan);
     const byRole = groupByRole(bound);
     const composition = resolveCompositionFor([requested], {
-      aspect: ctx.w / Math.max(1, ctx.h),
+      aspect: canvas.w / Math.max(1, canvas.h),
       has: (role) => (byRole.get(role)?.length ?? 0) > 0,
     }, effectiveLayout);
 
@@ -4438,12 +4470,12 @@ export class AiDesignerComposerService implements OnModuleInit {
   }
 
   /** Every slot the engine can place, with its resolved role and copy. */
-  private _boundSlots(ctx: ComposeContext, plan: DesignPlan): BoundSlot[] {
+  private _boundSlots(copy: SlotTextMap, plan: DesignPlan): BoundSlot[] {
     const copySlots = plan.slots.filter((s) => isCopySlot(s) && s.role !== 'image');
     const out: BoundSlot[] = [];
     copySlots.forEach((slot, i) => {
       const role = this._slotRole(slot, i);
-      out.push({ slot, role, text: this._slotText(ctx.copy, slot, plan, i) });
+      out.push({ slot, role, text: this._slotText(copy, slot, plan, i) });
     });
     for (const slot of plan.slots) {
       if (slot.kind === 'image' || slot.role === 'image') {
@@ -4471,7 +4503,7 @@ export class AiDesignerComposerService implements OnModuleInit {
     roles: Map<string, SlotRole>
   ): DesignerElement[] {
     const grid = buildGrid({ width: ctx.w, height: ctx.h, formatId: ctx.formatId });
-    const bound = this._boundSlots(ctx, ctx.plan);
+    const bound = this._boundSlots(ctx.copy, ctx.plan);
 
     const boxes = layoutSlots({
       composition,
