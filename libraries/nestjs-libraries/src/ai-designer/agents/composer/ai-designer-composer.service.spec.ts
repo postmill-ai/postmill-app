@@ -536,11 +536,13 @@ describe('AiDesignerComposerService.compose (style-aware)', () => {
 
   it('composes a channelLayouts output with the mapped layout instead of the reflow', async () => {
     const plan = makePlan({
-      channelLayouts: { story: 'side-by-side' },
+      channelLayouts: { 'x-post': 'side-by-side' },
     });
     const doc = await composeWith(plan, [
       SQUARE,
-      { formatId: 'story', width: 1080, height: 1920 },
+      // Wide, not tall: a split panel on a story is substituted, not forced
+      // (the gallery's aspect rule — two 540px columns hold no word).
+      { formatId: 'x-post', width: 1200, height: 675 },
     ]);
 
     expect(doc.outputs).toHaveLength(2);

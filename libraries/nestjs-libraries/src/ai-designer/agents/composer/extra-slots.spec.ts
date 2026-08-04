@@ -1,5 +1,17 @@
-import { describe, it, expect } from 'vitest';
-import { buildExtraSlot, buildExtraSlots, isExtraSlot, type ExtraSlotContext } from './extra-slots';
+import { describe, it, expect, beforeEach, vi } from 'vitest';
+
+const mockResolve = vi.fn();
+vi.mock('../../../media/designer-doc/icon-resolver', () => ({
+  resolveIconifyIcon: (name: string) => mockResolve(name),
+}));
+
+import {
+  buildExtraSlot,
+  buildExtraSlots,
+  isExtraSlot,
+  resolveIconSlots,
+  type ExtraSlotContext,
+} from './extra-slots';
 import { DesignerDocStrictSchema } from '../../../media/designer-doc/designer-doc.schema';
 import type { DesignSlot } from '../../ai-designer.types';
 
@@ -177,13 +189,54 @@ describe('logo', () => {
 });
 
 describe('icon', () => {
-  it('stands in with a shape rather than emitting an unresolvable icon', () => {
-    // There is no server-side icon resolver, and the two sides disagree about
-    // `src`: the Designer's picker stores raw SVG body there, SrcSchema wants a
-    // URL. An `icon` element from here would fail the compose outright.
+  it('stands in with a shape when nothing resolvable was named', () => {
+    // No resolved icon in the context — the ellipse keeps the design honest
+    // rather than emitting an icon element with no source.
     const [el] = buildExtraSlot(slot('icon'), 0, ctx());
     expect(el.type).toBe('shape');
     expect(el.fill).toBeTruthy();
+  });
+
+  it('emits a real icon element when the slot was resolved', () => {
+    const [el] = buildExtraSlot(
+      slot('icon', 'mdi:rocket', 'icon'),
+      0,
+      ctx({
+        resolvedIcons: new Map([
+          ['icon', { body: '<path d="M2 12l10-9 3 9-3 9z"/>' }],
+        ]),
+      })
+    );
+    expect(el.type).toBe('icon');
+    expect(el.src).toBe('<path d="M2 12l10-9 3 9-3 9z"/>');
+    expect(el.fill).toBeTruthy();
+    // The raw-body contract is schema-valid on icon elements now.
+    expect(
+      DesignerDocStrictSchema.safeParse(docOf([{ ...el, id: 'i1' }])).success
+    ).toBe(true);
+  });
+});
+
+describe('resolveIconSlots', () => {
+  beforeEach(() => mockResolve.mockReset());
+
+  it('resolves only icon-kind slots whose role is an Iconify name', async () => {
+    mockResolve.mockResolvedValue({ body: '<path d="M0 0h1v1z"/>' });
+    const map = await resolveIconSlots([
+      slot('icon', 'mdi:rocket', 'a'),
+      slot('icon', 'decor', 'b'),
+      slot('shape', 'mdi:rocket', 'c'),
+    ]);
+    expect(map.size).toBe(1);
+    expect(map.get('a')?.body).toBe('<path d="M0 0h1v1z"/>');
+    expect(mockResolve).toHaveBeenCalledTimes(1);
+    expect(mockResolve).toHaveBeenCalledWith('mdi:rocket');
+  });
+
+  it('drops failures instead of failing the compose', async () => {
+    mockResolve.mockResolvedValue(null);
+    const map = await resolveIconSlots([slot('icon', 'mdi:nope', 'a')]);
+    expect(map.size).toBe(0);
   });
 });
 

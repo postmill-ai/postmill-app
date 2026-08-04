@@ -73,7 +73,8 @@ import {
   wrapMoveUnitsInGroups,
 } from '../../util/layer-groups';
 import { markTemplateSlots } from '../../util/template-slots';
-import { buildExtraSlots } from './extra-slots';
+import { buildExtraSlots, resolveIconSlots } from './extra-slots';
+import type { ResolvedIcon } from '../../../media/designer-doc/icon-resolver';
 import { emphasise, emphasisTokens } from './rich-text';
 import { applyKnockouts, knockoutRequests } from './subject-knockout';
 import {
@@ -174,17 +175,16 @@ type LayoutId =
  * set only by having its geometry justified box by box.
  */
 const ENGINE_OWNED_LEGACY = new Set<string>([
+  // All six. The panel layouts were the last: their copy rhythm stays with
+  // `_copyStack` (the band-start, balance-cap and footer-carve arithmetic is
+  // pinned by eight assertions), while the engine owns selection, the slab
+  // and the imagery — see `_layoutPanelViaEngine`.
   'minimal-centered',
   'top-bottom',
   'hero-fullbleed',
   'badge-burst',
-  // NOT the two panel layouts, though the slab they need is now built (see
-  // `composition.panel`). What still stops them is `_copyStack`'s BALANCE PASS:
-  // a short stack drifts into the band its badge leaves, a full one stays
-  // packed to the top, and the shift is capped EXCEPT inside a panel. Eight
-  // assertions pin that, and the engine's stack has no equivalent. Porting the
-  // balance pass is the last piece; flipping these on without it would mean
-  // loosening the assertions that caught it.
+  'split-panel',
+  'editorial-sidebar',
 ]);
 
 const LAYOUT_ALIASES: Record<string, LayoutId> = {
@@ -517,11 +517,13 @@ export class AiDesignerComposerService implements OnModuleInit {
       // Real glyph advances need a font load and a canvas, so they are awaited
       // HERE — once, at the async boundary — and the layout pass below stays
       // synchronous. Measuring inside the engine would make every caller async
-      // and force a canvas into every layout spec.
+      // and force a canvas into every layout spec. Icon resolution is awaited
+      // here for the same reason (Iconify, over the network).
       await this._ensureMeasurer();
+      const resolvedIcons = await resolveIconSlots(plan.slots);
       const composed = rawOps
         ? await this._composeFromRawOps(rawOps, outputs, plan, copy, assets)
-        : this._composeDeterministic(plan, copy, assets, outputs);
+        : this._composeDeterministic(plan, copy, assets, outputs, resolvedIcons);
       const sanitized = this.sanitizeDoc(composed, plan).doc;
       return {
         doc: await this.applySubjectFocalPoints(
@@ -2579,7 +2581,8 @@ export class AiDesignerComposerService implements OnModuleInit {
     plan: DesignPlan,
     copy: SlotTextMap,
     assets: Record<string, AssetResult>,
-    outputs: ComposerInput['outputs']
+    outputs: ComposerInput['outputs'],
+    resolvedIcons?: ReadonlyMap<string, ResolvedIcon>
   ): DesignerDoc {
     const style = this._resolveStyle(plan);
     const layout = this._resolveTemplate(plan);
@@ -2597,6 +2600,7 @@ export class AiDesignerComposerService implements OnModuleInit {
     const primaryOpts = {
       outputBg: bg.bg ? undefined : bg.background,
       bgIsImage: bg.bg?.type === 'image',
+      resolvedIcons,
     };
     const primaryElements = this._buildElements(
       plan,
@@ -2657,7 +2661,7 @@ export class AiDesignerComposerService implements OnModuleInit {
     // no-op (it only iterates secondary outputs). `_buildPerChannelAdjustments`
     // is inert for new plans — the art director no longer emits `perChannel`;
     // it only still honors notes carried by older stored plans.
-    doc = this._applyChannelLayouts(plan, copy, assets, outputs, style, doc);
+    doc = this._applyChannelLayouts(plan, copy, assets, outputs, style, doc, resolvedIcons);
     doc = this._dropBackgroundDuplicateImages(doc);
 
     const adjustOps = this._buildPerChannelAdjustments(plan, doc);
@@ -2681,7 +2685,8 @@ export class AiDesignerComposerService implements OnModuleInit {
     assets: Record<string, AssetResult>,
     outputs: ComposerInput['outputs'],
     style: ResolvedStyle,
-    doc: DesignerDoc
+    doc: DesignerDoc,
+    resolvedIcons?: ReadonlyMap<string, ResolvedIcon>
   ): DesignerDoc {
     if (!plan.channelLayouts) return doc;
     let next = doc;
@@ -2706,7 +2711,7 @@ export class AiDesignerComposerService implements OnModuleInit {
         outputs[i],
         template,
         style,
-        buildOpts
+        { ...buildOpts, resolvedIcons }
       ).map((el) => ({
         ...el,
         // Keep an id the builder already minted — `wrapMoveUnitsInGroups`
@@ -2797,7 +2802,13 @@ export class AiDesignerComposerService implements OnModuleInit {
       'Could not repair raw ops; falling back to deterministic compose.',
       AiDesignerComposerService.name
     );
-    return this._composeDeterministic(plan, copy, assets, outputs);
+    return this._composeDeterministic(
+      plan,
+      copy,
+      assets,
+      outputs,
+      await resolveIconSlots(plan.slots)
+    );
   }
 
   private _buildFallbackDoc(
@@ -4250,7 +4261,13 @@ export class AiDesignerComposerService implements OnModuleInit {
     output: { width: number; height: number; formatId?: string },
     layout: LayoutId,
     style: ResolvedStyle,
-    opts: { heroTop?: boolean; outputBg?: string; bgIsImage?: boolean } = {}
+    opts: {
+      heroTop?: boolean;
+      outputBg?: string;
+      bgIsImage?: boolean;
+      /** Pre-resolved at the async boundary — see `resolveIconSlots`. */
+      resolvedIcons?: ReadonlyMap<string, ResolvedIcon>;
+    } = {}
   ): DesignerElement[] {
     const w = output.width;
     const h = output.height;
@@ -4317,11 +4334,11 @@ export class AiDesignerComposerService implements OnModuleInit {
 
     let elements: DesignerElement[];
 
-    // Compositions the six hand-written builders do not implement are laid out
-    // by the ENGINE. The legacy six keep their builders for now: those encode
-    // about eight rounds of live remediation and are locked by 48 golden
-    // snapshots, so each is ported behind its own reviewed diff rather than all
-    // at once under cover of this change.
+    // Every composition resolves through the engine now — the six legacy
+    // layouts were ported one at a time, each behind its own reviewed
+    // snapshot diff, because they encode about eight rounds of live
+    // remediation. The switch below only runs for plans that name no
+    // arrangement at all (no `composition`, no `formatTemplate`).
     const engineComposition = this._engineComposition(plan, effectiveLayout, {
       w,
       h,
@@ -4340,17 +4357,11 @@ export class AiDesignerComposerService implements OnModuleInit {
       );
     } else
     switch (effectiveLayout) {
-      case 'split-panel':
-        elements = this._layoutSplitPanel(ctx, imageSlot, textSlots, badgeSlots, legalSlots, accents, roles);
-        break;
       case 'top-bottom':
         elements = this._layoutTopBottom(ctx, imageSlot, textSlots, badgeSlots, legalSlots, accents, roles);
         break;
       case 'badge-burst':
         elements = this._layoutBadgeBurst(ctx, imageSlot, textSlots, badgeSlots, legalSlots, accents, roles);
-        break;
-      case 'editorial-sidebar':
-        elements = this._layoutEditorialSidebar(ctx, imageSlot, textSlots, badgeSlots, legalSlots, accents, roles);
         break;
       case 'minimal-centered':
         elements = this._layoutMinimalCentered(ctx, imageSlot, textSlots, badgeSlots, legalSlots, accents, roles);
@@ -4383,6 +4394,7 @@ export class AiDesignerComposerService implements OnModuleInit {
             }
           : undefined,
         logo: this._logoAsset(assets),
+        resolvedIcons: opts.resolvedIcons,
       })
     );
 
@@ -4542,6 +4554,21 @@ export class AiDesignerComposerService implements OnModuleInit {
     accents: DesignerElement[],
     roles: Map<string, SlotRole>
   ): DesignerElement[] {
+    // A panel arrangement is its slab, its imagery, and its safe column — a
+    // margin/edge contract, not grid layout. It gets its own path.
+    if (composition.panel) {
+      return this._layoutPanelViaEngine(
+        composition,
+        ctx,
+        imageSlot,
+        textSlots,
+        badgeSlots,
+        legalSlots,
+        accents,
+        roles
+      );
+    }
+
     const grid = buildGrid({ width: ctx.w, height: ctx.h, formatId: ctx.formatId });
     const bound = this._boundSlots(ctx.copy, ctx.plan);
 
@@ -4554,34 +4581,7 @@ export class AiDesignerComposerService implements OnModuleInit {
 
     const elements: DesignerElement[] = [];
 
-    // A panel arrangement IS its slab: without it the copy sits on the
-    // photograph instead of on a surface, which is a different design. The
-    // panel takes one column and the imagery fills the complement, edge to
-    // edge — never an inset.
-    const panel = composition.panel;
-    const panelRight = ctx.plan.panelSide === 'right';
-    const panelW = panel ? Math.round(ctx.w * panel.widthRatio) : 0;
-    const panelX = panel ? (panelRight ? ctx.w - panelW : 0) : 0;
-
-    if (panel) {
-      elements.push({
-        id: '',
-        type: 'shape',
-        shape: 'rect',
-        x: panelX,
-        y: 0,
-        width: panelW,
-        height: ctx.h,
-        rotation: 0,
-        opacity: 1,
-        locked: false,
-        hidden: false,
-        fill: ctx.style.surface,
-        originId: `${composition.id}-bg`,
-      } as DesignerElement);
-    }
-
-    // Imagery next: it is the backdrop, and z-order is array order.
+    // Imagery first: it is the backdrop, and z-order is array order.
     if (imageSlot) {
       const box = boxes.get(imageSlot.id);
       const asset = this._assetFor(ctx, imageSlot.id);
@@ -4590,16 +4590,7 @@ export class AiDesignerComposerService implements OnModuleInit {
         // photograph inset by the copy margin is the framed-inset defect.
         const bleeds =
           box.width >= grid.right - grid.left - 1 && box.height >= grid.bottom - grid.top - 1;
-        const target = panel
-          ? {
-              x: panelRight ? 0 : panelW,
-              y: 0,
-              width: ctx.w - panelW,
-              height: ctx.h,
-            }
-          : bleeds
-            ? { x: 0, y: 0, width: ctx.w, height: ctx.h }
-            : box;
+        const target = bleeds ? { x: 0, y: 0, width: ctx.w, height: ctx.h } : box;
         elements.push(
           this._imageElement(imageSlot.id, asset, target.x, target.y, target.width, target.height)
         );
@@ -4618,9 +4609,7 @@ export class AiDesignerComposerService implements OnModuleInit {
     // and reimplementing it would be re-deriving eight rounds of fixes for
     // nothing. The engine owns the copy stack and the imagery, which is where
     // the templates actually constrained it.
-    const column = panel
-      ? this._safeColumn(ctx, panelX + ctx.margin, panelW - ctx.margin * 2)
-      : this._safeColumn(ctx, ctx.margin, ctx.w - ctx.margin * 2);
+    const column = this._safeColumn(ctx, ctx.margin, ctx.w - ctx.margin * 2);
     const badges = this._pushBadges(
       ctx,
       elements,
@@ -4663,9 +4652,6 @@ export class AiDesignerComposerService implements OnModuleInit {
       );
       const placed = {
         ...box,
-        // Inside the panel, not across the canvas: a copy box that keeps the
-        // engine's full-width geometry would run straight over the photograph.
-        ...(panel ? { x: column.x, width: column.width } : {}),
         y: Math.max(box.y, band.y),
       };
 
@@ -4684,6 +4670,102 @@ export class AiDesignerComposerService implements OnModuleInit {
     }
 
     void textSlots;
+    return elements;
+  }
+
+  /**
+   * A panel composition (split-panel, editorial-sidebar): the slab takes one
+   * column, imagery fills the complement edge to edge, and the copy stacks in
+   * the panel's safe column.
+   *
+   * The copy rhythm deliberately stays with `_copyStack`, `_pushBadges` and
+   * `_pushFooter` rather than the engine's per-slot boxes — the same call the
+   * legacy builders made, because eight assertions pin that arithmetic
+   * exactly: the band starts at the canvas margin (NOT the grid's top, which
+   * is why the naive per-box port landed the headline at 75.6 instead of 54),
+   * the balance shift is measured from the band's top, it is capped unless a
+   * footer closes the band, and a `middle` verticalAlign skips it. What the
+   * engine owns here is SELECTION — a split panel requested on a story canvas
+   * is substituted rather than forced into two unreadable columns — plus the
+   * slab and the edge-to-edge imagery, both derived from `composition.panel`.
+   */
+  private _layoutPanelViaEngine(
+    composition: Composition,
+    ctx: ComposeContext,
+    imageSlot: DesignSlot | undefined,
+    textSlots: DesignSlot[],
+    badgeSlots: DesignSlot[],
+    legalSlots: DesignSlot[],
+    accents: DesignerElement[],
+    roles: Map<string, SlotRole>
+  ): DesignerElement[] {
+    const { w, h, margin, style } = ctx;
+    const panel = composition.panel as { widthRatio: number };
+    const panelW = Math.round(w * panel.widthRatio);
+    const panelRight = ctx.plan.panelSide === 'right';
+    const panelX = panelRight ? w - panelW : 0;
+    const elements: DesignerElement[] = [
+      {
+        id: '',
+        type: 'shape',
+        shape: 'rect',
+        x: panelX,
+        y: 0,
+        width: panelW,
+        height: h,
+        rotation: 0,
+        opacity: 1,
+        locked: false,
+        hidden: false,
+        fill: style.surface,
+        originId: `${composition.id}-bg`,
+      } as DesignerElement,
+    ];
+    if (imageSlot) {
+      elements.push(
+        this._imageElement(
+          imageSlot.id,
+          this._assetFor(ctx, imageSlot.id),
+          panelRight ? 0 : panelW,
+          0,
+          w - panelW,
+          h
+        )
+      );
+    }
+    elements.push(...accents);
+    // The copy column, inside the title-safe area (see `_safeColumn`).
+    const col = this._safeColumn(ctx, panelX + margin, panelW - margin * 2);
+    const badges = this._pushBadges(
+      ctx,
+      elements,
+      badgeSlots,
+      roles,
+      { ...col, y: margin, bottom: h - margin },
+      composition.badgeAlign ?? 'left'
+    );
+    const footers = this._pushFooter(
+      ctx,
+      elements,
+      legalSlots,
+      roles,
+      { ...col, bottom: this._footerBottom(ctx) },
+      // The footer sits IN the panel: a plan fill equal to the surface is
+      // invisible text, so it validates against the surface, not the output
+      // background.
+      { align: 'left', backdrop: style.surface }
+    );
+    const band = this._copyBand(ctx, badges, margin, h - margin, footers);
+    elements.push(
+      ...this._copyStack(
+        ctx,
+        textSlots,
+        roles,
+        { ...col, y: band.y, height: band.height },
+        // Same guard as the footer: the copy sits on the panel surface.
+        { align: 'left', backdrop: style.surface, centerInBand: footers.length > 0 }
+      )
+    );
     return elements;
   }
 
@@ -4959,76 +5041,6 @@ export class AiDesignerComposerService implements OnModuleInit {
     return elements;
   }
 
-  /** split-panel: solid surface panel with left-aligned copy on one side,
-   *  image filling the other half. `plan.panelSide` picks the panel side
-   *  (default left). */
-  private _layoutSplitPanel(
-    ctx: ComposeContext,
-    imageSlot: DesignSlot | undefined,
-    textSlots: DesignSlot[],
-    badgeSlots: DesignSlot[],
-    legalSlots: DesignSlot[],
-    accents: DesignerElement[],
-    roles: Map<string, SlotRole>
-  ): DesignerElement[] {
-    const { w, h, margin, style } = ctx;
-    const panelW = Math.round(w * 0.46);
-    const panelRight = ctx.plan.panelSide === 'right';
-    const panelX = panelRight ? w - panelW : 0;
-    const elements: DesignerElement[] = [
-      {
-        id: '',
-        type: 'shape',
-        shape: 'rect',
-        x: panelX,
-        y: 0,
-        width: panelW,
-        height: h,
-        rotation: 0,
-        opacity: 1,
-        locked: false,
-        hidden: false,
-        fill: style.surface,
-        originId: 'split-panel-bg',
-      } as DesignerElement,
-    ];
-    if (imageSlot) {
-      elements.push(
-        this._imageElement(
-          imageSlot.id,
-          this._assetFor(ctx, imageSlot.id),
-          panelRight ? 0 : panelW,
-          0,
-          w - panelW,
-          h
-        )
-      );
-    }
-    elements.push(...accents);
-    // The copy column, inside the title-safe area (see `_safeColumn`).
-    const col = this._safeColumn(ctx, panelX + margin, panelW - margin * 2);
-    const badges = this._pushBadges(ctx, elements, badgeSlots, roles, {
-      ...col,
-      y: margin,
-      bottom: h - margin,
-    }, 'left');
-    const footers = this._pushFooter(ctx, elements, legalSlots, roles, {
-      ...col,
-      bottom: this._footerBottom(ctx),
-    }, { align: 'left', backdrop: style.surface });
-    const band = this._copyBand(ctx, badges, margin, h - margin, footers);
-    elements.push(
-      ...this._copyStack(ctx, textSlots, roles, {
-        ...col,
-        y: band.y,
-        height: band.height,
-        // The copy sits on the panel — a plan fill equal to the surface is
-        // invisible text, so the stack validates against it.
-      }, { align: 'left', backdrop: style.surface, centerInBand: footers.length > 0 })
-    );
-    return elements;
-  }
-
   /** top-bottom: fullbleed image, first copy slot pinned top, last pinned
    *  bottom, any middle slots stacked center. */
   private _layoutTopBottom(
@@ -5172,75 +5184,6 @@ export class AiDesignerComposerService implements OnModuleInit {
         width: w - margin * 2,
         height: this._bandBottom(ctx, footers, h - margin) - stackY,
       }, { align: 'center', onImage, backdrop, centerInBand: footers.length > 0 })
-    );
-    return elements;
-  }
-
-  /** editorial-sidebar: solid sidebar column with a left-aligned vertical
-   *  rhythm of copy; the image fills the rest of the canvas.
-   *  `plan.panelSide` picks the sidebar side (default left). */
-  private _layoutEditorialSidebar(
-    ctx: ComposeContext,
-    imageSlot: DesignSlot | undefined,
-    textSlots: DesignSlot[],
-    badgeSlots: DesignSlot[],
-    legalSlots: DesignSlot[],
-    accents: DesignerElement[],
-    roles: Map<string, SlotRole>
-  ): DesignerElement[] {
-    const { w, h, margin, style } = ctx;
-    const sidebarW = Math.round(w * 0.38);
-    const panelRight = ctx.plan.panelSide === 'right';
-    const sidebarX = panelRight ? w - sidebarW : 0;
-    const elements: DesignerElement[] = [
-      {
-        id: '',
-        type: 'shape',
-        shape: 'rect',
-        x: sidebarX,
-        y: 0,
-        width: sidebarW,
-        height: h,
-        rotation: 0,
-        opacity: 1,
-        locked: false,
-        hidden: false,
-        fill: style.surface,
-        originId: 'editorial-sidebar-bg',
-      } as DesignerElement,
-    ];
-    if (imageSlot) {
-      elements.push(
-        this._imageElement(
-          imageSlot.id,
-          this._assetFor(ctx, imageSlot.id),
-          panelRight ? 0 : sidebarW,
-          0,
-          w - sidebarW,
-          h
-        )
-      );
-    }
-    elements.push(...accents);
-    // The copy column, inside the title-safe area (see `_safeColumn`).
-    const col = this._safeColumn(ctx, sidebarX + margin, sidebarW - margin * 2);
-    const badges = this._pushBadges(ctx, elements, badgeSlots, roles, {
-      ...col,
-      y: margin,
-      bottom: h - margin,
-    }, 'left');
-    const footers = this._pushFooter(ctx, elements, legalSlots, roles, {
-      ...col,
-      bottom: this._footerBottom(ctx),
-    }, { align: 'left', backdrop: style.surface });
-    const band = this._copyBand(ctx, badges, margin, h - margin, footers);
-    elements.push(
-      ...this._copyStack(ctx, textSlots, roles, {
-        ...col,
-        y: band.y,
-        height: band.height,
-        // Same guard as split-panel: the copy sits on the sidebar surface.
-      }, { align: 'left', backdrop: style.surface, centerInBand: footers.length > 0 })
     );
     return elements;
   }

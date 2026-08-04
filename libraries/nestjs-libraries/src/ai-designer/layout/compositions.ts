@@ -72,7 +72,11 @@ export const COMPOSITIONS: Composition[] = [
     label: 'Split Panel',
     description: 'Two columns: imagery on one side, a solid panel of copy on the other.',
     roles: ['image', 'headline', 'subhead', 'cta', 'badge', 'legal'],
-    requires: ['image'],
+    // No `requires: ['image']`: the slab IS the design, so a panel holds up on
+    // a flat background — an explicit request must be honoured (two specs pin
+    // the slab over a flat background). Fallback selection is unaffected: the
+    // fallback is hero-fullbleed, which fits first.
+    requires: [],
     // Two columns on a 9:16 story are each narrower than a word.
     aspect: { min: 0.7 },
     build: (ctx) => ({
@@ -147,7 +151,9 @@ export const COMPOSITIONS: Composition[] = [
     label: 'Editorial Sidebar',
     description: 'A narrow column of copy beside a dominant image; magazine-like.',
     roles: ['image', 'headline', 'subhead', 'cta', 'badge', 'legal'],
-    requires: ['image'],
+    // Same as split-panel: the sidebar holds up on a flat background, so an
+    // explicit request must not be vetoed by a missing image role.
+    requires: [],
     aspect: { min: 0.7 },
     build: (ctx) => ({
       kind: 'row',
@@ -356,4 +362,7 @@ export const resolveComposition = (
 
 /** The gallery as the planning model sees it — generated, never hand-listed. */
 export const compositionCatalogPrompt = (): string =>
-  COMPOSITIONS.map((c) => `- ${c.id}: ${c.description}`).join('\n');
+  COMPOSITIONS.map(
+    (c) =>
+      `- ${c.id}: ${c.description} (imagery: ${c.roles.includes('image') ? 'placed' : 'none'})`
+  ).join('\n');

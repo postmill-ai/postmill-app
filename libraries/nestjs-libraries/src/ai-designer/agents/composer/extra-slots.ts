@@ -3,6 +3,10 @@ import type { DesignSlot } from '../../ai-designer.types';
 import { expandDecor, decorRecipeById } from '../../design-language/decor-recipes';
 import { offsetPath, roundCorners } from '../../../media/designer-doc/path-offset';
 import type { DesignerPathNode } from '../../../media/designer-doc/designer-doc.schema';
+import {
+  resolveIconifyIcon,
+  type ResolvedIcon,
+} from '../../../media/designer-doc/icon-resolver';
 
 /**
  * Builders for the slot kinds the composer never learned to draw.
@@ -32,6 +36,9 @@ export interface ExtraSlotContext {
   headline?: { x: number; y: number; width: number; height: number };
   /** Resolved logo asset, when the brand has one. */
   logo?: { src?: string; fileId?: string; naturalWidth?: number; naturalHeight?: number };
+  /** Pre-resolved Iconify bodies for `icon` slots, keyed by slot id — see
+   *  `resolveIconSlots`. Absent (or a miss) keeps the ellipse stand-in. */
+  resolvedIcons?: ReadonlyMap<string, ResolvedIcon>;
 }
 
 /** The kinds this module owns. Everything else is somebody else's slot. */
@@ -220,21 +227,26 @@ export const buildExtraSlot = (
     }
 
     case 'icon': {
-      // DELIBERATELY a shape, not an `icon` element.
-      //
-      // An `icon` needs a resolvable source and there is no server-side icon
-      // resolver — the picker runs in the browser against Iconify. Worse, the
-      // two sides disagree about what `src` even is: the Designer's icons panel
-      // stores the raw SVG BODY there, while `SrcSchema` requires a `data:` or
-      // `http(s)` URL, so a hand-added icon does not survive strict validation
-      // either. Emitting one from here would produce a document that fails to
-      // compose rather than a design with an icon in it.
-      //
-      // A filled circle in the accent is an honest stand-in; when an icon
-      // resolver exists this becomes a real `icon` element and nothing else
-      // changes.
+      // A real `icon` element when the slot named a resolvable Iconify icon
+      // (see `resolveIconSlots` below); the raw SVG body goes in `src` with
+      // the accent as its tint, exactly like a hand-placed icon from the
+      // Designer's icons panel. Until Phase 1's schema/render work this had
+      // to be a shape — an `icon` element failed strict validation AND the
+      // server render — and the ellipse stays as the fallback for a slot
+      // that named nothing resolvable.
       const size = Math.round(unit * 0.09);
       const anchor = box ?? cornerBox(ctx, index, size, size);
+      const resolved = ctx.resolvedIcons?.get(slot.id);
+      if (resolved) {
+        return [
+          {
+            ...base(slot, anchor),
+            type: 'icon',
+            src: resolved.body,
+            fill: accent,
+          } as DesignerElement,
+        ];
+      }
       return [
         {
           ...base(slot, anchor),
@@ -273,4 +285,28 @@ export const buildExtraSlots = (
 ): DesignerElement[] => {
   const extras = slots.filter(isExtraSlot);
   return extras.flatMap((slot, i) => buildExtraSlot(slot, i, ctx, boxes?.get(slot.id)));
+};
+
+/**
+ * Resolve every `icon` slot that names an Iconify icon.
+ *
+ * The slot's ROLE carries the name, the same convention the divider uses for
+ * its decor recipe: `role: 'mdi:rocket'` draws a rocket, anything else keeps
+ * the ellipse stand-in. Resolution is async (Iconify, through safeFetch) and
+ * `buildExtraSlot` is sync, so the composer resolves up front and passes the
+ * map in the context. Failures resolve to absence, not an error — a missing
+ * icon degrades a design, it must not fail a compose.
+ */
+export const resolveIconSlots = async (
+  slots: DesignSlot[]
+): Promise<ReadonlyMap<string, ResolvedIcon>> => {
+  const named = slots.filter(
+    (s) => s.kind === 'icon' && /^[a-z0-9]+(?:-[a-z0-9]+)*:[a-z0-9]+(?:-[a-z0-9]+)*$/.test(s.role ?? '')
+  );
+  const entries = await Promise.all(
+    named.map(async (s) => [s.id, await resolveIconifyIcon(s.role!)] as const)
+  );
+  return new Map(
+    entries.filter((e): e is readonly [string, ResolvedIcon] => e[1] !== null)
+  );
 };
