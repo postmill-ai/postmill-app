@@ -27,7 +27,7 @@ export const ProductPromoSkill: DesignSkill = {
 - A cta-button is optional — promos can sell on desire alone. If present, it is small, lower third, and never touches the product.
 - Keep all copy inside safe zones; the product may bleed to edges only when the template calls for full-bleed imagery.`,
   layoutHints: {
-    formatTemplates: ['split-panel', 'hero-fullbleed'],
+    formatTemplates: ['split-panel', 'poster-left', 'hero-fullbleed'],
     slotSchema: [
       { id: 'image', role: 'product-image', kind: 'image' },
       { id: 'headline', role: 'headline', kind: 'text' },

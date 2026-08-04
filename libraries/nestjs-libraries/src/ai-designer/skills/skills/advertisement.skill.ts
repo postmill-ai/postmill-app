@@ -40,7 +40,7 @@ export const AdvertisementSkill: DesignSkill = {
 - Over a busy hero image, give the text a shadow or glow so it reads against the picture — never raw text on noise, and never a scrim/overlay band over the photo.
 - If the brief names an offer, the offer goes in the headline or badge — not buried in the subhead.`,
   layoutHints: {
-    formatTemplates: ['hero-fullbleed', 'split-panel'],
+    formatTemplates: ['hero-fullbleed', 'poster-left', 'split-panel'],
     slotSchema: [
       { id: 'image', role: 'image', kind: 'image' },
       { id: 'headline', role: 'headline', kind: 'text' },

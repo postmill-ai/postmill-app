@@ -37,7 +37,7 @@ export const SaleDiscountSkill = defineSkill({
     { id: 'image', role: 'image', kind: 'image' },
   ],
   art: {
-    compositions: ['badge-burst', 'type-dominant', 'hero-fullbleed'],
+    compositions: ['badge-burst', 'type-dominant', 'hero-fullbleed', 'poster-left'],
     effects: ['hard-shadow', 'sticker-pop', 'long-shadow'],
     treatments: ['contrast-punch', 'duotone-brand'],
     decor: ['burst', 'diagonal-stripes', 'rule'],
@@ -99,7 +99,7 @@ export const NewArrivalSkill = defineSkill({
     { id: 'cta', role: 'cta', kind: 'cta-button' },
   ],
   art: {
-    compositions: ['hero-fullbleed', 'poster-frame', 'editorial-sidebar', 'overlap-card'],
+    compositions: ['hero-fullbleed', 'poster-frame', 'editorial-sidebar', 'overlap-card', 'poster-left'],
     effects: ['soft-lift', 'keyline'],
     treatments: ['faded-matte', 'mono-tint', 'crisp'],
     masks: ['soft-corners', 'arch'],
