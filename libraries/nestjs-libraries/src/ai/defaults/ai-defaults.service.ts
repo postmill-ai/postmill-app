@@ -303,14 +303,14 @@ export class AiDefaultsService {
     );
   }
 
-  async vision(orgId: string, imageUrl: string, prompt: string) {
+  async vision(orgId: string, imageUrl: string, prompt: string, opts?: { signal?: AbortSignal }) {
     const resolved = await this._require('ai', 'vision', orgId);
     return this._aiModelProvider.generateTextWithModel(
       orgId,
       resolved.providerId,
       resolved.version,
       resolved.model,
-      { imageUrl, prompt },
+      { imageUrl, prompt, signal: opts?.signal },
     );
   }
 
@@ -356,9 +356,9 @@ export class AiDefaultsService {
   // The success path (a default IS configured) is unchanged — `AiMediaService` still
   // re-resolves internally for the actual provider/model.
 
-  async textToImage(orgId: string, prompt: string, opts?: { aspect?: 'square' | 'wide' | 'tall' }) {
+  async textToImage(orgId: string, prompt: string, opts?: { aspect?: 'square' | 'wide' | 'tall'; signal?: AbortSignal }) {
     await this._requireMedia(orgId, 'text-to-image');
-    return this._aiMediaService.generateImage(prompt, { orgId, aspect: opts?.aspect });
+    return this._aiMediaService.generateImage(prompt, { orgId, aspect: opts?.aspect, signal: opts?.signal });
   }
 
   async textToVideo(orgId: string, prompt: string) {

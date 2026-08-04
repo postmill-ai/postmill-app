@@ -542,6 +542,69 @@ describe('AIModelProvider', () => {
     });
   });
 
+  describe('abort signal threading', () => {
+    it('generateText passes options.signal as abortSignal to doGenerate', async () => {
+      mockDoGenerate.mockClear();
+      const controller = new AbortController();
+
+      await provider.generateText('utility', 'Hello world', {
+        orgId: 'org-123',
+        signal: controller.signal,
+      });
+
+      expect(mockDoGenerate.mock.calls.at(-1)![0].abortSignal).toBe(controller.signal);
+    });
+
+    it('generateObject passes options.signal as abortSignal to doGenerate', async () => {
+      mockDoGenerate.mockClear();
+      const controller = new AbortController();
+
+      await provider.generateObject<any>(
+        'utility',
+        'Extract data',
+        { title: 'test' },
+        { orgId: 'org-123', signal: controller.signal },
+      );
+
+      expect(mockDoGenerate.mock.calls.at(-1)![0].abortSignal).toBe(controller.signal);
+    });
+
+    it('generateTextWithModel passes args.signal as abortSignal to doGenerate', async () => {
+      mockDoGenerate.mockClear();
+      mockGetByIdentifier.mockResolvedValue({
+        credentials: { apiKey: 'sk-test' },
+      });
+      const controller = new AbortController();
+
+      await provider.generateTextWithModel('org-123', 'openai', 'v1', 'gpt-4.1', {
+        prompt: 'Hello',
+        signal: controller.signal,
+      });
+
+      expect(mockDoGenerate.mock.calls.at(-1)![0].abortSignal).toBe(controller.signal);
+    });
+
+    it('generateObjectWithModel passes args.signal as abortSignal to doGenerate', async () => {
+      mockDoGenerate.mockClear();
+      mockGetByIdentifier.mockResolvedValue({
+        credentials: { apiKey: 'sk-test' },
+      });
+      mockDoGenerate.mockResolvedValueOnce({
+        content: [{ type: 'text', text: '{"title": "test"}' }],
+        usage: { inputTokens: 10, outputTokens: 20 },
+        finishReason: 'stop',
+      });
+      const controller = new AbortController();
+
+      await provider.generateObjectWithModel('org-123', 'openai', 'v1', 'gpt-4.1', {
+        prompt: 'Extract data',
+        signal: controller.signal,
+      });
+
+      expect(mockDoGenerate.mock.calls.at(-1)![0].abortSignal).toBe(controller.signal);
+    });
+  });
+
   describe('semantic cache + routing (opt-in, off by default)', () => {
     function makeCache(over: Partial<{ get: any; set: any; setModelProvider: any }> = {}) {
       return {

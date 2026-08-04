@@ -32,6 +32,7 @@ import {
   isAgentInputError,
   parseAgentInput,
 } from '../../util/parse-agent-input';
+import { throwIfAborted } from '../../util/throw-if-aborted';
 import { normalizeSlotText } from '../../util/slot-keys';
 import {
   FIXED_COPY_SEPARATOR,
@@ -98,6 +99,10 @@ export class AiDesignerArtDirectorService implements OnModuleInit {
   private _handler: InProcessHandler = async (
     context: ContextPacket
   ): Promise<AgentResponse> => {
+    // The session signal rides in metadata from the conductor — a cancelled
+    // or timed-out session must not start billable plan generation.
+    const signal = context.metadata?.signal as AbortSignal | undefined;
+    throwIfAborted(signal);
     const request = parseAgentInput<PlanRequest>(context.raw_input);
     if (isAgentInputError(request)) {
       return {
@@ -126,8 +131,11 @@ export class AiDesignerArtDirectorService implements OnModuleInit {
 
     let plans: DesignPlan[];
     try {
-      plans = await this._generatePlans(skillId, brief, sizes, variants, orgId);
+      plans = await this._generatePlans(skillId, brief, sizes, variants, orgId, signal);
     } catch (err) {
+      // An abort is a cancel, not a plan-generation failure — don't mask it
+      // with a fallback plan nobody is waiting for.
+      throwIfAborted(signal);
       this._logger.warn(
         `Plan generation failed, using fallback: ${(err as Error).message}`
       );
@@ -228,7 +236,8 @@ export class AiDesignerArtDirectorService implements OnModuleInit {
     brief: EnrichedBrief,
     sizes: SizeOutput[],
     variants: number,
-    orgId: string | undefined
+    orgId: string | undefined,
+    signal?: AbortSignal
   ): Promise<DesignPlan[]> {
     const skillSystemPrompt = this._skillRouter.getSkillPrompt(skillId);
 
@@ -253,7 +262,10 @@ export class AiDesignerArtDirectorService implements OnModuleInit {
       `Return ONLY a JSON object in this exact shape: { "type": "plans", "plans": DesignPlan[] }.`,
       `The "plans" array must contain exactly ${variants} DesignPlan objects.`,
       '',
-      'Imagery: social designs live or die on imagery. Unless the brief explicitly asks for a',
+      'Imagery: social designs live or die on imagery — when the chosen composition places it.',
+      'A composition marked "(imagery: none)" (e.g. type-dominant, centred-emblem) places NO',
+      'image: its plan must not declare image slots or "assetNeeds" entries — they would be paid',
+      'for and never placed. For any other composition, unless the brief explicitly asks for a',
       'flat/solid/typographic-only design, every plan MUST include an image slot (typically the',
       'background) AND a matching entry in "assetNeeds" with a vivid, specific brief for that',
       "image (subject, mood, lighting, palette). Use prefer: 'either' unless the brief demands",
@@ -303,7 +315,7 @@ export class AiDesignerArtDirectorService implements OnModuleInit {
       JSON.stringify(this._designPlanSchema(), null, 2),
     ].join('\n');
 
-    let validPlans = await this._requestPlans(prompt, skillSystemPrompt, orgId);
+    let validPlans = await this._requestPlans(prompt, skillSystemPrompt, orgId, signal);
 
     // Offer-token fidelity: a plan whose texts drop ANY offer token the
     // brief stated (discount, price, coupon code, date, URL, fixed copy)
@@ -347,7 +359,8 @@ export class AiDesignerArtDirectorService implements OnModuleInit {
         const retried = await this._requestPlans(
           `${prompt}\n\n${repairs.join('\n')}`,
           skillSystemPrompt,
-          orgId
+          orgId,
+          signal
         );
         // Only the plans that failed coverage are replaced — plans that
         // already passed keep their verified copy.
@@ -358,6 +371,8 @@ export class AiDesignerArtDirectorService implements OnModuleInit {
             : plan
         );
       } catch (err) {
+        // A cancel must not be swallowed as "repair failed, keep originals".
+        throwIfAborted(signal);
         this._logger.warn(
           `Offer-token repair retry failed: ${(err as Error).message}; keeping the original plans.`
         );
@@ -482,7 +497,8 @@ export class AiDesignerArtDirectorService implements OnModuleInit {
   private async _requestPlans(
     prompt: string,
     skillSystemPrompt: string,
-    orgId: string | undefined
+    orgId: string | undefined,
+    signal?: AbortSignal
   ): Promise<DesignPlan[]> {
     const result = await this._modelProvider.generateObject<{
       type: string;
@@ -490,6 +506,7 @@ export class AiDesignerArtDirectorService implements OnModuleInit {
     }>('agent', prompt, PlanResponseSchema, {
       system: skillSystemPrompt,
       orgId,
+      signal,
     });
 
     if (result?.type !== 'plans' || !Array.isArray(result.plans)) {
@@ -970,6 +987,7 @@ export class AiDesignerArtDirectorService implements OnModuleInit {
       `Canonical slots for this format (use these ids/roles/kinds so copy, assets, and revise fixes key off the same ids):`,
       JSON.stringify(hints.slotSchema, null, 2),
       'Plans should cover these slots (image slots also need an "assetNeeds" entry). Optional slots may be dropped when the concept does not need them; do not invent parallel slot ids for the same role.',
+      'An "icon" slot draws a real icon: set its "role" to an Iconify name ("mdi:rocket", "tabler:bolt") chosen to fit the concept. Any other role draws a neutral mark instead.',
     ];
   }
 

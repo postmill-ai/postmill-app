@@ -29,6 +29,8 @@ import { getDesignSkill } from '../skills/design-skill.registry';
 import { AiDesignerInputPolicyService } from '../ai-designer-input-policy.service';
 import { raceWithTimeout } from '../util/race-with-timeout';
 import { aspectClass, assetKey } from '../util/aspect';
+import { compositionById } from '../layout/compositions';
+import { compositionFits, type SlotRole } from '../layout/composition';
 import { DEGENERATE_VIOLATION_PREFIX } from '../util/doc-validator';
 import { matchSlotTexts, normalizeSlotText } from '../util/slot-keys';
 import { isDeliveredAccept } from '../util/accept-phrases';
@@ -2133,8 +2135,11 @@ export class AiDesignerConductorService {
     // hero/background slots can carry layout intent into the image prompt.
     const seen = new Set<string>();
     const needs: AssetNeedRequest[] = [];
+    let unplaceable = 0;
     for (const plan of plans) {
-      for (const need of plan.assetNeeds ?? []) {
+      const placeable = this._placeableAssetNeeds(plan, outputs[0]);
+      unplaceable += placeable.dropped;
+      for (const need of placeable.needs) {
         const key = `${plan.variantId}:${need.slotId}`;
         if (seen.has(key)) continue;
         seen.add(key);
@@ -2155,10 +2160,48 @@ export class AiDesignerConductorService {
       );
       return {
         needs: needs.slice(0, AiDesignerConductorService.MAX_ASSET_NEEDS),
-        dropped: needs.length - AiDesignerConductorService.MAX_ASSET_NEEDS,
+        dropped: unplaceable + (needs.length - AiDesignerConductorService.MAX_ASSET_NEEDS),
       };
     }
-    return { needs, dropped: 0 };
+    return { needs, dropped: unplaceable };
+  }
+
+  /**
+   * The asset needs a plan can actually place.
+   *
+   * A composition with no imagery role (type-dominant, centred-emblem) has
+   * nowhere an asset could go — the art-director prompt once mandated an
+   * image slot per plan, so a typographic design paid for a generation it
+   * never placed. Those needs are dropped here, deterministically, with one
+   * exception: a need backing an image BACKGROUND survives, because the
+   * background is placed independently of the composition's roles. A plan
+   * whose requested composition does not fit the canvas keeps its needs —
+   * the composer will fall back to a composition that does place imagery.
+   */
+  private _placeableAssetNeeds(
+    plan: DesignPlan,
+    primary?: { width: number; height: number }
+  ): { needs: DesignPlan['assetNeeds']; dropped: number } {
+    const all = plan.assetNeeds ?? [];
+    const id = plan.composition ?? plan.formatTemplate;
+    const composition = id ? compositionById(id) : undefined;
+    if (!composition || composition.roles.includes('image') || all.length === 0) {
+      return { needs: all, dropped: 0 };
+    }
+    const has = (role: SlotRole): boolean =>
+      role === 'image'
+        ? plan.slots.some((s) => s.kind === 'image' || s.role === 'image')
+        : plan.slots.some((s) => s.role === role);
+    const aspect = primary ? primary.width / Math.max(1, primary.height) : 1;
+    if (!compositionFits(composition, { aspect, has })) {
+      return { needs: all, dropped: 0 };
+    }
+    const bgRef =
+      plan.background?.kind === 'image'
+        ? (plan.background.ref || '').replace(/^asset:/, '')
+        : undefined;
+    const kept = bgRef ? all.filter((n) => n.slotId === bgRef) : [];
+    return { needs: kept, dropped: all.length - kept.length };
   }
 
   // Layout intent for the generation prompt's text-space guidance, resolved
@@ -3098,11 +3141,23 @@ export class AiDesignerConductorService {
     }
 
     const timeoutMs = this._agentTimeoutMs();
-    const signal = this._aborts.get(ctx.sessionId)?.signal;
-    // NOTE: a lost race (timeout/cancel) ABANDONS the dispatch, it does not
-    // abort it — dispatchToAgent accepts no signal, so the underlying
-    // agent/LLM call keeps running (and billing) in the background; only
-    // subsequent steps stop.
+    const sessionSignal = this._aborts.get(ctx.sessionId)?.signal;
+    // dispatchToAgent accepts no signal, but the agents run in-process and
+    // metadata reaches the handler by reference (agent-mesh-router passes
+    // `metadata: input.metadata` through unserialized), so an AbortSignal
+    // rides along and a lost race aborts the underlying LLM/image call
+    // instead of abandoning it mid-billing. The signal is per-dispatch: a
+    // timeout aborts THIS agent call only — the session signal gates the
+    // whole run and must stay un-aborted for the pipeline's own cancel path.
+    const dispatchAbort = new AbortController();
+    const linkSessionAbort = () => dispatchAbort.abort();
+    if (sessionSignal?.aborted) {
+      dispatchAbort.abort();
+    } else {
+      sessionSignal?.addEventListener('abort', linkSessionAbort, {
+        once: true,
+      });
+    }
     try {
       const response = await raceWithTimeout(
         dispatchToAgent(agent, {
@@ -3119,10 +3174,15 @@ export class AiDesignerConductorService {
             orgId: ctx.orgId,
             userId: ctx.userId,
             sessionId: ctx.sessionId,
+            signal: dispatchAbort.signal,
           },
         }),
         timeoutMs,
-        { signal, label: `Agent ${agentId}` }
+        {
+          signal: sessionSignal,
+          label: `Agent ${agentId}`,
+          onTimeout: () => dispatchAbort.abort(),
+        }
       );
       this._breakers.delete(breakerKey);
       return response;
@@ -3153,6 +3213,8 @@ export class AiDesignerConductorService {
         });
       }
       throw err;
+    } finally {
+      sessionSignal?.removeEventListener('abort', linkSessionAbort);
     }
   }
 

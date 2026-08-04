@@ -49,6 +49,31 @@ describe('AiDesignerArtDirectorService', () => {
       metadata: orgId ? { orgId } : {},
     });
 
+  it('does no billable work when the dispatch signal is already aborted', async () => {
+    await expect(
+      (service as any)._handler({
+        raw_input: makeRequest(),
+        metadata: { orgId: 'org1', signal: AbortSignal.abort() },
+      })
+    ).rejects.toThrow('Cancelled');
+    expect(model.generateObject).not.toHaveBeenCalled();
+  });
+
+  it('threads the dispatch signal into the plan-generation generateObject call', async () => {
+    model.generateObject.mockResolvedValue({
+      type: 'plans',
+      plans: [{ concept: 'x' }],
+    });
+    const controller = new AbortController();
+
+    await (service as any)._handler({
+      raw_input: makeRequest(),
+      metadata: { orgId: 'org1', signal: controller.signal },
+    });
+
+    expect(model.generateObject.mock.calls[0][3].signal).toBe(controller.signal);
+  });
+
   it('falls back to a single plan when every plan item is invalid', async () => {
     model.generateObject.mockResolvedValue({
       type: 'plans',

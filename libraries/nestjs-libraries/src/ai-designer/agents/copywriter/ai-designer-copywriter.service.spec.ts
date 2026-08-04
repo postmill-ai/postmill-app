@@ -32,6 +32,36 @@ describe('AiDesignerCopywriterService', () => {
       metadata: orgId ? { orgId } : {},
     });
 
+  it('does no billable work when the dispatch signal is already aborted', async () => {
+    await expect(
+      (service as any)._handler({
+        raw_input: JSON.stringify({
+          type: 'copy-request',
+          plan: makePlan(),
+          brand: null,
+        }),
+        metadata: { orgId: 'org1', signal: AbortSignal.abort() },
+      })
+    ).rejects.toThrow('Cancelled');
+    expect(model.generateText).not.toHaveBeenCalled();
+  });
+
+  it('threads the dispatch signal into the generateText call', async () => {
+    model.generateText.mockResolvedValue('{"headline":"Hi","cta":"Go"}');
+    const controller = new AbortController();
+
+    await (service as any)._handler({
+      raw_input: JSON.stringify({
+        type: 'copy-request',
+        plan: makePlan(),
+        brand: null,
+      }),
+      metadata: { orgId: 'org1', signal: controller.signal },
+    });
+
+    expect(model.generateText.mock.calls[0][2].signal).toBe(controller.signal);
+  });
+
   it('parses fenced JSON and returns copy for each text slot', async () => {
     model.generateText.mockResolvedValue(
       '```json\n{"headline":"Summer Sale","cta":"Shop Now"}\n```'

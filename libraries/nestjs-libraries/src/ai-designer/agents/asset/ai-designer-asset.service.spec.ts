@@ -60,6 +60,30 @@ describe('AiDesignerAssetService', () => {
     );
   });
 
+  it('does no billable work when the dispatch signal is already aborted', async () => {
+    const { service, aiDefaults } = makeService();
+
+    await expect(
+      (service as any)._handler({
+        ...makeContext(),
+        metadata: { orgId: ORG_ID, signal: AbortSignal.abort() },
+      })
+    ).rejects.toThrow('Cancelled');
+    expect(aiDefaults.textToImage).not.toHaveBeenCalled();
+  });
+
+  it('threads the dispatch signal into textToImage', async () => {
+    const { service, aiDefaults } = makeService();
+    const controller = new AbortController();
+
+    await (service as any)._handler({
+      ...makeContext(),
+      metadata: { orgId: ORG_ID, signal: controller.signal },
+    });
+
+    expect(aiDefaults.textToImage.mock.calls[0][2].signal).toBe(controller.signal);
+  });
+
   it('returns an error envelope when metadata orgId is missing', async () => {
     const { service, aiDefaults } = makeService();
 

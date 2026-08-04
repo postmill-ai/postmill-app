@@ -483,7 +483,7 @@ export class AIModelProvider {
     );
   }
 
-  async imageModel(scope: AIScope, orgId?: string): Promise<{ generate(prompt: string, opts?: { size?: string; isVertical?: boolean }): Promise<string> }> {
+  async imageModel(scope: AIScope, orgId?: string): Promise<{ generate(prompt: string, opts?: { size?: string; isVertical?: boolean; signal?: AbortSignal }): Promise<string> }> {
     return this._withFallback(async (config) => {
       const budgetCheck = await this._budget.checkBudget(scope, orgId, config.providerId);
       if (!budgetCheck.allowed) {
@@ -544,13 +544,14 @@ export class AIModelProvider {
     orgId: string | undefined,
     providerId: string,
     modelId: string,
-  ): (prompt: string, opts?: { size?: string; isVertical?: boolean }) => Promise<string> {
-    return async (prompt: string, _opts?: { size?: string; isVertical?: boolean }) => {
+  ): (prompt: string, opts?: { size?: string; isVertical?: boolean; signal?: AbortSignal }) => Promise<string> {
+    return async (prompt: string, _opts?: { size?: string; isVertical?: boolean; signal?: AbortSignal }) => {
       const result = await (imageModel as any).doGenerate({
         prompt,
         n: 1,
         size: _opts?.size || (_opts?.isVertical ? '1024x1536' : '1024x1024'),
         aspectRatio: undefined,
+        abortSignal: _opts?.signal,
       });
       const images = result.images as Array<string>;
       await this._recordUsage({
@@ -949,7 +950,7 @@ export class AIModelProvider {
   async generateText(
     scope: AIScope,
     prompt: string,
-    options?: { system?: string; promptKey?: string; orgId?: string; userId?: string; platform?: string; brandId?: string },
+    options?: { system?: string; promptKey?: string; orgId?: string; userId?: string; platform?: string; brandId?: string; signal?: AbortSignal },
   ): Promise<string> {
     const { checkedPrompt, brand, effectiveSystem } = await this._prepareGeneration(scope, prompt, options);
 
@@ -989,7 +990,7 @@ export class AIModelProvider {
               temperature: config.defaultSurface?.temperature,
             });
 
-            const result = await (model as any).doGenerate({ prompt: messages });
+            const result = await (model as any).doGenerate({ prompt: messages, abortSignal: options?.signal });
 
             const outputText = this._extractText(result);
             const checkedOutput = await this._guardrails.checkOutput(outputText, { orgId: options?.orgId });
@@ -1034,7 +1035,7 @@ export class AIModelProvider {
     scope: AIScope,
     prompt: string,
     _schema: any,
-    options?: { system?: string; promptKey?: string; orgId?: string; userId?: string; platform?: string; brandId?: string },
+    options?: { system?: string; promptKey?: string; orgId?: string; userId?: string; platform?: string; brandId?: string; signal?: AbortSignal },
   ): Promise<T> {
     const { checkedPrompt, brand, effectiveSystem } = await this._prepareGeneration(scope, prompt, options);
     const systemPrompt = this._buildSystemPrompt(effectiveSystem, brand);
@@ -1078,6 +1079,7 @@ export class AIModelProvider {
             const result = await (model as any).doGenerate({
               prompt: finalMessages,
               responseFormat: { type: 'json' },
+              abortSignal: options?.signal,
             });
 
             const outputText = this._extractText(result);
@@ -1126,7 +1128,7 @@ export class AIModelProvider {
     providerId: string,
     version: string,
     modelId: string | undefined,
-    args: { prompt?: string; messages?: any[]; system?: string; temperature?: number; maxTokens?: number; imageUrl?: string } = {},
+    args: { prompt?: string; messages?: any[]; system?: string; temperature?: number; maxTokens?: number; imageUrl?: string; signal?: AbortSignal } = {},
   ): Promise<string> {
     const creds = orgId ? await this._credentialsForProvider(orgId, providerId, version) : null;
     if (!creds) {
@@ -1174,7 +1176,7 @@ export class AIModelProvider {
           }
           promptPayload = [{ role: 'user', content }];
         }
-        const result = await (model as any).doGenerate({ prompt: promptPayload });
+        const result = await (model as any).doGenerate({ prompt: promptPayload, abortSignal: args.signal });
         const outputText = this._extractText(result);
         const checkedOutput = await this._guardrails.checkOutput(outputText, { orgId });
 
@@ -1229,7 +1231,7 @@ export class AIModelProvider {
     providerId: string,
     version: string,
     modelId: string | undefined,
-    args: { prompt?: string; messages?: any[]; system?: string; schema?: any; temperature?: number } = {},
+    args: { prompt?: string; messages?: any[]; system?: string; schema?: any; temperature?: number; signal?: AbortSignal } = {},
   ): Promise<T> {
     const creds = orgId ? await this._credentialsForProvider(orgId, providerId, version) : null;
     if (!creds) {
@@ -1270,6 +1272,7 @@ export class AIModelProvider {
         const result = await (model as any).doGenerate({
           prompt: promptPayload,
           responseFormat: { type: 'json' },
+          abortSignal: args.signal,
         });
         const outputText = this._extractText(result);
         const checkedOutput = await this._guardrails.checkOutput(outputText, { orgId });

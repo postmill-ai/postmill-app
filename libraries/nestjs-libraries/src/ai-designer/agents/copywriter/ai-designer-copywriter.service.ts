@@ -13,6 +13,7 @@ import {
   isAgentInputError,
   parseAgentInput,
 } from '../../util/parse-agent-input';
+import { throwIfAborted } from '../../util/throw-if-aborted';
 import { parseOrRepair } from '../../util/parse-or-repair';
 import { matchSlotTexts } from '../../util/slot-keys';
 
@@ -49,6 +50,10 @@ export class AiDesignerCopywriterService implements OnModuleInit {
   private _handler: InProcessHandler = async (
     context: ContextPacket
   ): Promise<AgentResponse> => {
+    // The session signal rides in metadata from the conductor — a cancelled
+    // or timed-out session must not start billable copy generation.
+    const signal = context.metadata?.signal as AbortSignal | undefined;
+    throwIfAborted(signal);
     const payload = parseAgentInput<CopywriterInput>(context.raw_input);
     if (isAgentInputError(payload)) {
       return {
@@ -61,7 +66,8 @@ export class AiDesignerCopywriterService implements OnModuleInit {
       payload.brand,
       payload.slotTexts,
       payload.lockedTexts,
-      (context.metadata?.orgId as string | undefined) ?? undefined
+      (context.metadata?.orgId as string | undefined) ?? undefined,
+      signal
     );
 
     return {
@@ -75,7 +81,8 @@ export class AiDesignerCopywriterService implements OnModuleInit {
     brand: CopyBrand | null,
     existingTexts: Record<string, string> | undefined,
     lockedTexts: Record<string, string> | undefined,
-    orgId: string | undefined
+    orgId: string | undefined,
+    signal?: AbortSignal
   ): Promise<Record<string, string>> {
     const textSlots = plan.slots.filter(isCopySlot);
     if (textSlots.length === 0) {
@@ -113,6 +120,7 @@ export class AiDesignerCopywriterService implements OnModuleInit {
     const raw = await this._ai.generateText('utility', prompt, {
       system,
       orgId,
+      signal,
     });
 
     const parsed = await this._parseRawCopy(raw, openSlots);

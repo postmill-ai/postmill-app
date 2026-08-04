@@ -15,6 +15,7 @@ import {
   isAgentInputError,
   parseAgentInput,
 } from '../../util/parse-agent-input';
+import { throwIfAborted } from '../../util/throw-if-aborted';
 import { isDeliveredAccept } from '../../util/accept-phrases';
 import { FIXED_COPY_SEPARATOR } from '../../conductor/brief-values';
 import { AiDesignerSkillRouter } from '../../skills/ai-designer-skill-router.service';
@@ -113,6 +114,10 @@ export class AiDesignerConversationalistService implements OnModuleInit {
     context: ContextPacket,
     _agent: AgentConfig
   ): Promise<AgentResponse> => {
+    // The session signal rides in metadata from the conductor — a cancelled
+    // or timed-out session must not start a billable classification call.
+    const signal = context.metadata?.signal as AbortSignal | undefined;
+    throwIfAborted(signal);
     const parsed = parseAgentInput<ChatInput>(context.raw_input);
     if (isAgentInputError(parsed)) {
       return {
@@ -123,7 +128,7 @@ export class AiDesignerConversationalistService implements OnModuleInit {
     const input = this._normalizeInput(parsed);
     const orgId = this._extractOrgId(context);
 
-    const classification = await this._classify(input, orgId);
+    const classification = await this._classify(input, orgId, signal);
 
     const content = this._buildResponse(input, classification);
 
@@ -167,7 +172,8 @@ export class AiDesignerConversationalistService implements OnModuleInit {
 
   private async _classify(
     input: ChatInput,
-    orgId: string | undefined
+    orgId: string | undefined,
+    signal?: AbortSignal
   ): Promise<ClassificationResult> {
     const { session, text } = input;
 
@@ -240,7 +246,7 @@ export class AiDesignerConversationalistService implements OnModuleInit {
     ].join('\n');
 
     try {
-      const raw = await this._ai.generateText('utility', prompt, { system, orgId });
+      const raw = await this._ai.generateText('utility', prompt, { system, orgId, signal });
       const cleaned = this._stripMarkdownFences(raw);
       const parsed = JSON.parse(cleaned) as Partial<ClassificationResult>;
 
@@ -256,6 +262,8 @@ export class AiDesignerConversationalistService implements OnModuleInit {
         };
       }
     } catch (err) {
+      // An abort is a cancel, not a classification failure to degrade over.
+      throwIfAborted(signal);
       this._logger.warn(`Conversationalist classification failed: ${(err as Error).message}`);
       return { intent: 'general', text: text || 'How can I help?', failed: true };
     }

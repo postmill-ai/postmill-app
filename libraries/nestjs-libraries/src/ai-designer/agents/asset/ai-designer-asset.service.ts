@@ -15,6 +15,7 @@ import { StockMediaService } from '@postmill-ai/nestjs-libraries/media/stock/sto
 import type { AssetAspect, AssetNeedRequest, AssetResult } from '../../ai-designer.types';
 import { assetKey } from '../../util/aspect';
 import { raceWithTimeout } from '../../util/race-with-timeout';
+import { throwIfAborted } from '../../util/throw-if-aborted';
 import {
   isAgentInputError,
   parseAgentInput,
@@ -160,6 +161,10 @@ export class AiDesignerAssetService implements OnModuleInit {
   private _handler: InProcessHandler = async (
     context: ContextPacket
   ): Promise<AgentResponse> => {
+    // The session signal rides in metadata from the conductor — a cancelled
+    // or timed-out session must not start billable image generation.
+    const signal = context.metadata?.signal as AbortSignal | undefined;
+    throwIfAborted(signal);
     const orgId =
       context.metadata && typeof context.metadata.orgId === 'string'
         ? context.metadata.orgId
@@ -196,8 +201,8 @@ export class AiDesignerAssetService implements OnModuleInit {
     await Promise.all(
       assetNeeds.map(async (need) => {
         const result = payload.regenerate
-          ? await this.regenerateForSlot(orgId, need)
-          : await this._resolveAsset(orgId, need);
+          ? await this.regenerateForSlot(orgId, need, signal)
+          : await this._resolveAsset(orgId, need, false, signal);
         if (result) {
           assets[assetKey(need.slotId, need.aspect)] = result;
         }
@@ -222,15 +227,17 @@ export class AiDesignerAssetService implements OnModuleInit {
    */
   async regenerateForSlot(
     orgId: string,
-    need: AssetNeed
+    need: AssetNeed,
+    signal?: AbortSignal
   ): Promise<AssetResult | null> {
-    return this._resolveAsset(orgId, need, true);
+    return this._resolveAsset(orgId, need, true, signal);
   }
 
   private async _resolveAsset(
     orgId: string,
     need: AssetNeed,
-    regenerate = false
+    regenerate = false,
+    signal?: AbortSignal
   ): Promise<AssetResult | null> {
     // A `prefer: 'stock'` need used to skip the generate block entirely, so a
     // regeneration (which exists precisely because the critic rejected the
@@ -246,8 +253,13 @@ export class AiDesignerAssetService implements OnModuleInit {
       // One retry before stock: transient provider failures (rate limits,
       // timeouts) are the common case and a second attempt usually lands.
       for (let attempt = 1; attempt <= 2; attempt++) {
+        throwIfAborted(signal);
         try {
-          const url = await this._generateImageWithTimeout(orgId, need, regenerate);
+          const url = await this._generateImageWithTimeout(orgId, need, regenerate, signal);
+          // The media-adapter HTTP call itself cannot be interrupted
+          // (MediaGenerateOptions carries no signal), so a cancel lands here:
+          // skip importing/writing the result and stop the resolve path.
+          throwIfAborted(signal);
           if (url.startsWith('https:')) {
             const file = await this._fileService.importFromUrl(orgId, {
               url,
@@ -262,6 +274,9 @@ export class AiDesignerAssetService implements OnModuleInit {
           // An unusable URL shape won't change on a retry — go to stock.
           break;
         } catch (err) {
+          // A cancel is not a provider failure — don't retry it, don't fall
+          // through to stock, and don't log it as a generation failure.
+          throwIfAborted(signal);
           // Swallow provider/timeout/capability errors and try stock — but say
           // so: a silent fallthrough here renders flat backgrounds with zero
           // diagnostic trail.
@@ -272,6 +287,7 @@ export class AiDesignerAssetService implements OnModuleInit {
       }
     }
 
+    throwIfAborted(signal);
     const stock = await this._tryStock(orgId, need, regenerate);
     if (stock) return stock;
 
@@ -284,16 +300,18 @@ export class AiDesignerAssetService implements OnModuleInit {
   private async _generateImageWithTimeout(
     orgId: string,
     need: AssetNeed,
-    regenerate = false
+    regenerate = false,
+    signal?: AbortSignal
   ): Promise<string> {
     const raw = Number(process.env.AI_DESIGNER_ASSET_TIMEOUT_MS);
     const timeoutMs = Number.isFinite(raw) && raw > 0 ? raw : 90_000;
     return raceWithTimeout(
       this._aiDefaults.textToImage(orgId, this._buildPrompt(need, regenerate), {
         aspect: need.aspect,
+        signal,
       }),
       timeoutMs,
-      { label: 'Asset generation' }
+      { signal, label: 'Asset generation' }
     );
   }
 

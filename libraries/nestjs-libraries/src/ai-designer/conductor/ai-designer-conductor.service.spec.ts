@@ -1,8 +1,13 @@
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect, vi, afterEach } from 'vitest';
 import { AiDesignerConductorService } from './ai-designer-conductor.service';
 import { AiDesignerInputPolicyService } from '../ai-designer-input-policy.service';
 import { AiDesignerSkillRouter } from '../skills/ai-designer-skill-router.service';
 import { DesignerDocService } from '@postmill-ai/nestjs-libraries/media/designer-doc/designer-doc.service';
+import {
+  registerInProcessAgent,
+  unregisterInProcessAgent,
+} from '@reaatech/agent-mesh-router';
+import { registryState } from '@reaatech/agent-mesh-registry';
 
 const ORG_ID = 'org-1';
 const USER_ID = 'user-1';
@@ -2202,6 +2207,67 @@ describe('AiDesignerConductorService._collectAssetNeeds (variant-scoped)', () =>
     const { needs } = (conductor as any)._collectAssetNeeds([plan], [SQUARE_OUT]);
 
     expect(needs[0].heroLayout).toBeUndefined();
+  });
+
+  it('drops needs a composition with no imagery role can never place', () => {
+    const { conductor } = makeConductor({});
+    const plan = makePlan({
+      composition: 'type-dominant',
+      slots: [{ id: 'headline', role: 'headline', kind: 'text' }],
+      assetNeeds: [
+        { slotId: 'hero', brief: 'a hero image', prefer: 'generate' },
+      ],
+    });
+
+    const { needs, dropped } = (conductor as any)._collectAssetNeeds(
+      [plan],
+      [SQUARE_OUT]
+    );
+
+    expect(needs).toHaveLength(0);
+    expect(dropped).toBe(1);
+  });
+
+  it('keeps a background-ref need even on an imageless composition', () => {
+    const { conductor } = makeConductor({});
+    const plan = makePlan({
+      composition: 'type-dominant',
+      slots: [{ id: 'headline', role: 'headline', kind: 'text' }],
+      background: { kind: 'image', ref: 'asset:bg' },
+      assetNeeds: [
+        { slotId: 'bg', brief: 'backdrop', prefer: 'either' },
+        { slotId: 'hero', brief: 'a hero image', prefer: 'generate' },
+      ],
+    });
+
+    const { needs, dropped } = (conductor as any)._collectAssetNeeds(
+      [plan],
+      [SQUARE_OUT]
+    );
+
+    expect(needs.map((n: any) => n.slotId)).toEqual(['v1:bg']);
+    expect(dropped).toBe(1);
+  });
+
+  it('keeps needs when the imageless composition does not fit the plan', () => {
+    const { conductor } = makeConductor({});
+    // type-dominant requires a headline; without one it does not fit, the
+    // composer falls back to an imagery composition, and the need stays.
+    const plan = makePlan({
+      composition: 'type-dominant',
+      slots: [
+        { id: 'cta', role: 'cta', kind: 'cta-button' },
+        { id: 'hero', role: 'image', kind: 'image' },
+      ],
+    });
+
+    const { needs, dropped } = (conductor as any)._collectAssetNeeds(
+      [plan],
+      [SQUARE_OUT]
+    );
+
+    expect(needs).toHaveLength(1);
+    expect(dropped).toBe(0);
   });
 });
 
@@ -4663,5 +4729,86 @@ describe('AiDesignerConductorService brand-palette override note', () => {
     expect(
       await note(conductor, CONFIG, BRIEF, [{ palette: ['#111111'] }])
     ).toBeUndefined();
+  });
+});
+
+describe('_dispatchAgent abort signal', () => {
+  // Exercises the REAL _dispatchAgent (every other block stubs it): a live
+  // AbortSignal must ride the dispatch metadata into the in-process handler so
+  // a cancel/timeout stops the underlying LLM/image call.
+  const AGENT_ID = 'abort-test-agent';
+
+  const wireAgent = (handler: (context: any) => Promise<any>) => {
+    registerInProcessAgent(AGENT_ID, handler as any);
+    registryState.swap([
+      { agent_id: AGENT_ID, type: 'inprocess', is_default: false } as any,
+    ]);
+  };
+
+  afterEach(() => {
+    unregisterInProcessAgent(AGENT_ID);
+    registryState.swap([]);
+    vi.unstubAllEnvs();
+  });
+
+  it('threads a per-dispatch AbortSignal into the metadata, aborted when the session cancels mid-dispatch', async () => {
+    const { conductor } = makeConductor();
+    let seenMetadata: any;
+    // Settles only when the abort lands — mirroring an agent whose LLM call
+    // honours the signal.
+    wireAgent(
+      (context) =>
+        new Promise((resolve, reject) => {
+          seenMetadata = context.metadata;
+          context.metadata.signal.addEventListener(
+            'abort',
+            () => reject(new Error('Cancelled')),
+            { once: true }
+          );
+        })
+    );
+    const sessionAbort = new AbortController();
+    (conductor as any)._aborts.set(SESSION_ID, sessionAbort);
+
+    const dispatch = (conductor as any)._dispatchAgent(ctx, AGENT_ID, {});
+    // The budget check precedes the dispatch — let the handler start first.
+    await new Promise((resolve) => setImmediate(resolve));
+    expect(seenMetadata.signal).toBeInstanceOf(AbortSignal);
+    expect(seenMetadata.signal.aborted).toBe(false);
+    // Linked, not the session signal itself: a session cancel aborts what the
+    // handler holds, while the session signal stays the pipeline's own gate.
+    sessionAbort.abort();
+    expect(seenMetadata.signal.aborted).toBe(true);
+    await expect(dispatch).rejects.toThrow('Pipeline cancelled');
+  });
+
+  it('works without a session abort controller (metadata signal simply never aborts)', async () => {
+    const { conductor } = makeConductor();
+    let seenMetadata: any;
+    wireAgent(async (context) => {
+      seenMetadata = context.metadata;
+      return { content: '{}', workflow_complete: false };
+    });
+
+    await (conductor as any)._dispatchAgent(ctx, AGENT_ID, {});
+
+    expect(seenMetadata.signal).toBeInstanceOf(AbortSignal);
+    expect(seenMetadata.signal.aborted).toBe(false);
+  });
+
+  it('aborts the dispatch signal when the dispatch times out', async () => {
+    vi.stubEnv('AI_DESIGNER_AGENT_TIMEOUT_MS', '50');
+    const { conductor } = makeConductor();
+    let seenMetadata: any;
+    // Never settles — the timeout must be what ends the dispatch.
+    wireAgent((context) => {
+      seenMetadata = context.metadata;
+      return new Promise(() => {});
+    });
+
+    await expect(
+      (conductor as any)._dispatchAgent(ctx, AGENT_ID, {})
+    ).rejects.toThrow(/timed out/);
+    expect(seenMetadata.signal.aborted).toBe(true);
   });
 });

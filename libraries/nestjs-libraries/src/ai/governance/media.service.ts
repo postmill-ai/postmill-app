@@ -986,7 +986,7 @@ export class AiMediaService {
   // behaviour-preserving fallback for orgs with no image-capable media provider.
   async generateImageResult(
     prompt: string,
-    options?: { size?: string; aspect?: 'square' | 'wide' | 'tall'; orgId?: string; userId?: string; isVertical?: boolean; sourceUrl?: string },
+    options?: { size?: string; aspect?: 'square' | 'wide' | 'tall'; orgId?: string; userId?: string; isVertical?: boolean; sourceUrl?: string; signal?: AbortSignal },
   ): Promise<MediaGenerationResult> {
     const size = options?.size || (options?.isVertical ? '1024x1536' : undefined);
     const candidates = await this._resolveForOperation(options?.orgId, 'image', options?.sourceUrl);
@@ -994,6 +994,9 @@ export class AiMediaService {
     for (const candidate of candidates) {
       await this._assertMediaBudget(options?.orgId, candidate.adapter.identifier);
       try {
+        // MediaGenerateOptions carries no AbortSignal, so a cancel cannot
+        // interrupt an in-flight adapter HTTP call here — callers check the
+        // signal around this await. Only the facade fallback below aborts.
         const result = await candidate.adapter.generateImage(prompt, {
           credentials: candidate.credentials,
           model: candidate.model,
@@ -1035,6 +1038,7 @@ export class AiMediaService {
     }
     const url = await model.generate(prompt, {
       size: size || (options?.aspect ? AiMediaService.FACADE_ASPECT_SIZE[options.aspect] : undefined),
+      signal: options?.signal,
     });
 
     const aiConfig = await this._aiModelProvider.resolveConfigForScope('utility', options?.orgId);
@@ -1055,7 +1059,7 @@ export class AiMediaService {
 
   async generateImage(
     prompt: string,
-    options?: { size?: string; aspect?: 'square' | 'wide' | 'tall'; orgId?: string; userId?: string; isVertical?: boolean; sourceUrl?: string },
+    options?: { size?: string; aspect?: 'square' | 'wide' | 'tall'; orgId?: string; userId?: string; isVertical?: boolean; sourceUrl?: string; signal?: AbortSignal },
   ): Promise<string> {
     const result = await this.generateImageResult(prompt, options);
     return result.image || '';

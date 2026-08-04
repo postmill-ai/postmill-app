@@ -98,6 +98,30 @@ describe('AiDesignerVisionCriticService', () => {
     expect(aiDefaults.vision.mock.calls[0][1]).toBe(publicUrl);
   });
 
+  it('does no billable work when the dispatch signal is already aborted', async () => {
+    await expect(
+      (service as any)._handler({
+        raw_input: makeRequest(),
+        metadata: { orgId: 'org1', signal: AbortSignal.abort() },
+      })
+    ).rejects.toThrow('Cancelled');
+    expect(aiDefaults.vision).not.toHaveBeenCalled();
+  });
+
+  it('threads the dispatch signal into the vision call', async () => {
+    aiDefaults.vision.mockResolvedValue('{"findings": []}');
+    const controller = new AbortController();
+
+    await (service as any)._handler({
+      raw_input: makeRequest(),
+      metadata: { orgId: 'org1', signal: controller.signal },
+    });
+
+    expect(aiDefaults.vision.mock.calls[0][3]).toEqual({
+      signal: controller.signal,
+    });
+  });
+
   it('includes the real schema block in the escalation prompt', async () => {
     aiDefaults.vision
       .mockResolvedValueOnce(

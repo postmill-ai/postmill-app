@@ -19,6 +19,7 @@ import {
   isAgentInputError,
   parseAgentInput,
 } from '../../util/parse-agent-input';
+import { throwIfAborted } from '../../util/throw-if-aborted';
 
 const VISION_CRITIC_MAX_INLINE_BYTES = 2 * 1024 * 1024;
 
@@ -204,6 +205,10 @@ export class AiDesignerVisionCriticService implements OnModuleInit {
   private _handler: InProcessHandler = async (
     context: ContextPacket
   ): Promise<AgentResponse> => {
+    // The session signal rides in metadata from the conductor — a cancelled
+    // or timed-out session must not start billable vision calls.
+    const signal = context.metadata?.signal as AbortSignal | undefined;
+    throwIfAborted(signal);
     const orgId =
       context.metadata && typeof context.metadata.orgId === 'string'
         ? context.metadata.orgId
@@ -231,7 +236,7 @@ export class AiDesignerVisionCriticService implements OnModuleInit {
     }
 
     if (payload.type === 'interpret-request') {
-      const cues = await this.interpretReferences(orgId, payload.fileIds);
+      const cues = await this.interpretReferences(orgId, payload.fileIds, signal);
       return {
         content: JSON.stringify({ type: 'interpretations', cues }),
         workflow_complete: false,
@@ -240,7 +245,8 @@ export class AiDesignerVisionCriticService implements OnModuleInit {
 
     const { findings, skipped } = await this._critique(
       orgId,
-      payload as CritiqueRequest
+      payload as CritiqueRequest,
+      signal
     );
     return {
       // `skipped` distinguishes "the pass never happened" (image not
@@ -257,11 +263,13 @@ export class AiDesignerVisionCriticService implements OnModuleInit {
 
   async interpretReferences(
     orgId: string,
-    fileIds: string[]
+    fileIds: string[],
+    signal?: AbortSignal
   ): Promise<string[]> {
     const cues: string[] = [];
     await Promise.all(
       fileIds.map(async (id) => {
+        throwIfAborted(signal);
         try {
           const file = await this._fileService.getFileById(orgId, id);
           // Defense-in-depth: the repository already scopes to the org.
@@ -270,10 +278,12 @@ export class AiDesignerVisionCriticService implements OnModuleInit {
           if (!imageUrl) return;
           const prompt =
             'Describe this image concisely for a design assistant. List the dominant colors, mood/style, any text or logos, and the main subject. Keep it under 80 words.';
-          const raw = await this._aiDefaults.vision(orgId, imageUrl, prompt);
+          const raw = await this._aiDefaults.vision(orgId, imageUrl, prompt, { signal });
           const text = typeof raw === 'string' ? raw : String(raw);
           if (text.trim()) cues.push(text.trim());
         } catch (err) {
+          // A cancel is not a per-file interpretation failure.
+          throwIfAborted(signal);
           this._logger.warn(
             `Reference interpretation failed for ${id}: ${(err as Error).message}`
           );
@@ -285,7 +295,8 @@ export class AiDesignerVisionCriticService implements OnModuleInit {
 
   private async _critique(
     orgId: string,
-    payload: CritiqueRequest
+    payload: CritiqueRequest,
+    signal?: AbortSignal
   ): Promise<{ findings: VisionFinding[]; skipped: boolean }> {
     const imageUrl = await this._resolveImageUrl(orgId, payload.contactSheetUrl);
     if (!imageUrl) {
@@ -295,7 +306,7 @@ export class AiDesignerVisionCriticService implements OnModuleInit {
     }
 
     const prompt = this._buildPrompt(payload);
-    const raw = await this._aiDefaults.vision(orgId, imageUrl, prompt);
+    const raw = await this._aiDefaults.vision(orgId, imageUrl, prompt, { signal });
 
     const parsed = this._extractFindings(raw);
     if (!parsed.parseable) {
@@ -309,7 +320,8 @@ export class AiDesignerVisionCriticService implements OnModuleInit {
 
     // Tiered escalation: if the holistic contact-sheet pass flags detail or
     // legibility issues, run a full-res per-output pass for affected formats.
-    const escalated = await this._escalate(orgId, payload, findings);
+    throwIfAborted(signal);
+    const escalated = await this._escalate(orgId, payload, findings, signal);
     return { findings: [...findings, ...escalated], skipped: false };
   }
 
@@ -439,7 +451,8 @@ If the contact sheet looks good, return { "findings": [] }.`;
   private async _escalate(
     orgId: string,
     payload: CritiqueRequest,
-    findings: VisionFinding[]
+    findings: VisionFinding[],
+    signal?: AbortSignal
   ): Promise<VisionFinding[]> {
     const escalatedFormats = new Set<string>();
     const detailKeywords = [
@@ -474,6 +487,7 @@ If the contact sheet looks good, return { "findings": [] }.`;
       (payload.outputPreviews || [])
         .filter((o) => escalatedFormats.has(o.formatId))
         .map(async (o) => {
+          throwIfAborted(signal);
           try {
             const imageUrl = await this._resolveImageUrl(orgId, o.url);
             if (!imageUrl) return;
@@ -481,13 +495,15 @@ If the contact sheet looks good, return { "findings": [] }.`;
             // list — brand_safety has to be restated inline or a swoosh that
             // the contact sheet was too small to show goes unflagged here too.
             const prompt = `Review this full-resolution design for the "${o.formatId}" output. Focus on legibility, safe-zone compliance, and whether any text or important detail would be lost at real size. Also flag brand_safety defects: any recognizable third-party brand logo, trademark, brand mark, branded product or celebrity likeness in the generated imagery — fix those with "regenerateAsset" targeting the image slot, never with a text fix, and set "criterion" to "brand_safety". ${VISION_CRITIC_SCHEMA_BLOCK}; keep it brief.`;
-            const raw = await this._aiDefaults.vision(orgId, imageUrl, prompt);
+            const raw = await this._aiDefaults.vision(orgId, imageUrl, prompt, { signal });
             const parsed = this._extractFindings(raw);
             for (const f of parsed.findings) {
               if (!f.formatId) f.formatId = o.formatId;
               extra.push(f);
             }
           } catch (err) {
+            // A cancel is not a per-format escalation failure.
+            throwIfAborted(signal);
             this._logger.warn(
               `Escalated critique failed for ${o.formatId}: ${(err as Error).message}`
             );

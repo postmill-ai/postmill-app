@@ -47,6 +47,27 @@ describe('AiDesignerConversationalistService intake', () => {
       JSON.parse(res.content)
     );
 
+  it('does no billable work when the dispatch signal is already aborted', async () => {
+    await expect(
+      (service as any)._handler({
+        raw_input: makeInput(CONFIDENT_BRIEF),
+        metadata: { orgId: 'org1', signal: AbortSignal.abort() },
+      })
+    ).rejects.toThrow('Cancelled');
+    expect(ai.generateText).not.toHaveBeenCalled();
+  });
+
+  it('threads the dispatch signal into the classification generateText call', async () => {
+    const controller = new AbortController();
+
+    await (service as any)._handler({
+      raw_input: makeInput(CONFIDENT_BRIEF),
+      metadata: { orgId: 'org1', signal: controller.signal },
+    });
+
+    expect(ai.generateText.mock.calls[0][2].signal).toBe(controller.signal);
+  });
+
   it('asks ONE follow-up question for the first missing field instead of a form', async () => {
     // questionsAsked marks this as a later turn — the first-turn backstop
     // (tested below) would otherwise adopt the raw text as the intent.
