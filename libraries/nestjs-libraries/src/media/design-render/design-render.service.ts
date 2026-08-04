@@ -18,6 +18,7 @@ import {
   TextRun,
 } from './design-render.types';
 import { FontLoaderService } from './font-loader.service';
+import { PromiseLruCache } from './promise-lru';
 import {
   cssFilterForToken,
   parseDesignerFilterToken,
@@ -36,6 +37,7 @@ import { arrowHeadPoints, strokeEndpoints } from '../designer-doc/stroke-style';
 import { tracePathNodes } from '../designer-doc/path-geometry';
 import { buildLayerTree, groupBounds, type LayerNode } from '../designer-doc/layer-tree';
 import { expandSymbols } from '../designer-doc/symbols';
+import { renderableSrc } from '../designer-doc/svg-src';
 import {
   applyAdjustment,
   blendPixels,
@@ -67,6 +69,12 @@ const MAX_SMART_FILTER_PIXELS = 16_000_000;
 
 /** How many evaluated stacks to keep. Each entry holds a decoded canvas. */
 const SMART_FILTER_CACHE_MAX = 6;
+
+// Decoded source bitmaps, shared across every output of a render (and beyond,
+// since the bytes behind a URL are immutable by the same contract as
+// `originalSrc`). One photo across 30 linked outputs decodes once, not 30
+// times. Bounded: a decoded 1080² bitmap is ~4.5 MB.
+const IMAGE_CACHE_MAX = 16;
 
 // "Busy backdrop" thresholds for `auditTextContrast`. The WCAG ratio is
 // computed against the MEAN of the sampled box, so a photograph with bright
@@ -2474,7 +2482,10 @@ export class DesignRenderService {
     el: DesignerElement
   ): Promise<{ img: any; preCropped: boolean } | null> {
     if (!hasSmartFilters(el)) {
-      const img = await this.loadImageSafe(el.src);
+      // An icon element may carry raw SVG markup as its `src` (the icons
+      // panel stores the body, not a URL) — wrap it so it loads like any
+      // other bitmap. Parity with the client IconNode.
+      const img = await this.loadImageSafe(renderableSrc(el));
       return img ? { img, preCropped: false } : null;
     }
 
@@ -2535,8 +2546,19 @@ export class DesignRenderService {
     }
   }
 
-  private async loadImageSafe(src?: string): Promise<any | null> {
-    if (!src) return null;
+  private readonly _imageCache = new PromiseLruCache<any | null>(IMAGE_CACHE_MAX);
+
+  /**
+   * Load and decode a bitmap by URL, memoised: 30 linked outputs drawing the
+   * same photo fetch and decode it exactly once, and a failed URL settles as
+   * a cached null instead of being retried per output.
+   */
+  private loadImageSafe(src?: string): Promise<any | null> {
+    if (!src) return Promise.resolve(null);
+    return this._imageCache.get(src, () => this._loadImageUncached(src));
+  }
+
+  private async _loadImageUncached(src: string): Promise<any | null> {
     try {
       const { loadImage } = await loadCanvasModule();
       if (src.startsWith('data:')) return await loadImage(src);

@@ -11,6 +11,7 @@
 import { z } from 'zod';
 import { parseDesignerFilterToken } from '../design-render/filter-tokens';
 import { MAX_MOTION_BLUR_SAMPLES } from './motion-blur';
+import { isSvgMarkupSrc } from './svg-src';
 import {
   DESIGNER_DOC_VERSION,
   MAX_CLIPS_PER_TRACK,
@@ -37,6 +38,21 @@ const strictNum = (min: number, max: number) =>
 const lenientNum = (min: number, max: number, fallback: number) =>
   z.number().finite().catch(fallback).transform((v) => clamp(v, min, max));
 
+// Fields that are optional in strict stay optional in lenient: parse
+// validates and clamps what is present but stamps NOTHING onto elements that
+// never had it. The old `lenientNum(..., 16)` applied unconditionally, so
+// every image, shape and group container carried `fontSize: 16` (and every
+// AI-composed document paid for it — it made half the golden snapshot one
+// repeated constant). Renderers fall back (`el.fontSize || 16`) where a
+// value actually matters.
+const lenientOptionalNum = (min: number, max: number) =>
+  z
+    .number()
+    .finite()
+    .optional()
+    .catch(undefined)
+    .transform((v) => (v === undefined ? undefined : clamp(v, min, max)));
+
 const dualObject = <S extends z.ZodRawShape, L extends z.ZodRawShape>(
   strictShape: S,
   lenientShape: L
@@ -55,8 +71,9 @@ export const SrcSchema = z
   .string()
   .max(2048)
   .refine(
-    (s) => s.startsWith('data:') || /^https?:\/\//.test(s),
-    'src must be a data: or http(s) URL'
+    (s) =>
+      s.startsWith('data:') || /^https?:\/\//.test(s) || isSvgMarkupSrc(s),
+    'src must be a data: or http(s) URL, or raw SVG markup (icon elements only)'
   );
 
 export const DesignerFilterStringSchema = z
@@ -1061,15 +1078,15 @@ const elementLenientNumeric = {
   opacity: lenientNum(0, 1, 1),
   locked: z.boolean().catch(false),
   hidden: z.boolean().catch(false),
-  fontSize: lenientNum(1, MAX_FONT_SIZE, 16),
-  fontWeight: lenientNum(1, 1000, 400),
-  lineHeight: lenientNum(0, 100, 1.2),
-  letterSpacing: lenientNum(-MAX_DIMENSION, MAX_DIMENSION, 0),
-  curve: lenientNum(-1000, 1000, 0),
-  borderRadius: lenientNum(0, MAX_DIMENSION, 0),
-  strokeWidth: lenientNum(0, MAX_DIMENSION, 0),
-  naturalWidth: lenientNum(0, MAX_DIMENSION, 0),
-  naturalHeight: lenientNum(0, MAX_DIMENSION, 0),
+  fontSize: lenientOptionalNum(1, MAX_FONT_SIZE),
+  fontWeight: lenientOptionalNum(1, 1000),
+  lineHeight: lenientOptionalNum(0, 100),
+  letterSpacing: lenientOptionalNum(-MAX_DIMENSION, MAX_DIMENSION),
+  curve: lenientOptionalNum(-1000, 1000),
+  borderRadius: lenientOptionalNum(0, MAX_DIMENSION),
+  strokeWidth: lenientOptionalNum(0, MAX_DIMENSION),
+  naturalWidth: lenientOptionalNum(0, MAX_DIMENSION),
+  naturalHeight: lenientOptionalNum(0, MAX_DIMENSION),
 };
 
 const elementStrictNested = {
@@ -1111,20 +1128,46 @@ const elementLenientNested = {
   filters: FiltersSchema,
 };
 
-const { strict: StrictDesignerElementSchema, lenient: LenientDesignerElementSchema } =
-  dualObject(
-    {
-      ...elementCommon,
-      ...elementStrictNumeric,
-      ...elementStrictOptionalNumeric,
-      ...elementStrictNested,
-    },
-    {
-      ...elementCommon,
-      ...elementLenientNumeric,
-      ...elementLenientNested,
-    }
+const { strict: strictElement, lenient: lenientElement } = dualObject(
+  {
+    ...elementCommon,
+    ...elementStrictNumeric,
+    ...elementStrictOptionalNumeric,
+    ...elementStrictNested,
+  },
+  {
+    ...elementCommon,
+    ...elementLenientNumeric,
+    ...elementLenientNested,
+  }
+);
+
+/**
+ * Raw SVG markup in `src` is only meaningful on `icon` elements (see
+ * svg-src.ts) — anywhere else it would pass SrcSchema yet never load.
+ */
+const iconSrcGuard = (
+  el: { type?: string; src?: string },
+  ctx: z.RefinementCtx
+) => {
+  if (el.src && el.type !== 'icon' && isSvgMarkupSrc(el.src)) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: 'raw SVG markup src is only valid on icon elements',
+      path: ['src'],
+    });
+  }
+};
+
+/** The icon-src guard as a combinator, for element schema flavours that
+ *  still need object methods (.omit etc.) before refining. */
+export const withIconSrcGuard = <T extends z.ZodTypeAny>(schema: T) =>
+  schema.superRefine((el: { type?: string; src?: string }, ctx) =>
+    iconSrcGuard(el, ctx)
   );
+
+const StrictDesignerElementSchema = withIconSrcGuard(strictElement);
+const LenientDesignerElementSchema = withIconSrcGuard(lenientElement);
 
 // ---------------------------------------------------------------------------
 // StickerFrame
@@ -1266,27 +1309,27 @@ const clipStrictOptionalNumeric = {
 const clipLenientNumeric = {
   startMs: lenientNum(0, MAX_VIDEO_DURATION_MS, 0),
   endMs: lenientNum(0, MAX_VIDEO_DURATION_MS, 0),
-  trimInMs: lenientNum(0, MAX_VIDEO_DURATION_MS, 0),
-  trimOutMs: lenientNum(0, MAX_VIDEO_DURATION_MS, 0),
-  x: lenientNum(-MAX_DIMENSION, MAX_DIMENSION, 0),
-  y: lenientNum(-MAX_DIMENSION, MAX_DIMENSION, 0),
-  width: lenientNum(0, MAX_DIMENSION, 0),
-  height: lenientNum(0, MAX_DIMENSION, 0),
-  rotation: lenientNum(-360000, 360000, 0),
-  opacity: lenientNum(0, 1, 1),
-  fontSize: lenientNum(1, MAX_FONT_SIZE, 16),
-  fontWeight: lenientNum(1, 1000, 400),
-  sides: lenientNum(3, 64, 6),
-  innerRatio: lenientNum(0.05, 0.95, 0.5),
-  strokeWidth: lenientNum(0, MAX_DIMENSION, 0),
-  borderRadius: lenientNum(0, MAX_DIMENSION, 0),
-  volume: lenientNum(0, 1, 1),
-  fadeInMs: lenientNum(0, MAX_VIDEO_DURATION_MS, 0),
-  fadeOutMs: lenientNum(0, MAX_VIDEO_DURATION_MS, 0),
-  naturalWidth: lenientNum(0, MAX_DIMENSION, 0),
-  naturalHeight: lenientNum(0, MAX_DIMENSION, 0),
-  speed: lenientNum(0.1, 10, 1),
-  freezeAtMs: lenientNum(0, MAX_VIDEO_DURATION_MS, 0),
+  trimInMs: lenientOptionalNum(0, MAX_VIDEO_DURATION_MS),
+  trimOutMs: lenientOptionalNum(0, MAX_VIDEO_DURATION_MS),
+  x: lenientOptionalNum(-MAX_DIMENSION, MAX_DIMENSION),
+  y: lenientOptionalNum(-MAX_DIMENSION, MAX_DIMENSION),
+  width: lenientOptionalNum(0, MAX_DIMENSION),
+  height: lenientOptionalNum(0, MAX_DIMENSION),
+  rotation: lenientOptionalNum(-360000, 360000),
+  opacity: lenientOptionalNum(0, 1),
+  fontSize: lenientOptionalNum(1, MAX_FONT_SIZE),
+  fontWeight: lenientOptionalNum(1, 1000),
+  sides: lenientOptionalNum(3, 64),
+  innerRatio: lenientOptionalNum(0.05, 0.95),
+  strokeWidth: lenientOptionalNum(0, MAX_DIMENSION),
+  borderRadius: lenientOptionalNum(0, MAX_DIMENSION),
+  volume: lenientOptionalNum(0, 1),
+  fadeInMs: lenientOptionalNum(0, MAX_VIDEO_DURATION_MS),
+  fadeOutMs: lenientOptionalNum(0, MAX_VIDEO_DURATION_MS),
+  naturalWidth: lenientOptionalNum(0, MAX_DIMENSION),
+  naturalHeight: lenientOptionalNum(0, MAX_DIMENSION),
+  speed: lenientOptionalNum(0.1, 10),
+  freezeAtMs: lenientOptionalNum(0, MAX_VIDEO_DURATION_MS),
 };
 
 const clipStrictNested = {
