@@ -1470,7 +1470,8 @@ export class AiDesignerComposerService implements OnModuleInit {
     orgId: string,
     signal?: AbortSignal,
     targetOutputs?: string[],
-    lockedTexts?: Record<string, string>
+    lockedTexts?: Record<string, string>,
+    plan?: DesignPlan
   ): Promise<DesignerDoc> {
     const scopedFindings: VisionFinding[] = targetOutputs?.length
       ? findings.map((finding) => ({
@@ -1776,7 +1777,7 @@ export class AiDesignerComposerService implements OnModuleInit {
       );
     }
 
-    return this.sanitizeDoc(next).doc;
+    return this.sanitizeDoc(next, plan).doc;
   }
 
   /**
@@ -1793,7 +1794,8 @@ export class AiDesignerComposerService implements OnModuleInit {
     targetOutputs?: string[],
     targetSlots?: string[],
     signal?: AbortSignal,
-    lockedTexts?: Record<string, string>
+    lockedTexts?: Record<string, string>,
+    plan?: DesignPlan
   ): Promise<DesignerDoc> {
     const revised = await this._llmReviseOps(
       doc,
@@ -1805,7 +1807,7 @@ export class AiDesignerComposerService implements OnModuleInit {
       signal,
       lockedTexts
     );
-    return this.sanitizeDoc(revised).doc;
+    return this.sanitizeDoc(revised, plan).doc;
   }
 
   /**

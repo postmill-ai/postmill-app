@@ -55,4 +55,56 @@ describe('AiDesignerComposerService duplicate-role slots', () => {
     expect(oids).toContain('headline');
     expect(oids).toContain('headline2');
   });
+
+  it('keeps the echo through applyFixes when the plan rides along', async () => {
+    // The pipeline's post-compose sanitize rounds (contrast repair, critic
+    // fixes) used to call sanitizeDoc WITHOUT the plan, and the validator's
+    // duplicate-copy dedupe then killed the second hit the compose had just
+    // kept. applyFixes/reviseByInstruction take the plan for exactly this.
+    const service = new AiDesignerComposerService(
+      new DesignerDocService() as any,
+      { generateText: vi.fn() } as any
+    );
+    const text = (id: string, y: number) => ({
+      id,
+      originId: id,
+      type: 'text',
+      x: 54,
+      y,
+      width: 800,
+      height: 160,
+      rotation: 0,
+      opacity: 1,
+      locked: false,
+      hidden: false,
+      text: 'PIZZA',
+      fontSize: 92,
+      fill: '#FFFFFF',
+    });
+    const doc: any = {
+      mode: 'image',
+      outputs: [
+        {
+          id: 'o1',
+          formatId: 'ig-square',
+          name: 'IG',
+          width: 1080,
+          height: 1080,
+          background: '#0A0A0A',
+          children: [text('headline', 200), text('headline2', 500)],
+        },
+      ],
+    };
+    const plan: any = {
+      slots: [
+        { id: 'headline', role: 'headline', kind: 'text' },
+        { id: 'headline2', role: 'headline', kind: 'text' },
+      ],
+    };
+
+    const out = await service.applyFixes(doc, [], 'o1', undefined, undefined, undefined, plan);
+    const oids = out.outputs[0].children.map((el: any) => el.originId);
+    expect(oids).toContain('headline');
+    expect(oids).toContain('headline2');
+  });
 });

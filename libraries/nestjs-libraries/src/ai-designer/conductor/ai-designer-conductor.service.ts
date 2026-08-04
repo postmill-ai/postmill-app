@@ -1668,7 +1668,8 @@ export class AiDesignerConductorService {
           ctx.orgId,
           this._aborts.get(sessionId)?.signal,
           undefined,
-          this._lockedTextsFor([planForVariant])
+          this._lockedTextsFor([planForVariant]),
+          planForVariant
         );
         // Update the SAME Design row (+ preview) — a second saveDesign here
         // would orphan the pre-fix row and its preview files, the exact leak
@@ -1922,7 +1923,8 @@ export class AiDesignerConductorService {
               ctx.orgId,
               this._aborts.get(sessionId)?.signal,
               [out.formatId],
-              this._lockedTextsFor([plan])
+              this._lockedTextsFor([plan]),
+              plan
             );
             render = await this._saver.updateDesign(
               ctx.orgId,
@@ -3008,6 +3010,11 @@ export class AiDesignerConductorService {
     }
 
     emitter.progress('composer', 'Applying revision', undefined, revision.instruction);
+    // The session's plans ride into sanitize: the validator's duplicate-copy
+    // dedupe exempts same-role plan echoes, but only when it can SEE the plan.
+    const sessionForPlans = await this._service.getSessionForUser(sessionId, ctx.orgId, ctx.userId);
+    const briefForPlans = this._brief(sessionForPlans ?? {});
+    const plansForSanitize = (briefForPlans.lastPlans as DesignPlan[] | undefined) ?? [];
     // Real LLM re-emit of updateElement ops (not a note-only no-op): honors
     // scope (shared vs format-only), so the revised design actually changes.
     let revisedDoc = await this._composer.reviseByInstruction(
@@ -3017,14 +3024,16 @@ export class AiDesignerConductorService {
       ctx.orgId,
       targetOutputs,
       revision.targetSlots,
-      this._aborts.get(sessionId)?.signal
+      this._aborts.get(sessionId)?.signal,
+      undefined,
+      plansForSanitize[0]
     );
 
-    const session = await this._service.getSessionForUser(sessionId, ctx.orgId, ctx.userId);
+    const session = sessionForPlans ?? (await this._service.getSessionForUser(sessionId, ctx.orgId, ctx.userId));
     const config = this._config(session ?? {});
-    const sessionBrief = this._brief(session ?? {});
+    const sessionBrief = briefForPlans;
     const genre = (sessionBrief.skillId as string | undefined) ?? 'meme';
-    const lastPlans = (sessionBrief.lastPlans as DesignPlan[] | undefined) ?? [];
+    const lastPlans = plansForSanitize;
     const saveFolderId = await this._resolveSaveFolder(ctx.orgId, config);
 
     this._throwIfCancelled(sessionId);
@@ -3073,7 +3082,8 @@ export class AiDesignerConductorService {
             ctx.orgId,
             this._aborts.get(sessionId)?.signal,
             undefined,
-            this._lockedTextsFor(lastPlans)
+            this._lockedTextsFor(lastPlans),
+            lastPlans[0]
           );
           // Re-render the SAME Design row — a second saveDesign here would
           // orphan the pre-fix row (+ its preview files) on every revise.

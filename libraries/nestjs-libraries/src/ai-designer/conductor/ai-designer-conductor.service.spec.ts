@@ -4454,6 +4454,8 @@ describe('AiDesignerConductorService format-only revise degradation (round 7 C6)
       ORG_ID,
       ['fb-post'],
       undefined,
+      undefined,
+      undefined,
       undefined
     );
     expect(notes).toEqual([]);
@@ -4482,6 +4484,8 @@ describe('AiDesignerConductorService format-only revise degradation (round 7 C6)
       'make the headline bigger',
       'shared',
       ORG_ID,
+      undefined,
+      undefined,
       undefined,
       undefined,
       undefined
