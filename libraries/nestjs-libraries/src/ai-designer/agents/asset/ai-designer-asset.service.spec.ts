@@ -280,6 +280,34 @@ describe('AiDesignerAssetService per-aspect generation (Phase 3)', () => {
     );
   });
 
+  it('passes the brief\'s mood and setting words through to the stock query', async () => {
+    const { service, aiDefaults, stockMedia } = makeService();
+    aiDefaults.textToImage.mockRejectedValue(new Error('provider down'));
+    stockMedia.searchPhotos.mockResolvedValue({ results: [] });
+
+    await (service as any)._handler(makeContext({
+      rawInput: JSON.stringify({
+        type: 'asset-request',
+        assetNeeds: [
+          {
+            slotId: 's1',
+            brief: 'full-bleed moody stock photo of a cheese-pull slice over dark wood',
+            prefer: 'stock',
+            aspect: 'wide',
+          },
+        ],
+      }),
+    }));
+
+    // The only words a stock query may lose are brand-asking ones — a search
+    // engine is the ONLY place the plan's mood reaches the pixels, so
+    // "moody"/"dark wood" must survive verbatim (live: they did, and the
+    // missing piece was the treatment steering, not the query).
+    const query = stockMedia.searchPhotos.mock.calls[0][1] as string;
+    expect(query).toContain('moody');
+    expect(query).toContain('dark wood');
+  });
+
   it('keeps an all-brand-token brief intact rather than searching for nothing', async () => {
     const { service, aiDefaults, stockMedia } = makeService();
     aiDefaults.textToImage.mockRejectedValue(new Error('provider down'));

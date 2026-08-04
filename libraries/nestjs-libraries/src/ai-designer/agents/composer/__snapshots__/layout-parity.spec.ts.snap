@@ -1792,6 +1792,258 @@ exports[`composition poster-frame > lays out on 'tw-post' 1`] = `
 }
 `;
 
+exports[`composition poster-left > lays out on 'ig-post' 1`] = `
+{
+  "children": [
+    {
+      "h": 1080,
+      "originId": "img",
+      "type": "image",
+      "w": 1080,
+      "x": 0,
+      "y": 0,
+    },
+    {
+      "h": 1080,
+      "originId": "poster-left-scrim",
+      "type": "shape",
+      "w": 670,
+      "x": 0,
+      "y": 0,
+    },
+    {
+      "h": 0,
+      "originId": "badge-group",
+      "type": "group",
+      "w": 0,
+      "x": 0,
+      "y": 0,
+    },
+    {
+      "h": 52,
+      "originId": "badge-bg",
+      "type": "shape",
+      "w": 178,
+      "x": 54,
+      "y": 54,
+    },
+    {
+      "fontSize": 26,
+      "h": 52,
+      "originId": "badge",
+      "type": "text",
+      "w": 146,
+      "x": 70,
+      "y": 54,
+    },
+    {
+      "fontSize": 15,
+      "h": 27,
+      "originId": "legal",
+      "type": "text",
+      "w": 972,
+      "x": 54,
+      "y": 999,
+    },
+    {
+      "fontSize": 92,
+      "h": 253,
+      "originId": "headline",
+      "type": "text",
+      "w": 972,
+      "x": 54,
+      "y": 137,
+    },
+    {
+      "fontSize": 35,
+      "h": 66,
+      "originId": "sub",
+      "type": "text",
+      "w": 972,
+      "x": 54,
+      "y": 423,
+    },
+    {
+      "h": 63,
+      "originId": "cta",
+      "type": "symbol",
+      "w": 296,
+      "x": 54,
+      "y": 521,
+    },
+  ],
+  "typeBudget": 1.9740543457161375,
+}
+`;
+
+exports[`composition poster-left > lays out on 'ig-story' 1`] = `
+{
+  "children": [
+    {
+      "h": 1920,
+      "originId": "img",
+      "type": "image",
+      "w": 1080,
+      "x": 0,
+      "y": 0,
+    },
+    {
+      "h": 1920,
+      "originId": "poster-left-scrim",
+      "type": "shape",
+      "w": 670,
+      "x": 0,
+      "y": 0,
+    },
+    {
+      "h": 0,
+      "originId": "badge-group",
+      "type": "group",
+      "w": 0,
+      "x": 0,
+      "y": 0,
+    },
+    {
+      "h": 68,
+      "originId": "badge-bg",
+      "type": "shape",
+      "w": 231,
+      "x": 72,
+      "y": 80,
+    },
+    {
+      "fontSize": 34,
+      "h": 68,
+      "originId": "badge",
+      "type": "text",
+      "w": 191,
+      "x": 92,
+      "y": 80,
+    },
+    {
+      "fontSize": 20,
+      "h": 36,
+      "originId": "legal",
+      "type": "text",
+      "w": 936,
+      "x": 72,
+      "y": 1744,
+    },
+    {
+      "fontSize": 109,
+      "h": 336,
+      "originId": "headline",
+      "type": "text",
+      "w": 936,
+      "x": 72,
+      "y": 191,
+    },
+    {
+      "fontSize": 51,
+      "h": 172,
+      "originId": "sub",
+      "type": "text",
+      "w": 936,
+      "x": 72,
+      "y": 570,
+    },
+    {
+      "h": 84,
+      "originId": "cta",
+      "type": "symbol",
+      "w": 395,
+      "x": 72,
+      "y": 786,
+    },
+  ],
+  "typeBudget": 1.9740543457161375,
+}
+`;
+
+exports[`composition poster-left > lays out on 'tw-post' 1`] = `
+{
+  "children": [
+    {
+      "h": 675,
+      "originId": "img",
+      "type": "image",
+      "w": 1200,
+      "x": 0,
+      "y": 0,
+    },
+    {
+      "h": 675,
+      "originId": "poster-left-scrim",
+      "type": "shape",
+      "w": 744,
+      "x": 0,
+      "y": 0,
+    },
+    {
+      "h": 0,
+      "originId": "badge-group",
+      "type": "group",
+      "w": 0,
+      "x": 0,
+      "y": 0,
+    },
+    {
+      "h": 40,
+      "originId": "badge-bg",
+      "type": "shape",
+      "w": 136,
+      "x": 60,
+      "y": 45,
+    },
+    {
+      "fontSize": 20,
+      "h": 40,
+      "originId": "badge",
+      "type": "text",
+      "w": 112,
+      "x": 72,
+      "y": 45,
+    },
+    {
+      "fontSize": 11,
+      "h": 20,
+      "originId": "legal",
+      "type": "text",
+      "w": 1080,
+      "x": 60,
+      "y": 610,
+    },
+    {
+      "fontSize": 70,
+      "h": 96,
+      "originId": "headline",
+      "type": "text",
+      "w": 1080,
+      "x": 60,
+      "y": 111,
+    },
+    {
+      "fontSize": 30,
+      "h": 51,
+      "originId": "sub",
+      "type": "text",
+      "w": 1080,
+      "x": 60,
+      "y": 234,
+    },
+    {
+      "h": 48,
+      "originId": "cta",
+      "type": "symbol",
+      "w": 227,
+      "x": 60,
+      "y": 312,
+    },
+  ],
+  "typeBudget": 1.9740543457161375,
+}
+`;
+
 exports[`composition split-panel > lays out on 'ig-post' 1`] = `
 {
   "children": [

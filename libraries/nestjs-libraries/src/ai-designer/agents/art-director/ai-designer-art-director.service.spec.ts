@@ -419,6 +419,28 @@ describe('AiDesignerArtDirectorService', () => {
     expect(prompt).toContain('distinct subjects');
   });
 
+  it('steers dark-mood concepts to a darkening treatment in the plan prompt', async () => {
+    const validPlan: DesignPlan = {
+      variantId: 'orig',
+      skill: 'social-post',
+      concept: 'A valid plan',
+      palette: ['#fff'],
+      typeScale: { headline: 48 },
+      background: { kind: 'solid', value: '#fff' },
+      slots: [{ id: 'headline', role: 'headline', kind: 'text' }],
+      assetNeeds: [],
+    };
+    model.generateObject.mockResolvedValue({ type: 'plans', plans: [validPlan] });
+
+    await handler(makeRequest(), 'org1');
+
+    const prompt = model.generateObject.mock.calls[0][1] as string;
+    // Live failure: a "moody, dark wood" concept shipped a daylight stock
+    // photo graded with warm-tint — a tint changes hue, not brightness.
+    expect(prompt).toContain('moody-dark');
+    expect(prompt).toContain('barely darkens');
+  });
+
   it('demands per-slot texts and verbatim fixedCopy in the plan prompt', async () => {
     const validPlan: DesignPlan = {
       variantId: 'orig',

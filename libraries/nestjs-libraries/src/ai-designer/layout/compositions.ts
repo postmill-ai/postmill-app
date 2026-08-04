@@ -143,6 +143,36 @@ export const COMPOSITIONS: Composition[] = [
     }),
   },
   {
+    id: 'poster-left',
+    copyBandRatio: 0.75,
+    typeScale: 0.95,
+    label: 'Poster Left',
+    description: 'Copy column at the top-left over a dark-scrimmed full-bleed photo. Moody food, drink, retail promos.',
+    roles: ['image', 'headline', 'subhead', 'cta', 'badge', 'legal', 'decor'],
+    requires: [],
+    scrim: { widthRatio: 0.62, strength: 0.72 },
+    textAlign: 'left',
+    badgeAlign: 'left',
+    build: (ctx) => ({
+      kind: 'overlay',
+      children: [
+        slot('image', { fill: true }),
+        {
+          kind: 'stack',
+          justify: 'start',
+          gap: 3,
+          children: present(ctx, [
+            slot('badge'),
+            slot('headline'),
+            slot('subhead'),
+            slot('cta'),
+            slot('legal', { rigid: true }),
+          ]),
+        },
+      ],
+    }),
+  },
+  {
     id: 'editorial-sidebar',
     copyBandRatio: 0.9,
     typeScale: 0.72,

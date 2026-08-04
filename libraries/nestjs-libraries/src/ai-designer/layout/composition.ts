@@ -77,6 +77,16 @@ export interface Composition {
    * `widthRatio` is the share of the canvas the panel takes.
    */
   panel?: { widthRatio: number };
+  /**
+   * A dark gradient over the copy's side of the imagery, behind the copy —
+   * the moody-poster look. The copy sits ON the photograph here (unlike a
+   * panel, which is a solid surface); the scrim keeps it legible without
+   * hiding the photo. Emitted by the composer, never by the planning model.
+   */
+  scrim?: { widthRatio: number; strength?: number };
+  /** Horizontal alignment for this arrangement's copy. Defaults to the slot's
+   *  own style, then center. */
+  textAlign?: 'left' | 'center' | 'right';
   /** Where this arrangement pins its badge when the plan does not say. */
   badgeAlign?: 'left' | 'center' | 'right';
   /** Badge shape this arrangement forces, over the preset's own. */

@@ -274,6 +274,14 @@ export class AiDesignerArtDirectorService implements OnModuleInit {
       'image slot for the same subject (it would render the same picture twice). Image slots are',
       'only for additional, distinct subjects (e.g. a product shot over a scenic background).',
       '',
+      'Type accents: a slot may override the preset fonts per slot via "style": { "fontFamily": ... }',
+      'and "style": { "fill": ... }. Use this ONLY for a decorative accent line the concept calls',
+      'for — a script flourish above the headline ("Italian", "Traditional", "handmade") or a',
+      'single word set in the accent color. Script faces available: "Dancing Script", "Lobster",',
+      '"Pacifico", "Caveat", "Shadows Into Light". A script line takes an accent fill from the',
+      'palette, never the body color. Everything else keeps the preset pairing — mixed fonts on',
+      'ordinary copy reads as a mistake, not a style.',
+      '',
       'Copy: every plan MUST include a "texts" object mapping EVERY copy slot id (kind "text",',
       '"cta-button", or "badge") to its exact final copy, written to the skill\'s copy rules (for',
       'example an advertisement: headline ≤8 words benefit-led, CTA ≤3 words verb-first). The',
@@ -1011,6 +1019,10 @@ export class AiDesignerArtDirectorService implements OnModuleInit {
       designLanguagePrompt(),
       '',
       'Restraint is the difference between designed and decorated. Two effects on one element is the ceiling and one is usually right; a treatment exists so imagery belongs to the palette, not so every photo is filtered; "none" is a real answer for both.',
+      // Live failure: a "moody, dark wood" concept shipped a daylight stock
+      // photo graded with warm-tint — the tint changed the hue, not the
+      // brightness. Mood is a TREATMENT choice, not just a brief adjective.
+      'Match the treatment to the concept\'s mood, not only its palette: a dark, moody or nocturnal concept MUST set the image treatment to "moody-dark" — a colour tint warms or cools a daylight photo but barely darkens it.',
     ];
   }
 

@@ -2450,6 +2450,101 @@ describe('AiDesignerComposerService framing & legibility', () => {
     expect(cta.height).toBeGreaterThan(20);
   });
 
+  it('shrinks a long unbroken string to fit its box WIDTH — the renderer never splits words', () => {
+    const service = new AiDesignerComposerService(
+      new DesignerDocService() as any,
+      { generateText: vi.fn() } as any
+    );
+    // Live: "WWW.YOURPAGE.COM" in the ~38%-wide editorial-sidebar panel. The
+    // wrapped-line estimate breaks an over-long word mid-word, so at 30px the
+    // URL "fit" as two wrapped lines and the clamp left it alone — while the
+    // real renderer paints it as ONE 264px line (16 × 0.55 × 30) that
+    // overflows the 200px box and clips at the panel edge.
+    const doc = {
+      mode: 'image',
+      outputs: [
+        {
+          id: 'o1',
+          formatId: 'ig-square',
+          name: 'IG',
+          width: 1080,
+          height: 1080,
+          background: '#ffffff',
+          children: [
+            {
+              id: 'e1',
+              originId: 'subhead',
+              type: 'text',
+              x: 100,
+              y: 100,
+              width: 200,
+              height: 120,
+              rotation: 0,
+              opacity: 1,
+              locked: false,
+              hidden: false,
+              text: 'WWW.YOURPAGE.COM',
+              fontSize: 30,
+            },
+          ],
+        },
+      ],
+    } as any;
+
+    const clamped = (service as any)._clampTextToFit(doc);
+    const el = clamped.outputs[0].children[0];
+
+    expect(el.fontSize).toBeLessThan(30);
+    // Fits on ONE line now: the widest word's estimated advance is inside the
+    // box (the unit context has no loaded measurer, so the clamp used the
+    // same 0.55 fallback this assertion mirrors).
+    expect(el.fontSize * 0.55 * 'WWW.YOURPAGE.COM'.length).toBeLessThanOrEqual(200);
+  });
+
+  it('does not shrink wrappable copy whose widest word already fits the box', () => {
+    const service = new AiDesignerComposerService(
+      new DesignerDocService() as any,
+      { generateText: vi.fn() } as any
+    );
+    const doc = {
+      mode: 'image',
+      outputs: [
+        {
+          id: 'o1',
+          formatId: 'ig-square',
+          name: 'IG',
+          width: 1080,
+          height: 1080,
+          background: '#ffffff',
+          children: [
+            {
+              id: 'e1',
+              originId: 'subhead',
+              type: 'text',
+              x: 100,
+              y: 100,
+              width: 200,
+              height: 120,
+              rotation: 0,
+              opacity: 1,
+              locked: false,
+              hidden: false,
+              text: 'Visit our page today',
+              fontSize: 30,
+            },
+          ],
+        },
+      ],
+    } as any;
+
+    const clamped = (service as any)._clampTextToFit(doc);
+
+    // Every word wraps fine at 30px and the block fits the height, so the new
+    // width rule must not shrink ordinary copy (same-doc reference back).
+    expect(clamped).toBe(doc);
+  });
+
+
   it('honors a slot-level badgeStyle override over the preset treatment', async () => {
     // The 'bold' preset badges are pills — the plan's slot-level ribbon wins.
     // (This used to assert a slot-level 'burst' produced a star; the override
@@ -4611,6 +4706,245 @@ describe('AiDesignerComposerService.fixContrast', () => {
     );
     expect(untouched.fill).toBe('#777777');
   });
+
+  /** A hero doc with a dark photo bg and a plated CTA, as a symbol instance. */
+  const symbolCtaDoc = (plateFill: string, labelFill: string) =>
+    ({
+      mode: 'image',
+      symbols: [
+        {
+          id: 'lockup-cta',
+          name: 'cta lockup',
+          width: 220,
+          height: 60,
+          children: [
+            {
+              id: 'plate',
+              type: 'shape',
+              shape: 'rect',
+              x: 0,
+              y: 0,
+              width: 220,
+              height: 60,
+              rotation: 0,
+              opacity: 1,
+              locked: false,
+              hidden: false,
+              fill: plateFill,
+              borderRadius: 30,
+            },
+            {
+              id: 'label',
+              type: 'text',
+              x: 10,
+              y: 15,
+              width: 200,
+              height: 30,
+              rotation: 0,
+              opacity: 1,
+              locked: false,
+              hidden: false,
+              text: 'Shop now',
+              fontSize: 20,
+              fontWeight: 700,
+              fill: labelFill,
+            },
+          ],
+        },
+      ],
+      outputs: [
+        {
+          id: 'o1',
+          formatId: 'ig-post',
+          name: 'IG',
+          width: 1080,
+          height: 1080,
+          background: '#000000',
+          bg: { type: 'image', src: 'https://example.com/dark.png' },
+          children: [
+            {
+              id: 'cta1',
+              originId: 'cta',
+              type: 'symbol',
+              symbolId: 'lockup-cta',
+              x: 100,
+              y: 900,
+              width: 220,
+              height: 60,
+              rotation: 0,
+              opacity: 1,
+              locked: false,
+              hidden: false,
+              symbolOverrides: { label: { text: 'Shop now' } },
+            },
+          ],
+        },
+      ],
+    } as any);
+
+  it('repaints a symbol-instance CTA plate that went dark-on-dark over imagery', () => {
+    const service = makeService();
+    // Live: hero full-bleed, dark photo, dark accent plate — flipping the
+    // label against the sampled photo (or haloing it) leaves the pair
+    // dark-on-dark. The plate IS the label's backdrop, so the plate is what
+    // must change.
+    const { doc, notes } = service.fixContrast(
+      symbolCtaDoc('#1F2937', '#111827'),
+      [
+        {
+          outputIndex: 0,
+          elementId: 'cta1::label',
+          originId: 'cta',
+          fill: '#111827',
+          ratio: 1.1,
+          backdropLuma: 0.02,
+        } as any,
+      ]
+    );
+
+    const instance = (doc.outputs[0] as any).children.find(
+      (el: any) => el.id === 'cta1'
+    );
+    // Dark photo → the plate goes light; the dark label already reads on it,
+    // so it is kept (no label override written).
+    expect(instance.symbolOverrides.plate.fill).toBe('#FFFFFF');
+    expect(instance.symbolOverrides.label.fill).toBeUndefined();
+    // The wrong cures are absent: no halo on the label, no scrim shape added.
+    expect(instance.textShadow).toBeUndefined();
+    expect((doc.outputs[0] as any).children).toHaveLength(1);
+    expect(notes).toEqual([
+      'repainted the "cta" plate #1F2937 → #FFFFFF over the imagery (label #111827 kept)',
+    ]);
+  });
+
+  it('flips a symbol-instance CTA label that no longer reads on the repainted plate', () => {
+    const service = makeService();
+    // Light label on a dark plate: the PAIR was legible, but the plate itself
+    // vanishes against the dark photo — repainting the plate light flips the
+    // label to its complement.
+    const { doc, notes } = service.fixContrast(
+      symbolCtaDoc('#1F2937', '#E5E7EB'),
+      [
+        {
+          outputIndex: 0,
+          elementId: 'cta1::label',
+          originId: 'cta',
+          fill: '#E5E7EB',
+          ratio: 1.1,
+          backdropLuma: 0.02,
+        } as any,
+      ]
+    );
+
+    const instance = (doc.outputs[0] as any).children.find(
+      (el: any) => el.id === 'cta1'
+    );
+    expect(instance.symbolOverrides.plate.fill).toBe('#FFFFFF');
+    expect(instance.symbolOverrides.label.fill).toBe('#111111');
+    // The instance's existing label TEXT override survived the merge.
+    expect(instance.symbolOverrides.label.text).toBe('Shop now');
+    expect(notes).toEqual([
+      'repainted the "cta" plate #1F2937 → #FFFFFF over the imagery (label #E5E7EB → #111111)',
+    ]);
+  });
+
+  it('repaints the cta-bg shape of a PRE-symbol plated CTA instead of flipping the label', () => {
+    const service = makeService();
+    const doc = {
+      mode: 'image',
+      outputs: [
+        {
+          id: 'o1',
+          formatId: 'ig-post',
+          name: 'IG',
+          width: 1080,
+          height: 1080,
+          background: '#000000',
+          bg: { type: 'image', src: 'https://example.com/dark.png' },
+          children: [
+            {
+              id: 'cta-bg',
+              originId: 'cta-bg',
+              type: 'shape',
+              shape: 'rect',
+              x: 100,
+              y: 900,
+              width: 220,
+              height: 60,
+              rotation: 0,
+              opacity: 1,
+              locked: false,
+              hidden: false,
+              fill: '#1F2937',
+              borderRadius: 30,
+            },
+            {
+              id: 'cta1',
+              originId: 'cta',
+              type: 'text',
+              x: 110,
+              y: 915,
+              width: 200,
+              height: 30,
+              rotation: 0,
+              opacity: 1,
+              locked: false,
+              hidden: false,
+              text: 'Shop now',
+              fontSize: 20,
+              fontWeight: 700,
+              fill: '#111827',
+            },
+          ],
+        },
+      ],
+    } as any;
+
+    const { doc: fixed, notes } = service.fixContrast(doc, [
+      {
+        outputIndex: 0,
+        elementId: 'cta1',
+        originId: 'cta',
+        fill: '#111827',
+        ratio: 1.1,
+        backdropLuma: 0.02,
+      } as any,
+    ]);
+
+    const children = (fixed.outputs[0] as any).children;
+    const plate = children.find((el: any) => el.id === 'cta-bg');
+    const label = children.find((el: any) => el.id === 'cta1');
+    expect(plate.fill).toBe('#FFFFFF');
+    expect(label.fill).toBe('#111827');
+    expect(label.textShadow).toBeUndefined();
+    expect(children).toHaveLength(2);
+    expect(notes).toEqual([
+      'repainted the "cta" plate #1F2937 → #FFFFFF over the imagery (label #111827 kept)',
+    ]);
+  });
+
+  it('leaves a plated CTA whose pair reads fine to the ordinary ladder', () => {
+    const service = makeService();
+    // Light plate on a dark photo with a dark label: nothing about the PAIR
+    // is broken, so no plate repaint — the violation must be about imagery
+    // the label overhangs, which the flip/halo ladder owns.
+    const doc = symbolCtaDoc('#FFFFFF', '#111111');
+    const before = (doc.outputs[0] as any).children[0];
+
+    const { notes } = service.fixContrast(doc, [
+      {
+        outputIndex: 0,
+        elementId: 'cta1::label',
+        originId: 'cta',
+        fill: '#111111',
+        ratio: 1.1,
+        backdropLuma: 0.02,
+      } as any,
+    ]);
+
+    expect(before.symbolOverrides.plate).toBeUndefined();
+    expect(notes).toEqual([]);
+  });
 });
 
 describe('AiDesignerComposerService contrast floor', () => {
@@ -5648,6 +5982,43 @@ describe('AiDesignerComposerService aspect-aware type basis', () => {
     // rounding step of it, instead of the 56px the unbudgeted basis gave.
     expect(square).toBeGreaterThanOrEqual(88);
     expect(square / banner).toBeGreaterThan(2);
+  });
+});
+
+describe('AiDesignerComposerService poster-left composition', () => {
+  it('stacks left-aligned copy at the top over a left scrim', async () => {
+    const doc = await composeWith(makePlan({ composition: 'poster-left' }));
+    const headline = byOrigin(doc, 'headline');
+    expect(headline.align).toBe('left');
+    // Top-anchored: the headline sits in the top quarter, not the hero's lower third.
+    expect(headline.y).toBeLessThan(1080 * 0.25);
+
+    const scrim = byOrigin(doc, 'poster-left-scrim');
+    expect(scrim).toBeDefined();
+    expect(scrim.fillGradient.stops[0].color).toContain('rgba(0,0,0');
+    // The scrim covers the copy's side only, and sits above the image, below the copy.
+    expect(scrim.width).toBeLessThan(1080);
+    const children = childrenOf(doc);
+    const z = (oid: string) => children.findIndex((el) => el.originId === oid);
+    expect(z('poster-left-scrim')).toBeGreaterThan(z('img'));
+    expect(z('poster-left-scrim')).toBeLessThan(z('headline'));
+  });
+
+  it('honours a slot-level script accent: fontFamily and fill override the preset', async () => {
+    const plan = makePlan({ composition: 'poster-left' });
+    plan.slots.push({
+      id: 'kicker',
+      role: 'subhead',
+      kind: 'text',
+      style: { fontFamily: 'Dancing Script', fill: '#FFD400' },
+    } as any);
+    const doc = await composeWith(plan, undefined, {
+      ...makeCopy(),
+      kicker: 'Traditional',
+    });
+    const kicker = byOrigin(doc, 'kicker');
+    expect(kicker.fontFamily).toBe('Dancing Script');
+    expect(kicker.fill).toBe('#FFD400');
   });
 });
 

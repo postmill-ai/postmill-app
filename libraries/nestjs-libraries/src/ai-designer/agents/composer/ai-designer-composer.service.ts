@@ -1115,6 +1115,13 @@ export class AiDesignerComposerService implements OnModuleInit {
    * the detector. Round 8 (D2) changed only the CURE. The remedy ladder is now,
    * per failing text:
    *
+   *   0. A PLATED label (a CTA pill or badge chip — symbol-instance lockup or
+   *      a pre-symbol `${slotId}-bg` pair) is backed by its own plate, not by
+   *      the imagery: when the pair itself is the defect (dark label on a
+   *      dark plate, or a plate that vanishes against the photo), the PLATE
+   *      is repainted to read against the sampled backdrop and the label to
+   *      read against the plate. A flip/halo against the photo cured the
+   *      wrong surface and shipped dark-on-dark (live, hero full-bleed).
    *   1. Flip the fill to whichever of #FFFFFF/#111111 contrasts with the
    *      sampled backdrop luminance.
    *   2. When neither flat fill passes (busy mid-luma imagery), back the GLYPHS
@@ -1146,6 +1153,96 @@ export class AiDesignerComposerService implements OnModuleInit {
     for (const violation of violations) {
       const out = doc.outputs[violation.outputIndex];
       if (!out || !('children' in out)) continue;
+
+      // A PLATED label (a CTA pill, a badge chip) is backed by its own
+      // plate, not by the imagery: flipping the label against the SAMPLED
+      // photo — or haloing it — cures the wrong surface and shipped a dark
+      // plate with a dark label on a dark hero photo. The cure is repainting
+      // the PLATE to read against the imagery and the label to read against
+      // the plate. The CTA composes as a symbol instance now (lockup
+      // plate/label children, restyled through `symbolOverrides`); the
+      // pre-symbol `${slotId}-bg` shape + label pair takes the same repair
+      // on the shape itself.
+      const plated = this._platedLabelTarget(doc, out, violation);
+      if (plated) {
+        const fontSize = plated.labelFontSize;
+        const isLarge =
+          fontSize >= 24 || (plated.labelFontWeight >= 700 && fontSize >= 18);
+        const required = isLarge ? 3 : 4.5;
+        const plateRatioToBackdrop = (lum: number) =>
+          (Math.max(lum, violation.backdropLuma) + 0.05) /
+          (Math.min(lum, violation.backdropLuma) + 0.05);
+        const plateHex = plated.plateFill
+          ? parseSolidHexColor(plated.plateFill)
+          : undefined;
+        const labelHex =
+          parseSolidHexColor(plated.labelFill) ?? violation.fill;
+        // Repair only when the PAIR is the defect: the label fails against
+        // its own plate, or the plate itself vanishes against the photo
+        // (dark-on-dark). A pair that reads fine means the label overhangs
+        // its plate onto imagery — the ordinary ladder owns that case.
+        const labelOnPlateFails =
+          !!plateHex && contrastRatio(labelHex, plateHex) < required;
+        const plateInvisible =
+          !!plateHex && plateRatioToBackdrop(hexLuminance(plateHex)) < 1.15;
+        if (plateHex && (labelOnPlateFails || plateInvisible)) {
+          // The plate must read against the PHOTO first, then the label
+          // against the plate. Keep the label's current fill when it already
+          // reads on the repainted plate.
+          const newPlate =
+            plateRatioToBackdrop(WHITE_L) >= plateRatioToBackdrop(BLACK_L)
+              ? '#FFFFFF'
+              : '#111111';
+          const newLabel =
+            contrastRatio(labelHex, newPlate) >= required
+              ? labelHex
+              : newPlate === '#FFFFFF'
+                ? '#111111'
+                : '#FFFFFF';
+          if (plated.kind === 'symbol') {
+            const existing = plated.instance.symbolOverrides ?? {};
+            const symbolOverrides: SymbolOverrides = {
+              ...existing,
+              [LOCKUP_PLATE]: { ...existing[LOCKUP_PLATE], fill: newPlate },
+            };
+            if (newLabel !== labelHex) {
+              symbolOverrides[LOCKUP_LABEL] = {
+                ...existing[LOCKUP_LABEL],
+                fill: newLabel,
+              };
+            }
+            ops.push({
+              op: 'updateElement',
+              outputIndex: violation.outputIndex,
+              elementId: plated.instance.id,
+              scope: 'format-only',
+              patch: { symbolOverrides },
+            });
+          } else {
+            ops.push({
+              op: 'updateElement',
+              outputIndex: violation.outputIndex,
+              elementId: plated.plate.id,
+              scope: 'format-only',
+              patch: { fill: newPlate },
+            });
+            if (newLabel !== labelHex) {
+              ops.push({
+                op: 'updateElement',
+                outputIndex: violation.outputIndex,
+                elementId: plated.textEl.id,
+                scope: 'format-only',
+                patch: { fill: newLabel },
+              });
+            }
+          }
+          notes.push(
+            `repainted the "${plated.label}" plate ${plateHex} → ${newPlate} over the imagery (label ${labelHex}${newLabel !== labelHex ? ` → ${newLabel}` : ' kept'})`
+          );
+          continue;
+        }
+      }
+
       const textEl = out.children.find((el) => el.id === violation.elementId);
       if (!textEl || textEl.type !== 'text') continue;
       const label = violation.originId || textEl.originId || textEl.id;
@@ -1270,6 +1367,93 @@ export class AiDesignerComposerService implements OnModuleInit {
       );
       return { doc, notes: [] };
     }
+  }
+
+  /**
+   * The plated-CTA view of a contrast violation: the flagged text resolved to
+   * the label/plate pair it belongs to, or undefined when it is ordinary
+   * text-on-imagery.
+   *
+   * Two doc shapes carry the same lockup. The CURRENT one is a symbol
+   * instance whose definition holds the `plate`/`label` children — the audit
+   * reads the expanded layer list, so the violation names the expanded child
+   * (`${instanceId}::label`) or occasionally the instance itself, and the
+   * repair must write `symbolOverrides` on the instance (an expanded child
+   * id is not independently addressable). The PRE-symbol shape is a label
+   * text with a filled, overlapping `${originId}-bg` shape sibling — the
+   * repair patches that shape directly.
+   */
+  private _platedLabelTarget(
+    doc: DesignerDoc,
+    out: DesignerOutput,
+    violation: TextContrastViolation
+  ):
+    | {
+        kind: 'symbol';
+        instance: DesignerElement;
+        label: string;
+        labelFill: string;
+        labelFontSize: number;
+        labelFontWeight: number;
+        plateFill?: string;
+      }
+    | {
+        kind: 'legacy';
+        textEl: DesignerElement;
+        plate: DesignerElement;
+        label: string;
+        labelFill: string;
+        labelFontSize: number;
+        labelFontWeight: number;
+        plateFill?: string;
+      }
+    | undefined {
+    if (!('children' in out)) return undefined;
+    const [elementId, childId] = violation.elementId.split('::');
+    const direct = out.children.find((el) => el.id === elementId);
+    if (direct?.type === 'symbol') {
+      const definition = doc.symbols?.find((d) => d.id === direct.symbolId);
+      const plateChild = definition?.children.find((c) => c.id === LOCKUP_PLATE);
+      const labelChild = definition?.children.find((c) => c.id === LOCKUP_LABEL);
+      if (!definition || !plateChild || !labelChild) return undefined;
+      if (childId && childId !== LOCKUP_LABEL) return undefined;
+      const overrides = direct.symbolOverrides ?? {};
+      // The instance box scales the definition's pixels, fonts included.
+      const scale = definition.height ? direct.height / definition.height : 1;
+      return {
+        kind: 'symbol',
+        instance: direct,
+        label: violation.originId || direct.originId || direct.id,
+        labelFill:
+          overrides[LOCKUP_LABEL]?.fill ?? labelChild.fill ?? violation.fill,
+        labelFontSize: (labelChild.fontSize || 16) * scale,
+        labelFontWeight: labelChild.fontWeight ?? 400,
+        plateFill: overrides[LOCKUP_PLATE]?.fill ?? plateChild.fill,
+      };
+    }
+    if (direct?.type !== 'text' || !direct.originId) return undefined;
+    // The plate only counts when it actually backs the label — a label the
+    // overlap guard nudged OFF its plate sits on the imagery and belongs to
+    // the ordinary ladder.
+    const plate = out.children.find(
+      (el) =>
+        el.type === 'shape' &&
+        el.originId === `${direct.originId}-bg` &&
+        !!el.fill &&
+        !el.hidden &&
+        this._boxesOverlap(el, direct)
+    );
+    if (!plate) return undefined;
+    return {
+      kind: 'legacy',
+      textEl: direct,
+      plate,
+      label: violation.originId || direct.originId,
+      labelFill: direct.fill || violation.fill,
+      labelFontSize: direct.fontSize || 16,
+      labelFontWeight: direct.fontWeight ?? 400,
+      plateFill: plate.fill,
+    };
   }
 
   /**
@@ -1662,9 +1846,37 @@ export class AiDesignerComposerService implements OnModuleInit {
         if (!(el.width > 0) || !(el.height > 0)) return el;
         const lineHeightFactor = el.lineHeight || 1.2;
         const floor = roleFontFloorPx(el, out.width, out.height);
+        // The renderer never splits an unbroken word (`wrapTextLines`
+        // overflows it on its own line), but `_estimateWrappedLines` assumes
+        // mid-word hard-wrapping — so a long URL "fit" its panel vertically
+        // while painting wider than the box and clipping at the panel edge
+        // (live: "WWW.YOURPAGE.COM" on an editorial sidebar). The widest word
+        // must fit the box WIDTH at the final size too. Measured with the
+        // real face when the measurer is loaded (it is, past first compose);
+        // the 0.55 estimate is the same degraded path the line estimator
+        // uses. Letter spacing paints after EVERY glyph (fit-text's
+        // `measureLineWidth`), so it counts per character.
+        const widestWord = el.text
+          .split(/\s+/)
+          .reduce((a, w) => (w.length > a.length ? w : a), '');
+        const widestWordWidthAt = (size: number): number => {
+          if (!widestWord) return 0;
+          const advance = this._measurer
+            ? this._measurer(widestWord, size, {
+                fontFamily: el.fontFamily,
+                fontWeight: el.fontWeight,
+                fontStyle: el.fontStyle,
+              })
+            : widestWord.length * size * 0.55;
+          return advance + (el.letterSpacing || 0) * widestWord.length;
+        };
         let size = fontSize;
         let lines = this._estimateWrappedLines(el.text, el.width, size);
-        while (size > floor && lines * lineHeightFactor * size > el.height) {
+        while (
+          size > floor &&
+          (lines * lineHeightFactor * size > el.height ||
+            widestWordWidthAt(size) > el.width)
+        ) {
           size = Math.max(floor, Math.floor(size * 0.9));
           lines = this._estimateWrappedLines(el.text, el.width, size);
         }
@@ -1708,7 +1920,10 @@ export class AiDesignerComposerService implements OnModuleInit {
         current = 0;
       }
       current = current > 0 ? current + 1 + wordLen : wordLen;
-      // A single word longer than the line hard-wraps mid-word.
+      // A single word longer than the line is assumed to hard-wrap mid-word —
+      // a height-estimate convenience only. The renderer never splits a word,
+      // which is exactly why `_clampTextToFit` also fits the widest word to
+      // the box width.
       while (current > maxChars) {
         lines++;
         current -= maxChars;
@@ -4805,6 +5020,37 @@ export class AiDesignerComposerService implements OnModuleInit {
 
     elements.push(...accents);
 
+    // A scrim is a dark gradient over the copy's side of the photo — the copy
+    // sits ON the imagery here (no panel slab); the scrim keeps it legible
+    // without hiding the photograph. It goes UNDER badges, footer and copy.
+    if (composition.scrim) {
+      elements.push({
+        id: '',
+        type: 'shape',
+        shape: 'rect',
+        x: 0,
+        y: 0,
+        width: Math.round(ctx.w * composition.scrim.widthRatio),
+        height: ctx.h,
+        rotation: 0,
+        opacity: 1,
+        locked: false,
+        hidden: false,
+        fillGradient: {
+          type: 'linear',
+          angle: 0,
+          stops: [
+            {
+              offset: 0,
+              color: `rgba(0,0,0,${composition.scrim.strength ?? 0.72})`,
+            },
+            { offset: 1, color: 'rgba(0,0,0,0)' },
+          ],
+        },
+        originId: `${composition.id}-scrim`,
+      } as DesignerElement);
+    }
+
     // BADGES and the FOOTER stay with `_pushBadges` and `_pushFooter`.
     //
     // Those two carry the bulk of the remediation — plan-requested corners,
@@ -4839,7 +5085,7 @@ export class AiDesignerComposerService implements OnModuleInit {
       legalSlots,
       roles,
       { x: column.x, width: column.width, bottom: this._footerBottom(ctx) },
-      { align: 'center', backdrop: ctx.outputBg }
+      { align: composition.textAlign ?? 'center', backdrop: ctx.outputBg }
     );
 
     const claimed = new Set([...badgeSlots, ...legalSlots]);
@@ -4863,13 +5109,19 @@ export class AiDesignerComposerService implements OnModuleInit {
 
       if (b.role === 'cta') {
         elements.push(
-          ...this._ctaElements(b.slot, b.text, { x: placed.x, y: placed.y, width: placed.width }, ctx, {})
+          ...this._ctaElements(
+            b.slot,
+            b.text,
+            { x: placed.x, y: placed.y, width: placed.width },
+            ctx,
+            { align: composition.textAlign }
+          )
         );
         continue;
       }
       elements.push(
         this._styledTextElement(b.slot, b.role, b.text, placed, ctx, {
-          align: b.slot.style?.align,
+          align: composition.textAlign ?? b.slot.style?.align,
           verticalAlign: composition.textVerticalAlign,
         })
       );
