@@ -56,6 +56,13 @@ interface ElementsProps {
    * the background back with the rest of the page.
    */
   backdrop?: ReactNode;
+  /**
+   * Bumped when asynchronously-loaded backdrop content (the bg image) becomes
+   * ready. An AdjustmentScope CACHES its children; without this the cache is
+   * captured before the image arrives and the canvas stays blank forever —
+   * the "black canvas on a freshly loaded doc" bug.
+   */
+  backdropKey?: string | number;
 }
 
 const imageCache = new Map<string, HTMLImageElement>();
@@ -751,6 +758,7 @@ export const CanvasElements: FC<ElementsProps> = ({
   onContextMenu,
   interactive = true,
   backdrop,
+  backdropKey,
 }) => {
   // Symbol instances expand to ordinary elements before the tree is built, so
   // nothing below here needs to know symbols exist — the same contract the
@@ -1106,7 +1114,7 @@ export const CanvasElements: FC<ElementsProps> = ({
         const kept = el.clipped ? acc.slice(0, -1) : [];
         return [
           ...kept,
-          <AdjustmentScope key={`adj-${el.id}`} adjustment={el.adjustment}>
+          <AdjustmentScope key={`adj-${el.id}`} adjustment={el.adjustment} cacheKey={backdropKey}>
             {scoped}
           </AdjustmentScope>,
         ];

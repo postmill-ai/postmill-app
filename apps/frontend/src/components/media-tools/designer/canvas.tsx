@@ -25,6 +25,7 @@ import { getTool, resolveToolShortcut } from './tools';
 import { rectFromDrag, isMeaningfulDraw, buildShapeElement, buildShapeClip } from './tool-draw';
 import { addText } from './add-text';
 import { CropOverlay } from './crop-overlay';
+import { ensureFontsLoaded } from './fonts';
 import { getImageNaturalSize } from './elements';
 import {
   type PenDraft,
@@ -272,6 +273,35 @@ export const DesignerCanvas: FC<CanvasProps> = ({
       cancelled = true;
     };
   }, [output?.bg]);
+
+  // Warm every font the document uses, then redraw. Nothing else loads fonts
+  // on OPEN — `ensureFontLoaded` only ran when adding or restyling text — so
+  // a doc carrying a display face (every AI-composed headline) opened in a
+  // fallback serif and, Konva never being invalidated, stayed there.
+  useEffect(() => {
+    const families = new Set<string>();
+    for (const out of doc.outputs || []) {
+      for (const el of (out as DesignerOutput).children || []) {
+        if (el.fontFamily) families.add(el.fontFamily);
+        for (const run of el.richText || []) {
+          if (run.fontFamily) families.add(run.fontFamily);
+        }
+      }
+      for (const track of (out as any).tracks || []) {
+        for (const clip of track.clips || []) {
+          if (clip.fontFamily) families.add(clip.fontFamily);
+        }
+      }
+    }
+    if (!families.size) return;
+    let cancelled = false;
+    void ensureFontsLoaded([...families]).then(() => {
+      if (!cancelled) stageRef.current?.batchDraw();
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [doc]);
 
   useEffect(() => {
     const isTypingTarget = (t: EventTarget | null) =>
@@ -1350,6 +1380,9 @@ export const DesignerCanvas: FC<CanvasProps> = ({
           <CanvasElements
             elements={isVideo ? [] : (output?.children || [])}
             symbols={doc.symbols}
+            // Re-cache the adjustment scopes once the bg image arrives — see
+            // `backdropKey` on ElementsProps.
+            backdropKey={bgImage ? 'bg-loaded' : 'bg-pending'}
             // The Rect above keeps the page drop-shadow (editor chrome, which
             // must never be filtered); this fill-only copy is what an
             // adjustment layer sees, matching the server's page readback.
