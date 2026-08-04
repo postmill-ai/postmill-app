@@ -387,7 +387,16 @@ export const computeTextStackBoxes = (
         continue;
       }
       const members = elements.filter((m) => m.groupId === el.groupId);
-      if (!members.some((m) => m.type === 'text' && !m.hidden)) continue;
+      // A lockup instance (a CTA composed as one symbol) stands for its
+      // label here: its text lives in the definition's overrides, but it is
+      // still the copy unit that must ride the stack — excluding it drops the
+      // CTA out of its column exactly like the ungrouped-pair bug above.
+      if (
+        !members.some(
+          (m) => (m.type === 'text' || m.type === 'symbol') && !m.hidden
+        )
+      )
+        continue;
       seenGroups.add(el.groupId);
       units.push({ box, members });
       continue;
@@ -738,8 +747,15 @@ export const smartReflow = (
   // Keep text, images, and shapes inside the title-safe area so they remain
   // readable / uncropped by platform overlays. For images and shapes we only
   // nudge when the element actually overlaps a safe-zone edge, preserving the
-  // user's intentional edge-to-edge placements when possible.
-  if (el.type === 'text' || el.type === 'image' || el.type === 'shape') {
+  // user's intentional edge-to-edge placements when possible. A symbol
+  // instance (a CTA lockup) clamps like a shape — its plate+label expand
+  // from its box, so nudging the box nudges the whole unit.
+  if (
+    el.type === 'text' ||
+    el.type === 'image' ||
+    el.type === 'shape' ||
+    el.type === 'symbol'
+  ) {
     const safe = getSafeZoneInset(target.formatId || '', target.width, target.height);
     if (el.type === 'text') {
       // A box wider than the title-safe area still overflows the right edge
@@ -787,6 +803,27 @@ export const smartReflow = (
           y = Math.max(safe.top, safe.bottom - newH);
         }
       }
+    }
+  }
+
+  // A path's nodes are element-local, so transforming only the box left the
+  // DRAWN pixels at their source-canvas coordinates — a rule authored under a
+  // square's copy floated mid-canvas on the story, detached from everything.
+  // Scale the nodes (and their handles, which are absolute control points)
+  // with the box; the box's own x/y carries the translation.
+  if (el.type === 'path' && el.nodes?.length && el.width > 0 && el.height > 0) {
+    const nodeScaleX = newW / el.width;
+    const nodeScaleY = newH / el.height;
+    if (nodeScaleX !== 1 || nodeScaleY !== 1) {
+      result.nodes = el.nodes.map((n) => ({
+        ...n,
+        x: n.x * nodeScaleX,
+        y: n.y * nodeScaleY,
+        inX: n.inX !== undefined ? n.inX * nodeScaleX : undefined,
+        inY: n.inY !== undefined ? n.inY * nodeScaleY : undefined,
+        outX: n.outX !== undefined ? n.outX * nodeScaleX : undefined,
+        outY: n.outY !== undefined ? n.outY * nodeScaleY : undefined,
+      }));
     }
   }
 

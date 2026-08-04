@@ -73,6 +73,17 @@ import {
   wrapMoveUnitsInGroups,
 } from '../../util/layer-groups';
 import { markTemplateSlots } from '../../util/template-slots';
+import {
+  defineLockup,
+  instantiateLockup,
+  lockupOverrideText,
+  LOCKUP_LABEL,
+  LOCKUP_PLATE,
+} from './lockups';
+import type {
+  SymbolDefinition,
+  SymbolOverrides,
+} from '../../../media/designer-doc/symbols';
 import { buildExtraSlots, resolveIconSlots } from './extra-slots';
 import type { ResolvedIcon } from '../../../media/designer-doc/icon-resolver';
 import { emphasise, emphasisTokens } from './rich-text';
@@ -362,6 +373,12 @@ interface ComposeContext {
    *  even when the plan carries no image slot — see `_buildElements`' D4
    *  panel→hero redirect. */
   bgIsImage?: boolean;
+  /**
+   * Lockup registry shared across every output's build of one compose: the
+   * FIRST build (the primary) authors each slot's symbol definition, later
+   * builds instantiate it. Attached to `doc.symbols` by `_composeDeterministic`.
+   */
+  lockups?: Map<string, SymbolDefinition>;
 }
 
 interface Box {
@@ -862,7 +879,7 @@ export class AiDesignerComposerService implements OnModuleInit {
     }
 
     let changed = false;
-    const children = out.children.map((el) => {
+    let children = out.children.map((el) => {
       const patch = patches.get(el.id);
       if (!patch) return el;
       const next = { ...el, ...patch };
@@ -878,6 +895,38 @@ export class AiDesignerComposerService implements OnModuleInit {
       changed = true;
       return next;
     });
+
+    // Decor placed against the copy (rules, swashes) cannot ride the seed: a
+    // full-canvas path scales 1:1 onto a taller canvas, so the mark stayed
+    // where the PRIMARY'S copy was — a rule floating mid-canvas, detached
+    // from the re-fit headline. Placement is a pure function of canvas +
+    // headline box, so it is re-emitted against the re-fit headline. The
+    // recipe id and colour ride the seeded element; the fresh emission gets
+    // its id and originId back so cross-output addressing is undisturbed.
+    const headlineT = children.find(
+      (el) => el.type === 'text' && (el.originId || '').includes('headline')
+    );
+    if (headlineT) {
+      const margin = canvasMarginPx(out.width, out.height);
+      children = children.map((el) => {
+        const oid = el.originId || '';
+        if (!oid.startsWith('decor-')) return el;
+        const [fresh] = emitDecor([oid.slice('decor-'.length)], {
+          canvas: { width: out.width, height: out.height },
+          margin,
+          headline: {
+            x: headlineT.x,
+            y: headlineT.y,
+            width: headlineT.width,
+            height: headlineT.height,
+          },
+          palette: ['', '', el.stroke || el.fill || ''],
+        });
+        if (!fresh) return el;
+        changed = true;
+        return { ...fresh, id: el.id, originId: el.originId };
+      });
+    }
     return changed ? { ...out, children } : null;
   }
 
@@ -1356,7 +1405,11 @@ export class AiDesignerComposerService implements OnModuleInit {
         // (the label keeps the slot id). A geometry fix scoped to the slot
         // that only patched the label would detach text from its shape — so
         // geometry targets expand to the companions. Style patches stay
-        // label-only (a fill fix is about the copy, not the button).
+        // label-only (a fill fix is about the copy, not the button). A
+        // lockup'd CTA has no separate `${slotId}-bg` element — the symbol
+        // instance at the slot id IS the whole button — so the expansion
+        // simply matches nothing extra for it; its underline/shadow
+        // companions still exist and still expand.
         const geometryTargetIds = slotScope
           ? new Set(
               slotScope.flatMap((id) => [
@@ -1389,6 +1442,11 @@ export class AiDesignerComposerService implements OnModuleInit {
                     el
                   )
                 : rawPicked;
+            // A px fontSize means nothing on a lockup instance — the label's
+            // size is DERIVED from the instance box at expansion time, so a
+            // stored value would sit in the doc unread. Resizing the box IS
+            // the font fix there.
+            if (el.type === 'symbol') delete picked.fontSize;
             // The fix box is authored for the LABEL. Writing it verbatim to
             // the `-bg`/`-underline` companions collapses the label/shape
             // inset (pill box === label box, byte-identical) — a companion
@@ -1425,6 +1483,26 @@ export class AiDesignerComposerService implements OnModuleInit {
                 `Refusing text fix on ${el.type} slot "${fix.text.slotId}" — imagery is protected.`,
                 AiDesignerComposerService.name
               );
+            } else if (el.type === 'symbol') {
+              // A lockup'd CTA's label lives in the symbol definition; the
+              // instance rewrites it through `symbolOverrides.label`. Locked
+              // copy still wins — by REFUSING the override write (the
+              // instance already carries the locked text from compose), not
+              // by writing the lock back over the rewrite.
+              const locked = lockedTexts?.[fix.text.slotId];
+              if (locked === undefined) {
+                patch.symbolOverrides = this._mergedOverrides(
+                  el,
+                  patch.symbolOverrides,
+                  LOCKUP_LABEL,
+                  { text: fix.text.newText }
+                );
+              } else if (locked !== fix.text.newText) {
+                this._logger.log(
+                  `Locked copy for slot "${fix.text.slotId}" kept over the critic's rewrite.`,
+                  AiDesignerComposerService.name
+                );
+              }
             } else {
               // Locked copy (the plan texts the user approved) always wins over
               // a critic rewrite; geometry/style halves of the fix still apply.
@@ -1689,6 +1767,12 @@ export class AiDesignerComposerService implements OnModuleInit {
           el.type === 'shape' && el.shape === 'star'
             ? starVisualBox(el)
             : { x: el.x, y: el.y, width: el.width, height: el.height };
+        // A lockup instance (a CTA composed as one symbol) carries its label
+        // in `symbolOverrides`, not `text` — for collision and stack-order
+        // purposes it IS that label. Without this the guard went blind to the
+        // one element most likely to sit under a drifting subhead.
+        const textOf = (el: DesignerElement): string | undefined =>
+          el.text ?? lockupOverrideText(el);
 
         // Bounded fixpoint: one pass separates each element from the elements
         // placed BEFORE it, so a group pushed by a later collider can drift
@@ -1743,7 +1827,11 @@ export class AiDesignerComposerService implements OnModuleInit {
           const placed: { index: number; el: DesignerElement }[] = [];
           for (let i = 0; i < out.children.length; i++) {
             const el = currentAt(i);
-            if (el.type !== 'text' || !el.text || el.rotation) {
+            const isMover =
+              !el.rotation &&
+              ((el.type === 'text' && !!el.text) ||
+                (el.type === 'symbol' && !!lockupOverrideText(el)));
+            if (!isMover) {
               placed.push({ index: i, el });
               continue;
             }
@@ -1775,7 +1863,7 @@ export class AiDesignerComposerService implements OnModuleInit {
                 lines = this._estimateWrappedLines(next.text, inner.width, size);
               }
               this._logger.warn(
-                `Overlap guard: text "${next.text.slice(0, 40)}" spilled outside its shape ${shape.originId} — clamped inside (${fontSize}px → ${size}px).`,
+                `Overlap guard: text "${(textOf(next) || '').slice(0, 40)}" spilled outside its shape ${shape.originId} — clamped inside (${fontSize}px → ${size}px).`,
                 AiDesignerComposerService.name
               );
               next = { ...next, ...inner, fontSize: size };
@@ -1791,7 +1879,7 @@ export class AiDesignerComposerService implements OnModuleInit {
               const x = Math.max(0, Math.min(next.x, out.width - width));
               if (x !== next.x || width !== next.width) {
                 this._logger.warn(
-                  `Overlap guard: text "${next.text.slice(0, 40)}" ran off the canvas edge — clamped x/width ${next.x}/${next.width} → ${x}/${width}.`,
+                  `Overlap guard: text "${(textOf(next) || '').slice(0, 40)}" ran off the canvas edge — clamped x/width ${next.x}/${next.width} → ${x}/${width}.`,
                   AiDesignerComposerService.name
                 );
                 next = { ...next, x, width };
@@ -1851,10 +1939,12 @@ export class AiDesignerComposerService implements OnModuleInit {
               // A `*-bg` shape collides only when it is a small accent (badge
               // burst, CTA pill) covering a text that is NOT in its group —
               // big background panels (split-panel-bg) are backdrops the copy
-              // intentionally sits on, not collisions.
+              // intentionally sits on, not collisions. A lockup instance is
+              // the same kind of small painted plate: its fill lives in the
+              // definition, but its box is what copy can collide with.
               const isShapeCollider =
-                other.type === 'shape' &&
-                !!other.originId?.endsWith('-bg') &&
+                ((other.type === 'shape' && !!other.originId?.endsWith('-bg')) ||
+                  other.type === 'symbol') &&
                 other.width * other.height < out.width * out.height * 0.25;
               if (!isTextCollider && !isShapeCollider) continue;
 
@@ -1905,7 +1995,7 @@ export class AiDesignerComposerService implements OnModuleInit {
               const belowDelta = colliderBottom + gap - box.y;
               if (box.y + box.height + belowDelta <= safe.bottom) {
                 this._logger.warn(
-                  `Overlap guard: text "${next.text.slice(0, 40)}" overlapped ${otherLabel} — nudged its group down by ${belowDelta}px.`,
+                  `Overlap guard: text "${(textOf(next) || '').slice(0, 40)}" overlapped ${otherLabel} — nudged its group down by ${belowDelta}px.`,
                   AiDesignerComposerService.name
                 );
                 moveGroup(belowDelta);
@@ -1917,7 +2007,7 @@ export class AiDesignerComposerService implements OnModuleInit {
               const aboveDelta = colliderTop - gap - (box.y + box.height);
               if (box.y + aboveDelta >= safe.top) {
                 this._logger.warn(
-                  `Overlap guard: text "${next.text.slice(0, 40)}" overlapped ${otherLabel} with no room below — moved its group above it.`,
+                  `Overlap guard: text "${(textOf(next) || '').slice(0, 40)}" overlapped ${otherLabel} with no room below — moved its group above it.`,
                   AiDesignerComposerService.name
                 );
                 moveGroup(aboveDelta);
@@ -1931,7 +2021,7 @@ export class AiDesignerComposerService implements OnModuleInit {
                 // group goes behind the colliding text so at least one of them
                 // reads cleanly.
                 this._logger.warn(
-                  `Overlap guard: collision between text "${next.text.slice(0, 40)}" and ${otherLabel} has no canvas room — reordered the group behind it.`,
+                  `Overlap guard: collision between text "${(textOf(next) || '').slice(0, 40)}" and ${otherLabel} has no canvas room — reordered the group behind it.`,
                   AiDesignerComposerService.name
                 );
                 reorders.push({
@@ -1941,7 +2031,7 @@ export class AiDesignerComposerService implements OnModuleInit {
                 break;
               }
               this._logger.warn(
-                `Overlap guard: collision between text "${next.text.slice(0, 40)}" and ${otherLabel} left unresolved (no canvas room).`,
+                `Overlap guard: collision between text "${(textOf(next) || '').slice(0, 40)}" and ${otherLabel} left unresolved (no canvas room).`,
                 AiDesignerComposerService.name
               );
             }
@@ -2027,8 +2117,11 @@ export class AiDesignerComposerService implements OnModuleInit {
       .filter(
         (e): e is { el: DesignerElement; index: number; rank: 0 | 1 | 2 | 3 } =>
           e.rank !== undefined &&
-          e.el.type === 'text' &&
-          !!e.el.text &&
+          ((e.el.type === 'text' && !!e.el.text) ||
+            // A lockup'd CTA answers for its label in the order assertion
+            // too — leaving it out let a cascade park a subhead under the
+            // button with no pairwise collision to catch it.
+            (e.el.type === 'symbol' && !!lockupOverrideText(e.el))) &&
           !e.el.hidden &&
           !e.el.rotation
       );
@@ -2597,10 +2690,16 @@ export class AiDesignerComposerService implements OnModuleInit {
       plan.variantId,
       plan.assetNeeds?.length ?? 0
     );
+    // Lockups (today: the CTA) are authored ONCE — by the primary's build —
+    // as symbol definitions on the doc; every output, primary included, then
+    // carries an INSTANCE, so a restyle edits one definition instead of one
+    // plate+label pair per format.
+    const lockups = new Map<string, SymbolDefinition>();
     const primaryOpts = {
       outputBg: bg.bg ? undefined : bg.background,
       bgIsImage: bg.bg?.type === 'image',
       resolvedIcons,
+      lockups,
     };
     const primaryElements = this._buildElements(
       plan,
@@ -2661,12 +2760,18 @@ export class AiDesignerComposerService implements OnModuleInit {
     // no-op (it only iterates secondary outputs). `_buildPerChannelAdjustments`
     // is inert for new plans — the art director no longer emits `perChannel`;
     // it only still honors notes carried by older stored plans.
-    doc = this._applyChannelLayouts(plan, copy, assets, outputs, style, doc, resolvedIcons);
+    doc = this._applyChannelLayouts(plan, copy, assets, outputs, style, doc, resolvedIcons, lockups);
     doc = this._dropBackgroundDuplicateImages(doc);
 
     const adjustOps = this._buildPerChannelAdjustments(plan, doc);
     if (adjustOps.length > 0) {
       doc = this._docService.applyOps(doc, adjustOps);
+    }
+
+    // Attached AFTER the ops pipeline: `setDoc`/`addOutput` know nothing of
+    // symbols, and every instance they seed references the definition by id.
+    if (lockups.size > 0) {
+      doc = { ...doc, symbols: [...lockups.values()] } as DesignerDoc;
     }
 
     return doc;
@@ -2686,7 +2791,8 @@ export class AiDesignerComposerService implements OnModuleInit {
     outputs: ComposerInput['outputs'],
     style: ResolvedStyle,
     doc: DesignerDoc,
-    resolvedIcons?: ReadonlyMap<string, ResolvedIcon>
+    resolvedIcons?: ReadonlyMap<string, ResolvedIcon>,
+    lockups?: Map<string, SymbolDefinition>
   ): DesignerDoc {
     if (!plan.channelLayouts) return doc;
     let next = doc;
@@ -2703,6 +2809,9 @@ export class AiDesignerComposerService implements OnModuleInit {
         // background; an image/gradient one has no single hex to judge.
         outputBg: out.bg ? undefined : out.background,
         bgIsImage: out.bg?.type === 'image',
+        // Composed fresh, but the lockup definitions stay the primary's —
+        // this output gets an instance of the same symbol, not a second one.
+        lockups,
       };
       const children = this._buildElements(
         plan,
@@ -2931,7 +3040,22 @@ export class AiDesignerComposerService implements OnModuleInit {
    */
   private _stylePatch(style: FixStyle, el: DesignerElement): Partial<DesignerElement> {
     const patch: Partial<DesignerElement> = {};
-    if (typeof style.fill === 'string') patch.fill = style.fill;
+    if (typeof style.fill === 'string') {
+      // A lockup instance carries no fill of its own — the PLATE inside the
+      // definition does, and the plate is where the CTA's visual weight
+      // lives, so a fill fix lands as an override keyed by the plate's child
+      // id rather than as an unread field on the instance.
+      if (el.type === 'symbol') {
+        patch.symbolOverrides = this._mergedOverrides(
+          el,
+          patch.symbolOverrides,
+          LOCKUP_PLATE,
+          { fill: style.fill }
+        );
+      } else {
+        patch.fill = style.fill;
+      }
+    }
     if (typeof style.stroke === 'string') patch.stroke = style.stroke;
     if (typeof style.opacity === 'number' && Number.isFinite(style.opacity)) {
       patch.opacity = Math.max(0, Math.min(1, style.opacity));
@@ -2973,6 +3097,29 @@ export class AiDesignerComposerService implements OnModuleInit {
       patch.textShadow = undefined;
     }
     return patch;
+  }
+
+  /**
+   * Merge one child's content into an instance's override map — never REPLACE
+   * it: a text fix and a fill fix in the same finding must both land, and a
+   * format-only override an instance already carried must survive a shared
+   * one written from the primary.
+   */
+  private _mergedOverrides(
+    el: DesignerElement,
+    base: SymbolOverrides | undefined,
+    childId: string,
+    content: SymbolOverrides[string]
+  ): SymbolOverrides {
+    return {
+      ...el.symbolOverrides,
+      ...base,
+      [childId]: {
+        ...el.symbolOverrides?.[childId],
+        ...base?.[childId],
+        ...content,
+      },
+    };
   }
 
   /**
@@ -3157,7 +3304,11 @@ export class AiDesignerComposerService implements OnModuleInit {
     picked: Record<string, unknown>
   ): Record<string, unknown> {
     const label = out.children.find(
-      (c) => c.type === 'text' && (c.originId === slotId || c.id === slotId)
+      // A lockup'd CTA's "label box" is the instance box — plate and label
+      // share it by construction, so the instance answers for both.
+      (c) =>
+        (c.type === 'text' || c.type === 'symbol') &&
+        (c.originId === slotId || c.id === slotId)
     );
     if (!label) return picked;
     const merged = {
@@ -3947,9 +4098,23 @@ export class AiDesignerComposerService implements OnModuleInit {
   }
 
   /**
-   * CTA slot → button pair: a rounded-rect shape plus a centered text element
-   * on top. The shape is originId'd `${slotId}-bg` (the text keeps the slot
-   * id, so slot-scoped fixes hit the label) and both share a groupId.
+   * CTA slot → button lockup: a rounded-rect plate plus a centered label.
+   *
+   * When the compose carries a lockup registry (the deterministic path always
+   * does), the pair is authored ONCE — on the first build, the primary's — as
+   * a symbol definition on `doc.symbols` (children `plate`/`label`), and every
+   * output gets an INSTANCE of it instead of its own plate+label pair. The
+   * instance keeps the slot's `originId` and the pair's `groupId`, so
+   * move-units, linked propagation and slot-scoped fixes address it exactly
+   * where they addressed the label; geometry lands on its box (the expansion
+   * scales plate and label from it, fontSize included), and content/style
+   * fixes write `symbolOverrides`. What no longer exists is the separate
+   * `${slotId}-bg` element — the instance encompasses it.
+   *
+   * The underline CTA has no plate, so it stays a plain text + accent bar
+   * pair; the neobrutalism drop shadow stays its own offset rect BEHIND the
+   * instance, grouped with it so the overlap guard and the geometry fan-out
+   * move the whole stack together.
    */
   private _ctaElements(
     slot: DesignSlot,
@@ -4079,6 +4244,25 @@ export class AiDesignerComposerService implements OnModuleInit {
       groupId: slot.id,
     });
 
+    // The lockup: plate + label become a symbol instance (see the method
+    // comment). The label text rides as an override even though it matches
+    // the definition — pinned per instance, a later definition edit can never
+    // silently reword approved copy. Without a registry (no doc to attach the
+    // definition to) the pair is emitted as-is.
+    const pair: DesignerElement[] = ctx.lockups
+      ? [
+          instantiateLockup(
+            this._lockupDefinition(ctx, slot, shape, text),
+            {
+              originId: slot.id,
+              groupId: slot.id,
+              box,
+              overrides: { [LOCKUP_LABEL]: { text: rawText } },
+            }
+          ),
+        ]
+      : [shape, text];
+
     if (!outline && treatments.ctaShadow === true) {
       const offset = this._ctaShadowOffset(fontSize);
       const shadow: DesignerElement = {
@@ -4100,9 +4284,28 @@ export class AiDesignerComposerService implements OnModuleInit {
       } as DesignerElement;
       // Behind the button, and grouped with it so the overlap guard and the
       // geometry fan-out move the whole stack together.
-      return [shadow, shape, text];
+      return [shadow, ...pair];
     }
-    return [shape, text];
+    return pair;
+  }
+
+  /**
+   * The slot's lockup definition, authored on FIRST build (the primary
+   * output) and reused by every later one — a channel-layout output
+   * recomposed for its own canvas instantiates the SAME symbol, so the whole
+   * doc has exactly one definition per CTA slot.
+   */
+  private _lockupDefinition(
+    ctx: ComposeContext,
+    slot: DesignSlot,
+    plate: DesignerElement,
+    label: DesignerElement
+  ): SymbolDefinition {
+    const existing = ctx.lockups?.get(slot.id);
+    if (existing) return existing;
+    const definition = defineLockup(slot.id, plate, label);
+    ctx.lockups?.set(slot.id, definition);
+    return definition;
   }
 
   /** Offset of a neobrutalism CTA's solid drop shadow, in px. */
@@ -4267,6 +4470,8 @@ export class AiDesignerComposerService implements OnModuleInit {
       bgIsImage?: boolean;
       /** Pre-resolved at the async boundary — see `resolveIconSlots`. */
       resolvedIcons?: ReadonlyMap<string, ResolvedIcon>;
+      /** Shared lockup registry — see `ComposeContext.lockups`. */
+      lockups?: Map<string, SymbolDefinition>;
     } = {}
   ): DesignerElement[] {
     const w = output.width;
@@ -4308,6 +4513,7 @@ export class AiDesignerComposerService implements OnModuleInit {
       scale,
       outputBg: opts.outputBg,
       bgIsImage: opts.bgIsImage,
+      lockups: opts.lockups,
     };
     const copySlots = plan.slots.filter(
       (s) => isCopySlot(s) && s.role !== 'image'

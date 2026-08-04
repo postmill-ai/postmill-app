@@ -100,6 +100,40 @@ describe('expandSymbolInstance', () => {
     expect(out[1].fontSize).toBe(40);
   });
 
+  it('recomputes a pill radius from the new height instead of keeping the source px', () => {
+    // A pill plate (radius = height/2) on a doubled instance: 30 → 60, not 30.
+    const pillDef: SymbolDefinition = {
+      id: 'sym-pill',
+      name: 'CTA',
+      width: 100,
+      height: 60,
+      children: [
+        el({ id: 'plate', x: 0, y: 0, width: 100, height: 60, borderRadius: 30, strokeWidth: 4 }),
+      ],
+    };
+    const out = expandSymbolInstance(
+      { ...instance, symbolId: 'sym-pill', width: 200, height: 120 },
+      pillDef
+    );
+    expect(out[0].borderRadius).toBe(60);
+    expect(out[0].strokeWidth).toBe(8);
+  });
+
+  it('scales a non-pill radius proportionally', () => {
+    const roundDef: SymbolDefinition = {
+      id: 'sym-round',
+      name: 'Card',
+      width: 100,
+      height: 60,
+      children: [el({ id: 'card', x: 0, y: 0, width: 100, height: 60, borderRadius: 8 })],
+    };
+    const out = expandSymbolInstance(
+      { ...instance, symbolId: 'sym-round', width: 200, height: 120 },
+      roundDef
+    );
+    expect(out[0].borderRadius).toBe(16);
+  });
+
   it('applies a content override', () => {
     const out = expandSymbolInstance(
       { ...instance, symbolOverrides: { label: { text: 'Other' } } },

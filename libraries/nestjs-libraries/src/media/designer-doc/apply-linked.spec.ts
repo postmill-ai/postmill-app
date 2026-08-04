@@ -112,3 +112,96 @@ describe('applyLinked fontSize propagation', () => {
     expect(affected).toEqual([]);
   });
 });
+
+describe('applyLinked symbol overrides', () => {
+  /** Two outputs whose CTA is a lockup instance at originId 'cta'. */
+  const makeSymbolDoc = (): DesignerDoc =>
+    ({
+      mode: 'image',
+      outputs: [
+        {
+          id: 'o1',
+          formatId: 'ig-square',
+          name: 'IG',
+          width: 1080,
+          height: 1080,
+          background: '#ffffff',
+          children: [
+            {
+              id: 'e1',
+              originId: 'cta',
+              type: 'symbol',
+              symbolId: 'lockup-cta',
+              x: 434,
+              y: 856,
+              width: 213,
+              height: 59,
+              symbolOverrides: { label: { text: 'Shop now' } },
+            },
+          ],
+        },
+        {
+          id: 'o2',
+          formatId: 'fb-wide',
+          name: 'FB',
+          width: 1200,
+          height: 675,
+          background: '#ffffff',
+          children: [
+            {
+              id: 'e9',
+              originId: 'cta',
+              type: 'symbol',
+              symbolId: 'lockup-cta',
+              x: 500,
+              y: 500,
+              width: 180,
+              height: 50,
+              // A format-only fill fix this sibling already carries.
+              symbolOverrides: {
+                label: { text: 'Shop now' },
+                plate: { fill: '#111111' },
+              },
+            },
+          ],
+        },
+      ],
+    } as any);
+
+  it('propagates a CTA text edit to sibling instances, merging per child id', () => {
+    const { outputs, affected } = applyLinked(
+      makeSymbolDoc(),
+      0,
+      new Set(['e1']),
+      { symbolOverrides: { label: { text: 'Shop the sale' } } },
+      false
+    );
+
+    expect((outputs[0] as any).children[0].symbolOverrides).toEqual({
+      label: { text: 'Shop the sale' },
+    });
+    // The sibling's own plate fill survives — a blind spread of the primary's
+    // map would have clobbered it.
+    expect((outputs[1] as any).children[0].symbolOverrides).toEqual({
+      label: { text: 'Shop the sale' },
+      plate: { fill: '#111111' },
+    });
+    expect(affected).toEqual([1]);
+  });
+
+  it('never propagates the instance box — geometry stays per-format', () => {
+    const { outputs } = applyLinked(
+      makeSymbolDoc(),
+      0,
+      new Set(['e1']),
+      { x: 100, symbolOverrides: { label: { text: 'Shop the sale' } } },
+      false
+    );
+
+    expect((outputs[0] as any).children[0].x).toBe(100);
+    expect((outputs[1] as any).children[0].x).toBe(500);
+    expect((outputs[1] as any).children[0].symbolOverrides.label).toEqual({
+      text: 'Shop the sale',
+    });
+  });
+});

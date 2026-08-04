@@ -72,6 +72,7 @@ export const expandSymbolInstance = (
 
   return definition.children.map((child) => {
     const patch = overrides[child.id] || {};
+    const sizeScale = Math.min(scaleX, scaleY);
     return {
       ...child,
       ...patch,
@@ -82,7 +83,20 @@ export const expandSymbolInstance = (
       width: child.width * scaleX,
       height: child.height * scaleY,
       // Font size scales with the box, as it does everywhere else in the doc.
-      ...(child.fontSize ? { fontSize: child.fontSize * Math.min(scaleX, scaleY) } : {}),
+      ...(child.fontSize ? { fontSize: child.fontSize * sizeScale } : {}),
+      // Pixel-valued style scales with the box too — the pill invariant from
+      // reflow: a radius authored AS a pill is recomputed from the new
+      // height, anything else scales proportionally. Without this a pill CTA
+      // seeded to a bigger canvas kept the smaller canvas's radius.
+      ...(child.borderRadius
+        ? {
+            borderRadius:
+              Math.abs(child.borderRadius - child.height / 2) <= 1
+                ? Math.max(1, (child.height * scaleY) / 2)
+                : child.borderRadius * sizeScale,
+          }
+        : {}),
+      ...(child.strokeWidth ? { strokeWidth: child.strokeWidth * sizeScale } : {}),
       opacity: child.opacity * instance.opacity,
       hidden: child.hidden || instance.hidden,
       // An expanded child is not independently editable; the instance is.

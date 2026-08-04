@@ -100,6 +100,19 @@ const isVisibleText = (el: DesignerElement): boolean =>
   typeof el.text === 'string' &&
   el.text.trim().length > 0;
 
+/**
+ * A lockup instance whose overrides carry copy — the CTA's label lives in
+ * `symbolOverrides` now, so the degenerate-output check (which predates
+ * symbols) would call a CTA-only design empty without looking through.
+ */
+const isTextBearingInstance = (el: DesignerElement): boolean =>
+  el.type === 'symbol' &&
+  !el.hidden &&
+  (el.opacity ?? 1) > 0 &&
+  Object.values(el.symbolOverrides ?? {}).some(
+    (override) => !!override.text?.trim()
+  );
+
 const isOpaqueShape = (el: DesignerElement): boolean =>
   el.type === 'shape' && !el.hidden && (el.opacity ?? 1) >= 0.9;
 
@@ -271,7 +284,12 @@ function validateOutput(
       const by = Math.min(...members.map((m) => m.y));
       const bw = Math.max(...members.map((m) => m.x + m.width)) - bx;
       const bh = Math.max(...members.map((m) => m.y + m.height)) - by;
-      const safe = members.some((m) => m.type === 'text') ? safeZone : undefined;
+      // A symbol instance (a CTA lockup) counts as text-bearing: its label
+      // lives inside the definition, so the unit still clamps to the
+      // title-safe area rather than the raw canvas.
+      const safe = members.some((m) => m.type === 'text' || m.type === 'symbol')
+        ? safeZone
+        : undefined;
       const safeX = !!safe && bw <= safe.right - safe.left;
       const safeY = !!safe && bh <= safe.bottom - safe.top;
       const x = safeX
@@ -881,7 +899,7 @@ function validateOutput(
     Object.values(planTexts).some(
       (t) => typeof t === 'string' && t.trim().length > 0
     );
-  if (planHasCopy && !children.some(isVisibleText)) {
+  if (planHasCopy && !children.some(isVisibleText) && !children.some(isTextBearingInstance)) {
     violations.push(
       `${DEGENERATE_VIOLATION_PREFIX} "${out.formatId}": no visible text ` +
         `elements remain although the plan carries copy — could not auto-repair.`

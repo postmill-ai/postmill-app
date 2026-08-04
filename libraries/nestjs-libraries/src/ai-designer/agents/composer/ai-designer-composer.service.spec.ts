@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { AiDesignerComposerService } from './ai-designer-composer.service';
 import { DesignerDocService } from '@postmill-ai/nestjs-libraries/media/designer-doc/designer-doc.service';
+import { DesignerDocStrictSchema } from '@postmill-ai/nestjs-libraries/media/designer-doc/designer-doc.schema';
 import { canvasMarginPx } from '@postmill-ai/nestjs-libraries/media/designer-doc/reflow';
 import type { DesignPlan, VisionFinding } from '../../ai-designer.types';
 
@@ -307,6 +308,179 @@ describe('AiDesignerComposerService.applyFixes', () => {
   });
 });
 
+describe('AiDesignerComposerService.applyFixes on a lockup instance', () => {
+  let docService: { applyOps: ReturnType<typeof vi.fn> };
+  let model: { generateText: ReturnType<typeof vi.fn> };
+  let service: AiDesignerComposerService;
+
+  beforeEach(() => {
+    docService = {
+      applyOps: vi.fn((doc: unknown, ops: unknown[]) => ({
+        ...(doc as object),
+        appliedOps: ops,
+      })),
+    };
+    model = { generateText: vi.fn() };
+    service = new AiDesignerComposerService(
+      docService as any,
+      model as any
+    );
+  });
+
+  /**
+   * A doc whose CTA is a symbol lockup, as the composer now emits it: the
+   * instance keeps the slot's originId; plate+label live in the definition.
+   */
+  const makeLockupDoc = () =>
+    ({
+      mode: 'image',
+      symbols: [
+        {
+          id: 'lockup-cta',
+          name: 'cta lockup',
+          width: 213,
+          height: 59,
+          children: [
+            { id: 'plate', type: 'shape', x: 0, y: 0, width: 213, height: 59, fill: '#FF4D00' },
+            { id: 'label', type: 'text', x: 0, y: 0, width: 213, height: 59, text: 'Shop now', fontSize: 28 },
+          ],
+        },
+      ],
+      outputs: [
+        {
+          id: 'o1',
+          formatId: 'ig-post',
+          name: 'IG',
+          width: 1080,
+          height: 1080,
+          background: '#000000',
+          children: [
+            {
+              id: 'e1',
+              originId: 'cta',
+              type: 'symbol',
+              symbolId: 'lockup-cta',
+              x: 434,
+              y: 856,
+              width: 213,
+              height: 59,
+              symbolOverrides: { label: { text: 'Shop now' } },
+            },
+          ],
+        },
+      ],
+    } as any);
+
+  it('maps a text fix to symbolOverrides.label.text on the instance', async () => {
+    const findings: VisionFinding[] = [
+      {
+        issue: 'CTA copy is weak',
+        fix: { scope: 'shared', text: { slotId: 'cta', newText: 'Shop the sale' } },
+      },
+    ];
+
+    await service.applyFixes(makeLockupDoc(), findings, 'org1');
+
+    const ops = docService.applyOps.mock.calls[0][1];
+    expect(ops).toEqual([
+      {
+        op: 'updateElement',
+        outputIndex: 0,
+        elementId: 'e1',
+        scope: 'shared',
+        patch: { symbolOverrides: { label: { text: 'Shop the sale' } } },
+      },
+    ]);
+  });
+
+  it('maps a fill fix to symbolOverrides.plate.fill — the plate carries the visual weight', async () => {
+    const findings: VisionFinding[] = [
+      {
+        issue: 'CTA button blends into the background',
+        fix: { scope: 'shared', targetSlots: ['cta'], style: { fill: '#FFFFFF' } },
+      },
+    ];
+
+    await service.applyFixes(makeLockupDoc(), findings, 'org1');
+
+    const ops = docService.applyOps.mock.calls[0][1];
+    expect(ops).toEqual([
+      {
+        op: 'updateElement',
+        outputIndex: 0,
+        elementId: 'e1',
+        scope: 'shared',
+        patch: { symbolOverrides: { label: { text: 'Shop now' }, plate: { fill: '#FFFFFF' } } },
+      },
+    ]);
+  });
+
+  it('merges a text fix and a fill fix from the same finding instead of clobbering one', async () => {
+    const findings: VisionFinding[] = [
+      {
+        issue: 'CTA needs new copy and more contrast',
+        fix: {
+          scope: 'shared',
+          targetSlots: ['cta'],
+          style: { fill: '#FFFFFF' },
+          text: { slotId: 'cta', newText: 'Shop the sale' },
+        },
+      },
+    ];
+
+    await service.applyFixes(makeLockupDoc(), findings, 'org1');
+
+    const ops = docService.applyOps.mock.calls[0][1];
+    expect(ops).toEqual([
+      {
+        op: 'updateElement',
+        outputIndex: 0,
+        elementId: 'e1',
+        scope: 'shared',
+        patch: {
+          symbolOverrides: { label: { text: 'Shop the sale' }, plate: { fill: '#FFFFFF' } },
+        },
+      },
+    ]);
+  });
+
+  it('maps a geometry fix to the instance box — and drops the unread fontSize', async () => {
+    const findings: VisionFinding[] = [
+      {
+        issue: 'CTA too low',
+        fix: { scope: 'shared', targetSlots: ['cta'], geometry: { y: 700, fontSize: 40 } },
+      },
+    ];
+
+    await service.applyFixes(makeLockupDoc(), findings, 'org1');
+
+    const ops = docService.applyOps.mock.calls[0][1];
+    // The instance box IS the geometry target (the expansion scales plate
+    // and label from it); a stored fontSize would sit in the doc unread.
+    expect(ops).toEqual([
+      { op: 'updateElement', outputIndex: 0, elementId: 'e1', scope: 'shared', patch: { y: 700 } },
+    ]);
+  });
+
+  it('refuses the override write when the CTA text is locked', async () => {
+    const findings: VisionFinding[] = [
+      {
+        issue: 'CTA copy is weak',
+        fix: { scope: 'shared', text: { slotId: 'cta', newText: 'BUY NOW!!!' } },
+      },
+    ];
+
+    const doc = makeLockupDoc();
+    const result = await service.applyFixes(doc, findings, 'org1', undefined, undefined, {
+      cta: 'Shop now',
+    });
+
+    // Locked plan copy wins — nothing is written, not even the lock back.
+    expect(docService.applyOps).not.toHaveBeenCalled();
+    expect(result).toBe(doc);
+  });
+});
+
 // ---------------------------------------------------------------------------
 // compose (Phase 2B style-aware deterministic composer)
 // ---------------------------------------------------------------------------
@@ -373,13 +547,25 @@ const childrenOf = (doc: any, index = 0) => doc.outputs[index].children as any[]
 const byOrigin = (doc: any, originId: string, index = 0) =>
   childrenOf(doc, index).find((el) => el.originId === originId);
 
+// The CTA composes as a symbol lockup: EVERY output carries an instance at
+// the slot's originId; the plate/label pair lives once, in symbol-local
+// coordinates, on `doc.symbols` (children `plate`/`label`). Underline CTAs
+// have no plate and stay a plain text + bar pair.
+const ctaDefinition = (doc: any) =>
+  (doc.symbols ?? []).find((s: any) => s.id === 'lockup-cta');
+const ctaChild = (doc: any, childId: string) =>
+  ctaDefinition(doc)?.children.find((c: any) => c.id === childId);
+const ctaPlate = (doc: any) => ctaChild(doc, 'plate');
+const ctaLabel = (doc: any) => ctaChild(doc, 'label');
+
 describe('AiDesignerComposerService.compose (style-aware)', () => {
   it('resolves the preset: display font on the headline, body font on supporting text', async () => {
     const doc = await composeWith(makePlan({ styleId: 'editorial' }));
 
     expect(byOrigin(doc, 'headline').fontFamily).toBe('Playfair Display');
     expect(byOrigin(doc, 'sub').fontFamily).toBe('Inter');
-    expect(byOrigin(doc, 'cta').fontFamily).toBe('Inter');
+    // editorial's CTA is an underline — no lockup, the label is plain text.
+    expect((ctaLabel(doc) ?? byOrigin(doc, 'cta')).fontFamily).toBe('Inter');
   });
 
   it('uses the default style when styleId is absent', async () => {
@@ -408,41 +594,51 @@ describe('AiDesignerComposerService.compose (style-aware)', () => {
     expect(headline.fill).toBe('#123456');
   });
 
-  it('renders a cta-button slot as an accent shape + centered text pair', async () => {
+  it('renders a cta-button slot as a symbol lockup — one definition, an instance per output', async () => {
     const doc = await composeWith(makePlan());
 
-    const shape = byOrigin(doc, 'cta-bg');
-    const text = byOrigin(doc, 'cta');
-    expect(shape).toBeDefined();
-    expect(text).toBeDefined();
-    expect(shape.type).toBe('shape');
+    const instance = byOrigin(doc, 'cta');
+    expect(instance).toBeDefined();
+    expect(instance.type).toBe('symbol');
+    expect(instance.symbolId).toBe('lockup-cta');
+    expect(instance.groupId).toBe('cta');
+    // The label text rides as an override, pinned per instance so a later
+    // definition edit can never silently reword approved copy.
+    expect(instance.symbolOverrides).toEqual({ label: { text: 'Shop now' } });
+    // No separate plate element remains — the instance encompasses it.
+    expect(byOrigin(doc, 'cta-bg')).toBeUndefined();
+
+    const def = ctaDefinition(doc);
+    expect(def).toBeDefined();
+    const [plate, label] = def.children;
     // 'bold' preset: pill CTA in the palette accent.
-    expect(shape.fill).toBe('#FF4D00');
-    expect(shape.borderRadius).toBe(Math.round(shape.height / 2));
-    expect(shape.groupId).toBe('cta');
-    expect(text.groupId).toBe('cta');
-    // The label overlaps the button shape exactly — same box, centered both
-    // ways — so it can never render beside or below the pill.
-    expect(text.x).toBe(shape.x);
-    expect(text.y).toBe(shape.y);
-    expect(text.width).toBe(shape.width);
-    expect(text.height).toBe(shape.height);
-    expect(text.align).toBe('center');
-    expect(text.verticalAlign).toBe('middle');
-    expect(text.text).toBe('Shop now');
+    expect(plate.type).toBe('shape');
+    expect(plate.fill).toBe('#FF4D00');
+    expect(plate.borderRadius).toBe(Math.round(def.height / 2));
+    // The label covers the plate exactly — same symbol-local box, centered
+    // both ways — so it can never render beside or below the pill.
+    expect(label.x).toBe(plate.x);
+    expect(label.y).toBe(plate.y);
+    expect(label.width).toBe(plate.width);
+    expect(label.height).toBe(plate.height);
+    expect(label.align).toBe('center');
+    expect(label.verticalAlign).toBe('middle');
+    // The definition is authored at the primary output's box.
+    expect(def.width).toBe(instance.width);
+    expect(def.height).toBe(instance.height);
   });
 
   it('centers the CTA label inside the shape even in left-aligned panels', async () => {
     const doc = await composeWith(makePlan({ formatTemplate: 'split-panel' }));
 
-    const shape = byOrigin(doc, 'cta-bg');
-    const text = byOrigin(doc, 'cta');
-    expect(text.x).toBe(shape.x);
-    expect(text.y).toBe(shape.y);
-    expect(text.width).toBe(shape.width);
-    expect(text.height).toBe(shape.height);
-    expect(text.align).toBe('center');
-    expect(text.verticalAlign).toBe('middle');
+    const plate = ctaPlate(doc);
+    const label = ctaLabel(doc);
+    expect(label.x).toBe(plate.x);
+    expect(label.y).toBe(plate.y);
+    expect(label.width).toBe(plate.width);
+    expect(label.height).toBe(plate.height);
+    expect(label.align).toBe('center');
+    expect(label.verticalAlign).toBe('middle');
   });
 
   it('renders a badge slot as a pill + short text', async () => {
@@ -467,14 +663,14 @@ describe('AiDesignerComposerService.compose (style-aware)', () => {
 
   it('falls back to the preset palette when the plan palette is too short', async () => {
     const doc = await composeWith(makePlan({ palette: ['#123456'] }));
-    expect(byOrigin(doc, 'cta-bg').fill).toBe('#FF4D00');
+    expect(ctaPlate(doc).fill).toBe('#FF4D00');
   });
 
   it('honors a complete plan palette (surface/text/accent convention)', async () => {
     const doc = await composeWith(
       makePlan({ palette: ['#101010', '#EEEEEE', '#00FF00'] })
     );
-    expect(byOrigin(doc, 'cta-bg').fill).toBe('#00FF00');
+    expect(ctaPlate(doc).fill).toBe('#00FF00');
   });
 
   it('maps preset typeScale ratios to px for 1080x1080', async () => {
@@ -483,7 +679,7 @@ describe('AiDesignerComposerService.compose (style-aware)', () => {
     // bold ratios on a 1080 baseline (~92px headline): 1 / 0.42 / 0.3.
     const headline = byOrigin(doc, 'headline').fontSize;
     const sub = byOrigin(doc, 'sub').fontSize;
-    const cta = byOrigin(doc, 'cta').fontSize;
+    const cta = ctaLabel(doc).fontSize;
     expect(headline).toBeGreaterThanOrEqual(85);
     expect(headline).toBeLessThanOrEqual(100);
     expect(sub).toBeGreaterThanOrEqual(33);
@@ -628,14 +824,30 @@ describe('AiDesignerComposerService.compose (style-aware)', () => {
       { formatId: 'x-post', width: 1200, height: 675 },
     ]);
 
-    const shape = byOrigin(doc, 'cta-bg', 1);
-    const text = byOrigin(doc, 'cta', 1);
-    expect(text.x).toBe(shape.x);
-    expect(text.y).toBe(shape.y);
-    expect(text.width).toBe(shape.width);
-    expect(text.height).toBe(shape.height);
-    expect(text.align).toBe('center');
-    expect(text.verticalAlign).toBe('middle');
+    // The seeded output carries an instance of the SAME definition — one
+    // glued unit that refits as a box, never a plate and a label that can
+    // drift apart.
+    const primary = byOrigin(doc, 'cta', 0);
+    const seeded = byOrigin(doc, 'cta', 1);
+    expect(seeded).toBeDefined();
+    expect(seeded.type).toBe('symbol');
+    expect(seeded.symbolId).toBe(primary.symbolId);
+    expect(seeded.groupId).toBe('cta');
+    expect(seeded.symbolOverrides).toEqual({ label: { text: 'Shop now' } });
+  });
+
+  it('produces a doc the strict schema accepts, symbols included', async () => {
+    const doc = await composeWith(makePlan(), [
+      SQUARE,
+      { formatId: 'x-post', width: 1200, height: 675 },
+    ]);
+
+    expect(ctaDefinition(doc)).toBeDefined();
+    expect(byOrigin(doc, 'cta', 1)?.type).toBe('symbol');
+    const result = DesignerDocStrictSchema.safeParse(doc);
+    expect(
+      result.success ? true : result.error.issues.slice(0, 5)
+    ).toBe(true);
   });
 });
 
@@ -2127,7 +2339,7 @@ describe('AiDesignerComposerService framing & legibility', () => {
     expect(byOrigin(doc, 'sub').fontSize).toBeGreaterThanOrEqual(
       Math.round(1080 * 0.032)
     );
-    expect(byOrigin(doc, 'cta').fontSize).toBeGreaterThanOrEqual(
+    expect(ctaLabel(doc).fontSize).toBeGreaterThanOrEqual(
       Math.round(1080 * 0.028)
     );
   });
@@ -4504,8 +4716,8 @@ describe('AiDesignerComposerService plan-fill backdrop guard', () => {
 
     // Both labels are judged against their own SHAPE (the #0A0A0A accent),
     // not the panel beneath it — the guard must not repaint them #000000.
-    expect(byOrigin(doc, 'cta-bg').fill).toBe('#0A0A0A');
-    expect(byOrigin(doc, 'cta').fill).toBe('#FFFFFF');
+    expect(ctaPlate(doc).fill).toBe('#0A0A0A');
+    expect(ctaLabel(doc).fill).toBe('#FFFFFF');
     expect(byOrigin(doc, 'badge').fill).toBe('#FFFFFF');
   });
 });
@@ -5065,8 +5277,13 @@ describe('AiDesignerComposerService subject-aware cropping', () => {
 
 describe('AiDesignerComposerService CTA treatments', () => {
   const ctaOf = (doc: any) => ({
-    shape: byOrigin(doc, 'cta-bg'),
-    text: byOrigin(doc, 'cta'),
+    // A plated CTA is a symbol lockup: plate/label live in the definition
+    // (symbol-local coordinates), the instance at originId 'cta' carries the
+    // on-canvas box. An underline CTA has no definition — its label stays a
+    // plain text element.
+    shape: ctaPlate(doc),
+    text: ctaDefinition(doc) ? ctaLabel(doc) : byOrigin(doc, 'cta'),
+    instance: byOrigin(doc, 'cta'),
     shadow: byOrigin(doc, 'cta-shadow'),
     underline: byOrigin(doc, 'cta-underline'),
   });
@@ -5096,27 +5313,28 @@ describe('AiDesignerComposerService CTA treatments', () => {
 
   it('neobrutalism: hard-edged block with a thick border AND an offset solid shadow', async () => {
     const doc = await composeWith(makePlan({ styleId: 'neobrutalism' }));
-    const { shape, text, shadow } = ctaOf(doc);
+    const { shape, instance, shadow } = ctaOf(doc);
 
     expect(shape.borderRadius).toBe(0);
     expect(shape.stroke).toBeDefined();
     expect(shape.strokeWidth).toBeGreaterThanOrEqual(2);
 
-    // The renderer has no shape drop-shadow — the shadow is its own rect.
+    // The renderer has no shape drop-shadow — the shadow is its own rect,
+    // offset from the INSTANCE's on-canvas box (the plate's own box is
+    // symbol-local now).
     expect(shadow).toBeDefined();
     expect(shadow.type).toBe('shape');
-    expect(shadow.width).toBe(shape.width);
-    expect(shadow.height).toBe(shape.height);
-    expect(shadow.x).toBeGreaterThan(shape.x);
-    expect(shadow.y).toBeGreaterThan(shape.y);
-    expect(shadow.x - shape.x).toBe(shadow.y - shape.y);
+    expect(shadow.width).toBe(instance.width);
+    expect(shadow.height).toBe(instance.height);
+    expect(shadow.x).toBeGreaterThan(instance.x);
+    expect(shadow.y).toBeGreaterThan(instance.y);
+    expect(shadow.x - instance.x).toBe(shadow.y - instance.y);
     expect(shadow.borderRadius).toBe(0);
     expect(shadow.groupId).toBe('cta');
 
-    // Painted BEHIND the button and its label.
+    // Painted BEHIND the button instance.
     const children = childrenOf(doc);
-    expect(children.indexOf(shadow)).toBeLessThan(children.indexOf(shape));
-    expect(children.indexOf(shape)).toBeLessThan(children.indexOf(text));
+    expect(children.indexOf(shadow)).toBeLessThan(children.indexOf(instance));
   });
 
   it('neon: an outline CTA — stroked, unfilled, and the label takes the accent', async () => {
@@ -5625,6 +5843,29 @@ describe('AiDesignerComposerService seeded-output re-fit', () => {
     );
     const doc = await composeWith(makePlan());
     expect(service.refitSeededOutputs(doc)).toBe(doc);
+  });
+
+  it('re-emits headline-anchored decor against the re-fit headline', async () => {
+    // A rule emitted under the primary's headline cannot ride the seed: a
+    // full-canvas path scales 1:1 onto any other canvas, so the mark stayed
+    // where the PRIMARY'S copy was. It is re-emitted against the re-fit
+    // headline instead.
+    const plan = makePlan({ formatTemplate: 'minimal-centered' });
+    (plan as any).decor = ['rule'];
+    const { refit } = await seedAndRefit(plan);
+    const wide = (refit.outputs[1] as any).children;
+    const headline = wide.find((el: any) => el.originId === 'headline');
+    const decor = wide.find((el: any) => el.originId === 'decor-rule');
+    expect(decor).toBeDefined();
+    const nodeYs = (decor.nodes || []).map((n: any) => decor.y + n.y);
+    // Under the re-fit headline, close beneath it — not wherever the primary's
+    // headline happened to sit.
+    expect(Math.min(...nodeYs)).toBeGreaterThanOrEqual(
+      headline.y + headline.height
+    );
+    expect(Math.min(...nodeYs)).toBeLessThan(
+      headline.y + headline.height + headline.height
+    );
   });
 });
 

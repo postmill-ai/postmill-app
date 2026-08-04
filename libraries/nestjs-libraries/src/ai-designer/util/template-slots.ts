@@ -80,8 +80,14 @@ export const markTemplateSlots = (
 
     // An image element with no source is a placeholder the composer could not
     // fill; offering it as a template field is right, but a TEXT element with
-    // no text is an empty box nobody wants in the panel.
-    if (kind === 'text' && !el.text?.trim()) return el;
+    // no text is an empty box nobody wants in the panel. A lockup instance
+    // (a CTA composed as a symbol) carries its label in `symbolOverrides`
+    // instead of `text` — look through to it, or every composed CTA would
+    // silently drop out of the fill panel.
+    const overrideText = Object.values(el.symbolOverrides ?? {})
+      .map((override) => override.text)
+      .find((text) => !!text?.trim());
+    if (kind === 'text' && !el.text?.trim() && !overrideText) return el;
 
     changed = true;
     return {

@@ -100,6 +100,49 @@ describe('smartReflow with preset safe zones', () => {
   });
 });
 
+describe('smartReflow paths', () => {
+  const squareSource = { width: 1080, height: 1080 };
+  // A smaller wide canvas: the uniform content scale is 675/1080 = 0.625.
+  const wideTarget = { width: 1200, height: 675, formatId: 'x-post' };
+
+  it('scales a path\'s nodes and handles with its box', () => {
+    // A full-canvas decor path: the box is the canvas, the rule sits at
+    // (100..300, 700) in element-local (= canvas) coordinates.
+    const rule: DesignerElement = {
+      id: 'd1',
+      type: 'path',
+      x: 0,
+      y: 0,
+      width: 1080,
+      height: 1080,
+      rotation: 0,
+      opacity: 1,
+      locked: false,
+      hidden: false,
+      originId: 'decor-rule',
+      stroke: '#111111',
+      strokeWidth: 4,
+      nodes: [
+        { x: 100, y: 700 },
+        { x: 300, y: 700, inX: 250, inY: 690, outX: 200, outY: 700 },
+      ],
+    };
+    const result = smartReflow(rule, squareSource, wideTarget);
+    const scale = (result.width as number) / 1080;
+    expect(scale).toBeCloseTo(0.625, 2);
+    for (const [i, n] of (result.nodes || []).entries()) {
+      const src = rule.nodes![i];
+      expect(n.x).toBeCloseTo(src.x * scale, 5);
+      expect(n.y).toBeCloseTo(src.y * scale, 5);
+      if (src.inX !== undefined) {
+        expect(n.inX).toBeCloseTo(src.inX * scale, 5);
+        expect(n.inY).toBeCloseTo((src.inY as number) * scale, 5);
+        expect(n.outX).toBeCloseTo((src.outX as number) * scale, 5);
+      }
+    }
+  });
+});
+
 describe('smartReflow cover images', () => {
   const squareSource = { width: 1080, height: 1080 };
   const xPostTarget = { width: 1200, height: 675, formatId: 'x-post' };
@@ -1070,6 +1113,72 @@ describe('smartReflow copy stacks', () => {
 
     expect(stacks.get(headline)).toBe(stacks.get(subhead));
     expect(stacks.get(ctaLabel)).toBeUndefined();
+  });
+
+  // A lockup'd CTA is ONE symbol instance — no text member at all — but it
+  // still stands for its label in the column rhythm: excluding it would drop
+  // the CTA into its own anchor bucket, the same dead-band bug as above.
+  it('keeps a lockup-instance CTA in the stack although it has no text member', () => {
+    const instance: DesignerElement = {
+      id: 'c1',
+      type: 'symbol',
+      symbolId: 'lockup-cta',
+      x: 434,
+      y: 530,
+      width: 213,
+      height: 60,
+      rotation: 0,
+      opacity: 1,
+      locked: false,
+      hidden: false,
+      groupId: 'cta',
+      originId: 'cta',
+      symbolOverrides: { label: { text: 'Shop now' } },
+    };
+    const stacks = computeTextStackBoxes([headline, subhead, instance], source);
+
+    expect(stacks.get(headline)).toBe(stacks.get(subhead));
+    expect(stacks.get(instance)).toBe(stacks.get(headline));
+  });
+});
+
+describe('smartReflow symbol instances', () => {
+  const squareSource = { width: 1080, height: 1080 };
+  const storyTarget = { width: 1080, height: 1920, formatId: 'ig-story' };
+
+  const instance = (over: Partial<DesignerElement> = {}): DesignerElement => ({
+    id: 's1',
+    type: 'symbol',
+    symbolId: 'lockup-cta',
+    x: 434,
+    y: 975,
+    width: 213,
+    height: 63,
+    rotation: 0,
+    opacity: 1,
+    locked: false,
+    hidden: false,
+    groupId: 'cta',
+    originId: 'cta',
+    symbolOverrides: { label: { text: 'Shop now' } },
+    ...over,
+  });
+
+  it('refits as ONE unit at the type basis (its groupId marks it copy-sized)', () => {
+    const result = smartReflow(instance(), squareSource, storyTarget);
+    // Grouped, so the aspect basis (1440/1080 = 4/3), not the min-axis 1:
+    // the expansion then scales plate, label and fontSize from this box.
+    expect(result.width).toBe(284);
+    expect(result.height).toBe(84);
+    expect(result.fontSize).toBeUndefined();
+  });
+
+  it('clamps into the title-safe area like a shape', () => {
+    const result = smartReflow(instance(), squareSource, storyTarget);
+    // bottom-center anchor lands the 84px box at y=1836, under the story's
+    // bottom overlay — the clamp pulls it back above the 1780 inset.
+    expect(result.y).toBe(1780 - 84);
+    expect((result.y as number) + (result.height as number)).toBe(1780);
   });
 });
 

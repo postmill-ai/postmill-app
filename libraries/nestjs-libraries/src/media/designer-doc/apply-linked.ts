@@ -2,6 +2,7 @@ import type {
   DesignerDoc,
   DesignerElement,
   DesignerOutput,
+  SymbolOverrides,
   VideoOutput,
 } from './designer-doc.schema';
 import { typeScaleRatio } from './reflow';
@@ -35,6 +36,28 @@ const sharedUpdates = (
 const isImageOutput = (
   out: DesignerOutput | VideoOutput
 ): out is DesignerOutput => 'children' in out;
+
+/**
+ * Apply one element patch, MERGING `symbolOverrides` per definition-child id
+ * instead of replacing the map: overrides are keyed by the child INSIDE the
+ * symbol (`plate`/`label`), so a linked text edit written from the primary
+ * would otherwise clobber a fill override the sibling instance already
+ * carried. Overrides carry no fontSize, so `scaledForOutput` passes them
+ * through untouched.
+ */
+const applyPatch = (
+  el: DesignerElement,
+  updates: Partial<DesignerElement>
+): DesignerElement => {
+  if (!updates.symbolOverrides || !el.symbolOverrides) {
+    return { ...el, ...updates };
+  }
+  const merged: SymbolOverrides = { ...el.symbolOverrides };
+  for (const [childId, content] of Object.entries(updates.symbolOverrides)) {
+    merged[childId] = { ...merged[childId], ...content };
+  }
+  return { ...el, ...updates, symbolOverrides: merged };
+};
 
 /**
  * Non-geometry updates propagate raw — except `fontSize`: a px value authored
@@ -91,7 +114,7 @@ export const applyLinked = (
       return {
         ...out,
         children: (out as DesignerOutput).children.map((el) =>
-          idSet.has(el.id) ? { ...el, ...updates } : el
+          idSet.has(el.id) ? applyPatch(el, updates) : el
         ),
       };
     }
@@ -102,7 +125,7 @@ export const applyLinked = (
     const newChildren = (out as DesignerOutput).children.map((el) => {
       if (el.originId && origins.has(el.originId)) {
         changed = true;
-        return { ...el, ...scaled };
+        return applyPatch(el, scaled);
       }
       return el;
     });
