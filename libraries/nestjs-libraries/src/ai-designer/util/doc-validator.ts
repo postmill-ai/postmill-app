@@ -379,6 +379,19 @@ function validateOutput(
   // prominent one (larger fontSize, else earlier in children) and drop the
   // duplicate. Exact matches only — a badge "BEAN30" inside a subhead
   // "code BEAN30" is emphasis, not duplication, and must not fire.
+  //
+  // Exception: when the PLAN declares both slots with the same role, the
+  // repetition is a design device, not a planner accident — a poster's echo
+  // headline ("PIZZA" twice) is a deliberate second hit, and the plan card
+  // showed the user exactly that copy before they accepted it.
+  const planRoleBySlotId = new Map(
+    (opts?.plan?.slots ?? []).map((s) => [s.id, (s.role || '').toLowerCase()])
+  );
+  const isPlanEcho = (a: DesignerElement, b: DesignerElement): boolean => {
+    const roleA = planRoleBySlotId.get(a.originId ?? '');
+    const roleB = planRoleBySlotId.get(b.originId ?? '');
+    return !!roleA && roleA === roleB;
+  };
   {
     const keeperByText = new Map<string, number>();
     const dupDrop = new Set<number>();
@@ -394,6 +407,7 @@ function validateOutput(
         return;
       }
       const keeper = children[keeperIdx];
+      if (isPlanEcho(el, keeper)) return;
       // A later element only wins with a strictly larger fontSize; on a tie
       // the earlier element stays.
       let dropped = el;

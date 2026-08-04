@@ -919,6 +919,84 @@ describe('validateDesignDoc', () => {
     expect(children.map((c: any) => c.originId)).toEqual(['headline']);
   });
 
+  it('keeps a deliberate echo when the plan declares both slots with the same role', () => {
+    // A poster's second hit: "PIZZA" twice, both plan-declared headline slots.
+    // The dedupe exists for the planner repeating one message across ROLES
+    // (badge and CTA both "JOIN NOW"), not for killing a design device the
+    // user saw and approved on the plan card.
+    const doc = makeDoc([
+      el({
+        originId: 'headline',
+        text: 'PIZZA',
+        x: 100,
+        y: 200,
+        width: 600,
+        height: 120,
+        fontSize: 92,
+        fill: '#FFFFFF',
+      }),
+      el({
+        originId: 'headline2',
+        text: 'PIZZA',
+        x: 100,
+        y: 500,
+        width: 600,
+        height: 120,
+        fontSize: 92,
+        fill: '#FFFFFF',
+      }),
+    ]);
+
+    const { doc: out } = validateDesignDoc(doc, {
+      plan: {
+        slots: [
+          { id: 'headline', role: 'headline' },
+          { id: 'headline2', role: 'headline' },
+        ],
+      } as any,
+    });
+    const children = (out.outputs[0] as any).children;
+
+    expect(children.map((c: any) => c.originId)).toEqual(['headline', 'headline2']);
+  });
+
+  it('still dedupes the same copy across different plan roles', () => {
+    const doc = makeDoc([
+      el({
+        originId: 'badge',
+        text: 'JOIN NOW',
+        x: 700,
+        y: 100,
+        width: 200,
+        height: 60,
+        fontSize: 20,
+        fill: '#111111',
+      }),
+      el({
+        originId: 'cta',
+        text: 'JOIN NOW',
+        x: 100,
+        y: 400,
+        width: 400,
+        height: 80,
+        fontSize: 40,
+        fill: '#111111',
+      }),
+    ]);
+
+    const { doc: out } = validateDesignDoc(doc, {
+      plan: {
+        slots: [
+          { id: 'badge', role: 'badge' },
+          { id: 'cta', role: 'cta' },
+        ],
+      } as any,
+    });
+    const children = (out.outputs[0] as any).children;
+
+    expect(children.map((c: any) => c.originId)).toEqual(['cta']);
+  });
+
   it('does not dedupe a badge code appearing inside a longer subhead', () => {
     const doc = makeDoc([
       el({
