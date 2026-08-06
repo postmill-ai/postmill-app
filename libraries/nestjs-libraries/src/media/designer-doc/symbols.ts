@@ -90,10 +90,16 @@ export const expandSymbolInstance = (
       // seeded to a bigger canvas kept the smaller canvas's radius.
       ...(child.borderRadius
         ? {
-            borderRadius:
-              Math.abs(child.borderRadius - child.height / 2) <= 1
-                ? Math.max(1, (child.height * scaleY) / 2)
-                : child.borderRadius * sizeScale,
+            borderRadius: Array.isArray(child.borderRadius)
+              ? (child.borderRadius.map((r) => r * sizeScale) as [
+                  number,
+                  number,
+                  number,
+                  number
+                ])
+              : Math.abs(child.borderRadius - child.height / 2) <= 1
+              ? Math.max(1, (child.height * scaleY) / 2)
+              : child.borderRadius * sizeScale,
           }
         : {}),
       ...(child.strokeWidth ? { strokeWidth: child.strokeWidth * sizeScale } : {}),

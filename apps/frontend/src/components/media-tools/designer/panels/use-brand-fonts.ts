@@ -10,6 +10,7 @@ export interface CustomFontEntry {
   fileId: string;
   path: string;
   weights: number[];
+  italic?: boolean;
 }
 
 export const useBrandFonts = () => {
@@ -56,12 +57,18 @@ export const useCustomFonts = (): {
     if (typeof document === 'undefined' || !('fonts' in document)) return;
     for (const f of fonts) {
       try {
+        const weight = f.weights.map(String).join(', ') || '400';
+        const style = f.italic ? 'italic' : 'normal';
+        // Keyed by family ALONE, the second weight of a family was skipped —
+        // upload Inter Regular then Inter Bold and Bold never loaded. A face is
+        // identified by family + weight + style.
         const existing = Array.from((document.fonts as any).values()).find(
-          (ff: any) => ff.family === f.family
+          (ff: any) => ff.family === f.family && ff.weight === weight && ff.style === style
         );
         if (existing) continue;
         const fontFace = new FontFace(f.family, `url(${f.path})`, {
-          weight: f.weights.map(String).join(', ') || '400',
+          weight,
+          style,
         });
         fontFace.load().then((loaded) => {
           (document.fonts as any).add(loaded);

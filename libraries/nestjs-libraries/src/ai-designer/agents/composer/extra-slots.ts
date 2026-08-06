@@ -243,6 +243,8 @@ export const buildExtraSlot = (
           ...base(slot, anchor),
           type: 'icon',
           src: resolved.body,
+          // Carried through so an icon drawn on a non-24 grid isn't cropped.
+          ...(resolved.viewBox ? { viewBox: resolved.viewBox } : {}),
           fill: accent,
         } as DesignerElement,
       ];

@@ -3,6 +3,7 @@
 import React, { FC, useCallback, useState } from 'react';
 import { ColorSwatch, Slider, SegmentedControl } from '../controls';
 import { useBrandColors } from './use-brand-colors';
+import { GradientEditor, gradientCss } from '../controls/gradient-editor';
 import { useMediaPicker } from '../../use-media-picker';
 import { useT } from '@postmill-ai/react/translation/get.transation.service.client';
 import type { DesignerGradient, DesignerOutput, VideoOutput } from '../designer.store';
@@ -47,27 +48,19 @@ export const CanvasInspector: FC<CanvasInspectorProps> = ({ store }) => {
   const [h, setH] = useState(String(out?.height ?? 1080));
 
   const [bgMode, setBgMode] = useState<BgMode>('color');
-  const [stop0, setStop0] = useState('#2B5CD3');
-  const [stop1, setStop1] = useState('#1e2a4a');
-  const [angle, setAngle] = useState(90);
-  const [gradientType, setGradientType] = useState<'linear' | 'radial'>('linear');
+  // The gradient lives on the document, not in local state — the old
+  // start/end/angle trio could only ever describe two stops, and needed an
+  // "Apply" button because it wasn't reading what was already there.
+  const bgGradient = (out as DesignerOutput | undefined)?.bg?.gradient as
+    | DesignerGradient
+    | undefined;
 
   const setColor = useCallback(
     (color: string) => store.getState().setOutputBackground({ type: 'color', color }),
     [store]
   );
 
-  const applyGradient = useCallback(() => {
-    const gradient: DesignerGradient = {
-      type: gradientType,
-      angle,
-      stops: [
-        { offset: 0, color: stop0 },
-        { offset: 1, color: stop1 },
-      ],
-    };
-    store.getState().setOutputBackground({ type: 'gradient', gradient });
-  }, [store, gradientType, angle, stop0, stop1]);
+
 
   // One picker, no second file browser: MediaSelectorModal already lists My
   // Files alongside the stock tabs.
@@ -84,10 +77,7 @@ export const CanvasInspector: FC<CanvasInspectorProps> = ({ store }) => {
     },
   });
 
-  const gradientCss =
-    gradientType === 'linear'
-      ? `linear-gradient(${angle}deg, ${stop0}, ${stop1})`
-      : `radial-gradient(circle, ${stop0}, ${stop1})`;
+
 
   if (!out) return null;
   const isVideo = doc.mode === 'video';
@@ -188,48 +178,19 @@ export const CanvasInspector: FC<CanvasInspectorProps> = ({ store }) => {
             <div className="flex flex-col gap-3">
               <div
                 className="w-full h-16 rounded-lg border border-studioBorder"
-                style={{ background: gradientCss }}
+                style={{ background: bgGradient ? gradientCss(bgGradient) : 'transparent' }}
               />
-              <SegmentedControl
-                value={gradientType}
-                options={[
-                  { value: 'linear', label: t('designer_linear', 'Linear') },
-                  { value: 'radial', label: t('designer_radial', 'Radial') },
-                ]}
-                onChange={(v) => setGradientType(v as 'linear' | 'radial')}
+              {/* The two-stop start/end pair is gone: the same editor every
+                  other gradient surface uses, so a page background can carry a
+                  multi-stop ramp like anything else. */}
+              <GradientEditor
+                value={bgGradient}
+                onChange={(g: DesignerGradient) =>
+                  store.getState().setOutputBackground({ type: 'gradient', gradient: g })
+                }
+                brandColors={brandColors}
+                brandEnforcement={brandEnforcement}
               />
-              <div className="grid grid-cols-2 gap-3">
-                <ColorSwatch
-                  label={t('designer_gradient_start', 'Start')}
-                  value={stop0}
-                  onChange={setStop0}
-                  brandColors={brandColors}
-                  brandEnforcement={brandEnforcement}
-                />
-                <ColorSwatch
-                  label={t('designer_gradient_end', 'End')}
-                  value={stop1}
-                  onChange={setStop1}
-                  brandColors={brandColors}
-                  brandEnforcement={brandEnforcement}
-                />
-              </div>
-              {gradientType === 'linear' && (
-                <Slider
-                  label={t('designer_label_angle', 'Angle')}
-                  min={0}
-                  max={360}
-                  suffix="°"
-                  value={angle}
-                  onChange={setAngle}
-                />
-              )}
-              <button
-                onClick={applyGradient}
-                className="w-full px-3 py-2 rounded-lg text-[12px] font-medium bg-designerAccent text-white hover:bg-designerAccent/80"
-              >
-                {t('designer_apply_gradient', 'Apply gradient')}
-              </button>
             </div>
           )}
 

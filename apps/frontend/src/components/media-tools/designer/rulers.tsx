@@ -95,14 +95,57 @@ interface RulersProps {
   viewportY: number;
   width: number; // container width (css px)
   height: number; // container height (css px)
+  /**
+   * Pull a guide out of a ruler. Given, the rulers stop being decoration and
+   * become the guide source they look like — until now you could read a
+   * measurement off them and nothing else.
+   */
+  onDragOutGuide?: (axis: 'x' | 'y', position: number) => void;
 }
 
 // Top + left measurement rulers that track pan/zoom, mapping screen ↔ document
 // pixels. Doc coordinate 0 is the artboard's top-left corner; negatives show
 // off-artboard space. Purely visual (pointer-events: none) — overlays the stage.
-export const Rulers: FC<RulersProps> = ({ zoom, viewportX, viewportY, width, height }) => {
+export const Rulers: FC<RulersProps> = ({
+  zoom,
+  viewportX,
+  viewportY,
+  width,
+  height,
+  onDragOutGuide,
+}) => {
   const topRef = useRef<HTMLCanvasElement>(null);
   const leftRef = useRef<HTMLCanvasElement>(null);
+
+  /**
+   * A press on a ruler drops a guide at that document coordinate; dragging
+   * before release moves it, and the store keeps the last position.
+   *
+   * `axis` is the guide's own axis: the TOP ruler makes vertical guides, which
+   * are constrained in x.
+   */
+  const startGuide = (axis: 'x' | 'y') => (e: React.PointerEvent<HTMLCanvasElement>) => {
+    if (!onDragOutGuide) return;
+    e.preventDefault();
+    const canvas = e.currentTarget;
+    canvas.setPointerCapture?.(e.pointerId);
+    const rect = canvas.getBoundingClientRect();
+    const at = (ev: { clientX: number; clientY: number }) =>
+      axis === 'x'
+        ? (ev.clientX - rect.left - viewportX) / zoom
+        : (ev.clientY - rect.top - viewportY) / zoom;
+    let position = at(e);
+    const move = (ev: PointerEvent) => {
+      position = at(ev);
+    };
+    const up = () => {
+      window.removeEventListener('pointermove', move);
+      window.removeEventListener('pointerup', up);
+      onDragOutGuide(axis, Math.round(position));
+    };
+    window.addEventListener('pointermove', move);
+    window.addEventListener('pointerup', up);
+  };
 
   useEffect(() => {
     if (topRef.current && width > 0) drawRuler(topRef.current, 'x', zoom, viewportX, width);
@@ -116,12 +159,14 @@ export const Rulers: FC<RulersProps> = ({ zoom, viewportX, viewportY, width, hei
     <div className="absolute inset-0 pointer-events-none z-10">
       <canvas
         ref={topRef}
-        className="absolute top-0 left-0"
+        onPointerDown={startGuide('x')}
+        className={`absolute top-0 left-0 ${onDragOutGuide ? 'pointer-events-auto cursor-ew-resize' : ''}`}
         style={{ width, height: RULER_SIZE }}
       />
       <canvas
         ref={leftRef}
-        className="absolute top-0 left-0"
+        onPointerDown={startGuide('y')}
+        className={`absolute top-0 left-0 ${onDragOutGuide ? 'pointer-events-auto cursor-ns-resize' : ''}`}
         style={{ width: RULER_SIZE, height }}
       />
       {/* corner square hides the overlap */}

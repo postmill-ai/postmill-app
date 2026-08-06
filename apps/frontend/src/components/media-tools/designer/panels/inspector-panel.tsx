@@ -7,7 +7,9 @@ import { ShapeInspector } from './shape-inspector';
 import { IconInspector } from './icon-inspector';
 import { TextInspector } from './text-inspector';
 import { ClipInspector } from './clip-inspector';
+import { FillLayerInspector } from './fill-layer-inspector';
 import { AdjustmentInspector } from './adjustment-inspector';
+import { EffectsList } from './effects-list';
 import { useT } from '@postmill-ai/react/translation/get.transation.service.client';
 import type { DesignerElement } from '../designer.store';
 
@@ -133,7 +135,9 @@ export const InspectorPanel: FC<InspectorProps> = ({ store }) => {
         <ImageInspector element={primary} ids={ids} store={store} />
       )}
 
-      {!isMixedType && primary.type === 'shape' && (
+      {/* Pen and Pathfinder output styles through the same fill/stroke controls;
+          ShapeInspector hides the shape-only ones for a path. */}
+      {!isMixedType && (primary.type === 'shape' || primary.type === 'path') && (
         <ShapeInspector element={primary} ids={ids} store={store} />
       )}
 
@@ -141,9 +145,21 @@ export const InspectorPanel: FC<InspectorProps> = ({ store }) => {
         <IconInspector element={primary} ids={ids} store={store} />
       )}
 
+      {/* A fill layer used to route to nothing: addable, never editable. */}
+      {!isMixedType && primary.type === 'fill' && (
+        <FillLayerInspector element={primary} ids={ids} store={store} />
+      )}
+
       {/* Settings apply to the one layer — averaging two Curves is meaningless. */}
       {selected.length === 1 && primary.type === 'adjustment' && (
         <AdjustmentInspector element={primary} store={store} />
+      )}
+
+      {/* Effects are painted from the layer's alpha, so they apply to every
+          element type — including images, which the old partial mapping
+          silently skipped. */}
+      {!isMixedType && primary.type !== 'adjustment' && (
+        <EffectsList element={primary} ids={ids} store={store} />
       )}
 
       <CommonInspector selected={selected} ids={ids} store={store} />

@@ -4,6 +4,12 @@ import {
   DEFAULT_STAR_POINTS,
   DEFAULT_STAR_INNER_RATIO,
 } from '@postmill-ai/nestjs-libraries/media/designer-doc/shape-geometry';
+import { parseSvgPathData } from '@postmill-ai/nestjs-libraries/media/designer-doc/svg-path-parse';
+import {
+  normalisePathToBox,
+  pathBounds,
+  scalePathNodes,
+} from '@postmill-ai/nestjs-libraries/media/designer-doc/path-geometry';
 
 /**
  * Geometry and element construction for drag-to-draw tools.
@@ -87,8 +93,8 @@ export const shapeForTool = (toolId: string): DesignerElement['shape'] => {
       return 'star';
     case 'shape-line':
       return 'line';
-    // Custom Shape draws a rounded rect until a shape library exists; the
-    // options bar is where a preset picker will land.
+    // Custom Shape yields a real `path` element when the options bar carries
+    // path data (see `buildShapeElement`); an empty field still draws a rect.
     case 'shape-custom':
     case 'shape-rect':
     default:
@@ -99,6 +105,54 @@ export const shapeForTool = (toolId: string): DesignerElement['shape'] => {
 const DEFAULT_FILL = '#2B5CD3';
 
 /**
+ * An SVG `d` string as a `path` element scaled into `rect`.
+ *
+ * The largest contour wins, because a `path` element holds one — for a letter
+ * or a ring that is the outer shape rather than its counter. Shared by the
+ * Custom Shape tool and SVG import.
+ */
+export const pathElementFromData = (
+  d: string,
+  rect: DrawRect
+): DesignerElement | null => {
+  const subpaths = parseSvgPathData(d);
+  if (!subpaths.length) return null;
+
+  const biggest = subpaths
+    .map((sub) => {
+      const b = pathBounds(sub.nodes);
+      return { sub, area: b ? (b.maxX - b.minX) * (b.maxY - b.minY) : 0 };
+    })
+    .sort((a, b) => b.area - a.area)[0].sub;
+
+  const normalised = normalisePathToBox(biggest.nodes);
+  if (!normalised) return null;
+
+  const width = Math.max(1, Math.round(rect.width));
+  const height = Math.max(1, Math.round(rect.height));
+  return {
+    id: '',
+    type: 'path',
+    x: rect.x,
+    y: rect.y,
+    width,
+    height,
+    rotation: 0,
+    opacity: 1,
+    locked: false,
+    hidden: false,
+    // Scaled to the drag, so the path fills the box the user drew.
+    nodes: scalePathNodes(
+      normalised.nodes,
+      width / normalised.width,
+      height / normalised.height
+    ),
+    closed: biggest.closed,
+    fill: DEFAULT_FILL,
+  } as DesignerElement;
+};
+
+/**
  * Build the element a shape tool should insert for a completed drag.
  * `options` comes from the tool's options-bar state.
  */
@@ -107,6 +161,14 @@ export const buildShapeElement = (
   rect: DrawRect,
   options: Record<string, unknown> = {}
 ): DesignerElement => {
+  // A Custom Shape with path data is a PATH, not a shape — the parser turns
+  // `d` into the same editable nodes the Pen tool writes, so it can be reshaped
+  // afterwards rather than being a frozen preset.
+  if (toolId === 'shape-custom' && typeof options.pathData === 'string' && options.pathData.trim()) {
+    const path = pathElementFromData(options.pathData, rect);
+    if (path) return path;
+  }
+
   const shape = shapeForTool(toolId);
   const isLine = shape === 'line';
   const strokeWidth = Number(options.strokeWidth ?? (isLine ? 3 : 0)) || undefined;

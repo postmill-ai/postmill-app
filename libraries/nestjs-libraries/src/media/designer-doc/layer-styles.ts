@@ -100,3 +100,51 @@ export const stylePadding = (styles: DesignerLayerStyle[] | undefined): number =
   }
   return Math.ceil(pad);
 };
+
+/**
+ * A layer's effects, including the legacy `boxShadow` that predates them.
+ *
+ * `boxShadow` was a full inspector section on images and shapes — colour, blur,
+ * two offsets — that NO renderer ever read, sitting directly above an Effects
+ * panel whose drop shadow works. Rather than teach a second shadow model to
+ * four renderers, an old `boxShadow` is translated into the drop-shadow style
+ * it always meant, so existing documents render what their inspector promised.
+ *
+ * An explicit drop-shadow effect wins: if a document has both, the one the user
+ * can still see and edit is the effect.
+ *
+ * `offsetX/offsetY` are cartesian, while a style stores angle + distance and
+ * casts the shadow AWAY from the light — hence the inverted vector (see
+ * `styleOffset`, which this is the exact inverse of).
+ */
+export const elementStyles = (el: {
+  styles?: DesignerLayerStyle[];
+  boxShadow?: { color?: string; blur?: number; offsetX?: number; offsetY?: number };
+}): DesignerLayerStyle[] | undefined => {
+  const shadow = el.boxShadow;
+  if (!shadow) return el.styles;
+  if (el.styles?.some((s) => s.type === 'drop-shadow' && isStyleEnabled(s))) {
+    return el.styles;
+  }
+  return [...(el.styles ?? []), styleFromBoxShadow(shadow)];
+};
+
+/** The exact inverse of `styleOffset`: cartesian offsets → angle + distance. */
+export const styleFromBoxShadow = (shadow: {
+  color?: string;
+  blur?: number;
+  offsetX?: number;
+  offsetY?: number;
+}): DesignerLayerStyle => {
+  const dx = shadow.offsetX ?? 0;
+  const dy = shadow.offsetY ?? 0;
+  return {
+    type: 'drop-shadow',
+    color: shadow.color ?? '#000000',
+    opacity: 1,
+    distance: Math.hypot(dx, dy),
+    angle: ((Math.atan2(dy, -dx) * 180) / Math.PI + 360) % 360,
+    size: shadow.blur ?? 0,
+    spread: 0,
+  };
+};

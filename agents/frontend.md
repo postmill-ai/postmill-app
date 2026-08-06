@@ -160,15 +160,19 @@ Gate composer/UI features per channel on the shared capability matrix, not on ad
   `apps/frontend/src/components/composer/providers/show.all.providers.tsx`.
 - Full walkthrough: `agents/providers/social.md`.
 
-## Designer: three renderers, one document
+## Designer: four renderers, one document
 
-`/media/designer` draws every document **three times**:
+`/media/designer` draws every document **four times**:
 
 | Path | Where | Used for |
 |---|---|---|
 | Konva | `designer/elements.tsx`, `designer/video-canvas-overlay.tsx` | the canvas *and* PNG/JPEG/WebP export |
 | node-canvas | `design-render/design-render.service.ts` | PDF and bulk generation |
 | a browser script | `design-render/frame-renderer-script.ts` | video frames, in headless Chromium |
+| an SVG translator | `designer-doc/svg-export.ts` | SVG export |
+
+The SVG path is a **translation**, not a fourth renderer: anything SVG cannot express is emitted as
+an `<image>` the caller rasterises. It still has to agree on geometry, so the same rules apply.
 
 All three must produce the same picture, so **every rule any of them needs goes in a shared pure
 module under `designer-doc/`** — `fit-text`, `shape-geometry`, `path-geometry`, `layer-tree`,
@@ -193,12 +197,46 @@ Layer semantics that are easy to get wrong, and that the renderers must agree on
   `backdrop` (so it joins the fold) rather than rendering it as a sibling.
 - **Server readbacks are in DEVICE pixels.** `ctx.scale(ratio, ratio)` is applied once at page setup
   and never undone, so `getImageData` with logical coordinates reads the wrong region.
+- **Guides are editor state that lives on the output.** `output.guides` follows the design rather
+  than the session, and **no renderer reads it** — a guide in an export is a defect. The grid and
+  snap-to-grid are session view prefs on the store, not document content.
 - **Video clips are canvas objects too.** The tool palette applies to both document kinds: a clip
   carries the same geometry an element does, and a drag writes back through `clip-geometry.ts` as a
   DELTA — writing absolute values would collapse a keyframed clip's animation onto whichever frame
   was showing. A keyframe sitting under the playhead is edited in place; otherwise the base props
   move. Track types `shape` and `raster` (doc v5) exist so shape and paint tools have somewhere to
   put their output on a timeline.
+
+- **Effects, warp and text metrics are SHARED code, not two implementations.** `designer-doc/`
+  carries the painter (`layer-style-render.ts`), the deformation (`warp.ts`), the fitter
+  (`fit-text.ts` — which owns `textTransform`, because case changes what a line measures), the
+  filter stack (`filter-pixels.ts`), the curved-text arc (`curved-text.ts`) and the SVG path parser
+  (`svg-path-parse.ts`); the canvas and `design-render.service` both call them. Adding a lookalike copy on
+  one side is how the two renderers drift — that is exactly how seven layer styles ended up drawing
+  in PDFs and nowhere else.
+- **node-canvas is not a browser canvas.** `ctx.filter = 'blur(…)'` is accepted and ignored, and
+  `ctx.scale()` does not condense glyphs — text is rasterised at the font size with only the origin
+  moving. Anything that needs either must work in pixel space (`blurCanvas`) or squeeze a rendered
+  bitmap. A visual effect that "works locally" and not in an export is almost always this.
+- **The CANVAS is authoritative when two renderers disagree.** It is the authoring surface, and
+  stored geometry means what it drew — so a fix goes into the other renderer, not into the canvas.
+  Two consequences worth stating outright, because both were wrong on the server for a long time:
+  **rotation pivots on the element ORIGIN** (Konva rotates about the node origin and no offset is
+  ever set, so `x/y/rotation` mean "top-left pivot"), and **each text line is drawn CENTRED in its
+  line box** — Konva draws with `textBaseline = 'middle'` half a line-height down (`Text.js`
+  `translateY = lineHeightPx / 2`), and `TextPath` defaults to `'middle'` too. Drawing from the top
+  of the line box instead puts an export a fraction of a line-height above the canvas.
+  node-canvas and Chrome still define `'middle'` slightly differently (em box vs font metrics),
+  which leaves a sub-0.2em residual on some faces; there is no metric both expose that would let one
+  shared definition close it.
+- **Konva measures a Text node once and caches the arrangement.** A redraw does not re-measure, so
+  text first laid out before its webfont arrives keeps the fallback's line breaks — and with a fixed
+  box height the overflow line is dropped, truncating the string. `canvas.tsx` forces a re-measure
+  after `ensureFontsLoaded`; anything that changes the font stylesheet depends on it.
+- **The font catalog is written down three times** — `designer/fonts.ts`, the `@import` in
+  `app/global.scss`, and `CURATED_FONTS` in `font-loader.service.ts`. A family missing from the
+  second renders as Arial; missing from the third exports as sans-serif. `font-catalog.drift.spec.ts`
+  fails the build if they disagree.
 
 Acceptance test for any change here: render the same document through **both** paths and diff them —
 a document with a blended group, a clipped adjustment and a layer style is the case that catches

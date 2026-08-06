@@ -15,9 +15,12 @@ import type {
   DesignerGradient,
   DesignerOutput,
 } from './designer-doc.schema';
-import { pointsForShape } from './shape-geometry';
+import { pointsForShape, cornerRadii } from './shape-geometry';
 import type { DesignerPathNode } from './path-geometry';
 import { buildLayerTree, type LayerNode } from './layer-tree';
+import { fitTextToBox, DEFAULT_LINE_HEIGHT, type MeasureText } from './fit-text';
+import { warpedOutline } from './warp';
+import { renderableSrc } from './svg-src';
 
 /** Blend modes the CSS `mix-blend-mode` property actually has. */
 const CSS_BLEND_MODES = new Set([
@@ -49,6 +52,10 @@ export const isVectorExportable = (el: DesignerElement): boolean => {
   if (el.maskSrc) return false; // a bitmap mask is a bitmap
   if (el.blendMode && !CSS_BLEND_MODES.has(el.blendMode)) return false;
   if (el.type === 'raster' || el.type === 'adjustment') return false;
+  // A symbol INSTANCE is an id plus overrides; its geometry lives in the
+  // document's symbol table, which this translator is not handed. It used to
+  // fall through to the shape branch and come out as a plain rectangle.
+  if (el.type === 'symbol') return false;
   return true;
 };
 
@@ -65,8 +72,10 @@ const gradientDef = (id: string, gradient: DesignerGradient): string => {
   if (gradient.type === 'radial') {
     return `<radialGradient id="${esc(id)}">${stops}</radialGradient>`;
   }
-  // An angle in degrees, converted to the unit-square vector SVG wants.
-  const rad = ((gradient.angle ?? 90) * Math.PI) / 180;
+  // An angle in degrees, converted to the unit-square vector SVG wants. The
+  // default is 0 (left-to-right) because that is what `buildStyleGradient`
+  // uses; 90 here meant an angle-less gradient exported rotated a quarter turn.
+  const rad = ((gradient.angle ?? 0) * Math.PI) / 180;
   const x = Math.cos(rad);
   const y = Math.sin(rad);
   return (
@@ -100,9 +109,10 @@ const pathData = (nodes: DesignerPathNode[], closed?: boolean): string => {
 
 const transformFor = (el: DesignerElement): string => {
   const parts: string[] = [`translate(${num(el.x)} ${num(el.y)})`];
-  if (el.rotation) {
-    parts.push(`rotate(${num(el.rotation)} ${num(el.width / 2)} ${num(el.height / 2)})`);
-  }
+  // Both renderers rotate about the element ORIGIN — stored `x/y/rotation`
+  // mean "top-left pivot". Rotating about the centre here put a 45deg element
+  // ~158px away from where the Designer drew it.
+  if (el.rotation) parts.push(`rotate(${num(el.rotation)})`);
   if (el.flipX || el.flipY) {
     parts.push(
       `translate(${num(el.flipX ? el.width : 0)} ${num(el.flipY ? el.height : 0)})`,
@@ -130,6 +140,16 @@ export interface SvgExportOptions {
    * with no entry is skipped rather than drawn wrong.
    */
   rasterized?: Record<string, string>;
+  /**
+   * Measures a string at a font size, for the caller's font stack.
+   *
+   * SVG has no word wrap and no shrink-to-fit — the exporter has to lay lines
+   * out itself, exactly as the two renderers do, and that needs a measurement.
+   * Without one this falls back to splitting on explicit newlines only, which
+   * is what it always did and why a wrapped headline exported as one long line
+   * running off the artboard.
+   */
+  measure?: (el: DesignerElement) => MeasureText;
 }
 
 interface Ctx {
@@ -179,22 +199,67 @@ const elementSvg = (el: DesignerElement, ctx: Ctx): string => {
         }"/>`;
       }
       case 'text': {
-        const size = el.fontSize || 16;
+        const authored = el.fontSize || 16;
+        const scaleX = el.textScaleX || 1;
+        const measure = ctx.options.measure?.(el);
+        // With a measurement available the block wraps and shrinks exactly as
+        // the renderers do; without one, explicit newlines are all we can honour.
+        const fitted = measure
+          ? fitTextToBox(
+              {
+                text: String(el.text || ''),
+                width: el.width,
+                height: el.height,
+                fontSize: authored,
+                lineHeight: el.lineHeight,
+                letterSpacing: el.letterSpacing,
+                scaleX,
+              },
+              measure
+            )
+          : {
+              fontSize: authored,
+              lines: String(el.text || '').split('\n'),
+              lineHeight: (el.lineHeight || DEFAULT_LINE_HEIGHT) * authored,
+            };
+
+        const size = fitted.fontSize;
         const anchor =
           el.align === 'center' ? 'middle' : el.align === 'right' ? 'end' : 'start';
-        const x = el.align === 'center' ? el.width / 2 : el.align === 'right' ? el.width : 0;
-        const lines = String(el.text || '').split('\n');
-        const tspans = lines
+        // Layout happens in unscaled glyph space and the whole block is scaled,
+        // the same rule `measureLineWidth` states — so the wrap box, and every
+        // x here, is divided back out.
+        const boxWidth = el.width / scaleX;
+        const x =
+          el.align === 'center' ? boxWidth / 2 : el.align === 'right' ? boxWidth : 0;
+
+        const contentHeight = fitted.lines.length * fitted.lineHeight;
+        const top =
+          el.verticalAlign === 'middle'
+            ? Math.max(0, (el.height - contentHeight) / 2)
+            : el.verticalAlign === 'bottom'
+            ? Math.max(0, el.height - contentHeight)
+            : 0;
+
+        const tspans = fitted.lines
           .map(
             (line, i) =>
-              `<tspan x="${num(x)}" dy="${i === 0 ? 0 : num(size * 1.2)}">${esc(line)}</tspan>`
+              `<tspan x="${num(x)}" dy="${i === 0 ? 0 : num(fitted.lineHeight)}">${esc(
+                line
+              )}</tspan>`
           )
           .join('');
+
+        const tracking = el.letterSpacing
+          ? ` letter-spacing="${num(el.letterSpacing)}"`
+          : '';
+        const condense = scaleX === 1 ? '' : ` transform="scale(${num(scaleX)} 1)"`;
+
         return (
-          `<text x="${num(x)}" y="${num(size)}" font-family="${esc(
+          `<text${condense} x="${num(x)}" y="${num(top + size)}" font-family="${esc(
             el.fontFamily || 'sans-serif'
           )}" font-size="${num(size)}" font-weight="${num(el.fontWeight || 400)}"` +
-          `${el.fontStyle === 'italic' ? ' font-style="italic"' : ''}` +
+          `${el.fontStyle === 'italic' ? ' font-style="italic"' : ''}${tracking}` +
           ` text-anchor="${anchor}"${fill}${strokeAttrs(el)}>${tspans}</text>`
         );
       }
@@ -212,17 +277,37 @@ const elementSvg = (el: DesignerElement, ctx: Ctx): string => {
         }
         return `<rect x="0" y="0" width="${num(el.width)}" height="${num(el.height)}"${f}/>`;
       }
+      case 'icon': {
+        // An icon carries raw SVG markup (or a URL); `renderableSrc` is the one
+        // place that knows which. It used to fall through to the shape branch
+        // and export as an empty rectangle.
+        const src = renderableSrc(el);
+        if (!src) return '';
+        return `<image x="0" y="0" width="${num(el.width)}" height="${num(
+          el.height
+        )}" href="${esc(src)}"/>`;
+      }
       case 'shape':
-      case 'icon':
       default: {
+        // A warp is real geometry, not a filter: the same outline both
+        // renderers trace becomes a path here rather than being ignored.
+        const warped = warpedOutline(el);
+        if (warped?.length) {
+          const d =
+            `M${num(warped[0].x)},${num(warped[0].y)}` +
+            warped.slice(1).map((pt) => ` L${num(pt.x)},${num(pt.y)}`).join('') +
+            ' Z';
+          return `<path d="${d}"${fill}${strokeAttrs(el)}/>`;
+        }
         if (el.shape === 'ellipse') {
           return `<ellipse cx="${num(el.width / 2)}" cy="${num(el.height / 2)}" rx="${num(
             el.width / 2
           )}" ry="${num(el.height / 2)}"${fill}${strokeAttrs(el)}/>`;
         }
         if (el.shape === 'line') {
-          return `<line x1="0" y1="${num(el.height / 2)}" x2="${num(el.width)}" y2="${num(
-            el.height / 2
+          // Corner to corner, as the canvas draws it and the draw tool intends.
+          return `<line x1="0" y1="0" x2="${num(el.width)}" y2="${num(
+            el.height
           )}"${strokeAttrs(el) || ` stroke="${esc(el.fill || '#000')}" stroke-width="2"`}/>`;
         }
         const points = pointsForShape(el.shape, el.width, el.height, el.sides, el.innerRatio);
@@ -231,10 +316,21 @@ const elementSvg = (el: DesignerElement, ctx: Ctx): string => {
             .map((p) => `${num(p.x)},${num(p.y)}`)
             .join(' ')}"${fill}${strokeAttrs(el)}/>`;
         }
-        const r = Math.min(el.borderRadius || 0, el.width / 2, el.height / 2);
-        return `<rect x="0" y="0" width="${num(el.width)}" height="${num(el.height)}"${
-          r > 0 ? ` rx="${num(r)}" ry="${num(r)}"` : ''
-        }${fill}${strokeAttrs(el)}/>`;
+        const [tl, tr, br, bl] = cornerRadii(el.borderRadius, el.width, el.height);
+        if (tl === tr && tr === br && br === bl) {
+          return `<rect x="0" y="0" width="${num(el.width)}" height="${num(el.height)}"${
+            tl > 0 ? ` rx="${num(tl)}" ry="${num(tl)}"` : ''
+          }${fill}${strokeAttrs(el)}/>`;
+        }
+        // SVG's `rx` is uniform, so per-corner radii need a real path.
+        const w = el.width;
+        const h = el.height;
+        const d =
+          `M${num(tl)},0 H${num(w - tr)} A${num(tr)},${num(tr)} 0 0 1 ${num(w)},${num(tr)}` +
+          ` V${num(h - br)} A${num(br)},${num(br)} 0 0 1 ${num(w - br)},${num(h)}` +
+          ` H${num(bl)} A${num(bl)},${num(bl)} 0 0 1 0,${num(h - bl)}` +
+          ` V${num(tl)} A${num(tl)},${num(tl)} 0 0 1 ${num(tl)},0 Z`;
+        return `<path d="${d}"${fill}${strokeAttrs(el)}/>`;
       }
     }
   })();

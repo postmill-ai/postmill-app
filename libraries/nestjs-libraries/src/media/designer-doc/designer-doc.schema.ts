@@ -150,6 +150,31 @@ const StrokeStyleSchema = z
   })
   .optional();
 
+/**
+ * One definition for both parsers: a warp is a small closed set of names plus
+ * three bounded scalars, with nothing lenient about it worth a second shape.
+ */
+const WarpSchema = z
+  .object({
+    preset: z.enum([
+      'arc',
+      'arc-lower',
+      'arc-upper',
+      'arch',
+      'bulge',
+      'shell-lower',
+      'shell-upper',
+      'flag',
+      'wave',
+      'rise',
+      'fish',
+    ]),
+    bend: z.number().finite().min(-100).max(100).optional(),
+    distortH: z.number().finite().min(-100).max(100).optional(),
+    distortV: z.number().finite().min(-100).max(100).optional(),
+  })
+  .optional();
+
 /** One definition, shared by layers and clips — they carry the same stack. */
 const SmartFilterStackSchema = z
   .array(
@@ -240,6 +265,36 @@ export interface DesignerGradient {
   type: 'linear' | 'radial';
   angle?: number;
   stops: DesignerGradientStop[];
+  /**
+   * Radial only: where the inner circle sits, as a fraction of the box (0.5,
+   * 0.5 is centred — the previous fixed behaviour). An off-centre highlight is
+   * what makes a radial read as a light source rather than a bullseye.
+   */
+  focalX?: number;
+  focalY?: number;
+}
+
+/**
+ * A non-destructive shape/path deformation. The preset names follow
+ * Photoshop's Warp menu; the maths lives in `designer-doc/warp`.
+ */
+export interface DesignerWarp {
+  preset:
+    | 'arc'
+    | 'arc-lower'
+    | 'arc-upper'
+    | 'arch'
+    | 'bulge'
+    | 'shell-lower'
+    | 'shell-upper'
+    | 'flag'
+    | 'wave'
+    | 'rise'
+    | 'fish';
+  /** −100…100. Zero is the identity, and both renderers skip it entirely. */
+  bend?: number;
+  distortH?: number;
+  distortV?: number;
 }
 
 export interface DesignerBackground {
@@ -423,17 +478,46 @@ export interface DesignerElement {
   verticalAlign?: 'top' | 'middle' | 'bottom';
   lineHeight?: number;
   letterSpacing?: number;
+  /**
+   * Horizontal scale, Photoshop's "Horizontal Scale" — 1 is unscaled, 0.6
+   * condenses to 60% of the natural width. Layout happens in unscaled glyph
+   * space and is divided by this at paint time, so tracking condenses with the
+   * glyphs. Flat text only: rich, curved and on-path text already opt out of
+   * the shared fitter for the same reason.
+   */
+  textScaleX?: number;
   textShadow?: DesignerTextShadow;
   textStroke?: DesignerTextStroke;
   curve?: number;
   textPath?: string;
+  /**
+   * Case transform, applied before measurement (see `fit-text`) so the wrap
+   * matches what is painted.
+   */
+  textTransform?: 'none' | 'uppercase' | 'lowercase' | 'capitalize';
+  /** Extra leading before each paragraph after the first, in px. */
+  paragraphSpacing?: number;
+  /** First-line indent of each paragraph, in px. */
+  firstLineIndent?: number;
 
   // image
   src?: string;
   fileId?: string;
+  /**
+   * Source viewBox for an `icon` element whose SVG is not drawn on Iconify's
+   * 24×24 grid. Both renderers default to 24×24 when absent.
+   */
+  viewBox?: string;
   crop?: DesignerCrop;
   filters?: string[];
-  borderRadius?: number;
+  /**
+   * Corner rounding: one number for all four, or `[tl, tr, br, bl]`.
+   *
+   * Konva's `Rect` has always accepted the tuple and the server's rounded-rect
+   * tracer took a scalar, so only uniform rounding was expressible — a card
+   * rounded at the top and square at the bottom needed a custom path.
+   */
+  borderRadius?: number | [number, number, number, number];
   fitMode?: 'contain' | 'cover' | 'fill';
   focalPoint?: { x: number; y: number };
   /**
@@ -497,6 +581,12 @@ export interface DesignerElement {
   strokeWidth?: number;
   /** Dash, cap, join and arrowheads — see `designer-doc/stroke-style`. */
   strokeStyle?: StrokeStyle;
+  /**
+   * Non-destructive deformation of a shape or path — see `designer-doc/warp`.
+   * The geometry above is untouched; both renderers deform on the way out, the
+   * same contract text `curve` follows.
+   */
+  warp?: DesignerWarp;
 
   // reflow / linked-by-default
   originId?: string;
@@ -513,6 +603,15 @@ export interface DesignerElement {
 
   // drift-resolved: boxShadow present in frontend, absent server copy
   boxShadow?: DesignerTextShadow;
+  /**
+   * Blur/desaturate what is BEHIND this layer, inside its own shape — the
+   * frosted-glass panel that is most of modern social design.
+   *
+   * Reads the pixels already painted beneath, which both renderers now have:
+   * the server composites page-wise, and on the canvas a `sceneFunc` runs with
+   * the layer canvas already holding everything below it.
+   */
+  backdropFilter?: { blur?: number; saturate?: number };
 }
 
 export interface StickerFrame {
@@ -614,7 +713,14 @@ export interface VideoClip {
   innerRatio?: number;
   stroke?: string;
   strokeWidth?: number;
-  borderRadius?: number;
+  /**
+   * Corner rounding: one number for all four, or `[tl, tr, br, bl]`.
+   *
+   * Konva's `Rect` has always accepted the tuple and the server's rounded-rect
+   * tracer took a scalar, so only uniform rounding was expressible — a card
+   * rounded at the top and square at the bottom needed a custom path.
+   */
+  borderRadius?: number | [number, number, number, number];
   /**
    * Explicit source-pixel crop (doc v5), same meaning as an element's — it wins
    * over `fitMode`'s automatic cover crop. Lets the Crop tool work on a clip.
@@ -661,6 +767,15 @@ export interface DesignerOutput {
    * authored docs, which fall back to the plain geometric-mean basis.
    */
   typeBudget?: number;
+  /**
+   * Ruler guides, in document pixels.
+   *
+   * EDITOR STATE that happens to belong to the artboard rather than the
+   * session — a guide follows the design so it is still there next time it is
+   * opened. **No renderer reads this**, and none may: a guide that showed up in
+   * an export would be a defect, not a feature.
+   */
+  guides?: { x: number[]; y: number[] };
 }
 
 export interface DesignerAttribution {
@@ -816,11 +931,15 @@ const { strict: StrictDesignerGradientSchema, lenient: LenientDesignerGradientSc
       ...gradientCommon,
       angle: strictNum(-360, 360).optional(),
       stops: z.array(StrictDesignerGradientStopSchema).max(64),
+      focalX: strictNum(0, 1).optional(),
+      focalY: strictNum(0, 1).optional(),
     },
     {
       ...gradientCommon,
       angle: lenientNum(-360, 360, 0),
       stops: z.array(LenientDesignerGradientStopSchema).max(64),
+      focalX: lenientNum(0, 1, 0.5).optional(),
+      focalY: lenientNum(0, 1, 0.5).optional(),
     }
   );
 
@@ -988,10 +1107,19 @@ const elementCommon = {
   align: z.enum(['left', 'center', 'right']).optional(),
   verticalAlign: z.enum(['top', 'middle', 'bottom']).optional(),
   textPath: z.string().max(MAX_TEXT_LEN).optional(),
+  textTransform: z.enum(['none', 'uppercase', 'lowercase', 'capitalize']).optional(),
+  paragraphSpacing: z.number().min(0).max(500).optional(),
+  firstLineIndent: z.number().min(0).max(500).optional(),
 
   // image
   src: SrcSchema.optional(),
   fileId: z.string().max(200).optional(),
+  // Four numbers and nothing else — this is interpolated straight into SVG
+  // markup, so it is validated as a shape, not merely as a string.
+  viewBox: z
+    .string()
+    .regex(/^-?\d+(\.\d+)? -?\d+(\.\d+)? \d+(\.\d+)? \d+(\.\d+)?$/)
+    .optional(),
   fitMode: z.enum(['contain', 'cover', 'fill']).optional(),
   alt: z.string().max(500).optional(),
 
@@ -1062,8 +1190,19 @@ const elementStrictOptionalNumeric = {
   fontWeight: strictNum(1, 1000).optional(),
   lineHeight: strictNum(0, 100).optional(),
   letterSpacing: strictNum(-MAX_DIMENSION, MAX_DIMENSION).optional(),
+  textScaleX: strictNum(0.1, 10).optional(),
   curve: strictNum(-1000, 1000).optional(),
-  borderRadius: strictNum(0, MAX_DIMENSION).optional(),
+  borderRadius: z
+    .union([
+      strictNum(0, MAX_DIMENSION),
+      z.tuple([
+        strictNum(0, MAX_DIMENSION),
+        strictNum(0, MAX_DIMENSION),
+        strictNum(0, MAX_DIMENSION),
+        strictNum(0, MAX_DIMENSION),
+      ]),
+    ])
+    .optional(),
   strokeWidth: strictNum(0, MAX_DIMENSION).optional(),
   naturalWidth: strictNum(0, MAX_DIMENSION).optional(),
   naturalHeight: strictNum(0, MAX_DIMENSION).optional(),
@@ -1082,8 +1221,19 @@ const elementLenientNumeric = {
   fontWeight: lenientOptionalNum(1, 1000),
   lineHeight: lenientOptionalNum(0, 100),
   letterSpacing: lenientOptionalNum(-MAX_DIMENSION, MAX_DIMENSION),
+  textScaleX: lenientOptionalNum(0.1, 10),
   curve: lenientOptionalNum(-1000, 1000),
-  borderRadius: lenientOptionalNum(0, MAX_DIMENSION),
+  borderRadius: z
+    .union([
+      lenientNum(0, MAX_DIMENSION, 0),
+      z.tuple([
+        lenientNum(0, MAX_DIMENSION, 0),
+        lenientNum(0, MAX_DIMENSION, 0),
+        lenientNum(0, MAX_DIMENSION, 0),
+        lenientNum(0, MAX_DIMENSION, 0),
+      ]),
+    ])
+    .optional(),
   strokeWidth: lenientOptionalNum(0, MAX_DIMENSION),
   naturalWidth: lenientOptionalNum(0, MAX_DIMENSION),
   naturalHeight: lenientOptionalNum(0, MAX_DIMENSION),
@@ -1100,10 +1250,17 @@ const elementStrictNested = {
   fillGradient: StrictDesignerGradientSchema.optional(),
   // drift-resolved: boxShadow present in frontend, absent server copy
   boxShadow: StrictDesignerTextShadowSchema.optional(),
+  backdropFilter: z
+    .object({
+      blur: strictNum(0, 200).optional(),
+      saturate: strictNum(0, 4).optional(),
+    })
+    .optional(),
   styles: z.array(layerStyleShape(StrictDesignerGradientSchema)).max(MAX_LAYER_STYLES).optional(),
   fillStyle: fillStyleShape(StrictDesignerGradientSchema).optional(),
   adjustment: adjustmentShape(StrictDesignerGradientSchema).optional(),
   strokeStyle: StrokeStyleSchema,
+  warp: WarpSchema,
   symbolOverrides: SymbolOverridesSchema,
   slot: SlotSchema,
   filters: FiltersSchema,
@@ -1119,10 +1276,17 @@ const elementLenientNested = {
   mask: LenientDesignerMaskSchema.optional(),
   fillGradient: LenientDesignerGradientSchema.optional(),
   boxShadow: LenientDesignerTextShadowSchema.optional(),
+  backdropFilter: z
+    .object({
+      blur: lenientNum(0, 200, 0).optional(),
+      saturate: lenientNum(0, 4, 1).optional(),
+    })
+    .optional(),
   styles: z.array(layerStyleShape(LenientDesignerGradientSchema)).max(MAX_LAYER_STYLES).optional(),
   fillStyle: fillStyleShape(LenientDesignerGradientSchema).optional(),
   adjustment: adjustmentShape(LenientDesignerGradientSchema).optional(),
   strokeStyle: StrokeStyleSchema,
+  warp: WarpSchema,
   symbolOverrides: SymbolOverridesSchema,
   slot: SlotSchema,
   filters: FiltersSchema,
@@ -1296,7 +1460,17 @@ const clipStrictOptionalNumeric = {
   sides: strictNum(3, 64).optional(),
   innerRatio: strictNum(0.05, 0.95).optional(),
   strokeWidth: strictNum(0, MAX_DIMENSION).optional(),
-  borderRadius: strictNum(0, MAX_DIMENSION).optional(),
+  borderRadius: z
+    .union([
+      strictNum(0, MAX_DIMENSION),
+      z.tuple([
+        strictNum(0, MAX_DIMENSION),
+        strictNum(0, MAX_DIMENSION),
+        strictNum(0, MAX_DIMENSION),
+        strictNum(0, MAX_DIMENSION),
+      ]),
+    ])
+    .optional(),
   volume: strictNum(0, 1).optional(),
   fadeInMs: strictNum(0, MAX_VIDEO_DURATION_MS).optional(),
   fadeOutMs: strictNum(0, MAX_VIDEO_DURATION_MS).optional(),
@@ -1322,7 +1496,17 @@ const clipLenientNumeric = {
   sides: lenientOptionalNum(3, 64),
   innerRatio: lenientOptionalNum(0.05, 0.95),
   strokeWidth: lenientOptionalNum(0, MAX_DIMENSION),
-  borderRadius: lenientOptionalNum(0, MAX_DIMENSION),
+  borderRadius: z
+    .union([
+      lenientNum(0, MAX_DIMENSION, 0),
+      z.tuple([
+        lenientNum(0, MAX_DIMENSION, 0),
+        lenientNum(0, MAX_DIMENSION, 0),
+        lenientNum(0, MAX_DIMENSION, 0),
+        lenientNum(0, MAX_DIMENSION, 0),
+      ]),
+    ])
+    .optional(),
   volume: lenientOptionalNum(0, 1),
   fadeInMs: lenientOptionalNum(0, MAX_VIDEO_DURATION_MS),
   fadeOutMs: lenientOptionalNum(0, MAX_VIDEO_DURATION_MS),
@@ -1440,6 +1624,12 @@ const { strict: StrictDesignerOutputSchema, lenient: LenientDesignerOutputSchema
       height: strictNum(1, MAX_DIMENSION),
       bg: StrictDesignerBackgroundSchema.optional(),
       typeBudget: strictNum(0, 100).optional(),
+      guides: z
+        .object({
+          x: z.array(strictNum(-MAX_DIMENSION, MAX_DIMENSION)).max(200),
+          y: z.array(strictNum(-MAX_DIMENSION, MAX_DIMENSION)).max(200),
+        })
+        .optional(),
       children: z.array(StrictDesignerElementSchema).max(MAX_ELEMENTS_PER_OUTPUT),
     },
     {
@@ -1448,6 +1638,12 @@ const { strict: StrictDesignerOutputSchema, lenient: LenientDesignerOutputSchema
       height: lenientNum(1, MAX_DIMENSION, 1080),
       bg: LenientDesignerBackgroundSchema.optional(),
       typeBudget: lenientNum(0, 100, 0).optional(),
+      guides: z
+        .object({
+          x: z.array(lenientNum(-MAX_DIMENSION, MAX_DIMENSION, 0)).max(200),
+          y: z.array(lenientNum(-MAX_DIMENSION, MAX_DIMENSION, 0)).max(200),
+        })
+        .optional(),
       children: z.array(LenientDesignerElementSchema).max(MAX_ELEMENTS_PER_OUTPUT),
     }
   );

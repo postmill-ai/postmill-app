@@ -1,6 +1,7 @@
 import {
   fitTextToBox,
   type FittedText,
+  type MeasureText,
 } from '@postmill-ai/nestjs-libraries/media/designer-doc/fit-text';
 import type { DesignerElement } from './designer.store';
 
@@ -61,12 +62,30 @@ export const fitDesignerText = (el: DesignerElement): FittedText | null => {
       fontSize: el.fontSize || 16,
       lineHeight: el.lineHeight,
       letterSpacing: el.letterSpacing,
+      scaleX: el.textScaleX,
+      textTransform: el.textTransform,
+      paragraphSpacing: el.paragraphSpacing,
+      firstLineIndent: el.firstLineIndent,
     },
     (line, size) => {
       ctx.font = fontShorthand(el, size);
       return ctx.measureText(line).width;
     }
   );
+};
+
+/**
+ * The browser measurement primitive for one element, for callers that drive
+ * `fitTextToBox` themselves — the SVG exporter, which has to lay lines out
+ * because SVG has neither word wrap nor shrink-to-fit.
+ */
+export const measureForElement = (el: DesignerElement): MeasureText | undefined => {
+  const ctx = getMeasureCtx();
+  if (!ctx) return undefined;
+  return (line, size) => {
+    ctx.font = fontShorthand(el, size);
+    return ctx.measureText(line).width;
+  };
 };
 
 /**
@@ -90,6 +109,8 @@ export interface NewTextSpec {
   fontStyle?: 'normal' | 'italic';
   lineHeight?: number;
   letterSpacing?: number;
+  /** Horizontal scale, so a condensed box is born the width it will paint. */
+  textScaleX?: number;
 }
 
 /**
@@ -125,6 +146,7 @@ export const defaultTextBox = (
     textWidth = spec.text.length * fontSize * FALLBACK_GLYPH_EM;
   }
   textWidth += letterSpacing * spec.text.length;
+  textWidth *= spec.textScaleX || 1;
 
   return {
     width: Math.max(1, Math.ceil(textWidth + NEW_TEXT_PADDING_PX * 2)),

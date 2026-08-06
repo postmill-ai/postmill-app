@@ -606,7 +606,8 @@ export const VideoCanvasOverlay: FC<VideoCanvasOverlayProps> = ({
               text={clip.text || ''}
               fontFamily={clip.fontFamily || 'Arial'}
               fontSize={clip.fontSize || 16}
-              fontStyle={`${clip.fontWeight && clip.fontWeight >= 600 ? 'bold' : 'normal'}`}
+              // Numeric weight straight through, the same as an element's text.
+              fontStyle={String(clip.fontWeight ?? 400)}
               fill={clip.fill || '#000000'}
               rotation={props.rotation}
               opacity={props.opacity}

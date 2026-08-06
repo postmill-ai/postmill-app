@@ -202,6 +202,248 @@ describe('DesignRenderService', () => {
     expect(multiplied[2]).toBeLessThan(plain[2]);
   });
 
+  it('renders a warped shape deformed, and an unwarped one exactly as before', async () => {
+    const service = makeService();
+    const doc = (warp?: any): any => ({
+      version: 4,
+      mode: 'image',
+      outputs: [
+        {
+          id: 'out-1', formatId: 'square', name: 'Square',
+          width: 120, height: 120, background: '#ffffff',
+          children: [
+            {
+              id: 'band', type: 'shape', shape: 'rect',
+              x: 10, y: 50, width: 100, height: 20,
+              rotation: 0, opacity: 1, locked: false, hidden: false,
+              fill: '#000000', warp,
+            },
+          ],
+        },
+      ],
+    });
+
+    const png = async (warp?: any) => service.renderPage(doc(warp), 0, { pixelRatio: 1 });
+    const inkTop = async (warp?: any) => {
+      const { data, info } = await sharp(await png(warp)).ensureAlpha().raw().toBuffer({ resolveWithObject: true });
+      for (let y = 0; y < info.height; y++) {
+        for (let x = 0; x < info.width; x++) {
+          if (data[(y * info.width + x) * info.channels] < 128) return y;
+        }
+      }
+      return -1;
+    };
+
+    // Unwarped: a plain band starting at its box top.
+    expect(await inkTop(undefined)).toBe(50);
+    // A preset with no bend is the identity — byte-for-byte the same render.
+    expect(Buffer.compare(await png(undefined), await png({ preset: 'arc', bend: 0 }))).toBe(0);
+    // Arched: the middle of the band lifts above the box.
+    expect(await inkTop({ preset: 'arc', bend: 60 })).toBeLessThan(50);
+  });
+
+  it('rotates about the element origin, the way the canvas does', async () => {
+    // Konva rotates about the node's x/y and nothing sets an offset, so that is
+    // what a stored rotation has always meant. The server pivoted on the centre
+    // instead, putting a 45° element ~158px from where it was authored — and
+    // every other fixture in this file uses rotation 0, which is why nobody saw
+    // it. These assert the geometry directly rather than eyeballing a render.
+    const service = makeService();
+    const doc = (rotation: number): any => ({
+      version: 4,
+      mode: 'image',
+      outputs: [
+        {
+          id: 'out-1', formatId: 'square', name: 'Square',
+          width: 400, height: 400, background: '#ffffff',
+          children: [
+            {
+              id: 'r', type: 'shape', shape: 'rect',
+              x: 100, y: 100, width: 200, height: 40,
+              rotation, opacity: 1, locked: false, hidden: false, fill: '#000000',
+            },
+          ],
+        },
+      ],
+    });
+
+    const inkBox = async (rotation: number) => {
+      const png = await service.renderPage(doc(rotation), 0, { pixelRatio: 1 });
+      const { data, info } = await sharp(png).ensureAlpha().raw().toBuffer({ resolveWithObject: true });
+      let minX = Infinity, maxX = -1, minY = Infinity, maxY = -1;
+      for (let y = 0; y < info.height; y++) {
+        for (let x = 0; x < info.width; x++) {
+          if (data[(y * info.width + x) * info.channels] < 128) {
+            if (x < minX) minX = x;
+            if (x > maxX) maxX = x;
+            if (y < minY) minY = y;
+            if (y > maxY) maxY = y;
+          }
+        }
+      }
+      return { minX, maxX, minY, maxY };
+    };
+
+    // Unrotated: exactly its box.
+    const flat = await inkBox(0);
+    expect(flat.minX).toBe(100);
+    expect(flat.minY).toBe(100);
+
+    // 90°: pivoting on the ORIGIN sweeps the bar down-left from (100,100), so
+    // it occupies x 60..100, y 100..300. Pivoting on the centre would instead
+    // leave it centred on (200,120) — a completely different place.
+    const right = await inkBox(90);
+    expect(right.minY).toBe(100);
+    expect(right.maxY).toBeGreaterThanOrEqual(295);
+    expect(right.maxX).toBeLessThanOrEqual(105);
+
+    // 45°: the top-left corner stays pinned wherever the pivot is correct.
+    const diagonal = await inkBox(45);
+    expect(Math.abs(diagonal.minX - 71)).toBeLessThanOrEqual(3);
+    expect(Math.abs(diagonal.minY - 100)).toBeLessThanOrEqual(3);
+  });
+
+  it('condenses text horizontally without changing its height', async () => {
+    // No catalog font is narrow enough for some lockups, so `textScaleX` is the
+    // only way to match one. The server has to squeeze the same way the canvas
+    // does or the export undoes the design.
+    const service = makeService();
+    const doc = (textScaleX?: number): any => ({
+      version: 4,
+      mode: 'image',
+      outputs: [
+        {
+          id: 'out-1', formatId: 'square', name: 'Square',
+          width: 200, height: 100, background: '#ffffff',
+          children: [
+            {
+              id: 't', type: 'text',
+              x: 0, y: 0, width: 200, height: 100,
+              rotation: 0, opacity: 1, locked: false, hidden: false,
+              text: 'HHHH', fontSize: 60, fontFamily: 'sans-serif',
+              fill: '#000000', align: 'left', textScaleX,
+            },
+          ],
+        },
+      ],
+    });
+
+    const inkBox = async (textScaleX?: number) => {
+      const png = await service.renderPage(doc(textScaleX), 0, { pixelRatio: 1 });
+      const { data, info } = await sharp(png).ensureAlpha().raw().toBuffer({ resolveWithObject: true });
+      let minX = Infinity, maxX = -1, minY = Infinity, maxY = -1;
+      for (let y = 0; y < info.height; y++) {
+        for (let x = 0; x < info.width; x++) {
+          const i = (y * info.width + x) * info.channels;
+          if (data[i] < 128) {
+            if (x < minX) minX = x;
+            if (x > maxX) maxX = x;
+            if (y < minY) minY = y;
+            if (y > maxY) maxY = y;
+          }
+        }
+      }
+      return { width: maxX - minX + 1, height: maxY - minY + 1, left: minX };
+    };
+
+    const plain = await inkBox(undefined);
+    const condensed = await inkBox(0.5);
+
+    expect(plain.width).toBeGreaterThan(0);
+    // Half the width, same cap height, still starting at the same left edge.
+    expect(condensed.width / plain.width).toBeGreaterThan(0.4);
+    expect(condensed.width / plain.width).toBeLessThan(0.6);
+    expect(Math.abs(condensed.height - plain.height)).toBeLessThanOrEqual(1);
+    // Left-aligned from the same box edge. The ink starts a couple of px later
+    // than the box because of the glyph's side bearing, and that bearing
+    // condenses along with everything else.
+    expect(Math.abs(condensed.left - plain.left)).toBeLessThanOrEqual(4);
+  });
+
+  it('paints every layer style, not just the three Konva could express', async () => {
+    // Seven of the ten used to be inert on the canvas: `layerStyleProps` mapped
+    // drop shadow, stroke and colour overlay and deferred the rest to a
+    // component that did not exist. Both renderers now call the same shared
+    // painter, so each of these has to leave a mark here AND on the canvas.
+    const service = makeService();
+    const doc = (styles?: any[]): any => ({
+      version: 4,
+      mode: 'image',
+      outputs: [
+        {
+          id: 'out-1', formatId: 'square', name: 'Square',
+          width: 100, height: 100, background: '#ffffff',
+          children: [
+            {
+              id: 'box', type: 'shape', shape: 'rect',
+              x: 20, y: 20, width: 60, height: 60,
+              rotation: 0, opacity: 1, locked: false, hidden: false, fill: '#808080',
+              styles,
+            },
+          ],
+        },
+      ],
+    });
+
+    const pixels = async (styles?: any[]) => {
+      const png = await service.renderPage(doc(styles), 0, { pixelRatio: 1 });
+      const { data, info } = await sharp(png).ensureAlpha().raw().toBuffer({ resolveWithObject: true });
+      return { data, info };
+    };
+    const at = (buf: any, x: number, y: number) => {
+      const i = (y * buf.info.width + x) * buf.info.channels;
+      return [buf.data[i], buf.data[i + 1], buf.data[i + 2]];
+    };
+
+    const plain = await pixels(undefined);
+    // Inside the box, well clear of every edge effect.
+    expect(at(plain, 50, 50)[0]).toBeGreaterThan(120);
+
+    // Overlays and inner effects recolour inside the silhouette.
+    for (const style of [
+      { type: 'color-overlay', color: '#ff0000', opacity: 1 },
+      { type: 'gradient-overlay', opacity: 1, angle: 90, gradient: { type: 'linear', stops: [{ offset: 0, color: '#ff0000' }, { offset: 1, color: '#ff0000' }] } },
+      { type: 'pattern-overlay', opacity: 1, pattern: { preset: 'dots', scale: 1, color: '#ff0000', background: '#ff0000' } },
+    ]) {
+      const out = await pixels([style]);
+      const [r, g, b] = at(out, 50, 50);
+      expect(r, `${style.type} should paint red inside the layer`).toBeGreaterThan(150);
+      expect(g).toBeLessThan(120);
+      expect(b).toBeLessThan(120);
+    }
+
+    // Inner shadow and inner glow darken/lighten just inside the edge.
+    const innerShadow = await pixels([
+      { type: 'inner-shadow', color: '#000000', opacity: 1, distance: 0, size: 10 },
+    ]);
+    expect(at(innerShadow, 24, 50)[0]).toBeLessThan(at(plain, 24, 50)[0]);
+
+    const innerGlow = await pixels([
+      { type: 'inner-glow', color: '#ffffff', opacity: 1, size: 10 },
+    ]);
+    expect(at(innerGlow, 24, 50)[0]).toBeGreaterThan(at(plain, 24, 50)[0]);
+
+    // Outer glow reaches OUTSIDE the box, where the page is otherwise white.
+    const outerGlow = await pixels([
+      { type: 'outer-glow', color: '#ff0000', opacity: 1, size: 12, spread: 60 },
+    ]);
+    const outside = at(outerGlow, 14, 50);
+    expect(outside[1], 'outer glow should tint the page beside the layer').toBeLessThan(240);
+
+    // Bevel lightens the highlight side.
+    const bevel = await pixels([
+      { type: 'bevel-emboss', opacity: 1, depth: 400, angle: 120, highlightColor: '#ffffff' },
+    ]);
+    expect(at(bevel, 24, 50)[0]).toBeGreaterThan(at(plain, 24, 50)[0]);
+
+    // Satin is documented as rendering like a second inner shadow; pin that so
+    // the simplification is a decision rather than a surprise.
+    const satin = await pixels([
+      { type: 'satin', color: '#000000', opacity: 1, distance: 6, size: 10 },
+    ]);
+    expect(at(satin, 24, 50)[0]).toBeLessThan(at(plain, 24, 50)[0]);
+  });
+
   it('clips an adjustment to the base layer\'s pixels, not its bounding box', async () => {
     // The Designer canvas clips by filtering the base layer's own cached
     // bitmap, so an ellipse's transparent bbox corners keep the backdrop. The
@@ -740,8 +982,10 @@ describe('DesignRenderService flat text layout', () => {
 
     expect(spy).toHaveBeenCalled();
     const y = spy.mock.calls[0][2] as number;
-    // One 20px line at 1.2 line-height → (200 - 24) / 2 = 88.
-    expect(y).toBeCloseTo(88, 0);
+    // One 20px line at 1.2 line-height → block top (200 - 24) / 2 = 88, and
+    // the glyph is drawn CENTRED in its line box (baseline 'middle' half a
+    // line down), which is what Konva does — so 88 + 12.
+    expect(y).toBeCloseTo(100, 0);
   });
 
   it('anchors the block at the bottom when verticalAlign is bottom', async () => {
@@ -755,7 +999,8 @@ describe('DesignRenderService flat text layout', () => {
     );
 
     const y = spy.mock.calls[0][2] as number;
-    expect(y).toBeCloseTo(200 - 24, 0);
+    // Block top at 200 - 24, plus the half-line-height baseline offset.
+    expect(y).toBeCloseTo(200 - 24 + 12, 0);
   });
 
   it('defaults to top alignment when verticalAlign is absent', async () => {
@@ -768,6 +1013,7 @@ describe('DesignRenderService flat text layout', () => {
       makeEl({ text: 'Hi', fontSize: 20, width: 200, height: 200 })
     );
 
-    expect(spy.mock.calls[0][2]).toBe(0);
+    // Block top 0, plus half a 24px line box — the baseline Konva draws on.
+    expect(spy.mock.calls[0][2]).toBe(12);
   });
 });

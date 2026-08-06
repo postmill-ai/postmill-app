@@ -156,7 +156,12 @@ export const convertAnchorAt = (
   return out;
 };
 
-const DEFAULT_STROKE = '#000000';
+/**
+ * A path is born with a stroke colour: both renderers draw nothing when
+ * `stroke` is unset, so a colourless path would be an invisible layer. The
+ * options bar offers this as its default too.
+ */
+export const PEN_DEFAULT_STROKE = '#000000';
 
 /**
  * Turn a finished draft into a `path` element, re-origined so the stored nodes
@@ -183,7 +188,7 @@ export const buildPathElement = (
     hidden: false,
     nodes: box.nodes,
     closed: draft.closed,
-    stroke: (options.stroke as string) || DEFAULT_STROKE,
+    stroke: (options.stroke as string) || PEN_DEFAULT_STROKE,
     strokeWidth: Number(options.strokeWidth ?? 2),
     // Only a closed path gets a fill; an open one would fill its chord.
     fill: draft.closed ? ((options.fill as string) || undefined) : undefined,

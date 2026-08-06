@@ -1,7 +1,7 @@
 'use client';
 
 import React, { FC, useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { createDesignerStore, migrateDoc, type DesignerStore, type DesignerDoc, type DesignerAttribution, type VideoOutput, type VideoClip } from './designer.store';
+import { createDesignerStore, migrateDoc, type DesignerStore, type DesignerDoc, type DesignerAttribution, type VideoOutput, type VideoClip, type DesignerOutput, type DesignerElement } from './designer.store';
 import { useCollaboration } from './collaboration';
 import type { TimelineAwareness, ImageAwareness } from './collaboration';
 import { CollaborationCursors, type PeerTimelineState } from './collaboration-cursors';
@@ -797,6 +797,94 @@ export const Designer: FC<DesignerProps> = ({
 
   // Reusable image-from-media placement (centered + aspect-correct) — shared by
   // the Insert/Import media modal and the canvas "Add Image" (D-8).
+  /**
+   * Insert > Stock Icon.
+   *
+   * An Iconify pick used to go through `addImageFromMedia`, which stored the
+   * API URL as a raster `src` at the icon's own 24x24 — `fitWithin` never
+   * upscales, so it landed as a tiny black square with no fill control. The
+   * Designer already has the right element for this: `icon` holds SVG markup
+   * and paints in `fill`, which is what the icons panel and the AI composer
+   * both emit. The markup comes from the server resolver, the same one the
+   * composer uses.
+   */
+  const addStockIcon = useCallback(
+    async (item: { url: string }) => {
+      const name = /\/([a-z0-9-]+)\/([a-z0-9-]+)\.svg/.exec(item.url);
+      const resolved = name
+        ? await fetch(
+            `/media/icons/resolve?name=${encodeURIComponent(`${name[1]}:${name[2]}`)}`
+          )
+            .then((r) => (r.ok ? r.json() : null))
+            .catch(() => null)
+        : null;
+      if (!resolved?.body) {
+        toaster.show(
+          translate('couldnt_add_icon', "Couldn't add that icon"),
+          'warning'
+        );
+        return;
+      }
+      const state = store.getState();
+      const active = state.doc.outputs[state.currentOutput];
+      const size = Math.round(Math.min(active.width, active.height) * 0.2);
+      state.addElement({
+        id: '',
+        type: 'icon',
+        x: (active.width - size) / 2,
+        y: (active.height - size) / 2,
+        width: size,
+        height: size,
+        rotation: 0,
+        opacity: 1,
+        locked: false,
+        hidden: false,
+        src: resolved.body,
+        viewBox: resolved.viewBox,
+        fill: '#2B5CD3',
+      } as never);
+    },
+    [store, fetch, toaster, translate]
+  );
+
+  /**
+   * Convert the selected text layer to `path` outlines.
+   *
+   * Server-side: glyph contours live in the font file, which no canvas API
+   * exposes. The text layer is replaced, so this is a one-way conversion — the
+   * same as every vector editor, and undo still puts it back.
+   */
+  const onTextToOutlines = useCallback(async () => {
+    const state = store.getState();
+    const out = state.doc.outputs[state.currentOutput] as DesignerOutput | undefined;
+    const el = (out?.children || []).find(
+      (c: DesignerElement) => state.selectedIds.includes(c.id) && c.type === 'text'
+    );
+    if (!el) return;
+
+    const res = await fetch('/designs/text-outlines', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ element: el, perGlyph: true }),
+    }).catch(() => null);
+
+    const data = res?.ok ? ((await res.json()) as { elements?: DesignerElement[]; reason?: string }) : null;
+    if (!data?.elements?.length) {
+      toaster.show(
+        data?.reason === 'font-unavailable'
+          ? translate('outlines_font_unavailable', "That font isn't available for outlining")
+          : translate('couldnt_convert_to_outlines', "Couldn't convert that to outlines"),
+        'warning'
+      );
+      return;
+    }
+
+    for (const outline of data.elements) {
+      store.getState().addElement({ id: '', ...outline } as DesignerElement);
+    }
+    store.getState().removeElements([el.id]);
+  }, [store, fetch, toaster, translate]);
+
   const addImageFromMedia = useCallback(
     (item: { url: string; fileId?: string; width?: number; height?: number }) => {
       const state = store.getState();
@@ -844,11 +932,14 @@ export const Designer: FC<DesignerProps> = ({
    * real duration.
    */
   const onInsertMedia = useCallback(
-    (kind: 'image' | 'sticker' | 'vector' | 'video' | 'audio') => {
+    (kind: 'image' | 'sticker' | 'vector' | 'icon' | 'video' | 'audio') => {
       const TABS = {
         image: ['My Files', 'Stock Photos'],
         sticker: ['Stock Stickers'],
         vector: ['Stock Vectors'],
+        // Iconify was reachable from Replace image but not from Insert, so the
+        // whole catalog was one indirection away and simply unwired.
+        icon: ['Stock Icons'],
         video: ['My Files', 'Stock Videos'],
         audio: ['My Files', 'Stock Audio'],
       } as const;
@@ -856,6 +947,7 @@ export const Designer: FC<DesignerProps> = ({
         image: translate('insert_image', 'Insert image'),
         sticker: translate('insert_sticker', 'Insert sticker'),
         vector: translate('insert_vector', 'Insert vector'),
+        icon: translate('insert_stock_icon', 'Insert icon'),
         video: translate('insert_video', 'Insert video'),
         audio: translate('insert_audio', 'Insert audio'),
       };
@@ -880,11 +972,15 @@ export const Designer: FC<DesignerProps> = ({
             });
             return;
           }
+          if (kind === 'icon') {
+            void addStockIcon(item as never);
+            return;
+          }
           addImageFromMedia(item as never);
         },
       });
     },
-    [mediaPicker, translate, addImageFromMedia, store, toaster]
+    [mediaPicker, translate, addImageFromMedia, addStockIcon, store, toaster]
   );
 
   const selectedImageId = useCallback(() => {
@@ -1015,6 +1111,7 @@ export const Designer: FC<DesignerProps> = ({
         modals.openModal({
           children: (close: () => void) => <ShortcutsOverlay onClose={close} />,
         }),
+      onTextToOutlines,
       onConvertMode: async () => {
         const st = store.getState();
         const cur = st.doc.mode;

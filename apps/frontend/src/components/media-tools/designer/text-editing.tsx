@@ -241,7 +241,11 @@ export const TextEditingOverlay: FC<TextEditingProps> = ({
         position: 'absolute',
         left: `${left}px`,
         top: `${top}px`,
-        width: `${Math.max(width, 20)}px`,
+        // Condensed the same way the canvas paints it, from the same origin the
+        // box is positioned at — otherwise the glyphs jump on blur.
+        transform: element.textScaleX ? `scaleX(${element.textScaleX})` : undefined,
+        transformOrigin: 'left top',
+        width: `${Math.max(width, 20) / (element.textScaleX || 1)}px`,
         minHeight: `${minHeight}px`,
         fontFamily: element.fontFamily || 'Arial',
         fontSize: `${(element.fontSize || 16) * scale}px`,

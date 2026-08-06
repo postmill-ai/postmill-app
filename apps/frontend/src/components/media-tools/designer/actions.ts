@@ -84,7 +84,7 @@ export interface DesignerActionCtx {
   onSaveAsTemplate: () => void;
   onOpenMedia: () => void;
   /** Insert media of a specific kind, with the picker narrowed to match. */
-  onInsertMedia: (kind: 'image' | 'sticker' | 'vector' | 'video' | 'audio') => void;
+  onInsertMedia: (kind: 'image' | 'sticker' | 'vector' | 'icon' | 'video' | 'audio') => void;
   onExport: () => void;
   onUseInPost?: () => void;
   onClose?: () => void;
@@ -98,6 +98,8 @@ export interface DesignerActionCtx {
   onActualSize: () => void;
   onShortcuts: () => void;
   onConvertMode: () => void;
+  /** Replace the selected text layer with `path` outlines of its glyphs. */
+  onTextToOutlines: () => void;
   onToggleShare: () => void;
   // Pixel operations — Select, Edit ▸ Fill/Stroke and the Filter menu. The host
   // owns them because they need the Konva stage (to rasterize) and modals (to
@@ -245,6 +247,8 @@ export const useDesignerActions = (
         hasSelection: st.selectedIds.length > 0,
         singleImageSelected:
           selectedEls.length === 1 && selectedEls[0].type === 'image',
+        singleTextSelected:
+          selectedEls.length === 1 && selectedEls[0].type === 'text',
         mode: st.doc.mode,
       };
     };
@@ -359,6 +363,11 @@ export const useDesignerActions = (
       { id: 'actual-size', label: 'Actual Size (100%)', menu: 'view', group: 'zoom', keywords: ['actual', '100', 'reset zoom'], run: ctx.onActualSize },
       { id: 'view-safe-zones', label: 'Safe Zones', menu: 'view', group: 'overlay', keywords: ['safe zones'], checked: () => ctx.showSafeZones, run: ctx.onToggleSafeZones },
       { id: 'view-rulers', label: 'Rulers', menu: 'view', group: 'overlay', keywords: ['rulers'], checked: () => ctx.showRulers, run: ctx.onToggleRulers },
+      // The rulers you could read but never pull a guide out of, and the grid
+      // that didn't exist.
+      { id: 'view-grid', label: 'Grid', menu: 'view', group: 'overlay', keywords: ['grid'], checked: () => store.getState().showGrid, run: () => { const st = store.getState(); st.setShowGrid(!st.showGrid); } },
+      { id: 'view-snap-grid', label: 'Snap to Grid', menu: 'view', group: 'overlay', keywords: ['snap', 'grid'], checked: () => store.getState().snapToGrid, run: () => { const st = store.getState(); st.setSnapToGrid(!st.snapToGrid); } },
+      { id: 'view-clear-guides', label: 'Clear Guides', menu: 'view', group: 'overlay', keywords: ['guides', 'clear'], run: () => store.getState().clearGuides() },
       { id: 'command-palette', label: 'Command Palette', menu: 'view', group: 'cmd', shortcut: '⌘K', keywords: ['command', 'palette'], run: () => { if (typeof window !== 'undefined') window.dispatchEvent(new KeyboardEvent('keydown', { key: 'k', metaKey: true })); } },
 
       // ---------------- Insert ----------------
@@ -369,6 +378,7 @@ export const useDesignerActions = (
       { id: 'insert-video', label: 'Video…', menu: 'insert', keywords: ['video', 'clip', 'footage'], enabled: () => live().mode === 'video', run: () => ctx.onInsertMedia('video') },
       { id: 'insert-audio', label: 'Audio…', menu: 'insert', keywords: ['audio', 'music', 'sound', 'track'], enabled: () => live().mode === 'video', run: () => ctx.onInsertMedia('audio') },
       { id: 'insert-icon', label: 'Icon', menu: 'insert', keywords: ['icon'], run: () => ctx.onTogglePanel('icons') },
+      { id: 'insert-stock-icon', label: 'Stock Icon…', menu: 'insert', keywords: ['icon', 'iconify', 'stock'], enabled: () => live().mode === 'image', run: () => ctx.onInsertMedia('icon') },
       { id: 'insert-sticker', label: 'Sticker…', menu: 'insert', keywords: ['sticker'], enabled: () => live().mode === 'image', run: () => ctx.onInsertMedia('sticker') },
       { id: 'insert-vector', label: 'Vector…', menu: 'insert', keywords: ['vector', 'svg', 'illustration'], enabled: () => live().mode === 'image', run: () => ctx.onInsertMedia('vector') },
 
@@ -411,6 +421,9 @@ export const useDesignerActions = (
       { id: 'gen-video', label: 'Generate Video…', menu: 'tools', group: 'gen', keywords: ['ai', 'generate', 'video'], enabled: () => isVideoDoc() && mediaTool('text-to-video'), run: () => store.getState().requestGenerate('video') },
       { id: 'gen-audio-music', label: 'Music…', menu: 'tools', submenuPath: ['Generate Audio'], group: 'gen', keywords: ['ai', 'generate', 'audio', 'music', 'soundtrack'], enabled: () => isVideoDoc() && mediaTool('text-to-music'), run: () => store.getState().requestGenerate('music') },
       { id: 'gen-audio-voiceover', label: 'Voiceover…', menu: 'tools', submenuPath: ['Generate Audio'], group: 'gen', keywords: ['ai', 'generate', 'audio', 'voiceover', 'speech', 'tts'], enabled: () => isVideoDoc() && mediaOp('tts'), run: () => store.getState().requestGenerate('voiceover') },
+      // The one vector operation that cannot happen in the browser: glyph
+      // contours come from the font file, which only the server has.
+      { id: 'text-to-outlines', label: 'Convert Text to Outlines', menu: 'tools', group: 'vector', keywords: ['outline', 'vector', 'text', 'convert', 'curves'], enabled: () => live().singleTextSelected, run: ctx.onTextToOutlines },
       { id: 'ai-remove-bg', label: 'Remove Background', menu: 'tools', group: 'ai', keywords: ['ai', 'background', 'remove'], enabled: () => mediaOp('bg-remove') && live().singleImageSelected, run: ctx.onAiRemoveBg },
       { id: 'ai-upscale-2x', label: '2×', menu: 'tools', submenu: 'Upscale', group: 'ai', keywords: ['ai', 'upscale'], enabled: () => mediaOp('upscale') && live().singleImageSelected, run: () => ctx.onAiUpscale(2) },
       { id: 'ai-upscale-4x', label: '4×', menu: 'tools', submenu: 'Upscale', group: 'ai', keywords: ['ai', 'upscale'], enabled: () => mediaOp('upscale') && live().singleImageSelected, run: () => ctx.onAiUpscale(4) },

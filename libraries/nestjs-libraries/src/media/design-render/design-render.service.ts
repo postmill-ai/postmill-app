@@ -20,10 +20,6 @@ import {
 import { FontLoaderService } from './font-loader.service';
 import { PromiseLruCache } from './promise-lru';
 import {
-  cssFilterForToken,
-  parseDesignerFilterToken,
-} from './filter-tokens';
-import {
   MAX_CANVAS_DIMENSION,
   MAX_GROUP_RENDER_DEPTH,
 } from '../designer-doc/designer-doc.limits';
@@ -33,6 +29,9 @@ import {
   type FittedText,
 } from '../designer-doc/fit-text';
 import { pointsForShape, starPoints } from '../designer-doc/shape-geometry';
+import { warpedOutline, warpPadding } from '../designer-doc/warp';
+import { cornerRadii, hasCornerRadius } from '../designer-doc/shape-geometry';
+import { arcBaselineY, arcGeometry } from '../designer-doc/curved-text';
 import { arrowHeadPoints, strokeEndpoints } from '../designer-doc/stroke-style';
 import { tracePathNodes } from '../designer-doc/path-geometry';
 import { buildLayerTree, groupBounds, type LayerNode } from '../designer-doc/layer-tree';
@@ -45,7 +44,17 @@ import {
   isNativeBlend,
 } from '../designer-doc/pixel-ops';
 import { drawPatternTile, tileSizeFor } from '../designer-doc/pattern-tiles';
-import { splitStyles, styleOffset, styleBlur, stylePadding } from '../designer-doc/layer-styles';
+import { splitStyles, styleOffset, styleBlur, stylePadding, elementStyles } from '../designer-doc/layer-styles';
+import {
+  buildStyleGradient,
+  paintBackdropFilter,
+  drawOverStyle,
+  drawUnderStyle,
+} from '../designer-doc/layer-style-render';
+import {
+  applyFilterTokensToCanvas,
+  hasFilterEffect,
+} from '../designer-doc/filter-pixels';
 import {
   applySmartFilters,
   hasSmartFilters,
@@ -192,16 +201,6 @@ const aabbOverlap = (
 
 // Canonical filter token vocabulary — must match the client tokens 1:1.
 // Each token is passed to ctx.filter as a CSS filter string.
-const mapFilters = (filters: string[]): string => {
-  const parts: string[] = [];
-  for (const token of filters) {
-    const parsed = parseDesignerFilterToken(token);
-    if (!parsed) continue;
-    parts.push(cssFilterForToken(parsed.key, parsed.value));
-  }
-  return parts.join(' ');
-};
-
 // Compute a cover source-rect from a source image to fill target w×h,
 // cropped toward a focalPoint (0–1, default centre).
 const computeCoverCrop = (
@@ -968,13 +967,17 @@ export class DesignRenderService {
     }
 
     const inset = fitted.fontSize * GLYPH_ASCENDER_INSET_EM;
+    // Condensed text occupies less of the box, so the ink rects the contrast
+    // check samples have to shrink with it or it reports against empty pixels.
+    const scaleX = el.textScaleX || 1;
+    const boxWidth = el.width / scaleX;
     const rects: { x: number; y: number; width: number; height: number }[] = [];
     for (const line of fitted.lines) {
-      const lineWidth = this.measureLine(ctx, line, letterSpacing);
+      const lineWidth = this.measureLine(ctx, line, letterSpacing) * scaleX;
       if (line.trim() && lineWidth > 0) {
         let x = 0;
-        if (align === 'center') x = (el.width - lineWidth) / 2;
-        else if (align === 'right') x = el.width - lineWidth;
+        if (align === 'center') x = (boxWidth * scaleX - lineWidth) / 2;
+        else if (align === 'right') x = boxWidth * scaleX - lineWidth;
         const left = Math.max(el.x, el.x + x);
         const top = Math.max(el.y, el.y + y + inset);
         rects.push({
@@ -1302,12 +1305,21 @@ export class DesignRenderService {
       ctx.globalCompositeOperation = canvasCompositeFor(el.blendMode);
     }
 
-    const cx = el.x + el.width / 2;
-    const cy = el.y + el.height / 2;
-    ctx.translate(cx, cy);
+    // Rotation pivots on the element ORIGIN, not its centre.
+    //
+    // Konva rotates about the node's x/y and nothing ever sets an offset, so
+    // that is what a stored `rotation` has always meant — the canvas is the
+    // authoring surface. Pivoting on the centre here put a 45° element 158px
+    // away from where it was drawn, and every render fixture used rotation 0,
+    // so nothing caught it. Flip still mirrors about the centre, which is what
+    // "flip in place" means.
+    ctx.translate(el.x, el.y);
     if (el.rotation) ctx.rotate((el.rotation * Math.PI) / 180);
-    if (el.flipX || el.flipY) ctx.scale(el.flipX ? -1 : 1, el.flipY ? -1 : 1);
-    ctx.translate(-el.width / 2, -el.height / 2);
+    if (el.flipX || el.flipY) {
+      ctx.translate(el.width / 2, el.height / 2);
+      ctx.scale(el.flipX ? -1 : 1, el.flipY ? -1 : 1);
+      ctx.translate(-el.width / 2, -el.height / 2);
+    }
 
     if (el.type === 'shape') {
       this.drawShape(ctx, el);
@@ -1366,9 +1378,13 @@ export class DesignRenderService {
           continue;
         }
 
+        // Frosted glass reads the pixels ALREADY on the page, so it has to run
+        // before the layer itself is drawn over them.
+        if (el.backdropFilter) await this.drawBackdropFilter(ctx, el, ratio);
+
         if (el.maskSrc && el.maskEnabled !== false) {
           await this.drawMaskedElement(ctx, el, ratio);
-        } else if (el.styles?.length) {
+        } else if (elementStyles(el)?.length) {
           await this.drawElementWithStyles(ctx, el, ratio);
         } else {
           await this.drawElement(ctx, el);
@@ -1395,7 +1411,7 @@ export class DesignRenderService {
     el: DesignerElement,
     ratio: number
   ): Promise<void> {
-    const { under, over } = splitStyles(el.styles);
+    const { under, over } = splitStyles(elementStyles(el));
     if (!under.length && !over.length) {
       await this.drawElement(ctx, el);
       return;
@@ -1420,19 +1436,62 @@ export class DesignRenderService {
     const sctx: any = stack.getContext('2d');
     sctx.scale(ratio, ratio);
 
+    // The whole page is the surface here; the canvas passes an element-sized
+    // one. Pattern tiles are resolved up front because the shared painter is
+    // synchronous — the client has no async step to hide a load behind.
+    const surface = { x: 0, y: 0, width: w / ratio, height: h / ratio };
+    const tiles = await this.resolveStyleTiles(over);
+    const deps = { createCanvas, patternTile: (s: DesignerLayerStyle) => tiles.get(s) ?? null };
+
     for (const style of under) {
-      this.drawUnderStyle(sctx, layer, style, ratio, createCanvas);
+      drawUnderStyle(sctx, layer, style, ratio, surface, deps);
     }
 
     sctx.drawImage(layer, 0, 0, w / ratio, h / ratio);
 
     for (const style of over) {
-      await this.drawOverStyle(sctx, layer, el, style, ratio, createCanvas);
+      drawOverStyle(sctx, layer, el, style, ratio, surface, deps);
     }
 
     ctx.save();
     this.applyBlend(ctx, stack, el.blendMode, ratio);
     ctx.restore();
+  }
+
+  /**
+   * Blur/desaturate the page behind one layer, clipped to that layer's shape.
+   *
+   * The silhouette is the layer drawn alone into a buffer, which is the same
+   * alpha every layer style already keys off — so a frosted rounded panel is
+   * frosted to its corners rather than to its bounding box.
+   */
+  private async drawBackdropFilter(
+    ctx: any,
+    el: DesignerElement,
+    ratio: number
+  ): Promise<void> {
+    const filter = el.backdropFilter;
+    if (!filter || (!(filter.blur ?? 0) && (filter.saturate ?? 1) === 1)) return;
+
+    const { createCanvas } = await loadCanvasModule();
+    // Slack around the box so the blur has neighbouring pixels to pull from;
+    // without it the edges sample nothing and read as a dark rim.
+    const pad = Math.ceil((filter.blur ?? 0) * 2);
+    const region = {
+      x: (el.x - pad) * ratio,
+      y: (el.y - pad) * ratio,
+      width: (el.width + pad * 2) * ratio,
+      height: (el.height + pad * 2) * ratio,
+    };
+    const [tl, tr, br, bl] = cornerRadii(el.borderRadius, el.width, el.height);
+
+    paintBackdropFilter(ctx, filter, region, ratio, createCanvas, {
+      x: pad * ratio,
+      y: pad * ratio,
+      width: el.width * ratio,
+      height: el.height * ratio,
+      radii: [tl * ratio, tr * ratio, br * ratio, bl * ratio],
+    });
   }
 
   /**
@@ -1451,7 +1510,7 @@ export class DesignRenderService {
     const mask = await this.loadImageSafe(el.maskSrc);
     if (!mask) {
       // An unreachable mask must not silently erase the layer.
-      if (el.styles?.length) await this.drawElementWithStyles(ctx, el, ratio);
+      if (elementStyles(el)?.length) await this.drawElementWithStyles(ctx, el, ratio);
       else await this.drawElement(ctx, el);
       return;
     }
@@ -1463,7 +1522,7 @@ export class DesignRenderService {
     const bctx: any = buffer.getContext('2d');
     bctx.scale(ratio, ratio);
 
-    if (el.styles?.length) await this.drawElementWithStyles(bctx, el, ratio);
+    if (elementStyles(el)?.length) await this.drawElementWithStyles(bctx, el, ratio);
     else await this.drawElement(bctx, el);
 
     bctx.globalCompositeOperation = 'destination-in';
@@ -1478,115 +1537,23 @@ export class DesignRenderService {
     ctx.restore();
   }
 
-  /** Drop Shadow / Outer Glow — the layer's silhouette, blurred behind it. */
-  private drawUnderStyle(
-    ctx: any,
-    layer: any,
-    style: DesignerLayerStyle,
-    ratio: number,
-    createCanvas: (w: number, h: number) => any
-  ): void {
-    const w = ctx.canvas.width;
-    const h = ctx.canvas.height;
-    const shadow = createCanvas(w, h);
-    const sctx: any = shadow.getContext('2d');
-
-    // Tint the silhouette: draw it, then flood the colour through source-in.
-    sctx.drawImage(layer, 0, 0);
-    sctx.globalCompositeOperation = 'source-in';
-    sctx.fillStyle = style.color || '#000000';
-    sctx.fillRect(0, 0, w, h);
-
-    const offset = styleOffset(style);
-    const blur = styleBlur(style);
-    ctx.save();
-    ctx.globalAlpha = style.opacity ?? 0.75;
-    if (blur > 0) ctx.filter = `blur(${blur}px)`;
-    ctx.drawImage(shadow, offset.x, offset.y, w / ratio, h / ratio);
-    ctx.filter = 'none';
-    ctx.restore();
-  }
-
-  /** Overlays, inner shadow/glow, stroke, bevel and satin — all clipped to the layer. */
-  private async drawOverStyle(
-    ctx: any,
-    layer: any,
-    el: DesignerElement,
-    style: DesignerLayerStyle,
-    ratio: number,
-    createCanvas: (w: number, h: number) => any
-  ): Promise<void> {
-    const w = ctx.canvas.width;
-    const h = ctx.canvas.height;
-    const buf = createCanvas(w, h);
-    const bctx: any = buf.getContext('2d');
-
-    if (style.type === 'color-overlay' || style.type === 'gradient-overlay' || style.type === 'pattern-overlay') {
-      bctx.drawImage(layer, 0, 0);
-      bctx.globalCompositeOperation = 'source-in';
-      bctx.scale(ratio, ratio);
-      if (style.type === 'gradient-overlay' && style.gradient) {
-        bctx.fillStyle = this.buildGradient(bctx, style.gradient, el.width, el.height);
-      } else if (style.type === 'pattern-overlay' && style.pattern) {
-        const tile = await this.buildPatternTile(style.pattern);
-        bctx.fillStyle = tile ? bctx.createPattern(tile, 'repeat') : (style.color || '#000000');
-      } else {
-        bctx.fillStyle = style.color || '#000000';
-      }
-      bctx.translate(el.x, el.y);
-      bctx.fillRect(-el.x, -el.y, w / ratio, h / ratio);
-    } else if (style.type === 'inner-shadow' || style.type === 'inner-glow' || style.type === 'satin') {
-      // Inner effects light the INVERSE silhouette, then clip back inside the
-      // layer — the same destination-in trick the text mask uses.
-      const inverse = createCanvas(w, h);
-      const ictx: any = inverse.getContext('2d');
-      ictx.fillStyle = style.color || '#000000';
-      ictx.fillRect(0, 0, w, h);
-      ictx.globalCompositeOperation = 'destination-out';
-      ictx.drawImage(layer, 0, 0);
-
-      const offset = style.type === 'inner-glow' ? { x: 0, y: 0 } : styleOffset(style);
-      const blur = styleBlur(style) || 4;
-      bctx.filter = `blur(${blur}px)`;
-      bctx.drawImage(inverse, offset.x * ratio, offset.y * ratio);
-      bctx.filter = 'none';
-      bctx.globalCompositeOperation = 'destination-in';
-      bctx.drawImage(layer, 0, 0);
-    } else if (style.type === 'stroke') {
-      // Approximate an outline by stamping the silhouette around a ring, then
-      // removing the interior — no path data needed, so it works for images too.
-      const size = Math.max(1, style.size ?? 1) * ratio;
-      bctx.fillStyle = style.color || '#000000';
-      for (let a = 0; a < Math.PI * 2; a += Math.PI / 8) {
-        bctx.drawImage(layer, Math.cos(a) * size, Math.sin(a) * size);
-      }
-      bctx.globalCompositeOperation = 'source-in';
-      bctx.fillRect(0, 0, w, h);
-      if (style.position !== 'center') {
-        bctx.globalCompositeOperation =
-          style.position === 'inside' ? 'destination-in' : 'destination-out';
-        bctx.drawImage(layer, 0, 0);
-      }
-    } else if (style.type === 'bevel-emboss') {
-      // Offset highlight and shadow copies of the silhouette in opposite
-      // directions, clipped inside — a cheap but recognisable bevel.
-      const offset = styleOffset({ ...style, distance: (style.depth ?? 100) / 20 });
-      bctx.globalAlpha = 0.6;
-      bctx.drawImage(layer, -offset.x * ratio, -offset.y * ratio);
-      bctx.globalCompositeOperation = 'source-in';
-      bctx.fillStyle = style.highlightColor || '#ffffff';
-      bctx.fillRect(0, 0, w, h);
-      bctx.globalCompositeOperation = 'destination-in';
-      bctx.drawImage(layer, 0, 0);
+  /**
+   * Pattern tiles for a style stack, resolved before painting.
+   *
+   * The shared painter is synchronous so the canvas can call it from a Konva
+   * `sceneFunc`; loading an image-backed tile is the one asynchronous step, so
+   * it happens here instead.
+   */
+  private async resolveStyleTiles(
+    styles: DesignerLayerStyle[]
+  ): Promise<Map<DesignerLayerStyle, any>> {
+    const tiles = new Map<DesignerLayerStyle, any>();
+    for (const style of styles) {
+      if (style.type !== 'pattern-overlay' || !style.pattern) continue;
+      const tile = await this.buildPatternTile(style.pattern);
+      if (tile) tiles.set(style, tile);
     }
-
-    ctx.save();
-    ctx.globalAlpha = style.opacity ?? 1;
-    if (isNativeBlend(style.blendMode)) {
-      ctx.globalCompositeOperation = canvasCompositeFor(style.blendMode);
-    }
-    ctx.drawImage(buf, 0, 0, w / ratio, h / ratio);
-    ctx.restore();
+    return tiles;
   }
 
   /** Draw a group's members offscreen, then composite the result as one layer. */
@@ -1739,7 +1706,10 @@ export class DesignRenderService {
     // silently crop the adjustment.
     const shadow = el.textShadow;
     const pad =
-      stylePadding(el.styles) +
+      stylePadding(elementStyles(el)) +
+      // A warp leaves the element rect; without this the readback cropped an
+      // arched banner's effects at the box.
+      warpPadding(el) +
       (el.strokeWidth || 0) +
       (shadow
         ? (shadow.blur || 0) + Math.abs(shadow.offsetX || 0) + Math.abs(shadow.offsetY || 0)
@@ -1826,7 +1796,18 @@ export class DesignRenderService {
       ? this.buildGradient(ctx, el.fillGradient, el.width, el.height)
       : el.fill;
 
-    tracePathNodes(ctx, nodes, !!el.closed);
+    // Warping flattens the beziers to the polyline the deformation was
+    // evaluated on; an unwarped path still traces its real curve.
+    const warpedPath = warpedOutline(el);
+    if (warpedPath) {
+      this.tracePath(
+        ctx,
+        warpedPath.map((p) => [p.x, p.y] as [number, number]),
+        !!el.closed
+      );
+    } else {
+      tracePathNodes(ctx, nodes, !!el.closed);
+    }
     // Only a closed path is fillable; an open one would fill its implicit chord.
     if (fill && el.closed) {
       ctx.fillStyle = fill;
@@ -1889,18 +1870,43 @@ export class DesignRenderService {
       : el.fill;
     const shape = el.shape || 'rect';
 
+    // A warped shape resamples to a single polyline whatever kind it was; the
+    // unwarped branches below are untouched so nothing existing shifts.
+    const warped = warpedOutline(el);
+    if (warped) {
+      this.tracePath(
+        ctx,
+        warped.map((p) => [p.x, p.y] as [number, number]),
+        shape !== 'line'
+      );
+      if (fill && shape !== 'line') { ctx.fillStyle = fill; ctx.fill(); }
+      if (el.stroke && (el.strokeWidth || 0) > 0) {
+        ctx.strokeStyle = el.stroke;
+        ctx.lineWidth = el.strokeWidth as number;
+        this.applyStrokeStyle(ctx, el);
+        ctx.stroke();
+        ctx.setLineDash([]);
+      }
+      return;
+    }
+
     if (shape === 'line') {
+      // A line ELEMENT is the diagonal of its box — that is what the tool draws
+      // (`tool-draw.ts`) and what the canvas renders. Drawing a horizontal
+      // midline here turned every diagonal rule and arrow flat in the export,
+      // and moved its arrowheads with it. (Video line CLIPS are a midline on
+      // both sides; they are a different model and stay as they are.)
       ctx.beginPath();
-      ctx.moveTo(0, el.height / 2);
-      ctx.lineTo(el.width, el.height / 2);
+      ctx.moveTo(0, 0);
+      ctx.lineTo(el.width, el.height);
       ctx.strokeStyle = el.stroke || el.fill || '#000000';
       ctx.lineWidth = el.strokeWidth || 1;
       this.applyStrokeStyle(ctx, el);
       ctx.stroke();
       ctx.setLineDash([]);
       this.drawArrowHeads(ctx, el, [
-        { x: 0, y: el.height / 2 },
-        { x: el.width, y: el.height / 2 },
+        { x: 0, y: 0 },
+        { x: el.width, y: el.height },
       ]);
       return;
     }
@@ -1944,7 +1950,21 @@ export class DesignRenderService {
     if (rich?.length) {
       const curve = el.curve || 0;
       if (curve !== 0) {
-        this.drawCurvedText(ctx, flatText, el, el.fontSize || 16, el.fontStyle ?? 'normal', el.fontWeight ?? 400, el.fontFamily || 'sans-serif', curve);
+        // `drawCurvedText` paints with whatever font state its caller left set,
+        // which the FLAT branch below does and this one did not — so curved rich
+        // text exported as 10px black, the bare context defaults.
+        const size = el.fontSize || 16;
+        const weight = el.fontWeight ?? 400;
+        const style = el.fontStyle === 'italic' ? 'italic' : 'normal';
+        const family = el.fontFamily || 'sans-serif';
+        ctx.font = `${style} ${weight} ${size}px ${family}`;
+        ctx.textBaseline = 'top';
+        ctx.fillStyle = el.fill || '#000000';
+        if (el.textStroke && el.textStroke.width > 0) {
+          ctx.strokeStyle = el.textStroke.color;
+          ctx.lineWidth = el.textStroke.width;
+        }
+        this.drawCurvedText(ctx, flatText, el, size, style, weight, family, curve);
         return;
       }
       this.drawRichText(ctx, el);
@@ -1961,9 +1981,24 @@ export class DesignRenderService {
     const curve = el.curve || 0;
 
     ctx.font = `${fontStyle} ${fontWeight} ${fontSize}px ${fontFamily}`;
-    ctx.textBaseline = 'top';
-    ctx.fillStyle = el.fill || '#000000';
+    // `middle`, matching Konva — see `paint` below.
+    ctx.textBaseline = 'middle';
+    // A gradient headline is a staple of poster work, and text was the only
+    // element type that ignored `fillGradient` — shape and path have honoured
+    // it all along. Same ramp builder, so a gradient reads identically
+    // whichever type carries it.
+    ctx.fillStyle = el.fillGradient?.stops?.length
+      ? buildStyleGradient(ctx, el.fillGradient, el.width, el.height)
+      : el.fill || '#000000';
     if (typeof ctx.textAlign === 'string') ctx.textAlign = 'left';
+
+    // The outline's own colour and width. `drawTextLine` calls `strokeText`
+    // whenever `textStroke` is set but never set the state, so a 4px white
+    // outline exported as the context defaults — a 1px black hairline.
+    if (el.textStroke && el.textStroke.width > 0) {
+      ctx.strokeStyle = el.textStroke.color;
+      ctx.lineWidth = el.textStroke.width;
+    }
 
     if (el.textShadow) {
       ctx.shadowColor = el.textShadow.color;
@@ -1983,19 +2018,89 @@ export class DesignRenderService {
     const fitted = this.fitFlatText(ctx, text, el, fontSize, fontStyle, fontWeight, fontFamily, letterSpacing);
     ctx.font = `${fontStyle} ${fontWeight} ${fitted.fontSize}px ${fontFamily}`;
 
-    const contentHeight = fitted.lines.length * fitted.lineHeight;
+    const contentHeight =
+      fitted.lines.length * fitted.lineHeight +
+      fitted.lineGaps.reduce((sum, gap) => sum + gap, 0);
     let y = 0;
     if (el.verticalAlign === 'middle') y = Math.max(0, (el.height - contentHeight) / 2);
     else if (el.verticalAlign === 'bottom') y = Math.max(0, el.height - contentHeight);
 
-    for (const line of fitted.lines) {
-      const lineWidth = this.measureLine(ctx, line, letterSpacing);
-      let x = 0;
-      if (align === 'center') x = (el.width - lineWidth) / 2;
-      else if (align === 'right') x = el.width - lineWidth;
-      this.drawTextLine(ctx, line, x, y, letterSpacing, el);
-      y += fitted.lineHeight;
+    // Horizontal scale. Layout is measured in unscaled glyph space, so the box
+    // widens by 1/scale before the align maths — matching the Konva node's
+    // scaleX plus its compensating width.
+    const scaleX = el.textScaleX || 1;
+    const boxWidth = el.width / scaleX;
+
+    const paint = (target: any, top: number): void => {
+      let cursor = top;
+      fitted.lines.forEach((line, i) => {
+        // Paragraph spacing is leading ABOVE a paragraph's first line; the
+        // indent shifts that line right and narrows nothing else.
+        cursor += fitted.lineGaps[i] || 0;
+        const indent = fitted.lineIndents[i] || 0;
+        const lineWidth = this.measureLine(target, line, letterSpacing);
+        let x = indent;
+        if (align === 'center') x = indent + (boxWidth - indent - lineWidth) / 2;
+        else if (align === 'right') x = boxWidth - lineWidth;
+        // Centred in the line box, which is what Konva does: it draws every
+        // line with `textBaseline = 'middle'` at half a line-height down (see
+        // Text.js `translateY = lineHeightPx / 2`). Drawing from the TOP of the
+        // box instead put the export a fraction of a line-height above the
+        // canvas — ~13px on a 41px footer, and more the larger the type.
+        this.drawTextLine(target, line, x, cursor + fitted.lineHeight / 2, letterSpacing, el);
+        cursor += fitted.lineHeight;
+      });
+    };
+
+    if (scaleX === 1) {
+      paint(ctx, y);
+      return;
     }
+
+    // node-canvas renders glyphs at the font size and ignores the horizontal
+    // component of the transform, so `ctx.scale(scaleX, 1)` would leave the
+    // export unsqueezed while the browser condensed it. Rasterising at the
+    // natural width and squeezing the bitmap is the one operation both agree
+    // on. Buffered at device resolution so the squeeze doesn't cost detail.
+    const canvasModule = _canvasModule;
+    if (!canvasModule) {
+      paint(ctx, y);
+      return;
+    }
+    const device = Math.max(1, Math.abs(ctx.getTransform?.().a ?? 1));
+    const bufferHeight = contentHeight + fitted.fontSize;
+    const buffer = canvasModule.createCanvas(
+      Math.max(1, Math.ceil(boxWidth * device)),
+      Math.max(1, Math.ceil(bufferHeight * device))
+    );
+    const bctx: any = buffer.getContext('2d');
+    bctx.scale(device, device);
+    bctx.font = ctx.font;
+    bctx.textBaseline = 'middle';
+    // Rebuilt against the buffer, in the UNSCALED glyph space the text is
+    // painted in — the ramp is squeezed with the glyphs, as it is on the
+    // canvas where Konva scales the whole node.
+    bctx.fillStyle = el.fillGradient?.stops?.length
+      ? buildStyleGradient(bctx, el.fillGradient, boxWidth, bufferHeight)
+      : ctx.fillStyle;
+    if (typeof bctx.textAlign === 'string') bctx.textAlign = 'left';
+    if (el.textStroke && el.textStroke.width > 0) {
+      bctx.strokeStyle = el.textStroke.color;
+      bctx.lineWidth = el.textStroke.width;
+    }
+    paint(bctx, 0);
+
+    ctx.drawImage(
+      buffer,
+      0,
+      0,
+      buffer.width,
+      buffer.height,
+      0,
+      y,
+      boxWidth * scaleX,
+      bufferHeight
+    );
   }
 
   /**
@@ -2016,6 +2121,10 @@ export class DesignRenderService {
         fontSize,
         lineHeight: el.lineHeight,
         letterSpacing,
+        scaleX: el.textScaleX,
+        textTransform: el.textTransform,
+        paragraphSpacing: el.paragraphSpacing,
+        firstLineIndent: el.firstLineIndent,
       },
       (line, size) => {
         ctx.font = `${fontStyle} ${fontWeight} ${size}px ${fontFamily}`;
@@ -2111,13 +2220,17 @@ export class DesignRenderService {
         const fill = seg.run.fill || el.fill || '#000000';
         const sz = seg.run.fontSize ?? el.fontSize ?? 16;
         ctx.fillStyle = fill;
-        ctx.textBaseline = 'top';
+        // The canvas draws each rich run as its own Konva `Text` node, which
+        // centres its single line with `textBaseline = 'middle'` at half a line
+        // height — and those nodes carry no `lineHeight`, so Konva's default of
+        // 1 makes that half the RUN's font size, not the line's.
+        ctx.textBaseline = 'middle';
         ctx.textAlign = 'left';
 
         const segW = this.measureLine(ctx, seg.text, letterSpacing);
 
         // Glyph-by-glyph when letterSpacing is set — same as the flat path.
-        this.drawTextLine(ctx, seg.text, x, y, letterSpacing, el);
+        this.drawTextLine(ctx, seg.text, x, y + sz / 2, letterSpacing, el);
 
         if (seg.run.underline) {
           const uy = y + sz * 1.15;
@@ -2140,8 +2253,12 @@ export class DesignRenderService {
     fontSize: number, fontStyle: string, fontWeight: number,
     fontFamily: string, curve: number
   ): void {
-    const radius = Math.abs(curve) > 0 ? (el.width / 2) / Math.sin(Math.abs(curve) * Math.PI / 360) : Infinity;
-    if (!isFinite(radius)) return;
+    // Shared with the canvas, which walks the same arc as an SVG path. The
+    // sign used to be thrown away here, so a negative Arc Angle bowed upward
+    // exactly like a positive one and half the slider did nothing.
+    const geometry = arcGeometry(el.width, curve);
+    if (!geometry) return;
+    const { radius } = geometry;
 
     const letterSpacing = el.letterSpacing || 0;
     const totalAngle = (el.width / (2 * Math.PI * radius)) * (Math.PI * 2);
@@ -2151,11 +2268,14 @@ export class DesignRenderService {
     for (const ch of text) {
       const charWidth = ctx.measureText(ch).width;
       const midAngle = startAngle + (charOffset + charWidth / 2) / (2 * Math.PI * radius) * (Math.PI * 2);
-      const cx = el.width / 2 + Math.sin(midAngle) * radius;
-      const cy = -Math.cos(midAngle) * radius + radius;
+      // A downward bow runs the glyphs along the far side of the circle, so
+      // both the horizontal sweep and the glyph tilt invert with it.
+      const direction = geometry.up ? 1 : -1;
+      const cx = el.width / 2 + Math.sin(midAngle) * radius * direction;
+      const cy = arcBaselineY(geometry, midAngle);
       ctx.save();
       ctx.translate(cx, cy);
-      ctx.rotate(midAngle);
+      ctx.rotate(midAngle * direction);
       if (el.textStroke && el.textStroke.width > 0) {
         ctx.strokeStyle = el.textStroke.color;
         ctx.lineWidth = el.textStroke.width;
@@ -2176,8 +2296,14 @@ export class DesignRenderService {
     if (!text) return;
     const points = sampleSvgPath(pathData);
     if (points.length < 2) {
-      // Invalid path: fall back to straight text.
-      this.drawRichText(ctx, el);
+      // Invalid path: fall back to straight text. `drawRichText` opens with
+      // `el.richText!` and throws on a flat element, and the caller swallows
+      // that — so a half-typed custom path (the textarea writes on every
+      // keystroke) silently DELETED the layer from the export while the canvas
+      // still drew it.
+      // Re-enter without the bad path, which lands on the straight-text branch.
+      // Safe from recursion: `textPath` is cleared on the copy.
+      this.drawText(ctx, { ...el, textPath: undefined, curve: 0 });
       return;
     }
 
@@ -2261,12 +2387,6 @@ export class DesignRenderService {
 
     ctx.save();
 
-    // Apply CSS filters via ctx.filter (server parity with client Konva filters)
-    if (el.filters?.length) {
-      const filterStr = mapFilters(el.filters);
-      if (filterStr) ctx.filter = filterStr;
-    }
-
     // Apply mask (photo-in-shape / photo-in-text). Shape masks clip via a path;
     // text masks are applied as an alpha stencil using destination-in after the
     // image is drawn, because standard Canvas does not expose glyph paths.
@@ -2279,45 +2399,76 @@ export class DesignRenderService {
     }
 
     // Apply border-radius clip (only if no mask — mask supersedes)
-    if (!el.mask && el.borderRadius && el.borderRadius > 0) {
+    if (!el.mask && hasCornerRadius(el.borderRadius)) {
       this.traceRoundRect(ctx, 0, 0, el.width, el.height, el.borderRadius);
       ctx.clip();
     }
 
-    // fitMode cover-crop (server parity with client ImageNode)
-    if (el.fitMode === 'cover') {
+    // Filters run over the drawn pixels, not through `ctx.filter` — node-canvas
+    // accepts that property and ignores it, which is why every grayscale, blur,
+    // brightness, contrast and saturate silently vanished from exports. So the
+    // image goes into a buffer, the buffer is filtered, and the buffer is what
+    // lands on the page.
+    const filtered = hasFilterEffect(el.filters);
+    const { createCanvas } = await loadCanvasModule();
+    const ratio = Math.max(1, Math.abs(ctx.getTransform?.().a ?? 1));
+    const target = filtered
+      ? createCanvas(
+          Math.max(1, Math.ceil(el.width * ratio)),
+          Math.max(1, Math.ceil(el.height * ratio))
+        )
+      : null;
+    const tctx: any = target ? target.getContext('2d') : ctx;
+    if (target) tctx.scale(ratio, ratio);
+
+    // An explicit crop wins over the fit mode, matching the canvas — dropped
+    // images default to `cover`, so honouring cover first made the crop tool a
+    // no-op on exactly the images people crop most.
+    const crop = loaded.preCropped ? undefined : el.crop;
+    const srcW = (img as any).naturalWidth || img.width || el.width;
+    const srcH = (img as any).naturalHeight || img.height || el.height;
+
+    if (crop) {
+      tctx.drawImage(img, crop.x, crop.y, crop.width, crop.height, 0, 0, el.width, el.height);
+    } else if (el.fitMode === 'cover') {
       const { sx, sy, sw, sh } = computeCoverCrop(
-        (img as any).naturalWidth || img.width || el.width,
-        (img as any).naturalHeight || img.height || el.height,
-        el.width, el.height,
-        el.focalPoint
+        srcW, srcH, el.width, el.height, el.focalPoint
       );
-      ctx.drawImage(img, sx, sy, sw, sh, 0, 0, el.width, el.height);
-    } else if (el.fitMode === 'fill') {
-      ctx.drawImage(img, 0, 0, el.width, el.height);
+      tctx.drawImage(img, sx, sy, sw, sh, 0, 0, el.width, el.height);
+    } else if (el.fitMode === 'contain') {
+      // Letterbox. Upscaling is allowed: "Fit" that refuses to enlarge a small
+      // source is not what the control says it does.
+      const scale = Math.min(el.width / srcW, el.height / srcH);
+      const dw = srcW * scale;
+      const dh = srcH * scale;
+      tctx.drawImage(img, 0, 0, srcW, srcH, (el.width - dw) / 2, (el.height - dh) / 2, dw, dh);
     } else {
-      // 'contain' or default — letterbox behaviour. A smart-filtered bitmap
-      // was already cropped at evaluation time; applying el.crop again would
-      // read outside it.
-      const crop = loaded.preCropped ? undefined : el.crop;
-      if (crop) {
-        ctx.drawImage(img, crop.x, crop.y, crop.width, crop.height, 0, 0, el.width, el.height);
-      } else {
-        const srcW = (img as any).naturalWidth || img.width || el.width;
-        const srcH = (img as any).naturalHeight || img.height || el.height;
-        const scale = Math.min(el.width / srcW, el.height / srcH, 1);
-        const dw = srcW * scale;
-        const dh = srcH * scale;
-        const dx = (el.width - dw) / 2;
-        const dy = (el.height - dh) / 2;
-        ctx.drawImage(img, 0, 0, srcW, srcH, dx, dy, dw, dh);
-      }
+      // 'fill' and the unset default both stretch, which is what the canvas has
+      // always done for an element with no explicit fit mode.
+      tctx.drawImage(img, 0, 0, el.width, el.height);
+    }
+
+    if (target) {
+      applyFilterTokensToCanvas(target, el.filters, ratio);
+      ctx.drawImage(target, 0, 0, el.width, el.height);
     }
 
     // Text mask: stencil the already-drawn image to the glyph shapes.
     if (textMask) {
-      ctx.filter = 'none';
       await this.applyTextMask(ctx, textMask, el.width, el.height);
+    }
+
+    // Border, which the canvas draws as a stroked rect over the image and the
+    // server used not to draw at all.
+    if (el.strokeWidth && el.strokeWidth > 0) {
+      ctx.strokeStyle = el.stroke || '#000000';
+      ctx.lineWidth = el.strokeWidth;
+      if (hasCornerRadius(el.borderRadius)) {
+        this.traceRoundRect(ctx, 0, 0, el.width, el.height, el.borderRadius);
+        ctx.stroke();
+      } else {
+        ctx.strokeRect(0, 0, el.width, el.height);
+      }
     }
 
     ctx.restore();
@@ -2403,41 +2554,43 @@ export class DesignRenderService {
 
   // -----------------------------------------------------------------
 
+  /** Delegates to the shared builder so the canvas paints the same ramp. */
   private buildGradient(ctx: any, g: DesignerGradient, width: number, height: number): any {
-    let grad: any;
-    if (g.type === 'radial') {
-      const r = Math.max(width, height) / 2;
-      grad = ctx.createRadialGradient(width / 2, height / 2, 0, width / 2, height / 2, r);
-    } else {
-      const angle = ((g.angle ?? 0) * Math.PI) / 180;
-      const halfW = width / 2, halfH = height / 2;
-      const dx = Math.cos(angle) * halfW, dy = Math.sin(angle) * halfH;
-      grad = ctx.createLinearGradient(halfW - dx, halfH - dy, halfW + dx, halfH + dy);
-    }
-    for (const stop of g.stops ?? []) {
-      grad.addColorStop(Math.min(1, Math.max(0, stop.offset)), stop.color);
-    }
-    return grad;
+    return buildStyleGradient(ctx, g, width, height);
   }
 
-  private traceRoundRect(ctx: any, x: number, y: number, w: number, h: number, r: number): void {
-    const radius = Math.min(r, w / 2, h / 2);
+  private traceRoundRect(
+    ctx: any,
+    x: number,
+    y: number,
+    w: number,
+    h: number,
+    r: number | [number, number, number, number] | undefined
+  ): void {
+    // Per corner, because `borderRadius` may be `[tl, tr, br, bl]` — `arcTo`
+    // takes a radius per corner already, so this is the same four calls.
+    const [tl, tr, br, bl] = cornerRadii(r, w, h);
     ctx.beginPath();
-    if (radius <= 0) { ctx.rect(x, y, w, h); return; }
-    ctx.moveTo(x + radius, y);
-    ctx.arcTo(x + w, y, x + w, y + h, radius);
-    ctx.arcTo(x + w, y + h, x, y + h, radius);
-    ctx.arcTo(x, y + h, x, y, radius);
-    ctx.arcTo(x, y, x + w, y, radius);
+    if (!(tl || tr || br || bl)) { ctx.rect(x, y, w, h); return; }
+    ctx.moveTo(x + tl, y);
+    ctx.arcTo(x + w, y, x + w, y + h, tr);
+    ctx.arcTo(x + w, y + h, x, y + h, br);
+    ctx.arcTo(x, y + h, x, y, bl);
+    ctx.arcTo(x, y, x + w, y, tl);
     ctx.closePath();
   }
 
-  private tracePath(ctx: any, points: Array<[number, number]>): void {
+  private tracePath(
+    ctx: any,
+    points: Array<[number, number]>,
+    close = true
+  ): void {
     if (!points.length) return;
     ctx.beginPath();
     ctx.moveTo(points[0][0], points[0][1]);
     for (let i = 1; i < points.length; i++) ctx.lineTo(points[i][0], points[i][1]);
-    ctx.closePath();
+    // An open warped path must not join back, or it draws its closing chord.
+    if (close) ctx.closePath();
   }
 
   /**

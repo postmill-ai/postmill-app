@@ -14,6 +14,7 @@ import { useBrandColors } from './panels/use-brand-colors';
 import { useBrandFonts } from './panels/use-brand-fonts';
 import { getBrandViolations } from './brand-compliance';
 import type { SymbolDefinition } from '@postmill-ai/nestjs-libraries/media/designer-doc/symbols';
+import { measureForElement } from './measure-text';
 import {
   layersNeedingRaster,
   outputToSvg,
@@ -298,8 +299,8 @@ const renderOutputToBlob = async (
  * SVG export: translate the document, and bake only what SVG cannot carry.
  *
  * `layersNeedingRaster` names those layers; each is rendered ALONE, at its own
- * box with no rotation, because the `<g>` wrapper in the SVG re-applies both.
- * Baking a rotated layer would rotate it twice.
+ * box with no rotation and no flip, because the `<g>` wrapper in the SVG
+ * re-applies all three. Baking them in would apply each one twice.
  */
 const renderOutputAsSvg = async (
   output: DesignerOutput,
@@ -317,7 +318,20 @@ const renderOutputAsSvg = async (
       height: Math.max(1, Math.round(el.height)),
       background: '#ffffff',
       bg: undefined,
-      children: [{ ...el, x: 0, y: 0, rotation: 0, opacity: 1, blendMode: undefined }],
+      children: [
+        {
+          ...el,
+          x: 0,
+          y: 0,
+          rotation: 0,
+          // Flip, like rotation, is re-applied by the `<g>` wrapper — baking it
+          // in here flipped the layer twice, back to unflipped.
+          flipX: false,
+          flipY: false,
+          opacity: 1,
+          blendMode: undefined,
+        },
+      ],
     };
     const blob = await renderOutputToBlob(solo, 'transparent', 1, 1, symbols);
     if (!blob) continue;
@@ -330,7 +344,12 @@ const renderOutputAsSvg = async (
     if (!rasterized[id]) delete rasterized[id];
   }
 
-  return outputToSvg(output, { rasterized });
+  return outputToSvg(output, {
+    rasterized,
+    // SVG can't wrap or shrink text on its own; the exporter lays the lines out
+    // with the same fitter the canvas uses, given a browser measurement.
+    measure: (el) => measureForElement(el as never) ?? ((line, size) => line.length * size * 0.6),
+  });
 };
 
 const MAX_UPLOAD_BYTES = 10 * 1024 * 1024;

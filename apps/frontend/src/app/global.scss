@@ -3,10 +3,11 @@
 @use '@uppy/core/dist/style.css' as uppyCore;
 @use '@uppy/dashboard/dist/style.css' as uppyDashboard;
 
-/* Designer fonts — open-licensed (SIL OFL) families used by the media Designer
-   font picker / canvas renderer. See
-   apps/frontend/src/components/media-tools/designer/fonts.ts. Additive only. */
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Roboto:wght@300;400;500;700&family=Open+Sans:wght@300;400;500;600;700;800&family=Montserrat:wght@300;400;500;600;700;800;900&family=Poppins:wght@300;400;500;600;700&family=Lato:wght@300;400;700;900&family=Raleway:wght@300;400;500;600;700;800&family=Nunito:wght@300;400;500;600;700;800;900&family=Nunito+Sans:wght@300;400;500;600;700;800;900&family=Source+Sans+3:wght@300;400;500;600;700&family=Figtree:wght@300;400;500;600;700;800&family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&family=DM+Sans:wght@400;500;700&family=Manrope:wght@300;400;500;600;700;800&family=Be+Vietnam+Pro:wght@300;400;500;600;700;800&family=Lexend:wght@300;400;500;600;700&family=Merriweather:wght@300;400;700;900&family=Playfair+Display:wght@400;500;600;700;800;900&family=Lora:wght@400;500;600;700&family=Source+Serif+4:wght@300;400;500;600;700&family=Libre+Baskerville:wght@400;700&family=Crimson+Text:wght@400;600;700&family=Cormorant+Garamond:wght@300;400;500;600;700&family=Noto+Serif:wght@400;700&family=Bebas+Neue:wght@400&family=Oswald:wght@300;400;500;600;700&family=Anton:wght@400&family=Abril+Fatface:wght@400&family=Lobster:wght@400&family=Pacifico:wght@400&family=Righteous:wght@400&family=Permanent+Marker:wght@400&family=Caveat:wght@400;500;600;700&family=Shadows+Into+Light:wght@400&family=Dancing+Script:wght@400;500;600;700&family=Great+Vibes:wght@400&family=Zilla+Slab:wght@300;400;500;600;700&family=JetBrains+Mono:wght@300;400;500;600;700;800&family=Fira+Code:wght@300;400;500;600;700&family=Source+Code+Pro:wght@300;400;500;600;700&family=IBM+Plex+Mono:wght@300;400;500;600;700&family=Space+Mono:wght@400;700&family=Courier+Prime:wght@400;700&display=swap');
+/* Designer fonts are NOT imported here any more. Every family Google serves is
+   reachable from the picker and its stylesheet is injected on first use — see
+   `designer/fonts.ts` and `designer-doc/font-catalog.ts`. The single @import
+   that used to live here carried ~50 families on every page load, Designer or
+   not, and had reached the 2,000-character mark with nowhere left to grow. */
 
 @tailwind base;
 @tailwind components;

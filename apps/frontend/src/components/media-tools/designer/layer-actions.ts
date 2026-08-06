@@ -41,7 +41,7 @@ const STYLES: { type: DesignerLayerStyle['type']; label: string }[] = [
 ];
 
 /** Sensible starting values so a newly added effect is visible, not a no-op. */
-const defaultStyle = (type: DesignerLayerStyle['type']): DesignerLayerStyle => {
+export const defaultStyle = (type: DesignerLayerStyle['type']): DesignerLayerStyle => {
   const base: DesignerLayerStyle = { type, enabled: true, opacity: 0.75 };
   switch (type) {
     case 'drop-shadow':

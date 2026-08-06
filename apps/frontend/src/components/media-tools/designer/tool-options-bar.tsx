@@ -3,6 +3,7 @@
 import React, { FC } from 'react';
 import { useT } from '@postmill-ai/react/translation/get.transation.service.client';
 import { getTool } from './tools';
+import { PEN_DEFAULT_STROKE } from './pen-tools';
 
 /**
  * The options bar — Photoshop's strip under the menu bar showing the active
@@ -17,7 +18,9 @@ import { getTool } from './tools';
 export type ToolOptionSpec =
   | { kind: 'number'; key: string; label: string; labelKey: string; min: number; max: number; step?: number; suffix?: string; def: number }
   | { kind: 'toggle'; key: string; label: string; labelKey: string; def: boolean }
-  | { kind: 'select'; key: string; label: string; labelKey: string; options: { value: string; label: string }[]; def: string };
+  | { kind: 'select'; key: string; label: string; labelKey: string; options: { value: string; label: string }[]; def: string }
+  | { kind: 'color'; key: string; label: string; labelKey: string; def: string }
+  | { kind: 'text'; key: string; label: string; labelKey: string; placeholder?: string; def: string };
 
 /**
  * Per-tool option schemas. Tools absent from this map render the "no options"
@@ -39,6 +42,19 @@ export const TOOL_OPTION_SPECS: Record<string, ToolOptionSpec[]> = {
   'shape-star': [
     { kind: 'number', key: 'points', label: 'Points', labelKey: 'tool_opt_points', min: 3, max: 24, def: 5 },
     { kind: 'number', key: 'innerRatio', label: 'Inner', labelKey: 'tool_opt_inner_ratio', min: 5, max: 95, step: 1, suffix: '%', def: 50 },
+  ],
+  // The Custom Shape tool drew a rounded rect and said "no options" because
+  // nothing could turn path data into nodes. `parseSvgPathData` is that
+  // missing piece, so this is now a real path-data field.
+  'shape-custom': [
+    {
+      kind: 'text',
+      key: 'pathData',
+      label: 'Path data',
+      labelKey: 'tool_opt_path_data',
+      placeholder: 'M 0 0 L 100 0 L 50 100 Z',
+      def: '',
+    },
   ],
   'shape-line': [
     { kind: 'number', key: 'strokeWidth', label: 'Weight', labelKey: 'tool_opt_weight', min: 1, max: 100, def: 3 },
@@ -142,15 +158,20 @@ export const TOOL_OPTION_SPECS: Record<string, ToolOptionSpec[]> = {
   ],
   'object-select': [],
 
-  // Pen family.
+  // Pen family. Stroke colour is chosen here because a path is born with one:
+  // the renderers draw nothing when `stroke` is unset, so a colourless path
+  // would be an invisible layer.
   pen: [
     { kind: 'number', key: 'strokeWidth', label: 'Weight', labelKey: 'tool_opt_weight', min: 0, max: 100, def: 2 },
+    { kind: 'color', key: 'stroke', label: 'Stroke', labelKey: 'tool_opt_stroke', def: PEN_DEFAULT_STROKE },
   ],
   'pen-freeform': [
     { kind: 'number', key: 'strokeWidth', label: 'Weight', labelKey: 'tool_opt_weight', min: 0, max: 100, def: 2 },
+    { kind: 'color', key: 'stroke', label: 'Stroke', labelKey: 'tool_opt_stroke', def: PEN_DEFAULT_STROKE },
   ],
   'pen-curvature': [
     { kind: 'number', key: 'strokeWidth', label: 'Weight', labelKey: 'tool_opt_weight', min: 0, max: 100, def: 2 },
+    { kind: 'color', key: 'stroke', label: 'Stroke', labelKey: 'tool_opt_stroke', def: PEN_DEFAULT_STROKE },
   ],
 
   hand: [],
@@ -217,6 +238,16 @@ export const ToolOptionsBar: FC<ToolOptionsBarProps> = ({ activeTool, options, o
               </>
             )}
 
+            {spec.kind === 'text' && (
+              <input
+                type="text"
+                value={String(valueOf(spec) ?? '')}
+                placeholder={spec.placeholder}
+                onChange={(e) => onChange(spec.key, e.target.value)}
+                className="w-[220px] h-[26px] px-2 rounded-md bg-newBgColor border border-studioBorder text-[12px] font-mono text-textColor outline-none focus:border-designerAccent"
+              />
+            )}
+
             {spec.kind === 'toggle' && (
               <input
                 type="checkbox"
@@ -238,6 +269,16 @@ export const ToolOptionsBar: FC<ToolOptionsBarProps> = ({ activeTool, options, o
                   </option>
                 ))}
               </select>
+            )}
+
+            {spec.kind === 'color' && (
+              <input
+                type="color"
+                aria-label={t(spec.labelKey, spec.label)}
+                value={String(valueOf(spec))}
+                onChange={(e) => onChange(spec.key, e.target.value)}
+                className="w-[34px] h-[26px] p-0 rounded-md bg-newBgColor border border-studioBorder outline-none cursor-pointer focus:border-designerAccent"
+              />
             )}
           </label>
         ))

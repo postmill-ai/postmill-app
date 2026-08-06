@@ -77,7 +77,8 @@ describe('DesignController', () => {
       {} as any,
       {} as any,
       {} as any,
-      designerDocService as any
+      designerDocService as any,
+      {} as any
     );
     templateController = new DesignTemplateController(designService as any);
   });

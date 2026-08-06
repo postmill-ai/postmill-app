@@ -32,6 +32,7 @@ import type { MediaGenerateOptions } from '@postmill-ai/provider-kernel';
 import type { SlideService } from '@postmill-ai/nestjs-libraries/media/slide/slide.service';
 import type { CaptionService } from '@postmill-ai/nestjs-libraries/media/caption/caption.service';
 import { BudgetExceeded, CapabilityNotAvailable } from './errors';
+import { parseFontMetadata } from '@postmill-ai/nestjs-libraries/media/designer-doc/font-metadata';
 import type { MediaOperation } from '@postmill-ai/nestjs-libraries/ai/governance/media-operation.types';
 import {
   AI_MEDIA_CATEGORIES,
@@ -692,7 +693,7 @@ export class AiMediaService {
   async uploadFont(
     orgId: string,
     file: Express.Multer.File,
-  ): Promise<{ fonts: any[]; uploaded: { family: string; fileId: string; path: string; weights: number[] } }> {
+  ): Promise<{ fonts: any[]; uploaded: { family: string; fileId: string; path: string; weights: number[]; italic?: boolean } }> {
     if (!this._storageService || !this._brandsService) {
       throw new Error('Storage/brands services are not available');
     }
@@ -706,11 +707,17 @@ export class AiMediaService {
     const adapter = await this._storageService.getLocalAdapterForOrg(orgId, true);
     const uploaded = await adapter.uploadFile(file);
 
+    // The file names its own family and weight; the filename only stands in
+    // when it doesn't. Deriving both from the filename made every upload a
+    // separate 400-weight family, so two weights of one typeface could never
+    // be used as one family — see `parseFontMetadata`.
+    const meta = file.buffer ? parseFontMetadata(file.buffer) : {};
     const fontEntry = {
-      family: file.originalname.replace(/\.[^./\\]*$/, ''),
+      family: meta.family || file.originalname.replace(/\.[^./\\]*$/, ''),
       fileId: uploaded.filename || uploaded.originalname,
       path: uploaded.path,
-      weights: [400],
+      weights: [meta.weight ?? 400],
+      ...(meta.italic ? { italic: true } : {}),
     };
 
     const fonts = await this._brandsService.addCustomFont(orgId, fontEntry);

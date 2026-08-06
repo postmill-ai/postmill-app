@@ -33,6 +33,12 @@ export const FontFamiliesSchema = z.array(FontFamilySchema).default([]);
 export const CustomFontSchema = z.object({
   fileId: z.string(),
   family: z.string().optional(),
+  // Listed because zod STRIPS what it doesn't know: a brand-profile upsert
+  // would otherwise quietly drop the stored path and weight, leaving an
+  // uploaded font that nothing could load.
+  path: z.string().optional(),
+  weights: z.array(z.number()).optional(),
+  italic: z.boolean().optional(),
 });
 
 export const CustomFontsSchema = z.array(CustomFontSchema).default([]);

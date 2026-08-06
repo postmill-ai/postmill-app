@@ -169,7 +169,13 @@ describe('smart filters render server-side', () => {
     // naturalWidth/naturalHeight would describe an image that no longer exists.
     const src = await solid(40, 10, [255, 0, 0]);
 
-    const at = await render(docWith({ src, originalSrc: src, smartFilters: [{ id: 'sharpen' }] }));
+    // `contain` is stated rather than relied on: an UNSET fit mode now stretches,
+    // matching the canvas and the inspector's own "Fill" label for that case.
+    // What this guards is that a smart filter doesn't move geometry, whatever
+    // the fit mode is.
+    const at = await render(
+      docWith({ src, originalSrc: src, smartFilters: [{ id: 'sharpen' }], fitMode: 'contain' })
+    );
 
     // A 4:1 source contained in a 100x100 box occupies a band ~25px tall.
     const [midR] = at(50, 50);

@@ -1,4 +1,5 @@
 import type { DesignerAdjustment, DesignerBlendMode } from './designer-doc.schema';
+import { BLEND_MODES } from './designer-doc.schema';
 
 /**
  * Pixel maths shared by the Designer canvas and the server renderer.
@@ -36,17 +37,20 @@ export const NATIVE_BLEND_ORDER = [
 export const NATIVE_BLEND_MODES: ReadonlySet<string> = new Set(NATIVE_BLEND_ORDER);
 
 /**
- * The modes the Designer offers in its UI.
+ * The modes the Designer offers in its UI: all of them.
  *
- * Only the native set: `blendPixels` below can evaluate the other eleven, but
- * it needs the backdrop, and the Konva canvas has no backdrop to hand a node —
- * so offering them would mean the editor and PNG export showed `normal` while
- * the PDF and video export showed the real blend. A mode that renders one way
- * on screen and another in the file is worse than a mode that isn't offered.
- * `blendPixels` stays for documents authored elsewhere, which the server
- * renders faithfully.
+ * This was the native set alone, because `blendPixels` needs the BACKDROP and
+ * "the Konva canvas has no backdrop to hand a node" — so offering the other
+ * eleven would have meant the editor showing `normal` while the PDF and video
+ * showed the real blend, which is worse than not offering them.
+ *
+ * That is no longer true. A Konva `sceneFunc` runs with the layer canvas
+ * already holding everything drawn beneath it, so the canvas can capture the
+ * backdrop before a layer paints and blend against it after — through this
+ * same `blendPixels`, which is what makes the two agree. See
+ * `layer-render.tsx`'s `CustomBlendLayer`.
  */
-export const SELECTABLE_BLEND_MODES = NATIVE_BLEND_ORDER;
+export const SELECTABLE_BLEND_MODES = BLEND_MODES;
 
 export const isNativeBlend = (mode?: DesignerBlendMode): boolean =>
   !mode || NATIVE_BLEND_MODES.has(mode);

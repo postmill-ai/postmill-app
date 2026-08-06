@@ -6,6 +6,7 @@ import type {
   VideoOutput,
 } from './designer-doc.schema';
 import { typeScaleRatio } from './reflow';
+import { scalePathNodes } from './path-geometry';
 
 // Geometry is per-format and never propagates; everything else (style/content)
 // syncs to same-originId copies in the other outputs.
@@ -49,14 +50,40 @@ const applyPatch = (
   el: DesignerElement,
   updates: Partial<DesignerElement>
 ): DesignerElement => {
+  const patched = resizePathNodes(el, updates);
   if (!updates.symbolOverrides || !el.symbolOverrides) {
-    return { ...el, ...updates };
+    return { ...el, ...patched };
   }
   const merged: SymbolOverrides = { ...el.symbolOverrides };
   for (const [childId, content] of Object.entries(updates.symbolOverrides)) {
     merged[childId] = { ...merged[childId], ...content };
   }
-  return { ...el, ...updates, symbolOverrides: merged };
+  return { ...el, ...patched, symbolOverrides: merged };
+};
+
+/**
+ * Keep a path's geometry with its box.
+ *
+ * A path stores bezier nodes in element-local coordinates, so resizing the
+ * element only moved the selection box — the curve carried on at whatever size
+ * it was drawn. It looked convincing on the canvas because Konva cannot compute
+ * real bounds for a custom `sceneFunc` and reports the declared width/height
+ * instead, so only the export showed the truth.
+ */
+const resizePathNodes = (
+  el: DesignerElement,
+  updates: Partial<DesignerElement>
+): Partial<DesignerElement> => {
+  if (el.type !== 'path' || !el.nodes?.length) return updates;
+  const nextW = updates.width ?? el.width;
+  const nextH = updates.height ?? el.height;
+  if (nextW === el.width && nextH === el.height) return updates;
+  if (!(el.width > 0) || !(el.height > 0) || !(nextW > 0) || !(nextH > 0)) return updates;
+  if (updates.nodes) return updates;
+  return {
+    ...updates,
+    nodes: scalePathNodes(el.nodes, nextW / el.width, nextH / el.height),
+  };
 };
 
 /**

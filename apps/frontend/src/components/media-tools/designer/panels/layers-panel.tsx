@@ -386,8 +386,10 @@ export const LayersPanel: FC<LayersPanelProps> = ({ store, onClose }) => {
                 <span className="flex-1 truncate">{layerLabel(el)}</span>
               )}
 
-              {/* Effects marker. */}
-              {!!el.styles?.length && (
+              {/* Effects marker — only for effects that are actually painting.
+                  A stack switched entirely off changes nothing on the canvas
+                  and should not claim otherwise. */}
+              {el.styles?.some((s) => s.enabled !== false) && (
                 <span className="shrink-0 text-[10px] text-textColor/45" title={t('layer_effects', 'Effects')}>
                   fx
                 </span>

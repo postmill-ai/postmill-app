@@ -102,16 +102,24 @@ ${captionStylesSource()}
     }
   }
 
+  // Mirrors parseDesignerFilterToken + cssFilterForToken (filter-tokens.ts),
+  // which this page cannot import. A drift spec pins the two together.
+  // parseFloat of a missing value is NaN, not null — the old "== null"
+  // guards never fired and this emitted literal brightness(NaN), which CSS
+  // discards, silently dropping every adjustment on the clip.
   function mapFilterToken(token) {
     if (token === 'grayscale') return 'grayscale(100%)';
     if (token === 'sepia') return 'sepia(100%)';
-    const [key, valueStr] = token.split(':');
-    const value = parseFloat(valueStr);
+    const parts = token.split(':');
+    const key = parts[0];
+    if (parts[1] === undefined) return '';
+    const value = parseFloat(parts[1]);
+    if (isNaN(value)) return '';
     switch (key) {
-      case 'blur': return \`blur(\${value || 0}px)\`;
-      case 'brightness': return \`brightness(\${value == null ? 1 : value})\`;
-      case 'contrast': return \`contrast(\${value == null ? 1 : value})\`;
-      case 'saturate': return \`saturate(\${value == null ? 1 : value})\`;
+      case 'blur': return \`blur(\${value}px)\`;
+      case 'brightness': return \`brightness(\${value})\`;
+      case 'contrast': return \`contrast(\${value})\`;
+      case 'saturate': return \`saturate(\${value})\`;
       default: return '';
     }
   }
@@ -276,7 +284,10 @@ ${captionStylesSource()}
 
     const nw = element.naturalWidth || element.videoWidth || props.width;
     const nh = element.naturalHeight || element.videoHeight || props.height;
-    const fitMode = clip.fitMode || 'contain';
+    // Unset means fill, as it does in the preview and the still renderer. This
+    // defaulted to 'contain', so a clip that filled its box in the editor
+    // exported letterboxed.
+    const fitMode = clip.fitMode || 'fill';
 
     ctx.save();
     applyFilters(ctx, clip.filters);
@@ -303,7 +314,7 @@ ${captionStylesSource()}
     } else if (fitMode === 'fill') {
       ctx.drawImage(element, 0, 0, props.width, props.height);
     } else {
-      const scale = Math.min(props.width / nw, props.height / nh, 1);
+      const scale = Math.min(props.width / nw, props.height / nh);
       const dw = nw * scale;
       const dh = nh * scale;
       const dx = (props.width - dw) / 2;
@@ -382,7 +393,9 @@ ${captionStylesSource()}
     ctx.save();
     ctx.globalAlpha = props.opacity;
     const fontSize = clip.fontSize || 32;
-    ctx.font = \`\${clip.fontWeight || 400} \${fontSize}px \${clip.fontFamily || 'sans-serif'}\`;
+    // Quoted: an unquoted multi-word family ("Bebas Neue") makes the whole
+    // shorthand invalid, and the assignment is then silently ignored.
+    ctx.font = \`\${clip.fontWeight || 400} \${fontSize}px "\${clip.fontFamily || 'sans-serif'}"\`;
     ctx.fillStyle = clip.fill || '#ffffff';
     ctx.textBaseline = 'top';
     const align = clip.align || 'left';
@@ -407,7 +420,7 @@ ${captionStylesSource()}
     ctx.globalAlpha = props.opacity;
     const fontSize = clip.fontSize || 28;
     const fontWeight = clip.fontWeight || 700;
-    ctx.font = \`\${fontWeight} \${fontSize}px \${clip.fontFamily || 'Arial'}\`;
+    ctx.font = \`\${fontWeight} \${fontSize}px "\${clip.fontFamily || 'Arial'}"\`;
     ctx.textBaseline = 'top';
     const lineHeight = fontSize * 1.35;
     const spaceWidth = ctx.measureText(' ').width;
@@ -420,7 +433,7 @@ ${captionStylesSource()}
     for (let i = 0; i < words.length; i++) {
       const state = states[i];
       const scaled = fontSize * state.scale;
-      ctx.font = (state.weight || fontWeight) + ' ' + scaled + 'px ' + (clip.fontFamily || 'Arial');
+      ctx.font = (state.weight || fontWeight) + ' ' + scaled + 'px "' + (clip.fontFamily || 'Arial') + '"';
       const wordWidth = ctx.measureText(words[i].word).width;
       if (x + wordWidth > props.width && x > 0) {
         x = 0;
@@ -488,11 +501,23 @@ ${captionStylesSource()}
         ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
       } catch {}
     } else if (output.bg && output.bg.type === 'gradient' && output.bg.gradient) {
-      // Simple gradient support: top-to-bottom if colors provided
-      const colors = output.bg.gradient.colors || [];
-      if (colors.length) {
-        const grd = ctx.createLinearGradient(0, 0, 0, canvas.height);
-        colors.forEach((c, i) => grd.addColorStop(i / Math.max(1, colors.length - 1), c));
+      // "stops", not "colors" — this read a field the schema has never had,
+      // so a gradient background rendered as nothing at all. Angle honoured
+      // the same way buildStyleGradient does: degrees, 0 = left to right.
+      const stops = output.bg.gradient.stops || [];
+      if (stops.length) {
+        const angle = ((output.bg.gradient.angle || 0) * Math.PI) / 180;
+        const hx = (Math.cos(angle) * canvas.width) / 2;
+        const hy = (Math.sin(angle) * canvas.height) / 2;
+        const cx = canvas.width / 2;
+        const cy = canvas.height / 2;
+        const grd = ctx.createLinearGradient(cx - hx, cy - hy, cx + hx, cy + hy);
+        stops.forEach(function (s, i) {
+          const offset = typeof s.offset === 'number'
+            ? Math.max(0, Math.min(1, s.offset))
+            : i / Math.max(1, stops.length - 1);
+          grd.addColorStop(offset, s.color);
+        });
         ctx.fillStyle = grd;
         ctx.fillRect(0, 0, canvas.width, canvas.height);
       }

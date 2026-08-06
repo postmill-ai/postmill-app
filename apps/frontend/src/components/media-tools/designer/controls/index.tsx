@@ -122,8 +122,18 @@ export const ColorSwatch: React.FC<ColorSwatchProps> = ({
   const [showEyedropper, setShowEyedropper] = useState(false);
   const [recents, setRecents] = useState<string[]>([]);
   const wrapRef = useRef<HTMLDivElement>(null);
+  const commitDraftRef = useRef<(() => void) | null>(null);
 
-  useDismiss(open, () => setOpen(false), wrapRef);
+  // Dismissing commits: a hex typed into the field and then clicked away from
+  // used to be discarded silently, which reads as "the colour didn't apply".
+  useDismiss(
+    open,
+    () => {
+      commitDraftRef.current?.();
+      setOpen(false);
+    },
+    wrapRef
+  );
 
   useEffect(() => {
     setDraft(value);
@@ -155,6 +165,14 @@ export const ColorSwatch: React.FC<ColorSwatchProps> = ({
     },
     [commitColor],
   );
+
+  // `useDismiss` is registered before `draft` exists in scope; a ref keeps the
+  // handler pointing at the current value without re-registering the listener.
+  // Written in an effect, not during render — the compiler treats a render-time
+  // ref write as a mutation.
+  useEffect(() => {
+    commitDraftRef.current = () => commitDraft(draft);
+  }, [commitDraft, draft]);
 
   const handleEyedropper = async () => {
     try {
@@ -541,6 +559,9 @@ export const Stepper: React.FC<StepperProps> = ({
         <input
           id={id}
           type="number"
+          // Named even when the visible label sits elsewhere in the row (X/Y/W/H
+          // share one), or the field is anonymous to a screen reader.
+          aria-label={label}
           value={value}
           min={min === -Infinity ? undefined : min}
           max={max === Infinity ? undefined : max}

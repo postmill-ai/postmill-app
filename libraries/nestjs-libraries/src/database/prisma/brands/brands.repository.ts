@@ -147,11 +147,18 @@ export class BrandsRepository {
 
   async addCustomFont(
     organizationId: string,
-    font: { family: string; fileId: string; path: string; weights: number[] }
+    font: { family: string; fileId: string; path: string; weights: number[]; italic?: boolean }
   ) {
     const brand = await this.getDefaultBrand(organizationId) || await this.getFirstBrand(organizationId);
     if (!brand) return [];
-    const existing = (brand.customFonts as any[]) || [];
+    // Identity is (family, weight, italic), not the row. Re-uploading a weight
+    // used to append a second entry for it, and which of the two the renderers
+    // picked depended on iteration order — the new file replaces the old one.
+    const key = (f: { family?: string; weights?: number[]; italic?: boolean }) =>
+      `${(f.family || '').toLowerCase()}|${f.weights?.[0] ?? 400}|${f.italic ? 'i' : 'n'}`;
+    const existing = ((brand.customFonts as any[]) || []).filter(
+      (f: any) => key(f) !== key(font)
+    );
     existing.push(font);
     await this._aiBrandProfile.model.aIBrandProfile.update({
       where: { id: brand.id, organizationId },

@@ -6,6 +6,7 @@ import type {
   DesignerTextShadow,
   TextRun,
 } from '../designer.store';
+import { FillSection } from './fill-section';
 import {
   ColorSwatch,
   Slider,
@@ -13,11 +14,34 @@ import {
   Stepper,
 } from '../controls';
 import { DESIGNER_FONTS, ensureFontLoaded } from '../fonts';
+import { GOOGLE_FONTS } from '@postmill-ai/nestjs-libraries/media/designer-doc/font-catalog';
+import { fitDesignerText, fittedFontSize } from '../measure-text';
 import { useBrandColors } from './use-brand-colors';
 import { useBrandFonts, useCustomFonts } from './use-brand-fonts';
 import { useT } from '@postmill-ai/react/translation/get.transation.service.client';
 
 const RUN_STYLE_KEYS = new Set(['fill', 'fontFamily', 'fontSize', 'fontWeight', 'fontStyle']);
+
+/** Catalog matches shown per search. Enough to choose from, short enough to scan. */
+const MAX_FONT_RESULTS = 60;
+
+/**
+ * Height the box needs so a typed font size is actually the size that paints.
+ *
+ * The fitter is shrink-only by design, which means the Size field could be set
+ * to anything and the canvas would quietly paint something smaller. Growing the
+ * box (never shrinking it — that would fight a deliberate layout) makes the
+ * number honest.
+ */
+const growBoxFor = (
+  element: DesignerElement | null,
+  fontSize: number
+): Partial<DesignerElement> => {
+  if (!element || element.type !== 'text') return {};
+  const lines = Math.max(1, fitDesignerText(element)?.lines.length ?? 1);
+  const needed = Math.ceil(lines * (element.lineHeight || 1.2) * fontSize);
+  return needed > element.height ? { height: needed } : {};
+};
 
 const runStylesEqual = (a: Partial<TextRun>, b: Partial<TextRun>): boolean => {
   return (
@@ -112,7 +136,10 @@ const getSelectionOffsets = (elementId: string): { start: number; end: number } 
   return { start, end };
 };
 
-const WEIGHTS = [300, 400, 500, 600, 700, 800, 900];
+// 100/200 included: the hairline cuts are the whole reason a condensed
+// gothic reads as one, and without them the picker could offer the family but
+// not the weight that makes it.
+const WEIGHTS = [100, 200, 300, 400, 500, 600, 700, 800, 900];
 
 const CATEGORY_LABELS: Record<string, string> = {
   'sans-serif': 'Sans Serif',
@@ -156,6 +183,16 @@ export const TextFormatPanel: FC<TextFormatPanelProps> = ({ store }) => {
   const brandEnforcement = store((s) => s.brandEnforcement);
   const brandFonts = useBrandFonts();
   const { fonts: customFonts } = useCustomFonts();
+
+  // Say so when the box is still forcing a smaller size than the field claims —
+  // silence here is what made the Size field untrustworthy.
+  const fittedNotice = useMemo(() => {
+    if (!element) return null;
+    const painted = fittedFontSize(element);
+    return painted !== (element.fontSize ?? 16)
+      ? t('designer_fitted_to', 'fitted to {{size}}px', { size: Math.round(painted) })
+      : null;
+  }, [element, t]);
 
   const update = useCallback(
     (updates: Partial<DesignerElement>, commit = true) => {
@@ -220,15 +257,43 @@ export const TextFormatPanel: FC<TextFormatPanelProps> = ({ store }) => {
         category: 'display' as const,
       })
     );
-    const all = [...customEntries, ...DESIGNER_FONTS];
-    if (!fontSearch.trim()) return all;
-    const q = fontSearch.toLowerCase();
-    return all.filter(
-      (f) =>
-        f.family.toLowerCase().includes(q) ||
-        f.category.toLowerCase().includes(q)
+    const recommended = [...customEntries, ...DESIGNER_FONTS];
+    const q = fontSearch.trim().toLowerCase();
+
+    // Unsearched, the picker shows the recommended shortlist — 1,900 rows is
+    // not a menu. Typing searches the whole catalog.
+    if (!q) return recommended;
+
+    const seen = new Set(recommended.map((f) => f.family));
+    const hits = recommended.filter(
+      (f) => f.family.toLowerCase().includes(q) || f.category.toLowerCase().includes(q)
     );
+
+    for (const font of GOOGLE_FONTS) {
+      if (hits.length >= MAX_FONT_RESULTS) break;
+      if (seen.has(font.family)) continue;
+      if (!font.family.toLowerCase().includes(q)) continue;
+      hits.push({
+        family: font.family,
+        label: font.family,
+        weights: font.weights,
+        // The catalog has a handwriting class the picker's groups do not;
+        // it belongs with the other decorative faces.
+        category: font.category === 'handwriting' ? 'display' : font.category,
+      });
+    }
+    return hits;
   }, [fontSearch, customFonts]);
+
+  // Preview rows render in their own face, so the stylesheet has to exist
+  // before they paint — for the catalog results that is the first time the
+  // browser has heard of the family.
+  useEffect(() => {
+    if (!fontPickerOpen) return;
+    for (const font of filteredFonts) {
+      void ensureFontLoaded(font.family, [font.weights[0] ?? 400]);
+    }
+  }, [fontPickerOpen, filteredFonts]);
 
   const grouped = useMemo(() => {
     const enforceBrand = brandEnforcement && brandFonts.length > 0;
@@ -282,8 +347,6 @@ export const TextFormatPanel: FC<TextFormatPanelProps> = ({ store }) => {
     return null;
   }
 
-  const fill = element.fill || '#000000';
-  const safeColor = isValidHex(fill) ? fill : '#000000';
 
   const isBold = (element.fontWeight ?? 400) >= 600;
   const isItalic = element.fontStyle === 'italic';
@@ -418,11 +481,17 @@ export const TextFormatPanel: FC<TextFormatPanelProps> = ({ store }) => {
             onChange={(e) => {
               const value = parseInt(e.target.value, 10);
               if (!Number.isNaN(value) && value > 0) {
-                update({ fontSize: value });
+                // The fitter only ever shrinks, so a size larger than the box
+                // used to be accepted, stored, echoed back by this field — and
+                // then silently painted smaller. Grow the box to honour it.
+                update({ fontSize: value, ...growBoxFor(element, value) });
               }
             }}
             className="w-full h-[34px] px-[8px] rounded-[6px] bg-newBgColor border border-studioBorder text-[13px] text-textColor outline-none focus:border-designerAccent"
           />
+          {fittedNotice && (
+            <span className="text-[10px] text-amber-400/80">{fittedNotice}</span>
+          )}
         </div>
 
         <div className="flex flex-col gap-1.5">
@@ -446,10 +515,12 @@ export const TextFormatPanel: FC<TextFormatPanelProps> = ({ store }) => {
       </div>
 
       <div className="flex flex-col gap-1.5">
-        <ColorSwatch
+        {/* A gradient headline is a staple of poster work; text was the only
+            type that ignored `fillGradient` until this round. */}
+        <FillSection
+          element={element}
+          set={update}
           label={t('color', 'Color')}
-          value={safeColor}
-          onChange={(hex) => update({ fill: hex })}
           brandColors={brandColors}
           brandEnforcement={brandEnforcement}
         />
@@ -467,6 +538,66 @@ export const TextFormatPanel: FC<TextFormatPanelProps> = ({ store }) => {
           ]}
           onChange={(align) => update({ align: align as 'left' | 'center' | 'right' })}
         />
+      </div>
+
+      <div className="flex flex-col gap-1.5">
+        <label className="text-[11px] text-newTextColor/60">
+          {t('designer_label_text_case', 'Case')}
+        </label>
+        {/* Applied before the wrap (see `fit-text`), so the line breaks are the
+            ones the case actually produces. */}
+        <SegmentedControl
+          value={element.textTransform || 'none'}
+          options={[
+            { value: 'none', label: t('designer_case_none', 'As typed') },
+            { value: 'uppercase', label: t('designer_case_upper', 'AA') },
+            { value: 'lowercase', label: t('designer_case_lower', 'aa') },
+            { value: 'capitalize', label: t('designer_case_title', 'Aa') },
+          ]}
+          onChange={(v) =>
+            update({ textTransform: v as DesignerElement['textTransform'] })
+          }
+        />
+      </div>
+
+      <div className="grid grid-cols-2 gap-3">
+        <div className="flex flex-col gap-1.5">
+          <label htmlFor="text-paragraph-spacing" className="text-[11px] text-newTextColor/60">
+            {t('designer_label_paragraph_spacing', 'Paragraph space')}
+          </label>
+          <input
+            id="text-paragraph-spacing"
+            type="number"
+            step={2}
+            min={0}
+            max={500}
+            value={element.paragraphSpacing ?? 0}
+            onChange={(e) => {
+              const value = parseFloat(e.target.value);
+              if (!Number.isNaN(value) && value >= 0) update({ paragraphSpacing: value });
+            }}
+            className="w-full h-[34px] px-[8px] rounded-[6px] bg-newBgColor border border-studioBorder text-[13px] text-textColor outline-none focus:border-designerAccent"
+          />
+        </div>
+
+        <div className="flex flex-col gap-1.5">
+          <label htmlFor="text-first-line-indent" className="text-[11px] text-newTextColor/60">
+            {t('designer_label_first_line_indent', 'First-line indent')}
+          </label>
+          <input
+            id="text-first-line-indent"
+            type="number"
+            step={2}
+            min={0}
+            max={500}
+            value={element.firstLineIndent ?? 0}
+            onChange={(e) => {
+              const value = parseFloat(e.target.value);
+              if (!Number.isNaN(value) && value >= 0) update({ firstLineIndent: value });
+            }}
+            className="w-full h-[34px] px-[8px] rounded-[6px] bg-newBgColor border border-studioBorder text-[13px] text-textColor outline-none focus:border-designerAccent"
+          />
+        </div>
       </div>
 
       <div className="grid grid-cols-2 gap-3">
@@ -502,6 +633,33 @@ export const TextFormatPanel: FC<TextFormatPanelProps> = ({ store }) => {
               const value = parseFloat(e.target.value);
               if (!Number.isNaN(value)) {
                 update({ letterSpacing: value });
+              }
+            }}
+            className="w-full h-[34px] px-[8px] rounded-[6px] bg-newBgColor border border-studioBorder text-[13px] text-textColor outline-none focus:border-designerAccent"
+          />
+        </div>
+      </div>
+
+      {/* Horizontal scale — the only way to condense, since the catalog has no
+          condensed cut of most families and the document model has no
+          scaleX to fall back on. */}
+      <div className="grid grid-cols-2 gap-3">
+        <div className="flex flex-col gap-1.5">
+          <label htmlFor="text-scale-x" className="text-[11px] text-newTextColor/60">
+            {t('designer_label_horizontal_scale', 'Horizontal scale')}
+          </label>
+          <input
+            id="text-scale-x"
+            type="number"
+            step={0.05}
+            min={0.1}
+            max={10}
+            value={element.textScaleX ?? 1}
+            onChange={(e) => {
+              const value = parseFloat(e.target.value);
+              if (!Number.isNaN(value) && value >= 0.1 && value <= 10) {
+                // Stored as 1 = unscaled, so a clean document never carries it.
+                update({ textScaleX: value === 1 ? undefined : value });
               }
             }}
             className="w-full h-[34px] px-[8px] rounded-[6px] bg-newBgColor border border-studioBorder text-[13px] text-textColor outline-none focus:border-designerAccent"

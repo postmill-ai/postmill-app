@@ -93,6 +93,10 @@ export interface DesignerState {
   linkedUpdateFlash: Record<number, number>;
   // View prefs / canvas requests (menu-driven)
   snapEnabled: boolean;
+  /** Grid overlay — a view pref, like snapping, not part of the document. */
+  showGrid: boolean;
+  gridSize: number;
+  snapToGrid: boolean;
   fitNonce: number;
   // Photoshop-style tool palette (see tools.ts). Tool state is editor UI, not
   // document content — it is deliberately NOT part of DesignerDoc and never
@@ -179,6 +183,14 @@ export interface DesignerActions {
   setZoom: (zoom: number) => void;
   setViewport: (x: number, y: number) => void;
   setSnapEnabled: (v: boolean) => void;
+  setShowGrid: (v: boolean) => void;
+  setGridSize: (n: number) => void;
+  setSnapToGrid: (v: boolean) => void;
+  /** Add a ruler guide to the active output. Editor state, never exported. */
+  addGuide: (axis: 'x' | 'y', position: number) => void;
+  /** Move guide `index` on `axis`; pass null to delete it. */
+  moveGuide: (axis: 'x' | 'y', index: number, position: number | null) => void;
+  clearGuides: () => void;
   requestFit: () => void;
   /** Select a tool; also remembers it as its group's last-used option. */
   setActiveTool: (toolId: string) => void;
@@ -284,6 +296,9 @@ export const createDesignerStore = (
       selectedClip: null,
       linkedUpdateFlash: {},
       snapEnabled: true,
+      showGrid: false,
+      gridSize: 50,
+      snapToGrid: false,
       fitNonce: 0,
       activeTool: DEFAULT_TOOL_ID,
       lastToolPerGroup: {},
@@ -850,6 +865,46 @@ export const createDesignerStore = (
       setZoom: (zoom) => set({ zoom: Math.max(0.1, Math.min(5, zoom)) }),
       setViewport: (x, y) => set({ viewportX: x, viewportY: y }),
       setSnapEnabled: (v) => set({ snapEnabled: v }),
+      setShowGrid: (v) => set({ showGrid: v }),
+      setGridSize: (n) => set({ gridSize: Math.max(2, Math.min(500, Math.round(n))) }),
+      setSnapToGrid: (v) => set({ snapToGrid: v }),
+
+      // Guides live on the OUTPUT, so they follow the design rather than the
+      // session — but nothing in any renderer reads them.
+      addGuide: (axis, position) =>
+        set((state) => {
+          const doc = structuredClone(state.doc);
+          const out = doc.outputs[state.currentOutput] as any;
+          if (!out) return {};
+          const guides = out.guides || { x: [], y: [] };
+          out.guides = { ...guides, [axis]: [...guides[axis], position] };
+          return { doc };
+        }),
+
+      moveGuide: (axis, index, position) =>
+        set((state) => {
+          const doc = structuredClone(state.doc);
+          const out = doc.outputs[state.currentOutput] as any;
+          const guides = out?.guides;
+          if (!guides?.[axis] || index < 0 || index >= guides[axis].length) return {};
+          out.guides = {
+            ...guides,
+            [axis]:
+              position === null
+                ? guides[axis].filter((_: number, i: number) => i !== index)
+                : guides[axis].map((g: number, i: number) => (i === index ? position : g)),
+          };
+          return { doc };
+        }),
+
+      clearGuides: () =>
+        set((state) => {
+          const doc = structuredClone(state.doc);
+          const out = doc.outputs[state.currentOutput] as any;
+          if (!out) return {};
+          out.guides = { x: [], y: [] };
+          return { doc };
+        }),
       requestFit: () => set({ fitNonce: get().fitNonce + 1 }),
       setActiveTool: (toolId) => {
         const t = getTool(toolId);

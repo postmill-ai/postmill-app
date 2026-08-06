@@ -136,3 +136,25 @@ export const shapeGeometrySource = (): string => {
     decl('flattenPoints', flattenPoints),
   ].join('\n');
 };
+
+/**
+ * Corner radii as `[tl, tr, br, bl]`, clamped so opposite corners can never
+ * overlap. One definition for the scalar and the per-corner form, so every
+ * renderer rounds the same way.
+ */
+export const cornerRadii = (
+  radius: number | [number, number, number, number] | undefined,
+  width: number,
+  height: number
+): [number, number, number, number] => {
+  const limit = Math.min(width / 2, height / 2);
+  const clamp = (n: number) => Math.max(0, Math.min(n || 0, limit));
+  return Array.isArray(radius)
+    ? [clamp(radius[0]), clamp(radius[1]), clamp(radius[2]), clamp(radius[3])]
+    : [clamp(radius ?? 0), clamp(radius ?? 0), clamp(radius ?? 0), clamp(radius ?? 0)];
+};
+
+/** True when a radius rounds nothing at all. */
+export const hasCornerRadius = (
+  radius: number | [number, number, number, number] | undefined
+): boolean => (Array.isArray(radius) ? radius.some((n) => n > 0) : (radius ?? 0) > 0);

@@ -63,9 +63,14 @@ describe('outputToSvg', () => {
     expect(svg).toContain('translate(10 20)');
   });
 
-  it('rotates about the layer centre, as the canvas does', () => {
+  it('rotates about the layer ORIGIN, as both renderers do', () => {
+    // This test used to assert a centre pivot and pass — which is exactly how
+    // the divergence survived. Konva rotates about the node origin and stored
+    // `x/y/rotation` mean "top-left pivot", so a centre pivot here put a
+    // rotated layer well away from where the Designer drew it.
     const svg = outputToSvg(output([el({ rotation: 30 })]));
-    expect(svg).toContain('rotate(30 50 25)');
+    expect(svg).toContain('rotate(30)');
+    expect(svg).not.toContain('rotate(30 50 25)');
   });
 
   it('writes an ellipse as an ellipse', () => {

@@ -2,6 +2,11 @@ import { Injectable, Logger } from '@nestjs/common';
 import { BrandsService } from '@postmill-ai/nestjs-libraries/brands/brands.service';
 import { safeFetch } from '@postmill-ai/nestjs-libraries/dtos/webhooks/safe.fetch';
 import { registerFont } from 'canvas';
+import {
+  catalogWeights,
+  googleFontsUrl,
+  isCatalogFamily,
+} from '../designer-doc/font-catalog';
 import path from 'path';
 import os from 'os';
 import fs from 'fs/promises';
@@ -69,6 +74,13 @@ export const CURATED_FONTS: CuratedFont[] = [
   { family: 'IBM Plex Mono', weights: [300, 400, 500, 600, 700] },
   { family: 'Space Mono', weights: [400, 700] },
   { family: 'Courier Prime', weights: [400, 700] },
+  { family: 'Roboto Condensed', weights: [300, 400, 500, 600, 700] },
+  { family: 'Archivo Narrow', weights: [400, 500, 600, 700] },
+  { family: 'Barlow Condensed', weights: [300, 400, 500, 600, 700] },
+  { family: 'Bodoni Moda', weights: [400, 500, 600, 700, 800, 900] },
+  { family: 'Prata', weights: [400] },
+  { family: 'Fjalla One', weights: [400] },
+  { family: 'Rozha One', weights: [400] },
 ];
 
 interface HasFontFamily {
@@ -89,6 +101,15 @@ export class FontLoaderService {
   private static readonly CURATED_RETRY_MS = 15 * 60_000;
   private readonly _curatedFailed = new Map<string, number>();
   private readonly _tempDir = path.join(os.tmpdir(), 'postmill-fonts');
+  /**
+   * `family|weight` → the file on disk.
+   *
+   * The loader downloads every font a render uses and then only hands it to
+   * node-canvas; nothing could ask WHERE a family lives. Convert-to-outlines
+   * needs the file itself, because glyph contours come from the font's own
+   * tables and no canvas API exposes them.
+   */
+  private readonly _files = new Map<string, string>();
   private _dirEnsured = false;
 
   constructor(private _brandsService: BrandsService) {}
@@ -123,6 +144,7 @@ export class FontLoaderService {
         registerFont(tmpPath, { family: font.family, weight: String(font.weights?.[0] || '400') });
 
         this._cache.set(cacheKey, { family: font.family, filePath: tmpPath });
+        this._files.set(`${font.family}|${font.weights?.[0] || 400}`, tmpPath);
         this._logger.log(`Registered font ${font.family} for org ${orgId}`);
       } catch (err) {
         this._logger.warn(`Failed to register font ${font.family}: ${(err as Error)?.message}`);
@@ -160,6 +182,7 @@ export class FontLoaderService {
         registerFont(tmpPath, { family: font.family, weight: String(weight) });
 
         this._cache.set(cacheKey, { family: font.family, filePath: tmpPath });
+        this._files.set(`${font.family}|${weight}`, tmpPath);
       } catch (err) {
         this._logger.warn(`Failed to register font weight ${weight} for ${fontFamily}: ${(err as Error)?.message}`);
       }
@@ -201,23 +224,23 @@ export class FontLoaderService {
   ): void {
     const family = item.fontFamily;
     if (!family) return;
-    if (!CURATED_FONTS.some((f) => f.family === family)) return;
+    // The catalog is the allowlist, not a curated shortlist: the picker can
+    // reach every family Google serves, and one missing here would silently
+    // export in a fallback face. It still gates the fetch — the family name
+    // goes into a URL, so it is checked rather than trusted.
+    if (!isCatalogFamily(family)) return;
     if (!used.has(family)) used.set(family, new Set());
     used.get(family)!.add(item.fontWeight ?? 400);
   }
 
   private async _loadCuratedFontFamily(family: string, weights: number[]): Promise<void> {
-    const curated = CURATED_FONTS.find((f) => f.family === family);
-    if (!curated) return;
+    if (!isCatalogFamily(family)) return;
 
-    const requested = new Set(weights);
-    const available = new Set(curated.weights);
-    const toLoad = Array.from(requested).filter((w) => available.has(w));
-    if (toLoad.length === 0) toLoad.push(curated.weights[0] ?? 400);
-
-    const encoded = encodeURIComponent(family);
-    const weightParam = toLoad.sort((a, b) => a - b).join(';');
-    const cssUrl = `https://fonts.googleapis.com/css2?family=${encoded}:wght@${weightParam}&display=swap`;
+    // Narrowed to the weights Google actually serves for this family: asking
+    // for one it does not have 400s the whole request.
+    const toLoad = catalogWeights(family, weights);
+    if (!toLoad.length) return;
+    const cssUrl = googleFontsUrl(family, toLoad);
 
     try {
       const res = await safeFetch(cssUrl);
@@ -257,6 +280,7 @@ export class FontLoaderService {
           family: faceFamily.replace(/['"]/g, ''),
           weight: faceWeight || '400',
         });
+        this._files.set(`${family}|${faceWeight || 400}`, tmpPath);
         registeredAny = true;
       }
 
@@ -272,6 +296,36 @@ export class FontLoaderService {
       this._curatedFailed.set(family, Date.now());
       this._logger.warn(`Failed to register curated font ${family}: ${(err as Error)?.message}`);
     }
+  }
+
+  /**
+   * The file backing one family + weight, downloading it first if need be.
+   *
+   * Returns null for a family that could not be fetched, and for a WOFF2 —
+   * whose tables are Brotli-compressed, so an outline parser would read
+   * nonsense. Saying "not available" beats emitting wrong glyphs.
+   */
+  async resolveFontFile(
+    orgId: string,
+    family: string,
+    weight = 400,
+  ): Promise<string | null> {
+    const key = `${family}|${weight}`;
+    if (!this._files.has(key)) {
+      await this.loadOrgFonts(orgId).catch(() => undefined);
+    }
+    if (!this._files.has(key)) {
+      await this.loadCuratedFonts([{ fontFamily: family, fontWeight: weight }]).catch(
+        () => undefined,
+      );
+    }
+    // Fall back to any weight of the family — better the regular cut than
+    // nothing at all.
+    const found =
+      this._files.get(key) ||
+      [...this._files.entries()].find(([k]) => k.startsWith(`${family}|`))?.[1];
+    if (!found) return null;
+    return /\.(ttf|otf)$/i.test(found) ? found : null;
   }
 
   private _extractCssValue(block: string, property: string): string | undefined {

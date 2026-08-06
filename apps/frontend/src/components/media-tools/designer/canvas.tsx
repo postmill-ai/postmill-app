@@ -25,8 +25,10 @@ import { getTool, resolveToolShortcut } from './tools';
 import { rectFromDrag, isMeaningfulDraw, buildShapeElement, buildShapeClip } from './tool-draw';
 import { addText } from './add-text';
 import { CropOverlay } from './crop-overlay';
-import { ensureFontsLoaded } from './fonts';
+import { ensureFontsUsed } from './fonts';
 import { getImageNaturalSize } from './elements';
+import { computeCoverCrop } from './reflow';
+import { svgToPathElements } from '@postmill-ai/nestjs-libraries/media/designer-doc/svg-import';
 import {
   type PenDraft,
   emptyDraft,
@@ -70,6 +72,13 @@ interface CanvasProps {
   ) => void;
 }
 
+/** How far a guide runs past the artboard edge, so it stays grabbable. */
+const GUIDE_OVERREACH = 40;
+/** Dragged this far off the top/left, a guide is deleted rather than moved. */
+const GUIDE_DELETE_SLACK = 24;
+/** Upper bound on grid lines per axis, so a tiny grid can't stall the stage. */
+const MAX_GRID_LINES = 200;
+
 const SNAP = 6;
 
 export const DesignerCanvas: FC<CanvasProps> = ({
@@ -97,6 +106,13 @@ export const DesignerCanvas: FC<CanvasProps> = ({
   const [isSpacePressed, setIsSpacePressed] = useState(false);
   const [isPanning, setIsPanning] = useState(false);
   const [guides, setGuides] = useState<{ points: number[] }[]>([]);
+  const showGrid = store((s: any) => s.showGrid);
+  const gridSize = store((s: any) => s.gridSize);
+  const snapToGrid = store((s: any) => s.snapToGrid);
+  const docGuides = ((store((s: any) => s.doc.outputs[s.currentOutput]) as
+    | DesignerOutput
+    | undefined)?.guides || { x: [], y: [] }) as { x: number[]; y: number[] };
+
   /** Equal-spacing guide: the two matching gaps, plus where to draw the badge. */
   const [spacingGuide, setSpacingGuide] = useState<
     (SpacingGuide & { cross: number }) | null
@@ -279,24 +295,43 @@ export const DesignerCanvas: FC<CanvasProps> = ({
   // a doc carrying a display face (every AI-composed headline) opened in a
   // fallback serif and, Konva never being invalidated, stayed there.
   useEffect(() => {
-    const families = new Set<string>();
+    // Weights as well as families: a face loads per weight, so warming only the
+    // default would leave a 700 headline measuring against the 400 cut.
+    const families = new Map<string, Set<number>>();
+    const note = (family?: string, weight?: number) => {
+      if (!family) return;
+      if (!families.has(family)) families.set(family, new Set());
+      families.get(family)!.add(weight ?? 400);
+    };
     for (const out of doc.outputs || []) {
       for (const el of (out as DesignerOutput).children || []) {
-        if (el.fontFamily) families.add(el.fontFamily);
-        for (const run of el.richText || []) {
-          if (run.fontFamily) families.add(run.fontFamily);
-        }
+        note(el.fontFamily, el.fontWeight);
+        for (const run of el.richText || []) note(run.fontFamily, run.fontWeight);
       }
       for (const track of (out as any).tracks || []) {
-        for (const clip of track.clips || []) {
-          if (clip.fontFamily) families.add(clip.fontFamily);
-        }
+        for (const clip of track.clips || []) note(clip.fontFamily, clip.fontWeight);
       }
     }
     if (!families.size) return;
     let cancelled = false;
-    void ensureFontsLoaded([...families]).then(() => {
-      if (!cancelled) stageRef.current?.batchDraw();
+    void ensureFontsUsed(families).then(() => {
+      if (cancelled) return;
+      const stage = stageRef.current;
+      if (!stage) return;
+      // Redrawing is not enough. Konva measures a Text node once and caches the
+      // line arrangement, so a headline first laid out in the fallback serif
+      // keeps the fallback's line breaks even after the real font arrives — a
+      // word wider in the fallback gets wrapped, and with a fixed box height
+      // the overflow line is dropped, silently truncating the headline. Konva
+      // recomputes on a genuine attribute change and ignores a write of the
+      // same value, so the round-trip is what forces the re-measure.
+      for (const node of stage.find('Text')) {
+        const text = (node as unknown as { text(): string; text(v: string): void }).text();
+        if (typeof text !== 'string') continue;
+        (node as unknown as { text(v: string): void }).text(`${text} `);
+        (node as unknown as { text(v: string): void }).text(text);
+      }
+      stage.batchDraw();
     });
     return () => {
       cancelled = true;
@@ -796,11 +831,25 @@ export const DesignerCanvas: FC<CanvasProps> = ({
     (node: Konva.Node) => {
       if (!output || isVideo) return;
       if (!snapEnabled) { setGuides([]); setSpacingGuide(null); return; }
-      const others = ((output as DesignerOutput | undefined)?.children || []).filter((el) => !selectedIds.includes(el.id) && !el.hidden);
-      const w = node.width() * node.scaleX();
-      const h = node.height() * node.scaleY();
+      const children = (output as DesignerOutput | undefined)?.children || [];
+      const others = children.filter((el) => !selectedIds.includes(el.id) && !el.hidden);
+      // A warped shape is a Konva `Line`, whose `width()` is the bbox of its
+      // POINTS — so it snapped on its bulge while a warped PATH (a `Shape`,
+      // which reports the element box) snapped on its box. The element box is
+      // the authoring rectangle for both: it is what the Transformer shows and
+      // what the marquee hit-tests, so it is what snapping measures.
+      const moving = children.find((el) => el.id === node.id());
+      const w = (moving ? moving.width : node.width()) * node.scaleX();
+      const h = (moving ? moving.height : node.height()) * node.scaleY();
       const targetsX = [0, output.width / 2, output.width];
       const targetsY = [0, output.height / 2, output.height];
+      // A guide you can't snap to is a decoration; same for a grid.
+      targetsX.push(...(docGuides.x || []));
+      targetsY.push(...(docGuides.y || []));
+      if (snapToGrid && gridSize > 0) {
+        for (let g = 0; g <= output.width; g += gridSize) targetsX.push(g);
+        for (let g = 0; g <= output.height; g += gridSize) targetsY.push(g);
+      }
       others.forEach((el) => {
         targetsX.push(el.x, el.x + el.width / 2, el.x + el.width);
         targetsY.push(el.y, el.y + el.height / 2, el.y + el.height);
@@ -850,8 +899,20 @@ export const DesignerCanvas: FC<CanvasProps> = ({
       setGuides(lines);
       setHud({ x: node.x(), y: node.y() - 22, text: `${Math.round(node.x())}, ${Math.round(node.y())}` });
     },
-    [output, selectedIds, snapEnabled, isVideo]
+    [output, selectedIds, snapEnabled, isVideo, docGuides, snapToGrid, gridSize]
   );
+  // Grid lines in document space. Capped: a 2px grid on a 4000px artboard is
+  // 2,000 nodes Konva would redraw on every pan.
+  const gridLines = React.useMemo(() => {
+    if (!showGrid || !output || gridSize <= 0) return [] as number[][];
+    const w = output.width;
+    const h = output.height;
+    const step = Math.max(gridSize, Math.min(w, h) / MAX_GRID_LINES);
+    const lines: number[][] = [];
+    for (let x = step; x < w; x += step) lines.push([x, 0, x, h]);
+    for (let y = step; y < h; y += step) lines.push([0, y, w, y]);
+    return lines;
+  }, [showGrid, gridSize, output]);
 
   // Element drags fire on the element node itself and bubble to the Layer (the
   // Transformer is a sibling and never sees them), so these handlers live on the
@@ -932,13 +993,20 @@ export const DesignerCanvas: FC<CanvasProps> = ({
         if (!id) return;
         const el = children.find((c) => c.id === id);
         if (!el) return;
+        // Konva's `Line` overrides `width()` to return the bbox of its POINTS,
+        // and a warped shape is drawn as a Line whose points leave the element
+        // box — so reading the node grew `el.width` on every mousemove and the
+        // shape inflated as you dragged it. The element's own box is the truth
+        // for anything warped; the node is still authoritative for the rest,
+        // because a live drag folds each tick's scale back into it below.
+        const warped = !!el.warp?.preset && !!(el.warp.bend || el.warp.distortH || el.warp.distortV);
         const patch = buildResizePatch(
           el,
           {
             x: node.x(),
             y: node.y(),
-            width: node.width(),
-            height: node.height(),
+            width: warped ? el.width : node.width(),
+            height: warped ? el.height : node.height(),
             scaleX: node.scaleX(),
             scaleY: node.scaleY(),
             rotation: node.rotation(),
@@ -948,8 +1016,12 @@ export const DesignerCanvas: FC<CanvasProps> = ({
         patches.push({ id, patch });
         // Synchronous: fold the scale into the node's own size so the next
         // mousemove measures from a scale of 1 (see note 1 above).
-        node.width(patch.width);
-        node.height(patch.height);
+        // Writing width/height onto a warped Line would rewrite its points;
+        // it re-derives them from the patched element on the next render.
+        if (!warped) {
+          node.width(patch.width);
+          node.height(patch.height);
+        }
         node.scaleX(1);
         node.scaleY(1);
       });
@@ -1219,6 +1291,46 @@ export const DesignerCanvas: FC<CanvasProps> = ({
 
       if (isVideo) return;
 
+      // An SVG comes in as EDITABLE PATHS, not as a raster. It used to be
+      // uploaded and placed as an `image`, so a vector arrived as pixels and
+      // could be neither recoloured nor reshaped.
+      if (file.type === 'image/svg+xml') {
+        void file.text().then((markup) => {
+          const side = Math.min(output.width, output.height) * 0.6;
+          const { elements, skipped } = svgToPathElements(markup, {
+            x: px,
+            y: py,
+            width: side,
+            height: side,
+          });
+          if (!elements.length) {
+            toaster.show(t('couldnt_import_svg', "Couldn't import that SVG"), 'warning');
+            return;
+          }
+          const state = store.getState();
+          for (const el of elements) {
+            state.addElement({
+              id: '',
+              rotation: 0,
+              opacity: 1,
+              locked: false,
+              hidden: false,
+              ...el,
+            } as DesignerElement);
+          }
+          if (skipped.length) {
+            // Say what was dropped rather than let a partial import look whole.
+            toaster.show(
+              t('svg_import_skipped', 'Imported as paths; skipped {{tags}}', {
+                tags: skipped.join(', '),
+              }),
+              'warning'
+            );
+          }
+        });
+        return;
+      }
+
       setUploadingFile(true);
       const formData = new FormData();
       formData.append('file', file);
@@ -1398,7 +1510,27 @@ export const DesignerCanvas: FC<CanvasProps> = ({
                   listening={false}
                 />
                 {bg?.type === 'image' && bgImage && (
-                  <KonvaImage image={bgImage} x={0} y={0} width={output.width} height={output.height} listening={false} />
+                  <KonvaImage
+                    image={bgImage}
+                    x={0}
+                    y={0}
+                    width={output.width}
+                    height={output.height}
+                    // The server cover-crops the page background around
+                    // `focalPoint`; the canvas used to stretch it, so a photo
+                    // whose aspect didn't match the artboard was authored
+                    // squashed and exported cropped — and `bg.focalPoint`, which
+                    // the AI composer sets from the subject centroid, did
+                    // nothing here at all.
+                    crop={computeCoverCrop(
+                      bgImage.naturalWidth || output.width,
+                      bgImage.naturalHeight || output.height,
+                      output.width,
+                      output.height,
+                      bg.focalPoint
+                    )}
+                    listening={false}
+                  />
                 )}
               </Group>
             }
@@ -1420,6 +1552,56 @@ export const DesignerCanvas: FC<CanvasProps> = ({
               onEditText={setEditingTextId}
             />
           )}
+          {/* Grid overlay. Editor chrome: drawn on the stage but never in an
+              export, which renders from the document, not from this component. */}
+          {showGrid &&
+            !isVideo &&
+            gridLines.map((line) => (
+              <KonvaLine
+                key={`grid-${line.join(',')}`}
+                points={line}
+                stroke="rgba(120,130,150,0.28)"
+                strokeWidth={1 / zoom}
+                listening={false}
+              />
+            ))}
+
+          {/* Ruler guides — draggable, unlike the transient snap guides below. */}
+          {!isVideo &&
+            (['x', 'y'] as const).flatMap((axis) =>
+              (docGuides[axis] || []).map((position, index) => (
+                <KonvaLine
+                  key={`guide-${axis}-${index}`}
+                  points={
+                    axis === 'x'
+                      ? [position, -GUIDE_OVERREACH, position, output.height + GUIDE_OVERREACH]
+                      : [-GUIDE_OVERREACH, position, output.width + GUIDE_OVERREACH, position]
+                  }
+                  stroke="#22C3E6"
+                  strokeWidth={1 / zoom}
+                  hitStrokeWidth={8 / zoom}
+                  draggable
+                  dragBoundFunc={(pos) => ({
+                    x: axis === 'x' ? pos.x : 0,
+                    y: axis === 'y' ? pos.y : 0,
+                  })}
+                  onDragEnd={(e) => {
+                    const moved =
+                      position + (axis === 'x' ? e.target.x() : e.target.y()) / 1;
+                    e.target.position({ x: 0, y: 0 });
+                    // Dragged back onto its ruler means "delete", the same
+                    // gesture every other editor uses.
+                    store.getState().moveGuide(
+                      axis,
+                      index,
+                      moved < -GUIDE_DELETE_SLACK ? null : Math.round(moved)
+                    );
+                  }}
+                  onDblClick={() => store.getState().moveGuide(axis, index, null)}
+                />
+              ))
+            )}
+
           {guides.map((g) => (
             <KonvaLine key={g.points.join(',')} points={g.points} stroke="#FF3B7F" strokeWidth={1 / zoom} dash={[4, 4]} listening={false} />
           ))}
@@ -1691,6 +1873,9 @@ export const DesignerCanvas: FC<CanvasProps> = ({
           viewportY={viewportY}
           width={stageSize.width}
           height={stageSize.height}
+          onDragOutGuide={
+            isVideo ? undefined : (axis, position) => store.getState().addGuide(axis, position)
+          }
         />
       )}
 

@@ -33,12 +33,16 @@ export const measureLineWidth = (
   line: string,
   fontSize: number,
   letterSpacing: number,
-  measure: MeasureText
+  measure: MeasureText,
+  scaleX = 1
 ): number => {
-  if (!letterSpacing) return measure(line, fontSize);
+  // The single definition of what a horizontal scale does to tracking: layout
+  // is measured in unscaled glyph space and the whole line is scaled, so
+  // condensing the glyphs condenses the spacing between them too.
+  if (!letterSpacing) return measure(line, fontSize) * scaleX;
   let w = 0;
   for (const ch of line) w += measure(ch, fontSize) + letterSpacing;
-  return w;
+  return w * scaleX;
 };
 
 /**
@@ -51,7 +55,8 @@ export const wrapTextLines = (
   maxWidth: number,
   fontSize: number,
   letterSpacing: number,
-  measure: MeasureText
+  measure: MeasureText,
+  scaleX = 1
 ): string[] => {
   const out: string[] = [];
   for (const rawLine of text.split('\n')) {
@@ -60,7 +65,7 @@ export const wrapTextLines = (
     for (const word of words) {
       const candidate = current ? `${current} ${word}` : word;
       if (
-        measureLineWidth(candidate, fontSize, letterSpacing, measure) > maxWidth &&
+        measureLineWidth(candidate, fontSize, letterSpacing, measure, scaleX) > maxWidth &&
         current
       ) {
         out.push(current);
@@ -74,6 +79,34 @@ export const wrapTextLines = (
   return out;
 };
 
+/**
+ * Case transform, applied BEFORE measurement.
+ *
+ * It has to live here rather than in either renderer: uppercasing text changes
+ * how wide it is, so a transform applied at paint time would wrap at the wrong
+ * words and shrink-to-fit against the wrong measurement. One implementation,
+ * ahead of the wrap, is the only version that can't disagree with itself.
+ */
+export type TextTransform = 'none' | 'uppercase' | 'lowercase' | 'capitalize';
+
+export const applyTextTransform = (
+  text: string,
+  transform: TextTransform | undefined
+): string => {
+  switch (transform) {
+    case 'uppercase':
+      return text.toLocaleUpperCase();
+    case 'lowercase':
+      return text.toLocaleLowerCase();
+    case 'capitalize':
+      // Per word, and only the first letter — the rest is left alone, so an
+      // intentional "iPhone" survives.
+      return text.replace(/(^|\s)(\S)/g, (_, lead, ch) => lead + ch.toLocaleUpperCase());
+    default:
+      return text;
+  }
+};
+
 export interface FitTextBox {
   text: string;
   /** Wrap width — the element box width. */
@@ -84,6 +117,14 @@ export interface FitTextBox {
   fontSize: number;
   lineHeight?: number;
   letterSpacing?: number;
+  /** Horizontal scale; condensed text fits more per line. Defaults to 1. */
+  scaleX?: number;
+  /** Applied before wrapping, because case changes the measurement. */
+  textTransform?: TextTransform;
+  /** Extra leading before each paragraph after the first, in px. */
+  paragraphSpacing?: number;
+  /** First-line indent of each paragraph, in px. */
+  firstLineIndent?: number;
 }
 
 export interface FittedText {
@@ -91,6 +132,14 @@ export interface FittedText {
   lines: string[];
   /** Per-line advance in px (already multiplied by the line-height factor). */
   lineHeight: number;
+  /**
+   * Extra leading ABOVE each line, index-aligned with `lines` — paragraph
+   * spacing, which only applies to the first line of a new paragraph. All
+   * zeroes when no paragraph spacing is set, so the common case is unchanged.
+   */
+  lineGaps: number[];
+  /** Left indent per line, index-aligned with `lines`. */
+  lineIndents: number[];
 }
 
 /**
@@ -110,13 +159,52 @@ export const fitTextToBox = (
     Math.floor(box.fontSize * FIT_FLOOR_RATIO)
   );
   let size = box.fontSize;
+  const scaleX = box.scaleX || 1;
+  const paragraphSpacing = box.paragraphSpacing || 0;
+  const indent = box.firstLineIndent || 0;
+  // Case first: it changes the width of every word, so wrapping the untransformed
+  // text and uppercasing at paint time would break at the wrong places.
+  const text = applyTextTransform(box.text, box.textTransform);
+
+  // Which wrapped lines START a paragraph — the only ones paragraph spacing and
+  // a first-line indent apply to. Derived per wrap, since the wrap changes.
+  const paragraphStarts = (lines: string[]): boolean[] => {
+    if (!paragraphSpacing && !indent) return lines.map(() => false);
+    const counts = text
+      .split('\n')
+      .map((p) => wrapTextLines(p, box.width - indent, size, letterSpacing, measure, scaleX).length);
+    const starts = lines.map(() => false);
+    let at = 0;
+    for (const count of counts) {
+      if (at < starts.length) starts[at] = true;
+      at += count;
+    }
+    return starts;
+  };
+
   const wrapAt = (px: number) =>
-    wrapTextLines(box.text, box.width, px, letterSpacing, measure);
+    wrapTextLines(text, box.width - indent, px, letterSpacing, measure, scaleX);
+
+  const blockHeight = (lines: string[], px: number): number => {
+    const base = lines.length * lineHeightFactor * px;
+    if (!paragraphSpacing) return base;
+    // The first paragraph gets no space above it.
+    const extra = paragraphStarts(lines).filter(Boolean).length - 1;
+    return base + Math.max(0, extra) * paragraphSpacing;
+  };
 
   let lines = wrapAt(size);
-  while (size > floor && lines.length * lineHeightFactor * size > box.height) {
+  while (size > floor && blockHeight(lines, size) > box.height) {
     size = Math.max(floor, Math.floor(size * FIT_STEP_RATIO));
     lines = wrapAt(size);
   }
-  return { fontSize: size, lines, lineHeight: lineHeightFactor * size };
+
+  const starts = paragraphStarts(lines);
+  return {
+    fontSize: size,
+    lines,
+    lineHeight: lineHeightFactor * size,
+    lineGaps: starts.map((start, i) => (start && i > 0 ? paragraphSpacing : 0)),
+    lineIndents: starts.map((start) => (start ? indent : 0)),
+  };
 };
