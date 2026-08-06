@@ -27,6 +27,8 @@ const UNDER_HEADLINE = new Set([
   'dashed-rule',
   'double-rule',
   'underline-swash',
+  'swash-pair',
+  'wavy-rule',
 ]);
 
 /** Marks that want the whole canvas. */

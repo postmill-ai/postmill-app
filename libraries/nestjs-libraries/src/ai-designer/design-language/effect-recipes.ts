@@ -398,6 +398,26 @@ export const EFFECT_RECIPES: EffectRecipe[] = [
     ],
   },
   {
+    id: 'vignette',
+    label: 'Vignette',
+    description:
+      'Darkened edges fading to a clear centre — focuses the eye and adds mood. The single biggest lever for dark, cinematic designs.',
+    expand: () => [
+      {
+        type: 'gradient-overlay',
+        opacity: 1,
+        gradient: {
+          type: 'radial',
+          stops: [
+            { offset: 0, color: 'rgba(0, 0, 0, 0)' },
+            { offset: 0.65, color: 'rgba(0, 0, 0, 0.1)' },
+            { offset: 1, color: 'rgba(0, 0, 0, 0.55)' },
+          ],
+        },
+      },
+    ],
+  },
+  {
     id: 'glass-edge',
     label: 'Glass Edge',
     description: 'A bright inner rim and faint outer glow; frosted-panel look.',

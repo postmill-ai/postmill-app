@@ -156,8 +156,17 @@ export interface DesignSlotStyle {
   fill?: string;
   gradient?: [string, string];
   stroke?: { color: string; width: number };
-  shadow?: boolean;
+  /**
+   * true/false keeps the legacy preset behaviour; the object form gives the
+   * planner full control over the drop shadow.
+   */
+  shadow?: boolean | { color: string; blur: number; offsetX: number; offsetY: number };
   align?: 'left' | 'center' | 'right';
+  /** Tracking in px (negative tightens) — the dial letterspaced caps need. */
+  letterSpacing?: number;
+  /** Leading as a font-size multiple (1.0–1.6). */
+  lineHeight?: number;
+  opacity?: number;
   /** Badge slot shape override — wins over the preset's badgeStyle treatment. */
   badgeStyle?: 'pill' | 'burst' | 'ribbon';
   /** CTA slot shape override — wins over the preset's ctaStyle treatment. */
@@ -193,6 +202,16 @@ export interface DesignSlot {
   blend?: string;
   /** Rotation in degrees. Decorative and badge elements only. */
   rotation?: number;
+  /** Scales the chosen treatment's parameters (0 = no-op, 1 = full recipe). */
+  treatmentStrength?: number;
+  /**
+   * A directional gradient scrim over this image slot so type on top stays
+   * legible — how the planner creates a quiet type zone in a busy photo.
+   */
+  scrim?: {
+    direction: 'left' | 'right' | 'top' | 'bottom' | 'full';
+    strength: number;
+  };
 }
 
 /**
@@ -290,6 +309,10 @@ export interface FixStyle {
   fontFamily?: string;
   align?: 'left' | 'center' | 'right';
   verticalAlign?: 'top' | 'middle' | 'bottom';
+  /** Tracking in px — the fix for cramped or un-designed all-caps labels. */
+  letterSpacing?: number;
+  /** Leading as a font-size multiple. */
+  lineHeight?: number;
   /** Text outline (maps to the element's `textStroke`). */
   textStroke?: DesignerTextStroke;
   textShadow?: boolean;

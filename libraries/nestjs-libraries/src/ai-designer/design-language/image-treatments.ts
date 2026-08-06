@@ -233,8 +233,11 @@ export const IMAGE_TREATMENTS: ImageTreatment[] = [
     description: 'Bright, low-contrast and airy; leaves plenty of room for dark type.',
     expand: (ctx) => ({
       adjustments: [
-        { type: 'levels', values: { black: 0, gamma: 1.25, white: 255 } },
-        { type: 'brightness-contrast', values: { brightness: at(ctx, 12), contrast: -at(ctx, 15) } },
+        // Gentle lift only — at full depth strength the old values (gamma
+        // 1.25, +12/−15) bleached an already-bright photo to a ghost
+        // (observed live: the chair vanished into the white page).
+        { type: 'levels', values: { black: 0, gamma: 1.15, white: 255 } },
+        { type: 'brightness-contrast', values: { brightness: at(ctx, 7), contrast: -at(ctx, 9) } },
       ],
       smartFilters: [],
     }),

@@ -45,6 +45,7 @@ export const DESIGNER_FONTS: DesignerFont[] = [
   { family: 'Crimson Text', label: 'Crimson Text', weights: [400, 600, 700], category: 'serif' },
   { family: 'Cormorant Garamond', label: 'Cormorant Garamond', weights: [300, 400, 500, 600, 700], category: 'serif' },
   { family: 'Noto Serif', label: 'Noto Serif', weights: [400, 700], category: 'serif' },
+  { family: 'Zilla Slab', label: 'Zilla Slab', weights: [300, 400, 500, 600, 700], category: 'serif' },
 
   // Display
   { family: 'Bebas Neue', label: 'Bebas Neue', weights: [400], category: 'display' },
@@ -58,6 +59,7 @@ export const DESIGNER_FONTS: DesignerFont[] = [
   { family: 'Caveat', label: 'Caveat', weights: [400, 500, 600, 700], category: 'display' },
   { family: 'Shadows Into Light', label: 'Shadows Into Light', weights: [400], category: 'display' },
   { family: 'Dancing Script', label: 'Dancing Script', weights: [400, 500, 600, 700], category: 'display' },
+  { family: 'Great Vibes', label: 'Great Vibes', weights: [400], category: 'display' },
 
   // Monospace
   { family: 'JetBrains Mono', label: 'JetBrains Mono', weights: [300, 400, 500, 600, 700, 800], category: 'monospace' },

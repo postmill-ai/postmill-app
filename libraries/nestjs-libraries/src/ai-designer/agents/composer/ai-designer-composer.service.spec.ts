@@ -410,7 +410,7 @@ describe('AiDesignerComposerService.applyFixes on a lockup instance', () => {
         outputIndex: 0,
         elementId: 'e1',
         scope: 'shared',
-        patch: { symbolOverrides: { label: { text: 'Shop now' }, plate: { fill: '#FFFFFF' } } },
+        patch: { symbolOverrides: { label: { text: 'Shop now', fill: '#111111' }, plate: { fill: '#FFFFFF' } } },
       },
     ]);
   });
@@ -438,7 +438,7 @@ describe('AiDesignerComposerService.applyFixes on a lockup instance', () => {
         elementId: 'e1',
         scope: 'shared',
         patch: {
-          symbolOverrides: { label: { text: 'Shop the sale' }, plate: { fill: '#FFFFFF' } },
+          symbolOverrides: { label: { text: 'Shop the sale', fill: '#111111' }, plate: { fill: '#FFFFFF' } },
         },
       },
     ]);
@@ -2546,11 +2546,10 @@ describe('AiDesignerComposerService framing & legibility', () => {
 
 
   it('honors a slot-level badgeStyle override over the preset treatment', async () => {
-    // The 'bold' preset badges are pills — the plan's slot-level ribbon wins.
-    // (This used to assert a slot-level 'burst' produced a star; the override
-    // MECHANISM is what matters and is still live, so the test keeps its
-    // coverage using a treatment that still renders distinctly — see the
-    // burst-resolves-to-pill test below for the retired value.)
+    // The 'bold' preset badges are pills — the plan's slot-level ribbon wins,
+    // and a ribbon is a real one: a closed, gently arched path (proved in the
+    // manual clone test), NOT the preset's fully-rounded pill and not a
+    // barely-rounded rect (the old fake-ribbon behaviour).
     const plan = makePlan({ styleId: 'bold' });
     plan.slots.push({
       id: 'badge',
@@ -2564,10 +2563,10 @@ describe('AiDesignerComposerService framing & legibility', () => {
     });
 
     const shape = byOrigin(doc, 'badge-bg');
-    expect(shape.shape).toBe('rect');
-    // A ribbon is a barely-rounded rect, NOT the preset's fully-rounded pill.
-    expect(shape.borderRadius).toBe(Math.round(shape.height * 0.12));
-    expect(shape.borderRadius).not.toBe(Math.round(shape.height / 2));
+    expect(shape.type).toBe('path');
+    expect(shape.closed).toBe(true);
+    expect(shape.borderRadius).toBeUndefined();
+    expect(shape.nodes?.length).toBeGreaterThanOrEqual(4);
   });
 
   // Round 8 (D1): the `burst` enum value is deliberately KEPT (stored plans,

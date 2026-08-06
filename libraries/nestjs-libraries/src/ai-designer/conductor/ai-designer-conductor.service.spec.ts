@@ -4816,3 +4816,190 @@ describe('_dispatchAgent abort signal', () => {
     expect(seenMetadata.signal.aborted).toBe(true);
   });
 });
+
+
+// The beauty gate: a variant the critic STILL flags for aesthetic criteria
+// after MAX_QUALITY_PASSES is held back rather than shipped — unless it is
+// the only result, in which case it ships with a warning.
+describe('AiDesignerConductorService beauty gate', () => {
+  const makePlan = (variantId: string) => ({
+    variantId,
+    skill: 'advertisement',
+    concept: `concept-${variantId}`,
+    slots: [] as any[],
+    assetNeeds: [] as any[],
+    palette: [] as any[],
+    typeScale: {},
+    background: { kind: 'solid' as const },
+  });
+
+  const makeRenderResult = (variantId: string) => ({
+    designId: `design-${variantId}`,
+    variantId,
+    outputPreviews: [
+      {
+        formatId: 'ig-post',
+        fileId: `file-${variantId}`,
+        url: `https://example.com/preview-${variantId}.png`,
+      },
+    ],
+    contactSheetUrl: `https://example.com/sheet-${variantId}.png`,
+  });
+
+  const AESTHETIC_FINDING = {
+    issue: 'The design reads as a filled-in template, not an art-directed poster',
+    slotId: 'image',
+    criterion: 'aesthetic_quality',
+    fix: { scope: 'shared', targetSlots: ['image'], effects: ['vignette'] },
+  };
+
+  const makeGateConductor = (
+    plans: any[],
+    findingsFor: (variantTag: string) => any[]
+  ) => {
+    const service = {
+      getSessionForUser: vi.fn().mockResolvedValue({
+        id: SESSION_ID,
+        state: 'awaiting_plan',
+        mode: 'prompt',
+        brief: { intent: 'x', lastPlans: plans },
+        config: { channels: ['ig-post'], variants: plans.length },
+        activeDesignIds: null,
+      }),
+      updateSession: vi.fn().mockResolvedValue(undefined),
+      appendMessage: vi.fn().mockResolvedValue({ id: 'msg-1' }),
+    };
+    const saver = {
+      saveDesign: vi.fn().mockImplementation((_orgId, _userId, variantId) =>
+        Promise.resolve(makeRenderResult(variantId))
+      ),
+      updateDesign: vi.fn().mockImplementation((_orgId, designId: string) => {
+        const tag = designId.replace('design-', '');
+        return Promise.resolve({
+          designId,
+          variantId: `${tag}-revised`,
+          contactSheetUrl: `https://example.com/sheet-${tag}-revised.png`,
+          outputPreviews: [
+            {
+              formatId: 'ig-post',
+              fileId: `file-${tag}-revised`,
+              url: `https://example.com/preview-${tag}-revised.png`,
+            },
+          ],
+        });
+      }),
+    };
+    const composer = { applyFixes: vi.fn((d: any) => Promise.resolve(d)) };
+    const designService = {
+      getDesign: vi
+        .fn()
+        .mockResolvedValue({ id: 'design', doc: { metadata: {}, layers: [] } }),
+    };
+
+    const { conductor } = makeConductor({ service });
+    (conductor as any)._skillRouter = {
+      getRubric: vi.fn().mockReturnValue({ criteria: [] }),
+    };
+    (conductor as any)._saver = saver;
+    (conductor as any)._composer = composer;
+    (conductor as any)._designService = designService;
+
+    const dispatchAgent = vi.fn().mockImplementation((_, agentId, payload) => {
+      if (agentId === 'asset') {
+        return Promise.resolve({ content: JSON.stringify({ type: 'assets', assets: {} }) });
+      }
+      if (agentId === 'copywriter') {
+        return Promise.resolve({ content: JSON.stringify({ type: 'copy', texts: {} }) });
+      }
+      if (agentId === 'composer') {
+        return Promise.resolve({
+          content: JSON.stringify({ type: 'doc', doc: { metadata: {}, layers: [] } }),
+        });
+      }
+      if (agentId === 'vision-critic') {
+        const url: string = payload?.contactSheetUrl ?? '';
+        // The variant tag ('v1', 'v2', …) rides every preview/sheet URL.
+        const tag = plans
+          .map((p) => p.variantId as string)
+          .find((v) => url.includes(v));
+        return Promise.resolve({
+          content: JSON.stringify({
+            type: 'findings',
+            findings: tag ? findingsFor(tag) : [],
+          }),
+        });
+      }
+      return Promise.resolve({ content: '{}' });
+    });
+    (conductor as any)._dispatchAgent = dispatchAgent;
+
+    const mediaItems = () =>
+      (service.appendMessage as ReturnType<typeof vi.fn>).mock.calls
+        .filter((call) => call[0].kind === 'media')
+        .flatMap((call) => call[0].content.items as any[]);
+    const headsUp = () =>
+      (service.appendMessage as ReturnType<typeof vi.fn>).mock.calls
+        .filter(
+          (call) =>
+            call[0].kind === 'markdown' && call[0].content.md.includes('Heads up')
+        )
+        .map((call) => call[0].content.md as string)
+        .join('\n');
+
+    return { conductor, saver, composer, dispatchAgent, mediaItems, headsUp };
+  };
+
+  it('holds back a variant still flagged for aesthetic criteria after the bounded passes', async () => {
+    const emitter = makeEmitter();
+    const { conductor, dispatchAgent, mediaItems, headsUp } = makeGateConductor(
+      [makePlan('v1'), makePlan('v2')],
+      (tag) => (tag === 'v1' ? [AESTHETIC_FINDING] : [])
+    );
+
+    await conductor.handleAcceptPlan(SESSION_ID, ctx, 'reply-1', undefined, false, undefined, emitter);
+
+    // v1 got the full bounded loop (3 critiques), v2 one clean pass.
+    const criticCalls = dispatchAgent.mock.calls.filter(
+      ([_, agentId]: any) => agentId === 'vision-critic'
+    );
+    expect(criticCalls).toHaveLength(4);
+
+    // The held-back variant is NOT delivered; the clean one is.
+    const designIds = mediaItems().map((item) => item.designId);
+    expect(designIds).not.toContain('design-v1');
+    expect(designIds).toContain('design-v2');
+    expect(headsUp()).toContain('variant 1 was held back');
+  });
+
+  it('delivers the only result with a warning instead of delivering nothing', async () => {
+    const emitter = makeEmitter();
+    const { conductor, mediaItems, headsUp } = makeGateConductor(
+      [makePlan('v1')],
+      () => [AESTHETIC_FINDING]
+    );
+
+    await conductor.handleAcceptPlan(SESSION_ID, ctx, 'reply-1', undefined, false, undefined, emitter);
+
+    const designIds = mediaItems().map((item) => item.designId);
+    expect(designIds).toContain('design-v1');
+    expect(headsUp()).toContain('still has known quality issues');
+  });
+
+  it('keeps the old single-pass behaviour when the first critique is clean', async () => {
+    const emitter = makeEmitter();
+    const { conductor, dispatchAgent, mediaItems } = makeGateConductor(
+      [makePlan('v1'), makePlan('v2')],
+      () => []
+    );
+
+    await conductor.handleAcceptPlan(SESSION_ID, ctx, 'reply-1', undefined, false, undefined, emitter);
+
+    const criticCalls = dispatchAgent.mock.calls.filter(
+      ([_, agentId]: any) => agentId === 'vision-critic'
+    );
+    expect(criticCalls).toHaveLength(2);
+    expect(mediaItems().map((item) => item.designId)).toEqual(
+      expect.arrayContaining(['design-v1', 'design-v2'])
+    );
+  });
+});

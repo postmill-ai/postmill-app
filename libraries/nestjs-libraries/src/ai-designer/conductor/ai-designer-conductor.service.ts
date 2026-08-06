@@ -128,6 +128,23 @@ export class AiDesignerConductorService {
     Map<string, RegeneratedSlot>
   >();
   private static readonly REGENERATE_MAX_ATTEMPTS = 2;
+  /**
+   * The beauty gate: how many critique passes a variant gets before it is
+   * judged as-is. Passes 1..N-1 critique AND fix; the last pass critiques
+   * only, so the decision below is made on the render the fixes produced.
+   */
+  private static readonly MAX_QUALITY_PASSES = 3;
+  /**
+   * Findings under these criteria say "not beautiful enough", not "broken" —
+   * a variant still flagged for them after MAX_QUALITY_PASSES is held back
+   * rather than shipped (unless it is the only result).
+   */
+  private static readonly AESTHETIC_CRITERIA = new Set([
+    'aesthetic_quality',
+    'craft_polish',
+    'reference_fidelity',
+    'image_quality',
+  ]);
   // Stock provider item id per asset key for the assets this session composed
   // with. A regeneration passes it back to the asset agent as an exclusion (the
   // stock search is deterministic AND Redis-cached, so an unguarded re-run
@@ -1588,125 +1605,182 @@ export class AiDesignerConductorService {
       throw lastError;
     }
 
-    // K=1 auto-revision: run Vision Critic on each contact sheet and re-render
-    // once. The whole step — INCLUDING the critic dispatch — is non-fatal: the
-    // variants above are already rendered, saved, and previewed, so a vision
-    // provider failure here must deliver the un-critiqued result, never roll
-    // the session back and orphan the saved designs.
+    // Bounded beauty loop: critique → fix → re-render, then re-critique the
+    // FIXED render, up to MAX_QUALITY_PASSES per variant. The first pass is
+    // the old K=1 behaviour; later passes exist because a fix can miss — or
+    // trade one defect for another — and only a re-critique of the revised
+    // render can say. A variant still flagged for BEAUTY criteria after the
+    // bound is held back rather than shipped. The whole step — INCLUDING the
+    // critic dispatch — is non-fatal: the variants above are already rendered,
+    // saved, and previewed, so a vision provider failure here must deliver the
+    // un-critiqued result, never roll the session back and orphan the saved
+    // designs.
+    const heldBack = new Set<string>();
     for (let i = 0; i < results.length; i++) {
       this._throwIfCancelled(sessionId);
-      const result = results[i];
-      if (!result.contactSheetUrl) {
+      if (!results[i].contactSheetUrl) {
         notes.push(`the automatic quality pass was skipped for variant ${i + 1}`);
         continue;
       }
 
-      try {
-        const planForVariant = plans.find((p) => p.variantId === result.variantId);
-        emitter.progress(
-          'vision-critic',
-          `Reviewing variant ${i + 1}/${results.length}`,
-          Math.round(((i + 1) / results.length) * 100)
-        );
-        const docForVariant = composedDocs.get(result.variantId);
-        const criticResponse = await this._dispatchAgent(ctx, 'vision-critic', {
-          type: 'critique-request',
-          // Single-output doc: send the output's own full-res preview — the
-          // contact sheet downscales to ≤400px, hiding badge-sized text and
-          // contrast/occlusion defects. Multi-page docs keep the sheet.
-          contactSheetUrl:
-            result.outputPreviews.length === 1
-              ? result.outputPreviews[0].url
-              : result.contactSheetUrl,
-          plans,
-          // The doc holds only the primary format at this point (variants are
-          // expanded later) — the critic must critique what is on the sheet.
-          outputs: outputs.slice(0, 1),
-          rubric: this._skillRouter.getRubric(planForVariant?.skill ?? plans[0]?.skill ?? 'meme'),
-          outputPreviews: result.outputPreviews.map((o) => ({
-            formatId: o.formatId,
-            url: o.url,
-          })),
-          ...(docForVariant
-            ? { docSummary: this._critiqueDocSummary(docForVariant) }
-            : {}),
-        });
-        const { findings, skipped } = this._parseFindings(criticResponse);
-        if (skipped) {
-          notes.push(
-            `the automatic quality pass was skipped for variant ${i + 1}`
+      let aestheticFindings: VisionFinding[] = [];
+      for (let pass = 0; pass < AiDesignerConductorService.MAX_QUALITY_PASSES; pass++) {
+        const result = results[i];
+        const lastPass =
+          pass === AiDesignerConductorService.MAX_QUALITY_PASSES - 1;
+        try {
+          const planForVariant = plans.find((p) => p.variantId === result.variantId);
+          emitter.progress(
+            'vision-critic',
+            pass === 0
+              ? `Reviewing variant ${i + 1}/${results.length}`
+              : `Re-reviewing variant ${i + 1}/${results.length} (pass ${pass + 1})`,
+            Math.round(((i + 1) / results.length) * 100)
           );
-          continue;
-        }
-        if (findings.length === 0) continue;
-
-        this._logger.log(
-          `Vision Critic found ${findings.length} issues for ${result.variantId}; auto-revising once.`
-        );
-
-        const doc = await this._loadDesignDoc(ctx.orgId, result.designId);
-        emitter.progress('composer', 'Applying fixes');
-        // Imagery-regeneration fixes run deterministically here (asset agent
-        // re-dispatch + src/fileId swap); the rest go through applyFixes.
-        const { regenerate, rest } = this._partitionRegenerateFindings(findings);
-        const regeneratedDoc = await this._regenerateFlaggedAssets(
-          sessionId,
-          ctx,
-          doc,
-          regenerate,
-          planForVariant,
-          notes
-        );
-        if (rest.length === 0 && regeneratedDoc === doc) {
-          // Every finding was a regeneration that failed or was capped —
-          // nothing changed, so skip the pointless re-render.
-          continue;
-        }
-        const revisedDoc = await this._composer.applyFixes(
-          regeneratedDoc,
-          rest,
-          ctx.orgId,
-          this._aborts.get(sessionId)?.signal,
-          undefined,
-          this._lockedTextsFor([planForVariant]),
-          planForVariant
-        );
-        // Update the SAME Design row (+ preview) — a second saveDesign here
-        // would orphan the pre-fix row and its preview files, the exact leak
-        // the manual revise path avoids via updateDesign.
-        let revised = await this._saver.updateDesign(
-          ctx.orgId,
-          result.designId,
-          `${result.variantId}-revised`,
-          revisedDoc,
-          {
-            name: `${plans[0]?.skill ?? 'ai-design'}-${result.variantId}-revised`,
-            saveFolderId,
+          const docForVariant = composedDocs.get(result.variantId);
+          const criticResponse = await this._dispatchAgent(ctx, 'vision-critic', {
+            type: 'critique-request',
+            // Single-output doc: send the output's own full-res preview — the
+            // contact sheet downscales to ≤400px, hiding badge-sized text and
+            // contrast/occlusion defects. Multi-page docs keep the sheet.
+            contactSheetUrl:
+              result.outputPreviews.length === 1
+                ? result.outputPreviews[0].url
+                : result.contactSheetUrl,
+            plans,
+            // The doc holds only the primary format at this point (variants are
+            // expanded later) — the critic must critique what is on the sheet.
+            outputs: outputs.slice(0, 1),
+            rubric: this._skillRouter.getRubric(planForVariant?.skill ?? plans[0]?.skill ?? 'meme'),
+            outputPreviews: result.outputPreviews.map((o) => ({
+              formatId: o.formatId,
+              url: o.url,
+            })),
+            ...(docForVariant
+              ? { docSummary: this._critiqueDocSummary(docForVariant) }
+              : {}),
+            ...(brief.referenceCues?.length
+              ? { referenceCues: brief.referenceCues }
+              : {}),
+          });
+          const { findings, skipped } = this._parseFindings(criticResponse);
+          if (skipped) {
+            if (pass === 0) {
+              notes.push(
+                `the automatic quality pass was skipped for variant ${i + 1}`
+              );
+            }
+            break;
           }
-        );
-        const revisedFixed = await this._fixContrastOverImagery(
-          ctx,
-          result.designId,
-          revisedDoc,
-          { ...revised, variantId: result.variantId },
-          `${plans[0]?.skill ?? 'ai-design'}-${result.variantId}-revised`,
-          saveFolderId,
-          notes,
-          `variant ${i + 1}`
-        );
-        revised = revisedFixed.render;
-        results[i] = { ...revised, variantId: result.variantId };
-        emitter.preview(results[i]);
-      } catch (err) {
-        if (this._wasCancelled(err)) throw err;
-        this._logger.warn(
-          `Vision critique/auto-revise failed for ${result.variantId}: ${
-            (err as Error).message
-          }`,
-          AiDesignerConductorService.name
-        );
-        notes.push(`the automatic quality pass failed for variant ${i + 1}`);
+          if (findings.length === 0) {
+            aestheticFindings = [];
+            break;
+          }
+
+          // The last pass judges only — no fix budget left, so its findings
+          // describe the render as it will ship.
+          aestheticFindings = findings.filter(
+            (f) =>
+              f.criterion &&
+              AiDesignerConductorService.AESTHETIC_CRITERIA.has(f.criterion)
+          );
+          if (lastPass) break;
+
+          this._logger.log(
+            `Vision Critic found ${findings.length} issues for ${result.variantId}; auto-revising (pass ${pass + 1}).`
+          );
+
+          const doc = await this._loadDesignDoc(ctx.orgId, result.designId);
+          emitter.progress('composer', 'Applying fixes');
+          // Imagery-regeneration fixes run deterministically here (asset agent
+          // re-dispatch + src/fileId swap); the rest go through applyFixes.
+          const { regenerate, rest } = this._partitionRegenerateFindings(findings);
+          const regeneratedDoc = await this._regenerateFlaggedAssets(
+            sessionId,
+            ctx,
+            doc,
+            regenerate,
+            planForVariant,
+            notes
+          );
+          if (rest.length === 0 && regeneratedDoc === doc) {
+            // Every finding was a regeneration that failed or was capped —
+            // nothing changed, and a re-critique would repeat these findings.
+            break;
+          }
+          const revisedDoc = await this._composer.applyFixes(
+            regeneratedDoc,
+            rest,
+            ctx.orgId,
+            this._aborts.get(sessionId)?.signal,
+            undefined,
+            this._lockedTextsFor([planForVariant]),
+            planForVariant
+          );
+          // Update the SAME Design row (+ preview) — a second saveDesign here
+          // would orphan the pre-fix row and its preview files, the exact leak
+          // the manual revise path avoids via updateDesign.
+          let revised = await this._saver.updateDesign(
+            ctx.orgId,
+            result.designId,
+            `${result.variantId}-revised`,
+            revisedDoc,
+            {
+              name: `${plans[0]?.skill ?? 'ai-design'}-${result.variantId}-revised`,
+              saveFolderId,
+            }
+          );
+          const revisedFixed = await this._fixContrastOverImagery(
+            ctx,
+            result.designId,
+            revisedDoc,
+            { ...revised, variantId: result.variantId },
+            `${plans[0]?.skill ?? 'ai-design'}-${result.variantId}-revised`,
+            saveFolderId,
+            notes,
+            `variant ${i + 1}`
+          );
+          revised = revisedFixed.render;
+          results[i] = { ...revised, variantId: result.variantId };
+          // The re-critique must see the REVISED doc, not the pre-fix one.
+          composedDocs.set(result.variantId, revisedDoc);
+          emitter.preview(results[i]);
+        } catch (err) {
+          if (this._wasCancelled(err)) throw err;
+          this._logger.warn(
+            `Vision critique/auto-revise failed for ${result.variantId}: ${
+              (err as Error).message
+            }`,
+            AiDesignerConductorService.name
+          );
+          if (pass === 0) {
+            notes.push(`the automatic quality pass failed for variant ${i + 1}`);
+          }
+          break;
+        }
       }
+
+      // The beauty gate: the loop ended with the critic still flagging BEAUTY
+      // criteria on the shipping render. Hold the variant back — but never
+      // deliver an empty set: the last surviving variant ships with a warning.
+      if (aestheticFindings.length > 0) {
+        const firstIssue = aestheticFindings[0].issue;
+        if (results.length - heldBack.size > 1) {
+          heldBack.add(results[i].variantId);
+          notes.push(
+            `variant ${i + 1} was held back — after ${AiDesignerConductorService.MAX_QUALITY_PASSES} review passes it still missed the quality bar (${firstIssue})`
+          );
+        } else {
+          notes.push(
+            `variant ${i + 1} still has known quality issues (${firstIssue}) — delivered anyway because it is the only result; please review before publishing`
+          );
+        }
+      }
+    }
+    if (heldBack.size > 0) {
+      const kept = results.filter((r) => !heldBack.has(r.variantId));
+      results.length = 0;
+      results.push(...kept);
     }
 
     // Variant expansion: each saved original holds only the primary format.

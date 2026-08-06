@@ -73,8 +73,25 @@ const SlotStyleSchema = z
         width: z.number().min(0).max(50),
       })
       .optional(),
-    shadow: z.boolean().optional(),
+    // true/false keeps the legacy preset behaviour; the object form gives the
+    // planner full control over the drop shadow.
+    shadow: z
+      .union([
+        z.boolean(),
+        z.object({
+          color: z.string().max(100),
+          blur: z.number().min(0).max(200),
+          offsetX: z.number().min(-100).max(100),
+          offsetY: z.number().min(-100).max(100),
+        }),
+      ])
+      .optional(),
     align: z.enum(['left', 'center', 'right']).optional(),
+    // Tracking in px (negative tightens) and leading as a font-size multiple —
+    // the two craft dials letterspaced caps and tight display type need.
+    letterSpacing: z.number().min(-2).max(20).optional(),
+    lineHeight: z.number().min(1).max(1.6).optional(),
+    opacity: z.number().min(0).max(1).optional(),
     badgeStyle: z.enum(['pill', 'burst', 'ribbon']).optional(),
     ctaStyle: z.enum(['pill', 'rect', 'underline', 'outline']).optional(),
   })
@@ -108,9 +125,20 @@ const DesignSlotSchema = z
     style: SlotStyleSchema.optional(),
     effects: z.array(RecipeNameSchema).max(4).optional(),
     treatment: RecipeNameSchema.optional(),
+    // Scales the chosen treatment's parameters (0 = no-op, 1 = full recipe).
+    // Plan-level "depth" stays the default when omitted.
+    treatmentStrength: z.number().min(0).max(1).optional(),
     mask: RecipeNameSchema.optional(),
     blend: z.string().max(40).optional(),
     rotation: z.number().min(-180).max(180).optional(),
+    // A directional gradient scrim over this image slot so type on top stays
+    // legible — the planner's dial for creating a quiet type zone.
+    scrim: z
+      .object({
+        direction: z.enum(['left', 'right', 'top', 'bottom', 'full']),
+        strength: z.number().min(0).max(1),
+      })
+      .optional(),
   })
   .passthrough();
 

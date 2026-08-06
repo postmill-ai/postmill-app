@@ -3,6 +3,7 @@ import { MemeSkill } from './skills/meme.skill';
 import { AdvertisementSkill } from './skills/advertisement.skill';
 import { GreetingCardSkill } from './skills/greeting-card.skill';
 import { ProductPromoSkill } from './skills/product-promo.skill';
+import { ReferenceCloneSkill } from './skills/reference-clone.skill';
 import { AnnouncementSkill } from './skills/announcement.skill';
 import { COMMERCE_SKILLS } from './skills/commerce.skills';
 import { ANNOUNCEMENT_SKILLS } from './skills/announcement.skills';
@@ -30,6 +31,10 @@ export const DESIGN_SKILLS: DesignSkill[] = [
   GreetingCardSkill,
   ProductPromoSkill,
   AnnouncementSkill,
+  // Meta-skill: outranks every genre (match 0.98) the moment the brief
+  // carries reference cues — a user who attached a design wants ITS
+  // structure, not a genre's conventions.
+  ReferenceCloneSkill,
   ...COMMERCE_SKILLS,
   ...ANNOUNCEMENT_SKILLS,
   ...SOCIAL_NATIVE_SKILLS,

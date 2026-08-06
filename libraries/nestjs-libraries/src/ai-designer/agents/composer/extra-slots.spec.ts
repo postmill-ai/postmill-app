@@ -64,7 +64,9 @@ describe('isExtraSlot', () => {
 });
 
 describe('every kind now produces something', () => {
-  it.each(['shape', 'icon', 'divider', 'logo', 'frame'] as const)('%s builds an element', (kind) => {
+  // `icon` is deliberately out of this list: an unresolved icon slot drops
+  // (see the icon describe below) rather than stand in with a placeholder.
+  it.each(['shape', 'divider', 'logo', 'frame'] as const)('%s builds an element', (kind) => {
     expect(buildExtraSlot(slot(kind), 0, ctx()).length).toBeGreaterThan(0);
   });
 
@@ -189,12 +191,13 @@ describe('logo', () => {
 });
 
 describe('icon', () => {
-  it('stands in with a shape when nothing resolvable was named', () => {
-    // No resolved icon in the context — the ellipse keeps the design honest
-    // rather than emitting an icon element with no source.
-    const [el] = buildExtraSlot(slot('icon'), 0, ctx());
-    expect(el.type).toBe('shape');
-    expect(el.fill).toBeTruthy();
+  it('drops the slot when nothing resolvable was named', () => {
+    // No resolved icon in the context — the slot drops rather than emitting
+    // the old ellipse stand-in, which rendered as a placeholder-looking blob
+    // (a grey circle that read as a defect, not decor). Deliberate dots are
+    // the `shape` kind's job.
+    const els = buildExtraSlot(slot('icon'), 0, ctx());
+    expect(els).toEqual([]);
   });
 
   it('emits a real icon element when the slot was resolved', () => {
@@ -242,7 +245,7 @@ describe('resolveIconSlots', () => {
 
 describe('placement', () => {
   it('cycles corners so two decorative slots do not stack', () => {
-    const els = buildExtraSlots([slot('shape', 'decor', 'a'), slot('icon', 'decor', 'b')], ctx());
+    const els = buildExtraSlots([slot('shape', 'decor', 'a'), slot('shape', 'decor', 'b')], ctx());
     expect({ x: els[0].x, y: els[0].y }).not.toEqual({ x: els[1].x, y: els[1].y });
   });
 

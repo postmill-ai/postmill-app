@@ -230,28 +230,19 @@ export const buildExtraSlot = (
       // A real `icon` element when the slot named a resolvable Iconify icon
       // (see `resolveIconSlots` below); the raw SVG body goes in `src` with
       // the accent as its tint, exactly like a hand-placed icon from the
-      // Designer's icons panel. Until Phase 1's schema/render work this had
-      // to be a shape — an `icon` element failed strict validation AND the
-      // server render — and the ellipse stays as the fallback for a slot
-      // that named nothing resolvable.
+      // Designer's icons panel. An UNRESOLVED icon slot is dropped: the old
+      // ellipse stand-in rendered as a placeholder-looking blob (observed
+      // live — a grey circle top-right that read as a defect, not decor).
+      // Deliberate dots are the `shape` kind's job.
       const size = Math.round(unit * 0.09);
       const anchor = box ?? cornerBox(ctx, index, size, size);
       const resolved = ctx.resolvedIcons?.get(slot.id);
-      if (resolved) {
-        return [
-          {
-            ...base(slot, anchor),
-            type: 'icon',
-            src: resolved.body,
-            fill: accent,
-          } as DesignerElement,
-        ];
-      }
+      if (!resolved) return [];
       return [
         {
           ...base(slot, anchor),
-          type: 'shape',
-          shape: 'ellipse',
+          type: 'icon',
+          src: resolved.body,
           fill: accent,
         } as DesignerElement,
       ];

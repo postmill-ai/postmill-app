@@ -117,6 +117,88 @@ describe('DesignPlanSchema v2', () => {
   });
 });
 
+describe('DesignPlanSchema craft fields', () => {
+  it('accepts the craft dials: tracking, leading, opacity, shadow object', () => {
+    const res = DesignPlanSchema.safeParse({
+      ...makeV1Plan(),
+      slots: [
+        {
+          id: 'headline',
+          role: 'headline',
+          kind: 'text',
+          style: {
+            letterSpacing: 2.5,
+            lineHeight: 1.05,
+            opacity: 0.9,
+            shadow: { color: 'rgba(0,0,0,0.6)', blur: 12, offsetX: 0, offsetY: 4 },
+          },
+        },
+      ],
+    });
+    expect(res.success).toBe(true);
+  });
+
+  it('still accepts the legacy boolean shadow', () => {
+    const res = DesignPlanSchema.safeParse({
+      ...makeV1Plan(),
+      slots: [
+        { id: 'headline', role: 'headline', kind: 'text', style: { shadow: false } },
+      ],
+    });
+    expect(res.success).toBe(true);
+  });
+
+  it('rejects out-of-range craft values', () => {
+    const badTracking = DesignPlanSchema.safeParse({
+      ...makeV1Plan(),
+      slots: [
+        { id: 'headline', role: 'headline', kind: 'text', style: { letterSpacing: 99 } },
+      ],
+    });
+    expect(badTracking.success).toBe(false);
+
+    const badLeading = DesignPlanSchema.safeParse({
+      ...makeV1Plan(),
+      slots: [
+        { id: 'headline', role: 'headline', kind: 'text', style: { lineHeight: 2.5 } },
+      ],
+    });
+    expect(badLeading.success).toBe(false);
+  });
+
+  it('accepts scrim and treatmentStrength on image slots', () => {
+    const res = DesignPlanSchema.safeParse({
+      ...makeV1Plan(),
+      slots: [
+        {
+          id: 'image',
+          role: 'image',
+          kind: 'image',
+          treatment: 'moody-dark',
+          treatmentStrength: 0.7,
+          scrim: { direction: 'left', strength: 0.6 },
+        },
+      ],
+    });
+    expect(res.success).toBe(true);
+  });
+
+  it('rejects a malformed scrim', () => {
+    const res = DesignPlanSchema.safeParse({
+      ...makeV1Plan(),
+      slots: [
+        {
+          id: 'image',
+          role: 'image',
+          kind: 'image',
+          scrim: { direction: 'diagonal', strength: 0.6 },
+        },
+      ],
+    });
+    expect(res.success).toBe(false);
+  });
+});
+
 describe('DesignBriefSchema v2', () => {
   it('accepts a styleId from the registry', () => {
     const res = DesignBriefSchema.safeParse({

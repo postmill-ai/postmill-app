@@ -257,6 +257,8 @@ export class AiDesignerArtDirectorService implements OnModuleInit {
       ...this._skillLayoutGuidance(skillId),
       ...this._designLanguageGuidance(),
       '',
+      ...this._craftGuidance(brief),
+      '',
       ...this._styleGuidance(brief),
       '',
       `Return ONLY a JSON object in this exact shape: { "type": "plans", "plans": DesignPlan[] }.`,
@@ -277,8 +279,9 @@ export class AiDesignerArtDirectorService implements OnModuleInit {
       'Type accents: a slot may override the preset fonts per slot via "style": { "fontFamily": ... }',
       'and "style": { "fill": ... }. Use this ONLY for a decorative accent line the concept calls',
       'for — a script flourish above the headline ("Italian", "Traditional", "handmade") or a',
-      'single word set in the accent color. Script faces available: "Dancing Script", "Lobster",',
-      '"Pacifico", "Caveat", "Shadows Into Light". A script line takes an accent fill from the',
+      'single word set in the accent color. Script faces available: "Great Vibes" (formal',
+      'copperplate — elegant, restaurant/celebration), "Dancing Script", "Lobster",',
+      '"Pacifico", "Caveat", "Shadows Into Light" (casual). A script line takes an accent fill from the',
       'palette, never the body color. Everything else keeps the preset pairing — mixed fonts on',
       'ordinary copy reads as a mistake, not a style.',
       '',
@@ -1018,11 +1021,12 @@ export class AiDesignerArtDirectorService implements OnModuleInit {
       '',
       designLanguagePrompt(),
       '',
-      'Restraint is the difference between designed and decorated. Two effects on one element is the ceiling and one is usually right; a treatment exists so imagery belongs to the palette, not so every photo is filtered; "none" is a real answer for both.',
+      'Restraint means COHERENCE, not scarcity: pick one design idea and execute it fully. A great poster uses many coordinated moves — a grade, a vignette, a scrim, a decor mark, tracked caps — all serving one mood. What fails is two competing ideas on one canvas, or three effects on one element.',
       // Live failure: a "moody, dark wood" concept shipped a daylight stock
       // photo graded with warm-tint — the tint changed the hue, not the
       // brightness. Mood is a TREATMENT choice, not just a brief adjective.
-      'Match the treatment to the concept\'s mood, not only its palette: a dark, moody or nocturnal concept MUST set the image treatment to "moody-dark" — a colour tint warms or cools a daylight photo but barely darkens it.',
+      'Match the treatment to the concept\'s mood, not only its palette: a dark, moody or nocturnal concept MUST set the image treatment to "moody-dark" AND add the "vignette" effect to the same image (plus a slot "scrim" where copy sits) — a colour tint warms or cools a daylight photo but barely darkens it. A bright, clean concept MUST keep its type zones quiet: no heavy treatments, no vignette, copy on calm areas or a panel.',
+      'Every image brief must specify LIGHTING and GRADE, not just subject: "dark moody overhead shot, deep shadows, warm tungsten rim light" gets a cinematic photo; "pizza on a table" gets a flat daylight snapshot.',
     ];
   }
 
@@ -1075,6 +1079,40 @@ export class AiDesignerArtDirectorService implements OnModuleInit {
       'Slot kinds: text-bearing slots use kind "text"; a call-to-action slot MUST use kind "cta-button"; a small label/tag slot MAY use kind "badge"; a purely decorative geometric element MAY use kind "accent-shape"; imagery stays kind "image".',
       'Per-slot "style" overrides (fontFamily/fontWeight/fill/gradient/stroke/shadow/align) are optional — add one only where it improves on the preset for that slot.',
     ];
+  }
+
+  /**
+   * The craft section: the typographic and photographic dials that separate a
+   * designed poster from filled-in slots, plus two condensed quality-bar
+   * exemplars. This is the bar every plan is held to — not a list of options.
+   */
+  private _craftGuidance(brief: EnrichedBrief): string[] {
+    const lines = [
+      '## Design craft (the quality bar — every plan is judged against this)',
+      'Type craft, via per-slot "style":',
+      '- Small ALL-CAPS labels (badges, kickers, legal, URLs) read as designed only when tracked out: set "letterSpacing" 2-6.',
+      '- Display headlines sit tight: "lineHeight" 1.0-1.1. Supporting copy stays at the default leading.',
+      '- Hierarchy must be unmistakable: the headline at least 2.5x the subhead size (set "typeScale" accordingly).',
+      '- One accent face per design (a script flourish line); everything else keeps the preset pairing.',
+      '- A slot "shadow" may be an object { "color", "blur", "offsetX", "offsetY" } when the default shadow is wrong for the mood.',
+      'Photography craft:',
+      '- Type lives in the photo\'s quiet zone. If the photo has none, CREATE one: a slot "scrim" { "direction", "strength" } on the image (direction = the side the copy sits on), the "vignette" effect, or both.',
+      '- Grade every photo with a "treatment" that matches the concept mood; scale it with "treatmentStrength" when the full recipe is too much.',
+      '',
+      '## Quality bar — two condensed exemplars (match this level of intent, not the content)',
+      'Dark/moody food poster: image slot { treatment: "moody-dark", effects: ["vignette"], scrim: { "direction": "left", "strength": 0.6 } } — the photo goes cinematic and the left third becomes a type zone. Headline slot { style: { "letterSpacing": 1, "lineHeight": 1.0 } }; script accent line above it in an accent fill; badge slot { style: { "letterSpacing": 4 } }; decor ["underline-swash"] under the script. Rationale: the mood is made by the grade+vignette, the hierarchy by scale contrast, the craft by tracked caps and one decor mark.',
+      'Bright/clean minimal: image slot { treatment: "high-key" } with NO scrim and NO vignette — copy sits on a solid panel or calm area. Headline in the preset display face, tight leading; one short-rule decor mark; generous empty space left unfilled. Rationale: the luxury is the restraint — one idea (clarity), executed fully.',
+    ];
+
+    if (brief.referenceCues?.length) {
+      lines.push(
+        '',
+        '## Reference match (the user attached reference image(s) — interpreted cues are in the brief)',
+        'The referenceCues describe the design the user actually wants. Before planning, DECONSTRUCT the cues into: (1) palette and temperature, (2) the type stack — roles, case, tracking, scale contrast, (3) decor inventory, (4) photo grade and mood, (5) layout map. Then plan to MATCH that deconstruction: same mood devices (treatment/vignette/scrim), same hierarchy, same kind of decor. A plan that ignores the reference\'s mood and craft fails the user, however tidy it is.'
+      );
+    }
+
+    return lines;
   }
 
   private _isValidPlanItem(item: unknown): boolean {
@@ -1140,9 +1178,13 @@ export class AiDesignerArtDirectorService implements OnModuleInit {
           role: 'string',
           kind: "'text' | 'image' | 'cta-button' | 'badge' | 'accent-shape' | 'shape' | 'icon' | 'divider' | 'logo' | 'frame'",
           style:
-            'optional per-slot override: { fontFamily?, fontWeight?, fill?, gradient?: [string, string], stroke?: { color, width }, shadow?: boolean, align?: "left" | "center" | "right", badgeStyle?: "pill" | "burst" | "ribbon" (badge slots only) }',
+            'optional per-slot override: { fontFamily?, fontWeight?, fill?, gradient?: [string, string], stroke?: { color, width }, shadow?: boolean | { color, blur, offsetX, offsetY }, align?: "left" | "center" | "right", letterSpacing?: number (-2..20 px tracking — 2-6 for all-caps labels), lineHeight?: number (1.0-1.6; 1.0-1.1 for display headlines), opacity?: number (0-1), badgeStyle?: "pill" | "burst" | "ribbon" (badge slots only) }',
           effects: 'string[] (optional) — at most two EFFECT ids',
           treatment: 'string (optional) — one TREATMENT id; image slots only',
+          treatmentStrength:
+            'number 0-1 (optional) — scales the chosen treatment; image slots only',
+          scrim:
+            '{ direction: "left" | "right" | "top" | "bottom" | "full", strength: 0-1 } (optional) — a gradient wash over this image so copy on top stays legible; image slots only',
           mask: 'string (optional) — one MASK id; image slots only',
         },
       ],

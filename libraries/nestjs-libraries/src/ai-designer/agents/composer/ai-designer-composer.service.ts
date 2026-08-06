@@ -24,7 +24,7 @@ import {
   type DesignerDocOp,
 } from '@postmill-ai/nestjs-libraries/media/designer-doc/designer-doc-ops.schema';
 import type { TextContrastViolation } from '@postmill-ai/nestjs-libraries/media/design-render/design-render.types';
-import { MAX_FONT_SIZE } from '@postmill-ai/nestjs-libraries/media/designer-doc/designer-doc.limits';
+import { MAX_FONT_SIZE, MAX_LAYER_STYLES } from '@postmill-ai/nestjs-libraries/media/designer-doc/designer-doc.limits';
 import {
   CONTAINED_RATIO,
   CONTAINER_FILL_RATIO,
@@ -3269,6 +3269,20 @@ export class AiDesignerComposerService implements OnModuleInit {
           LOCKUP_PLATE,
           { fill: style.fill }
         );
+        // The plate and its label are one lockup: repainting the plate
+        // without re-deriving the label strands it — a dark plate under the
+        // definition's dark label renders the CTA as an empty box (observed
+        // live). The label fill is never its own fix target, so it is always
+        // re-derived from the new plate here.
+        const plateHex = parseSolidHexColor(style.fill);
+        if (plateHex) {
+          patch.symbolOverrides = this._mergedOverrides(
+            el,
+            patch.symbolOverrides,
+            LOCKUP_LABEL,
+            { fill: hexLuminance(plateHex) < 0.5 ? '#FFFFFF' : '#111111' }
+          );
+        }
       } else {
         patch.fill = style.fill;
       }
@@ -3294,6 +3308,22 @@ export class AiDesignerComposerService implements OnModuleInit {
       style.verticalAlign === 'bottom'
     ) {
       patch.verticalAlign = style.verticalAlign;
+    }
+    // Tracking and leading are TEXT craft properties — same clamp the plan
+    // schema enforces, so a critic fix can never set an unreadable value.
+    if (
+      el.type === 'text' &&
+      typeof style.letterSpacing === 'number' &&
+      Number.isFinite(style.letterSpacing)
+    ) {
+      patch.letterSpacing = Math.max(-2, Math.min(20, style.letterSpacing));
+    }
+    if (
+      el.type === 'text' &&
+      typeof style.lineHeight === 'number' &&
+      Number.isFinite(style.lineHeight)
+    ) {
+      patch.lineHeight = Math.max(1, Math.min(1.6, style.lineHeight));
     }
     if (
       style.textStroke &&
@@ -4233,8 +4263,9 @@ export class AiDesignerComposerService implements OnModuleInit {
     const align = override.align ?? opts.align ?? 'center';
 
     // Fill precedence: explicit opts > per-slot override > white over imagery
-    // > palette text color. A gradient override on a text slot falls back to
-    // its first stop (flat text has no gradient fill in the render model).
+    // > palette text color. A gradient override keeps its first stop as the
+    // flat fill — the fallback colour beneath the gradient-overlay layer style
+    // emitted below (glyph-shaped in every renderer).
     const planFill = override.fill ?? override.gradient?.[0];
     // A plan-supplied fill is validated against what will actually be painted
     // beneath it — the same guard `_resolveAccent` makes for shapes. The
@@ -4261,10 +4292,13 @@ export class AiDesignerComposerService implements OnModuleInit {
       };
     }
 
-    // Shadow precedence: per-slot override (true = preset shadow, false =
-    // none) > preset treatment > legibility safety net for text over imagery.
+    // Shadow precedence: per-slot override (an object is used verbatim; true =
+    // preset shadow, false = none) > preset treatment > legibility safety net
+    // for text over imagery.
     let textShadow: DesignerTextShadow | undefined;
-    if (override.shadow ?? treatments.textShadow) {
+    if (typeof override.shadow === 'object' && override.shadow) {
+      textShadow = override.shadow;
+    } else if (override.shadow ?? treatments.textShadow) {
       textShadow = this._presetShadow(ctx.style, fontSize);
     } else if (override.shadow === undefined && opts.onImage && !textStroke) {
       textShadow = {
@@ -4275,12 +4309,34 @@ export class AiDesignerComposerService implements OnModuleInit {
       };
     }
 
+    // A gradient on TEXT paints through a gradient-overlay layer style, which
+    // every renderer clips to the glyph silhouette — the flat `fill` above
+    // stays as the fallback underneath. Skipped when a stroke is set: stroke +
+    // gradient fill over-promises what the text renderers composite cleanly.
+    const styles =
+      override.gradient && !textStroke
+        ? [
+            {
+              type: 'gradient-overlay' as const,
+              opacity: 1,
+              gradient: {
+                type: 'linear' as const,
+                angle: 90,
+                stops: [
+                  { offset: 0, color: override.gradient[0] },
+                  { offset: 1, color: override.gradient[1] },
+                ],
+              },
+            },
+          ]
+        : undefined;
+
     return {
       id: '',
       type: 'text',
       ...box,
       rotation: 0,
-      opacity: 1,
+      opacity: override.opacity ?? 1,
       locked: false,
       hidden: false,
       text,
@@ -4293,11 +4349,15 @@ export class AiDesignerComposerService implements OnModuleInit {
       // right for a display headline, where tight leading is the whole look,
       // and wrong for everything else: a two-line subhead or a legal line set
       // solid reads as a block rather than as lines, which is the single most
-      // common way otherwise-correct copy looks amateur.
-      lineHeight: isDisplay ? 1.1 : 1.35,
-      letterSpacing: isDisplay ? treatments.letterSpacing || 0 : undefined,
+      // common way otherwise-correct copy looks amateur. A per-slot override
+      // wins — the planner owns the craft when it asks for it.
+      lineHeight: override.lineHeight ?? (isDisplay ? 1.1 : 1.35),
+      letterSpacing:
+        override.letterSpacing ??
+        (isDisplay ? treatments.letterSpacing || 0 : undefined),
       textStroke,
       textShadow,
+      styles,
       verticalAlign: opts.verticalAlign,
       groupId: opts.groupId,
       originId: slot.id,
@@ -4581,21 +4641,49 @@ export class AiDesignerComposerService implements OnModuleInit {
     else if (align === 'right') x = area.x + area.width - width;
     const box: Box = { x, y: area.y, width, height };
 
-    const shape: DesignerElement = {
-      id: '',
-      type: 'shape',
-      shape: 'rect',
-      ...box,
-      rotation: 0,
-      opacity: 1,
-      locked: false,
-      hidden: false,
-      fill: accent,
-      borderRadius:
-        badgeStyle === 'pill' ? Math.round(height / 2) : Math.round(height * 0.12),
-      groupId: slot.id,
-      originId: `${slot.id}-bg`,
-    } as DesignerElement;
+    const shape: DesignerElement =
+      badgeStyle === 'ribbon'
+        ? ({
+            id: '',
+            type: 'path',
+            // Canvas box + absolute nodes, same contract as emit-decor — the
+            // gently arched band with angled ends the style name promises
+            // (proven in the manual clone test). A plain rect with a small
+            // radius is NOT a ribbon.
+            x: 0,
+            y: 0,
+            width: ctx.w,
+            height: ctx.h,
+            rotation: 0,
+            opacity: 1,
+            locked: false,
+            hidden: false,
+            closed: true,
+            fill: accent,
+            nodes: [
+              { x: box.x + 2, y: box.y + box.height * 0.16, outX: box.x + box.width * 0.3, outY: box.y - box.height * 0.1 },
+              { x: box.x + box.width - 2, y: box.y + box.height * 0.16, inX: box.x + box.width * 0.7, inY: box.y - box.height * 0.1 },
+              { x: box.x + box.width, y: box.y + box.height * 0.84, outX: box.x + box.width * 0.7, outY: box.y + box.height * 1.1 },
+              { x: box.x, y: box.y + box.height * 0.84, inX: box.x + box.width * 0.3, inY: box.y + box.height * 1.1 },
+            ],
+            groupId: slot.id,
+            originId: `${slot.id}-bg`,
+          } as DesignerElement)
+        : ({
+            id: '',
+            type: 'shape',
+            shape: 'rect',
+            ...box,
+            rotation: 0,
+            opacity: 1,
+            locked: false,
+            hidden: false,
+            fill: accent,
+            borderRadius:
+              badgeStyle === 'pill' ? Math.round(height / 2) : Math.round(height * 0.12),
+            groupId: slot.id,
+            originId: `${slot.id}-bg`,
+          } as DesignerElement);
 
     // The label sits inside the shape with a horizontal inset so glyphs never
     // touch or clip the edge.
@@ -5025,7 +5113,9 @@ export class AiDesignerComposerService implements OnModuleInit {
     // A scrim is a dark gradient over the copy's side of the photo — the copy
     // sits ON the imagery here (no panel slab); the scrim keeps it legible
     // without hiding the photograph. It goes UNDER badges, footer and copy.
-    if (composition.scrim) {
+    // Skipped when the planner gave the image slot its own scrim — two scrims
+    // over the same photo stack into a mud wash (and both get validator-capped).
+    if (composition.scrim && !imageSlot?.scrim) {
       elements.push({
         id: '',
         type: 'shape',
@@ -5410,6 +5500,10 @@ export class AiDesignerComposerService implements OnModuleInit {
       const kind: 'text' | 'image' | 'shape' | 'other' =
         el.type === 'text' ? 'text' : el.type === 'image' ? 'image' : el.type === 'shape' ? 'shape' : 'other';
 
+      // A per-slot treatmentStrength wins over the plan-level depth — the
+      // planner's dial for grading one image harder than the rest.
+      const slotStrength = slot.treatmentStrength ?? strength;
+
       // Effect geometry scales from the TYPE for text and from the box
       // otherwise. A headline's shadow belongs to its letterforms; deriving it
       // from a 1200x200 banner box would shadow 96px type as if it were 200px.
@@ -5418,9 +5512,15 @@ export class AiDesignerComposerService implements OnModuleInit {
       const patch = applySlotRecipes(
         slot,
         { width: el.width, height: el.height },
-        { basis, palette: ctx.style.palette, backdrop, kind, strength },
+        { basis, palette: ctx.style.palette, backdrop, kind, strength: slotStrength },
         el.text
       );
+
+      // Merge layer styles rather than overwrite — a text element may already
+      // carry a gradient-overlay from its per-slot style override.
+      if (patch.styles && el.styles?.length) {
+        patch.styles = [...el.styles, ...patch.styles].slice(0, MAX_LAYER_STYLES);
+      }
 
       const next = { ...el, ...patch } as DesignerElement;
 
@@ -5439,11 +5539,71 @@ export class AiDesignerComposerService implements OnModuleInit {
       // An adjustment is a LAYER, not a property, so it is emitted above the
       // image it grades rather than folded into it.
       if (kind === 'image') {
-        out.push(...treatmentAdjustmentLayers(slot, next, { palette: ctx.style.palette, strength }));
+        out.push(...treatmentAdjustmentLayers(slot, next, { palette: ctx.style.palette, strength: slotStrength }));
+
+        // A plan-requested scrim sits directly above its image (and its
+        // adjustment layers), under every text element that follows — the
+        // planner's way of creating a quiet type zone in a busy photo.
+        const scrim = this._slotScrimElement(slot, next);
+        if (scrim) out.push(scrim);
       }
     }
 
     return out;
+  }
+
+  /**
+   * The gradient (or flat, for 'full') wash a slot's `scrim` asks for, sized
+   * to its image. Strength lives in the stop alpha, matching the composition
+   * scrim's convention; the doc validator's washout guard still applies.
+   */
+  private _slotScrimElement(
+    slot: DesignSlot,
+    image: DesignerElement
+  ): DesignerElement | undefined {
+    const scrim = slot.scrim;
+    if (!scrim || !(scrim.strength > 0)) return undefined;
+    const strength = Math.min(1, Math.max(0, scrim.strength));
+    const base = {
+      id: '',
+      type: 'shape',
+      shape: 'rect',
+      x: image.x,
+      y: image.y,
+      width: image.width,
+      height: image.height,
+      rotation: 0,
+      opacity: 1,
+      locked: false,
+      hidden: false,
+      originId: `${slot.id}-scrim`,
+    };
+    if (scrim.direction === 'full') {
+      return { ...base, fill: `rgba(0,0,0,${strength})` } as DesignerElement;
+    }
+    const dark = `rgba(0,0,0,${strength})`;
+    const clear = 'rgba(0,0,0,0)';
+    // Gradient angle convention: 0 runs left→right, 90 runs top→bottom, with
+    // offset 0 at the start — so the dark stop leads for left/top and trails
+    // for right/bottom.
+    const horizontal = scrim.direction === 'left' || scrim.direction === 'right';
+    const darkFirst = scrim.direction === 'left' || scrim.direction === 'top';
+    return {
+      ...base,
+      fillGradient: {
+        type: 'linear',
+        angle: horizontal ? 0 : 90,
+        stops: darkFirst
+          ? [
+              { offset: 0, color: dark },
+              { offset: 1, color: clear },
+            ]
+          : [
+              { offset: 0, color: clear },
+              { offset: 1, color: dark },
+            ],
+      },
+    } as DesignerElement;
   }
 
   /** hero-fullbleed: the image is full-bleed (0,0,w,h) by design — there is

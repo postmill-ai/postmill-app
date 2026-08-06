@@ -97,6 +97,40 @@ export const DECOR_RECIPES: DecorRecipe[] = [
     ],
   },
   {
+    id: 'swash-pair',
+    label: 'Swash Pair',
+    description:
+      'One continuous flourish with upturned ends — the classic menu ornament that frames a word from both sides (≈ word ≈).',
+    restraint: 'moderate',
+    filled: false,
+    closed: false,
+    // Weight keys off the placement band's height: ~4px on a 1080 canvas band.
+    strokeRatio: 0.18,
+    nodes: () => [
+      { x: 0, y: 0.35, outX: 0.1, outY: 0.2 },
+      { x: 0.2, y: 0.55, inX: 0.1, inY: 0.45, outX: 0.35, outY: 0.7 },
+      { x: 0.5, y: 0.6, inX: 0.35, inY: 0.65, outX: 0.65, outY: 0.55 },
+      { x: 0.8, y: 0.55, inX: 0.65, inY: 0.6, outX: 0.9, outY: 0.45 },
+      { x: 1, y: 0.3, inX: 0.92, inY: 0.35 },
+    ],
+  },
+  {
+    id: 'wavy-rule',
+    label: 'Wavy Rule',
+    description: 'A wavy divider line; playful, hand-drawn, restaurant-menu.',
+    restraint: 'quiet',
+    filled: false,
+    closed: false,
+    strokeRatio: 0.15,
+    nodes: () => [
+      { x: 0, y: 0.6, outX: 0.08, outY: 0.1 },
+      { x: 0.25, y: 0.5, inX: 0.17, inY: 0.25, outX: 0.33, outY: 0.75 },
+      { x: 0.5, y: 0.5, inX: 0.42, inY: 0.25, outX: 0.58, outY: 0.75 },
+      { x: 0.75, y: 0.5, inX: 0.67, inY: 0.25, outX: 0.83, outY: 0.75 },
+      { x: 1, y: 0.4, inX: 0.92, inY: 0.9 },
+    ],
+  },
+  {
     id: 'corner-brackets',
     label: 'Corner Brackets',
     description: 'Right-angle marks at opposite corners; frames a subject without boxing it in.',

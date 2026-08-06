@@ -2031,6 +2031,7 @@ export class DesignRenderService {
     const maxWidth = el.width;
     const align = el.align || 'left';
     const lineHeightFactor = el.lineHeight ?? 1.2;
+    const letterSpacing = el.letterSpacing || 0;
 
     if (el.textShadow) {
       ctx.shadowColor = el.textShadow.color;
@@ -2061,13 +2062,13 @@ export class DesignRenderService {
         for (let wi = 0; wi < words.length; wi++) {
           const raw = words[wi];
           if (raw === '') {
-            const spw = ctx.measureText(' ').width;
+            const spw = this.measureLine(ctx, ' ', letterSpacing);
             if (lineWidth + spw > maxWidth && lineWidth > 0) { lines.push([]); lineWidth = 0; }
             lineWidth += spw;
             continue;
           }
           const display = wi < words.length - 1 ? raw + ' ' : raw;
-          const ww = ctx.measureText(display).width;
+          const ww = this.measureLine(ctx, display, letterSpacing);
           if (lineWidth > 0 && lineWidth + ww > maxWidth) { lines.push([]); lineWidth = 0; }
           lines[lines.length - 1].push({ text: display, run: { ...run } });
           lineWidth += ww;
@@ -2076,22 +2077,34 @@ export class DesignRenderService {
       }
     }
 
-    let y = 0;
-    for (const line of lines) {
-      if (!line.length) { y += lineHeightFactor * (runs[0]?.fontSize ?? el.fontSize ?? 16); continue; }
-
-      let totalW = 0;
-      for (const seg of line) { setRunFont(seg.run); totalW += ctx.measureText(seg.text).width; }
-
-      let x = 0;
-      if (align === 'center') x = (maxWidth - totalW) / 2;
-      else if (align === 'right') x = maxWidth - totalW;
-
+    const emptyLineH = lineHeightFactor * (runs[0]?.fontSize ?? el.fontSize ?? 16);
+    const lineHeights = lines.map((line) => {
+      if (!line.length) return emptyLineH;
       let lineH = 0;
       for (const seg of line) {
         const sz = seg.run.fontSize ?? el.fontSize ?? 16;
         lineH = Math.max(lineH, lineHeightFactor * sz);
       }
+      return lineH;
+    });
+
+    // Vertical alignment mirrors the flat-text path: the wrapped block is
+    // offset inside el.height for middle/bottom, never pushed above the box.
+    const contentHeight = lineHeights.reduce((sum, h) => sum + h, 0);
+    let y = 0;
+    if (el.verticalAlign === 'middle') y = Math.max(0, (el.height - contentHeight) / 2);
+    else if (el.verticalAlign === 'bottom') y = Math.max(0, el.height - contentHeight);
+
+    for (let li = 0; li < lines.length; li++) {
+      const line = lines[li];
+      if (!line.length) { y += emptyLineH; continue; }
+
+      let totalW = 0;
+      for (const seg of line) { setRunFont(seg.run); totalW += this.measureLine(ctx, seg.text, letterSpacing); }
+
+      let x = 0;
+      if (align === 'center') x = (maxWidth - totalW) / 2;
+      else if (align === 'right') x = maxWidth - totalW;
 
       for (const seg of line) {
         setRunFont(seg.run);
@@ -2101,13 +2114,10 @@ export class DesignRenderService {
         ctx.textBaseline = 'top';
         ctx.textAlign = 'left';
 
-        if (el.textStroke?.width && el.textStroke.width > 0) {
-          ctx.strokeStyle = el.textStroke.color;
-          ctx.lineWidth = el.textStroke.width;
-          ctx.strokeText(seg.text, x, y);
-        }
+        const segW = this.measureLine(ctx, seg.text, letterSpacing);
 
-        ctx.fillText(seg.text, x, y);
+        // Glyph-by-glyph when letterSpacing is set — same as the flat path.
+        this.drawTextLine(ctx, seg.text, x, y, letterSpacing, el);
 
         if (seg.run.underline) {
           const uy = y + sz * 1.15;
@@ -2115,13 +2125,13 @@ export class DesignRenderService {
           ctx.lineWidth = Math.max(1, sz / 14);
           ctx.beginPath();
           ctx.moveTo(x, uy);
-          ctx.lineTo(x + ctx.measureText(seg.text).width, uy);
+          ctx.lineTo(x + segW, uy);
           ctx.stroke();
         }
 
-        x += ctx.measureText(seg.text).width;
+        x += segW;
       }
-      y += lineH;
+      y += lineHeights[li];
     }
   }
 
@@ -2133,6 +2143,7 @@ export class DesignRenderService {
     const radius = Math.abs(curve) > 0 ? (el.width / 2) / Math.sin(Math.abs(curve) * Math.PI / 360) : Infinity;
     if (!isFinite(radius)) return;
 
+    const letterSpacing = el.letterSpacing || 0;
     const totalAngle = (el.width / (2 * Math.PI * radius)) * (Math.PI * 2);
     const startAngle = -totalAngle / 2;
     let charOffset = 0;
@@ -2152,7 +2163,8 @@ export class DesignRenderService {
       }
       ctx.fillText(ch, -charWidth / 2, 0);
       ctx.restore();
-      charOffset += charWidth;
+      // Spacing after every glyph, matching the flat path's drawTextLine.
+      charOffset += charWidth + letterSpacing;
     }
   }
 

@@ -105,8 +105,26 @@ const BASE_CRITERIA: { name: string; description: string; weight: number }[] = [
   {
     name: 'decoration_restraint',
     description:
-      'Decoration is deliberate and sparse. Competing decorative marks, or ornament with no purpose, fails — the fix is to REMOVE, never to add.',
+      'Decoration is deliberate and coherent — every mark serves the one design idea. Competing decorative marks or purposeless ornament fails (the fix is to REMOVE); a design whose concept promised a mood device the render is missing (an anchor rule under a script line, a badge the layout called for) also fails — the fix is to ADD the missing anchor, not more ornament.',
     weight: 0.5,
+  },
+  {
+    name: 'aesthetic_quality',
+    description:
+      'Overall beauty: would this stop a scroll? Judge mood, cohesion and polish as a whole — a flat daylight photo under a concept that promised mood, type floating on a busy bright image with no quiet zone, or a design that reads as a filled-in template rather than an art-directed poster, fails. Fix toward the concept\'s mood: a "treatment" grade, the "vignette" or "scrim-veil" effect, or a recompose.',
+    weight: 1,
+  },
+  {
+    name: 'image_quality',
+    description:
+      'The imagery is USABLE: the subject is clearly visible and correctly exposed. An overexposed, washed-out photo whose subject you can barely make out (or one crushed to black) fails — no grade can rescue a bad source. Fix with "regenerateAsset" asking for the same subject at correct exposure.',
+    weight: 1,
+  },
+  {
+    name: 'craft_polish',
+    description:
+      'Typographic craft: all-caps labels are tracked out (fix with style "letterSpacing" 2-6), display headlines sit tight (style "lineHeight" 1.0-1.1), spacing rhythm is even, alignment is exact, and type integrates with the imagery instead of floating on top of it.',
+    weight: 1,
   },
   {
     name: 'text_fit',
@@ -160,6 +178,11 @@ interface CritiqueRequest {
   rubric: {
     criteria: { name: string; description: string; weight: number }[];
   };
+  /**
+   * English cues from the user's attached reference image(s) — when present,
+   * the critic also judges fidelity to the reference's mood and craft.
+   */
+  referenceCues?: string[];
   outputPreviews?: { formatId: string; url: string }[];
   /**
    * Authoritative per-output element data from the design doc (geometry,
@@ -336,6 +359,18 @@ export class AiDesignerVisionCriticService implements OnModuleInit {
       ...BASE_CRITERIA.filter(
         (base) => !payload.rubric.criteria.some((c) => c.name === base.name)
       ),
+      // Reference fidelity only exists when there is a reference to be
+      // faithful to — the cues are the user's interpretation of "like this".
+      ...(payload.referenceCues?.length
+        ? [
+            {
+              name: 'reference_fidelity',
+              description:
+                'The design matches the mood, palette temperature, hierarchy and craft of the user\'s reference (cues below) — a render that ignores the reference\'s mood or type treatment fails, however tidy it is.',
+              weight: 1,
+            },
+          ]
+        : []),
     ]
       .map(
         (c, i) =>
@@ -427,6 +462,8 @@ ${expectedCopy ? `Expected copy (the render must show exactly this text; letter 
 
 ${docSummary ? `Design doc elements (authoritative geometry/colors per output — use them to catch low-contrast fills and overlapping/occluding elements the pixels may hide):\n${docSummary}` : ''}
 
+${payload.referenceCues?.length ? `Reference cues (the user's attached reference image(s), interpreted — the target for reference_fidelity):\n${payload.referenceCues.map((c) => `  - ${c}`).join('\n')}` : ''}
+
 Look at the contact sheet and identify concrete, actionable visual issues. For each issue, produce a finding with:
 - "formatId" (optional): which output format is affected, if known.
 - "slotId" (optional): which design slot is affected, if known.
@@ -436,7 +473,7 @@ Look at the contact sheet and identify concrete, actionable visual issues. For e
   - "scope": "shared" or "format-only"
   - "targetSlots": array of slot ids the fix applies to
   - "geometry": partial element geometry such as { x, y, width, height, fontSize }
-  - "style": partial style such as { fill, stroke, opacity, fontFamily, align ("left"|"center"|"right"), verticalAlign ("top"|"middle"|"bottom"), textStroke { color, width }, textShadow (true = add a default shadow, false = remove it) }
+  - "style": partial style such as { fill, stroke, opacity, fontFamily, align ("left"|"center"|"right"), verticalAlign ("top"|"middle"|"bottom"), letterSpacing (px tracking — 2-6 for all-caps labels), lineHeight (1.0-1.6; 1.0-1.1 for display headlines), textStroke { color, width }, textShadow (true = add a default shadow, false = remove it) }
   - "text": { slotId, newText } — rewrite the copy of a TEXT slot only; never target an image slot with a text fix
   - "regenerateAsset": { slotId, brief? } — regenerate the underlying imagery for that slot; the ONLY fix for a no_baked_in_text, text_accuracy or brand_safety defect inside a generated photo: imagery containing baked-in text, letters, logos, watermarks, or a recognizable third-party brand mark / branded product / celebrity likeness must be fixed with regenerateAsset targeting the image slot — never with a text fix. Optional "brief" adds guidance for the regeneration (subject, mood, what to avoid — e.g. "generic unbranded sneaker, no logos or brand marks")
   - "addElement": { slotId, type: "text" | "shape", text?, shape?, box? { x, y, width, height }, style? { fill, fontFamily, fontSize, align, textStroke, textShadow } } — add a small text/shape/badge-style element
