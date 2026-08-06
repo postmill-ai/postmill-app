@@ -1,9 +1,11 @@
 import { describe, it, expect, vi } from 'vitest';
+import { writeFile } from 'fs/promises';
+import { join } from 'path';
 import { BackfillDesignThumbnails } from './backfill-design-thumbnails';
 
 const VALID_DOC = {
   mode: 'image',
-  outputs: [{ id: 'out-1', width: 1080, height: 1080, children: [] }],
+  outputs: [{ id: 'out-1', width: 1080, height: 1080, children: [] as unknown[] }],
 };
 
 function createMocks() {
@@ -87,7 +89,8 @@ describe('BackfillDesignThumbnails', () => {
       prisma as any,
       designRenderService as any,
       fileService as any,
-      storageService as any
+      storageService as any,
+      { captureFrames: vi.fn() } as any
     );
 
     await command.run();
@@ -121,7 +124,8 @@ describe('BackfillDesignThumbnails', () => {
       prisma as any,
       designRenderService as any,
       fileService as any,
-      storageService as any
+      storageService as any,
+      { captureFrames: vi.fn() } as any
     );
 
     await command.run();
@@ -142,7 +146,8 @@ describe('BackfillDesignThumbnails', () => {
       prisma as any,
       designRenderService as any,
       fileService as any,
-      storageService as any
+      storageService as any,
+      { captureFrames: vi.fn() } as any
     );
 
     await command.run('org-2');
@@ -150,5 +155,38 @@ describe('BackfillDesignThumbnails', () => {
     const designs = Object.fromEntries(store.design.map((d) => [d.id, d]));
     expect(designs['d-other-org'].previewFileId).toBe('file-for-design-d-other-org-thumbnail.png');
     expect(designs['d-fill'].previewFileId).toBeNull();
+  });
+
+  it('thumbnails a VIDEO design from its first frame', async () => {
+    const { prisma, store, designRenderService, storageService, fileService } = createMocks();
+    // A video output has tracks, not children — the still renderer refused it
+    // and every video design kept a permanent "No preview" card.
+    store.design.push({
+      id: 'd-video', organizationId: 'org-1', name: 'V',
+      doc: { mode: 'video', outputs: [{ id: 'out-v', width: 1080, height: 1920, durationMs: 10000, tracks: [] }] },
+      deletedAt: null, previewFileId: null, previewDataUrl: null,
+    });
+    const captureFrames = vi.fn(async (_output: unknown, fps: number, frameDir: string) => {
+      // The fps contract: ceil(duration * fps) === 1 — exactly one frame.
+      expect(Math.ceil(10 * fps)).toBe(1);
+      await writeFile(join(frameDir, 'frame-00001.png'), Buffer.from('png-bytes'));
+      return 1;
+    });
+
+    const command = new BackfillDesignThumbnails(
+      prisma as any,
+      designRenderService as any,
+      fileService as any,
+      storageService as any,
+      { captureFrames } as any
+    );
+    await command.run('org-1');
+
+    expect(captureFrames).toHaveBeenCalledTimes(1);
+    const row = store.design.find((d) => d.id === 'd-video');
+    expect(row.previewFileId).toBeTruthy();
+    // The still renderer must never have been asked to render the video doc.
+    const stillCalls = designRenderService.renderPage.mock.calls.map((c: any[]) => c[0]?.mode);
+    expect(stillCalls).not.toContain('video');
   });
 });

@@ -134,6 +134,11 @@ path. Full mechanics, versioning lifecycle, and how to add a provider: `agents/p
   `backfill-design-thumbnails.ts`. The command module imports the same `@Global` module set
   as the backend app module (minus `ChatModule`) plus `ProvidersBootstrap` — without those,
   `DatabaseModule` services and kernel resolution (`storage/local@v1`, …) fail standalone.
+  **Run a command against the COMPILED dist with the path register** — the kernel and provider
+  packages' `main` points at raw `.ts`, which Node's ESM loader refuses (same trap
+  `apps/backend/dev.cjs` documents):
+  `npx nest build && node -r ./register-paths.cjs ./dist/apps/commands/src/main.js <command> [args]`
+  (from `apps/commands`, with `dotenv -e ../../.env` and a localhost `DATABASE_URL` for host runs).
   Touch when adding an operator/maintenance command; **never** put request-path logic here.
 - **`apps/extension`** (`postmill-extension`) — Vite + `@crxjs` browser extension for cookie-based
   platform auth. `src/background.ts` is the service worker; `src/providers/` holds the per-site

@@ -15,6 +15,7 @@ import { FeatureFlagsModule } from '@postmill-ai/nestjs-libraries/feature-flags/
 import { VpnModule } from '@postmill-ai/nestjs-libraries/vpn/vpn.module';
 import { MediaStudioModule } from '@postmill-ai/nestjs-libraries/media/studio/studio.module';
 import { ProvidersBootstrap } from '@postmill-ai/backend/providers.bootstrap';
+import { VideoRenderModule } from '@postmill-ai/nestjs-libraries/media/design-render/video-render.module';
 
 @Module({
   // UploadModule/AiModule/ProvidersModule/FeatureFlagsModule/VpnModule are
@@ -34,6 +35,8 @@ import { ProvidersBootstrap } from '@postmill-ai/backend/providers.bootstrap';
     FeatureFlagsModule,
     VpnModule,
     MediaStudioModule,
+    // ChromiumFrameCaptureService, for video-design thumbnails in the backfill.
+    VideoRenderModule,
   ],
   controllers: [],
   // ProvidersBootstrap registers every provider package with the kernel —
