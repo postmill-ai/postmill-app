@@ -89,3 +89,8 @@ apps/backend/uploads/
 # Marketing capture artifacts (stills/clips for the demo video) — local only,
 # large binaries that do not belong in the repo.
 capture/
+
+# Scratch from local AI Designer runs: per-run screenshot dirs, the throwaway
+# image venv, and stray logs. ~90MB of binaries, none of it reproducible input.
+.tmp-*/
+scratchpad-logs/
