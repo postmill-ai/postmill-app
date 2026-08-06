@@ -41,6 +41,44 @@ export function collectFolders(
 }
 
 /**
+ * The root→leaf chain leading to a folder, used by the breadcrumb and to build
+ * the URL path. Empty for "All Files" or an id that is no longer in the tree.
+ */
+export function ancestorsOf(
+  folders: FolderItem[],
+  id: string | null
+): FolderItem[] {
+  if (!id) return [];
+  for (const folder of folders) {
+    if (folder.id === id) return [folder];
+    const below = ancestorsOf(folder.children || [], id);
+    if (below.length) return [folder, ...below];
+  }
+  return [];
+}
+
+/**
+ * The reverse of {@link ancestorsOf}: resolve URL name segments against the
+ * tree. Returns null for the root or a path that no longer exists (a folder was
+ * renamed or deleted). Sibling names aren't enforced unique, so the first match
+ * at each level wins.
+ */
+export function resolveFolderPath(
+  folders: FolderItem[],
+  segments: string[]
+): string | null {
+  let level = folders;
+  let resolved: string | null = null;
+  for (const segment of segments) {
+    const match = level.find((folder) => folder.name === segment);
+    if (!match) return null;
+    resolved = match.id;
+    level = match.children || [];
+  }
+  return resolved;
+}
+
+/**
  * Direct children of the selected folder — or the tree roots at "All Files".
  * The full tree is already fetched for the sidebar, so the browse area needs no
  * extra request to show its subfolders.

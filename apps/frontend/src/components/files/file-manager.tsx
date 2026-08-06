@@ -1,6 +1,6 @@
 'use client';
 
-import React, { FC, useCallback, useEffect, useState, useSyncExternalStore } from 'react';
+import React, { FC, useCallback, useEffect, useMemo, useState, useSyncExternalStore } from 'react';
 import useSWR from 'swr';
 import { useFetch } from '@postmill-ai/helpers/utils/custom.fetch';
 import { useDebounce } from 'use-debounce';
@@ -18,16 +18,33 @@ import clsx from 'clsx';
 import { PageHeader } from '@postmill-ai/frontend/components/ui/page-header';
 import { useT } from '@postmill-ai/react/translation/get.transation.service.client';
 import { useToaster } from '@postmill-ai/react/toaster/toaster';
-import { childrenOf, useFolderDropTarget, type FolderItem } from '@postmill-ai/frontend/components/files/folder.utils';
+import { ancestorsOf, childrenOf, resolveFolderPath, useFolderDropTarget, type FolderItem } from '@postmill-ai/frontend/components/files/folder.utils';
+import { FolderBreadcrumb } from '@postmill-ai/frontend/components/files/folder-breadcrumb';
 import { ContextMenu, type ContextMenuItem } from '@postmill-ai/frontend/components/ui/context-menu';
 import { useContextMenu } from '@postmill-ai/frontend/components/ui/use-context-menu';
 import { RenameDialog } from '@postmill-ai/frontend/components/files/rename-dialog';
 import { useMediaDirectory } from '@postmill-ai/react/helpers/use.media.directory';
 import { hasExtension } from '@postmill-ai/helpers/utils/has.extension';
 import { openInDesigner } from '@postmill-ai/frontend/components/media-tools/open-in-designer';
-import { useRouter } from 'next/navigation';
+import { usePathname, useRouter } from 'next/navigation';
 
 type ViewMode = 'grid' | 'list';
+
+/** The library's own route — the base every synced folder path hangs off. */
+const FILES_ROUTE = '/files';
+
+// One control for field + direction: the pair is what a user actually picks
+// ("newest first"), and two selects would only make them assemble it. The list
+// view's column headers set the same two pieces of state.
+const SORT_OPTIONS: { field: string; order: string; key: string; label: string }[] = [
+  { field: 'createdAt', order: 'desc', key: 'newest_first', label: 'Newest first' },
+  { field: 'createdAt', order: 'asc', key: 'oldest_first', label: 'Oldest first' },
+  { field: 'name', order: 'asc', key: 'name_a_z', label: 'Name A–Z' },
+  { field: 'name', order: 'desc', key: 'name_z_a', label: 'Name Z–A' },
+  { field: 'size', order: 'desc', key: 'largest_first', label: 'Largest first' },
+  { field: 'size', order: 'asc', key: 'smallest_first', label: 'Smallest first' },
+  { field: 'type', order: 'asc', key: 'type', label: 'Type' },
+];
 
 const GridIcon: FC<{ className?: string }> = ({ className }) => (
   <svg width="16" height="16" viewBox="0 0 16 16" fill="none" className={className}>
@@ -106,6 +123,12 @@ export const FileManager: FC<{
    * file the caller must then reject.
    */
   lockedType?: 'image' | 'video' | 'audio' | 'document';
+  /**
+   * Mirror the open folder into the address bar as `/files/<name>/<name>`, and
+   * follow the URL back on deep links and browser Back. Opt-in: only the /files
+   * page owns that route — a picker modal must never rewrite the location.
+   */
+  urlSync?: boolean;
 }> = ({
   standalone,
   onSelect,
@@ -113,17 +136,21 @@ export const FileManager: FC<{
   refreshKey,
   sidebarMode,
   lockedType,
+  urlSync,
 }) => {
   const fetch = useFetch();
   const t = useT();
   const toaster = useToaster();
   const modals = useModals();
   const router = useRouter();
+  const pathname = usePathname();
   const mediaDirectory = useMediaDirectory();
   const [page, setPage] = useState(0);
   const [search, setSearch] = useState('');
   const [debouncedSearch] = useDebounce(search, 300);
-  const [selectedFolderId, setSelectedFolderId] = useState<string | null>(null);
+  // Only a host without `urlSync` keeps the open folder in state; with it, the
+  // URL is the one source of truth (see `selectedFolderId` below).
+  const [manualFolderId, setManualFolderId] = useState<string | null>(null);
   const [selectedFiles, setSelectedFiles] = useState<FileItem[]>([]);
   const [viewMode, setViewMode] = useState<ViewMode>('grid');
   const [sortField, setSortField] = useState('createdAt');
@@ -169,9 +196,65 @@ export const FileManager: FC<{
     setPage(0);
   }, []);
 
+  // Reordering the whole result set invalidates the page you were on — page 3
+  // of "newest first" holds nothing in common with page 3 of "name A–Z".
+  const setSortAndReset = useCallback((field: string, order: string) => {
+    setSortField(field);
+    setSortOrder(order);
+    setPage(0);
+  }, []);
+
+  const { data: foldersData, mutate: mutateFolders } = useSWR(
+    'files-folders',
+    async () => (await fetch('/files/folders')).json()
+  );
+
+  // '/files/Brand%20assets/Logos' → ['Brand assets', 'Logos']
+  const urlSegments = useMemo(
+    () =>
+      urlSync && pathname?.startsWith(FILES_ROUTE)
+        ? pathname
+            .slice(FILES_ROUTE.length)
+            .split('/')
+            .filter(Boolean)
+            .map(decodeURIComponent)
+        : [],
+    [urlSync, pathname]
+  );
+
+  // With `urlSync` the open folder is read straight out of the address bar,
+  // which makes deep links and browser Back/Forward work with no state to keep
+  // in step. Only the tree can map a path of folder *names* to an id, so until
+  // it has loaded the answer is the root.
+  const selectedFolderId = urlSync
+    ? foldersData
+      ? resolveFolderPath(foldersData, urlSegments)
+      : null
+    : manualFolderId;
+
+  // Whichever way the folder changed — a click, a deep link, Back — the browse
+  // state it belonged to is stale. Adjusting during render (rather than in an
+  // effect) keeps the request that follows from ever using the old page.
+  const [lastFolderId, setLastFolderId] = useState(selectedFolderId);
+  if (lastFolderId !== selectedFolderId) {
+    setLastFolderId(selectedFolderId);
+    setSelectedFiles([]);
+    setDetailsFile(null);
+    setPage(0);
+  }
+
   useEffect(() => {
     onFolderChange?.(selectedFolderId);
   }, [selectedFolderId, onFolderChange]);
+
+  // A path that no longer resolves — the folder was renamed or deleted — shows
+  // the root, so don't leave the dead path in the address bar.
+  useEffect(() => {
+    if (!urlSync || !foldersData || !urlSegments.length) return;
+    if (resolveFolderPath(foldersData, urlSegments) === null) {
+      router.replace(FILES_ROUTE, { scroll: false });
+    }
+  }, [urlSync, foldersData, urlSegments, router]);
 
   const params = new URLSearchParams({ page: String(page + 1) });
   if (debouncedSearch.trim()) params.set('search', debouncedSearch.trim());
@@ -186,11 +269,6 @@ export const FileManager: FC<{
   const { data, mutate, isLoading } = useSWR(
     `files-${page}-${debouncedSearch}-${selectedFolderId || 'root'}-${filterType}-${filterTag}-${sortField}-${sortOrder}-${refreshKey ?? 0}`,
     async () => (await fetch(`/files?${params.toString()}`)).json()
-  );
-
-  const { data: foldersData, mutate: mutateFolders } = useSWR(
-    'files-folders',
-    async () => (await fetch('/files/folders')).json()
   );
 
   const toggleFileSelection = useCallback((file: FileItem) => {
@@ -220,12 +298,24 @@ export const FileManager: FC<{
     [modals]
   );
 
-  const handleFolderSelect = useCallback((folderId: string | null) => {
-    setSelectedFolderId(folderId);
-    setSelectedFiles([]);
-    setDetailsFile(null);
-    setPage(0);
-  }, []);
+  // With `urlSync` the navigation IS the state change: pushing the path makes
+  // `selectedFolderId` above resolve to the new folder on the next render, and
+  // Back gets to walk the same trail in reverse.
+  const handleFolderSelect = useCallback(
+    (folderId: string | null) => {
+      if (!urlSync) {
+        setManualFolderId(folderId);
+        return;
+      }
+      const segments = ancestorsOf(foldersData || [], folderId).map(f =>
+        encodeURIComponent(f.name)
+      );
+      router.push(segments.length ? `${FILES_ROUTE}/${segments.join('/')}` : FILES_ROUTE, {
+        scroll: false,
+      });
+    },
+    [urlSync, foldersData, router]
+  );
 
   const refresh = useCallback(() => {
     mutate();
@@ -565,6 +655,22 @@ export const FileManager: FC<{
                 <option value="document">{t('documents', 'Documents')}</option>
               </select>
             )}
+
+            <select
+              value={`${sortField}-${sortOrder}`}
+              aria-label={t('sort_files', 'Sort files')}
+              onChange={e => {
+                const picked = SORT_OPTIONS.find(o => `${o.field}-${o.order}` === e.target.value);
+                if (picked) setSortAndReset(picked.field, picked.order);
+              }}
+              className="h-[44px] px-[12px] rounded-[8px] bg-newBgColorInner border border-newColColor text-[13px] text-textColor outline-none focus:border-[#2B5CD3] shrink-0"
+            >
+              {SORT_OPTIONS.map(option => (
+                <option key={`${option.field}-${option.order}`} value={`${option.field}-${option.order}`}>
+                  {t(option.key, option.label)}
+                </option>
+              ))}
+            </select>
           </div>
 
           <div className="flex items-center gap-[8px] mobile:w-full mobile:justify-between">
@@ -642,6 +748,12 @@ export const FileManager: FC<{
           </div>
         </div>
 
+        <FolderBreadcrumb
+          folders={foldersData || []}
+          selectedFolderId={selectedFolderId}
+          onSelect={handleFolderSelect}
+        />
+
         <BulkToolbar
           selectedFiles={selectedFiles}
           onClearSelection={clearSelection}
@@ -697,10 +809,9 @@ export const FileManager: FC<{
               sortOrder={sortOrder}
               onSort={(field) => {
                 if (sortField === field) {
-                  setSortOrder(prev => prev === 'asc' ? 'desc' : 'asc');
+                  setSortAndReset(field, sortOrder === 'asc' ? 'desc' : 'asc');
                 } else {
-                  setSortField(field);
-                  setSortOrder('asc');
+                  setSortAndReset(field, 'asc');
                 }
               }}
             />

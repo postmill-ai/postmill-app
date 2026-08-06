@@ -1,9 +1,12 @@
 import React from 'react';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { render, screen, cleanup, fireEvent, waitFor } from '@testing-library/react';
+import { render, screen, cleanup, fireEvent, waitFor, within } from '@testing-library/react';
 import { SWRConfig } from 'swr';
 
 const mockFetch = vi.fn();
+const mockPush = vi.fn();
+const mockReplace = vi.fn();
+const navigation = { pathname: '/files' };
 
 vi.mock('@postmill-ai/react/translation/get.transation.service.client', () => ({
   useT: () => (_key: string, fallback: string, vars?: Record<string, unknown>) =>
@@ -23,7 +26,10 @@ vi.mock('@postmill-ai/react/translation/i18next', () => ({
 vi.mock('@postmill-ai/react/toaster/toaster', () => ({
   useToaster: () => ({ show: vi.fn() }),
 }));
-vi.mock('next/navigation', () => ({ useRouter: () => ({ push: vi.fn() }) }));
+vi.mock('next/navigation', () => ({
+  useRouter: () => ({ push: mockPush, replace: mockReplace }),
+  usePathname: () => navigation.pathname,
+}));
 vi.mock('@postmill-ai/frontend/components/layout/new-modal', () => ({
   useModals: () => ({ openModal: vi.fn(), closeAll: vi.fn() }),
 }));
@@ -84,6 +90,9 @@ const renderManager = (props: Record<string, unknown> = {}) =>
 beforeEach(() => {
   localStorage.clear();
   mockFetch.mockReset();
+  mockPush.mockReset();
+  mockReplace.mockReset();
+  navigation.pathname = '/files';
   respondWith();
 });
 afterEach(cleanup);
@@ -189,5 +198,109 @@ describe('FileManager sidebar', () => {
     expect(document.getElementById('files-folder-sidebar')).toBeNull();
     expect(screen.queryByText('Hide folders')).toBeNull();
     expect(screen.queryByText('Show folders')).toBeNull();
+  });
+});
+
+const lastFilesQuery = () => {
+  const call = [...mockFetch.mock.calls]
+    .reverse()
+    .find(([url]: [string]) => !url.startsWith('/files/folders'));
+  return call ? (call[0] as string) : '';
+};
+
+describe('FileManager sort selector', () => {
+  it('defaults to newest first and reorders through the query string', async () => {
+    renderManager();
+    await waitFor(() => expect(screen.getByLabelText('Sort files')).toBeTruthy());
+    expect((screen.getByLabelText('Sort files') as HTMLSelectElement).value).toBe('createdAt-desc');
+
+    fireEvent.change(screen.getByLabelText('Sort files'), { target: { value: 'name-asc' } });
+
+    await waitFor(() => expect(lastFilesQuery()).toContain('sort=name'));
+    expect(lastFilesQuery()).toContain('order=asc');
+  });
+
+  it('is offered in grid view, where column headers are not', async () => {
+    renderManager();
+    await waitFor(() => expect(screen.getByLabelText('Sort files')).toBeTruthy());
+    // Grid view is the default — the list view's sortable headers are absent.
+    expect(screen.queryByText('Largest first')).toBeTruthy();
+  });
+
+  it('returns to the first page when the order changes', async () => {
+    respondWith({ files: FILES, folders: FOLDERS });
+    mockFetch.mockImplementation((url: string) => {
+      if (url.startsWith('/files/folders')) {
+        return Promise.resolve({ ok: true, json: async () => FOLDERS });
+      }
+      return Promise.resolve({ ok: true, json: async () => ({ results: FILES, pages: 3 }) });
+    });
+    renderManager();
+    await waitFor(() => expect(screen.getByRole('button', { name: '2' })).toBeTruthy());
+
+    fireEvent.click(screen.getByRole('button', { name: '2' }));
+    await waitFor(() => expect(lastFilesQuery()).toContain('page=2'));
+
+    fireEvent.change(screen.getByLabelText('Sort files'), { target: { value: 'size-desc' } });
+    await waitFor(() => expect(lastFilesQuery()).toContain('page=1'));
+  });
+});
+
+describe('FileManager breadcrumb', () => {
+  it('shows the ancestor chain and walks back up', async () => {
+    renderManager();
+    await waitFor(() => expect(screen.getByLabelText('Open folder Brand assets')).toBeTruthy());
+
+    fireEvent.click(screen.getByLabelText('Open folder Brand assets'));
+
+    const trail = await screen.findByLabelText('Folder path');
+    await waitFor(() => expect(trail.textContent).toContain('Brand assets'));
+    expect(trail.textContent).toContain('All Files');
+
+    // The sidebar tree has its own "All Files" row — take the breadcrumb's.
+    fireEvent.click(within(trail).getByRole('button', { name: 'All Files' }));
+    await waitFor(() => expect(lastFilesQuery()).toContain('folderId=null'));
+  });
+});
+
+describe('FileManager URL sync', () => {
+  it('opens the folder named by the path on a deep link', async () => {
+    navigation.pathname = '/files/Brand%20assets/Logos';
+    renderManager({ urlSync: true });
+
+    await waitFor(() => expect(lastFilesQuery()).toContain('folderId=d1a'));
+    const trail = await screen.findByLabelText('Folder path');
+    expect(trail.textContent).toContain('Logos');
+    expect(mockReplace).not.toHaveBeenCalled();
+  });
+
+  it('pushes the folder path when navigating', async () => {
+    renderManager({ urlSync: true });
+    await waitFor(() => expect(screen.getByLabelText('Open folder Brand assets')).toBeTruthy());
+
+    fireEvent.click(screen.getByLabelText('Open folder Brand assets'));
+
+    await waitFor(() =>
+      expect(mockPush).toHaveBeenCalledWith('/files/Brand%20assets', { scroll: false })
+    );
+  });
+
+  it('falls back to the root when the path no longer resolves', async () => {
+    navigation.pathname = '/files/Deleted%20folder';
+    renderManager({ urlSync: true });
+
+    await waitFor(() => expect(mockReplace).toHaveBeenCalledWith('/files', { scroll: false }));
+    expect(lastFilesQuery()).toContain('folderId=null');
+  });
+
+  it('never touches the location without urlSync (picker hosts)', async () => {
+    renderManager({ standalone: false, sidebarMode: 'drawer' });
+    await waitFor(() => expect(screen.getByLabelText('Open folder Brand assets')).toBeTruthy());
+
+    fireEvent.click(screen.getByLabelText('Open folder Brand assets'));
+
+    await waitFor(() => expect(lastFilesQuery()).toContain('folderId=d1'));
+    expect(mockPush).not.toHaveBeenCalled();
+    expect(mockReplace).not.toHaveBeenCalled();
   });
 });
