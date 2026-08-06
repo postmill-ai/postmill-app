@@ -538,7 +538,7 @@ describe('AiDesignerConductorService _fixContrastOverImagery', () => {
       'design-v1',
       'v1-contrast',
       fixedDoc,
-      { name: 'meme-v1', saveFolderId: null }
+      { name: 'meme-v1', saveFolderId: null, registerPreviews: false }
     );
     expect(result.doc).toBe(fixedDoc);
     // The re-render keeps the original variant id for the caller.

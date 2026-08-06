@@ -126,6 +126,32 @@ describe('genre routing', () => {
     }
   });
 
+  it('routes an overlapping brief to the specific genre, not the general original', () => {
+    // Overlap audit: the specific `defineSkill` genres score 0.95 against the
+    // originals' 0.9, so when both match, the specific genre wins BY SCORE —
+    // registry order only breaks exact ties (see design-skill.registry.ts).
+    // These pin the intended top-1 winner for briefs that hit both.
+    const cases: [string, string][] = [
+      // announcement ('announcing', 0.9) + product-launch ('launch', 0.95)
+      ['announcing our launch', 'product-launch'],
+      // advertisement ('promote'/'discount', 0.9) + sale-discount ('discount', 0.95)
+      ['promote the 20% discount', 'sale-discount'],
+      // announcement ('we are', 0.9) + hiring-jobpost ('hiring', 0.95)
+      ['we are hiring a senior engineer', 'hiring-jobpost'],
+      // event-promo's family + webinar-invite ('webinar', 0.95)
+      ['join our webinar on thursday', 'webinar-invite'],
+      // greeting-card ('holiday', 0.9) + holiday ('christmas', 0.95)
+      ['merry christmas from our team', 'holiday'],
+    ];
+
+    for (const [intent, expected] of cases) {
+      const scored = DESIGN_SKILLS.map((s) => ({ id: s.id, score: s.match({ intent }) })).sort(
+        (a, b) => b.score - a.score
+      );
+      expect(scored[0].id, `"${intent}" routed to ${scored[0].id}`).toBe(expected);
+    }
+  });
+
   it('leaves an unrelated brief unmatched, so the picker asks', () => {
     // Below the router's confidence threshold, intake shows a genre picker
     // rather than guessing — which is the correct behaviour for a vague brief.

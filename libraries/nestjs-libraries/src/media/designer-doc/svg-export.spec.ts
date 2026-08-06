@@ -194,6 +194,17 @@ describe('what SVG cannot carry', () => {
     expect(layersNeedingRaster(out)).toEqual(['styled']);
   });
 
+  it('names styled layers nested inside a group, not just top-level ones', () => {
+    // The flat scan only saw output.children, so a styled layer in a group was
+    // exported as if it were plain vector — the group wrapper is vector, its
+    // member is not.
+    const out = output([
+      el({ id: 'grp', type: 'group' }),
+      el({ id: 'nested-styled', parentId: 'grp', styles: [{ type: 'drop-shadow' }] }),
+    ]);
+    expect(layersNeedingRaster(out)).toEqual(['nested-styled']);
+  });
+
   it('embeds the supplied bitmap for such a layer', () => {
     const svg = outputToSvg(
       output([el({ id: 'styled', styles: [{ type: 'drop-shadow' }] })]),

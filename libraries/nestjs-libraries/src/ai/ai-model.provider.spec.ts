@@ -244,6 +244,31 @@ describe('AIModelProvider', () => {
     });
   });
 
+  describe('_imageFilePart', () => {
+    const part = (url: string) => (provider as any)._imageFilePart(url);
+
+    it('derives the media type from a recognizable URL extension', () => {
+      expect(part('https://cdn.example.com/hero.jpg').mediaType).toBe('image/jpeg');
+      expect(part('https://cdn.example.com/hero.jpeg?w=100').mediaType).toBe('image/jpeg');
+      expect(part('https://cdn.example.com/hero.webp').mediaType).toBe('image/webp');
+      expect(part('https://cdn.example.com/hero.gif#x').mediaType).toBe('image/gif');
+      expect(part('https://cdn.example.com/hero.png').mediaType).toBe('image/png');
+    });
+
+    it('keeps image/png for extensionless or unrecognized URLs', () => {
+      expect(part('https://cdn.example.com/hero').mediaType).toBe('image/png');
+      expect(part('https://cdn.example.com/hero.bmp').mediaType).toBe('image/png');
+      expect(part('https://cdn.example.com/download?format=jpg').mediaType).toBe('image/png');
+    });
+
+    it('keeps the data-URI and bare-base64 branches untouched', () => {
+      const uri = part('data:image/jpeg;base64,AAA BBB');
+      expect(uri.mediaType).toBe('image/jpeg');
+      expect(uri.data).toBe('AAABBB');
+      expect(part('QUJD').mediaType).toBe('image/png');
+    });
+  });
+
   describe('languageModel', () => {
     it('returns a language model when config is active', async () => {
       const model = await provider.languageModel('utility', 'org-123');

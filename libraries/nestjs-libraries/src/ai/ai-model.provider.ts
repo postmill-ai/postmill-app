@@ -97,6 +97,26 @@ const CONTEXT_WINDOW_LIMITS: Record<string, number> = {
 const AI_NOT_CONFIGURED_MESSAGE =
   'AI is not configured for this organization. Go to Settings → AI to configure a provider.';
 
+/**
+ * Best-effort media type for a remote image URL, from its path extension.
+ * Unrecognized (or extensionless) URLs keep the historical `image/png` —
+ * adapters only use the type to label the payload, not to transcode it.
+ */
+const imageMediaTypeFromUrl = (imageUrl: string): string => {
+  const ext = /\.(jpe?g|png|webp|gif)(?:[?#]|$)/i.exec(imageUrl)?.[1]?.toLowerCase();
+  switch (ext) {
+    case 'jpg':
+    case 'jpeg':
+      return 'image/jpeg';
+    case 'webp':
+      return 'image/webp';
+    case 'gif':
+      return 'image/gif';
+    default:
+      return 'image/png';
+  }
+};
+
 @Injectable()
 export class AIModelProvider {
   private readonly _logger = new Logger(AIModelProvider.name);
@@ -1220,7 +1240,11 @@ export class AIModelProvider {
       };
     }
     if (/^https?:\/\//i.test(imageUrl)) {
-      return { type: 'file', mediaType: 'image/png', data: new URL(imageUrl) };
+      return {
+        type: 'file',
+        mediaType: imageMediaTypeFromUrl(imageUrl),
+        data: new URL(imageUrl),
+      };
     }
     // Bare base64 payload (no scheme) — pass through as-is.
     return { type: 'file', mediaType: 'image/png', data: imageUrl };

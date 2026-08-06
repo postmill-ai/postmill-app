@@ -5,6 +5,7 @@ import {
   applyFilterTokensToCanvas,
   blurFilterRadius,
   hasFilterEffect,
+  MAX_BLUR_FILTER_RADIUS,
 } from './filter-pixels';
 
 /**
@@ -110,6 +111,14 @@ describe('blurFilterRadius', () => {
   it('is zero when there is no blur', () => {
     expect(blurFilterRadius(['grayscale'])).toBe(0);
     expect(blurFilterRadius(undefined)).toBe(0);
+  });
+
+  it('clamps an extreme token to the documented max', () => {
+    // blurCanvas is O(radius) per row per channel — an unbounded radius is a
+    // DoS. Same clamp `clampToDescriptor` applies to smart-filter radii.
+    expect(blurFilterRadius(['blur:100000000'])).toBe(MAX_BLUR_FILTER_RADIUS);
+    expect(blurFilterRadius(['blur:600', 'blur:600'])).toBe(MAX_BLUR_FILTER_RADIUS);
+    expect(blurFilterRadius(['blur:250', 'blur:250'])).toBe(MAX_BLUR_FILTER_RADIUS);
   });
 });
 

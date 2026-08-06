@@ -3072,7 +3072,17 @@ describe('AiDesignerConductorService variant expansion', () => {
     ],
   };
 
-  const makeExpansionConductor = (criticFindings: (callIndex: number) => any[]) => {
+  const makeExpansionConductor = (
+    criticFindings: (callIndex: number) => any[],
+    opts: {
+      /**
+       * Mark the primary critique as SKIPPED (never happened) rather than
+       * clean: a verified-clean primary now skips the per-format expansion QC,
+       * so tests exercising that QC need a primary that was not verified clean.
+       */
+      primarySkipped?: boolean;
+    } = {}
+  ) => {
     const service = {
       getSessionForUser: vi.fn().mockResolvedValue({
         id: SESSION_ID,
@@ -3136,6 +3146,15 @@ describe('AiDesignerConductorService variant expansion', () => {
       }
       if (agentId === 'vision-critic') {
         criticCall++;
+        if (opts.primarySkipped && criticCall === 1) {
+          return Promise.resolve({
+            content: JSON.stringify({
+              type: 'findings',
+              findings: [],
+              skipped: true,
+            }),
+          });
+        }
         return Promise.resolve({
           content: JSON.stringify({
             type: 'findings',
@@ -3150,7 +3169,7 @@ describe('AiDesignerConductorService variant expansion', () => {
     return { conductor, service, saver, composer, docService, dispatchAgent };
   };
 
-  it('composes the primary only, then addOutput-expands and QC\'s each variant', async () => {
+  it('composes the primary only, then addOutput-expands — skipping per-format QC after a clean primary', async () => {
     const emitter = makeEmitter();
     const { conductor, saver, docService, dispatchAgent } =
       makeExpansionConductor(() => []);
@@ -3198,29 +3217,23 @@ describe('AiDesignerConductorService variant expansion', () => {
     expect(saver.updateDesign).toHaveBeenCalledTimes(1);
     expect(saver.updateDesign.mock.calls[0][1]).toBe('design-v1');
 
-    // Critic ran on the original (primary only) and once per variant format.
+    // The primary passed its first critique clean, so the per-format critique
+    // passes are SKIPPED: each would re-judge a faithful re-fit of the render
+    // the critic just approved. One critic dispatch (the primary), and no
+    // per-format review progress.
     const criticCalls = dispatchAgent.mock.calls.filter(
       ([_, agentId]: any) => agentId === 'vision-critic'
     );
-    expect(criticCalls).toHaveLength(2);
+    expect(criticCalls).toHaveLength(1);
     expect(criticCalls[0][2].outputs).toEqual([
       expect.objectContaining({ formatId: 'ig-post' }),
     ]);
-    expect(criticCalls[1][2].contactSheetUrl).toBe('https://example.com/story.png');
-    expect(criticCalls[1][2].plans).toHaveLength(1);
-    expect(criticCalls[1][2].outputs).toEqual([
-      expect.objectContaining({ formatId: 'ig-story' }),
-    ]);
-    expect(criticCalls[1][2].outputPreviews).toEqual([
-      { formatId: 'ig-story', url: 'https://example.com/story.png' },
-    ]);
 
-    // Per-format progress events.
+    // The expansion itself still happened — the seeded format is delivered…
     const phases = (emitter.progress as ReturnType<typeof vi.fn>).mock.calls.map(
       (call: any) => `${call[0]}:${call[1]}`
     );
-    expect(phases).toContain('composer:Adapting to ig-story');
-    expect(phases).toContain('vision-critic:Reviewing ig-story');
+    expect(phases).not.toContain('vision-critic:Reviewing ig-story');
 
     // The delivered result covers every output.
     const deliveredUpdate = (conductor as any)._service.updateSession.mock.calls.find(
@@ -3236,7 +3249,8 @@ describe('AiDesignerConductorService variant expansion', () => {
 
   it('applies format-pinned fixes and caps the variant QC at two passes', async () => {
     const emitter = makeEmitter();
-    // The original's pass is clean; every variant pass finds an issue.
+    // The primary pass is SKIPPED (not verified clean — a clean one skips the
+    // per-format QC entirely); every variant pass finds an issue.
     const { conductor, saver, composer, dispatchAgent } = makeExpansionConductor(
       (callIndex) =>
         callIndex === 1
@@ -3247,7 +3261,8 @@ describe('AiDesignerConductorService variant expansion', () => {
                 slotId: 'headline',
                 fix: { scope: 'shared', targetSlots: ['headline'], geometry: { y: 40 } },
               },
-            ]
+            ],
+      { primarySkipped: true }
     );
 
     await conductor.handleAcceptPlan(SESSION_ID, ctx, 'reply-1', undefined, false, undefined, emitter);
@@ -3460,7 +3475,9 @@ describe('AiDesignerConductorService variant expansion', () => {
 
   it('threads the design doc element data into every critique dispatch', async () => {
     const emitter = makeEmitter();
-    const { conductor, dispatchAgent } = makeExpansionConductor(() => []);
+    const { conductor, dispatchAgent } = makeExpansionConductor(() => [], {
+      primarySkipped: true,
+    });
 
     await conductor.handleAcceptPlan(SESSION_ID, ctx, 'reply-1', undefined, false, undefined, emitter);
 
@@ -3638,6 +3655,12 @@ describe('AiDesignerConductorService regenerateAsset fixes', () => {
     initialAssets?: Record<string, any>;
     doc?: any;
     plan?: any;
+    /**
+     * Mark the primary critique as SKIPPED (never happened) rather than clean:
+     * a verified-clean primary now skips the per-format expansion QC these
+     * tests exercise, so their findings ride the expansion passes (call 2+).
+     */
+    primarySkipped?: boolean;
   }) => {
     const plan = opts.plan ?? REGEN_PLAN;
     const doc = opts.doc ?? HERO_DOC;
@@ -3721,6 +3744,18 @@ describe('AiDesignerConductorService regenerateAsset fixes', () => {
       }
       if (agentId === 'vision-critic') {
         criticCall++;
+        // A primary pass that never happened (unparseable reply): the variant
+        // is NOT verified clean, so the expansion's per-format QC still runs —
+        // which is where these tests' findings land (call 2+).
+        if (opts.primarySkipped && criticCall === 1) {
+          return Promise.resolve({
+            content: JSON.stringify({
+              type: 'findings',
+              findings: [],
+              skipped: true,
+            }),
+          });
+        }
         return Promise.resolve({
           content: JSON.stringify({
             type: 'findings',
@@ -3747,9 +3782,11 @@ describe('AiDesignerConductorService regenerateAsset fixes', () => {
 
   it('dispatches the asset agent once for a regenerateAsset finding and patches every output sharing the old fileId', async () => {
     const emitter = makeEmitter();
-    // Original pass clean; the ig-story variant pass flags the imagery; the
+    // The primary pass is skipped (not verified clean — a clean one now skips
+    // the per-format QC); the ig-story variant pass flags the imagery; the
     // re-check pass is clean.
     const { conductor, saver, composer, regenDispatches } = makeRegenConductor({
+      primarySkipped: true,
       criticFindings: (call) => (call === 2 ? [REGEN_FINDING] : []),
     });
 
@@ -3851,6 +3888,7 @@ describe('AiDesignerConductorService regenerateAsset fixes', () => {
     };
 
     const { conductor, saver, regenDispatches } = makeRegenConductor({
+      primarySkipped: true,
       criticFindings: (call) => (call === 2 ? [REGEN_FINDING] : []),
       doc,
     });
@@ -3877,6 +3915,7 @@ describe('AiDesignerConductorService regenerateAsset fixes', () => {
     const emitter = makeEmitter();
     // Both variant passes flag the same slot; the first one regenerates fine.
     const { conductor, regenDispatches, headsUpNotes } = makeRegenConductor({
+      primarySkipped: true,
       criticFindings: (call) => (call === 1 ? [] : [REGEN_FINDING]),
     });
 
@@ -3901,6 +3940,7 @@ describe('AiDesignerConductorService regenerateAsset fixes', () => {
     // Flagged on the ig-story pass, clean on the re-check: the replacement was
     // re-examined and passed — claiming otherwise would be knowledge we lack.
     const { conductor, regenDispatches, headsUpNotes } = makeRegenConductor({
+      primarySkipped: true,
       criticFindings: (call) => (call === 2 ? [REGEN_FINDING] : []),
     });
 
@@ -3919,6 +3959,7 @@ describe('AiDesignerConductorService regenerateAsset fixes', () => {
     // after the one successful regeneration. The old per-refusal push turned
     // that into the same line three times.
     const { conductor, saver, headsUpNotes } = makeRegenConductor({
+      primarySkipped: true,
       channels: ['ig-post', 'ig-story', 'x-post'],
       criticFindings: (call) => (call === 1 ? [] : [REGEN_FINDING]),
     });
@@ -3954,6 +3995,7 @@ describe('AiDesignerConductorService regenerateAsset fixes', () => {
     // First flag: a generic defect → generate. Second: brand_safety → the
     // technique changes, so a SECOND attempt is allowed (and only then).
     const { conductor, saver, regenDispatches, headsUpNotes } = makeRegenConductor({
+      primarySkipped: true,
       channels: ['ig-post', 'ig-story', 'x-post'],
       criticFindings: (call) =>
         call === 1 ? [] : call === 2 ? [REGEN_FINDING] : [BRAND_FINDING],
@@ -3992,6 +4034,7 @@ describe('AiDesignerConductorService regenerateAsset fixes', () => {
   it('caps a brand_safety slot at ONE stock attempt — the technique must change', async () => {
     const emitter = makeEmitter();
     const { conductor, regenDispatches } = makeRegenConductor({
+      primarySkipped: true,
       criticFindings: (call) => (call === 1 ? [] : [BRAND_FINDING]),
     });
 
@@ -4028,6 +4071,7 @@ describe('AiDesignerConductorService regenerateAsset fixes', () => {
       ],
     };
     const { conductor, headsUpNotes } = makeRegenConductor({
+      primarySkipped: true,
       plan: imagePlan,
       doc: imageDoc,
       criticFindings: (call) =>
@@ -4087,6 +4131,7 @@ describe('AiDesignerConductorService regenerateAsset fixes', () => {
       ],
     };
     const { conductor, headsUpNotes, dispatchAgent } = makeRegenConductor({
+      primarySkipped: true,
       doc: vectorDoc,
       criticFindings: (call: number) =>
         call === 2
@@ -4145,6 +4190,7 @@ describe('AiDesignerConductorService regenerateAsset fixes', () => {
   it('keeps the old image and posts a degradation note when regeneration fails', async () => {
     const emitter = makeEmitter();
     const { conductor, saver, regenDispatches, headsUpNotes } = makeRegenConductor({
+      primarySkipped: true,
       criticFindings: (call) => (call === 2 ? [REGEN_FINDING] : []),
       regenAssets: {}, // the asset agent produced nothing
     });
@@ -4178,6 +4224,7 @@ describe('AiDesignerConductorService regenerateAsset fixes', () => {
   it('passes the previous stock pick to the asset agent as an exclusion', async () => {
     const emitter = makeEmitter();
     const { conductor, regenDispatches } = makeRegenConductor({
+      primarySkipped: true,
       criticFindings: (call) => (call === 2 ? [REGEN_FINDING] : []),
       initialAssets: {
         'v1:hero:square': STOCK_ASSET('photo-1', 'f-hero', 'https://example.com/hero.png'),
@@ -4197,6 +4244,7 @@ describe('AiDesignerConductorService regenerateAsset fixes', () => {
   it('treats a regenerated stock asset with the SAME stockId as a failure', async () => {
     const emitter = makeEmitter();
     const { conductor, saver, regenDispatches, headsUpNotes } = makeRegenConductor({
+      primarySkipped: true,
       criticFindings: (call) => (call === 2 ? [REGEN_FINDING] : []),
       initialAssets: {
         'v1:hero:square': STOCK_ASSET('photo-1', 'f-hero', 'https://example.com/hero.png'),
@@ -4229,6 +4277,7 @@ describe('AiDesignerConductorService regenerateAsset fixes', () => {
   it('accepts a genuinely DIFFERENT stock photo', async () => {
     const emitter = makeEmitter();
     const { conductor, saver, headsUpNotes } = makeRegenConductor({
+      primarySkipped: true,
       criticFindings: (call) => (call === 2 ? [REGEN_FINDING] : []),
       initialAssets: {
         'v1:hero:square': STOCK_ASSET('photo-1', 'f-hero', 'https://example.com/hero.png'),
@@ -4276,6 +4325,7 @@ describe('AiDesignerConductorService regenerateAsset fixes', () => {
       fix: { scope: 'shared', targetSlots: ['headline'], geometry: { y: 40 } },
     };
     const { conductor, composer, regenDispatches } = makeRegenConductor({
+      primarySkipped: true,
       criticFindings: (call) => (call === 2 ? [REGEN_FINDING, geometryFinding] : []),
     });
 
@@ -4969,6 +5019,9 @@ describe('AiDesignerConductorService beauty gate', () => {
     expect(designIds).not.toContain('design-v1');
     expect(designIds).toContain('design-v2');
     expect(headsUp()).toContain('variant 1 was held back');
+    // …and the survivor keeps the number the notes (and the user) know it by —
+    // renumbering it to "Variant 1" made the heads-up and the caption disagree.
+    expect(mediaItems()[0].caption).toContain('Variant 2');
   });
 
   it('delivers the only result with a warning instead of delivering nothing', async () => {

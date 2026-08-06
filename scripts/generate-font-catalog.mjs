@@ -54,7 +54,10 @@ const main = async () => {
       .map(Number)
       .sort((a, b) => a - b);
     if (!weights.length) continue;
-    if (entry.family.includes('|')) continue;
+    // Family names land verbatim inside a template literal below: anything that
+    // could terminate or interpolate it (backtick, backslash, ${) or split a
+    // row (|, newline) gets the family skipped rather than escaped.
+    if (/[|`\\\r\n]|\$\{/.test(entry.family)) continue;
     rows.push(`${entry.family}|${category}|${weights.join(',')}`);
   }
   rows.sort();

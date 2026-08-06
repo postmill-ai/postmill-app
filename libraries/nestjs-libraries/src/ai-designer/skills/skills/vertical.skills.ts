@@ -12,7 +12,7 @@ import { defineSkill } from '../define-skill';
 export const RestaurantDishSkill = defineSkill({
   id: 'restaurant-dish',
   title: 'Restaurant / Dish',
-  signals: ['dish', 'menu item', 'restaurant', 'cafe', '食', 'special', 'chef', 'cuisine', 'bakery'],
+  signals: ['dish', 'menu item', 'restaurant', 'cafe', 'special', 'chef', 'cuisine', 'bakery'],
   direction:
     'Aim at a food magazine spread. The photograph is everything: shot close, warm, shallow. Type stays out of its way — a small caption at the edge, never a headline across the plate.',
   rules: [

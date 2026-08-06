@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- **Default image models:** OpenAI's default image model moved from `dall-e-3` to
+  `gpt-image-1` (dall-e-3 is gone for new API keys) and Replicate's from
+  `black-forest-labs/flux-schnell` (retired upstream) to `black-forest-labs/flux-1.1-pro`.
+  Orgs that pinned a model are unaffected — explicit model selections still win.
+
 ### Security
 
 - **F1 — role privilege escalation:** assigning roles now requires the target role's permissions

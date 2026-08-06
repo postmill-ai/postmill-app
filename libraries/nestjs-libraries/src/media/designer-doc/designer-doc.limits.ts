@@ -73,6 +73,27 @@ export const MAX_PATH_NODES = 2000;
 export const MAX_GROUP_RENDER_DEPTH = 16;
 
 /**
+ * Maximum symbol nesting depth `expandSymbols` recurses into.
+ *
+ * Mirrors MAX_GROUP_RENDER_DEPTH: a definition may instance another definition,
+ * so depth is user-controlled and must be bounded independently of the cycle
+ * guard (which only stops a definition containing ITSELF).
+ */
+export const MAX_SYMBOL_EXPANSION_DEPTH = 16;
+
+/**
+ * Maximum elements one `expandSymbols` call may emit in total.
+ *
+ * The cycle guard stops a symbol containing itself, but not multiplicative
+ * nesting — definitions instancing definitions turn a handful of authored
+ * elements into an exponential count (200 defs × 500 children → 10^8+), which
+ * exhausts the render process long before the schema's per-output cap is ever
+ * consulted. A multiple of MAX_ELEMENTS_PER_OUTPUT leaves generous headroom for
+ * real template work; instances past the budget are dropped, not drawn.
+ */
+export const MAX_SYMBOL_EXPANSION_TOTAL = MAX_ELEMENTS_PER_OUTPUT * 10;
+
+/**
  * Maximum layer styles (effects) on one layer. Photoshop allows one of each of
  * its ten effect types plus multiples of a few; this bounds how much offscreen
  * compositing a single element can force per render.

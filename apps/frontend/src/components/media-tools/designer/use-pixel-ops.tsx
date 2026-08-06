@@ -9,14 +9,12 @@ import { sharedStageRef } from './stage-ref';
 import {
   ensureBuffer,
   getBuffer,
-  pushUndoRegion,
   commitBuffer,
   seedBufferFromImage,
 } from './raster-layers';
 import {
   fullMask,
   invertMask,
-  maskBounds,
   strokeBand,
   createMask,
   type SelectionMask,
@@ -98,6 +96,41 @@ export const usePixelOps = ({ store, fetchFn }: UsePixelOpsArgs) => {
 
   /** The layer currently being re-baked, so the UI can say so. */
   const [baking, setBaking] = useState<string | null>(null);
+
+  /**
+   * In-flight re-bakes, keyed by layer/clip id. A recipe edit while a bake is
+   * still running must win — the older bake's pixels describe a recipe the
+   * layer no longer has, so its worker is aborted and its completion ignored.
+   * Object identity is the generation token: a newer run replaces the entry.
+   */
+  const rebakeRuns = useRef(new Map<string, AbortController>());
+  /** Cancels the in-flight destructive filter on unmount or a newer run. */
+  const destructiveFilter = useRef<AbortController | null>(null);
+
+  const beginRebakeRun = useCallback((key: string): AbortController => {
+    const runs = rebakeRuns.current;
+    runs.get(key)?.abort();
+    const controller = new AbortController();
+    runs.set(key, controller);
+    return controller;
+  }, []);
+
+  const isCurrentRun = useCallback(
+    (key: string, controller: AbortController): boolean =>
+      rebakeRuns.current.get(key) === controller,
+    []
+  );
+
+  // Unmount cancels everything in flight — a completion landing after the
+  // designer is gone would write into a store nobody is watching.
+  useEffect(() => {
+    const runs = rebakeRuns.current;
+    return () => {
+      for (const controller of runs.values()) controller.abort();
+      runs.clear();
+      destructiveFilter.current?.abort();
+    };
+  }, []);
 
   // ── Select menu ──────────────────────────────────────────────────────────
 
@@ -249,35 +282,13 @@ export const usePixelOps = ({ store, fetchFn }: UsePixelOpsArgs) => {
     [store]
   );
 
-  /** The layer-local rect an operation can touch, for a bounded undo snapshot. */
-  const dirtyRect = useCallback(
-    (target: PixelTarget) => {
-      const selection = store.getState().selection;
-      const { canvas, element } = target;
-      if (!selection) return { x: 0, y: 0, width: canvas.width, height: canvas.height };
-
-      const bounds = maskBounds(selection);
-      if (!bounds) return { x: 0, y: 0, width: canvas.width, height: canvas.height };
-
-      const scaleX = canvas.width / Math.max(1, element.width);
-      const scaleY = canvas.height / Math.max(1, element.height);
-      const x = Math.max(0, Math.floor((bounds.x - element.x) * scaleX));
-      const y = Math.max(0, Math.floor((bounds.y - element.y) * scaleY));
-      return {
-        x,
-        y,
-        width: Math.min(canvas.width - x, Math.ceil(bounds.width * scaleX) + 1),
-        height: Math.min(canvas.height - y, Math.ceil(bounds.height * scaleY) + 1),
-      };
-    },
-    [store]
-  );
-
   /**
    * Run `mutate` over the target's pixels and persist the result.
    *
-   * Every pixel operation funnels through here, so undo, upload and the history
-   * entry are written once rather than in each command.
+   * Every pixel operation funnels through here, so upload and the history
+   * entry are written once rather than in each command. Undo is doc history
+   * plus `reconcileBuffersWithDoc` — the commit below is what makes the
+   * restored `src` match these pixels.
    */
   const applyToLayer = useCallback(
     async (
@@ -289,9 +300,6 @@ export const usePixelOps = ({ store, fetchFn }: UsePixelOpsArgs) => {
     ): Promise<boolean> => {
       const target = await resolveTarget();
       if (!target) return false;
-
-      const rect = dirtyRect(target);
-      pushUndoRegion(target.element.id, rect.x, rect.y, rect.width, rect.height);
 
       let data: ImageData;
       try {
@@ -314,7 +322,7 @@ export const usePixelOps = ({ store, fetchFn }: UsePixelOpsArgs) => {
       store.getState().pushHistory();
       return true;
     },
-    [resolveTarget, dirtyRect, coverageFor, fetchFn, store, toaster, t]
+    [resolveTarget, coverageFor, fetchFn, store, toaster, t]
   );
 
   // ── Edit ▸ Fill / Stroke ─────────────────────────────────────────────────
@@ -418,9 +426,13 @@ export const usePixelOps = ({ store, fetchFn }: UsePixelOpsArgs) => {
     async (elementId: string) => {
       const el = (activeOutput(store)?.children || []).find((c) => c.id === elementId);
       if (!el) return;
+      const run = beginRebakeRun(elementId);
       setBaking(elementId);
       try {
-        const result = await rebakeSmartFilters(el, fetchFn);
+        const result = await rebakeSmartFilters(el, fetchFn, { signal: run.signal });
+        // A newer bake owns the layer now — its pixels, not these, describe
+        // the current recipe.
+        if (!isCurrentRun(elementId, run)) return;
         if (!result) {
           toaster.show(
             t('designer_filter_failed', "Couldn't apply that filter"),
@@ -434,10 +446,10 @@ export const usePixelOps = ({ store, fetchFn }: UsePixelOpsArgs) => {
         });
         store.getState().pushHistory();
       } finally {
-        setBaking(null);
+        if (isCurrentRun(elementId, run)) setBaking(null);
       }
     },
-    [store, fetchFn, toaster, t]
+    [store, fetchFn, toaster, t, beginRebakeRun, isCurrentRun]
   );
 
   /** Re-bake a clip's stack, the clip-shaped twin of `rebake`. */
@@ -449,6 +461,7 @@ export const usePixelOps = ({ store, fetchFn }: UsePixelOpsArgs) => {
         ?.find((tr) => tr.id === sel.trackId)
         ?.clips.find((c) => c.id === sel.clipId);
       if (!clip) return;
+      const run = beginRebakeRun(sel.clipId);
       setBaking(sel.clipId);
       try {
         const result = await rebakeSmartFilters(
@@ -460,8 +473,10 @@ export const usePixelOps = ({ store, fetchFn }: UsePixelOpsArgs) => {
             src: clip.src,
             smartFilters: clip.smartFilters,
           },
-          fetchFn
+          fetchFn,
+          { signal: run.signal }
         );
+        if (!isCurrentRun(sel.clipId, run)) return;
         if (!result) {
           toaster.show(t('designer_filter_failed', "Couldn't apply that filter"), 'warning');
           return;
@@ -474,10 +489,10 @@ export const usePixelOps = ({ store, fetchFn }: UsePixelOpsArgs) => {
           });
         store.getState().pushHistory();
       } finally {
-        setBaking(null);
+        if (isCurrentRun(sel.clipId, run)) setBaking(null);
       }
     },
-    [store, fetchFn, toaster, t]
+    [store, fetchFn, toaster, t, beginRebakeRun, isCurrentRun]
   );
 
   const applyFilterById = useCallback(
@@ -515,7 +530,11 @@ export const usePixelOps = ({ store, fetchFn }: UsePixelOpsArgs) => {
         return;
       }
 
+      // A newer destructive run (or unmount) cancels the previous one — the
+      // worker honours the signal by resolving null, which skips the blend.
+      destructiveFilter.current?.abort();
       const controller = new AbortController();
+      destructiveFilter.current = controller;
       await applyToLayer(async (data, coverage) => {
         const result = await runFilter(data, id, params, { signal: controller.signal });
         if (!result) return;

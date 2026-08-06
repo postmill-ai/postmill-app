@@ -14,6 +14,10 @@
  */
 
 import type { DesignerElement } from './designer-doc.schema';
+import {
+  MAX_SYMBOL_EXPANSION_DEPTH,
+  MAX_SYMBOL_EXPANSION_TOTAL,
+} from './designer-doc.limits';
 
 export interface SymbolDefinition {
   id: string;
@@ -121,7 +125,11 @@ export const expandSymbolInstance = (
  * A definition may itself contain an instance of ANOTHER symbol, so expansion
  * recurses; `visiting` tracks the definitions on the current expansion stack
  * and drops a cycle (a symbol containing itself, directly or transitively)
- * instead of recursing forever.
+ * instead of recursing forever. The cycle guard does NOT stop multiplicative
+ * nesting — definitions instancing definitions multiply the emitted count — so
+ * expansion is also bounded by a depth cap and a total-emitted budget
+ * (MAX_SYMBOL_EXPANSION_DEPTH / MAX_SYMBOL_EXPANSION_TOTAL); instances past
+ * either bound are dropped rather than drawn.
  */
 export const expandSymbols = (
   children: DesignerElement[],
@@ -129,29 +137,41 @@ export const expandSymbols = (
 ): DesignerElement[] => {
   if (!definitions?.length) return children.filter((el) => el.type !== 'symbol');
   const byId = new Map(definitions.map((d) => [d.id, d]));
+  // Shared across the whole expansion: the budget is on what one call emits,
+  // not per branch, or multiplicative nesting would slip under it.
+  let emitted = 0;
 
   const expand = (
     els: DesignerElement[],
-    visiting: ReadonlySet<string>
+    visiting: ReadonlySet<string>,
+    depth: number
   ): DesignerElement[] => {
     const out: DesignerElement[] = [];
     for (const el of els) {
+      if (emitted >= MAX_SYMBOL_EXPANSION_TOTAL) break;
       if (el.type !== 'symbol') {
         out.push(el);
+        emitted++;
         continue;
       }
       const definition = el.symbolId ? byId.get(el.symbolId) : undefined;
-      if (!definition || visiting.has(definition.id)) continue;
+      if (
+        !definition ||
+        visiting.has(definition.id) ||
+        depth >= MAX_SYMBOL_EXPANSION_DEPTH
+      )
+        continue;
       out.push(
         ...expand(
           expandSymbolInstance(el, definition),
-          new Set([...visiting, definition.id])
+          new Set([...visiting, definition.id]),
+          depth + 1
         )
       );
     }
     return out;
   };
-  return expand(children, new Set());
+  return expand(children, new Set(), 0);
 };
 
 export interface TemplateField {

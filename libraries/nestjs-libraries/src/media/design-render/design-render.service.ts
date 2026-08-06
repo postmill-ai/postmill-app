@@ -735,6 +735,37 @@ export class DesignRenderService {
    * re-rendering; a missing backdrop page falls back to the composite rather
    * than skipping the element.
    */
+  /**
+   * Cheap precheck for `auditTextContrast`: could ANY text sit over imagery
+   * (an image element beneath it, or an image/gradient output background)?
+   * When nothing can, the audit is guaranteed empty, so the saver skips the
+   * backdrop (`hideText`) render entirely — a second full render the QC loop
+   * would otherwise pay for on every save. Conservative by design: a false
+   * positive only costs the backdrop render, a false negative would skip a
+   * real audit, so anything uncertain answers true.
+   */
+  docHasTextOverImagery(doc: DesignerDoc): boolean {
+    for (const out of doc.outputs ?? []) {
+      if (!('children' in out)) continue;
+      const children = expandSymbols(out.children ?? [], doc.symbols);
+      const texts = children.filter(
+        (el) =>
+          el.type === 'text' &&
+          !el.hidden &&
+          (el.opacity ?? 1) > 0 &&
+          !!(el.text?.trim() || el.richText?.length)
+      );
+      if (texts.length === 0) continue;
+      const bgType = (out as DesignerOutput).bg?.type;
+      if (bgType === 'image' || bgType === 'gradient') return true;
+      const images = children.filter((el) => el.type === 'image' && !el.hidden);
+      if (texts.some((t) => images.some((img) => aabbOverlap(t, img)))) {
+        return true;
+      }
+    }
+    return false;
+  }
+
   async auditTextContrast(
     doc: DesignerDoc,
     pages?: Buffer[],
@@ -2412,14 +2443,60 @@ export class DesignRenderService {
     const filtered = hasFilterEffect(el.filters);
     const { createCanvas } = await loadCanvasModule();
     const ratio = Math.max(1, Math.abs(ctx.getTransform?.().a ?? 1));
+
+    // The buffer covers only the part of the element that can land on the
+    // page. An element hanging far off-canvas used to allocate its FULL size
+    // (⌈width·ratio⌉ × ⌈height·ratio⌉) for pixels nothing can show. The page
+    // rect is mapped into element-local space through the inverse transform —
+    // a superset under rotation, which is fine: it stays bounded by the page
+    // either way — and the draw below is offset to match.
+    let visibleX = 0;
+    let visibleY = 0;
+    let visibleW = el.width;
+    let visibleH = el.height;
+    if (filtered) {
+      const transform = ctx.getTransform?.();
+      const pageW = ctx.canvas?.width;
+      const pageH = ctx.canvas?.height;
+      if (transform && pageW && pageH) {
+        try {
+          const inv = transform.inverse();
+          const corners = [
+            inv.transformPoint({ x: 0, y: 0 }),
+            inv.transformPoint({ x: pageW, y: 0 }),
+            inv.transformPoint({ x: 0, y: pageH }),
+            inv.transformPoint({ x: pageW, y: pageH }),
+          ];
+          const minX = Math.max(0, Math.min(...corners.map((c) => c.x)));
+          const minY = Math.max(0, Math.min(...corners.map((c) => c.y)));
+          const maxX = Math.min(el.width, Math.max(...corners.map((c) => c.x)));
+          const maxY = Math.min(el.height, Math.max(...corners.map((c) => c.y)));
+          if (maxX <= minX || maxY <= minY) {
+            // Fully off-page: nothing visible to filter or draw.
+            ctx.restore();
+            return;
+          }
+          visibleX = minX;
+          visibleY = minY;
+          visibleW = maxX - minX;
+          visibleH = maxY - minY;
+        } catch {
+          // No inverse (degenerate transform) — keep the full-element buffer.
+        }
+      }
+    }
+
     const target = filtered
       ? createCanvas(
-          Math.max(1, Math.ceil(el.width * ratio)),
-          Math.max(1, Math.ceil(el.height * ratio))
+          Math.max(1, Math.ceil(visibleW * ratio)),
+          Math.max(1, Math.ceil(visibleH * ratio))
         )
       : null;
     const tctx: any = target ? target.getContext('2d') : ctx;
-    if (target) tctx.scale(ratio, ratio);
+    if (target) {
+      tctx.scale(ratio, ratio);
+      tctx.translate(-visibleX, -visibleY);
+    }
 
     // An explicit crop wins over the fit mode, matching the canvas — dropped
     // images default to `cover`, so honouring cover first made the crop tool a
@@ -2450,7 +2527,7 @@ export class DesignRenderService {
 
     if (target) {
       applyFilterTokensToCanvas(target, el.filters, ratio);
-      ctx.drawImage(target, 0, 0, el.width, el.height);
+      ctx.drawImage(target, visibleX, visibleY, visibleW, visibleH);
     }
 
     // Text mask: stencil the already-drawn image to the glyph shapes.

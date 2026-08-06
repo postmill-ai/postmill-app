@@ -16,14 +16,15 @@ vi.mock('@postmill-ai/helpers/utils/custom.fetch', () => ({
 // Minimal useSWR: actually runs the fetcher and, like real SWR, keeps the last good
 // data when a revalidation rejects.
 vi.mock('swr', () => ({
-  default: (key: string, fetcher: any) => {
-    // eslint-disable-next-line react-hooks/rules-of-hooks
+  // Named `use…` so react-hooks/rules-of-hooks treats the body as a hook; a
+  // function expression so the mock factory stays self-contained (vi.mock is
+  // hoisted above module scope).
+  default: function useMockSwr(key: string, fetcher: any) {
     const [state, setState] = React.useState<{
       data?: any;
       error?: any;
       isLoading: boolean;
     }>({ isLoading: true });
-    // eslint-disable-next-line react-hooks/rules-of-hooks
     React.useEffect(() => {
       let cancelled = false;
       Promise.resolve(fetcher(key)).then(

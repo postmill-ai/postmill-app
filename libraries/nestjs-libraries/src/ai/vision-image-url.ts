@@ -63,6 +63,19 @@ export async function resolveVisionImageUrl(
 
   if (typeof url !== 'string' || !url.trim()) return null;
 
+  // Already inline (the AI Designer's contact sheet rides memory as a data
+  // URI instead of being persisted to storage on every save). No fetch, no
+  // disk read — only the prompt-size bound applies.
+  if (/^data:image\//i.test(url)) {
+    const payload = url.slice(url.indexOf(',') + 1);
+    const bytes = Math.floor((payload.length * 3) / 4);
+    if (bytes > maxInlineBytes) {
+      warn(`${label}: inlined image too large (${bytes} bytes)`);
+      return null;
+    }
+    return url;
+  }
+
   // A local upload URL is checked FIRST: with SSRF_ALLOWED_PRIVATE_CIDRS opted
   // in, a self-hosted `https://…/uploads/…` can pass the public check and would
   // otherwise be handed to a provider that cannot reach it.

@@ -1357,11 +1357,15 @@ export const VideoTimeline: FC<VideoTimelineProps> = ({ store, sendTimelineAware
    */
   const generateRequest = store((s) => s.generateRequest);
   const openRequested = useRef<((kind: string) => void) | null>(null);
-  openRequested.current = (kind: string) => {
-    if (kind === 'video') handleGenerateVideo();
-    else if (kind === 'music') handleGenerateMusic();
-    else if (kind === 'voiceover') handleGenerateVoiceover();
-  };
+  // Writing the ref in an effect rather than during render is what
+  // react-hooks/refs requires (same pattern as canvas.tsx's penDraftRef).
+  useEffect(() => {
+    openRequested.current = (kind: string) => {
+      if (kind === 'video') handleGenerateVideo();
+      else if (kind === 'music') handleGenerateMusic();
+      else if (kind === 'voiceover') handleGenerateVoiceover();
+    };
+  }, [handleGenerateVideo, handleGenerateMusic, handleGenerateVoiceover]);
   useEffect(() => {
     if (!generateRequest) return;
     openRequested.current?.(generateRequest);

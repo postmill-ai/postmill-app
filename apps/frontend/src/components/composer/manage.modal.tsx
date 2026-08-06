@@ -823,18 +823,22 @@ export const ManageModal: FC<AddEditModalProps> = (props) => {
                   id="social-content"
                   className="gap-[12px] md:gap-[32px] flex flex-col pe-[8px] pt-[12px] md:pt-[20px] ps-[20px] absolute top-0 left-0 w-full h-full overflow-x-hidden overflow-y-scroll scrollbar scrollbar-thumb-newColColor scrollbar-track-newBgColorInner"
                 >
-                  {/* Two groups, reordered on mobile: the destination pickers
+                  {/* Two groups, reordered below 2xl: the destination pickers
                       (channels + brand) sit on their own full-width row below
                       the actions, which is the only way three pills and two
-                      buttons fit a phone without wrapping mid-group. */}
+                      buttons fit without wrapping mid-group. At lg–xl widths the
+                      shared row squeezes this group (min-w-0) until the
+                      shrink-proof "Select Channels" pill paints over the brand
+                      pill, so the swap holds until 2xl, where the row is wide
+                      enough for both groups side by side. */}
                   <div className="flex w-full items-center gap-[8px] flex-wrap">
-                    <div className="order-2 lg:order-1 w-full lg:w-auto lg:flex-1 flex items-center gap-[8px] min-w-0">
+                    <div className="order-2 2xl:order-1 w-full 2xl:w-auto 2xl:flex-1 flex items-center gap-[8px] min-w-0">
                       <div className="flex min-w-0">
                         <PicksSocialsComponent toolTip={true} />
                       </div>
                       {!dummy && <BrandPicker openDirection="down" />}
                     </div>
-                    <div className="order-1 lg:order-2 flex items-center gap-[8px] flex-wrap">
+                    <div className="order-1 2xl:order-2 flex items-center gap-[8px] flex-wrap">
                     {!dummy && !addEditSets && (
                       <button
                         type="button"

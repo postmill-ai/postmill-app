@@ -1,6 +1,11 @@
 import { create } from 'zustand';
 import { CHANNEL_PRESETS } from '@postmill-ai/nestjs-libraries/integrations/social/channel-presets';
 import { detectFocalPoint } from './reflow';
+import {
+  disposeAllBuffers,
+  disposeElementBuffers,
+  reconcileBuffersWithDoc,
+} from './raster-layers';
 import { DEFAULT_TOOL_ID, getTool } from './tools';
 import type { SelectionMask } from './selection-mask';
 import { DESIGNER_DOC_VERSION } from '@postmill-ai/nestjs-libraries/media/designer-doc/designer-doc.limits';
@@ -410,6 +415,7 @@ export const createDesignerStore = (
           isDirty: true, selectedIds: selectedIds.filter((s) => s !== id),
         });
         get().pushHistory();
+        disposeElementBuffers(id);
       },
 
       removeElements: (ids) => {
@@ -422,6 +428,7 @@ export const createDesignerStore = (
           isDirty: true, selectedIds: selectedIds.filter((s) => !remove.has(s)),
         });
         get().pushHistory();
+        ids.forEach(disposeElementBuffers);
       },
 
       duplicateElement: (id) => {
@@ -502,6 +509,7 @@ export const createDesignerStore = (
           selectedIds: [], isDirty: true,
         });
         get().pushHistory();
+        selectedIds.forEach(disposeElementBuffers);
       },
 
       paste: () => {
@@ -968,6 +976,10 @@ export const createDesignerStore = (
           isDirty: index !== savedHistoryIndex,
           currentOutput: Math.max(0, Math.min(currentOutput, (nextDoc.outputs?.length ?? 1) - 1)),
         });
+        // The restored `src` is now the truth for every raster layer — the
+        // live paint buffers have to catch up or the canvas keeps showing the
+        // pixels undo just reverted.
+        reconcileBuffersWithDoc(nextDoc);
       },
 
       undo: () => {
@@ -982,6 +994,7 @@ export const createDesignerStore = (
           isDirty: newIndex !== savedHistoryIndex,
           currentOutput: Math.max(0, Math.min(currentOutput, (nextDoc.outputs?.length ?? 1) - 1)),
         });
+        reconcileBuffersWithDoc(nextDoc);
       },
 
       redo: () => {
@@ -996,6 +1009,7 @@ export const createDesignerStore = (
           isDirty: newIndex !== savedHistoryIndex,
           currentOutput: Math.max(0, Math.min(currentOutput, (nextDoc.outputs?.length ?? 1) - 1)),
         });
+        reconcileBuffersWithDoc(nextDoc);
       },
 
       markSaved: () => set({ isDirty: false, isSaving: false, lastSaved: new Date(), savedHistoryIndex: get().historyIndex }),
@@ -1003,6 +1017,8 @@ export const createDesignerStore = (
 
       reset: (w, h) => {
         const newDoc = createEmptyDoc(w, h);
+        // Every live paint buffer belongs to the document being discarded.
+        disposeAllBuffers();
         set({
           doc: newDoc, selectedIds: [], currentOutput: 0, zoom: 1, viewportX: 0, viewportY: 0,
           // Ask the canvas to fit. Bumped here rather than at the call sites so
@@ -1022,6 +1038,9 @@ export const createDesignerStore = (
 
       loadDesign: (doc, id, name, templateId = null) => {
         const migrated = migrateDoc(doc);
+        // Buffers from the previously open design would otherwise live (and
+        // paint over matching ids) for the tab's lifetime.
+        disposeAllBuffers();
         set({
           doc: migrated, designId: id, designName: name,
           templateId, designTemplateId: templateId,

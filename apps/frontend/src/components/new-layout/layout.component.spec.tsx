@@ -63,12 +63,14 @@ const swrStub = (_key: string, _fetcher: any) => ({
 });
 
 vi.mock('swr', () => ({
-  default: (key: string, fetcher: any, options?: any) => {
-    if (!useRealSwr) return swrStub(key, fetcher);
-    // eslint-disable-next-line react-hooks/rules-of-hooks
+  // Named `use…` so react-hooks/rules-of-hooks treats the body as a hook; a
+  // function expression so the mock factory stays self-contained (vi.mock is
+  // hoisted above module scope). The useRealSwr check moved inside: the flag is
+  // set per test before render, so reading it at call time is safe.
+  default: function useMockSwr(key: string, fetcher: any) {
     const [state, setState] = React.useState<{ data?: any; error?: any }>({});
-    // eslint-disable-next-line react-hooks/rules-of-hooks
     React.useEffect(() => {
+      if (!useRealSwr) return;
       let cancelled = false;
       Promise.resolve(fetcher(key)).then(
         (data) => !cancelled && setState({ data }),
@@ -78,6 +80,7 @@ vi.mock('swr', () => ({
         cancelled = true;
       };
     }, [key, fetcher]);
+    if (!useRealSwr) return swrStub(key, fetcher);
     return { data: state.data, error: state.error, mutate: vi.fn() };
   },
   useSWRConfig: () => ({ mutate: vi.fn() }),

@@ -288,6 +288,27 @@ describe('parity: filters', () => {
     // Dark on the border, image colour inside it.
     expect(bordered.at(41, 100)[0]).toBeLessThan(80);
   });
+
+  it('filters the on-page part of an element that hangs far off-page', async () => {
+    // The filter buffer is clamped to the element∩page region — before the
+    // clamp this allocated the full off-page extent; the visible pixels must
+    // come out identical either way.
+    const wide = await render(
+      doc([await image({ x: -5000, y: 0, width: 5200, height: 200, filters: ['grayscale'] })])
+    );
+    const [r, g, b] = wide.at(40, 40);
+    // The red swatch quadrant under this point went through the filter.
+    expect(Math.abs(r - g)).toBeLessThanOrEqual(2);
+    expect(Math.abs(g - b)).toBeLessThanOrEqual(2);
+    expect(r).toBeGreaterThan(40); // luminance of red, not the background
+  });
+
+  it('skips a filtered element that is entirely off-page', async () => {
+    const pixels = await render(
+      doc([await image({ x: -5000, y: -5000, width: 200, height: 200, filters: ['grayscale'] })])
+    );
+    expect(pixels.inkBox()).toBeNull();
+  });
 });
 
 // ---------------------------------------------------------------------------

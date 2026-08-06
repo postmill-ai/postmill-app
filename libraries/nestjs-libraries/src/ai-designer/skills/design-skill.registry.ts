@@ -16,9 +16,15 @@ import { VERTICAL_SKILLS } from './skills/vertical.skills';
 /**
  * The design genres the router can pick from.
  *
- * ORDER MATTERS for ties: the five originals come first, so a brief that
- * matches both a general and a specific genre keeps whichever the router has
- * always chosen. New genres are additive.
+ * ORDER breaks only EXACT ties: the router sorts by score with a stable sort,
+ * so an earlier entry wins solely at equal confidence. It does NOT make the
+ * originals win overlaps — `defineSkill` genres score 0.95 on a signal match
+ * while four of the five originals score 0.9, so when a brief matches both a
+ * general original and a specific new genre ("announcing our launch" hits
+ * `announcement` AND `product-launch`), the specific genre wins BY SCORE.
+ * That is intended: the specific genre's art direction is the better answer.
+ * Where order still decides: two `defineSkill` genres tying at 0.95 (earlier
+ * family wins), and two 0.9 originals tying (earlier original wins).
  *
  * Newer genres are grouped by family rather than one file per genre. Forty
  * single-skill files would be forty near-identical imports and forty registry

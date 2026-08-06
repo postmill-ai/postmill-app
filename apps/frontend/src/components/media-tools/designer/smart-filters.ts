@@ -1,7 +1,7 @@
 'use client';
 
 import { runFilter } from './filter-runner';
-import { commitBuffer, seedBufferFromImage } from './raster-layers';
+import { commitBuffer, disposeBuffer, seedBufferFromImage } from './raster-layers';
 import {
   enabledSmartFilters,
   smartFilterSource,
@@ -174,10 +174,17 @@ export const rebakeSmartFilters = async (
 
   ctx.putImageData(data, 0, 0);
 
+  // Cancelled while the last filter ran — skip the upload, the caller's
+  // generation guard would have discarded the result anyway.
+  if (options.signal?.aborted) return null;
+
   // Route the upload through the buffer machinery so a re-bake takes the same
   // path a painted layer does — one upload implementation, not two.
   seedBufferFromImage(bakeId, canvas as never, canvas.width, canvas.height);
   const committed = await commitBuffer(bakeId, fetchFn);
+  // The bake buffer is only a vehicle for the upload; keeping it would hold a
+  // full bitmap per bake for the tab's lifetime.
+  disposeBuffer(bakeId);
   return committed;
 };
 

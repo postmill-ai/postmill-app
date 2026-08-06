@@ -17,7 +17,7 @@ import type {
 } from './designer-doc.schema';
 import { pointsForShape, cornerRadii } from './shape-geometry';
 import type { DesignerPathNode } from './path-geometry';
-import { buildLayerTree, type LayerNode } from './layer-tree';
+import { buildLayerTree, walkLayerTree, type LayerNode } from './layer-tree';
 import { fitTextToBox, DEFAULT_LINE_HEIGHT, type MeasureText } from './fit-text';
 import { warpedOutline } from './warp';
 import { renderableSrc } from './svg-src';
@@ -370,8 +370,16 @@ const backgroundSvg = (output: DesignerOutput, ctx: Ctx): string => {
 };
 
 /** Which layers the caller must rasterize before calling, and why. */
-export const layersNeedingRaster = (output: DesignerOutput): string[] =>
-  (output.children || []).filter((el) => !el.hidden && !isVectorExportable(el)).map((el) => el.id);
+export const layersNeedingRaster = (output: DesignerOutput): string[] => {
+  // Walk the layer TREE, not just the top level: a styled/masked layer inside
+  // a group was silently dropped from the export (the group itself is vector).
+  const ids: string[] = [];
+  walkLayerTree(buildLayerTree(output.children || []), (node) => {
+    const el = node.element;
+    if (!el.hidden && !isVectorExportable(el)) ids.push(el.id);
+  });
+  return ids;
+};
 
 /** Translate one output to a standalone SVG document. */
 export const outputToSvg = (

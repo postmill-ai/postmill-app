@@ -143,6 +143,14 @@ export const RenderQueue: FC<RenderQueueProps> = ({
     [fetchTranscript, openComposer, toaster]
   );
 
+  // A stable callback identity matters here: an inline ref is detached and
+  // re-attached on every render, so scrollIntoView would re-fire (smooth
+  // scrolling the queue back to this card) on each SWR poll while highlighted.
+  // A stable ref runs once, on mount.
+  const scrollIntoViewRef = useCallback((el: HTMLDivElement | null) => {
+    el?.scrollIntoView?.({ block: 'center', behavior: 'smooth' });
+  }, []);
+
   if (!isLoading && (!jobs || jobs.length === 0)) {
     return (
       <div className="text-[12px] text-newTextColor/60 px-[4px] py-[10px]">
@@ -170,11 +178,7 @@ export const RenderQueue: FC<RenderQueueProps> = ({
           <div
             key={job.id}
             id={`media-job-${job.id}`}
-            ref={
-              highlighted
-                ? (el) => el?.scrollIntoView?.({ block: 'center', behavior: 'smooth' })
-                : undefined
-            }
+            ref={highlighted ? scrollIntoViewRef : undefined}
             className={`rounded-[10px] border bg-newBgColorInner overflow-hidden transition-colors ${
               highlighted
                 ? 'border-[#2B5CD3] ring-2 ring-[#2B5CD3]/40'

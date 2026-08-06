@@ -1,4 +1,4 @@
-import { IsIn, IsOptional, IsString, Length, Max, Min } from 'class-validator';
+import { IsIn, IsOptional, IsString, Length, Max, MaxLength, Min } from 'class-validator';
 import { Transform } from 'class-transformer';
 
 /** Job states the queue can filter by. Mirrors AIMediaJob.status. */
@@ -28,6 +28,7 @@ export class MediaJobsQueryDto {
 
   @IsOptional()
   @IsString()
+  @MaxLength(64)
   provider?: string;
 
   /**

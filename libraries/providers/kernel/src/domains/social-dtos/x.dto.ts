@@ -18,9 +18,10 @@ export class XDto {
   __type?: string;
 
   // Thread finisher — the composer's ThreadFinisher registers these on the X
-  // settings form and the X adapter posts them at the end of a thread. Capped at
-  // the adapter's premium post limit (XProvider.maxLength: 4000 verified / 280
-  // otherwise) since the finisher posts as a standalone tweet.
+  // settings form; they are persisted for upcoming publish support (nothing on
+  // the publish path reads them yet). Capped at the adapter's premium post
+  // limit (XProvider.maxLength: 4000 verified / 280 otherwise) since the
+  // finisher is meant to post as a standalone tweet.
   @IsOptional()
   @IsBoolean()
   active_thread_finisher?: boolean;

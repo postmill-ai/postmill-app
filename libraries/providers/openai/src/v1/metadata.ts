@@ -257,7 +257,7 @@ export const metadata: ProviderMetadata = {
       },
       {
         "id": "dall-e-3",
-        "label": "DALL·E 3",
+        "label": "[DEPRECATED] DALL·E 3",
         "fields": [
           {
             "name": "size",

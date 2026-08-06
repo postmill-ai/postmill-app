@@ -7,6 +7,10 @@ import {
   templateFields,
   type SymbolDefinition,
 } from './symbols';
+import {
+  MAX_SYMBOL_EXPANSION_DEPTH,
+  MAX_SYMBOL_EXPANSION_TOTAL,
+} from './designer-doc.limits';
 import type { DesignerElement } from './designer-doc.schema';
 
 /**
@@ -188,6 +192,68 @@ describe('expandSymbols', () => {
   it('is a no-op for a document with no symbols at all', () => {
     const plain = [el({ id: 'a' }), el({ id: 'b' })];
     expect(expandSymbols(plain, undefined)).toEqual(plain);
+  });
+
+  it('caps multiplicative nesting at the total-emitted budget', () => {
+    // Definitions instancing definitions: 60 instances × 100 instances × 1 leaf
+    // would emit 6000 elements from three tiny defs — over the budget.
+    const leafDef: SymbolDefinition = {
+      id: 'leaf',
+      name: 'Leaf',
+      width: 10,
+      height: 10,
+      children: [el({ id: 'dot' })],
+    };
+    const midDef: SymbolDefinition = {
+      id: 'mid',
+      name: 'Mid',
+      width: 100,
+      height: 100,
+      children: Array.from({ length: 100 }, (_, i) =>
+        el({ id: `m${i}`, type: 'symbol', symbolId: 'leaf', width: 10, height: 10 })
+      ),
+    };
+    const instances = Array.from({ length: 60 }, (_, i) =>
+      el({ id: `top${i}`, type: 'symbol', symbolId: 'mid', width: 100, height: 100 })
+    );
+    const out = expandSymbols(instances, [leafDef, midDef]);
+    expect(out.length).toBeLessThanOrEqual(MAX_SYMBOL_EXPANSION_TOTAL);
+    expect(out.length).toBeGreaterThan(0);
+  });
+
+  it('drops instances nested deeper than the depth cap', () => {
+    // A chain of defs each instancing the next — no cycle, so only the depth
+    // cap stops it. The chain is deeper than MAX_SYMBOL_EXPANSION_DEPTH, so the
+    // leaf at the bottom never renders.
+    const defs: SymbolDefinition[] = [
+      {
+        id: 'chain-end',
+        name: 'End',
+        width: 10,
+        height: 10,
+        children: [el({ id: 'leaf' })],
+      },
+    ];
+    for (let i = MAX_SYMBOL_EXPANSION_DEPTH + 2; i >= 0; i--) {
+      defs.push({
+        id: `chain-${i}`,
+        name: `Chain ${i}`,
+        width: 10,
+        height: 10,
+        children: [
+          i === MAX_SYMBOL_EXPANSION_DEPTH + 2
+            ? el({ id: `link-${i}`, type: 'symbol', symbolId: 'chain-end', width: 10, height: 10 })
+            : el({ id: `link-${i}`, type: 'symbol', symbolId: `chain-${i + 1}`, width: 10, height: 10 }),
+        ],
+      });
+    }
+    const out = expandSymbols(
+      [el({ id: 'root', type: 'symbol', symbolId: 'chain-0', width: 10, height: 10 })],
+      defs
+    );
+    // The leaf sits one level deeper than the cap allows, so nothing renders —
+    // but expansion terminates instead of recursing without bound.
+    expect(out).toEqual([]);
   });
 });
 

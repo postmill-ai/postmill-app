@@ -21,6 +21,29 @@ export function safeFileId(fileId: string): string {
   return String(fileId).replace(/[^a-zA-Z0-9_-]/g, '_');
 }
 
+/**
+ * Insert into a process-wide cache with an LRU-ish bound: a re-insert
+ * refreshes recency, and the oldest entries are evicted past `max` (Map
+ * iteration is insertion-ordered). The font caches below grow with every
+ * org×family a render touches, so without a bound a long-lived process
+ * serving many orgs grows them forever. Eviction only forfeits the
+ * "already downloaded" marker — the font stays registered with node-canvas
+ * and on disk, so an evicted family is re-fetched on its next render, never
+ * broken.
+ */
+export function boundedCacheSet<K, V>(
+  map: Map<K, V>,
+  key: K,
+  value: V,
+  max: number
+): void {
+  if (map.has(key)) map.delete(key);
+  map.set(key, value);
+  while (map.size > max) {
+    map.delete(map.keys().next().value as K);
+  }
+}
+
 // Mirror of the curated Designer font catalog from
 // apps/frontend/src/components/media-tools/designer/fonts.ts.
 // The backend registers these on demand from Google Fonts so exports render
@@ -115,6 +138,15 @@ export class FontLoaderService {
    * any org that guessed its family name. Curated fonts are public and shared.
    */
   private readonly _files = new Map<string, string>();
+  /**
+   * Bound on the process-wide `_cache`/`_files` maps (see `boundedCacheSet`).
+   * Note: `registerFont` itself is GLOBAL in node-canvas — a family registered
+   * for one org is resolvable by name process-wide (glyphs only; the file path
+   * stays org-scoped via `_files`). That is an accepted tradeoff: family names
+   * collide harmlessly across tenants, and there is no unregister API to pair
+   * with eviction.
+   */
+  private static readonly MAX_FONT_CACHE_ENTRIES = 500;
   private _dirEnsured = false;
 
   constructor(private _brandsService: BrandsService) {}
@@ -148,8 +180,18 @@ export class FontLoaderService {
 
         registerFont(tmpPath, { family: font.family, weight: String(font.weights?.[0] || '400') });
 
-        this._cache.set(cacheKey, { family: font.family, filePath: tmpPath });
-        this._files.set(`org:${orgId}:${font.family}|${font.weights?.[0] || 400}`, tmpPath);
+        boundedCacheSet(
+          this._cache,
+          cacheKey,
+          { family: font.family, filePath: tmpPath },
+          FontLoaderService.MAX_FONT_CACHE_ENTRIES
+        );
+        boundedCacheSet(
+          this._files,
+          `org:${orgId}:${font.family}|${font.weights?.[0] || 400}`,
+          tmpPath,
+          FontLoaderService.MAX_FONT_CACHE_ENTRIES
+        );
         this._logger.log(`Registered font ${font.family} for org ${orgId}`);
       } catch (err) {
         this._logger.warn(`Failed to register font ${font.family}: ${(err as Error)?.message}`);
@@ -186,8 +228,18 @@ export class FontLoaderService {
 
         registerFont(tmpPath, { family: font.family, weight: String(weight) });
 
-        this._cache.set(cacheKey, { family: font.family, filePath: tmpPath });
-        this._files.set(`org:${orgId}:${font.family}|${weight}`, tmpPath);
+        boundedCacheSet(
+          this._cache,
+          cacheKey,
+          { family: font.family, filePath: tmpPath },
+          FontLoaderService.MAX_FONT_CACHE_ENTRIES
+        );
+        boundedCacheSet(
+          this._files,
+          `org:${orgId}:${font.family}|${weight}`,
+          tmpPath,
+          FontLoaderService.MAX_FONT_CACHE_ENTRIES
+        );
       } catch (err) {
         this._logger.warn(`Failed to register font weight ${weight} for ${fontFamily}: ${(err as Error)?.message}`);
       }
@@ -285,7 +337,12 @@ export class FontLoaderService {
           family: faceFamily.replace(/['"]/g, ''),
           weight: faceWeight || '400',
         });
-        this._files.set(`g:${family}|${faceWeight || 400}`, tmpPath);
+        boundedCacheSet(
+          this._files,
+          `g:${family}|${faceWeight || 400}`,
+          tmpPath,
+          FontLoaderService.MAX_FONT_CACHE_ENTRIES
+        );
         registeredAny = true;
       }
 

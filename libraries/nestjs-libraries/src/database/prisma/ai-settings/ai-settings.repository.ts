@@ -302,7 +302,10 @@ export class AiSettingsRepository {
         ...statusWhere,
         ...(opts.provider ? { provider: opts.provider } : {}),
       },
-      orderBy: { createdAt: 'desc' as const },
+      // createdAt ties are real (a burst of jobs lands in the same ms), and an
+      // unstable order makes cursor pagination skip/repeat rows — break them
+      // with the id so every row has a fixed position.
+      orderBy: [{ createdAt: 'desc' as const }, { id: 'desc' as const }],
       take: limit,
       // Skip the cursor row itself so pages don't repeat their boundary job.
       ...(opts.cursor ? { cursor: { id: opts.cursor }, skip: 1 } : {}),
@@ -310,9 +313,14 @@ export class AiSettingsRepository {
     try {
       return await this._aiMediaJob.model.aIMediaJob.findMany(query);
     } catch (err) {
-      // A stale or forged cursor id makes Prisma throw (the anchor row no
+      // A stale or forged cursor id makes Prisma throw P2025 (the anchor row no
       // longer exists); serve the first page instead of 500-ing the endpoint.
-      if (opts.cursor) {
+      // Any OTHER error is a real failure — retrying it without the cursor
+      // would mask it behind a successful-looking first page.
+      if (
+        opts.cursor &&
+        (err as { code?: string })?.code === 'P2025'
+      ) {
         return this.getMediaJobs(organizationId, limit, {
           ...opts,
           cursor: undefined,

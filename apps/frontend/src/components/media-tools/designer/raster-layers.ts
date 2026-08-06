@@ -1,4 +1,9 @@
-import type { DesignerElement } from './designer.store';
+import type {
+  DesignerDoc,
+  DesignerElement,
+  DesignerOutput,
+  VideoOutput,
+} from './designer.store';
 
 /**
  * Client-side pixel buffers for `raster` elements.
@@ -14,15 +19,30 @@ import type { DesignerElement } from './designer.store';
  *
  * `SrcSchema` caps `src` at 2048 characters, so an inline data URL is not an
  * option — the upload is mandatory, not an optimisation.
+ *
+ * Undo/redo is the DOCUMENT's job, not this module's: every stroke commits and
+ * lands in doc history, so a history jump restores the matching `src` and
+ * `reconcileBuffersWithDoc` re-seeds any buffer whose pixels no longer match.
+ * A separate pixel-level undo stack used to live here, but nothing could
+ * replay it in step with doc history — it was dead code holding up to 20
+ * ImageData per layer hostage.
  */
 
 /** Live buffers keyed by element id. */
 const buffers = new Map<string, HTMLCanvasElement>();
-/** Undo snapshots per element, most recent last. */
-const undoStacks = new Map<string, ImageData[]>();
+/** The `src` each buffer was last uploaded as — history restore's staleness check. */
+const committedSrcs = new Map<string, string>();
+/**
+ * Monotonic token per buffer key, bumped whenever the buffer is invalidated,
+ * so a late image load from a re-seed can't overwrite newer pixels.
+ */
+const reseedTokens = new Map<string, number>();
 
-/** How many pixel-level undo steps to keep per layer. */
-export const MAX_RASTER_UNDO = 20;
+const bumpReseedToken = (key: string): number => {
+  const next = (reseedTokens.get(key) ?? 0) + 1;
+  reseedTokens.set(key, next);
+  return next;
+};
 
 export const getBuffer = (id: string): HTMLCanvasElement | undefined =>
   buffers.get(id);
@@ -48,6 +68,9 @@ export const ensureBuffer = (
     const ctx = next.getContext('2d');
     ctx?.drawImage(existing, 0, 0, existing.width, existing.height, 0, 0, w, h);
   }
+  // A fresh canvas means new ownership of the key — a re-seed still in flight
+  // from a history restore must not overwrite what is about to be painted.
+  bumpReseedToken(el.id);
   buffers.set(el.id, next);
   return next;
 };
@@ -63,60 +86,139 @@ export const seedBufferFromImage = (
   canvas.width = Math.max(1, Math.round(width));
   canvas.height = Math.max(1, Math.round(height));
   canvas.getContext('2d')?.drawImage(image, 0, 0, canvas.width, canvas.height);
+  bumpReseedToken(id);
+  // Seeded pixels have not been uploaded under any `src` yet.
+  committedSrcs.delete(id);
   buffers.set(id, canvas);
   return canvas;
 };
 
 export const disposeBuffer = (id: string): void => {
+  bumpReseedToken(id);
   buffers.delete(id);
-  undoStacks.delete(id);
+  committedSrcs.delete(id);
+};
+
+/** Drop an element's own buffer and its mask's, e.g. when it is deleted. */
+export const disposeElementBuffers = (id: string): void => {
+  disposeBuffer(id);
+  disposeBuffer(`${id}:mask`);
+};
+
+/** Drop every buffer — a design reset or load makes them all stale. */
+export const disposeAllBuffers = (): void => {
+  // Bump first so re-seeds still in flight are discarded when they land.
+  for (const key of new Set([...buffers.keys(), ...reseedTokens.keys()])) {
+    bumpReseedToken(key);
+  }
+  buffers.clear();
+  committedSrcs.clear();
+};
+
+/** A surface the document says should have a live buffer, keyed as buffers are. */
+interface PaintSurface {
+  key: string;
+  src?: string;
+  width: number;
+  height: number;
+}
+
+const collectSurfaces = (doc: DesignerDoc): PaintSurface[] => {
+  const surfaces: PaintSurface[] = [];
+  for (const out of doc.outputs) {
+    for (const el of (out as DesignerOutput).children || []) {
+      if (el.type === 'raster') {
+        surfaces.push({ key: el.id, src: el.src, width: el.width, height: el.height });
+      }
+      if (el.maskSrc) {
+        surfaces.push({
+          key: `${el.id}:mask`,
+          src: el.maskSrc,
+          width: el.width,
+          height: el.height,
+        });
+      }
+    }
+    for (const track of (out as VideoOutput).tracks || []) {
+      if (track.type !== 'raster') continue;
+      for (const clip of track.clips) {
+        surfaces.push({
+          key: clip.id,
+          src: clip.src,
+          width: clip.width ?? out.width,
+          height: clip.height ?? out.height,
+        });
+      }
+    }
+  }
+  return surfaces;
 };
 
 /**
- * Snapshot a region before a stroke mutates it.
- *
- * Deliberately a dirty RECT rather than the whole canvas: a full 4096² snapshot
- * is 64 MB per undo step, which a 20-deep stack turns into gigabytes.
+ * Re-seed a buffer from the `src` history restored. The old buffer comes down
+ * synchronously — the renderer falls back to drawing `src` directly while the
+ * image loads, so undo is visually immediate.
  */
-export const pushUndoRegion = (
-  id: string,
-  x: number,
-  y: number,
-  width: number,
-  height: number
-): void => {
-  const canvas = buffers.get(id);
-  const ctx = canvas?.getContext('2d');
-  if (!canvas || !ctx) return;
-
-  const sx = Math.max(0, Math.floor(x));
-  const sy = Math.max(0, Math.floor(y));
-  const sw = Math.min(canvas.width - sx, Math.ceil(width));
-  const sh = Math.min(canvas.height - sy, Math.ceil(height));
-  if (sw <= 0 || sh <= 0) return;
-
-  const stack = undoStacks.get(id) || [];
-  const data = ctx.getImageData(sx, sy, sw, sh);
-  // Stash the origin on the ImageData so undo knows where to put it back.
-  (data as ImageData & { _x?: number; _y?: number })._x = sx;
-  (data as ImageData & { _x?: number; _y?: number })._y = sy;
-  stack.push(data);
-  while (stack.length > MAX_RASTER_UNDO) stack.shift();
-  undoStacks.set(id, stack);
+const reseedFromSrc = (surface: PaintSurface): void => {
+  const { key, src, width, height } = surface;
+  buffers.delete(key);
+  const token = bumpReseedToken(key);
+  if (!src) {
+    committedSrcs.delete(key);
+    return;
+  }
+  // Claim the target `src` NOW, not when the image lands. The claim is what a
+  // second history jump compares against — without it, redo arriving while
+  // undo's re-seed was still loading found no buffer, skipped the key, and
+  // the stale pre-stroke bitmap then seeded itself over the redone document.
+  // Since the canvas prefers the live buffer to `src`, the stroke silently
+  // vanished from view on every quick undo-then-redo.
+  committedSrcs.set(key, src);
+  const img = new Image();
+  img.crossOrigin = 'anonymous';
+  img.onload = () => {
+    // A stroke or a newer restore since means this load is stale.
+    if (reseedTokens.get(key) !== token) return;
+    seedBufferFromImage(key, img, width, height);
+    // `seedBufferFromImage` clears the committed src (seeded pixels normally
+    // predate any upload); these pixels ARE `src`, so restate the claim.
+    committedSrcs.set(key, src);
+  };
+  img.onerror = () => {
+    // Leave the buffer disposed — the element still renders from `src`. The
+    // claim comes back off so a later jump to this same src retries the load.
+    if (reseedTokens.get(key) === token) committedSrcs.delete(key);
+  };
+  img.src = src;
 };
 
-/** Restore the most recent snapshot. Returns false when the stack is empty. */
-export const popUndoRegion = (id: string): boolean => {
-  const stack = undoStacks.get(id);
-  const canvas = buffers.get(id);
-  const ctx = canvas?.getContext('2d');
-  if (!stack?.length || !ctx) return false;
-  const data = stack.pop() as ImageData & { _x?: number; _y?: number };
-  ctx.putImageData(data, data._x ?? 0, data._y ?? 0);
-  return true;
+/**
+ * Bring the live buffers back in line with a document restored by history
+ * (undo/redo/jumpToHistory).
+ *
+ * Buffers whose layer no longer exists are disposed, and buffers whose `src`
+ * changed under them are re-seeded from the restored `src`. A buffer whose
+ * committed `src` still matches the document's is left alone — most history
+ * jumps never touched pixels, and reloading a 1080² bitmap per jump would be
+ * waste.
+ */
+export const reconcileBuffersWithDoc = (doc: DesignerDoc): void => {
+  const surfaces = collectSurfaces(doc);
+  const live = new Set(surfaces.map((s) => s.key));
+  for (const key of [...buffers.keys()]) {
+    // `${id}:smart` belongs to a bake that may be mid-flight; smart-filters
+    // disposes it itself once the upload completes.
+    if (!live.has(key) && !key.endsWith(':smart')) disposeBuffer(key);
+  }
+  for (const surface of surfaces) {
+    // Tracked = a live buffer, or a re-seed in flight (claimed but not yet
+    // landed). A layer that was never painted this session is neither, and
+    // renders straight from `src` — no buffer needed.
+    if (!buffers.has(surface.key) && !committedSrcs.has(surface.key)) continue;
+    if (committedSrcs.get(surface.key) === surface.src) continue;
+    reseedFromSrc(surface);
+  }
 };
-
-export const hasUndo = (id: string): boolean => !!undoStacks.get(id)?.length;
 
 /** Upload endpoint switch — mirrors export-dialog's uploadBlob. */
 const MAX_UPLOAD_BYTES = 10 * 1024 * 1024;
@@ -153,6 +255,8 @@ export const commitBuffer = async (
   const data = await res.json();
   const src = data.path || data.url;
   if (!src) return null;
+  // From here the buffer and the document agree — until the next stroke.
+  committedSrcs.set(id, src);
   return { src, fileId: data.id };
 };
 

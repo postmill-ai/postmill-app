@@ -706,7 +706,7 @@ describe('AiSettingsRepository', () => {
 
       expect(mockMediaJob.findMany).toHaveBeenCalledWith({
         where: { organizationId: 'org1' },
-        orderBy: { createdAt: 'desc' },
+        orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
         take: 50,
       });
     });
@@ -716,7 +716,7 @@ describe('AiSettingsRepository', () => {
 
       expect(mockMediaJob.findMany).toHaveBeenCalledWith({
         where: { organizationId: 'org1' },
-        orderBy: { createdAt: 'desc' },
+        orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
         take: 10,
       });
     });
@@ -726,7 +726,7 @@ describe('AiSettingsRepository', () => {
 
       expect(mockMediaJob.findMany).toHaveBeenCalledWith({
         where: { organizationId: 'org1', status: 'failed', provider: 'runway' },
-        orderBy: { createdAt: 'desc' },
+        orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
         take: 10,
       });
     });
@@ -736,7 +736,7 @@ describe('AiSettingsRepository', () => {
 
       expect(mockMediaJob.findMany).toHaveBeenCalledWith({
         where: { organizationId: 'org1', status: { in: ['completed', 'done'] } },
-        orderBy: { createdAt: 'desc' },
+        orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
         take: 10,
       });
     });
@@ -746,7 +746,7 @@ describe('AiSettingsRepository', () => {
 
       expect(mockMediaJob.findMany).toHaveBeenCalledWith({
         where: { organizationId: 'org1' },
-        orderBy: { createdAt: 'desc' },
+        orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
         take: 10,
         cursor: { id: 'job-9' },
         skip: 1,
@@ -755,7 +755,9 @@ describe('AiSettingsRepository', () => {
 
     it('falls back to the first page when the cursor row no longer exists', async () => {
       mockMediaJob.findMany
-        .mockRejectedValueOnce(new Error('RecordNotFound'))
+        .mockRejectedValueOnce(
+          Object.assign(new Error('RecordNotFound'), { code: 'P2025' })
+        )
         .mockResolvedValueOnce([{ id: 'job-1' }]);
 
       const result = await repository.getMediaJobs('org1', 10, { cursor: 'gone' });
@@ -763,7 +765,7 @@ describe('AiSettingsRepository', () => {
       expect(mockMediaJob.findMany).toHaveBeenCalledTimes(2);
       expect(mockMediaJob.findMany).toHaveBeenLastCalledWith({
         where: { organizationId: 'org1' },
-        orderBy: { createdAt: 'desc' },
+        orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
         take: 10,
       });
       expect(result).toEqual([{ id: 'job-1' }]);

@@ -129,6 +129,24 @@ export class AiDesignerConductorService {
   >();
   private static readonly REGENERATE_MAX_ATTEMPTS = 2;
   /**
+   * Hard ceiling on vision-critic critique dispatches for ONE run (accept or
+   * revise). Without it the QC loops multiply LLM/vision spend: MAX_QUALITY_PASSES
+   * per variant plus two passes per secondary format per variant, all on top of
+   * the per-dispatch `checkStartBudget` gate (which stays untouched). Once the
+   * budget is spent the QC loops stop gracefully and deliver what they have,
+   * with an honest degradation note like every other capped subsystem.
+   * Keyed by session like _degradationNotes; cleared in _release.
+   */
+  private static readonly MAX_CRITIQUE_DISPATCHES_PER_RUN = 12;
+  private readonly _critiqueDispatches = new Map<string, number>();
+  /**
+   * 1-based variant numbers as the QC notes named them, carried through the
+   * holdback filter so delivery captions do not renumber the survivors (the
+   * revise path passes its own ordinals to _emitDelivery directly). Keyed by
+   * session like _degradationNotes; consumed (and cleared) by handleAcceptPlan.
+   */
+  private readonly _deliveryOrdinals = new Map<string, number[]>();
+  /**
    * The beauty gate: how many critique passes a variant gets before it is
    * judged as-is. Passes 1..N-1 critique AND fix; the last pass critiques
    * only, so the decision below is made on the render the fixes produced.
@@ -614,6 +632,10 @@ export class AiDesignerConductorService {
       // identical strings are genuinely the same message repeated.
       const notes = [...new Set(this._degradationNotes.get(sessionId) ?? [])];
       this._degradationNotes.delete(sessionId);
+      // The variant numbers those notes (and the user) know, carried through
+      // the pipeline's holdback filter — see _deliveryOrdinals.
+      const ordinals = this._deliveryOrdinals.get(sessionId);
+      this._deliveryOrdinals.delete(sessionId);
 
       const activeDesignIds = results.map((r) => r.designId);
       await this._service.updateSession(sessionId, ctx.orgId, ctx.userId, {
@@ -627,7 +649,7 @@ export class AiDesignerConductorService {
         },
       });
 
-      await this._emitDelivery(sessionId, ctx, emitter, results, notes);
+      await this._emitDelivery(sessionId, ctx, emitter, results, notes, ordinals);
 
       // Explicit plan-level opt-in (the conversational accept flow handles
       // the default auto-save with its own opt-out).
@@ -1557,6 +1579,9 @@ export class AiDesignerConductorService {
         }
 
         this._throwIfCancelled(sessionId);
+        // Intermediate state: the QC loops below re-render this variant up to
+        // ~10x, so File rows are deferred to the delivery registration at the
+        // end of the pipeline (see the saver's registerPreviews).
         let render = await this._saver.saveDesign(
           ctx.orgId,
           ctx.userId,
@@ -1565,6 +1590,7 @@ export class AiDesignerConductorService {
           {
             name: `${plan.skill}-${plan.variantId}`,
             saveFolderId,
+            registerPreviews: false,
           }
         );
         // Deterministic contrast repair over imagery (no LLM): flip the fill
@@ -1616,6 +1642,11 @@ export class AiDesignerConductorService {
     // un-critiqued result, never roll the session back and orphan the saved
     // designs.
     const heldBack = new Set<string>();
+    // Variants whose PRIMARY render passed its first critique clean. Their
+    // seeded formats are faithful re-fits of that render, so the expansion
+    // loop skips their per-format critique passes (each would be a vision
+    // dispatch against a near-identical image).
+    const cleanVariants = new Set<string>();
     for (let i = 0; i < results.length; i++) {
       this._throwIfCancelled(sessionId);
       if (!results[i].contactSheetUrl) {
@@ -1629,6 +1660,14 @@ export class AiDesignerConductorService {
         const lastPass =
           pass === AiDesignerConductorService.MAX_QUALITY_PASSES - 1;
         try {
+          if (this._critiqueBudgetExhausted(sessionId)) {
+            if (pass === 0) {
+              notes.push(
+                `the automatic quality pass was skipped for variant ${i + 1} — this run's review budget was used up`
+              );
+            }
+            break;
+          }
           const planForVariant = plans.find((p) => p.variantId === result.variantId);
           emitter.progress(
             'vision-critic',
@@ -1638,6 +1677,7 @@ export class AiDesignerConductorService {
             Math.round(((i + 1) / results.length) * 100)
           );
           const docForVariant = composedDocs.get(result.variantId);
+          this._countCritiqueDispatch(sessionId);
           const criticResponse = await this._dispatchAgent(ctx, 'vision-critic', {
             type: 'critique-request',
             // Single-output doc: send the output's own full-res preview — the
@@ -1673,6 +1713,10 @@ export class AiDesignerConductorService {
             break;
           }
           if (findings.length === 0) {
+            // A first-pass clean bill: the expansion loop skips this variant's
+            // per-format critiques — they would re-judge a faithful re-fit of
+            // the render the critic just approved.
+            if (pass === 0) cleanVariants.add(result.variantId);
             aestheticFindings = [];
             break;
           }
@@ -1728,6 +1772,7 @@ export class AiDesignerConductorService {
             {
               name: `${plans[0]?.skill ?? 'ai-design'}-${result.variantId}-revised`,
               saveFolderId,
+              registerPreviews: false,
             }
           );
           const revisedFixed = await this._fixContrastOverImagery(
@@ -1742,8 +1787,9 @@ export class AiDesignerConductorService {
           );
           revised = revisedFixed.render;
           results[i] = { ...revised, variantId: result.variantId };
-          // The re-critique must see the REVISED doc, not the pre-fix one.
-          composedDocs.set(result.variantId, revisedDoc);
+          // The re-critique must see the REVISED doc — including the contrast
+          // fix, which re-rendered revisedFixed.doc over revisedDoc.
+          composedDocs.set(result.variantId, revisedFixed.doc);
           emitter.preview(results[i]);
         } catch (err) {
           if (this._wasCancelled(err)) throw err;
@@ -1777,10 +1823,17 @@ export class AiDesignerConductorService {
         }
       }
     }
+    // The QC notes above name variants by their pre-holdback position, so the
+    // delivery captions must use the same numbers — renumbering the survivors
+    // here used to make "variant 2 was held back" disagree with the captions.
+    let ordinals = results.map((_, idx) => idx + 1);
     if (heldBack.size > 0) {
-      const kept = results.filter((r) => !heldBack.has(r.variantId));
+      const survivors = results
+        .map((result, idx) => ({ result, ordinal: idx + 1 }))
+        .filter(({ result }) => !heldBack.has(result.variantId));
       results.length = 0;
-      results.push(...kept);
+      results.push(...survivors.map(({ result }) => result));
+      ordinals = survivors.map(({ ordinal }) => ordinal);
     }
 
     // Variant expansion: each saved original holds only the primary format.
@@ -1795,7 +1848,8 @@ export class AiDesignerConductorService {
       plans,
       outputs,
       saveFolderId,
-      notes
+      notes,
+      cleanVariants
     );
 
     // Surviving-defect disclosure, emitted from exactly ONE place so no
@@ -1809,9 +1863,41 @@ export class AiDesignerConductorService {
       if (!state.succeeded || !state.reFlagged) continue;
       const idx = results.findIndex((r) => r.variantId === state.variantId);
       notes.push(
-        `we replaced the imagery for variant ${idx >= 0 ? idx + 1 : 1} but the review flagged it again — please check it before publishing`
+        `we replaced the imagery for variant ${idx >= 0 ? ordinals[idx] : 1} but the review flagged it again — please check it before publishing`
       );
     }
+
+    // Every save above ran with registerPreviews: false, so the QC loops never
+    // multiplied the org's File rows. The renders are final now — mint the
+    // delivery File rows from the buffers each variant's last save wrote (no
+    // re-render). Non-fatal per variant: a failure delivers the previews
+    // without library entries, with a note, rather than rolling the run back.
+    for (let i = 0; i < results.length; i++) {
+      if (!this._saver.registerPreviews) continue; // mocked savers in tests
+      const plan = plans.find((p) => p.variantId === results[i].variantId);
+      try {
+        const outputPreviews = await this._saver.registerPreviews(
+          ctx.orgId,
+          results[i].designId,
+          results[i],
+          {
+            name: `${plan?.skill ?? plans[0]?.skill ?? 'ai-design'}-${results[i].variantId}`,
+            saveFolderId,
+          }
+        );
+        results[i] = { ...results[i], outputPreviews };
+      } catch (err) {
+        this._logger.warn(
+          `Preview registration failed for ${results[i].variantId}: ${(err as Error).message}`,
+          AiDesignerConductorService.name
+        );
+        notes.push(
+          `variant ${ordinals[i]}'s previews could not be added to your file library — the designs themselves are saved`
+        );
+      }
+    }
+    // Delivery captions ride the same numbers the QC notes used.
+    this._deliveryOrdinals.set(sessionId, ordinals);
 
     if (notes.length > 0) {
       this._degradationNotes.set(sessionId, notes);
@@ -1840,7 +1926,14 @@ export class AiDesignerConductorService {
     plans: DesignPlan[],
     outputs: { formatId: string; width: number; height: number; name?: string }[],
     saveFolderId: string | null,
-    notes: string[]
+    notes: string[],
+    /**
+     * Variants whose primary render passed its first critique clean. Their
+     * seeded formats are faithful re-fits of that render, so their per-format
+     * critique passes are skipped — each pass is a vision dispatch against a
+     * near-identical image.
+     */
+    cleanVariants: ReadonlySet<string> = new Set()
   ) {
     const secondaryOutputs = outputs.slice(1);
     if (secondaryOutputs.length === 0) return;
@@ -1924,6 +2017,7 @@ export class AiDesignerConductorService {
           {
             name: `${plan.skill}-${result.variantId}`,
             saveFolderId,
+            registerPreviews: false,
           }
         );
         expansionPersisted = true;
@@ -1940,7 +2034,14 @@ export class AiDesignerConductorService {
         render = expandedFixed.render;
         doc = expandedFixed.doc;
 
-        for (let f = 0; f < secondaryOutputs.length; f++) {
+        if (cleanVariants.has(result.variantId)) {
+          this._logger.log(
+            `Skipping per-format quality passes for ${result.variantId} — its primary render passed the first critique clean.`,
+            AiDesignerConductorService.name
+          );
+        }
+
+        for (let f = 0; f < secondaryOutputs.length && !cleanVariants.has(result.variantId); f++) {
           const out = secondaryOutputs[f];
           const pct = Math.round(((f + 1) / secondaryOutputs.length) * 100);
           const progressNote = `Format ${f + 1}/${secondaryOutputs.length}`;
@@ -1956,6 +2057,13 @@ export class AiDesignerConductorService {
             if (!preview) break;
 
             emitter.progress('vision-critic', `Reviewing ${out.formatId}`, pct, progressNote);
+            if (this._critiqueBudgetExhausted(sessionId)) {
+              notes.push(
+                `the automatic quality pass was skipped for variant ${i + 1} (${out.formatId}) — this run's review budget was used up`
+              );
+              break;
+            }
+            this._countCritiqueDispatch(sessionId);
             const criticResponse = await this._dispatchAgent(ctx, 'vision-critic', {
               type: 'critique-request',
               // Scoped to this one format: the output's own preview stands in
@@ -2008,6 +2116,7 @@ export class AiDesignerConductorService {
               {
                 name: `${plan.skill}-${result.variantId}`,
                 saveFolderId,
+                registerPreviews: false,
               }
             );
             const passFixed = await this._fixContrastOverImagery(
@@ -2053,6 +2162,7 @@ export class AiDesignerConductorService {
               {
                 name: `${plan.skill}-${result.variantId}`,
                 saveFolderId,
+                registerPreviews: false,
               }
             );
             results[i] = { ...restored, variantId: result.variantId };
@@ -2103,7 +2213,7 @@ export class AiDesignerConductorService {
         designId,
         `${render.variantId}-contrast`,
         fixed.doc,
-        { name, saveFolderId }
+        { name, saveFolderId, registerPreviews: false }
       );
       return {
         doc: fixed.doc,
@@ -2336,8 +2446,9 @@ export class AiDesignerConductorService {
    * not an escalation — it is the same dice that already came up branded.
    *
    * A genuine failure keeps the old image and pushes a degradation note here.
-   * A cap hit pushes nothing HERE but records `reFlagged`, and `_runQualityPass`
-   * turns that into exactly one honest note per slot — a successful swap the
+   * A cap hit pushes nothing HERE but records `reFlagged`, and the
+   * surviving-defect disclosure in `_executePipeline` turns that into exactly
+   * one honest note per slot — a successful swap the
    * critic then flagged again used to produce zero user-visible output, which
    * is how a design with a surviving brand mark was delivered as "clean".
    * Non-fatal except for user cancels.
@@ -2397,7 +2508,8 @@ export class AiDesignerConductorService {
           state.techniques.includes(technique) ||
           state.attempts >= AiDesignerConductorService.REGENERATE_MAX_ATTEMPTS
         ) {
-          // NO note here — one push site (in _runQualityPass) means the
+          // NO note here — one push site (the surviving-defect disclosure in
+          // _executePipeline) means the
           // per-format loop (2 passes × secondary formats) cannot spam the
           // same line once per refusal.
           this._logger.warn(
@@ -2489,7 +2601,8 @@ export class AiDesignerConductorService {
         }
         doc = patched;
         // A replacement landed: if the critic flags this slot again and no
-        // technique is left, _runQualityPass tells the user about it.
+        // technique is left, the surviving-defect disclosure in
+        // _executePipeline tells the user about it.
         const landed = tracked.get(slotKey);
         if (landed) landed.succeeded = true;
         // Remember the replacement too, so a later run's exclusion tracks the
@@ -3114,7 +3227,8 @@ export class AiDesignerConductorService {
     emitter.progress('composer', 'Saving');
     // One clean base name per revision — the saver uses it verbatim, so the
     // timestamp rides the name (not a re-appended variantId) and re-renders
-    // after the critic pass below keep the same base.
+    // after the critic pass below keep the same base. File rows are deferred
+    // to the registration at the end (the re-check loop re-renders first).
     const revisionName = `ai-design-revised-${Date.now()}`;
     let render = await this._saver.saveDesign(
       ctx.orgId,
@@ -3124,6 +3238,7 @@ export class AiDesignerConductorService {
       {
         name: revisionName,
         saveFolderId,
+        registerPreviews: false,
       }
     );
 
@@ -3133,7 +3248,14 @@ export class AiDesignerConductorService {
       try {
         for (let pass = 1; pass <= 2; pass++) {
           this._throwIfCancelled(sessionId);
+          if (this._critiqueBudgetExhausted(sessionId)) {
+            notes.push(
+              'the quality re-check was skipped — this run\'s review budget was used up'
+            );
+            break;
+          }
           emitter.progress('vision-critic', 'Reviewing the revision');
+          this._countCritiqueDispatch(sessionId);
           const criticResponse = await this._dispatchAgent(ctx, 'vision-critic', {
             type: 'critique-request',
             contactSheetUrl: render.contactSheetUrl,
@@ -3170,6 +3292,7 @@ export class AiDesignerConductorService {
             {
               name: revisionName,
               saveFolderId,
+              registerPreviews: false,
             }
           );
         }
@@ -3182,10 +3305,56 @@ export class AiDesignerConductorService {
       }
     }
 
+    // Same deterministic contrast repair the pipeline runs after every save —
+    // the revise path skipped it, so a revision that broke text-over-imagery
+    // contrast shipped unrepaired.
+    const contrastFixed = await this._fixContrastOverImagery(
+      ctx,
+      render.designId,
+      revisedDoc,
+      render,
+      revisionName,
+      saveFolderId,
+      notes,
+      'the revision'
+    );
+    render = contrastFixed.render;
+    revisedDoc = contrastFixed.doc;
+
+    // Mint the delivery File rows for the final state (every save above ran
+    // with registerPreviews: false). Optional call: mocked savers in tests
+    // carry no registration step.
+    const deliveryPreviews = await this._saver.registerPreviews?.(
+      ctx.orgId,
+      render.designId,
+      render,
+      { name: revisionName, saveFolderId }
+    );
+    if (deliveryPreviews) render = { ...render, outputPreviews: deliveryPreviews };
+
     // Show the revision immediately (mirrors the pipeline's preview emit) —
     // the persisted delivery message replaces it below.
     emitter.preview(render);
     return render;
+  }
+
+  /**
+   * Count one vision-critic critique dispatch against the run's budget. Every
+   * QC dispatch site calls this right before `_dispatchAgent`.
+   */
+  private _countCritiqueDispatch(sessionId: string): void {
+    this._critiqueDispatches.set(
+      sessionId,
+      (this._critiqueDispatches.get(sessionId) ?? 0) + 1
+    );
+  }
+
+  /** True once this run's vision-critic critique budget is spent. */
+  private _critiqueBudgetExhausted(sessionId: string): boolean {
+    return (
+      (this._critiqueDispatches.get(sessionId) ?? 0) >=
+      AiDesignerConductorService.MAX_CRITIQUE_DISPATCHES_PER_RUN
+    );
   }
 
   private async _dispatchAgent(
@@ -3356,6 +3525,7 @@ export class AiDesignerConductorService {
     this._aborts.delete(sessionId);
     this._regeneratedSlots.delete(sessionId);
     this._assetStockIds.delete(sessionId);
+    this._critiqueDispatches.delete(sessionId);
   }
 
   private _throwIfCancelled(sessionId: string) {

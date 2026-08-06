@@ -59,6 +59,15 @@ export interface DesignSkill {
   layoutHints: DesignSkillLayoutHints;
   rubric: ScoringRubric;
   examples?: DesignSkillExample[];
-  /** Optional while the older genres are migrated. */
+  /**
+   * Optional while the older genres are migrated.
+   *
+   * No runtime consumer yet — staged for the design-language follow-up that
+   * grounds the art director's plans (and the composer's styling) in these
+   * composition/effect/treatment recipe ids. Until that lands, the only reader
+   * is `skill-art-direction.spec.ts`, the drift guard that keeps the ids
+   * pointing at real catalog entries. Intentional: the catalog is authored
+   * alongside the genres, not retrofitted later.
+   */
   artDirection?: DesignSkillArtDirection;
 }

@@ -1,12 +1,11 @@
 'use client';
 
-import { useCallback, useRef, useState } from 'react';
+import { useCallback, useMemo, useRef, useState } from 'react';
 import type Konva from 'konva';
 import type { DesignerElement, DesignerOutput, VideoOutput } from './designer.store';
 import {
   ensureBuffer,
   getBuffer,
-  pushUndoRegion,
   commitBuffer,
   buildRasterElement,
 } from './raster-layers';
@@ -296,7 +295,6 @@ export const usePaintTools = ({ store, stageRef, output, fetchFn }: UsePaintTool
       if (toolId === 'paint-bucket') {
         const ctx = canvas.getContext('2d');
         if (!ctx) return;
-        pushUndoRegion(target.id, 0, 0, canvas.width, canvas.height);
         // Fill against the visible composite, not the empty layer.
         const compose = document.createElement('canvas');
         compose.width = canvas.width;
@@ -348,8 +346,6 @@ export const usePaintTools = ({ store, stageRef, output, fetchFn }: UsePaintTool
 
       painting.current = true;
       lastPoint.current = local;
-      const r = settings.size;
-      pushUndoRegion(target.id, local.x - r, local.y - r, r * 2, r * 2);
       const ctx = canvas.getContext('2d');
       if (ctx) {
         beginStrokeClip(canvas, selection, target, strokeMask, strokeBase);
@@ -626,20 +622,38 @@ export const usePaintTools = ({ store, stageRef, output, fetchFn }: UsePaintTool
     setLassoPoints(null);
   }, []);
 
-  return {
-    selection,
-    lassoPoints,
-    paintNonce,
-    beginPaint,
-    movePaint,
-    endPaint,
-    beginSelection,
-    moveSelection,
-    endSelection,
-    closePolygonalLasso,
-    runObjectSelection,
-    clearSelection,
-  };
+  // One stable object: canvas.tsx memoizes handlers on `paint`, and a fresh
+  // literal every render defeated that memoization.
+  return useMemo(
+    () => ({
+      selection,
+      lassoPoints,
+      paintNonce,
+      beginPaint,
+      movePaint,
+      endPaint,
+      beginSelection,
+      moveSelection,
+      endSelection,
+      closePolygonalLasso,
+      runObjectSelection,
+      clearSelection,
+    }),
+    [
+      selection,
+      lassoPoints,
+      paintNonce,
+      beginPaint,
+      movePaint,
+      endPaint,
+      beginSelection,
+      moveSelection,
+      endSelection,
+      closePolygonalLasso,
+      runObjectSelection,
+      clearSelection,
+    ]
+  );
 };
 
 /**

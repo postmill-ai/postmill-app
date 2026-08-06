@@ -80,6 +80,7 @@ export const LayersPanel: FC<LayersPanelProps> = ({ store, onClose }) => {
 
   const [localEditingId, setLocalEditingId] = useState<string | null>(null);
   const nameInputRef = useRef<HTMLInputElement>(null);
+  const opacityInputRef = useRef<HTMLInputElement>(null);
   const [dragId, setDragId] = useState<string | null>(null);
   const [dropIndex, setDropIndex] = useState<number | null>(null);
   const lastClickedId = useRef<string | null>(null);
@@ -155,6 +156,26 @@ export const LayersPanel: FC<LayersPanelProps> = ({ store, onClose }) => {
   }, [editingId, store, stopRename]);
 
   /**
+   * Opacity is a draft committed on blur/Enter, exactly like rename. Writing
+   * the store on every keystroke zeroed the layer the moment the field was
+   * cleared mid-edit.
+   */
+  const commitOpacity = useCallback(() => {
+    const raw = (opacityInputRef.current?.value ?? '').trim();
+    if (!raw) return;
+    const parsed = Number(raw);
+    if (!Number.isFinite(parsed)) return;
+    const v = Math.max(0, Math.min(100, parsed)) / 100;
+    const state = store.getState();
+    const out = state.doc.outputs[state.currentOutput] as DesignerOutput | undefined;
+    const el = out?.children.find((c) => c.id === state.selectedIds[0]);
+    // A no-op commit (Enter then blur) must not stack two history entries.
+    if (!el || Math.abs((el.opacity ?? 1) - v) < 0.005) return;
+    state.updateElementsSilent(state.selectedIds, { opacity: v });
+    state.pushHistory();
+  }, [store]);
+
+  /**
    * Drop the dragged rows at a visible row boundary.
    *
    * The panel is top-first while `children` is bottom-first, so the display
@@ -214,18 +235,15 @@ export const LayersPanel: FC<LayersPanelProps> = ({ store, onClose }) => {
             min={0}
             max={100}
             aria-label={t('layer_opacity', 'Opacity')}
-            value={Math.round((selectedEl?.opacity ?? 1) * 100)}
+            // Uncontrolled draft, committed on blur/Enter (the rename field's
+            // pattern). Keyed so changing the selection reseeds the draft.
+            key={selectedEl?.id || 'none'}
+            ref={opacityInputRef}
+            defaultValue={Math.round((selectedEl?.opacity ?? 1) * 100)}
             disabled={!selectedEl}
-            // Silent while typing, one history entry on commit — the store's
-            // convention for continuous controls. `updateElements` here put an
-            // undo step on the stack for every keystroke.
-            onChange={(e) => {
-              const v = Math.max(0, Math.min(100, Number(e.target.value))) / 100;
-              store.getState().updateElementsSilent(selectedIds, { opacity: v });
-            }}
-            onBlur={() => store.getState().pushHistory()}
+            onBlur={commitOpacity}
             onKeyDown={(e) => {
-              if (e.key === 'Enter') store.getState().pushHistory();
+              if (e.key === 'Enter') commitOpacity();
             }}
             className="w-[46px] h-[26px] px-1 rounded-md bg-newBgColor border border-studioBorder text-[11px] text-textColor outline-none disabled:opacity-40"
           />

@@ -80,7 +80,8 @@ export class BackfillDesignThumbnails {
     }
 
     // Org templates only — system templates can't own a File
-    // (File.organizationId is required), so they are never touched.
+    // (File.organizationId is required), so they are never touched. Null-org
+    // rows are excluded too: there is no org storage to persist a thumbnail to.
     let templateCursor: string | undefined;
     for (;;) {
       const templates = await this._prisma.designTemplate.findMany({
@@ -88,6 +89,7 @@ export class BackfillDesignThumbnails {
           deletedAt: null,
           isSystem: false,
           thumbnailFileId: null,
+          organizationId: { not: null },
           ...orgFilter,
         },
         select: { id: true, organizationId: true, name: true, doc: true },
@@ -98,10 +100,13 @@ export class BackfillDesignThumbnails {
       if (templates.length === 0) break;
 
       for (const template of templates) {
+        // Unreachable (the where clause filters null orgs) — the guard narrows
+        // organizationId from `string | null` for _renderAndPersist.
+        if (!template.organizationId) continue;
         processed++;
         try {
           const file = await this._renderAndPersist(
-            template.organizationId as string,
+            template.organizationId,
             template.doc as unknown as DesignerDoc,
             `design-template-${template.id}-thumbnail.png`
           );

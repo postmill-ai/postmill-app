@@ -25,11 +25,18 @@ function createMocks() {
       { id: 't-skip', organizationId: 'org-1', name: 'T1', doc: VALID_DOC, deletedAt: null, isSystem: false, thumbnailFileId: 'file-y' },
       // Org template without a thumbnail — the only row to backfill.
       { id: 't-fill', organizationId: 'org-1', name: 'T2', doc: VALID_DOC, deletedAt: null, isSystem: false, thumbnailFileId: null },
+      // Null-org non-system template — no org storage to persist to, must be skipped.
+      { id: 't-no-org', organizationId: null, name: 'T0', doc: VALID_DOC, deletedAt: null, isSystem: false, thumbnailFileId: null },
     ],
   };
 
+  // Minimal Prisma where-subset: exact equality, plus `{ not: v }` negation.
   const matches = (row: any, where: any) =>
-    Object.entries(where).every(([key, value]) => row[key] === value);
+    Object.entries(where).every(([key, value]) =>
+      value && typeof value === 'object' && 'not' in (value as any)
+        ? row[key] !== (value as any).not
+        : row[key] === value
+    );
 
   const modelProxy = (modelName: string) => ({
     findMany: ({ where, select }: { where: any; select?: any }) =>
@@ -96,6 +103,8 @@ describe('BackfillDesignThumbnails', () => {
     expect(templates['t-skip'].thumbnailFileId).toBe('file-y');
     // System templates are never rendered or updated.
     expect(templates['t-system'].thumbnailFileId).toBeNull();
+    // Null-org templates have no org storage to persist to — never touched.
+    expect(templates['t-no-org'].thumbnailFileId).toBeNull();
 
     // Two renders only: d-fill and t-fill.
     expect(designRenderService.renderPage).toHaveBeenCalledTimes(2);

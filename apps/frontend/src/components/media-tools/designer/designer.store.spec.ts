@@ -1,6 +1,11 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { act, renderHook } from '@testing-library/react';
 import { createDesignerStore, migrateDoc, type DesignerStore } from './designer.store';
+import {
+  disposeAllBuffers,
+  getBuffer,
+  seedBufferFromImage,
+} from './raster-layers';
 import { DESIGNER_DOC_VERSION } from '@postmill-ai/nestjs-libraries/media/designer-doc/designer-doc.limits';
 
 /**
@@ -413,5 +418,169 @@ describe('Designer smoke: multi-format linked editing', () => {
 
     expect(result.current.doc.outputs).toHaveLength(1);
     expect(result.current.doc.outputs[0].children[0].type).toBe('shape');
+  });
+});
+
+describe('raster buffer lifecycle', () => {
+  beforeEach(() => {
+    // jsdom's canvas rejects drawImage of an unloaded Image; the pixels are
+    // irrelevant here — only the buffer bookkeeping is under test. The
+    // constructor isn't a jsdom global, so spy through a live context.
+    const ctx = document.createElement('canvas').getContext('2d');
+    if (ctx) {
+      vi.spyOn(Object.getPrototypeOf(ctx), 'drawImage').mockImplementation(() => {});
+    }
+  });
+
+  // The buffers are module-level, so each test leaves them as it found them.
+  afterEach(() => {
+    disposeAllBuffers();
+    vi.restoreAllMocks();
+  });
+
+  const addRaster = (result: { current: DesignerStore }, src?: string): string => {
+    act(() => {
+      result.current.addElement({
+        id: '', type: 'raster', x: 0, y: 0, width: 100, height: 100,
+        rotation: 0, opacity: 1, locked: false, hidden: false, src,
+      });
+    });
+    return result.current.doc.outputs[0].children[0].id;
+  };
+
+  it('disposes the buffer when the element is removed', () => {
+    const store = createDesignerStore();
+    const { result } = renderHook(() => store());
+    const id = addRaster(result);
+    seedBufferFromImage(id, new Image(), 100, 100);
+    expect(getBuffer(id)).toBeTruthy();
+
+    act(() => {
+      result.current.removeElements([id]);
+    });
+
+    expect(getBuffer(id)).toBeUndefined();
+  });
+
+  it('disposes the buffer when undo reverts the element\u2019s creation', () => {
+    const store = createDesignerStore();
+    const { result } = renderHook(() => store());
+    const id = addRaster(result);
+    seedBufferFromImage(id, new Image(), 100, 100);
+
+    act(() => {
+      result.current.undo();
+    });
+
+    expect(result.current.doc.outputs[0].children).toHaveLength(0);
+    expect(getBuffer(id)).toBeUndefined();
+  });
+
+  it('invalidates the live buffer when undo restores a different src', () => {
+    const store = createDesignerStore();
+    const { result } = renderHook(() => store());
+    const id = addRaster(result, 'https://example.com/a.png');
+    seedBufferFromImage(id, new Image(), 100, 100);
+
+    act(() => {
+      result.current.updateElement(id, { src: 'https://example.com/b.png' });
+      result.current.pushHistory();
+    });
+    act(() => {
+      result.current.undo();
+    });
+
+    expect(result.current.doc.outputs[0].children[0].src).toBe('https://example.com/a.png');
+    // The stale buffer comes down synchronously; the re-seed from the restored
+    // src is async (jsdom never fires img.onload, so it stays down here).
+    expect(getBuffer(id)).toBeUndefined();
+  });
+
+  it('redo during undo\u2019s re-seed supersedes the stale load', () => {
+    // The race: undo's re-seed deletes the buffer and starts loading the old
+    // bitmap; redo used to find no buffer, skip the key, and the old pixels
+    // then seeded over the redone document — the stroke silently vanished on
+    // every quick undo-then-redo. The in-flight claim is what fixes it.
+    const created: Array<{ src: string; onload?: () => void }> = [];
+    vi.stubGlobal(
+      'Image',
+      class {
+        onload?: () => void;
+        onerror?: () => void;
+        crossOrigin = '';
+        width = 100;
+        height = 100;
+        private _src = '';
+        get src() { return this._src; }
+        set src(value: string) {
+          this._src = value;
+          created.push(this as never);
+        }
+      }
+    );
+
+    const store = createDesignerStore();
+    const { result } = renderHook(() => store());
+    const id = addRaster(result, 'https://example.com/old.png');
+    seedBufferFromImage(id, document.createElement('canvas') as never, 100, 100);
+
+    act(() => {
+      result.current.updateElement(id, { src: 'https://example.com/new.png' });
+      result.current.pushHistory();
+    });
+    act(() => {
+      result.current.undo(); // starts the old.png load
+    });
+    act(() => {
+      result.current.redo(); // must claim new.png and invalidate the old load
+    });
+
+    expect(created.map((img) => img.src)).toEqual([
+      'https://example.com/old.png',
+      'https://example.com/new.png',
+    ]);
+
+    // The stale load lands late — and must be discarded, not seeded.
+    created[0].onload?.();
+    expect(getBuffer(id)).toBeUndefined();
+
+    // The current load lands — this one seeds.
+    created[1].onload?.();
+    expect(getBuffer(id)).toBeTruthy();
+
+    vi.unstubAllGlobals();
+  });
+
+  it('keeps the live buffer when undo leaves the element\u2019s src untouched', () => {
+    const store = createDesignerStore();
+    const { result } = renderHook(() => store());
+    const id = addRaster(result);
+    seedBufferFromImage(id, new Image(), 100, 100);
+
+    act(() => {
+      result.current.addElement({
+        id: 'other', type: 'text', x: 0, y: 0, width: 100, height: 30,
+        rotation: 0, opacity: 1, locked: false, hidden: false, text: 'Unrelated',
+      });
+    });
+    act(() => {
+      result.current.undo();
+    });
+
+    expect(result.current.doc.outputs[0].children).toHaveLength(1);
+    expect(getBuffer(id)).toBeTruthy();
+  });
+
+  it('disposes every buffer on reset', () => {
+    const store = createDesignerStore();
+    const { result } = renderHook(() => store());
+    const id = addRaster(result);
+    seedBufferFromImage(id, new Image(), 100, 100);
+
+    act(() => {
+      result.current.reset();
+    });
+
+    expect(getBuffer(id)).toBeUndefined();
   });
 });

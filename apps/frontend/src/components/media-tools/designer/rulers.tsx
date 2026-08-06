@@ -138,13 +138,21 @@ export const Rulers: FC<RulersProps> = ({
     const move = (ev: PointerEvent) => {
       position = at(ev);
     };
-    const up = () => {
+    const teardown = () => {
       window.removeEventListener('pointermove', move);
       window.removeEventListener('pointerup', up);
+      window.removeEventListener('pointercancel', cancel);
+    };
+    const up = () => {
+      teardown();
       onDragOutGuide(axis, Math.round(position));
     };
+    // A cancelled pointer (touch stolen by the OS, pen out of range) never
+    // fires pointerup — without this the window listeners stayed attached.
+    const cancel = () => teardown();
     window.addEventListener('pointermove', move);
     window.addEventListener('pointerup', up);
+    window.addEventListener('pointercancel', cancel);
   };
 
   useEffect(() => {

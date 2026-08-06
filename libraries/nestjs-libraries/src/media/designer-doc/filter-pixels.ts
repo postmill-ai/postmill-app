@@ -137,7 +137,15 @@ export const applyFilterTokens = (
   }
 };
 
-/** Total blur radius in a token list, in px. Zero when there is none. */
+/**
+ * Largest blur radius a token list may produce, in design px. The radius feeds
+ * `blurCanvas`, whose cost is O(radius) per row per channel — an unclamped
+ * `blur:1e8` is a DoS, not a style. Same precedent as `clampToDescriptor` in
+ * `filter-ops.ts`, which clamps smart-filter radii for the same reason.
+ */
+export const MAX_BLUR_FILTER_RADIUS = 500;
+
+/** Total blur radius in a token list, in px, clamped. Zero when there is none. */
 export const blurFilterRadius = (tokens: string[] | undefined): number => {
   if (!tokens?.length) return 0;
   let radius = 0;
@@ -145,7 +153,7 @@ export const blurFilterRadius = (tokens: string[] | undefined): number => {
     const parsed = parseDesignerFilterToken(token);
     if (parsed?.key === 'blur') radius += amount(parsed.value, 0);
   }
-  return radius;
+  return Math.min(radius, MAX_BLUR_FILTER_RADIUS);
 };
 
 /** Whether a token list changes any pixels at all. */
