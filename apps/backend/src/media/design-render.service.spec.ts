@@ -11,6 +11,7 @@ const testState = vi.hoisted(() => ({
   imageDimensions: { width: 100, height: 100 },
   drawImageCalls: [] as Array<{ img: any; args: number[] }>,
   filterAssignments: [] as string[],
+  putImageDataCalls: 0,
   canvasInstances: [] as Array<{ width: number; height: number }>,
 }));
 
@@ -50,6 +51,18 @@ vi.mock('canvas', () => ({
       strokeText: vi.fn(),
       createLinearGradient: vi.fn(() => ({ addColorStop: vi.fn() })),
       createRadialGradient: vi.fn(() => ({ addColorStop: vi.fn() })),
+      // Pixel-space filtering reads the buffer back and writes it again;
+      // `putImageData` is therefore the observable "a filter ran" signal.
+      getImageData: vi.fn((x: number, y: number, w: number, h: number) => ({
+        data: new Uint8ClampedArray(Math.max(1, w * h) * 4),
+        width: w,
+        height: h,
+      })),
+      putImageData: vi.fn(() => {
+        testState.putImageDataCalls += 1;
+      }),
+      getTransform: vi.fn(() => ({ a: 1, b: 0, c: 0, d: 1, e: 0, f: 0 })),
+      setTransform: vi.fn(),
     };
 
     Object.defineProperty(ctx, 'filter', {
@@ -147,6 +160,7 @@ describe('DesignRenderService', () => {
     testState.imageDimensions = { width: 100, height: 100 };
     testState.drawImageCalls = [];
     testState.filterAssignments = [];
+    testState.putImageDataCalls = 0;
     testState.canvasInstances = [];
 
     service = new DesignRenderService({
@@ -249,7 +263,14 @@ describe('DesignRenderService', () => {
   });
 
   describe('filter parity', () => {
-    it('applies the canonical filter token vocabulary to ctx.filter', async () => {
+    it('applies filters in pixel space, never via ctx.filter', async () => {
+      // `ctx.filter` is accepted and silently IGNORED by node-canvas — the
+      // original implementation assigned it, this test asserted the
+      // assignment, and every filter evaporated in every export while the
+      // suite stayed green. Filters now run on real pixels
+      // (`applyFilterTokensToCanvas`), so the observable contract is a
+      // buffer readback/writeback for the filtered image and no `ctx.filter`
+      // assignment at all.
       const doc: DesignerDoc = {
         version: 1,
         mode: 'image',
@@ -296,9 +317,13 @@ describe('DesignRenderService', () => {
 
       await service.renderPage(doc, 0);
 
-      expect(testState.filterAssignments).toEqual([
-        'grayscale(100%) brightness(1.5)',
-      ]);
+      // The filtered image round-tripped through pixels; the unfiltered one
+      // must not pay for that.
+      expect(testState.putImageDataCalls).toBe(1);
+      expect(testState.filterAssignments).toEqual([]);
+      // Both images still drew — a filter failing must never drop the layer.
+      const drawn = testState.drawImageCalls.filter((c) => c.img && typeof c.img === 'object');
+      expect(drawn.length).toBeGreaterThanOrEqual(2);
     });
   });
 });

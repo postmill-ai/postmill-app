@@ -165,7 +165,21 @@ export class DesignController {
     @Body() body: TextOutlinesDto,
   ): Promise<{ elements: unknown[]; reason?: string }> {
     const el = body.element as any;
-    if (el?.type !== 'text' || !el.text) return { elements: [], reason: 'not-text' };
+    if (el?.type !== 'text' || typeof el.text !== 'string' || !el.text) {
+      return { elements: [], reason: 'not-text' };
+    }
+    // The element arrives as a free object (an unsaved edit has no id to load),
+    // so it never passed the document schema — bound the fields that drive CPU.
+    // One path element per glyph contour makes a megabyte of text a render
+    // farm's worth of bezier extraction.
+    if (
+      el.text.length > 5000 ||
+      !(el.width > 0) || el.width > 20000 ||
+      !(el.height > 0) || el.height > 20000 ||
+      (el.fontSize != null && !(el.fontSize > 0 && el.fontSize <= 2000))
+    ) {
+      return { elements: [], reason: 'out-of-bounds' };
+    }
 
     const fontPath = await this._fontLoaderService.resolveFontFile(
       org.id,

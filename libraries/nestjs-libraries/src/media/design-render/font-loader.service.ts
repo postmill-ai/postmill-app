@@ -102,12 +102,17 @@ export class FontLoaderService {
   private readonly _curatedFailed = new Map<string, number>();
   private readonly _tempDir = path.join(os.tmpdir(), 'postmill-fonts');
   /**
-   * `family|weight` → the file on disk.
+   * Font file locations: `org:<orgId>:<family>|<weight>` for per-org custom
+   * fonts, `g:<family>|<weight>` for curated Google fonts.
    *
    * The loader downloads every font a render uses and then only hands it to
    * node-canvas; nothing could ask WHERE a family lives. Convert-to-outlines
    * needs the file itself, because glyph contours come from the font's own
    * tables and no canvas API exposes them.
+   *
+   * The org prefix is load-bearing: this map is process-wide, and without it
+   * org A's uploaded brand font would be resolvable — and outline-able — by
+   * any org that guessed its family name. Curated fonts are public and shared.
    */
   private readonly _files = new Map<string, string>();
   private _dirEnsured = false;
@@ -144,7 +149,7 @@ export class FontLoaderService {
         registerFont(tmpPath, { family: font.family, weight: String(font.weights?.[0] || '400') });
 
         this._cache.set(cacheKey, { family: font.family, filePath: tmpPath });
-        this._files.set(`${font.family}|${font.weights?.[0] || 400}`, tmpPath);
+        this._files.set(`org:${orgId}:${font.family}|${font.weights?.[0] || 400}`, tmpPath);
         this._logger.log(`Registered font ${font.family} for org ${orgId}`);
       } catch (err) {
         this._logger.warn(`Failed to register font ${font.family}: ${(err as Error)?.message}`);
@@ -182,7 +187,7 @@ export class FontLoaderService {
         registerFont(tmpPath, { family: font.family, weight: String(weight) });
 
         this._cache.set(cacheKey, { family: font.family, filePath: tmpPath });
-        this._files.set(`${font.family}|${weight}`, tmpPath);
+        this._files.set(`org:${orgId}:${font.family}|${weight}`, tmpPath);
       } catch (err) {
         this._logger.warn(`Failed to register font weight ${weight} for ${fontFamily}: ${(err as Error)?.message}`);
       }
@@ -280,7 +285,7 @@ export class FontLoaderService {
           family: faceFamily.replace(/['"]/g, ''),
           weight: faceWeight || '400',
         });
-        this._files.set(`${family}|${faceWeight || 400}`, tmpPath);
+        this._files.set(`g:${family}|${faceWeight || 400}`, tmpPath);
         registeredAny = true;
       }
 
@@ -310,20 +315,32 @@ export class FontLoaderService {
     family: string,
     weight = 400,
   ): Promise<string | null> {
-    const key = `${family}|${weight}`;
-    if (!this._files.has(key)) {
-      await this.loadOrgFonts(orgId).catch(() => undefined);
-    }
-    if (!this._files.has(key)) {
+    // The requesting org's own fonts, then the public curated set — NEVER
+    // another org's uploads, which share this process-wide map.
+    const prefixes = [`org:${orgId}:`, 'g:'];
+    const lookup = (): string | undefined => {
+      for (const prefix of prefixes) {
+        const exact = this._files.get(`${prefix}${family}|${weight}`);
+        if (exact) return exact;
+      }
+      // Fall back to any weight of the family — better the regular cut than
+      // nothing at all.
+      for (const prefix of prefixes) {
+        const any = [...this._files.entries()].find(([k]) =>
+          k.startsWith(`${prefix}${family}|`)
+        );
+        if (any) return any[1];
+      }
+      return undefined;
+    };
+
+    if (!lookup()) await this.loadOrgFonts(orgId).catch(() => undefined);
+    if (!lookup()) {
       await this.loadCuratedFonts([{ fontFamily: family, fontWeight: weight }]).catch(
         () => undefined,
       );
     }
-    // Fall back to any weight of the family — better the regular cut than
-    // nothing at all.
-    const found =
-      this._files.get(key) ||
-      [...this._files.entries()].find(([k]) => k.startsWith(`${family}|`))?.[1];
+    const found = lookup();
     if (!found) return null;
     return /\.(ttf|otf)$/i.test(found) ? found : null;
   }

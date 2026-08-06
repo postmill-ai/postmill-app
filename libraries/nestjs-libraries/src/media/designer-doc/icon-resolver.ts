@@ -59,6 +59,9 @@ const fetchIcon = async (name: string): Promise<ResolvedIcon | null> => {
 export const resolveIconifyIcon = (
   name: string
 ): Promise<ResolvedIcon | null> => {
+  // Real icon names are short; anything longer is garbage that would only
+  // grow the cache keys and the outbound URL.
+  if (!name || name.length > 200) return Promise.resolve(null);
   const cached = iconCache.get(name);
   if (cached) return cached;
   const promise = fetchIcon(name).catch(() => null);

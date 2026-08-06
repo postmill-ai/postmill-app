@@ -39,9 +39,11 @@ export const gradientCss = (g: DesignerGradient): string => {
     ? `radial-gradient(circle at ${Math.round((g.focalX ?? 0.5) * 100)}% ${Math.round(
         (g.focalY ?? 0.5) * 100
       )}%, ${stops})`
-    : // CSS angles run clockwise from "up"; the document's run
-      // counter-clockwise from "right", which is what both renderers use.
-      `linear-gradient(${90 - (g.angle ?? 0)}deg, ${stops})`;
+    : // Document angle 0 points right with y DOWN (canvas space), so theta
+      // degrees maps to CSS `90 + theta`: 0 -> 90deg (to right), 90 (downward)
+      // -> 180deg (to bottom). The minus form previewed every non-zero angle
+      // mirrored about the horizontal.
+      `linear-gradient(${90 + (g.angle ?? 0)}deg, ${stops})`;
 };
 
 export const GradientEditor: FC<{

@@ -112,7 +112,12 @@ const woff2Tables = (buf: Buffer): Tables => {
 
   let data: Buffer;
   try {
-    data = brotliDecompressSync(buf.subarray(pos, pos + totalCompressedSize));
+    // Capped: this runs on user uploads, and Brotli will happily expand a few
+    // kilobytes into gigabytes. 64 MiB clears every real font (large CJK faces
+    // top out around 40 MiB uncompressed) and turns a bomb into a parse error.
+    data = brotliDecompressSync(buf.subarray(pos, pos + totalCompressedSize), {
+      maxOutputLength: 64 * 1024 * 1024,
+    });
   } catch {
     return tables;
   }
