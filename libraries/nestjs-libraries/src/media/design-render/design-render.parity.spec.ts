@@ -353,6 +353,61 @@ describe('parity: type', () => {
     expect(up.inkBox()).not.toEqual(down.inkBox());
   });
 
+  it('reads left to right whichever way it bows', async () => {
+    // A ∪ bow inverts the glyph TILT, not the direction of travel. Inverting
+    // the sweep as well walked the string backwards, so every arc-down line
+    // exported character-reversed while the canvas drew it correctly — the
+    // "bows the other way" test above passed the whole time, because a
+    // reversal moves the ink box too.
+    //
+    // One glyph plus trailing spaces: the ink lands in the box's left half
+    // going forwards and its right half going backwards. Nothing subtler
+    // survives a font substitution.
+    const forwards = (curve: number) =>
+      render(doc([text({ text: 'A         ', curve, width: 180 })]));
+
+    for (const curve of [40, -40]) {
+      const box = (await forwards(curve)).inkBox();
+      expect(box, `curve ${curve}`).not.toBeNull();
+      // Element spans x = 10 … 190, so its midpoint is 100.
+      expect(box!.maxX, `curve ${curve} runs right to left`).toBeLessThan(100);
+    }
+  });
+
+  it('aligns curved text along the arc, not from the box edge', async () => {
+    // `drawCurvedText` ignored `align` outright, so a centred accent inside a
+    // full-width band rendered hard left while the canvas — which hands
+    // `align` to Konva's `TextPath` — centred it. A short string in a wide
+    // box makes the difference unmistakable.
+    const at = (align: 'left' | 'center' | 'right') =>
+      render(doc([text({ text: 'AB', curve: 30, width: 180, align })]));
+
+    const left = (await at('left')).inkBox()!;
+    const centre = (await at('center')).inkBox()!;
+    const right = (await at('right')).inkBox()!;
+
+    expect(centre.minX).toBeGreaterThan(left.minX);
+    expect(right.minX).toBeGreaterThan(centre.minX);
+    // Element spans x = 10 … 190. Right-aligned ink must reach its far end.
+    expect(right.maxX).toBeGreaterThan(140);
+  });
+
+  it('honours verticalAlign on curved text, as flat text always has', async () => {
+    // The arc band is pinned to `0 … sagitta`, so a curved line hugged the TOP
+    // of its box whatever its vertical alignment — which is how a badge's
+    // arched label floated clear off the plate it rides. Both renderers take
+    // the offset from `arcVerticalOffset`, so they move together.
+    const at = (verticalAlign: 'top' | 'middle' | 'bottom') =>
+      render(doc([text({ text: 'AB', curve: 30, height: 160, verticalAlign })]));
+
+    const top = (await at('top')).inkBox()!;
+    const middle = (await at('middle')).inkBox()!;
+    const bottom = (await at('bottom')).inkBox()!;
+
+    expect(middle.minY).toBeGreaterThan(top.minY);
+    expect(bottom.minY).toBeGreaterThan(middle.minY);
+  });
+
   it('strokes text in the colour and width asked for', async () => {
     // `drawTextLine` called strokeText without ever setting the state, so a 4px
     // white outline exported as a 1px black hairline.

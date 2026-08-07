@@ -54,6 +54,31 @@ export const arcBaselineY = (geometry: ArcGeometry, theta: number): number => {
 };
 
 /**
+ * Where the arc band sits inside an element of `height`.
+ *
+ * The band itself always spans `0 … sagitta` (see `arcBaselineY`), so a curved
+ * line pinned there hugs the TOP of its box however it is vertically aligned —
+ * which is how a badge's arched label floated clear off the plate it was
+ * supposed to ride. Flat text has honoured `verticalAlign` all along.
+ *
+ * `top` (and an unset align) keeps the historical placement, so nothing that
+ * never asked for centring moves. Both renderers apply this, so they cannot
+ * drift apart.
+ */
+export const arcVerticalOffset = (
+  geometry: ArcGeometry,
+  height: number | undefined,
+  verticalAlign: string | undefined
+): number => {
+  if (!height || !(height > 0)) return 0;
+  const slack = height - geometry.sagitta;
+  if (slack <= 0) return 0;
+  if (verticalAlign === 'middle') return slack / 2;
+  if (verticalAlign === 'bottom') return slack;
+  return 0;
+};
+
+/**
  * The same arc as an SVG path, for Konva's `TextPath`.
  *
  * Sweep flag 1 draws in the positive-angle direction, which in SVG's y-down
@@ -63,12 +88,15 @@ export const arcBaselineY = (geometry: ArcGeometry, theta: number): number => {
  */
 export const arcPathData = (
   width: number,
-  curve: number | undefined
+  curve: number | undefined,
+  height?: number,
+  verticalAlign?: string
 ): string | null => {
   const geometry = arcGeometry(width, curve);
   if (!geometry) return null;
   const { radius, sagitta, up } = geometry;
-  const edgeY = up ? sagitta : 0;
+  const edgeY =
+    (up ? sagitta : 0) + arcVerticalOffset(geometry, height, verticalAlign);
   const sweep = up ? 1 : 0;
   const r = round(radius);
   return `M 0,${round(edgeY)} A ${r},${r} 0 0,${sweep} ${round(width)},${round(edgeY)}`;

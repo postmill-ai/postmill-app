@@ -895,7 +895,7 @@ export const CanvasElements: FC<ElementsProps> = ({
             // ended up putting the baseline a full radius below the element.
             const textPathData = el.textPath
               ? el.textPath
-              : arcPathData(el.width, curve);
+              : arcPathData(el.width, curve, el.height, el.verticalAlign);
 
             // Rich text: flatten runs into one string for curved text,
             // or render each run segment individually for straight text.

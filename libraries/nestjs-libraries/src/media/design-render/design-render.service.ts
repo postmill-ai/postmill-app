@@ -31,7 +31,7 @@ import {
 import { pointsForShape, starPoints } from '../designer-doc/shape-geometry';
 import { warpedOutline, warpPadding } from '../designer-doc/warp';
 import { cornerRadii, hasCornerRadius } from '../designer-doc/shape-geometry';
-import { arcBaselineY, arcGeometry } from '../designer-doc/curved-text';
+import { arcBaselineY, arcGeometry, arcVerticalOffset } from '../designer-doc/curved-text';
 import { arrowHeadPoints, strokeEndpoints } from '../designer-doc/stroke-style';
 import { tracePathNodes } from '../designer-doc/path-geometry';
 import { buildLayerTree, groupBounds, type LayerNode } from '../designer-doc/layer-tree';
@@ -2294,19 +2294,43 @@ export class DesignRenderService {
     const letterSpacing = el.letterSpacing || 0;
     const totalAngle = (el.width / (2 * Math.PI * radius)) * (Math.PI * 2);
     const startAngle = -totalAngle / 2;
-    let charOffset = 0;
+
+    // Align along the arc, exactly as the flat path and `drawTextOnPath` do.
+    // This was missing entirely, so every curved line started at its box's
+    // LEFT edge however it was aligned — a centred accent inside a full-width
+    // band rendered hard left while the canvas, which hands `align` to Konva's
+    // `TextPath`, centred it. (The comment on the canvas side already claimed
+    // the server offset the run; it never did.)
+    let textWidth = 0;
+    for (const ch of text) textWidth += ctx.measureText(ch).width + letterSpacing;
+    textWidth = Math.max(0, textWidth - letterSpacing);
+
+    // Shared with the canvas via `arcPathData`, so a centred arc sits at the
+    // same height in both.
+    const verticalOffset = arcVerticalOffset(geometry, el.height, el.verticalAlign);
+
+    const align = el.align || 'left';
+    let charOffset =
+      align === 'center'
+        ? Math.max(0, (el.width - textWidth) / 2)
+        : align === 'right'
+        ? Math.max(0, el.width - textWidth)
+        : 0;
 
     for (const ch of text) {
       const charWidth = ctx.measureText(ch).width;
       const midAngle = startAngle + (charOffset + charWidth / 2) / (2 * Math.PI * radius) * (Math.PI * 2);
-      // A downward bow runs the glyphs along the far side of the circle, so
-      // both the horizontal sweep and the glyph tilt invert with it.
-      const direction = geometry.up ? 1 : -1;
-      const cx = el.width / 2 + Math.sin(midAngle) * radius * direction;
-      const cy = arcBaselineY(geometry, midAngle);
+      // A downward bow inverts the glyph TILT — the tangent of a ∪ slopes the
+      // opposite way to a ∩ — but NOT the direction of travel. Inverting the
+      // horizontal sweep too walked the string right to left, so every
+      // arc-down line exported character-reversed ("moc.egapruoy.www" for
+      // "www.yourpage.com") while the canvas, which lays glyphs along
+      // `arcPathData` in path order, drew it correctly.
+      const cx = el.width / 2 + Math.sin(midAngle) * radius;
+      const cy = arcBaselineY(geometry, midAngle) + verticalOffset;
       ctx.save();
       ctx.translate(cx, cy);
-      ctx.rotate(midAngle * direction);
+      ctx.rotate(geometry.up ? midAngle : -midAngle);
       if (el.textStroke && el.textStroke.width > 0) {
         ctx.strokeStyle = el.textStroke.color;
         ctx.lineWidth = el.textStroke.width;

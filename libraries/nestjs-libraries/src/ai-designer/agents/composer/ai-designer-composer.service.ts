@@ -4831,11 +4831,15 @@ export class AiDesignerComposerService implements OnModuleInit {
             hidden: false,
             closed: true,
             fill: accent,
+            // Both edges bow the SAME way — that is what makes a band read as
+            // an arched ribbon. Bowing the top up and the bottom down (as this
+            // did) fattens the middle into a lens, which is why the "1893"
+            // plate rendered as a barrel with its label adrift above it.
             nodes: [
               { x: box.x + 2, y: box.y + box.height * 0.16, outX: box.x + box.width * 0.3, outY: box.y - box.height * 0.1 },
               { x: box.x + box.width - 2, y: box.y + box.height * 0.16, inX: box.x + box.width * 0.7, inY: box.y - box.height * 0.1 },
-              { x: box.x + box.width, y: box.y + box.height * 0.84, outX: box.x + box.width * 0.7, outY: box.y + box.height * 1.1 },
-              { x: box.x, y: box.y + box.height * 0.84, inX: box.x + box.width * 0.3, inY: box.y + box.height * 1.1 },
+              { x: box.x + box.width, y: box.y + box.height * 0.84, outX: box.x + box.width * 0.7, outY: box.y + box.height * 0.58 },
+              { x: box.x, y: box.y + box.height * 0.84, inX: box.x + box.width * 0.3, inY: box.y + box.height * 0.58 },
             ],
             groupId: slot.id,
             originId: `${slot.id}-bg`,
