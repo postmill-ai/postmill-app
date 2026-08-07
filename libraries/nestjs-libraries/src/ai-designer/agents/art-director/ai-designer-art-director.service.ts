@@ -1178,8 +1178,17 @@ export class AiDesignerArtDirectorService implements OnModuleInit {
           role: 'string',
           kind: "'text' | 'image' | 'cta-button' | 'badge' | 'accent-shape' | 'shape' | 'icon' | 'divider' | 'logo' | 'frame'",
           style:
-            'optional per-slot override: { fontFamily?, fontWeight?, fill?, gradient?: [string, string], stroke?: { color, width }, shadow?: boolean | { color, blur, offsetX, offsetY }, align?: "left" | "center" | "right", letterSpacing?: number (-2..20 px tracking — 2-6 for all-caps labels), lineHeight?: number (1.0-1.6; 1.0-1.1 for display headlines), opacity?: number (0-1), badgeStyle?: "pill" | "burst" | "ribbon" (badge slots only) }',
+            'optional per-slot override: { fontFamily?, fontWeight?, fill?, gradient?: [from, to] | { type?: "linear"|"radial", angle?, focalX?, focalY? (0-1, radial highlight off-centre), stops: [{color, offset 0-1}] (2-5 stops) }, stroke?: { color, width }, shadow?: boolean | { color, blur, offsetX, offsetY }, align?: "left" | "center" | "right", letterSpacing?: number (-2..20 px tracking — 2-6 for all-caps labels), lineHeight?: number (1.0-1.6; 1.0-1.1 for display headlines), opacity?: number (0-1), textScaleX?: number (0.5-1 — condensed display type; 0.62 reads like a condensed cut of the face, for tall headlines in a narrow measure), textTransform?: "uppercase" | "lowercase" | "capitalize" (case as a style — never retype the copy), paragraphSpacing?: number (px before each paragraph after the first), curve?: "arc-up" | "arc-down" (arc a single accent/ribbon line of text), borderRadius?: number | [topLeft, topRight, bottomRight, bottomLeft] (badge/CTA/shape plates — asymmetric corners make ticket and tab shapes), badgeStyle?: "pill" | "burst" | "ribbon" (badge slots only) }',
           effects: 'string[] (optional) — at most two EFFECT ids',
+          blend:
+            'string (optional) — blend mode for elements that should interact with what is beneath: multiply (ink on paper), screen/linear-dodge (glow), overlay/soft-light (texture). Use sparingly — one blended accent per design.',
+          rotation:
+            'number (optional, -15..15) — a slight tilt on decorative/badge slots only; never on body copy',
+          warp:
+            'string (optional) — one WARP id (arched ribbons, flag waves); shape/badge/cta slots only',
+          sides:
+            'number (optional, 3-12) — star points / polygon sides on accent-shape slots',
+          innerRatio: 'number (optional, 0.3-0.7) — star spike depth; 0.5 is a classic star',
           treatment: 'string (optional) — one TREATMENT id; image slots only',
           treatmentStrength:
             'number 0-1 (optional) — scales the chosen treatment; image slots only',

@@ -154,7 +154,20 @@ export interface DesignSlotStyle {
   fontFamily?: string;
   fontWeight?: number;
   fill?: string;
-  gradient?: [string, string];
+  /**
+   * Legacy two-stop tuple, or the full form: any number of stops (2–5),
+   * linear at an angle or radial with an off-centre focal point. The composer
+   * emits `fillGradient` from either.
+   */
+  gradient?:
+    | [string, string]
+    | {
+        type?: 'linear' | 'radial';
+        angle?: number;
+        focalX?: number;
+        focalY?: number;
+        stops: { color: string; offset: number }[];
+      };
   stroke?: { color: string; width: number };
   /**
    * true/false keeps the legacy preset behaviour; the object form gives the
@@ -167,6 +180,27 @@ export interface DesignSlotStyle {
   /** Leading as a font-size multiple (1.0–1.6). */
   lineHeight?: number;
   opacity?: number;
+  /**
+   * Horizontal glyph condensation (0.5–1.25). 0.6 reads like a condensed cut
+   * of the face — the tool for tall display type in a narrow measure.
+   */
+  textScaleX?: number;
+  /** Case as a render property — measured AND painted transformed. */
+  textTransform?: 'none' | 'uppercase' | 'lowercase' | 'capitalize';
+  /** Extra leading before each paragraph after the first, in px (0–100). */
+  paragraphSpacing?: number;
+  /** First-line indent of each paragraph, in px (0–100). */
+  firstLineIndent?: number;
+  /**
+   * Arc the line of text: 'arc-up' bows ∩, 'arc-down' bows ∪. The composer
+   * converts to the document's numeric curve scaled from the slot box.
+   */
+  curve?: 'arc-up' | 'arc-down';
+  /**
+   * Corner rounding for badge/CTA/shape plates: one number, or
+   * [topLeft, topRight, bottomRight, bottomLeft].
+   */
+  borderRadius?: number | [number, number, number, number];
   /** Badge slot shape override — wins over the preset's badgeStyle treatment. */
   badgeStyle?: 'pill' | 'burst' | 'ribbon';
   /** CTA slot shape override — wins over the preset's ctaStyle treatment. */
@@ -202,6 +236,15 @@ export interface DesignSlot {
   blend?: string;
   /** Rotation in degrees. Decorative and badge elements only. */
   rotation?: number;
+  /**
+   * Warp recipe by name, from the warp catalog (arched ribbons, flag waves).
+   * Shape/badge/CTA plates only; unknown names are dropped.
+   */
+  warp?: string;
+  /** Star points / polygon sides (3–12), accent-shape and shape kinds. */
+  sides?: number;
+  /** Star inner-radius ratio (0.3–0.7). */
+  innerRatio?: number;
   /** Scales the chosen treatment's parameters (0 = no-op, 1 = full recipe). */
   treatmentStrength?: number;
   /**
@@ -316,6 +359,18 @@ export interface FixStyle {
   /** Text outline (maps to the element's `textStroke`). */
   textStroke?: DesignerTextStroke;
   textShadow?: boolean;
+  /** Horizontal condensation (0.5–1.25) — the fix for display type that wraps. */
+  textScaleX?: number;
+  /** Case as a render property — never a copy rewrite. */
+  textTransform?: 'none' | 'uppercase' | 'lowercase' | 'capitalize';
+  /** Arc a single accent/ribbon line: subtended degrees, ±60 max. */
+  curve?: number;
+  /** Warp bend on a plate the slot already warps (−100..100). */
+  warpBend?: number;
+  /** Backdrop frost on a glass panel: blur px (0–40). */
+  backdropBlur?: number;
+  /** Blend mode by name — all 27 the renderer composites. */
+  blend?: string;
 }
 
 /**

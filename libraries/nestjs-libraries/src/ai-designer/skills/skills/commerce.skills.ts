@@ -22,6 +22,7 @@ export const SaleDiscountSkill = defineSkill({
   direction:
     'Aim at a department-store window card, not a coupon booklet. The number IS the design: set it enormous, everything else is a caption to it. One loud accent against a restrained ground — a design shouting in three colours reads as spam, and a discount that looks like spam is not believed.',
   rules: [
+    'The percent-off number is display type: condense it with style textScaleX 0.62-0.75 rather than shrinking it, and set the small print in tracked caps (textTransform "uppercase", letterSpacing 2-6).',
     'The discount figure is the largest element on the canvas by a wide margin — at least twice the headline.',
     OFFER_FIDELITY,
     'Expiry and conditions go in a legal slot, small but present. A sale with no end date reads as permanent, which devalues it.',
@@ -37,6 +38,7 @@ export const SaleDiscountSkill = defineSkill({
     { id: 'image', role: 'image', kind: 'image' },
   ],
   art: {
+    warps: ['arc-banner'],
     compositions: ['badge-burst', 'type-dominant', 'hero-fullbleed', 'poster-left'],
     effects: ['hard-shadow', 'sticker-pop', 'long-shadow'],
     treatments: ['contrast-punch', 'duotone-brand'],
@@ -56,6 +58,7 @@ export const CouponOfferSkill = defineSkill({
   direction:
     'Aim at a physical ticket stub — perforations, a dashed tear line, a code set in monospace like something printed rather than designed. The tactile reference is what makes a code feel redeemable instead of decorative.',
   rules: [
+    'The stub reads as a ticket: give the plate asymmetric corners with style borderRadius [12, 12, 0, 0] (or the mirror) so it tears like one.',
     'The code is set in a monospaced or heavily-tracked face, in its own bounded field, and is never re-cased or re-spaced.',
     OFFER_FIDELITY,
     'A dashed rule or notch reads as "tear here" and is worth more than any amount of colour.',
@@ -148,6 +151,7 @@ export const FlashSaleSkill = defineSkill({
   direction:
     'Aim at an emergency broadcast, not a poster. High contrast, hard edges, motion cues — diagonal stripes or a chevron. This is the one genre where loud is correct, but loud still means ONE loud gesture executed properly.',
   rules: [
+    'Urgency is condensed: headline textScaleX 0.62-0.7, all-caps via textTransform, never a smaller font.',
     'The deadline is a first-class element, not fine print. "Today only" belongs at headline weight.',
     OFFER_FIDELITY,
     'Two colours maximum plus a neutral. Three competing brights read as a scam.',
@@ -161,6 +165,7 @@ export const FlashSaleSkill = defineSkill({
     { id: 'legal', role: 'legal', kind: 'text' },
   ],
   art: {
+    warps: ['rise-banner'],
     compositions: ['type-dominant', 'badge-burst', 'banner-strip'],
     effects: ['hard-shadow', 'sticker-pop', 'neon-glow'],
     treatments: ['contrast-punch', 'high-contrast-mono'],
@@ -178,6 +183,7 @@ export const MenuPricingSkill = defineSkill({
   direction:
     'Aim at a letterpress café menu. This is a typographic problem, not a decorative one: consistent leading, aligned prices, a rule between courses. Restraint reads as quality, and quality is what a price list is selling.',
   rules: [
+    'Section headers in tracked caps (textTransform "uppercase", letterSpacing 3-6); prices never condensed.',
     'Prices align on a common edge. Ragged prices are the fastest way to look amateur.',
     'Every item and price comes from the brief verbatim. Never invent a dish or a number.',
     'Group with rules and space, never with boxes — boxes turn a menu into a spreadsheet.',

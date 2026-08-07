@@ -473,7 +473,7 @@ Look at the contact sheet and identify concrete, actionable visual issues. For e
   - "scope": "shared" or "format-only"
   - "targetSlots": array of slot ids the fix applies to
   - "geometry": partial element geometry such as { x, y, width, height, fontSize }
-  - "style": partial style such as { fill, stroke, opacity, fontFamily, align ("left"|"center"|"right"), verticalAlign ("top"|"middle"|"bottom"), letterSpacing (px tracking — 2-6 for all-caps labels), lineHeight (1.0-1.6; 1.0-1.1 for display headlines), textStroke { color, width }, textShadow (true = add a default shadow, false = remove it) }
+  - "style": partial style such as { fill, stroke, opacity, fontFamily, align ("left"|"center"|"right"), verticalAlign ("top"|"middle"|"bottom"), letterSpacing (px tracking — 2-6 for all-caps labels), lineHeight (1.0-1.6; 1.0-1.1 for display headlines), textScaleX (0.5-1 — condense display type that wraps or overflows instead of shrinking it), textTransform ("uppercase"|"lowercase"|"capitalize" — case as a style, never retype the copy), curve (degrees, -60..60 — arc a single accent/ribbon line), warpBend (-100..100 — deepen or flatten an existing banner warp), backdropBlur (0-40 — the frost on a glass panel), blend (a blend-mode name, e.g. "multiply"), textStroke { color, width }, textShadow (true = add a default shadow, false = remove it) }
   - "text": { slotId, newText } — rewrite the copy of a TEXT slot only; never target an image slot with a text fix
   - "regenerateAsset": { slotId, brief? } — regenerate the underlying imagery for that slot; the ONLY fix for a no_baked_in_text, text_accuracy or brand_safety defect inside a generated photo: imagery containing baked-in text, letters, logos, watermarks, or a recognizable third-party brand mark / branded product / celebrity likeness must be fixed with regenerateAsset targeting the image slot — never with a text fix. Optional "brief" adds guidance for the regeneration (subject, mood, what to avoid — e.g. "generic unbranded sneaker, no logos or brand marks")
   - "addElement": { slotId, type: "text" | "shape", text?, shape?, box? { x, y, width, height }, style? { fill, fontFamily, fontSize, align, textStroke, textShadow } } — add a small text/shape/badge-style element
@@ -684,6 +684,27 @@ If the contact sheet looks good, return { "findings": [] }.`;
         }
       }
       if (typeof src.textShadow === 'boolean') style.textShadow = src.textShadow;
+      if (typeof src.textScaleX === 'number' && Number.isFinite(src.textScaleX)) {
+        style.textScaleX = Math.max(0.5, Math.min(1.25, src.textScaleX));
+      }
+      if (
+        src.textTransform === 'none' ||
+        src.textTransform === 'uppercase' ||
+        src.textTransform === 'lowercase' ||
+        src.textTransform === 'capitalize'
+      ) {
+        style.textTransform = src.textTransform;
+      }
+      if (typeof src.curve === 'number' && Number.isFinite(src.curve)) {
+        style.curve = Math.max(-60, Math.min(60, src.curve));
+      }
+      if (typeof src.warpBend === 'number' && Number.isFinite(src.warpBend)) {
+        style.warpBend = Math.max(-100, Math.min(100, src.warpBend));
+      }
+      if (typeof src.backdropBlur === 'number' && Number.isFinite(src.backdropBlur)) {
+        style.backdropBlur = Math.max(0, Math.min(40, src.backdropBlur));
+      }
+      if (typeof src.blend === 'string') style.blend = src.blend;
       if (Object.keys(style).length > 0) fix.style = style;
     }
 

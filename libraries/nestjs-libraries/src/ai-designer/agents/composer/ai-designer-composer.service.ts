@@ -18,6 +18,7 @@ import type {
   DesignerTextShadow,
   DesignerTextStroke,
 } from '@postmill-ai/nestjs-libraries/media/designer-doc/designer-doc.schema';
+import { BLEND_MODES } from '@postmill-ai/nestjs-libraries/media/designer-doc/designer-doc.schema';
 import {
   DesignerDocOpsSchema,
   DesignerDocOpSchema,
@@ -45,6 +46,7 @@ import type {
   AssetResult,
   DesignPlan,
   DesignSlot,
+  DesignSlotStyle,
   Fix,
   FixAddElement,
   FixStyle,
@@ -96,13 +98,31 @@ import {
 } from './layout-bridge';
 import { buildGrid } from '../../layout/grid';
 import type { Composition } from '../../layout/composition';
-import { wrapTextLines } from '@postmill-ai/nestjs-libraries/media/designer-doc/fit-text';
-import { createTextMeasurer, type FaceMeasurer } from './measure-text';
+import {
+  applyTextTransform,
+  fitTextToBox,
+  wrapTextLines,
+} from '@postmill-ai/nestjs-libraries/media/designer-doc/fit-text';
+
+/**
+ * Vertical headroom the layout engine adds over a text block's wrapped height.
+ * Covers ascender/descender overshoot only — the old 1.25 also compensated for
+ * measuring headlines with the body face, which `_effectiveTextStyle` fixed.
+ */
+const MEASURE_HEADROOM = 1.08;
+
+/** Whether a critic-supplied blend name is one the renderer composites. */
+const isDesignerBlendMode = (
+  value: string
+): value is import('@postmill-ai/nestjs-libraries/media/designer-doc/designer-doc.schema').DesignerBlendMode =>
+  (BLEND_MODES as readonly string[]).includes(value);
+import { createTextMeasurer, estimateWrappedLines, type FaceMeasurer } from './measure-text';
 import {
   applySlotRecipes,
   emitDecor,
   strengthForDepth,
   treatmentAdjustmentLayers,
+  expandWarp,
 } from '../../design-language';
 import {
   STAR_LABEL_SAFE_RATIO,
@@ -1873,14 +1893,74 @@ export class AiDesignerComposerService implements OnModuleInit {
           return advance + (el.letterSpacing || 0) * widestWord.length;
         };
         let size = fontSize;
-        let lines = this._estimateWrappedLines(el.text, el.width, size);
-        while (
-          size > floor &&
-          (lines * lineHeightFactor * size > el.height ||
-            widestWordWidthAt(size) > el.width)
-        ) {
-          size = Math.max(floor, Math.floor(size * 0.9));
-          lines = this._estimateWrappedLines(el.text, el.width, size);
+        let lines: number;
+        if (this._measurer) {
+          // The renderer's own fitter, on the real face — wrap counts, case
+          // transform, tracking and condensation all agree with what will be
+          // painted. The 0.55 char estimator stays only as the pre-measurer
+          // degraded path.
+          const measure = this._measurer;
+          const fitted = fitTextToBox(
+            {
+              text: el.text,
+              width: el.width,
+              height: el.height,
+              fontSize,
+              lineHeight: el.lineHeight,
+              letterSpacing: el.letterSpacing,
+              scaleX: el.textScaleX,
+              textTransform: el.textTransform,
+              paragraphSpacing: el.paragraphSpacing,
+              firstLineIndent: el.firstLineIndent,
+              minFontSize: floor,
+            },
+            (t, s) =>
+              measure(t, s, {
+                fontFamily: el.fontFamily,
+                fontWeight: el.fontWeight,
+                fontStyle: el.fontStyle,
+              })
+          );
+          size = fitted.fontSize;
+          lines = fitted.lines.length;
+          // The fitter never splits a word, so the widest word must still fit
+          // the box WIDTH at the fitted size.
+          while (size > floor && widestWordWidthAt(size) > el.width) {
+            size = Math.max(floor, Math.floor(size * 0.9));
+          }
+          if (size !== fitted.fontSize) {
+            lines = fitTextToBox(
+              {
+                text: el.text,
+                width: el.width,
+                height: el.height,
+                fontSize: size,
+                lineHeight: el.lineHeight,
+                letterSpacing: el.letterSpacing,
+                scaleX: el.textScaleX,
+                textTransform: el.textTransform,
+                paragraphSpacing: el.paragraphSpacing,
+                firstLineIndent: el.firstLineIndent,
+                minFontSize: size,
+              },
+              (t, s) =>
+                measure(t, s, {
+                  fontFamily: el.fontFamily,
+                  fontWeight: el.fontWeight,
+                  fontStyle: el.fontStyle,
+                })
+            ).lines.length;
+          }
+        } else {
+          lines = this._estimateWrappedLines(el.text, el.width, size, el.textTransform);
+          while (
+            size > floor &&
+            (lines * lineHeightFactor * size > el.height ||
+              widestWordWidthAt(size) > el.width)
+          ) {
+            size = Math.max(floor, Math.floor(size * 0.9));
+            lines = this._estimateWrappedLines(el.text, el.width, size, el.textTransform);
+          }
         }
         let height = el.height;
         if (lines * lineHeightFactor * size > height) {
@@ -1910,28 +1990,10 @@ export class AiDesignerComposerService implements OnModuleInit {
   private _estimateWrappedLines(
     text: string,
     width: number,
-    fontSize: number
+    fontSize: number,
+    textTransform?: 'none' | 'uppercase' | 'lowercase' | 'capitalize'
   ): number {
-    const maxChars = Math.max(1, Math.floor(width / (fontSize * 0.55)));
-    let lines = 1;
-    let current = 0;
-    for (const word of text.split(/\s+/)) {
-      const wordLen = Math.max(1, word.length);
-      if (current > 0 && current + 1 + wordLen > maxChars) {
-        lines++;
-        current = 0;
-      }
-      current = current > 0 ? current + 1 + wordLen : wordLen;
-      // A single word longer than the line is assumed to hard-wrap mid-word —
-      // a height-estimate convenience only. The renderer never splits a word,
-      // which is exactly why `_clampTextToFit` also fits the widest word to
-      // the box width.
-      while (current > maxChars) {
-        lines++;
-        current -= maxChars;
-      }
-    }
-    return lines;
+    return estimateWrappedLines(text, width, fontSize, textTransform);
   }
 
   /**
@@ -2499,7 +2561,7 @@ export class AiDesignerComposerService implements OnModuleInit {
       `Instruction: ${instruction}`,
       scopeHint,
       `Return ONLY a JSON array of ops. Each op is {"op":"updateElement","outputIndex":<n>,"elementId":"<existing id>","scope":"${scope}","patch":{...}}.`,
-      'patch may set x, y, width, height, fontSize, text, fill, opacity, fontFamily, align, verticalAlign, textStroke ({color,width}), textShadow ({color,blur,offsetX,offsetY}). Never invent element ids or patch keys.',
+      'patch may set x, y, width, height, fontSize, text, fill, opacity, fontFamily, align, verticalAlign, letterSpacing (px tracking, -2..20), lineHeight (1.0-1.6), textScaleX (0.5-1.25 — condense display type instead of shrinking it), textTransform ("none"|"uppercase"|"lowercase"|"capitalize" — case as a style, never retype the copy), curve (degrees, -60..60 — arc an accent line), fillGradient ({type:"linear"|"radial", angle?, stops:[{color,offset}]}), blendMode (e.g. "multiply"), textStroke ({color,width}), textShadow ({color,blur,offsetX,offsetY}). Never invent element ids or patch keys.',
       'You may also emit {"op":"addElement","outputIndex":<n>,"element":{...}} with a constrained TEXT element (type:"text", x, y, width, height, rotation: 0, opacity: 1, locked: false, hidden: false, plus text, fontSize, fill, align, textStroke, textShadow, originId), or {"op":"removeElement","outputIndex":<n>,"elementId":"<existing id>"} to delete an element. Do NOT add shape elements: scrims, plates and bands behind copy are rejected. When text is hard to read over imagery, patch the TEXT — set its fill and give it a textShadow.',
       'To change an output\'s background, emit {"op":"setOutputBackground","outputIndex":<n>,"background":{"type":"color","color":"#rrggbb"}} — or {"type":"gradient","gradient":{"type":"linear","angle":<deg>,"stops":[{"color":"#rrggbb","offset":0},{"color":"#rrggbb","offset":1}]}}. Use it when the instruction asks for a background color or gradient. Never use it on an output whose background is an image — image backgrounds are protected.',
     ]
@@ -3342,6 +3404,54 @@ export class AiDesignerComposerService implements OnModuleInit {
       );
     } else if (style.textShadow === false) {
       patch.textShadow = undefined;
+    }
+    // The new type tools — same clamps as the plan schema and the critic's
+    // sanitizer, so nothing can arrive out of range whichever door it came in.
+    if (
+      el.type === 'text' &&
+      typeof style.textScaleX === 'number' &&
+      Number.isFinite(style.textScaleX)
+    ) {
+      patch.textScaleX = Math.max(0.5, Math.min(1.25, style.textScaleX));
+    }
+    if (
+      el.type === 'text' &&
+      (style.textTransform === 'none' ||
+        style.textTransform === 'uppercase' ||
+        style.textTransform === 'lowercase' ||
+        style.textTransform === 'capitalize')
+    ) {
+      patch.textTransform = style.textTransform;
+    }
+    if (
+      el.type === 'text' &&
+      typeof style.curve === 'number' &&
+      Number.isFinite(style.curve)
+    ) {
+      patch.curve = Math.max(-60, Math.min(60, style.curve));
+    }
+    // Bend only adjusts an EXISTING warp — a bend with no preset is undefined
+    // geometry, and choosing one on the critic's behalf is the planner's job.
+    if (
+      el.type === 'shape' &&
+      el.warp?.preset &&
+      typeof style.warpBend === 'number' &&
+      Number.isFinite(style.warpBend)
+    ) {
+      patch.warp = { ...el.warp, bend: Math.max(-100, Math.min(100, style.warpBend)) };
+    }
+    if (
+      el.type === 'shape' &&
+      typeof style.backdropBlur === 'number' &&
+      Number.isFinite(style.backdropBlur)
+    ) {
+      patch.backdropFilter = {
+        ...(el.backdropFilter ?? { saturate: 1.4 }),
+        blur: Math.max(0, Math.min(40, style.backdropBlur)),
+      };
+    }
+    if (typeof style.blend === 'string' && isDesignerBlendMode(style.blend)) {
+      patch.blendMode = style.blend;
     }
     return patch;
   }
@@ -4250,10 +4360,16 @@ export class AiDesignerComposerService implements OnModuleInit {
     const override = slot.style || {};
     const isDisplay = role === 'headline';
 
-    let text = rawText;
-    if (isDisplay && treatments.headlineTransform === 'uppercase') {
-      text = text.toUpperCase();
-    }
+    // Case is a RENDER property now, not a mutation: the shared fitter measures
+    // the transformed string and the renderer paints it, while the document
+    // keeps the user's authored copy. Mutating here meant every downstream
+    // comparison (locks, dedupe, critics) saw shouting text the user never
+    // typed.
+    const text = rawText;
+    const textTransform =
+      isDisplay && treatments.headlineTransform === 'uppercase'
+        ? ('uppercase' as const)
+        : undefined;
 
     const fontSize = opts.fontSize ?? this._roleFontSize(role, ctx.scale);
     const fontFamily =
@@ -4266,7 +4382,7 @@ export class AiDesignerComposerService implements OnModuleInit {
     // > palette text color. A gradient override keeps its first stop as the
     // flat fill — the fallback colour beneath the gradient-overlay layer style
     // emitted below (glyph-shaped in every renderer).
-    const planFill = override.fill ?? override.gradient?.[0];
+    const planFill = override.fill ?? this._slotGradientFirstColor(override.gradient);
     // A plan-supplied fill is validated against what will actually be painted
     // beneath it — the same guard `_resolveAccent` makes for shapes. The
     // planner repeatedly emitted text in its own background color (#FFFFFF on
@@ -4309,27 +4425,12 @@ export class AiDesignerComposerService implements OnModuleInit {
       };
     }
 
-    // A gradient on TEXT paints through a gradient-overlay layer style, which
-    // every renderer clips to the glyph silhouette — the flat `fill` above
-    // stays as the fallback underneath. Skipped when a stroke is set: stroke +
-    // gradient fill over-promises what the text renderers composite cleanly.
-    const styles =
-      override.gradient && !textStroke
-        ? [
-            {
-              type: 'gradient-overlay' as const,
-              opacity: 1,
-              gradient: {
-                type: 'linear' as const,
-                angle: 90,
-                stops: [
-                  { offset: 0, color: override.gradient[0] },
-                  { offset: 1, color: override.gradient[1] },
-                ],
-              },
-            },
-          ]
-        : undefined;
+    // A gradient headline is a real `fillGradient` — both renderers honor
+    // gradients on text since the parity round (design-render.parity.spec.ts
+    // "fills text with a gradient"). This replaces the gradient-overlay layer
+    // style workaround, which was also suppressed whenever a textStroke was
+    // set; the flat `fill` stays as the fallback beneath the ramp.
+    const planGradient = this._slotFillGradient(override.gradient);
 
     return {
       id: '',
@@ -4355,9 +4456,19 @@ export class AiDesignerComposerService implements OnModuleInit {
       letterSpacing:
         override.letterSpacing ??
         (isDisplay ? treatments.letterSpacing || 0 : undefined),
+      textTransform: override.textTransform ?? textTransform,
+      // The new type tools, straight off the plan: condensation, arc, and
+      // paragraph rhythm. `curve` is planned by NAME — the emitter owns the
+      // number (30° subtends a classic ribbon arc; the renderer keeps the
+      // baseline inside the box either way).
+      textScaleX: override.textScaleX,
+      curve:
+        override.curve === 'arc-up' ? 30 : override.curve === 'arc-down' ? -30 : undefined,
+      paragraphSpacing: override.paragraphSpacing,
+      firstLineIndent: override.firstLineIndent,
       textStroke,
       textShadow,
-      styles,
+      fillGradient: planGradient,
       verticalAlign: opts.verticalAlign,
       groupId: opts.groupId,
       originId: slot.id,
@@ -4454,12 +4565,15 @@ export class AiDesignerComposerService implements OnModuleInit {
     // "hard-edged rectangle", minimal's "plain rectangular CTA") shipped a
     // 9px radius. The corner treatment is per-preset now.
     const radius = ctaStyle === 'pill' ? 'pill' : treatments.ctaRadius ?? 'small';
+    // A plan-supplied radius (scalar or per-corner [tl,tr,br,bl] — the ticket
+    // and tab shapes) wins over the preset's corner treatment.
     const borderRadius =
-      radius === 'pill'
+      override.borderRadius ??
+      (radius === 'pill'
         ? Math.round(height / 2)
         : radius === 'square'
         ? 0
-        : Math.round(height * 0.14);
+        : Math.round(height * 0.14));
     // Neobrutalism's prompt promises "a thick border and an offset solid
     // shadow"; neither ever rendered (stroke was set only on the outline
     // branch, and the renderer has no shape drop-shadow — the shadow has to
@@ -4475,18 +4589,10 @@ export class AiDesignerComposerService implements OnModuleInit {
       locked: false,
       hidden: false,
       fill: outline ? undefined : accent,
-      fillGradient:
-        !outline && override.gradient
-          ? {
-              type: 'linear',
-              angle: 90,
-              stops: [
-                { offset: 0, color: override.gradient[0] },
-                { offset: 1, color: override.gradient[1] },
-              ],
-            }
-          : undefined,
+      fillGradient: !outline ? this._slotFillGradient(override.gradient) : undefined,
       borderRadius,
+      // A named warp bends the plate — the arched/waving banner family.
+      warp: expandWarp(slot.warp),
       stroke: outline ? accent : hardBorder ? ctx.style.text : undefined,
       strokeWidth: outline
         ? Math.max(2, Math.round(fontSize * 0.09))
@@ -4680,7 +4786,9 @@ export class AiDesignerComposerService implements OnModuleInit {
             hidden: false,
             fill: accent,
             borderRadius:
-              badgeStyle === 'pill' ? Math.round(height / 2) : Math.round(height * 0.12),
+              slot.style?.borderRadius ??
+              (badgeStyle === 'pill' ? Math.round(height / 2) : Math.round(height * 0.12)),
+            warp: expandWarp(slot.warp),
             groupId: slot.id,
             originId: `${slot.id}-bg`,
           } as DesignerElement);
@@ -4699,14 +4807,29 @@ export class AiDesignerComposerService implements OnModuleInit {
     // must never spill outside its shape.
     let fittedFontSize = fontSize;
     const fontFloor = Math.max(MIN_FONT_SIZE_PX, Math.floor(fontSize * 0.6));
-    while (
-      fittedFontSize > fontFloor &&
-      this._estimateWrappedLines(rawText, textBox.width, fittedFontSize) *
-        1.1 *
-        fittedFontSize >
-        textBox.height
-    ) {
-      fittedFontSize = Math.max(fontFloor, Math.floor(fittedFontSize * 0.9));
+    if (this._measurer) {
+      const measure = this._measurer;
+      fittedFontSize = fitTextToBox(
+        {
+          text: rawText,
+          width: textBox.width,
+          height: textBox.height,
+          fontSize,
+          lineHeight: 1.1,
+          minFontSize: fontFloor,
+        },
+        (t, s) => measure(t, s, { fontFamily: ctx.style.preset.fonts.body })
+      ).fontSize;
+    } else {
+      while (
+        fittedFontSize > fontFloor &&
+        this._estimateWrappedLines(rawText, textBox.width, fittedFontSize) *
+          1.1 *
+          fittedFontSize >
+          textBox.height
+      ) {
+        fittedFontSize = Math.max(fontFloor, Math.floor(fittedFontSize * 0.9));
+      }
     }
     const text = this._styledTextElement(slot, 'badge', rawText, textBox, ctx, {
       align: 'center',
@@ -4726,7 +4849,10 @@ export class AiDesignerComposerService implements OnModuleInit {
     ctx: ComposeContext
   ): DesignerElement {
     const shapes: Array<'rect' | 'ellipse' | 'star'> = ['rect', 'ellipse', 'star'];
-    const shape = shapes[index % shapes.length];
+    // Planned star geometry beats the deterministic cycle — `sides` on the
+    // slot means the planner asked for a starburst, not whatever the index
+    // happened to land on.
+    const shape = slot.sides ? 'star' : shapes[index % shapes.length];
     const accent =
       slot.style?.fill ?? ctx.style.accents[index % ctx.style.accents.length];
     const unit = Math.min(ctx.w, ctx.h);
@@ -4754,6 +4880,12 @@ export class AiDesignerComposerService implements OnModuleInit {
       locked: false,
       hidden: false,
       fill: accent,
+      ...(shape === 'star'
+        ? {
+            sides: Math.max(3, Math.min(64, Math.round(slot.sides ?? 5))),
+            innerRatio: Math.max(0.05, Math.min(0.95, slot.innerRatio ?? 0.5)),
+          }
+        : {}),
       originId: slot.id,
     } as DesignerElement;
   }
@@ -5334,13 +5466,110 @@ export class AiDesignerComposerService implements OnModuleInit {
     const fontSize = this._roleFontSize(b.role, ctx.scale);
     if (!b.text.trim()) return 0;
     const measure = this._measurer;
+    // The face, tracking and case the ELEMENT will actually get — mirrors
+    // `_styledTextElement`. This used to measure everything with the body
+    // face at zero tracking: headlines are set in `fonts.display` (often far
+    // wider per glyph), so the engine sized bands for a face it never used
+    // and papered over it with a 25% fudge.
+    const eff = this._effectiveTextStyle(b.slot, b.role, ctx);
+    const text = applyTextTransform(b.text, eff.textTransform);
     const lines = measure
-      ? wrapTextLines(b.text, width, fontSize, 0, (t, size) =>
-          measure(t, size, { fontFamily: ctx.style.preset.fonts.body })
+      ? wrapTextLines(
+          text,
+          width,
+          fontSize,
+          eff.letterSpacing,
+          (t, size) =>
+            measure(t, size, {
+              fontFamily: eff.fontFamily,
+              fontWeight: eff.fontWeight,
+            }),
+          eff.textScaleX
         ).length
-      : Math.max(1, Math.ceil((b.text.length * fontSize * 0.56) / Math.max(1, width)));
+      : Math.max(1, Math.ceil((text.length * fontSize * 0.56) / Math.max(1, width)));
     const lineHeight = b.role === 'headline' ? 1.1 : 1.35;
-    return Math.round(Math.max(1, lines) * lineHeight * fontSize * 1.25);
+    // Ascender/descender headroom only — the wrong-face compensation the old
+    // 1.25 carried is gone now that the measurement uses the real face.
+    return Math.round(Math.max(1, lines) * lineHeight * fontSize * MEASURE_HEADROOM);
+  }
+
+  /**
+   * A slot's gradient in the document's `DesignerGradient` form.
+   *
+   * The plan accepts either the legacy `[from, to]` tuple or the full object
+   * (multi-stop, radial, focal offset); the document only ever sees the full
+   * form. `angle` here follows the plan's convention (90 = top-to-bottom,
+   * matching the historical tuple behaviour) unless the plan set its own.
+   */
+  private _slotFillGradient(
+    gradient: DesignSlotStyle['gradient']
+  ): DesignerGradient | undefined {
+    if (!gradient) return undefined;
+    if (Array.isArray(gradient)) {
+      return {
+        type: 'linear',
+        angle: 90,
+        stops: [
+          { offset: 0, color: gradient[0] },
+          { offset: 1, color: gradient[1] },
+        ],
+      };
+    }
+    if (!gradient.stops?.length) return undefined;
+    return {
+      type: gradient.type === 'radial' ? 'radial' : 'linear',
+      angle: gradient.angle ?? 90,
+      ...(gradient.type === 'radial' && gradient.focalX !== undefined
+        ? { focalX: gradient.focalX }
+        : {}),
+      ...(gradient.type === 'radial' && gradient.focalY !== undefined
+        ? { focalY: gradient.focalY }
+        : {}),
+      stops: gradient.stops.map((s) => ({ offset: s.offset, color: s.color })),
+    };
+  }
+
+  /** The gradient's first stop — the flat fallback colour beneath a ramp. */
+  private _slotGradientFirstColor(
+    gradient: DesignSlotStyle['gradient']
+  ): string | undefined {
+    if (!gradient) return undefined;
+    return Array.isArray(gradient) ? gradient[0] : gradient.stops?.[0]?.color;
+  }
+
+  /**
+   * The font face, tracking, case and condensation a slot's text element will
+   * carry — the single source `_measureBound` and the element factory share,
+   * so the engine can never again size a band for a face the element doesn't
+   * use.
+   */
+  private _effectiveTextStyle(
+    slot: DesignSlot,
+    role: SlotRole,
+    ctx: ComposeContext
+  ): {
+    fontFamily: string;
+    fontWeight: number;
+    letterSpacing: number;
+    textTransform?: 'none' | 'uppercase' | 'lowercase' | 'capitalize';
+    textScaleX?: number;
+  } {
+    const { preset } = ctx.style;
+    const override = (slot.style || {}) as DesignSlotStyle;
+    const isDisplay = role === 'headline';
+    return {
+      fontFamily:
+        override.fontFamily ?? (isDisplay ? preset.fonts.display : preset.fonts.body),
+      fontWeight: override.fontWeight ?? this._roleFontWeight(role),
+      letterSpacing:
+        override.letterSpacing ?? (isDisplay ? preset.treatments.letterSpacing || 0 : 0),
+      textTransform:
+        override.textTransform ??
+        (isDisplay && preset.treatments.headlineTransform === 'uppercase'
+          ? 'uppercase'
+          : undefined),
+      textScaleX: override.textScaleX,
+    };
   }
 
   /**

@@ -1,3 +1,7 @@
+import {
+  applyTextTransform,
+  type TextTransform,
+} from '../../../media/designer-doc/fit-text';
 import type { MeasureText } from '../../../media/designer-doc/fit-text';
 
 /**
@@ -104,4 +108,41 @@ export const createTextMeasurer = async (
     cache.set(key, width);
     return width;
   };
+};
+
+/**
+ * Estimated word-wrap line count for a flat text at `fontSize` inside `width`
+ * px — deliberately pessimistic (0.55 × fontSize per glyph) so callers err on
+ * the small side. The DEGRADED path only: anything with a live measurer uses
+ * `fitTextToBox` on real glyph advances instead.
+ *
+ * One copy, transform-aware. This existed three times (composer, badge fit,
+ * doc-validator), and none of them measured the string the renderer would
+ * actually paint once case became a render property.
+ */
+export const estimateWrappedLines = (
+  text: string,
+  width: number,
+  fontSize: number,
+  textTransform?: TextTransform
+): number => {
+  const t = applyTextTransform(text, textTransform);
+  const maxChars = Math.max(1, Math.floor(width / (fontSize * 0.55)));
+  let lines = 1;
+  let current = 0;
+  for (const word of t.split(/\s+/)) {
+    const wordLen = Math.max(1, word.length);
+    if (current > 0 && current + 1 + wordLen > maxChars) {
+      lines++;
+      current = 0;
+    }
+    current = current > 0 ? current + 1 + wordLen : wordLen;
+    // A single word longer than the line is assumed to hard-wrap mid-word —
+    // a height-estimate convenience only; the renderer never splits a word.
+    while (current > maxChars) {
+      lines++;
+      current -= maxChars;
+    }
+  }
+  return lines;
 };

@@ -2,6 +2,7 @@ import { EFFECT_RECIPE_IDS, effectCatalogPrompt } from './effect-recipes';
 import { IMAGE_TREATMENT_IDS, treatmentCatalogPrompt } from './image-treatments';
 import { MASK_RECIPE_IDS, maskCatalogPrompt } from './mask-recipes';
 import { DECOR_RECIPE_IDS, decorCatalogPrompt } from './decor-recipes';
+import { WARP_RECIPE_IDS, warpCatalogPrompt } from './warp-recipes';
 
 /**
  * The design vocabulary, as the planning model is shown it.
@@ -28,6 +29,9 @@ export const designLanguagePrompt = (): string =>
     '',
     'DECOR — vector marks carrying no content. At most one "loud" mark per design.',
     decorCatalogPrompt(),
+    '',
+    'WARPS — bends applied to a shape/badge/CTA plate, given by name on the slot as `warp`.',
+    warpCatalogPrompt(),
   ].join('\n');
 
 /** Every id the plan schema will accept, for validation and for specs. */
@@ -36,4 +40,5 @@ export const DESIGN_LANGUAGE_IDS = {
   treatments: IMAGE_TREATMENT_IDS,
   masks: MASK_RECIPE_IDS,
   decor: DECOR_RECIPE_IDS,
+  warps: WARP_RECIPE_IDS,
 } as const;

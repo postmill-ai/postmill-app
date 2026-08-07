@@ -47,6 +47,8 @@ export interface DesignSkillArtDirection {
   decor?: string[];
   /** Mask recipe ids that suit this genre. */
   masks?: string[];
+  /** Warp recipe ids (arched/waving plates) that suit this genre. */
+  warps?: string[];
 }
 
 export interface DesignSkill {

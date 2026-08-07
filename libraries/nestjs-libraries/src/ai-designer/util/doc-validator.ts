@@ -3,6 +3,7 @@ import type {
   DesignerElement,
   DesignerOutput,
 } from '@postmill-ai/nestjs-libraries/media/designer-doc/designer-doc.schema';
+import { estimateWrappedLines } from '../agents/composer/measure-text';
 import {
   getSafeZoneInset,
   groupKeyOf,
@@ -173,33 +174,24 @@ const clamp = (v: number, min: number, max: number) =>
 const elLabel = (el: DesignerElement): string => el.originId || el.id;
 
 /**
- * Estimated word-wrap line count for a flat text at `fontSize` inside
- * `width` px — same deliberately pessimistic 0.55 × fontSize glyph advance
- * as the composer's estimator, so the badge refit errs on the small side.
+ * Whether a shape actually puts pixels on the page.
+ *
+ * `fill`/`fillGradient` are the obvious cases; a glass panel paints through
+ * `backdropFilter`, and an element whose only paint is a color/gradient
+ * overlay LAYER STYLE is just as visible. The occlusion checks treated all of
+ * those as invisible, which flagged (and could strip) perfectly painted
+ * elements the new vocabulary emits.
  */
-const estimateWrappedLines = (
-  text: string,
-  width: number,
-  fontSize: number
-): number => {
-  const maxChars = Math.max(1, Math.floor(width / (fontSize * 0.55)));
-  let lines = 1;
-  let current = 0;
-  for (const word of text.split(/\s+/)) {
-    const wordLen = Math.max(1, word.length);
-    if (current > 0 && current + 1 + wordLen > maxChars) {
-      lines++;
-      current = 0;
-    }
-    current = current > 0 ? current + 1 + wordLen : wordLen;
-    // A single word longer than the line hard-wraps mid-word.
-    while (current > maxChars) {
-      lines++;
-      current -= maxChars;
-    }
-  }
-  return lines;
-};
+const isPaintedShape = (el: DesignerElement): boolean =>
+  !!el.fill ||
+  !!el.fillGradient ||
+  !!el.backdropFilter ||
+  (el.styles ?? []).some(
+    (s) =>
+      (s.type === 'color-overlay' || s.type === 'gradient-overlay') &&
+      s.enabled !== false
+  );
+
 
 /**
  * Validate (and repair) a design doc. `opts.plan` unlocks the degenerate
@@ -534,7 +526,7 @@ function validateOutput(
     const innerFor = (star: Box): Box =>
       starVisualBox(star, STAR_LABEL_SAFE_RATIO);
     const fitsAt = (inner: Box, size: number): boolean =>
-      estimateWrappedLines(label.text as string, inner.width, size) *
+      estimateWrappedLines(label.text as string, inner.width, size, label.textTransform) *
         (label.lineHeight || 1.2) *
         size <=
       inner.height;
@@ -669,7 +661,15 @@ function validateOutput(
         ...el,
         ...star,
         ...(revertedToPill
-          ? { shape: 'rect', borderRadius: Math.round(star.height / 2) }
+          ? {
+              shape: 'rect',
+              borderRadius: Math.round(star.height / 2),
+              // Stale star geometry must not survive the revert — a later
+              // edit switching the shape back would resurrect whatever
+              // point count happened to be lying around.
+              sides: undefined,
+              innerRatio: undefined,
+            }
           : {}),
       };
     }
@@ -728,7 +728,7 @@ function validateOutput(
       // its box, so it is transparent to this scan — keep looking DOWN the
       // stack. Stopping here hid an IMAGE under an unfilled shape and judged
       // the chip against the output background instead (same bug as §4).
-      if (!other.fill && !other.fillGradient) continue;
+      if (!isPaintedShape(other)) continue;
       beneath = parseSolidHex(other.fill);
       break; // a gradient has no single hex to judge: fall through to the bg
     }
@@ -828,7 +828,7 @@ function validateOutput(
       // scan — keep looking DOWN the stack. Stopping here hid the IMAGE under
       // an unfilled button and silently judged the text against the output bg
       // instead: a #FF00E5 label shipped on a magenta photo at 1.73:1.
-      if (!other.fill && !other.fillGradient) continue;
+      if (!isPaintedShape(other)) continue;
       underlying = parseSolidHex(other.fill);
       underlyingIdx = k;
       break; // a gradient has no single hex to judge: fall through to the bg

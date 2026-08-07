@@ -576,7 +576,11 @@ describe('AiDesignerComposerService.compose (style-aware)', () => {
     const headline = byOrigin(doc, 'headline');
     // Default preset is 'bold' (Anton display, uppercase headline).
     expect(headline.fontFamily).toBe('Anton');
-    expect(headline.text).toBe('BIG LAUNCH');
+    // Case is a render property now: the document keeps the authored copy and
+    // the transform paints it uppercase — the renderer's fitter measures the
+    // transformed string, so nothing downstream sees mutated text.
+    expect(headline.text).toBe('Big launch');
+    expect(headline.textTransform).toBe('uppercase');
   });
 
   it('lets a per-slot style override win over preset defaults', async () => {
@@ -6736,5 +6740,75 @@ describe('AiDesignerComposerService risky-crop subject detection (round 7 D)', (
     const el = (out.outputs[0] as any).children[0];
     expect(el.subjectPoint).toEqual({ x: 0.02, y: 0.5 });
     expect(el.focalPoint).toEqual({ x: 0.5, y: 0.5 });
+  });
+});
+
+describe('AiDesignerComposerService.compose (new designer vocabulary)', () => {
+  it('emits the plan slot’s type tools on the text element', async () => {
+    const plan = makePlan();
+    plan.slots = plan.slots.map((s) =>
+      s.id === 'headline'
+        ? {
+            ...s,
+            style: {
+              textScaleX: 0.65,
+              textTransform: 'uppercase' as const,
+              curve: 'arc-up' as const,
+              letterSpacing: 3,
+            },
+          }
+        : s
+    );
+    const doc = await composeWith(plan);
+    const headline = byOrigin(doc, 'headline');
+    expect(headline.textScaleX).toBe(0.65);
+    expect(headline.textTransform).toBe('uppercase');
+    // The plan names the arc; the emitter owns the degrees.
+    expect(headline.curve).toBe(30);
+    expect(headline.letterSpacing).toBe(3);
+  });
+
+  it('emits a multi-stop radial gradient from the widened plan form', async () => {
+    const plan = makePlan();
+    plan.slots = plan.slots.map((s) =>
+      s.id === 'headline'
+        ? {
+            ...s,
+            style: {
+              gradient: {
+                type: 'radial' as const,
+                focalX: 0.3,
+                focalY: 0.25,
+                stops: [
+                  { color: '#ff5a36', offset: 0 },
+                  { color: '#7a1fff', offset: 0.6 },
+                  { color: '#0b1020', offset: 1 },
+                ],
+              },
+            },
+          }
+        : s
+    );
+    const doc = await composeWith(plan);
+    const headline = byOrigin(doc, 'headline');
+    expect(headline.fillGradient?.type).toBe('radial');
+    expect(headline.fillGradient?.stops).toHaveLength(3);
+    expect(headline.fillGradient?.focalX).toBe(0.3);
+  });
+
+  it('legacy tuple gradients still emit a two-stop linear ramp', async () => {
+    const plan = makePlan();
+    plan.slots = plan.slots.map((s) =>
+      s.id === 'headline'
+        ? { ...s, style: { gradient: ['#ff5a36', '#0b1020'] as [string, string] } }
+        : s
+    );
+    const doc = await composeWith(plan);
+    const headline = byOrigin(doc, 'headline');
+    expect(headline.fillGradient?.type).toBe('linear');
+    expect(headline.fillGradient?.stops).toEqual([
+      { offset: 0, color: '#ff5a36' },
+      { offset: 1, color: '#0b1020' },
+    ]);
   });
 });

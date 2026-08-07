@@ -3,7 +3,12 @@ import type {
   DesignerBlendMode,
 } from '../../media/designer-doc/designer-doc.schema';
 import { BLEND_MODES } from '../../media/designer-doc/designer-doc.schema';
-import { expandEffects, type EffectContext } from './effect-recipes';
+import {
+  expandEffects,
+  expandEffectElementPatches,
+  type EffectContext,
+} from './effect-recipes';
+import { expandWarp } from './warp-recipes';
 import { expandTreatment } from './image-treatments';
 import { expandMask } from './mask-recipes';
 export { limitDecor } from './decor-recipes';
@@ -42,6 +47,9 @@ export const applySlotRecipes = (
     mask?: string;
     blend?: string;
     rotation?: number;
+    warp?: string;
+    sides?: number;
+    innerRatio?: number;
   },
   box: { width: number; height: number },
   ctx: ApplyContext,
@@ -52,8 +60,39 @@ export const applySlotRecipes = (
   // Effects apply to anything with a silhouette. Capped hard: a model given a
   // list will reach for three, and three layer styles on one element is the
   // difference between designed and decorated.
-  const effects = expandEffects((slot.effects || []).slice(0, MAX_EFFECTS_PER_ELEMENT), ctx);
+  const cappedEffects = (slot.effects || []).slice(0, MAX_EFFECTS_PER_ELEMENT);
+  const effects = expandEffects(cappedEffects, ctx);
   if (effects.length) patch.styles = effects;
+
+  // Some recipes contribute ELEMENT fields rather than layer styles — a glass
+  // panel's backdropFilter, a gradient headline's fillGradient. Gated by kind:
+  // a backdrop blur on text or a text gradient on an image is a silently
+  // broken element, the same rule treatments follow below.
+  const elementPatch = expandEffectElementPatches(cappedEffects, ctx);
+  if (elementPatch.backdropFilter && ctx.kind === 'shape') {
+    patch.backdropFilter = elementPatch.backdropFilter;
+    if (elementPatch.fill) patch.fill = elementPatch.fill;
+  }
+  if (elementPatch.fillGradient && (ctx.kind === 'text' || ctx.kind === 'shape')) {
+    patch.fillGradient = elementPatch.fillGradient;
+  }
+
+  // A named warp bends a plate — shapes only; warped text is the renderer's
+  // curved-text feature, expressed through `style.curve` instead.
+  if (slot.warp && ctx.kind === 'shape') {
+    const warp = expandWarp(slot.warp);
+    if (warp) patch.warp = warp;
+  }
+
+  // Star points / polygon sides on accent shapes.
+  if (ctx.kind === 'shape') {
+    if (typeof slot.sides === 'number' && Number.isFinite(slot.sides)) {
+      patch.sides = Math.max(3, Math.min(64, Math.round(slot.sides)));
+    }
+    if (typeof slot.innerRatio === 'number' && Number.isFinite(slot.innerRatio)) {
+      patch.innerRatio = Math.max(0.05, Math.min(0.95, slot.innerRatio));
+    }
+  }
 
   // Treatments and masks are pixel operations; they mean nothing on a text or
   // shape layer, and applying them anyway produces a silently broken element

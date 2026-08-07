@@ -85,6 +85,12 @@ describe('art direction references only things that exist', () => {
     }
   });
 
+  it.each(withArt)('%s names real warps', (id, art) => {
+    for (const warp of art.warps ?? []) {
+      expect(DESIGN_LANGUAGE_IDS.warps, `${id} names warp "${warp}"`).toContain(warp);
+    }
+  });
+
   it.each(withArt)('%s names real decor', (id, art) => {
     for (const decor of art.decor ?? []) {
       expect(DESIGN_LANGUAGE_IDS.decor, `${id} names decor "${decor}"`).toContain(decor);

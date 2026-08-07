@@ -1,4 +1,4 @@
-import type { DesignerLayerStyle } from '../../media/designer-doc/designer-doc.schema';
+import type { DesignerElement, DesignerLayerStyle } from '../../media/designer-doc/designer-doc.schema';
 import { MAX_LAYER_STYLES } from '../../media/designer-doc/designer-doc.limits';
 
 /**
@@ -44,6 +44,13 @@ export interface EffectRecipe {
   /** One line, shown to the planning model. Say what it LOOKS like. */
   description: string;
   expand(ctx: EffectContext): DesignerLayerStyle[];
+  /**
+   * ELEMENT fields this recipe contributes, for capabilities that are not
+   * layer styles — a frosted panel's `backdropFilter`, a headline's
+   * `fillGradient`. Merged by `applySlotRecipes` (shape/text gating there);
+   * absent for the classic style-only recipes.
+   */
+  elementPatch?(ctx: EffectContext): Partial<DesignerElement>;
 }
 
 // ---------------------------------------------------------------------------
@@ -512,6 +519,69 @@ export const EFFECT_RECIPES: EffectRecipe[] = [
       },
     ],
   },
+  {
+    id: 'glass-panel',
+    label: 'Glass Panel',
+    description:
+      'A frosted-glass plate: blurs and enriches whatever sits behind it, with a translucent surface — the modern way to float copy over a busy photo.',
+    // The frost is an ELEMENT capability (`backdropFilter`), not a layer
+    // style; the subtle edge below is what sells the material.
+    expand: (ctx) => [
+      {
+        type: 'stroke',
+        color: rgba('#ffffff', ctx.backdrop === 'dark' ? 0.25 : 0.45),
+        size: Math.max(1, Math.round(ctx.basis * DEPTH.hairline * 0.5)),
+        position: 'inside',
+        opacity: 1,
+      },
+    ],
+    elementPatch: (ctx) => ({
+      backdropFilter: {
+        blur: Math.max(6, Math.round(ctx.basis * DEPTH.soft)),
+        saturate: 1.4,
+      },
+      fill: rgba(
+        ctx.backdrop === 'dark' ? '#ffffff' : surfaceOf(ctx.palette),
+        ctx.backdrop === 'dark' ? 0.12 : 0.55
+      ),
+    }),
+  },
+  {
+    id: 'gradient-headline',
+    label: 'Gradient Headline',
+    description:
+      'The type itself carries a two-tone ramp from the accent into the ink — a gradient headline, the poster staple.',
+    expand: () => [],
+    elementPatch: (ctx) => ({
+      fillGradient: {
+        type: 'linear',
+        angle: 90,
+        stops: [
+          { offset: 0, color: accentOf(ctx.palette) },
+          { offset: 1, color: inkOf(ctx.palette) },
+        ],
+      },
+    }),
+  },
+  {
+    id: 'radial-glow',
+    label: 'Radial Glow',
+    description:
+      'A radial ramp with an off-centre highlight — the element reads as lit from above-left rather than flood-filled.',
+    expand: () => [],
+    elementPatch: (ctx) => ({
+      fillGradient: {
+        type: 'radial',
+        focalX: 0.35,
+        focalY: 0.3,
+        stops: [
+          { offset: 0, color: accentOf(ctx.palette) },
+          { offset: 0.65, color: inkOf(ctx.palette) },
+          { offset: 1, color: rgba(inkOf(ctx.palette), 1) },
+        ],
+      },
+    }),
+  },
 ];
 
 export const EFFECT_RECIPE_IDS: string[] = EFFECT_RECIPES.map((r) => r.id);
@@ -554,3 +624,21 @@ export const expandEffects = (
  */
 export const effectCatalogPrompt = (): string =>
   EFFECT_RECIPES.map((r) => `- ${r.id}: ${r.description}`).join('\n');
+
+/**
+ * The element-field contributions of a recipe list — the companion to
+ * `expandEffects` for capabilities that live on the element rather than in
+ * its style stack. Later recipes win on a conflicting key, same as CSS.
+ */
+export const expandEffectElementPatches = (
+  ids: string[] | undefined,
+  ctx: EffectContext
+): Partial<DesignerElement> => {
+  let patch: Partial<DesignerElement> = {};
+  for (const id of ids || []) {
+    const recipe = effectRecipeById(id);
+    if (!recipe?.elementPatch) continue;
+    patch = { ...patch, ...recipe.elementPatch(ctx) };
+  }
+  return patch;
+};

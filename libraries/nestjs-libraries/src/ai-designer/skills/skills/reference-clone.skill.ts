@@ -29,6 +29,10 @@ Rules:
 - Reproduce the mood devices: a dark/moody reference demands treatment "moody-dark" + effect "vignette" + a slot "scrim" on the copy side; a bright/clean reference demands a light treatment and quiet type zones, no vignette.
 - Reproduce the decor with the closest DECOR recipe (a swash under a script line, a rule between blocks, a wavy divider) — "none" only when the reference is truly bare.
 - Keep the hierarchy: the headline at least 2.5x the subhead; small print genuinely small (typeScale legal at most 0.2).
+- Condensed display type in the reference is style textScaleX 0.6-0.8 on the SAME face — never a wider face at a smaller size, and never squashed copy.
+- All-caps lines in the reference use style textTransform "uppercase" (case is a render property — keep the copy as authored) with letterSpacing 2-6 on small tracked lines.
+- An arched or waving ribbon plate uses warp "arc-banner" / "arc-down-banner" / "flag-wave" on the badge slot; a curved accent LINE of text uses style curve "arc-up" or "arc-down".
+- A gradient headline in the reference is effect "gradient-headline"; a frosted panel behind copy is effect "glass-panel".
 - Variants may differ in arrangement (composition, panel side, badge corner) but NEVER in fidelity: every variant carries the reference's full type stack, mood devices and decor.`,
   layoutHints: {
     formatTemplates: ['poster-left', 'hero-fullbleed', 'split-panel'],
@@ -44,7 +48,8 @@ Rules:
   },
   artDirection: {
     compositions: ['poster-left', 'hero-fullbleed', 'split-panel'],
-    effects: ['vignette', 'scrim-veil', 'legibility-halo', 'soft-lift'],
+    effects: ['vignette', 'scrim-veil', 'legibility-halo', 'soft-lift', 'gradient-headline', 'glass-panel'],
+    warps: ['arc-banner', 'arc-down-banner', 'flag-wave'],
     treatments: ['moody-dark', 'contrast-punch', 'high-key', 'film-grain'],
     decor: ['underline-swash', 'swash-pair', 'wavy-rule', 'short-rule', 'rule', 'quote-marks'],
   },

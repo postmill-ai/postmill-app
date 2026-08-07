@@ -76,6 +76,7 @@ export const StoryCoverSkill = defineSkill({
   direction:
     'Aim at a title card seen for half a second while a thumb is already moving. Vertical, centred, enormous type in the middle third — the top and bottom belong to the platform and anything placed there is gone.',
   rules: [
+    'Vertical title-card type is condensed: textScaleX 0.6-0.75 on the middle-third headline.',
     'All copy lives in the middle third. The top and bottom fifths are platform chrome.',
     'One idea. A story cover with two messages communicates neither.',
     'Type large enough to read while scrolling: at least a tenth of the canvas height for the headline.',
@@ -89,7 +90,7 @@ export const StoryCoverSkill = defineSkill({
   ],
   art: {
     compositions: ['hero-fullbleed', 'type-dominant', 'stacked-thirds'],
-    effects: ['legibility-halo', 'sticker-pop', 'hard-shadow'],
+    effects: ['legibility-halo', 'sticker-pop', 'hard-shadow', 'gradient-headline'],
     treatments: ['contrast-punch', 'moody-dark', 'soft-backdrop'],
     decor: ['none', 'chevron'],
   },
@@ -106,6 +107,7 @@ export const YoutubeThumbnailSkill = defineSkill({
   direction:
     'Aim at a tabloid front page, not a poster. Three or four words maximum at enormous weight, a face with a readable expression, and saturated contrast. This genre rewards obviousness — subtlety is invisible at 168 pixels wide.',
   rules: [
+    'Tabloid type is condensed and shouted: textScaleX 0.62-0.75, textTransform "uppercase" — never a long word at a small size.',
     'Three to four words. Five is too many; a sentence is invisible.',
     'If a person appears, crop tight enough that the expression reads at thumbnail size.',
     'Outline or halo the type. Thumbnails sit on unpredictable backgrounds in the sidebar.',
@@ -136,6 +138,7 @@ export const PodcastEpisodeSkill = defineSkill({
   direction:
     'Aim at a record sleeve. Square, a strong central mark or portrait, episode number treated as typography rather than metadata. Consistency across episodes matters more than novelty in any one.',
   rules: [
+    'The episode number can sit on a radial-glow ground (effect radial-glow) like a lit record sleeve.',
     'The episode number is a design element — set it deliberately, not as a caption.',
     'Guest name and episode title are the two facts that matter; the show name is a constant and can be small.',
     'Keep a fixed zone for the number so a series reads as a series.',
@@ -150,7 +153,7 @@ export const PodcastEpisodeSkill = defineSkill({
   ],
   art: {
     compositions: ['split-panel', 'centred-emblem', 'overlap-card', 'poster-frame'],
-    effects: ['soft-lift', 'keyline', 'gradient-sheen'],
+    effects: ['soft-lift', 'keyline', 'gradient-sheen', 'radial-glow'],
     treatments: ['duotone-brand', 'mono-tint', 'moody-dark'],
     masks: ['circle', 'squircle', 'arch'],
     decor: ['rule', 'short-rule'],

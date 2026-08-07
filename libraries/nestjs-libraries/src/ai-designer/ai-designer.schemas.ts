@@ -66,7 +66,27 @@ const SlotStyleSchema = z
     fontFamily: z.string().max(200).optional(),
     fontWeight: z.number().int().min(100).max(900).optional(),
     fill: z.string().max(100).optional(),
-    gradient: z.tuple([z.string().max(100), z.string().max(100)]).optional(),
+    // Legacy two-stop tuple or the full form (multi-stop, radial + focal).
+    gradient: z
+      .union([
+        z.tuple([z.string().max(100), z.string().max(100)]),
+        z.object({
+          type: z.enum(['linear', 'radial']).optional(),
+          angle: z.number().min(-360).max(360).optional(),
+          focalX: z.number().min(0).max(1).optional(),
+          focalY: z.number().min(0).max(1).optional(),
+          stops: z
+            .array(
+              z.object({
+                color: z.string().max(100),
+                offset: z.number().min(0).max(1),
+              })
+            )
+            .min(2)
+            .max(5),
+        }),
+      ])
+      .optional(),
     stroke: z
       .object({
         color: z.string().max(100),
@@ -92,6 +112,24 @@ const SlotStyleSchema = z
     letterSpacing: z.number().min(-2).max(20).optional(),
     lineHeight: z.number().min(1).max(1.6).optional(),
     opacity: z.number().min(0).max(1).optional(),
+    // Condensation, case, paragraph rhythm and arc — the new type tools. All
+    // clamped to craft ranges tighter than the document schema allows.
+    textScaleX: z.number().min(0.5).max(1.25).optional(),
+    textTransform: z.enum(['none', 'uppercase', 'lowercase', 'capitalize']).optional(),
+    paragraphSpacing: z.number().min(0).max(100).optional(),
+    firstLineIndent: z.number().min(0).max(100).optional(),
+    curve: z.enum(['arc-up', 'arc-down']).optional(),
+    borderRadius: z
+      .union([
+        z.number().min(0).max(400),
+        z.tuple([
+          z.number().min(0).max(400),
+          z.number().min(0).max(400),
+          z.number().min(0).max(400),
+          z.number().min(0).max(400),
+        ]),
+      ])
+      .optional(),
     badgeStyle: z.enum(['pill', 'burst', 'ribbon']).optional(),
     ctaStyle: z.enum(['pill', 'rect', 'underline', 'outline']).optional(),
   })
@@ -131,6 +169,9 @@ const DesignSlotSchema = z
     mask: RecipeNameSchema.optional(),
     blend: z.string().max(40).optional(),
     rotation: z.number().min(-180).max(180).optional(),
+    warp: RecipeNameSchema.optional(),
+    sides: z.number().int().min(3).max(12).optional(),
+    innerRatio: z.number().min(0.3).max(0.7).optional(),
     // A directional gradient scrim over this image slot so type on top stays
     // legible — the planner's dial for creating a quiet type zone.
     scrim: z

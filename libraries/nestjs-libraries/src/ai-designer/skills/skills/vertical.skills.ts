@@ -16,6 +16,7 @@ export const RestaurantDishSkill = defineSkill({
   direction:
     'Aim at a food magazine spread. The photograph is everything: shot close, warm, shallow. Type stays out of its way — a small caption at the edge, never a headline across the plate.',
   rules: [
+    'An establishment line ("EST. 1998", "WOOD-FIRED") may ride an arched ribbon (warp arc-banner) with a curved accent line above the dish (style curve "arc-up").',
     'The food fills the frame. A dish photographed small looks unappetising.',
     'Warm the imagery slightly; cool grading makes food look inedible.',
     'Name the dish exactly as the brief gives it, including any accents or diacritics.',
@@ -28,6 +29,7 @@ export const RestaurantDishSkill = defineSkill({
     { id: 'badge', role: 'badge', kind: 'badge' },
   ],
   art: {
+    warps: ['arc-banner'],
     compositions: ['hero-fullbleed', 'poster-frame', 'overlap-card', 'editorial-sidebar'],
     effects: ['soft-lift', 'legibility-halo'],
     treatments: ['warm-tint', 'sun-drenched', 'crisp'],
@@ -46,6 +48,7 @@ export const FitnessClassSkill = defineSkill({
   direction:
     'Aim at a sportswear campaign: high contrast, motion, hard-edged type set tight and uppercase. Cool or desaturated grading with one hot accent. Energy comes from contrast and angle, not from exclamation marks.',
   rules: [
+    'Sportswear type is tight uppercase AND condensed: textTransform "uppercase", textScaleX 0.65-0.8, letterSpacing 1-3.',
     'Schedule facts — day, time, place — are load-bearing and must be legible.',
     'Type set tight and heavy. Light weights read as wellness, not as training.',
     'Grade imagery hard: raise contrast, drop saturation, keep one accent hot.',
@@ -140,6 +143,7 @@ export const SaasFeatureSkill = defineSkill({
   direction:
     'Aim at a developer-tool landing page: dark or near-dark ground, one accent, a UI fragment shown at an angle with a soft glow behind it. Precision reads as competence, which is what the genre is selling.',
   rules: [
+    'Float the feature copy on a glass-panel plate over the dark ground; one radial-glow accent behind the product shot at most.',
     'Show a fragment of the interface, not the whole screen. A full screenshot is illegible at social size.',
     'One capability per design. Feature lists belong in a carousel.',
     'Technical accuracy matters — never invent a capability or an integration.',
@@ -154,7 +158,7 @@ export const SaasFeatureSkill = defineSkill({
   ],
   art: {
     compositions: ['overlap-card', 'split-panel', 'hero-fullbleed', 'stacked-thirds'],
-    effects: ['drop-depth', 'halo', 'glass-edge', 'gradient-sheen'],
+    effects: ['drop-depth', 'halo', 'glass-edge', 'gradient-sheen', 'glass-panel', 'radial-glow'],
     treatments: ['moody-dark', 'cool-tint', 'crisp'],
     masks: ['soft-corners', 'squircle'],
     decor: ['dot-grid', 'rule', 'arc'],

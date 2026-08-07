@@ -9,6 +9,7 @@ export const HolidaySkill = defineSkill({
   direction:
     'Aim at a well-made seasonal card, not a stock template. Pick the season\'s palette and ONE motif, then execute it properly — the failure mode of this genre is a scatter of clip-art snowflakes standing in for a decision.',
   rules: [
+    'A season ribbon may arch (warp arc-banner); script accent lines may bow with style curve "arc-up".',
     'One motif, used once, at size. Repeated ornament reads as a template.',
     'The greeting is short and specific to the occasion named in the brief.',
     'Do not assume a religion or a culture the brief did not state.',
@@ -22,6 +23,7 @@ export const HolidaySkill = defineSkill({
     { id: 'decor', role: 'decor', kind: 'accent-shape' },
   ],
   art: {
+    warps: ['arc-banner'],
     compositions: ['centred-emblem', 'minimal-centered', 'hero-fullbleed', 'poster-frame'],
     effects: ['gradient-sheen', 'letterpress', 'halo', 'chisel'],
     treatments: ['warm-tint', 'faded-matte', 'mono-tint'],
@@ -98,6 +100,7 @@ export const GiveawaySkill = defineSkill({
   direction:
     'Aim at a fairground prize board: energetic, but with the mechanics laid out plainly. The tension in this genre is excitement versus rules, and the rules must survive — an unclear giveaway generates complaints, not entries.',
   rules: [
+    'The prize board starburst is a real star: accent-shape slot with sides 12-16 and innerRatio 0.55.',
     'The prize is the headline. What someone wins comes before how they enter.',
     'Entry mechanics are explicit and numbered where there is more than one step.',
     'The closing date and any restrictions go in a legal slot — present, not hidden.',

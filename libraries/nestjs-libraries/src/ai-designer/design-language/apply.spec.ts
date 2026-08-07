@@ -153,3 +153,54 @@ describe('strengthForDepth', () => {
     expect(strengthForDepth('nonsense')).toBe(strengthForDepth('layered'));
   });
 });
+
+describe('applySlotRecipes — the new vocabulary', () => {
+  it('bends a shape with a named warp, and only a shape', () => {
+    const onShape = applySlotRecipes({ warp: 'arc-banner' }, box, ctx({ kind: 'shape' }));
+    expect(onShape.warp).toEqual({ preset: 'arc', bend: 26 });
+    // Warped text is the renderer's curved-text feature (`style.curve`), so a
+    // warp on a text slot must not leak through this path.
+    const onText = applySlotRecipes({ warp: 'arc-banner' }, box, ctx({ kind: 'text' }));
+    expect(onText.warp).toBeUndefined();
+  });
+
+  it('degrades an unknown warp name to no change', () => {
+    const patch = applySlotRecipes({ warp: 'nope' }, box, ctx({ kind: 'shape' }));
+    expect(patch.warp).toBeUndefined();
+  });
+
+  it('frosts a glass-panel shape and refuses to frost text', () => {
+    const onShape = applySlotRecipes({ effects: ['glass-panel'] }, box, ctx({ kind: 'shape' }));
+    expect(onShape.backdropFilter?.blur).toBeGreaterThan(0);
+    expect(onShape.fill).toBeTruthy();
+    const onText = applySlotRecipes({ effects: ['glass-panel'] }, box, ctx({ kind: 'text' }));
+    expect(onText.backdropFilter).toBeUndefined();
+  });
+
+  it('puts a gradient-headline ramp on text and a radial glow on shapes', () => {
+    const headline = applySlotRecipes(
+      { effects: ['gradient-headline'] },
+      box,
+      ctx({ kind: 'text' })
+    );
+    expect(headline.fillGradient?.type).toBe('linear');
+    expect(headline.fillGradient?.stops).toHaveLength(2);
+
+    const glow = applySlotRecipes({ effects: ['radial-glow'] }, box, ctx({ kind: 'shape' }));
+    expect(glow.fillGradient?.type).toBe('radial');
+    expect(glow.fillGradient?.focalX).toBeLessThan(0.5);
+    // But never on an image — a text gradient on a photo is a broken element.
+    const onImage = applySlotRecipes({ effects: ['radial-glow'] }, box, ctx({ kind: 'image' }));
+    expect(onImage.fillGradient).toBeUndefined();
+  });
+
+  it('clamps planned star geometry into the schema range', () => {
+    const patch = applySlotRecipes(
+      { sides: 100, innerRatio: 0.01 },
+      box,
+      ctx({ kind: 'shape' })
+    );
+    expect(patch.sides).toBe(64);
+    expect(patch.innerRatio).toBe(0.05);
+  });
+});

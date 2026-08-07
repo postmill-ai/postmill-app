@@ -121,6 +121,12 @@ export interface FitTextBox {
   scaleX?: number;
   /** Applied before wrapping, because case changes the measurement. */
   textTransform?: TextTransform;
+  /**
+   * Absolute floor for the shrink loop, overriding the default
+   * `max(8, 60% of authored)`. The AI composer's role floors are absolute
+   * pixel values; without this it could not reuse the shared fitter.
+   */
+  minFontSize?: number;
   /** Extra leading before each paragraph after the first, in px. */
   paragraphSpacing?: number;
   /** First-line indent of each paragraph, in px. */
@@ -154,10 +160,10 @@ export const fitTextToBox = (
 ): FittedText => {
   const lineHeightFactor = box.lineHeight || DEFAULT_LINE_HEIGHT;
   const letterSpacing = box.letterSpacing || 0;
-  const floor = Math.max(
-    MIN_FIT_FONT_SIZE,
-    Math.floor(box.fontSize * FIT_FLOOR_RATIO)
-  );
+  const floor =
+    box.minFontSize !== undefined
+      ? Math.max(1, Math.floor(box.minFontSize))
+      : Math.max(MIN_FIT_FONT_SIZE, Math.floor(box.fontSize * FIT_FLOOR_RATIO));
   let size = box.fontSize;
   const scaleX = box.scaleX || 1;
   const paragraphSpacing = box.paragraphSpacing || 0;
