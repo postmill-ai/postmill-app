@@ -1158,7 +1158,7 @@ export class AiDesignerArtDirectorService implements OnModuleInit {
       panelSide:
         "'left' | 'right' (optional) — split/sidebar layouts only: the side the TEXT panel sits on",
       badgePosition:
-        "'top-left' | 'top-right' | 'bottom-left' | 'bottom-right' | 'center' (optional) — the corner the badge sits in, inside the text panel for split/sidebar layouts and inside the full canvas otherwise",
+        "'top-left' | 'top-center' | 'top-right' | 'bottom-left' | 'bottom-center' | 'bottom-right' | 'center' (optional) — the corner the badge sits in, inside the text panel for split/sidebar layouts and inside the full canvas otherwise",
       palette: 'string[]',
       typeScale: 'Record<string, number>',
       background: {

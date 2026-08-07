@@ -1182,9 +1182,15 @@ describe('AiDesignerArtDirectorService brief constraints (workstream 3)', () => 
     });
     expect(parsed.panelSide).toBe('left');
     expect(parsed.badgePosition).toBe('bottom-right');
-    expect(() =>
-      DesignPlanSchema.parse({ ...plan, badgePosition: 'middle-left' })
-    ).toThrow();
+    // Contract CHANGED (deliberately): an unknown badgePosition degrades to
+    // "no plan-supplied position" rather than throwing. Throwing here took a
+    // live session down — the planner asked for the perfectly reasonable
+    // `top-center`, the enum lacked it, and because the brief is re-validated
+    // on every write the user got "I hit a problem, please try again" for a
+    // badge that would otherwise have landed a few pixels off.
+    expect(
+      DesignPlanSchema.parse({ ...plan, badgePosition: 'middle-left' }).badgePosition
+    ).toBeUndefined();
     expect(parsed.slots[0].style?.badgeStyle).toBe('burst');
 
     expect(() =>

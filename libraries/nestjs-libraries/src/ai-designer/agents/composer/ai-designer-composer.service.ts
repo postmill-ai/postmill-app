@@ -111,12 +111,17 @@ import {
  */
 const MEASURE_HEADROOM = 1.08;
 
+/** An instruction that actually asks for something to be taken off the design. */
+const REMOVAL_INTENT_RE =
+  /\b(remove|delete|drop|get rid of|take (it |them )?(out|off)|without the|no more)\b/i;
+
 /** Whether a critic-supplied blend name is one the renderer composites. */
 const isDesignerBlendMode = (
   value: string
 ): value is import('@postmill-ai/nestjs-libraries/media/designer-doc/designer-doc.schema').DesignerBlendMode =>
   (BLEND_MODES as readonly string[]).includes(value);
 import { createTextMeasurer, estimateWrappedLines, type FaceMeasurer } from './measure-text';
+import { isScriptFamily, resolveFontFamily } from './resolve-font-family';
 import {
   applySlotRecipes,
   emitDecor,
@@ -2295,6 +2300,30 @@ export class AiDesignerComposerService implements OnModuleInit {
                 moved = true;
                 continue;
               }
+              // The last resort re-stacks rather than moves — fine when the
+              // mover is itself copy (the two lines just swap depth), but
+              // fatal when the MOVER is an opaque lockup: a CTA plate parked
+              // on a script accent hides the line completely. Observed live:
+              // the poster's "Italian" line ended up entirely behind the
+              // "Order now" pill, invisible — and because the sampled region
+              // was then the pill's own fill, the contrast repair saw nothing
+              // wrong either. Copy that would be BURIED gets pulled clear
+              // instead, even at the cost of crowding the safe area.
+              const moverIsOpaque =
+                next.type === 'symbol' ||
+                (next.type === 'shape' && (!!next.fill || !!next.fillGradient));
+              if (isTextCollider && moverIsOpaque) {
+                const clearDelta = colliderTop - gap - (box.y + box.height);
+                this._logger.warn(
+                  `Overlap guard: ${otherLabel} would be buried under opaque ${next.type} "${(textOf(next) || next.originId || next.id).slice(0, 40)}" — moved the opaque element clear instead of re-stacking.`,
+                  AiDesignerComposerService.name
+                );
+                moveGroup(clearDelta);
+                next = { ...next, y: next.y + clearDelta };
+                replace(i, next);
+                moved = true;
+                continue;
+              }
               if (isTextCollider) {
                 // Last resort: keep the geometry, fix the paint order — the
                 // group goes behind the colliding text so at least one of them
@@ -2601,7 +2630,14 @@ export class AiDesignerComposerService implements OnModuleInit {
         doc,
         repaired as DesignerDocOp[],
         targetOutputs,
-        lockedTexts
+        lockedTexts,
+        // Deleting copy is destructive and irreversible from the user's seat,
+        // so it takes an explicit ask. Observed live: "set the Fresh & Tasty
+        // textScaleX to 0.62" came back with the ACCENT line deleted — a whole
+        // line of the poster's type stack gone, silently, from a revision that
+        // named a different element.
+        REMOVAL_INTENT_RE.test(instruction),
+        targetSlots
       );
       if (filtered.length > 0) {
         try {
@@ -2628,7 +2664,11 @@ export class AiDesignerComposerService implements OnModuleInit {
     doc: DesignerDoc,
     ops: DesignerDocOp[],
     targetOutputs?: string[],
-    lockedTexts?: Record<string, string>
+    lockedTexts?: Record<string, string>,
+    /** The instruction actually asked for a removal. */
+    removalAsked = false,
+    /** Slots the instruction named, when it named any. */
+    targetSlots?: string[]
   ): DesignerDocOp[] {
     const findElement = (outputIndex: number, elementId: string) => {
       const out = doc.outputs[outputIndex];
@@ -2694,6 +2734,19 @@ export class AiDesignerComposerService implements OnModuleInit {
         if (el?.type === 'image') {
           this._logger.warn(
             `Dropping removeElement on image slot "${el.originId || el.id}" — imagery is protected.`,
+            AiDesignerComposerService.name
+          );
+          continue;
+        }
+        // Copy is protected the same way imagery is: a revision may only
+        // delete a line the user asked to delete, or one it explicitly
+        // targeted. Everything else is the model tidying up on its own — and
+        // a line of the design vanishes with no way for the user to know.
+        const isCopy = el?.type === 'text' && !!(el.text || '').trim();
+        const wasTargeted = !!el?.originId && (targetSlots ?? []).includes(el.originId);
+        if (isCopy && !removalAsked && !wasTargeted) {
+          this._logger.warn(
+            `Dropping removeElement on text slot "${el!.originId || el!.id}" — the instruction asked for no removal.`,
             AiDesignerComposerService.name
           );
           continue;
@@ -3354,7 +3407,9 @@ export class AiDesignerComposerService implements OnModuleInit {
       patch.opacity = Math.max(0, Math.min(1, style.opacity));
     }
     if (typeof style.fontFamily === 'string' && style.fontFamily.trim()) {
-      patch.fontFamily = style.fontFamily;
+      // Same resolution as the build path: a critic or a chat revision asking
+      // for "a script face" must land on a loadable family, not the word.
+      patch.fontFamily = resolveFontFamily(style.fontFamily, el.fontFamily) ?? style.fontFamily;
     }
     // Alignment is a TEXT property — a shape carrying `align` is noise that
     // then propagates as a linked style invariant across every output.
@@ -4372,9 +4427,13 @@ export class AiDesignerComposerService implements OnModuleInit {
         : undefined;
 
     const fontSize = opts.fontSize ?? this._roleFontSize(role, ctx.scale);
-    const fontFamily =
-      override.fontFamily ??
-      (isDisplay ? preset.fonts.display : preset.fonts.body);
+    // The planner answers "what KIND of face?" as often as it names one —
+    // `"script"`, `"condensed"`, `"serif"` all shipped into documents verbatim
+    // and painted in the fallback sans. Resolved to a loadable family here.
+    const fontFamily = resolveFontFamily(
+      override.fontFamily,
+      isDisplay ? preset.fonts.display : preset.fonts.body
+    );
     const fontWeight = override.fontWeight ?? this._roleFontWeight(role);
     const align = override.align ?? opts.align ?? 'center';
 
@@ -4456,7 +4515,13 @@ export class AiDesignerComposerService implements OnModuleInit {
       letterSpacing:
         override.letterSpacing ??
         (isDisplay ? treatments.letterSpacing || 0 : undefined),
-      textTransform: override.textTransform ?? textTransform,
+      // A script face in capitals is not a script — the joins only exist
+      // between lowercase letters. The planner asks for both often enough
+      // (a "script accent, tracked caps" instruction) that this has to be a
+      // craft rule, not a hope.
+      textTransform: isScriptFamily(fontFamily)
+        ? undefined
+        : override.textTransform ?? textTransform,
       // The new type tools, straight off the plan: condensation, arc, and
       // paragraph rhythm. `curve` is planned by NAME — the emitter owns the
       // number (30° subtends a classic ribbon arc; the renderer keeps the
@@ -5558,8 +5623,10 @@ export class AiDesignerComposerService implements OnModuleInit {
     const override = (slot.style || {}) as DesignSlotStyle;
     const isDisplay = role === 'headline';
     return {
-      fontFamily:
-        override.fontFamily ?? (isDisplay ? preset.fonts.display : preset.fonts.body),
+      fontFamily: resolveFontFamily(
+        override.fontFamily,
+        isDisplay ? preset.fonts.display : preset.fonts.body
+      )!,
       fontWeight: override.fontWeight ?? this._roleFontWeight(role),
       letterSpacing:
         override.letterSpacing ?? (isDisplay ? preset.treatments.letterSpacing || 0 : 0),
@@ -6115,7 +6182,8 @@ export class AiDesignerComposerService implements OnModuleInit {
   private _badgeAtBottom(ctx: ComposeContext): boolean {
     return (
       ctx.plan.badgePosition === 'bottom-left' ||
-      ctx.plan.badgePosition === 'bottom-right'
+      ctx.plan.badgePosition === 'bottom-right' ||
+      ctx.plan.badgePosition === 'bottom-center'
     );
   }
 
@@ -6142,7 +6210,7 @@ export class AiDesignerComposerService implements OnModuleInit {
     const position = ignorePlanPosition ? undefined : ctx.plan.badgePosition;
     const resolvedAlign = !position
       ? align
-      : position === 'center'
+      : position === 'center' || position.endsWith('center')
       ? 'center'
       : position.endsWith('right')
       ? 'right'
@@ -6167,7 +6235,9 @@ export class AiDesignerComposerService implements OnModuleInit {
     if (
       built.length > 0 &&
       area.bottom !== undefined &&
-      (position === 'bottom-left' || position === 'bottom-right')
+      (position === 'bottom-left' ||
+        position === 'bottom-right' ||
+        position === 'bottom-center')
     ) {
       const extent = Math.max(...built.map((el) => el.y + el.height));
       const delta = area.bottom - extent;

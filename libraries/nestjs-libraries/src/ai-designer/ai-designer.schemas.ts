@@ -224,8 +224,25 @@ export const DesignPlanSchema = z
     // Split/sidebar layouts: which side the TEXT panel sits on.
     panelSide: z.enum(['left', 'right']).optional(),
     // Where the badge sits inside its layout band.
+    // A CENTRED badge is a standard poster device — the ribbon under a
+    // centred type stack — and the planner asked for `top-center` on the very
+    // first reference run. Without these the enum rejected it, and because a
+    // stored plan is re-validated on load, the whole SESSION died with "I hit
+    // a problem" rather than the badge landing a few pixels off.
     badgePosition: z
-      .enum(['top-left', 'top-right', 'bottom-left', 'bottom-right', 'center'])
+      .enum([
+        'top-left',
+        'top-center',
+        'top-right',
+        'bottom-left',
+        'bottom-center',
+        'bottom-right',
+        'center',
+      ])
+      // Never fatal: an unrecognised position degrades to the composer's own
+      // placement, exactly as every recipe name does. A plan that outlives a
+      // build of this enum must still open.
+      .catch(undefined as never)
       .optional(),
   })
   .passthrough();

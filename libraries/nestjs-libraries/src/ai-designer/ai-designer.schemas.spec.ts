@@ -258,3 +258,45 @@ describe('AiDesignerConfigSchema v2', () => {
     expect(res.success).toBe(false);
   });
 });
+
+describe('badgePosition — never fatal', () => {
+  it('accepts the centred positions a poster actually uses', () => {
+    for (const position of ['top-center', 'bottom-center', 'center', 'top-left']) {
+      const parsed = DesignPlanSchema.safeParse({
+        variantId: 'v1',
+        skill: 's',
+        concept: 'c',
+        styleId: 'bold',
+        palette: [],
+        typeScale: {},
+        background: { kind: 'solid' },
+        slots: [],
+        assetNeeds: [],
+        badgePosition: position,
+      });
+      expect(parsed.success, position).toBe(true);
+      if (parsed.success) expect(parsed.data.badgePosition).toBe(position);
+    }
+  });
+
+  it('degrades an unknown position instead of failing the plan', () => {
+    // A stored plan outlives the build that wrote it. This threw before, and
+    // because the brief is re-validated on every write the whole SESSION died
+    // with "I hit a problem" — for a badge that would have landed a few pixels
+    // off.
+    const parsed = DesignPlanSchema.safeParse({
+      variantId: 'v1',
+      skill: 's',
+      concept: 'c',
+      styleId: 'bold',
+      palette: [],
+      typeScale: {},
+      background: { kind: 'solid' },
+      slots: [],
+      assetNeeds: [],
+      badgePosition: 'middle-nowhere',
+    });
+    expect(parsed.success).toBe(true);
+    if (parsed.success) expect(parsed.data.badgePosition).toBeUndefined();
+  });
+});
