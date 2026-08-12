@@ -58,7 +58,6 @@ describe('FRAME_RENDERER_SCRIPT', () => {
       __DATA: { output, baseUrl: 'https://example.test' },
     };
     const doc = { getElementById: () => canvas };
-    // eslint-disable-next-line @typescript-eslint/no-implied-eval
     const fn = new Function('window', 'document', 'Image', FRAME_RENDERER_SCRIPT);
     fn(win, doc, class {});
     return win.__FRAME_API as {
