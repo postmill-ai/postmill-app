@@ -63,10 +63,10 @@ overrides:
   # undici >=7.0.0 <7.28.0: high WebSocket DoS (GHSA-vxpw-j846-p89q) and SOCKS5
   # cross-origin request routing (GHSA-hm92-r4w5-c3mj), pulled by jsdom@29.1 via vitest.
   # Bump vulnerable 7.x to patched 7.28.x (same major).
-  'undici@>=7.0.0 <7.28.0': '>=7.28.0 <8'
+  'undici@>=7.0.0 <7.29.0': '>=7.29.0 <8'
   # undici >=8.0.0 <8.5.0: high WebSocket DoS (GHSA-vxpw-j846-p89q, GHSA-38rv-x7px-6hhq) and
   # TLS cert validation bypass (GHSA-vmh5-mc38-953g), direct dependency. Bump to patched 8.5.x.
-  'undici@>=8.0.0 <8.5.0': '>=8.5.0 <9'
+  'undici@>=8.0.0 <8.9.0': '>=8.9.0 <9'
   # ws <8.21.0: high memory-exhaustion DoS from tiny fragments (GHSA-96hv-2xvq-fx4p), pulled by
   # @toruslabs/solana-embed -> socket.io-client -> engine.io-client. Bump to patched 8.21.x.
   'ws@<8.21.0': '>=8.21.0 <9'
@@ -85,16 +85,28 @@ overrides:
   # langsmith <0.6.0: high public prompt pull deserializes untrusted manifests
   # (GHSA-3644-q5cj-c5c7), pulled by older @langchain/core paths. Bump to patched 0.6+.
   langsmith: '>=0.6.0'
+  # socket.io-parser >=4.0.0 <4.2.7: high DoS — a malformed packet with a huge
+  # attachment count allocates unbounded memory before validation (GHSA-2m8v-j782-fhvr),
+  # pinned by socket.io. Bump to patched 4.2.x (same major, wire-compatible).
+  'socket.io-parser@>=4.0.0 <4.2.7': '>=4.2.7 <5'
+  # ip-address <=10.3.0: high — Address4 decodes leading-zero octets as decimal, so an
+  # allow/deny list keyed on the parsed address can be bypassed (GHSA-mwp4-54f8-5fhr).
+  # Reaches us through socks (VPN egress) and express-rate-limit, i.e. exactly the
+  # allow/deny-decision code the advisory is about. Bump to patched 10.3.x.
+  'ip-address@<=10.3.0': '>=10.3.1 <11'
+  # nanoid >=4.0.0 <5.1.16: high — the non-secure generator loops indefinitely on a
+  # negative size (GHSA-28wg-ghj8-5hjv), pulled by @uppy/core. Bump to patched 5.1.x.
+  'nanoid@>=4.0.0 <5.1.16': '>=5.1.16 <6'
   # Migrated from package.json "pnpm.overrides" (ignored by pnpm 10.34+); this file is
   # the single source of truth for overrides.
   '@opentelemetry/propagator-jaeger@<2.9.0': '^2.9.0'
   'axios@>=1.15.2 <1.18.0': '^1.18.0'
-  'brace-expansion@1': '~1.1.16'
-  'brace-expansion@2': '~2.1.2'
-  'brace-expansion@>=3.0.0 <5.0.7': '^5.0.7'
-  'fast-uri@>=3.0.0 <3.1.4': '^3.1.4'
+  'brace-expansion@1': '~1.1.18'
+  'brace-expansion@2': '~2.1.4'
+  'brace-expansion@>=3.0.0 <5.0.9': '^5.0.9'
+  'fast-uri@>=3.0.0 <3.1.5': '^3.1.5'
   'immutable@5': '^5.1.8'
-  'js-yaml@>=4.0.0 <4.3.0': '^4.3.0'
+  'js-yaml@>=4.0.0 <4.3.1': '^4.3.1'
   'sharp@<0.35.0': '^0.35.0'
   'svgo@3': '^3.3.4'
 
@@ -128,14 +140,28 @@ allowBuilds:
 # Audit suppressions — advisories with no viable fix in the current tree.
 auditConfig:
   ignoreGhsas:
-    # brace-expansion <=5.0.7 DoS (GHSA-mh99-v99m-4gvg): the only patched version,
-    # 5.0.8, is ESM-only with a *named* `expand` export, which breaks the old
-    # `minimatch@3.x`/`glob@7` that `require('brace-expansion')` as a function. Those
-    # are pulled by eslint core (@eslint/config-array, @eslint/eslintrc), every eslint
-    # plugin, @swc/cli and glob — none of which have a modern-minimatch release yet, so
-    # there is no override or dep-bump that removes the vulnerable line without breaking
-    # the lint/build toolchain (verified: forcing 5.0.8 → "TypeError: expand is not a
-    # function" in eslint). Not reachable in practice — brace-expansion only ever sees
-    # trusted build/lint globs here, never untrusted input. Remove this once eslint-core
-    # and glob adopt minimatch@10 / brace-expansion@5.
-    - GHSA-mh99-v99m-4gvg
+    # (The brace-expansion suppression GHSA-mh99-v99m-4gvg is GONE, not lost: the
+    # blocker was 5.0.8 being ESM-only with a named `expand` export, which broke the
+    # CJS `require('brace-expansion')` in minimatch@3/glob@7. 5.0.9 restores the
+    # callable default export, so the three lines are now bumped in place —
+    # 1.1.18 / 2.1.4 / 5.0.9 in `overrides` above — and the advisory is genuinely
+    # fixed rather than ignored. Verified by a full eslint run over the repo.)
+    #
+    # image-size <=2.0.2 ICNS and JXL/HEIF parser DoS (GHSA-w3rx-r6r6-pgpr,
+    # GHSA-5p2g-fcmc-qvqq): withdrawn-style advisories with NO patched version
+    # published ("patched: <0.0.0"), so no override can close them. The single path is
+    # apps/frontend > @solana/wallet-adapter-react > @solana-mobile/* > react-native >
+    # metro > image-size: react-native's METRO BUNDLER, dragged in as a transitive of
+    # the Solana mobile wallet adapter. Metro never runs here (this is a Next.js app;
+    # nothing bundles with metro, and image-size is only called on files metro is
+    # bundling), so no image this deployment handles ever reaches that parser. Revisit
+    # if the Solana wallet adapters are dropped or image-size ships a fix.
+    - GHSA-w3rx-r6r6-pgpr
+    - GHSA-5p2g-fcmc-qvqq
+    # extract-zip <=2.0.1 unvalidated symlink path traversal (GHSA-jmr9-qjv8-65gv): no
+    # patched version exists (the package is unmaintained; "patched: <0.0.0"). Path is
+    # puppeteer > @puppeteer/browsers > extract-zip, used ONLY to unpack a Chrome build
+    # downloaded from Google's own CDN during browser install — never to extract a
+    # user-supplied archive. Removing it means dropping puppeteer, which the design
+    # renderer needs. Revisit when @puppeteer/browsers moves off extract-zip.
+    - GHSA-jmr9-qjv8-65gv
