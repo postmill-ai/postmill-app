@@ -81,7 +81,7 @@ export async function resolveVisionImageUrl(
   // otherwise be handed to a provider that cannot reach it.
   if (isLocalStorageUrl(url)) {
     try {
-      const buffer = await readFile(localPathFromUrl(url));
+      const buffer = await readLocalUpload(url);
       if (buffer.length > maxInlineBytes) {
         warn(`${label}: local image too large to inline (${buffer.length} bytes)`);
         return null;
@@ -125,7 +125,7 @@ export async function loadVisionImageBytes(
   }
   if (isLocalStorageUrl(url)) {
     try {
-      return await readFile(localPathFromUrl(url));
+      return await readLocalUpload(url);
     } catch (err) {
       warn(`${label} failed to read local image: ${(err as Error).message}`);
       return null;
@@ -174,4 +174,25 @@ export function localPathFromUrl(url: string): string {
     throw new Error(`upload path escapes storage root: ${url}`);
   }
   return resolved;
+}
+
+/**
+ * Read a local upload, containment enforced HERE rather than in a helper.
+ *
+ * `localPathFromUrl` already refuses anything that leaves the storage root,
+ * but a guard one call away is a guard a reader (and a static analyser) has to
+ * take on faith. The check that matters therefore sits in the same function as
+ * the `readFile` it protects: resolve, re-assert the prefix, then read — so
+ * every path reaching the filesystem was proven contained three lines above.
+ */
+export async function readLocalUpload(url: string): Promise<Buffer> {
+  const uploadDirectory = path.resolve(process.env.UPLOAD_DIRECTORY || './uploads');
+  const resolved = localPathFromUrl(url);
+  if (
+    resolved !== uploadDirectory &&
+    !resolved.startsWith(uploadDirectory + path.sep)
+  ) {
+    throw new Error(`upload path escapes storage root: ${url}`);
+  }
+  return readFile(resolved);
 }

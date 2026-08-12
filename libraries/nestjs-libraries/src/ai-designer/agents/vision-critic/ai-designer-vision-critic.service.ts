@@ -1,5 +1,4 @@
 import '@postmill-ai/nestjs-libraries/ai-designer/agent-mesh/agent-mesh-env.shim';
-import { readFile } from 'fs/promises';
 import { Injectable, Logger, OnModuleInit } from '@nestjs/common';
 import sharp from 'sharp';
 import {
@@ -13,7 +12,7 @@ import { CHANNEL_PRESETS } from '@postmill-ai/nestjs-libraries/integrations/soci
 import {
   isLocalStorageUrl,
   loadVisionImageBytes,
-  localPathFromUrl,
+  readLocalUpload,
   resolveVisionImageUrl,
 } from '@postmill-ai/nestjs-libraries/ai/vision-image-url';
 import { isSafePublicHttpsUrl } from '@postmill-ai/nestjs-libraries/dtos/webhooks/webhook.url.validator';
@@ -1339,7 +1338,7 @@ If the contact sheet looks good, return { "findings": [] }.`;
         );
       } else if (isLocalStorageUrl(file.path)) {
         resolved = await this._downscaleToDataUri(
-          await readFile(localPathFromUrl(file.path))
+          await readLocalUpload(file.path)
         );
       } else if (await isSafePublicHttpsUrl(file.path)) {
         resolved = file.path;
