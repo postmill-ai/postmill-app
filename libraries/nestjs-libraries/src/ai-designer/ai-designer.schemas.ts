@@ -180,6 +180,21 @@ const DesignSlotSchema = z
         strength: z.number().min(0).max(1),
       })
       .optional(),
+    // Reference-measured placement, stamped DETERMINISTICALLY by the conductor
+    // from `brief.referenceLayout` on reference-clone plans (the LLM is never
+    // asked to copy numbers). All values are canvas-relative ratios so
+    // multi-format refit keeps working. The engine treats a band as a
+    // starting placement — the overlap guard and safe-zone refit stay
+    // authoritative.
+    geometry: z
+      .object({
+        yBand: z
+          .tuple([z.number().min(0).max(1), z.number().min(0).max(1)])
+          .optional(),
+        xAnchor: z.enum(['left', 'center', 'right']).optional(),
+        heightRatio: z.number().min(0).max(0.6).optional(),
+      })
+      .optional(),
   })
   .passthrough();
 
@@ -194,6 +209,12 @@ const AssetNeedSchema = z
     slotId: z.string().max(200),
     brief: z.string().max(1000),
     prefer: z.enum(['generate', 'stock', 'either']),
+    // An unknown kind must never sink a plan — fall back to the default
+    // (photo) exactly as ChannelLayoutSchema falls back.
+    kind: z
+      .enum(['photo', 'illustration', 'icon', 'vector'])
+      .optional()
+      .catch(undefined),
   })
   .passthrough();
 
@@ -271,6 +292,60 @@ export const DesignPlanV2FieldsSchema = z
   })
   .passthrough();
 
+// ── Reference layout (the measured spatial spec of a reference image) ────────
+// Emitted by the vision interpreter's structured measurement call — every
+// value a canvas-relative ratio, because absolute px from the reference's
+// aspect would break every non-primary format at refit. Parsing is fail-soft:
+// a malformed measurement leaves `referenceLayout` unset and the prose cues
+// carry the run alone.
+
+const YBandSchema = z.tuple([
+  z.number().min(0).max(1),
+  z.number().min(0).max(1),
+]);
+
+export const ReferenceLayoutSchema = z.object({
+  lines: z
+    .array(
+      z.object({
+        /** Verbatim reference line — the slot matcher keys off it. */
+        text: z.string().max(200),
+        /** Top/bottom of the line's band, as fractions of canvas height. */
+        yBand: YBandSchema,
+        xAnchor: z.enum(['left', 'center', 'right']).optional(),
+        /** Cap-height as a fraction of canvas height (the size ratio). */
+        heightRatio: z.number().min(0).max(0.6).optional(),
+        fontClass: z.string().max(60).optional(),
+        case: z.enum(['caps', 'title', 'lower']).optional(),
+      })
+    )
+    .max(16),
+  badge: z
+    .object({
+      yBand: YBandSchema.optional(),
+      xAnchor: z.enum(['left', 'center', 'right']).optional(),
+      shape: z.enum(['pill', 'ribbon', 'burst']).optional(),
+      widthRatio: z.number().min(0).max(1).optional(),
+    })
+    .optional(),
+  image: z
+    .object({
+      yBand: YBandSchema.optional(),
+      coverage: z.enum(['full-bleed', 'band', 'panel']).optional(),
+      side: z.enum(['left', 'right']).optional(),
+    })
+    .optional(),
+  ornaments: z
+    .array(
+      z.object({
+        kind: z.string().max(60),
+        nearLineIndex: z.number().int().min(0).max(15).optional(),
+      })
+    )
+    .max(8)
+    .optional(),
+});
+
 export const DesignBriefSchema = z
   .object({
     intent: z.string().max(5000),
@@ -279,6 +354,8 @@ export const DesignBriefSchema = z
     includeLogo: z.boolean().optional(),
     fixedCopy: z.string().max(5000).optional(),
     referenceCues: z.array(z.string().max(2000)).max(50).optional(),
+    referenceCueFileIds: z.array(z.string().max(200)).max(10).optional(),
+    referenceLayout: ReferenceLayoutSchema.optional(),
     questionsAsked: z.array(z.string().max(1000)).max(50).optional(),
     lastPlans: z.array(DesignPlanSchema).max(20).optional(),
     pendingReviseTarget: z.string().max(200).optional(),

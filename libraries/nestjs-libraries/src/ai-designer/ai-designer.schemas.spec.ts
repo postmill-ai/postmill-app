@@ -117,6 +117,40 @@ describe('DesignPlanSchema v2', () => {
   });
 });
 
+describe('AssetNeed kind (icons, vectors, illustrator)', () => {
+  it('round-trips a declared kind', () => {
+    const plan = {
+      ...makeV1Plan(),
+      assetNeeds: [
+        { slotId: 'image', brief: 'pizza slice icon', prefer: 'either', kind: 'icon' },
+        { slotId: 'hero', brief: 'retro poster art', prefer: 'generate', kind: 'illustration' },
+      ],
+    };
+    const res = DesignPlanSchema.safeParse(plan);
+    expect(res.success).toBe(true);
+    expect((res as any).data.assetNeeds[0].kind).toBe('icon');
+    expect((res as any).data.assetNeeds[1].kind).toBe('illustration');
+  });
+
+  it('an unknown kind falls back instead of sinking the plan', () => {
+    const plan = {
+      ...makeV1Plan(),
+      assetNeeds: [
+        { slotId: 'image', brief: 'x', prefer: 'either', kind: 'hologram' },
+      ],
+    };
+    const res = DesignPlanSchema.safeParse(plan);
+    expect(res.success).toBe(true);
+    expect((res as any).data.assetNeeds[0].kind).toBeUndefined();
+  });
+
+  it('an absent kind stays absent (legacy plans untouched)', () => {
+    const res = DesignPlanSchema.safeParse(makeV1Plan());
+    expect(res.success).toBe(true);
+    expect((res as any).data.assetNeeds[0].kind).toBeUndefined();
+  });
+});
+
 describe('DesignPlanSchema craft fields', () => {
   it('accepts the craft dials: tracking, leading, opacity, shadow object', () => {
     const res = DesignPlanSchema.safeParse({
@@ -298,5 +332,65 @@ describe('badgePosition — never fatal', () => {
     });
     expect(parsed.success).toBe(true);
     if (parsed.success) expect(parsed.data.badgePosition).toBeUndefined();
+  });
+});
+
+describe('slot geometry + reference layout (spatial control)', () => {
+  const planWithGeometry = (geometry: unknown) => ({
+    ...makeV1Plan(),
+    slots: [
+      { id: 'headline', role: 'headline', kind: 'text', geometry },
+    ],
+  });
+
+  it('accepts a stamped slot geometry', () => {
+    const res = DesignPlanSchema.safeParse(
+      planWithGeometry({ yBand: [0.08, 0.2], xAnchor: 'left', heightRatio: 0.11 })
+    );
+    expect(res.success).toBe(true);
+    if (res.success) {
+      expect((res.data.slots[0] as any).geometry.yBand).toEqual([0.08, 0.2]);
+    }
+  });
+
+  it('rejects out-of-range geometry values', () => {
+    expect(
+      DesignPlanSchema.safeParse(planWithGeometry({ yBand: [0.1, 7] })).success
+    ).toBe(false);
+    expect(
+      DesignPlanSchema.safeParse(planWithGeometry({ heightRatio: 0.9 })).success
+    ).toBe(false);
+  });
+
+  it('round-trips a brief carrying referenceLayout + referenceCueFileIds', () => {
+    const res = DesignBriefSchema.safeParse({
+      intent: 'clone this',
+      referenceCues: ['COMPOSITION: type stack top-left'],
+      referenceCueFileIds: ['file-1'],
+      referenceLayout: {
+        lines: [
+          {
+            text: 'PIZZA',
+            yBand: [0.08, 0.2],
+            xAnchor: 'left',
+            heightRatio: 0.11,
+            fontClass: 'condensed slab serif',
+            case: 'caps',
+          },
+        ],
+        badge: { yBand: [0.6, 0.66], shape: 'ribbon' },
+        image: { coverage: 'full-bleed' },
+        ornaments: [{ kind: 'wavy rule', nearLineIndex: 0 }],
+      },
+    });
+    expect(res.success).toBe(true);
+  });
+
+  it('rejects a malformed referenceLayout so a bad measurement can never poison the session row', () => {
+    const res = DesignBriefSchema.safeParse({
+      intent: 'clone this',
+      referenceLayout: { lines: [{ text: 'x', yBand: [0, 'bottom'] }] },
+    });
+    expect(res.success).toBe(false);
   });
 });

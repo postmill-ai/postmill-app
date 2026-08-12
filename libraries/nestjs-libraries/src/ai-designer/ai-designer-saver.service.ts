@@ -168,12 +168,18 @@ export class AiDesignerSaverService {
       pages,
     });
 
-    // Deterministic text-over-imagery contrast audit on the same page
-    // buffers. Non-fatal: a sampling failure must never block a save. The
-    // backdrop render (the doc with text hidden) is skipped entirely when no
-    // text can sit over imagery — the audit is guaranteed empty then, and a
-    // second full render per save is real money inside the QC loops.
-    let contrastViolations: AiDesignerRenderResult['contrastViolations'];
+    // Deterministic audits on the same page buffers — contrast, painted-ink
+    // collisions, imagery visibility — merged into one violations array. Each
+    // audit is individually fail-soft: a sampling failure must never block a
+    // save, and one audit's exception must not discard another's findings.
+    const violations: NonNullable<
+      AiDesignerRenderResult['contrastViolations']
+    > = [];
+
+    // Text-over-imagery contrast. The backdrop render (the doc with text
+    // hidden) is skipped entirely when no text can sit over imagery — the
+    // audit is guaranteed empty then, and a second full render per save is
+    // real money inside the QC loops.
     if (this._renderService.docHasTextOverImagery(doc)) {
       try {
         // The audit judges each text box against a BACKDROP render (the doc
@@ -190,16 +196,43 @@ export class AiDesignerSaverService {
         } catch {
           backdrops = pages;
         }
-        const found = await this._renderService.auditTextContrast(
-          doc,
-          pages,
-          backdrops
+        violations.push(
+          ...(await this._renderService.auditTextContrast(
+            doc,
+            pages,
+            backdrops
+          ))
         );
-        if (found.length > 0) contrastViolations = found;
-      } catch {
-        contrastViolations = undefined;
+      } catch (err) {
+        this._logger.warn(
+          `Text-contrast audit failed: ${(err as Error)?.message}`
+        );
       }
     }
+
+    // Painted-ink collisions: pure measurement, no pixels — always cheap.
+    try {
+      violations.push(...(await this._renderService.auditTextCollisions(doc)));
+    } catch (err) {
+      this._logger.warn(
+        `Text-collision audit failed: ${(err as Error)?.message}`
+      );
+    }
+
+    // Imagery visibility: samples the already-rendered composites, and only
+    // when the doc actually declares imagery (the audit scans first and
+    // returns without touching sharp otherwise).
+    try {
+      violations.push(
+        ...(await this._renderService.auditImageryVisibility(doc, pages))
+      );
+    } catch (err) {
+      this._logger.warn(
+        `Imagery-visibility audit failed: ${(err as Error)?.message}`
+      );
+    }
+
+    const contrastViolations = violations.length > 0 ? violations : undefined;
 
     const adapter = await this._storageService.getLocalAdapterForOrg(orgId, true);
     const register = options.registerPreviews !== false;

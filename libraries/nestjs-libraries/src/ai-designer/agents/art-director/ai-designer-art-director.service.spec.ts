@@ -541,6 +541,9 @@ describe('AiDesignerArtDirectorService offer fidelity (workstream 5)', () => {
     palette: ['#fff'],
     typeScale: { headline: 48 },
     background: { kind: 'solid', value: '#fff' },
+    // Imageless plans need decor (art-direction floor) — declared so these
+    // tests exercise ONLY the offer-token path.
+    decor: ['rule'],
     slots: [{ id: 'headline', role: 'headline', kind: 'text' }],
     assetNeeds: [],
     texts,
@@ -938,6 +941,388 @@ describe('AiDesignerArtDirectorService offer fidelity (workstream 5)', () => {
   });
 });
 
+describe('AiDesignerArtDirectorService copy grounding (pizza-run defects)', () => {
+  let skillRouter: {
+    route: ReturnType<typeof vi.fn>;
+    getSkillPrompt: ReturnType<typeof vi.fn>;
+    getLayoutHints: ReturnType<typeof vi.fn>;
+  };
+  let model: { generateObject: ReturnType<typeof vi.fn> };
+  let service: AiDesignerArtDirectorService;
+
+  beforeEach(() => {
+    skillRouter = {
+      route: vi.fn(() => ({ skillId: 'sale-discount' })),
+      getSkillPrompt: vi.fn(() => 'skill prompt'),
+      getLayoutHints: vi.fn(() => undefined),
+    };
+    model = { generateObject: vi.fn() };
+    service = new AiDesignerArtDirectorService(
+      skillRouter as any,
+      { getBrand: vi.fn() } as any,
+      model as any
+    );
+  });
+
+  const bogoPlan = (texts: Record<string, string>): DesignPlan => ({
+    variantId: 'v1',
+    skill: 'sale-discount',
+    concept: 'window card',
+    palette: ['#0A0A0A', '#FFFFFF'],
+    typeScale: { headline: 1 },
+    background: { kind: 'solid', value: '#FFFFFF' },
+    decor: ['rule'],
+    slots: Object.keys(texts).map((id) => ({
+      id,
+      role: id,
+      kind: id === 'cta' ? 'cta-button' : id === 'badge' ? 'badge' : 'text',
+    })),
+    assetNeeds: [],
+    texts,
+  });
+
+  const bogoRequest = JSON.stringify({
+    type: 'plan-request',
+    brief: {
+      intent:
+        'create a post for my pizza business. we are having a sale: buy 1 get 1 free',
+    },
+    config: { channels: ['ig-square'], variants: 1 },
+    mode: 'prompt',
+  });
+
+  const handler = (raw_input: string) =>
+    (service as any)._handler({ raw_input, metadata: { orgId: 'org1' } });
+
+  it('retries on invented urgency and strips it when the retry still carries it', async () => {
+    model.generateObject.mockResolvedValue({
+      type: 'plans',
+      plans: [
+        bogoPlan({
+          headline: 'BUY 1 GET 1 FREE',
+          badge: 'TONIGHT ONLY',
+          legal: 'ENDS TONIGHT. CONDITIONS APPLY.',
+        }),
+      ],
+    });
+
+    const res = await handler(bogoRequest);
+    const content = JSON.parse(res.content);
+
+    expect(model.generateObject).toHaveBeenCalledTimes(2);
+    const retryPrompt = model.generateObject.mock.calls[1][1] as string;
+    expect(retryPrompt).toContain('CLAIM REPAIR');
+    expect(retryPrompt).toContain('TONIGHT ONLY');
+    // Backstop: the urgency badge dies whole (text + slot); the legal line
+    // keeps its grounded remainder.
+    expect(content.plans[0].texts.badge).toBeUndefined();
+    expect(
+      content.plans[0].slots.some((s: { id: string }) => s.id === 'badge')
+    ).toBe(false);
+    expect(content.plans[0].texts.legal).toBe('CONDITIONS APPLY.');
+    expect(content.plans[0].texts.headline).toBe('BUY 1 GET 1 FREE');
+  });
+
+  it('retries on jargon copy and strips it as a backstop', async () => {
+    model.generateObject.mockResolvedValue({
+      type: 'plans',
+      plans: [bogoPlan({ headline: 'B1G1 FREE', subhead: 'BUY 1 PIZZA GET 1 FREE' })],
+    });
+
+    const res = await handler(bogoRequest);
+    const content = JSON.parse(res.content);
+
+    expect(model.generateObject).toHaveBeenCalledTimes(2);
+    expect(content.plans[0].texts.headline).toBe('FREE');
+    expect(content.plans[0].texts.subhead).toBe('BUY 1 PIZZA GET 1 FREE');
+  });
+
+  it('replaces a fragment CTA with the brief-appropriate default', async () => {
+    model.generateObject.mockResolvedValue({
+      type: 'plans',
+      plans: [bogoPlan({ headline: 'BUY 1 GET 1 FREE', cta: 'Shop sale' })],
+    });
+
+    const res = await handler(bogoRequest);
+    const content = JSON.parse(res.content);
+
+    expect(model.generateObject).toHaveBeenCalledTimes(2);
+    const retryPrompt = model.generateObject.mock.calls[1][1] as string;
+    expect(retryPrompt).toContain('CTA REPAIR');
+    // Pizza brief → "Order now", not a generic default.
+    expect(content.plans[0].texts.cta).toBe('Order now');
+  });
+
+  it('strips plan copy out of asset briefs — copy is typeset, never painted', async () => {
+    // Live: the synthesized image brief carried the concept verbatim —
+    // "gigantic condensed BUY 1 GET 1 FREE stacked like a window card" — and
+    // the image model painted the offer into the photo, where it sat as a
+    // ghost behind the real typeset headline.
+    model.generateObject.mockResolvedValue({
+      type: 'plans',
+      plans: [
+        {
+          ...bogoPlan({
+            headline: 'BUY 1 GET 1 FREE',
+            subhead: 'HOT. CHEESY. READY.',
+          }),
+          concept:
+            'Gigantic condensed BUY 1 GET 1 FREE stacked like a window card over gooey pizza.',
+          background: { kind: 'image', ref: 'asset:image' },
+          slots: [
+            { id: 'image', role: 'image', kind: 'image' },
+            { id: 'headline', role: 'headline', kind: 'text' },
+            { id: 'subhead', role: 'subhead', kind: 'text' },
+          ],
+          assetNeeds: [
+            {
+              slotId: 'image',
+              brief:
+                'Full-bleed gooey pizza, the offer is the hero: gigantic BUY 1 GET 1 FREE window card energy, warm tungsten light.',
+              prefer: 'either',
+            },
+          ],
+        },
+      ],
+    });
+
+    const res = await handler(bogoRequest);
+    const content = JSON.parse(res.content);
+
+    const brief = content.plans[0].assetNeeds[0].brief as string;
+    expect(brief.toUpperCase()).not.toContain('BUY 1 GET 1 FREE');
+    // The scene description survives.
+    expect(brief).toContain('gooey pizza');
+    expect(brief).toContain('tungsten');
+  });
+
+  it('drops an uncovered image slot when the background already carries the imagery', async () => {
+    // Live (pool run v3): the synthesized need for the extra image slot
+    // generated a SECOND near-identical photo that shipped as a framed inset
+    // floating on the full-bleed background — picture-in-picture.
+    model.generateObject.mockResolvedValue({
+      type: 'plans',
+      plans: [
+        {
+          ...bogoPlan({ headline: 'BUY 1 GET 1 FREE' }),
+          background: { kind: 'image', ref: 'asset:bg-03' },
+          slots: [
+            { id: 'image', role: 'image', kind: 'image' },
+            { id: 'headline', role: 'headline', kind: 'text' },
+          ],
+          assetNeeds: [
+            { slotId: 'bg-03', brief: 'sparkling pool water close-up', prefer: 'either' },
+          ],
+        },
+      ],
+    });
+
+    const res = await handler(bogoRequest);
+    const content = JSON.parse(res.content);
+
+    // No second need synthesized, and the redundant slot is gone.
+    expect(content.plans[0].assetNeeds).toHaveLength(1);
+    expect(
+      content.plans[0].slots.some((s: { id: string }) => s.id === 'image')
+    ).toBe(false);
+  });
+
+  it('scrubs design-language phrases from image briefs, not just plan copy', async () => {
+    // Live: "bold service name + big phone on a clean panel" in an image
+    // brief got a fake phone number PAINTED into the generated photo.
+    model.generateObject.mockResolvedValue({
+      type: 'plans',
+      plans: [
+        {
+          ...bogoPlan({ headline: 'BUY 1 GET 1 FREE' }),
+          background: { kind: 'image', ref: 'asset:image' },
+          slots: [
+            { id: 'image', role: 'image', kind: 'image' },
+            { id: 'headline', role: 'headline', kind: 'text' },
+          ],
+          assetNeeds: [
+            {
+              slotId: 'image',
+              brief:
+                'Sparkling pool photo on the left, bold service name and big phone number on a clean panel right, warm daylight.',
+              prefer: 'either',
+            },
+          ],
+        },
+      ],
+    });
+
+    const res = await handler(bogoRequest);
+    const content = JSON.parse(res.content);
+
+    const brief = (content.plans[0].assetNeeds[0].brief as string).toLowerCase();
+    expect(brief).not.toContain('service name');
+    expect(brief).not.toContain('phone');
+    expect(brief).not.toContain('panel');
+    expect(brief).toContain('sparkling pool photo');
+    expect(brief).toContain('warm daylight');
+  });
+
+  it('does not retry when urgency is grounded in the brief', async () => {
+    model.generateObject.mockResolvedValue({
+      type: 'plans',
+      plans: [
+        bogoPlan({ headline: 'BUY 1 GET 1 FREE', badge: 'TONIGHT ONLY' }),
+      ],
+    });
+
+    const request = JSON.stringify({
+      type: 'plan-request',
+      brief: {
+        intent: 'flash sale tonight only: buy 1 get 1 free at my pizza place',
+      },
+      config: { channels: ['ig-square'], variants: 1 },
+      mode: 'prompt',
+    });
+    const res = await handler(request);
+    const content = JSON.parse(res.content);
+
+    expect(model.generateObject).toHaveBeenCalledTimes(1);
+    expect(content.plans[0].texts.badge).toBe('TONIGHT ONLY');
+  });
+});
+
+describe('AiDesignerArtDirectorService art-direction floors (blank-canvas gate)', () => {
+  let skillRouter: {
+    route: ReturnType<typeof vi.fn>;
+    getSkillPrompt: ReturnType<typeof vi.fn>;
+    getLayoutHints: ReturnType<typeof vi.fn>;
+    getArtDirection: ReturnType<typeof vi.fn>;
+  };
+  let model: { generateObject: ReturnType<typeof vi.fn> };
+  let service: AiDesignerArtDirectorService;
+
+  beforeEach(() => {
+    skillRouter = {
+      route: vi.fn(() => ({ skillId: 'sale-discount' })),
+      getSkillPrompt: vi.fn(() => 'skill prompt'),
+      getLayoutHints: vi.fn(() => undefined),
+      getArtDirection: vi.fn(() => ({
+        compositions: ['badge-burst', 'type-dominant'],
+        decor: ['burst', 'diagonal-stripes', 'rule'],
+        effects: ['hard-shadow'],
+        treatments: ['contrast-punch'],
+      })),
+    };
+    model = { generateObject: vi.fn() };
+    service = new AiDesignerArtDirectorService(
+      skillRouter as any,
+      { getBrand: vi.fn() } as any,
+      model as any
+    );
+  });
+
+  const barePlan = (overrides: Record<string, unknown> = {}) => ({
+    variantId: 'v1',
+    skill: 'sale-discount',
+    concept: 'bare card',
+    palette: ['#0A0A0A', '#F7E9D0', '#FF4D00'],
+    typeScale: { headline: 1 },
+    slots: [{ id: 'headline', role: 'headline', kind: 'text' }],
+    assetNeeds: [],
+    texts: { headline: 'BUY 1 GET 1 FREE' },
+    ...overrides,
+  });
+
+  const request = JSON.stringify({
+    type: 'plan-request',
+    brief: { intent: 'buy 1 get 1 free at my pizza shop' },
+    config: { channels: ['ig-square'], variants: 1 },
+    mode: 'prompt',
+  });
+
+  const handler = (raw_input: string) =>
+    (service as any)._handler({ raw_input, metadata: { orgId: 'org1' } });
+
+  it('renders the genre art-direction catalog into the prompt', async () => {
+    model.generateObject.mockResolvedValue({
+      type: 'plans',
+      plans: [
+        barePlan({
+          background: { kind: 'solid', value: '#F7E9D0' },
+          decor: ['burst'],
+        }),
+      ],
+    });
+
+    await handler(request);
+
+    const prompt = model.generateObject.mock.calls[0][1] as string;
+    expect(prompt).toContain('## Genre art direction');
+    expect(prompt).toContain('burst, diagonal-stripes, rule');
+    expect(prompt).toContain('contrast-punch');
+  });
+
+  it('retries a background-less plan and synthesizes ground + decor as backstop', async () => {
+    model.generateObject.mockResolvedValue({
+      type: 'plans',
+      plans: [barePlan()],
+    });
+
+    const res = await handler(request);
+    const content = JSON.parse(res.content);
+
+    expect(model.generateObject).toHaveBeenCalledTimes(2);
+    const retryPrompt = model.generateObject.mock.calls[1][1] as string;
+    expect(retryPrompt).toContain('ART DIRECTION REPAIR');
+    // Ground synthesized from the plan's own palette (the most ground-like
+    // hex), decor from the genre's first preference.
+    expect(content.plans[0].background).toEqual({
+      kind: 'solid',
+      value: expect.stringMatching(/^#/),
+    });
+    expect(content.plans[0].palette).toContain(
+      content.plans[0].background.value
+    );
+    expect(content.plans[0].decor).toEqual(['burst']);
+  });
+
+  it('treats decor ["none"] on an imageless plan as missing', async () => {
+    model.generateObject.mockResolvedValue({
+      type: 'plans',
+      plans: [
+        barePlan({
+          background: { kind: 'solid', value: '#F7E9D0' },
+          decor: ['none'],
+        }),
+      ],
+    });
+
+    const res = await handler(request);
+    const content = JSON.parse(res.content);
+
+    expect(model.generateObject).toHaveBeenCalledTimes(2);
+    expect(content.plans[0].decor).toContain('burst');
+  });
+
+  it('does not demand decor when the plan has imagery', async () => {
+    model.generateObject.mockResolvedValue({
+      type: 'plans',
+      plans: [
+        barePlan({
+          background: { kind: 'image', ref: 'asset:image' },
+          slots: [
+            { id: 'image', role: 'image', kind: 'image' },
+            { id: 'headline', role: 'headline', kind: 'text' },
+          ],
+          assetNeeds: [
+            { slotId: 'image', brief: 'overhead pizza', prefer: 'either' },
+          ],
+        }),
+      ],
+    });
+
+    await handler(request);
+
+    expect(model.generateObject).toHaveBeenCalledTimes(1);
+  });
+});
+
 describe('AiDesignerArtDirectorService brief constraints (workstream 3)', () => {
   let skillRouter: {
     route: ReturnType<typeof vi.fn>;
@@ -970,6 +1355,9 @@ describe('AiDesignerArtDirectorService brief constraints (workstream 3)', () => 
     palette: ['#fff'],
     typeScale: { headline: 48 },
     background: { kind: 'solid', value: '#fff' },
+    // Imageless plans need decor (art-direction floor) — declared so these
+    // tests exercise ONLY the constraint path.
+    decor: ['rule'],
     slots: [{ id: 'headline', role: 'headline', kind: 'text' }],
     assetNeeds: [],
     texts: { headline: 'Hello' },

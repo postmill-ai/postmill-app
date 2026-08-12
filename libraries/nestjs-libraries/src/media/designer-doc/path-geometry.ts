@@ -147,6 +147,39 @@ export const scalePathNodes = (
   }));
 
 /**
+ * Rotate every point about (cx, cy) by `degrees` (Konva's convention:
+ * positive is clockwise in the canvas's y-down space), handles included.
+ * The one way to rotate a canvas-box path (absolute nodes) rigidly with the
+ * rest of its unit — setting `rotation` on the element would swing the
+ * whole-canvas box about its origin instead.
+ */
+export const rotatePathNodes = (
+  nodes: DesignerPathNode[],
+  cx: number,
+  cy: number,
+  degrees: number
+): DesignerPathNode[] => {
+  const rad = (degrees * Math.PI) / 180;
+  const cos = Math.cos(rad);
+  const sin = Math.sin(rad);
+  const rot = (x: number, y: number) => ({
+    x: cx + (x - cx) * cos - (y - cy) * sin,
+    y: cy + (x - cx) * sin + (y - cy) * cos,
+  });
+  return nodes.map((n) => {
+    const p = rot(n.x, n.y);
+    const i = hasIn(n) ? rot(n.inX as number, n.inY as number) : undefined;
+    const o = hasOut(n) ? rot(n.outX as number, n.outY as number) : undefined;
+    return {
+      x: p.x,
+      y: p.y,
+      ...(i ? { inX: i.x, inY: i.y } : {}),
+      ...(o ? { outX: o.x, outY: o.y } : {}),
+    };
+  });
+};
+
+/**
  * Re-origin a node list built in DOCUMENT space into element-local space,
  * returning the element box that contains it. Every Pen tool ends here, so the
  * stored nodes are always local and the element box always hugs the path.

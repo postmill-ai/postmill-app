@@ -1148,7 +1148,7 @@ export class AIModelProvider {
     providerId: string,
     version: string,
     modelId: string | undefined,
-    args: { prompt?: string; messages?: any[]; system?: string; temperature?: number; maxTokens?: number; imageUrl?: string; signal?: AbortSignal } = {},
+    args: { prompt?: string; messages?: any[]; system?: string; temperature?: number; maxTokens?: number; imageUrl?: string | string[]; signal?: AbortSignal } = {},
   ): Promise<string> {
     const creds = orgId ? await this._credentialsForProvider(orgId, providerId, version) : null;
     if (!creds) {
@@ -1188,11 +1188,18 @@ export class AIModelProvider {
         let promptPayload = args.messages;
         if (!promptPayload) {
           const content: any[] = [{ type: 'text', text: checkedInput }];
-          if (args.imageUrl) {
-            // LanguageModelV2 file part — the legacy {type:'image'} shape from
-            // SDK v1 serializes into an invalid provider message
-            // ("Invalid type for 'messages[0].content[1]'").
-            content.push(this._imageFilePart(args.imageUrl));
+          // LanguageModelV2 file parts — the legacy {type:'image'} shape from
+          // SDK v1 serializes into an invalid provider message
+          // ("Invalid type for 'messages[0].content[1]'"). Multi-image callers
+          // rely on part order: prompts address "Image 1"/"Image 2" by the
+          // order the URLs were passed.
+          const imageUrls = Array.isArray(args.imageUrl)
+            ? args.imageUrl
+            : args.imageUrl
+              ? [args.imageUrl]
+              : [];
+          for (const url of imageUrls) {
+            content.push(this._imageFilePart(url));
           }
           promptPayload = [{ role: 'user', content }];
         }

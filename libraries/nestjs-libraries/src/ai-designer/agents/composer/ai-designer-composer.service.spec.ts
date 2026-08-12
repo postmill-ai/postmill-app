@@ -306,6 +306,224 @@ describe('AiDesignerComposerService.applyFixes', () => {
     expect(docService.applyOps).not.toHaveBeenCalled();
     expect(result).toBe(doc);
   });
+
+  const makeBadgeDoc = (plate: 'rect' | 'path') =>
+    ({
+      mode: 'image',
+      outputs: [
+        {
+          id: 'o1',
+          formatId: 'ig-square',
+          name: 'IG',
+          width: 1080,
+          height: 1080,
+          background: '#ffffff',
+          children: [
+            plate === 'rect'
+              ? {
+                  id: 'plate-1',
+                  originId: 'badge-bg',
+                  type: 'shape',
+                  shape: 'rect',
+                  x: 400,
+                  y: 800,
+                  width: 280,
+                  height: 64,
+                  fill: '#C0392B',
+                  borderRadius: 32,
+                }
+              : {
+                  id: 'plate-1',
+                  originId: 'badge-bg',
+                  type: 'path',
+                  x: 0,
+                  y: 0,
+                  width: 1080,
+                  height: 1080,
+                  closed: true,
+                  fill: '#C0392B',
+                  nodes: [
+                    { x: 402, y: 810 },
+                    { x: 678, y: 810 },
+                    { x: 680, y: 854 },
+                    { x: 400, y: 854 },
+                  ],
+                },
+            {
+              id: 'label-1',
+              originId: 'badge',
+              type: 'text',
+              x: 420,
+              y: 800,
+              width: 240,
+              height: 64,
+              text: '1893',
+              fontSize: 28,
+            },
+          ],
+        },
+      ],
+    } as any);
+
+  it('re-emits a pill plate as a ribbon path under the label (structural badgeStyle fix)', async () => {
+    // "The badge is not an arched ribbon" was visible to the critic and
+    // unfixable — badge shape lived only at compose time.
+    const findings: VisionFinding[] = [
+      {
+        issue: 'The badge is a pill; the reference shows an arched ribbon',
+        fix: {
+          scope: 'shared',
+          targetSlots: ['badge'],
+          style: { badgeStyle: 'ribbon' },
+        },
+      },
+    ];
+
+    await service.applyFixes(makeBadgeDoc('rect'), findings, 'org1');
+
+    const ops = docService.applyOps.mock.calls[0][1] as any[];
+    const add = ops.find((op) => op.op === 'addElement');
+    const remove = ops.find((op) => op.op === 'removeElement');
+    expect(add).toBeDefined();
+    expect(add.element.type).toBe('path');
+    expect(add.element.closed).toBe(true);
+    expect(add.element.originId).toBe('badge-bg');
+    expect(add.element.groupId).toBe('badge');
+    expect(add.element.fill).toBe('#C0392B');
+    // Inserted UNDER the label so the plate never paints over its copy.
+    expect(add.beforeElementId).toBe('label-1');
+    expect(remove).toEqual({
+      op: 'removeElement',
+      outputIndex: 0,
+      elementId: 'plate-1',
+    });
+    // The label itself is untouched — no updateElement targeting it.
+    expect(
+      ops.filter((op) => op.op === 'updateElement' && op.elementId === 'label-1')
+    ).toHaveLength(0);
+  });
+
+  it('converts a ribbon path back to a pill rect, and no-ops when the shape already matches', async () => {
+    const toPill: VisionFinding[] = [
+      {
+        issue: 'The plate should be a simple pill',
+        fix: {
+          scope: 'shared',
+          targetSlots: ['badge'],
+          style: { badgeStyle: 'pill' },
+        },
+      },
+    ];
+
+    await service.applyFixes(makeBadgeDoc('path'), toPill, 'org1');
+    const ops = docService.applyOps.mock.calls[0][1] as any[];
+    const add = ops.find((op) => op.op === 'addElement');
+    expect(add.element.type).toBe('shape');
+    expect(add.element.shape).toBe('rect');
+    // Half-height radius = pill.
+    expect(add.element.borderRadius).toBe(Math.round(add.element.height / 2));
+
+    docService.applyOps.mockClear();
+    // burst downgrades to pill (same rule as compose) — on a rect plate that
+    // is already the right shape class, nothing structural happens.
+    const burstOnPill: VisionFinding[] = [
+      {
+        issue: 'Make it a starburst',
+        fix: {
+          scope: 'shared',
+          targetSlots: ['badge'],
+          style: { badgeStyle: 'burst' },
+        },
+      },
+    ];
+    const doc = makeBadgeDoc('rect');
+    const result = await service.applyFixes(doc, burstOnPill, 'org1');
+    expect(docService.applyOps).not.toHaveBeenCalled();
+    expect(result).toBe(doc);
+  });
+
+  it('ignores a badgeStyle fix on a slot with no plate companion', async () => {
+    const doc = makeDoc();
+    const findings: VisionFinding[] = [
+      {
+        issue: 'Headline should be a ribbon (nonsense)',
+        fix: {
+          scope: 'shared',
+          targetSlots: ['headline'],
+          style: { badgeStyle: 'ribbon' },
+        },
+      },
+    ];
+
+    const result = await service.applyFixes(doc, findings, 'org1');
+
+    expect(docService.applyOps).not.toHaveBeenCalled();
+    expect(result).toBe(doc);
+  });
+});
+
+describe('AiDesignerComposerService.planForRecompose', () => {
+  const service = new AiDesignerComposerService(
+    { applyOps: vi.fn() } as any,
+    { generateText: vi.fn() } as any
+  );
+  const plan = {
+    variantId: 'v1',
+    skill: 'reference-clone',
+    concept: 'pizza poster',
+    slots: [
+      { id: 'headline', role: 'headline', kind: 'text' },
+      { id: 'image', role: 'product-image', kind: 'image' },
+    ],
+    assetNeeds: [],
+    palette: ['#111111'],
+    typeScale: {},
+    background: { kind: 'image' },
+    composition: 'hero-fullbleed',
+    formatTemplate: 'hero-fullbleed',
+    channelLayouts: { 'ig-square': 'stacked', 'ig-story': 'hero-top' },
+  } as unknown as DesignPlan;
+  const output = { formatId: 'ig-square', width: 1080, height: 1080 };
+  const copy = { headline: 'PIZZA' };
+
+  it('mutates a copy of the plan and clears the two silent-override levers', () => {
+    const mutated = service.planForRecompose(plan, 'poster-left', output, copy);
+
+    expect(mutated).not.toBeNull();
+    expect(mutated!.composition).toBe('poster-left');
+    // `effectiveLayout` (per-channel) and the D4 formatTemplate redirect both
+    // silently beat plan.composition — a recompose must clear them or it is a
+    // no-op with extra steps.
+    expect(mutated!.formatTemplate).toBeUndefined();
+    expect(mutated!.channelLayouts).toEqual({ 'ig-story': 'hero-top' });
+    // The original plan is untouched.
+    expect(plan.composition).toBe('hero-fullbleed');
+    expect(plan.channelLayouts).toEqual({
+      'ig-square': 'stacked',
+      'ig-story': 'hero-top',
+    });
+  });
+
+  it('returns null for an unknown composition id', () => {
+    expect(service.planForRecompose(plan, 'zigzag-panel', output, copy)).toBeNull();
+  });
+
+  it('returns null when the composition fails the aspect fit (never a silent substitute)', () => {
+    // banner-strip needs aspect ≥ 1.4; a square canvas fails it.
+    expect(service.planForRecompose(plan, 'banner-strip', output, copy)).toBeNull();
+  });
+
+  it('returns null when a required role is missing', () => {
+    const noImage = {
+      ...plan,
+      slots: [{ id: 'headline', role: 'headline', kind: 'text' }],
+      background: { kind: 'solid' },
+    } as unknown as DesignPlan;
+    // overlap-card requires an image role.
+    expect(
+      service.planForRecompose(noImage, 'overlap-card', output, copy)
+    ).toBeNull();
+  });
 });
 
 describe('AiDesignerComposerService.applyFixes on a lockup instance', () => {
@@ -581,6 +799,24 @@ describe('AiDesignerComposerService.compose (style-aware)', () => {
     // transformed string, so nothing downstream sees mutated text.
     expect(headline.text).toBe('Big launch');
     expect(headline.textTransform).toBe('uppercase');
+  });
+
+  it('honours reference-measured slot geometry: band placement and cap-height font size', async () => {
+    // The size-ratio control: "PIZZA is 4× the subhead" survives planning as
+    // numbers stamped by applyReferenceGeometry, not adjectives.
+    const plan = makePlan();
+    plan.slots[1] = {
+      ...plan.slots[1],
+      geometry: { yBand: [0.08, 0.2], xAnchor: 'left', heightRatio: 0.06 },
+    } as any;
+    const doc = await composeWith(plan);
+
+    const headline = byOrigin(doc, 'headline');
+    // Cap-height ratio → font size (cap ≈ 0.7 em): 0.06 × 1080 / 0.7 ≈ 93.
+    expect(headline.fontSize).toBe(Math.round((0.06 * 1080) / 0.7));
+    // hero-fullbleed anchors copy to the LOWER third; the measured band pins
+    // this headline to the top of the canvas instead.
+    expect(headline.y).toBeLessThan(1080 * 0.4);
   });
 
   it('lets a per-slot style override win over preset defaults', async () => {
@@ -1341,7 +1577,12 @@ describe('AiDesignerComposerService compose resilience', () => {
     });
   };
 
-  it('ignores ratio-shaped (0..1) plan.typeScale hints instead of rounding them to 0', async () => {
+  it('reads ratio-shaped (0..1) plan.typeScale hints as RATIOS of the role size', async () => {
+    // History: ratio hints once rounded to fontSize 0 and nuked the compose,
+    // so they were IGNORED outright. But every live plan speaks ratios
+    // (headline: 1, subhead: 0.42 — the skills' own vocabulary), and ignoring
+    // them discarded the plan's hierarchy intent entirely. They now scale the
+    // role's computed size, which keeps the doc valid by construction.
     const plan = makePlan({
       typeScale: { headline: 0.85, subhead: 0.4, cta: 0.28, legal: 0.16 },
     });
@@ -1357,8 +1598,16 @@ describe('AiDesignerComposerService compose resilience', () => {
         expect(el.fontSize).toBeGreaterThanOrEqual(8);
       }
     }
-    // Sub-floor hints are ignored — the preset ratio sizes win instead.
-    expect(byOrigin(doc, 'headline').fontSize).toBeGreaterThanOrEqual(85);
+    // The ratio landed: 0.85 of the unpinned headline size — same slot set,
+    // so the stack-count basis is identical.
+    const basePlan = makePlan();
+    basePlan.slots.push({ id: 'legal', role: 'legal', kind: 'text' });
+    const baseDoc = await composeResilient(basePlan, {
+      copy: { ...makeCopy(), legal: 'Terms apply' },
+    });
+    const baseHeadline = byOrigin(baseDoc, 'headline').fontSize;
+    const ratioHeadline = byOrigin(doc, 'headline').fontSize;
+    expect(Math.abs(ratioHeadline - Math.round(baseHeadline * 0.85))).toBeLessThanOrEqual(2);
   });
 
   it('clamps zero/negative/NaN typeScale hints to the legibility floor', async () => {
@@ -2003,13 +2252,40 @@ describe('AiDesignerComposerService.applyFixes scoped fontSize propagation (Phas
 });
 
 describe('AiDesignerComposerService background colors (gradient robustness)', () => {
-  const bgOf = (background: any, assets?: any) => {
+  const bgOf = (background: any, assets?: any, palette?: string[]) => {
     const service = new AiDesignerComposerService(
       new DesignerDocService() as any,
       { generateText: vi.fn() } as any
     );
-    return (service as any)._backgroundToDesignerBg(background, assets);
+    return (service as any)._backgroundToDesignerBg(
+      background,
+      assets,
+      undefined,
+      undefined,
+      0,
+      palette
+    );
   };
+
+  it('derives a missing background from the plan palette, never bare white', () => {
+    // The blank-white-card live failure: a plan with no background at all
+    // fell straight to '#ffffff'.
+    expect(bgOf(undefined, undefined, ['#0A0A14', '#F0F0FF']).background).toBe(
+      '#0A0A14'
+    );
+    expect(
+      bgOf({ kind: 'solid' }, undefined, ['#F7E9D0', '#3B2F2F']).background
+    ).toBe('#F7E9D0');
+    // Junk palette entries are skipped, not trusted.
+    expect(
+      bgOf(undefined, undefined, ['not-a-color', '#123456']).background
+    ).toBe('#123456');
+  });
+
+  it('keeps bare white only when there is no palette to derive from', () => {
+    expect(bgOf(undefined).background).toBe('#ffffff');
+    expect(bgOf({ kind: 'solid' }, undefined, []).background).toBe('#ffffff');
+  });
 
   it('parses a full CSS linear-gradient string into valid stops', () => {
     // The S3 live failure: the plan background carried a CSS gradient string
@@ -4495,6 +4771,40 @@ describe('AiDesignerComposerService.fixContrast', () => {
     ]);
   });
 
+  it('routes a straddle violation to the type halo — a bare fill flip cannot read on both surfaces', () => {
+    const service = makeService();
+    // Worst line: near-black (the audit stamps the WORST line's luma on a
+    // straddle). The plain ladder would flip to #FFFFFF — white reads ~19:1
+    // against 0.005 — and ship white text on the pale band the OTHER lines
+    // sit on. `straddle: true` must skip the bare flip and go straight to
+    // the halo repair.
+    const { doc, notes } = service.fixContrast(imageryDoc('#777777', 40), [
+      {
+        outputIndex: 0,
+        elementId: 't1',
+        originId: 'headline',
+        fill: '#777777',
+        ratio: 1.02,
+        backdropLuma: 0.005,
+        reason: 'contrast',
+        straddle: true,
+      } as any,
+    ]);
+
+    const children = (doc.outputs[0] as any).children;
+    const text = children.find((el: any) => el.id === 't1');
+    // The halo repair still flips the fill toward the worst line's surface —
+    // but never alone: the opposite-colour zero-offset halo separates the
+    // glyphs on the lines sitting on the other surface.
+    expect(text.fill).toBe('#FFFFFF');
+    expect(text.textShadow).toEqual(darkHalo(40));
+    // No bare flip note, no scrim painted over the photograph.
+    expect(children.filter((el: any) => el.type === 'shape')).toEqual([]);
+    expect(notes).toEqual([
+      'backed "headline" with a dark type halo over the imagery',
+    ]);
+  });
+
   it('still flips the fill for a reason:"contrast" violation at the same luminance', () => {
     const service = makeService();
     const { doc, notes } = service.fixContrast(imageryDoc('#777777', 40), [
@@ -4947,6 +5257,139 @@ describe('AiDesignerComposerService.fixContrast', () => {
 
     expect(before.symbolOverrides.plate).toBeUndefined();
     expect(notes).toEqual([]);
+  });
+
+  /**
+   * Two flat texts whose BOXES do not intersect (10px gap) but whose measured
+   * INK does — the live "(PHONE NUMBER NEEDED)" over "Call today" defect: a
+   * fitted line painted past its declared box bottom.
+   */
+  const inkOverlapDoc = () =>
+    ({
+      mode: 'image',
+      outputs: [
+        {
+          id: 'o1',
+          formatId: 'ig-square',
+          name: 'IG',
+          width: 1080,
+          height: 1080,
+          background: '#ffffff',
+          children: [
+            {
+              id: 'e1',
+              originId: 'headline',
+              type: 'text',
+              x: 100,
+              y: 100,
+              width: 400,
+              height: 50,
+              rotation: 0,
+              opacity: 1,
+              locked: false,
+              hidden: false,
+              text: 'Call today',
+              fontSize: 40,
+            },
+            {
+              id: 'e2',
+              originId: 'sub',
+              type: 'text',
+              x: 100,
+              y: 160,
+              width: 400,
+              height: 50,
+              rotation: 0,
+              opacity: 1,
+              locked: false,
+              hidden: false,
+              text: '(PHONE NUMBER NEEDED)',
+              fontSize: 20,
+            },
+          ],
+        },
+      ],
+    } as any);
+
+  const overlapViolation = (extra: Record<string, unknown> = {}) =>
+    ({
+      outputIndex: 0,
+      elementId: 'e1',
+      originId: 'headline',
+      otherElementId: 'e2',
+      fill: '',
+      ratio: 0,
+      backdropLuma: 0,
+      reason: 'overlap',
+      ...extra,
+    } as any);
+
+  it('separates an ink-only overlap by widening the boxes to the audit\'s ink rects', () => {
+    const service = makeService();
+    const input = inkOverlapDoc();
+    // e1's ink runs 40px past its box bottom (150 → 190), crossing e2's box
+    // (160 → 210); the declared boxes themselves never intersect.
+    const inkRect = { x: 100, y: 146, width: 300, height: 44 };
+    const { doc, notes } = service.fixContrast(input, [
+      overlapViolation({
+        inkRect,
+        otherInkRect: { x: 100, y: 165, width: 250, height: 17 },
+      }),
+    ]);
+
+    const children = (doc.outputs[0] as any).children;
+    const headline = children.find((el: any) => el.id === 'e1');
+    const sub = children.find((el: any) => el.id === 'e2');
+    // e1's box now covers its former ink y-range…
+    expect(headline.y).toBeLessThanOrEqual(inkRect.y);
+    expect(headline.y + headline.height).toBeGreaterThanOrEqual(
+      inkRect.y + inkRect.height
+    );
+    // …and the guard genuinely separated the pair: no box overlap remains.
+    expect(sub.y).toBeGreaterThanOrEqual(headline.y + headline.height);
+    expect(notes).toContain(
+      'separated overlapping text the render audit caught'
+    );
+    // The input doc was not mutated in place.
+    expect((input.outputs[0] as any).children[0].height).toBe(50);
+    expect((input.outputs[0] as any).children[1].y).toBe(160);
+  });
+
+  it('still runs the plain box guard on an overlap violation without ink rects', () => {
+    const service = makeService();
+    // Boxes truly overlap here (e2 pulled up onto e1) — the pre-ink-rect
+    // behavior: the guard separates by boxes alone, no crash.
+    const input = inkOverlapDoc();
+    (input.outputs[0] as any).children[1].y = 120;
+
+    const { doc, notes } = service.fixContrast(input, [overlapViolation()]);
+
+    const children = (doc.outputs[0] as any).children;
+    const headline = children.find((el: any) => el.id === 'e1');
+    const sub = children.find((el: any) => el.id === 'e2');
+    expect(sub.y).toBeGreaterThanOrEqual(headline.y + headline.height);
+    expect(notes).toContain(
+      'separated overlapping text the render audit caught'
+    );
+  });
+
+  it('skips ink rects naming elements that are gone — fail-soft', () => {
+    const service = makeService();
+    const input = inkOverlapDoc();
+
+    const { doc } = service.fixContrast(input, [
+      overlapViolation({
+        elementId: 'ghost',
+        otherElementId: 'also-gone',
+        inkRect: { x: 100, y: 146, width: 300, height: 44 },
+        otherInkRect: { x: 100, y: 165, width: 250, height: 17 },
+      }),
+    ]);
+
+    // Nothing matched, the boxes never intersected: geometry is untouched.
+    const children = (doc.outputs[0] as any).children;
+    expect(children.find((el: any) => el.id === 'e1').height).toBe(50);
+    expect(children.find((el: any) => el.id === 'e2').y).toBe(160);
   });
 });
 
@@ -6022,6 +6465,172 @@ describe('AiDesignerComposerService poster-left composition', () => {
     const kicker = byOrigin(doc, 'kicker');
     expect(kicker.fontFamily).toBe('Dancing Script');
     expect(kicker.fill).toBe('#FFD400');
+  });
+
+  it('rides an accent-role slot ABOVE the headline — poster grammar', async () => {
+    // The kicker/script line ("Italian" over "PIZZA") is not a subhead
+    // variant: bound to the subhead role it stacked under the headline and
+    // every reference with a top kicker composed wrong.
+    const plan = makePlan({ composition: 'poster-left' });
+    plan.slots.push({
+      id: 'kicker',
+      role: 'accent',
+      kind: 'text',
+      style: { fontFamily: 'Great Vibes', fill: '#E2B84B' },
+    } as any);
+    const doc = await composeWith(plan, undefined, {
+      ...makeCopy(),
+      kicker: 'Italian',
+    });
+    const kicker = byOrigin(doc, 'kicker');
+    const headline = byOrigin(doc, 'headline');
+    expect(kicker).toBeDefined();
+    expect(kicker.y).toBeLessThan(headline.y);
+    expect(headline.y).toBeLessThan(1080 * 0.35);
+  });
+
+  it('treats a copy slot hidden with opacity: 0 as ABSENT, plate included', async () => {
+    // The planner's way of saying "the reference has no CTA" was a cta slot
+    // with style.opacity 0 — the label took the 0 while the plate painted at
+    // full strength, and an empty red pill shipped.
+    const plan = makePlan({ composition: 'poster-left' });
+    const cta = plan.slots.find((s) => s.id === 'cta')!;
+    (cta as any).style = { opacity: 0 };
+    const doc = await composeWith(plan);
+    const children = childrenOf(doc);
+    expect(children.some((el) => (el.originId || '') === 'cta')).toBe(false);
+    expect(children.some((el) => (el.originId || '') === 'cta-bg')).toBe(false);
+  });
+
+  it('rotates a badge UNIT rigidly — label and ribbon plate together', async () => {
+    // The label is the only member whose originId IS the slot id, so a
+    // plan-level `rotation` patched the label alone: the text swung off the
+    // flat plate (a sticker-pop badge shipped exactly that, label at -6°
+    // hanging above its ribbon).
+    const plan = makePlan({ composition: 'poster-left' });
+    plan.slots.push({
+      id: 'badge',
+      role: 'badge',
+      kind: 'badge',
+      style: { badgeStyle: 'ribbon' },
+      rotation: -6,
+    } as any);
+    const doc = await composeWith(plan);
+
+    const label = byOrigin(doc, 'badge');
+    expect(label.rotation).toBe(-6);
+    const plate = byOrigin(doc, 'badge-bg');
+    // The plate's painted centre must still sit on the label's centre —
+    // rotated rigidly about the same pivot, they cannot separate.
+    const ys = plate.nodes.map((n: any) => n.y);
+    const xs = plate.nodes.map((n: any) => n.x);
+    const plateCx = (Math.min(...xs) + Math.max(...xs)) / 2;
+    const plateCy = (Math.min(...ys) + Math.max(...ys)) / 2;
+    const labelCx = label.x + label.width / 2;
+    const labelCy = label.y + label.height / 2;
+    // Rotating a wide flat unit by 6° moves the extremes most; the centres
+    // stay within a few px of each other.
+    expect(Math.abs(plateCx - labelCx)).toBeLessThan(15);
+    expect(Math.abs(plateCy - labelCy)).toBeLessThan(15);
+  });
+
+  it('grows a short display headline toward its column', async () => {
+    // The role ratios size a headline for the average multi-word line — a
+    // two-word sale headline at that size reads as a caption on an empty
+    // poster ("B1G1 FREE" shipped at 83px on a 1080 white canvas).
+    const plan = makePlan({ composition: 'poster-left' });
+    const doc = await composeWith(plan, undefined, {
+      ...makeCopy(),
+      headline: 'SALE',
+    });
+    const headline = byOrigin(doc, 'headline');
+    expect(headline.fontSize).toBeGreaterThan(150);
+  });
+
+  it('leaves an ordinary multi-word headline at its ratio size', async () => {
+    // Fill-grow must not churn every layout: a headline that already covers
+    // half its column keeps the ratio-sized result.
+    const doc = await composeWith(makePlan({ composition: 'poster-left' }));
+    expect(byOrigin(doc, 'headline').fontSize).toBeLessThan(150);
+  });
+
+  it('reads slot-id-keyed typeScale hints as within-role ratios', async () => {
+    // The planner ranks lines WITHIN a role (`typeScale: { echo: 0.5 }` —
+    // the second PIZZA under the big one); only the four role keys reached
+    // `_typeScalePx`, so the echo composed at full headline size.
+    const plan = makePlan({
+      composition: 'poster-left',
+      typeScale: { echo: 0.5 } as any,
+    });
+    plan.slots.push({ id: 'echo', role: 'headline', kind: 'text' } as any);
+    const doc = await composeWith(plan, undefined, {
+      ...makeCopy(),
+      echo: 'PIZZA',
+    });
+    const headline = byOrigin(doc, 'headline');
+    const echo = byOrigin(doc, 'echo');
+    expect(
+      Math.abs(echo.fontSize - Math.round(headline.fontSize * 0.5))
+    ).toBeLessThanOrEqual(2);
+  });
+
+  it('re-anchors copy-anchored decor when a critic fix moves the copy', async () => {
+    // The rule under the headline is a pure function of the headline's box;
+    // a geometry fix that moved the headline used to leave the rule floating
+    // where the headline WAS — a red streak across the photo, live.
+    const doc = await composeWith(makePlan({ composition: 'poster-left', decor: ['rule'] } as any));
+    const ruleY = (d: any) =>
+      Math.min(
+        ...(childrenOf(d).find((el) => el.originId === 'decor-rule')?.nodes ?? [{ y: Infinity }])
+          .map((n: any) => n.y)
+      );
+
+    const fixed = await new AiDesignerComposerService(
+      new DesignerDocService() as any,
+      { generateText: vi.fn() } as any
+    ).applyFixes(doc, [
+      {
+        issue: 'headline too high',
+        fix: { scope: 'shared', targetSlots: ['headline'], geometry: { y: 300 } },
+      },
+    ] as any, 'org1');
+
+    // Wherever the stack settles, the rule sits in the gap directly under the
+    // headline's FINAL box — re-emitted, not left where the headline was —
+    // and capped by the room above the next line.
+    const h = byOrigin(fixed, 'headline');
+    const subY = byOrigin(fixed, 'sub').y;
+    const rY = ruleY(fixed);
+    expect(rY).toBeGreaterThanOrEqual(h.y + h.height);
+    expect(rY).toBeLessThan(subY);
+  });
+
+  it('carves the copy band from a ribbon badge’s PAINTED extent, not its canvas-sized path box', async () => {
+    // The ribbon plate is a closed path on the emit-decor contract: a
+    // canvas-sized box with absolute nodes. Carving the band from that box
+    // started it below the bottom edge and the whole stack collapsed into the
+    // overlap guard's bottom re-pack — a live pizza-clone run composed its
+    // "poster-left" stack at y=755 with the subhead off-canvas.
+    const plan = makePlan({ composition: 'poster-left' });
+    plan.slots.push({
+      id: 'badge',
+      role: 'badge',
+      kind: 'badge',
+      style: { badgeStyle: 'ribbon' },
+    } as any);
+    const doc = await composeWith(plan);
+
+    const plate = byOrigin(doc, 'badge-bg');
+    expect(plate.type).toBe('path');
+    // The contract that broke the carve: the plate's box really is the canvas.
+    expect(plate.width).toBe(1080);
+    expect(plate.height).toBe(1080);
+
+    // Top-anchored regardless: the headline sits in the top quarter.
+    const headline = byOrigin(doc, 'headline');
+    expect(headline.y).toBeLessThan(1080 * 0.25);
+    expect(byOrigin(doc, 'sub').y).toBeGreaterThan(headline.y);
+    expect(byOrigin(doc, 'sub').y).toBeLessThan(1080 * 0.5);
   });
 });
 

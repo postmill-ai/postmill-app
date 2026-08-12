@@ -325,6 +325,57 @@ describe('AiDesignerConductorService plan acceptance', () => {
     );
   });
 
+  it('broadcasts session:transition for executing and delivered', async () => {
+    const emitter = makeEmitter();
+    const service = {
+      getSessionForUser: vi.fn().mockResolvedValue({
+        id: SESSION_ID,
+        state: 'awaiting_plan',
+        mode: 'prompt',
+        brief: {
+          intent: 'x',
+          lastPlans: [{ variantId: 'v1', skill: 'meme' }],
+        },
+        activeDesignIds: null,
+      }),
+      updateSession: vi.fn().mockResolvedValue(undefined),
+      appendMessage: vi.fn().mockResolvedValue({ id: 'msg-1' }),
+    };
+    const { conductor } = makeConductor({ service });
+    (conductor as any)._executePipeline = vi.fn().mockResolvedValue([]);
+
+    await conductor.handleAcceptPlan(
+      SESSION_ID,
+      ctx,
+      'reply-1',
+      undefined,
+      false,
+      undefined,
+      emitter
+    );
+
+    expect(emitter.toSession).toHaveBeenCalledWith('session:transition', {
+      state: 'executing',
+    });
+    expect(emitter.toSession).toHaveBeenCalledWith('session:transition', {
+      state: 'delivered',
+    });
+    // The transition rides AFTER the persist: the write must be visible to a
+    // reconnect's session:state hydrate before the frontend hears about it.
+    expect(service.updateSession).toHaveBeenCalledWith(
+      SESSION_ID,
+      ORG_ID,
+      USER_ID,
+      expect.objectContaining({ state: 'executing' })
+    );
+    expect(service.updateSession).toHaveBeenCalledWith(
+      SESSION_ID,
+      ORG_ID,
+      USER_ID,
+      expect.objectContaining({ state: 'delivered' })
+    );
+  });
+
   const makeAcceptanceConductor = (lastPlans: any[]) => {
     const service = {
       getSessionForUser: vi.fn().mockResolvedValue({
@@ -1823,6 +1874,81 @@ describe('AiDesignerConductorService vision-critic rubric resolution', () => {
     expect(criticCall![2].rubric).toEqual(skillRouter.getRubric('meme'));
   });
 
+  it('threads reference cues + file ids into the revise re-check critique', async () => {
+    // A revision of a reference-clone run used to be re-checked with no
+    // reference_fidelity criterion at all — the reference context vanished
+    // on revise.
+    const emitter = makeEmitter();
+    const service = {
+      getSessionForUser: vi.fn().mockResolvedValue({
+        id: SESSION_ID,
+        state: 'delivered',
+        mode: 'prompt',
+        brief: {
+          intent: 'x',
+          skillId: 'reference-clone',
+          lastPlans: [],
+          referenceCues: ['COMPOSITION: type stack top-left'],
+          referenceCueFileIds: ['ref-1'],
+        },
+        config: { channels: ['ig-post'], variants: 1, referenceFileIds: ['ref-1'] },
+        activeDesignIds: ['design-A'],
+      }),
+      updateSession: vi.fn().mockResolvedValue(undefined),
+      appendMessage: vi.fn().mockResolvedValue({ id: 'msg-1' }),
+    };
+    const designService = {
+      getDesign: vi.fn().mockResolvedValue({ id: 'design-A', doc: { metadata: {}, layers: [] } }),
+    };
+    const composer = {
+      reviseByInstruction: vi.fn().mockResolvedValue({ metadata: {}, layers: [] }),
+      applyFixes: vi.fn(),
+    };
+    const saver = {
+      saveDesign: vi.fn().mockResolvedValue({
+        designId: 'design-A-revised',
+        variantId: 'revised',
+        contactSheetUrl: 'https://example.com/revised-sheet.png',
+        outputPreviews: [
+          { formatId: 'ig-post', fileId: 'file-revised', url: 'https://example.com/revised.png' },
+        ],
+      }),
+      updateDesign: vi.fn(),
+    };
+
+    const { conductor } = makeConductor({ service });
+    (conductor as any)._skillRouter = new AiDesignerSkillRouter();
+    (conductor as any)._designService = designService;
+    (conductor as any)._composer = composer;
+    (conductor as any)._saver = saver;
+
+    const dispatchAgent = vi.fn().mockImplementation((_, agentId) => {
+      if (agentId === 'vision-critic') {
+        return Promise.resolve({
+          content: JSON.stringify({ type: 'findings', findings: [] }),
+        });
+      }
+      return Promise.resolve({ content: '{}' });
+    });
+    (conductor as any)._dispatchAgent = dispatchAgent;
+
+    await conductor.handleRevise(
+      SESSION_ID,
+      ctx,
+      { instruction: 'make it bigger', targetDesignId: 'design-A', nonce: 'n1' },
+      emitter
+    );
+
+    const criticCall = dispatchAgent.mock.calls.find(
+      ([_, agentId]) => agentId === 'vision-critic'
+    );
+    expect(criticCall).toBeDefined();
+    expect(criticCall![2].referenceCues).toEqual([
+      'COMPOSITION: type stack top-left',
+    ]);
+    expect(criticCall![2].referenceFileIds).toEqual(['ref-1']);
+  });
+
   // Round 8 C5: `results = [revised]` on the revise path, and the caption used
   // a hardcoded array index — so a revision of variant 3 always shipped
   // captioned "Variant 1".
@@ -2386,6 +2512,52 @@ describe('AiDesignerConductorService chat intake', () => {
     );
     expect(briefUpdate[3].brief).not.toHaveProperty('lastPlans');
     expect(briefUpdate[3].brief.questionsAsked).toEqual(['audience']);
+  });
+
+  it("records the conversationalist's contact question in questionsAsked", async () => {
+    // 'contact' is not a brief field, so the missing-field bookkeeping can't
+    // record it — the `asked` hint on the chat-turn must, or the question
+    // loops forever.
+    const emitter = makeEmitter();
+    const { conductor, service } = makeIntakeConductor({
+      intent: 'a summer pool cleaning special',
+      audience: 'local homeowners',
+      tone: 'friendly',
+    });
+    (conductor as any)._dispatchAgent = vi.fn().mockResolvedValue(
+      agentReply({
+        type: 'chat-turn',
+        asked: 'contact',
+        reply:
+          "Should the design include a phone number, website, or address? Share it, or say 'none'.",
+      })
+    );
+
+    await (conductor as any)._runChatIntake(SESSION_ID, ctx, CONFIG, emitter, 'friendly');
+
+    const briefUpdate = service.updateSession.mock.calls.find(
+      (call: any) => call[3]?.brief
+    );
+    expect(briefUpdate[3].brief.questionsAsked).toEqual(['contact']);
+  });
+
+  it('honors no asked hint other than contact', async () => {
+    const emitter = makeEmitter();
+    const { conductor, service } = makeIntakeConductor({
+      intent: 'a summer pool cleaning special',
+      audience: 'local homeowners',
+      tone: 'friendly',
+    });
+    (conductor as any)._dispatchAgent = vi.fn().mockResolvedValue(
+      agentReply({ type: 'chat-turn', asked: 'forged', reply: 'hm?' })
+    );
+
+    await (conductor as any)._runChatIntake(SESSION_ID, ctx, CONFIG, emitter, 'hi');
+
+    const briefUpdate = service.updateSession.mock.calls.find(
+      (call: any) => call[3]?.brief
+    );
+    expect(briefUpdate[3].brief.questionsAsked).toEqual([]);
   });
 
   it('counts consecutive classifier failures server-side and resets on success', async () => {
@@ -3081,6 +3253,8 @@ describe('AiDesignerConductorService variant expansion', () => {
        * so tests exercising that QC need a primary that was not verified clean.
        */
       primarySkipped?: boolean;
+      config?: Record<string, unknown>;
+      brief?: Record<string, unknown>;
     } = {}
   ) => {
     const service = {
@@ -3088,8 +3262,8 @@ describe('AiDesignerConductorService variant expansion', () => {
         id: SESSION_ID,
         state: 'awaiting_plan',
         mode: 'prompt',
-        brief: { intent: 'x', lastPlans: [PLAN] },
-        config: { channels: ['ig-post', 'ig-story'], variants: 1 },
+        brief: opts.brief ?? { intent: 'x', lastPlans: [PLAN] },
+        config: opts.config ?? { channels: ['ig-post', 'ig-story'], variants: 1 },
         activeDesignIds: null,
       }),
       updateSession: vi.fn().mockResolvedValue(undefined),
@@ -3247,6 +3421,42 @@ describe('AiDesignerConductorService variant expansion', () => {
     ]);
   });
 
+  it('threads reference cues + file ids + briefIntent into the primary AND per-format critiques', async () => {
+    // Reference context used to stop at the primary loop: the per-format
+    // passes critiqued secondary formats with no reference_fidelity criterion
+    // at all, so fidelity regressions survived expansion unflagged — and
+    // with no briefIntent the offer_fidelity criterion vanished there too.
+    const emitter = makeEmitter();
+    const { conductor, dispatchAgent } = makeExpansionConductor(() => [], {
+      primarySkipped: true,
+      config: {
+        channels: ['ig-post', 'ig-story'],
+        variants: 1,
+        referenceFileIds: ['ref-1'],
+      },
+      brief: {
+        intent: 'buy 1 get 1 free pizza post',
+        lastPlans: [PLAN],
+        referenceCues: ['COMPOSITION: type stack top-left'],
+        referenceCueFileIds: ['ref-1'],
+      },
+    });
+
+    await conductor.handleAcceptPlan(SESSION_ID, ctx, 'reply-1', undefined, false, undefined, emitter);
+
+    const criticCalls = dispatchAgent.mock.calls.filter(
+      ([_, agentId]: any) => agentId === 'vision-critic'
+    );
+    // Primary pass + at least one per-format pass — and every single one
+    // carries the full reference context AND the user's own words.
+    expect(criticCalls.length).toBeGreaterThanOrEqual(2);
+    for (const call of criticCalls) {
+      expect(call[2].referenceCues).toEqual(['COMPOSITION: type stack top-left']);
+      expect(call[2].referenceFileIds).toEqual(['ref-1']);
+      expect(call[2].briefIntent).toBe('buy 1 get 1 free pizza post');
+    }
+  });
+
   it('applies format-pinned fixes and caps the variant QC at two passes', async () => {
     const emitter = makeEmitter();
     // The primary pass is SKIPPED (not verified clean — a clean one skips the
@@ -3359,6 +3569,11 @@ describe('AiDesignerConductorService variant expansion', () => {
     expect(criticCalls).toHaveLength(2);
     expect(composer.applyFixes).toHaveBeenCalledTimes(2);
     expect(saver.updateDesign).toHaveBeenCalledTimes(2);
+    // The revise re-check carries the user's own words — offer_fidelity used
+    // to silently vanish on revise.
+    for (const call of criticCalls) {
+      expect(call[2].briefIntent).toBe('x');
+    }
   });
 
   it('runs the composer sanitizer on the addOutput-seeded outputs', async () => {
@@ -3448,6 +3663,41 @@ describe('AiDesignerConductorService variant expansion', () => {
     const restore = saver.updateDesign.mock.calls.at(-1)!;
     expect(restore[3]).toEqual(docService.applyOps.mock.calls[0][0]);
     expect(restore[3].outputs).toHaveLength(1);
+  });
+
+  it('retries a failed expansion once and delivers every format when the retry lands', async () => {
+    // Observed live: one malformed critic fix op aborted variant 2's whole
+    // expansion and the user got 1 of the 2 formats they ordered. A transient
+    // failure now gets one clean retry from the rolled-back doc.
+    const emitter = makeEmitter();
+    const { conductor, saver, service, composer } = makeExpansionConductor(
+      () => [{ issue: 'caption is too low', fix: { scope: 'format-only' } }],
+      // Primary pass skipped → the per-format expansion QC is the ONLY
+      // applyFixes caller, so the single rejection lands there.
+      { primarySkipped: true }
+    );
+    composer.applyFixes
+      .mockRejectedValueOnce(new Error('fixes exploded'))
+      .mockImplementation((d: any) => Promise.resolve(d));
+
+    await conductor.handleAcceptPlan(SESSION_ID, ctx, 'reply-1', undefined, false, undefined, emitter);
+
+    const notes = (service.appendMessage as ReturnType<typeof vi.fn>).mock.calls
+      .map(([arg]: any) => arg?.content?.md)
+      .filter(Boolean)
+      .join('\n');
+    expect(notes).not.toContain('could only be delivered in its original format');
+    // The delivered doc is the RETRY's expansion (both formats), not the
+    // rolled-back single-format original.
+    const mediaCall = (service.appendMessage as ReturnType<typeof vi.fn>).mock.calls
+      .find((call) => call[0].kind === 'media');
+    expect(mediaCall).toBeTruthy();
+    // Rollback ran (an -unexpanded write), then the expansion ran again.
+    const writeNames = saver.updateDesign.mock.calls.map((c: any[]) => c[2]);
+    expect(writeNames.some((n: string) => String(n).includes('-unexpanded'))).toBe(true);
+    expect(
+      writeNames.filter((n: string) => String(n).includes('-expanded')).length
+    ).toBeGreaterThanOrEqual(2);
   });
 
   it('posts a degradation note when the sanitizer cannot repair a seeded output', async () => {
@@ -4869,8 +5119,10 @@ describe('_dispatchAgent abort signal', () => {
 
 
 // The beauty gate: a variant the critic STILL flags for aesthetic criteria
-// after MAX_QUALITY_PASSES is held back rather than shipped — unless it is
-// the only result, in which case it ships with a warning.
+// after MAX_QUALITY_PASSES is disclosed, never dropped: on ordinary runs
+// every approved variant delivers (residual findings become review notes);
+// actual hold-back exists only on reference runs, feeding winner-only
+// best-of-N delivery.
 describe('AiDesignerConductorService beauty gate', () => {
   const makePlan = (variantId: string) => ({
     variantId,
@@ -4999,7 +5251,11 @@ describe('AiDesignerConductorService beauty gate', () => {
     return { conductor, saver, composer, dispatchAgent, mediaItems, headsUp };
   };
 
-  it('holds back a variant still flagged for aesthetic criteria after the bounded passes', async () => {
+  it('delivers a still-flagged variant WITH a disclosure note — approved plans are a delivery contract', async () => {
+    // Observed live: 3 approved plans, 1 delivered — however honest the
+    // hold-back notes were, under-delivering the order reads as a failed
+    // session. On non-reference runs every approved variant now ships and
+    // residual findings are disclosed instead.
     const emitter = makeEmitter();
     const { conductor, dispatchAgent, mediaItems, headsUp } = makeGateConductor(
       [makePlan('v1'), makePlan('v2')],
@@ -5008,20 +5264,95 @@ describe('AiDesignerConductorService beauty gate', () => {
 
     await conductor.handleAcceptPlan(SESSION_ID, ctx, 'reply-1', undefined, false, undefined, emitter);
 
-    // v1 got the full bounded loop (3 critiques), v2 one clean pass.
+    // v1 got the full bounded loop twice (3 critiques, then 3 more after the
+    // ship-gate rebuild), v2 one clean pass.
     const criticCalls = dispatchAgent.mock.calls.filter(
       ([_, agentId]: any) => agentId === 'vision-critic'
     );
-    expect(criticCalls).toHaveLength(4);
+    expect(criticCalls).toHaveLength(7);
 
-    // The held-back variant is NOT delivered; the clean one is.
+    // BOTH variants deliver; the flagged one carries the review warning.
     const designIds = mediaItems().map((item) => item.designId);
-    expect(designIds).not.toContain('design-v1');
+    expect(designIds).toContain('design-v1');
     expect(designIds).toContain('design-v2');
-    expect(headsUp()).toContain('variant 1 was held back');
-    // …and the survivor keeps the number the notes (and the user) know it by —
-    // renumbering it to "Variant 1" made the heads-up and the caption disagree.
-    expect(mediaItems()[0].caption).toContain('Variant 2');
+    expect(headsUp()).toContain('variant 1 still has known quality issues');
+    expect(headsUp()).not.toContain('was held back');
+  });
+
+  it('rebuilds a variant once when ship-blockers survive the fix budget', async () => {
+    // Disclosure is not the bar: a render the system KNOWS is broken gets a
+    // full rebuild (fresh compose from the approved plan) and a from-scratch
+    // re-review before it may ship — notes are the LAST resort, after the
+    // rebuild also failed.
+    const emitter = makeEmitter();
+    const { conductor, saver, dispatchAgent, headsUp, mediaItems } =
+      makeGateConductor([makePlan('v1')], () => [AESTHETIC_FINDING]);
+
+    await conductor.handleAcceptPlan(SESSION_ID, ctx, 'reply-1', undefined, false, undefined, emitter);
+
+    // Initial compose + the ship-gate rebuild compose.
+    const composerCalls = dispatchAgent.mock.calls.filter(
+      ([_, agentId]: any) => agentId === 'composer'
+    );
+    expect(composerCalls.length).toBe(2);
+    // The rebuilt doc was persisted under the `-rebuilt` tag…
+    expect(
+      saver.updateDesign.mock.calls.some((c: any[]) =>
+        String(c[2]).endsWith('-rebuilt')
+      )
+    ).toBe(true);
+    // …and only ONE rebuild happens even though findings persist; the
+    // variant still delivers (delivery contract) with the disclosure note.
+    expect(mediaItems().map((i) => i.designId)).toContain('design-v1');
+    expect(headsUp()).toContain('still has known quality issues');
+  });
+
+  it('sizes the critique budget to the order and clamps it', () => {
+    const { conductor } = makeGateConductor([makePlan('v1')], () => []);
+    const c = conductor as any;
+    // 3 variants × 2 formats: 4 + 12 + 6 = 22.
+    c._setCritiqueBudget('s1', 3, 2);
+    expect(c._critiqueCaps.get('s1')).toBe(22);
+    // 1 variant × 1 format computes below the floor — clamped up to 12.
+    c._setCritiqueBudget('s2', 1, 1);
+    expect(c._critiqueCaps.get('s2')).toBe(12);
+    // A huge order clamps at 32.
+    c._setCritiqueBudget('s3', 10, 4);
+    expect(c._critiqueCaps.get('s3')).toBe(32);
+    // Exhaustion reads the per-session cap, not the constant.
+    for (let k = 0; k < 21; k++) c._countCritiqueDispatch('s1');
+    expect(c._critiqueBudgetExhausted('s1')).toBe(false);
+    c._countCritiqueDispatch('s1');
+    expect(c._critiqueBudgetExhausted('s1')).toBe(true);
+  });
+
+  it('restores the best-scoring pass when fixes made the render worse', async () => {
+    // Live: a fix chain wrecked a decent pass-1 render and the wreck shipped
+    // because the loop keeps the LAST render. The best judged doc now wins.
+    const emitter = makeEmitter();
+    let critiques = 0;
+    const { conductor, saver, headsUp, mediaItems } = makeGateConductor(
+      [makePlan('v1')],
+      () => {
+        critiques += 1;
+        // Pass 1: one modest fixable finding. Passes 2-3: the "fixes" made it
+        // much worse.
+        return critiques === 1
+          ? [AESTHETIC_FINDING]
+          : [AESTHETIC_FINDING, AESTHETIC_FINDING, AESTHETIC_FINDING];
+      }
+    );
+
+    await conductor.handleAcceptPlan(SESSION_ID, ctx, 'reply-1', undefined, false, undefined, emitter);
+
+    // The restore re-persisted the pass-1 doc under the `-best` tag…
+    const bestWrite = saver.updateDesign.mock.calls.find((c: any[]) =>
+      String(c[2]).endsWith('-best')
+    );
+    expect(bestWrite).toBeTruthy();
+    // …the note says so, and the variant still delivers.
+    expect(headsUp()).toContain('rolled back');
+    expect(mediaItems().map((i) => i.designId)).toContain('design-v1');
   });
 
   it('delivers the only result with a warning instead of delivering nothing', async () => {
@@ -5054,5 +5385,523 @@ describe('AiDesignerConductorService beauty gate', () => {
     expect(mediaItems().map((item) => item.designId)).toEqual(
       expect.arrayContaining(['design-v1', 'design-v2'])
     );
+  });
+});
+
+// The interpretation IS the run's spec: re-rolling it on every plan
+// presentation made the spec drift between otherwise-identical runs (and paid
+// a vision call each time). `_referenceCuesFor` reuses the persisted cues
+// while the session's reference files are unchanged.
+describe('AiDesignerConductorService reference interpretation caching', () => {
+  it('reuses persisted cues when the reference file ids are unchanged', async () => {
+    const { conductor } = makeConductor();
+    const dispatchAgent = vi.fn();
+    (conductor as any)._dispatchAgent = dispatchAgent;
+
+    const result = await (conductor as any)._referenceCuesFor(
+      ctx,
+      { channels: ['ig-post'], variants: 1, referenceFileIds: ['a', 'b'] },
+      {
+        intent: 'x',
+        referenceCues: ['COMPOSITION: top-left'],
+        referenceCueFileIds: ['a', 'b'],
+      }
+    );
+
+    expect(result).toEqual({
+      referenceCues: ['COMPOSITION: top-left'],
+      referenceCueFileIds: ['a', 'b'],
+    });
+    expect(dispatchAgent).not.toHaveBeenCalled();
+  });
+
+  it('re-interprets when the reference files changed, stamping the new ids', async () => {
+    const { conductor } = makeConductor();
+    const dispatchAgent = vi.fn().mockResolvedValue({
+      content: JSON.stringify({ type: 'interpretations', cues: ['new cue'] }),
+    });
+    (conductor as any)._dispatchAgent = dispatchAgent;
+
+    const result = await (conductor as any)._referenceCuesFor(
+      ctx,
+      { channels: ['ig-post'], variants: 1, referenceFileIds: ['c'] },
+      {
+        intent: 'x',
+        referenceCues: ['old cue'],
+        referenceCueFileIds: ['a', 'b'],
+      }
+    );
+
+    expect(result).toEqual({
+      referenceCues: ['new cue'],
+      referenceCueFileIds: ['c'],
+    });
+    expect(dispatchAgent).toHaveBeenCalledTimes(1);
+    expect(dispatchAgent.mock.calls[0][2]).toEqual({
+      type: 'interpret-request',
+      fileIds: ['c'],
+    });
+  });
+
+  it('leaves the id stamp unset when interpretation fails, so the next run retries', async () => {
+    const { conductor } = makeConductor();
+    (conductor as any)._dispatchAgent = vi
+      .fn()
+      .mockRejectedValue(new Error('vision provider down'));
+
+    const result = await (conductor as any)._referenceCuesFor(
+      ctx,
+      { channels: ['ig-post'], variants: 1, referenceFileIds: ['a'] },
+      { intent: 'x' }
+    );
+
+    expect(result).toEqual({});
+  });
+
+  it('returns nothing for a run without references', async () => {
+    const { conductor } = makeConductor();
+    const dispatchAgent = vi.fn();
+    (conductor as any)._dispatchAgent = dispatchAgent;
+
+    const result = await (conductor as any)._referenceCuesFor(
+      ctx,
+      { channels: ['ig-post'], variants: 1 },
+      { intent: 'x' }
+    );
+
+    expect(result).toEqual({});
+    expect(dispatchAgent).not.toHaveBeenCalled();
+  });
+});
+
+// Fix.recompose used to be parsed, prompted, typed — and consumed by nothing
+// (composer:_designLanguagePatch excludes it). A layout-level defect was
+// therefore structurally unfixable and reliably held the variant back. Now it
+// re-enters compose with the same copy and assets under the new composition.
+describe('AiDesignerConductorService recompose wiring', () => {
+  const RECOMPOSE_FINDING = {
+    issue: 'The stack is anchored at the wrong edge — the arrangement itself is wrong',
+    criterion: 'reference_fidelity',
+    fix: {
+      scope: 'shared',
+      recompose: 'poster-left',
+      note: 'anchor the copy stack top-left over the photo',
+    },
+  };
+
+  const makeRecomposeConductor = (
+    criticFindings: (criticCall: number) => any[],
+    opts: { planForRecomposeReturnsNull?: boolean } = {}
+  ) => {
+    const plan = {
+      variantId: 'v1',
+      skill: 'reference-clone',
+      concept: 'pizza poster',
+      slots: [{ id: 'headline', role: 'headline', kind: 'text' }],
+      assetNeeds: [],
+      palette: [],
+      typeScale: {},
+      background: { kind: 'solid' as const },
+      composition: 'hero-fullbleed',
+    };
+    const service = {
+      getSessionForUser: vi.fn().mockResolvedValue({
+        id: SESSION_ID,
+        state: 'awaiting_plan',
+        mode: 'prompt',
+        brief: { intent: 'x', lastPlans: [plan] },
+        config: { channels: ['ig-post'], variants: 1 },
+        activeDesignIds: null,
+      }),
+      updateSession: vi.fn().mockResolvedValue(undefined),
+      appendMessage: vi.fn().mockResolvedValue({ id: 'msg-1' }),
+    };
+    const saver = {
+      saveDesign: vi.fn().mockResolvedValue({
+        designId: 'design-v1',
+        variantId: 'v1',
+        contactSheetUrl: 'https://example.com/sheet-v1.png',
+        outputPreviews: [
+          { formatId: 'ig-post', fileId: 'f1', url: 'https://example.com/preview-v1.png' },
+        ],
+      }),
+      updateDesign: vi.fn().mockResolvedValue({
+        designId: 'design-v1',
+        variantId: 'v1-recomposed',
+        contactSheetUrl: 'https://example.com/sheet-v1-recomposed.png',
+        outputPreviews: [
+          {
+            formatId: 'ig-post',
+            fileId: 'f1r',
+            url: 'https://example.com/preview-v1-recomposed.png',
+          },
+        ],
+      }),
+    };
+    const composer = {
+      applyFixes: vi.fn((d: any) => Promise.resolve(d)),
+      planForRecompose: vi.fn((p: any, id: string) =>
+        opts.planForRecomposeReturnsNull
+          ? null
+          : { ...p, composition: id, formatTemplate: undefined }
+      ),
+    };
+    const designService = {
+      getDesign: vi
+        .fn()
+        .mockResolvedValue({ id: 'design-v1', doc: { metadata: {}, layers: [] } }),
+    };
+
+    const { conductor } = makeConductor({ service });
+    (conductor as any)._skillRouter = {
+      getRubric: vi.fn().mockReturnValue({ criteria: [] }),
+    };
+    (conductor as any)._saver = saver;
+    (conductor as any)._composer = composer;
+    (conductor as any)._designService = designService;
+
+    let criticCall = 0;
+    const dispatchAgent = vi.fn().mockImplementation((_, agentId) => {
+      if (agentId === 'asset') {
+        return Promise.resolve({ content: JSON.stringify({ type: 'assets', assets: {} }) });
+      }
+      if (agentId === 'copywriter') {
+        return Promise.resolve({
+          content: JSON.stringify({ type: 'copy', texts: { headline: 'PIZZA' } }),
+        });
+      }
+      if (agentId === 'composer') {
+        return Promise.resolve({
+          content: JSON.stringify({ type: 'doc', doc: { metadata: {}, layers: [] } }),
+        });
+      }
+      if (agentId === 'vision-critic') {
+        criticCall++;
+        return Promise.resolve({
+          content: JSON.stringify({
+            type: 'findings',
+            findings: criticFindings(criticCall),
+          }),
+        });
+      }
+      return Promise.resolve({ content: '{}' });
+    });
+    (conductor as any)._dispatchAgent = dispatchAgent;
+
+    return { conductor, service, saver, composer, dispatchAgent };
+  };
+
+  const composeDispatches = (dispatchAgent: ReturnType<typeof vi.fn>) =>
+    dispatchAgent.mock.calls.filter(
+      ([_, agentId, payload]: any) =>
+        agentId === 'composer' && payload?.type === 'compose-request'
+    );
+
+  it('re-dispatches compose ONCE with the mutated plan and the same copy/assets', async () => {
+    const emitter = makeEmitter();
+    const { conductor, service, saver, composer, dispatchAgent } =
+      makeRecomposeConductor((call) => (call === 1 ? [RECOMPOSE_FINDING] : []));
+
+    await conductor.handleAcceptPlan(SESSION_ID, ctx, 'reply-1', undefined, false, undefined, emitter);
+
+    const composes = composeDispatches(dispatchAgent);
+    expect(composes).toHaveLength(2); // initial + recompose
+    const recomposePayload = composes[1][2];
+    expect(recomposePayload.plan.composition).toBe('poster-left');
+    // Same copy the variant composed with — nothing rewritten.
+    expect(recomposePayload.copy).toEqual({ headline: 'PIZZA' });
+    expect(recomposePayload.assets).toEqual({});
+    // The recompose replaced this pass's fix application entirely.
+    expect(composer.applyFixes).not.toHaveBeenCalled();
+    // Re-rendered on the SAME Design row.
+    expect(saver.updateDesign).toHaveBeenCalledWith(
+      'org-1',
+      'design-v1',
+      expect.stringContaining('recomposed'),
+      expect.anything(),
+      expect.objectContaining({ registerPreviews: false })
+    );
+    // The mutated plan is persisted — revise/expansion must see the shipped
+    // composition, not the one the critic rejected.
+    const briefUpdates = (service.updateSession as ReturnType<typeof vi.fn>).mock.calls
+      .map((call: any) => call[3]?.brief)
+      .filter(Boolean);
+    const persistedPlans = briefUpdates
+      .map((b: any) => b.lastPlans)
+      .filter(Boolean)
+      .at(-1);
+    expect(persistedPlans?.[0]?.composition).toBe('poster-left');
+  });
+
+  it('spends the single recompose per variant — a repeat request falls through to fixes', async () => {
+    const emitter = makeEmitter();
+    const { conductor, composer, dispatchAgent } = makeRecomposeConductor(() => [
+      RECOMPOSE_FINDING,
+    ]);
+
+    await conductor.handleAcceptPlan(SESSION_ID, ctx, 'reply-1', undefined, false, undefined, emitter);
+
+    // One initial compose + exactly ONE recompose, however often the critic
+    // asks again — plus the ship gate's single rebuild, since the findings
+    // persist to the end of the loop.
+    expect(composeDispatches(dispatchAgent)).toHaveLength(3);
+    // The later pass's recompose finding went through the normal fix path.
+    expect(composer.applyFixes).toHaveBeenCalled();
+  });
+
+  it('degrades to the normal fix path when the composition is unknown or unfit', async () => {
+    const emitter = makeEmitter();
+    const { conductor, composer, dispatchAgent } = makeRecomposeConductor(
+      (call) => (call === 1 ? [RECOMPOSE_FINDING] : []),
+      { planForRecomposeReturnsNull: true }
+    );
+
+    await conductor.handleAcceptPlan(SESSION_ID, ctx, 'reply-1', undefined, false, undefined, emitter);
+
+    expect(composeDispatches(dispatchAgent)).toHaveLength(1); // initial only
+    expect(composer.planForRecompose).toHaveBeenCalledWith(
+      expect.objectContaining({ variantId: 'v1' }),
+      'poster-left',
+      expect.objectContaining({ formatId: 'ig-post' }),
+      { headline: 'PIZZA' }
+    );
+    // The finding still got its shot through applyFixes (note path).
+    expect(composer.applyFixes).toHaveBeenCalled();
+  });
+});
+
+// Best-of-N against the reference: on reference runs the survivors are ranked
+// against the reference pixels in ONE comparison dispatch and only the
+// closest ships (winner-only, decided with Rick 2026-08-07). Losers stay
+// saved Design rows. Hold-back runs first; any skip degrades to delivering
+// all survivors.
+describe('AiDesignerConductorService best-of-N reference delivery', () => {
+  const makePlan = (variantId: string) => ({
+    variantId,
+    skill: 'reference-clone',
+    concept: `concept-${variantId}`,
+    slots: [] as any[],
+    assetNeeds: [] as any[],
+    palette: [] as any[],
+    typeScale: {},
+    background: { kind: 'solid' as const },
+  });
+
+  const makeBestOfConductor = (opts: {
+    plans: any[];
+    referenceRun?: boolean;
+    compareResponse?: any;
+    criticFindingsFor?: (tag: string) => any[];
+  }) => {
+    const service = {
+      getSessionForUser: vi.fn().mockResolvedValue({
+        id: SESSION_ID,
+        state: 'awaiting_plan',
+        mode: 'prompt',
+        brief: { intent: 'x', lastPlans: opts.plans },
+        config: {
+          channels: ['ig-post'],
+          variants: opts.plans.length,
+          ...(opts.referenceRun === false ? {} : { referenceFileIds: ['ref-1'] }),
+        },
+        activeDesignIds: null,
+      }),
+      updateSession: vi.fn().mockResolvedValue(undefined),
+      appendMessage: vi.fn().mockResolvedValue({ id: 'msg-1' }),
+    };
+    const saver = {
+      saveDesign: vi.fn().mockImplementation((_orgId, _userId, variantId) =>
+        Promise.resolve({
+          designId: `design-${variantId}`,
+          variantId,
+          contactSheetUrl: `https://example.com/sheet-${variantId}.png`,
+          outputPreviews: [
+            {
+              formatId: 'ig-post',
+              fileId: `file-${variantId}`,
+              url: `https://example.com/preview-${variantId}.png`,
+            },
+          ],
+        })
+      ),
+      updateDesign: vi.fn(),
+    };
+    const composer = { applyFixes: vi.fn((d: any) => Promise.resolve(d)) };
+    const designService = {
+      getDesign: vi
+        .fn()
+        .mockResolvedValue({ id: 'design', doc: { metadata: {}, layers: [] } }),
+    };
+
+    const { conductor } = makeConductor({ service });
+    (conductor as any)._skillRouter = {
+      getRubric: vi.fn().mockReturnValue({ criteria: [] }),
+    };
+    (conductor as any)._saver = saver;
+    (conductor as any)._composer = composer;
+    (conductor as any)._designService = designService;
+
+    const dispatchAgent = vi.fn().mockImplementation((_, agentId, payload) => {
+      if (agentId === 'asset') {
+        return Promise.resolve({ content: JSON.stringify({ type: 'assets', assets: {} }) });
+      }
+      if (agentId === 'copywriter') {
+        return Promise.resolve({ content: JSON.stringify({ type: 'copy', texts: {} }) });
+      }
+      if (agentId === 'composer') {
+        return Promise.resolve({
+          content: JSON.stringify({ type: 'doc', doc: { metadata: {}, layers: [] } }),
+        });
+      }
+      if (agentId === 'vision-critic') {
+        if (payload?.type === 'compare-request') {
+          return Promise.resolve({
+            content: JSON.stringify(
+              opts.compareResponse ?? { type: 'comparison', skipped: true }
+            ),
+          });
+        }
+        const url: string = payload?.contactSheetUrl ?? '';
+        const tag = opts.plans
+          .map((p) => p.variantId as string)
+          .find((v) => url.includes(v));
+        return Promise.resolve({
+          content: JSON.stringify({
+            type: 'findings',
+            findings: tag ? (opts.criticFindingsFor?.(tag) ?? []) : [],
+          }),
+        });
+      }
+      return Promise.resolve({ content: '{}' });
+    });
+    (conductor as any)._dispatchAgent = dispatchAgent;
+
+    const mediaItems = () =>
+      (service.appendMessage as ReturnType<typeof vi.fn>).mock.calls
+        .filter((call) => call[0].kind === 'media')
+        .flatMap((call) => call[0].content.items as any[]);
+    const headsUp = () =>
+      (service.appendMessage as ReturnType<typeof vi.fn>).mock.calls
+        .filter(
+          (call) =>
+            call[0].kind === 'markdown' && call[0].content.md.includes('Heads up')
+        )
+        .map((call) => call[0].content.md as string)
+        .join('\n');
+    const compareDispatches = () =>
+      dispatchAgent.mock.calls.filter(
+        ([_, agentId, payload]: any) =>
+          agentId === 'vision-critic' && payload?.type === 'compare-request'
+      );
+
+    return { conductor, dispatchAgent, mediaItems, headsUp, compareDispatches };
+  };
+
+  it('delivers only the ranked winner, with honest set-aside notes and stable ordinals', async () => {
+    const emitter = makeEmitter();
+    const { conductor, mediaItems, headsUp, compareDispatches } =
+      makeBestOfConductor({
+        plans: [makePlan('v1'), makePlan('v2')],
+        compareResponse: { type: 'comparison', ranking: ['v2', 'v1'] },
+      });
+
+    await conductor.handleAcceptPlan(SESSION_ID, ctx, 'reply-1', undefined, false, undefined, emitter);
+
+    expect(compareDispatches()).toHaveLength(1);
+    const candidates = compareDispatches()[0][2].candidates;
+    expect(candidates.map((c: any) => c.variantId)).toEqual(['v1', 'v2']);
+    // Winner only.
+    expect(mediaItems().map((i) => i.designId)).toEqual(['design-v2']);
+    // The winner keeps its ORIGINAL ordinal (variant 2), and the loser is
+    // named by its own.
+    expect(headsUp()).toContain(
+      'variant 1 was set aside — variant 2 matched your reference more closely'
+    );
+    const caption = mediaItems()[0].caption as string;
+    expect(caption).toContain('Variant 2');
+  });
+
+  it('excludes held-back variants from the comparison (hold-back first)', async () => {
+    const emitter = makeEmitter();
+    const AESTHETIC = {
+      issue: 'reads as a filled-in template',
+      criterion: 'aesthetic_quality',
+      fix: { scope: 'shared' as const, targetSlots: ['image'], effects: ['vignette'] },
+    };
+    const { conductor, compareDispatches, mediaItems } = makeBestOfConductor({
+      plans: [makePlan('v1'), makePlan('v2'), makePlan('v3')],
+      criticFindingsFor: (tag) => (tag === 'v1' ? [AESTHETIC] : []),
+      compareResponse: { type: 'comparison', ranking: ['v3', 'v2'] },
+    });
+
+    await conductor.handleAcceptPlan(SESSION_ID, ctx, 'reply-1', undefined, false, undefined, emitter);
+
+    // v1 was held back before the comparison — never a candidate.
+    const candidates = compareDispatches()[0][2].candidates;
+    expect(candidates.map((c: any) => c.variantId)).toEqual(['v2', 'v3']);
+    expect(mediaItems().map((i) => i.designId)).toEqual(['design-v3']);
+  });
+
+  it('skips the comparison with a single survivor', async () => {
+    const emitter = makeEmitter();
+    const { conductor, compareDispatches, mediaItems } = makeBestOfConductor({
+      plans: [makePlan('v1')],
+      compareResponse: { type: 'comparison', ranking: ['v1'] },
+    });
+
+    await conductor.handleAcceptPlan(SESSION_ID, ctx, 'reply-1', undefined, false, undefined, emitter);
+
+    expect(compareDispatches()).toHaveLength(0);
+    expect(mediaItems().map((i) => i.designId)).toEqual(['design-v1']);
+  });
+
+  it('delivers all survivors when the comparison is skipped, with a degradation note', async () => {
+    const emitter = makeEmitter();
+    const { conductor, mediaItems, headsUp } = makeBestOfConductor({
+      plans: [makePlan('v1'), makePlan('v2')],
+      compareResponse: { type: 'comparison', skipped: true },
+    });
+
+    await conductor.handleAcceptPlan(SESSION_ID, ctx, 'reply-1', undefined, false, undefined, emitter);
+
+    expect(mediaItems().map((i) => i.designId)).toEqual([
+      'design-v1',
+      'design-v2',
+    ]);
+    expect(headsUp()).toContain("couldn't run the reference comparison");
+  });
+
+  it('never compares on a non-reference run', async () => {
+    const emitter = makeEmitter();
+    const { conductor, compareDispatches, mediaItems } = makeBestOfConductor({
+      plans: [makePlan('v1'), makePlan('v2')],
+      referenceRun: false,
+      compareResponse: { type: 'comparison', ranking: ['v2', 'v1'] },
+    });
+
+    await conductor.handleAcceptPlan(SESSION_ID, ctx, 'reply-1', undefined, false, undefined, emitter);
+
+    expect(compareDispatches()).toHaveLength(0);
+    expect(mediaItems().map((i) => i.designId)).toEqual([
+      'design-v1',
+      'design-v2',
+    ]);
+  });
+
+  it('skips the comparison when the critique budget is spent, delivering all survivors', async () => {
+    const emitter = makeEmitter();
+    const { conductor, compareDispatches, mediaItems } = makeBestOfConductor({
+      plans: [makePlan('v1'), makePlan('v2')],
+      compareResponse: { type: 'comparison', ranking: ['v2', 'v1'] },
+    });
+    (conductor as any)._critiqueDispatches.set(SESSION_ID, 12);
+
+    await conductor.handleAcceptPlan(SESSION_ID, ctx, 'reply-1', undefined, false, undefined, emitter);
+
+    expect(compareDispatches()).toHaveLength(0);
+    expect(mediaItems().map((i) => i.designId)).toEqual([
+      'design-v1',
+      'design-v2',
+    ]);
   });
 });

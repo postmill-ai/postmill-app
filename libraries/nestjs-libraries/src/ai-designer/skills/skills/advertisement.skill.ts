@@ -1,5 +1,6 @@
 import type { DesignBrief } from '../../ai-designer.types';
 import type { DesignSkill } from '../design-skill.interface';
+import { OFFER_FIDELITY } from '../copy-rules';
 import { matchesAnySignal } from '../signal-match';
 
 export const AdvertisementSkill: DesignSkill = {
@@ -38,7 +39,8 @@ export const AdvertisementSkill: DesignSkill = {
 - A badge ("-30%", "Limited") is the only decoration allowed — small, upper corner or beside the CTA, never competing with the headline.
 - Keep 5-8% margin breathing room on all sides; ads that bleed text to the edges get cropped by feed previews.
 - Over a busy hero image, give the text a shadow or glow so it reads against the picture — never raw text on noise, and never a scrim/overlay band over the photo.
-- If the brief names an offer, the offer goes in the headline or badge — not buried in the subhead.`,
+- If the brief names an offer, the offer goes in the headline or badge — not buried in the subhead.
+- ${OFFER_FIDELITY}`,
   layoutHints: {
     formatTemplates: ['hero-fullbleed', 'poster-left', 'split-panel'],
     slotSchema: [

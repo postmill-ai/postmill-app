@@ -107,6 +107,33 @@ export async function resolveVisionImageUrl(
   return null;
 }
 
+/**
+ * The raw bytes behind an inline-able image URL, for a caller that wants to
+ * DOWNSCALE an image `resolveVisionImageUrl` refused for size instead of
+ * skipping its vision pass. Only sources this process already holds are
+ * readable — a `data:` URI or a local upload (same traversal guard) — a
+ * remote URL returns null; nothing here fetches.
+ */
+export async function loadVisionImageBytes(
+  url: string,
+  options: Pick<ResolveVisionImageOptions, 'warn' | 'label'> = {}
+): Promise<Buffer | null> {
+  const { warn = () => undefined, label = 'Vision' } = options;
+  if (typeof url !== 'string' || !url.trim()) return null;
+  if (/^data:image\//i.test(url)) {
+    return Buffer.from(url.slice(url.indexOf(',') + 1), 'base64');
+  }
+  if (isLocalStorageUrl(url)) {
+    try {
+      return await readFile(localPathFromUrl(url));
+    } catch (err) {
+      warn(`${label} failed to read local image: ${(err as Error).message}`);
+      return null;
+    }
+  }
+  return null;
+}
+
 /** A URL served by this instance's own local upload storage. */
 export function isLocalStorageUrl(url: string): boolean {
   const frontendUrl = (process.env.FRONTEND_URL || '').replace(/\/$/, '');

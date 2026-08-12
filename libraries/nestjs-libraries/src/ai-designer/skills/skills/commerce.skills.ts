@@ -1,4 +1,5 @@
 import { defineSkill } from '../define-skill';
+import { OFFER_FIDELITY } from '../copy-rules';
 
 /**
  * Commerce genres — designs whose job is to move a specific offer.
@@ -8,16 +9,31 @@ import { defineSkill } from '../define-skill';
  * family reads as a set, which is how these are actually written and revised.
  */
 
-const OFFER_FIDELITY =
-  'Never invent, round or "tidy" a price, a discount, a code or a date. If the brief does not supply one, leave the slot out rather than filling it — plausible filler is the single most damaging thing a promotional design can carry, because the user ships it believing it is true.';
-
 export const SaleDiscountSkill = defineSkill({
   id: 'sale-discount',
   title: 'Sale / Discount',
   // NOT bare 'off': it is a whole word in "show off", "day off" and "off to",
   // which routed half the product briefs here. The same substring trap the
   // router's own spec was written for.
-  signals: ['sale', 'discount', 'clearance', 'markdown', '% off', 'percent off'],
+  // The buy-X-get-Y phrasings are spelled out because a "buy 1 get 1 free"
+  // brief otherwise routes to the generic advertisement skill on the bare
+  // word 'buy' — the skill without this family's offer-fidelity rules.
+  signals: [
+    'sale',
+    'discount',
+    'clearance',
+    'markdown',
+    '% off',
+    'percent off',
+    'bogo',
+    'b1g1',
+    'buy one get one',
+    'buy 1 get 1',
+    'buy one, get one',
+    'buy 1, get 1',
+    '2 for 1',
+    'two for one',
+  ],
   requires: ['intent'],
   direction:
     'Aim at a department-store window card, not a coupon booklet. The number IS the design: set it enormous, everything else is a caption to it. One loud accent against a restrained ground — a design shouting in three colours reads as spam, and a discount that looks like spam is not believed.',
@@ -27,7 +43,9 @@ export const SaleDiscountSkill = defineSkill({
     OFFER_FIDELITY,
     'Expiry and conditions go in a legal slot, small but present. A sale with no end date reads as permanent, which devalues it.',
     'One CTA, imperative and short: "Shop the sale", not "Click here to browse our discounted items".',
-    'Imagery is optional and secondary. If the product is the draw, show one; if the offer is, do not dilute it.',
+    'A food, drink or product offer ALWAYS shows the product — appetite sells the deal. A bare type card for food reads as a coupon, not a poster; keep the offer display line huge OVER the photography.',
+    'The offer display line must FILL the design: for a two-to-four-word headline set typeScale headline 2-3 (ratio of the role size) so it reads at poster scale, not caption scale.',
+    'Imagery is optional and secondary for non-product offers. If the product is the draw, show one; if the offer is, do not dilute it.',
   ],
   slots: [
     { id: 'badge', role: 'badge', kind: 'badge' },

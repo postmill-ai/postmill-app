@@ -18,6 +18,11 @@ import {
 import { throwIfAborted } from '../../util/throw-if-aborted';
 import { isDeliveredAccept } from '../../util/accept-phrases';
 import { FIXED_COPY_SEPARATOR } from '../../conductor/brief-values';
+import {
+  CONTACT_QUESTION,
+  isContactDecline,
+  needsContactQuestion,
+} from './contact-intake';
 import { AiDesignerSkillRouter } from '../../skills/ai-designer-skill-router.service';
 import { getDesignSkill } from '../../skills/design-skill.registry';
 
@@ -365,6 +370,42 @@ export class AiDesignerConversationalistService implements OnModuleInit {
           tone: input.text.trim().slice(0, 2000),
         };
       }
+      // Contact-answer turn: the assistant just asked the deterministic
+      // contact question (`questionsAsked` ends with 'contact'). Handled
+      // deterministically, classifier-independent: a decline ("none", "no",
+      // "skip") stores nothing; anything substantive is APPENDED to the
+      // existing fixedCopy (pipe-separated atomic units) so it becomes
+      // required verbatim copy and grounds the art director's contact lint.
+      const lastAsked =
+        session.questionsAsked[session.questionsAsked.length - 1];
+      if (lastAsked === 'contact') {
+        if (
+          this._isSubstantiveAnswer(input.text) &&
+          !isContactDecline(input.text)
+        ) {
+          const answer = input.text.trim().slice(0, 500);
+          const existing =
+            typeof session.brief.fixedCopy === 'string'
+              ? session.brief.fixedCopy
+              : '';
+          extracted = {
+            ...(extracted ?? {}),
+            // Deterministic append wins over the classifier's own extraction
+            // for this turn — an extracted `fixedCopy` would REPLACE the
+            // stored units on merge, dropping earlier quoted spans.
+            fixedCopy: !existing
+              ? answer
+              : existing.toLowerCase().includes(answer.toLowerCase())
+                ? existing
+                : `${existing}${FIXED_COPY_SEPARATOR}${answer}`,
+          };
+        } else if (extracted?.fixedCopy) {
+          // A decline must not let the classifier's read of it (e.g.
+          // fixedCopy: "none") become required verbatim copy.
+          delete extracted.fixedCopy;
+          if (Object.keys(extracted).length === 0) extracted = undefined;
+        }
+      }
       const brief: DesignBrief = { ...session.brief, ...extracted };
       const routed = this._skillRouter.route(brief);
       const skill = getDesignSkill(routed.skillId);
@@ -455,6 +496,30 @@ export class AiDesignerConversationalistService implements OnModuleInit {
               options,
             },
           ],
+        };
+      }
+
+      // One MORE intake question, after tone and before the recap: a
+      // business/promotional brief with no phone number or URL anywhere
+      // produces designs that NEED a contact CTA target — live, the art
+      // director first shipped "(PHONE NUMBER NEEDED)" placeholders and then
+      // invented numbers, and copy-grounding now strips both, leaving no CTA
+      // target. Ask the user once; the answer (handled above) lands in
+      // fixedCopy. Asked at most once via questionsAsked ('contact').
+      if (
+        needsContactQuestion({
+          ...brief,
+          questionsAsked: session.questionsAsked,
+        })
+      ) {
+        return {
+          type: 'chat-turn',
+          // 'contact' is not a brief field, so the conductor's own
+          // missing-field bookkeeping can't record it — this names the
+          // question just asked for questionsAsked tracking.
+          asked: 'contact',
+          ...(extracted ? { fields: extracted } : {}),
+          reply: CONTACT_QUESTION,
         };
       }
 

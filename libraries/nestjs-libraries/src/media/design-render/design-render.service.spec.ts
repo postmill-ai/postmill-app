@@ -908,6 +908,62 @@ describe('DesignRenderService.auditTextContrast', () => {
     expect(violations).toEqual([]);
   });
 
+  // Near-white above `splitY`, near-black below — the two surfaces the live
+  // "POOL CLEANING" headline straddled (pale top band over a dark photo).
+  const straddleSplit =
+    (splitY: number) =>
+    (x: number, y: number): [number, number, number] =>
+      y < splitY ? [245, 245, 245] : [15, 15, 15];
+
+  it('judges the WORST glyph line: a straddled headline flags although the union mean passes', async () => {
+    const service = makeService();
+    // Two 40px lines: the first sits wholly on the near-white band, the
+    // second wholly on the near-black region (line 1 ink ≈ rows 26–60,
+    // line 2 ≈ rows 74–108 at lineHeight 1.2; the split at y=67 falls in the
+    // leading between them). The union mean is mid grey (~0.22 luma) —
+    // ~4.9:1 against the #111111 fill, comfortably over the 3:1 large-text
+    // bar — so the pre-fix mean judgment PASSED this element while its
+    // second line read at ~1.02:1. This is the live pool-run defect.
+    const doc = await imageBgDoc('#111111', straddleSplit(67), [
+      textEl('#111111', { height: 100 }),
+    ]);
+    doc.outputs[0].children[0].text = 'HI\nHI';
+
+    const violations = await service.auditTextContrast(doc);
+
+    expect(violations).toHaveLength(1);
+    const [v] = violations;
+    expect(v).toMatchObject({
+      elementId: 't1',
+      reason: 'contrast',
+      straddle: true,
+    });
+    // The violation carries the WORST line's values (the near-black region,
+    // luma ~0.005, ~1:1), never the union mean's (~0.22, passing) — the
+    // repair must recolor against the surface where the text reads worst.
+    expect(v.backdropLuma).toBeLessThan(0.05);
+    expect(v.ratio).toBeLessThan(1.5);
+  });
+
+  it('does not stamp straddle on a uniform-backdrop multi-line element', async () => {
+    const service = makeService();
+    // Same two-line layout, flat 200-grey panel: white text fails outright
+    // (1.67:1) exactly as it did before per-line judgment — and with every
+    // line on the same surface no straddle flag appears.
+    const doc = await imageBgDoc('#FFFFFF', flat(200), [
+      textEl('#FFFFFF', { height: 100 }),
+    ]);
+    doc.outputs[0].children[0].text = 'HI\nHI';
+
+    const violations = await service.auditTextContrast(doc);
+
+    expect(violations).toHaveLength(1);
+    expect(violations[0].reason).toBe('contrast');
+    expect(violations[0].straddle).toBeUndefined();
+    // Worst line and union agree on a flat panel.
+    expect(violations[0].backdropLuma).toBeGreaterThan(0.5);
+  });
+
   it('skips text over a solid background — that is the doc-validator backstop', async () => {
     const service = makeService();
     const doc = gradientDoc('#FFFFFF');
@@ -918,6 +974,359 @@ describe('DesignRenderService.auditTextContrast', () => {
     const violations = await service.auditTextContrast(doc);
 
     expect(violations).toEqual([]);
+  });
+});
+
+describe('DesignRenderService.auditTextCollisions', () => {
+  const text = (id: string, box: Record<string, unknown> = {}): any => ({
+    id,
+    originId: id,
+    type: 'text',
+    x: 10,
+    y: 20,
+    width: 180,
+    height: 60,
+    rotation: 0,
+    opacity: 1,
+    locked: false,
+    hidden: false,
+    text: 'Hello',
+    fontSize: 40,
+    fill: '#111111',
+    ...box,
+  });
+
+  const docWith = (children: any[], symbols?: any[]): any => ({
+    version: 6,
+    mode: 'image',
+    outputs: [
+      {
+        id: 'o1',
+        formatId: 'square',
+        name: 'Sq',
+        width: 200,
+        height: 200,
+        background: '#ffffff',
+        children,
+      },
+    ],
+    ...(symbols ? { symbols } : {}),
+  });
+
+  it('flags two text elements whose painted ink genuinely intersects', async () => {
+    const service = makeService();
+    // Same x, boxes 20px apart vertically: with 40px type each line's ink band
+    // spans well past 20px, so the glyphs of the two lines truly cross.
+    const doc = docWith([
+      text('headline', { y: 40 }),
+      text('subhead', { y: 60 }),
+    ]);
+
+    const violations = await service.auditTextCollisions(doc);
+
+    expect(violations).toHaveLength(1);
+    expect(violations[0]).toMatchObject({
+      outputIndex: 0,
+      reason: 'overlap',
+      elementId: 'headline',
+      otherElementId: 'subhead',
+    });
+    expect(violations[0].message).toContain('headline');
+    expect(violations[0].message).toContain('subhead');
+  });
+
+  it('carries both measured ink rects on the overlap violation', async () => {
+    const service = makeService();
+    const doc = docWith([
+      text('headline', { y: 40 }),
+      text('subhead', { y: 60 }),
+    ]);
+
+    const [violation] = await service.auditTextCollisions(doc);
+    const { inkRect, otherInkRect } = violation;
+
+    // The composer widens the declared boxes to these rects before running
+    // its box-based overlap guard — without them a fitted line whose ink
+    // falls outside its box could never be separated and the audit re-fired
+    // forever.
+    expect(inkRect).toBeDefined();
+    expect(otherInkRect).toBeDefined();
+    // Fitted line geometry, not the raw box: one line of 'Hello' paints an
+    // ink band inset below the line top (ascender inset) and shorter than
+    // the 60px box, starting at the box's left edge.
+    expect(inkRect!.y).toBeGreaterThan(40);
+    expect(inkRect!.height).toBeLessThan(60);
+    expect(inkRect!.x).toBe(10);
+    expect(inkRect!.width).toBeGreaterThan(0);
+    expect(inkRect!.width).toBeLessThanOrEqual(180);
+    expect(otherInkRect!.y).toBeGreaterThan(60);
+    // And the two ink bands genuinely cross — that is what was flagged.
+    expect(inkRect!.y + inkRect!.height).toBeGreaterThan(otherInkRect!.y);
+  });
+
+  it('leaves adjacent elements (5px gap) alone', async () => {
+    const service = makeService();
+    // Box A ends at y=80, box B starts at y=85 — and the ink bands inside the
+    // boxes are further apart still.
+    const doc = docWith([
+      text('headline', { y: 20, height: 60 }),
+      text('subhead', { y: 85, height: 60 }),
+    ]);
+
+    expect(await service.auditTextCollisions(doc)).toEqual([]);
+  });
+
+  it('never pairs a label with its own plate (shapes are not ink)', async () => {
+    const service = makeService();
+    // The pre-symbol CTA convention: a filled `X-bg` shape directly under the
+    // `X` label. The plate paints across the label's whole box.
+    const doc = docWith([
+      {
+        id: 'cta-bg',
+        originId: 'cta-bg',
+        type: 'shape',
+        shape: 'rect',
+        x: 10,
+        y: 20,
+        width: 180,
+        height: 60,
+        rotation: 0,
+        opacity: 1,
+        locked: false,
+        hidden: false,
+        fill: '#111111',
+      },
+      text('cta', { fill: '#FFFFFF' }),
+    ]);
+
+    expect(await service.auditTextCollisions(doc)).toEqual([]);
+  });
+
+  it('skips pairs that share a groupId — a lockup travels as one unit', async () => {
+    const service = makeService();
+    const doc = docWith([
+      text('headline', { y: 40, groupId: 'lockup' }),
+      text('subhead', { y: 60, groupId: 'lockup' }),
+    ]);
+
+    expect(await service.auditTextCollisions(doc)).toEqual([]);
+  });
+
+  it('treats a symbol instance as one opaque box', async () => {
+    const service = makeService();
+    const symbols = [
+      {
+        id: 'sym-cta',
+        name: 'CTA lockup',
+        width: 100,
+        height: 40,
+        children: [
+          {
+            id: 'label',
+            type: 'text',
+            x: 0,
+            y: 0,
+            width: 100,
+            height: 40,
+            rotation: 0,
+            opacity: 1,
+            locked: false,
+            hidden: false,
+            text: 'Shop now',
+            fontSize: 20,
+            fill: '#FFFFFF',
+          },
+        ],
+      },
+    ];
+    const doc = docWith(
+      [
+        {
+          id: 'inst-1',
+          type: 'symbol',
+          symbolId: 'sym-cta',
+          x: 10,
+          y: 50,
+          width: 100,
+          height: 40,
+          rotation: 0,
+          opacity: 1,
+          locked: false,
+          hidden: false,
+        },
+        text('headline', { y: 40 }),
+      ],
+      symbols
+    );
+
+    const violations = await service.auditTextCollisions(doc);
+
+    expect(violations).toHaveLength(1);
+    expect(violations[0]).toMatchObject({ reason: 'overlap' });
+    expect([violations[0].elementId, violations[0].otherElementId]).toEqual(
+      expect.arrayContaining(['inst-1', 'headline'])
+    );
+  });
+});
+
+describe('DesignRenderService.auditImageryVisibility', () => {
+  const size = 200;
+
+  const rawPng = async (
+    pixels: (x: number, y: number) => [number, number, number]
+  ) => {
+    const raw = Buffer.alloc(size * size * 3);
+    for (let y = 0; y < size; y++) {
+      for (let x = 0; x < size; x++) {
+        const [r, g, b] = pixels(x, y);
+        const i = (y * size + x) * 3;
+        raw[i] = r;
+        raw[i + 1] = g;
+        raw[i + 2] = b;
+      }
+    }
+    return sharp(raw, { raw: { width: size, height: size, channels: 3 } })
+      .png()
+      .toBuffer();
+  };
+
+  const checker = (x: number, y: number): [number, number, number] => {
+    const v = (x + y) % 2 === 0 ? 20 : 236;
+    return [v, v, v];
+  };
+
+  const overlay = (fill: string, opacity: number): any => ({
+    id: 'overlay',
+    type: 'shape',
+    shape: 'rect',
+    x: 0,
+    y: 0,
+    width: size,
+    height: size,
+    rotation: 0,
+    opacity,
+    locked: false,
+    hidden: false,
+    fill,
+  });
+
+  const bgImageDoc = async (
+    pixels: (x: number, y: number) => [number, number, number],
+    children: any[] = []
+  ): Promise<any> => {
+    const png = await rawPng(pixels);
+    return {
+      version: 5,
+      mode: 'image',
+      outputs: [
+        {
+          id: 'o1',
+          formatId: 'square',
+          name: 'Sq',
+          width: size,
+          height: size,
+          background: '#ffffff',
+          bg: {
+            type: 'image',
+            src: `data:image/png;base64,${png.toString('base64')}`,
+          },
+          children,
+        },
+      ],
+    };
+  };
+
+  it('flags an image background washed to near-white by a heavy overlay', async () => {
+    const service = makeService();
+    const doc = await bgImageDoc(checker, [overlay('#ffffff', 0.97)]);
+
+    const violations = await service.auditImageryVisibility(doc);
+
+    expect(violations).toHaveLength(1);
+    expect(violations[0]).toMatchObject({
+      outputIndex: 0,
+      elementId: 'bg',
+      reason: 'washed-out',
+    });
+    expect(violations[0].backdropLuma).toBeGreaterThan(0.9);
+    expect(violations[0].backdropStdev!).toBeLessThan(12);
+    expect(violations[0].message).toContain('nearly invisible');
+  });
+
+  it('flags imagery crushed to near-black too', async () => {
+    const service = makeService();
+    const doc = await bgImageDoc(checker, [overlay('#000000', 0.98)]);
+
+    const violations = await service.auditImageryVisibility(doc);
+
+    expect(violations).toHaveLength(1);
+    expect(violations[0]).toMatchObject({ elementId: 'bg', reason: 'washed-out' });
+  });
+
+  it('leaves a normal photo alone', async () => {
+    const service = makeService();
+    const doc = await bgImageDoc(checker);
+
+    expect(await service.auditImageryVisibility(doc)).toEqual([]);
+  });
+
+  it('leaves flat mid-grey imagery alone — uniform is not extreme', async () => {
+    const service = makeService();
+    const doc = await bgImageDoc(() => [128, 128, 128]);
+
+    expect(await service.auditImageryVisibility(doc)).toEqual([]);
+  });
+
+  it('samples a large image ELEMENT but ignores one under the coverage floor', async () => {
+    const service = makeService();
+    const png = await rawPng(checker);
+    const src = `data:image/png;base64,${png.toString('base64')}`;
+    const imageEl = (id: string, box: Record<string, number>): any => ({
+      id,
+      type: 'image',
+      rotation: 0,
+      opacity: 1,
+      locked: false,
+      hidden: false,
+      fitMode: 'fill',
+      src,
+      ...box,
+    });
+    const docFor = (children: any[]): any => ({
+      version: 5,
+      mode: 'image',
+      outputs: [
+        {
+          id: 'o1',
+          formatId: 'square',
+          name: 'Sq',
+          width: size,
+          height: size,
+          background: '#ffffff',
+          children,
+        },
+      ],
+    });
+
+    // Full-canvas photo under the same heavy overlay: flagged, by element id.
+    const flagged = await service.auditImageryVisibility(
+      docFor([
+        imageEl('photo', { x: 0, y: 0, width: size, height: size }),
+        overlay('#ffffff', 0.97),
+      ])
+    );
+    expect(flagged).toHaveLength(1);
+    expect(flagged[0]).toMatchObject({ elementId: 'photo', reason: 'washed-out' });
+
+    // A 40×40 thumbnail is 4% of the canvas — not "the imagery of this
+    // output", so it is never sampled however washed out the render is.
+    const ignored = await service.auditImageryVisibility(
+      docFor([
+        imageEl('thumb', { x: 0, y: 0, width: 40, height: 40 }),
+        overlay('#ffffff', 0.97),
+      ])
+    );
+    expect(ignored).toEqual([]);
   });
 });
 

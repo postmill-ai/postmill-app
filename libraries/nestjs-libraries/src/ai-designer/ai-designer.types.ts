@@ -35,6 +35,51 @@ export interface AiDesignerConfig {
   styleId?: string;
 }
 
+/**
+ * The measured spatial spec of a reference image — canvas-relative ratios
+ * only (absolute px from the reference's aspect would break multi-format
+ * refit). Produced by the interpreter's structured measurement call,
+ * consumed by `applyReferenceGeometry`, which stamps it onto clone plans.
+ */
+export interface ReferenceLayoutLine {
+  /** Verbatim reference line — the slot matcher keys off it. */
+  text: string;
+  /** Top/bottom of the line's band, as fractions of canvas height. */
+  yBand: [number, number];
+  xAnchor?: 'left' | 'center' | 'right';
+  /** Cap-height as a fraction of canvas height (the size ratio). */
+  heightRatio?: number;
+  fontClass?: string;
+  case?: 'caps' | 'title' | 'lower';
+}
+
+export interface ReferenceLayout {
+  lines: ReferenceLayoutLine[];
+  badge?: {
+    yBand?: [number, number];
+    xAnchor?: 'left' | 'center' | 'right';
+    shape?: 'pill' | 'ribbon' | 'burst';
+    widthRatio?: number;
+  };
+  image?: {
+    yBand?: [number, number];
+    coverage?: 'full-bleed' | 'band' | 'panel';
+    side?: 'left' | 'right';
+  };
+  ornaments?: { kind: string; nearLineIndex?: number }[];
+}
+
+/**
+ * Reference-measured placement stamped on a plan slot (clone runs only) —
+ * a STARTING placement the engine honors before the overlap guard and
+ * safe-zone refit have their say.
+ */
+export interface DesignSlotGeometry {
+  yBand?: [number, number];
+  xAnchor?: 'left' | 'center' | 'right';
+  heightRatio?: number;
+}
+
 export interface DesignBrief {
   intent: string;
   audience?: string;
@@ -42,6 +87,20 @@ export interface DesignBrief {
   includeLogo?: boolean;
   fixedCopy?: string;
   referenceCues?: string[];
+  /**
+   * Server-owned: the referenceFileIds the persisted `referenceCues` were
+   * interpreted from. When they match the session config's current ids, the
+   * cues are reused instead of re-running the vision interpretation — the
+   * interpretation IS the run's spec, and re-rolling it between plan
+   * presentations made the spec itself drift.
+   */
+  referenceCueFileIds?: string[];
+  /**
+   * Server-owned: the first reference's measured spatial spec, cached next to
+   * the cues (same file-id key). Fail-soft — absent when the measurement call
+   * failed or parsed malformed; the prose cues carry the run alone.
+   */
+  referenceLayout?: ReferenceLayout;
   questionsAsked?: string[];
   lastPlans?: DesignPlan[];
   /**
@@ -93,6 +152,11 @@ export interface DesignPlan {
     slotId: string;
     brief: string;
     prefer: 'generate' | 'stock' | 'either';
+    /** What the slot needs. Default 'photo'; 'illustration' exercises the
+     *  same generator with an illustration-style prompt; 'icon' searches
+     *  Iconify by the brief instead of demanding a literal `prefix:name`
+     *  role; 'vector' searches stock vector art. */
+    kind?: AssetKind;
   }[];
   perChannel?: Record<string, { note: string }>;
   /**
@@ -257,6 +321,11 @@ export interface DesignSlot {
     direction: 'left' | 'right' | 'top' | 'bottom' | 'full';
     strength: number;
   };
+  /**
+   * Reference-measured placement (clone runs) — stamped deterministically by
+   * the conductor from `brief.referenceLayout`, never authored by the LLM.
+   */
+  geometry?: DesignSlotGeometry;
 }
 
 /**
@@ -275,11 +344,18 @@ export type SlotTextMap = Record<string, string>;
 /** Aspect class of a generated asset / output format (see `util/aspect.ts`). */
 export type AssetAspect = 'square' | 'wide' | 'tall';
 
+/** What an assetNeed resolves to — photographic imagery (default), a
+ *  generated illustration, an Iconify icon found by search, or stock vector
+ *  art. */
+export type AssetKind = 'photo' | 'illustration' | 'icon' | 'vector';
+
 /** One image generation request, scoped per plan (`${variantId}:${slotId}`) in the primary aspect by the conductor. */
 export interface AssetNeedRequest {
   slotId: string;
   brief: string;
   prefer: 'generate' | 'stock' | 'either';
+  /** See the plan-level field: photo (default) | illustration | icon | vector. */
+  kind?: AssetKind;
   /** Aspect class this generation targets; the asset is keyed `slotId:aspect`. */
   aspect?: AssetAspect;
   /**
@@ -305,9 +381,15 @@ export interface AssetNeedRequest {
 
 export interface AssetResult {
   slotId: string;
+  /** Empty for `type: 'icon'` — an icon inlines as SVG, no file is stored. */
   fileId: string;
+  /** Empty for `type: 'icon'` (image-asset consumers gate on a truthy path). */
   path: string;
-  type: 'image';
+  type: 'image' | 'icon';
+  /** Iconify SVG body for `type: 'icon'` — inlined like a Designer icon. */
+  iconBody?: string;
+  /** The icon's viewBox, when it isn't the default 24-grid. */
+  iconViewBox?: string;
   /** Where the asset actually came from — compared against the plan's `prefer` to surface fallbacks. */
   source?: 'generate' | 'stock' | 'gradient';
   /** Aspect class this asset was generated for (the map key carries it too). */
@@ -373,6 +455,13 @@ export interface FixStyle {
   backdropBlur?: number;
   /** Blend mode by name — all 27 the renderer composites. */
   blend?: string;
+  /**
+   * Re-shape a badge PLATE (an arched ribbon is not a pill). Structural: the
+   * composer re-emits the plate through `buildBadgePlate` and replaces the
+   * old one — never a property patch. `burst` downgrades to pill, same as at
+   * compose.
+   */
+  badgeStyle?: 'pill' | 'burst' | 'ribbon';
 }
 
 /**

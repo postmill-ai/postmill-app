@@ -17,6 +17,7 @@ import type {
   DesignerOutput,
   DesignerTextShadow,
   DesignerTextStroke,
+  VideoOutput,
 } from '@postmill-ai/nestjs-libraries/media/designer-doc/designer-doc.schema';
 import { BLEND_MODES } from '@postmill-ai/nestjs-libraries/media/designer-doc/designer-doc.schema';
 import {
@@ -41,6 +42,7 @@ import {
   type GroupBox,
 } from '@postmill-ai/nestjs-libraries/media/designer-doc/reflow';
 import { subjectPointToFocalPoint } from '@postmill-ai/nestjs-libraries/media/designer-doc/focal-point';
+import { pathBounds, rotatePathNodes } from '@postmill-ai/nestjs-libraries/media/designer-doc/path-geometry';
 import type {
   AssetAspect,
   AssetResult,
@@ -86,6 +88,7 @@ import type {
   SymbolDefinition,
   SymbolOverrides,
 } from '../../../media/designer-doc/symbols';
+import { buildBadgePlate } from './badge-plate';
 import { buildExtraSlots, resolveIconSlots } from './extra-slots';
 import type { ResolvedIcon } from '../../../media/designer-doc/icon-resolver';
 import { emphasise, emphasisTokens } from './rich-text';
@@ -98,6 +101,8 @@ import {
 } from './layout-bridge';
 import { buildGrid } from '../../layout/grid';
 import type { Composition } from '../../layout/composition';
+import { compositionFits } from '../../layout/composition';
+import { compositionById } from '../../layout/compositions';
 import {
   applyTextTransform,
   fitTextToBox,
@@ -375,7 +380,17 @@ interface TypeScalePx {
   legal: number;
 }
 
-type SlotRole = 'headline' | 'subhead' | 'cta' | 'badge' | 'legal' | 'body';
+type SlotRole = 'headline' | 'subhead' | 'cta' | 'badge' | 'legal' | 'body' | 'accent';
+
+/**
+ * A copy slot the planner hid outright (`style.opacity: 0` — its way of
+ * saying "the reference has no CTA") is not a design element at all: kept,
+ * the label takes the 0 while its plate still paints at full strength (an
+ * empty red pill shipped exactly this way), and the slot claims its band in
+ * the stack. Treat it as absent everywhere slots are enumerated.
+ */
+const isPlacedCopySlot = (s: DesignSlot): boolean =>
+  isCopySlot(s) && s.role !== 'image' && s.style?.opacity !== 0;
 
 interface ComposeContext {
   plan: DesignPlan;
@@ -562,7 +577,10 @@ export class AiDesignerComposerService implements OnModuleInit {
       // and force a canvas into every layout spec. Icon resolution is awaited
       // here for the same reason (Iconify, over the network).
       await this._ensureMeasurer();
-      const resolvedIcons = await resolveIconSlots(plan.slots);
+      const resolvedIcons = await resolveIconSlots(
+        plan.slots,
+        this._assetResolvedIcons(plan, assets)
+      );
       const composed = rawOps
         ? await this._composeFromRawOps(rawOps, outputs, plan, copy, assets)
         : this._composeDeterministic(plan, copy, assets, outputs, resolvedIcons);
@@ -617,8 +635,17 @@ export class AiDesignerComposerService implements OnModuleInit {
         // Re-couple after the validator: its z-order repair can move a layer
         // between an image and the grade clipped to it, which silently
         // re-points the grade at whatever landed in between.
+        //
+        // And re-run the overlap guard after everything else has moved boxes:
+        // the validator's title-safe clamp pushes bottom-anchored elements to
+        // the SAME safe floor — live (x-post), it parked the CTA lockup on
+        // the legal line 14px deep AFTER the first guard pass had signed off.
+        // The guard is bounded and honors the safe area, so this converges.
         doc: this._recoupleAdjustments(
-          this._emphasiseHeadlines(this._clampTextToFit(result.doc), plan)
+          this._resolveOverlaps(
+            this._emphasiseHeadlines(this._clampTextToFit(result.doc), plan),
+            { requireTrueOverlap: true }
+          )
         ),
         violations: result.violations,
       };
@@ -904,7 +931,7 @@ export class AiDesignerComposerService implements OnModuleInit {
     }
 
     let changed = false;
-    let children = out.children.map((el) => {
+    const children = out.children.map((el) => {
       const patch = patches.get(el.id);
       if (!patch) return el;
       const next = { ...el, ...patch };
@@ -924,35 +951,66 @@ export class AiDesignerComposerService implements OnModuleInit {
     // Decor placed against the copy (rules, swashes) cannot ride the seed: a
     // full-canvas path scales 1:1 onto a taller canvas, so the mark stayed
     // where the PRIMARY'S copy was — a rule floating mid-canvas, detached
-    // from the re-fit headline. Placement is a pure function of canvas +
-    // headline box, so it is re-emitted against the re-fit headline. The
-    // recipe id and colour ride the seeded element; the fresh emission gets
-    // its id and originId back so cross-output addressing is undisturbed.
-    const headlineT = children.find(
+    // from the re-fit headline.
+    const reanchored = this._reanchorDecor({
+      ...out,
+      children,
+    } as DesignerOutput);
+    if (reanchored.children !== children) return reanchored;
+    return changed ? { ...out, children } : null;
+  }
+
+  /**
+   * Re-emit copy-anchored decor (rules, swashes) against the CURRENT headline
+   * and accent boxes. Placement is a pure function of canvas + those boxes,
+   * so after anything moves the copy — a re-fit, a critic geometry fix, a
+   * chat revision — the marks are regenerated where the copy IS rather than
+   * left floating where it WAS (a rule drifting across the photo shipped
+   * exactly this way). The recipe id and colour ride the existing element;
+   * the fresh emission gets its id and originId back so cross-output
+   * addressing is undisturbed. Returns the SAME output reference when no
+   * mark moved.
+   */
+  private _reanchorDecor<T extends DesignerOutput | VideoOutput>(out: T): T {
+    if (!('children' in out)) return out;
+    const headline = out.children.find(
       (el) => el.type === 'text' && (el.originId || '').includes('headline')
     );
-    if (headlineT) {
-      const margin = canvasMarginPx(out.width, out.height);
-      children = children.map((el) => {
-        const oid = el.originId || '';
-        if (!oid.startsWith('decor-')) return el;
-        const [fresh] = emitDecor([oid.slice('decor-'.length)], {
-          canvas: { width: out.width, height: out.height },
-          margin,
-          headline: {
-            x: headlineT.x,
-            y: headlineT.y,
-            width: headlineT.width,
-            height: headlineT.height,
-          },
-          palette: ['', '', el.stroke || el.fill || ''],
-        });
-        if (!fresh) return el;
-        changed = true;
-        return { ...fresh, id: el.id, originId: el.originId };
+    if (!headline) return out;
+    const accent = out.children.find(
+      (el) => el.type === 'text' && (el.originId || '').includes('accent')
+    );
+    const margin = canvasMarginPx(out.width, out.height);
+    let changed = false;
+    const children = out.children.map((el) => {
+      const oid = el.originId || '';
+      if (!oid.startsWith('decor-')) return el;
+      const [fresh] = emitDecor([oid.slice('decor-'.length)], {
+        canvas: { width: out.width, height: out.height },
+        margin,
+        headline: {
+          x: headline.x,
+          y: headline.y,
+          width: headline.width,
+          height: headline.height,
+        },
+        headlineInk: this._inkBox(headline),
+        headlineNextBelow: this._nextCopyBelow(out.children, headline),
+        accent: accent ? this._inkBox(accent) : undefined,
+        accentNextBelow: accent
+          ? this._nextCopyBelow(out.children, accent)
+          : undefined,
+        palette: ['', '', el.stroke || el.fill || ''],
       });
-    }
-    return changed ? { ...out, children } : null;
+      if (!fresh) return el;
+      const next = { ...fresh, id: el.id, originId: el.originId };
+      if (JSON.stringify(next.nodes) !== JSON.stringify(el.nodes)) {
+        changed = true;
+        return next;
+      }
+      return el;
+    });
+    return changed ? ({ ...out, children } as T) : out;
   }
 
   /** Horizontal placement of one re-fit unit inside the target copy column,
@@ -1171,6 +1229,23 @@ export class AiDesignerComposerService implements OnModuleInit {
     const notes: string[] = [];
     if (violations.length === 0) return { doc, notes };
 
+    // Painted-ink collisions from the render audit route to the geometry
+    // guard, not the color ladder — a color flip cannot un-overlap two
+    // lines. True-overlap mode only: the audit measured real ink, and the
+    // near-touch rule would re-litigate deliberately tight stacks. The audit
+    // measured INK, which a fitted/overflowing line paints OUTSIDE its
+    // declared box — and the guard separates BOXES, so without widening them
+    // first the pair need not intersect, the guard no-ops, and the audit
+    // re-fires forever (live: "(PHONE NUMBER NEEDED)" ink over "Call today",
+    // 72 passes, shipped). Grow each named box to cover its measured ink so
+    // the guard sees the collision the audit saw.
+    if (violations.some((v) => v.reason === 'overlap')) {
+      doc = this._resolveOverlaps(this._coverInkRects(doc, violations), {
+        requireTrueOverlap: true,
+      });
+      notes.push('separated overlapping text the render audit caught');
+    }
+
     const WHITE_L = 1;
     const BLACK_L = hexLuminance('#111111');
     const ops: DesignerDocOp[] = [];
@@ -1178,6 +1253,12 @@ export class AiDesignerComposerService implements OnModuleInit {
     for (const violation of violations) {
       const out = doc.outputs[violation.outputIndex];
       if (!out || !('children' in out)) continue;
+      // Non-color audit findings: 'overlap' handled above; 'washed-out'
+      // (near-invisible imagery) has no deterministic repair — it rides the
+      // notes and the critique prompt instead.
+      if (violation.reason === 'overlap' || violation.reason === 'washed-out') {
+        continue;
+      }
 
       // A PLATED label (a CTA pill, a badge chip) is backed by its own
       // plate, not by the imagery: flipping the label against the SAMPLED
@@ -1287,7 +1368,20 @@ export class AiDesignerComposerService implements OnModuleInit {
       // flipping the fill only re-picks between two flat colors over the same
       // high-frequency imagery, which is exactly what shipped a headline
       // legible through its text shadow alone. Straight to the halo.
-      if (violation.reason !== 'busy' && Math.max(whiteRatio, blackRatio) >= required) {
+      //
+      // A `straddle` violation skips the plain flip for the same reason from
+      // the other direction: the glyph lines sit on DIVERGENT surfaces (a pale
+      // band and a dark photo), so a fill that reads on the worst line is
+      // pinned illegible on the others — one flat color cannot suit both.
+      // Straight to the halo, whose patch still flips the fill toward the
+      // worst line's backdrop (the audit stamped the worst line's luma on the
+      // violation) while the opposite-colour halo separates the glyphs on
+      // every other surface — the flip alone is never trusted to cure it.
+      if (
+        violation.reason !== 'busy' &&
+        !violation.straddle &&
+        Math.max(whiteRatio, blackRatio) >= required
+      ) {
         if ((textEl.fill || '').toUpperCase() === flipped) continue;
         ops.push({
           op: 'updateElement',
@@ -1584,6 +1678,22 @@ export class AiDesignerComposerService implements OnModuleInit {
       if (fix.addElement) {
         ops.push(...this._buildAddElementOps(doc, fix.addElement, targetIndexes, fix.scope));
       }
+      // A badge SHAPE change is structural too (ribbon = bezier path, pill =
+      // rect) — updateElement cannot change an element's type, so the plate
+      // is re-emitted through the compose-time builder, inserted under its
+      // label, and the old plate removed. Without this the critic could SEE
+      // "the badge is not an arched ribbon" and had no fix that could touch
+      // it — a recurring hold-back cause.
+      if (fix.style?.badgeStyle && slotScope) {
+        ops.push(
+          ...this._buildBadgeStyleOps(
+            doc,
+            fix.style.badgeStyle,
+            slotScope,
+            targetIndexes
+          )
+        );
+      }
       if (fix.removeElement) {
         for (const outputIndex of targetIndexes) {
           const out = doc.outputs[outputIndex];
@@ -1657,6 +1767,24 @@ export class AiDesignerComposerService implements OnModuleInit {
             // stored value would sit in the doc unread. Resizing the box IS
             // the font fix there.
             if (el.type === 'symbol') delete picked.fontSize;
+            // Belt to the critic-side guard: a sub-1 fontSize fails the
+            // strict patch schema and would void the whole ops round. No
+            // legitimate px value is under the composer's own floor.
+            if (
+              typeof picked.fontSize === 'number' &&
+              picked.fontSize < MIN_FONT_SIZE_PX
+            ) {
+              delete picked.fontSize;
+            }
+            // And never below the ROLE floor: a chain of "make it smaller"
+            // fixes drove a display headline to 32px on a 1080 canvas, live —
+            // illegible at feed scale, the exact defect the floor encodes.
+            if (typeof picked.fontSize === 'number') {
+              picked.fontSize = Math.max(
+                picked.fontSize,
+                roleFontFloorPx(el, out.width, out.height)
+              );
+            }
             // The fix box is authored for the LABEL. Writing it verbatim to
             // the `-bg`/`-underline` companions collapses the label/shape
             // inset (pill box === label box, byte-identical) — a companion
@@ -1784,7 +1912,24 @@ export class AiDesignerComposerService implements OnModuleInit {
       }
     }
 
-    let next = ops.length > 0 ? this._docService.applyOps(doc, ops) : doc;
+    // Fix application is best-effort by contract: one malformed op (a
+    // model-authored value the strict schema rejects) must degrade to "this
+    // round of fixes was skipped", never to an exception — thrown from here it
+    // aborted a variant's whole format expansion live, and the user lost a
+    // format they ordered over a fontSize.
+    let next = doc;
+    if (ops.length > 0) {
+      try {
+        next = this._docService.applyOps(doc, ops);
+      } catch (err) {
+        this._logger.warn(
+          `Skipping this round of critic fixes — an op failed validation: ${
+            (err as Error).message
+          }`,
+          AiDesignerComposerService.name
+        );
+      }
+    }
 
     for (const nf of noteFixes) {
       // Cancel boundary between LLM re-emits: stop spending, return what has
@@ -1802,7 +1947,15 @@ export class AiDesignerComposerService implements OnModuleInit {
       );
     }
 
-    return this.sanitizeDoc(next, plan).doc;
+    // Copy-anchored decor (rules, swashes) re-anchors LAST — after the
+    // sanitize pass has settled the copy, or the marks track boxes the guard
+    // is about to move again. Identity preserved when no mark moved: callers
+    // assert "no fixes" by reference.
+    const sanitized = this.sanitizeDoc(next, plan).doc;
+    const reanchored = sanitized.outputs.map((out) => this._reanchorDecor(out));
+    return reanchored.some((out, i) => out !== sanitized.outputs[i])
+      ? ({ ...sanitized, outputs: reanchored } as DesignerDoc)
+      : sanitized;
   }
 
   /**
@@ -1833,6 +1986,51 @@ export class AiDesignerComposerService implements OnModuleInit {
       lockedTexts
     );
     return this.sanitizeDoc(revised, plan).doc;
+  }
+
+  /**
+   * Mutated plan for a critic `recompose` fix, or null when the request can't
+   * be honored. The pre-check exists because `resolveCompositionFor` silently
+   * REPLACES a requested composition that fails `compositionFits` — a critic
+   * asking for "split-panel" on a 9:16 story would get some other arrangement
+   * with no trace, which is exactly the silent-override failure mode a wired
+   * recompose is meant to kill. A null here degrades to a note-fix upstream.
+   *
+   * The mutation clears the two levers that would silently beat the new
+   * composition at compose time: the primary's `channelLayouts` entry
+   * (`effectiveLayout` wins over `plan.composition` when they disagree) and
+   * `formatTemplate` (the D4 panel→hero redirect keys off it).
+   */
+  planForRecompose(
+    plan: DesignPlan,
+    requestedComposition: string,
+    output: { formatId?: string; width: number; height: number },
+    copy: SlotTextMap
+  ): DesignPlan | null {
+    const composition = compositionById(requestedComposition);
+    if (!composition) return null;
+
+    // Same fit context `_engineComposition` builds — a mismatch here would
+    // approve a recompose the engine then silently swaps away.
+    const byRole = groupByRole(this._boundSlots(copy, plan));
+    const fits = compositionFits(composition, {
+      aspect: output.width / Math.max(1, output.height),
+      has: (role) => (byRole.get(role)?.length ?? 0) > 0,
+    });
+    if (!fits) return null;
+
+    const channelLayouts = plan.channelLayouts
+      ? { ...plan.channelLayouts }
+      : undefined;
+    if (channelLayouts && output.formatId) {
+      delete channelLayouts[output.formatId];
+    }
+    return {
+      ...plan,
+      composition: requestedComposition,
+      formatTemplate: undefined,
+      ...(channelLayouts ? { channelLayouts } : {}),
+    };
   }
 
   /**
@@ -1868,11 +2066,32 @@ export class AiDesignerComposerService implements OnModuleInit {
     const outputs = doc.outputs.map((out) => {
       if (!('children' in out)) return out;
       const children = out.children.map((el) => {
-        if (el.type !== 'text' || el.richText?.length || !el.text) return el;
+        if (el.type !== 'text' || !el.text) return el;
+        // Emphasis richText (fill/weight runs over the SAME string) used to
+        // opt the element out of the clamp entirely — after any later box
+        // change the wrapped headline overflowed onto the copy below it
+        // (live: "FREE" struck through "GRAB A FRIEND"). Runs never carry
+        // fontSize/fontFamily (the emphasiser only sets fill/weight), so the
+        // element still fits as flat text; anything richer is left alone.
+        const clampableRuns =
+          !el.richText?.length ||
+          (el.richText.every(
+            (run) =>
+              run.fontSize === undefined && run.fontFamily === undefined
+          ) &&
+            el.richText.map((run) => run.text).join('') === el.text);
+        if (!clampableRuns) return el;
         const fontSize = el.fontSize || 16;
         if (!(el.width > 0) || !(el.height > 0)) return el;
         const lineHeightFactor = el.lineHeight || 1.2;
         const floor = roleFontFloorPx(el, out.width, out.height);
+        // Measure at the heaviest run weight — the emphasised word is the
+        // widest cut of the face, and fitting to the lighter base weight
+        // would under-wrap it.
+        const measureWeight = Math.max(
+          el.fontWeight ?? 400,
+          ...(el.richText ?? []).map((run) => run.fontWeight ?? 0)
+        );
         // The renderer never splits an unbroken word (`wrapTextLines`
         // overflows it on its own line), but `_estimateWrappedLines` assumes
         // mid-word hard-wrapping — so a long URL "fit" its panel vertically
@@ -1891,7 +2110,7 @@ export class AiDesignerComposerService implements OnModuleInit {
           const advance = this._measurer
             ? this._measurer(widestWord, size, {
                 fontFamily: el.fontFamily,
-                fontWeight: el.fontWeight,
+                fontWeight: measureWeight,
                 fontStyle: el.fontStyle,
               })
             : widestWord.length * size * 0.55;
@@ -1922,7 +2141,7 @@ export class AiDesignerComposerService implements OnModuleInit {
             (t, s) =>
               measure(t, s, {
                 fontFamily: el.fontFamily,
-                fontWeight: el.fontWeight,
+                fontWeight: measureWeight,
                 fontStyle: el.fontStyle,
               })
           );
@@ -1951,7 +2170,7 @@ export class AiDesignerComposerService implements OnModuleInit {
               (t, s) =>
                 measure(t, s, {
                   fontFamily: el.fontFamily,
-                  fontWeight: el.fontWeight,
+                  fontWeight: measureWeight,
                   fontStyle: el.fontStyle,
                 })
             ).lines.length;
@@ -2002,6 +2221,66 @@ export class AiDesignerComposerService implements OnModuleInit {
   }
 
   /**
+   * Widen declared element boxes to cover the measured ink rects an 'overlap'
+   * violation carries (canvas coords, from the render audit). A fitted/
+   * overflowing line paints ink OUTSIDE its declared box, and
+   * `_resolveOverlaps` collides BOXES — with the boxes untouched the pair the
+   * audit flagged need not intersect and the guard cannot separate it. Each
+   * named box becomes the UNION of its current box and its ink rect. Immutable
+   * and fail-soft: violations without ink rects, or naming elements that are
+   * gone, change nothing; an untouched doc returns the SAME reference.
+   */
+  private _coverInkRects(
+    doc: DesignerDoc,
+    violations: TextContrastViolation[]
+  ): DesignerDoc {
+    // outputIndex → elementId → union of the ink rects to cover.
+    const targets = new Map<number, Map<string, Box>>();
+    const add = (outputIndex: number, elementId?: string, ink?: Box) => {
+      if (!elementId || !ink || !(ink.width > 0) || !(ink.height > 0)) return;
+      let byId = targets.get(outputIndex);
+      if (!byId) targets.set(outputIndex, (byId = new Map()));
+      const prev = byId.get(elementId);
+      byId.set(elementId, prev ? boundingBox([prev, ink]) : ink);
+    };
+    for (const v of violations) {
+      if (v.reason !== 'overlap') continue;
+      add(v.outputIndex, v.elementId, v.inkRect);
+      add(v.outputIndex, v.otherElementId, v.otherInkRect);
+    }
+    if (targets.size === 0) return doc;
+
+    let changed = false;
+    const outputs = doc.outputs.map((out, outputIndex) => {
+      const byId = targets.get(outputIndex);
+      if (!byId || !('children' in out)) return out;
+      let outChanged = false;
+      const children = out.children.map((el) => {
+        const ink = byId.get(el.id);
+        if (!ink) return el;
+        const grown = boundingBox([
+          { x: el.x, y: el.y, width: el.width, height: el.height },
+          ink,
+        ]);
+        if (
+          grown.x === el.x &&
+          grown.y === el.y &&
+          grown.width === el.width &&
+          grown.height === el.height
+        ) {
+          return el;
+        }
+        outChanged = true;
+        return { ...el, ...grown };
+      });
+      if (!outChanged) return out;
+      changed = true;
+      return { ...out, children };
+    });
+    return changed ? ({ ...doc, outputs } as DesignerDoc) : doc;
+  }
+
+  /**
    * Deterministic post-pass overlap guard, applied after compose and after
    * applyFixes/revise: (1) a label drifted inside its `${slotId}-bg` shape is
    * re-centered, (2) text spilling outside that shape is re-clamped inside and
@@ -2016,7 +2295,17 @@ export class AiDesignerComposerService implements OnModuleInit {
    * degradation note — it NEVER throws, and returns the SAME doc reference
    * when nothing needed fixing.
    */
-  private _resolveOverlaps(doc: DesignerDoc): DesignerDoc {
+  private _resolveOverlaps(
+    doc: DesignerDoc,
+    opts: {
+      /** Skip the near-touch rule and separate only TRUE box overlaps. The
+       *  post-validator re-run uses this: the validator's safe-area clamp can
+       *  park two bottom-anchored elements on the same floor (a real overlap
+       *  worth fixing), but re-litigating near-touches there tears apart
+       *  deliberately tight stacks the first pass already accepted. */
+      requireTrueOverlap?: boolean;
+    } = {}
+  ): DesignerDoc {
     try {
       let changed = false;
       const outputs = doc.outputs.map((out) => {
@@ -2251,7 +2540,7 @@ export class AiDesignerComposerService implements OnModuleInit {
               }
 
               let hit = this._boxesOverlap(next, otherBox);
-              if (!hit) {
+              if (!hit && !opts.requireTrueOverlap) {
                 // Near-touch: boxes separated by less than the minimum gap.
                 const dx = Math.max(
                   otherBox.x - (next.x + next.width),
@@ -2641,7 +2930,12 @@ export class AiDesignerComposerService implements OnModuleInit {
       );
       if (filtered.length > 0) {
         try {
-          return this._docService.applyOps(doc, filtered);
+          const revised = this._docService.applyOps(doc, filtered);
+          // Copy moved — copy-anchored decor moves with it.
+          return {
+            ...revised,
+            outputs: revised.outputs.map((out) => this._reanchorDecor(out)),
+          } as DesignerDoc;
         } catch (err) {
           this._logger.warn(
             `Revise ops failed applyOps: ${(err as Error).message}`,
@@ -2805,6 +3099,21 @@ export class AiDesignerComposerService implements OnModuleInit {
         const out = doc.outputs[op.outputIndex];
         if (!out || !('children' in out)) continue;
         const element = { ...(op.element as DesignerElement) };
+        // The typed fix path converts an add that targets an existing slot
+        // into a patch; this raw path had no such guard, and the model used
+        // it to LAYER a second "headline" — a free-floating 64px "FREE" with
+        // no slot and no face shipped next to the real headline, live. A raw
+        // op carries no patch intent to salvage: skip the duplicate.
+        if (
+          element.originId &&
+          out.children.some((c) => (c.originId || c.id) === element.originId)
+        ) {
+          this._logger.warn(
+            `Skipping LLM addElement duplicating existing slot "${element.originId}".`,
+            AiDesignerComposerService.name
+          );
+          continue;
+        }
         if (element.type === 'shape') {
           const hardened = this._hardenAddedShape(
             element,
@@ -3020,7 +3329,8 @@ export class AiDesignerComposerService implements OnModuleInit {
       assets,
       primaryPreset,
       plan.variantId,
-      plan.assetNeeds?.length ?? 0
+      plan.assetNeeds?.length ?? 0,
+      plan.palette
     );
     // Lockups (today: the CTA) are authored ONCE — by the primary's build —
     // as symbol definitions on the doc; every output, primary included, then
@@ -3248,8 +3558,39 @@ export class AiDesignerComposerService implements OnModuleInit {
       copy,
       assets,
       outputs,
-      await resolveIconSlots(plan.slots)
+      await resolveIconSlots(plan.slots, this._assetResolvedIcons(plan, assets))
     );
+  }
+
+  /**
+   * Icons the ASSET AGENT already resolved (assetNeeds of kind 'icon',
+   * searched by brief), keyed by the plan's bare slot id. Asset slot ids are
+   * variant-scoped (`variantId:slotId`) on the pipeline path and bare on
+   * direct calls — accept both, this plan's variants only.
+   */
+  private _assetResolvedIcons(
+    plan: DesignPlan,
+    assets: Record<string, AssetResult> | undefined
+  ): Map<string, ResolvedIcon> {
+    const map = new Map<string, ResolvedIcon>();
+    if (!assets) return map;
+    const iconSlotIds = new Set(
+      (plan.slots ?? []).filter((s) => s.kind === 'icon').map((s) => s.id)
+    );
+    for (const asset of Object.values(assets)) {
+      if (asset.type !== 'icon' || !asset.iconBody) continue;
+      const [prefix, ...rest] = asset.slotId.split(':');
+      const bare =
+        rest.length > 0 && prefix === plan.variantId
+          ? rest.join(':')
+          : asset.slotId;
+      if (!iconSlotIds.has(bare) || map.has(bare)) continue;
+      map.set(bare, {
+        body: asset.iconBody,
+        ...(asset.iconViewBox ? { viewBox: asset.iconViewBox } : {}),
+      });
+    }
+    return map;
   }
 
   private _buildFallbackDoc(
@@ -3273,7 +3614,8 @@ export class AiDesignerComposerService implements OnModuleInit {
       assets,
       primaryPreset,
       plan.variantId,
-      plan.assetNeeds?.length ?? 0
+      plan.assetNeeds?.length ?? 0,
+      plan.palette
     );
     // Reuse the slot-text resolution (fuzzy copy match, role-appropriate
     // generic line, 60-char concept truncation) — never dump the raw concept.
@@ -4031,6 +4373,87 @@ export class AiDesignerComposerService implements OnModuleInit {
   }
 
   /**
+   * Re-shape a badge plate in place: build the replacement through the same
+   * `buildBadgePlate` compose uses, insert it UNDER the existing label
+   * (`beforeElementId`), and remove the old plate. A shape change is
+   * structural (ribbon = bezier path, pill = rect) — `updateElement` cannot
+   * change an element's type, which is why "the badge is not an arched
+   * ribbon" used to be visible to the critic and unfixable.
+   */
+  private _buildBadgeStyleOps(
+    doc: DesignerDoc,
+    requestedStyle: NonNullable<FixStyle['badgeStyle']>,
+    slotIds: string[],
+    targetIndexes: number[]
+  ): DesignerDocOp[] {
+    // Same downgrade as compose: a starburst plate deforms on every re-fit.
+    const badgeStyle = requestedStyle === 'burst' ? 'pill' : requestedStyle;
+    const ops: DesignerDocOp[] = [];
+    for (const outputIndex of targetIndexes) {
+      const out = doc.outputs[outputIndex];
+      if (!out || !('children' in out)) continue;
+      for (const slotId of slotIds) {
+        const plate = out.children.find(
+          (el) =>
+            el.originId === `${slotId}-bg` &&
+            (el.type === 'shape' || el.type === 'path')
+        );
+        const label = out.children.find(
+          (el) =>
+            (el.originId === slotId || el.id === slotId) && el.type === 'text'
+        );
+        // No separate plate (lockup'd CTA, plain text slot) — nothing to
+        // re-shape.
+        if (!plate || !label) continue;
+        // Already the requested shape class.
+        if ((badgeStyle === 'ribbon') === (plate.type === 'path')) continue;
+
+        // Recover the plate box: a rect plate's element box IS it; a ribbon's
+        // canvas-sized path box is re-derived from the label with the same
+        // inset math compose used (insetX = 0.6 × font size).
+        const box =
+          plate.type === 'shape'
+            ? { x: plate.x, y: plate.y, width: plate.width, height: plate.height }
+            : (() => {
+                const insetX = Math.round((label.fontSize ?? 16) * 0.6);
+                return {
+                  x: label.x - insetX,
+                  y: label.y,
+                  width: label.width + insetX * 2,
+                  height: label.height,
+                };
+              })();
+        const { id: _unused, ...plateNoId } = buildBadgePlate(
+          box,
+          badgeStyle,
+          typeof plate.fill === 'string' ? plate.fill : '#111111',
+          { w: out.width, h: out.height },
+          slotId
+        ) as DesignerElement & { id: string };
+        const parsed = DesignerDocOpSchema.safeParse({
+          op: 'addElement',
+          outputIndex,
+          element: plateNoId,
+          beforeElementId: label.id,
+        });
+        if (!parsed.success) {
+          this._logger.warn(
+            `Skipping badgeStyle fix ("${slotId}"): ${parsed.error.issues[0]?.message}`,
+            AiDesignerComposerService.name
+          );
+          continue;
+        }
+        ops.push(parsed.data as DesignerDocOp, {
+          op: 'removeElement',
+          outputIndex,
+          elementId: plate.id,
+        });
+      }
+    }
+    return ops;
+  }
+
+  /**
    * Output indexes a fix applies to.
    *
    * A `format-only` fix used to return `[]` (a silent no-op behind a
@@ -4172,7 +4595,7 @@ export class AiDesignerComposerService implements OnModuleInit {
    *  their own edges, so they are not part of the stack's vertical rhythm). */
   private _stackSlotCount(plan: DesignPlan): number {
     const copySlots = plan.slots.filter(
-      (s) => isCopySlot(s) && s.role !== 'image'
+      (s) => isPlacedCopySlot(s)
     );
     return copySlots.filter((s, i) => {
       const role = this._slotRole(s, i);
@@ -4256,7 +4679,8 @@ export class AiDesignerComposerService implements OnModuleInit {
     style: ResolvedStyle,
     w: number,
     h: number,
-    layout: LayoutId
+    layout: LayoutId,
+    copy?: SlotTextMap
   ): TypeScalePx {
     const basis = this._typeBasisPx(w, h, layout, this._stackSlotCount(plan));
     const base = basis * BASE_TYPE_RATIO * LAYOUT_TYPE_SCALE[layout];
@@ -4266,27 +4690,98 @@ export class AiDesignerComposerService implements OnModuleInit {
         MIN_FONT_SIZE_PX,
         Math.round(basis * ROLE_FLOOR_RATIO[key])
       );
+      const computed = Number.isFinite(base * ratios[key])
+        ? Math.max(floor, Math.round(base * ratios[key]))
+        : floor;
       const hint = plan.typeScale?.[key];
       if (
         typeof hint === 'number' &&
         Number.isFinite(hint) &&
-        hint >= MIN_FONT_SIZE_PX
+        hint > 0
       ) {
-        // Clamped to the doc schema's font-size ceiling as well as the role
-        // floor — an outsized LLM hint fails strict validation otherwise.
-        return Math.max(floor, Math.min(MAX_FONT_SIZE, Math.round(hint)));
+        if (hint >= MIN_FONT_SIZE_PX) {
+          // Absolute px — clamped to the doc schema's ceiling as well as the
+          // role floor; an outsized LLM hint fails strict validation otherwise.
+          return Math.max(floor, Math.min(MAX_FONT_SIZE, Math.round(hint)));
+        }
+        // Sub-floor hints are RATIOS of the role's computed size — the
+        // vocabulary every skill and prompt speaks ("headline at least 2.5x
+        // the subhead", "legal at most 0.2"). They used to fall through here
+        // UNREAD, so the plan's hierarchy intent never reached the document:
+        // every plan's headline: 1 composed at the same ~90px as everything
+        // else, however the planner ranked the lines.
+        return Math.max(floor, Math.min(MAX_FONT_SIZE, Math.round(computed * hint)));
       }
-      const computed = base * ratios[key];
-      return Number.isFinite(computed)
-        ? Math.max(floor, Math.round(computed))
-        : floor;
+      return computed;
     };
-    return {
+    const scale: TypeScalePx = {
       headline: px('headline'),
       subhead: px('subhead'),
       cta: px('cta'),
       legal: px('legal'),
     };
+    return this._fillDisplayHeadline(plan, style, scale, w, h, layout, copy);
+  }
+
+  /**
+   * Grow-to-fill for a short display headline. The role ratios size a headline
+   * for the average multi-word line; a two-word sale headline at that size
+   * reads as a caption on an empty poster ("B1G1 FREE" shipped at 83px on a
+   * 1080 white canvas). When the ink leaves most of the column empty, scale
+   * the headline toward the column — bounded, so an ordinary headline is
+   * untouched and the stack still fits its band. Skipped when the plan pins
+   * an absolute px size or a reference run measured the line's geometry.
+   */
+  private _fillDisplayHeadline(
+    plan: DesignPlan,
+    style: ResolvedStyle,
+    scale: TypeScalePx,
+    w: number,
+    h: number,
+    layout: LayoutId,
+    copy?: SlotTextMap
+  ): TypeScalePx {
+    const copySlots = plan.slots.filter((s) => isPlacedCopySlot(s));
+    const headlineSlot = copySlots.find(
+      (s, i) => this._slotRole(s, i) === 'headline'
+    );
+    if (!headlineSlot) return scale;
+    // Banner grammar is different — type never fills a 1584×396 strip's
+    // width, and the seeded-format type budget pins the square:banner ratio.
+    if (w / h > 1.6) return scale;
+    const pinned = plan.typeScale?.[headlineSlot.id] ?? plan.typeScale?.headline;
+    if (typeof pinned === 'number' && pinned >= MIN_FONT_SIZE_PX) return scale;
+    if (headlineSlot.geometry?.heightRatio !== undefined) return scale;
+    const raw = copy?.[headlineSlot.id] ?? plan.texts?.[headlineSlot.id];
+    if (!raw || raw.includes('\n')) return scale;
+
+    const uppercase =
+      headlineSlot.style?.textTransform === 'uppercase' ||
+      (!headlineSlot.style?.textTransform &&
+        style.preset.treatments.headlineTransform === 'uppercase');
+    // Per-char advance: the same generous-side constants the badge/CTA sizers
+    // use, wider for all-caps.
+    const perChar = uppercase ? 0.62 : 0.56;
+    const scaleX =
+      headlineSlot.style?.textScaleX && headlineSlot.style.textScaleX > 0
+        ? Math.min(1, headlineSlot.style.textScaleX)
+        : 1;
+    const ink = raw.length * perChar * scale.headline * scaleX;
+
+    const margin = canvasMarginPx(w, h);
+    const isPanel = layout === 'split-panel' || layout === 'editorial-sidebar';
+    const column = Math.max(1, (isPanel ? Math.round(w * 0.46) : w) - margin * 2);
+    const target = column * 0.85;
+    // Only the clearly under-filled case moves — an ordinary headline within
+    // half its column keeps the ratio-sized result (and its snapshots).
+    if (ink >= target * 0.5) return scale;
+    const grow = Math.min(3, (target * 0.75) / Math.max(1, ink));
+    const next = Math.min(
+      MAX_FONT_SIZE,
+      Math.round(h * 0.25),
+      Math.floor(scale.headline * grow)
+    );
+    return next > scale.headline ? { ...scale, headline: next } : scale;
   }
 
   /** Classify a copy slot into a typographic role. `copyIndex` is the slot's
@@ -4298,9 +4793,43 @@ export class AiDesignerComposerService implements OnModuleInit {
     if (FOOTER_ROLE_RE.test(role)) return 'legal';
     if (/cta|button|action/.test(role)) return 'cta';
     if (/badge|sticker|burst/.test(role)) return 'badge';
+    // Before the index-0 rule: a kicker that happens to be the first copy
+    // slot is a kicker, not the headline.
+    if (/accent|kicker|flourish/.test(role)) return 'accent';
     if (copyIndex === 0 || /headline|title|hero/.test(role)) return 'headline';
     if (/sub|caption|body|desc|tagline/.test(role)) return 'subhead';
     return 'body';
+  }
+
+  /**
+   * A slot's font size: the role's scale size, modulated by a SLOT-ID-keyed
+   * typeScale hint when the plan carries one. The four role keys are read in
+   * `_typeScalePx`, but the planner ranks lines WITHIN a role too
+   * (`typeScale: { echo: 0.72 }` — the second PIZZA under the big one), and
+   * those hints had no reader: the echo composed at full headline size.
+   * Sub-floor values are ratios, as everywhere else.
+   */
+  private _slotFontSize(
+    slot: DesignSlot,
+    role: SlotRole,
+    ctx: ComposeContext
+  ): number {
+    const roleSize = this._roleFontSize(role, ctx.scale);
+    // Role-keyed hints ('headline', 'subhead', …) are read — with the role
+    // floors — in `_typeScalePx`; when the slot id IS a role key, reading it
+    // here too would apply the same hint twice, the second time floorless.
+    if ((slot.id as keyof TypeScalePx) in ROLE_FLOOR_RATIO) return roleSize;
+    const hint = ctx.plan.typeScale?.[slot.id];
+    if (typeof hint !== 'number' || !Number.isFinite(hint) || hint <= 0) {
+      return roleSize;
+    }
+    if (hint >= MIN_FONT_SIZE_PX) {
+      return Math.min(MAX_FONT_SIZE, Math.round(hint));
+    }
+    return Math.max(
+      MIN_FONT_SIZE_PX,
+      Math.min(MAX_FONT_SIZE, Math.round(roleSize * hint))
+    );
   }
 
   private _roleFontSize(role: SlotRole, scale: TypeScalePx): number {
@@ -4426,7 +4955,22 @@ export class AiDesignerComposerService implements OnModuleInit {
         ? ('uppercase' as const)
         : undefined;
 
-    const fontSize = opts.fontSize ?? this._roleFontSize(role, ctx.scale);
+    // Reference-measured size (clone runs): the interpreter's cap-height
+    // ratio converts to a font size (cap height ≈ 0.7 em), clamped to the
+    // same floor/ceiling every other size obeys. An explicit opts.fontSize
+    // (badge/CTA labels — already fit- and contrast-derived) still wins;
+    // the text-fit clamp downstream stays the deterministic backstop.
+    const measuredSize = slot.geometry?.heightRatio
+      ? Math.min(
+          MAX_FONT_SIZE,
+          Math.max(
+            MIN_FONT_SIZE_PX,
+            Math.round((slot.geometry.heightRatio * ctx.h) / 0.7)
+          )
+        )
+      : undefined;
+    const fontSize =
+      opts.fontSize ?? measuredSize ?? this._slotFontSize(slot, role, ctx);
     // The planner answers "what KIND of face?" as often as it names one —
     // `"script"`, `"condensed"`, `"serif"` all shipped into documents verbatim
     // and painted in the fallback sans. Resolved to a loadable family here.
@@ -4584,7 +5128,26 @@ export class AiDesignerComposerService implements OnModuleInit {
     const align = override.align ?? opts.align ?? 'center';
 
     const padX = Math.round(fontSize * 1.3);
-    const estTextW = Math.round(rawText.length * fontSize * 0.56);
+    // Size the plate from the LABEL's real paint width, not a per-char
+    // estimate: the estimate ignored letterSpacing, case transform, and the
+    // face — a tracked-caps "Order now" painted wider than its plate and
+    // shipped with clipped glyphs (live: "ORDER ▮O▮"). Mirror exactly what
+    // `_styledTextElement` will resolve for the label.
+    const track = override.letterSpacing ?? 0;
+    const shownText =
+      (override.textTransform ?? 'none') === 'uppercase'
+        ? rawText.toUpperCase()
+        : rawText;
+    const advance = this._measurer
+      ? this._measurer(shownText, fontSize, {
+          fontFamily: resolveFontFamily(
+            override.fontFamily,
+            ctx.style.preset.fonts.body
+          ),
+          fontWeight: override.fontWeight ?? this._roleFontWeight('cta'),
+        })
+      : shownText.length * fontSize * 0.56;
+    const estTextW = Math.round(advance + track * shownText.length);
     const width = Math.min(area.width, estTextW + padX * 2);
     const underline = ctaStyle === 'underline';
     const height = underline
@@ -4812,55 +5375,19 @@ export class AiDesignerComposerService implements OnModuleInit {
     else if (align === 'right') x = area.x + area.width - width;
     const box: Box = { x, y: area.y, width, height };
 
-    const shape: DesignerElement =
-      badgeStyle === 'ribbon'
-        ? ({
-            id: '',
-            type: 'path',
-            // Canvas box + absolute nodes, same contract as emit-decor — the
-            // gently arched band with angled ends the style name promises
-            // (proven in the manual clone test). A plain rect with a small
-            // radius is NOT a ribbon.
-            x: 0,
-            y: 0,
-            width: ctx.w,
-            height: ctx.h,
-            rotation: 0,
-            opacity: 1,
-            locked: false,
-            hidden: false,
-            closed: true,
-            fill: accent,
-            // Both edges bow the SAME way — that is what makes a band read as
-            // an arched ribbon. Bowing the top up and the bottom down (as this
-            // did) fattens the middle into a lens, which is why the "1893"
-            // plate rendered as a barrel with its label adrift above it.
-            nodes: [
-              { x: box.x + 2, y: box.y + box.height * 0.16, outX: box.x + box.width * 0.3, outY: box.y - box.height * 0.1 },
-              { x: box.x + box.width - 2, y: box.y + box.height * 0.16, inX: box.x + box.width * 0.7, inY: box.y - box.height * 0.1 },
-              { x: box.x + box.width, y: box.y + box.height * 0.84, outX: box.x + box.width * 0.7, outY: box.y + box.height * 0.58 },
-              { x: box.x, y: box.y + box.height * 0.84, inX: box.x + box.width * 0.3, inY: box.y + box.height * 0.58 },
-            ],
-            groupId: slot.id,
-            originId: `${slot.id}-bg`,
-          } as DesignerElement)
-        : ({
-            id: '',
-            type: 'shape',
-            shape: 'rect',
-            ...box,
-            rotation: 0,
-            opacity: 1,
-            locked: false,
-            hidden: false,
-            fill: accent,
-            borderRadius:
-              slot.style?.borderRadius ??
-              (badgeStyle === 'pill' ? Math.round(height / 2) : Math.round(height * 0.12)),
-            warp: expandWarp(slot.warp),
-            groupId: slot.id,
-            originId: `${slot.id}-bg`,
-          } as DesignerElement);
+    // Plate construction lives in `badge-plate.ts` — the critic's badgeStyle
+    // fix re-emits through the same builder post-compose.
+    const shape: DesignerElement = buildBadgePlate(
+      box,
+      badgeStyle,
+      accent,
+      { w: ctx.w, h: ctx.h },
+      slot.id,
+      {
+        borderRadius: slot.style?.borderRadius,
+        warp: expandWarp(slot.warp),
+      }
+    );
 
     // The label sits inside the shape with a horizontal inset so glyphs never
     // touch or clip the edge.
@@ -5006,7 +5533,7 @@ export class AiDesignerComposerService implements OnModuleInit {
     // stamp — see `_effectiveLayout`.)
     const effectiveLayout = this._effectiveLayout(plan, layout, opts);
 
-    const scale = this._typeScalePx(plan, style, w, h, effectiveLayout);
+    const scale = this._typeScalePx(plan, style, w, h, effectiveLayout, copy);
     const ctx: ComposeContext = {
       plan,
       copy,
@@ -5022,7 +5549,7 @@ export class AiDesignerComposerService implements OnModuleInit {
       lockups: opts.lockups,
     };
     const copySlots = plan.slots.filter(
-      (s) => isCopySlot(s) && s.role !== 'image'
+      (s) => isPlacedCopySlot(s)
     );
     const roles = new Map<string, SlotRole>(
       copySlots.map((s, i) => [s.id, this._slotRole(s, i)])
@@ -5090,24 +5617,48 @@ export class AiDesignerComposerService implements OnModuleInit {
     const headlineBox = elements.find(
       (el) => el.type === 'text' && (el.originId || '').includes('headline')
     );
+    // Reference-measured bands place extra slots too (clone runs) — the box
+    // map is the seam buildExtraSlots always accepted and nothing passed, so
+    // shape/icon/divider slots fell back to index-cycled corners even when
+    // the reference measured exactly where they sit.
+    const geometryBoxes = new Map(
+      plan.slots
+        .filter((s) => s.geometry?.yBand)
+        .map((s) => {
+          const [top, bottom] = s.geometry!.yBand!;
+          return [
+            s.id,
+            {
+              x: margin,
+              y: Math.round(top * h),
+              width: w - margin * 2,
+              height: Math.max(1, Math.round((bottom - top) * h)),
+            },
+          ] as const;
+        })
+    );
     elements = elements.concat(
-      buildExtraSlots(plan.slots, {
-        w,
-        h,
-        margin,
-        accents: style.accents,
-        ink: style.text,
-        headline: headlineBox
-          ? {
-              x: headlineBox.x,
-              y: headlineBox.y,
-              width: headlineBox.width,
-              height: headlineBox.height,
-            }
-          : undefined,
-        logo: this._logoAsset(assets),
-        resolvedIcons: opts.resolvedIcons,
-      })
+      buildExtraSlots(
+        plan.slots,
+        {
+          w,
+          h,
+          margin,
+          accents: style.accents,
+          ink: style.text,
+          headline: headlineBox
+            ? {
+                x: headlineBox.x,
+                y: headlineBox.y,
+                width: headlineBox.width,
+                height: headlineBox.height,
+              }
+            : undefined,
+          logo: this._logoAsset(assets),
+          resolvedIcons: opts.resolvedIcons,
+        },
+        geometryBoxes
+      )
     );
 
     const withOrigins = elements.map((el) => ({
@@ -5131,12 +5682,23 @@ export class AiDesignerComposerService implements OnModuleInit {
     const headline = styled.find(
       (el) => el.type === 'text' && (el.originId || '').includes('headline')
     );
+    const accentLine = styled.find(
+      (el) => el.type === 'text' && (el.originId || '').includes('accent')
+    );
     const decorated = [
       ...emitDecor(ctx.plan.decor, {
         canvas: { width: w, height: h },
         margin,
         headline: headline
           ? { x: headline.x, y: headline.y, width: headline.width, height: headline.height }
+          : undefined,
+        headlineInk: headline ? this._inkBox(headline) : undefined,
+        headlineNextBelow: headline
+          ? this._nextCopyBelow(styled, headline)
+          : undefined,
+        accent: accentLine ? this._inkBox(accentLine) : undefined,
+        accentNextBelow: accentLine
+          ? this._nextCopyBelow(styled, accentLine)
           : undefined,
         palette: ctx.style.palette,
       }),
@@ -5235,7 +5797,7 @@ export class AiDesignerComposerService implements OnModuleInit {
 
   /** Every slot the engine can place, with its resolved role and copy. */
   private _boundSlots(copy: SlotTextMap, plan: DesignPlan): BoundSlot[] {
-    const copySlots = plan.slots.filter((s) => isCopySlot(s) && s.role !== 'image');
+    const copySlots = plan.slots.filter((s) => isPlacedCopySlot(s));
     const out: BoundSlot[] = [];
     copySlots.forEach((slot, i) => {
       const role = this._slotRole(slot, i);
@@ -5387,9 +5949,11 @@ export class AiDesignerComposerService implements OnModuleInit {
       if (!box || b.slot.kind === 'image' || b.slot.role === 'image') continue;
       if (!b.text.trim() || claimed.has(b.slot)) continue;
 
-      // Keep the copy clear of whatever the badge and footer took.
+      // Keep the copy clear of whatever the badge and footer took. The badge
+      // extent is its PAINTED band, not its declared box — a ribbon plate's
+      // box is the whole canvas (see `_paintedBand`).
       const band = this._carveCopyBand(
-        badges.map((el) => ({ y: el.y, height: el.height })),
+        badges.map((el) => this._paintedBand(el)),
         box.y,
         this._bandBottom(ctx, footers, box.y + box.height),
         Math.round(ctx.scale.cta * 0.9),
@@ -5532,7 +6096,7 @@ export class AiDesignerComposerService implements OnModuleInit {
     if (b.slot.kind === 'image' || b.slot.role === 'image') {
       return Math.round(width * 0.66);
     }
-    const fontSize = this._roleFontSize(b.role, ctx.scale);
+    const fontSize = this._slotFontSize(b.slot, b.role, ctx);
     if (!b.text.trim()) return 0;
     const measure = this._measurer;
     // The face, tracking and case the ELEMENT will actually get — mirrors
@@ -5788,7 +6352,13 @@ export class AiDesignerComposerService implements OnModuleInit {
 
     const strength = strengthForDepth(ctx.plan.depth);
     const backdrop: 'light' | 'dark' = ctx.style.surfaceIsDark ? 'dark' : 'light';
-    const out: DesignerElement[] = [];
+    let out: DesignerElement[] = [];
+    // A badge/CTA is a UNIT (label + plate + underline/shadow companions);
+    // rotating just the label — the only member whose originId IS the slot id
+    // — swings the text off its plate (a sticker-pop badge shipped exactly
+    // that: label tilted -6°, plate flat). The rotation is lifted out of the
+    // per-element patch and applied to the whole unit below.
+    const unitRotations = new Map<string, number>();
 
     for (const el of elements) {
       const slot = el.originId ? slots.get(el.originId) : undefined;
@@ -5815,6 +6385,14 @@ export class AiDesignerComposerService implements OnModuleInit {
         { basis, palette: ctx.style.palette, backdrop, kind, strength: slotStrength },
         el.text
       );
+
+      if (
+        patch.rotation !== undefined &&
+        (slot.kind === 'badge' || slot.kind === 'cta-button')
+      ) {
+        unitRotations.set(slot.id, patch.rotation);
+        delete patch.rotation;
+      }
 
       // Merge layer styles rather than overwrite — a text element may already
       // carry a gradient-overlay from its per-slot style override.
@@ -5849,7 +6427,78 @@ export class AiDesignerComposerService implements OnModuleInit {
       }
     }
 
+    for (const [slotId, degrees] of unitRotations) {
+      out = this._rotateUnit(out, slotId, degrees);
+    }
+
     return out;
+  }
+
+  /**
+   * Rotate a badge/CTA unit (label + plate + companions) rigidly about the
+   * centre of its painted bounds. Rect plates and labels rotate about their
+   * origins like any element; a canvas-box ribbon path has its NODES rotated
+   * instead — setting `rotation` on a full-canvas element would swing the
+   * canvas, not the ribbon.
+   */
+  private _rotateUnit(
+    elements: DesignerElement[],
+    slotId: string,
+    degrees: number
+  ): DesignerElement[] {
+    const isMember = (el: DesignerElement): boolean =>
+      el.groupId === slotId ||
+      el.originId === slotId ||
+      !!el.originId?.startsWith(`${slotId}-`);
+    const members = elements.filter(isMember);
+    if (!members.length || !degrees) return elements;
+
+    // Pivot: centre of the unit's PAINTED bounds (a ribbon plate's declared
+    // box is the whole canvas — see `_paintedBand`).
+    let minX = Infinity;
+    let minY = Infinity;
+    let maxX = -Infinity;
+    let maxY = -Infinity;
+    for (const el of members) {
+      if (el.type === 'path' && el.nodes?.length) {
+        const b = pathBounds(el.nodes);
+        if (b) {
+          minX = Math.min(minX, el.x + b.minX);
+          minY = Math.min(minY, el.y + b.minY);
+          maxX = Math.max(maxX, el.x + b.maxX);
+          maxY = Math.max(maxY, el.y + b.maxY);
+          continue;
+        }
+      }
+      minX = Math.min(minX, el.x);
+      minY = Math.min(minY, el.y);
+      maxX = Math.max(maxX, el.x + el.width);
+      maxY = Math.max(maxY, el.y + el.height);
+    }
+    if (!Number.isFinite(minX)) return elements;
+    const cx = (minX + maxX) / 2;
+    const cy = (minY + maxY) / 2;
+    const rad = (degrees * Math.PI) / 180;
+    const cos = Math.cos(rad);
+    const sin = Math.sin(rad);
+    const rot = (x: number, y: number) => ({
+      x: cx + (x - cx) * cos - (y - cy) * sin,
+      y: cy + (x - cx) * sin + (y - cy) * cos,
+    });
+
+    return elements.map((el) => {
+      if (!isMember(el)) return el;
+      if (el.type === 'path' && el.nodes?.length) {
+        return { ...el, nodes: rotatePathNodes(el.nodes, cx - el.x, cy - el.y, degrees) };
+      }
+      const origin = rot(el.x, el.y);
+      return {
+        ...el,
+        x: origin.x,
+        y: origin.y,
+        rotation: (el.rotation || 0) + degrees,
+      } as DesignerElement;
+    });
   }
 
   /**
@@ -6235,7 +6884,9 @@ export class AiDesignerComposerService implements OnModuleInit {
       );
     });
     // Bottom corners: translate the built block so its real extent (a burst is
-    // square, not `advance` tall) rests on the band's bottom edge.
+    // square, not `advance` tall) rests on the band's bottom edge. Measured on
+    // the PAINTED band — a ribbon plate's declared box is the whole canvas, so
+    // the raw extent would pin every bottom-corner ribbon to y = bottom - h.
     if (
       built.length > 0 &&
       area.bottom !== undefined &&
@@ -6243,7 +6894,12 @@ export class AiDesignerComposerService implements OnModuleInit {
         position === 'bottom-right' ||
         position === 'bottom-center')
     ) {
-      const extent = Math.max(...built.map((el) => el.y + el.height));
+      const extent = Math.max(
+        ...built.map((el) => {
+          const band = this._paintedBand(el);
+          return band.y + band.height;
+        })
+      );
       const delta = area.bottom - extent;
       if (delta !== 0) {
         for (const el of built) el.y += delta;
@@ -6397,6 +7053,71 @@ export class AiDesignerComposerService implements OnModuleInit {
   /** The badge-extent carve itself, free of a ComposeContext so the seeded
    *  outputs' re-fit (`refitSeededOutputs`) can measure the same band from
    *  geometry alone. */
+  /**
+   * The y of the first copy element below `anchor` — how much room
+   * copy-anchored decor actually has before it strikes the next line.
+   */
+  private _nextCopyBelow(
+    elements: DesignerElement[],
+    anchor: DesignerElement
+  ): number | undefined {
+    const bottom = anchor.y + anchor.height;
+    const below = elements
+      .filter(
+        (el) =>
+          el !== anchor &&
+          !el.hidden &&
+          (el.type === 'text' || el.type === 'symbol') &&
+          el.y >= bottom - 2
+      )
+      .map((el) => el.y);
+    return below.length ? Math.min(...below) : undefined;
+  }
+
+  /**
+   * A text element's approximate INK box. The element box is the full copy
+   * column; decor that frames a word (swashes, the wavy rule) needs the word's
+   * own extent. Width is estimated at 0.56 em/char — the generous-side
+   * estimate the badge sizer already uses — and re-seated on the aligned edge.
+   */
+  private _inkBox(el: DesignerElement): { x: number; y: number; width: number; height: number } {
+    const text = (el.text ?? '') as string;
+    if (!text) return { x: el.x, y: el.y, width: el.width, height: el.height };
+    const est = Math.max(
+      1,
+      Math.min(el.width, Math.round(text.length * (el.fontSize || 16) * 0.56))
+    );
+    const x =
+      el.align === 'center'
+        ? el.x + Math.round((el.width - est) / 2)
+        : el.align === 'right'
+        ? el.x + el.width - est
+        : el.x;
+    return { x, y: el.y, width: est, height: el.height };
+  }
+
+  /**
+   * The vertical band a badge element actually PAINTS, for band carving.
+   *
+   * A ribbon plate built as a closed path carries a canvas-sized box with
+   * absolute nodes (the emit-decor contract — the full-canvas box is what
+   * scales the nodes on a re-fit), so its declared box spans the whole canvas:
+   * carving the copy band from it starts the band below the bottom edge and
+   * the entire copy stack collapses into the overlap guard's bottom re-pack.
+   * The painted extent is the node bounds plus the element offset the
+   * renderer applies (`ctx.translate(el.x, el.y)`), which reads correctly for
+   * both the canvas-box and the local-nodes contracts.
+   */
+  private _paintedBand(el: DesignerElement): { y: number; height: number } {
+    if (el.type === 'path' && el.nodes?.length) {
+      const bounds = pathBounds(el.nodes);
+      if (bounds) {
+        return { y: el.y + bounds.minY, height: bounds.maxY - bounds.minY };
+      }
+    }
+    return { y: el.y, height: el.height };
+  }
+
   private _carveCopyBand(
     badges: { y: number; height: number }[],
     top: number,
@@ -6944,9 +7665,16 @@ export class AiDesignerComposerService implements OnModuleInit {
     assets?: Record<string, AssetResult>,
     output?: { width: number; height: number },
     variantId?: string,
-    assetNeedCount = 0
+    assetNeedCount = 0,
+    palette?: string[]
   ): { background: string; bg?: DesignerOutput['bg'] } {
-    if (!background) return { background: '#ffffff' };
+    // The bare-white fallback shipped a blank white card live: a plan whose
+    // background never arrived rendered as unstyled type on nothing. The
+    // plan's own palette is always the better guess for its ground.
+    const paletteFallback = (palette ?? [])
+      .map((value) => this._sanitizeColor(value))
+      .find((value): value is string => !!value);
+    if (!background) return { background: paletteFallback ?? '#ffffff' };
     if (background.kind === 'image') {
       // Plans reference generated/stock assets as `asset:{slotId}`. This case
       // was previously unimplemented and silently fell through to white —
@@ -6998,7 +7726,10 @@ export class AiDesignerComposerService implements OnModuleInit {
       return { background: this._sanitizeColor(background.value) ?? '#1f2937' };
     }
     if (background.kind === 'solid') {
-      return { background: this._sanitizeColor(background.value) ?? '#ffffff' };
+      return {
+        background:
+          this._sanitizeColor(background.value) ?? paletteFallback ?? '#ffffff',
+      };
     }
     if (background.kind === 'gradient') {
       const raw = background.value || '#ffffff,#000000';

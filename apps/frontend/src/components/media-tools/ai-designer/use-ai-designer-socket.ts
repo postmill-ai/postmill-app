@@ -16,6 +16,7 @@ import type {
   AiDesignerRenderResult,
   AiDesignerRevisePayload,
   AiDesignerSessionDto,
+  AiDesignerSessionState,
   AiDesignerStartPayload,
 } from '@postmill-ai/nestjs-libraries/ai-designer/ai-designer.types';
 
@@ -53,6 +54,8 @@ export interface AiDesignerSocketCallbacks {
     messages: AiDesignerMessagePayload[]
   ) => void;
   onMessage?: (msg: AiDesignerServerMessage) => void;
+  /** Authoritative state change broadcast by the conductor's _setState. */
+  onSessionTransition?: (state: AiDesignerSessionState) => void;
   onProgress?: (msg: AiDesignerProgressMsg) => void;
   onPreview?: (result: AiDesignerRenderResult) => void;
   onError?: (err: AiDesignerSocketError) => void;
@@ -157,6 +160,15 @@ export function useAiDesignerSocket(
         lastAckRef.current = msg.seq;
       }
     });
+
+    socket.on(
+      'session:transition',
+      (payload: { state: AiDesignerSessionState }) => {
+        if (payload?.state) {
+          callbacksRef.current.onSessionTransition?.(payload.state);
+        }
+      }
+    );
 
     socket.on('agent:progress', (msg: AiDesignerProgressMsg) => {
       callbacksRef.current.onProgress?.(msg);

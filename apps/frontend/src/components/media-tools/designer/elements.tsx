@@ -911,6 +911,7 @@ export const CanvasElements: FC<ElementsProps> = ({
                     // The server offsets the run along the path for centre/right;
                     // without this the canvas always started at the path origin.
                     align={el.align || 'left'}
+                    letterSpacing={el.letterSpacing || 0}
                     fontFamily={el.fontFamily || 'Arial'}
                     fontSize={el.fontSize || 16}
                     fontStyle={fontStyle}
@@ -975,6 +976,7 @@ export const CanvasElements: FC<ElementsProps> = ({
                   {...gradientFillProps(el.fillGradient, el.width, el.height)}
                   text={el.text || ''}
                   align={el.align || 'left'}
+                  letterSpacing={el.letterSpacing || 0}
                   fontFamily={el.fontFamily || 'Arial'}
                   fontSize={el.fontSize || 16}
                   fontStyle={fontStyle}

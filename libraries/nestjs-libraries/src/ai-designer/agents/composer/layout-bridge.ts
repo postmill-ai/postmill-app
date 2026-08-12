@@ -30,7 +30,14 @@ import type { DesignSlot } from '../../ai-designer.types';
  */
 
 /** The composer's own role vocabulary, which is narrower than a composition's. */
-export type ComposerRole = 'headline' | 'subhead' | 'cta' | 'badge' | 'legal' | 'body';
+export type ComposerRole =
+  | 'headline'
+  | 'subhead'
+  | 'cta'
+  | 'badge'
+  | 'legal'
+  | 'body'
+  | 'accent';
 
 export interface BoundSlot {
   slot: DesignSlot;
@@ -54,6 +61,9 @@ const ROLE_MAP: Record<ComposerRole, CompositionRole> = {
   cta: 'cta',
   badge: 'badge',
   legal: 'legal',
+  // A composition that names no accent leaf simply drops the role, which is
+  // how the kicker stays with the subhead stack everywhere but poster-left.
+  accent: 'accent',
 };
 
 /** Slot kinds that are imagery rather than copy. */
@@ -169,6 +179,42 @@ export const layoutSlots = (request: LayoutRequest): Map<string, Box> => {
           { x: 0, y: placement.box.y <= grid.top + 1 ? 0 : placement.box.y, width: grid.width, height: placement.box.height + (placement.box.y <= grid.top + 1 ? placement.box.y : 0) }
         : placement.box
     );
+  }
+
+  // Reference-measured placement (clone runs): a slot carrying `geometry`
+  // takes its measured vertical band and horizontal anchor as the STARTING
+  // placement, overriding the composition's box. Width stays the engine's —
+  // bands are a vertical spec, and horizontal safety (margins, panel widths)
+  // stays with the grid. Imagery (and anything bleeding) keeps the engine's
+  // box: a photo is full-bleed or a deliberate band per the COMPOSITION, and
+  // shrinking it to a measured strip would tear the design's ground apart.
+  // The overlap guard and safe-zone refit downstream stay authoritative.
+  for (const bound of slots) {
+    const geometry = bound.slot.geometry;
+    if (
+      !geometry?.yBand ||
+      bleeding.has(bound.slot.id) ||
+      bound.slot.kind === 'image' ||
+      bound.slot.kind === 'logo'
+    ) {
+      continue;
+    }
+    const prev = out.get(bound.slot.id);
+    if (!prev) continue;
+    const y = Math.round(grid.top + geometry.yBand[0] * (grid.bottom - grid.top));
+    const height = Math.max(
+      1,
+      Math.round((geometry.yBand[1] - geometry.yBand[0]) * (grid.bottom - grid.top))
+    );
+    const x =
+      geometry.xAnchor === 'right'
+        ? grid.right - prev.width
+        : geometry.xAnchor === 'center'
+          ? Math.round(grid.left + (grid.right - grid.left - prev.width) / 2)
+          : geometry.xAnchor === 'left'
+            ? grid.left
+            : prev.x;
+    out.set(bound.slot.id, { x, y, width: prev.width, height });
   }
   return out;
 };

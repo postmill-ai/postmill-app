@@ -243,6 +243,22 @@ describe('DesignerDoc schema', () => {
     expect(textParsed.outputs[0].children[0].fontSize).toBe(MAX_FONT_SIZE);
   });
 
+  it('stamps no fontSize onto rich-text RUNS that never carried one', () => {
+    // The renderer resolves `run.fontSize ?? el.fontSize`, so a lenient-stamped
+    // 16 on a run silently shrank the line: an emphasised 96px headline
+    // rendered at 16px (live, sale run).
+    const doc = JSON.parse(JSON.stringify(imageDocFixture));
+    doc.outputs[0].children[0].richText = [
+      { text: 'BUY 1 GET 1 ' },
+      { text: 'FREE', fill: '#00F0FF', fontWeight: 900 },
+    ];
+    const parsed = DesignerDocLenientSchema.parse(migrateDoc(doc));
+    const runs = parsed.outputs[0].children[0].richText!;
+    expect(runs[0].fontSize).toBeUndefined();
+    expect(runs[1].fontSize).toBeUndefined();
+    expect(runs[1].fontWeight).toBe(900);
+  });
+
   it('accepts a managed http src in dev', () => {
     const ok = JSON.parse(JSON.stringify(imageDocFixture));
     ok.outputs[0].children[1].src = 'http://localhost:3000/uploads/asset.png';

@@ -110,6 +110,20 @@ describe('AiDesignerSkillRouter word-boundary signal matching (round 7 C1)', () 
     }
   });
 
+  it('routes buy-X-get-Y offers to sale-discount, not advertisement', () => {
+    // Observed live: "buy 1 get 1 free" matched only advertisement's bare
+    // 'buy' signal — the one commerce genre WITHOUT the offer-fidelity rules
+    // — and the plan shipped a "B1G1 FREE" headline.
+    for (const intent of [
+      'create a post for my pizza business. we are having a sale: buy 1 get 1 free',
+      'buy one get one free on all smoothies',
+      'bogo deal this week',
+      'two for one tickets',
+    ]) {
+      expect(router.route({ intent }).skillId, intent).toBe('sale-discount');
+    }
+  });
+
   it('matches every skill on its own signals', () => {
     expect(router.route({ intent: 'a funny meme', tone: 'playful' }).skillId).toBe('meme');
     expect(router.route({ intent: 'a birthday card for Ana' }).skillId).toBe('greeting-card');
@@ -146,5 +160,15 @@ describe('AiDesignerSkillRouter word-boundary signal matching (round 7 C1)', () 
   it('is case-insensitive', () => {
     expect(score('advertisement', { intent: 'A SALE this weekend' })).toBe(0.9);
     expect(score('meme', { intent: 'A MEME about Mondays' })).toBe(0.95);
+  });
+
+  it('resolves a planner-improvised skill suffix to the registered rubric', () => {
+    // The plan echoes the skill as "reference-clone-poster" — a rubric lookup
+    // on that verbatim id misses, and the critique once went out rubric-less
+    // (and crashed on `.criteria` before that).
+    expect(router.getRubric('reference-clone-poster')).toBe(
+      router.getRubric('reference-clone')
+    );
+    expect(router.getRubric('reference-clone-poster')?.criteria.length).toBeGreaterThan(0);
   });
 });

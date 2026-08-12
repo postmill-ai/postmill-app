@@ -1,7 +1,10 @@
 import { Injectable } from '@nestjs/common';
 import type { DesignBrief } from '../ai-designer.types';
 import { DESIGN_SKILLS, getDesignSkill } from './design-skill.registry';
-import type { DesignSkillLayoutHints } from './design-skill.interface';
+import type {
+  DesignSkillArtDirection,
+  DesignSkillLayoutHints,
+} from './design-skill.interface';
 
 @Injectable()
 export class AiDesignerSkillRouter {
@@ -64,6 +67,24 @@ export class AiDesignerSkillRouter {
   }
 
   getRubric(skillId: string) {
-    return getDesignSkill(skillId)?.rubric;
+    const exact = getDesignSkill(skillId)?.rubric;
+    if (exact) return exact;
+    // The planner improvises suffixes on the plan's skill echo
+    // ("reference-clone-poster" for "reference-clone"); resolve to the
+    // registered skill the id extends, longest prefix first, or the critique
+    // goes out rubric-less.
+    return DESIGN_SKILLS.filter((s) => skillId.startsWith(`${s.id}-`)).sort(
+      (a, b) => b.id.length - a.id.length
+    )[0]?.rubric;
+  }
+
+  /** The skill's curated art-direction catalog (preferred compositions,
+   *  decor, effects, treatments) — suffix-tolerant like `getRubric`. */
+  getArtDirection(skillId: string): DesignSkillArtDirection | undefined {
+    const exact = getDesignSkill(skillId)?.artDirection;
+    if (exact) return exact;
+    return DESIGN_SKILLS.filter((s) => skillId.startsWith(`${s.id}-`)).sort(
+      (a, b) => b.id.length - a.id.length
+    )[0]?.artDirection;
   }
 }

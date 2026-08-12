@@ -5,6 +5,16 @@ import path from 'path';
 import sharp from 'sharp';
 import { AiDesignerAssetService } from './ai-designer-asset.service';
 
+// Icon needs resolve through the shared Iconify resolver (network) — mocked
+// so the icon-kind tests stay hermetic.
+vi.mock('../../../media/designer-doc/icon-resolver', () => ({
+  resolveIconifyIcon: vi.fn(async (name: string) =>
+    name === 'mdi:pizza'
+      ? { body: '<path d="M2 2h20"/>', viewBox: '0 0 24 24' }
+      : null
+  ),
+}));
+
 const ORG_ID = 'org-1';
 
 const makeService = () => {
@@ -111,6 +121,145 @@ describe('AiDesignerAssetService', () => {
     const parsed = JSON.parse(response.content);
     expect(Object.keys(parsed.assets).length).toBe(8);
     expect(aiDefaults.textToImage).toHaveBeenCalledTimes(8);
+  });
+});
+
+describe('AiDesignerAssetService asset kinds (icons, vectors, illustrator)', () => {
+  const makeKindService = () => {
+    const base = makeService();
+    const stockMedia = {
+      searchPhotos: vi.fn().mockResolvedValue({ results: [] }),
+      searchIcons: vi.fn().mockResolvedValue({
+        results: [
+          {
+            id: 'mdi:pizza',
+            prefix: 'mdi',
+            iconName: 'pizza',
+            url: 'https://api.iconify.design/mdi/pizza.svg',
+          },
+        ],
+      }),
+      searchVectors: vi.fn().mockResolvedValue({
+        results: [
+          {
+            id: 'vec-1',
+            url: 'https://pixabay.example/vector.png',
+            source: 'pixabay',
+          },
+        ],
+      }),
+    };
+    return {
+      ...base,
+      stockMedia,
+      service: new AiDesignerAssetService(
+        base.aiDefaults as any,
+        base.fileService as any,
+        { getLocalAdapterForOrg: vi.fn() } as any,
+        stockMedia as any
+      ),
+    };
+  };
+
+  const request = (need: Record<string, unknown>) =>
+    ({
+      raw_input: JSON.stringify({
+        type: 'asset-request',
+        assetNeeds: [need],
+      }),
+      metadata: { orgId: ORG_ID },
+    }) as any;
+
+  it("resolves a kind:'icon' need via Iconify search, no image pipeline", async () => {
+    const { service, stockMedia, aiDefaults } = makeKindService();
+
+    const response = await (service as any)._handler(
+      request({ slotId: 'icon', brief: 'pizza slice icon', prefer: 'either', kind: 'icon' })
+    );
+
+    const parsed = JSON.parse(response.content);
+    const asset = parsed.assets['icon'];
+    expect(stockMedia.searchIcons).toHaveBeenCalledWith(ORG_ID, 'pizza slice icon');
+    expect(asset.type).toBe('icon');
+    expect(asset.iconBody).toContain('<path');
+    expect(asset.iconViewBox).toBe('0 0 24 24');
+    expect(aiDefaults.textToImage).not.toHaveBeenCalled();
+  });
+
+  it('an icon miss resolves to absence — never a placeholder', async () => {
+    const { service, stockMedia } = makeKindService();
+    stockMedia.searchIcons.mockResolvedValue({ results: [] });
+
+    const response = await (service as any)._handler(
+      request({ slotId: 'icon', brief: 'nonexistent', prefer: 'either', kind: 'icon' })
+    );
+
+    const parsed = JSON.parse(response.content);
+    expect(parsed.assets['icon']).toBeUndefined();
+  });
+
+  it("resolves a kind:'vector' need through stock vector search", async () => {
+    const { service, stockMedia, fileService } = makeKindService();
+
+    const response = await (service as any)._handler(
+      request({ slotId: 'art', brief: 'pizza doodle', prefer: 'either', kind: 'vector' })
+    );
+
+    const parsed = JSON.parse(response.content);
+    expect(stockMedia.searchVectors).toHaveBeenCalled();
+    expect(fileService.importFromUrl).toHaveBeenCalledWith(
+      ORG_ID,
+      expect.objectContaining({ url: 'https://pixabay.example/vector.png' })
+    );
+    expect(parsed.assets['art'].type).toBe('image');
+  });
+
+  it('a vector miss falls through to the ordinary resolve chain', async () => {
+    const { service, stockMedia, aiDefaults } = makeKindService();
+    stockMedia.searchVectors.mockResolvedValue({ results: [] });
+
+    await (service as any)._handler(
+      request({ slotId: 'art', brief: 'pizza doodle', prefer: 'generate', kind: 'vector' })
+    );
+
+    expect(aiDefaults.textToImage).toHaveBeenCalled();
+  });
+
+  it("an illustration need prompts for graphic style and skips the photographic layout language", async () => {
+    const { service, aiDefaults } = makeKindService();
+
+    await (service as any)._handler(
+      request({
+        slotId: 'hero',
+        brief: 'retro pizza slice illustration',
+        prefer: 'generate',
+        kind: 'illustration',
+        heroLayout: 'hero-fullbleed',
+      })
+    );
+
+    const prompt = aiDefaults.textToImage.mock.calls[0][1] as string;
+    expect(prompt).toContain('ILLUSTRATION');
+    expect(prompt).not.toContain('photographic composition');
+    // The no-baked-in-text negative still applies to every generation.
+    expect(prompt).toContain('No text');
+  });
+
+  it('a photo need is byte-identical to the old prompt path', async () => {
+    const { service, aiDefaults } = makeKindService();
+
+    await (service as any)._handler(
+      request({
+        slotId: 'image',
+        brief: 'overhead pizza',
+        prefer: 'generate',
+        heroLayout: 'hero-fullbleed',
+      })
+    );
+
+    const prompt = aiDefaults.textToImage.mock.calls[0][1] as string;
+    expect(prompt).toContain('Full-bleed photographic composition');
+    expect(prompt).not.toContain('ILLUSTRATION');
   });
 });
 

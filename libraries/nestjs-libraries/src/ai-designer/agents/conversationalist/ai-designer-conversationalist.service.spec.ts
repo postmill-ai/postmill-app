@@ -281,12 +281,19 @@ describe('AiDesignerConversationalistService intake', () => {
     );
 
     const res = await handle(
-      makeInput({
-        intent: 'Labor Day Sale social media post',
-        audience: 'social media followers',
-        tone: 'patriotic',
-        fixedCopy: 'LABOR26',
-      })
+      makeInput(
+        {
+          intent: 'Labor Day Sale social media post',
+          audience: 'social media followers',
+          tone: 'patriotic',
+          fixedCopy: 'LABOR26',
+        },
+        'intake',
+        'hello',
+        // A sale brief with no phone/URL gets the contact question first —
+        // already asked here, this test is about the recap rendering.
+        ['contact']
+      )
     );
 
     expect(res.type).toBe('chat-turn');
@@ -301,16 +308,23 @@ describe('AiDesignerConversationalistService intake', () => {
     );
 
     const res = await handle(
-      makeInput({
-        intent: 'an end of summer sale',
-        audience: 'followers',
-        tone: 'urgent',
-        deadline: 'Friday',
-        questionsAsked: ['intent'],
-        preferredSkill: 'advertisement',
-        lastPlans: [{ variantId: 'v1', skill: 'meme' }],
-        skillId: 'advertisement',
-      })
+      makeInput(
+        {
+          intent: 'an end of summer sale',
+          audience: 'followers',
+          tone: 'urgent',
+          deadline: 'Friday',
+          questionsAsked: ['intent'],
+          preferredSkill: 'advertisement',
+          lastPlans: [{ variantId: 'v1', skill: 'meme' }],
+          skillId: 'advertisement',
+        },
+        'intake',
+        'hello',
+        // Sale brief, no phone/URL → contact question would come first; mark
+        // it asked so this test stays about the recap narration.
+        ['intent', 'contact']
+      )
     );
 
     expect(res.type).toBe('chat-turn');
@@ -796,6 +810,119 @@ describe('AiDesignerConversationalistService intake', () => {
     });
 
     expect(summary).toContain('with the exact copy "BEAN30"');
+  });
+
+  // ── Contact-info intake step ──
+  // Live defect (twice): service-business briefs (pool cleaning) need a
+  // contact CTA target the brief never contains — the art director shipped
+  // "(PHONE NUMBER NEEDED)" and then invented numbers, both now lint-stripped
+  // upstream. The fix is asking the USER, once, after tone and before recap.
+
+  const SERVICE_BRIEF: DesignBrief = {
+    intent: 'a summer pool cleaning special',
+    audience: 'local homeowners',
+    tone: 'friendly',
+  };
+  const CONTACT_QUESTION =
+    "Should the design include a phone number, website, or address? Share it, or say 'none'.";
+
+  it('asks the contact question after tone and before the recap for a service brief with no contact info', async () => {
+    const res = await handle(makeInput(SERVICE_BRIEF));
+
+    expect(res.type).toBe('chat-turn');
+    expect(res.asked).toBe('contact');
+    expect(res.reply).toBe(CONTACT_QUESTION);
+    expect(res.recap).toBeUndefined();
+  });
+
+  it('lands a phone-number answer in fixedCopy and follows with the recap', async () => {
+    const res = await handle(
+      makeInput(SERVICE_BRIEF, 'intake', '555-123-4567', ['contact'], CONTACT_QUESTION)
+    );
+
+    expect(res.type).toBe('chat-turn');
+    expect(res.fields).toEqual({ fixedCopy: '555-123-4567' });
+    expect(res.recap).toBe(true);
+    expect(res.reply).toContain('555-123-4567');
+    expect(res.reply).toContain('Ready for concepts?');
+  });
+
+  it('appends the contact answer to existing fixedCopy units', async () => {
+    const res = await handle(
+      makeInput(
+        { ...SERVICE_BRIEF, fixedCopy: 'SAVE20' },
+        'intake',
+        'call (555) 123-4567',
+        ['contact'],
+        CONTACT_QUESTION
+      )
+    );
+
+    expect(res.fields).toEqual({ fixedCopy: 'SAVE20 | call (555) 123-4567' });
+    expect(res.recap).toBe(true);
+  });
+
+  it('stores nothing on a decline and follows with the recap', async () => {
+    for (const text of ['none', 'No', 'skip', 'nope', 'N/A']) {
+      const res = await handle(
+        makeInput(SERVICE_BRIEF, 'intake', text, ['contact'], CONTACT_QUESTION)
+      );
+
+      expect(res.type).toBe('chat-turn');
+      expect(res.recap).toBe(true);
+      expect(res.fields).toBeUndefined();
+    }
+  });
+
+  it('drops a classifier-extracted fixedCopy on a decline turn', async () => {
+    // The classifier read "none" literally — it must not become required
+    // verbatim copy.
+    ai.generateText.mockResolvedValue(
+      JSON.stringify({
+        intent: 'general',
+        text: 'ok',
+        extracted: { fixedCopy: 'none' },
+      })
+    );
+
+    const res = await handle(
+      makeInput(SERVICE_BRIEF, 'intake', 'none', ['contact'], CONTACT_QUESTION)
+    );
+
+    expect(res.fields).toBeUndefined();
+    expect(res.recap).toBe(true);
+  });
+
+  it('skips the contact question when the intent already carries a URL', async () => {
+    const res = await handle(
+      makeInput({
+        ...SERVICE_BRIEF,
+        intent: 'a summer pool cleaning special — book at bluepool.com',
+      })
+    );
+
+    expect(res.recap).toBe(true);
+    expect(res.reply).not.toContain('phone number');
+  });
+
+  it('skips the contact question when the brief already carries a phone number', async () => {
+    const res = await handle(
+      makeInput({ ...SERVICE_BRIEF, fixedCopy: '(555) 123-4567' })
+    );
+
+    expect(res.recap).toBe(true);
+    expect(res.reply).not.toContain('Should the design include');
+  });
+
+  it('never asks the contact question twice', async () => {
+    // Already asked and declined — the corpus still has no contact info, but
+    // the question must not come back: the recap follows instead.
+    const res = await handle(
+      makeInput(SERVICE_BRIEF, 'intake', 'no', ['contact'], CONTACT_QUESTION)
+    );
+
+    expect(res.recap).toBe(true);
+    expect(res.reply).not.toContain('phone number');
   });
 });
 

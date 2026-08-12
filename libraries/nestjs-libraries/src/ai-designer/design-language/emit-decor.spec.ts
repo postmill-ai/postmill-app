@@ -80,6 +80,70 @@ describe('emitDecor', () => {
     expect(a.stroke).not.toBe(b.stroke);
   });
 
+  it('keeps a wavy rule narrow enough to read as a wave', () => {
+    // Stretched across the full-width headline box the recipe flattens into a
+    // hairline — a 972px "wave" 11px tall shipped once and read as a glitch.
+    const nodes = nodesOf('wavy-rule');
+    const xs = nodes.map((n) => n.x);
+    const ys = nodes.map((n) => n.y);
+    const width = Math.max(...xs) - Math.min(...xs);
+    const height = Math.max(...ys) - Math.min(...ys);
+    // Periods a few times the amplitude, not a hundred.
+    expect(width).toBeLessThan(500);
+    expect(height).toBeGreaterThan(10);
+  });
+
+  it('keeps the wave ratio when a tight stack caps its height', () => {
+    // Live (pizza run, variant 3): capToRoom shrank the wave to 6.6px tall
+    // while its width stayed 389px — the hairline again, with a 1.65px
+    // stroke, and the critic rightly flagged the decor as missing. The cap
+    // now re-narrows the width to the wave ratio.
+    const tight = ctx({
+      headline: { x: 100, y: 318, width: 389, height: 230 },
+      headlineNextBelow: 570,
+    });
+    const nodes = nodesOf('wavy-rule', tight);
+    expect(nodes.length).toBeGreaterThan(0);
+    const xs = nodes.map((n) => n.x);
+    const ys = nodes.map((n) => n.y);
+    const width = Math.max(...xs) - Math.min(...xs);
+    const height = Math.max(...ys) - Math.min(...ys);
+    // The BOX is re-narrowed to 10× its capped height; the drawn amplitude is
+    // a fraction of the box, so allow the node-space ratio some slack — the
+    // defect being pinned was 389px wide over 6.6px tall (ratio ~59).
+    expect(width).toBeLessThanOrEqual(height * 17);
+    expect(width).toBeLessThanOrEqual(120);
+    // And below the legibility floor the mark is skipped, never a scribble.
+    expect(
+      emitDecor(['wavy-rule'], ctx({ headlineNextBelow: 318 + 230 + 8 }))
+    ).toEqual([]);
+  });
+
+  it('anchors word marks to the accent line when there is one', () => {
+    // A swash frames a WORD; under a full-width headline box it stretches
+    // into a hairline.
+    const withAccent = ctx({
+      accent: { x: 120, y: 200, width: 230, height: 60 },
+    });
+    const nodes = nodesOf('swash-pair', withAccent);
+    const xs = nodes.map((n) => n.x);
+    const ys = nodes.map((n) => n.y);
+    expect(Math.max(...xs) - Math.min(...xs)).toBeLessThanOrEqual(231);
+    expect(Math.min(...ys)).toBeGreaterThanOrEqual(260);
+  });
+
+  it('never strikes through the line below the anchor', () => {
+    // A short headline packs the stack tight; the under-headline gap derived
+    // from its height alone put a swash THROUGH the subhead (live, sale run).
+    // Headline in the shared fixture spans y 400…560.
+    const tight = ctx({ headlineNextBelow: 560 + 18 });
+    const nodes = nodesOf('rule', tight);
+    expect(nodes.length).toBeGreaterThan(0);
+    expect(Math.max(...nodes.map((n) => n.y))).toBeLessThanOrEqual(578 - 2);
+    // No room at all: the mark is skipped, not squeezed into a hairline.
+    expect(emitDecor(['rule'], ctx({ headlineNextBelow: 560 + 5 }))).toEqual([]);
+  });
+
   it('produces elements the strict schema accepts', () => {
     // A malformed decor element would fail the whole compose, not just itself.
     const children = emitDecor(['rule', 'burst', 'dot-grid', 'corner-brackets'], ctx());

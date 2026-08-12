@@ -928,6 +928,69 @@ function validateOutput(
     }
   }
 
+  // (5c) Display hierarchy — machine-checkable, no vision needed: the
+  // headline-role element must carry the largest type on the canvas. A fix
+  // chain shrank a live headline to 32px while the subhead kept 35px and the
+  // CTA label read louder than the offer. Report-only; badge/CTA labels
+  // inside their own plates are exempt (a plate label is sized to its plate,
+  // not to the type scale).
+  {
+    const texts = children.filter(
+      (el): el is DesignerElement & { fontSize: number } =>
+        el.type === 'text' &&
+        !el.hidden &&
+        typeof el.fontSize === 'number' &&
+        !!(el.text && String(el.text).trim())
+    );
+    const headline = texts.find((el) => el.originId === 'headline');
+    if (headline) {
+      const hasPlate = (el: DesignerElement) =>
+        !!el.originId &&
+        children.some(
+          (c) => c.type === 'shape' && c.originId === `${el.originId}-bg`
+        );
+      for (const el of texts) {
+        if (el === headline || el.originId === 'badge' || hasPlate(el)) {
+          continue;
+        }
+        // A 2px allowance for rounding — anything beyond it means the
+        // headline no longer leads (a subhead "as loud as its headline" is
+        // the type_hierarchy defect, not a style).
+        if (el.fontSize > headline.fontSize + 2) {
+          violations.push(
+            `Display hierarchy on "${out.formatId}": "${elLabel(el)}" ` +
+              `(${el.fontSize}px) out-sizes the headline (${headline.fontSize}px) — ` +
+              `the offer no longer reads first.`
+          );
+        }
+      }
+    }
+  }
+
+  // (6) Uncomposed canvas — the plan promised visual interest (decor, or an
+  // image ground) but the output is a flat solid with nothing except type on
+  // it. Shipped live as the "blank white card". Element census only: any
+  // visible non-text visual (image, shape, path, icon, raster, fill) counts
+  // as composition; adjustments do not, they grade what isn't there.
+  const planPromisedVisuals =
+    (Array.isArray(opts?.plan?.decor) &&
+      opts!.plan!.decor!.some((id) => typeof id === 'string' && id !== 'none')) ||
+    opts?.plan?.background?.kind === 'image' ||
+    opts?.plan?.background?.kind === 'gradient';
+  const flatSolidGround = !out.bg || out.bg.type === 'color';
+  const hasVisual = children.some(
+    (el) =>
+      !el.hidden &&
+      ['image', 'shape', 'path', 'icon', 'raster', 'fill'].includes(el.type)
+  );
+  if (planPromisedVisuals && flatSolidGround && !hasVisual) {
+    violations.push(
+      `${DEGENERATE_VIOLATION_PREFIX} "${out.formatId}": uncomposed canvas — ` +
+        `the plan declared decor/an image ground but the output is a flat ` +
+        `solid with only text on it.`
+    );
+  }
+
   return {
     output: changed ? ({ ...out, children } as DesignerOutput) : out,
     changed,

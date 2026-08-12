@@ -34,6 +34,13 @@ import {
 } from '../../util/parse-agent-input';
 import { throwIfAborted } from '../../util/throw-if-aborted';
 import { normalizeSlotText } from '../../util/slot-keys';
+import { defaultCta } from '../../skills/copy-rules';
+import {
+  briefCorpus,
+  findUngroundedClaims,
+  lintCta,
+  stripUngroundedClaims,
+} from './copy-grounding';
 import {
   FIXED_COPY_SEPARATOR,
   URL_TLDS,
@@ -255,6 +262,7 @@ export class AiDesignerArtDirectorService implements OnModuleInit {
       JSON.stringify(sizes[0], null, 2),
       '',
       ...this._skillLayoutGuidance(skillId),
+      ...this._skillArtDirectionGuidance(skillId),
       ...this._designLanguageGuidance(),
       '',
       ...this._craftGuidance(brief),
@@ -275,6 +283,10 @@ export class AiDesignerArtDirectorService implements OnModuleInit {
       'If the plan uses an image background, that background IS the imagery — do NOT also add an',
       'image slot for the same subject (it would render the same picture twice). Image slots are',
       'only for additional, distinct subjects (e.g. a product shot over a scenic background).',
+      'An image brief describes the SCENE — subject, mood, lighting, palette — and NEVER the',
+      "design's copy. Putting the headline or offer text in a brief makes the image model paint",
+      'those words INTO the photo, where they collide with the real typeset copy. No quotes, no',
+      'slogans, no offer wording in any assetNeeds brief.',
       '',
       'Type accents: a slot may override the preset fonts per slot via "style": { "fontFamily": ... }',
       'and "style": { "fill": ... }. Use this ONLY for a decorative accent line the concept calls',
@@ -312,6 +324,17 @@ export class AiDesignerArtDirectorService implements OnModuleInit {
       'better than a wrong one. Plausible-sounding filler ("Effective Monday", "Open 9-5") is the',
       'single most damaging thing a plan can produce — the user ships it believing it is true.',
       '',
+      'Copy rulebook (hard rules for every genre):',
+      '- Offer mechanics are spelled out in the customer\'s own words: "buy 1 get 1 free" is set',
+      '  as "BUY 1 GET 1 FREE" — never compressed into initialisms or trade jargon the brief did',
+      '  not use ("B1G1", "BOGO", "2F1"). Jargon half the audience cannot parse is a defect.',
+      '- Urgency and scope are FACTS under fact fidelity: "TONIGHT ONLY", "ENDS SOON", "LIMITED',
+      '  TIME", "SELECT ITEMS ONLY", "WHILE SUPPLIES LAST", weekday or date claims may appear',
+      '  ONLY when the brief states them. A sale with no stated deadline is presented without',
+      '  one — invented urgency is a lie the user ships believing it is true.',
+      '- CTA copy is a 1-3 word imperative that reads as a complete spoken command: "Order now",',
+      '  "Shop the sale", "Get yours". Never a verb+noun fragment ("Shop sale") or a bare label.',
+      '',
       'Palette fidelity: when the brief names explicit colors or palette words (e.g. warm,',
       "cream, espresso, terracotta), every plan's palette MUST honor them — never substitute a",
       'different temperature family (a warm-toned brief must never get an all-cool palette).',
@@ -346,7 +369,33 @@ export class AiDesignerArtDirectorService implements OnModuleInit {
     const failingPalette = validPlans.filter((plan) =>
       this._paletteFightsBrief(plan, brief)
     );
-    const failing = [...new Set([...failingTokens, ...failingPalette])];
+    // Inverse fact-check: plans carrying urgency/scope claims or offer jargon
+    // the brief never stated ("TONIGHT ONLY", "B1G1"), and CTAs that are not
+    // real commands ("Shop sale"). Observed live — all three shipped in one
+    // run. Retry first; deterministic strip/replace backstop below.
+    const corpus = briefCorpus(brief);
+    const failingClaims = validPlans.filter(
+      (plan) => findUngroundedClaims(plan, corpus).length > 0
+    );
+    const failingCtas = validPlans.filter((plan) =>
+      this._badCtaSlotIds(plan).length > 0
+    );
+    // Art-direction floor: a plan with no declared background, or an
+    // imageless plan with no decor, is the blank white card observed live —
+    // "minimalism" the model reached by omission, not decision.
+    const failingArt = validPlans.filter((plan) => {
+      const gaps = this._planArtDirectionGaps(plan);
+      return gaps.background || gaps.decor;
+    });
+    const failing = [
+      ...new Set([
+        ...failingTokens,
+        ...failingPalette,
+        ...failingClaims,
+        ...failingCtas,
+        ...failingArt,
+      ]),
+    ];
     if (failing.length > 0) {
       const missingUnion = [
         ...new Set(
@@ -364,6 +413,30 @@ export class AiDesignerArtDirectorService implements OnModuleInit {
       if (failingPalette.length > 0) {
         repairs.push(
           `PALETTE REPAIR: the brief names warm colors, but the previous plans used an all-cool palette. Every plan's "palette" MUST honor the brief's stated colors — stay in the warm temperature family.`
+        );
+      }
+      const claimUnion = [
+        ...new Set(
+          failingClaims.flatMap((plan) =>
+            findUngroundedClaims(plan, corpus).map((c) => c.phrase)
+          )
+        ),
+      ];
+      if (claimUnion.length > 0) {
+        repairs.push(
+          `CLAIM REPAIR: the previous plans invented claims the brief never states: ${claimUnion
+            .map((p) => `"${p}"`)
+            .join(', ')}. Remove them — urgency, deadlines, and scope qualifiers may only come from the brief. Omit a slot rather than fill it with an invented fact.`
+        );
+      }
+      if (failingCtas.length > 0) {
+        repairs.push(
+          `CTA REPAIR: the previous plans used CTA copy that is not a real command. A CTA is a 1-3 word verb-first imperative ("Order now", "Shop the sale") — never a verb+noun fragment ("Shop sale") or a label.`
+        );
+      }
+      if (failingArt.length > 0) {
+        repairs.push(
+          `ART DIRECTION REPAIR: every plan MUST declare "background" (kind + value), and a plan without imagery MUST name at least one real "decor" recipe id — a bare solid canvas with type on it is a defect, not minimalism.`
         );
       }
       try {
@@ -401,6 +474,33 @@ export class AiDesignerArtDirectorService implements OnModuleInit {
       }
     }
 
+    // Art-direction backstop: a plan STILL background-less or bare after the
+    // retry gets a ground synthesized from its own palette and the genre's
+    // first decor recipe — a blank white card must be unreachable.
+    for (const plan of validPlans) {
+      const patched = this._backstopArtDirection(plan, skillId);
+      if (patched.length > 0) {
+        this._logger.warn(
+          `Plan still missed art-direction floors after one repair retry; ${patched.join(', ')}.`
+        );
+      }
+    }
+
+    // Claim-strip backstop, after token injection so it also covers injected
+    // text: a plan STILL carrying an ungrounded claim after the retry has it
+    // cut out deterministically — an invented fact must never reach the plan
+    // card, because the conductor locks whatever the user approves.
+    for (const plan of validPlans) {
+      const claims = findUngroundedClaims(plan, corpus);
+      if (claims.length === 0) continue;
+      const stripped = stripUngroundedClaims(plan, claims);
+      if (stripped.length > 0) {
+        this._logger.warn(
+          `Plan kept ungrounded claims after one repair retry; stripped: ${stripped.join(', ')}.`
+        );
+      }
+    }
+
     // Pipe hygiene on everything about to be returned (initial, retried, and
     // injected texts alike): the " | " fixedCopy separator is machine syntax,
     // and the conductor locks plan texts verbatim — a pipe that survives here
@@ -409,13 +509,25 @@ export class AiDesignerArtDirectorService implements OnModuleInit {
       this._normalizePlanTextPipes(plan);
     }
 
-    // Slot-shape copy limits, LAST of the copy steps so it also cleans up
-    // whatever the injection backstop above appended: a badge/CTA carrying a
-    // whole compound offer is unreadable at feed scale, so the overflow moves
-    // to the subhead. Coverage is slot-agnostic, so moving whole tokens keeps
+    // Slot-shape copy limits — after the backstops above so it also cleans up
+    // whatever the injection backstop appended: a badge/CTA carrying a whole
+    // compound offer is unreadable at feed scale, so the overflow moves to
+    // the subhead. Coverage is slot-agnostic, so moving whole tokens keeps
     // every required token accounted for.
     for (const plan of validPlans) {
       this._enforceSlotCopyLimits(plan);
+    }
+
+    // CTA lint LAST, so it also judges what the limit enforcement left behind
+    // (its offer-token cut can strand a fragment). A CTA that still fails is
+    // replaced with a safe default — never shipped as a non-command.
+    for (const plan of validPlans) {
+      const replaced = this._replaceBadCtas(plan, corpus, requiredTokens);
+      if (replaced.length > 0) {
+        this._logger.warn(
+          `Plan kept non-command CTA copy after one repair retry; replaced: ${replaced.join(', ')}.`
+        );
+      }
     }
 
     // Explicit brief constraints (side language, burst badges) are hard
@@ -459,11 +571,39 @@ export class AiDesignerArtDirectorService implements OnModuleInit {
     for (const plan of validPlans) {
       const needs = (plan.assetNeeds = plan.assetNeeds ?? []);
       const covered = new Set(needs.map((n) => n.slotId));
-      for (const slot of plan.slots ?? []) {
+      const bgIsImage = plan.background?.kind === 'image';
+      for (const slot of [...(plan.slots ?? [])]) {
         if (slot.kind === 'image' && !covered.has(slot.id)) {
+          // An image BACKGROUND is the imagery. An uncovered image slot next
+          // to it has no distinct subject of its own — synthesizing a need
+          // for it generates a SECOND near-identical picture that dodges the
+          // same-asset duplicate-dropper and ships as a framed photo floating
+          // on the full-bleed background (picture-in-picture, live). Drop the
+          // slot; the prompt already forbids it, this is the backstop. Slots
+          // WITH their own distinct need (a product over a scene) are
+          // covered and never reach here.
+          if (bgIsImage) {
+            plan.slots = (plan.slots ?? []).filter((s) => s.id !== slot.id);
+            this._logger.warn(
+              `Dropped redundant image slot "${slot.id}" — the image background already carries the imagery.`
+            );
+            continue;
+          }
+          // Synthesize from an EXISTING scene brief, never from the concept:
+          // the concept describes the DESIGN ("photo left, bold service name
+          // on a panel"), and pasted into an image prompt it either painted
+          // the type into the photo or — after the design-vocab scrub — left
+          // a mangled fragment that generated off-concept imagery (a trust
+          // portrait for a pool plan, live). A sibling need's brief is the
+          // plan's own art-directed scene; the neutral ask is the fallback.
+          const sceneBrief = needs.find(
+            (n) => typeof n.brief === 'string' && n.brief.trim().length > 0
+          )?.brief;
           needs.push({
             slotId: slot.id,
-            brief: `${plan.concept} — high-quality ${slot.role || 'background'} image, on-palette (${(plan.palette || []).join(', ')})`,
+            brief:
+              sceneBrief ??
+              `A clean, professional photographic ${slot.role || 'background'} scene for this design, on-palette (${(plan.palette || []).join(', ')}), no text.`,
             prefer: 'either',
           });
           covered.add(slot.id);
@@ -482,7 +622,8 @@ export class AiDesignerArtDirectorService implements OnModuleInit {
           if (needs.length === 0) {
             needs.push({
               slotId: 'background',
-              brief: `${plan.concept} — full-bleed background image, on-palette`,
+              // Never the concept (see the synthesis note above).
+              brief: `A clean, professional full-bleed photographic background scene for this design, on-palette (${(plan.palette || []).join(', ')}), no text.`,
               prefer: 'either',
             });
             covered.add('background');
@@ -498,7 +639,75 @@ export class AiDesignerArtDirectorService implements OnModuleInit {
       }
     }
 
+    // Copy never rides an image brief — LAST, over synthesized and
+    // model-authored briefs alike. The synthesis above pastes `plan.concept`
+    // verbatim, and a concept like "gigantic condensed BUY 1 GET 1 FREE
+    // stacked like a window card" is an *instruction to paint the headline
+    // into the photo*: the image model obliged, live, straight through the
+    // no-baked-in-text negative, and the design then typeset the same words
+    // over their ghost. The design's copy is typeset by the composer; the
+    // brief describes the scene.
+    for (const plan of validPlans) {
+      const stripped = this._stripCopyFromAssetBriefs(plan);
+      if (stripped.length > 0) {
+        this._logger.warn(
+          `Removed plan copy from image briefs: ${stripped.join(', ')}.`
+        );
+      }
+    }
+
     return validPlans;
+  }
+
+  /** Design-language phrases in an IMAGE brief are painting instructions:
+   *  "bold service name + big phone on a clean panel" got a fake number
+   *  painted straight into the photo, live. Scrubbed from every brief —
+   *  the design's type and panels are the composer's, never the image
+   *  model's. */
+  private static readonly BRIEF_DESIGN_VOCAB_RE =
+    /\b(?:bold|big|giant|large|huge)?\s*(?:service name|business name|company name|phone(?:\s+number)?|headline|subhead|tagline|slogan|caption|copy|text|type(?:ography)?|lettering|wordmark|cta|call to action|badge|banner(?:\s+strip)?|panel|plate|logo|font|words?)\b[^,.;]*/gi;
+
+  /** Cut every plan copy text (headline, badge, CTA, …) AND design-language
+   *  phrasing out of every assetNeed brief. Returns log notes for the briefs
+   *  that changed. */
+  private _stripCopyFromAssetBriefs(plan: DesignPlan): string[] {
+    const notes: string[] = [];
+    const texts = Object.values(plan.texts ?? {}).filter(
+      (t): t is string => typeof t === 'string' && t.trim().length >= 4
+    );
+    for (const need of plan.assetNeeds ?? []) {
+      if (typeof need.brief !== 'string') continue;
+      let brief = need.brief;
+      for (const text of texts) {
+        const pattern = new RegExp(
+          text
+            .trim()
+            .replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+            .replace(/\s+/g, '\\s+'),
+          'gi'
+        );
+        brief = brief.replace(pattern, ' ');
+      }
+      brief = brief.replace(
+        AiDesignerArtDirectorService.BRIEF_DESIGN_VOCAB_RE,
+        ' '
+      );
+      brief = brief
+        .replace(/\s{2,}/g, ' ')
+        .replace(/\s+([.,;:!])/g, '$1')
+        .replace(/(?:[.,;:]\s*){2,}/g, '. ')
+        .trim();
+      // Scrubbing must never leave an empty prompt — fall back to a neutral
+      // scene ask rather than sending the generator nothing.
+      if (!/[a-z0-9]/i.test(brief)) {
+        brief = 'A clean, professional photographic background, no text.';
+      }
+      if (brief !== need.brief) {
+        notes.push(`"${need.slotId}"`);
+        need.brief = brief;
+      }
+    }
+    return notes;
   }
 
   /**
@@ -695,6 +904,120 @@ export class AiDesignerArtDirectorService implements OnModuleInit {
     }
     if (plan.texts && 'cta' in plan.texts) ids.add('cta');
     return ids;
+  }
+
+  /** The art-direction floors a plan misses: a declared background, and (for
+   *  an imageless plan) at least one real decor recipe. */
+  private _planArtDirectionGaps(plan: DesignPlan): {
+    background: boolean;
+    decor: boolean;
+  } {
+    const bg = plan.background as { kind?: unknown } | undefined;
+    const missingBackground = !bg || typeof bg.kind !== 'string';
+    const hasImage =
+      (!missingBackground && (bg as { kind: string }).kind === 'image') ||
+      (plan.slots ?? []).some(
+        (slot) => slot.kind === 'image' || slot.role === 'image'
+      );
+    const decorIds = (Array.isArray(plan.decor) ? plan.decor : []).filter(
+      (id) => typeof id === 'string' && id !== 'none'
+    );
+    return {
+      background: missingBackground,
+      decor: !hasImage && decorIds.length === 0,
+    };
+  }
+
+  /** Fill the missed floors deterministically: ground = the plan's own
+   *  palette hex that contrasts best with the rest (the most ground-like
+   *  color; text contrast repair downstream keeps copy legible on it), decor
+   *  = the genre's first preference. Returns log notes. */
+  private _backstopArtDirection(plan: DesignPlan, skillId: string): string[] {
+    const gaps = this._planArtDirectionGaps(plan);
+    const patched: string[] = [];
+    if (gaps.background) {
+      const value = this._groundColorFromPalette(plan) ?? '#F5F1E8';
+      plan.background = { kind: 'solid', value };
+      patched.push(`synthesized background ${value}`);
+    }
+    if (gaps.decor) {
+      const art = this._skillRouter.getArtDirection?.(skillId);
+      const recipe =
+        art?.decor?.find((id) => id !== 'none') ?? 'rule';
+      plan.decor = [...(Array.isArray(plan.decor) ? plan.decor : []), recipe];
+      patched.push(`injected decor "${recipe}"`);
+    }
+    return patched;
+  }
+
+  /** The palette hex most usable as a ground: the one whose WORST contrast
+   *  against the other palette colors is best — on a poster that is the
+   *  field the rest sits on. */
+  private _groundColorFromPalette(plan: DesignPlan): string | undefined {
+    const hexes = (Array.isArray(plan.palette) ? plan.palette : []).filter(
+      (value): value is string =>
+        typeof value === 'string' && /^#[0-9a-f]{6}$/i.test(value.trim())
+    );
+    if (hexes.length === 0) return undefined;
+    if (hexes.length === 1) return hexes[0];
+    const luminance = (hex: string): number => {
+      const channel = (i: number) => {
+        const v = parseInt(hex.slice(i, i + 2), 16) / 255;
+        return v <= 0.03928 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4);
+      };
+      return 0.2126 * channel(1) + 0.7152 * channel(3) + 0.0722 * channel(5);
+    };
+    const contrast = (a: number, b: number) =>
+      (Math.max(a, b) + 0.05) / (Math.min(a, b) + 0.05);
+    const lums = hexes.map((hex) => luminance(hex.trim()));
+    let best = 0;
+    let bestScore = -1;
+    for (let i = 0; i < hexes.length; i++) {
+      const worst = Math.min(
+        ...lums.filter((_, j) => j !== i).map((lum) => contrast(lums[i], lum))
+      );
+      if (worst > bestScore) {
+        bestScore = worst;
+        best = i;
+      }
+    }
+    return hexes[best].trim();
+  }
+
+  /** CTA slots whose text fails the command-shape lint. */
+  private _badCtaSlotIds(plan: DesignPlan): string[] {
+    const texts = plan.texts ?? {};
+    return [...this._ctaSlotIds(plan)].filter(
+      (id) => typeof texts[id] === 'string' && !lintCta(texts[id])
+    );
+  }
+
+  /** Replace every still-failing CTA with the brief-appropriate default —
+   *  after the LLM retry, a non-command CTA never ships. A CTA carrying a
+   *  required brief token is left alone: replacing it would silently drop
+   *  coverage the token checks above already signed off on. Returns log
+   *  lines. */
+  private _replaceBadCtas(
+    plan: DesignPlan,
+    corpus: string,
+    requiredTokens: string[]
+  ): string[] {
+    const replaced: string[] = [];
+    const fallback = defaultCta(corpus);
+    const flat = (value: string) =>
+      value.toLowerCase().replace(/\s+/g, '');
+    for (const slotId of this._badCtaSlotIds(plan)) {
+      const previous = plan.texts?.[slotId];
+      if (
+        typeof previous === 'string' &&
+        requiredTokens.some((token) => flat(previous).includes(flat(token)))
+      ) {
+        continue;
+      }
+      plan.texts![slotId] = fallback;
+      replaced.push(`"${previous}" → "${fallback}" (${slotId})`);
+    }
+    return replaced;
   }
 
   /**
@@ -998,7 +1321,36 @@ export class AiDesignerArtDirectorService implements OnModuleInit {
       `Canonical slots for this format (use these ids/roles/kinds so copy, assets, and revise fixes key off the same ids):`,
       JSON.stringify(hints.slotSchema, null, 2),
       'Plans should cover these slots (image slots also need an "assetNeeds" entry). Optional slots may be dropped when the concept does not need them; do not invent parallel slot ids for the same role.',
-      'An "icon" slot draws a real icon: set its "role" to an Iconify name ("mdi:rocket", "tabler:bolt") chosen to fit the concept. Any other role draws a neutral mark instead.',
+      'An "icon" slot draws a real icon. Preferred: give it an "assetNeeds" entry with kind "icon" and a plain-language search brief ("pizza slice icon", "flame") — the icon is found for you. Alternatively set its "role" to a literal Iconify name ("mdi:rocket"). An unresolved icon slot is dropped.',
+      'Graphic elements beyond icons — a hero illustration, a texture, badge art — are an "assetNeeds" entry with kind "illustration" and a style-specific brief matching the plan\'s palette and mood; "vector" searches stock vector art. Use these when the concept calls for illustration rather than photography.',
+    ];
+  }
+
+  /**
+   * The genre's curated art-direction catalog, rendered into the prompt.
+   *
+   * Every skill has carried an `artDirection` block (preferred compositions,
+   * decor, effects, treatments) since the catalog was written — and no
+   * runtime ever consumed it, so plans were art-directed from nothing. This
+   * is its consumer.
+   */
+  private _skillArtDirectionGuidance(skillId: string): string[] {
+    const art = this._skillRouter.getArtDirection?.(skillId);
+    if (!art) return [];
+    const line = (label: string, ids?: string[]) =>
+      ids && ids.length > 0 ? [`- ${label}: ${ids.join(', ')}`] : [];
+    return [
+      `## Genre art direction (from the "${skillId}" skill — preferred ids, most-preferred first)`,
+      ...line('compositions', art.compositions),
+      ...line('decor', art.decor),
+      ...line('effects', art.effects),
+      ...line('image treatments', art.treatments),
+      ...line('masks', art.masks),
+      ...line('warps', art.warps),
+      'Choose from these lists unless the brief demands otherwise. Every plan MUST declare',
+      '"composition" and "background". A plan with no imagery (no image slot and a non-image',
+      'background) MUST also name at least one decor recipe — a bare solid canvas with type on',
+      'it is a defect, not minimalism: even the quietest card carries a ground and a mark.',
     ];
   }
 
@@ -1076,6 +1428,7 @@ export class AiDesignerArtDirectorService implements OnModuleInit {
       ),
       'Every plan MUST set "styleId" to one of the preset ids above, and the plans MUST VARY styles so the user gets genuinely distinct options (repeat a styleId only when more variants than presets were requested).',
       "Each plan's palette and typeScale must be consistent with its chosen preset (preset values are the default).",
+      'Match the preset to the SUBJECT: the palette and display face must be plausible for what is being sold. A novelty preset (neon glow, vaporwave, brutalist acid) on an appetizing or premium subject — food, drink, skincare, fashion — fails the brief however striking it is; reach for those only when the brand itself is loud. Appetizing subjects get warm, warm-dark or fresh palettes, never cold neons.',
       'Slot kinds: text-bearing slots use kind "text"; a call-to-action slot MUST use kind "cta-button"; a small label/tag slot MAY use kind "badge"; a purely decorative geometric element MAY use kind "accent-shape"; imagery stays kind "image".',
       'Per-slot "style" overrides (fontFamily/fontWeight/fill/gradient/stroke/shadow/align) are optional — add one only where it improves on the preset for that slot.',
     ];
@@ -1162,16 +1515,16 @@ export class AiDesignerArtDirectorService implements OnModuleInit {
       palette: 'string[]',
       typeScale: 'Record<string, number>',
       background: {
-        kind: "'solid' | 'gradient' | 'image'",
+        kind: "'solid' | 'gradient' | 'image' (REQUIRED — every plan declares its ground)",
         value: 'string (optional)',
         ref: 'asset:{id} (optional)',
       },
       composition:
-        'string (optional) — an arrangement id from the COMPOSITIONS list. Omit to let the composer choose.',
+        'string (REQUIRED) — an arrangement id from the COMPOSITIONS list.',
       depth:
         "'flat' | 'layered' | 'deep' (optional) — how much the design should separate foreground from background",
       decor:
-        'string[] (optional) — decoration recipe ids from the DECOR list. At most one "loud" mark.',
+        'string[] — decoration recipe ids from the DECOR list. At most one "loud" mark. REQUIRED (≥1 real id, not "none") for any plan without imagery.',
       slots: [
         {
           id: 'string',
@@ -1202,6 +1555,7 @@ export class AiDesignerArtDirectorService implements OnModuleInit {
           slotId: 'string',
           brief: 'string',
           prefer: "'generate' | 'stock' | 'either'",
+          kind: "'photo' (default) | 'illustration' | 'icon' | 'vector' (optional) — photo: photographic imagery; illustration: a generated GRAPHIC element (hero illustration, texture, badge art) in the plan's style, never photographic; icon: the brief is a plain-language icon search ('pizza slice icon') resolved to a real vector icon for an icon slot; vector: stock vector artwork",
         },
       ],
       texts: 'Record<slotId, string> — final copy for every copy slot (required)',

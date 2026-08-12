@@ -37,8 +37,10 @@ export interface RenderOptions {
 }
 
 /**
- * One text-over-imagery legibility failure from
- * `DesignRenderService.auditTextContrast`.
+ * One deterministic render-audit failure. Historically only
+ * `DesignRenderService.auditTextContrast` produced these; the reason union is
+ * additive (downstream consumers switch on `reason` and must treat unknown
+ * reasons as report-only), so the collision and imagery audits reuse the shape.
  *
  * `reason: 'contrast'` — the painted backdrop sampled under the text's box
  * fails the WCAG ratio for its size class.
@@ -52,6 +54,19 @@ export interface RenderOptions {
  * flip ships together with a zero-offset shadow in the opposite colour. It used
  * to route to a scrim; round 8 (D2) deleted that remedy. See the composer's
  * `fixContrast`.
+ *
+ * `reason: 'overlap'` — from `auditTextCollisions`: the painted ink of this
+ * element intersects the ink of a DIFFERENT element (`otherElementId`).
+ * Measured geometrically from the renderer's own line metrics, no pixels
+ * sampled — so `ratio`/`backdropLuma` carry 0 and `fill` may be empty.
+ *
+ * `reason: 'washed-out'` — from `auditImageryVisibility`: the doc declares
+ * imagery (an image background, or an image element covering a large share of
+ * the canvas) but the RENDERED pixels over that region are near-uniform and
+ * extreme (washed to white or crushed to black) — the imagery is effectively
+ * invisible in the deliverable. `backdropLuma` carries the sampled region's
+ * WCAG luminance, `backdropStdev` its luma spread; `ratio` carries 0 and
+ * `fill` is empty.
  */
 export interface TextContrastViolation {
   outputIndex: number;
@@ -63,7 +78,21 @@ export interface TextContrastViolation {
   /** WCAG relative luminance of the sampled backdrop (0..1). */
   backdropLuma: number;
   /** Why the text was flagged. Absent is read as `'contrast'`. */
-  reason?: 'contrast' | 'busy';
+  reason?: 'contrast' | 'busy' | 'overlap' | 'washed-out';
+  /** For `reason: 'overlap'`: the other element/instance in the colliding pair. */
+  otherElementId?: string;
+  /**
+   * For `reason: 'overlap'`: bounding union of THIS element's measured ink
+   * rects, in canvas coordinates. A fitted/overflowing line paints ink OUTSIDE
+   * the element's declared box, so a consumer separating the pair by BOX
+   * geometry must first widen each box to cover its ink rect — otherwise the
+   * boxes need not intersect and the repair never converges.
+   */
+  inkRect?: { x: number; y: number; width: number; height: number };
+  /** For `reason: 'overlap'`: bounding union of the OTHER element's ink rects. */
+  otherInkRect?: { x: number; y: number; width: number; height: number };
+  /** Human-readable description (collision and imagery audits). */
+  message?: string;
   /** Largest per-channel standard deviation of the sampled backdrop (0..255). */
   backdropStdev?: number;
   /**
@@ -72,4 +101,12 @@ export interface TextContrastViolation {
    * where the glyphs are unreadable.
    */
   crossingFraction?: number;
+  /**
+   * The element's glyph LINES sit on divergent backdrops (lightest vs darkest
+   * per-line backdrop luminance ≥ 2.5:1 apart — a pale band above a dark
+   * photo). No single flat fill can read on every line, so a repair must
+   * separate the glyphs (halo/stroke) rather than merely flip the fill.
+   * `ratio`/`backdropLuma` carry the WORST line's values.
+   */
+  straddle?: boolean;
 }

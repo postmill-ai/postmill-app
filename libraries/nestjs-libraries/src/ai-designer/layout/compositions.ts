@@ -148,7 +148,7 @@ export const COMPOSITIONS: Composition[] = [
     typeScale: 0.95,
     label: 'Poster Left',
     description: 'Copy column at the top-left over a dark-scrimmed full-bleed photo. Moody food, drink, retail promos.',
-    roles: ['image', 'headline', 'subhead', 'cta', 'badge', 'legal', 'decor'],
+    roles: ['image', 'headline', 'subhead', 'cta', 'badge', 'legal', 'decor', 'accent'],
     requires: [],
     scrim: { widthRatio: 0.62, strength: 0.72 },
     textAlign: 'left',
@@ -163,6 +163,9 @@ export const COMPOSITIONS: Composition[] = [
           gap: 3,
           children: present(ctx, [
             slot('badge'),
+            // The kicker/script line rides ABOVE the headline — poster
+            // grammar ("Italian" over "PIZZA"), not a subhead variant.
+            slot('accent'),
             slot('headline'),
             slot('subhead'),
             slot('cta'),

@@ -22,6 +22,8 @@ describe('AiDesignerSaverService file naming', () => {
     renderAllPages: ReturnType<typeof vi.fn>;
     renderContactSheet: ReturnType<typeof vi.fn>;
     auditTextContrast: ReturnType<typeof vi.fn>;
+    auditTextCollisions: ReturnType<typeof vi.fn>;
+    auditImageryVisibility: ReturnType<typeof vi.fn>;
     docHasTextOverImagery: ReturnType<typeof vi.fn>;
   };
   let adapter: {
@@ -44,6 +46,8 @@ describe('AiDesignerSaverService file naming', () => {
       renderAllPages: vi.fn(async () => [Buffer.from('page')]),
       renderContactSheet: vi.fn(async () => Buffer.from('sheet')),
       auditTextContrast: vi.fn(async () => []),
+      auditTextCollisions: vi.fn(async () => []),
+      auditImageryVisibility: vi.fn(async () => []),
       docHasTextOverImagery: vi.fn(() => false),
     };
     adapter = {
@@ -154,6 +158,79 @@ describe('AiDesignerSaverService file naming', () => {
     );
     expect(renderService.auditTextContrast).toHaveBeenCalledTimes(1);
   });
+
+  it('merges violations from all three audits into contrastViolations', async () => {
+    renderService.docHasTextOverImagery.mockReturnValue(true);
+    const contrast = {
+      outputIndex: 0,
+      elementId: 't1',
+      fill: '#FFFFFF',
+      ratio: 1.4,
+      backdropLuma: 0.9,
+      reason: 'contrast',
+    };
+    const overlap = {
+      outputIndex: 0,
+      elementId: 't2',
+      otherElementId: 't3',
+      fill: '',
+      ratio: 0,
+      backdropLuma: 0,
+      reason: 'overlap',
+      message: 'painted ink of "t2" overlaps "t3"',
+    };
+    const washedOut = {
+      outputIndex: 0,
+      elementId: 'bg',
+      fill: '',
+      ratio: 0,
+      backdropLuma: 0.97,
+      reason: 'washed-out',
+      message: 'declared imagery ("background image") is nearly invisible',
+    };
+    renderService.auditTextContrast.mockResolvedValue([contrast]);
+    renderService.auditTextCollisions.mockResolvedValue([overlap]);
+    renderService.auditImageryVisibility.mockResolvedValue([washedOut]);
+
+    const result = await service.saveDesign('org1', 'user1', 'v1', makeDoc(), {
+      name: 'announcement-v1',
+    });
+
+    expect(result.contrastViolations).toEqual([contrast, overlap, washedOut]);
+    // The imagery audit reuses the saver's already-rendered composites.
+    expect(renderService.auditImageryVisibility.mock.calls[0][1]).toEqual([
+      Buffer.from('page'),
+    ]);
+  });
+
+  it('one audit blowing up neither blocks the save nor discards the others', async () => {
+    renderService.docHasTextOverImagery.mockReturnValue(true);
+    renderService.auditTextContrast.mockRejectedValue(new Error('boom'));
+    const overlap = {
+      outputIndex: 0,
+      elementId: 't2',
+      fill: '',
+      ratio: 0,
+      backdropLuma: 0,
+      reason: 'overlap',
+    };
+    renderService.auditTextCollisions.mockResolvedValue([overlap]);
+
+    const result = await service.saveDesign('org1', 'user1', 'v1', makeDoc(), {
+      name: 'announcement-v1',
+    });
+
+    expect(result.designId).toBe('design-1');
+    expect(result.contrastViolations).toEqual([overlap]);
+  });
+
+  it('omits contrastViolations entirely when every audit is clean', async () => {
+    const result = await service.saveDesign('org1', 'user1', 'v1', makeDoc(), {
+      name: 'announcement-v1',
+    });
+
+    expect(result).not.toHaveProperty('contrastViolations');
+  });
 });
 
 describe('AiDesignerSaverService deferred preview registration', () => {
@@ -174,6 +251,8 @@ describe('AiDesignerSaverService deferred preview registration', () => {
       renderAllPages: vi.fn(async () => [Buffer.from('page')]),
       renderContactSheet: vi.fn(async () => Buffer.from('sheet')),
       auditTextContrast: vi.fn(async () => []),
+      auditTextCollisions: vi.fn(async () => []),
+      auditImageryVisibility: vi.fn(async () => []),
       docHasTextOverImagery: vi.fn(() => false),
     };
     adapter = {

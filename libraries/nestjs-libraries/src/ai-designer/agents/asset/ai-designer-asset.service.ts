@@ -12,6 +12,7 @@ import { AiDefaultsService } from '@postmill-ai/nestjs-libraries/ai/defaults/ai-
 import { FileService } from '@postmill-ai/nestjs-libraries/database/prisma/file/file.service';
 import { StorageService } from '@postmill-ai/nestjs-libraries/database/prisma/storage/storage.service';
 import { StockMediaService } from '@postmill-ai/nestjs-libraries/media/stock/stock-media.service';
+import { resolveIconifyIcon } from '@postmill-ai/nestjs-libraries/media/designer-doc/icon-resolver';
 import type { AssetAspect, AssetNeedRequest, AssetResult } from '../../ai-designer.types';
 import { assetKey } from '../../util/aspect';
 import { raceWithTimeout } from '../../util/race-with-timeout';
@@ -61,6 +62,13 @@ const NO_BAKED_IN_TEXT_SUFFIX =
 // negative.
 const REGENERATE_NO_TEXT_SUFFIX =
   'Plain unbranded packaging or surfaces — absolutely no printed text, labels, or logos on any object. No brand marks, emblems, monograms, logo-shaped details or real celebrity likenesses of any kind; every product must be an unbranded generic design.';
+
+// Appended to `kind: 'illustration'` prompts INSTEAD of the photographic
+// hero-layout guidance: these needs are graphic elements (hero illustrations,
+// textures, badge art), and "full-bleed photographic composition" steers the
+// model to exactly the wrong register.
+const ILLUSTRATION_STYLE_SUFFIX =
+  'Rendered as a graphic ILLUSTRATION, not a photograph: bold flat shapes, clean edges, deliberate limited palette; poster-art quality.';
 
 // Layout intent → subject-placement guidance for the image model. Covers both
 // channelLayouts intent ids and gallery template ids. Composition ONLY — never
@@ -239,6 +247,21 @@ export class AiDesignerAssetService implements OnModuleInit {
     regenerate = false,
     signal?: AbortSignal
   ): Promise<AssetResult | null> {
+    // Icon needs never touch the image pipeline: the brief is an Iconify
+    // SEARCH QUERY ("pizza slice icon"), resolved to an inline SVG body. A
+    // miss resolves to absence — the composer drops the slot rather than
+    // shipping a placeholder blob.
+    if (need.kind === 'icon') {
+      return this._resolveIconNeed(orgId, need);
+    }
+    // Vector art is searched first (Pixabay serves raster renders of vector
+    // illustrations); a miss falls through to the ordinary resolve chain so
+    // the slot still gets imagery.
+    if (need.kind === 'vector') {
+      throwIfAborted(signal);
+      const vector = await this._tryVector(orgId, need);
+      if (vector) return vector;
+    }
     // A `prefer: 'stock'` need used to skip the generate block entirely, so a
     // regeneration (which exists precisely because the critic rejected the
     // previous imagery) could never reach the strengthened negative prompt —
@@ -325,6 +348,17 @@ export class AiDesignerAssetService implements OnModuleInit {
     const noText = regenerate
       ? `${NO_BAKED_IN_TEXT_SUFFIX} ${REGENERATE_NO_TEXT_SUFFIX}`
       : NO_BAKED_IN_TEXT_SUFFIX;
+    // Illustration needs steer the SAME generator away from photography —
+    // and skip LAYOUT_TEXT_SPACE, whose "full-bleed photographic composition"
+    // language is exactly wrong for a graphic element.
+    if (need.kind === 'illustration') {
+      const parts = [
+        need.brief,
+        ILLUSTRATION_STYLE_SUFFIX,
+        ...(need.aspect ? [ASPECT_COMPOSITION[need.aspect]] : []),
+      ];
+      return `${parts.join(' ')} ${noText}`;
+    }
     if (!need.heroLayout) return `${need.brief} ${noText}`;
     const parts: string[] = [];
     if (need.aspect) parts.push(ASPECT_COMPOSITION[need.aspect]);
@@ -333,6 +367,69 @@ export class AiDesignerAssetService implements OnModuleInit {
     return parts.length > 0
       ? `${need.brief} ${parts.join(' ')} ${noText}`
       : `${need.brief} ${noText}`;
+  }
+
+  /**
+   * Resolve an icon need: Iconify search by the brief, first hit's SVG body
+   * inlined — the same asset a hand-placed icon from the Designer's icons
+   * panel carries, so no file is stored and no upload guard applies.
+   */
+  private async _resolveIconNeed(
+    orgId: string,
+    need: AssetNeed
+  ): Promise<AssetResult | null> {
+    try {
+      const response = await this._stockMedia.searchIcons(
+        orgId,
+        this._sanitizeStockQuery(need.brief)
+      );
+      const item = (Array.isArray(response.results) ? response.results : [])[0];
+      if (!item?.prefix || !item.iconName) return null;
+      const resolved = await resolveIconifyIcon(
+        `${item.prefix}:${item.iconName}`
+      );
+      if (!resolved) return null;
+      return {
+        slotId: need.slotId,
+        fileId: '',
+        path: '',
+        type: 'icon',
+        iconBody: resolved.body,
+        ...(resolved.viewBox ? { iconViewBox: resolved.viewBox } : {}),
+        source: 'stock',
+        aspect: need.aspect,
+      };
+    } catch {
+      return null;
+    }
+  }
+
+  /** Stock vector art (Pixabay raster renders), imported like a photo. */
+  private async _tryVector(
+    orgId: string,
+    need: AssetNeed
+  ): Promise<AssetResult | null> {
+    try {
+      const response = await this._stockMedia.searchVectors(
+        orgId,
+        this._sanitizeStockQuery(need.brief),
+        1,
+        need.aspect ? STOCK_ORIENTATION[need.aspect] : undefined
+      );
+      const item = (Array.isArray(response.results) ? response.results : [])[0];
+      if (!item) return null;
+      const file = await this._fileService.importFromUrl(orgId, {
+        url: item.url,
+        name: need.brief.slice(0, 40),
+        source: item.source,
+        attribution: item.attribution,
+      });
+      return await this._toResult(need, file, 'stock', {
+        stockId: typeof item.id === 'string' ? item.id : undefined,
+      });
+    } catch {
+      return null;
+    }
   }
 
   private async _tryStock(
@@ -396,8 +493,55 @@ export class AiDesignerAssetService implements OnModuleInit {
       .join(' ')
       .replace(/\s+/g, ' ')
       .trim();
-    return kept || brief;
+    // Search engines match noun phrases, not art direction: a full prose
+    // brief ("Bright midday backyard swimming pool with crystal-clear
+    // turquoise water and visible surface ripples, clean tile…") returned
+    // ZERO stock hits live, and the plan's entire imagery fell to a gradient.
+    // Query with the first clause, minus photography-filler and connective
+    // words (they only narrow the match), capped to eight terms — mood and
+    // setting words SURVIVE; the sentence around them does not.
+    const subject = (kept || brief).split(/[,;:.]/)[0] ?? '';
+    const shortened = subject
+      .split(/\s+/)
+      .filter(
+        (word) =>
+          !AiDesignerAssetService.STOCK_QUERY_FILLER.has(
+            word.toLowerCase().replace(/[^a-z-]/g, '')
+          )
+      )
+      .slice(0, 8)
+      .join(' ')
+      .trim();
+    return shortened || kept || brief;
   }
+
+  /** Words that narrow a stock search without describing the subject. */
+  private static readonly STOCK_QUERY_FILLER = new Set([
+    'full-bleed',
+    'stock',
+    'photo',
+    'photograph',
+    'photographic',
+    'photography',
+    'picture',
+    'image',
+    'shot',
+    'scene',
+    'close-up',
+    'high-quality',
+    'a',
+    'an',
+    'the',
+    'of',
+    'with',
+    'and',
+    'for',
+    'over',
+    'on',
+    'in',
+    'at',
+    'to',
+  ]);
 
   // Stock providers don't currently return a focal point; pass one through if
   // a provider ever does — the composer defaults to center otherwise.

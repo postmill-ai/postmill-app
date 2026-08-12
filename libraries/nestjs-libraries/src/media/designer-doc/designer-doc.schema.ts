@@ -821,8 +821,12 @@ const { strict: StrictTextRunSchema, lenient: LenientTextRunSchema } =
     },
     {
       ...textRunCommon,
-      fontSize: lenientNum(1, MAX_FONT_SIZE, 16),
-      fontWeight: lenientNum(1, 1000, 400),
+      // Optional in strict, optional in lenient — the renderer resolves
+      // `run.fontSize ?? el.fontSize`, so stamping 16 onto a run that never
+      // carried one SILENTLY shrank the line: an emphasised 96px headline
+      // ("BUY 1 GET 1 FREE" with a cyan FREE) rendered at 16px, live.
+      fontSize: lenientOptionalNum(1, MAX_FONT_SIZE),
+      fontWeight: lenientOptionalNum(1, 1000),
     }
   );
 

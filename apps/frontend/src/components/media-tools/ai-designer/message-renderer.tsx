@@ -8,6 +8,7 @@ import { Input } from '@postmill-ai/react/form/input';
 import { useT } from '@postmill-ai/react/translation/get.transation.service.client';
 import { TranslatedLabel } from '@postmill-ai/react/translation/translated-label';
 import { useModals } from '@postmill-ai/frontend/components/layout/new-modal';
+import { Disclosure } from '@postmill-ai/frontend/components/ui/disclosure';
 import { InteractiveForm } from './interactive-form';
 import { markdownToHtml } from './markdown-lite';
 import { getStylePreset } from '@postmill-ai/nestjs-libraries/ai-designer/styles';
@@ -141,47 +142,80 @@ const MediaMessage: React.FC<{
     });
   };
 
+  // Finished results group by design — one card per design with a single
+  // Edit button (a design's channel variants are the SAME design re-fitted,
+  // so per-image edit links all opened the same thing). In-flight previews
+  // carry no designId yet and stay ungrouped tiles without a button.
+  const { groups, ungrouped } = useMemo(() => {
+    const byDesign = new Map<string, MediaItem[]>();
+    const loose: MediaItem[] = [];
+    for (const item of items) {
+      if (!item.designId) {
+        loose.push(item);
+        continue;
+      }
+      byDesign.set(item.designId, [...(byDesign.get(item.designId) ?? []), item]);
+    }
+    return { groups: [...byDesign.entries()], ungrouped: loose };
+  }, [items]);
+
+  const tile = (item: MediaItem, idx: number) => (
+    <div key={`${item.fileId || item.url}-${idx}`} className="flex flex-col gap-1">
+      {item.type === 'video' ? (
+        <video
+          src={item.url}
+          controls
+          className="max-w-[280px] max-h-[200px] rounded-lg border border-studioBorder"
+        >
+          <track kind="captions" src="" label={t('no_captions', 'No captions')} />
+        </video>
+      ) : (
+        <button
+          type="button"
+          onClick={() => openLightbox(item)}
+          className="cursor-zoom-in rounded-lg ring-designerAccent hover:ring-2 transition-shadow"
+          aria-label={t('view_full_size', 'View full size')}
+        >
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img
+            src={item.url}
+            alt={item.caption || t('preview', 'Preview')}
+            className="max-w-[280px] max-h-[200px] rounded-lg border border-studioBorder object-contain"
+          />
+        </button>
+      )}
+      {item.caption && (
+        <span className="text-[11px] text-textColor/60">{item.caption}</span>
+      )}
+    </div>
+  );
+
   return (
-    <div className="flex flex-wrap gap-3">
-      {items.map((item, idx) => (
-        <div key={`${item.fileId || item.url}-${idx}`} className="flex flex-col gap-1">
-          {item.type === 'video' ? (
-            <video
-              src={item.url}
-              controls
-              className="max-w-[280px] max-h-[200px] rounded-lg border border-studioBorder"
-            >
-              <track kind="captions" src="" label={t('no_captions', 'No captions')} />
-            </video>
-          ) : (
-            <button
+    <div className="flex flex-col gap-3">
+      {groups.map(([designId, groupItems]) => {
+        // 'Variant 1 · ig-post' → 'Variant 1'
+        const title = groupItems[0].caption?.split(' · ')[0];
+        return (
+          <div
+            key={designId}
+            className="flex flex-col items-start gap-2 rounded-lg border border-studioBorder bg-newBgColorInner p-3"
+          >
+            {title && (
+              <div className="text-[13px] font-medium text-textColor">{title}</div>
+            )}
+            <div className="flex flex-wrap gap-3">{groupItems.map(tile)}</div>
+            <Button
               type="button"
-              onClick={() => openLightbox(item)}
-              className="cursor-zoom-in rounded-lg ring-designerAccent hover:ring-2 transition-shadow"
-              aria-label={t('view_full_size', 'View full size')}
-            >
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img
-                src={item.url}
-                alt={item.caption || t('preview', 'Preview')}
-                className="max-w-[280px] max-h-[200px] rounded-lg border border-studioBorder object-contain"
-              />
-            </button>
-          )}
-          {item.caption && (
-            <span className="text-[11px] text-textColor/60">{item.caption}</span>
-          )}
-          {item.designId && (
-            <button
-              type="button"
-              onClick={() => openDesignerModal(modal, t, item.designId!)}
-              className="text-[11px] text-btnPrimaryAccent hover:underline text-start"
+              onClick={() => openDesignerModal(modal, t, designId)}
             >
               {t('edit_in_designer', 'Edit in Designer')}
-            </button>
-          )}
-        </div>
-      ))}
+            </Button>
+          </div>
+        );
+      })}
+      {ungrouped.length > 0 && (
+        <div className="flex flex-wrap gap-3">{ungrouped.map(tile)}</div>
+      )}
     </div>
   );
 };
@@ -311,6 +345,10 @@ const PlanMessage: React.FC<{
   const [selectedIds, setSelectedIds] = useState<string[]>(
     content.plans.map((p) => p.variantId)
   );
+  // Accordion state: every card starts collapsed. Collapsing unmounts a
+  // card's copy editors, but their values live in `editedTexts` below, so
+  // edits survive a collapse and still ship with Accept.
+  const [openIds, setOpenIds] = useState<string[]>([]);
   // Inline copy editing: one input per copy slot, initialized from the
   // plan's texts ('' when the plan predates plan-time copy).
   const [editedTexts, setEditedTexts] = useState<PlanTextsPayload>(() => {
@@ -331,6 +369,13 @@ const PlanMessage: React.FC<{
 
   const togglePlan = (variantId: string) =>
     setSelectedIds((prev) =>
+      prev.includes(variantId)
+        ? prev.filter((id) => id !== variantId)
+        : [...prev, variantId]
+    );
+
+  const toggleOpen = (variantId: string) =>
+    setOpenIds((prev) =>
       prev.includes(variantId)
         ? prev.filter((id) => id !== variantId)
         : [...prev, variantId]
@@ -381,99 +426,116 @@ const PlanMessage: React.FC<{
                     : 'border-studioBorder bg-newBgColorInner'
                 }`}
               >
-                <label className="flex items-start gap-3 cursor-pointer">
-                  <input
-                    type="checkbox"
-                    value={plan.variantId}
-                    checked={selectedIds.includes(plan.variantId)}
-                    onChange={() => togglePlan(plan.variantId)}
-                    className="mt-0.5 accent-designerAccent"
-                  />
-                  <div className="min-w-0 text-[13px] font-medium text-textColor">
-                    {plan.concept}
-                    <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-[12px] font-normal text-textColor/60">
-                      {styleTitle && (
-                        <span className="px-1.5 py-0.5 rounded bg-designerAccent/15 text-[10px] font-medium text-textColor">
-                          {styleTitle}
-                        </span>
-                      )}
-                      {plan.slots.length > 0 && (
-                        <span>
-                          {t('n_slots_count', '{{count}} slot', {
-                            count: plan.slots.length,
-                          })}
-                        </span>
-                      )}
-                      {plan.formatTemplate && (
-                        <span>{humanize(plan.formatTemplate)}</span>
-                      )}
-                      {plan.palette.length > 0 && (
-                        <span className="flex items-center gap-1">
-                          {plan.palette.slice(0, 6).map((color) => (
-                            <span
-                              key={color}
-                              className="w-3 h-3 rounded-full border border-studioBorder"
-                              style={{ backgroundColor: color }}
-                              title={color}
-                            />
-                          ))}
-                        </span>
-                      )}
-                    </div>
-                  </div>
-                </label>
-                {canAccept && copySlots.length > 0 && (
-                  // Outside the selection label so focusing an input never
-                  // toggles the plan checkbox.
-                  <div className="mt-2 flex flex-col gap-2 ps-[28px]">
-                    {copySlots.map((slot) => {
-                      const value = editedTexts[plan.variantId]?.[slot.id] ?? '';
-                      if (isMultilineSlot(slot.role, value)) {
-                        // Multi-line copy edits in an auto-height textarea
-                        // styled like the revise box; the label mirrors the
-                        // Input's own label markup.
-                        return (
-                          <div key={slot.id} className="flex flex-col gap-[6px]">
-                            <div className="text-[14px]">
-                              <TranslatedLabel label={humanize(slot.role)} />
-                            </div>
-                            <textarea
-                              name={`plan-text-${plan.variantId}-${slot.id}`}
-                              maxLength={500}
-                              value={value}
-                              rows={Math.max(
-                                2,
-                                Math.min(6, value.split('\n').length + 1)
-                              )}
-                              onChange={(e) =>
-                                setSlotText(
-                                  plan.variantId,
-                                  slot.id,
-                                  e.target.value
-                                )
-                              }
-                              className="rounded-lg border border-studioBorder bg-newBgColorInner p-3 text-[14px] text-textColor outline-none focus:border-designerAccent resize-none"
-                            />
-                          </div>
-                        );
-                      }
-                      return (
-                        <Input
-                          key={slot.id}
-                          disableForm
-                          removeError
-                          name={`plan-text-${plan.variantId}-${slot.id}`}
-                          label={humanize(slot.role)}
-                          maxLength={500}
-                          value={value}
-                          onChange={(e) =>
-                            setSlotText(plan.variantId, slot.id, e.target.value)
-                          }
+                <Disclosure
+                  open={openIds.includes(plan.variantId)}
+                  onToggle={() => toggleOpen(plan.variantId)}
+                  header={
+                    <div className="flex items-start gap-3">
+                      {/* The label swallows the click so toggling selection
+                          never expands/collapses the card. */}
+                      {/* eslint-disable-next-line jsx-a11y/no-noninteractive-element-interactions, jsx-a11y/click-events-have-key-events */}
+                      <label
+                        className="flex cursor-pointer"
+                        onClick={(e) => e.stopPropagation()}
+                      >
+                        <input
+                          type="checkbox"
+                          value={plan.variantId}
+                          checked={selectedIds.includes(plan.variantId)}
+                          onChange={() => togglePlan(plan.variantId)}
+                          className="mt-0.5 accent-designerAccent"
                         />
-                      );
-                    })}
-                  </div>
-                )}
+                        <span className="sr-only">{plan.concept}</span>
+                      </label>
+                      <div className="min-w-0 text-[13px] font-medium text-textColor">
+                        {plan.concept}
+                        <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-[12px] font-normal text-textColor/60">
+                          {styleTitle && (
+                            <span className="px-1.5 py-0.5 rounded bg-designerAccent/15 text-[10px] font-medium text-textColor">
+                              {styleTitle}
+                            </span>
+                          )}
+                          {plan.slots.length > 0 && (
+                            <span>
+                              {t('n_slots_count', '{{count}} slot', {
+                                count: plan.slots.length,
+                              })}
+                            </span>
+                          )}
+                          {plan.formatTemplate && (
+                            <span>{humanize(plan.formatTemplate)}</span>
+                          )}
+                          {plan.palette.length > 0 && (
+                            <span className="flex items-center gap-1">
+                              {plan.palette.slice(0, 6).map((color) => (
+                                <span
+                                  key={color}
+                                  className="w-3 h-3 rounded-full border border-studioBorder"
+                                  style={{ backgroundColor: color }}
+                                  title={color}
+                                />
+                              ))}
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  }
+                >
+                  {canAccept && copySlots.length > 0 && (
+                    // Outside the selection label so focusing an input never
+                    // toggles the plan checkbox.
+                    <div className="mt-2 flex flex-col gap-2 ps-[28px]">
+                      {copySlots.map((slot) => {
+                        const value =
+                          editedTexts[plan.variantId]?.[slot.id] ?? '';
+                        if (isMultilineSlot(slot.role, value)) {
+                          // Multi-line copy edits in an auto-height textarea
+                          // styled like the revise box; the label mirrors the
+                          // Input's own label markup.
+                          return (
+                            <div key={slot.id} className="flex flex-col gap-[6px]">
+                              <div className="text-[14px]">
+                                <TranslatedLabel label={humanize(slot.role)} />
+                              </div>
+                              <textarea
+                                name={`plan-text-${plan.variantId}-${slot.id}`}
+                                maxLength={500}
+                                value={value}
+                                rows={Math.max(
+                                  2,
+                                  Math.min(6, value.split('\n').length + 1)
+                                )}
+                                onChange={(e) =>
+                                  setSlotText(
+                                    plan.variantId,
+                                    slot.id,
+                                    e.target.value
+                                  )
+                                }
+                                className="rounded-lg border border-studioBorder bg-newBgColorInner p-3 text-[14px] text-textColor outline-none focus:border-designerAccent resize-none"
+                              />
+                            </div>
+                          );
+                        }
+                        return (
+                          <Input
+                            key={slot.id}
+                            disableForm
+                            removeError
+                            name={`plan-text-${plan.variantId}-${slot.id}`}
+                            label={humanize(slot.role)}
+                            maxLength={500}
+                            value={value}
+                            onChange={(e) =>
+                              setSlotText(plan.variantId, slot.id, e.target.value)
+                            }
+                          />
+                        );
+                      })}
+                    </div>
+                  )}
+                </Disclosure>
               </div>
             );
           })}

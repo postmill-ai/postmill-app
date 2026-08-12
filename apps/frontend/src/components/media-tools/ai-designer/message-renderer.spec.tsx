@@ -93,6 +93,14 @@ const renderPlan = (plans: DesignPlan[]) => {
   return onAcceptPlan;
 };
 
+// Plan cards are accordions, collapsed by default. Only the card headers
+// carry aria-expanded, so `expanded` filters out Accept/Revise/etc.
+const expandPlan = (index = 0) =>
+  fireEvent.click(screen.getAllByRole('button', { expanded: false })[index]);
+
+const collapsePlan = (index = 0) =>
+  fireEvent.click(screen.getAllByRole('button', { expanded: true })[index]);
+
 describe('PlanMessage inline copy editing', () => {
   it('renders one input per copy slot, initialized from plan.texts', () => {
     renderPlan([
@@ -100,6 +108,7 @@ describe('PlanMessage inline copy editing', () => {
         texts: { headline: 'Labor Day Sale!', cta: 'Shop Now' },
       }),
     ]);
+    expandPlan();
 
     // Copy slots (text + cta-button) get inputs; the image slot does not.
     expect(screen.getAllByRole('textbox')).toHaveLength(2);
@@ -116,6 +125,7 @@ describe('PlanMessage inline copy editing', () => {
         texts: { headline: 'Labor Day Sale!', cta: 'Shop Now' },
       }),
     ]);
+    expandPlan();
 
     fireEvent.change(screen.getByDisplayValue('Labor Day Sale!'), {
       target: { value: 'Final Hours: Labor Day Sale!' },
@@ -144,6 +154,7 @@ describe('PlanMessage inline copy editing', () => {
 
   it('renders old plan messages without texts and accepts without a texts payload', () => {
     const onAcceptPlan = renderPlan([makePlan()]);
+    expandPlan();
 
     // No crash; inputs render blank from the missing texts.
     expect(screen.getAllByRole('textbox')).toHaveLength(2);
@@ -170,6 +181,81 @@ describe('PlanMessage inline copy editing', () => {
     const instruction = onRevisePlan.mock.calls[0][0] as string;
     expect(instruction).toContain('deliberately different');
     expect(instruction).not.toMatch(/\d/);
+  });
+});
+
+describe('PlanMessage accordion cards', () => {
+  it('renders collapsed by default with no copy inputs in the DOM', () => {
+    renderPlan([
+      makePlan({ texts: { headline: 'Labor Day Sale!', cta: 'Shop Now' } }),
+    ]);
+
+    expect(screen.queryAllByRole('textbox')).toHaveLength(0);
+    expect(screen.getAllByRole('button', { expanded: false })).toHaveLength(1);
+    expect(screen.queryAllByRole('button', { expanded: true })).toHaveLength(0);
+  });
+
+  it('expands on header click and shows the copy inputs', () => {
+    renderPlan([
+      makePlan({ texts: { headline: 'Labor Day Sale!', cta: 'Shop Now' } }),
+    ]);
+
+    expandPlan();
+
+    expect(screen.getAllByRole('button', { expanded: true })).toHaveLength(1);
+    expect(screen.getAllByRole('textbox')).toHaveLength(2);
+    expect(screen.getByDisplayValue('Labor Day Sale!')).toBeTruthy();
+  });
+
+  it('toggles selection via the checkbox without expanding the card', () => {
+    renderPlan([
+      makePlan({ texts: { headline: 'Labor Day Sale!', cta: 'Shop Now' } }),
+    ]);
+
+    const checkbox = screen.getByRole('checkbox') as HTMLInputElement;
+    expect(checkbox.checked).toBe(true);
+
+    fireEvent.click(checkbox);
+
+    expect(checkbox.checked).toBe(false);
+    // Still collapsed — the checkbox click never reaches the header toggle.
+    expect(screen.queryAllByRole('textbox')).toHaveLength(0);
+    expect(screen.getAllByRole('button', { expanded: false })).toHaveLength(1);
+  });
+
+  it('preserves an edit across collapse and re-expand', () => {
+    renderPlan([
+      makePlan({ texts: { headline: 'Labor Day Sale!', cta: 'Shop Now' } }),
+    ]);
+
+    expandPlan();
+    fireEvent.change(screen.getByDisplayValue('Labor Day Sale!'), {
+      target: { value: 'Final Hours!' },
+    });
+
+    collapsePlan();
+    expect(screen.queryAllByRole('textbox')).toHaveLength(0);
+
+    expandPlan();
+    expect(screen.getByDisplayValue('Final Hours!')).toBeTruthy();
+  });
+
+  it('accept payload includes edits made on a now-collapsed card', () => {
+    const onAcceptPlan = renderPlan([
+      makePlan({ texts: { headline: 'Labor Day Sale!', cta: 'Shop Now' } }),
+    ]);
+
+    expandPlan();
+    fireEvent.change(screen.getByDisplayValue('Labor Day Sale!'), {
+      target: { value: 'Final Hours!' },
+    });
+    collapsePlan();
+
+    fireEvent.click(screen.getByText('Accept plan'));
+
+    expect(onAcceptPlan).toHaveBeenCalledWith('msg-1', 'v1', {
+      v1: { headline: 'Final Hours!', cta: 'Shop Now' },
+    });
   });
 });
 
@@ -212,6 +298,7 @@ describe('PlanMessage multi-line copy', () => {
         },
       }),
     ]);
+    expandPlan();
 
     // The two-line meme caption keeps its line break in a textarea; caption
     // roles are multi-line even without a newline in the copy.
@@ -238,6 +325,7 @@ describe('PlanMessage multi-line copy', () => {
         },
       }),
     ]);
+    expandPlan();
 
     fireEvent.change(container.querySelector('textarea')!, {
       target: { value: 'MONDAY MORNING\nSTILL DEBUGGING' },
@@ -326,5 +414,61 @@ describe('MediaMessage Edit in Designer', () => {
     expect(lightboxClose).toHaveBeenCalledTimes(1);
     expect(openModalMock).toHaveBeenCalledTimes(1);
     expect(openModalMock.mock.calls[0][0].fullScreen).toBe(true);
+  });
+
+  it('groups items by designId into cards with exactly one Edit button each', () => {
+    renderMedia([
+      { ...item, caption: 'Variant 1 · ig-post', designId: 'design-1' },
+      {
+        ...item,
+        url: 'https://cdn.test/preview-story.png',
+        caption: 'Variant 1 · ig-story',
+        designId: 'design-1',
+      },
+      {
+        ...item,
+        url: 'https://cdn.test/preview-2.png',
+        caption: 'Variant 2 · ig-post',
+        designId: 'design-2',
+      },
+      {
+        ...item,
+        url: 'https://cdn.test/preview-2-story.png',
+        caption: 'Variant 2 · ig-story',
+        designId: 'design-2',
+      },
+    ]);
+
+    // 2 designs → 2 group cards → 2 buttons total, not 4 per-image links.
+    const buttons = screen.getAllByRole('button', { name: 'Edit in Designer' });
+    expect(buttons).toHaveLength(2);
+    // Group titles strip the ' · format' suffix; per-image captions remain.
+    expect(screen.getByText('Variant 1')).toBeTruthy();
+    expect(screen.getByText('Variant 2')).toBeTruthy();
+    expect(screen.getByText('Variant 1 · ig-story')).toBeTruthy();
+
+    // The second card's button opens the designer on its group's design.
+    fireEvent.click(buttons[1]);
+    const call = openModalMock.mock.calls[0][0];
+    const { getByTestId } = render(<>{call.children(vi.fn())}</>);
+    expect(getByTestId('designer-stub').getAttribute('data-design-id')).toBe(
+      'design-2'
+    );
+  });
+
+  it('renders items without a designId as plain tiles with no Edit button', () => {
+    renderMedia([
+      {
+        url: 'https://cdn.test/inflight.png',
+        type: 'image',
+        caption: 'Variant 1 · ig-post',
+      },
+    ]);
+
+    expect(
+      screen.queryByRole('button', { name: 'Edit in Designer' })
+    ).toBeNull();
+    // The preview itself still renders (and still opens the lightbox).
+    expect(screen.getByRole('button', { name: 'View full size' })).toBeTruthy();
   });
 });

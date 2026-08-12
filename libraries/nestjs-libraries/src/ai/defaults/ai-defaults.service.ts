@@ -303,7 +303,7 @@ export class AiDefaultsService {
     );
   }
 
-  async vision(orgId: string, imageUrl: string, prompt: string, opts?: { signal?: AbortSignal }) {
+  async vision(orgId: string, imageUrl: string | string[], prompt: string, opts?: { signal?: AbortSignal }) {
     const resolved = await this._require('ai', 'vision', orgId);
     return this._aiModelProvider.generateTextWithModel(
       orgId,

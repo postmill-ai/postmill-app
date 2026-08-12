@@ -408,6 +408,32 @@ describe('parity: type', () => {
     expect(bottom.minY).toBeGreaterThan(middle.minY);
   });
 
+  it('paints curved RICH text at the same height as curved flat text', async () => {
+    // The rich curved branch set `textBaseline = 'top'` where the flat branch
+    // and Konva's TextPath both use 'middle', so the same line exported half a
+    // font size lower the moment it carried a run.
+    const flat = (await render(doc([text({ text: 'AB', curve: 30 })]))).inkBox()!;
+    const rich = (
+      await render(
+        doc([text({ text: '', curve: 30, richText: [{ text: 'AB' }] })])
+      )
+    ).inkBox()!;
+
+    expect(Math.abs(rich.minY - flat.minY)).toBeLessThanOrEqual(2);
+    expect(Math.abs(rich.minX - flat.minX)).toBeLessThanOrEqual(2);
+  });
+
+  it('spreads curved text by its letterSpacing', async () => {
+    // The canvas hands `letterSpacing` to Konva's TextPath; pin the server
+    // half of that contract — the per-glyph advance in `drawCurvedText`.
+    const tight = (await render(doc([text({ text: 'AB', curve: 30 })]))).inkBox()!;
+    const spread = (
+      await render(doc([text({ text: 'AB', curve: 30, letterSpacing: 20 })]))
+    ).inkBox()!;
+
+    expect(spread.maxX - spread.minX).toBeGreaterThan(tight.maxX - tight.minX + 10);
+  });
+
   it('strokes text in the colour and width asked for', async () => {
     // `drawTextLine` called strokeText without ever setting the state, so a 4px
     // white outline exported as a 1px black hairline.
@@ -493,6 +519,76 @@ describe('parity: effects', () => {
     const box = warped.inkBox()!;
     // An arc bends well above the element's own top edge.
     expect(box.minY).toBeLessThan(80);
+  });
+
+  it('draws styled text from ONE layout — no effect pass re-wraps the glyphs', async () => {
+    // A live design appeared to render its 170px rich-text headline twice: a
+    // second, larger, differently-wrapped grey copy sat behind the real one.
+    // That duplicate turned out to be baked into the AI-generated photo layer,
+    // not drawn here — every effect keys off one rasterised silhouette buffer
+    // (`drawElementWithStyles`), so a style pass cannot lay the text out
+    // differently. This pins that invariant with the exact combination from
+    // that design: wrapped rich text at 170px with a fontWeight-900 run,
+    // textScaleX, negative letterSpacing, outer-glow, textShadow, textStroke.
+    const headline = (styles?: any[]): any => ({
+      id: 'headline',
+      type: 'text',
+      x: 54,
+      y: 150,
+      width: 950,
+      height: 320,
+      rotation: 0,
+      opacity: 1,
+      locked: false,
+      hidden: false,
+      fill: '#111111',
+      text: 'BUY 1 GET 1 FREE',
+      richText: [
+        { text: 'BUY 1 GET 1 ' },
+        { text: 'FREE', fill: '#333333', fontWeight: 900 },
+      ],
+      align: 'left',
+      fontSize: 170,
+      fontFamily: 'Anton',
+      fontWeight: 800,
+      lineHeight: 1,
+      letterSpacing: -1,
+      textScaleX: 0.95,
+      textTransform: 'uppercase',
+      textShadow: { blur: 85, color: 'rgba(0,0,0,0.85)', offsetX: 0, offsetY: 0 },
+      textStroke: { color: '#00000033', width: 2 },
+      styles,
+    });
+    const page = { width: 1080, height: 1080 };
+    const bare = await render(doc([headline()], page));
+    const styled = await render(
+      doc(
+        [
+          headline([
+            {
+              type: 'outer-glow',
+              size: 8.5,
+              spread: 30,
+              color: 'rgba(0, 0, 0, 0.55)',
+              opacity: 1,
+            },
+          ]),
+        ],
+        page
+      )
+    );
+    const a = bare.inkBox()!;
+    const b = styled.inkBox()!;
+    // The glow is the same silhouette blurred a few pixels, so the ink box may
+    // only grow by that fringe. A style pass that measured the text with
+    // different metrics (unscaled width, flattened runs, dropped spacing)
+    // would wrap onto a different number of 170px lines and move an edge by a
+    // whole line-height — far beyond this tolerance.
+    const slack = 40;
+    expect(Math.abs(b.minX - a.minX)).toBeLessThanOrEqual(slack);
+    expect(Math.abs(b.minY - a.minY)).toBeLessThanOrEqual(slack);
+    expect(Math.abs(b.maxX - a.maxX)).toBeLessThanOrEqual(slack);
+    expect(Math.abs(b.maxY - a.maxY)).toBeLessThanOrEqual(slack);
   });
 
   it('blurs the backdrop behind a layer', async () => {

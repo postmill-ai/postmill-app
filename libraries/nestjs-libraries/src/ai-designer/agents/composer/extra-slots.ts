@@ -291,15 +291,23 @@ export const buildExtraSlots = (
  * icon degrades a design, it must not fail a compose.
  */
 export const resolveIconSlots = async (
-  slots: DesignSlot[]
+  slots: DesignSlot[],
+  preResolved?: ReadonlyMap<string, ResolvedIcon>
 ): Promise<ReadonlyMap<string, ResolvedIcon>> => {
+  // Asset-agent-resolved icons (an assetNeed of kind 'icon', searched by
+  // brief) win over the literal-Iconify-id role convention — a plan no longer
+  // needs to guess a real `prefix:name` to place an icon.
   const named = slots.filter(
-    (s) => s.kind === 'icon' && /^[a-z0-9]+(?:-[a-z0-9]+)*:[a-z0-9]+(?:-[a-z0-9]+)*$/.test(s.role ?? '')
+    (s) =>
+      s.kind === 'icon' &&
+      !preResolved?.has(s.id) &&
+      /^[a-z0-9]+(?:-[a-z0-9]+)*:[a-z0-9]+(?:-[a-z0-9]+)*$/.test(s.role ?? '')
   );
   const entries = await Promise.all(
     named.map(async (s) => [s.id, await resolveIconifyIcon(s.role!)] as const)
   );
-  return new Map(
-    entries.filter((e): e is readonly [string, ResolvedIcon] => e[1] !== null)
-  );
+  return new Map([
+    ...(preResolved ?? []),
+    ...entries.filter((e): e is readonly [string, ResolvedIcon] => e[1] !== null),
+  ]);
 };

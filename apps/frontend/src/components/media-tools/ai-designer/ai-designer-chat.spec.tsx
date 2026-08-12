@@ -131,10 +131,19 @@ describe('AiDesignerChat thinking bubble', () => {
     );
   });
 
-  it('clears the bubble on the first non-user message', () => {
+  it('clears the bubble when a state-less intake turn settles', () => {
     render(<AiDesignerChat sessionId={SESSION_ID} mode="chat" />);
 
     sendChatMessage('a meme about cats');
+    expect(screen.getByTestId('progress-bubble')).toBeTruthy();
+
+    // Intake never transitions state: the server echoes the user's message,
+    // then the assistant replies — that reply ends the optimistic busy.
+    act(() => {
+      hoisted.socketCallbacks.onMessage(
+        serverMessage({ id: 'echo-1', role: 'user', nonce: 'nonce-1' })
+      );
+    });
     expect(screen.getByTestId('progress-bubble')).toBeTruthy();
 
     act(() => {
@@ -251,12 +260,17 @@ describe('AiDesignerChat cancel affordance', () => {
     expect(screen.getByRole('button', { name: 'Cancel' })).toBeTruthy();
   });
 
-  it('hides the Cancel button once the progress bubble clears', () => {
+  it('hides the Cancel button once the indicator clears', () => {
     render(<AiDesignerChat sessionId={SESSION_ID} mode="chat" />);
 
     sendChatMessage('a meme about cats');
     expect(screen.getByRole('button', { name: 'Cancel' })).toBeTruthy();
 
+    act(() => {
+      hoisted.socketCallbacks.onMessage(
+        serverMessage({ id: 'echo-1', role: 'user', nonce: 'nonce-1' })
+      );
+    });
     act(() => {
       hoisted.socketCallbacks.onMessage(serverMessage());
     });
@@ -300,6 +314,155 @@ describe('AiDesignerChat cancel affordance', () => {
     expect((button as HTMLButtonElement).disabled).toBe(false);
     fireEvent.click(button);
     expect(hoisted.socket.cancel).toHaveBeenCalledTimes(2);
+  });
+});
+
+// The indicator's lifetime is the session's authoritative state (session:state
+// hydrates + session:transition broadcasts), never inferred from message
+// traffic — the defect was the indicator vanishing mid-pipeline because any
+// assistant message or preview cleared it.
+describe('AiDesignerChat state-driven indicator', () => {
+  beforeEach(() => {
+    hoisted.socket = {
+      connected: true,
+      sendMessage: vi.fn().mockReturnValue('nonce-1'),
+      submitForm: vi.fn(),
+      acceptPlan: vi.fn(),
+      revisePlan: vi.fn(),
+      cancel: vi.fn(),
+      ack: vi.fn(),
+      reconnect: vi.fn(),
+    };
+    hoisted.lastRendererProps = {};
+    hoisted.hydrate = undefined;
+  });
+
+  it('stays visible across a preview event and assistant chatter while executing', () => {
+    render(<AiDesignerChat sessionId={SESSION_ID} mode="chat" />);
+
+    act(() => {
+      hoisted.socketCallbacks.onSessionTransition('executing');
+    });
+    expect(screen.getByTestId('progress-bubble')).toBeTruthy();
+
+    act(() => {
+      hoisted.socketCallbacks.onPreview({
+        outputPreviews: [{ url: 'https://x/preview.png', formatId: 'ig-post' }],
+      });
+    });
+    expect(screen.getByTestId('msg-preview')).toBeTruthy();
+    expect(screen.getByTestId('progress-bubble')).toBeTruthy();
+
+    act(() => {
+      hoisted.socketCallbacks.onMessage(
+        serverMessage({ content: { kind: 'text', text: 'Plan accepted.' } })
+      );
+    });
+    expect(screen.getByTestId('progress-bubble')).toBeTruthy();
+  });
+
+  it('hides on a session:transition to delivered', () => {
+    render(<AiDesignerChat sessionId={SESSION_ID} mode="chat" />);
+
+    act(() => {
+      hoisted.socketCallbacks.onSessionTransition('executing');
+    });
+    expect(screen.getByTestId('progress-bubble')).toBeTruthy();
+
+    act(() => {
+      hoisted.socketCallbacks.onSessionTransition('delivered');
+    });
+    expect(screen.queryByTestId('progress-bubble')).toBeNull();
+  });
+
+  it('shows on a session:transition to executing with no local send in flight', () => {
+    // Another tab accepted the plan — this tab hears the broadcast only.
+    render(<AiDesignerChat sessionId={SESSION_ID} mode="chat" />);
+    expect(screen.queryByTestId('progress-bubble')).toBeNull();
+
+    act(() => {
+      hoisted.socketCallbacks.onSessionTransition('executing');
+    });
+    expect(screen.getByTestId('progress-bubble')).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Cancel' })).toBeTruthy();
+  });
+
+  it('shows after a reconnect hydrate reporting a busy state, hides on a resting one', () => {
+    render(<AiDesignerChat sessionId={SESSION_ID} mode="chat" />);
+
+    act(() => {
+      hoisted.socketCallbacks.onSessionState(
+        { id: SESSION_ID, mode: 'chat', state: 'executing' },
+        []
+      );
+    });
+    expect(screen.getByTestId('progress-bubble')).toBeTruthy();
+
+    act(() => {
+      hoisted.socketCallbacks.onSessionState(
+        { id: SESSION_ID, mode: 'chat', state: 'delivered' },
+        []
+      );
+    });
+    expect(screen.queryByTestId('progress-bubble')).toBeNull();
+  });
+
+  it('shows from the SWR hydrate alone when the session is mid-pipeline', () => {
+    hoisted.hydrate = {
+      session: { id: SESSION_ID, mode: 'chat', state: 'executing' },
+      messages: [],
+    };
+
+    render(<AiDesignerChat sessionId={SESSION_ID} mode="chat" />);
+    expect(screen.getByTestId('progress-bubble')).toBeTruthy();
+  });
+
+  it('progress events change the label but never control visibility', () => {
+    render(<AiDesignerChat sessionId={SESSION_ID} mode="chat" />);
+
+    // Resting: a stray progress event must not conjure the indicator.
+    act(() => {
+      hoisted.socketCallbacks.onProgress({
+        kind: 'progress',
+        agent: 'composer',
+        phase: 'stray',
+      });
+    });
+    expect(screen.queryByTestId('progress-bubble')).toBeNull();
+
+    act(() => {
+      hoisted.socketCallbacks.onSessionTransition('executing');
+    });
+    // The resting-state stray label was discarded — the busy indicator starts
+    // from its fallback, not a stale phase.
+    expect(screen.getByTestId('progress-bubble').textContent).toBe(
+      'assistant: Working…'
+    );
+
+    act(() => {
+      hoisted.socketCallbacks.onProgress({
+        kind: 'progress',
+        agent: 'composer',
+        phase: 'Composing variant v1',
+      });
+    });
+    expect(screen.getByTestId('progress-bubble').textContent).toBe(
+      'composer: Composing variant v1'
+    );
+  });
+
+  it('hides on an error event', () => {
+    render(<AiDesignerChat sessionId={SESSION_ID} mode="chat" />);
+
+    act(() => {
+      hoisted.socketCallbacks.onSessionTransition('executing');
+    });
+    expect(screen.getByTestId('progress-bubble')).toBeTruthy();
+
+    act(() => {
+      hoisted.socketCallbacks.onError({ message: 'agent failed' });
+    });
+    expect(screen.queryByTestId('progress-bubble')).toBeNull();
   });
 });
 

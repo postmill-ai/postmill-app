@@ -25,7 +25,11 @@ export type SlotRole =
   | 'badge'
   | 'legal'
   | 'logo'
-  | 'decor';
+  | 'decor'
+  // A script/kicker line. Poster grammar puts it ABOVE the headline (the
+  // "Italian" over the "PIZZA"); binding it to the subhead role stacked it
+  // under the headline instead.
+  | 'accent';
 
 export interface Composition {
   id: string;

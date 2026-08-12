@@ -241,6 +241,28 @@ describe('resolveIconSlots', () => {
     const map = await resolveIconSlots([slot('icon', 'mdi:nope', 'a')]);
     expect(map.size).toBe(0);
   });
+
+  it('asset-agent-resolved icons win over the literal-role convention', async () => {
+    mockResolve.mockResolvedValue({ body: '<path d="M9 9"/>' });
+    const pre = new Map([['a', { body: '<path d="M1 1"/>', viewBox: '0 0 32 32' }]]);
+    const map = await resolveIconSlots(
+      [slot('icon', 'mdi:rocket', 'a'), slot('icon', 'mdi:rocket', 'b')],
+      pre
+    );
+    // Slot 'a' keeps the pre-resolved body (no network resolve for it);
+    // slot 'b' still resolves through its literal role.
+    expect(map.get('a')?.body).toBe('<path d="M1 1"/>');
+    expect(map.get('a')?.viewBox).toBe('0 0 32 32');
+    expect(map.get('b')?.body).toBe('<path d="M9 9"/>');
+    expect(mockResolve).toHaveBeenCalledTimes(1);
+  });
+
+  it('a pre-resolved icon needs no Iconify-shaped role at all', async () => {
+    const pre = new Map([['a', { body: '<path d="M1 1"/>' }]]);
+    const map = await resolveIconSlots([slot('icon', 'decor', 'a')], pre);
+    expect(map.get('a')?.body).toBe('<path d="M1 1"/>');
+    expect(mockResolve).not.toHaveBeenCalled();
+  });
 });
 
 describe('placement', () => {

@@ -1,5 +1,7 @@
 import '@postmill-ai/nestjs-libraries/ai-designer/agent-mesh/agent-mesh-env.shim';
+import { readFile } from 'fs/promises';
 import { Injectable, Logger, OnModuleInit } from '@nestjs/common';
+import sharp from 'sharp';
 import {
   registerInProcessAgent,
   type InProcessHandler,
@@ -8,13 +10,22 @@ import type { AgentResponse, ContextPacket } from '@reaatech/agent-mesh';
 import { AiDefaultsService } from '@postmill-ai/nestjs-libraries/ai/defaults/ai-defaults.service';
 import { FileService } from '@postmill-ai/nestjs-libraries/database/prisma/file/file.service';
 import { CHANNEL_PRESETS } from '@postmill-ai/nestjs-libraries/integrations/social/channel-presets';
-import { resolveVisionImageUrl } from '@postmill-ai/nestjs-libraries/ai/vision-image-url';
+import {
+  isLocalStorageUrl,
+  loadVisionImageBytes,
+  localPathFromUrl,
+  resolveVisionImageUrl,
+} from '@postmill-ai/nestjs-libraries/ai/vision-image-url';
+import { isSafePublicHttpsUrl } from '@postmill-ai/nestjs-libraries/dtos/webhooks/webhook.url.validator';
 import type {
   DesignPlan,
   Fix,
   FixScope,
+  ReferenceLayout,
   VisionFinding,
 } from '../../ai-designer.types';
+import { ReferenceLayoutSchema } from '../../ai-designer.schemas';
+import { COMPOSITION_IDS } from '../../layout/compositions';
 import {
   isAgentInputError,
   parseAgentInput,
@@ -22,6 +33,18 @@ import {
 import { throwIfAborted } from '../../util/throw-if-aborted';
 
 const VISION_CRITIC_MAX_INLINE_BYTES = 2 * 1024 * 1024;
+
+/**
+ * The reference image rides the critique call NEXT TO the render, so it gets
+ * its own tighter bound: downscaled to this long edge and re-encoded as JPEG.
+ * The render alone can already be a ~2MB inline data URI — a second full-size
+ * image risks provider message-size rejection, and 1024px is plenty for
+ * "is the ribbon arched, is the script a script".
+ */
+const REFERENCE_IMAGE_MAX_EDGE = 1024;
+const REFERENCE_IMAGE_JPEG_QUALITY = 80;
+/** Bounded memo of downscaled references — the same file serves every pass. */
+const REFERENCE_IMAGE_CACHE_MAX = 20;
 
 const VISION_CRITIC_SCHEMA_BLOCK = `Return ONLY a JSON object in this exact shape:
 {
@@ -168,6 +191,18 @@ const BASE_CRITERIA: { name: string; description: string; weight: number }[] = [
       'Text is centered/aligned within its containing shape (badges, buttons, pills) and never spills outside it; no text-on-text collisions; text over busy imagery needs a strong shadow/stroke for contrast — never ask for a scrim, plate or band behind copy.',
     weight: 1,
   },
+  {
+    name: 'display_hierarchy',
+    description:
+      'The display line DOMINATES: the headline is unmistakably the largest type on the canvas and big enough to carry the design at feed scale. A sale or poster headline rendered at near-body size — a two-word offer adrift as small type on a big canvas — fails, however tidy the layout is. Fix by growing the display line (style "fontSize" or geometry), never by shrinking the support copy further.',
+    weight: 1,
+  },
+  {
+    name: 'composition_balance',
+    description:
+      'The canvas is COMPOSED, not abandoned: no dead voids (a small type stack adrift in a large empty field), no corner-crammed copy with the rest of the canvas bare, no copy stranded on busy photo regions with no quiet zone. A poster that is mostly empty background, or all its type squeezed into one corner, fails. Fix with geometry that rebalances, or a recompose note.',
+    weight: 1,
+  },
 ];
 
 interface CritiqueRequest {
@@ -183,6 +218,19 @@ interface CritiqueRequest {
    * the critic also judges fidelity to the reference's mood and craft.
    */
   referenceCues?: string[];
+  /**
+   * The reference file ids themselves. When present, the FIRST reference
+   * image is downscaled and sent to the vision model NEXT TO the render, so
+   * fidelity is judged against pixels instead of prose alone.
+   */
+  referenceFileIds?: string[];
+  /**
+   * The user's own words for the run ("create a post for my pizza business —
+   * buy 1 get 1 free"). When present, the critic also judges offer fidelity:
+   * the render's copy must say what the user asked, not a planner's
+   * abbreviation of it.
+   */
+  briefIntent?: string;
   outputPreviews?: { formatId: string; url: string }[];
   /**
    * Authoritative per-output element data from the design doc (geometry,
@@ -210,6 +258,18 @@ interface CritiqueRequest {
 interface InterpretRequest {
   type: 'interpret-request';
   fileIds: string[];
+}
+
+/**
+ * Best-of-N against the reference: one call carrying the reference AND every
+ * candidate render, returning a fidelity ranking. A single shared context
+ * ranks candidates against each other on one scale — N independent scores
+ * have no common yardstick, and cost N dispatches instead of one.
+ */
+interface CompareRequest {
+  type: 'compare-request';
+  referenceFileIds: string[];
+  candidates: { variantId: string; url: string }[];
 }
 
 @Injectable()
@@ -248,9 +308,9 @@ export class AiDesignerVisionCriticService implements OnModuleInit {
       };
     }
 
-    const payload = parseAgentInput<CritiqueRequest | InterpretRequest>(
-      context.raw_input
-    );
+    const payload = parseAgentInput<
+      CritiqueRequest | InterpretRequest | CompareRequest
+    >(context.raw_input);
     if (isAgentInputError(payload)) {
       return {
         content: JSON.stringify(payload),
@@ -259,9 +319,25 @@ export class AiDesignerVisionCriticService implements OnModuleInit {
     }
 
     if (payload.type === 'interpret-request') {
-      const cues = await this.interpretReferences(orgId, payload.fileIds, signal);
+      const { cues, layout } = await this.interpretReferences(
+        orgId,
+        payload.fileIds,
+        signal
+      );
       return {
-        content: JSON.stringify({ type: 'interpretations', cues }),
+        content: JSON.stringify({
+          type: 'interpretations',
+          cues,
+          ...(layout ? { layout } : {}),
+        }),
+        workflow_complete: false,
+      };
+    }
+
+    if (payload.type === 'compare-request') {
+      const comparison = await this._compare(orgId, payload, signal);
+      return {
+        content: JSON.stringify(comparison),
         workflow_complete: false,
       };
     }
@@ -288,10 +364,11 @@ export class AiDesignerVisionCriticService implements OnModuleInit {
     orgId: string,
     fileIds: string[],
     signal?: AbortSignal
-  ): Promise<string[]> {
+  ): Promise<{ cues: string[]; layout?: ReferenceLayout }> {
     const cues: string[] = [];
+    let layout: ReferenceLayout | undefined;
     await Promise.all(
-      fileIds.map(async (id) => {
+      fileIds.map(async (id, index) => {
         throwIfAborted(signal);
         try {
           const file = await this._fileService.getFileById(orgId, id);
@@ -300,10 +377,23 @@ export class AiDesignerVisionCriticService implements OnModuleInit {
           const imageUrl = await this._resolveImageUrl(orgId, file.path);
           if (!imageUrl) return;
           const prompt =
-            'Describe this image concisely for a design assistant. List the dominant colors, mood/style, any text or logos, and the main subject. Keep it under 80 words.';
+            'Deconstruct this reference design for a designer who must reproduce it WITHOUT seeing it. Answer in compact labelled lines:\n' +
+            'COMPOSITION: where every block sits on the canvas (e.g. "type stack anchored top-left", "photo full-bleed", "footer at the bottom edge").\n' +
+            'TYPE STACK: every visible text line VERBATIM, one entry per line, largest first — with its case (all-caps/title case), weight, relative size, and style class (condensed slab serif, formal copperplate script, hairline geometric sans, …). NEVER merge two visible lines into one entry, and keep a word the design shows twice at different sizes as two entries.\n' +
+            'ORNAMENTS: every decorative mark — swashes, straight or wavy rules, stars, badge plates (name the shape: pill, arched ribbon, starburst — a band whose long edges BOW in the same direction is an arched ribbon, the classic year-badge shape; look closely before calling it a pill) — and what it sits next to.\n' +
+            'PALETTE: the dominant colours with their roles (type, accent, plate).\n' +
+            'IMAGERY: the photo subject, its lighting and grade (dark/moody versus bright/clean), and where its quiet zone is.\n' +
+            'Omit a section the image does not have. Under 220 words.';
           const raw = await this._aiDefaults.vision(orgId, imageUrl, prompt, { signal });
           const text = typeof raw === 'string' ? raw : String(raw);
           if (text.trim()) cues.push(text.trim());
+          // Structured measurement for the FIRST reference only — the file
+          // the geometry stamping and the critique's Image 2 both use.
+          // Fail-soft by design: a malformed measurement leaves `layout`
+          // unset and the prose cues carry the run alone.
+          if (index === 0) {
+            layout = await this._measureReferenceLayout(orgId, imageUrl, signal);
+          }
         } catch (err) {
           // A cancel is not a per-file interpretation failure.
           throwIfAborted(signal);
@@ -313,7 +403,132 @@ export class AiDesignerVisionCriticService implements OnModuleInit {
         }
       })
     );
-    return cues;
+    return { cues, layout };
+  }
+
+  /**
+   * The measurement half of the interpretation: per-line vertical bands and
+   * size ratios as FRACTIONS of the canvas, so "PIZZA occupies y 0.08–0.20,
+   * left third" survives planning as numbers instead of adjectives.
+   */
+  private async _measureReferenceLayout(
+    orgId: string,
+    imageUrl: string,
+    signal?: AbortSignal
+  ): Promise<ReferenceLayout | undefined> {
+    try {
+      const prompt =
+        'Measure this reference design. Return ONLY a JSON object, no prose:\n' +
+        '{ "lines": [ { "text": "<the line VERBATIM>", "yBand": [<top>, <bottom>], "xAnchor": "left"|"center"|"right", "heightRatio": <cap height as a fraction of image height>, "fontClass": "<style class, e.g. condensed slab serif / formal copperplate script>", "case": "caps"|"title"|"lower" } ],\n' +
+        '  "badge": { "yBand": [<top>, <bottom>], "xAnchor": "...", "shape": "pill"|"ribbon"|"burst", "widthRatio": <width / image width> },\n' +
+        '  "image": { "coverage": "full-bleed"|"band"|"panel", "yBand": [<top>, <bottom>], "side": "left"|"right" },\n' +
+        '  "ornaments": [ { "kind": "<wavy rule / swash pair / straight rule / ...>", "nearLineIndex": <index into lines> } ] }\n' +
+        'Rules: every number is a FRACTION of image height (yBand, heightRatio) or width (widthRatio), 0..1 with two decimals. ' +
+        'One entry per visible text line, in top-to-bottom order — a word shown twice at different sizes is two entries. ' +
+        'yBand spans exactly the ink of that line (top of its capitals to the bottom of its descenders). ' +
+        'Omit "badge"/"image"/"ornaments" when the design has none. At most 16 lines.';
+      const raw = await this._aiDefaults.vision(orgId, imageUrl, prompt, { signal });
+      const parsed = ReferenceLayoutSchema.safeParse(
+        this._extractJson(typeof raw === 'string' ? raw : String(raw))
+      );
+      if (!parsed.success) {
+        this._logger.warn(
+          `Reference layout measurement did not parse: ${parsed.error.issues[0]?.message}`
+        );
+        return undefined;
+      }
+      return parsed.data as ReferenceLayout;
+    } catch (err) {
+      throwIfAborted(signal);
+      this._logger.warn(
+        `Reference layout measurement failed: ${(err as Error).message}`
+      );
+      return undefined;
+    }
+  }
+
+  /**
+   * Rank candidate renders by fidelity to the reference — Image 1 is the
+   * reference, Images 2..N+1 the candidates. Candidates are shuffled before
+   * the call (cheap position-bias insurance; ids map the ranking back), and
+   * ids the model hallucinates are filtered against the real candidate list.
+   * Any failure returns `skipped` — the conductor then delivers all
+   * survivors, exactly as before this feature existed.
+   */
+  private async _compare(
+    orgId: string,
+    payload: CompareRequest,
+    signal?: AbortSignal
+  ): Promise<{
+    type: 'comparison';
+    ranking?: string[];
+    reasons?: Record<string, string>;
+    skipped?: boolean;
+  }> {
+    const referenceUrl = payload.referenceFileIds?.length
+      ? await this._resolveReferenceImage(orgId, payload.referenceFileIds[0])
+      : null;
+    if (!referenceUrl) return { type: 'comparison', skipped: true };
+
+    const resolved: { variantId: string; url: string }[] = [];
+    for (const candidate of payload.candidates ?? []) {
+      if (typeof candidate?.variantId !== 'string' || !candidate.url) continue;
+      const url = await this._resolveImageUrl(orgId, candidate.url);
+      if (url) resolved.push({ variantId: candidate.variantId, url });
+    }
+    if (resolved.length < 2) return { type: 'comparison', skipped: true };
+
+    // Fisher–Yates: the image order is the prompt order, so shuffling the
+    // candidates is what breaks position bias.
+    for (let i = resolved.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [resolved[i], resolved[j]] = [resolved[j], resolved[i]];
+    }
+
+    const prompt =
+      `You are shown ${resolved.length + 1} images. Image 1 is the user's REFERENCE design — the spec. ` +
+      `Images 2..${resolved.length + 1} are candidate designs, in this order: ${resolved
+        .map((c, i) => `Image ${i + 2} = "${c.variantId}"`)
+        .join(', ')}.\n` +
+      'Rank ALL candidates by fidelity to the reference: silhouette (where the type stack anchors), type stack (every line present, same order, same relative sizes), type classes (script/slab/condensed), ornament shapes (an arched ribbon is not a pill), palette temperature and mood. ' +
+      'The candidates\' COPY may legitimately differ from the reference — judge structure, placement and craft, never the words.\n' +
+      'Return ONLY JSON: { "ranking": ["<candidate id, best match first>", ...], "reasons": { "<candidate id>": "<one short sentence>" } }';
+
+    try {
+      const raw = await this._aiDefaults.vision(
+        orgId,
+        [referenceUrl, ...resolved.map((c) => c.url)],
+        prompt,
+        { signal }
+      );
+      const parsed = this._extractJson(
+        typeof raw === 'string' ? raw : String(raw)
+      ) as { ranking?: unknown; reasons?: unknown } | null;
+      const known = new Set(resolved.map((c) => c.variantId));
+      const ranking = Array.isArray(parsed?.ranking)
+        ? parsed.ranking.filter(
+            (id): id is string => typeof id === 'string' && known.has(id)
+          )
+        : [];
+      if (ranking.length === 0) return { type: 'comparison', skipped: true };
+      const reasons: Record<string, string> = {};
+      if (parsed?.reasons && typeof parsed.reasons === 'object') {
+        for (const [id, reason] of Object.entries(
+          parsed.reasons as Record<string, unknown>
+        )) {
+          if (known.has(id) && typeof reason === 'string') {
+            reasons[id] = reason.slice(0, 300);
+          }
+        }
+      }
+      return { type: 'comparison', ranking, reasons };
+    } catch (err) {
+      throwIfAborted(signal);
+      this._logger.warn(
+        `Reference comparison failed: ${(err as Error).message}`
+      );
+      return { type: 'comparison', skipped: true };
+    }
   }
 
   private async _critique(
@@ -321,15 +536,49 @@ export class AiDesignerVisionCriticService implements OnModuleInit {
     payload: CritiqueRequest,
     signal?: AbortSignal
   ): Promise<{ findings: VisionFinding[]; skipped: boolean }> {
-    const imageUrl = await this._resolveImageUrl(orgId, payload.contactSheetUrl);
-    if (!imageUrl) {
-      // Not a clean pass: the evidence never reached the model (over the
-      // inline size cap, unreadable file, …) — flag it as skipped.
+    const main = await this._resolveOrDownscale(orgId, payload.contactSheetUrl);
+    if (!main) {
+      // Not a clean pass: the evidence never reached the model (unreadable
+      // file, non-inlinable remote, …) — flag it as skipped. An OVERSIZED
+      // inline image no longer lands here: it is downscaled instead.
       return { findings: [], skipped: true };
     }
 
-    const prompt = this._buildPrompt(payload);
-    const raw = await this._aiDefaults.vision(orgId, imageUrl, prompt, { signal });
+    // Feed-scale second image: the model judges legibility against the
+    // pixels a feed actually shows, not against the full-size render. Only
+    // possible when the bytes are already in hand — a public https URL is
+    // fetched by the provider, never by this process.
+    const thumbnailUrl = main.bytes
+      ? await this._thumbnailDataUri(main.bytes)
+      : null;
+
+    // Close the visual loop: on reference runs the reference image itself
+    // rides the call as the last image, so fidelity is judged
+    // pixel-against-pixel. A resolve failure degrades to the cue-only
+    // critique — never skips it.
+    let referenceUrl: string | null = null;
+    if (payload.referenceFileIds?.length) {
+      referenceUrl = await this._resolveReferenceImage(
+        orgId,
+        payload.referenceFileIds[0]
+      );
+    }
+
+    const images = [
+      main.url,
+      ...(thumbnailUrl ? [thumbnailUrl] : []),
+      ...(referenceUrl ? [referenceUrl] : []),
+    ];
+    const prompt = this._buildPrompt(payload, {
+      thumbnailAttached: !!thumbnailUrl,
+      referenceIndex: referenceUrl ? images.length : undefined,
+    });
+    const raw = await this._aiDefaults.vision(
+      orgId,
+      images.length > 1 ? images : images[0],
+      prompt,
+      { signal }
+    );
 
     const parsed = this._extractFindings(raw);
     if (!parsed.parseable) {
@@ -348,25 +597,71 @@ export class AiDesignerVisionCriticService implements OnModuleInit {
     return { findings: [...findings, ...escalated], skipped: false };
   }
 
-  private _buildPrompt(payload: CritiqueRequest): string {
+  private _buildPrompt(
+    payload: CritiqueRequest,
+    // `referenceIndex` is the 1-based image number the reference rides as —
+    // 2 alone, 3 behind the feed-scale thumbnail — so every mention of it in
+    // the prompt renumbers together.
+    opts: { thumbnailAttached?: boolean; referenceIndex?: number } = {}
+  ): string {
+    const referenceAttached = opts.referenceIndex !== undefined;
     // Every skill's rubric gets the base criteria appended centrally (a
     // headline spilling past its band, baked-in asset text, a framed inset,
     // illegible-at-thumbnail copy, wrong copy, or misaligned/colliding text
     // is a defect no matter the genre). The composer's font-size clamp and
     // overlap guard are the deterministic backstops.
+    // The planner sometimes improvises the skill's SUFFIX ("reference-clone-poster"
+    // for "reference-clone"), so the rubric lookup can miss — the base criteria
+    // must still apply, or the whole critique dies reading `.criteria` of
+    // undefined and the variant ships unreviewed (observed live).
+    const rubricCriteria = payload.rubric?.criteria ?? [];
     const criteria = [
-      ...payload.rubric.criteria,
+      ...rubricCriteria,
       ...BASE_CRITERIA.filter(
-        (base) => !payload.rubric.criteria.some((c) => c.name === base.name)
+        (base) => !rubricCriteria.some((c) => c.name === base.name)
       ),
       // Reference fidelity only exists when there is a reference to be
-      // faithful to — the cues are the user's interpretation of "like this".
-      ...(payload.referenceCues?.length
+      // faithful to — the cues (and, when attached, the reference image
+      // itself) are the user's interpretation of "like this".
+      ...(payload.referenceCues?.length || payload.referenceFileIds?.length
         ? [
             {
               name: 'reference_fidelity',
+              description: referenceAttached
+                ? `The design matches the user's reference — Image ${opts.referenceIndex}. Work through the REFERENCE FIDELITY CHECKLIST below region by region; every miss is a finding under this criterion.`
+                : 'The design matches the mood, palette temperature, hierarchy and craft of the user\'s reference (cues below) — a render that ignores the reference\'s mood or type treatment fails, however tidy it is.',
+              weight: 1,
+            },
+          ]
+        : []),
+      // Offer fidelity only exists when the brief's own words are known —
+      // the plan's expected copy is the PLANNER'S reading of the ask, and
+      // both shipped "B1G1 FREE" for "buy 1 get 1 free" once, plan and
+      // render in perfect agreement with each other and wrong for the user.
+      // Copy quality is enforced UPSTREAM (before the plan card); this is
+      // the safety net that keeps a leak from shipping, not a rewrite path —
+      // approved copy is locked, so a finding here holds the variant back.
+      ...(payload.briefIntent
+        ? [
+            {
+              name: 'offer_fidelity',
               description:
-                'The design matches the mood, palette temperature, hierarchy and craft of the user\'s reference (cues below) — a render that ignores the reference\'s mood or type treatment fails, however tidy it is.',
+                'The copy says what the user actually asked for (the brief is below): the offer mechanics are right (a free item is free, not "GET 1 PIZZA"), no invented abbreviations or jargon the user never said ("B1G1"), no invented urgency or scope claims, no dropped qualifiers. When the RENDER differs from the expected copy, fix with a "text" op restoring the expected copy verbatim. When the expected copy ITSELF misstates the brief, emit the finding with NO fix — approved copy is locked; the finding holds the variant back.',
+              weight: 1,
+            },
+          ]
+        : []),
+      // Plan conformance needs the plan spec (serialized below) — the render
+      // must exhibit the art direction the user approved. A "full-bleed,
+      // dramatic slice pull" plan that renders as type on a bare card passed
+      // every other criterion once, because none of them compare against the
+      // plan.
+      ...((payload.plans?.length ?? 0) > 0
+        ? [
+            {
+              name: 'plan_conformance',
+              description:
+                "The render exhibits the plan's stated art direction (the plan spec is below): the named composition actually manifests (a full-bleed composition bleeds imagery to every edge; a split panel shows a panel), the background kind matches (an image background shows imagery, a gradient shows a gradient), every declared decor mark is present and purposeful, and the palette family is honored. A near-empty canvas under a plan that declared decor or imagery is a finding under this criterion. Layout-level misses pair with a \"recompose\" fix; a missing decor/background is a \"note\".",
               weight: 1,
             },
           ]
@@ -397,15 +692,39 @@ export class AiDesignerVisionCriticService implements OnModuleInit {
       .join('\n');
 
     // Plans are context, not a requirement — the revise re-check critiques a
-    // rendered doc without them.
+    // rendered doc without them. When present, the ART DIRECTION rides along:
+    // composition, background, decor, palette. Without these the critic
+    // literally could not judge whether the render matches the plan — the
+    // pizza run's "full-bleed slice pull" plan rendered as a bare white card
+    // and no criterion could see it.
     const planSummary = (payload.plans ?? [])
       .map((p) => {
         const slots = (p.slots ?? [])
           .map((s) => `        - ${s.id} (${s.kind}, role=${s.role})`)
           .join('\n');
+        const bg = p.background
+          ? `${p.background.kind}${p.background.value ? ` ${p.background.value}` : ''}${p.background.ref ? ` (${p.background.ref})` : ''}`
+          : undefined;
+        const artDirection = [
+          p.composition || p.formatTemplate
+            ? `    composition: ${p.composition ?? p.formatTemplate}`
+            : undefined,
+          bg ? `    background: ${bg}` : undefined,
+          Array.isArray(p.decor) && p.decor.length > 0
+            ? `    decor: ${p.decor.join(', ')}`
+            : undefined,
+          Array.isArray(p.palette) && p.palette.length > 0
+            ? `    palette: ${p.palette.join(', ')}`
+            : undefined,
+          p.styleId ? `    style: ${p.styleId}` : undefined,
+          p.depth ? `    depth: ${p.depth}` : undefined,
+          p.panelSide ? `    text panel side: ${p.panelSide}` : undefined,
+          p.badgePosition ? `    badge position: ${p.badgePosition}` : undefined,
+        ].filter(Boolean);
         return [
           `  - variant ${p.variantId}: ${p.skill}`,
           `    concept: ${p.concept}`,
+          ...artDirection,
           `    slots:\n${slots}`,
         ].join('\n');
       })
@@ -448,10 +767,45 @@ export class AiDesignerVisionCriticService implements OnModuleInit {
       })
       .join('\n');
 
-    return `You are a meticulous visual-design critic reviewing a contact sheet of generated design variants.
+    // Region-named, answerable questions beat a fat criterion description:
+    // the model compares the two images directly instead of re-deriving what
+    // "fidelity" means each pass. Only rendered when the reference image is
+    // actually attached — the questions address Image 2.
+    const fidelityChecklist = referenceAttached
+      ? `
+REFERENCE FIDELITY CHECKLIST — compare Image 1 against Image ${opts.referenceIndex} directly, top to bottom:
+- SILHOUETTE: is the type stack anchored where the reference anchors it (top/bottom/panel side)?
+- TYPE STACK: is every reference text line present, in the same order, with the same relative sizes? Is the reference's largest line still the largest?
+- TYPE CLASS: script lines rendered in a script face, slab serifs as slabs, condensed as condensed — a class mismatch fails (fix with style "fontFamily" naming the class, e.g. "a casual script").
+- ORNAMENTS: badge/plate SHAPE matches (an arched ribbon is not a pill); swashes, rules and waves sit next to the same lines they do in the reference.
+- PALETTE & MOOD: same colour temperature and darkness; imagery graded the same direction (dark/moody vs bright/clean).
+The COPY may legitimately differ — judge structure, placement and craft, never the words themselves.
+Emit each miss as a finding with criterion "reference_fidelity" and a concrete typed fix.
+`
+      : '';
 
+    const imageCount =
+      1 + (opts.thumbnailAttached ? 1 : 0) + (referenceAttached ? 1 : 0);
+    const imageHeader =
+      imageCount === 1
+        ? ''
+        : `
+You are shown ${imageCount === 2 ? 'TWO' : 'THREE'} images. Image 1 is the design under review (contact sheet or single render).${
+            opts.thumbnailAttached
+              ? ' Image 2 is the SAME design at feed size — anything you cannot read in Image 2 is a finding under feed_legibility.'
+              : ''
+          }${
+            referenceAttached
+              ? ` Image ${opts.referenceIndex} is the user's REFERENCE design — the spec the design is meant to match.`
+              : ''
+          }
+`;
+
+    return `You are a meticulous visual-design critic reviewing a contact sheet of generated design variants.
+${imageHeader}
 Evaluate the contact sheet against this rubric:
 ${criteria}
+${fidelityChecklist}
 
 Outputs and channel-safe zones:
 ${outputLines}
@@ -460,6 +814,8 @@ ${planSummary ? `Design plans:\n${planSummary}` : ''}
 
 ${expectedCopy ? `Expected copy (the render must show exactly this text; letter case may differ per the style preset — e.g. an all-caps headline transform — so judge text_accuracy case-insensitively):\n${expectedCopy}` : ''}
 
+${payload.briefIntent ? `The user's brief (their own words — offer_fidelity is judged against THIS, not against the plan's reading of it):\n"${payload.briefIntent}"` : ''}
+
 ${docSummary ? `Design doc elements (authoritative geometry/colors per output — use them to catch low-contrast fills and overlapping/occluding elements the pixels may hide):\n${docSummary}` : ''}
 
 ${payload.referenceCues?.length ? `Reference cues (the user's attached reference image(s), interpreted — the target for reference_fidelity):\n${payload.referenceCues.map((c) => `  - ${c}`).join('\n')}` : ''}
@@ -467,17 +823,18 @@ ${payload.referenceCues?.length ? `Reference cues (the user's attached reference
 Look at the contact sheet and identify concrete, actionable visual issues. For each issue, produce a finding with:
 - "formatId" (optional): which output format is affected, if known.
 - "slotId" (optional): which design slot is affected, if known.
-- "criterion" (optional): the name of the rubric criterion above that this finding violates (e.g. "brand_safety", "text_fit") — always include it when the finding maps to one; the repair strategy depends on it.
+- "criterion" (required): the name of the rubric criterion above that this finding violates (e.g. "brand_safety", "text_fit") — the repair strategy depends on it; use "aesthetic_quality" when no other criterion fits.
 - "issue": a short, specific description of the problem (e.g. "Bottom caption is too close to the Instagram Reel bottom-UI safe zone and may be covered by captions", "Headline text is too small to read at thumbnail size", "Light text on a bright background lacks contrast").
 - "fix" (optional): an object describing the fix, with one of these shapes:
   - "scope": "shared" or "format-only"
   - "targetSlots": array of slot ids the fix applies to
   - "geometry": partial element geometry such as { x, y, width, height, fontSize }
-  - "style": partial style such as { fill, stroke, opacity, fontFamily, align ("left"|"center"|"right"), verticalAlign ("top"|"middle"|"bottom"), letterSpacing (px tracking — 2-6 for all-caps labels), lineHeight (1.0-1.6; 1.0-1.1 for display headlines), textScaleX (0.5-1 — condense display type that wraps or overflows instead of shrinking it), textTransform ("uppercase"|"lowercase"|"capitalize" — case as a style, never retype the copy), curve (degrees, -60..60 — arc a single accent/ribbon line), warpBend (-100..100 — deepen or flatten an existing banner warp), backdropBlur (0-40 — the frost on a glass panel), blend (a blend-mode name, e.g. "multiply"), textStroke { color, width }, textShadow (true = add a default shadow, false = remove it) }
+  - "style": partial style such as { fill, stroke, opacity, fontFamily (a loadable face OR a style class — "a casual script", "condensed slab serif", "formal copperplate script" — the composer resolves the class to a loadable family; the fix for a type-class mismatch against a reference), align ("left"|"center"|"right"), verticalAlign ("top"|"middle"|"bottom"), letterSpacing (px tracking — 2-6 for all-caps labels), lineHeight (1.0-1.6; 1.0-1.1 for display headlines), textScaleX (0.5-1 — condense display type that wraps or overflows instead of shrinking it), textTransform ("uppercase"|"lowercase"|"capitalize" — case as a style, never retype the copy), curve (degrees, -60..60 — arc a single accent/ribbon line), warpBend (-100..100 — deepen or flatten an existing banner warp), backdropBlur (0-40 — the frost on a glass panel), blend (a blend-mode name, e.g. "multiply"), badgeStyle ("pill"|"ribbon" — re-shape a badge plate; a band whose long edges bow the same way is an arched ribbon, never a pill), textStroke { color, width }, textShadow (true = add a default shadow, false = remove it) }
   - "text": { slotId, newText } — rewrite the copy of a TEXT slot only; never target an image slot with a text fix
   - "regenerateAsset": { slotId, brief? } — regenerate the underlying imagery for that slot; the ONLY fix for a no_baked_in_text, text_accuracy or brand_safety defect inside a generated photo: imagery containing baked-in text, letters, logos, watermarks, or a recognizable third-party brand mark / branded product / celebrity likeness must be fixed with regenerateAsset targeting the image slot — never with a text fix. Optional "brief" adds guidance for the regeneration (subject, mood, what to avoid — e.g. "generic unbranded sneaker, no logos or brand marks")
   - "addElement": { slotId, type: "text" | "shape", text?, shape?, box? { x, y, width, height }, style? { fill, fontFamily, fontSize, align, textStroke, textShadow } } — add a small text/shape/badge-style element
   - "removeElement": a slot id to remove from the targeted outputs
+  - "recompose": a composition id (one of: ${COMPOSITION_IDS.join(', ')}) — swap the WHOLE arrangement when the problem is the layout itself (the stack anchored at the wrong edge, copy in the wrong region, a panel where the reference has none); the design re-composes under the new arrangement with the same copy and imagery, so pair it only with layout-level findings
   - "note": free-text guidance when no numeric edit is possible
 
 ${VISION_CRITIC_SCHEMA_BLOCK}
@@ -508,6 +865,15 @@ If the contact sheet looks good, return { "findings": [] }.`;
       'covered',
       'overlap',
       'occluded',
+      // Rendering defects (double-drawn text, exposure, cropping, detached
+      // elements) that only the full-res pass can confirm and localize.
+      'duplicate',
+      'ghost',
+      'washed',
+      'faded',
+      'clipped',
+      'cut off',
+      'floating',
     ];
 
     for (const f of findings) {
@@ -526,8 +892,9 @@ If the contact sheet looks good, return { "findings": [] }.`;
         .map(async (o) => {
           throwIfAborted(signal);
           try {
-            const imageUrl = await this._resolveImageUrl(orgId, o.url);
-            if (!imageUrl) return;
+            const resolved = await this._resolveOrDownscale(orgId, o.url);
+            if (!resolved) return;
+            const imageUrl = resolved.url;
             // The escalation carries only the schema block, not the criteria
             // list — brand_safety has to be restated inline or a swoosh that
             // the contact sheet was too small to show goes unflagged here too.
@@ -590,8 +957,13 @@ If the contact sheet looks good, return { "findings": [] }.`;
     }
     // The criterion drives the conductor's regeneration technique — keep it,
     // bounded (a rambling model must not smuggle a paragraph through it).
+    // A finding WITHOUT one defaults to aesthetic_quality: the conductor's
+    // hold-back gate filters on `criterion && AESTHETIC_CRITERIA.has(...)`,
+    // so a criterion-less finding used to slip straight past it.
     if (typeof candidate.criterion === 'string' && candidate.criterion.trim()) {
       finding.criterion = candidate.criterion.trim().slice(0, 60);
+    } else {
+      finding.criterion = 'aesthetic_quality';
     }
     if (candidate.fix && typeof candidate.fix === 'object') {
       finding.fix = this._normalizeFix(candidate.fix as Record<string, unknown>);
@@ -644,6 +1016,13 @@ If the contact sheet looks good, return { "findings": [] }.`;
           geometry[key] = value;
         }
       }
+      // fontSize is PIXELS. The model occasionally answers with a ratio
+      // ("0.8" for "20% smaller") — as an op that value fails the strict
+      // patch schema (fontSize ≥ 1) and, unguarded, one such fix aborted an
+      // entire variant's format expansion live. No real px ask is under 4.
+      if (geometry.fontSize !== undefined && geometry.fontSize < 4) {
+        delete geometry.fontSize;
+      }
       if (Object.keys(geometry).length > 0) fix.geometry = geometry;
     }
 
@@ -684,6 +1063,19 @@ If the contact sheet looks good, return { "findings": [] }.`;
         }
       }
       if (typeof src.textShadow === 'boolean') style.textShadow = src.textShadow;
+      // The prompt advertises both and the composer applies both (with the
+      // same clamps) — dropping them here silently discarded every tracking/
+      // leading fix, which made craft_polish findings recur until the variant
+      // was held back.
+      if (
+        typeof src.letterSpacing === 'number' &&
+        Number.isFinite(src.letterSpacing)
+      ) {
+        style.letterSpacing = Math.max(-2, Math.min(20, src.letterSpacing));
+      }
+      if (typeof src.lineHeight === 'number' && Number.isFinite(src.lineHeight)) {
+        style.lineHeight = Math.max(1, Math.min(1.6, src.lineHeight));
+      }
       if (typeof src.textScaleX === 'number' && Number.isFinite(src.textScaleX)) {
         style.textScaleX = Math.max(0.5, Math.min(1.25, src.textScaleX));
       }
@@ -705,6 +1097,13 @@ If the contact sheet looks good, return { "findings": [] }.`;
         style.backdropBlur = Math.max(0, Math.min(40, src.backdropBlur));
       }
       if (typeof src.blend === 'string') style.blend = src.blend;
+      if (
+        src.badgeStyle === 'pill' ||
+        src.badgeStyle === 'burst' ||
+        src.badgeStyle === 'ribbon'
+      ) {
+        style.badgeStyle = src.badgeStyle;
+      }
       if (Object.keys(style).length > 0) fix.style = style;
     }
 
@@ -841,5 +1240,140 @@ If the contact sheet looks good, return { "findings": [] }.`;
       label: 'Vision critic',
       maxInlineBytes: VISION_CRITIC_MAX_INLINE_BYTES,
     });
+  }
+
+  /**
+   * `_resolveImageUrl`, plus size recovery: an inline-able image (data URI or
+   * local upload) over the inline cap is DOWNSCALED through sharp instead of
+   * refused — a refusal made the whole critique return `skipped` and the
+   * variant shipped unreviewed (happened live). `bytes` rides along whenever
+   * the image is inline, so the feed-scale thumbnail can reuse them.
+   */
+  private async _resolveOrDownscale(
+    orgId: string,
+    url: string
+  ): Promise<{ url: string; bytes?: Buffer } | null> {
+    const resolved = await this._resolveImageUrl(orgId, url);
+    if (resolved) {
+      if (resolved.startsWith('data:')) {
+        return {
+          url: resolved,
+          bytes: Buffer.from(
+            resolved.slice(resolved.indexOf(',') + 1),
+            'base64'
+          ),
+        };
+      }
+      return { url: resolved };
+    }
+    const raw = await loadVisionImageBytes(url, {
+      warn: (message) => this._logger.warn(message),
+      label: 'Vision critic',
+    });
+    if (!raw) return null;
+    try {
+      const downscaled = await this._downscaleToDataUri(raw);
+      return {
+        url: downscaled,
+        bytes: Buffer.from(
+          downscaled.slice(downscaled.indexOf(',') + 1),
+          'base64'
+        ),
+      };
+    } catch (err) {
+      this._logger.warn(
+        `Vision critic could not downscale oversized image: ${(err as Error).message}`
+      );
+      return null;
+    }
+  }
+
+  /**
+   * The design at ~feed scale (25%), as a second image for the same call —
+   * legibility is judged against the pixels a feed actually shows. Fail-soft:
+   * the full-size critique runs without it.
+   */
+  private async _thumbnailDataUri(buffer: Buffer): Promise<string | null> {
+    try {
+      const meta = await sharp(buffer).metadata();
+      if (!meta.width) return null;
+      const small = await sharp(buffer)
+        .resize({ width: Math.max(1, Math.round(meta.width * 0.25)) })
+        .flatten({ background: '#ffffff' })
+        .jpeg({ quality: REFERENCE_IMAGE_JPEG_QUALITY })
+        .toBuffer();
+      return `data:image/jpeg;base64,${small.toString('base64')}`;
+    } catch (err) {
+      this._logger.warn(
+        `Vision critic could not build the feed-scale thumbnail: ${(err as Error).message}`
+      );
+      return null;
+    }
+  }
+
+  /** fileId → downscaled data URI (or the passthrough https URL). */
+  private readonly _referenceImageCache = new Map<string, string>();
+
+  /**
+   * Resolve a reference file to something a vision provider can consume NEXT
+   * TO the render. Bytes we would inline (data URIs, local uploads) are
+   * downscaled through sharp first — see REFERENCE_IMAGE_MAX_EDGE. A verified
+   * public HTTPS URL passes through untouched (the provider fetches it; no
+   * inline payload to bound). Returns null on any failure — the caller
+   * degrades to the cue-only critique.
+   */
+  private async _resolveReferenceImage(
+    orgId: string,
+    fileId: string
+  ): Promise<string | null> {
+    const cached = this._referenceImageCache.get(fileId);
+    if (cached) return cached;
+    try {
+      const file = await this._fileService.getFileById(orgId, fileId);
+      if (!file || !file.path) return null;
+
+      let resolved: string | null = null;
+      if (/^data:image\//i.test(file.path)) {
+        resolved = await this._downscaleToDataUri(
+          Buffer.from(file.path.slice(file.path.indexOf(',') + 1), 'base64')
+        );
+      } else if (isLocalStorageUrl(file.path)) {
+        resolved = await this._downscaleToDataUri(
+          await readFile(localPathFromUrl(file.path))
+        );
+      } else if (await isSafePublicHttpsUrl(file.path)) {
+        resolved = file.path;
+      }
+
+      if (resolved) {
+        if (this._referenceImageCache.size >= REFERENCE_IMAGE_CACHE_MAX) {
+          const oldest = this._referenceImageCache.keys().next().value;
+          if (oldest !== undefined) this._referenceImageCache.delete(oldest);
+        }
+        this._referenceImageCache.set(fileId, resolved);
+      }
+      return resolved;
+    } catch (err) {
+      this._logger.warn(
+        `Vision critic could not attach reference ${fileId}: ${(err as Error).message}`
+      );
+      return null;
+    }
+  }
+
+  private async _downscaleToDataUri(buffer: Buffer): Promise<string> {
+    const small = await sharp(buffer)
+      .resize({
+        width: REFERENCE_IMAGE_MAX_EDGE,
+        height: REFERENCE_IMAGE_MAX_EDGE,
+        fit: 'inside',
+        withoutEnlargement: true,
+      })
+      // JPEG drops alpha — flatten onto white so a transparent-PNG reference
+      // doesn't silhouette onto black.
+      .flatten({ background: '#ffffff' })
+      .jpeg({ quality: REFERENCE_IMAGE_JPEG_QUALITY })
+      .toBuffer();
+    return `data:image/jpeg;base64,${small.toString('base64')}`;
   }
 }

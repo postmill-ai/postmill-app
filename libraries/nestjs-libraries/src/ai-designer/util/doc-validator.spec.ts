@@ -1473,6 +1473,157 @@ describe('validateDesignDoc', () => {
     ).toBe(true);
   });
 
+  it('flags a subhead that out-sizes the headline (display hierarchy)', () => {
+    const doc = makeDoc([
+      el({
+        originId: 'headline',
+        type: 'text',
+        text: 'BUY 1 GET 1 FREE',
+        x: 54, y: 400, width: 560, height: 109,
+        fill: '#0A0A0A',
+        fontSize: 32,
+      }),
+      el({
+        originId: 'subhead',
+        type: 'text',
+        text: 'HOT, FRESH, READY',
+        x: 54, y: 520, width: 900, height: 50,
+        fill: '#0A0A0A',
+        fontSize: 35,
+      }),
+    ]);
+
+    const { violations } = validateDesignDoc(doc, {});
+
+    expect(violations.some((v) => v.includes('Display hierarchy'))).toBe(true);
+  });
+
+  it('does not flag hierarchy when the headline leads, and exempts plated labels', () => {
+    const doc = makeDoc([
+      el({
+        originId: 'headline',
+        type: 'text',
+        text: 'POOL DAY',
+        x: 54, y: 300, width: 900, height: 160,
+        fill: '#0A0A0A',
+        fontSize: 120,
+      }),
+      el({
+        originId: 'cta-bg',
+        type: 'shape',
+        shape: 'rect',
+        x: 54, y: 700, width: 400, height: 160,
+        fill: '#FF4D00',
+      }),
+      el({
+        originId: 'cta',
+        type: 'text',
+        text: 'BOOK NOW',
+        x: 70, y: 710, width: 360, height: 140,
+        fill: '#FFFFFF',
+        // Bigger than the headline but sized to its own plate — exempt.
+        fontSize: 140,
+      }),
+    ]);
+
+    const { violations } = validateDesignDoc(doc, {});
+
+    expect(violations.some((v) => v.includes('Display hierarchy'))).toBe(false);
+  });
+
+  it('flags an uncomposed canvas: flat solid ground, only text, plan declared decor', () => {
+    const doc = makeDoc([
+      el({
+        originId: 'headline',
+        type: 'text',
+        text: 'BUY 1 GET 1 FREE',
+        x: 100,
+        y: 400,
+        width: 880,
+        height: 120,
+        fill: '#0A0A0A',
+        fontSize: 80,
+      }),
+    ]);
+    const plan = {
+      decor: ['short-rule'],
+      background: { kind: 'solid', value: '#FFFFFF' },
+      slots: [{ id: 'headline', role: 'headline', kind: 'text' }],
+      texts: { headline: 'BUY 1 GET 1 FREE' },
+    } as unknown as DesignPlan;
+
+    const { violations } = validateDesignDoc(doc, { plan });
+
+    expect(
+      violations.some(
+        (v) =>
+          v.startsWith(DEGENERATE_VIOLATION_PREFIX) &&
+          v.includes('uncomposed canvas')
+      )
+    ).toBe(true);
+  });
+
+  it('does not flag an uncomposed canvas when a decor path is present', () => {
+    const doc = makeDoc([
+      el({
+        originId: 'headline',
+        type: 'text',
+        text: 'BUY 1 GET 1 FREE',
+        x: 100,
+        y: 400,
+        width: 880,
+        height: 120,
+        fill: '#0A0A0A',
+        fontSize: 80,
+      }),
+      el({
+        originId: 'decor-rule',
+        type: 'path',
+        x: 100,
+        y: 560,
+        width: 300,
+        height: 4,
+        fill: '#FF4D00',
+      }),
+    ]);
+    const plan = {
+      decor: ['short-rule'],
+      background: { kind: 'solid', value: '#FFFFFF' },
+      slots: [{ id: 'headline', role: 'headline', kind: 'text' }],
+      texts: { headline: 'BUY 1 GET 1 FREE' },
+    } as unknown as DesignPlan;
+
+    const { violations } = validateDesignDoc(doc, { plan });
+
+    expect(violations.some((v) => v.includes('uncomposed canvas'))).toBe(false);
+  });
+
+  it('does not flag a text-only output when the plan never promised visuals', () => {
+    const doc = makeDoc([
+      el({
+        originId: 'headline',
+        type: 'text',
+        text: 'Quote of the day',
+        x: 100,
+        y: 400,
+        width: 880,
+        height: 120,
+        fill: '#0A0A0A',
+        fontSize: 80,
+      }),
+    ]);
+    const plan = {
+      decor: ['none'],
+      background: { kind: 'solid', value: '#FFFFFF' },
+      slots: [{ id: 'headline', role: 'headline', kind: 'text' }],
+      texts: { headline: 'Quote of the day' },
+    } as unknown as DesignPlan;
+
+    const { violations } = validateDesignDoc(doc, { plan });
+
+    expect(violations.some((v) => v.includes('uncomposed canvas'))).toBe(false);
+  });
+
   it('flags an image-slot element with no resolvable src', () => {
     const doc = makeDoc([
       el({

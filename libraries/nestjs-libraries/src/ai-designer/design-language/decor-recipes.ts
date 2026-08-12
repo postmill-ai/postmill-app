@@ -122,13 +122,20 @@ export const DECOR_RECIPES: DecorRecipe[] = [
     filled: false,
     closed: false,
     strokeRatio: 0.15,
-    nodes: () => [
-      { x: 0, y: 0.6, outX: 0.08, outY: 0.1 },
-      { x: 0.25, y: 0.5, inX: 0.17, inY: 0.25, outX: 0.33, outY: 0.75 },
-      { x: 0.5, y: 0.5, inX: 0.42, inY: 0.25, outX: 0.58, outY: 0.75 },
-      { x: 0.75, y: 0.5, inX: 0.67, inY: 0.25, outX: 0.83, outY: 0.75 },
-      { x: 1, y: 0.4, inX: 0.92, inY: 0.9 },
-    ],
+    // Anchors carry the amplitude (alternating peaks and troughs) with
+    // horizontal handles. A handle-driven wave flattens into a hairline in
+    // the short boxes these marks are placed in — the curve never reaches
+    // its handles.
+    nodes: () => {
+      const H = 1 / 6; // half-period run: two and a half waves across the box
+      const ys = [0.55, 0.2, 0.55, 0.8, 0.55, 0.2, 0.55];
+      return ys.map((y, i) => ({
+        x: i * H,
+        y,
+        ...(i > 0 ? { inX: i * H - H * 0.55, inY: y } : {}),
+        ...(i < ys.length - 1 ? { outX: i * H + H * 0.55, outY: y } : {}),
+      }));
+    },
   },
   {
     id: 'corner-brackets',

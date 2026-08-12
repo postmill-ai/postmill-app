@@ -1,5 +1,8 @@
-import { describe, expect, it, vi } from 'vitest';
-import { resolveVisionImageUrl } from './vision-image-url';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { mkdirSync, rmSync, writeFileSync } from 'fs';
+import path from 'path';
+import os from 'os';
+import { loadVisionImageBytes, resolveVisionImageUrl } from './vision-image-url';
 
 /**
  * The AI Designer's contact sheet rides memory as a `data:` URI instead of
@@ -25,6 +28,67 @@ describe('resolveVisionImageUrl data URIs', () => {
   it('still rejects a non-image data URI', async () => {
     await expect(
       resolveVisionImageUrl('data:text/html;base64,PGI+')
+    ).resolves.toBeNull();
+  });
+});
+
+/**
+ * The raw-bytes loader behind the vision critic's downscale recovery: an
+ * image the resolver refuses FOR SIZE can still be read and shrunk instead of
+ * skipping the review. Only in-hand sources are readable — never a fetch.
+ */
+describe('loadVisionImageBytes', () => {
+  let tmpDir: string;
+
+  beforeEach(() => {
+    tmpDir = path.join(os.tmpdir(), `vision-image-url-test-${Date.now()}`);
+    mkdirSync(tmpDir, { recursive: true });
+    vi.stubEnv('FRONTEND_URL', 'http://localhost:4200');
+    vi.stubEnv('UPLOAD_DIRECTORY', tmpDir);
+  });
+
+  afterEach(() => {
+    vi.unstubAllEnvs();
+    try {
+      rmSync(tmpDir, { recursive: true, force: true });
+    } catch {
+      // ignore cleanup failures
+    }
+  });
+
+  it('decodes a data URI regardless of the inline cap', async () => {
+    const payload = Buffer.from('oversized-sheet');
+    const uri = `data:image/png;base64,${payload.toString('base64')}`;
+    await expect(loadVisionImageBytes(uri)).resolves.toEqual(payload);
+  });
+
+  it('reads a local upload off disk', async () => {
+    const payload = Buffer.from('local-bytes');
+    writeFileSync(path.join(tmpDir, 'sheet.png'), payload);
+    await expect(
+      loadVisionImageBytes('http://localhost:4200/uploads/sheet.png')
+    ).resolves.toEqual(payload);
+  });
+
+  it('returns null (and warns) for a missing local file', async () => {
+    const warn = vi.fn();
+    await expect(
+      loadVisionImageBytes('http://localhost:4200/uploads/missing.png', {
+        warn,
+      })
+    ).resolves.toBeNull();
+    expect(warn).toHaveBeenCalledOnce();
+  });
+
+  it('refuses a traversal outside the upload root', async () => {
+    await expect(
+      loadVisionImageBytes('/uploads/..%2F..%2Fetc%2Fpasswd')
+    ).resolves.toBeNull();
+  });
+
+  it('never fetches a remote URL — returns null', async () => {
+    await expect(
+      loadVisionImageBytes('https://example.com/sheet.png')
     ).resolves.toBeNull();
   });
 });

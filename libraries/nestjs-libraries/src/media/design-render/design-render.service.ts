@@ -144,10 +144,41 @@ const IMAGE_CACHE_MAX = 16;
 const BUSY_BACKDROP_STDEV = 25;
 const BUSY_BACKDROP_CROSSING = 0.12;
 
+// "Straddle" threshold for `auditTextContrast`: the glyph LINES sit on
+// backdrops so far apart in luminance that no single flat fill suits all of
+// them (live: a "POOL CLEANING" headline half on a pale top band, half on a
+// dark busy photo — the two averaged to a mid luma that a dark fill "passed"
+// against, and illegible text shipped). Measured as the WCAG-style luminance
+// ratio between the lightest and darkest per-line backdrop. 2.5 sits just
+// under the 3:1 large-text bar: once the surfaces diverge by more than the
+// bar itself, a fill sitting exactly at 3:1 against one surface is pinned
+// within ~1.2:1 of the other, so a flat flip cannot cure both lines and the
+// repair must separate the glyphs instead. Genuine straddles measure far
+// beyond it (the live one: ~17:1); same-surface line-to-line texture noise
+// stays well below it.
+const STRADDLE_LINE_LUMA_RATIO = 2.5;
+
 // Each line's ink band is inset from the top of its leading by this share of an
 // em (with a `top` baseline the em box starts at the line top and the cap
 // height sits below it) and cut at one em, which is where the descender ends.
 const GLYPH_ASCENDER_INSET_EM = 0.15;
+
+// `auditTextCollisions`: two ink rects must overlap by at least this many
+// document pixels on BOTH axes to be a collision — a sub-2px graze is
+// rounding/kerning noise, not two labels painted through each other.
+const COLLISION_MIN_OVERLAP_PX = 2;
+
+// `auditImageryVisibility`: an image ELEMENT only counts as "the imagery of
+// this output" when its visible box covers at least this share of the canvas —
+// a small logo washing out is not the defect this audit exists for.
+const IMAGERY_MIN_COVERAGE = 0.25;
+// The rendered region is "nearly invisible" when it is near-uniform (luma
+// stdev below this, conservative: real photos measure 30+ even when moody) AND
+// its mean is extreme (washed toward white / crushed toward black). Both must
+// hold — a flat mid-grey region is a design choice, not a defect.
+const WASHED_OUT_MAX_STDEV = 12;
+const WASHED_OUT_LIGHT_MEAN = 235;
+const WASHED_OUT_DARK_MEAN = 20;
 
 // Precomputed WCAG sRGB channel transform for 0..255. The audit walks every
 // pixel of every sampled text box, so the pow() comes out of the loop.
@@ -198,6 +229,45 @@ const aabbOverlap = (
   a.x + a.width > b.x &&
   a.y < b.y + b.height &&
   a.y + a.height > b.y;
+
+// Do any two rects from the two ink-rect sets overlap by at least
+// COLLISION_MIN_OVERLAP_PX on BOTH axes? (`auditTextCollisions`.)
+const inkRectsCollide = (
+  a: { x: number; y: number; width: number; height: number }[],
+  b: { x: number; y: number; width: number; height: number }[]
+): boolean => {
+  for (const ra of a) {
+    for (const rb of b) {
+      const overlapW =
+        Math.min(ra.x + ra.width, rb.x + rb.width) - Math.max(ra.x, rb.x);
+      const overlapH =
+        Math.min(ra.y + ra.height, rb.y + rb.height) - Math.max(ra.y, rb.y);
+      if (
+        overlapW >= COLLISION_MIN_OVERLAP_PX &&
+        overlapH >= COLLISION_MIN_OVERLAP_PX
+      ) {
+        return true;
+      }
+    }
+  }
+  return false;
+};
+
+// Bounding union of a non-empty set of ink rects — carried on 'overlap'
+// violations so the composer's geometry guard can widen a declared box to
+// cover ink a fitted/overflowing line painted outside it.
+const inkUnionRect = (
+  rects: { x: number; y: number; width: number; height: number }[]
+): { x: number; y: number; width: number; height: number } => {
+  const x = Math.min(...rects.map((r) => r.x));
+  const y = Math.min(...rects.map((r) => r.y));
+  return {
+    x,
+    y,
+    width: Math.max(...rects.map((r) => r.x + r.width)) - x,
+    height: Math.max(...rects.map((r) => r.y + r.height)) - y,
+  };
+};
 
 // Canonical filter token vocabulary — must match the client tokens 1:1.
 // Each token is passed to ctx.filter as a CSS filter string.
@@ -895,16 +965,46 @@ export class DesignRenderService {
           );
           if (!sample) continue;
           const { mean, backdropStdev, crossingFraction } = sample;
+          const wcag = (a: number, b: number) =>
+            (Math.max(a, b) + 0.05) / (Math.min(a, b) + 0.05);
 
-          const backdropLuma = srgbLuminance(
+          // The element is judged by its WORST glyph line, never only by the
+          // union mean: a headline straddling a pale band and a dark photo
+          // averages to a mid luma that exists nowhere on canvas, so a dark
+          // fill "passed" against the mean while half the lines were
+          // illegible (live: the "POOL CLEANING" pool run). The union stays
+          // in the candidate set so a mean-failure (fill between two
+          // individually-passing surfaces) still flags as before; the
+          // reported `ratio`/`backdropLuma` are the worst candidate's, which
+          // points the repair at the surface where the text reads worst.
+          let backdropLuma = srgbLuminance(
             mean[0] / 255,
             mean[1] / 255,
             mean[2] / 255
           );
-          const ratio =
-            (Math.max(fillLuma, backdropLuma) + 0.05) /
-            (Math.min(fillLuma, backdropLuma) + 0.05);
+          let ratio = wcag(fillLuma, backdropLuma);
+          const lineLumas = sample.regions.map((r) =>
+            srgbLuminance(r.mean[0] / 255, r.mean[1] / 255, r.mean[2] / 255)
+          );
+          for (const lineLuma of lineLumas) {
+            const lineRatio = wcag(fillLuma, lineLuma);
+            if (lineRatio < ratio) {
+              ratio = lineRatio;
+              backdropLuma = lineLuma;
+            }
+          }
+          // Straddle: the lines themselves sit on surfaces too far apart for
+          // any single flat fill — the repair must separate the glyphs
+          // (halo/stroke), not merely flip the fill.
+          const straddle =
+            lineLumas.length >= 2 &&
+            wcag(Math.max(...lineLumas), Math.min(...lineLumas)) >=
+              STRADDLE_LINE_LUMA_RATIO;
+
           if (ratio >= required) {
+            // Busy stays a UNION judgment: stdev/crossing aggregate the
+            // pixels under all the ink, and a single high-variance line
+            // dominates them anyway.
             if (
               backdropStdev >= BUSY_BACKDROP_STDEV &&
               crossingFraction >= BUSY_BACKDROP_CROSSING
@@ -919,6 +1019,7 @@ export class DesignRenderService {
                 reason: 'busy',
                 backdropStdev,
                 crossingFraction,
+                ...(straddle ? { straddle: true } : {}),
               });
             }
             continue;
@@ -933,10 +1034,285 @@ export class DesignRenderService {
             reason: 'contrast',
             backdropStdev,
             crossingFraction,
+            ...(straddle ? { straddle: true } : {}),
           });
         } catch (err) {
           this._logger.warn(
             `Contrast sampling failed for element ${el.id}: ${(err as Error)?.message}`
+          );
+        }
+      }
+    }
+
+    return violations;
+  }
+
+  /**
+   * Deterministic painted-ink collision audit: two different text elements (or
+   * symbol instances) whose INK genuinely overlaps ship as type painted through
+   * type — a defect no reader misses and no pixel sampling is needed to catch.
+   *
+   * Pure measurement. Each visible flat text element contributes its per-line
+   * ink rects (`glyphLineRects`, the renderer's own metrics); rich/path/curved/
+   * rotated text falls back to its BOX as a single rect — coarser, but better
+   * than exempting it. A symbol instance contributes its whole box as one
+   * opaque rect: its label is painted plate-wide, and its expanded children are
+   * judged as part of that box, never individually.
+   *
+   * Ignored pairs, by design:
+   *   * sub-`COLLISION_MIN_OVERLAP_PX` grazes on either axis;
+   *   * elements sharing a `groupId` (a lockup travels as one unit);
+   *   * a label and its own plate companion by the `X` / `X-bg` originId
+   *     convention (plates are shapes and shapes are never collected, but the
+   *     guard keeps a text-typed companion from flagging too).
+   */
+  async auditTextCollisions(doc: DesignerDoc): Promise<TextContrastViolation[]> {
+    const violations: TextContrastViolation[] = [];
+
+    // Same 1×1 measuring canvas as `auditTextContrast` — glyph precision when
+    // the native binary is present, box fallback when it is not.
+    let measureCtx: any = null;
+    try {
+      const { createCanvas } = await loadCanvasModule();
+      measureCtx = createCanvas(1, 1).getContext('2d');
+    } catch (err) {
+      this._logger.warn(
+        `Text metrics unavailable; collision audit falls back to element boxes: ${(err as Error)?.message}`
+      );
+    }
+
+    for (
+      let outputIndex = 0;
+      outputIndex < (doc.outputs?.length ?? 0);
+      outputIndex++
+    ) {
+      const out = doc.outputs[outputIndex] as DesignerOutput | undefined;
+      if (!out || !('children' in out)) continue;
+
+      interface InkItem {
+        el: DesignerElement;
+        label: string;
+        /** originId (or id) with a trailing `-bg` stripped — plate-pair key. */
+        base: string;
+        rects: { x: number; y: number; width: number; height: number }[];
+      }
+      const items: InkItem[] = [];
+      for (const el of out.children ?? []) {
+        if (el.hidden || (el.opacity ?? 1) <= 0) continue;
+        if (!(el.width > 0) || !(el.height > 0)) continue;
+        let rects: InkItem['rects'] | null = null;
+        if (el.type === 'text') {
+          if (!(el.text?.trim() || el.richText?.length)) continue;
+          // richText / path / curved / rotated text → null → the box.
+          rects = (measureCtx && this.glyphLineRects(measureCtx, el)) || [
+            { x: el.x, y: el.y, width: el.width, height: el.height },
+          ];
+        } else if (el.type === 'symbol') {
+          // An instance whose definition is gone renders nothing.
+          if (!el.symbolId || !doc.symbols?.some((s) => s.id === el.symbolId)) {
+            continue;
+          }
+          rects = [{ x: el.x, y: el.y, width: el.width, height: el.height }];
+        }
+        if (!rects) continue;
+        items.push({
+          el,
+          label: el.originId || el.name || el.id,
+          base: (el.originId || el.id).replace(/-bg$/, ''),
+          rects,
+        });
+      }
+
+      for (let i = 0; i < items.length; i++) {
+        for (let j = i + 1; j < items.length; j++) {
+          const a = items[i];
+          const b = items[j];
+          if (a.el.groupId && a.el.groupId === b.el.groupId) continue;
+          if (a.base === b.base) continue;
+          if (!inkRectsCollide(a.rects, b.rects)) continue;
+          const fillMatch = /^#?[0-9a-f]{6}$/i.exec((a.el.fill || '').trim());
+          violations.push({
+            outputIndex,
+            elementId: a.el.id,
+            originId: a.el.originId,
+            otherElementId: b.el.id,
+            fill: fillMatch
+              ? fillMatch[0].startsWith('#')
+                ? fillMatch[0]
+                : `#${fillMatch[0]}`
+              : '',
+            ratio: 0,
+            backdropLuma: 0,
+            reason: 'overlap',
+            message: `painted ink of "${a.label}" (${a.el.id}) overlaps "${b.label}" (${b.el.id})`,
+            inkRect: inkUnionRect(a.rects),
+            otherInkRect: inkUnionRect(b.rects),
+          });
+        }
+      }
+    }
+
+    return violations;
+  }
+
+  /**
+   * Deterministic imagery-visibility audit: an output that DECLARES imagery —
+   * an image background, or a visible image element covering at least
+   * `IMAGERY_MIN_COVERAGE` of the canvas — whose RENDERED pixels over that
+   * region are near-uniform and extreme has effectively lost its imagery (a
+   * heavy overlay washed it to white, or it crushed to black). Report-only.
+   *
+   * Samples the already-rendered composite `pages` when supplied (the saver's
+   * buffers) and renders only as a fallback. A doc that declares no imagery
+   * costs a children scan and returns without touching sharp.
+   */
+  async auditImageryVisibility(
+    doc: DesignerDoc,
+    pages?: Buffer[]
+  ): Promise<TextContrastViolation[]> {
+    interface Region {
+      elementId: string;
+      originId?: string;
+      label: string;
+      x: number;
+      y: number;
+      width: number;
+      height: number;
+    }
+    const perOutput: Region[][] = [];
+    let any = false;
+    for (const raw of doc.outputs ?? []) {
+      const regions: Region[] = [];
+      const out = raw as DesignerOutput;
+      if ('children' in out) {
+        if (out.bg?.type === 'image') {
+          regions.push({
+            elementId: 'bg',
+            label: 'background image',
+            x: 0,
+            y: 0,
+            width: out.width,
+            height: out.height,
+          });
+        }
+        // The render draws expandSymbols(children); symbol-provided imagery
+        // must be visible to this scan too.
+        for (const el of expandSymbols(out.children ?? [], doc.symbols)) {
+          if (el.type !== 'image' || el.hidden || (el.opacity ?? 1) <= 0) {
+            continue;
+          }
+          const x = Math.max(0, el.x);
+          const y = Math.max(0, el.y);
+          const width = Math.min(out.width, el.x + el.width) - x;
+          const height = Math.min(out.height, el.y + el.height) - y;
+          if (!(width > 0) || !(height > 0)) continue;
+          if (width * height < IMAGERY_MIN_COVERAGE * out.width * out.height) {
+            continue;
+          }
+          regions.push({
+            elementId: el.id,
+            originId: el.originId,
+            label: el.originId || el.name || el.id,
+            x,
+            y,
+            width,
+            height,
+          });
+        }
+      }
+      perOutput.push(regions);
+      if (regions.length > 0) any = true;
+    }
+    if (!any) return [];
+
+    const violations: TextContrastViolation[] = [];
+    const rendered = pages ?? (await this.renderAllPages(doc));
+    const sharp = (await import('sharp')).default;
+
+    for (let outputIndex = 0; outputIndex < perOutput.length; outputIndex++) {
+      const regions = perOutput[outputIndex];
+      const out = doc.outputs[outputIndex] as DesignerOutput;
+      const page = rendered[outputIndex];
+      if (regions.length === 0 || !page) continue;
+
+      let meta: { width?: number; height?: number };
+      try {
+        meta = await sharp(page).metadata();
+      } catch {
+        continue;
+      }
+      const pageW = meta.width || out.width;
+      const pageH = meta.height || out.height;
+      const scaleX = pageW / out.width;
+      const scaleY = pageH / out.height;
+
+      for (const region of regions) {
+        try {
+          const left = Math.min(
+            Math.max(0, Math.round(region.x * scaleX)),
+            pageW - 1
+          );
+          const top = Math.min(
+            Math.max(0, Math.round(region.y * scaleY)),
+            pageH - 1
+          );
+          const width = Math.max(
+            1,
+            Math.min(pageW - left, Math.round(region.width * scaleX))
+          );
+          const height = Math.max(
+            1,
+            Math.min(pageH - top, Math.round(region.height * scaleY))
+          );
+          const { data, info } = await sharp(page)
+            .extract({ left, top, width, height })
+            .raw()
+            .toBuffer({ resolveWithObject: true });
+
+          const channels = info.channels;
+          const pixels = Math.floor(data.length / channels);
+          if (pixels <= 0) continue;
+          const sum = [0, 0, 0];
+          let lumaSum = 0;
+          let lumaSumSq = 0;
+          for (let p = 0; p < pixels; p++) {
+            const i = p * channels;
+            const r = data[i];
+            const g = channels > 1 ? data[i + 1] : r;
+            const b = channels > 2 ? data[i + 2] : r;
+            sum[0] += r;
+            sum[1] += g;
+            sum[2] += b;
+            const luma = 0.2126 * r + 0.7152 * g + 0.0722 * b;
+            lumaSum += luma;
+            lumaSumSq += luma * luma;
+          }
+          const meanLuma = lumaSum / pixels;
+          const lumaStdev = Math.sqrt(
+            Math.max(0, lumaSumSq / pixels - meanLuma * meanLuma)
+          );
+          const washed =
+            lumaStdev < WASHED_OUT_MAX_STDEV &&
+            (meanLuma > WASHED_OUT_LIGHT_MEAN || meanLuma < WASHED_OUT_DARK_MEAN);
+          if (!washed) continue;
+          violations.push({
+            outputIndex,
+            elementId: region.elementId,
+            originId: region.originId,
+            fill: '',
+            ratio: 0,
+            backdropLuma: srgbLuminance(
+              sum[0] / pixels / 255,
+              sum[1] / pixels / 255,
+              sum[2] / pixels / 255
+            ),
+            reason: 'washed-out',
+            backdropStdev: lumaStdev,
+            message: `declared imagery ("${region.label}") is nearly invisible in the render (mean luma ${meanLuma.toFixed(1)}, stdev ${lumaStdev.toFixed(1)})`,
+          });
+        } catch (err) {
+          this._logger.warn(
+            `Imagery-visibility sampling failed for ${region.elementId}: ${(err as Error)?.message}`
           );
         }
       }
@@ -1031,6 +1407,12 @@ export class DesignRenderService {
    * of their union, its rows compacted down to the rects themselves, then a
    * single statistics pass. One decode however many lines the text wrapped
    * to, and the gaps between the lines never reach the statistics.
+   *
+   * `regions` carries the same statistics PER surviving input rect (in input
+   * order) from the same decoded bytes — the per-line view the straddle
+   * judgment needs. A union mean is a fiction when the lines sit on divergent
+   * surfaces: light band + dark photo average to a mid luma that exists
+   * nowhere on canvas.
    */
   private async _sampleBackdropRegions(
     page: Buffer,
@@ -1042,6 +1424,11 @@ export class DesignRenderService {
     mean: [number, number, number];
     backdropStdev: number;
     crossingFraction: number;
+    regions: {
+      mean: [number, number, number];
+      backdropStdev: number;
+      crossingFraction: number;
+    }[];
   } | null> {
     const { scaleX, scaleY, pageW, pageH } = frame;
     const boxes = regions
@@ -1092,7 +1479,8 @@ export class DesignRenderService {
       boxes[0].right === uRight &&
       boxes[0].bottom === uBottom
     ) {
-      return this._sampleBackdropCrop(data, channels, fillLuma, required);
+      const only = this._sampleBackdropCrop(data, channels, fillLuma, required);
+      return only && { ...only, regions: [only] };
     }
 
     const unionWidth = uRight - uLeft;
@@ -1102,20 +1490,37 @@ export class DesignRenderService {
     );
     const packed = Buffer.allocUnsafe(total * channels);
     let offset = 0;
+    const perRegion: {
+      mean: [number, number, number];
+      backdropStdev: number;
+      crossingFraction: number;
+    }[] = [];
     for (const b of boxes) {
       const rowBytes = (b.right - b.left) * channels;
+      const boxStart = offset;
       for (let y = b.top; y < b.bottom; y++) {
         const start = ((y - uTop) * unionWidth + (b.left - uLeft)) * channels;
         data.copy(packed, offset, start, start + rowBytes);
         offset += rowBytes;
       }
+      // Per-line statistics from the bytes just packed — a second arithmetic
+      // pass over pixels already in hand, no extra decode. Filtered boxes are
+      // non-degenerate, so the slice is never empty.
+      const stats = this._sampleBackdropCrop(
+        packed.subarray(boxStart, offset),
+        channels,
+        fillLuma,
+        required
+      );
+      if (stats) perRegion.push(stats);
     }
-    return this._sampleBackdropCrop(
+    const union = this._sampleBackdropCrop(
       packed.subarray(0, offset),
       channels,
       fillLuma,
       required
     );
+    return union && { ...union, regions: perRegion };
   }
 
   /**
@@ -1989,7 +2394,10 @@ export class DesignRenderService {
         const style = el.fontStyle === 'italic' ? 'italic' : 'normal';
         const family = el.fontFamily || 'sans-serif';
         ctx.font = `${style} ${weight} ${size}px ${family}`;
-        ctx.textBaseline = 'top';
+        // `middle`, matching Konva's TextPath default and the flat branch
+        // below — with `top` a curved rich line exported half a font size
+        // lower than the canvas drew it.
+        ctx.textBaseline = 'middle';
         ctx.fillStyle = el.fill || '#000000';
         if (el.textStroke && el.textStroke.width > 0) {
           ctx.strokeStyle = el.textStroke.color;

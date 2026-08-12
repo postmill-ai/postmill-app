@@ -1001,6 +1001,31 @@ describe('AIModelProvider', () => {
       expect((filePart.data as URL).toString()).toBe('https://example.com/sheet.png');
     });
 
+    it('builds one file part per imageUrl, in caller order (multi-image critique)', async () => {
+      mockGetByIdentifier.mockResolvedValue({
+        credentials: { apiKey: 'sk-test' },
+      });
+      const b64 =
+        'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==';
+
+      await provider.generateTextWithModel('org-123', 'openai', 'v1', 'gpt-4.1', {
+        prompt: 'compare Image 1 against Image 2',
+        imageUrl: [`data:image/png;base64,${b64}`, 'https://example.com/reference.jpg'],
+      });
+
+      const prompt = mockDoGenerate.mock.calls.at(-1)![0].prompt;
+      const content = prompt[0].content;
+      // Text part first, then file parts in the order the URLs were passed —
+      // the critic prompt addresses "Image 1"/"Image 2" by this order.
+      expect(content[0].type).toBe('text');
+      expect(content[1].type).toBe('file');
+      expect(content[1].data).toBe(b64);
+      expect(content[2].type).toBe('file');
+      expect(content[2].data).toBeInstanceOf(URL);
+      expect((content[2].data as URL).toString()).toBe('https://example.com/reference.jpg');
+      expect(content).toHaveLength(3);
+    });
+
     it('runs governance wrappers when generating an object with an explicit model', async () => {
       mockGetByIdentifier.mockResolvedValue({
         credentials: { apiKey: 'sk-test' },

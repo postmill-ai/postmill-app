@@ -64,3 +64,38 @@ describe('revise copy guard', () => {
     expect(out).toHaveLength(1);
   });
 });
+
+describe('addElement duplicate guard (raw ops)', () => {
+  const addOp = (element: Record<string, unknown>) =>
+    ({ op: 'addElement', outputIndex: 0, element } as never);
+
+  it('skips an added element whose originId duplicates an existing slot', () => {
+    // Live: the model layered a free-floating 64px "FREE" with
+    // originId "headline" NEXT TO the real headline.
+    const out = filter(
+      [
+        addOp({
+          id: '', type: 'text', text: 'FREE', originId: 'headline',
+          x: 621, y: 643, width: 405, height: 109, fontSize: 64,
+          rotation: 0, opacity: 1, locked: false, hidden: false,
+        }),
+      ],
+      false
+    );
+    expect(out).toHaveLength(0);
+  });
+
+  it('keeps an added element with a fresh originId', () => {
+    const out = filter(
+      [
+        addOp({
+          id: '', type: 'text', text: 'Terms apply', originId: 'legal',
+          x: 54, y: 1000, width: 972, height: 20, fontSize: 12,
+          rotation: 0, opacity: 1, locked: false, hidden: false,
+        }),
+      ],
+      false
+    );
+    expect(out).toHaveLength(1);
+  });
+});

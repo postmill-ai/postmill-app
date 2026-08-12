@@ -153,6 +153,68 @@ describe('layoutSlots', () => {
     expect(placed.size).toBe(0);
   });
 
+  it('honours a reference-measured band over the composition box', () => {
+    const withGeometry = [
+      bound('img', 'body', 'image'),
+      {
+        ...bound('headline', 'headline'),
+        slot: {
+          id: 'headline',
+          role: 'headline',
+          kind: 'text' as const,
+          geometry: { yBand: [0.08, 0.2] as [number, number], xAnchor: 'left' as const },
+        },
+      },
+      bound('sub', 'subhead'),
+    ];
+    const placed = layoutSlots({
+      composition: compositionById('hero-fullbleed')!,
+      grid,
+      slots: withGeometry as BoundSlot[],
+      measureSlot,
+    });
+    const box = placed.get('headline')!;
+    const contentHeight = grid.bottom - grid.top;
+    expect(box.y).toBe(Math.round(grid.top + 0.08 * contentHeight));
+    expect(box.height).toBe(Math.round(0.12 * contentHeight));
+    expect(box.x).toBe(grid.left);
+    // Width stays the engine's — bands are a vertical spec.
+    expect(box.width).toBeGreaterThan(0);
+    // Slots without geometry keep their engine boxes.
+    expect(placed.get('sub')).toBeDefined();
+  });
+
+  it('never band-overrides imagery — the photo keeps the composition box', () => {
+    const plain = [bound('img', 'body', 'image'), bound('headline', 'headline')];
+    const withGeometry = [
+      {
+        ...bound('img', 'body', 'image'),
+        slot: {
+          id: 'img',
+          role: 'body',
+          kind: 'image' as const,
+          geometry: { yBand: [0.4, 0.6] as [number, number] },
+        },
+      },
+      bound('headline', 'headline'),
+    ];
+    const engine = layoutSlots({
+      composition: compositionById('hero-fullbleed')!,
+      grid,
+      slots: plain,
+      measureSlot,
+    });
+    const placed = layoutSlots({
+      composition: compositionById('hero-fullbleed')!,
+      grid,
+      slots: withGeometry as BoundSlot[],
+      measureSlot,
+    });
+    // The photo is the design's ground — a measured strip must not tear it
+    // out of the composition. Identical box with or without geometry.
+    expect(placed.get('img')).toEqual(engine.get('img'));
+  });
+
   it('asks for each slot′s height at the width it will actually get', () => {
     // The two-pass contract. A headline is taller in a narrow column, and a
     // measure that ignored width is the bug this whole engine replaces.

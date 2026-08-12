@@ -24,8 +24,14 @@ ART DIRECTION: Aim at the reference itself, not at a genre. A great result is on
 
 Rules:
 - HIERARCHY COMES FROM SIZE, NOT MEANING: whatever line is physically LARGEST in the reference is the headline, even when another line reads as the "real" message. Observed failure: a poster whose largest word by far was "PIZZA" was planned with "Fresh & Tasty" as the headline and "PIZZA" dropped entirely — the result shared no silhouette with the reference. Rank the reference's lines by size, assign headline → subhead → body in that order, and only then decide what each one says.
-- A word the reference shows TWICE at different sizes is a deliberate echo: plan both, with the SAME role, so the repetition survives.
+- A word the reference shows TWICE at different sizes is a deliberate echo: plan both, with the SAME role, so the repetition survives. The echo repeats the headline's OWN words at the second size — never assign a different line to the echo slot.
+- The kicker is the SMALL line that sits immediately ABOVE the main headline in the reference (a script or condensed-caps line like "Italian") — it is never small print; URLs, dates and "your logo here" stay in "legal" slots.
+- The reference's LARGEST line stays the largest in the plan: the headline's typeScale is the biggest number in the plan, the echo's the second biggest, and no supporting line ever plans at or above the headline's size.
+- Match the reference's ANCHOR with the composition: a type stack that starts at the TOP of the canvas demands "poster-left" (the only top-anchored arrangement); a stack anchored to the bottom third is "hero-fullbleed"; copy in a solid side panel is "split-panel". A top-anchored reference planned as hero-fullbleed fails the silhouette no matter how good the parts are.
+- Ornaments come from the DECOR list (swash-pair, wavy-rule, rule…) — never from divider or shape slots.
+- If the reference has no call-to-action, OMIT the cta slot — never include one hidden with opacity 0.
 - EVERY text line in the reference gets its OWN slot — never merge two reference lines into one slot, never drop a line, and never tuck small print into the headline or subhead text (a second line inside the headline renders at headline size, which destroys the hierarchy).
+- The slot schema below is a FLOOR, not a ceiling: when the reference has more lines than the schema has slots, ADD slots and reuse roles — a kicker above the headline ("kicker", role "accent"), the second hit of an echoed word ("echo", role "headline"), a logo line ("logo-line", role "legal"). Slots that share a role stack in plan order, so plan order is reading order.
 - Small print (URL, tagline, date, "your logo here") uses the "legal" slot — small, tracked-out (style letterSpacing 2-6).
 - Script/handwritten accent lines use the "accent" slot with a script fontFamily override (formal copperplate: Great Vibes; casual: Dancing Script, Lobster, Pacifico, Caveat, Shadows Into Light) and an accent-colour fill.
 - Reproduce the mood devices: a dark/moody reference demands treatment "moody-dark" + effect "vignette" + a slot "scrim" on the copy side; a bright/clean reference demands a light treatment and quiet type zones, no vignette.
@@ -33,15 +39,18 @@ Rules:
 - Keep the hierarchy: the headline at least 2.5x the subhead; small print genuinely small (typeScale legal at most 0.2).
 - Condensed display type in the reference is style textScaleX 0.6-0.8 on the SAME face — never a wider face at a smaller size, and never squashed copy.
 - All-caps lines in the reference use style textTransform "uppercase" (case is a render property — keep the copy as authored) with letterSpacing 2-6 on small tracked lines.
-- An arched or waving ribbon plate uses warp "arc-banner" / "arc-down-banner" / "flag-wave" on the badge slot; a curved accent LINE of text uses style curve "arc-up" or "arc-down".
+- An arched or waving ribbon plate is style badgeStyle "ribbon" on the badge slot (a bowed banner is NOT a pill and NOT a starburst — when the cues describe a band that bows, choose ribbon); a curved accent LINE of text uses style curve "arc-up" or "arc-down".
+- Choose the styleId whose DISPLAY face matches the reference's headline class (slab serif, condensed sans, …). A script-display preset on a poster whose headline is a slab serif fails the silhouette — script faces belong to the accent/kicker slots only, never the headline or echo.
 - A gradient headline in the reference is effect "gradient-headline"; a frosted panel behind copy is effect "glass-panel".
 - Variants may differ in arrangement (composition, panel side, badge corner) but NEVER in fidelity: every variant carries the reference's full type stack, mood devices and decor.`,
   layoutHints: {
     formatTemplates: ['poster-left', 'hero-fullbleed', 'split-panel'],
     slotSchema: [
       { id: 'image', role: 'product-image', kind: 'image' },
-      { id: 'accent', role: 'accent', kind: 'text' },
+      { id: 'kicker', role: 'accent', kind: 'text' },
       { id: 'headline', role: 'headline', kind: 'text' },
+      { id: 'echo', role: 'headline', kind: 'text' },
+      { id: 'accent', role: 'accent', kind: 'text' },
       { id: 'subhead', role: 'benefit', kind: 'text' },
       { id: 'badge', role: 'price-badge', kind: 'badge' },
       { id: 'legal', role: 'legal', kind: 'text' },
