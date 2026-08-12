@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { mkdirSync, rmSync, writeFileSync } from 'fs';
+import { mkdirSync, rmSync, symlinkSync, writeFileSync } from 'fs';
 import path from 'path';
 import os from 'os';
 import { loadVisionImageBytes, resolveVisionImageUrl } from './vision-image-url';
@@ -83,6 +83,29 @@ describe('loadVisionImageBytes', () => {
   it('refuses a traversal outside the upload root', async () => {
     await expect(
       loadVisionImageBytes('/uploads/..%2F..%2Fetc%2Fpasswd')
+    ).resolves.toBeNull();
+  });
+
+  it('refuses a symlink inside the root that points outside it', async () => {
+    // `path.resolve` does not follow links, so prefix containment alone would
+    // have read the target happily — and vision inlines what it reads into a
+    // prompt bound for a third-party model. `/uploads/*` is served through the
+    // same ladder (resolve → prefix → stat → realpath); this path now matches.
+    const secret = path.join(os.tmpdir(), `vision-secret-${Date.now()}.png`);
+    writeFileSync(secret, Buffer.from('not-yours'));
+    symlinkSync(secret, path.join(tmpDir, 'planted.png'));
+    const warn = vi.fn();
+    await expect(
+      loadVisionImageBytes('http://localhost:4200/uploads/planted.png', { warn })
+    ).resolves.toBeNull();
+    expect(warn).toHaveBeenCalledOnce();
+    rmSync(secret, { force: true });
+  });
+
+  it('refuses a directory, which is not a readable upload', async () => {
+    mkdirSync(path.join(tmpDir, 'a-folder'));
+    await expect(
+      loadVisionImageBytes('http://localhost:4200/uploads/a-folder')
     ).resolves.toBeNull();
   });
 

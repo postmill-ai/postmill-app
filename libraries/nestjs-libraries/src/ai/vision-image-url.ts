@@ -1,4 +1,4 @@
-import { readFile } from 'fs/promises';
+import { readFile, realpath, stat } from 'fs/promises';
 import path from 'path';
 import { isSafePublicHttpsUrl } from '@postmill-ai/nestjs-libraries/dtos/webhooks/webhook.url.validator';
 import { fromBuffer } from '@postmill-ai/nestjs-libraries/upload/file-type.compat';
@@ -193,12 +193,19 @@ export function localPathFromUrl(url: string): string {
 /**
  * Read a local upload, containment enforced HERE rather than borrowed.
  *
- * The whole chain a reader has to trust — key shape, resolve, prefix — is in
- * this one function body, ending in the `readFile` it protects. Deliberately
- * not delegating to `localPathFromUrl`: a guard reached through a call is a
- * guard the sink takes on faith, and neither a reviewer nor a static analyser
- * should have to follow a return value across functions to see whether the
- * path that hits the disk was proven contained.
+ * The whole chain a reader has to trust — key shape, resolve, prefix, and the
+ * CANONICAL target — is in this one function body, ending in the `readFile` it
+ * protects. Deliberately not delegating to `localPathFromUrl`: a guard reached
+ * through a call is a guard the sink takes on faith, and neither a reviewer
+ * nor a static analyser should have to follow a return value across functions
+ * to see whether the path that hits the disk was proven contained.
+ *
+ * The symlink step is the one this path was actually missing. `/uploads/*` is
+ * served through exactly this ladder (resolve → prefix → stat → realpath), and
+ * `path.resolve` does not follow links, so a symlink planted inside the upload
+ * root would have read straight through it. Vision inlines whatever it reads
+ * into a prompt bound for a third-party model, which makes "reads a file
+ * outside the bucket" an exfiltration primitive rather than a curiosity.
  */
 export async function readLocalUpload(url: string): Promise<Buffer> {
   const root = uploadRoot();
@@ -210,5 +217,16 @@ export async function readLocalUpload(url: string): Promise<Buffer> {
   if (resolved !== root && !resolved.startsWith(root + path.sep)) {
     throw new Error(`upload path escapes storage root: ${url}`);
   }
-  return readFile(resolved);
+  // Compare canonical against canonical: the root itself may be reached
+  // through a link (macOS `/tmp` → `/private/tmp`, tests in temp dirs).
+  const realRoot = await realpath(root);
+  const real = await realpath(resolved);
+  if (real !== realRoot && !real.startsWith(realRoot + path.sep)) {
+    throw new Error(`upload path escapes storage root: ${url}`);
+  }
+  const stats = await stat(real);
+  if (!stats.isFile()) {
+    throw new Error(`upload path is not a file: ${url}`);
+  }
+  return readFile(real);
 }
