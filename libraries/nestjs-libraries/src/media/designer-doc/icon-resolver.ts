@@ -60,8 +60,13 @@ export const resolveIconifyIcon = (
   name: string
 ): Promise<ResolvedIcon | null> => {
   // Real icon names are short; anything longer is garbage that would only
-  // grow the cache keys and the outbound URL.
-  if (!name || name.length > 200) return Promise.resolve(null);
+  // grow the cache keys and the outbound URL. The type check is not
+  // decoration: `?name=a&name=b` hands Express an ARRAY, whose `.length` is an
+  // element count rather than a string length, so the size guard would pass a
+  // value that only becomes a string further down.
+  if (typeof name !== 'string' || !name || name.length > 200) {
+    return Promise.resolve(null);
+  }
   const cached = iconCache.get(name);
   if (cached) return cached;
   const promise = fetchIcon(name).catch(() => null);

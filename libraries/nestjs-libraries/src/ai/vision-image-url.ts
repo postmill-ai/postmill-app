@@ -153,7 +153,20 @@ export function localPathFromUrl(url: string): string {
     key = key.slice('/uploads/'.length);
   }
   const uploadDirectory = path.resolve(process.env.UPLOAD_DIRECTORY || './uploads');
-  const resolved = path.resolve(uploadDirectory, decodeURIComponent(key));
+  const decoded = decodeURIComponent(key);
+  // Reject traversal BEFORE resolving, not only after. An upload key is a
+  // relative storage key — never rooted, never `..`, never NUL-spliced — so a
+  // crafted `…/uploads/../../etc/passwd` is refused on its shape rather than
+  // relying solely on the prefix check below to catch where it landed.
+  const escapes =
+    !decoded ||
+    decoded.includes('\0') ||
+    path.isAbsolute(decoded) ||
+    decoded.split(/[\\/]/).includes('..');
+  if (escapes) {
+    throw new Error(`upload path escapes storage root: ${url}`);
+  }
+  const resolved = path.resolve(uploadDirectory, decoded);
   if (
     resolved !== uploadDirectory &&
     !resolved.startsWith(uploadDirectory + path.sep)

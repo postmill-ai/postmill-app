@@ -86,6 +86,14 @@ describe('loadVisionImageBytes', () => {
     ).resolves.toBeNull();
   });
 
+  it('refuses a rooted or NUL-spliced key, not only a `..` that escapes', async () => {
+    // Shape is rejected before the path is resolved: an upload key is always a
+    // relative storage key, so these never reach the filesystem at all.
+    for (const key of ['%2Fetc%2Fpasswd', 'a%00.png', '..%2F..']) {
+      await expect(loadVisionImageBytes(`/uploads/${key}`)).resolves.toBeNull();
+    }
+  });
+
   it('never fetches a remote URL — returns null', async () => {
     await expect(
       loadVisionImageBytes('https://example.com/sheet.png')

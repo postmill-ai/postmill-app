@@ -59,12 +59,37 @@ const fontKey = (font: FontSpec | undefined, fontSize: number) =>
   }`;
 
 /**
+ * A family name no font can be registered under, used to measure what the
+ * platform's fallback face does. Anything measuring the same as this is not
+ * actually available.
+ */
+const UNAVAILABLE_FACE = '__postmill_no_such_face__';
+
+/** Mixed widths, ascenders, descenders and digits, so two genuinely different
+ * faces are very unlikely to agree on the total advance by accident. */
+const PROBE_TEXT = 'MWiljq019 @#gyq';
+
+/**
  * Build a measurer backed by node-canvas.
  *
  * Falls back to the approximation rather than throwing when the native binary
  * is missing or a family failed to load: the composer runs in environments
  * where canvas may not be built, and a design laid out with estimated metrics
  * is very much better than no design.
+ *
+ * A family that was never REGISTERED is the sharper trap, and it took CI to
+ * expose it: node-canvas silently substitutes the platform's default sans, so
+ * the composer measured DejaVu on Linux and Helvetica on macOS while believing
+ * it had Anton. The same golden geometry therefore came out 36px wider in CI
+ * than on a developer's machine, and — worse than any snapshot — a CTA plate
+ * was sized for a face the renderer would never paint, which is how labels
+ * came back clipped mid-glyph.
+ *
+ * So availability is PROBED per face: a family that measures exactly like a
+ * family that cannot exist is treated as absent, and its text falls back to
+ * the documented estimate. Real metrics when the face is really there, one
+ * stated approximation when it is not, and never a third answer that depends
+ * on which machine composed the design.
  */
 export const createTextMeasurer = async (
   loadFonts?: () => Promise<void>
@@ -86,6 +111,29 @@ export const createTextMeasurer = async (
   // Setting `ctx.font` and measuring is not free, and a layout measures the
   // same headline at the same size repeatedly as the engine tries widths.
   const cache = new Map<string, number>();
+  const available = new Map<string, boolean>();
+
+  const probe = (family: string, font: FontSpec | undefined): number => {
+    context.font = fontKey({ ...font, fontFamily: family }, 100);
+    return context.measureText(PROBE_TEXT).width;
+  };
+
+  /** Is this face registered, or is node-canvas quietly substituting? */
+  const faceIsReal = (font: FontSpec | undefined): boolean => {
+    const family = font?.fontFamily?.trim();
+    if (!family) return false;
+    const key = `${font?.fontStyle || 'normal'} ${font?.fontWeight || 400} ${family}`;
+    const hit = available.get(key);
+    if (hit !== undefined) return hit;
+    let real = false;
+    try {
+      real = probe(family, font) !== probe(UNAVAILABLE_FACE, font);
+    } catch {
+      real = false;
+    }
+    available.set(key, real);
+    return real;
+  };
 
   return (text, fontSize, font) => {
     if (!text) return 0;
@@ -94,11 +142,15 @@ export const createTextMeasurer = async (
     if (hit !== undefined) return hit;
 
     let width: number;
-    try {
-      context.font = fontKey(font, fontSize);
-      width = context.measureText(text).width;
-    } catch {
+    if (!faceIsReal(font)) {
       width = approximateAdvance(text, fontSize);
+    } else {
+      try {
+        context.font = fontKey(font, fontSize);
+        width = context.measureText(text).width;
+      } catch {
+        width = approximateAdvance(text, fontSize);
+      }
     }
     // A family that failed to register measures as the fallback face, which is
     // silently wrong rather than obviously wrong. Zero is the one result that

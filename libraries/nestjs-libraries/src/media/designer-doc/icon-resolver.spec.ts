@@ -36,6 +36,14 @@ describe('resolveIconifyIcon', () => {
     expect(mockSafeFetch).not.toHaveBeenCalled();
   });
 
+  it('rejects a non-string name, which `?name=a&name=b` makes an array', async () => {
+    // The length guard reads an ARRAY's element count, so a tampered query
+    // parameter would slip past a size check meant for a string.
+    expect(await resolveIconifyIcon(['mdi:rocket', 'mdi:evil'] as never)).toBeNull();
+    expect(await resolveIconifyIcon({ toString: () => 'mdi:rocket' } as never)).toBeNull();
+    expect(mockSafeFetch).not.toHaveBeenCalled();
+  });
+
   it('returns null on a non-OK response', async () => {
     mockSafeFetch.mockResolvedValue({ ok: false, headers: new Headers() });
     expect(await resolveIconifyIcon('mdi:does-not-exist')).toBeNull();

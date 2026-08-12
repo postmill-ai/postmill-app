@@ -132,7 +132,9 @@ export class MediaController {
   @Get('/icons/resolve')
   @CheckPolicies([AuthorizationActions.Read, Sections.MEDIA])
   async resolveIcon(@Query('name') name: string) {
-    return (await resolveIconifyIcon(name || '')) || { body: null };
+    // `?name=a&name=b` arrives as an array; the resolver takes a string.
+    const requested = typeof name === 'string' ? name : '';
+    return (await resolveIconifyIcon(requested)) || { body: null };
   }
 
   @Post('/video/function')

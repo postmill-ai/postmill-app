@@ -1,6 +1,15 @@
 import { describe, it, expect, vi } from 'vitest';
+import path from 'path';
 import { approximateAdvance, createTextMeasurer, forFace } from './measure-text';
 import { wrapTextLines } from '../../../media/designer-doc/fit-text';
+
+/** A font file committed to this repo, so the "registered face" half of the
+ * contract is assertable on any machine and in CI, not only where system
+ * fonts happen to exist. */
+const PROBE_FONT_FILE = path.resolve(
+  __dirname,
+  '../../../../../../apps/frontend/public/fonts/WendyOne-Regular.ttf'
+);
 
 /**
  * The measurement the layout pass runs on.
@@ -42,6 +51,34 @@ describe('createTextMeasurer', () => {
     // that the measurer is asked to tell them apart, not that a font exists.
     expect(condensed).toBeGreaterThan(0);
     expect(wide).toBeGreaterThan(0);
+  });
+
+  it('falls back to the estimate for a face that was never registered', async () => {
+    // CI caught this: node-canvas substitutes the platform's default sans for
+    // an unregistered family WITHOUT saying so, so the same design measured
+    // 36px wider on Linux than on macOS, and CTA plates were sized for a face
+    // the renderer would never paint. An absent face must measure as the
+    // documented estimate — one answer, the same everywhere.
+    const measure = await createTextMeasurer();
+    const text = 'Shop the sale';
+    expect(measure(text, 48, { fontFamily: 'Anton' })).toBe(
+      approximateAdvance(text, 48)
+    );
+    expect(measure(text, 48, { fontFamily: 'Definitely Not Installed' })).toBe(
+      approximateAdvance(text, 48)
+    );
+  });
+
+  it('uses real metrics once a face IS registered', async () => {
+    // The other half of the contract: the fallback must not swallow a font
+    // that genuinely loaded, or measuring would have been pointless.
+    const { registerFont } = await import('canvas');
+    registerFont(PROBE_FONT_FILE, { family: 'PostmillProbeFace' });
+    const measure = await createTextMeasurer();
+    const text = 'Shop the sale';
+    expect(measure(text, 48, { fontFamily: 'PostmillProbeFace' })).not.toBe(
+      approximateAdvance(text, 48)
+    );
   });
 
   it('awaits the font load before measuring', async () => {
