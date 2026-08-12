@@ -143,8 +143,20 @@ export function isLocalStorageUrl(url: string): boolean {
   );
 }
 
-/** Resolved path must stay inside UPLOAD_DIRECTORY (traversal guard). */
-export function localPathFromUrl(url: string): string {
+/** Where local uploads live, absolute. */
+const uploadRoot = (): string =>
+  path.resolve(process.env.UPLOAD_DIRECTORY || './uploads');
+
+/**
+ * The RELATIVE storage key inside the upload root, or null when the URL's
+ * shape could never name one.
+ *
+ * Shape is judged before any path is built: an upload key is never rooted,
+ * never carries a `..` segment, and never contains a NUL, so a crafted
+ * `…/uploads/../../etc/passwd` is refused on what it is rather than on where
+ * resolving it happened to land.
+ */
+const uploadKeyFromUrl = (url: string): string | null => {
   const frontendUrl = (process.env.FRONTEND_URL || '').replace(/\/$/, '');
   let key = url;
   if (frontendUrl && key.startsWith(`${frontendUrl}/uploads/`)) {
@@ -152,46 +164,50 @@ export function localPathFromUrl(url: string): string {
   } else if (key.startsWith('/uploads/')) {
     key = key.slice('/uploads/'.length);
   }
-  const uploadDirectory = path.resolve(process.env.UPLOAD_DIRECTORY || './uploads');
   const decoded = decodeURIComponent(key);
-  // Reject traversal BEFORE resolving, not only after. An upload key is a
-  // relative storage key — never rooted, never `..`, never NUL-spliced — so a
-  // crafted `…/uploads/../../etc/passwd` is refused on its shape rather than
-  // relying solely on the prefix check below to catch where it landed.
-  const escapes =
+  if (
     !decoded ||
     decoded.includes('\0') ||
     path.isAbsolute(decoded) ||
-    decoded.split(/[\\/]/).includes('..');
-  if (escapes) {
+    decoded.split(/[\\/]/).includes('..')
+  ) {
+    return null;
+  }
+  return decoded;
+};
+
+/** Resolved path must stay inside UPLOAD_DIRECTORY (traversal guard). */
+export function localPathFromUrl(url: string): string {
+  const root = uploadRoot();
+  const key = uploadKeyFromUrl(url);
+  if (key === null) {
     throw new Error(`upload path escapes storage root: ${url}`);
   }
-  const resolved = path.resolve(uploadDirectory, decoded);
-  if (
-    resolved !== uploadDirectory &&
-    !resolved.startsWith(uploadDirectory + path.sep)
-  ) {
+  const resolved = path.resolve(root, key);
+  if (resolved !== root && !resolved.startsWith(root + path.sep)) {
     throw new Error(`upload path escapes storage root: ${url}`);
   }
   return resolved;
 }
 
 /**
- * Read a local upload, containment enforced HERE rather than in a helper.
+ * Read a local upload, containment enforced HERE rather than borrowed.
  *
- * `localPathFromUrl` already refuses anything that leaves the storage root,
- * but a guard one call away is a guard a reader (and a static analyser) has to
- * take on faith. The check that matters therefore sits in the same function as
- * the `readFile` it protects: resolve, re-assert the prefix, then read — so
- * every path reaching the filesystem was proven contained three lines above.
+ * The whole chain a reader has to trust — key shape, resolve, prefix — is in
+ * this one function body, ending in the `readFile` it protects. Deliberately
+ * not delegating to `localPathFromUrl`: a guard reached through a call is a
+ * guard the sink takes on faith, and neither a reviewer nor a static analyser
+ * should have to follow a return value across functions to see whether the
+ * path that hits the disk was proven contained.
  */
 export async function readLocalUpload(url: string): Promise<Buffer> {
-  const uploadDirectory = path.resolve(process.env.UPLOAD_DIRECTORY || './uploads');
-  const resolved = localPathFromUrl(url);
-  if (
-    resolved !== uploadDirectory &&
-    !resolved.startsWith(uploadDirectory + path.sep)
-  ) {
+  const root = uploadRoot();
+  const key = uploadKeyFromUrl(url);
+  if (key === null) {
+    throw new Error(`upload path escapes storage root: ${url}`);
+  }
+  const resolved = path.resolve(root, key);
+  if (resolved !== root && !resolved.startsWith(root + path.sep)) {
     throw new Error(`upload path escapes storage root: ${url}`);
   }
   return readFile(resolved);
