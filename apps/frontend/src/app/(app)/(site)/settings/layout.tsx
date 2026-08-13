@@ -12,8 +12,7 @@ import { useSidebarCollapse } from '@postmill-ai/frontend/components/layout/use-
 import { LogoutComponent } from '@postmill-ai/frontend/components/layout/logout.component';
 import { SubmenuStrip } from '@postmill-ai/frontend/components/new-layout/submenu-strip';
 import {
-  SETTINGS_NAV,
-  SETTINGS_SECTION_ORDER,
+  visibleSettingsNav,
   type SettingsNavItem,
 } from '@postmill-ai/frontend/components/settings/settings-nav.config';
 
@@ -36,18 +35,10 @@ export default function SettingsLayout({ children }: { children: React.ReactNode
   const settingsDenied =
     permissions.isResolved && !permissions.hasPermission('settings', 'read');
 
-  const items = useMemo(() => {
-    const ctx = { user, permissions, isGeneral, billingEnabled, showLogout };
-    const visible = SETTINGS_NAV.filter((i) => (i.gate ? i.gate(ctx) : true));
-    // Keep the category order, sort alphabetically within each category (matches old nav).
-    return [...visible].sort((a, b) => {
-      const sectionDiff =
-        SETTINGS_SECTION_ORDER.indexOf(a.section || '') -
-        SETTINGS_SECTION_ORDER.indexOf(b.section || '');
-      if (sectionDiff !== 0) return sectionDiff;
-      return t(a.labelKey, a.labelDefault).localeCompare(t(b.labelKey, b.labelDefault));
-    });
-  }, [user, permissions, isGeneral, billingEnabled, showLogout, t]);
+  const items = useMemo(
+    () => visibleSettingsNav({ user, permissions, isGeneral, billingEnabled, showLogout }, t),
+    [user, permissions, isGeneral, billingEnabled, showLogout, t]
+  );
 
   const isActive = (item: SettingsNavItem) => pathname.startsWith(item.href);
   const activeItem = items.find(isActive);
@@ -71,12 +62,25 @@ export default function SettingsLayout({ children }: { children: React.ReactNode
     );
   }
 
+  // Section labels were passed raw ("Workspace"), so the mobile strip showed
+  // them untranslated while the desktop rail translated them.
+  const sectionLabel = (section?: string) =>
+    !section
+      ? undefined
+      : section === 'Workspace'
+        ? t('settings_section_workspace', 'Workspace')
+        : section === 'Automation'
+          ? t('settings_section_automation', 'Automation')
+          : t('settings_section_developer', 'Developer');
+
   const stripItems = items.map((item) => ({
     label: t(item.labelKey, item.labelDefault),
     icon: item.icon,
-    section: item.section,
+    section: sectionLabel(item.section),
     active: isActive(item),
-    onClick: () => router.push(item.href),
+    // A real href, not router.push: in the overflow menu these become links, so
+    // middle-click and open-in-new-tab work for all 14 destinations.
+    href: item.href,
   }));
 
   return (
@@ -183,7 +187,11 @@ export default function SettingsLayout({ children }: { children: React.ReactNode
       </div>
 
       <div className="bg-newBgColorInner flex-1 flex-col flex min-w-0 mobile:p-0 p-[20px] gap-[12px] h-[calc(100vh-104px)] mobile:h-auto min-h-0 overflow-y-auto mobile:overflow-visible">
-        <SubmenuStrip ariaLabel={t('settings_sections_aria', 'Settings sections')} items={stripItems} />
+        <SubmenuStrip
+          ariaLabel={t('settings_sections_aria', 'Settings sections')}
+          overflowLabel={t('more_settings_sections', 'More settings')}
+          items={stripItems}
+        />
         <div className="flex flex-col gap-[12px] mobile:p-[16px]">
           <div className="w-full mx-auto gap-[24px] flex flex-col relative rounded-[4px]">
             {activeItem && (

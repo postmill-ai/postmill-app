@@ -6,12 +6,17 @@ import {
 } from '@reaatech/agent-mesh-router';
 import type { AgentResponse } from '@reaatech/agent-mesh';
 import sharp from 'sharp';
+import { readFile } from 'fs/promises';
+import * as path from 'path';
 import { AiDefaultsService } from '@postmill-ai/nestjs-libraries/ai/defaults/ai-defaults.service';
 import { FileService } from '@postmill-ai/nestjs-libraries/database/prisma/file/file.service';
 import { StorageService } from '@postmill-ai/nestjs-libraries/database/prisma/storage/storage.service';
 import { StockMediaService } from '@postmill-ai/nestjs-libraries/media/stock/stock-media.service';
-import type { AssetResult } from '../../ai-designer.types';
+import { resolveIconifyIcon } from '@postmill-ai/nestjs-libraries/media/designer-doc/icon-resolver';
+import type { AssetAspect, AssetNeedRequest, AssetResult } from '../../ai-designer.types';
+import { assetKey } from '../../util/aspect';
 import { raceWithTimeout } from '../../util/race-with-timeout';
+import { throwIfAborted } from '../../util/throw-if-aborted';
 import {
   isAgentInputError,
   parseAgentInput,
@@ -35,17 +40,116 @@ const ALLOWED_DATA_URL_MIME_TYPES = new Set([
 ]);
 const MAX_DATA_URL_MEDIA_BYTES = 512 * 1024 * 1024;
 
-interface AssetNeed {
-  slotId: string;
-  brief: string;
-  prefer: 'generate' | 'stock' | 'either';
-}
+// Aspect class → composition framing sentence for the image model.
+const ASPECT_COMPOSITION: Record<AssetAspect, string> = {
+  wide: 'Wide 16:9 composition.',
+  square: 'Square 1:1 composition.',
+  tall: 'Tall 9:16 composition.',
+};
+
+// Appended to every GENERATED image prompt (never to stock searches): image
+// models love painting headline text, logos and watermarks into the asset,
+// which then collides with the composer's own rendered copy — and they reach
+// for real-world branded products (observed: sneakers rendered with clear
+// Nike swooshes), which is a trademark problem, not just a visual one.
+const NO_BAKED_IN_TEXT_SUFFIX =
+  'No text, no words, no letters, no typography, no watermark, no logo. No recognizable brand logos, trademarks, or real-world branded products — generic unbranded designs only.';
+
+// Appended ON TOP of the standard suffix when the vision critic flagged the
+// previous generation for baked-in text/logos/brand marks (regenerateAsset
+// fix): the first attempt already carried NO_BAKED_IN_TEXT_SUFFIX and the
+// model painted branding anyway, so the regeneration prompt gets a harder
+// negative.
+const REGENERATE_NO_TEXT_SUFFIX =
+  'Plain unbranded packaging or surfaces — absolutely no printed text, labels, or logos on any object. No brand marks, emblems, monograms, logo-shaped details or real celebrity likenesses of any kind; every product must be an unbranded generic design.';
+
+// Appended to `kind: 'illustration'` prompts INSTEAD of the photographic
+// hero-layout guidance: these needs are graphic elements (hero illustrations,
+// textures, badge art), and "full-bleed photographic composition" steers the
+// model to exactly the wrong register.
+const ILLUSTRATION_STYLE_SUFFIX =
+  'Rendered as a graphic ILLUSTRATION, not a photograph: bold flat shapes, clean edges, deliberate limited palette; poster-art quality.';
+
+// Layout intent → subject-placement guidance for the image model. Covers both
+// channelLayouts intent ids and gallery template ids. Composition ONLY — never
+// ask for "dark/clean/low-detail areas for text": models paint solid black
+// bands into the asset when asked to reserve text space (observed with flux).
+// Text legibility is the composer's job (scrim/shadow/stroke), not the asset's.
+const LAYOUT_TEXT_SPACE: Record<string, string> = {
+  'hero-fullbleed': 'Full-bleed photographic composition to every edge — no borders, bars, letterboxing or solid-color regions. Place the main subject in the upper two-thirds of the frame.',
+  'hero-top': 'Full-bleed photographic composition to every edge — no borders, bars, letterboxing or solid-color regions. Place the main subject in the upper two-thirds of the frame.',
+  'top-bottom': 'Full-bleed photographic composition to every edge — no borders, bars, letterboxing or solid-color regions. Keep the main subject near the vertical center.',
+  stacked: 'Full-bleed photographic composition to every edge — no borders, bars, letterboxing or solid-color regions. Keep the main subject near the vertical center.',
+  'badge-burst': 'Full-bleed photographic composition to every edge — no borders, bars, letterboxing or solid-color regions.',
+  'split-panel': 'Full-bleed photographic composition to every edge — no borders, bars, letterboxing or solid-color regions. Place the main subject on the right half of the frame.',
+  'side-by-side': 'Full-bleed photographic composition to every edge — no borders, bars, letterboxing or solid-color regions. Place the main subject on the right half of the frame.',
+  'editorial-sidebar': 'Full-bleed photographic composition to every edge — no borders, bars, letterboxing or solid-color regions. Place the main subject on the right half of the frame.',
+};
+
+// Aspect class → stock search orientation (Unsplash vocabulary; content-pack
+// adapters receive the same filter map).
+const STOCK_ORIENTATION: Record<AssetAspect, string> = {
+  wide: 'landscape',
+  square: 'squarish',
+  tall: 'portrait',
+};
+
+// Brand-signal words stripped from a STOCK query before it reaches the
+// provider. Generated prompts get an explicit negative instead
+// (NO_BAKED_IN_TEXT_SUFFIX) — a search engine has no negatives, so the only
+// lever is not asking for branding in the first place. Deliberately generic:
+// a hardcoded list of real brand names would be unmaintainable and would
+// mangle legitimate queries, so this only removes words that ASK for a mark.
+const STOCK_BRAND_TOKENS = new Set([
+  'brand',
+  'brands',
+  'branded',
+  'branding',
+  'emblem',
+  'emblems',
+  'insignia',
+  'logo',
+  'logos',
+  'logotype',
+  'monogram',
+  'monograms',
+  'trademark',
+  'trademarks',
+  'trademarked',
+  'watermark',
+  'watermarks',
+]);
+
+// Gradient placeholder geometry per aspect class. A fixed 512x512 shipped a
+// SQUARE placeholder for a portrait or ultra-wide run, and its wrong
+// `naturalWidth`/`naturalHeight` then fed the composer's focal-point maths —
+// so the last-resort fallback also mis-aimed the crop. Exact 16:9 / 9:16.
+const FALLBACK_GRADIENT_SIZE: Record<AssetAspect, { width: number; height: number }> = {
+  square: { width: 512, height: 512 },
+  wide: { width: 896, height: 504 },
+  tall: { width: 504, height: 896 },
+};
+
+type AssetNeed = AssetNeedRequest;
 
 interface AssetRequestInput {
   type: 'asset-request';
   assetNeeds: AssetNeed[];
-  referenceFileIds?: string[];
+  /** Conductor regenerateAsset dispatch: same resolve path, harder no-text prompt. */
+  regenerate?: boolean;
 }
+
+// NOTE on reference images: this agent takes NO `referenceFileIds`. Neither
+// image provider in use can condition a generation on a source image through
+// the text-to-image path — the OpenAI adapter posts to
+// `/v1/images/generations` (no image input; `edits` is a different endpoint
+// it does not implement) and the Replicate adapter builds its prediction body
+// from `{ prompt, aspect_ratio }` only, dropping `options.sourceUrl`
+// entirely, and none of its six text-to-image model descriptors declares an
+// image/init-image/reference field. References therefore reach the design as
+// ENGLISH CUES (the vision critic's `interpret-request` → `brief.referenceCues`
+// → the art director's plan), which is honest and useful; they do not steer
+// the pixels. The conductor says so in its degradation trail.
 
 @Injectable()
 export class AiDesignerAssetService implements OnModuleInit {
@@ -65,6 +169,10 @@ export class AiDesignerAssetService implements OnModuleInit {
   private _handler: InProcessHandler = async (
     context: ContextPacket
   ): Promise<AgentResponse> => {
+    // The session signal rides in metadata from the conductor — a cancelled
+    // or timed-out session must not start billable image generation.
+    const signal = context.metadata?.signal as AbortSignal | undefined;
+    throwIfAborted(signal);
     const orgId =
       context.metadata && typeof context.metadata.orgId === 'string'
         ? context.metadata.orgId
@@ -100,9 +208,11 @@ export class AiDesignerAssetService implements OnModuleInit {
 
     await Promise.all(
       assetNeeds.map(async (need) => {
-        const result = await this._resolveAsset(orgId, need);
+        const result = payload.regenerate
+          ? await this.regenerateForSlot(orgId, need, signal)
+          : await this._resolveAsset(orgId, need, false, signal);
         if (result) {
-          assets[need.slotId] = result;
+          assets[assetKey(need.slotId, need.aspect)] = result;
         }
       })
     );
@@ -116,65 +226,236 @@ export class AiDesignerAssetService implements OnModuleInit {
     };
   };
 
+  /**
+   * Regeneration entry for the conductor's regenerateAsset fix (a critic
+   * flagged baked-in text/logos in the previous asset): same resolve path —
+   * generate with retry, stock fallback, gradient last resort — but the
+   * generation prompt carries the strengthened no-text negative. The
+   * initial-compose prompt path is untouched.
+   */
+  async regenerateForSlot(
+    orgId: string,
+    need: AssetNeed,
+    signal?: AbortSignal
+  ): Promise<AssetResult | null> {
+    return this._resolveAsset(orgId, need, true, signal);
+  }
+
   private async _resolveAsset(
     orgId: string,
-    need: AssetNeed
+    need: AssetNeed,
+    regenerate = false,
+    signal?: AbortSignal
   ): Promise<AssetResult | null> {
-    if (need.prefer === 'generate' || need.prefer === 'either') {
-      try {
-        const url = await this._generateImageWithTimeout(orgId, need.brief);
-        if (url.startsWith('https:')) {
-          const file = await this._fileService.importFromUrl(orgId, {
-            url,
-            name: need.brief.slice(0, 40),
-          });
-          return this._toResult(need.slotId, file);
+    // Icon needs never touch the image pipeline: the brief is an Iconify
+    // SEARCH QUERY ("pizza slice icon"), resolved to an inline SVG body. A
+    // miss resolves to absence — the composer drops the slot rather than
+    // shipping a placeholder blob.
+    if (need.kind === 'icon') {
+      return this._resolveIconNeed(orgId, need);
+    }
+    // Vector art is searched first (Pixabay serves raster renders of vector
+    // illustrations); a miss falls through to the ordinary resolve chain so
+    // the slot still gets imagery.
+    if (need.kind === 'vector') {
+      throwIfAborted(signal);
+      const vector = await this._tryVector(orgId, need);
+      if (vector) return vector;
+    }
+    // A `prefer: 'stock'` need used to skip the generate block entirely, so a
+    // regeneration (which exists precisely because the critic rejected the
+    // previous imagery) could never reach the strengthened negative prompt —
+    // it just re-ran the same deterministic search. Promote it for this pass,
+    // UNLESS the caller switched to stock deliberately (`stockOnly`): there
+    // the point is to stop re-rolling the image model.
+    const prefer =
+      regenerate && need.prefer === 'stock' && !need.stockOnly
+        ? 'either'
+        : need.prefer;
+    if (prefer === 'generate' || prefer === 'either') {
+      // One retry before stock: transient provider failures (rate limits,
+      // timeouts) are the common case and a second attempt usually lands.
+      for (let attempt = 1; attempt <= 2; attempt++) {
+        throwIfAborted(signal);
+        try {
+          const url = await this._generateImageWithTimeout(orgId, need, regenerate, signal);
+          // The media-adapter HTTP call itself cannot be interrupted
+          // (MediaGenerateOptions carries no signal), so a cancel lands here:
+          // skip importing/writing the result and stop the resolve path.
+          throwIfAborted(signal);
+          if (url.startsWith('https:')) {
+            const file = await this._fileService.importFromUrl(orgId, {
+              url,
+              name: need.brief.slice(0, 40),
+            });
+            return await this._toResult(need, file, 'generate');
+          }
+          if (url.startsWith('data:')) {
+            const file = await this._importDataUrl(orgId, url, need.brief);
+            if (file) return await this._toResult(need, file, 'generate');
+          }
+          // An unusable URL shape won't change on a retry — go to stock.
+          break;
+        } catch (err) {
+          // A cancel is not a provider failure — don't retry it, don't fall
+          // through to stock, and don't log it as a generation failure.
+          throwIfAborted(signal);
+          // Swallow provider/timeout/capability errors and try stock — but say
+          // so: a silent fallthrough here renders flat backgrounds with zero
+          // diagnostic trail.
+          this._logger.warn(
+            `Asset generate failed for slot ${assetKey(need.slotId, need.aspect)} (attempt ${attempt}/2): ${(err as Error).message}${attempt < 2 ? '; retrying once.' : '; trying stock.'}`
+          );
         }
-        if (url.startsWith('data:')) {
-          const file = await this._importDataUrl(orgId, url, need.brief);
-          if (file) return this._toResult(need.slotId, file);
-        }
-      } catch (err) {
-        // Swallow provider/timeout/capability errors and try stock — but say
-        // so: a silent fallthrough here renders flat backgrounds with zero
-        // diagnostic trail.
-        this._logger.warn(
-          `Asset generate failed for slot ${need.slotId}: ${(err as Error).message}; trying stock.`
-        );
       }
     }
 
-    const stock = await this._tryStock(orgId, need);
+    throwIfAborted(signal);
+    const stock = await this._tryStock(orgId, need, regenerate);
     if (stock) return stock;
 
     this._logger.warn(
-      `Asset for slot ${need.slotId} fell back to gradient (generate + stock both unavailable).`
+      `Asset for slot ${assetKey(need.slotId, need.aspect)} fell back to gradient (generate + stock both unavailable).`
     );
     return this._fallbackGradient(orgId, need);
   }
 
   private async _generateImageWithTimeout(
     orgId: string,
-    brief: string
+    need: AssetNeed,
+    regenerate = false,
+    signal?: AbortSignal
   ): Promise<string> {
     const raw = Number(process.env.AI_DESIGNER_ASSET_TIMEOUT_MS);
     const timeoutMs = Number.isFinite(raw) && raw > 0 ? raw : 90_000;
-    return raceWithTimeout(this._aiDefaults.textToImage(orgId, brief), timeoutMs, {
-      label: 'Asset generation',
-    });
+    return raceWithTimeout(
+      this._aiDefaults.textToImage(orgId, this._buildPrompt(need, regenerate), {
+        aspect: need.aspect,
+        signal,
+      }),
+      timeoutMs,
+      { signal, label: 'Asset generation' }
+    );
   }
 
-  private async _tryStock(
+  // Brief + a short (≤2 sentence) layout suffix for background/hero slots:
+  // the aspect's composition framing plus where the copy will sit, so the
+  // model leaves that region calm. Non-hero slots get the bare brief. Every
+  // generated prompt gets the no-baked-in-text suffix (stock searches don't —
+  // they query by brief, not generate); regenerations append the harder
+  // negative on top.
+  private _buildPrompt(need: AssetNeed, regenerate = false): string {
+    const noText = regenerate
+      ? `${NO_BAKED_IN_TEXT_SUFFIX} ${REGENERATE_NO_TEXT_SUFFIX}`
+      : NO_BAKED_IN_TEXT_SUFFIX;
+    // Illustration needs steer the SAME generator away from photography —
+    // and skip LAYOUT_TEXT_SPACE, whose "full-bleed photographic composition"
+    // language is exactly wrong for a graphic element.
+    if (need.kind === 'illustration') {
+      const parts = [
+        need.brief,
+        ILLUSTRATION_STYLE_SUFFIX,
+        ...(need.aspect ? [ASPECT_COMPOSITION[need.aspect]] : []),
+      ];
+      return `${parts.join(' ')} ${noText}`;
+    }
+    if (!need.heroLayout) return `${need.brief} ${noText}`;
+    const parts: string[] = [];
+    if (need.aspect) parts.push(ASPECT_COMPOSITION[need.aspect]);
+    const textSpace = LAYOUT_TEXT_SPACE[need.heroLayout];
+    if (textSpace) parts.push(textSpace);
+    return parts.length > 0
+      ? `${need.brief} ${parts.join(' ')} ${noText}`
+      : `${need.brief} ${noText}`;
+  }
+
+  /**
+   * Resolve an icon need: Iconify search by the brief, first hit's SVG body
+   * inlined — the same asset a hand-placed icon from the Designer's icons
+   * panel carries, so no file is stored and no upload guard applies.
+   */
+  private async _resolveIconNeed(
     orgId: string,
     need: AssetNeed
   ): Promise<AssetResult | null> {
     try {
+      const response = await this._stockMedia.searchIcons(
+        orgId,
+        this._sanitizeStockQuery(need.brief)
+      );
+      const item = (Array.isArray(response.results) ? response.results : [])[0];
+      if (!item?.prefix || !item.iconName) return null;
+      const resolved = await resolveIconifyIcon(
+        `${item.prefix}:${item.iconName}`
+      );
+      if (!resolved) return null;
+      return {
+        slotId: need.slotId,
+        fileId: '',
+        path: '',
+        type: 'icon',
+        iconBody: resolved.body,
+        ...(resolved.viewBox ? { iconViewBox: resolved.viewBox } : {}),
+        source: 'stock',
+        aspect: need.aspect,
+      };
+    } catch {
+      return null;
+    }
+  }
+
+  /** Stock vector art (Pixabay raster renders), imported like a photo. */
+  private async _tryVector(
+    orgId: string,
+    need: AssetNeed
+  ): Promise<AssetResult | null> {
+    try {
+      const response = await this._stockMedia.searchVectors(
+        orgId,
+        this._sanitizeStockQuery(need.brief),
+        1,
+        need.aspect ? STOCK_ORIENTATION[need.aspect] : undefined
+      );
+      const item = (Array.isArray(response.results) ? response.results : [])[0];
+      if (!item) return null;
+      const file = await this._fileService.importFromUrl(orgId, {
+        url: item.url,
+        name: need.brief.slice(0, 40),
+        source: item.source,
+        attribution: item.attribution,
+      });
+      return await this._toResult(need, file, 'stock', {
+        stockId: typeof item.id === 'string' ? item.id : undefined,
+      });
+    } catch {
+      return null;
+    }
+  }
+
+  private async _tryStock(
+    orgId: string,
+    need: AssetNeed,
+    regenerate = false
+  ): Promise<AssetResult | null> {
+    try {
       const response = await this._stockMedia.searchPhotos(
         orgId,
-        need.brief,
-        1
+        this._sanitizeStockQuery(need.brief),
+        1,
+        need.aspect ? STOCK_ORIENTATION[need.aspect] : undefined
       );
-      const item = response.results[0];
+      const results = Array.isArray(response.results) ? response.results : [];
+      // The stock search is deterministic AND Redis-cached for 60s, so a
+      // regeneration that re-ran it verbatim returned the SAME photo under a
+      // fresh fileId and reported a successful swap. Drop the previous pick
+      // (or, when the caller recorded none, the first hit — that IS the
+      // repeat); running out of candidates degrades honestly instead.
+      const candidates = regenerate
+        ? need.excludeStockId
+          ? results.filter((item) => item.id !== need.excludeStockId)
+          : results.slice(1)
+        : results;
+      const item = candidates[0];
       if (!item) {
         return null;
       }
@@ -186,10 +467,90 @@ export class AiDesignerAssetService implements OnModuleInit {
         attribution: item.attribution,
       });
 
-      return this._toResult(need.slotId, file);
+      return await this._toResult(need, file, 'stock', {
+        focalPoint: this._stockFocalPoint(item),
+        stockId: typeof item.id === 'string' ? item.id : undefined,
+      });
     } catch {
       return null;
     }
+  }
+
+  /**
+   * Strip brand/logo/trademark words from a STOCK query. Generated prompts
+   * carry an explicit no-branding negative; a search API has no such lever, so
+   * the query itself must not ask for a mark. Pure and conservative — an
+   * all-brand-token brief keeps its original text rather than searching for
+   * nothing.
+   */
+  private _sanitizeStockQuery(brief: string): string {
+    const kept = brief
+      .split(/\s+/)
+      .filter((word) => {
+        const bare = word.toLowerCase().replace(/[^a-z]/g, '');
+        return bare.length === 0 || !STOCK_BRAND_TOKENS.has(bare);
+      })
+      .join(' ')
+      .replace(/\s+/g, ' ')
+      .trim();
+    // Search engines match noun phrases, not art direction: a full prose
+    // brief ("Bright midday backyard swimming pool with crystal-clear
+    // turquoise water and visible surface ripples, clean tile…") returned
+    // ZERO stock hits live, and the plan's entire imagery fell to a gradient.
+    // Query with the first clause, minus photography-filler and connective
+    // words (they only narrow the match), capped to eight terms — mood and
+    // setting words SURVIVE; the sentence around them does not.
+    const subject = (kept || brief).split(/[,;:.]/)[0] ?? '';
+    const shortened = subject
+      .split(/\s+/)
+      .filter(
+        (word) =>
+          !AiDesignerAssetService.STOCK_QUERY_FILLER.has(
+            word.toLowerCase().replace(/[^a-z-]/g, '')
+          )
+      )
+      .slice(0, 8)
+      .join(' ')
+      .trim();
+    return shortened || kept || brief;
+  }
+
+  /** Words that narrow a stock search without describing the subject. */
+  private static readonly STOCK_QUERY_FILLER = new Set([
+    'full-bleed',
+    'stock',
+    'photo',
+    'photograph',
+    'photographic',
+    'photography',
+    'picture',
+    'image',
+    'shot',
+    'scene',
+    'close-up',
+    'high-quality',
+    'a',
+    'an',
+    'the',
+    'of',
+    'with',
+    'and',
+    'for',
+    'over',
+    'on',
+    'in',
+    'at',
+    'to',
+  ]);
+
+  // Stock providers don't currently return a focal point; pass one through if
+  // a provider ever does — the composer defaults to center otherwise.
+  private _stockFocalPoint(item: unknown): { x: number; y: number } | undefined {
+    const fp = (item as { focalPoint?: { x?: unknown; y?: unknown } })?.focalPoint;
+    if (typeof fp?.x === 'number' && typeof fp?.y === 'number') {
+      return { x: fp.x, y: fp.y };
+    }
+    return undefined;
   }
 
   private async _importDataUrl(
@@ -228,10 +589,10 @@ export class AiDesignerAssetService implements OnModuleInit {
     need: AssetNeed
   ): Promise<AssetResult | null> {
     try {
-      const size = 512;
-      const svg = this._buildFallbackSvg(need.brief, size);
+      const { width, height } = FALLBACK_GRADIENT_SIZE[need.aspect ?? 'square'];
+      const svg = this._buildFallbackSvg(need.brief, width, height);
       const buffer = await sharp(Buffer.from(svg))
-        .resize(size, size, { fit: 'fill' })
+        .resize(width, height, { fit: 'fill' })
         .png()
         .toBuffer();
 
@@ -245,23 +606,32 @@ export class AiDesignerAssetService implements OnModuleInit {
         fileSize: buffer.length,
       });
 
-      return this._toResult(need.slotId, file);
-    } catch {
+      return await this._toResult(need, file, 'gradient');
+    } catch (err) {
+      // The last-resort fallback failed: the slot gets NOTHING. This is an
+      // error-level event (sharp/storage broken), not routine degradation —
+      // the conductor surfaces the missing asset to the user via its
+      // missing-asset note.
+      this._logger.error(
+        `Gradient fallback failed for slot ${assetKey(need.slotId, need.aspect)}: ${(err as Error)?.message ?? err}`,
+        (err as Error)?.stack,
+        AiDesignerAssetService.name
+      );
       return null;
     }
   }
 
-  private _buildFallbackSvg(brief: string, size: number): string {
+  private _buildFallbackSvg(brief: string, width: number, height: number): string {
     const { from, to } = this._colorsFromBrief(brief);
     return `<?xml version="1.0" encoding="UTF-8"?>
-<svg xmlns="http://www.w3.org/2000/svg" width="${size}" height="${size}" viewBox="0 0 ${size} ${size}">
+<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}" viewBox="0 0 ${width} ${height}">
   <defs>
     <linearGradient id="g" x1="0%" y1="0%" x2="100%" y2="100%">
       <stop offset="0%" stop-color="${from}"/>
       <stop offset="100%" stop-color="${to}"/>
     </linearGradient>
   </defs>
-  <rect width="${size}" height="${size}" fill="url(#g)"/>
+  <rect width="${width}" height="${height}" fill="url(#g)"/>
 </svg>`;
   }
 
@@ -279,15 +649,89 @@ export class AiDesignerAssetService implements OnModuleInit {
     return { from: '#e5e7eb', to: '#9ca3af' };
   }
 
-  private _toResult(
-    slotId: string,
-    file: { id: string; path: string }
-  ): AssetResult {
+  private async _toResult(
+    need: AssetNeed,
+    file: { id: string; path: string },
+    source: AssetResult['source'],
+    opts: {
+      focalPoint?: { x: number; y: number };
+      stockId?: string;
+    } = {}
+  ): Promise<AssetResult> {
+    const analysis = await this._analyzeImage(file.path);
     return {
-      slotId,
+      slotId: need.slotId,
       fileId: file.id,
       path: file.path,
       type: 'image',
+      source,
+      aspect: need.aspect,
+      focalPoint: opts.focalPoint,
+      stockId: opts.stockId,
+      // Only a GENERATED asset was actually told where to put its subject.
+      heroLayout: source === 'generate' ? need.heroLayout : undefined,
+      ...analysis,
     };
+  }
+
+  /**
+   * Intrinsic size of a freshly resolved asset, read from local storage.
+   *
+   * It used to ALSO run sharp's `attention` strategy and store the result as
+   * the asset's `subjectPoint`. That signal is a saliency heuristic, not a
+   * subject detector, and it was wrong in the field: on two live assets it
+   * reported centroids of 0.0625 and 0.281 where the true subject centroids
+   * were 0.398 and 0.520 (both locking onto the product's drop shadow), and
+   * one output cropped away 45% of a product that plain centring kept whole.
+   * The probe is gone: the crop now defaults to CENTRE, and the composer
+   * escalates to the real VLM detector only for crops that actually risk
+   * losing the subject (`applySubjectFocalPoints`).
+   *
+   * The size is still needed — `subjectPointToFocalPoint` cannot convert a
+   * centroid without the source geometry.
+   *
+   * Fail-soft by construction: a non-local path, an unreadable file or any
+   * sharp error returns `{}` and never blocks asset resolution.
+   */
+  private async _analyzeImage(filePath: string): Promise<{
+    naturalWidth?: number;
+    naturalHeight?: number;
+  }> {
+    try {
+      const localPath = this._localUploadPath(filePath);
+      if (!localPath) return {};
+      const buffer = await readFile(localPath);
+      const meta = await sharp(buffer).metadata();
+      const width = meta.width ?? 0;
+      const height = meta.height ?? 0;
+      if (width < 2 || height < 2) return {};
+      return { naturalWidth: width, naturalHeight: height };
+    } catch (err) {
+      this._logger.warn(
+        `Asset size analysis skipped for ${filePath}: ${(err as Error)?.message}`
+      );
+      return {};
+    }
+  }
+
+  /** Map a local-storage upload URL to its on-disk path (null when the file
+   *  is not local storage). Resolved path must stay inside UPLOAD_DIRECTORY —
+   *  same traversal guard as the render service and the vision critic. */
+  private _localUploadPath(src: string): string | null {
+    const frontendUrl = (process.env.FRONTEND_URL || '').replace(/\/$/, '');
+    let key: string | null = null;
+    if (frontendUrl && src.startsWith(`${frontendUrl}/uploads/`)) {
+      key = src.slice(`${frontendUrl}/uploads/`.length);
+    } else if (src.startsWith('/uploads/')) {
+      key = src.slice('/uploads/'.length);
+    }
+    if (!key) return null;
+    const uploadDirectory = path.resolve(process.env.UPLOAD_DIRECTORY || './uploads');
+    const resolved = path.resolve(uploadDirectory, decodeURIComponent(key));
+    if (resolved !== uploadDirectory && !resolved.startsWith(uploadDirectory + path.sep)) {
+      this._logger.warn(`Blocked upload path traversal in asset analysis: ${src}`);
+      return null;
+    }
+    return resolved;
   }
 }

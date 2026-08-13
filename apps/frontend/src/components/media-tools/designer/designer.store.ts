@@ -2,13 +2,22 @@ import { create } from 'zustand';
 import { CHANNEL_PRESETS } from '@postmill-ai/nestjs-libraries/integrations/social/channel-presets';
 import { detectFocalPoint } from './reflow';
 import {
+  disposeAllBuffers,
+  disposeElementBuffers,
+  reconcileBuffersWithDoc,
+} from './raster-layers';
+import { DEFAULT_TOOL_ID, getTool } from './tools';
+import type { SelectionMask } from './selection-mask';
+import { DESIGNER_DOC_VERSION } from '@postmill-ai/nestjs-libraries/media/designer-doc/designer-doc.limits';
+import {
   migrateDoc,
   genId,
   matchPreset,
 } from '@postmill-ai/nestjs-libraries/media/designer-doc/designer-doc.migrate';
-import { smartReflow } from '@postmill-ai/nestjs-libraries/media/designer-doc/reflow';
+import { smartReflow, computeGroupBoxes } from '@postmill-ai/nestjs-libraries/media/designer-doc/reflow';
 import { seedCopy } from '@postmill-ai/nestjs-libraries/media/designer-doc/seed-copy';
 import { applyLinked, GEOMETRY_KEYS } from '@postmill-ai/nestjs-libraries/media/designer-doc/apply-linked';
+import { moveLayers, descendantIds } from '@postmill-ai/nestjs-libraries/media/designer-doc/layer-tree';
 import type {
   DesignerDoc,
   DesignerElement,
@@ -23,7 +32,13 @@ import type {
   DesignerAttribution,
   DesignerTextShadow,
   StickerFrame,
+  DesignerBlendMode,
+  DesignerLayerStyle,
+  DesignerPattern,
+  DesignerFillStyle,
+  DesignerAdjustment,
 } from '@postmill-ai/nestjs-libraries/media/designer-doc/designer-doc.schema';
+import type { FillContents } from '@postmill-ai/nestjs-libraries/media/designer-doc/fill-stroke';
 
 export type {
   DesignerDoc,
@@ -39,15 +54,33 @@ export type {
   DesignerAttribution,
   DesignerTextShadow,
   StickerFrame,
+  DesignerBlendMode,
+  DesignerLayerStyle,
+  DesignerPattern,
+  DesignerFillStyle,
+  DesignerAdjustment,
+  FillContents,
 };
 export { migrateDoc };
 
 export interface DesignerState {
   doc: DesignerDoc;
   selectedIds: string[];
+  /**
+   * Layer the user asked to rename from the Layer menu. The panel owns the
+   * inline editor, so the menu action just names the target and the panel
+   * picks it up; it clears itself once the editor opens.
+   */
+  renamingId: string | null;
   currentOutput: number;
   zoom: number; viewportX: number; viewportY: number;
   history: DesignerDoc[]; historyIndex: number;
+  /**
+   * What each history entry DID, parallel to `history`. Optional at every call
+   * site — an unlabelled push reads as a generic edit rather than forcing all
+   * ~60 callers to be touched at once.
+   */
+  historyLabels: string[];
   // The history index that matches the last persisted doc, so undo/redo back to a
   // saved state clears isDirty instead of always reporting unsaved.
   savedHistoryIndex: number;
@@ -65,7 +98,45 @@ export interface DesignerState {
   linkedUpdateFlash: Record<number, number>;
   // View prefs / canvas requests (menu-driven)
   snapEnabled: boolean;
+  /** Grid overlay — a view pref, like snapping, not part of the document. */
+  showGrid: boolean;
+  gridSize: number;
+  snapToGrid: boolean;
   fitNonce: number;
+  // Photoshop-style tool palette (see tools.ts). Tool state is editor UI, not
+  // document content — it is deliberately NOT part of DesignerDoc and never
+  // reaches the renderer.
+  activeTool: string;
+  /** Last tool used per group, so a rail slot shows the option you last picked. */
+  lastToolPerGroup: Record<string, string>;
+  /** Per-tool settings shown in the options bar, keyed by tool id. */
+  toolOptions: Record<string, Record<string, unknown>>;
+  /**
+   * The pixel selection — Photoshop's marching ants.
+   *
+   * Editor state, NOT document content: it lives here rather than inside the
+   * paint hook only so the Select menu and the filter runner can reach it, and
+   * it must never be written into `doc`, or every marquee drag would land in
+   * undo history and in the saved design.
+   */
+  selection: SelectionMask | null;
+  /** The last non-empty selection, for Select ▸ Reselect. */
+  lastSelection: SelectionMask | null;
+  /**
+   * The layer whose MASK the paint tools should write into, rather than its
+   * pixels. Editor state — which of a layer's two surfaces is armed is not part
+   * of the document.
+   */
+  maskTargetId: string | null;
+  /**
+   * A generation the Tools menu asked the timeline to open.
+   *
+   * The dialogs and their result-landing logic live in `video-timeline`, which
+   * the menu can't reach — so the menu names what it wants and the timeline
+   * opens its own dialog, then clears this. Same request/consume shape as
+   * `renamingId`.
+   */
+  generateRequest: 'video' | 'music' | 'voiceover' | null;
 }
 
 export interface DesignerActions {
@@ -83,10 +154,26 @@ export interface DesignerActions {
   removeElements: (ids: string[]) => void;
   duplicateElement: (id: string) => void;
   setSelectedIds: (ids: string[]) => void;
+  requestRename: (id: string | null) => void;
   setOutputBackground: (bg: DesignerBackground) => void;
   copySelection: () => void; cutSelection: () => void; paste: () => void;
   groupSelection: () => void; ungroupSelection: () => void;
+  /** Turn the selection into a reusable symbol, replacing it with an instance. */
+  createSymbol: (name?: string) => void;
+  /** Place another instance of an existing symbol. */
+  placeSymbol: (symbolId: string) => void;
+  /** Push edits back into the definition, updating every instance at once. */
+  updateSymbolDefinition: (symbolId: string, children: DesignerElement[]) => void;
   reorder: (ids: string[], dir: 'front' | 'back' | 'forward' | 'backward') => void;
+  /** Drag-to-reorder / reparent. `reorder` can only nudge front/back. */
+  moveLayersTo: (ids: string[], targetIndex: number, parentId?: string) => void;
+  /** Insert a new layer of any kind above the current selection. */
+  addLayer: (kind: 'group' | 'fill' | 'adjustment', init?: Partial<DesignerElement>) => void;
+  /** Toggle Photoshop's clipping-mask flag on the selection. */
+  toggleClipped: (ids: string[]) => void;
+  setLayerBlend: (ids: string[], blendMode: DesignerBlendMode) => void;
+  /** Collapse/expand a group in the layers panel. */
+  toggleGroupCollapsed: (id: string) => void;
   // outputs (replaces multi-page)
   setCurrentOutput: (index: number) => void;
   addOutput: (preset: { formatId: string; name: string; width: number; height: number }) => void;
@@ -101,8 +188,26 @@ export interface DesignerActions {
   setZoom: (zoom: number) => void;
   setViewport: (x: number, y: number) => void;
   setSnapEnabled: (v: boolean) => void;
+  setShowGrid: (v: boolean) => void;
+  setGridSize: (n: number) => void;
+  setSnapToGrid: (v: boolean) => void;
+  /** Add a ruler guide to the active output. Editor state, never exported. */
+  addGuide: (axis: 'x' | 'y', position: number) => void;
+  /** Move guide `index` on `axis`; pass null to delete it. */
+  moveGuide: (axis: 'x' | 'y', index: number, position: number | null) => void;
+  clearGuides: () => void;
   requestFit: () => void;
-  undo: () => void; redo: () => void; pushHistory: () => void;
+  /** Select a tool; also remembers it as its group's last-used option. */
+  setActiveTool: (toolId: string) => void;
+  setToolOption: (toolId: string, key: string, value: unknown) => void;
+  /** Replace the pixel selection. Remembers the outgoing one for Reselect. */
+  setSelection: (mask: SelectionMask | null) => void;
+  requestGenerate: (kind: 'video' | 'music' | 'voiceover' | null) => void;
+  /** Arm a layer's mask as the paint target (null = paint the pixels). */
+  setMaskTarget: (id: string | null) => void;
+  undo: () => void; redo: () => void; pushHistory: (label?: string) => void;
+  /** Jump straight to a history entry, as Photoshop's History panel does. */
+  jumpToHistory: (index: number) => void;
   markSaved: () => void; setSaving: (saving: boolean) => void;
   reset: (width?: number, height?: number) => void;
   loadDesign: (doc: any, id: string, name: string, templateId?: string | null) => void;
@@ -129,7 +234,7 @@ const createEmptyDoc = (width = 1080, height = 1080, attribution?: DesignerAttri
     const trackId = genId();
     const preset = CHANNEL_PRESETS.find((p) => p.id === m.formatId);
     return {
-      version: 2,
+      version: DESIGNER_DOC_VERSION,
       mode: 'video',
       outputs: [{
         id: genId(),
@@ -145,7 +250,7 @@ const createEmptyDoc = (width = 1080, height = 1080, attribution?: DesignerAttri
     };
   }
   return {
-    version: 2,
+    version: DESIGNER_DOC_VERSION,
     mode: 'image',
     outputs: [{ id: genId(), formatId: m.formatId, name: m.name, width, height, background: '#ffffff', children: [] }],
     attribution,
@@ -181,9 +286,10 @@ export const createDesignerStore = (
     return {
       doc: initialDoc,
       selectedIds: [],
+      renamingId: null,
       currentOutput: 0,
       zoom: 1, viewportX: 0, viewportY: 0,
-      history: [JSON.parse(JSON.stringify(initialDoc))], historyIndex: 0,
+      history: [JSON.parse(JSON.stringify(initialDoc))], historyIndex: 0, historyLabels: ['Open'],
       savedHistoryIndex: 0,
       designId: null, designTemplateId: null, templateId: null,
       designName: 'Untitled Design',
@@ -195,7 +301,17 @@ export const createDesignerStore = (
       selectedClip: null,
       linkedUpdateFlash: {},
       snapEnabled: true,
+      showGrid: false,
+      gridSize: 50,
+      snapToGrid: false,
       fitNonce: 0,
+      activeTool: DEFAULT_TOOL_ID,
+      lastToolPerGroup: {},
+      toolOptions: {},
+      selection: null,
+      lastSelection: null,
+      generateRequest: null,
+      maskTargetId: null,
       clipboard: [],
       setDoc: (doc) => set({ doc: migrateDoc(doc), isDirty: true }),
       setDesignName: (name) => set({ designName: name, isDirty: true }),
@@ -299,6 +415,7 @@ export const createDesignerStore = (
           isDirty: true, selectedIds: selectedIds.filter((s) => s !== id),
         });
         get().pushHistory();
+        disposeElementBuffers(id);
       },
 
       removeElements: (ids) => {
@@ -311,18 +428,55 @@ export const createDesignerStore = (
           isDirty: true, selectedIds: selectedIds.filter((s) => !remove.has(s)),
         });
         get().pushHistory();
+        ids.forEach(disposeElementBuffers);
       },
 
       duplicateElement: (id) => {
         if (isVideoMode()) return;
-        const el = activeImage().children.find((e) => e.id === id);
+        const children = activeImage().children;
+        const el = children.find((e) => e.id === id);
         if (!el) return;
-        const newEl = { ...JSON.parse(JSON.stringify(el)), id: genId(), originId: genId(), x: el.x + 20, y: el.y + 20 };
-        set({ doc: { ...get().doc, outputs: withActiveChildren([...activeImage().children, newEl]) }, isDirty: true, selectedIds: [newEl.id] });
+
+        // Duplicating a group takes its contents with it.
+        const subtree = el.type === 'group' ? descendantIds(children, id) : [];
+        const sourceIds = [id, ...subtree];
+        const idMap = new Map(sourceIds.map((sid) => [sid, genId()]));
+        const groupRemap: Record<string, string> = {};
+
+        const copies = children
+          .filter((c) => idMap.has(c.id))
+          .map((c) => {
+            const clone = JSON.parse(JSON.stringify(c)) as DesignerElement;
+            // Remap groupId rather than copying it verbatim — the old code
+            // silently joined every duplicate to the ORIGINAL's reflow group.
+            if (clone.groupId) {
+              groupRemap[clone.groupId] = groupRemap[clone.groupId] || genId();
+              clone.groupId = groupRemap[clone.groupId];
+            }
+            return {
+              ...clone,
+              id: idMap.get(c.id) as string,
+              originId: genId(),
+              // Re-point at the copied parent when it came along; otherwise
+              // keep the original parent so a duplicate stays in its folder.
+              parentId: clone.parentId && idMap.has(clone.parentId)
+                ? idMap.get(clone.parentId)
+                : clone.parentId,
+              x: c.x + 20,
+              y: c.y + 20,
+            };
+          });
+
+        set({
+          doc: { ...get().doc, outputs: withActiveChildren([...children, ...copies]) },
+          isDirty: true,
+          selectedIds: [idMap.get(id) as string],
+        });
         get().pushHistory();
       },
 
       setSelectedIds: (ids) => set({ selectedIds: ids }),
+      requestRename: (id) => set({ renamingId: id }),
 
       setOutputBackground: (bg) => {
         if (isVideoMode()) return;
@@ -355,6 +509,7 @@ export const createDesignerStore = (
           selectedIds: [], isDirty: true,
         });
         get().pushHistory();
+        selectedIds.forEach(disposeElementBuffers);
       },
 
       paste: () => {
@@ -371,26 +526,246 @@ export const createDesignerStore = (
         get().pushHistory();
       },
 
+      /**
+       * Create a real layer group: a `group` element plus `parentId` on each
+       * member.
+       *
+       * `groupId` is set too — deliberately. It is a DIFFERENT concept (the
+       * cross-format reflow move-unit), and a Photoshop folder should also
+       * travel as one when the design is re-fitted to another format.
+       */
+      createSymbol: (name) => {
+        const { doc, currentOutput, selectedIds } = get();
+        const out = doc.outputs[currentOutput] as DesignerOutput;
+        if (!('children' in out) || selectedIds.length === 0) return;
+
+        const members = out.children.filter((c) => selectedIds.includes(c.id));
+        if (!members.length) return;
+
+        // The definition is authored in its own coordinate space, so an
+        // instance can be moved and resized without touching it.
+        const minX = Math.min(...members.map((m) => m.x));
+        const minY = Math.min(...members.map((m) => m.y));
+        const maxX = Math.max(...members.map((m) => m.x + m.width));
+        const maxY = Math.max(...members.map((m) => m.y + m.height));
+
+        const symbolId = `sym-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 7)}`;
+        const definition = {
+          id: symbolId,
+          name: name || 'Symbol',
+          width: Math.max(1, maxX - minX),
+          height: Math.max(1, maxY - minY),
+          children: members.map((m) => ({
+            ...JSON.parse(JSON.stringify(m)),
+            x: m.x - minX,
+            y: m.y - minY,
+            parentId: undefined,
+          })),
+        };
+
+        const instance: DesignerElement = {
+          id: `inst-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 7)}`,
+          type: 'symbol',
+          symbolId,
+          name: definition.name,
+          x: minX,
+          y: minY,
+          width: definition.width,
+          height: definition.height,
+          rotation: 0,
+          opacity: 1,
+          locked: false,
+          hidden: false,
+        };
+
+        const outputs = doc.outputs.map((o, i) =>
+          i === currentOutput
+            ? {
+                ...(o as DesignerOutput),
+                children: [
+                  ...(o as DesignerOutput).children.filter((c) => !selectedIds.includes(c.id)),
+                  instance,
+                ],
+              }
+            : o
+        );
+        set({
+          doc: { ...doc, outputs, symbols: [...(doc.symbols || []), definition] },
+          selectedIds: [instance.id],
+          isDirty: true,
+        });
+        get().pushHistory('Create symbol');
+      },
+
+      placeSymbol: (symbolId) => {
+        const { doc, currentOutput } = get();
+        const definition = (doc.symbols || []).find((s) => s.id === symbolId);
+        const out = doc.outputs[currentOutput] as DesignerOutput;
+        if (!definition || !('children' in out)) return;
+
+        const instance: DesignerElement = {
+          id: `inst-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 7)}`,
+          type: 'symbol',
+          symbolId,
+          name: definition.name,
+          // Centred, like every other insert.
+          x: Math.round((out.width - definition.width) / 2),
+          y: Math.round((out.height - definition.height) / 2),
+          width: definition.width,
+          height: definition.height,
+          rotation: 0,
+          opacity: 1,
+          locked: false,
+          hidden: false,
+        };
+        get().addElement(instance);
+      },
+
+      updateSymbolDefinition: (symbolId, children) => {
+        const { doc } = get();
+        if (!(doc.symbols || []).some((s) => s.id === symbolId)) return;
+        set({
+          doc: {
+            ...doc,
+            symbols: (doc.symbols || []).map((s) =>
+              s.id === symbolId ? { ...s, children } : s
+            ),
+          },
+          isDirty: true,
+        });
+        get().pushHistory('Edit symbol');
+      },
+
       groupSelection: () => {
         if (isVideoMode()) return;
         const { selectedIds } = get();
-        if (selectedIds.length < 2) return;
+        // One layer is groupable — Photoshop's Layer ▸ Group Layers wraps a
+        // single selection too. Only New ▸ Group from Layers is plural-only.
+        if (selectedIds.length < 1) return;
+
+        const children = activeImage().children;
         const gid = genId();
+        const groupEl: DesignerElement = {
+          id: genId(),
+          type: 'group',
+          name: 'Group',
+          // A group's box is derived from its members; it has none of its own.
+          x: 0, y: 0, width: 0, height: 0,
+          rotation: 0, opacity: 1, locked: false, hidden: false,
+        };
+
+        // Insert the container just below the lowest member so z-order holds.
+        const firstIndex = children.findIndex((el) => selectedIds.includes(el.id));
+        const next = children.map((el) =>
+          selectedIds.includes(el.id)
+            ? { ...el, parentId: groupEl.id, groupId: gid }
+            : el
+        );
+        next.splice(Math.max(0, firstIndex), 0, groupEl);
+
+        set({
+          doc: { ...get().doc, outputs: withActiveChildren(next) },
+          isDirty: true,
+          selectedIds: [groupEl.id],
+        });
+        get().pushHistory();
+      },
+
+      /** Dissolve the selected groups, promoting members to the group's level. */
+      ungroupSelection: () => {
+        if (isVideoMode()) return;
+        const { selectedIds } = get();
+        const children = activeImage().children;
+
+        // Accept either the group itself or any member being selected.
+        const targets = new Set<string>();
+        for (const el of children) {
+          if (!selectedIds.includes(el.id)) continue;
+          if (el.type === 'group') targets.add(el.id);
+          else if (el.parentId) targets.add(el.parentId);
+        }
+        if (!targets.size) return;
+
+        const parentOfGroup = new Map<string, string | undefined>();
+        for (const el of children) {
+          if (targets.has(el.id)) parentOfGroup.set(el.id, el.parentId);
+        }
+
+        const next = children
+          // Drop the group containers themselves.
+          .filter((el) => !(el.type === 'group' && targets.has(el.id)))
+          .map((el) =>
+            el.parentId && targets.has(el.parentId)
+              // Promote to whatever the group's own parent was, so ungrouping
+              // an inner group leaves its members in the outer one.
+              ? { ...el, parentId: parentOfGroup.get(el.parentId), groupId: undefined }
+              : el
+          );
+
+        set({ doc: { ...get().doc, outputs: withActiveChildren(next) }, isDirty: true });
+        get().pushHistory();
+      },
+
+      moveLayersTo: (ids, targetIndex, parentId) => {
+        if (isVideoMode()) return;
+        const next = moveLayers(activeImage().children, ids, targetIndex, parentId);
+        if (next === activeImage().children) return;
+        set({ doc: { ...get().doc, outputs: withActiveChildren(next) }, isDirty: true });
+        get().pushHistory();
+      },
+
+      addLayer: (kind, init) => {
+        if (isVideoMode()) return;
+        const out = activeImage();
+        const el: DesignerElement = {
+          id: '',
+          type: kind,
+          name:
+            kind === 'group' ? 'Group'
+            : kind === 'fill' ? 'Fill'
+            : 'Adjustment',
+          x: 0,
+          y: 0,
+          // Fill and adjustment layers cover the whole artboard by default,
+          // like Photoshop's. A group derives its box from its members.
+          width: kind === 'group' ? 0 : out.width,
+          height: kind === 'group' ? 0 : out.height,
+          rotation: 0,
+          opacity: 1,
+          locked: false,
+          hidden: false,
+          ...init,
+        };
+        get().addElement(el);
+      },
+
+      toggleClipped: (ids) => {
+        if (isVideoMode() || !ids.length) return;
+        const children = activeImage().children;
+        const allClipped = children
+          .filter((el) => ids.includes(el.id))
+          .every((el) => el.clipped);
         set({ doc: { ...get().doc, outputs: withActiveChildren(
-          activeImage().children.map((el) => (selectedIds.includes(el.id) ? { ...el, groupId: gid } : el))
+          children.map((el) => (ids.includes(el.id) ? { ...el, clipped: !allClipped } : el))
         ) }, isDirty: true });
         get().pushHistory();
       },
 
-      ungroupSelection: () => {
-        if (isVideoMode()) return;
-        const { selectedIds } = get();
-        const groupIds = new Set(activeImage().children.filter((el) => selectedIds.includes(el.id) && el.groupId).map((el) => el.groupId as string));
-        if (!groupIds.size) return;
+      setLayerBlend: (ids, blendMode) => {
+        if (isVideoMode() || !ids.length) return;
         set({ doc: { ...get().doc, outputs: withActiveChildren(
-          activeImage().children.map((el) => (el.groupId && groupIds.has(el.groupId) ? { ...el, groupId: undefined } : el))
+          activeImage().children.map((el) => (ids.includes(el.id) ? { ...el, blendMode } : el))
         ) }, isDirty: true });
         get().pushHistory();
+      },
+
+      toggleGroupCollapsed: (id) => {
+        if (isVideoMode()) return;
+        // Panel-only state, so no history entry — collapsing a folder is not an
+        // edit anyone wants to undo.
+        set({ doc: { ...get().doc, outputs: withActiveChildren(
+          activeImage().children.map((el) => (el.id === id ? { ...el, collapsed: !el.collapsed } : el))
+        ) } });
       },
 
       reorder: (ids, dir) => {
@@ -422,8 +797,9 @@ export const createDesignerStore = (
         const { doc, currentOutput } = get();
         const source = doc.outputs[currentOutput] as DesignerOutput;
         const sourceChildren = source.children.map((el) => (el.originId ? el : { ...el, originId: genId() }));
+        const groupBoxes = computeGroupBoxes(sourceChildren);
         const children = sourceChildren.map((el) =>
-          seedCopy(el, source, { ...preset, id: '', background: '#fff', children: [] } as DesignerOutput, el.originId as string),
+          seedCopy(el, source, { ...preset, id: '', background: '#fff', children: [] } as DesignerOutput, el.originId as string, el.groupId ? groupBoxes.get(el.groupId) : undefined),
         );
         const newOutput: DesignerOutput = {
           id: genId(), formatId: preset.formatId, name: preset.name,
@@ -450,7 +826,8 @@ export const createDesignerStore = (
         const out = doc.outputs[index] as DesignerOutput;
         if (!out) return;
         const resized: DesignerOutput = { ...out, width, height, formatId: formatId ?? out.formatId, name: name ?? out.name };
-        resized.children = out.children.map((el) => seedCopy(el, out, resized, el.originId || el.id));
+        const groupBoxes = computeGroupBoxes(out.children);
+        resized.children = out.children.map((el) => seedCopy(el, out, resized, el.originId || el.id, el.groupId ? groupBoxes.get(el.groupId) : undefined));
         const outs = [...doc.outputs]; outs[index] = resized;
         set({ doc: { ...doc, outputs: outs }, isDirty: true });
         get().pushHistory();
@@ -496,19 +873,113 @@ export const createDesignerStore = (
       setZoom: (zoom) => set({ zoom: Math.max(0.1, Math.min(5, zoom)) }),
       setViewport: (x, y) => set({ viewportX: x, viewportY: y }),
       setSnapEnabled: (v) => set({ snapEnabled: v }),
-      requestFit: () => set({ fitNonce: get().fitNonce + 1 }),
+      setShowGrid: (v) => set({ showGrid: v }),
+      setGridSize: (n) => set({ gridSize: Math.max(2, Math.min(500, Math.round(n))) }),
+      setSnapToGrid: (v) => set({ snapToGrid: v }),
 
-      pushHistory: () => {
-        const { doc, history, historyIndex, savedHistoryIndex } = get();
+      // Guides live on the OUTPUT, so they follow the design rather than the
+      // session — but nothing in any renderer reads them.
+      addGuide: (axis, position) =>
+        set((state) => {
+          const doc = structuredClone(state.doc);
+          const out = doc.outputs[state.currentOutput] as any;
+          if (!out) return {};
+          const guides = out.guides || { x: [], y: [] };
+          out.guides = { ...guides, [axis]: [...guides[axis], position] };
+          return { doc };
+        }),
+
+      moveGuide: (axis, index, position) =>
+        set((state) => {
+          const doc = structuredClone(state.doc);
+          const out = doc.outputs[state.currentOutput] as any;
+          const guides = out?.guides;
+          if (!guides?.[axis] || index < 0 || index >= guides[axis].length) return {};
+          out.guides = {
+            ...guides,
+            [axis]:
+              position === null
+                ? guides[axis].filter((_: number, i: number) => i !== index)
+                : guides[axis].map((g: number, i: number) => (i === index ? position : g)),
+          };
+          return { doc };
+        }),
+
+      clearGuides: () =>
+        set((state) => {
+          const doc = structuredClone(state.doc);
+          const out = doc.outputs[state.currentOutput] as any;
+          if (!out) return {};
+          out.guides = { x: [], y: [] };
+          return { doc };
+        }),
+      requestFit: () => set({ fitNonce: get().fitNonce + 1 }),
+      setActiveTool: (toolId) => {
+        const t = getTool(toolId);
+        if (!t) return;
+        set({
+          activeTool: toolId,
+          lastToolPerGroup: { ...get().lastToolPerGroup, [t.group]: toolId },
+        });
+      },
+      setToolOption: (toolId, key, value) =>
+        set({
+          toolOptions: {
+            ...get().toolOptions,
+            [toolId]: { ...(get().toolOptions[toolId] || {}), [key]: value },
+          },
+        }),
+
+      requestGenerate: (kind) => set({ generateRequest: kind }),
+
+      setMaskTarget: (id) => set({ maskTargetId: id }),
+
+      setSelection: (mask) => {
+        const previous = get().selection;
+        set({
+          selection: mask,
+          // Only a real selection is worth restoring; clearing an already-empty
+          // one must not wipe what Reselect had to offer.
+          lastSelection: previous ?? get().lastSelection,
+        });
+      },
+
+      pushHistory: (label) => {
+        const { doc, history, historyLabels, historyIndex, savedHistoryIndex } = get();
         const snapshot = JSON.parse(JSON.stringify(doc));
         const newHistory = history.slice(0, historyIndex + 1);
+        const newLabels = historyLabels.slice(0, historyIndex + 1);
         newHistory.push(snapshot);
+        newLabels.push(label || 'Edit');
         let savedIdx = savedHistoryIndex;
         if (newHistory.length > 50) {
           newHistory.shift();
+          newLabels.shift();
           savedIdx -= 1; // indices shifted down; -1 → saved snapshot evicted
         }
-        set({ history: newHistory, historyIndex: newHistory.length - 1, savedHistoryIndex: savedIdx });
+        set({
+          history: newHistory,
+          historyLabels: newLabels,
+          historyIndex: newHistory.length - 1,
+          savedHistoryIndex: savedIdx,
+        });
+      },
+
+      jumpToHistory: (index) => {
+        const { history, historyIndex, savedHistoryIndex, currentOutput } = get();
+        if (index < 0 || index >= history.length || index === historyIndex) return;
+        const nextDoc = JSON.parse(JSON.stringify(history[index]));
+        set({
+          doc: nextDoc,
+          historyIndex: index,
+          selectedIds: [],
+          isDirty: index !== savedHistoryIndex,
+          currentOutput: Math.max(0, Math.min(currentOutput, (nextDoc.outputs?.length ?? 1) - 1)),
+        });
+        // The restored `src` is now the truth for every raster layer — the
+        // live paint buffers have to catch up or the canvas keeps showing the
+        // pixels undo just reverted.
+        reconcileBuffersWithDoc(nextDoc);
       },
 
       undo: () => {
@@ -523,6 +994,7 @@ export const createDesignerStore = (
           isDirty: newIndex !== savedHistoryIndex,
           currentOutput: Math.max(0, Math.min(currentOutput, (nextDoc.outputs?.length ?? 1) - 1)),
         });
+        reconcileBuffersWithDoc(nextDoc);
       },
 
       redo: () => {
@@ -537,6 +1009,7 @@ export const createDesignerStore = (
           isDirty: newIndex !== savedHistoryIndex,
           currentOutput: Math.max(0, Math.min(currentOutput, (nextDoc.outputs?.length ?? 1) - 1)),
         });
+        reconcileBuffersWithDoc(nextDoc);
       },
 
       markSaved: () => set({ isDirty: false, isSaving: false, lastSaved: new Date(), savedHistoryIndex: get().historyIndex }),
@@ -544,9 +1017,14 @@ export const createDesignerStore = (
 
       reset: (w, h) => {
         const newDoc = createEmptyDoc(w, h);
+        // Every live paint buffer belongs to the document being discarded.
+        disposeAllBuffers();
         set({
           doc: newDoc, selectedIds: [], currentOutput: 0, zoom: 1, viewportX: 0, viewportY: 0,
-          history: [JSON.parse(JSON.stringify(newDoc))], historyIndex: 0, savedHistoryIndex: 0,
+          // Ask the canvas to fit. Bumped here rather than at the call sites so
+          // every route into a new document gets it — there are four.
+          fitNonce: get().fitNonce + 1,
+          history: [JSON.parse(JSON.stringify(newDoc))], historyLabels: ['New'], historyIndex: 0, savedHistoryIndex: 0,
           designId: null, designTemplateId: null, templateId: null,
           designName: 'Untitled Design', isDirty: false, isSaving: false, lastSaved: null,
           editFormatOnly: false,
@@ -560,11 +1038,19 @@ export const createDesignerStore = (
 
       loadDesign: (doc, id, name, templateId = null) => {
         const migrated = migrateDoc(doc);
+        // Buffers from the previously open design would otherwise live (and
+        // paint over matching ids) for the tab's lifetime.
+        disposeAllBuffers();
         set({
           doc: migrated, designId: id, designName: name,
           templateId, designTemplateId: templateId,
-          selectedIds: [], currentOutput: 0, zoom: 1,
-          history: [JSON.parse(JSON.stringify(migrated))], historyIndex: 0, savedHistoryIndex: 0, isDirty: false,
+          selectedIds: [], currentOutput: 0,
+          // The zoom and viewport belonged to whatever was open before. Reset
+          // them and ask for a fit: leaving a stale zoom on screen for a frame
+          // before the fit lands reads as a flash.
+          zoom: 1, viewportX: 0, viewportY: 0,
+          fitNonce: get().fitNonce + 1,
+          history: [JSON.parse(JSON.stringify(migrated))], historyLabels: ['Open'], historyIndex: 0, savedHistoryIndex: 0, isDirty: false,
           playheadMs: 0,
           selectedClip: null,
           linkedUpdateFlash: {},

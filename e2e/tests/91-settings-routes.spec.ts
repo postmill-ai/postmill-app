@@ -30,9 +30,21 @@ async function gotoResilient(page: Page, path: string) {
 }
 
 test.describe('Settings routes', () => {
-  // The dev `proxy.ts` collapses Next's server redirect() into a 200 that serves the target
-  // content at the original URL (the "verify with Playwright not HTTP 307" gotcha), so assert
-  // on the rendered target content (post-hydration) rather than the browser URL.
+  // /settings is a landing page; only `?tab=` still redirects. Those links are NOT
+  // legacy — the backend emits them today (dashboard summary cards, the short-link
+  // and integration exception filters) and /dashboard/summary is Redis-cached, so
+  // they outlive any backend change. The redirect stays client-side because the dev
+  // `proxy.ts` collapses Next's server redirect() into a 200 serving the target
+  // content at the original URL, so assert on rendered content, not the URL.
+  test('the /settings index renders section cards instead of redirecting', async ({ page }) => {
+    test.setTimeout(60_000);
+    await gotoResilient(page, '/settings');
+    // A card for a known section is present…
+    await expect(page.getByRole('link', { name: /channels/i }).first()).toBeVisible({ timeout: 30_000 });
+    // …but the Channels *page* content is not — we did not bounce into a section.
+    await expect(page).toHaveURL(/\/settings$/);
+  });
+
   test('legacy ?tab= serves the new section content', async ({ page }) => {
     test.setTimeout(180_000);
     await gotoResilient(page, '/settings?tab=ai');

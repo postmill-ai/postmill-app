@@ -137,6 +137,9 @@ export class ReplicateStudioController {
   @Get('/jobs/:id')
   @CheckPolicies([AuthorizationActions.Read, Sections.MEDIA])
   @RequirePermission('media', 'read')
+  // The result panel and the merge editor both poll this every 6s (600/h each), sitting
+  // exactly on the global per-handler/per-org backstop. Give it headroom.
+  @Throttle({ default: { limit: 2000, ttl: 3600000 } })
   async getJob(
     @Param('id') id: string,
     @GetOrgFromRequest() org: Organization,

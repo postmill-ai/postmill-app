@@ -101,7 +101,7 @@ describe('ReplicateRunnerService', () => {
       );
 
       const result = await runner.runSync('org1', '', {
-        modelId: 'black-forest-labs/flux-schnell',
+        modelId: 'black-forest-labs/flux-dev',
         input: { prompt: 'cat' },
         operation: 'image',
       });
@@ -114,7 +114,7 @@ describe('ReplicateRunnerService', () => {
 
       const url = mockSafeFetch.mock.calls[0][0];
       expect(url).toBe(
-        'https://api.replicate.com/v1/models/black-forest-labs/flux-schnell/predictions',
+        'https://api.replicate.com/v1/models/black-forest-labs/flux-dev/predictions',
       );
       const init = mockSafeFetch.mock.calls[0][1] as RequestInit;
       const body = JSON.parse(init.body as string);
@@ -137,7 +137,7 @@ describe('ReplicateRunnerService', () => {
         'org1',
         '',
         {
-          modelId: 'black-forest-labs/flux-schnell',
+          modelId: 'black-forest-labs/flux-dev',
           input: { prompt: 'cat' },
           operation: 'image',
         },
@@ -161,7 +161,7 @@ describe('ReplicateRunnerService', () => {
       );
 
       await runner.runSync('org1', '', {
-        modelId: 'black-forest-labs/flux-schnell',
+        modelId: 'black-forest-labs/flux-dev',
         input: { image: { fileId: 'file-1' } },
         operation: 'image',
       });
@@ -181,7 +181,7 @@ describe('ReplicateRunnerService', () => {
 
       await expect(
         runner.runSync('org1', '', {
-          modelId: 'black-forest-labs/flux-schnell',
+          modelId: 'black-forest-labs/flux-dev',
           input: { image: { fileId: 'file-1' } },
           operation: 'image',
         }),
@@ -274,7 +274,7 @@ describe('ReplicateRunnerService', () => {
         'org1',
         '',
         {
-          modelId: 'black-forest-labs/flux-schnell',
+          modelId: 'black-forest-labs/flux-dev',
           input: { prompt: 'cat' },
           operation: 'image',
           folderId: 'folder-1',
@@ -287,7 +287,7 @@ describe('ReplicateRunnerService', () => {
           organizationId: 'org1',
           provider: 'replicate',
           operation: 'image',
-          model: 'black-forest-labs/flux-schnell',
+          model: 'black-forest-labs/flux-dev',
           folderId: 'folder-1',
           creditType: 'ai_images',
         }),

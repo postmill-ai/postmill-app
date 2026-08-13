@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation';
 import { useFetch } from '@postmill-ai/helpers/utils/custom.fetch';
 import { useToaster } from '@postmill-ai/react/toaster/toaster';
 import { useT } from '@postmill-ai/react/translation/get.transation.service.client';
-import { KebabMenu } from '@postmill-ai/frontend/components/ui/kebab-menu';
+import { OverflowTabs } from '@postmill-ai/frontend/components/ui/overflow-tabs';
 import { useModals } from '@postmill-ai/frontend/components/layout/new-modal';
 import { usePermissions } from '@postmill-ai/frontend/components/layout/use-permissions';
 import { useUser } from '@postmill-ai/frontend/components/layout/user.context';
@@ -347,32 +347,6 @@ export const TaggedItemsPanels: FC<{
       ? activeType
       : availableTypes[0] ?? null;
 
-  // On mobile only the first 3 type-tabs show inline; the rest fold into a kebab.
-  const primaryTypes = availableTypes.slice(0, 3);
-  const overflowTypes = availableTypes.slice(3);
-  const overflowActive = !!active && overflowTypes.includes(active);
-
-  const renderSubTab = (slug: CampaignEntitySlug, extra = '') => (
-    <button
-      key={slug}
-      type="button"
-      onClick={() => setActiveType(slug)}
-      aria-current={active === slug ? 'page' : undefined}
-      className={clsx(
-        'px-[14px] py-[8px] text-[13px] font-[500] whitespace-nowrap border-b-2 -mb-[1px] transition-colors',
-        extra,
-        active === slug
-          ? 'border-btnPrimary text-textColor'
-          : 'border-transparent text-newTableText hover:text-textColor'
-      )}
-    >
-      {entityLabel(slug, t)}
-      <span className="ms-[6px] text-[11px] text-newTableText">
-        {(items[slug] || []).length}
-      </span>
-    </button>
-  );
-
   const remove = useCallback(
     async (entityType: CampaignEntitySlug, entityId: string) => {
       if (removingKey) return;
@@ -425,35 +399,25 @@ export const TaggedItemsPanels: FC<{
         </div>
       ) : (
         <div className="flex flex-col gap-[12px]">
-          {/* One tab per set of tagged items. On mobile only the first 3 show
-              inline; the rest fold into a kebab (matching the dashboard's top
-              tab pattern). The kebab lives OUTSIDE the scrolling track so its
-              menu isn't clipped. */}
-          <div className="flex items-stretch border-b border-newTableBorder">
-            <div className="flex-1 overflow-x-auto overflow-y-hidden">
-              <div className="flex items-center gap-[2px] min-w-max">
-                {primaryTypes.map((slug) => renderSubTab(slug))}
-                {overflowTypes.map((slug) => renderSubTab(slug, 'hidden lg:block'))}
-              </div>
-            </div>
-            {overflowTypes.length > 0 && (
-              <div className="lg:hidden flex items-center shrink-0 ps-[8px]">
-                <KebabMenu
-                  ariaLabel={t('more_item_types', 'More item types')}
-                  active={overflowActive}
-                  align="right"
-                  items={overflowTypes.map((slug) => ({
-                    label: (
-                      <span className={clsx(active === slug && 'text-btnPrimary')}>
-                        {entityLabel(slug, t)} ({(items[slug] || []).length})
-                      </span>
-                    ),
-                    onClick: () => setActiveType(slug),
-                  }))}
-                />
-              </div>
-            )}
-          </div>
+          {/* The label carries the count in both places now — it used to read
+              "Files 3" inline but "Files (3)" in the menu. */}
+          <OverflowTabs
+            items={availableTypes.map((slug) => ({
+              key: slug,
+              label: (
+                <>
+                  {entityLabel(slug, t)}
+                  <span className="ms-[6px] text-[11px] text-newTableText">
+                    {(items[slug] || []).length}
+                  </span>
+                </>
+              ),
+            }))}
+            activeKey={active ?? undefined}
+            onSelect={(key) => setActiveType(key as CampaignEntitySlug)}
+            ariaLabel={t('more_item_types', 'More item types')}
+            listAriaLabel={t('tagged_item_types', 'Tagged item types')}
+          />
 
           <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-[8px]">
             {(active ? items[active] || [] : []).map((item) => (

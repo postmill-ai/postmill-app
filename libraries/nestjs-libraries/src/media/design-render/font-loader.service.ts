@@ -2,6 +2,11 @@ import { Injectable, Logger } from '@nestjs/common';
 import { BrandsService } from '@postmill-ai/nestjs-libraries/brands/brands.service';
 import { safeFetch } from '@postmill-ai/nestjs-libraries/dtos/webhooks/safe.fetch';
 import { registerFont } from 'canvas';
+import {
+  catalogWeights,
+  googleFontsUrl,
+  isCatalogFamily,
+} from '../designer-doc/font-catalog';
 import path from 'path';
 import os from 'os';
 import fs from 'fs/promises';
@@ -16,16 +21,39 @@ export function safeFileId(fileId: string): string {
   return String(fileId).replace(/[^a-zA-Z0-9_-]/g, '_');
 }
 
+/**
+ * Insert into a process-wide cache with an LRU-ish bound: a re-insert
+ * refreshes recency, and the oldest entries are evicted past `max` (Map
+ * iteration is insertion-ordered). The font caches below grow with every
+ * org×family a render touches, so without a bound a long-lived process
+ * serving many orgs grows them forever. Eviction only forfeits the
+ * "already downloaded" marker — the font stays registered with node-canvas
+ * and on disk, so an evicted family is re-fetched on its next render, never
+ * broken.
+ */
+export function boundedCacheSet<K, V>(
+  map: Map<K, V>,
+  key: K,
+  value: V,
+  max: number
+): void {
+  if (map.has(key)) map.delete(key);
+  map.set(key, value);
+  while (map.size > max) {
+    map.delete(map.keys().next().value as K);
+  }
+}
+
 // Mirror of the curated Designer font catalog from
 // apps/frontend/src/components/media-tools/designer/fonts.ts.
 // The backend registers these on demand from Google Fonts so exports render
 // with the same glyphs as the canvas.
-interface CuratedFont {
+export interface CuratedFont {
   family: string;
   weights: number[];
 }
 
-const CURATED_FONTS: CuratedFont[] = [
+export const CURATED_FONTS: CuratedFont[] = [
   { family: 'Inter', weights: [300, 400, 500, 600, 700] },
   { family: 'Roboto', weights: [300, 400, 500, 700] },
   { family: 'Open Sans', weights: [300, 400, 500, 600, 700, 800] },
@@ -50,6 +78,7 @@ const CURATED_FONTS: CuratedFont[] = [
   { family: 'Crimson Text', weights: [400, 600, 700] },
   { family: 'Cormorant Garamond', weights: [300, 400, 500, 600, 700] },
   { family: 'Noto Serif', weights: [400, 700] },
+  { family: 'Zilla Slab', weights: [300, 400, 500, 600, 700] },
   { family: 'Bebas Neue', weights: [400] },
   { family: 'Oswald', weights: [300, 400, 500, 600, 700] },
   { family: 'Anton', weights: [400] },
@@ -61,12 +90,20 @@ const CURATED_FONTS: CuratedFont[] = [
   { family: 'Caveat', weights: [400, 500, 600, 700] },
   { family: 'Shadows Into Light', weights: [400] },
   { family: 'Dancing Script', weights: [400, 500, 600, 700] },
+  { family: 'Great Vibes', weights: [400] },
   { family: 'JetBrains Mono', weights: [300, 400, 500, 600, 700, 800] },
   { family: 'Fira Code', weights: [300, 400, 500, 600, 700] },
   { family: 'Source Code Pro', weights: [300, 400, 500, 600, 700] },
   { family: 'IBM Plex Mono', weights: [300, 400, 500, 600, 700] },
   { family: 'Space Mono', weights: [400, 700] },
   { family: 'Courier Prime', weights: [400, 700] },
+  { family: 'Roboto Condensed', weights: [300, 400, 500, 600, 700] },
+  { family: 'Archivo Narrow', weights: [400, 500, 600, 700] },
+  { family: 'Barlow Condensed', weights: [300, 400, 500, 600, 700] },
+  { family: 'Bodoni Moda', weights: [400, 500, 600, 700, 800, 900] },
+  { family: 'Prata', weights: [400] },
+  { family: 'Fjalla One', weights: [400] },
+  { family: 'Rozha One', weights: [400] },
 ];
 
 interface HasFontFamily {
@@ -81,8 +118,35 @@ export class FontLoaderService {
   // Map caches font families per org; concurrency-safe only under single-threaded renders.
   private readonly _cache = new Map<string, FontCacheEntry>();
   private readonly _curatedLoaded = new Set<string>();
-  private readonly _curatedFailed = new Set<string>();
+  // family → failure timestamp. A failed Google Fonts fetch is retried after
+  // CURATED_RETRY_MS instead of blacklisting the family for the process
+  // lifetime; the current render still falls back to sans-serif.
+  private static readonly CURATED_RETRY_MS = 15 * 60_000;
+  private readonly _curatedFailed = new Map<string, number>();
   private readonly _tempDir = path.join(os.tmpdir(), 'postmill-fonts');
+  /**
+   * Font file locations: `org:<orgId>:<family>|<weight>` for per-org custom
+   * fonts, `g:<family>|<weight>` for curated Google fonts.
+   *
+   * The loader downloads every font a render uses and then only hands it to
+   * node-canvas; nothing could ask WHERE a family lives. Convert-to-outlines
+   * needs the file itself, because glyph contours come from the font's own
+   * tables and no canvas API exposes them.
+   *
+   * The org prefix is load-bearing: this map is process-wide, and without it
+   * org A's uploaded brand font would be resolvable — and outline-able — by
+   * any org that guessed its family name. Curated fonts are public and shared.
+   */
+  private readonly _files = new Map<string, string>();
+  /**
+   * Bound on the process-wide `_cache`/`_files` maps (see `boundedCacheSet`).
+   * Note: `registerFont` itself is GLOBAL in node-canvas — a family registered
+   * for one org is resolvable by name process-wide (glyphs only; the file path
+   * stays org-scoped via `_files`). That is an accepted tradeoff: family names
+   * collide harmlessly across tenants, and there is no unregister API to pair
+   * with eviction.
+   */
+  private static readonly MAX_FONT_CACHE_ENTRIES = 500;
   private _dirEnsured = false;
 
   constructor(private _brandsService: BrandsService) {}
@@ -116,7 +180,18 @@ export class FontLoaderService {
 
         registerFont(tmpPath, { family: font.family, weight: String(font.weights?.[0] || '400') });
 
-        this._cache.set(cacheKey, { family: font.family, filePath: tmpPath });
+        boundedCacheSet(
+          this._cache,
+          cacheKey,
+          { family: font.family, filePath: tmpPath },
+          FontLoaderService.MAX_FONT_CACHE_ENTRIES
+        );
+        boundedCacheSet(
+          this._files,
+          `org:${orgId}:${font.family}|${font.weights?.[0] || 400}`,
+          tmpPath,
+          FontLoaderService.MAX_FONT_CACHE_ENTRIES
+        );
         this._logger.log(`Registered font ${font.family} for org ${orgId}`);
       } catch (err) {
         this._logger.warn(`Failed to register font ${font.family}: ${(err as Error)?.message}`);
@@ -153,7 +228,18 @@ export class FontLoaderService {
 
         registerFont(tmpPath, { family: font.family, weight: String(weight) });
 
-        this._cache.set(cacheKey, { family: font.family, filePath: tmpPath });
+        boundedCacheSet(
+          this._cache,
+          cacheKey,
+          { family: font.family, filePath: tmpPath },
+          FontLoaderService.MAX_FONT_CACHE_ENTRIES
+        );
+        boundedCacheSet(
+          this._files,
+          `org:${orgId}:${font.family}|${weight}`,
+          tmpPath,
+          FontLoaderService.MAX_FONT_CACHE_ENTRIES
+        );
       } catch (err) {
         this._logger.warn(`Failed to register font weight ${weight} for ${fontFamily}: ${(err as Error)?.message}`);
       }
@@ -177,7 +263,14 @@ export class FontLoaderService {
     await this._ensureTempDir();
 
     for (const [family, weights] of used) {
-      if (this._curatedLoaded.has(family) || this._curatedFailed.has(family)) continue;
+      if (this._curatedLoaded.has(family)) continue;
+      const failedAt = this._curatedFailed.get(family);
+      if (
+        failedAt !== undefined &&
+        Date.now() - failedAt < FontLoaderService.CURATED_RETRY_MS
+      ) {
+        continue;
+      }
       await this._loadCuratedFontFamily(family, Array.from(weights));
     }
   }
@@ -188,36 +281,36 @@ export class FontLoaderService {
   ): void {
     const family = item.fontFamily;
     if (!family) return;
-    if (!CURATED_FONTS.some((f) => f.family === family)) return;
+    // The catalog is the allowlist, not a curated shortlist: the picker can
+    // reach every family Google serves, and one missing here would silently
+    // export in a fallback face. It still gates the fetch — the family name
+    // goes into a URL, so it is checked rather than trusted.
+    if (!isCatalogFamily(family)) return;
     if (!used.has(family)) used.set(family, new Set());
     used.get(family)!.add(item.fontWeight ?? 400);
   }
 
   private async _loadCuratedFontFamily(family: string, weights: number[]): Promise<void> {
-    const curated = CURATED_FONTS.find((f) => f.family === family);
-    if (!curated) return;
+    if (!isCatalogFamily(family)) return;
 
-    const requested = new Set(weights);
-    const available = new Set(curated.weights);
-    const toLoad = Array.from(requested).filter((w) => available.has(w));
-    if (toLoad.length === 0) toLoad.push(curated.weights[0] ?? 400);
-
-    const encoded = encodeURIComponent(family);
-    const weightParam = toLoad.sort((a, b) => a - b).join(';');
-    const cssUrl = `https://fonts.googleapis.com/css2?family=${encoded}:wght@${weightParam}&display=swap`;
+    // Narrowed to the weights Google actually serves for this family: asking
+    // for one it does not have 400s the whole request.
+    const toLoad = catalogWeights(family, weights);
+    if (!toLoad.length) return;
+    const cssUrl = googleFontsUrl(family, toLoad);
 
     try {
       const res = await safeFetch(cssUrl);
       if (!res.ok) {
         this._logger.warn(`Failed to fetch curated font CSS for ${family}: ${res.status}`);
-        this._curatedFailed.add(family);
+        this._curatedFailed.set(family, Date.now());
         return;
       }
 
       const css = await res.text();
       const faceBlocks = css.match(/@font-face\s*\{[^}]+\}/g) || [];
       if (faceBlocks.length === 0) {
-        this._curatedFailed.add(family);
+        this._curatedFailed.set(family, Date.now());
         return;
       }
 
@@ -244,20 +337,69 @@ export class FontLoaderService {
           family: faceFamily.replace(/['"]/g, ''),
           weight: faceWeight || '400',
         });
+        boundedCacheSet(
+          this._files,
+          `g:${family}|${faceWeight || 400}`,
+          tmpPath,
+          FontLoaderService.MAX_FONT_CACHE_ENTRIES
+        );
         registeredAny = true;
       }
 
       if (registeredAny) {
         this._curatedLoaded.add(family);
+        this._curatedFailed.delete(family);
         this._logger.log(`Registered curated font ${family}`);
       } else {
-        this._curatedFailed.add(family);
+        this._curatedFailed.set(family, Date.now());
         this._logger.warn(`No font files could be registered for curated family ${family}`);
       }
     } catch (err) {
-      this._curatedFailed.add(family);
+      this._curatedFailed.set(family, Date.now());
       this._logger.warn(`Failed to register curated font ${family}: ${(err as Error)?.message}`);
     }
+  }
+
+  /**
+   * The file backing one family + weight, downloading it first if need be.
+   *
+   * Returns null for a family that could not be fetched, and for a WOFF2 —
+   * whose tables are Brotli-compressed, so an outline parser would read
+   * nonsense. Saying "not available" beats emitting wrong glyphs.
+   */
+  async resolveFontFile(
+    orgId: string,
+    family: string,
+    weight = 400,
+  ): Promise<string | null> {
+    // The requesting org's own fonts, then the public curated set — NEVER
+    // another org's uploads, which share this process-wide map.
+    const prefixes = [`org:${orgId}:`, 'g:'];
+    const lookup = (): string | undefined => {
+      for (const prefix of prefixes) {
+        const exact = this._files.get(`${prefix}${family}|${weight}`);
+        if (exact) return exact;
+      }
+      // Fall back to any weight of the family — better the regular cut than
+      // nothing at all.
+      for (const prefix of prefixes) {
+        const any = [...this._files.entries()].find(([k]) =>
+          k.startsWith(`${prefix}${family}|`)
+        );
+        if (any) return any[1];
+      }
+      return undefined;
+    };
+
+    if (!lookup()) await this.loadOrgFonts(orgId).catch(() => undefined);
+    if (!lookup()) {
+      await this.loadCuratedFonts([{ fontFamily: family, fontWeight: weight }]).catch(
+        () => undefined,
+      );
+    }
+    const found = lookup();
+    if (!found) return null;
+    return /\.(ttf|otf)$/i.test(found) ? found : null;
   }
 
   private _extractCssValue(block: string, property: string): string | undefined {

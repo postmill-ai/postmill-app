@@ -3,9 +3,8 @@
 import React, { useRef, useEffect, useState, useCallback, useMemo } from 'react';
 import useSWR from 'swr';
 import { useFetch } from '@postmill-ai/helpers/utils/custom.fetch';
-import { useModals } from '@postmill-ai/frontend/components/layout/new-modal';
 import { useToaster } from '@postmill-ai/react/toaster/toaster';
-import { MediaSelectorModal } from '@postmill-ai/frontend/components/media-tools/media-selector-modal';
+import { useMediaPicker } from '@postmill-ai/frontend/components/media-tools/use-media-picker';
 import { useT } from '@postmill-ai/react/translation/get.transation.service.client';
 import { useReplicateStore } from './replicate.store';
 import { EditorShell, toolbarBtn, toolbarPrimary } from './editor-shell';
@@ -53,11 +52,17 @@ const fieldInput =
 export function MemeEditor() {
   const t = useT();
   const fetch = useFetch();
-  const modals = useModals();
   const toaster = useToaster();
   const saveFolderId = useReplicateStore((s) => s.saveFolderId);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [baseImage, setBaseImage] = useState<FileValue | null>(null);
+  const picker = useMediaPicker({
+    title: t('select_base_image', 'Select base image'),
+    kinds: ['image'],
+    requireFile: true,
+    onSelect: (item) =>
+      setBaseImage({ fileId: item.fileId, url: item.url, type: item.type }),
+  });
   const [layers, setLayers] = useState<TextLayer[]>([]);
   const [selectedLayerId, setSelectedLayerId] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
@@ -147,21 +152,8 @@ export function MemeEditor() {
   }, [drawMeme]);
 
   const handleChooseImage = useCallback(() => {
-    modals.openModal({
-      title: t('select_base_image', 'Select base image'),
-      removeLayout: true,
-      children: (close) => (
-        <MediaSelectorModal
-          open
-          onClose={close}
-          onSelect={(item) => {
-            setBaseImage({ fileId: item.fileId, url: item.url, type: item.type });
-            close();
-          }}
-        />
-      ),
-    });
-  }, [modals, t]);
+    picker.open();
+  }, [picker]);
 
   const addLayer = useCallback(() => {
     const id = makeId();
@@ -476,6 +468,7 @@ export function MemeEditor() {
           {t('choose_base_image_to_start', 'Choose a base image to start')}
         </button>
       )}
+      {picker.element}
     </EditorShell>
   );
 }

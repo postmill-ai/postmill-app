@@ -30,9 +30,17 @@ const useBrands = () => {
   });
 };
 
-// Matches the composer footer's other selectors (RepeatComponent / TagsComponent):
-// a bordered pill with an icon + label + dropdown arrow, and a menu-shadow popover.
-export const BrandPicker = () => {
+// Matches the composer's other selectors (RepeatComponent / TagsComponent): a
+// bordered pill with an icon + label + dropdown arrow, and a menu-shadow popover.
+//
+// `openDirection` exists because the pill moved from the footer (where a menu
+// must open upward or it falls off the bottom) to the toolbar row at the top of
+// the compose column, where it must open downward.
+export const BrandPicker = ({
+  openDirection = 'up',
+}: {
+  openDirection?: 'up' | 'down';
+}) => {
   const t = useT();
   const { data: brands, isLoading } = useBrands();
   const brandId = useLaunchStore((state) => state.brandId);
@@ -60,7 +68,7 @@ export const BrandPicker = () => {
     <div
       ref={ref}
       className={clsx(
-        'border rounded-[8px] justify-center flex items-center relative h-[36px] lg:h-[44px] text-[13px] lg:text-[15px] font-[600] select-none',
+        'border rounded-[8px] justify-center flex items-center relative min-w-0 h-[36px] lg:h-[44px] text-[13px] lg:text-[15px] font-[600] select-none',
         isOpen ? 'border-[#2B5CD3]' : 'border-newTextColor/10'
       )}
     >
@@ -97,7 +105,14 @@ export const BrandPicker = () => {
         </div>
       </button>
       {isOpen && (
-        <ul className="z-[300] absolute start-0 bottom-[100%] w-[240px] bg-newBgColorInner p-[12px] menu-shadow -translate-y-[10px] flex flex-col list-none m-0">
+        <ul
+          className={clsx(
+            'z-[300] absolute start-0 w-[240px] bg-newBgColorInner p-[12px] menu-shadow flex flex-col list-none m-0',
+            openDirection === 'down'
+              ? 'top-[100%] translate-y-[10px]'
+              : 'bottom-[100%] -translate-y-[10px]'
+          )}
+        >
           <li className="m-0 p-0">
             <button
               type="button"

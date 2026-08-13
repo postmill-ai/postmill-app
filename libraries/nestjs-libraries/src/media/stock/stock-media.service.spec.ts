@@ -158,4 +158,46 @@ describe('StockMediaService', () => {
       expect(result.results).toEqual([]);
     });
   });
+
+  describe('C3 — brand/adult safety on the Unsplash photo search', () => {
+    it('sends content_filter=high on every photo search', async () => {
+      process.env.UNSPLASH_ACCESS_KEY = 'secret-key';
+      mockSafeFetch.mockResolvedValue(jsonResponse({ results: [] }));
+      const { service } = makeService();
+
+      await service.searchPhotos('org-1', 'sneakers', 1, 'landscape');
+
+      expect(mockSafeFetch).toHaveBeenCalledTimes(1);
+      const url = new URL(mockSafeFetch.mock.calls[0][0] as string);
+      expect(url.host).toBe('api.unsplash.com');
+      // A search API has no negative-prompt lever, and the AI Designer
+      // resolves hero imagery through this path — so safety is not opt-in.
+      expect(url.searchParams.get('content_filter')).toBe('high');
+      expect(url.searchParams.get('query')).toBe('sneakers');
+      expect(url.searchParams.get('orientation')).toBe('landscape');
+    });
+
+    it('carries content_filter into the pack-adapter filters', async () => {
+      process.env.UNSPLASH_ACCESS_KEY = 'secret-key';
+      const search = vi.fn().mockResolvedValue({
+        results: [],
+        page: 1,
+        totalPages: 1,
+        configured: true,
+        source: 'magnific',
+      });
+      const { service, contentPacks } = makeService();
+      contentPacks.getActiveForCapability.mockResolvedValue({
+        capability: { search },
+        active: { identifier: 'magnific', version: 'v1' },
+      });
+
+      await service.searchPhotos('org-1', 'sneakers', 1);
+
+      // Pack adapters forward unknown filters generically, so packs inherit
+      // the same safety tier as the free Unsplash path.
+      expect(search).toHaveBeenCalledTimes(1);
+      expect(search.mock.calls[0][3]).toMatchObject({ content_filter: 'high' });
+    });
+  });
 });

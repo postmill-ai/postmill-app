@@ -1,5 +1,5 @@
 import { HttpException, Injectable, Logger } from '@nestjs/common';
-import { FileRepository } from '@postmill-ai/nestjs-libraries/database/prisma/file/file.repository';
+import { FileRepository, mediaCategoryFromMime } from '@postmill-ai/nestjs-libraries/database/prisma/file/file.repository';
 import { Organization } from '@prisma/client';
 import { SaveMediaInformationDto } from '@postmill-ai/nestjs-libraries/dtos/file/save.media.information.dto';
 import { StorageService } from '@postmill-ai/nestjs-libraries/database/prisma/storage/storage.service';
@@ -465,7 +465,7 @@ export class FileService {
     return this._fileRepository.saveGeneratedMedia(orgId, {
       name: data.name,
       path,
-      type: contentType.startsWith('audio/') ? 'audio' : contentType.startsWith('video/') ? 'video' : 'image',
+      type: mediaCategoryFromMime(contentType),
       folderId: ownedFolderId,
       fileSize,
       metadata: {

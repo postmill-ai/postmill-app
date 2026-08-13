@@ -1,320 +1,463 @@
 'use client';
 
-import React, { FC, useCallback, useEffect, useRef, useState } from 'react';
-import type { DesignerElement } from '../designer.store';
+import React, { FC, useCallback, useMemo, useRef, useState } from 'react';
 import { useT } from '@postmill-ai/react/translation/get.transation.service.client';
+import type { DesignerElement, DesignerOutput } from '../designer.store';
+import {
+  buildLayerTree,
+  flattenForDisplay,
+  descendantIds,
+  isEffectivelyHidden,
+  type LayerNode,
+} from '@postmill-ai/nestjs-libraries/media/designer-doc/layer-tree';
+import { SELECTABLE_BLEND_MODES } from '@postmill-ai/nestjs-libraries/media/designer-doc/pixel-ops';
+import { layerThumbnail } from './layer-thumbnail';
+import { SmartFilterList } from './smart-filter-list';
+import {
+  EyeIcon,
+  EyeOffIcon,
+  LockIcon,
+  UnlockIcon,
+} from '@postmill-ai/frontend/components/ui/icons/designer-tools';
 
 interface LayersPanelProps {
   store: ReturnType<typeof import('../designer.store').createDesignerStore>;
   onClose?: () => void;
 }
 
-const elementIcon: Record<string, string> = {
+/** Glyph per layer type, used when no thumbnail can be produced. */
+const TYPE_GLYPH: Record<string, string> = {
   text: 'T',
   image: '▣',
   shape: '◇',
+  icon: '★',
+  path: '✎',
+  raster: '▨',
+  group: '▤',
+  fill: '■',
+  adjustment: '◐',
 };
 
-const elementLabel = (el: DesignerElement, t: ReturnType<typeof useT>): string => {
+const layerLabel = (el: DesignerElement): string => {
   if (el.name) return el.name;
-  if (el.type === 'text') {
-    const text = (el.text || '').slice(0, 20);
-    return text ? `"${text}"` : t('provider_chip_text', 'Text');
-  }
-  if (el.type === 'image') return t('provider_chip_image', 'Image');
-  if (el.type === 'icon') return t('layers_panel_icon', 'Icon');
-  if (el.type === 'shape') return el.shape ? t('layers_panel_shape_named', 'Shape ({{shape}})', { shape: el.shape }) : t('layers_panel_shape', 'Shape');
-  return t('layers_panel_element', 'Element');
+  if (el.type === 'text') return el.text?.slice(0, 30) || 'Text';
+  if (el.type === 'adjustment') return el.adjustment?.type || 'Adjustment';
+  if (el.type === 'fill') return el.fillStyle?.type || 'Fill';
+  if (el.type === 'shape') return el.shape || 'Shape';
+  return el.type.charAt(0).toUpperCase() + el.type.slice(1);
 };
 
-export const LayersPanel: FC<LayersPanelProps> = ({ store }) => {
+const BLEND_LABELS: Record<string, string> = {
+  'normal': 'Normal', 'multiply': 'Multiply', 'screen': 'Screen',
+  'overlay': 'Overlay', 'darken': 'Darken', 'lighten': 'Lighten',
+  'color-dodge': 'Color Dodge', 'color-burn': 'Color Burn',
+  'hard-light': 'Hard Light', 'soft-light': 'Soft Light',
+  'difference': 'Difference', 'exclusion': 'Exclusion',
+  'hue': 'Hue', 'saturation': 'Saturation', 'color': 'Color',
+  'luminosity': 'Luminosity', 'dissolve': 'Dissolve',
+  'linear-burn': 'Linear Burn', 'linear-dodge': 'Linear Dodge',
+  'vivid-light': 'Vivid Light', 'linear-light': 'Linear Light',
+  'pin-light': 'Pin Light', 'hard-mix': 'Hard Mix',
+  'subtract': 'Subtract', 'divide': 'Divide',
+  'darker-color': 'Darker Color', 'lighter-color': 'Lighter Color',
+};
+
+/**
+ * Photoshop-style layers panel.
+ *
+ * Reads the tree from the flat `children` array via `parentId` (see
+ * `layer-tree`), so groups nest and collapse while every other part of the app
+ * keeps seeing one flat list.
+ */
+export const LayersPanel: FC<LayersPanelProps> = ({ store, onClose }) => {
   const t = useT();
   const currentOutput = store((s) => s.currentOutput);
-  const elements = store(
-    (s) =>
-      (s.doc.outputs[s.currentOutput] as import('../designer.store').DesignerOutput)
-        ?.children || []
+  const output = store(
+    (s) => s.doc.outputs[s.currentOutput] as DesignerOutput | undefined
   );
+  const elements = useMemo(() => output?.children || [], [output]);
   const selectedIds = store((s) => s.selectedIds);
 
-  const reversed = [...elements].reverse();
+  const [localEditingId, setLocalEditingId] = useState<string | null>(null);
+  const nameInputRef = useRef<HTMLInputElement>(null);
+  const opacityInputRef = useRef<HTMLInputElement>(null);
+  const [dragId, setDragId] = useState<string | null>(null);
+  const [dropIndex, setDropIndex] = useState<number | null>(null);
+  const lastClickedId = useRef<string | null>(null);
 
-  const [editingId, setEditingId] = useState<string | null>(null);
-  const [draftName, setDraftName] = useState('');
-  const rowRefs = useRef<(HTMLDivElement | null)[]>([]);
-  const renameInputRef = useRef<HTMLInputElement>(null);
+  const tree = useMemo(() => buildLayerTree(elements), [elements]);
 
-  useEffect(() => {
-    if (editingId) {
-      renameInputRef.current?.focus();
+  /** Visible rows, top-first, hiding the contents of collapsed groups. */
+  const rows = useMemo(() => {
+    const collapsed = new Set(
+      elements.filter((e) => e.type === 'group' && e.collapsed).map((e) => e.id)
+    );
+    const insideCollapsed = new Set<string>();
+    for (const id of collapsed) {
+      descendantIds(elements, id).forEach((d) => insideCollapsed.add(d));
     }
-  }, [editingId]);
+    return flattenForDisplay(tree).filter((n) => !insideCollapsed.has(n.element.id));
+  }, [tree, elements]);
 
-  const selectElement = useCallback(
-    (id: string) => {
-      store.getState().setSelectedIds([id]);
+  const select = useCallback(
+    (id: string, e: React.MouseEvent) => {
+      const state = store.getState();
+      if (e.shiftKey && lastClickedId.current) {
+        // Range select across the VISIBLE rows, which is what the user sees.
+        const order = rows.map((r) => r.element.id);
+        const a = order.indexOf(lastClickedId.current);
+        const b = order.indexOf(id);
+        if (a >= 0 && b >= 0) {
+          const [lo, hi] = a < b ? [a, b] : [b, a];
+          state.setSelectedIds(order.slice(lo, hi + 1));
+          return;
+        }
+      }
+      if (e.metaKey || e.ctrlKey) {
+        const next = new Set(state.selectedIds);
+        if (next.has(id)) next.delete(id);
+        else next.add(id);
+        state.setSelectedIds(Array.from(next));
+        lastClickedId.current = id;
+        return;
+      }
+      // Alt-click toggles the clipping mask, matching Photoshop.
+      if (e.altKey) {
+        state.toggleClipped([id]);
+        return;
+      }
+      state.setSelectedIds([id]);
+      lastClickedId.current = id;
     },
-    [store]
+    [store, rows]
   );
 
-  const startRename = useCallback((el: DesignerElement) => {
-    setEditingId(el.id);
-    setDraftName(elementLabel(el, t));
-  }, [t]);
+  // Layer ▸ Rename Layer names its target in the store; the inline editor lives
+  // here. Derived rather than copied into state so opening it never costs a
+  // second render pass.
+  const renamingId = store((s) => s.renamingId);
+  const maskTargetId = store((s) => s.maskTargetId);
+  const editingId =
+    localEditingId ?? (elements.some((e) => e.id === renamingId) ? renamingId : null);
+
+  const stopRename = useCallback(() => {
+    setLocalEditingId(null);
+    if (store.getState().renamingId) store.getState().requestRename(null);
+  }, [store]);
 
   const commitRename = useCallback(() => {
     if (!editingId) return;
-    const trimmed = draftName.trim();
+    // Uncontrolled input: the draft lives in the DOM, so the editor can open
+    // from either route without an effect seeding a draft-name state.
+    const trimmed = (nameInputRef.current?.value || '').trim();
     store.getState().updateElement(editingId, { name: trimmed || undefined });
     store.getState().pushHistory();
-    setEditingId(null);
-  }, [editingId, draftName, store]);
+    stopRename();
+  }, [editingId, store, stopRename]);
 
-  const cancelRename = useCallback(() => {
-    setEditingId(null);
-  }, []);
+  /**
+   * Opacity is a draft committed on blur/Enter, exactly like rename. Writing
+   * the store on every keystroke zeroed the layer the moment the field was
+   * cleared mid-edit.
+   */
+  const commitOpacity = useCallback(() => {
+    const raw = (opacityInputRef.current?.value ?? '').trim();
+    if (!raw) return;
+    const parsed = Number(raw);
+    if (!Number.isFinite(parsed)) return;
+    const v = Math.max(0, Math.min(100, parsed)) / 100;
+    const state = store.getState();
+    const out = state.doc.outputs[state.currentOutput] as DesignerOutput | undefined;
+    const el = out?.children.find((c) => c.id === state.selectedIds[0]);
+    // A no-op commit (Enter then blur) must not stack two history entries.
+    if (!el || Math.abs((el.opacity ?? 1) - v) < 0.005) return;
+    state.updateElementsSilent(state.selectedIds, { opacity: v });
+    state.pushHistory();
+  }, [store]);
 
-  const getCurrentChildren = useCallback(
-    () =>
-      (
-        store.getState().doc.outputs[currentOutput] as import('../designer.store').DesignerOutput
-      )?.children || [],
-    [store, currentOutput]
-  );
-
-  const toggleVisibility = useCallback(
-    (e: React.MouseEvent, id: string) => {
-      e.stopPropagation();
-      const children = getCurrentChildren();
-      const el = children.find((c) => c.id === id);
-      if (el) {
-        store.getState().updateElement(id, { hidden: !el.hidden });
-        store.getState().pushHistory();
-      }
+  /**
+   * Drop the dragged rows at a visible row boundary.
+   *
+   * The panel is top-first while `children` is bottom-first, so the display
+   * index has to be inverted before it means anything to the document.
+   */
+  const handleDrop = useCallback(
+    (displayIndex: number) => {
+      if (!dragId) return;
+      const target = rows[displayIndex];
+      const ids = selectedIds.includes(dragId) ? selectedIds : [dragId];
+      // Drop INTO a collapsed/expanded group when landing on its row.
+      const parentId =
+        target?.element.type === 'group' ? target.element.id : target?.element.parentId;
+      const docIndex = target
+        ? elements.findIndex((e) => e.id === target.element.id)
+        : elements.length;
+      store.getState().moveLayersTo(ids, Math.max(0, docIndex), parentId);
+      setDragId(null);
+      setDropIndex(null);
     },
-    [getCurrentChildren, store]
+    [dragId, rows, selectedIds, elements, store]
   );
 
-  const toggleLock = useCallback(
-    (e: React.MouseEvent, id: string) => {
-      e.stopPropagation();
-      const children = getCurrentChildren();
-      const el = children.find((c) => c.id === id);
-      if (el) {
-        store.getState().updateElement(id, { locked: !el.locked });
-        store.getState().pushHistory();
-      }
-    },
-    [getCurrentChildren, store]
-  );
-
-  // Reorder via the store action, which replaces ONLY the current output's
-  // children (preserving all other formats) and commits history. The previous
-  // setDoc({ outputs: [{...output}] }) wrote a single-output array, silently
-  // destroying every other format.
-  const moveUp = useCallback(
-    (e: React.MouseEvent, index: number) => {
-      e.stopPropagation();
-      const children = getCurrentChildren();
-      if (index >= children.length - 1) return;
-      const el = children[index];
-      if (!el) return;
-      store.getState().reorder([el.id], 'forward');
-    },
-    [store, getCurrentChildren]
-  );
-
-  const moveDown = useCallback(
-    (e: React.MouseEvent, index: number) => {
-      e.stopPropagation();
-      const children = getCurrentChildren();
-      if (index <= 0) return;
-      const el = children[index];
-      if (!el) return;
-      store.getState().reorder([el.id], 'backward');
-    },
-    [store, getCurrentChildren]
-  );
-
-  const handlePanelKeyDown = useCallback(
-    (e: React.KeyboardEvent) => {
-      if (editingId) return;
-      const target = e.target as HTMLElement;
-      const row = target.closest('[data-layer-row]') as HTMLDivElement | null;
-      if (!row) return;
-      const idx = Number(row.dataset.index);
-      const id = row.dataset.elementId;
-      if (Number.isNaN(idx) || !id) return;
-
-      const isActionButton = !!target.closest('[data-row-action]');
-      const children = getCurrentChildren();
-      const total = children.length;
-      const el = children.find((c) => c.id === id);
-      if (!el) return;
-
-      switch (e.key) {
-        case 'ArrowUp':
-          e.preventDefault();
-          if (idx > 0) {
-            rowRefs.current[idx - 1]?.focus();
-          }
-          break;
-        case 'ArrowDown':
-          e.preventDefault();
-          if (idx < total - 1) {
-            rowRefs.current[idx + 1]?.focus();
-          }
-          break;
-        case 'Enter':
-          if (isActionButton) return;
-          e.preventDefault();
-          selectElement(el.id);
-          startRename(el);
-          break;
-        case ' ':
-          if (isActionButton) return;
-          e.preventDefault();
-          selectElement(el.id);
-          break;
-      }
-    },
-    [editingId, selectElement, startRename, getCurrentChildren]
-  );
-
-  if (!elements.length) {
+  if (!rows.length) {
     return (
-      <div className="text-[12px] text-newTextColor/60 text-center py-4">
-        {t('layers_panel_no_elements', 'No elements on this output')}
+      <div className="text-[12px] text-textColor/50 text-center py-6">
+        {t('layers_panel_empty', 'No layers on this output')}
       </div>
     );
   }
 
+  const selectedEl = elements.find((e) => e.id === selectedIds[0]);
+
   return (
-    <div
-      className="flex flex-col gap-1"
-      role="listbox"
-      tabIndex={0}
-      aria-label={t('layers_panel_layers', 'Layers')}
-      onKeyDown={handlePanelKeyDown}
-    >
-      {reversed.map((el, reversedIdx) => {
-        const idx = elements.length - 1 - reversedIdx;
-        const isSelected = selectedIds.includes(el.id);
-        const isEditing = editingId === el.id;
-        return (
-          <div
-            key={el.id}
-            ref={(node) => {
-              rowRefs.current[reversedIdx] = node;
-            }}
-            data-layer-row
-            data-index={reversedIdx}
-            data-element-id={el.id}
-            role="option"
-            tabIndex={isEditing ? -1 : 0}
-            aria-selected={isSelected}
-            aria-label={t('layers_panel_layer_label', 'Layer {{label}}', { label: elementLabel(el, t) })}
-            onClick={() => {
-              if (!isEditing) {
-                selectElement(el.id);
-              }
-            }}
+    <div className="flex flex-col gap-2">
+      {/* Blend + opacity for the selection, as Photoshop puts above the list. */}
+      <div className="flex items-center gap-2 pb-2 border-b border-studioBorder">
+        <select
+          aria-label={t('layer_blend_mode', 'Blend mode')}
+          value={selectedEl?.blendMode || 'normal'}
+          disabled={!selectedEl}
+          onChange={(e) =>
+            store.getState().setLayerBlend(selectedIds, e.target.value as never)
+          }
+          className="flex-1 min-w-0 h-[26px] px-1.5 rounded-md bg-newBgColor border border-studioBorder text-[11px] text-textColor outline-none disabled:opacity-40"
+        >
+          {SELECTABLE_BLEND_MODES.map((m) => (
+            <option key={m} value={m}>{BLEND_LABELS[m] || m}</option>
+          ))}
+        </select>
+        <label className="flex items-center gap-1 shrink-0">
+          <span className="text-[11px] text-textColor/60">
+            {t('layer_opacity', 'Opacity')}
+          </span>
+          <input
+            type="number"
+            min={0}
+            max={100}
+            aria-label={t('layer_opacity', 'Opacity')}
+            // Uncontrolled draft, committed on blur/Enter (the rename field's
+            // pattern). Keyed so changing the selection reseeds the draft.
+            key={selectedEl?.id || 'none'}
+            ref={opacityInputRef}
+            defaultValue={Math.round((selectedEl?.opacity ?? 1) * 100)}
+            disabled={!selectedEl}
+            onBlur={commitOpacity}
             onKeyDown={(e) => {
-              if (isEditing) return;
-              if (e.key === 'Enter' || e.key === ' ') {
-                e.preventDefault();
-                selectElement(el.id);
-              }
+              if (e.key === 'Enter') commitOpacity();
             }}
-            className={`flex items-center gap-2 px-2 py-1.5 rounded-lg cursor-pointer text-[12px] transition-all outline-none focus-visible:ring-2 focus-visible:ring-designerAccent ${
-              isSelected
-                ? 'bg-designerAccent/20 text-textColor'
-                : 'text-newTextColor/60 hover:bg-studioBorder/10 hover:text-textColor'
-            }`}
-          >
-            <div className="w-5 h-5 flex items-center justify-center text-[11px] font-bold text-btnPrimaryAccent shrink-0">
-              {elementIcon[el.type] || '?'}
-            </div>
+            className="w-[46px] h-[26px] px-1 rounded-md bg-newBgColor border border-studioBorder text-[11px] text-textColor outline-none disabled:opacity-40"
+          />
+        </label>
+      </div>
 
-            {isEditing ? (
-              <input
-                ref={renameInputRef}
-                type="text"
-                value={draftName}
-                onChange={(e) => setDraftName(e.target.value)}
-                onBlur={commitRename}
-                onKeyDown={(e) => {
-                  e.stopPropagation();
-                  if (e.key === 'Enter') {
-                    commitRename();
-                  } else if (e.key === 'Escape') {
-                    cancelRename();
+      <div
+        className="flex flex-col"
+        role="listbox"
+        aria-multiselectable="true"
+        aria-label={t('layers_panel_layers', 'Layers')}
+        // A listbox must be focusable so Escape reaches it without first
+        // clicking a row.
+        tabIndex={0}
+        onKeyDown={(e) => {
+          if (e.key === 'Escape' && onClose) {
+            e.preventDefault();
+            onClose();
+          }
+        }}
+      >
+        {rows.map((node, i) => {
+          const el = node.element;
+          const isSelected = selectedIds.includes(el.id);
+          const isGroup = el.type === 'group';
+          const thumb = layerThumbnail(el, output);
+          const dimmed = isEffectivelyHidden(elements, el) && !el.hidden;
+
+          return (
+            <React.Fragment key={el.id}>
+            <div
+              data-layer-row
+              data-element-id={el.id}
+              role="option"
+              aria-selected={isSelected}
+              tabIndex={0}
+              draggable={!el.locked}
+              onDragStart={() => setDragId(el.id)}
+              onDragOver={(e) => {
+                e.preventDefault();
+                setDropIndex(i);
+              }}
+              onDrop={(e) => {
+                e.preventDefault();
+                handleDrop(i);
+              }}
+              onDragEnd={() => {
+                setDragId(null);
+                setDropIndex(null);
+              }}
+              onClick={(e) => select(el.id, e)}
+              onDoubleClick={() => setLocalEditingId(el.id)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') {
+                  e.preventDefault();
+                  setLocalEditingId(el.id);
+                }
+              }}
+              style={{ paddingInlineStart: 4 + node.depth * 12 }}
+              className={`group flex items-center gap-1.5 pe-1.5 py-1 rounded-md text-[12px] cursor-default transition-colors ${
+                isSelected ? 'bg-designerAccent/25 text-textColor' : 'hover:bg-studioBorder/25 text-textColor/85'
+              } ${dropIndex === i && dragId ? 'border-t-2 border-designerAccent' : ''} ${
+                dimmed ? 'opacity-40' : ''
+              }`}
+            >
+              {/* Expand / collapse, groups only. */}
+              {isGroup ? (
+                <button
+                  type="button"
+                  data-row-action
+                  aria-label={el.collapsed ? t('expand', 'Expand') : t('collapse', 'Collapse')}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    store.getState().toggleGroupCollapsed(el.id);
+                  }}
+                  className="w-3 shrink-0 text-[9px] text-textColor/60"
+                >
+                  {el.collapsed ? '▶' : '▼'}
+                </button>
+              ) : (
+                <span className="w-3 shrink-0" />
+              )}
+
+              {/* Clipping indicator — Photoshop's downward arrow. */}
+              {el.clipped && (
+                <span className="shrink-0 text-[10px] text-textColor/50" title={t('clipped', 'Clipped')}>
+                  ↳
+                </span>
+              )}
+
+              {/* The mask thumbnail. Clicking it arms the mask as the paint
+                  target; the ring makes which surface is armed unmistakable,
+                  because painting into the wrong one is invisible until it
+                  isn't. ⇧-click disables, ⌥-click is handled by the row. */}
+              {el.maskSrc && (
+                <button
+                  type="button"
+                  data-row-action
+                  aria-label={t('designer_layer_mask', 'Layer mask')}
+                  aria-pressed={maskTargetId === el.id}
+                  title={
+                    el.maskEnabled === false
+                      ? t('designer_mask_disabled', 'Mask disabled — shift-click to enable')
+                      : t('designer_paint_mask', 'Paint the mask — shift-click to disable')
                   }
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    const st = store.getState();
+                    if (e.shiftKey) {
+                      st.updateElement(el.id, { maskEnabled: el.maskEnabled === false });
+                      st.pushHistory();
+                      return;
+                    }
+                    st.setMaskTarget(maskTargetId === el.id ? null : el.id);
+                  }}
+                  className={`w-7 h-7 shrink-0 rounded border overflow-hidden flex items-center justify-center bg-newBgColor ${
+                    maskTargetId === el.id
+                      ? 'border-designerAccent ring-2 ring-designerAccent'
+                      : 'border-studioBorder'
+                  } ${el.maskEnabled === false ? 'opacity-40' : ''}`}
+                >
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img src={el.maskSrc} alt="" className="max-w-full max-h-full object-contain" />
+                </button>
+              )}
+
+              <span className={`w-7 h-7 shrink-0 rounded border overflow-hidden flex items-center justify-center text-[11px] text-textColor/60 bg-newBgColor ${
+                el.maskSrc && maskTargetId !== el.id
+                  ? 'border-designerAccent ring-2 ring-designerAccent'
+                  : 'border-studioBorder'
+              }`}>
+                {thumb ? (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img src={thumb} alt="" className="max-w-full max-h-full object-contain" />
+                ) : (
+                  TYPE_GLYPH[el.type] || '?'
+                )}
+              </span>
+
+              {editingId === el.id ? (
+                <input
+                  autoFocus
+                  ref={nameInputRef}
+                  key={el.id}
+                  defaultValue={el.name || layerLabel(el)}
+                  onBlur={commitRename}
+                  onKeyDown={(e) => {
+                    // The row itself opens the editor on Enter, so a bubbling
+                    // Enter would re-open it the instant the commit closed it.
+                    e.stopPropagation();
+                    if (e.key === 'Enter') commitRename();
+                    if (e.key === 'Escape') stopRename();
+                  }}
+                  onClick={(e) => e.stopPropagation()}
+                  className="flex-1 min-w-0 h-[22px] px-1 rounded bg-newBgColor border border-designerAccent text-[12px] text-textColor outline-none"
+                />
+              ) : (
+                <span className="flex-1 truncate">{layerLabel(el)}</span>
+              )}
+
+              {/* Effects marker — only for effects that are actually painting.
+                  A stack switched entirely off changes nothing on the canvas
+                  and should not claim otherwise. */}
+              {el.styles?.some((s) => s.enabled !== false) && (
+                <span className="shrink-0 text-[10px] text-textColor/45" title={t('layer_effects', 'Effects')}>
+                  fx
+                </span>
+              )}
+              {el.originId && (
+                <span className="shrink-0 text-[10px] text-textColor/35" title={t('linked', 'Linked')}>
+                  🔗
+                </span>
+              )}
+
+              <button
+                type="button"
+                data-row-action
+                aria-label={el.hidden ? t('show_layer', 'Show layer') : t('hide_layer', 'Hide layer')}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  store.getState().updateElement(el.id, { hidden: !el.hidden });
+                  store.getState().pushHistory();
                 }}
-                className="flex-1 h-[22px] px-1.5 rounded-[4px] bg-newBgColor border border-designerAccent text-[11px] text-textColor outline-none"
-              />
-            ) : (
-              <div className="flex-1 truncate text-[11px]">{elementLabel(el, t)}</div>
-            )}
-
-            {el.originId ? (
-              <span title={t('layers_panel_linked_title', 'Linked — edits here update all formats')} className="text-btnPrimaryAccent shrink-0">🔗</span>
-            ) : (
-              <span title={t('layers_panel_unlinked_title', 'Unlinked — changes stay in this format only')} className="text-gray-500 shrink-0">🔓</span>
-            )}
-
-            <div className="flex items-center gap-0.5 shrink-0">
-              <button
-                type="button"
-                data-row-action
-                onClick={(e) => moveDown(e, idx)}
-                className="w-5 h-5 flex items-center justify-center rounded hover:bg-studioBorder/20 text-[10px]"
-                title={t('move_down', 'Move down')}
-                aria-label={t('layers_panel_move_layer_down', 'Move layer down')}
+                className="shrink-0 w-5 h-5 flex items-center justify-center text-textColor/55 hover:text-textColor"
               >
-                ↑
+                {el.hidden ? <EyeOffIcon size={13} /> : <EyeIcon size={13} />}
               </button>
               <button
                 type="button"
                 data-row-action
-                onClick={(e) => moveUp(e, idx)}
-                className="w-5 h-5 flex items-center justify-center rounded hover:bg-studioBorder/20 text-[10px]"
-                title={t('move_up', 'Move up')}
-                aria-label={t('layers_panel_move_layer_up', 'Move layer up')}
+                aria-label={el.locked ? t('unlock_layer', 'Unlock layer') : t('lock_layer', 'Lock layer')}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  store.getState().updateElement(el.id, { locked: !el.locked });
+                  store.getState().pushHistory();
+                }}
+                className="shrink-0 w-5 h-5 flex items-center justify-center text-textColor/55 hover:text-textColor"
               >
-                ↓
+                {el.locked ? <LockIcon size={13} /> : <UnlockIcon size={13} />}
               </button>
             </div>
 
-            <div className="flex items-center gap-0.5 shrink-0">
-              <button
-                type="button"
-                data-row-action
-                onClick={(e) => toggleVisibility(e, el.id)}
-                className={`w-5 h-5 flex items-center justify-center rounded hover:bg-studioBorder/20 text-[11px] ${
-                  el.hidden ? 'text-newTextColor/20' : 'text-newTextColor/60'
-                }`}
-                title={el.hidden ? t('layers_panel_show', 'Show') : t('layers_panel_hide', 'Hide')}
-                aria-label={el.hidden ? t('layers_panel_show_layer', 'Show layer') : t('layers_panel_hide_layer', 'Hide layer')}
-              >
-                {el.hidden ? '◌' : '◎'}
-              </button>
-              <button
-                type="button"
-                data-row-action
-                onClick={(e) => toggleLock(e, el.id)}
-                className={`w-5 h-5 flex items-center justify-center rounded hover:bg-studioBorder/20 text-[10px] ${
-                  el.locked ? 'text-btnPrimaryAccent' : 'text-newTextColor/60'
-                }`}
-                title={el.locked ? t('layers_panel_unlock', 'Unlock') : t('layers_panel_lock', 'Lock')}
-                aria-label={el.locked ? t('layers_panel_unlock_layer', 'Unlock layer') : t('layers_panel_lock_layer', 'Lock layer')}
-              >
-                {el.locked ? '◉' : '○'}
-              </button>
-            </div>
-          </div>
-        );
-      })}
+            <SmartFilterList
+              stack={el.smartFilters}
+              depth={node.depth}
+              onChange={(next) => {
+                store.getState().updateElement(el.id, { smartFilters: next });
+                store.getState().pushHistory();
+              }}
+            />
+            </React.Fragment>
+          );
+        })}
+      </div>
     </div>
   );
 };

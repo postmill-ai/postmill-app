@@ -37,6 +37,11 @@ import {
 
 const CACHE_TTL_SECONDS = 60;
 
+// Unsplash's strictest safety tier. Applied to every photo search — the AI
+// Designer resolves hero imagery through this path, and a search API offers no
+// negative-prompt equivalent to the generator's no-branding suffix.
+const UNSPLASH_CONTENT_FILTER = 'high';
+
 @Injectable()
 export class StockMediaService {
   private readonly _logger = new Logger(StockMediaService.name);
@@ -81,7 +86,10 @@ export class StockMediaService {
       'photos',
       query,
       page,
-      { orientation, color },
+      // Brand/adult safety is not opt-in: mirrors the unconditional Pixabay
+      // `safesearch` on vectors. Content-pack adapters forward unknown filters
+      // generically, so packs inherit it too.
+      { orientation, color, content_filter: UNSPLASH_CONTENT_FILTER },
       () => this.searchPhotosFree(query, page, orientation, color)
     );
   }
@@ -118,7 +126,12 @@ export class StockMediaService {
         };
       }
 
-      const params = new URLSearchParams({ query, page: String(page), per_page: '20' });
+      const params = new URLSearchParams({
+        query,
+        page: String(page),
+        per_page: '20',
+        content_filter: UNSPLASH_CONTENT_FILTER,
+      });
       if (orientation) params.set('orientation', orientation);
       if (color) params.set('color', color);
       const res = await safeFetch(`https://api.unsplash.com/search/photos?${params}`, {

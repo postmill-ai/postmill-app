@@ -1,6 +1,6 @@
 'use client';
 
-import { FC, useState, useEffect } from 'react';
+import { FC, useState } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import clsx from 'clsx';
@@ -9,6 +9,7 @@ import { useUser } from '@postmill-ai/frontend/components/layout/user.context';
 import { useVariables } from '@postmill-ai/react/helpers/variable.context';
 import { useT } from '@postmill-ai/react/translation/get.transation.service.client';
 import { useHasOpenModals } from '@postmill-ai/frontend/components/layout/new-modal';
+import { useFullscreen } from '@postmill-ai/frontend/components/media-tools/use-fullscreen';
 import { MenuItemRow } from './menu-item-row';
 
 // Primary destinations pinned to the bottom bar. Home is always first; the remaining
@@ -36,16 +37,10 @@ export const BottomTabBar: FC = () => {
   const hasOpenModals = useHasOpenModals();
   const [moreOpen, setMoreOpen] = useState(false);
 
-  // Hide the bar in browser fullscreen too — the media studios / Designer go
-  // fullscreen for an immersive edit surface, and a fixed bottom bar would cover
-  // their footer controls (e.g. the Designer's video timeline).
-  const [isFullscreen, setIsFullscreen] = useState(false);
-  useEffect(() => {
-    const onChange = () => setIsFullscreen(!!document.fullscreenElement);
-    document.addEventListener('fullscreenchange', onChange);
-    onChange();
-    return () => document.removeEventListener('fullscreenchange', onChange);
-  }, []);
+  // Hide the bar while a studio is expanded — the media studios / Designer fill
+  // the browser window for an immersive edit surface, and a fixed bottom bar
+  // would cover their footer controls (e.g. the Designer's video timeline).
+  const { isFullscreen } = useFullscreen();
 
   // Close the sheet whenever the route changes (derived-state-during-render —
   // https://react.dev/learn/you-might-not-need-an-effect).

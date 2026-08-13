@@ -279,12 +279,55 @@ export class AiSettingsRepository {
     });
   }
 
-  getMediaJobs(organizationId: string, limit = 50) {
-    return this._aiMediaJob.model.aIMediaJob.findMany({
-      where: { organizationId },
-      orderBy: { createdAt: 'desc' },
+  async getMediaJobs(
+    organizationId: string,
+    limit = 50,
+    opts: { status?: string; provider?: string; cursor?: string } = {}
+  ) {
+    // `[organizationId, status, createdAt]` and `[provider, createdAt]` are both
+    // indexed, so filtering here stays index-backed.
+    //
+    // Two writers, two vocabularies: the async lifecycle writes 'completed',
+    // while synchronous jobs (AiMediaService._persistJob) write 'done'. They
+    // mean the same thing, so a 'completed' filter must match both.
+    const statusWhere =
+      opts.status === 'completed'
+        ? { status: { in: ['completed', 'done'] } }
+        : opts.status
+          ? { status: opts.status }
+          : {};
+    const query = {
+      where: {
+        organizationId,
+        ...statusWhere,
+        ...(opts.provider ? { provider: opts.provider } : {}),
+      },
+      // createdAt ties are real (a burst of jobs lands in the same ms), and an
+      // unstable order makes cursor pagination skip/repeat rows — break them
+      // with the id so every row has a fixed position.
+      orderBy: [{ createdAt: 'desc' as const }, { id: 'desc' as const }],
       take: limit,
-    });
+      // Skip the cursor row itself so pages don't repeat their boundary job.
+      ...(opts.cursor ? { cursor: { id: opts.cursor }, skip: 1 } : {}),
+    };
+    try {
+      return await this._aiMediaJob.model.aIMediaJob.findMany(query);
+    } catch (err) {
+      // A stale or forged cursor id makes Prisma throw P2025 (the anchor row no
+      // longer exists); serve the first page instead of 500-ing the endpoint.
+      // Any OTHER error is a real failure — retrying it without the cursor
+      // would mask it behind a successful-looking first page.
+      if (
+        opts.cursor &&
+        (err as { code?: string })?.code === 'P2025'
+      ) {
+        return this.getMediaJobs(organizationId, limit, {
+          ...opts,
+          cursor: undefined,
+        });
+      }
+      throw err;
+    }
   }
 
   async getMediaJobStatusCounts(organizationId: string) {

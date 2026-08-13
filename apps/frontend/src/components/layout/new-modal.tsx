@@ -14,8 +14,10 @@ import React, {
   useId,
   useMemo,
   useRef,
+  useState,
 } from 'react';
 import { Button } from '@postmill-ai/react/form/button';
+import { Input } from '@postmill-ai/react/form/input';
 import { useHotkeys } from 'react-hotkeys-hook';
 import clsx from 'clsx';
 import { EventEmitter } from 'events';
@@ -26,6 +28,10 @@ interface OpenModalInterface {
   title?: any;
   closeOnClickOutside?: boolean;
   removeLayout?: boolean;
+  /** Strip the container padding/gap (and clip to its rounded corners) so the
+   * child can render its own flush header — e.g. the post detail modal's
+   * coloured band. The child then owns its body padding. */
+  flush?: boolean;
   fullScreen?: boolean;
   top?: string | number;
   /** Vertically center the modal (content-sized; no fixed height required). */
@@ -287,8 +293,10 @@ export const Component: FC<{
             <div
               className={clsx(
                 !modal.removeLayout &&
+                  !modal.flush &&
                   'gap-[24px] p-[20px] md:gap-[40px] md:p-[32px]',
                 'bg-newBgColorInner border border-newTableBorder mx-auto flex flex-col w-fit rounded-[12px] relative',
+                modal.flush && 'overflow-hidden',
                 modal.size
                   ? 'max-w-[calc(100vw-24px)]'
                   : 'max-w-[calc(100vw-24px)] md:min-w-[600px] md:max-w-none',
@@ -525,6 +533,103 @@ export const useDecisionModal = () => {
               description={description}
               approveLabel={approveLabel}
               cancelLabel={cancelLabel}
+            />
+          ),
+        });
+      });
+    },
+    [modals, t]
+  );
+
+  return { open };
+};
+
+export const PromptModal: FC<{
+  label: string;
+  placeholder?: string;
+  initialValue: string;
+  approveLabel: string;
+  cancelLabel: string;
+  resolution: (value: string | null) => void;
+}> = ({
+  label,
+  placeholder,
+  initialValue,
+  approveLabel,
+  cancelLabel,
+  resolution,
+}) => {
+  const { closeCurrent } = useModals();
+  const [value, setValue] = useState(initialValue);
+  const submit = () => {
+    resolution(value.trim());
+    closeCurrent();
+  };
+  return (
+    <div className="flex flex-col w-[420px] max-w-full">
+      <Input
+        name="prompt-modal-value"
+        label={label}
+        disableForm={true}
+        removeError={true}
+        autoFocus={true}
+        placeholder={placeholder}
+        value={value}
+        onChange={(e) => setValue(e.target.value)}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter') {
+            e.preventDefault();
+            submit();
+          }
+        }}
+      />
+      <div className="flex gap-[12px] mt-[16px]">
+        <Button onClick={submit}>{approveLabel}</Button>
+        <Button
+          secondary={true}
+          onClick={() => {
+            // Cancel resolves null, not '' — callers distinguish "aborted" from
+            // "submitted empty" (e.g. clearing a link vs. leaving it alone).
+            resolution(null);
+            closeCurrent();
+          }}
+        >
+          {cancelLabel}
+        </Button>
+      </div>
+    </div>
+  );
+};
+
+/**
+ * The app's replacement for the native `prompt()`. Resolves the trimmed value
+ * (possibly `''`) on submit, and `null` when cancelled or dismissed.
+ */
+export const usePromptModal = () => {
+  const modals = useModals();
+  const t = useT();
+  const open = useCallback(
+    ({
+      title = t('enter_a_value', 'Enter a value'),
+      label = '',
+      placeholder = undefined as string | undefined,
+      initialValue = '',
+      approveLabel = t('ok', 'OK'),
+      cancelLabel = t('cancel', 'Cancel'),
+    } = {}) => {
+      return new Promise<string | null>((res) => {
+        modals.openModal({
+          title,
+          askClose: false,
+          onClose: () => res(null),
+          children: (
+            <PromptModal
+              label={label}
+              placeholder={placeholder}
+              initialValue={initialValue}
+              approveLabel={approveLabel}
+              cancelLabel={cancelLabel}
+              resolution={res}
             />
           ),
         });

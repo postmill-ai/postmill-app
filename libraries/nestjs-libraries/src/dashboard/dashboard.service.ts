@@ -83,6 +83,8 @@ export interface DashboardMediaJobsResponse {
     operation: string;
     status: string;
     artifactUrl: string | null;
+    /** File row for a completed artifact, so the queue's composer handoff can attach it. */
+    fileId: string | null;
     error: string | null;
     createdAt: Date;
   }>;
@@ -91,6 +93,8 @@ export interface DashboardMediaJobsResponse {
     processing: number;
     failed7d: number;
   };
+  /** Id to pass back as `cursor` for the next page; null when this is the last. */
+  nextCursor: string | null;
 }
 
 export type AttentionKind =
@@ -273,22 +277,50 @@ export class DashboardService {
   }
 
   async getMediaJobs(
-    orgId: string
+    orgId: string,
+    opts: { limit?: number; status?: string; provider?: string; cursor?: string } = {}
   ): Promise<DashboardMediaJobsResponse> {
+    // The dashboard widget calls this with no options and still gets the original
+    // 20-job payload; the queue page passes filters and a cursor.
+    const limit = Math.min(Math.max(opts.limit ?? 20, 1), 100);
     const { jobs, counts } = await this._aiSettingsService.getMediaJobsWithCounts(
       orgId,
-      20
+      limit,
+      { status: opts.status, provider: opts.provider, cursor: opts.cursor }
     );
+    // Batch-resolve the File row per completed artifact in one query (same
+    // approach as MediaStudioService._resolveFileMap) so the queue can offer
+    // "Post to Composer" without an N+1.
+    // 'done' is the synchronous writer's word for 'completed' (see
+    // AiSettingsRepository.getMediaJobs). Normalise once here so no consumer
+    // has to know there are two.
+    const isFinished = (status: string) => status === 'completed' || status === 'done';
+    const completedPaths = jobs
+      .filter((j: any) => isFinished(j.status) && j.artifactUrl)
+      .map((j: any) => j.artifactUrl as string);
+    const files = completedPaths.length
+      ? ((await this._fileRepository
+          .getFilesByPaths(orgId, completedPaths)
+          .catch(() => [])) as Array<{ path: string; id: string }>)
+      : [];
+    const fileByPath = new Map(files.map((f) => [f.path, f.id]));
+
     return {
-      jobs: jobs.map((j: any) => ({
-        id: j.id,
-        provider: j.provider,
-        operation: j.operation,
-        status: j.status,
-        artifactUrl: j.artifactUrl ?? null,
-        error: j.error ?? null,
-        createdAt: j.createdAt,
-      })),
+      nextCursor: jobs.length === limit ? jobs[jobs.length - 1].id : null,
+      jobs: jobs.map((j: any) => {
+        // `pending://` refs are internal and must never reach the client.
+        const completed = isFinished(j.status) && j.artifactUrl;
+        return {
+          id: j.id,
+          provider: j.provider,
+          operation: j.operation,
+          status: isFinished(j.status) ? 'completed' : j.status,
+          artifactUrl: completed ? j.artifactUrl : null,
+          fileId: completed ? fileByPath.get(j.artifactUrl) ?? null : null,
+          error: j.error ?? null,
+          createdAt: j.createdAt,
+        };
+      }),
       counts,
     };
   }
@@ -496,7 +528,7 @@ export class DashboardService {
             title: `${unhealthy.length} channel${unhealthy.length === 1 ? '' : 's'} need attention`,
             description: 'Reconnect or re-enable channels to keep publishing.',
             count: unhealthy.length,
-            link: '/settings?tab=channels',
+            link: '/settings/channels',
           });
         }
       } catch (err) {
@@ -574,7 +606,8 @@ export class DashboardService {
               kind: 'budget',
               severity: planPct >= 1 ? 'critical' : 'warning',
               title: `${Math.round(planPct * 100)}% of monthly posts used`,
-              link: '/billing',
+              // /billing sells plans; it shows no usage. The Usage tab does.
+              link: '/analytics?tab=usage',
             });
           }
         }
@@ -592,7 +625,7 @@ export class DashboardService {
             kind: 'failed-media-jobs',
             severity: 'warning',
             title: `${counts.failed7d} media job${counts.failed7d === 1 ? '' : 's'} failed`,
-            link: '/media',
+            link: '/media/queue?status=failed',
           });
         }
       } catch (err) {
@@ -672,7 +705,7 @@ export class DashboardService {
       kind: 'budget',
       severity: pct >= 1 ? 'critical' : 'warning',
       title: `${Math.round(pct * 100)}% of AI budget used`,
-      link: '/settings?tab=ai',
+      link: '/analytics?tab=usage',
     };
   }
 }

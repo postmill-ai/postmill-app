@@ -32,6 +32,36 @@ describe('AiDesignerCopywriterService', () => {
       metadata: orgId ? { orgId } : {},
     });
 
+  it('does no billable work when the dispatch signal is already aborted', async () => {
+    await expect(
+      (service as any)._handler({
+        raw_input: JSON.stringify({
+          type: 'copy-request',
+          plan: makePlan(),
+          brand: null,
+        }),
+        metadata: { orgId: 'org1', signal: AbortSignal.abort() },
+      })
+    ).rejects.toThrow('Cancelled');
+    expect(model.generateText).not.toHaveBeenCalled();
+  });
+
+  it('threads the dispatch signal into the generateText call', async () => {
+    model.generateText.mockResolvedValue('{"headline":"Hi","cta":"Go"}');
+    const controller = new AbortController();
+
+    await (service as any)._handler({
+      raw_input: JSON.stringify({
+        type: 'copy-request',
+        plan: makePlan(),
+        brand: null,
+      }),
+      metadata: { orgId: 'org1', signal: controller.signal },
+    });
+
+    expect(model.generateText.mock.calls[0][2].signal).toBe(controller.signal);
+  });
+
   it('parses fenced JSON and returns copy for each text slot', async () => {
     model.generateText.mockResolvedValue(
       '```json\n{"headline":"Summer Sale","cta":"Shop Now"}\n```'
@@ -93,5 +123,97 @@ describe('AiDesignerCopywriterService', () => {
     const content = JSON.parse(res.content);
     expect(content.type).toBe('error');
     expect(content.message).toContain('Malformed agent input');
+  });
+
+  it('returns locked texts verbatim and only writes the open slots', async () => {
+    // The model even "rewrites" the locked headline — it must not win.
+    model.generateText.mockResolvedValue(
+      '{"headline":"Model rewrite","cta":"Shop now"}'
+    );
+
+    const res = await handler(
+      JSON.stringify({
+        type: 'copy-request',
+        plan: makePlan(),
+        brand: null,
+        lockedTexts: { headline: 'Labor Day Sale' },
+      }),
+      'org1'
+    );
+
+    const content = JSON.parse(res.content);
+    expect(content.texts).toEqual({
+      headline: 'Labor Day Sale',
+      cta: 'Shop now',
+    });
+
+    // The locked slot is not part of the writing prompt at all.
+    const prompt = model.generateText.mock.calls[0][1] as string;
+    expect(prompt).toContain('- cta (role: cta)');
+    expect(prompt).not.toContain('- headline (role: headline)');
+  });
+
+  it('never calls the model when every copy slot is locked', async () => {
+    const res = await handler(
+      JSON.stringify({
+        type: 'copy-request',
+        plan: makePlan(),
+        brand: null,
+        lockedTexts: { headline: 'Labor Day Sale', cta: 'Shop now' },
+      }),
+      'org1'
+    );
+
+    const content = JSON.parse(res.content);
+    expect(content.texts).toEqual({
+      headline: 'Labor Day Sale',
+      cta: 'Shop now',
+    });
+    expect(model.generateText).not.toHaveBeenCalled();
+  });
+
+  it('keeps an https:// URL in the copy — the repair layer no longer shadows an intact parse', async () => {
+    // repair() strips `//…` comments string-unaware, so it returned a MANGLED
+    // partial map ("Shop now at https:" losing the host) and — because it ran
+    // first and succeeded — returned early, shadowing the intact JSON.parse at
+    // Layer 2. Parse-first is the fix.
+    model.generateText.mockResolvedValue(
+      '{"headline":"Summer Sale","cta":"Shop now at https://northbean.shop"}'
+    );
+
+    const res = await handler(
+      JSON.stringify({
+        type: 'copy-request',
+        plan: makePlan(),
+        brand: null,
+      }),
+      'org1'
+    );
+
+    const content = JSON.parse(res.content);
+    expect(content.texts).toEqual({
+      headline: 'Summer Sale',
+      cta: 'Shop now at https://northbean.shop',
+    });
+  });
+
+  it('ignores locked texts for slots the plan does not have', async () => {
+    model.generateText.mockResolvedValue('{"cta":"Shop now"}');
+
+    const res = await handler(
+      JSON.stringify({
+        type: 'copy-request',
+        plan: makePlan(),
+        brand: null,
+        lockedTexts: { headline: 'Labor Day Sale', ghost: 'no such slot' },
+      }),
+      'org1'
+    );
+
+    const content = JSON.parse(res.content);
+    expect(content.texts).toEqual({
+      headline: 'Labor Day Sale',
+      cta: 'Shop now',
+    });
   });
 });

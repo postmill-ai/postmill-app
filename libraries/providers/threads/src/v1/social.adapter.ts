@@ -6,6 +6,7 @@ import {
   PostResponse,
   SocialCommentDTO,
   SocialProvider,
+  ThreadsSettingsDto,
 } from '@postmill-ai/provider-kernel';
 import { makeId, makeOauthState } from '@postmill-ai/provider-kernel';
 import { timer } from '@postmill-ai/helpers/utils/timer';
@@ -40,6 +41,7 @@ export class ThreadsProvider extends SocialAbstract implements SocialProvider {
   }
 
   editor = 'normal' as const;
+  dto = ThreadsSettingsDto;
   maxLength() {
     return 500;
   }

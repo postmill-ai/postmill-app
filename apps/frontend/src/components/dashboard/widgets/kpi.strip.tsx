@@ -1,6 +1,7 @@
 'use client';
 
 import { FC, useMemo } from 'react';
+import { useRouter } from 'next/navigation';
 import { StatTile } from '@postmill-ai/frontend/components/analytics-v2/kit/stat-tile';
 import { useOverview } from '@postmill-ai/frontend/components/analytics-v2/hooks/useOverview';
 import { useDashboardSummary } from '../hooks/useDashboardSummary';
@@ -25,6 +26,7 @@ interface KpiStripProps {
 
 export const KpiStrip: FC<KpiStripProps> = ({ from, to, integrationIds }) => {
   const t = useT();
+  const router = useRouter();
   const { data: summary, isLoading: summaryLoading } = useDashboardSummary();
   const { data: overview, isLoading: overviewLoading } = useOverview({
     from,
@@ -39,6 +41,8 @@ export const KpiStrip: FC<KpiStripProps> = ({ from, to, integrationIds }) => {
       {
         kpi: engagement ?? staticKPI(t('kpi_engagement_7d', 'Engagement (7d)'), 0),
         accent: 'var(--chart-1, #2b5cd3)',
+        // Each tile opens the page that explains its number.
+        href: '/analytics',
       },
       {
         kpi: staticKPI(
@@ -46,6 +50,7 @@ export const KpiStrip: FC<KpiStripProps> = ({ from, to, integrationIds }) => {
           summaryLoading ? 0 : (summary?.publishedNext7 ?? 0)
         ),
         accent: 'var(--chart-2, #32d583)',
+        href: '/analytics?tab=posts',
       },
       {
         kpi: staticKPI(
@@ -53,6 +58,7 @@ export const KpiStrip: FC<KpiStripProps> = ({ from, to, integrationIds }) => {
           summaryLoading ? 0 : (summary?.scheduledPosts ?? 0)
         ),
         accent: 'var(--chart-5, #ffac30)',
+        href: '/posts',
       },
       {
         kpi: staticKPI(
@@ -60,6 +66,7 @@ export const KpiStrip: FC<KpiStripProps> = ({ from, to, integrationIds }) => {
           summaryLoading ? 0 : (summary?.commentUnreadCount ?? 0)
         ),
         accent: 'var(--chart-3, #1d9bf0)',
+        href: '/replies?unreadOnly=true',
       },
       {
         kpi: staticKPI(
@@ -67,6 +74,7 @@ export const KpiStrip: FC<KpiStripProps> = ({ from, to, integrationIds }) => {
           summary?.channelsConnected ?? integrationIds.length
         ),
         accent: 'var(--chart-6, #8b90ff)',
+        href: '/settings/channels',
       },
     ];
   }, [
@@ -84,9 +92,9 @@ export const KpiStrip: FC<KpiStripProps> = ({ from, to, integrationIds }) => {
 
   return (
     <div className="grid grid-cols-2 xl:grid-cols-3 gap-[12px]">
-      {kpis.map(({ kpi, accent }) => (
+      {kpis.map(({ kpi, accent, href }) => (
         <div key={kpi.metric} data-testid={`kpi-tile-${kpi.metric}`}>
-          <StatTile kpi={kpi} accent={accent} />
+          <StatTile kpi={kpi} accent={accent} onClick={() => router.push(href)} />
         </div>
       ))}
       {loading && (

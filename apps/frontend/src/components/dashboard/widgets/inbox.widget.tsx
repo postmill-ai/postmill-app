@@ -42,7 +42,10 @@ export const InboxWidget: FC = () => {
         <button
           key={comment.id}
           type="button"
-          onClick={() => router.push('/replies')}
+          // Land on the reply itself, unread-filtered so it's on page one.
+          onClick={() =>
+            router.push(`/replies?unreadOnly=true&comment=${comment.id}`)
+          }
           className="flex items-start gap-[10px] p-[10px] rounded-[10px] bg-newTableHeader border border-newTableBorder hover:border-newTableText transition-colors text-start"
         >
           <ChannelAvatar

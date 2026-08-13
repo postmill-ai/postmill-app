@@ -27,6 +27,9 @@ interface RepliesFilterBarProps {
   onSentimentChange: (sentiment?: string) => void;
   priority?: string;
   onPriorityChange: (priority?: string) => void;
+  /** Extra controls rendered between the chip track and the Filter button
+   *  (e.g. the inbox's "High priority first" toggle). */
+  actions?: ReactNode;
 }
 
 interface Chip {
@@ -62,6 +65,7 @@ export const RepliesFilterBar: FC<RepliesFilterBarProps> = ({
   onSentimentChange,
   priority,
   onPriorityChange,
+  actions,
 }) => {
   const t = useT();
   const [open, setOpen] = useState(false);
@@ -407,6 +411,8 @@ export const RepliesFilterBar: FC<RepliesFilterBarProps> = ({
           </button>
         )}
       </div>
+
+      {actions}
 
       <button
         type="button"

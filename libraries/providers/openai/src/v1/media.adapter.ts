@@ -72,6 +72,20 @@ const TTS_MIME: Record<string, string> = {
   flac: 'audio/flac',
 };
 
+// Aspect hint → provider size token. gpt-image and dall-e expose different
+// wide/tall sizes, so the mapping is model-aware; an explicit `options.size`
+// (or a native `input.size`) always wins over the hint.
+const GPT_IMAGE_ASPECT_SIZE: Record<string, string> = {
+  square: '1024x1024',
+  wide: '1536x1024',
+  tall: '1024x1536',
+};
+const DALL_E_ASPECT_SIZE: Record<string, string> = {
+  square: '1024x1024',
+  wide: '1792x1024',
+  tall: '1024x1792',
+};
+
 interface OpenAIImageResponse {
   data?: { url?: string; b64_json?: string }[];
 }
@@ -105,7 +119,14 @@ export class OpenaiMediaAdapter implements MediaProviderAdapter {
 
   async generateImage(prompt: string, options?: MediaGenerateOptions): Promise<MediaGenerationResult> {
     const apiKey = this._apiKey(options);
-    const model = options?.model || 'dall-e-3';
+    // dall-e-3 is gone for new keys (live 404s); explicit `options.model` overrides still win,
+    // so orgs configured for dall-e-3 keep it (and its dall-e-only defaults below).
+    const model = options?.model || 'gpt-image-1';
+    const aspectSizes = model.startsWith('dall-e') ? DALL_E_ASPECT_SIZE : GPT_IMAGE_ASPECT_SIZE;
+    const size = options?.size || (options?.aspect ? aspectSizes[options.aspect] : undefined) || '1024x1024';
+    // `quality` values are model-specific: dall-e takes standard|hd, gpt-image takes
+    // auto|high|medium|low — a dall-e default sent to gpt-image-1 400s.
+    const quality = options?.quality || (model.startsWith('dall-e') ? 'standard' : 'auto');
 
     // Native params (size, quality, style, background, output_format, n, …) ride through
     // `options.input` so the descriptor exposes each model's full surface; defaults below
@@ -122,8 +143,8 @@ export class OpenaiMediaAdapter implements MediaProviderAdapter {
         model,
         prompt,
         n: options?.n || 1,
-        size: options?.size || '1024x1024',
-        quality: options?.quality || 'standard',
+        size,
+        quality,
         ...(options?.input || {}),
       }),
     });

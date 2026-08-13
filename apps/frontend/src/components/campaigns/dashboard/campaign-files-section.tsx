@@ -21,7 +21,7 @@ import {
 } from '@postmill-ai/frontend/components/files/file-preview-modal';
 import type { FileItem } from '@postmill-ai/frontend/components/files/file-manager';
 import { useCampaignFiles } from '@postmill-ai/frontend/components/campaigns/hooks/campaign.hooks';
-import { UploadFilesModal } from '@postmill-ai/frontend/components/campaigns/dashboard/upload-files-modal';
+import { useMediaPicker } from '@postmill-ai/frontend/components/media-tools/use-media-picker';
 
 const formatDate = (d: string, format: string) => {
   try {
@@ -262,19 +262,41 @@ export const CampaignFilesSection: FC<{
     [modal, openNewPostDraft, confirmRemoveFromCampaign]
   );
 
-  const openUploadModal = useCallback(() => {
-    modal.openModal({
-      title: t('upload_files', 'Upload files'),
-      withCloseButton: true,
-      // size + height center the modal; maxSize keeps it responsive on mobile.
-      size: '760px',
-      maxSize: 'calc(100vw - 24px)',
-      height: 'auto',
-      children: (
-        <UploadFilesModal campaignId={campaignId} onUploaded={refresh} />
-      ),
-    });
-  }, [campaignId, modal, refresh, t]);
+  // Replaces a bespoke upload-only modal. Attaching an existing file (or a
+  // stock image) wasn't possible before — only freshly uploaded ones were.
+  // `requireFile` guarantees the fileId the campaign item needs.
+  const filesPicker = useMediaPicker({
+    title: t('add_files_to_campaign', 'Add files to campaign'),
+    multiple: true,
+    requireFile: true,
+    onConfirm: async (items) => {
+      const ids = items.map((i) => i.fileId).filter(Boolean) as string[];
+      if (ids.length === 0) return;
+      const results = await Promise.all(
+        ids.map(async (entityId) => {
+          const r = await fetch(`/campaigns/${campaignId}/items`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ entityType: 'file', entityId }),
+          });
+          return r.ok;
+        })
+      );
+      const failed = results.filter((ok) => !ok).length;
+      if (failed > 0) {
+        // Partial success must not read as success — the old modal showed a
+        // per-file Attached/Failed list, so silence here would be a regression.
+        toaster.show(
+          t('files_attached_partial', '{{count}} of {{total}} files could not be attached', {
+            count: failed,
+            total: ids.length,
+          }),
+          'warning'
+        );
+      }
+      refresh();
+    },
+  });
 
   const count = files?.length ?? 0;
 
@@ -287,9 +309,10 @@ export const CampaignFilesSection: FC<{
             <span className="text-[12px] text-newTableText">({count})</span>
           )}
         </div>
-        <Button onClick={openUploadModal} className="!h-[32px] !px-[12px] text-[13px]">
-          {t('upload', 'Upload')}
+        <Button onClick={filesPicker.open} className="!h-[32px] !px-[12px] text-[13px]">
+          {t('add_files', 'Add files')}
         </Button>
+        {filesPicker.element}
       </div>
 
       {isLoading ? (
@@ -298,7 +321,7 @@ export const CampaignFilesSection: FC<{
         </div>
       ) : count === 0 ? (
         <div className="text-[13px] text-newTableText text-center py-[24px]">
-          {t('no_tagged_files', 'No files yet. Click Upload to add files to this campaign.')}
+          {t('no_tagged_files', 'No files yet. Click Add files to attach files to this campaign.')}
         </div>
       ) : (
         <div

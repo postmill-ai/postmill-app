@@ -1,4 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { mkdtempSync, writeFileSync, rmSync } from 'fs';
+import { tmpdir } from 'os';
+import { join } from 'path';
 import {
   runDomainConformance,
   LoggerPort,
@@ -150,6 +153,64 @@ describe('MediaLockerStorage', () => {
         bucketId: BUCKET_ID,
         key,
       });
+    });
+  });
+
+  describe('uploadFile', () => {
+    // `/files/upload-server` uses multer diskStorage (file.path, no buffer);
+    // sniffing only the buffer made every such upload fail on MediaLocker orgs.
+    const presignFlow = () =>
+      vi.fn(async (input: any, init?: RequestInit) => {
+        const url = String(input);
+        if (url === `${API}/api/presign/upload`) {
+          const sent = JSON.parse(String(init?.body));
+          return jsonResponse({
+            url: 'https://uploads.medialocker.io/signed-put',
+            method: 'PUT',
+            key: sent.key,
+            bucketId: BUCKET_ID,
+            bucket: 'media-bucket',
+            expiresIn: 900,
+            headers: { 'Content-Type': sent.contentType },
+          });
+        }
+        if (url === 'https://uploads.medialocker.io/signed-put') {
+          return new Response(null, { status: 200 });
+        }
+        if (url === `${API}/api/presign/confirm`) {
+          return jsonResponse({});
+        }
+        throw new Error(`unexpected fetch: ${url}`);
+      });
+
+    it('uploads from a disk path when there is no buffer (upload-server)', async () => {
+      const dir = mkdtempSync(join(tmpdir(), 'ml-upload-'));
+      const filePath = join(dir, 'upload.tmp');
+      writeFileSync(filePath, PNG);
+
+      try {
+        const fetchMock = presignFlow();
+        const cap = medialockerStorageModule.create(makeCtx(fetchMock as any));
+        const result = await cap.uploadFile({ path: filePath, size: PNG.length });
+
+        expect(result.mimetype).toBe('image/png');
+        expect(result.filename).toMatch(/\.png$/);
+        // The disk bytes (not an undefined buffer) went out on the signed PUT.
+        const putInit = fetchMock.mock.calls[1][1];
+        expect(Buffer.isBuffer(putInit?.body)).toBe(true);
+        expect((putInit?.body as Buffer).equals(PNG)).toBe(true);
+      } finally {
+        rmSync(dir, { recursive: true, force: true });
+      }
+    });
+
+    it('rejects a file with neither a buffer nor a path', async () => {
+      const fetchMock = presignFlow();
+      const cap = medialockerStorageModule.create(makeCtx(fetchMock as any));
+      await expect(cap.uploadFile({ size: 10 })).rejects.toThrow(
+        'Invalid file upload.'
+      );
+      expect(fetchMock).not.toHaveBeenCalled();
     });
   });
 

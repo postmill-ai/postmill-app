@@ -7,6 +7,7 @@ import { useFetch } from '@postmill-ai/helpers/utils/custom.fetch';
 import { useT } from '@postmill-ai/react/translation/get.transation.service.client';
 import ProviderIcon from '@postmill-ai/frontend/components/shared/provider-icon';
 import { CommentComposer } from '@postmill-ai/frontend/components/launches/post-detail/comment.composer';
+import { useModals } from '@postmill-ai/frontend/components/layout/new-modal';
 import { TeamMemberItem } from '@postmill-ai/frontend/components/settings/roles/hooks/use-roles';
 
 dayjs.extend(relativeTime);
@@ -48,6 +49,8 @@ interface CommentCardProps {
   enableLike?: boolean;
   enableStatusCycle?: boolean;
   teamMembers?: TeamMemberItem[];
+  /** Ring and scroll to this card — the target of `/replies?comment=<id>`. */
+  highlighted?: boolean;
 }
 
 const STATUS_DOT: Record<string, string> = {
@@ -86,11 +89,44 @@ export const CommentCard: FC<CommentCardProps> = ({
   enableLike,
   enableStatusCycle,
   teamMembers,
+  highlighted,
 }) => {
   const t = useT();
   const fetch = useFetch();
+  const modal = useModals();
   const postId = comment.post?.id;
   const integration = comment.post?.integration;
+
+  // A stable callback identity matters here: an inline ref is detached and
+  // re-attached on every render, so scrollIntoView would re-fire (smooth
+  // scrolling the viewport back to this card) on each unrelated inbox state
+  // change. A stable ref runs once, on mount.
+  const scrollIntoViewRef = useCallback((el: HTMLDivElement | null) => {
+    el?.scrollIntoView?.({ block: 'center', behavior: 'smooth' });
+  }, []);
+
+  // Open the post command-center modal (same chrome as the calendar's
+  // openPostDetail: flush header band, own close button, no card actions).
+  // The modal is lazy-loaded at click time — a static import would pull the
+  // whole composer/provider tree into the inbox bundle (and break vitest).
+  const openPost = useCallback(async () => {
+    if (!postId) return;
+    const { PostDetailModal } = await import(
+      '@postmill-ai/frontend/components/launches/post-detail/post.detail.modal'
+    );
+    modal.openModal({
+      title: '',
+      closeOnClickOutside: true,
+      closeOnEscape: true,
+      withCloseButton: false,
+      flush: true,
+      classNames: {
+        modal: 'w-[100%] max-w-[1100px] text-textColor',
+      },
+      children: <PostDetailModal postId={postId} />,
+      size: '80%',
+    });
+  }, [modal, postId]);
 
   const [replying, setReplying] = useState(false);
   const [assigning, setAssigning] = useState(false);
@@ -168,7 +204,12 @@ export const CommentCard: FC<CommentCardProps> = ({
   );
 
   return (
-    <div className="bg-newBgColorInner rounded-[8px] border border-newTableBorder p-[16px] flex items-start gap-[12px]">
+    <div
+      ref={highlighted ? scrollIntoViewRef : undefined}
+      className={`bg-newBgColorInner rounded-[8px] border p-[16px] flex items-start gap-[12px] transition-colors ${
+        highlighted ? 'border-btnPrimary ring-2 ring-btnPrimary/40' : 'border-newTableBorder'
+      }`}
+    >
       {comment.authorPicture ? (
         // eslint-disable-next-line @next/next/no-img-element -- external comment author avatar
         <img
@@ -223,10 +264,28 @@ export const CommentCard: FC<CommentCardProps> = ({
 
         <p className="text-[13px] text-textColor break-words whitespace-pre-wrap mb-[8px]">{comment.content}</p>
 
-        {comment.post && (
-          <div className="text-[11px] text-newTableText mb-[8px] truncate">
-            {t('comment_inbox.post_label', 'Post')}: {comment.post.content?.substring(0, 100) || comment.post.id}
-          </div>
+        {postId && (
+          <button
+            type="button"
+            onClick={openPost}
+            className="inline-flex items-center gap-[3px] text-[11px] text-btnPrimary hover:underline mb-[8px]"
+          >
+            {t('view_post', 'View Post')}
+            <svg
+              width="10"
+              height="10"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2.5"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              aria-hidden="true"
+            >
+              <path d="M7 17L17 7" />
+              <path d="M7 7h10v10" />
+            </svg>
+          </button>
         )}
 
         <div className="flex items-center gap-[14px] flex-wrap">

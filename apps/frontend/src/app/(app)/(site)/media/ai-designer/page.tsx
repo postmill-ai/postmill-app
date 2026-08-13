@@ -12,6 +12,7 @@ import {
 } from 'react';
 import { AiDesignerStart } from '@postmill-ai/frontend/components/media-tools/ai-designer/ai-designer-start';
 import { useAiDesignerSession } from '@postmill-ai/frontend/components/media-tools/ai-designer/ai-designer.hooks';
+import { AiDesignerSessionsDrawer } from '@postmill-ai/frontend/components/media-tools/ai-designer/sessions-drawer';
 import { useToaster } from '@postmill-ai/react/toaster/toaster';
 import {
   useAiDesignerSocket,
@@ -47,6 +48,7 @@ function AiDesignerPageInner() {
   const { data: hydrate, isLoading: hydrateLoading } =
     useAiDesignerSession(sessionId);
   const [mode, setMode] = useState<AiDesignerMode>('chat');
+  const [sessionsOpen, setSessionsOpen] = useState(false);
   const [starting, setStarting] = useState(false);
   const [pendingNonce, setPendingNonce] = useState<string | null>(null);
   // Guidance the gateway posts as a markdown message before rejecting a start
@@ -142,6 +144,20 @@ function AiDesignerPageInner() {
     router.replace(pathname);
   }, [router, pathname, clearStartTimer]);
 
+  // Resuming just swaps the id — the chat re-hydrates off its SWR key.
+  const handleResume = useCallback(
+    (id: string) => {
+      clearStartTimer();
+      setPendingNonce(null);
+      startingRef.current = false;
+      setStarting(false);
+      setStartNotice(null);
+      setSessionId(id);
+      router.replace(`${pathname}?session=${id}`);
+    },
+    [router, pathname, clearStartTimer]
+  );
+
   // Invalid or expired ?session= query: once hydration finishes without a
   // result, drop back to the start screen instead of wedging on an empty chat.
   // Defer the reset to the next tick to avoid a synchronous setState cascade
@@ -159,18 +175,34 @@ function AiDesignerPageInner() {
     }
   }, [sessionId, hydrateLoading, hydrate, toaster, handleReset]);
 
-  if (sessionId) {
-    return <AiDesignerChat sessionId={sessionId} mode={mode} onReset={handleReset} />;
-  }
-
   return (
-    <AiDesignerStart
-      onStart={handleStart}
-      isStarting={starting}
-      isConnected={socket.connected}
-      onReconnect={socket.reconnect}
-      notice={startNotice}
-    />
+    <>
+      {sessionId ? (
+        <AiDesignerChat
+          sessionId={sessionId}
+          mode={mode}
+          onReset={handleReset}
+          onOpenSessions={() => setSessionsOpen(true)}
+        />
+      ) : (
+        <AiDesignerStart
+          onStart={handleStart}
+          isStarting={starting}
+          isConnected={socket.connected}
+          onReconnect={socket.reconnect}
+          notice={startNotice}
+          onOpenSessions={() => setSessionsOpen(true)}
+        />
+      )}
+
+      <AiDesignerSessionsDrawer
+        open={sessionsOpen}
+        onClose={() => setSessionsOpen(false)}
+        activeSessionId={sessionId}
+        onResume={handleResume}
+        onActiveDeleted={handleReset}
+      />
+    </>
   );
 }
 

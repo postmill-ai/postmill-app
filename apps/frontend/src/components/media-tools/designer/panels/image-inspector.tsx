@@ -6,27 +6,20 @@ import { useFetch } from '@postmill-ai/helpers/utils/custom.fetch';
 import { useT } from '@postmill-ai/react/translation/get.transation.service.client';
 import { ColorSwatch, Slider, SegmentedControl, Stepper } from '../controls';
 import { useBrandColors } from './use-brand-colors';
+import { ShadowSection, BackdropSection } from './shadow-section';
 import { getImageNaturalSize } from '../elements';
 import { detectFocalPoint, estimateFocalPoint, smartReflow } from '../reflow';
 import type {
   DesignerElement,
   DesignerMask,
-  DesignerTextShadow,
 } from '../designer.store';
-import { MediaSelectorModal } from '../../media-selector-modal';
+import { useMediaPicker } from '../../use-media-picker';
 
 interface ImageInspectorProps {
   element: DesignerElement;
   ids: string[];
   store: any;
 }
-
-const DEFAULT_SHADOW: DesignerTextShadow = {
-  color: '#000000',
-  blur: 4,
-  offsetX: 2,
-  offsetY: 2,
-};
 
 export const ImageInspector: FC<ImageInspectorProps> = ({
   element,
@@ -46,7 +39,20 @@ export const ImageInspector: FC<ImageInspectorProps> = ({
   const [upscaleScale, setUpscaleScale] = useState(2);
   const [inpaintPrompt, setInpaintPrompt] = useState('');
   const [imageToImagePrompt, setImageToImagePrompt] = useState('');
-  const [mediaModalOpen, setMediaModalOpen] = useState(false);
+  const replacePicker = useMediaPicker({
+    title: t('replace_image', 'Replace image'),
+    kinds: ['image'],
+    onSelect: (item) => {
+      updateElement(element.id, {
+        src: item.url,
+        fileId: item.fileId,
+        naturalWidth: item.width || undefined,
+        naturalHeight: item.height || undefined,
+        crop: undefined,
+        mask: undefined,
+      });
+    },
+  });
 
   const [inpaintMaskUrl, setInpaintMaskUrl] = useState<string | null>(null);
   const [masking, setMasking] = useState(false);
@@ -332,7 +338,6 @@ export const ImageInspector: FC<ImageInspectorProps> = ({
     }
   };
 
-  const shadow = element.boxShadow;
   const isSingle = ids.length === 1;
 
   const updateFocalFromEvent = (e: React.PointerEvent<HTMLDivElement>) => {
@@ -391,7 +396,7 @@ export const ImageInspector: FC<ImageInspectorProps> = ({
       </div>
 
       <button
-        onClick={() => setMediaModalOpen(true)}
+        onClick={replacePicker.open}
         className="w-full px-3 py-2 rounded-md text-[12px] border border-designerAccent text-btnPrimaryAccent hover:bg-designerAccent/10 transition-colors"
       >
         {t('designer_replace_image', 'Replace image…')}
@@ -546,7 +551,11 @@ export const ImageInspector: FC<ImageInspectorProps> = ({
       <Stepper
         label={t('designer_label_border_radius', 'Border radius')}
         min={0}
-        value={element.borderRadius || 0}
+        value={
+          Array.isArray(element.borderRadius)
+            ? element.borderRadius[0]
+            : element.borderRadius || 0
+        }
         onChange={(n) => set({ borderRadius: n })}
       />
 
@@ -568,78 +577,14 @@ export const ImageInspector: FC<ImageInspectorProps> = ({
         />
       </div>
 
-      <div className="flex flex-col gap-2 pt-1 border-t border-studioBorder">
-        <div className="flex items-center justify-between">
-          <span className="text-[11px] text-textColor/50">{t('designer_label_shadow', 'Shadow')}</span>
-          <button
-            type="button"
-            role="switch"
-            aria-checked={!!shadow}
-            onClick={() =>
-              set({
-                boxShadow: shadow ? undefined : { ...DEFAULT_SHADOW },
-              } as Partial<DesignerElement>)
-            }
-            className={`relative w-[40px] h-[22px] rounded-full transition-colors ${
-              shadow ? 'bg-designerAccent' : 'bg-studioBorder'
-            }`}
-          >
-            <span
-              className={`absolute top-[2px] left-[2px] w-[18px] h-[18px] rounded-full bg-white transition-transform ${
-                shadow ? 'translate-x-[18px]' : ''
-              }`}
-            />
-          </button>
-        </div>
-        {shadow && (
-          <div className="flex flex-col gap-3">
-            <ColorSwatch
-              label={t('designer_label_shadow_color', 'Shadow color')}
-              value={shadow.color || '#000000'}
-              onChange={(hex) =>
-                set({
-                  boxShadow: { ...shadow, color: hex },
-                } as Partial<DesignerElement>)
-              }
-              brandColors={brandColors}
-              brandEnforcement={brandEnforcement}
-            />
-            <Slider
-              label={t('designer_label_blur', 'Blur')}
-              min={0}
-              max={40}
-              value={shadow.blur}
-              onChange={(n) =>
-                set({
-                  boxShadow: { ...shadow, blur: n },
-                } as Partial<DesignerElement>)
-              }
-            />
-            <Slider
-              label={t('designer_label_offset_x', 'Offset X')}
-              min={-40}
-              max={40}
-              value={shadow.offsetX}
-              onChange={(n) =>
-                set({
-                  boxShadow: { ...shadow, offsetX: n },
-                } as Partial<DesignerElement>)
-              }
-            />
-            <Slider
-              label={t('designer_label_offset_y', 'Offset Y')}
-              min={-40}
-              max={40}
-              value={shadow.offsetY}
-              onChange={(n) =>
-                set({
-                  boxShadow: { ...shadow, offsetY: n },
-                } as Partial<DesignerElement>)
-              }
-            />
-          </div>
-        )}
-      </div>
+      <BackdropSection element={element} set={set} />
+
+      <ShadowSection
+        element={element}
+        set={set}
+        brandColors={brandColors}
+        brandEnforcement={brandEnforcement}
+      />
 
       <div className="flex flex-col gap-2 pt-1 border-t border-studioBorder">
         <div className="text-[11px] text-textColor/50">{t('designer_label_filters', 'Filters')}</div>
@@ -1022,21 +967,7 @@ export const ImageInspector: FC<ImageInspectorProps> = ({
         </div>
       </div>
     </div>
-    <MediaSelectorModal
-      open={mediaModalOpen}
-      onClose={() => setMediaModalOpen(false)}
-      onSelect={(item) => {
-        updateElement(element.id, {
-          src: item.url,
-          fileId: item.fileId,
-          naturalWidth: item.width || undefined,
-          naturalHeight: item.height || undefined,
-          crop: undefined,
-          mask: undefined,
-        });
-        setMediaModalOpen(false);
-      }}
-    />
+    {replacePicker.element}
     </>
   );
 };

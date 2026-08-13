@@ -135,8 +135,11 @@ HTTP → RequestIdMiddleware ('*', AppModule.configure)
 
 Guard registration order in `apps/backend/src/app.module.ts` is exactly throttle → policies →
 RBAC. `User.isSuperAdmin` bypasses RBAC, **not** the billing gate. Throttler default:
-600 req/hour per IP, override via `API_LIMIT` (sensitive routes carry tighter per-minute
-`@Throttle` decorators); storage is `ThrottlerStorageRedisService` on the shared `ioRedis`.
+600 req/hour, override via `API_LIMIT`. The bucket is **per (controller, handler, org)** —
+the tracker is `req.org?.id`, falling back to the client IP only for unauthenticated routes —
+so it is not one shared budget across the API. Sensitive routes carry tighter per-minute
+`@Throttle` decorators, and endpoints the frontend polls every few seconds raise the hourly
+cap; storage is `ThrottlerStorageRedisService` on the shared `ioRedis`.
 
 Authentication/CSRF are **middleware applied per controller list**, not global guards:
 `apps/backend/src/api/api.module.ts` defines `authenticatedController = [ … ]` and
@@ -340,7 +343,7 @@ Function table and per-function detail: `agents/jobs.md`.
 | Encryption | Single deployment-wide AES-GCM key, `v2:` prefix. Per-org reads via `EncryptionService`; global reads via `AuthService.fixedEncryption` (same key, two routes). `ENCRYPTION_KEY` optional, falls back to deriving from `JWT_SECRET`. Never store secrets plaintext. | `libraries/nestjs-libraries/src/encryption/encryption.service.ts`; `libraries/helpers/src/auth/auth.service.ts` |
 | SSRF | All user-influenced outbound HTTP via `safeFetch`: `isSafePublicHttpsUrl` + `ssrfSafeDispatcher` + manual per-hop redirect re-validation. `SSRF_ALLOWED_PRIVATE_CIDRS` is the self-hosted opt-in. | `libraries/nestjs-libraries/src/dtos/webhooks/safe.fetch.ts` |
 | CSRF | Required on cookie-authenticated mutating routes; header/API-key clients unaffected. Applied to the `authenticatedController` list only. | `apps/backend/src/services/auth/csrf.middleware.ts`; `api.module.ts` |
-| Throttling | On by default, per client IP behind proxy; global 600/hour (`API_LIMIT` override), tighter per-route `@Throttle`. Redis-backed. | `libraries/nestjs-libraries/src/throttler/throttler.provider.ts`; `apps/backend/src/app.module.ts` |
+| Throttling | On by default; 600/hour (`API_LIMIT` override) **per (controller, handler, org)** — per client IP (resolved behind proxy) only for unauthenticated routes. Tighter per-route `@Throttle` on sensitive routes, raised caps on polled job-status routes. Redis-backed. | `libraries/nestjs-libraries/src/throttler/throttler.provider.ts`; `apps/backend/src/app.module.ts` |
 | Validation | Global pipe `whitelist` + `forbidNonWhitelisted` — unknown fields rejected. | `apps/backend/src/main.ts` |
 | Feature flags | `DEV_DISABLE_AI`, `DEV_DISABLE_MCP`, `DEV_DISABLE_MEDIA`, `DEV_DISABLE_SHORTLINKS`, `DEV_DISABLE_EMAIL`, `DEV_DISABLE_VIDEO`, `DEV_DISABLE_AGENT`, `DEV_DISABLE_SENTRY`, `DEV_DISABLE_OPENTELEMETRY`, `DEV_DISABLE_CRON` — all default enabled. | `libraries/nestjs-libraries/src/feature-flags/feature-flags.service.ts` |
 | Dev toggle | `NOT_SECURED` bypasses HSTS/helmet (dev only), CSRF, the CopilotKit policy gate, and config fail-fast. Dev/local only. | `apps/backend/src/main.ts` |

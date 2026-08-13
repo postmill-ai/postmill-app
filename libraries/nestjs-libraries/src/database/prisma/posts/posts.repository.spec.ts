@@ -219,4 +219,65 @@ describe('1.1 / 1.3 / 1.4 — dashboard repository queries', () => {
     expect(args.where.publishDate.lte).toBe(to);
     expect(args.select).toEqual({ publishDate: true });
   });
+
+  describe('getPosts calendar payload (thumb)', () => {
+    const basePost = {
+      id: 'post-1',
+      content: 'hello',
+      publishDate: new Date('2026-06-10T12:00:00.000Z'),
+      intervalInDays: null,
+      settings: null,
+      tags: [],
+      integration: { id: 'int-1' },
+    };
+    const query = {
+      startDate: '2026-06-01T00:00:00.000Z',
+      endDate: '2026-06-30T00:00:00.000Z',
+    } as any;
+
+    function repoWith(rows: any[]) {
+      const findMany = vi.fn().mockResolvedValue(rows);
+      const repository = Object.create(
+        PostsRepository.prototype
+      ) as PostsRepository;
+      (repository as any)._post = { model: { post: { findMany } } };
+      return repository;
+    }
+
+    it('derives a lean thumb (first path + count) and strips the raw image JSON', async () => {
+      const repository = repoWith([
+        {
+          ...basePost,
+          image: JSON.stringify([
+            { id: 'm1', path: '/uploads/a.png' },
+            { id: 'm2', path: '/uploads/b.png' },
+          ]),
+        },
+      ]);
+
+      const posts = await repository.getPosts('org-1', query);
+
+      expect(posts[0].thumb).toEqual({ path: '/uploads/a.png', count: 2 });
+      expect(posts[0].mediaType).toBe('image');
+      expect(posts[0]).not.toHaveProperty('image');
+      expect(posts[0]).not.toHaveProperty('settings');
+    });
+
+    it('returns a null thumb when there is no usable media path', async () => {
+      const repository = repoWith([
+        { ...basePost, image: null },
+        { ...basePost, id: 'post-2', image: 'not-json' },
+        { ...basePost, id: 'post-3', image: JSON.stringify([]) },
+        {
+          ...basePost,
+          id: 'post-4',
+          image: JSON.stringify([{ id: 'm1' }]),
+        },
+      ]);
+
+      const posts = await repository.getPosts('org-1', query);
+
+      expect(posts.map((p: any) => p.thumb)).toEqual([null, null, null, null]);
+    });
+  });
 });

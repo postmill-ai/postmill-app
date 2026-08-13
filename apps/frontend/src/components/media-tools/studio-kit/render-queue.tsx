@@ -11,12 +11,24 @@ import { openInDesigner } from '@postmill-ai/frontend/components/media-tools/ope
 
 // Status/operation display text is resolved at render via `t()` (data-module pattern):
 // className stays here, the label is keyed off the stable status/operation id.
-const STATUS_META: Record<StudioJob['status'], { labelKey: string; label: string; className: string }> = {
+type StatusMeta = { labelKey: string; label: string; className: string };
+
+const STATUS_META: Record<StudioJob['status'], StatusMeta> = {
   pending: { labelKey: 'render_status_queued', label: 'Queued', className: 'text-amber-600 bg-amber-500/10' },
   processing: { labelKey: 'render_status_rendering', label: 'Rendering', className: 'text-amber-600 bg-amber-500/10' },
   completed: { labelKey: 'render_status_ready', label: 'Ready', className: 'text-green-500 bg-green-500/10' },
   failed: { labelKey: 'render_status_failed', label: 'Failed', className: 'text-red-700 dark:text-red-400 bg-red-500/10' },
 };
+
+// A job written by a path this UI doesn't know about must still render. The
+// backend normalises 'done' → 'completed', but nothing stops a new writer from
+// inventing another word, and an undefined lookup here white-screens the studio.
+const statusMeta = (status: string): StatusMeta =>
+  STATUS_META[status as StudioJob['status']] ?? {
+    labelKey: `render_status_${status}`,
+    label: status,
+    className: 'text-newTableText bg-newTableBorder',
+  };
 
 const OPERATION_LABEL: Record<string, { labelKey: string; label: string }> = {
   video: { labelKey: 'render_op_video', label: 'Video' },
@@ -26,9 +38,23 @@ const OPERATION_LABEL: Record<string, { labelKey: string; label: string }> = {
   stt: { labelKey: 'render_op_transcript', label: 'Transcript' },
 };
 
+interface RenderQueueProps {
+  jobs: StudioJob[] | undefined;
+  isLoading: boolean;
+  /** 'rail' is the narrow column beside a studio form; 'grid' fills the /media/queue page. */
+  variant?: 'rail' | 'grid';
+  /** Job to scroll to and ring, from `/media/queue?job=<id>`. */
+  highlightJobId?: string | null;
+}
+
 // Shared render-queue used by every studio. The three handoffs are baked in:
 // Save (implicit — the job already landed in /files), Edit in Designer, Post to Composer.
-export const RenderQueue: FC<{ jobs: StudioJob[] | undefined; isLoading: boolean }> = ({ jobs, isLoading }) => {
+export const RenderQueue: FC<RenderQueueProps> = ({
+  jobs,
+  isLoading,
+  variant = 'rail',
+  highlightJobId,
+}) => {
   const mediaDirectory = useMediaDirectory();
   const modal = useModals();
   const toaster = useToaster();
@@ -117,6 +143,14 @@ export const RenderQueue: FC<{ jobs: StudioJob[] | undefined; isLoading: boolean
     [fetchTranscript, openComposer, toaster]
   );
 
+  // A stable callback identity matters here: an inline ref is detached and
+  // re-attached on every render, so scrollIntoView would re-fire (smooth
+  // scrolling the queue back to this card) on each SWR poll while highlighted.
+  // A stable ref runs once, on mount.
+  const scrollIntoViewRef = useCallback((el: HTMLDivElement | null) => {
+    el?.scrollIntoView?.({ block: 'center', behavior: 'smooth' });
+  }, []);
+
   if (!isLoading && (!jobs || jobs.length === 0)) {
     return (
       <div className="text-[12px] text-newTextColor/60 px-[4px] py-[10px]">
@@ -126,15 +160,31 @@ export const RenderQueue: FC<{ jobs: StudioJob[] | undefined; isLoading: boolean
   }
 
   return (
-    <div className="flex flex-col gap-[8px]">
+    <div
+      className={
+        variant === 'grid'
+          ? 'grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-[12px] items-start'
+          : 'flex flex-col gap-[8px]'
+      }
+    >
       {(jobs || []).map((job) => {
-        const meta = STATUS_META[job.status];
+        const meta = statusMeta(job.status);
+        const highlighted = !!highlightJobId && job.id === highlightJobId;
         const isStt = job.operation === 'stt';
         const isAudio = job.operation === 'audio';
         const isImage = job.operation === 'image';
         const previewUrl = job.artifactUrl ? mediaDirectory.set(job.artifactUrl) : null;
         return (
-          <div key={job.id} className="rounded-[10px] border border-studioBorder bg-newBgColorInner overflow-hidden">
+          <div
+            key={job.id}
+            id={`media-job-${job.id}`}
+            ref={highlighted ? scrollIntoViewRef : undefined}
+            className={`rounded-[10px] border bg-newBgColorInner overflow-hidden transition-colors ${
+              highlighted
+                ? 'border-[#2B5CD3] ring-2 ring-[#2B5CD3]/40'
+                : 'border-studioBorder'
+            }`}
+          >
             {job.status === 'completed' && previewUrl && isImage && (
               // eslint-disable-next-line @next/next/no-img-element -- external media preview
               <img src={previewUrl} alt="" className="w-full aspect-video object-cover bg-black" />

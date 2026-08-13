@@ -11,6 +11,7 @@ import {
 import { PostValidationException } from '@postmill-ai/nestjs-libraries/errors/post-validation.exception';
 import { PostsRepository } from '@postmill-ai/nestjs-libraries/database/prisma/posts/posts.repository';
 import { CreatePostDto } from '@postmill-ai/nestjs-libraries/dtos/posts/create.post.dto';
+import { sanitizeProviderSettings } from '@postmill-ai/nestjs-libraries/dtos/posts/providers-settings/sanitize.settings';
 import { ValidatePostsDto } from '@postmill-ai/nestjs-libraries/dtos/posts/validate.posts.dto';
 import { BulkCreatePostsDto, BulkCreatePostRowDto } from '@postmill-ai/nestjs-libraries/dtos/posts/bulk.create.posts.dto';
 import dayjs from 'dayjs';
@@ -421,7 +422,14 @@ export class PostsService {
             type: replaceDraft ? 'schedule' : body?.type,
             ...post,
             settings: {
-              ...(post.settings || ({} as any)),
+              // Strip settings keys the provider does not support (shared composer
+              // fields leak e.g. `firstComment`/`thread_finisher` into every
+              // provider's form values) before persisting, then pin the
+              // discriminator to the integration's real provider identifier.
+              ...sanitizeProviderSettings(
+                integration.providerIdentifier,
+                post.settings
+              ),
               __type: integration.providerIdentifier,
             },
           };
@@ -1126,7 +1134,8 @@ export class PostsService {
   async createPost(
     orgId: string,
     body: CreatePostDto,
-    creationMethod: CreationMethod
+    creationMethod: CreationMethod,
+    createdById?: string
   ): Promise<any[]> {
     const postList = [];
     for (const post of body.posts) {
@@ -1169,6 +1178,7 @@ export class PostsService {
         body.inter,
         body.campaignId,
         body.brandId,
+        createdById,
       );
 
       if (!posts?.length) {
@@ -1209,6 +1219,7 @@ export class PostsService {
     rawBody: any,
     creationMethod: CreationMethod,
     replaceDraft = false,
+    createdById?: string,
   ): Promise<any[]> {
     const body = await this.mapTypeToPost(rawBody, orgId, replaceDraft);
 
@@ -1277,7 +1288,7 @@ export class PostsService {
       }
     }
 
-    return this.createPost(orgId, body, creationMethod);
+    return this.createPost(orgId, body, creationMethod, createdById);
   }
 
   async preflightCheck(

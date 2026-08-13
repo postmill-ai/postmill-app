@@ -2,6 +2,7 @@ import { Injectable, Logger } from '@nestjs/common';
 import puppeteer from 'puppeteer';
 import * as path from 'path';
 import { FRAME_RENDERER_SCRIPT, escapeForScriptTag } from './frame-renderer-script';
+import { buildFramePage, fontLinksForOutput } from './frame-page';
 import { isSafePublicHttpsUrl } from '@postmill-ai/nestjs-libraries/dtos/webhooks/webhook.url.validator';
 import type { VideoOutput } from './design-render.types';
 
@@ -127,24 +128,13 @@ export class ChromiumFrameCaptureService {
         const renderUrl = `${baseUrl.replace(/\/$/, '')}/media/designs/render-frame/${routeOptions.jobId}?token=${encodeURIComponent(routeOptions.token)}`;
         await page.goto(renderUrl, { waitUntil: 'networkidle0' });
       } else {
-        const html = `<!DOCTYPE html>
-<html>
-<head>
-  <meta charset="utf-8">
-  <base href="${baseUrl}">
-  <style>body{margin:0;background:#000}</style>
-</head>
-<body>
-  <canvas id="frame-canvas"></canvas>
-  <script>
-    window.__DATA = {
-      output: ${escapeForScriptTag(output)},
-      baseUrl: ${escapeForScriptTag(baseUrl)}
-    };
-    ${FRAME_RENDERER_SCRIPT}
-  </script>
-</body>
-</html>`;
+        const html = buildFramePage({
+          outputLiteral: escapeForScriptTag(output),
+          baseUrlLiteral: escapeForScriptTag(baseUrl),
+          baseUrl,
+          script: FRAME_RENDERER_SCRIPT,
+          fontLinks: fontLinksForOutput(output),
+        });
 
         await page.setContent(html, { waitUntil: 'networkidle0' });
       }

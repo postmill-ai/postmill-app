@@ -49,7 +49,10 @@ export const FileDetailsPanel: FC<{
   const isAudio = hasExtension(file.path, 'mp3', 'wav', 'ogg', 'm4a');
 
   const [editingName, setEditingName] = useState(false);
-  const [name, setName] = useState(file.name);
+  // The display name is `originalName || name` everywhere else; edit the same
+  // value so all three surfaces (grid, list, panel) agree.
+  const displayName = file.originalName || file.name;
+  const [name, setName] = useState(displayName);
   const [description, setDescription] = useState(file.description || '');
   const [tagsInput, setTagsInput] = useState('');
   const [tags, setTags] = useState<string[]>(file.tags ? JSON.parse(file.tags) : []);
@@ -58,7 +61,7 @@ export const FileDetailsPanel: FC<{
   const panelRef = useRef<HTMLDivElement>(null);
 
   const handleSaveName = useCallback(async () => {
-    if (name.trim() && name !== file.name) {
+    if (name.trim() && name.trim() !== displayName) {
       await fetch(`/files/${file.id}/rename`, {
         method: 'PUT',
         body: JSON.stringify({ name: name.trim() }),
@@ -66,7 +69,7 @@ export const FileDetailsPanel: FC<{
       onRefresh();
     }
     setEditingName(false);
-  }, [name, file, fetch, onRefresh]);
+  }, [name, displayName, file, fetch, onRefresh]);
 
   const handleSaveDescription = useCallback(async () => {
     await fetch(`/files/${file.id}/description`, {
@@ -168,7 +171,7 @@ export const FileDetailsPanel: FC<{
                 value={name}
                 onChange={(e) => setName(e.target.value)}
                 onBlur={handleSaveName}
-                onKeyDown={(e) => { if (e.key === 'Enter') handleSaveName(); if (e.key === 'Escape') { setName(file.name); setEditingName(false); } }}
+                onKeyDown={(e) => { if (e.key === 'Enter') handleSaveName(); if (e.key === 'Escape') { setName(displayName); setEditingName(false); } }}
                 className="w-full mt-[4px] bg-transparent border-b border-[#2B5CD3] text-[13px] text-textColor outline-none"
               />
             ) : (

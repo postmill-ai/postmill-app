@@ -9,10 +9,8 @@ import { Button } from '@postmill-ai/react/form/button';
 import { useFetch } from '@postmill-ai/helpers/utils/custom.fetch';
 import { useToaster } from '@postmill-ai/react/toaster/toaster';
 import { useT } from '@postmill-ai/react/translation/get.transation.service.client';
-import {
-  MediaSelectorItem,
-  MediaSelectorModal,
-} from '@postmill-ai/frontend/components/media-tools/media-selector-modal';
+import { MediaSelectorItem } from '@postmill-ai/frontend/components/media-tools/media-selector-modal';
+import { useMediaPicker } from '@postmill-ai/frontend/components/media-tools/use-media-picker';
 
 export const BotPicture: FC<{
   integration: Integrations;
@@ -27,7 +25,6 @@ export const BotPicture: FC<{
   const toast = useToaster();
   const [nick, setNickname] = useState(integration.name);
   const [picture, setPicture] = useState(integration.picture || '/no-picture.jpg');
-  const [pickerOpen, setPickerOpen] = useState(false);
   const fetch = useFetch();
   const submitForm: FormEventHandler<HTMLFormElement> = useCallback(
     async (e) => {
@@ -45,10 +42,12 @@ export const BotPicture: FC<{
     },
     [nick, picture, mutate, integration.id, fetch, modal, t, toast]
   );
-  const handleSelect = useCallback((item: MediaSelectorItem) => {
-    setPickerOpen(false);
-    setPicture(item.url);
-  }, []);
+  const picturePicker = useMediaPicker({
+    title: t('profile_picture', 'Profile picture'),
+    kinds: ['image'],
+    requireFile: true,
+    onSelect: (item: MediaSelectorItem) => setPicture(item.url),
+  });
   return (
     <div className="rounded-[4px] border border-newTableBorder bg-newBgColorInner px-[16px] pb-[16px] relative w-full">
       <TopTitle title={t('change_bot_picture_title', 'Change Bot Picture')} />
@@ -83,7 +82,7 @@ export const BotPicture: FC<{
                 alt={t('bot_avatar', 'Bot avatar')}
                 className="w-[100px] h-[100px] rounded-full"
               />
-              <Button type="button" onClick={() => setPickerOpen(true)}>
+              <Button type="button" onClick={picturePicker.open}>
                 {t('upload', 'Upload')}
               </Button>
             </div>
@@ -104,12 +103,7 @@ export const BotPicture: FC<{
           </div>
         </form>
       </div>
-      <MediaSelectorModal
-        open={pickerOpen}
-        onClose={() => setPickerOpen(false)}
-        onSelect={handleSelect}
-        kinds={['image']}
-      />
+      {picturePicker.element}
     </div>
   );
 };

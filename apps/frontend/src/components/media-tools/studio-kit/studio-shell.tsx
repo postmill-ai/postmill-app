@@ -2,8 +2,9 @@
 
 import React, { useMemo, useState } from 'react';
 import { Logo } from '@postmill-ai/frontend/components/new-layout/logo';
+import { OverflowTabs } from '@postmill-ai/frontend/components/ui/overflow-tabs';
 import { FullscreenButton } from '@postmill-ai/frontend/components/media-tools/fullscreen-button';
-import { useFullscreen } from '@postmill-ai/frontend/components/media-tools/use-fullscreen';
+import { useFullscreenSurface } from '@postmill-ai/frontend/components/media-tools/use-fullscreen';
 import { useToaster } from '@postmill-ai/react/toaster/toaster';
 import { useT } from '@postmill-ai/react/translation/get.transation.service.client';
 import { StudioForm } from './studio-form';
@@ -90,7 +91,9 @@ export function StudioShell({ descriptor }: { descriptor: StudioDescriptor }) {
 
   const generate = useStudioGenerate(provider);
   const { data: jobs, isLoading: jobsLoading, mutate: mutateJobs } = useStudioJobs(provider, configured);
-  const { isFullscreen } = useFullscreen();
+  const surface = useFullscreenSurface(
+    'rounded-[12px] overflow-hidden mobile:h-[calc(100vh-200px)]'
+  );
   const [generating, setGenerating] = useState(false);
 
   const canGenerate = useMemo(
@@ -152,29 +155,27 @@ export function StudioShell({ descriptor }: { descriptor: StudioDescriptor }) {
   const Custom = tab.custom;
 
   return (
-    <div className={`flex flex-col h-full bg-studioBg${isFullscreen ? ' fixed inset-0 z-[100]' : ' rounded-[12px] overflow-hidden mobile:h-[calc(100vh-200px)]'}`}>
+    <div className={`flex flex-col h-full bg-studioBg ${surface}`}>
       <div className="flex items-center justify-between gap-[10px] px-[16px] h-[52px] border-b border-studioBorder shrink-0">
         <div className="flex items-center gap-[10px] shrink-0">
           <Logo size={22} className="" />
           <h1 className="text-[15px] font-[600] text-textColor whitespace-nowrap">{title}</h1>
         </div>
         <div className="flex items-center gap-[8px] min-w-0">
-          <div className="flex items-center gap-[4px] overflow-x-auto">
-            {tabs.map((t) => (
-              <button
-                key={t.key}
-                type="button"
-                onClick={() => setTabKey(t.key)}
-                className={`px-[12px] h-[34px] rounded-[8px] text-[13px] whitespace-nowrap border transition-all ${
-                  tab.key === t.key
-                    ? 'bg-[#2B5CD3]/20 text-textColor border-transparent'
-                    : 'border-studioBorder text-newTextColor/70 hover:bg-boxHover hover:text-textColor hover:border-[#2B5CD3]'
-                }`}
-              >
-                {translate(studioTabKey(keyNs, t.key), t.label)}
-              </button>
-            ))}
-          </div>
+          {/* The 52px header also carries the logo, title and fullscreen button,
+              so this is the tightest bar in the app on mobile. */}
+          <OverflowTabs
+            items={tabs.map((t) => ({
+              key: t.key,
+              label: translate(studioTabKey(keyNs, t.key), t.label),
+            }))}
+            activeKey={tab.key}
+            onSelect={setTabKey}
+            variant="outline"
+            ariaLabel={translate('more_tools', 'More tools')}
+            listAriaLabel={title}
+            className="min-w-0"
+          />
           <FullscreenButton />
         </div>
       </div>

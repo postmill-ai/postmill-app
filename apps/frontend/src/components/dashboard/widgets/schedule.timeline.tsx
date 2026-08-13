@@ -36,6 +36,7 @@ const ComposerFillButton: FC<{ date: string }> = ({ date }) => {
 
 export const ScheduleTimeline: FC<ScheduleTimelineProps> = ({ upcomingPosts = [] }) => {
   const t = useT();
+  const router = useRouter();
   const { data: schedule, isLoading } = useSchedule(7);
 
   const postsByDay = useMemo(() => {
@@ -89,9 +90,12 @@ export const ScheduleTimeline: FC<ScheduleTimelineProps> = ({ upcomingPosts = []
 
             <div className="flex flex-col gap-[6px] min-h-[44px]">
               {dayPosts.slice(0, 2).map((post) => (
-                <div
+                // The chip holds a real post id, so it opens that post.
+                <button
                   key={post.id}
-                  className="flex items-center gap-[6px] text-[11px] text-newTableText truncate"
+                  type="button"
+                  onClick={() => router.push(`/posts?post=${post.id}`)}
+                  className="flex items-center gap-[6px] text-[11px] text-newTableText hover:text-textColor transition-colors text-start w-full min-w-0"
                   title={post.content ?? undefined}
                 >
                   <ChannelAvatar
@@ -100,7 +104,7 @@ export const ScheduleTimeline: FC<ScheduleTimelineProps> = ({ upcomingPosts = []
                     size={16}
                   />
                   <span className="truncate">{post.content || t('untitled', 'Untitled')}</span>
-                </div>
+                </button>
               ))}
             </div>
 

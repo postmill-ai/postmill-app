@@ -7,6 +7,11 @@ import { useToaster } from '@postmill-ai/react/toaster/toaster';
 import { EmptyState, TabSkeleton } from '@postmill-ai/frontend/components/analytics-v2/kit/states';
 import { Button } from '@postmill-ai/react/form/button';
 import { useT } from '@postmill-ai/react/translation/get.transation.service.client';
+import {
+  ANALYTICS_USAGE_HREF,
+  MEDIA_QUEUE_HREF,
+  canonicalPath,
+} from '../destinations';
 
 const severityBorder: Record<string, string> = {
   critical: 'border-l-[var(--negative,#f97066)]',
@@ -22,26 +27,47 @@ const severityIconBg: Record<string, string> = {
   default: 'bg-newTableBorder text-newTableText',
 };
 
-const kindLink = (item: AttentionItemDto): string => {
+/**
+ * Where an attention item goes.
+ *
+ * `item.link` wins throughout: the backend often knows something more specific
+ * than the kind does (a particular campaign, a dated composer slot), and this
+ * used to discard it for five of the eight kinds. The per-kind values are
+ * fallbacks, and they're canonical paths — the old `/settings?tab=…` values went
+ * through a client-side redirect shim, so every click cost an extra navigation
+ * and a flash of the wrong page.
+ *
+ * Returns `null` when there is genuinely nowhere to go, so the caller can omit
+ * the button rather than push `'#'` and appear broken.
+ */
+const kindLink = (item: AttentionItemDto): string | null => {
+  // Two kinds override the backend link. The backend now emits these same
+  // destinations, but `/dashboard/attention` is Redis-cached, so payloads
+  // pointing at `/billing` (no usage UI), `/settings?tab=ai` (no budget UI) and
+  // the studio index (not the failures) keep arriving for the cache TTL.
+  if (item.kind === 'budget') return ANALYTICS_USAGE_HREF;
+  if (item.kind === 'failed-media-jobs') return `${MEDIA_QUEUE_HREF}?status=failed`;
+
+  // Otherwise the backend usually knows something more specific than the kind
+  // does — a particular campaign, a dated composer slot. This used to be
+  // discarded for five of the eight kinds.
+  if (item.link) return canonicalPath(item.link);
+
   switch (item.kind) {
     case 'failed-posts':
       return '/posts';
     case 'channel-health':
-      return '/settings?tab=channels';
+      return '/settings/channels';
     case 'pending-approvals':
-      return item.link || '/campaigns';
+      return '/campaigns';
     case 'unread-comments':
       return '/replies';
     case 'schedule-gaps':
-      return item.link || '/posts/post';
-    case 'budget':
-      return item.link || '/billing';
-    case 'failed-media-jobs':
-      return '/media';
+      return '/posts/post';
     case 'anomalies':
       return '/analytics?tab=insights';
     default:
-      return item.link || '#';
+      return null;
   }
 };
 
@@ -72,6 +98,8 @@ const AttentionRow: FC<{
   const [working, setWorking] = useState(false);
   const toaster = useToaster();
   const t = useT();
+
+  const href = kindLink(item);
 
   const payloadPosts = item.action?.payload?.posts as
     | Array<{ id: string; channelName?: string; content?: string; error?: string }>
@@ -222,10 +250,12 @@ const AttentionRow: FC<{
               </svg>
             </button>
           )}
-          {item.action?.type !== 'retry-post' && (
+          {/* No button when there's nowhere to go — this used to render one that
+              pushed '#', which looks broken. */}
+          {item.action?.type !== 'retry-post' && href && (
             <button
               type="button"
-              onClick={() => router.push(kindLink(item))}
+              onClick={() => router.push(href)}
               className="inline-flex items-center justify-center min-h-[40px] px-[12px] py-[8px] text-[12px] font-medium rounded-[6px] bg-btnPrimary text-white hover:bg-btnPrimary/90 transition-colors"
             >
               {item.action?.label || t('view', 'View')}

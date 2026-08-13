@@ -108,7 +108,11 @@ export const StartDialog: FC<StartDialogProps> = ({ store, fetchFn, onDone }) =>
 
   return (
     <div className="absolute inset-0 z-[400] flex items-center justify-center bg-black/60 p-4">
-      <div className="w-full max-w-2xl max-h-[88vh] overflow-y-auto rounded-2xl border border-studioBorder bg-newBgColorInner shadow-2xl">
+      <div
+        role="dialog"
+        aria-modal="true"
+        className="w-full max-w-2xl max-h-[88vh] overflow-y-auto rounded-2xl border border-studioBorder bg-newBgColorInner shadow-2xl"
+      >
         {step === 'home' && (
           <div className="p-6">
             <h2 className="text-[20px] font-bold text-textColor mb-1">{translate('designer_start_a_design_title', 'Start a design')}</h2>

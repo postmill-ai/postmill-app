@@ -8,6 +8,7 @@ import {
   StrictDesignerBackgroundSchema,
   StrictDesignerElementSchema,
   SrcSchema,
+  withIconSrcGuard,
 } from './designer-doc.schema';
 import { migrateDoc } from './designer-doc.migrate';
 
@@ -35,11 +36,15 @@ const AddOutputPresetSchema = z
   .strict();
 
 const UpdateElementPatchSchema =
-  StrictDesignerElementSchema.omit({
-    id: true,
-    originId: true,
-    type: true,
-  })
+  // innerType(): the exported schema is refined (icon-src guard); a partial
+  // patch carries no `type`, so the guard cannot apply here — the merged
+  // element is validated as a whole downstream.
+  StrictDesignerElementSchema.innerType()
+    .omit({
+      id: true,
+      originId: true,
+      type: true,
+    })
     .partial()
     .strict();
 
@@ -85,7 +90,11 @@ const SetOutputBackgroundOpSchema = z.object({
 const AddElementOpSchema = z.object({
   op: z.literal('addElement'),
   outputIndex: outputIndex,
-  element: StrictDesignerElementSchema.omit({ id: true, originId: true }).strict(),
+  // `id` stays server-assigned; `originId` is allowed so a headless caller
+  // (e.g. the AI Designer composer) can link the new element across outputs.
+  element: withIconSrcGuard(
+    StrictDesignerElementSchema.innerType().omit({ id: true }).strict()
+  ),
   beforeElementId: z.string().max(200).optional(),
 });
 

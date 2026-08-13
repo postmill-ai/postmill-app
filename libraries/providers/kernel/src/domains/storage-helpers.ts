@@ -7,6 +7,7 @@ import {
   HeadBucketCommand,
 } from '@aws-sdk/client-s3';
 import { randomBytes } from 'crypto';
+import { createReadStream, statSync } from 'fs';
 import * as fileType from 'file-type';
 import { CredentialField } from '../manifest';
 import { ProviderModule, ProviderRuntimeContext } from '../module';
@@ -281,7 +282,20 @@ export class S3StorageBase implements StorageCapability {
 
   async uploadFile(file: any): Promise<any> {
     try {
-      const detected = await fromBuffer(file.buffer);
+      // `/files/upload-simple` uses multer's memoryStorage (file.buffer), while
+      // `/files/upload-server` uses diskStorage (file.path, no buffer). Sniff from
+      // whichever the caller supplied — reading only file.buffer made every
+      // upload-server request fail with "Unsupported file type." on S3-backed orgs.
+      const hasBuffer = !!file.buffer && Buffer.isBuffer(file.buffer);
+      let detected: DetectedFileType;
+      if (hasBuffer) {
+        detected = await fromBuffer(file.buffer);
+      } else if (file.path) {
+        detected = await fromFile(file.path);
+      } else {
+        throw new Error('Invalid file upload.');
+      }
+
       if (!detected || !ALLOWED_MIME_TYPES.has(detected.mime)) {
         throw new Error('Unsupported file type.');
       }
@@ -290,12 +304,19 @@ export class S3StorageBase implements StorageCapability {
       const safeContentType = detected.mime;
       const key = `${id}.${extension}`;
 
+      // PutObjectCommand cannot compute the length of a stream, so pass it
+      // explicitly when streaming from disk.
+      const contentLength = hasBuffer
+        ? undefined
+        : file.size || statSync(file.path).size;
+
       await this.client.send(
         new PutObjectCommand({
           Bucket: this.bucket,
           Key: key,
-          Body: file.buffer,
+          Body: hasBuffer ? file.buffer : createReadStream(file.path),
           ContentType: safeContentType,
+          ...(contentLength ? { ContentLength: contentLength } : {}),
         }),
       );
 

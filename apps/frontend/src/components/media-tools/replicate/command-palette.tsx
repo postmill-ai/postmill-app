@@ -139,6 +139,8 @@ export function CommandPalette({ categories }: { categories: CategoryDefinition[
       onClick={closePalette}
     >
       <div
+        role="dialog"
+        aria-modal="true"
         className="w-full max-w-lg rounded-xl border border-studioBorder bg-newBgColor shadow-2xl overflow-hidden"
         onClick={(e) => e.stopPropagation()}
       >

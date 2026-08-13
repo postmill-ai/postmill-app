@@ -5,10 +5,8 @@ import { useFetch } from '@postmill-ai/helpers/utils/custom.fetch';
 import useSWR from 'swr';
 import { useToaster } from '@postmill-ai/react/toaster/toaster';
 import { useDecisionModal, useModals } from '@postmill-ai/frontend/components/layout/new-modal';
-import {
-  MediaSelectorItem,
-  MediaSelectorModal,
-} from '@postmill-ai/frontend/components/media-tools/media-selector-modal';
+import { MediaSelectorItem } from '@postmill-ai/frontend/components/media-tools/media-selector-modal';
+import { useMediaPicker } from '@postmill-ai/frontend/components/media-tools/use-media-picker';
 import copy from 'copy-to-clipboard';
 import { useT } from '@postmill-ai/react/translation/get.transation.service.client';
 
@@ -81,8 +79,6 @@ export const DeveloperComponent: FC = () => {
   const [redirectUrl, setRedirectUrl] = useState('');
   const [pictureId, setPictureId] = useState<string | undefined>(undefined);
   const [picturePath, setPicturePath] = useState<string | undefined>(undefined);
-  const [pickerOpen, setPickerOpen] = useState(false);
-  const [importing, setImporting] = useState(false);
 
   const startEditing = useCallback(() => {
     if (!app) return;
@@ -94,53 +90,18 @@ export const DeveloperComponent: FC = () => {
     setEditing(true);
   }, [app]);
 
-  const handleSelect = useCallback(
-    async (item: MediaSelectorItem) => {
-      setPickerOpen(false);
-      if (item.source === 'file') {
-        setPictureId(item.fileId);
-        setPicturePath(item.url);
-        return;
-      }
-      setImporting(true);
-      try {
-        const res = await fetch('/files/import', {
-          method: 'POST',
-          body: JSON.stringify({
-            url: item.url,
-            name: item.name || 'stock-import',
-            type: item.type,
-            source: item.stockSource,
-            attribution: item.attribution,
-            ...(item.downloadLocation
-              ? { downloadLocation: item.downloadLocation }
-              : {}),
-          }),
-        });
-        if (!res.ok) {
-          const text = await res.text().catch(() => 'Import failed');
-          throw new Error(text);
-        }
-        const imported = (await res.json()) as { id: string; path: string };
-        setPictureId(imported.id);
-        setPicturePath(imported.path);
-      } catch (err) {
-        toaster.show(
-          t('import_failed_with_message', 'Import failed: {{message}}', {
-            message: (err as Error).message,
-          }),
-          'warning'
-        );
-      } finally {
-        setImporting(false);
-      }
+  const iconPicker = useMediaPicker({
+    title: t('app_icon', 'App icon'),
+    kinds: ['image'],
+    // The picker imports stock picks itself now (it used to be re-implemented
+    // here), and shows its own "Importing…" state while it does.
+    requireFile: true,
+    onSelect: (item: MediaSelectorItem) => {
+      setPictureId(item.fileId);
+      setPicturePath(item.url);
     },
-    [fetch, t, toaster]
-  );
+  });
 
-  const openMedia = useCallback(() => {
-    setPickerOpen(true);
-  }, []);
 
   const createApp = useCallback(async () => {
     if (!name || !redirectUrl) {
@@ -373,13 +334,10 @@ export const DeveloperComponent: FC = () => {
                 )}
                 <button
                   type="button"
-                  onClick={openMedia}
-                  disabled={importing}
-                  className="cursor-pointer px-[16px] h-[36px] bg-btnSimple hover:bg-boxHover transition-colors rounded-[8px] text-[13px] font-[600] disabled:opacity-50 disabled:cursor-not-allowed"
+                  onClick={iconPicker.open}
+                  className="cursor-pointer px-[16px] h-[36px] bg-btnSimple hover:bg-boxHover transition-colors rounded-[8px] text-[13px] font-[600]"
                 >
-                  {importing
-                    ? t('importing', 'Importing…')
-                    : t('choose_image', 'Choose image')}
+                  {t('choose_image', 'Choose image')}
                 </button>
               </div>
             </div>
@@ -501,13 +459,10 @@ export const DeveloperComponent: FC = () => {
                 )}
                 <button
                   type="button"
-                  onClick={openMedia}
-                  disabled={importing}
-                  className="cursor-pointer px-[16px] h-[36px] bg-btnSimple hover:bg-boxHover transition-colors rounded-[8px] text-[13px] font-[600] disabled:opacity-50 disabled:cursor-not-allowed"
+                  onClick={iconPicker.open}
+                  className="cursor-pointer px-[16px] h-[36px] bg-btnSimple hover:bg-boxHover transition-colors rounded-[8px] text-[13px] font-[600]"
                 >
-                  {importing
-                    ? t('importing', 'Importing…')
-                    : t('choose_image', 'Choose image')}
+                  {t('choose_image', 'Choose image')}
                 </button>
               </div>
             </div>
@@ -645,12 +600,7 @@ export const DeveloperComponent: FC = () => {
           </div>
         </div>
       </div>
-      <MediaSelectorModal
-        open={pickerOpen}
-        onClose={() => setPickerOpen(false)}
-        onSelect={handleSelect}
-        kinds={['image']}
-      />
+      {iconPicker.element}
     </div>
   );
 };

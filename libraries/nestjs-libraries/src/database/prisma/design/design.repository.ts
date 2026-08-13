@@ -21,6 +21,7 @@ export class DesignRepository {
       orderBy: { updatedAt: 'desc' },
       skip: (page - 1) * limit,
       take: limit,
+      include: { previewFile: { select: { path: true } } },
     });
   }
 
@@ -44,7 +45,7 @@ export class DesignRepository {
     return this._design.model.design.create({ data });
   }
 
-  update(id: string, orgId: string, data: { name?: string; doc?: any; width?: number; height?: number; previewDataUrl?: string; previewFileId?: string }) {
+  update(id: string, orgId: string, data: { name?: string; doc?: any; width?: number; height?: number; previewDataUrl?: string; previewFileId?: string | null }) {
     return this._design.model.design.update({
       where: { id, organizationId: orgId },
       data,
@@ -66,6 +67,7 @@ export class DesignRepository {
         OR: [{ organizationId: orgId }, { isSystem: true }],
       },
       orderBy: [{ isSystem: 'desc' }, { name: 'asc' }],
+      include: { thumbnailFile: { select: { path: true } } },
     });
   }
 
@@ -85,6 +87,7 @@ export class DesignRepository {
     category: string;
     doc: any;
     isSystem?: boolean;
+    thumbnailFileId?: string;
   }) {
     return this._designTemplate.model.designTemplate.create({ data });
   }

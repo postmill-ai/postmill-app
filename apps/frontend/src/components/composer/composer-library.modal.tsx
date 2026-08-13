@@ -10,6 +10,7 @@ import React, {
 import { useFetch } from '@postmill-ai/helpers/utils/custom.fetch';
 import useSWR from 'swr';
 import { useT } from '@postmill-ai/react/translation/get.transation.service.client';
+import { OverflowTabs } from '@postmill-ai/frontend/components/ui/overflow-tabs';
 import { useLaunchStore } from '@postmill-ai/frontend/components/composer/store';
 import { useShallow } from 'zustand/react/shallow';
 import { makeId } from '@postmill-ai/nestjs-libraries/services/make.is';
@@ -311,28 +312,22 @@ export const ComposerLibraryModal: FC<ComposerLibraryModalProps> = ({
 
   return (
     <div className="flex flex-col w-full max-w-[560px] max-h-[80vh]">
-      <div className="flex items-center gap-[8px] border-b border-newTableBorder mb-[16px]">
-        {TAB_ORDER.map((tKey) => (
-          <button
-            key={tKey}
-            type="button"
-            onClick={() => setTab(tKey)}
-            className={clsx(
-              'px-[12px] py-[10px] text-[13px] font-[500] transition-colors relative',
-              tab === tKey
-                ? 'text-textColor'
-                : 'text-newTableText hover:text-textColor'
-            )}
-          >
-            {tKey === 'drafts' && t('drafts', 'Drafts')}
-            {tKey === 'templates' && t('post_templates', 'Post Templates')}
-            {tKey === 'signatures' && t('signatures', 'Signatures')}
-            {tab === tKey && (
-              <span className="absolute bottom-0 left-0 right-0 h-[2px] bg-btnPrimary rounded-t-[2px]" />
-            )}
-          </button>
-        ))}
-      </div>
+      <OverflowTabs
+        items={TAB_ORDER.map((tKey) => ({
+          key: tKey,
+          label:
+            tKey === 'drafts'
+              ? t('drafts', 'Drafts')
+              : tKey === 'templates'
+                ? t('post_templates', 'Post Templates')
+                : t('signatures', 'Signatures'),
+        }))}
+        activeKey={tab}
+        onSelect={(key) => setTab(key as typeof tab)}
+        ariaLabel={t('more_tabs', 'More tabs')}
+        listAriaLabel={t('library', 'Library')}
+        className="mb-[16px]"
+      />
 
       <div className="mb-[12px]">
         <input

@@ -6,13 +6,16 @@ import {
 } from '@reaatech/agent-mesh-router';
 import type { AgentResponse, ContextPacket } from '@reaatech/agent-mesh';
 import { AIModelProvider } from '@postmill-ai/nestjs-libraries/ai/ai-model.provider';
-import { repair } from '@reaatech/structured-repair-core';
 import { z } from 'zod';
 import type { DesignPlan } from '../../ai-designer.types';
+import { isCopySlot } from '../../ai-designer.types';
 import {
   isAgentInputError,
   parseAgentInput,
 } from '../../util/parse-agent-input';
+import { throwIfAborted } from '../../util/throw-if-aborted';
+import { parseOrRepair } from '../../util/parse-or-repair';
+import { matchSlotTexts } from '../../util/slot-keys';
 
 interface CopyBrand {
   instructions?: string;
@@ -26,6 +29,12 @@ interface CopywriterInput {
   plan: DesignPlan;
   brand: CopyBrand | null;
   slotTexts?: Record<string, string>;
+  /**
+   * User-approved copy from the accepted plan card. Locked slots are returned
+   * verbatim and never sent to the model for a rewrite — only the remaining
+   * (open) copy slots are written.
+   */
+  lockedTexts?: Record<string, string>;
 }
 
 @Injectable()
@@ -41,6 +50,10 @@ export class AiDesignerCopywriterService implements OnModuleInit {
   private _handler: InProcessHandler = async (
     context: ContextPacket
   ): Promise<AgentResponse> => {
+    // The session signal rides in metadata from the conductor — a cancelled
+    // or timed-out session must not start billable copy generation.
+    const signal = context.metadata?.signal as AbortSignal | undefined;
+    throwIfAborted(signal);
     const payload = parseAgentInput<CopywriterInput>(context.raw_input);
     if (isAgentInputError(payload)) {
       return {
@@ -52,7 +65,9 @@ export class AiDesignerCopywriterService implements OnModuleInit {
       payload.plan,
       payload.brand,
       payload.slotTexts,
-      (context.metadata?.orgId as string | undefined) ?? undefined
+      payload.lockedTexts,
+      (context.metadata?.orgId as string | undefined) ?? undefined,
+      signal
     );
 
     return {
@@ -65,16 +80,34 @@ export class AiDesignerCopywriterService implements OnModuleInit {
     plan: DesignPlan,
     brand: CopyBrand | null,
     existingTexts: Record<string, string> | undefined,
-    orgId: string | undefined
+    lockedTexts: Record<string, string> | undefined,
+    orgId: string | undefined,
+    signal?: AbortSignal
   ): Promise<Record<string, string>> {
-    const textSlots = plan.slots.filter((s) => s.kind === 'text');
+    const textSlots = plan.slots.filter(isCopySlot);
     if (textSlots.length === 0) {
       return {};
     }
 
+    // Locked copy (approved by the user on the plan card) is returned
+    // verbatim and never rewritten — the model only sees the open slots.
+    const locked: Record<string, string> = {};
+    if (lockedTexts) {
+      for (const slot of textSlots) {
+        const text = lockedTexts[slot.id];
+        if (typeof text === 'string' && text.trim()) {
+          locked[slot.id] = text;
+        }
+      }
+    }
+    const openSlots = textSlots.filter((slot) => !(slot.id in locked));
+    if (openSlots.length === 0) {
+      return locked;
+    }
+
     const reviseIds = new Set<string>();
     if (existingTexts && Object.keys(existingTexts).length > 0) {
-      for (const slot of textSlots) {
+      for (const slot of openSlots) {
         if (existingTexts[slot.id] !== undefined) {
           reviseIds.add(slot.id);
         }
@@ -82,18 +115,19 @@ export class AiDesignerCopywriterService implements OnModuleInit {
     }
 
     const system = this._buildSystemPrompt(plan, brand);
-    const prompt = this._buildPrompt(plan, textSlots, existingTexts, reviseIds);
+    const prompt = this._buildPrompt(plan, openSlots, existingTexts, reviseIds);
 
     const raw = await this._ai.generateText('utility', prompt, {
       system,
       orgId,
+      signal,
     });
 
-    const parsed = await this._parseRawCopy(raw, textSlots);
+    const parsed = await this._parseRawCopy(raw, openSlots);
 
     // For a revise request, keep unchanged slots from the existing copy.
     if (existingTexts) {
-      for (const slot of textSlots) {
+      for (const slot of openSlots) {
         if (!reviseIds.has(slot.id)) {
           parsed[slot.id] = existingTexts[slot.id] ?? parsed[slot.id] ?? '';
         } else {
@@ -102,9 +136,9 @@ export class AiDesignerCopywriterService implements OnModuleInit {
       }
     }
 
-    const result: Record<string, string> = {};
+    const result: Record<string, string> = { ...locked };
     const missing: string[] = [];
-    for (const slot of textSlots) {
+    for (const slot of openSlots) {
       if (parsed[slot.id]) {
         result[slot.id] = parsed[slot.id];
       } else {
@@ -200,9 +234,13 @@ export class AiDesignerCopywriterService implements OnModuleInit {
     raw: string,
     slots: { id: string; role?: string }[]
   ): Promise<Record<string, string>> {
-    // Layer 1: structured repair (fenced/malformed JSON normalized).
+    // Layer 1: plain parse first, structured repair second (fenced/malformed
+    // JSON normalized). The order matters: repair() strips `//…` comments
+    // string-unaware, so copy carrying an https:// URL comes back mangled —
+    // and a mangled input still "repairs" into a partial map that used to
+    // return early and shadow the intact parse below.
     try {
-      const repaired = await repair(z.record(z.string()), raw);
+      const repaired = await parseOrRepair(z.record(z.string()), raw);
       if (repaired && typeof repaired === 'object' && !Array.isArray(repaired)) {
         const matched = this._matchSlots(repaired as Record<string, string>, slots);
         if (Object.keys(matched).length > 0) return matched;
@@ -211,7 +249,8 @@ export class AiDesignerCopywriterService implements OnModuleInit {
       // Fall through to JSON.parse / line extraction.
     }
 
-    // Layer 2: plain JSON.
+    // Layer 2: plain JSON (no schema constraint — a map with non-string
+    // values still yields usable copy through _matchSlots).
     try {
       const parsed = JSON.parse(raw);
       if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
@@ -243,27 +282,11 @@ export class AiDesignerCopywriterService implements OnModuleInit {
 
   /** Match model-returned keys to slots by exact id, then normalized id/role —
    *  models routinely key by the slot's ROLE (e.g. "primaryHeadline") instead
-   *  of its id ("headline"). */
+   *  of its id ("headline"). Shared with the conductor via util/slot-keys. */
   private _matchSlots(
     record: Record<string, unknown>,
     slots: { id: string; role?: string }[]
   ): Record<string, string> {
-    const norm = (v: string) => v.toLowerCase().replace(/[^a-z0-9]/g, '');
-    const out: Record<string, string> = {};
-    const entries = Object.entries(record).filter(
-      ([, v]) => typeof v === 'string' && (v as string).trim().length > 0
-    ) as [string, string][];
-    for (const slot of slots) {
-      const exact = entries.find(([k]) => k === slot.id);
-      if (exact) { out[slot.id] = exact[1]; continue; }
-      const wantId = norm(slot.id);
-      const wantRole = norm(slot.role || '');
-      const fuzzy = entries.find(([k]) => {
-        const nk = norm(k);
-        return nk === wantId || (wantRole && (nk === wantRole || nk.includes(wantRole) || wantRole.includes(nk)));
-      });
-      if (fuzzy) out[slot.id] = fuzzy[1];
-    }
-    return out;
+    return matchSlotTexts(record, slots);
   }
 }

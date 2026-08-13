@@ -2,15 +2,21 @@
 
 import { FC } from 'react';
 import { useT } from '@postmill-ai/react/translation/get.transation.service.client';
+import { usePromptModal } from '@postmill-ai/frontend/components/layout/new-modal';
 
 export const AComponent: FC<{
   editor: any;
   currentValue: string;
 }> = ({ editor }) => {
   const t = useT();
-  const mark = () => {
+  const prompt = usePromptModal();
+  const mark = async () => {
     const previousUrl = editor?.getAttributes('link')?.href;
-    const url = window.prompt(t('url', 'URL'), previousUrl);
+    const url = await prompt.open({
+      title: t('link', 'Link'),
+      label: t('url', 'URL'),
+      initialValue: previousUrl || '',
+    });
 
     // cancelled
     if (url === null) {

@@ -24,6 +24,7 @@ const POST_ITEM_KEYS: Record<string, string> = {
   campaignId: 'ci',
   approvalStatus: 'as',
   mediaType: 'mt',
+  thumb: 'th',
   color: 'cl',
   tags: 'tg',
   integration: 'n',
@@ -42,6 +43,7 @@ const INTEGRATION_KEYS: Record<string, string> = {
   providerIdentifier: 'pi',
   name: 'n',
   picture: 'p',
+  profile: 'pr',
 };
 
 const TAG_KEYS: Record<string, string> = {

@@ -10,6 +10,7 @@ import { migrateDoc } from './designer-doc.migrate';
 import {
   MAX_DIMENSION,
   MAX_ELEMENTS_PER_OUTPUT,
+  MAX_FONT_SIZE,
   MAX_VIDEO_DURATION_MS,
 } from './designer-doc.limits';
 
@@ -223,10 +224,72 @@ describe('DesignerDoc schema', () => {
     expect(parsed.outputs[0].children[1].hidden).toBe(false);
   });
 
+  it('does not stamp text defaults onto non-text elements in lenient mode', () => {
+    const parsed = DesignerDocLenientSchema.parse(migrateDoc(imageDocFixture));
+    const image = parsed.outputs[0].children[1];
+    expect(image.fontSize).toBeUndefined();
+    expect(image.fontWeight).toBeUndefined();
+    expect(image.lineHeight).toBeUndefined();
+    expect(image.strokeWidth).toBeUndefined();
+    // A present-but-invalid value is dropped, not defaulted.
+    const bad = JSON.parse(JSON.stringify(imageDocFixture));
+    bad.outputs[0].children[1].fontSize = 'huge';
+    const reparsed = DesignerDocLenientSchema.parse(migrateDoc(bad));
+    expect(reparsed.outputs[0].children[1].fontSize).toBeUndefined();
+    // Text keeps what it declared, clamped.
+    const clamped = JSON.parse(JSON.stringify(imageDocFixture));
+    clamped.outputs[0].children[0].fontSize = 1e9;
+    const textParsed = DesignerDocLenientSchema.parse(migrateDoc(clamped));
+    expect(textParsed.outputs[0].children[0].fontSize).toBe(MAX_FONT_SIZE);
+  });
+
+  it('stamps no fontSize onto rich-text RUNS that never carried one', () => {
+    // The renderer resolves `run.fontSize ?? el.fontSize`, so a lenient-stamped
+    // 16 on a run silently shrank the line: an emphasised 96px headline
+    // rendered at 16px (live, sale run).
+    const doc = JSON.parse(JSON.stringify(imageDocFixture));
+    doc.outputs[0].children[0].richText = [
+      { text: 'BUY 1 GET 1 ' },
+      { text: 'FREE', fill: '#00F0FF', fontWeight: 900 },
+    ];
+    const parsed = DesignerDocLenientSchema.parse(migrateDoc(doc));
+    const runs = parsed.outputs[0].children[0].richText!;
+    expect(runs[0].fontSize).toBeUndefined();
+    expect(runs[1].fontSize).toBeUndefined();
+    expect(runs[1].fontWeight).toBe(900);
+  });
+
   it('accepts a managed http src in dev', () => {
     const ok = JSON.parse(JSON.stringify(imageDocFixture));
     ok.outputs[0].children[1].src = 'http://localhost:3000/uploads/asset.png';
     expect(DesignerDocStrictSchema.safeParse(migrateDoc(ok)).success).toBe(true);
+  });
+
+  it('accepts raw SVG markup as an icon src, strictly and leniently', () => {
+    const doc = JSON.parse(JSON.stringify(imageDocFixture));
+    doc.outputs[0].children.push({
+      id: 'el-icon',
+      type: 'icon',
+      x: 100,
+      y: 100,
+      width: 120,
+      height: 120,
+      rotation: 0,
+      opacity: 1,
+      locked: false,
+      hidden: false,
+      src: '<path d="M12 2l2.9 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77z"/>',
+      fill: '#2B5CD3',
+    });
+    expect(DesignerDocStrictSchema.safeParse(migrateDoc(doc)).success).toBe(true);
+    expect(DesignerDocLenientSchema.safeParse(migrateDoc(doc)).success).toBe(true);
+  });
+
+  it('rejects raw SVG markup as a non-icon src', () => {
+    const bad = JSON.parse(JSON.stringify(imageDocFixture));
+    bad.outputs[0].children[1].src = '<path d="M0 0h1v1z"/>';
+    expect(DesignerDocStrictSchema.safeParse(migrateDoc(bad)).success).toBe(false);
+    expect(DesignerDocLenientSchema.safeParse(migrateDoc(bad)).success).toBe(false);
   });
 });
 

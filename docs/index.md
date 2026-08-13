@@ -3,8 +3,8 @@ layout: home
 
 hero:
   name: "Postmill"
-  text: "Schedule social & chat posts across 36 channels"
-  tagline: "A scheduling platform with a calendar, persisted analytics, team management, a media library, and a pluggable AI layer."
+  text: "The AI-native social media management platform"
+  tagline: "Schedule to 36+ channels, reply from one inbox, design in-app, and run AI on your own keys."
   actions:
     - theme: brand
       text: "Get Started"

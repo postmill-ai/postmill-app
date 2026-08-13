@@ -1,5 +1,6 @@
 import {
   AuthTokenDetails,
+  MoltbookDto,
   PostDetails,
   PostResponse,
   SocialProvider,
@@ -20,6 +21,7 @@ export class MoltbookProvider extends SocialAbstract implements SocialProvider {
   scopes = [] as string[];
   isWeb3 = true;
   editor = 'normal' as const;
+  dto = MoltbookDto;
 
   maxLength() {
     return 300;

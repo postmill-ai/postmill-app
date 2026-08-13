@@ -209,7 +209,7 @@ Invariants:
 | Secrets at rest | AES-GCM, `v2:` prefix. Per-org rows → `EncryptionService`; global rows → `AuthService.fixedEncryption`. Same key behind two routes — never cross routes for one row | `libraries/nestjs-libraries/src/encryption/encryption.service.ts`, `libraries/helpers/src/auth/auth.service.ts:100` |
 | User-facing notifications | **Only** `NotificationService.notify` — never `EmailService` directly from feature code | `libraries/nestjs-libraries/src/database/prisma/notifications/notification.service.ts`; `agents/notifications.md` |
 | Redis | Never blocking commands (BRPOP/BLPOP/BRPOPLPUSH) on the shared `ioRedis` client — they stall the per-request throttler. Use `ioRedis.duplicate()` | `libraries/nestjs-libraries/src/redis/redis.service.ts` |
-| Throttling | On by default: `ThrottlerBehindProxyGuard`, global 600/h per IP (`API_LIMIT` env). Sensitive routes add `@Throttle({ default: { limit, ttl } })` (login 10/min, register 5/min) | `app.module.ts:58-73`; examples in `auth.controller.ts` |
+| Throttling | On by default: `ThrottlerBehindProxyGuard`, 600/h (`API_LIMIT` env) **per (controller, handler, org)** — per client IP only for unauthenticated routes, not one global budget. Sensitive routes add `@Throttle({ default: { limit, ttl } })` (login 10/min, register 5/min); polled job-status endpoints raise the hourly cap | `app.module.ts:58-73`; examples in `auth.controller.ts`, `heygen.controller.ts` |
 
 ---
 

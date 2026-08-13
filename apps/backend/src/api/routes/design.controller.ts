@@ -10,6 +10,7 @@ import {
   Query,
   Res,
 } from '@nestjs/common';
+import { Throttle } from '@nestjs/throttler';
 import { Organization, User } from '@prisma/client';
 import { GetOrgFromRequest } from '@postmill-ai/nestjs-libraries/user/org.from.request';
 import { GetUserFromRequest } from '@postmill-ai/nestjs-libraries/user/user.from.request';
@@ -30,7 +31,11 @@ import {
   FRAME_RENDERER_SCRIPT,
   escapeForScriptTag,
 } from '@postmill-ai/nestjs-libraries/media/design-render/frame-renderer-script';
+import { buildFramePage, fontLinksForOutput } from '@postmill-ai/nestjs-libraries/media/design-render/frame-page';
 import { RenderDesignDto } from '@postmill-ai/nestjs-libraries/dtos/design/render.design.dto';
+import { TextOutlinesDto } from '@postmill-ai/nestjs-libraries/dtos/design/text-outlines.dto';
+import { textToOutlines } from '@postmill-ai/nestjs-libraries/media/design-render/text-outlines';
+import { FontLoaderService } from '@postmill-ai/nestjs-libraries/media/design-render/font-loader.service';
 import { RenderVideoDesignDto } from '@postmill-ai/nestjs-libraries/dtos/design/render-video.design.dto';
 import { BulkGenerateDesignDto } from '@postmill-ai/nestjs-libraries/dtos/design/bulk.generate.design.dto';
 import { CreateDesignDto } from '@postmill-ai/nestjs-libraries/dtos/design/create-design.dto';
@@ -58,6 +63,7 @@ export class DesignController {
     private _designBulkService: DesignBulkService,
     private _videoRenderService: VideoRenderService,
     private _designerDocService: DesignerDocService,
+    private _fontLoaderService: FontLoaderService,
   ) {}
 
   @Get('/')
@@ -143,6 +149,52 @@ export class DesignController {
     res.end(png);
   }
 
+  /**
+   * Text -> `path` elements.
+   *
+   * Server-side because glyph contours live in the font file's own tables and
+   * no canvas API — browser or node — exposes them. The font is already on
+   * disk: every family a render uses is downloaded and cached by
+   * `FontLoaderService`.
+   */
+  @Post('/text-outlines')
+  @CheckPolicies([AuthorizationActions.Create, Sections.MEDIA])
+  @RequirePermission('media', 'create')
+  async textOutlines(
+    @GetOrgFromRequest() org: Organization,
+    @Body() body: TextOutlinesDto,
+  ): Promise<{ elements: unknown[]; reason?: string }> {
+    const el = body.element as any;
+    if (el?.type !== 'text' || typeof el.text !== 'string' || !el.text) {
+      return { elements: [], reason: 'not-text' };
+    }
+    // The element arrives as a free object (an unsaved edit has no id to load),
+    // so it never passed the document schema — bound the fields that drive CPU.
+    // One path element per glyph contour makes a megabyte of text a render
+    // farm's worth of bezier extraction.
+    if (
+      el.text.length > 5000 ||
+      !(el.width > 0) || el.width > 20000 ||
+      !(el.height > 0) || el.height > 20000 ||
+      (el.fontSize != null && !(el.fontSize > 0 && el.fontSize <= 2000))
+    ) {
+      return { elements: [], reason: 'out-of-bounds' };
+    }
+
+    const fontPath = await this._fontLoaderService.resolveFontFile(
+      org.id,
+      el.fontFamily || 'Arial',
+      el.fontWeight || 400,
+    );
+    // A font we could not fetch, or one that only exists as WOFF2, yields
+    // nothing and says so — rather than outlines in the wrong typeface.
+    if (!fontPath) return { elements: [], reason: 'font-unavailable' };
+
+    return {
+      elements: await textToOutlines(el, { fontPath, perGlyph: body.perGlyph !== false }),
+    };
+  }
+
   @Post('/bulk-generate')
   @CheckPolicies([AuthorizationActions.Create, Sections.MEDIA])
   @RequirePermission('media', 'create')
@@ -209,6 +261,9 @@ export class DesignController {
   @Get('/render-video/:jobId')
   @CheckPolicies([AuthorizationActions.Read, Sections.MEDIA])
   @RequirePermission('media', 'read')
+  // The Designer export dialog polls this every 2s, once per queued output (1800/h per
+  // job), far over the global per-handler/per-org backstop of 600/h.
+  @Throttle({ default: { limit: 2000, ttl: 3600000 } })
   async getVideoRenderStatus(
     @GetOrgFromRequest() org: Organization,
     @Param('jobId') jobId: string,
@@ -420,27 +475,14 @@ export class DesignRenderFrameController {
       'http://localhost:3000';
     const initialFrame = frame ? Number(frame) : undefined;
 
-    const html = `<!DOCTYPE html>
-<html>
-<head>
-  <meta charset="utf-8">
-  <base href="${baseUrl}">
-  <style>body{margin:0;background:#000}</style>
-</head>
-<body>
-  <canvas id="frame-canvas"></canvas>
-  <script>
-    window.__DATA = {
-      output: ${escapeForScriptTag(output)},
-      baseUrl: ${escapeForScriptTag(baseUrl)}
-    };
-    ${FRAME_RENDERER_SCRIPT}
-    window.__FRAME_API.preload().then(function () {
-      ${initialFrame != null ? `window.__FRAME_API.renderFrame(${initialFrame});` : ''}
+    const html = buildFramePage({
+      outputLiteral: escapeForScriptTag(output),
+      baseUrlLiteral: escapeForScriptTag(baseUrl),
+      baseUrl,
+      script: FRAME_RENDERER_SCRIPT,
+      initialFrame,
+      fontLinks: fontLinksForOutput(output),
     });
-  </script>
-</body>
-</html>`;
 
     res.setHeader('Content-Type', 'text/html');
     res.send(html);

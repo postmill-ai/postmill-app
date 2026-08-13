@@ -1,7 +1,8 @@
 'use client';
 
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useEffect, useId, useMemo, useRef, useState } from 'react';
 import clsx from 'clsx';
+import { StockAudio } from './stock-audio';
 import { StockPhotos } from './stock-photos';
 import { StockVideos } from './stock-videos';
 import { StockVectors } from './stock-vectors';
@@ -12,6 +13,8 @@ import type { FileItem } from '@postmill-ai/frontend/components/files/file-manag
 import { useFetch } from '@postmill-ai/helpers/utils/custom.fetch';
 import { useToaster } from '@postmill-ai/react/toaster/toaster';
 import { useT } from '@postmill-ai/react/translation/get.transation.service.client';
+import { useImportStockMedia } from '@postmill-ai/frontend/components/media-tools/media-import';
+import { OverflowTabs } from '@postmill-ai/frontend/components/ui/overflow-tabs';
 
 export type MediaKind = 'image' | 'video' | 'audio';
 
@@ -30,34 +33,61 @@ export interface MediaSelectorItem {
   downloadLocation?: string | null;
 }
 
+// Your own files lead: the picker exists to attach something you already have,
+// so it must not open on a stock-photo wall. `activeTab` takes `tabs[0]`, and
+// 'My Files' maps to a null kind (below) so it survives every `kinds` filter —
+// which makes it the default everywhere without extra logic.
 const ALL_TABS = [
-  'Stock Photos',
-  'Stock Videos',
-  'Stock Vectors',
-  'Stock Stickers',
-  'Stock Icons',
   'My Files',
+  'Stock Audio',
+  'Stock Icons',
+  'Stock Photos',
+  'Stock Stickers',
+  'Stock Vectors',
+  'Stock Videos',
 ] as const;
 
-const TAB_TO_KIND: Record<(typeof ALL_TABS)[number], MediaKind | null> = {
-  'Stock Photos': 'image',
-  'Stock Videos': 'video',
-  'Stock Vectors': 'image',
-  'Stock Stickers': 'image',
-  'Stock Icons': 'image',
+export type MediaTab = (typeof ALL_TABS)[number];
+
+const TAB_TO_KIND: Record<MediaTab, MediaKind | null> = {
   'My Files': null,
+  'Stock Audio': 'audio',
+  'Stock Icons': 'image',
+  'Stock Photos': 'image',
+  'Stock Stickers': 'image',
+  'Stock Vectors': 'image',
+  'Stock Videos': 'video',
 };
 
 // Tabs are compared/keyed by their canonical English value (ALL_TABS) — only the
 // displayed label is translated, via this lookup.
-const TAB_LABEL_KEYS: Record<(typeof ALL_TABS)[number], string> = {
-  'Stock Photos': 'stock_photos_tab',
-  'Stock Videos': 'stock_videos_tab',
-  'Stock Vectors': 'stock_vectors_tab',
-  'Stock Stickers': 'stock_stickers_tab',
-  'Stock Icons': 'stock_icons_tab',
+const TAB_LABEL_KEYS: Record<MediaTab, string> = {
   'My Files': 'my_files_tab',
+  'Stock Audio': 'audio',
+  'Stock Icons': 'icons',
+  'Stock Photos': 'photos',
+  'Stock Stickers': 'stickers',
+  'Stock Vectors': 'stock_vectors_tab',
+  'Stock Videos': 'videos',
 };
+
+/**
+ * Displayed labels drop the word "Stock" — the bar carries it once as a group
+ * label instead of repeating it on every tab.
+ */
+const TAB_LABELS: Record<MediaTab, string> = {
+  'My Files': 'My Files',
+  'Stock Audio': 'Audio',
+  'Stock Icons': 'Icons',
+  'Stock Photos': 'Photos',
+  'Stock Stickers': 'Stickers',
+  'Stock Vectors': 'Vectors',
+  'Stock Videos': 'Videos',
+};
+
+/** Everything but My Files sits under one "Stock" heading. */
+const tabSection = (tab: MediaTab): string | undefined =>
+  tab === 'My Files' ? undefined : 'Stock';
 
 const useFocusTrap = (
   containerRef: React.RefObject<HTMLElement | null>,
@@ -104,15 +134,29 @@ const useFocusTrap = (
   }, [open, onClose, containerRef]);
 };
 
-interface MediaSelectorModalProps {
+export interface MediaSelectorModalProps {
   open: boolean;
   onClose: () => void;
+  /**
+   * Contextual heading, e.g. "Background image". Defaults to "Select media".
+   * The picker owns its header — never wrap it in `openModal` to add a title.
+   */
+  title?: React.ReactNode;
   /** Legacy single-select callback. Closes the modal. Default behavior. */
-  onSelect?: (item: MediaSelectorItem) => void;
+  onSelect?: (item: MediaSelectorItem) => void | Promise<void>;
   /** Multi-select mode: keeps the modal open and accumulates selections. */
   multiple?: boolean;
   /** Multi-select confirmation callback. Receives the accumulated batch. */
-  onConfirm?: (items: MediaSelectorItem[]) => void;
+  onConfirm?: (items: MediaSelectorItem[]) => void | Promise<void>;
+  /**
+   * Exactly these tabs, in this order — an allow-list that beats `kinds` and
+   * `excludeTabs` when given.
+   *
+   * `kinds` can't separate the image sub-sources (Photos/Vectors/Stickers/Icons
+   * all map to `'image'`), so a caller that wants "My Files and stock photos,
+   * nothing else" had to spell it out as three exclusions. This says it once.
+   */
+  tabs?: readonly MediaTab[];
   /** Restrict visible tabs to post-appropriate kinds. Default = all tabs. */
   kinds?: MediaKind[];
   /**
@@ -122,21 +166,39 @@ interface MediaSelectorModalProps {
    * individual stock tab — e.g. the composer hides Icons (SVG → /files/import 415).
    */
   excludeTabs?: readonly string[];
+  /**
+   * Guarantee the caller receives a real File: stock picks are imported via
+   * `POST /files/import` before `onSelect`/`onConfirm` fire, so every item has
+   * a `fileId` and a `/files` path. Callers that persist a reference (settings,
+   * studios, HeyGen) want this; it replaces six hand-rolled copies of the same
+   * fallback. Do NOT combine with a caller that imports the batch itself.
+   */
+  requireFile?: boolean;
+  /** File name used when `requireFile` imports a stock pick. */
+  importName?: string;
 }
 
 export const MediaSelectorModal: React.FC<MediaSelectorModalProps> = ({
   open,
   onClose,
+  title,
   onSelect,
   multiple,
   onConfirm,
+  tabs: tabsProp,
   kinds,
   excludeTabs,
+  requireFile,
+  importName,
 }) => {
   const t = useT();
   const fetch = useFetch();
   const toaster = useToaster();
+  const importStockMedia = useImportStockMedia();
+  const titleId = useId();
   const tabs = useMemo(() => {
+    // An explicit list is the caller being specific; honour it verbatim.
+    if (tabsProp?.length) return tabsProp.filter((tab) => ALL_TABS.includes(tab));
     const kindFiltered = !kinds?.length
       ? ALL_TABS
       : ALL_TABS.filter((tab) => {
@@ -145,12 +207,26 @@ export const MediaSelectorModal: React.FC<MediaSelectorModalProps> = ({
         });
     if (!excludeTabs?.length) return kindFiltered;
     return kindFiltered.filter((tab) => !excludeTabs.includes(tab));
-  }, [kinds, excludeTabs]);
+  }, [tabsProp, kinds, excludeTabs]);
+
+  /**
+   * The one kind this picker accepts, if it accepts exactly one — either stated
+   * outright via `kinds`, or implied by a tab list that only has one kind in it.
+   * My Files is filtered to that, so you can't pick a file the caller rejects.
+   */
+  const lockedKind = useMemo((): MediaKind | undefined => {
+    if (kinds?.length === 1) return kinds[0];
+    const fromTabs = new Set(
+      tabs.map((tab) => TAB_TO_KIND[tab as MediaTab]).filter(Boolean) as MediaKind[]
+    );
+    return fromTabs.size === 1 ? [...fromTabs][0] : undefined;
+  }, [kinds, tabs]);
   const [activeTab, setActiveTab] = useState<string>(tabs[0]);
   const [selection, setSelection] = useState<MediaSelectorItem[]>([]);
   const [myFilesFolderId, setMyFilesFolderId] = useState<string | null>(null);
   const [myFilesRefreshKey, setMyFilesRefreshKey] = useState(0);
   const [isUploading, setIsUploading] = useState(false);
+  const [isResolving, setIsResolving] = useState(false);
   const [isDragOver, setIsDragOver] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
@@ -170,7 +246,28 @@ export const MediaSelectorModal: React.FC<MediaSelectorModalProps> = ({
 
   if (!open) return null;
 
-  const finalize = (item: MediaSelectorItem) => {
+  // `requireFile` turns a stock pick into a real File before the caller sees it,
+  // so no caller has to hand-roll the import fallback. Failure keeps the dialog
+  // open — silently handing back a fileId-less item is what used to strand picks.
+  const resolveItems = async (items: MediaSelectorItem[]) => {
+    if (!requireFile) return items;
+    setIsResolving(true);
+    try {
+      return await Promise.all(
+        items.map((item) => importStockMedia(item, { name: importName }))
+      );
+    } catch (err) {
+      toaster.show(
+        (err as Error).message || t('import_failed', 'Import failed'),
+        'warning'
+      );
+      return null;
+    } finally {
+      setIsResolving(false);
+    }
+  };
+
+  const finalize = async (item: MediaSelectorItem) => {
     if (multiple) {
       setSelection((prev) => {
         const exists = prev.some(
@@ -181,8 +278,13 @@ export const MediaSelectorModal: React.FC<MediaSelectorModalProps> = ({
       });
       return;
     }
-    onSelect?.(item);
+    const resolved = await resolveItems([item]);
+    if (!resolved) return;
+    // Close as soon as *our* work is done. Callers do their own async work
+    // (folder-scoped imports, uploads) behind placeholder UI and expect the
+    // dialog to be gone by then.
     onClose();
+    await onSelect?.(resolved[0]);
   };
 
   const handleStockSelect = (item: {
@@ -235,10 +337,12 @@ export const MediaSelectorModal: React.FC<MediaSelectorModalProps> = ({
     setSelection((prev) => prev.filter((_, i) => i !== index));
   };
 
-  const confirmSelection = () => {
+  const confirmSelection = async () => {
     if (selection.length === 0) return;
-    onConfirm?.(selection);
+    const resolved = await resolveItems(selection);
+    if (!resolved) return;
     onClose();
+    await onConfirm?.(resolved);
   };
 
   const uploadFiles = async (files: FileList | null) => {
@@ -313,41 +417,79 @@ export const MediaSelectorModal: React.FC<MediaSelectorModalProps> = ({
         ref={containerRef}
         role="dialog"
         aria-modal="true"
-        aria-label={t('select_media_aria', 'Select media')}
-        className={clsx(
-          'bg-newBgColor border border-studioBorder rounded-xl flex flex-col',
-          multiple ? 'w-[760px] max-h-[680px]' : 'w-[720px] max-h-[600px]'
-        )}
+        aria-labelledby={titleId}
+        data-testid="media-picker"
+        // One size on every surface. The multi-select tray is a band inside this
+        // fixed height, not a different dialog — resizing per mode is how the
+        // picker came to look like a different component per caller.
+        className="bg-newBgColor border border-studioBorder rounded-xl flex flex-col w-[880px] max-w-[calc(100vw-24px)] h-[min(700px,calc(100vh-80px))]"
       >
-        <div className="flex items-center justify-between px-5 py-3 border-b border-studioBorder">
-          <div className="flex gap-1" role="tablist" aria-label={t('media_source_aria', 'Media source')}>
-            {tabs.map((tab) => (
+        <div className="px-5 pt-4 border-b border-studioBorder shrink-0">
+          <div className="flex items-start justify-between gap-4">
+            <h2
+              id={titleId}
+              className="text-[18px] font-[600] text-textColor truncate min-w-0"
+            >
+              {title ?? t('select_media', 'Select media')}
+            </h2>
+            {/* Single-select + requireFile imports after the click with no
+                confirm button to hang a spinner on — say so, or the dialog just
+                sits there. */}
+            {isResolving && (
+              <span
+                role="status"
+                className="flex items-center gap-2 text-[12px] text-newTextColor/65 shrink-0"
+              >
+                <span className="w-3 h-3 border-2 border-current border-t-transparent rounded-full animate-spin" />
+                {t('importing_media', 'Importing…')}
+              </span>
+            )}
+            <button
+              className="text-newTextColor/60 hover:text-textColor text-lg shrink-0 leading-none"
+              onClick={onClose}
+              aria-label={t('close_media_selector', 'Close media selector')}
+              title={t('close_media_selector', 'Close media selector')}
+            >
+              ✕
+            </button>
+          </div>
+          <OverflowTabs
+            items={tabs.map((tab) => ({
+              key: tab,
+              label: t(TAB_LABEL_KEYS[tab], TAB_LABELS[tab]),
+              section: tabSection(tab),
+            }))}
+            activeKey={activeTab}
+            onSelect={setActiveTab}
+            showSectionLabels
+            ariaLabel={t('more_media_sources', 'More media sources')}
+            listAriaLabel={t('media_source_aria', 'Media source')}
+            className="mt-3 pb-2"
+            renderItem={(item, { active, slotProps }) => (
               <button
-                key={tab}
+                key={item.key}
+                type="button"
                 role="tab"
-                aria-selected={activeTab === tab}
-                aria-label={t(TAB_LABEL_KEYS[tab], tab)}
-                className={`px-4 py-1.5 rounded text-sm font-medium transition-colors ${
-                  activeTab === tab
+                aria-selected={active}
+                data-overflow-slot={slotProps['data-overflow-slot']}
+                className={clsx(
+                  'px-4 py-1.5 rounded text-sm font-medium whitespace-nowrap transition-colors',
+                  slotProps.className,
+                  active
                     ? 'bg-[#2B5CD3] text-white'
                     : 'text-newTextColor/60 hover:text-textColor'
-                }`}
-                onClick={() => setActiveTab(tab)}
+                )}
+                onClick={() => setActiveTab(item.key)}
               >
-                {t(TAB_LABEL_KEYS[tab], tab)}
+                {item.label}
               </button>
-            ))}
-          </div>
-          <button
-            className="text-newTextColor/60 hover:text-textColor text-lg"
-            onClick={onClose}
-            aria-label={t('close_media_selector', 'Close media selector')}
-            title={t('close_media_selector', 'Close media selector')}
-          >
-            ✕
-          </button>
+            )}
+          />
         </div>
         <div className="flex-1 overflow-y-auto p-4">
+          {activeTab === 'Stock Audio' && (
+            <StockAudio mode="select" onSelectFull={handleStockSelect} />
+          )}
           {activeTab === 'Stock Photos' && (
             <StockPhotos mode="select" onSelectFull={handleStockSelect} />
           )}
@@ -428,6 +570,8 @@ export const MediaSelectorModal: React.FC<MediaSelectorModalProps> = ({
                 onSelect={handleFileSelect}
                 onFolderChange={setMyFilesFolderId}
                 refreshKey={myFilesRefreshKey}
+                sidebarMode="drawer"
+                lockedType={lockedKind}
               />
             </div>
           )}
@@ -472,13 +616,15 @@ export const MediaSelectorModal: React.FC<MediaSelectorModalProps> = ({
             </div>
             <button
               type="button"
-              disabled={selection.length === 0}
+              disabled={selection.length === 0 || isResolving}
               onClick={confirmSelection}
-              className="px-4 py-2 rounded bg-[#2B5CD3] text-white text-sm font-medium disabled:opacity-50 disabled:cursor-not-allowed"
+              className="px-4 py-2 rounded bg-[#2B5CD3] text-white text-sm font-medium shrink-0 disabled:opacity-50 disabled:cursor-not-allowed"
             >
-              {t('confirm_count', 'Confirm ({{count}})', {
-                count: selection.length,
-              })}
+              {isResolving
+                ? t('importing_media', 'Importing…')
+                : t('confirm_count', 'Confirm ({{count}})', {
+                    count: selection.length,
+                  })}
             </button>
           </div>
         )}

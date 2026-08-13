@@ -244,6 +244,31 @@ describe('AIModelProvider', () => {
     });
   });
 
+  describe('_imageFilePart', () => {
+    const part = (url: string) => (provider as any)._imageFilePart(url);
+
+    it('derives the media type from a recognizable URL extension', () => {
+      expect(part('https://cdn.example.com/hero.jpg').mediaType).toBe('image/jpeg');
+      expect(part('https://cdn.example.com/hero.jpeg?w=100').mediaType).toBe('image/jpeg');
+      expect(part('https://cdn.example.com/hero.webp').mediaType).toBe('image/webp');
+      expect(part('https://cdn.example.com/hero.gif#x').mediaType).toBe('image/gif');
+      expect(part('https://cdn.example.com/hero.png').mediaType).toBe('image/png');
+    });
+
+    it('keeps image/png for extensionless or unrecognized URLs', () => {
+      expect(part('https://cdn.example.com/hero').mediaType).toBe('image/png');
+      expect(part('https://cdn.example.com/hero.bmp').mediaType).toBe('image/png');
+      expect(part('https://cdn.example.com/download?format=jpg').mediaType).toBe('image/png');
+    });
+
+    it('keeps the data-URI and bare-base64 branches untouched', () => {
+      const uri = part('data:image/jpeg;base64,AAA BBB');
+      expect(uri.mediaType).toBe('image/jpeg');
+      expect(uri.data).toBe('AAABBB');
+      expect(part('QUJD').mediaType).toBe('image/png');
+    });
+  });
+
   describe('languageModel', () => {
     it('returns a language model when config is active', async () => {
       const model = await provider.languageModel('utility', 'org-123');
@@ -539,6 +564,69 @@ describe('AIModelProvider', () => {
       );
       // mockDoGenerate returns content:[{type:'text', text:'{"title":"test"}'}] for JSON prompts
       expect(result).toEqual({ title: 'test' });
+    });
+  });
+
+  describe('abort signal threading', () => {
+    it('generateText passes options.signal as abortSignal to doGenerate', async () => {
+      mockDoGenerate.mockClear();
+      const controller = new AbortController();
+
+      await provider.generateText('utility', 'Hello world', {
+        orgId: 'org-123',
+        signal: controller.signal,
+      });
+
+      expect(mockDoGenerate.mock.calls.at(-1)![0].abortSignal).toBe(controller.signal);
+    });
+
+    it('generateObject passes options.signal as abortSignal to doGenerate', async () => {
+      mockDoGenerate.mockClear();
+      const controller = new AbortController();
+
+      await provider.generateObject<any>(
+        'utility',
+        'Extract data',
+        { title: 'test' },
+        { orgId: 'org-123', signal: controller.signal },
+      );
+
+      expect(mockDoGenerate.mock.calls.at(-1)![0].abortSignal).toBe(controller.signal);
+    });
+
+    it('generateTextWithModel passes args.signal as abortSignal to doGenerate', async () => {
+      mockDoGenerate.mockClear();
+      mockGetByIdentifier.mockResolvedValue({
+        credentials: { apiKey: 'sk-test' },
+      });
+      const controller = new AbortController();
+
+      await provider.generateTextWithModel('org-123', 'openai', 'v1', 'gpt-4.1', {
+        prompt: 'Hello',
+        signal: controller.signal,
+      });
+
+      expect(mockDoGenerate.mock.calls.at(-1)![0].abortSignal).toBe(controller.signal);
+    });
+
+    it('generateObjectWithModel passes args.signal as abortSignal to doGenerate', async () => {
+      mockDoGenerate.mockClear();
+      mockGetByIdentifier.mockResolvedValue({
+        credentials: { apiKey: 'sk-test' },
+      });
+      mockDoGenerate.mockResolvedValueOnce({
+        content: [{ type: 'text', text: '{"title": "test"}' }],
+        usage: { inputTokens: 10, outputTokens: 20 },
+        finishReason: 'stop',
+      });
+      const controller = new AbortController();
+
+      await provider.generateObjectWithModel('org-123', 'openai', 'v1', 'gpt-4.1', {
+        prompt: 'Extract data',
+        signal: controller.signal,
+      });
+
+      expect(mockDoGenerate.mock.calls.at(-1)![0].abortSignal).toBe(controller.signal);
     });
   });
 
@@ -874,6 +962,68 @@ describe('AIModelProvider', () => {
       expect(telemetry.startSpan).toHaveBeenCalled();
       expect(guardrails.checkOutput).toHaveBeenCalled();
       expect(health.recordSuccess).toHaveBeenCalledWith('openai');
+    });
+
+    it('splits a data-URI imageUrl into a raw-base64 file part (no doubled prefix)', async () => {
+      mockGetByIdentifier.mockResolvedValue({
+        credentials: { apiKey: 'sk-test' },
+      });
+      // 1x1 transparent PNG — provider adapters prepend their own
+      // `data:<mime>;base64,` to a string `data`, so the part must carry the
+      // raw payload only ("Invalid base64 image_url" otherwise).
+      const b64 =
+        'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==';
+
+      await provider.generateTextWithModel('org-123', 'openai', 'v1', 'gpt-4.1', {
+        prompt: 'describe this image',
+        imageUrl: `data:image/png;base64,${b64}`,
+      });
+
+      const prompt = mockDoGenerate.mock.calls.at(-1)![0].prompt;
+      const filePart = prompt[0].content.find((p: any) => p.type === 'file');
+      expect(filePart.mediaType).toBe('image/png');
+      expect(filePart.data).toBe(b64);
+    });
+
+    it('passes a remote imageUrl as a URL file part instead of base64-wrapping it', async () => {
+      mockGetByIdentifier.mockResolvedValue({
+        credentials: { apiKey: 'sk-test' },
+      });
+
+      await provider.generateTextWithModel('org-123', 'openai', 'v1', 'gpt-4.1', {
+        prompt: 'describe this image',
+        imageUrl: 'https://example.com/sheet.png',
+      });
+
+      const prompt = mockDoGenerate.mock.calls.at(-1)![0].prompt;
+      const filePart = prompt[0].content.find((p: any) => p.type === 'file');
+      expect(filePart.data).toBeInstanceOf(URL);
+      expect((filePart.data as URL).toString()).toBe('https://example.com/sheet.png');
+    });
+
+    it('builds one file part per imageUrl, in caller order (multi-image critique)', async () => {
+      mockGetByIdentifier.mockResolvedValue({
+        credentials: { apiKey: 'sk-test' },
+      });
+      const b64 =
+        'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==';
+
+      await provider.generateTextWithModel('org-123', 'openai', 'v1', 'gpt-4.1', {
+        prompt: 'compare Image 1 against Image 2',
+        imageUrl: [`data:image/png;base64,${b64}`, 'https://example.com/reference.jpg'],
+      });
+
+      const prompt = mockDoGenerate.mock.calls.at(-1)![0].prompt;
+      const content = prompt[0].content;
+      // Text part first, then file parts in the order the URLs were passed —
+      // the critic prompt addresses "Image 1"/"Image 2" by this order.
+      expect(content[0].type).toBe('text');
+      expect(content[1].type).toBe('file');
+      expect(content[1].data).toBe(b64);
+      expect(content[2].type).toBe('file');
+      expect(content[2].data).toBeInstanceOf(URL);
+      expect((content[2].data as URL).toString()).toBe('https://example.com/reference.jpg');
+      expect(content).toHaveLength(3);
     });
 
     it('runs governance wrappers when generating an object with an explicit model', async () => {

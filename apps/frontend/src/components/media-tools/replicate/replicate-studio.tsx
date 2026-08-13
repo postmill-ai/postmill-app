@@ -5,7 +5,7 @@ import useSWR from 'swr';
 import { useFetch } from '@postmill-ai/helpers/utils/custom.fetch';
 import { Logo } from '@postmill-ai/frontend/components/new-layout/logo';
 import { FullscreenButton } from '@postmill-ai/frontend/components/media-tools/fullscreen-button';
-import { useFullscreen } from '@postmill-ai/frontend/components/media-tools/use-fullscreen';
+import { useFullscreenSurface } from '@postmill-ai/frontend/components/media-tools/use-fullscreen';
 import { useT } from '@postmill-ai/react/translation/get.transation.service.client';
 import { useReplicateStore, type CategoryDefinition } from './replicate.store';
 import { ModelPicker } from './model-picker';
@@ -17,22 +17,8 @@ import { MergeEditor } from './merge-editor';
 import { MemeEditor } from './meme-editor';
 import { CommandPalette } from './command-palette';
 import { StudioLanding } from '@postmill-ai/frontend/components/media-tools/studio-kit/studio-landing';
+import { REPLICATE_LANDING } from './landing';
 import { useGenerate, missingRequiredFields, FOLDER_REQUIRED_CATEGORIES } from './use-generate';
-
-const REPLICATE_LANDING = {
-  website: 'https://replicate.com',
-  tagline: 'Run thousands of AI models with one line',
-  description:
-    'A cloud hub for running thousands of open-source models via API — image, video, speech, and music generation — with pay-per-use pricing, fine-tuning, and custom deploys.',
-  badges: ['Image', 'Video', 'Audio'],
-  highlights: [
-    'Thousands of community models via API',
-    'Image, video, and audio generation models',
-    'Run and fine-tune with one line of code',
-    'Pay only for active compute time',
-    'Inpaint, merge, upscale and meme tools built in',
-  ],
-};
 
 type Medium = 'image' | 'video' | 'audio';
 
@@ -312,8 +298,8 @@ export function ReplicateStudio() {
   // The store is module-global (survives navigation); clear it when the studio
   // unmounts so a stale model/result/form doesn't bleed into the next visit.
   useEffect(() => () => resetStore(), [resetStore]);
-  // Full-screen fills the canvas app, not the page (see HeyGen studio for the rationale).
-  const { isFullscreen } = useFullscreen();
+  // Full screen fills the browser window, not the display (see HeyGen studio).
+  const surface = useFullscreenSurface('rounded-[12px] overflow-hidden');
 
   const selectedCategoryDef = categories?.find((c) => c.key === selectedCategory);
   const medium: Medium = selectedCategoryDef?.medium ?? 'image';
@@ -346,7 +332,7 @@ export function ReplicateStudio() {
     'mobile:absolute mobile:left-[52px] mobile:inset-y-0 mobile:z-20 mobile:w-[min(340px,82vw)] mobile:shadow-2xl';
 
   return (
-    <div className={`flex flex-col h-full bg-studioBg${isFullscreen ? ' fixed inset-0 z-[100]' : ' rounded-[12px] overflow-hidden'}`}>
+    <div className={`flex flex-col h-full bg-studioBg ${surface}`}>
       <StudioHeader activeCategoryLabel={selectedCategoryDef?.label} />
 
       <div className="relative flex flex-1 overflow-hidden">

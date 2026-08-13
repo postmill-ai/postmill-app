@@ -2,7 +2,10 @@ import { CHANNEL_PRESETS } from '@postmill-ai/nestjs-libraries/integrations/soci
 import type { DesignerDoc } from './designer-doc.schema';
 
 /** Current DesignerDoc schema version. */
-export const DESIGNER_DOC_VERSION = 2;
+// Defined in designer-doc.limits so the schema can bound `version` by it
+// without importing this module (which imports the schema's types).
+export { DESIGNER_DOC_VERSION } from './designer-doc.limits';
+import { DESIGNER_DOC_VERSION } from './designer-doc.limits';
 
 let elementCounter = 0;
 
@@ -66,6 +69,9 @@ export const migrateDoc = (raw: any): DesignerDoc => {
       mode: raw.mode || 'image',
       outputs: raw.outputs,
       attribution: raw.attribution,
+      // Symbol definitions live on the doc; omitting them here would drop every
+      // symbol instance in the document on the next load.
+      ...(Array.isArray(raw.symbols) ? { symbols: raw.symbols } : {}),
     } as DesignerDoc;
   }
   const w = raw?.width || 1080;

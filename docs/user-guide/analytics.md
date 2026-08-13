@@ -19,10 +19,13 @@ For the underlying API endpoints, see [Analytics API](../developer-docs/analytic
 
 ## Dashboard Tabs
 
-The analytics page has six tabs, accessible from the tab bar at the top: **Overview**, **Channels**,
-**Posts**, **Insights**, **Links**, and **Watchlist**. (Older `?tab=best-time` and
-`?tab=recommendations` deep links still work — they now resolve to the Insights tab, scrolled to the
-matching section.)
+The analytics page has seven tabs, accessible from the tab bar at the top: **Overview**,
+**Channels**, **Posts**, **Insights**, **Links**, **Watchlist**, and **Usage**. (Older
+`?tab=best-time` and `?tab=recommendations` deep links still work — they now resolve to the Insights
+tab, scrolled to the matching section.)
+
+On a phone the first three tabs stay on screen and the rest move into the **⋮** menu at the end of
+the bar, so nothing is cut off. Whichever tab you are on is always one of the ones shown.
 
 ### 1. Overview
 
@@ -65,7 +68,7 @@ A sortable, filterable table of individual posts:
 ### 4. Insights
 
 The Insights tab merges the former Best time and Recommendations tabs with a new Alerts section into
-one place (the old kebab overflow menu is gone). It has three sections:
+one place. It has three sections:
 
 **Best time** — a day-by-hour heatmap showing when your audience engages most:
 

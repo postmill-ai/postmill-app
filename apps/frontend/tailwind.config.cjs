@@ -1,4 +1,29 @@
 const { join } = require('path');
+
+/**
+ * A token whose CSS variable holds a plain colour (`#0e0e0e`), made safe to use
+ * with Tailwind's opacity modifier.
+ *
+ * Tailwind can only apply `/50` to a colour it can parse or to one written with
+ * `<alpha-value>`. Given a bare `var(--x)` it silently emits NOTHING, so
+ * `text-textColor/30` produced no rule at all and the element just inherited
+ * its parent's colour — disabled menu items rendered at full strength in one
+ * theme and near-invisible in the other. `color-mix` gives the same result the
+ * `<alpha-value>` form would, without needing every variable restated as
+ * channel triplets. Without a modifier the output is the plain `var()` it
+ * always was.
+ */
+const alphaVar = (name) => ({ opacityValue }) => {
+  // Utilities without a `/50` modifier are handed the `--tw-*-opacity` variable
+  // rather than a number, so anything non-numeric means "no modifier" and must
+  // fall through to the plain colour. (`bg-opacity-*`, the legacy spelling,
+  // therefore does not apply to these tokens — the slash syntax does.)
+  const alpha = Number(opacityValue);
+  return !Number.isFinite(alpha) || alpha === 1
+    ? `var(${name})`
+    : `color-mix(in srgb, var(${name}) ${alpha * 100}%, transparent)`;
+};
+
 module.exports = {
   darkMode: 'class',
   content: ['./src/**/*.{ts,tsx,html}', '../../libraries/**/*.{ts,tsx,html}'],
@@ -13,7 +38,9 @@ module.exports = {
         designerGuide: '#FF3B7F',
         primary: 'var(--new-bgColor)',
         secondary: 'var(--new-bgColorInner)',
-        textColor: 'var(--new-btn-text)',
+        // `--new-textColor` is the same colour as `--new-btn-text` in both
+        // themes, but expressed as channels — so the opacity modifier works.
+        textColor: 'rgb(var(--new-textColor) / <alpha-value>)',
         third: 'var(--new-bgColorInner)',
         forth: 'var(--new-btn-primary)',
         fifth: 'var(--new-bgLineColor)',
@@ -31,7 +58,7 @@ module.exports = {
         newBorder: 'var(--new-border)',
         newBgColorInner: 'var(--new-bgColorInner)',
         studioBg: 'var(--studio-bg)',
-        studioBorder: 'var(--studio-border)',
+        studioBorder: alphaVar('--studio-border'),
         newBgLineColor: 'var(--new-bgLineColor)',
         textItemFocused: 'var(--new-textItemFocused)',
         textItemBlur: 'var(--new-textItemBlur)',

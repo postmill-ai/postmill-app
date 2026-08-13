@@ -2,6 +2,7 @@
 
 import { FC, useCallback } from 'react';
 import { useT } from '@postmill-ai/react/translation/get.transation.service.client';
+import { OverflowTabs } from '@postmill-ai/frontend/components/ui/overflow-tabs';
 import { TeamMemberItem } from '@postmill-ai/frontend/components/settings/roles/hooks/use-roles';
 
 export interface InboxFilters {
@@ -61,26 +62,22 @@ export const CommentInboxFilters: FC<CommentInboxFiltersProps> = ({
 
   return (
     <div className="flex items-center gap-[12px] flex-wrap">
-      <div className="flex gap-[8px]">
-        {[
-          { label: t('comment_inbox.filter_all', 'All'), value: undefined },
-          { label: t('comment_inbox.filter_needs_reply', 'Needs Reply'), value: 'needs_reply' },
-          { label: t('comment_inbox.filter_handled', 'Handled'), value: 'handled' },
-          { label: t('comment_inbox.filter_ignored', 'Ignored'), value: 'ignored' },
-        ].map((opt) => (
-          <button
-            key={opt.label}
-            onClick={() => setStatus(opt.value)}
-            className={`px-[12px] py-[4px] text-[13px] font-medium rounded-[6px] transition-colors ${
-              filters.status === opt.value
-                ? 'bg-btnPrimary text-white'
-                : 'bg-newBgColorInner text-newTableText hover:text-btnText border border-newTableBorder'
-            }`}
-          >
-            {opt.label}
-          </button>
-        ))}
-      </div>
+      {/* 'all' is a synthetic key — the filter itself is `undefined`. */}
+      <OverflowTabs
+        items={[
+          { key: 'all', label: t('comment_inbox.filter_all', 'All') },
+          { key: 'needs_reply', label: t('comment_inbox.filter_needs_reply', 'Needs Reply') },
+          { key: 'handled', label: t('comment_inbox.filter_handled', 'Handled') },
+          { key: 'ignored', label: t('comment_inbox.filter_ignored', 'Ignored') },
+        ]}
+        activeKey={filters.status ?? 'all'}
+        onSelect={(key) => setStatus(key === 'all' ? undefined : key)}
+        variant="pill"
+        semantics="toolbar"
+        ariaLabel={t('more_filters', 'More filters')}
+        listAriaLabel={t('comment_inbox.filter_status', 'Filter by status')}
+        className="flex-1 min-w-0"
+      />
       {channels && channels.length > 0 && (
         <select
           value={filters.integrationId || ''}

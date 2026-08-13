@@ -57,6 +57,35 @@ function mimeFromName(name: string): string {
   return MIME_MAP[ext] || 'application/octet-stream';
 }
 
+/** The bare category stored in `File.type`, derived from a full MIME type. */
+export function mediaCategoryFromMime(mime: string): string {
+  if (mime.startsWith('audio/')) return 'audio';
+  if (mime.startsWith('video/')) return 'video';
+  if (mime.startsWith('image/')) return 'image';
+  if (mime.startsWith('application/') || mime.startsWith('text/')) return 'document';
+  return 'image';
+}
+
+/**
+ * `File.type` holds two vocabularies: uploads store a bare category ('image'),
+ * while generated media used to store a full MIME ('image/png'). An exact match
+ * would hide every one of those rows, so match both forms.
+ */
+function typeFilterClause(type: string) {
+  const prefixes: Record<string, string[]> = {
+    image: ['image/'],
+    video: ['video/'],
+    audio: ['audio/'],
+    document: ['application/', 'text/'],
+  };
+  const matching = prefixes[type];
+  // An unknown value ('other') has no MIME form — exact match is all it can be.
+  if (!matching) return { type };
+  return {
+    OR: [{ type }, ...matching.map((prefix) => ({ type: { startsWith: prefix } }))],
+  };
+}
+
 @Injectable()
 export class FileRepository {
   private readonly _logger = new Logger(FileRepository.name);
@@ -92,7 +121,7 @@ export class FileRepository {
     fileSize?: number
   ) {
     const mimeType = mimeFromName(fileName);
-    const fileType = mimeType.startsWith('audio/') ? 'audio' : mimeType.startsWith('video/') ? 'video' : 'image';
+    const fileType = mediaCategoryFromMime(mimeType);
     const meta: Record<string, unknown> = {
       mimeType,
       originalName: originalName || fileName,
@@ -172,7 +201,9 @@ export class FileRepository {
         organization: { connect: { id: org } },
         name: data.name,
         path: data.path,
-        type: data.type,
+        // Callers pass either a bare category or a full MIME; only the bare
+        // category is stored, so the library's type filter can find the row.
+        type: data.type.includes('/') ? mediaCategoryFromMime(data.type) : data.type,
         fileSize: data.fileSize ?? 0,
         ...(ownedFolderId ? { folder: { connect: { id: ownedFolderId } } } : {}),
         ...(data.metadata
@@ -320,7 +351,8 @@ export class FileRepository {
     }
 
     if (type) {
-      where.type = type;
+      // AND, not OR — `where.OR` already carries the search clause above.
+      where.AND = [typeFilterClause(type)];
     }
 
     if (tag) {
@@ -645,10 +677,19 @@ export class FileRepository {
     });
   }
 
-  renameFile(org: string, fileId: string, name: string) {
+  /**
+   * Renames the *display* name only.
+   *
+   * Every browse surface shows `originalName || name`, and uploads always
+   * populate `originalName` — so writing `name` alone (as this used to) changed
+   * nothing the user could see. `name` stays untouched on purpose: it holds the
+   * randomized storage filename whose extension backs the list view's Type
+   * column and the `@@index([name])` search path.
+   */
+  renameFile(org: string, fileId: string, originalName: string) {
     return this._file.model.file.update({
       where: { id: fileId, organizationId: org },
-      data: { name },
+      data: { originalName },
     });
   }
 

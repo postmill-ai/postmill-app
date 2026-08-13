@@ -6,7 +6,7 @@ import { useFetch } from '@postmill-ai/helpers/utils/custom.fetch';
 import { useToaster } from '@postmill-ai/react/toaster/toaster';
 import { useMediaDirectory } from '@postmill-ai/react/helpers/use.media.directory';
 import { useModals } from '@postmill-ai/frontend/components/layout/new-modal';
-import { MediaSelectorModal } from '@postmill-ai/frontend/components/media-tools/media-selector-modal';
+import { useMediaPicker } from '@postmill-ai/frontend/components/media-tools/use-media-picker';
 import { VoicePicker } from './voice-picker';
 import { HeyGenVoice } from './use-heygen';
 
@@ -32,7 +32,17 @@ export const TalkingPhoto: FC<TalkingPhotoProps> = ({ voices, onGenerated }) => 
   const [voice, setVoice] = useState<{ voiceId: string; name: string } | null>(null);
   const [text, setText] = useState('');
   const [dimensionKey, setDimensionKey] = useState('9:16');
-  const [picking, setPicking] = useState(false);
+  // `requireFile` replaces the old "Save the image to Files first" rejection —
+  // a stock pick is now imported rather than refused.
+  const photoPicker = useMediaPicker({
+    title: t('select_photo', 'Select photo'),
+    kinds: ['image'],
+    requireFile: true,
+    onSelect: (item) => {
+      if (!item.fileId) return;
+      setPhoto({ fileId: item.fileId, previewUrl: mediaDirectory.set(item.url) });
+    },
+  });
   const [generating, setGenerating] = useState(false);
 
   const valid = photo && voice && text.trim();
@@ -72,7 +82,7 @@ export const TalkingPhoto: FC<TalkingPhotoProps> = ({ voices, onGenerated }) => 
 
       <button
         type="button"
-        onClick={() => setPicking(true)}
+        onClick={photoPicker.open}
         className="flex items-center gap-[12px] p-[12px] rounded-[10px] border border-studioBorder hover:border-[#2B5CD3] transition-all text-left"
       >
         <div className="w-[64px] h-[64px] rounded-[8px] bg-newBgColorInner overflow-hidden flex items-center justify-center shrink-0">
@@ -133,22 +143,7 @@ export const TalkingPhoto: FC<TalkingPhotoProps> = ({ voices, onGenerated }) => 
         {generating ? t('heygen_starting', 'Starting…') : t('heygen_generate_talking_photo_to_files', 'Generate talking photo → Files')}
       </button>
 
-      <MediaSelectorModal
-        open={picking}
-        onClose={() => setPicking(false)}
-        onSelect={(item) => {
-          if (item.source !== 'file' || !item.fileId) {
-            toaster.show(t('heygen_save_image_to_files_first', 'Save the image to Files first, then pick it here'), 'warning');
-            return;
-          }
-          if (item.type !== 'image') {
-            toaster.show(t('heygen_talking_photo_needs_image', 'Talking photo needs an image'), 'warning');
-            return;
-          }
-          setPhoto({ fileId: item.fileId, previewUrl: mediaDirectory.set(item.url) });
-          setPicking(false);
-        }}
-      />
+      {photoPicker.element}
     </div>
   );
 };

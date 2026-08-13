@@ -97,6 +97,26 @@ const CONTEXT_WINDOW_LIMITS: Record<string, number> = {
 const AI_NOT_CONFIGURED_MESSAGE =
   'AI is not configured for this organization. Go to Settings → AI to configure a provider.';
 
+/**
+ * Best-effort media type for a remote image URL, from its path extension.
+ * Unrecognized (or extensionless) URLs keep the historical `image/png` —
+ * adapters only use the type to label the payload, not to transcode it.
+ */
+const imageMediaTypeFromUrl = (imageUrl: string): string => {
+  const ext = /\.(jpe?g|png|webp|gif)(?:[?#]|$)/i.exec(imageUrl)?.[1]?.toLowerCase();
+  switch (ext) {
+    case 'jpg':
+    case 'jpeg':
+      return 'image/jpeg';
+    case 'webp':
+      return 'image/webp';
+    case 'gif':
+      return 'image/gif';
+    default:
+      return 'image/png';
+  }
+};
+
 @Injectable()
 export class AIModelProvider {
   private readonly _logger = new Logger(AIModelProvider.name);
@@ -483,7 +503,7 @@ export class AIModelProvider {
     );
   }
 
-  async imageModel(scope: AIScope, orgId?: string): Promise<{ generate(prompt: string, opts?: { size?: string; isVertical?: boolean }): Promise<string> }> {
+  async imageModel(scope: AIScope, orgId?: string): Promise<{ generate(prompt: string, opts?: { size?: string; isVertical?: boolean; signal?: AbortSignal }): Promise<string> }> {
     return this._withFallback(async (config) => {
       const budgetCheck = await this._budget.checkBudget(scope, orgId, config.providerId);
       if (!budgetCheck.allowed) {
@@ -544,13 +564,14 @@ export class AIModelProvider {
     orgId: string | undefined,
     providerId: string,
     modelId: string,
-  ): (prompt: string, opts?: { size?: string; isVertical?: boolean }) => Promise<string> {
-    return async (prompt: string, _opts?: { size?: string; isVertical?: boolean }) => {
+  ): (prompt: string, opts?: { size?: string; isVertical?: boolean; signal?: AbortSignal }) => Promise<string> {
+    return async (prompt: string, _opts?: { size?: string; isVertical?: boolean; signal?: AbortSignal }) => {
       const result = await (imageModel as any).doGenerate({
         prompt,
         n: 1,
         size: _opts?.size || (_opts?.isVertical ? '1024x1536' : '1024x1024'),
         aspectRatio: undefined,
+        abortSignal: _opts?.signal,
       });
       const images = result.images as Array<string>;
       await this._recordUsage({
@@ -949,7 +970,7 @@ export class AIModelProvider {
   async generateText(
     scope: AIScope,
     prompt: string,
-    options?: { system?: string; promptKey?: string; orgId?: string; userId?: string; platform?: string; brandId?: string },
+    options?: { system?: string; promptKey?: string; orgId?: string; userId?: string; platform?: string; brandId?: string; signal?: AbortSignal },
   ): Promise<string> {
     const { checkedPrompt, brand, effectiveSystem } = await this._prepareGeneration(scope, prompt, options);
 
@@ -989,7 +1010,7 @@ export class AIModelProvider {
               temperature: config.defaultSurface?.temperature,
             });
 
-            const result = await (model as any).doGenerate({ prompt: messages });
+            const result = await (model as any).doGenerate({ prompt: messages, abortSignal: options?.signal });
 
             const outputText = this._extractText(result);
             const checkedOutput = await this._guardrails.checkOutput(outputText, { orgId: options?.orgId });
@@ -1034,7 +1055,7 @@ export class AIModelProvider {
     scope: AIScope,
     prompt: string,
     _schema: any,
-    options?: { system?: string; promptKey?: string; orgId?: string; userId?: string; platform?: string; brandId?: string },
+    options?: { system?: string; promptKey?: string; orgId?: string; userId?: string; platform?: string; brandId?: string; signal?: AbortSignal },
   ): Promise<T> {
     const { checkedPrompt, brand, effectiveSystem } = await this._prepareGeneration(scope, prompt, options);
     const systemPrompt = this._buildSystemPrompt(effectiveSystem, brand);
@@ -1078,6 +1099,7 @@ export class AIModelProvider {
             const result = await (model as any).doGenerate({
               prompt: finalMessages,
               responseFormat: { type: 'json' },
+              abortSignal: options?.signal,
             });
 
             const outputText = this._extractText(result);
@@ -1126,7 +1148,7 @@ export class AIModelProvider {
     providerId: string,
     version: string,
     modelId: string | undefined,
-    args: { prompt?: string; messages?: any[]; system?: string; temperature?: number; maxTokens?: number; imageUrl?: string } = {},
+    args: { prompt?: string; messages?: any[]; system?: string; temperature?: number; maxTokens?: number; imageUrl?: string | string[]; signal?: AbortSignal } = {},
   ): Promise<string> {
     const creds = orgId ? await this._credentialsForProvider(orgId, providerId, version) : null;
     if (!creds) {
@@ -1166,20 +1188,22 @@ export class AIModelProvider {
         let promptPayload = args.messages;
         if (!promptPayload) {
           const content: any[] = [{ type: 'text', text: checkedInput }];
-          if (args.imageUrl) {
-            // LanguageModelV2 file part — the legacy {type:'image'} shape from
-            // SDK v1 serializes into an invalid provider message
-            // ("Invalid type for 'messages[0].content[1]'").
-            const dataUriMime = args.imageUrl.match(/^data:([^;]+);/)?.[1];
-            content.push({
-              type: 'file',
-              mediaType: dataUriMime || 'image/*',
-              data: args.imageUrl,
-            });
+          // LanguageModelV2 file parts — the legacy {type:'image'} shape from
+          // SDK v1 serializes into an invalid provider message
+          // ("Invalid type for 'messages[0].content[1]'"). Multi-image callers
+          // rely on part order: prompts address "Image 1"/"Image 2" by the
+          // order the URLs were passed.
+          const imageUrls = Array.isArray(args.imageUrl)
+            ? args.imageUrl
+            : args.imageUrl
+              ? [args.imageUrl]
+              : [];
+          for (const url of imageUrls) {
+            content.push(this._imageFilePart(url));
           }
           promptPayload = [{ role: 'user', content }];
         }
-        const result = await (model as any).doGenerate({ prompt: promptPayload });
+        const result = await (model as any).doGenerate({ prompt: promptPayload, abortSignal: args.signal });
         const outputText = this._extractText(result);
         const checkedOutput = await this._guardrails.checkOutput(outputText, { orgId });
 
@@ -1199,12 +1223,46 @@ export class AIModelProvider {
     );
   }
 
+  /**
+   * Build a LanguageModelV2 file part for a vision image. Provider adapters
+   * treat a string `data` as RAW base64 and prepend their own
+   * `data:<mime>;base64,` prefix (@ai-sdk/provider-utils convertToBase64
+   * passes strings through untouched), so a full data URI must be split into
+   * mime + payload first — otherwise the prefix doubles and OpenAI rejects
+   * the message ("Invalid base64 image_url"). Remote URLs go as URL
+   * instances so the adapter forwards the link instead of base64-wrapping
+   * the URL text.
+   */
+  private _imageFilePart(imageUrl: string): {
+    type: 'file';
+    mediaType: string;
+    data: string | URL;
+  } {
+    const dataUri = /^data:([^;,]+);base64,([\s\S]*)$/.exec(imageUrl);
+    if (dataUri) {
+      return {
+        type: 'file',
+        mediaType: dataUri[1] || 'image/png',
+        data: dataUri[2].replace(/\s+/g, ''),
+      };
+    }
+    if (/^https?:\/\//i.test(imageUrl)) {
+      return {
+        type: 'file',
+        mediaType: imageMediaTypeFromUrl(imageUrl),
+        data: new URL(imageUrl),
+      };
+    }
+    // Bare base64 payload (no scheme) — pass through as-is.
+    return { type: 'file', mediaType: 'image/png', data: imageUrl };
+  }
+
   async generateObjectWithModel<T>(
     orgId: string | undefined,
     providerId: string,
     version: string,
     modelId: string | undefined,
-    args: { prompt?: string; messages?: any[]; system?: string; schema?: any; temperature?: number } = {},
+    args: { prompt?: string; messages?: any[]; system?: string; schema?: any; temperature?: number; signal?: AbortSignal } = {},
   ): Promise<T> {
     const creds = orgId ? await this._credentialsForProvider(orgId, providerId, version) : null;
     if (!creds) {
@@ -1245,6 +1303,7 @@ export class AIModelProvider {
         const result = await (model as any).doGenerate({
           prompt: promptPayload,
           responseFormat: { type: 'json' },
+          abortSignal: args.signal,
         });
         const outputText = this._extractText(result);
         const checkedOutput = await this._guardrails.checkOutput(outputText, { orgId });

@@ -293,28 +293,32 @@ describe('CalendarItem', () => {
     });
   });
 
-  describe('state pills', () => {
-    it('renders green Published pill for PUBLISHED state', () => {
-      render(<CalendarItem {...baseProps()} />);
-      const pill = screen.getByText('Published');
-      expect(pill).toBeTruthy();
-      expect(pill.className).toContain('green');
+  describe('state status dots', () => {
+    it('renders a green Published dot for PUBLISHED state', () => {
+      const { container } = render(<CalendarItem {...baseProps()} />);
+      const dot = container.querySelector('[data-tooltip-content="Published"]');
+      expect(dot).toBeTruthy();
+      expect(dot!.className).toContain('bg-green-500');
     });
 
-    it('renders blue Scheduled pill for QUEUE state', () => {
+    it('renders a blue Scheduled dot for QUEUE state', () => {
       const post = basePost({ state: 'QUEUE' });
-      render(<CalendarItem {...baseProps()} state="QUEUE" post={post} />);
-      const pill = screen.getByText('Scheduled');
-      expect(pill).toBeTruthy();
-      expect(pill.className).toContain('blue');
+      const { container } = render(
+        <CalendarItem {...baseProps()} state="QUEUE" post={post} />
+      );
+      const dot = container.querySelector('[data-tooltip-content="Scheduled"]');
+      expect(dot).toBeTruthy();
+      expect(dot!.className).toContain('bg-blue-500');
     });
 
-    it('renders amber Draft pill for DRAFT state', () => {
+    it('renders an amber Draft dot for DRAFT state', () => {
       const post = basePost({ state: 'DRAFT' });
-      render(<CalendarItem {...baseProps()} state="DRAFT" post={post} />);
-      const pill = screen.getByText('Draft');
-      expect(pill).toBeTruthy();
-      expect(pill.className).toContain('amber');
+      const { container } = render(
+        <CalendarItem {...baseProps()} state="DRAFT" post={post} />
+      );
+      const dot = container.querySelector('[data-tooltip-content="Draft"]');
+      expect(dot).toBeTruthy();
+      expect(dot!.className).toContain('bg-amber-500');
     });
 
     it('returns no state pill for ERROR state', () => {

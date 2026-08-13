@@ -1,19 +1,36 @@
 import type { DesignerElement, DesignerOutput } from './designer-doc.schema';
-import { smartReflow, estimateFocalPoint } from './reflow';
+import {
+  smartReflow,
+  estimateFocalPoint,
+  type GroupBox,
+  type TypeBasisCanvas,
+} from './reflow';
 import { genId } from './designer-doc.migrate';
 
 /**
  * Clone a source element into a target output, scaling/centering it with
  * `smartReflow` and wiring it to the same `originId` so it participates in
- * linked-by-default updates.
+ * linked-by-default updates. `groupBox` (the element's group combined bbox on
+ * the SOURCE canvas) lets grouped pairs — CTA label + pill/underline, badge +
+ * label — reflow through one shared anchor instead of splitting apart.
+ * `containerBox` (the layout panel the element sits inside, source-space) makes
+ * it reflow horizontally against that panel instead of the whole canvas.
  */
 export const seedCopy = (
   el: DesignerElement,
-  sourceOutput: { width: number; height: number },
-  targetOutput: { width: number; height: number; formatId?: string },
-  originId: string
+  sourceOutput: TypeBasisCanvas,
+  targetOutput: TypeBasisCanvas & { formatId?: string },
+  originId: string,
+  groupBox?: GroupBox,
+  containerBox?: GroupBox
 ): DesignerElement => {
-  const smart = smartReflow(el, sourceOutput, targetOutput);
+  const smart = smartReflow(
+    el,
+    sourceOutput,
+    targetOutput,
+    groupBox,
+    containerBox
+  );
   const newW = smart.width ?? el.width;
   const newH = smart.height ?? el.height;
   const base: DesignerElement = JSON.parse(JSON.stringify(el));

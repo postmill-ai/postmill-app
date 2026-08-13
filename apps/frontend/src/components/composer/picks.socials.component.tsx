@@ -141,7 +141,10 @@ export const PicksSocialsComponent: FC<{ toolTip?: boolean }> = ({
           aria-haspopup="listbox"
           aria-expanded={open}
           className={clsx(
-            'border rounded-[8px] flex items-center gap-[8px] h-[36px] lg:h-[44px] px-[12px] lg:px-[16px] text-[13px] lg:text-[15px] font-[600] text-textColor select-none transition-colors',
+            // shrink-0: this pill now shares its row with the brand picker,
+            // whose label can be long enough to squeeze "Select Channels" onto
+            // two lines.
+            'border rounded-[8px] shrink-0 flex items-center gap-[8px] h-[36px] lg:h-[44px] px-[12px] lg:px-[16px] text-[13px] lg:text-[15px] font-[600] text-textColor select-none transition-colors whitespace-nowrap',
             open ? 'border-[#2B5CD3]' : 'border-newTextColor/10'
           )}
         >

@@ -95,6 +95,7 @@ function buildService(overrides: {
 
   const fileRepository = {
     getStorageBytes: vi.fn().mockResolvedValue(1024 * 1024),
+    getFilesByPaths: vi.fn().mockResolvedValue([]),
   } as any;
 
   const webhooksService = {
@@ -143,6 +144,7 @@ function buildService(overrides: {
     analyticsService,
     aiSettingsManager,
     redisService,
+    fileRepository,
     webhooksService,
     brandsRepository,
     watchlistRepository,
@@ -284,6 +286,40 @@ describe('DashboardService.getAttention', () => {
     expect(result.items[0].severity).toBe('critical');
   });
 
+  it('links every attention item at a page that shows the problem', async () => {
+    const { service, postsService, integrationService, socialCommentsService, aiSettingsService } =
+      buildService({
+        posts: {
+          getFailedPosts: vi.fn().mockResolvedValue([{ id: 'p1' }]),
+          getPendingApprovals: vi.fn().mockResolvedValue([{ id: 'p2' }]),
+          getSchedule: vi.fn().mockResolvedValue({ days: [], gaps: ['2026-06-13'] }),
+        },
+      });
+    integrationService.getHealthSummary = vi.fn().mockResolvedValue([{ id: 'i1' }]);
+    socialCommentsService.getInboxUnreadCount = vi.fn().mockResolvedValue({ unreadCount: 3 });
+    aiSettingsService.getMediaJobsWithCounts = vi
+      .fn()
+      .mockResolvedValue({ jobs: [], counts: { failed7d: 1 } });
+
+    const result = await service.getAttention('org-1', 'user-1', allKinds, {
+      postsThisCycle: 900,
+      postsLimit: 1000,
+      channels: 1,
+      channelsLimit: 10,
+      teamMembers: 1,
+      teamLimit: 5,
+    }, 'UTC');
+    const linkFor = (kind: string) => result.items.find((i) => i.kind === kind)?.link;
+
+    // Failures live in the queue, not the studio index.
+    expect(linkFor('failed-media-jobs')).toBe('/media/queue?status=failed');
+    // /billing sells plans and shows no usage; the analytics Usage tab shows both halves.
+    expect(linkFor('budget')).toBe('/analytics?tab=usage');
+    // Canonical path — the `?tab=` form goes through a client-side redirect shim.
+    expect(linkFor('channel-health')).toBe('/settings/channels');
+    expect(postsService.getFailedPosts).toHaveBeenCalled();
+  });
+
   it('never computes forbidden probes', async () => {
     const { service, postsService, integrationService } = buildService();
     integrationService.getHealthSummary = vi.fn().mockResolvedValue([]);
@@ -367,10 +403,13 @@ describe('DashboardService.getMediaJobs', () => {
 
     const result = await service.getMediaJobs('org-1');
 
-    expect(aiSettingsService.getMediaJobsWithCounts).toHaveBeenCalledWith(
-      'org-1',
-      20,
-    );
+    // Bare call = the dashboard widget's original 20-job payload; every filter
+    // stays undefined so the repository query is unchanged.
+    expect(aiSettingsService.getMediaJobsWithCounts).toHaveBeenCalledWith('org-1', 20, {
+      status: undefined,
+      provider: undefined,
+      cursor: undefined,
+    });
     expect(result.jobs).toHaveLength(1);
     expect(result.jobs[0].provider).toBe('runway');
     expect(result.counts.failed7d).toBe(1);
@@ -544,5 +583,115 @@ describe('DashboardService _aiBudgetAlert via getAttention', () => {
     const result = await service.getAttention('org-1', 'user-1', ['budget']);
 
     expect(result.items).toHaveLength(0);
+  });
+});
+
+describe('DashboardService.getMediaJobs', () => {
+  const jobRow = (over: Record<string, unknown> = {}) => ({
+    id: 'job-1',
+    provider: 'heygen',
+    operation: 'video',
+    status: 'completed',
+    artifactUrl: '/uploads/a.mp4',
+    error: null,
+    createdAt: new Date('2026-06-10T00:00:00.000Z'),
+    ...over,
+  });
+  const counts = { pending: 0, processing: 0, failed7d: 0 };
+
+  it('resolves the File id for completed artifacts in one query', async () => {
+    const { service, aiSettingsService, fileRepository } = buildService();
+    aiSettingsService.getMediaJobsWithCounts = vi.fn().mockResolvedValue({
+      jobs: [jobRow(), jobRow({ id: 'job-2', artifactUrl: '/uploads/b.mp4' })],
+      counts,
+    });
+    fileRepository.getFilesByPaths = vi
+      .fn()
+      .mockResolvedValue([{ path: '/uploads/a.mp4', id: 'file-a' }]);
+
+    const result = await service.getMediaJobs('org-1', {});
+
+    expect(fileRepository.getFilesByPaths).toHaveBeenCalledTimes(1);
+    expect(fileRepository.getFilesByPaths).toHaveBeenCalledWith('org-1', [
+      '/uploads/a.mp4',
+      '/uploads/b.mp4',
+    ]);
+    expect(result.jobs[0].fileId).toBe('file-a');
+    // No File row yet (still being written) — null, not a crash.
+    expect(result.jobs[1].fileId).toBeNull();
+  });
+
+  it("presents the synchronous writer's 'done' as 'completed'", async () => {
+    const { service, aiSettingsService, fileRepository } = buildService();
+    // AiMediaService._persistJob writes 'done'; the async lifecycle writes
+    // 'completed'. Both land in the same table and mean the same thing.
+    aiSettingsService.getMediaJobsWithCounts = vi
+      .fn()
+      .mockResolvedValue({ jobs: [jobRow({ status: 'done' })], counts });
+    fileRepository.getFilesByPaths = vi
+      .fn()
+      .mockResolvedValue([{ path: '/uploads/a.mp4', id: 'file-a' }]);
+
+    const result = await service.getMediaJobs('org-1', {});
+
+    expect(result.jobs[0].status).toBe('completed');
+    expect(result.jobs[0].artifactUrl).toBe('/uploads/a.mp4');
+    // And it still resolves a File id, so "Post to Composer" works on it.
+    expect(result.jobs[0].fileId).toBe('file-a');
+  });
+
+  it('never leaks a pending:// artifact ref for an unfinished job', async () => {
+    const { service, aiSettingsService, fileRepository } = buildService();
+    aiSettingsService.getMediaJobsWithCounts = vi.fn().mockResolvedValue({
+      jobs: [jobRow({ status: 'processing', artifactUrl: 'pending://abc123' })],
+      counts,
+    });
+
+    const result = await service.getMediaJobs('org-1', {});
+
+    expect(result.jobs[0].artifactUrl).toBeNull();
+    expect(result.jobs[0].fileId).toBeNull();
+    // Nothing completed, so there is nothing to look up.
+    expect(fileRepository.getFilesByPaths).not.toHaveBeenCalled();
+  });
+
+  it('clamps the page size and passes the filters through', async () => {
+    const { service, aiSettingsService } = buildService();
+    aiSettingsService.getMediaJobsWithCounts = vi
+      .fn()
+      .mockResolvedValue({ jobs: [], counts });
+
+    await service.getMediaJobs('org-1', {
+      limit: 5000,
+      status: 'failed',
+      provider: 'runway',
+      cursor: 'job-9',
+    });
+
+    expect(aiSettingsService.getMediaJobsWithCounts).toHaveBeenCalledWith('org-1', 100, {
+      status: 'failed',
+      provider: 'runway',
+      cursor: 'job-9',
+    });
+  });
+
+  it('only offers a cursor when the page came back full', async () => {
+    const { service, aiSettingsService } = buildService();
+    aiSettingsService.getMediaJobsWithCounts = vi
+      .fn()
+      .mockResolvedValue({ jobs: [jobRow({ artifactUrl: null, status: 'failed' })], counts });
+
+    const partial = await service.getMediaJobs('org-1', { limit: 2 });
+    expect(partial.nextCursor).toBeNull();
+
+    aiSettingsService.getMediaJobsWithCounts = vi.fn().mockResolvedValue({
+      jobs: [
+        jobRow({ id: 'a', artifactUrl: null, status: 'failed' }),
+        jobRow({ id: 'b', artifactUrl: null, status: 'failed' }),
+      ],
+      counts,
+    });
+    const full = await service.getMediaJobs('org-1', { limit: 2 });
+    expect(full.nextCursor).toBe('b');
   });
 });

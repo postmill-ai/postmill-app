@@ -33,6 +33,17 @@ interface DataTableProps<T> {
   emptyState?: { icon?: React.ReactNode; title: string; description?: string; action?: React.ReactNode };
   onRowClick?: (item: T) => void;
   className?: string;
+  /**
+   * Extra `<tr>`s rendered above `data` — for rows of a different kind that must
+   * stay outside selection and sorting (e.g. folders above files). Their
+   * presence also suppresses the empty state.
+   */
+  leadingRows?: React.ReactNode;
+  /**
+   * Extra props spread onto each data `<tr>` — e.g. context-menu and long-press
+   * handlers that need the whole row, not a single cell.
+   */
+  rowProps?: (item: T) => Record<string, unknown>;
 }
 
 export const StatusPill: FC<{
@@ -111,6 +122,8 @@ export function DataTable<T>({
   emptyState,
   onRowClick,
   className,
+  leadingRows,
+  rowProps,
 }: DataTableProps<T>) {
   const t = useT();
   const totalPages = total !== undefined ? Math.ceil(total / limit) : 0;
@@ -205,7 +218,9 @@ export function DataTable<T>({
     );
   }
 
-  if (!data.length) {
+  // `leadingRows` are real content, so a table with folders but no files must
+  // still render rather than claiming it is empty.
+  if (!data.length && !leadingRows) {
     return (
       <div className={clsx(className)}>
         <EmptyState
@@ -281,12 +296,14 @@ export function DataTable<T>({
             </tr>
           </thead>
           <tbody className="mobile:block">
+            {leadingRows}
             {data.map((item) => {
               const id = keyExtractor(item);
               const isSelected = selectedIds.includes(id);
               return (
                 <tr
                   key={id}
+                  {...(rowProps?.(item) ?? {})}
                   className={clsx(
                     'border-b border-newTableBorder/60 last:border-b-0 hover:bg-boxHover transition-colors',
                     'mobile:flex mobile:flex-col mobile:gap-[6px] mobile:p-[14px] mobile:rounded-[10px] mobile:border mobile:border-newTableBorder mobile:mb-[10px] mobile:last:mb-0',

@@ -21,6 +21,7 @@ import { AuthorizationActions, Sections } from '@postmill-ai/backend/services/au
 import { ApiTags } from '@nestjs/swagger';
 import { StorageService } from '@postmill-ai/nestjs-libraries/database/prisma/storage/storage.service';
 import { StockMediaService } from '@postmill-ai/nestjs-libraries/media/stock/stock-media.service';
+import { resolveIconifyIcon } from '@postmill-ai/nestjs-libraries/media/designer-doc/icon-resolver';
 import { RequirePermission } from '@postmill-ai/backend/services/auth/rbac/require-permission.decorator';
 import { RemoveBackgroundDto } from '@postmill-ai/nestjs-libraries/dtos/ai/remove.background.dto';
 import { DetectFocalPointDto } from '@postmill-ai/nestjs-libraries/dtos/ai/detect-focal-point.dto';
@@ -116,6 +117,24 @@ export class MediaController {
   @CheckPolicies([AuthorizationActions.Read, Sections.MEDIA])
   async getToolStatus(@GetOrgFromRequest() org: Organization) {
     return this._aiMediaService.getToolStatus(org.id);
+  }
+
+  /**
+   * `mdi:rocket` -> the icon's raw SVG body.
+   *
+   * Insert > Stock Icon routed an Iconify pick through the image path, which
+   * stored the API URL as a raster `src` — a 24x24 black square with no fill
+   * control. An `icon` element wants the markup itself, and the resolver that
+   * produces it (safeFetch + script-stripping + cache) is server-side, so the
+   * editor asks for it here rather than reaching api.iconify.design directly
+   * past the frontend's connect-src.
+   */
+  @Get('/icons/resolve')
+  @CheckPolicies([AuthorizationActions.Read, Sections.MEDIA])
+  async resolveIcon(@Query('name') name: string) {
+    // `?name=a&name=b` arrives as an array; the resolver takes a string.
+    const requested = typeof name === 'string' ? name : '';
+    return (await resolveIconifyIcon(requested)) || { body: null };
   }
 
   @Post('/video/function')

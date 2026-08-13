@@ -7,6 +7,7 @@ import {
   ParseIntPipe,
   DefaultValuePipe,
 } from '@nestjs/common';
+import { Throttle } from '@nestjs/throttler';
 import { GetOrgFromRequest } from '@postmill-ai/nestjs-libraries/user/org.from.request';
 import { GetUserFromRequest } from '@postmill-ai/nestjs-libraries/user/user.from.request';
 import {
@@ -16,6 +17,7 @@ import {
   PlanUsageSnapshot,
 } from '@postmill-ai/nestjs-libraries/dashboard/dashboard.service';
 import { DashboardBriefService } from '@postmill-ai/nestjs-libraries/dashboard/dashboard-brief.service';
+import { MediaJobsQueryDto } from '@postmill-ai/nestjs-libraries/dtos/dashboard/media-jobs.query.dto';
 import { Organization, User } from '@prisma/client';
 import { RequirePermission } from '@postmill-ai/backend/services/auth/rbac/require-permission.decorator';
 import { PermissionsService } from '@postmill-ai/backend/services/auth/permissions/permissions.service';
@@ -89,12 +91,24 @@ export class DashboardController {
 
   @Get('/media-jobs')
   @RequirePermission('media', 'read')
-  async getMediaJobs(@GetOrgFromRequest() org: Organization) {
+  // Polled every 5s by the dashboard while a media job is active (720/h). The global
+  // per-handler/per-org backstop (600/h) would eject the user mid-render; give it headroom.
+  @Throttle({ default: { limit: 2000, ttl: 3600000 } })
+  async getMediaJobs(
+    @GetOrgFromRequest() org: Organization,
+    @Query() query: MediaJobsQueryDto
+  ) {
     if (!org?.id) {
       throw new UnauthorizedException();
     }
 
-    return this._dashboardService.getMediaJobs(org.id);
+    // No params = the original 20-job payload the dashboard widget expects.
+    return this._dashboardService.getMediaJobs(org.id, {
+      limit: query.limit,
+      status: query.status,
+      provider: query.provider,
+      cursor: query.cursor,
+    });
   }
 
   @Get('/usage')

@@ -1,97 +1,21 @@
 import type { VideoClip, VideoOutput, VideoTrack } from './designer.store';
+import {
+  interpolateClipKeyframes,
+  type EasePreset,
+} from '@postmill-ai/nestjs-libraries/media/designer-doc/keyframes';
 
 interface PlayOptions {
   onTick: (ms: number) => void;
   onEnd: () => void;
 }
 
-export type EaseType = 'linear' | 'easeInOut' | 'easeIn' | 'easeOut';
-
-function lerp(a: number, b: number, t: number): number {
-  return a + (b - a) * t;
-}
-
-function applyEase(t: number, ease?: EaseType): number {
-  if (!ease || ease === 'linear') return t;
-  switch (ease) {
-    case 'easeInOut':
-      return t < 0.5 ? 2 * t * t : 1 - Math.pow(-2 * t + 2, 2) / 2;
-    case 'easeIn':
-      return t * t;
-    case 'easeOut':
-      return 1 - (1 - t) * (1 - t);
-    default:
-      return t;
-  }
-}
-
-export function interpolateKeyframes(
-  clip: VideoClip,
-  relativeMs: number,
-): { x: number; y: number; width: number; height: number; rotation: number; opacity: number } {
-  const defaults = {
-    x: clip.x ?? 0,
-    y: clip.y ?? 0,
-    width: clip.width ?? 1,
-    height: clip.height ?? 1,
-    rotation: clip.rotation ?? 0,
-    opacity: clip.opacity ?? 1,
-  };
-
-  const kfs = clip.keyframes || [];
-  if (!kfs.length) return defaults;
-
-  const sorted = [...kfs].sort((a, b) => a.tMs - b.tMs);
-
-  if (relativeMs <= sorted[0].tMs) {
-    const kf = sorted[0];
-    return {
-      x: kf.props.x ?? defaults.x,
-      y: kf.props.y ?? defaults.y,
-      width: kf.props.width ?? defaults.width,
-      height: kf.props.height ?? defaults.height,
-      rotation: kf.props.rotation ?? defaults.rotation,
-      opacity: kf.props.opacity ?? defaults.opacity,
-    };
-  }
-
-  if (relativeMs >= sorted[sorted.length - 1].tMs) {
-    const kf = sorted[sorted.length - 1];
-    return {
-      x: kf.props.x ?? defaults.x,
-      y: kf.props.y ?? defaults.y,
-      width: kf.props.width ?? defaults.width,
-      height: kf.props.height ?? defaults.height,
-      rotation: kf.props.rotation ?? defaults.rotation,
-      opacity: kf.props.opacity ?? defaults.opacity,
-    };
-  }
-
-  let prev = sorted[0];
-  let next = sorted[0];
-  let segmentEase: EaseType = 'linear';
-  for (let i = 0; i < sorted.length - 1; i++) {
-    if (relativeMs >= sorted[i].tMs && relativeMs <= sorted[i + 1].tMs) {
-      prev = sorted[i];
-      next = sorted[i + 1];
-      segmentEase = next.ease ?? prev.ease ?? 'linear';
-      break;
-    }
-  }
-
-  const range = next.tMs - prev.tMs;
-  const rawT = range > 0 ? (relativeMs - prev.tMs) / range : 0;
-  const t = applyEase(rawT, segmentEase);
-
-  return {
-    x: lerp(prev.props.x ?? defaults.x, next.props.x ?? defaults.x, t),
-    y: lerp(prev.props.y ?? defaults.y, next.props.y ?? defaults.y, t),
-    width: lerp(prev.props.width ?? defaults.width, next.props.width ?? defaults.width, t),
-    height: lerp(prev.props.height ?? defaults.height, next.props.height ?? defaults.height, t),
-    rotation: lerp(prev.props.rotation ?? defaults.rotation, next.props.rotation ?? defaults.rotation, t),
-    opacity: lerp(prev.props.opacity ?? defaults.opacity, next.props.opacity ?? defaults.opacity, t),
-  };
-}
+/**
+ * Easing and keyframe interpolation live in the shared `designer-doc/keyframes`
+ * module — the same code the injected frame renderer is handed as source, so
+ * the preview and an exported mp4 cannot ease differently.
+ */
+export type EaseType = EasePreset;
+export const interpolateKeyframes = interpolateClipKeyframes;
 
 function getEffectiveClipEnd(clip: VideoClip): number {
   return clip.endMs + (clip.freezeAtMs || 0);
@@ -181,6 +105,8 @@ export function findTransitionWindows(track: VideoTrack): TransitionWindow[] {
 
 export interface ComposedClip {
   clip: VideoClip;
+  /** Needed to write back through `updateClip`, which is keyed by track. */
+  trackId: string;
   trackType: VideoTrack['type'];
   props: ReturnType<typeof interpolateKeyframes>;
 }
@@ -249,7 +175,7 @@ export function composeClipsAtPlayhead(vo: VideoOutput, playheadMs: number): Com
         props.opacity = Math.max(0, Math.min(1, props.opacity));
       }
 
-      result.push({ clip, trackType: track.type, props });
+      result.push({ clip, trackId: track.id, trackType: track.type, props });
     }
   }
   return result;

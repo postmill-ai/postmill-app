@@ -24,8 +24,10 @@ import { CampaignBand } from './charts/line.chart';
 import { InsightsTab } from './views/insights.tab';
 import { WatchlistTab } from './views/watchlist.tab';
 import { ShortlinksTab } from './views/shortlinks.tab';
+import { UsageTab } from './views/usage.tab';
 import { PostAnalyticsDrawer } from './post-analytics.drawer';
 import { useT } from '@postmill-ai/react/translation/get.transation.service.client';
+import { OverflowTabs } from '@postmill-ai/frontend/components/ui/overflow-tabs';
 
 function getDefaultFrom(): string {
   return dayjs().subtract(30, 'day').format('YYYY-MM-DD');
@@ -328,31 +330,15 @@ export const AnalyticsDashboard: FC = () => {
     insights: t('analytics_tab_insights', 'Insights'),
     shortlinks: t('analytics_tab_shortlinks', 'Links'),
     watchlist: t('analytics_tab_watchlist', 'Watchlist'),
+    usage: t('analytics_tab_usage', 'Usage'),
   };
 
-  // Tabs — all inline (D4 / 2.10): Insights absorbs Best time + Recommendations,
-  // so the kebab overflow is gone.
+  // Inline on desktop; on mobile the first three stay inline and the rest fold
+  // into the ⋮ menu (OverflowTabs). Without it "Watchlist" and "Usage" were
+  // clipped off the right edge with the scrollbar suppressed — unreachable.
   const tabItems = (
-    ['overview', 'channels', 'posts', 'insights', 'shortlinks', 'watchlist'] as const
+    ['overview', 'channels', 'posts', 'insights', 'shortlinks', 'watchlist', 'usage'] as const
   ).map((key) => ({ key, label: tabLabels[key] }));
-
-  const renderTab = (item: { key: string; label: string }) => (
-    <button
-      key={item.key}
-      type="button"
-      role="tab"
-      aria-selected={tab === item.key}
-      onClick={() => handleTabChange(item.key)}
-      className={clsx(
-        'px-[16px] py-[10px] text-[14px] font-[500] whitespace-nowrap border-b-2 -mb-[1px] transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-designerAccent/60',
-        tab === item.key
-          ? 'border-btnPrimary text-textColor'
-          : 'border-transparent text-newTableText hover:text-textColor'
-      )}
-    >
-      {item.label}
-    </button>
-  );
 
   return (
     <ErrorBoundary>
@@ -409,16 +395,14 @@ export const AnalyticsDashboard: FC = () => {
             }
           />
 
-          <div className="flex items-stretch border-b border-newTableBorder mb-[16px]">
-            <div
-              className="flex-1 overflow-x-auto overflow-y-hidden [&::-webkit-scrollbar]:hidden [scrollbar-width:none]"
-              role="tablist"
-            >
-              <div role="presentation" className="flex items-center gap-[2px] min-w-max">
-                {tabItems.map((item) => renderTab(item))}
-              </div>
-            </div>
-          </div>
+          <OverflowTabs
+            items={tabItems.map((item) => ({ key: item.key, label: item.label }))}
+            activeKey={tab}
+            onSelect={handleTabChange}
+            ariaLabel={t('more_analytics_tabs', 'More analytics tabs')}
+            listAriaLabel={t('analytics_tabs', 'Analytics tabs')}
+            className="mb-[16px]"
+          />
 
           {showEmptyBlock && (
             <div className="flex flex-col items-center justify-center py-[48px] px-[24px] mb-[16px] bg-newBgColorInner border border-newTableBorder rounded-[12px]">
@@ -493,6 +477,11 @@ export const AnalyticsDashboard: FC = () => {
           {tab === 'watchlist' && (
             <ErrorBoundary>
               <WatchlistTab />
+            </ErrorBoundary>
+          )}
+          {tab === 'usage' && (
+            <ErrorBoundary>
+              <UsageTab />
             </ErrorBoundary>
           )}
           {tab === 'shortlinks' && (

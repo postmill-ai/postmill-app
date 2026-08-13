@@ -1,8 +1,15 @@
 'use client';
 
-import React, { FC, useCallback, useMemo, useState } from 'react';
+import React, { FC, useCallback, useEffect, useMemo, useState } from 'react';
 import useSWR from 'swr';
 import { useFetch } from '@postmill-ai/helpers/utils/custom.fetch';
+import { useSearchParams } from 'next/navigation';
+import {
+  clearSignupPlan,
+  parseSignupPeriod,
+  parseSignupPlan,
+  readSignupPlan,
+} from '@postmill-ai/frontend/app/(app)/auth/signup.plan.component';
 import { useVariables } from '@postmill-ai/react/helpers/variable.context';
 import { loadStripe, Stripe } from '@stripe/stripe-js';
 import { OrganizationSelector } from '@postmill-ai/frontend/components/layout/organization.selector';
@@ -127,8 +134,28 @@ export const FirstBillingComponent = () => {
   const [stripe] = useState<Promise<Stripe | null> | null>(() =>
     stripeClient ? loadStripe(stripeClient) : null
   );
-  const [tier, setTier] = useState<PlanInterface['current']>('STARTER');
-  const [period, setPeriod] = useState('MONTHLY');
+  const searchParams = useSearchParams();
+  // Preselect plan/period: URL params win (direct deep-link to the paywall),
+  // then the localStorage handoff written by SignupPlanComponent on /auth.
+  // Read once in the initializers (idempotent under StrictMode) and cleared
+  // in the effect below; defaults are PRO / MONTHLY.
+  const [stored] = useState(readSignupPlan);
+  const [tier, setTier] = useState<PlanInterface['current']>(
+    () =>
+      parseSignupPlan(searchParams.get('plan')) ??
+      parseSignupPlan(stored.plan) ??
+      'PRO'
+  );
+  const [period, setPeriod] = useState(
+    () =>
+      parseSignupPeriod(searchParams.get('period')) ??
+      parseSignupPeriod(stored.period) ??
+      'MONTHLY'
+  );
+
+  useEffect(() => {
+    clearSignupPlan();
+  }, []);
   const fetch = useFetch();
   const modals = useModals();
   const t = useT();

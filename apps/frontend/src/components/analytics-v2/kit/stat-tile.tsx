@@ -1,7 +1,7 @@
 'use client';
 
 import { FC, KeyboardEvent } from 'react';
-import { KPI } from '../utils';
+import { KPI, formatCompactNumber } from '../utils';
 import { useCountUp } from '../hooks/useCountUp';
 import { AreaChart } from '../charts/area.chart';
 import { ACCENT } from './palette';
@@ -49,7 +49,12 @@ export const StatTile: FC<StatTileProps> = ({ kpi, label, value, accent, onClick
       <span className="relative text-[13px] font-medium text-newTableText uppercase tracking-wide">
         {label}
       </span>
-      <span className="relative text-[32px] mobile:text-[24px] xs:text-[20px] leading-[40px] mobile:leading-[32px] xs:leading-[28px] font-semibold tracking-tight tabular-nums">
+      {/* truncate matters here too: the parent only has overflow-hidden, so a
+          long value used to clip with no ellipsis at all. */}
+      <span
+        title={value}
+        className="relative block truncate text-[32px] mobile:text-[24px] xs:text-[20px] leading-[40px] mobile:leading-[32px] xs:leading-[28px] font-semibold tracking-tight tabular-nums"
+      >
         {value}
       </span>
     </div>
@@ -65,15 +70,40 @@ const RichTile: FC<{ kpi: KPI; color: string; onClick?: () => void }> = ({
   const animatedTotal = useCountUp(kpi.total, 800, true);
   const isPositive = kpi.percentageChange >= 0;
 
+  // Tiles can be as narrow as ~95px on the dashboard (kpi is lg:col-span-4 of
+  // 12), where a grouped "1,234,567" is ~170px and gets truncated to "1,2…".
+  // Compact instead, and keep the exact figure on hover.
   const displayValue = (() => {
     if (kpi.format === 'percent') return animatedTotal.toFixed(1) + '%';
+    if (kpi.format === 'currency')
+      return '$' + formatCompactNumber(Math.round(animatedTotal));
+    return formatCompactNumber(Math.round(animatedTotal));
+  })();
+
+  // A compacted figure runs 1–7 characters ("84", "259.5K", "$1.2M"). At 32px the
+  // longer ones still overflow a ~120px dashboard tile, and a truncated number is
+  // worse than a smaller one — so step the size down instead. Sized from the final
+  // value, not the animated one, so it doesn't resize while counting up.
+  const valueSizeClass = (() => {
+    const settled =
+      kpi.format === 'percent'
+        ? kpi.total.toFixed(1) + '%'
+        : (kpi.format === 'currency' ? '$' : '') +
+          formatCompactNumber(Math.round(kpi.total));
+    if (settled.length > 6) return 'text-[22px] leading-[32px]';
+    if (settled.length > 4) return 'text-[26px] leading-[36px]';
+    return 'text-[32px] leading-[40px]';
+  })();
+
+  const exactValue = (() => {
+    if (kpi.format === 'percent') return kpi.total.toFixed(1) + '%';
     if (kpi.format === 'currency')
       return new Intl.NumberFormat('en-US', {
         style: 'currency',
         currency: 'USD',
         minimumFractionDigits: 0,
-      }).format(Math.round(animatedTotal));
-    return new Intl.NumberFormat().format(Math.round(animatedTotal));
+      }).format(Math.round(kpi.total));
+    return new Intl.NumberFormat().format(Math.round(kpi.total));
   })();
 
   const interactiveProps = onClick
@@ -131,7 +161,10 @@ const RichTile: FC<{ kpi: KPI; color: string; onClick?: () => void }> = ({
         )}
       </div>
       <div className="px-[16px] mobile:px-[12px]">
-        <div className="text-[32px] leading-[40px] mobile:text-[22px] mobile:leading-[28px] font-semibold tracking-tight tabular-nums truncate">
+        <div
+          title={exactValue}
+          className={`${valueSizeClass} mobile:text-[22px] mobile:leading-[28px] font-semibold tracking-tight tabular-nums truncate`}
+        >
           {displayValue}
         </div>
       </div>

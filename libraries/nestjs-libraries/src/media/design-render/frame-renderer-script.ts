@@ -21,8 +21,18 @@ export function escapeForScriptTag(value: unknown): string {
     .replace(/\u2029/g, '\\u2029');
 }
 
+import { shapeGeometrySource } from '../designer-doc/shape-geometry';
+import { keyframesSource } from '../designer-doc/keyframes';
+import { motionBlurSource } from '../designer-doc/motion-blur';
+import { captionStylesSource } from '../designer-doc/caption-styles';
+
 export const FRAME_RENDERER_SCRIPT = /* js */ `
 (function () {
+${shapeGeometrySource()}
+${keyframesSource()}
+${motionBlurSource()}
+${captionStylesSource()}
+
   const output = window.__DATA.output;
   const baseUrl = window.__DATA.baseUrl || '';
   const canvas = document.getElementById('frame-canvas');
@@ -92,16 +102,24 @@ export const FRAME_RENDERER_SCRIPT = /* js */ `
     }
   }
 
+  // Mirrors parseDesignerFilterToken + cssFilterForToken (filter-tokens.ts),
+  // which this page cannot import. A drift spec pins the two together.
+  // parseFloat of a missing value is NaN, not null — the old "== null"
+  // guards never fired and this emitted literal brightness(NaN), which CSS
+  // discards, silently dropping every adjustment on the clip.
   function mapFilterToken(token) {
     if (token === 'grayscale') return 'grayscale(100%)';
     if (token === 'sepia') return 'sepia(100%)';
-    const [key, valueStr] = token.split(':');
-    const value = parseFloat(valueStr);
+    const parts = token.split(':');
+    const key = parts[0];
+    if (parts[1] === undefined) return '';
+    const value = parseFloat(parts[1]);
+    if (isNaN(value)) return '';
     switch (key) {
-      case 'blur': return \`blur(\${value || 0}px)\`;
-      case 'brightness': return \`brightness(\${value == null ? 1 : value})\`;
-      case 'contrast': return \`contrast(\${value == null ? 1 : value})\`;
-      case 'saturate': return \`saturate(\${value == null ? 1 : value})\`;
+      case 'blur': return \`blur(\${value}px)\`;
+      case 'brightness': return \`brightness(\${value})\`;
+      case 'contrast': return \`contrast(\${value})\`;
+      case 'saturate': return \`saturate(\${value})\`;
       default: return '';
     }
   }
@@ -144,66 +162,9 @@ export const FRAME_RENDERER_SCRIPT = /* js */ `
     return frames[frames.length - 1].url;
   }
 
-  function interpolateKeyframes(clip, relativeMs) {
-    const defaults = {
-      x: clip.x || 0,
-      y: clip.y || 0,
-      width: clip.width || 1,
-      height: clip.height || 1,
-      rotation: clip.rotation || 0,
-      opacity: clip.opacity == null ? 1 : clip.opacity,
-    };
-    const kfs = clip.keyframes || [];
-    if (kfs.length === 0) return defaults;
-    const sorted = [...kfs].sort((a, b) => a.tMs - b.tMs);
-    if (relativeMs <= sorted[0].tMs) {
-      const kf = sorted[0];
-      return {
-        x: kf.props.x == null ? defaults.x : kf.props.x,
-        y: kf.props.y == null ? defaults.y : kf.props.y,
-        width: kf.props.width == null ? defaults.width : kf.props.width,
-        height: kf.props.height == null ? defaults.height : kf.props.height,
-        rotation: kf.props.rotation == null ? defaults.rotation : kf.props.rotation,
-        opacity: kf.props.opacity == null ? defaults.opacity : kf.props.opacity,
-      };
-    }
-    if (relativeMs >= sorted[sorted.length - 1].tMs) {
-      const kf = sorted[sorted.length - 1];
-      return {
-        x: kf.props.x == null ? defaults.x : kf.props.x,
-        y: kf.props.y == null ? defaults.y : kf.props.y,
-        width: kf.props.width == null ? defaults.width : kf.props.width,
-        height: kf.props.height == null ? defaults.height : kf.props.height,
-        rotation: kf.props.rotation == null ? defaults.rotation : kf.props.rotation,
-        opacity: kf.props.opacity == null ? defaults.opacity : kf.props.opacity,
-      };
-    }
-    let prev = sorted[0];
-    let next = sorted[0];
-    let ease = 'linear';
-    for (let i = 0; i < sorted.length - 1; i++) {
-      if (relativeMs >= sorted[i].tMs && relativeMs <= sorted[i + 1].tMs) {
-        prev = sorted[i];
-        next = sorted[i + 1];
-        ease = next.ease || prev.ease || 'linear';
-        break;
-      }
-    }
-    const range = next.tMs - prev.tMs;
-    let t = range > 0 ? (relativeMs - prev.tMs) / range : 0;
-    if (ease === 'easeInOut') t = t < 0.5 ? 2 * t * t : 1 - Math.pow(-2 * t + 2, 2) / 2;
-    else if (ease === 'easeIn') t = t * t;
-    else if (ease === 'easeOut') t = 1 - (1 - t) * (1 - t);
-    const lerp = (a, b, t) => a + (b - a) * t;
-    return {
-      x: lerp(prev.props.x == null ? defaults.x : prev.props.x, next.props.x == null ? defaults.x : next.props.x, t),
-      y: lerp(prev.props.y == null ? defaults.y : prev.props.y, next.props.y == null ? defaults.y : next.props.y, t),
-      width: lerp(prev.props.width == null ? defaults.width : prev.props.width, next.props.width == null ? defaults.width : next.props.width, t),
-      height: lerp(prev.props.height == null ? defaults.height : prev.props.height, next.props.height == null ? defaults.height : next.props.height, t),
-      rotation: lerp(prev.props.rotation == null ? defaults.rotation : prev.props.rotation, next.props.rotation == null ? defaults.rotation : next.props.rotation, t),
-      opacity: lerp(prev.props.opacity == null ? defaults.opacity : prev.props.opacity, next.props.opacity == null ? defaults.opacity : next.props.opacity, t),
-    };
-  }
+  // Keyframe interpolation and easing come from the shared module as source
+  // (see keyframesSource), so the preview and an exported mp4 ease identically.
+  const interpolateKeyframes = interpolateClipKeyframes;
 
   function getClipDuration(clip) { return clip.endMs - clip.startMs; }
   function getEffectiveEnd(clip) { return clip.endMs + (clip.freezeAtMs || 0); }
@@ -323,19 +284,37 @@ export const FRAME_RENDERER_SCRIPT = /* js */ `
 
     const nw = element.naturalWidth || element.videoWidth || props.width;
     const nh = element.naturalHeight || element.videoHeight || props.height;
-    const fitMode = clip.fitMode || 'contain';
+    // Unset means fill, as it does in the preview and the still renderer. This
+    // defaulted to 'contain', so a clip that filled its box in the editor
+    // exported letterboxed.
+    const fitMode = clip.fitMode || 'fill';
 
     ctx.save();
     applyFilters(ctx, clip.filters);
     ctx.globalAlpha = props.opacity;
 
-    if (fitMode === 'cover') {
+    if (clip.crop) {
+      // An explicit crop is what the Crop tool wrote and beats fitMode's
+      // automatic cover window — same precedence the canvas uses.
+      const c = clip.crop;
+      ctx.drawImage(
+        element,
+        Math.max(0, c.x),
+        Math.max(0, c.y),
+        Math.max(1, c.width),
+        Math.max(1, c.height),
+        0,
+        0,
+        props.width,
+        props.height
+      );
+    } else if (fitMode === 'cover') {
       const { sx, sy, sw, sh } = computeCoverCrop(nw, nh, props.width, props.height, clip.focalPoint);
       ctx.drawImage(element, sx, sy, sw, sh, 0, 0, props.width, props.height);
     } else if (fitMode === 'fill') {
       ctx.drawImage(element, 0, 0, props.width, props.height);
     } else {
-      const scale = Math.min(props.width / nw, props.height / nh, 1);
+      const scale = Math.min(props.width / nw, props.height / nh);
       const dw = nw * scale;
       const dh = nh * scale;
       const dx = (props.width - dw) / 2;
@@ -365,13 +344,58 @@ export const FRAME_RENDERER_SCRIPT = /* js */ `
     return lines;
   }
 
+  // Shape clips. Polygon geometry comes from the injected shape-geometry
+  // source, so this traces exactly what the canvas and the PDF renderer trace.
+  function drawShapeClip(ctx, clip, props) {
+    const w = props.width;
+    const h = props.height;
+    ctx.save();
+    ctx.globalAlpha = props.opacity;
+    ctx.fillStyle = clip.fill || '#2B5CD3';
+    ctx.strokeStyle = clip.stroke || clip.fill || '#2B5CD3';
+    ctx.lineWidth = clip.strokeWidth || 0;
+
+    const points = pointsForShape(clip.shape, w, h, clip.sides, clip.innerRatio);
+    if (points) {
+      ctx.beginPath();
+      points.forEach(function (p, i) {
+        if (i === 0) ctx.moveTo(p.x, p.y);
+        else ctx.lineTo(p.x, p.y);
+      });
+      ctx.closePath();
+      ctx.fill();
+      if (clip.strokeWidth) ctx.stroke();
+    } else if (clip.shape === 'ellipse') {
+      ctx.beginPath();
+      ctx.ellipse(w / 2, h / 2, w / 2, h / 2, 0, 0, Math.PI * 2);
+      ctx.fill();
+      if (clip.strokeWidth) ctx.stroke();
+    } else if (clip.shape === 'line') {
+      ctx.beginPath();
+      ctx.moveTo(0, h / 2);
+      ctx.lineTo(w, h / 2);
+      ctx.lineWidth = clip.strokeWidth || 2;
+      ctx.stroke();
+    } else {
+      const r = Math.min(clip.borderRadius || 0, w / 2, h / 2);
+      ctx.beginPath();
+      if (r > 0 && ctx.roundRect) ctx.roundRect(0, 0, w, h, r);
+      else ctx.rect(0, 0, w, h);
+      ctx.fill();
+      if (clip.strokeWidth) ctx.stroke();
+    }
+    ctx.restore();
+  }
+
   function drawTextClip(ctx, clip, props) {
     const text = clip.text || '';
     if (!text) return;
     ctx.save();
     ctx.globalAlpha = props.opacity;
     const fontSize = clip.fontSize || 32;
-    ctx.font = \`\${clip.fontWeight || 400} \${fontSize}px \${clip.fontFamily || 'sans-serif'}\`;
+    // Quoted: an unquoted multi-word family ("Bebas Neue") makes the whole
+    // shorthand invalid, and the assignment is then silently ignored.
+    ctx.font = \`\${clip.fontWeight || 400} \${fontSize}px "\${clip.fontFamily || 'sans-serif'}"\`;
     ctx.fillStyle = clip.fill || '#ffffff';
     ctx.textBaseline = 'top';
     const align = clip.align || 'left';
@@ -396,29 +420,33 @@ export const FRAME_RENDERER_SCRIPT = /* js */ `
     ctx.globalAlpha = props.opacity;
     const fontSize = clip.fontSize || 28;
     const fontWeight = clip.fontWeight || 700;
-    ctx.font = \`\${fontWeight} \${fontSize}px \${clip.fontFamily || 'Arial'}\`;
+    ctx.font = \`\${fontWeight} \${fontSize}px "\${clip.fontFamily || 'Arial'}"\`;
     ctx.textBaseline = 'top';
     const lineHeight = fontSize * 1.35;
     const spaceWidth = ctx.measureText(' ').width;
     const relativeMs = Math.max(0, playheadMs - clip.startMs);
-    let activeIndex = -1;
-    for (let i = 0; i < words.length; i++) {
-      const w = words[i];
-      if (relativeMs >= w.startMs && relativeMs <= w.endMs) {
-        activeIndex = i;
-        break;
-      }
-    }
+    // Per-word styling comes from the shared module (see captionStylesSource),
+    // so a karaoke caption looks the same here as in the editor.
+    const states = captionWordStates(words, relativeMs, clip.captionStyle, clip.fill || '#ffffff');
     let x = 0;
     let y = 0;
     for (let i = 0; i < words.length; i++) {
+      const state = states[i];
+      const scaled = fontSize * state.scale;
+      ctx.font = (state.weight || fontWeight) + ' ' + scaled + 'px "' + (clip.fontFamily || 'Arial') + '"';
       const wordWidth = ctx.measureText(words[i].word).width;
       if (x + wordWidth > props.width && x > 0) {
         x = 0;
         y += lineHeight;
       }
-      ctx.fillStyle = i === activeIndex ? '#facc15' : (clip.fill || '#ffffff');
-      ctx.fillText(words[i].word, x, y);
+      if (state.background) {
+        ctx.fillStyle = state.background;
+        ctx.fillRect(x - 2, y - 2, wordWidth + 4, scaled + 4);
+      }
+      ctx.fillStyle = state.color;
+      // A scaled word grows from its own baseline, not its top, or the line
+      // visibly jumps as the highlight moves along it.
+      ctx.fillText(words[i].word, x, y + (fontSize - scaled));
       x += wordWidth + spaceWidth;
     }
     ctx.restore();
@@ -433,7 +461,9 @@ export const FRAME_RENDERER_SCRIPT = /* js */ `
     if (props.rotation) ctx.rotate((props.rotation * Math.PI) / 180);
     ctx.translate(-props.width / 2, -props.height / 2);
 
-    if (trackType === 'text') {
+    if (trackType === 'shape') {
+      drawShapeClip(ctx, clip, props);
+    } else if (trackType === 'text') {
       drawTextClip(ctx, clip, props);
     } else if (trackType === 'caption') {
       await drawCaptionClip(ctx, clip, props, window.__CURRENT_TIME);
@@ -471,11 +501,23 @@ export const FRAME_RENDERER_SCRIPT = /* js */ `
         ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
       } catch {}
     } else if (output.bg && output.bg.type === 'gradient' && output.bg.gradient) {
-      // Simple gradient support: top-to-bottom if colors provided
-      const colors = output.bg.gradient.colors || [];
-      if (colors.length) {
-        const grd = ctx.createLinearGradient(0, 0, 0, canvas.height);
-        colors.forEach((c, i) => grd.addColorStop(i / Math.max(1, colors.length - 1), c));
+      // "stops", not "colors" — this read a field the schema has never had,
+      // so a gradient background rendered as nothing at all. Angle honoured
+      // the same way buildStyleGradient does: degrees, 0 = left to right.
+      const stops = output.bg.gradient.stops || [];
+      if (stops.length) {
+        const angle = ((output.bg.gradient.angle || 0) * Math.PI) / 180;
+        const hx = (Math.cos(angle) * canvas.width) / 2;
+        const hy = (Math.sin(angle) * canvas.height) / 2;
+        const cx = canvas.width / 2;
+        const cy = canvas.height / 2;
+        const grd = ctx.createLinearGradient(cx - hx, cy - hy, cx + hx, cy + hy);
+        stops.forEach(function (s, i) {
+          const offset = typeof s.offset === 'number'
+            ? Math.max(0, Math.min(1, s.offset))
+            : i / Math.max(1, stops.length - 1);
+          grd.addColorStop(offset, s.color);
+        });
         ctx.fillStyle = grd;
         ctx.fillRect(0, 0, canvas.width, canvas.height);
       }
@@ -483,7 +525,39 @@ export const FRAME_RENDERER_SCRIPT = /* js */ `
 
     const composed = composeClipsAtPlayhead(output, timeMs);
     for (const item of composed) {
-      await drawClip(ctx, item.clip, item.trackType, item.props);
+      // Motion blur is an accumulation: the same clip drawn at several
+      // sub-frame times inside the shutter window, each at a fraction of the
+      // opacity. A clip without it samples once and costs nothing extra.
+      const times = motionBlurSampleTimes(timeMs, output.fps || 30, item.clip.motionBlur);
+      if (times.length < 2) {
+        await drawClip(ctx, item.clip, item.trackType, item.props);
+        continue;
+      }
+      const wasTime = window.__CURRENT_TIME;
+      // Accumulate the sub-frame samples ADDITIVELY at 1/N in an offscreen
+      // buffer, then composite once. Drawing them onto the page with
+      // source-over at opacity/N is not an average — overlapping samples
+      // compound to 1-(1-o/N)^N (66% at N=8), darkening every blurred clip
+      // against the already-painted background. Each sample also carries its
+      // OWN keyframed opacity, not the playhead's.
+      const acc = document.createElement('canvas');
+      acc.width = canvas.width;
+      acc.height = canvas.height;
+      const actx = acc.getContext('2d');
+      actx.globalCompositeOperation = 'lighter';
+      for (const sampleMs of times) {
+        window.__CURRENT_TIME = sampleMs;
+        const relativeMs = Math.max(0, sampleMs - item.clip.startMs);
+        const sampled = interpolateKeyframes(item.clip, relativeMs);
+        await drawClip(
+          actx,
+          item.clip,
+          item.trackType,
+          { ...sampled, opacity: (sampled.opacity == null ? 1 : sampled.opacity) / times.length }
+        );
+      }
+      window.__CURRENT_TIME = wasTime;
+      ctx.drawImage(acc, 0, 0);
     }
   }
 

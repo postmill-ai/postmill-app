@@ -58,7 +58,7 @@ describe('DashboardKpis', () => {
 
     const { container } = render(<DashboardKpis dashboard={baseDashboard} />);
     // Lifetime headline number stays the engagement total, not the windowed sum.
-    expect(screen.getByText('5,000')).toBeTruthy();
+    expect(screen.getByText('5.0K')).toBeTruthy();
     // The rich variant renders a sparkline canvas.
     expect(container.querySelector('canvas')).toBeTruthy();
     // Per-goal "as of" freshness hint (3.5).

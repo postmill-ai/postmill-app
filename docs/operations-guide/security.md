@@ -286,10 +286,15 @@ Error and breadcrumb data sent to Sentry is scrubbed of secrets and PII before t
 
 Applied via `ThrottlerBehindProxyGuard`, which respects `X-Forwarded-For` headers.
 
-- **Global default**: all routes are throttled by the default limit
-- **Per-route**: `@Throttle()` decorators set specific limits (e.g. 30 req/min on AI user endpoints)
+- **Global default**: all routes are throttled by the default limit — `API_LIMIT` env var,
+  default **600 requests/hour**
+- **Bucket scope**: one bucket per (controller, handler, caller) — the limit is *not* a single
+  global budget across the API. For authenticated requests the caller is the **organization**;
+  for unauthenticated ones it falls back to the client IP (resolved from `X-Forwarded-For` via
+  `TRUST_PROXY_HOPS`)
+- **Per-route**: `@Throttle()` decorators set specific limits (e.g. 30 req/min on AI user endpoints;
+  poll-heavy job-status endpoints raise the hourly cap)
 - **Store**: Redis-backed via `@nest-lab/throttler-storage-redis` (shared across replicas)
-- **Public API**: `API_LIMIT` env var (default 30 requests/hour)
 
 The throttler guard applies its default limit to all routes — per-route `@Throttle` caps
 actually take effect (unlike earlier versions where most routes bypassed the throttler).

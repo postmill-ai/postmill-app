@@ -8,8 +8,8 @@ type StoreApi = ReturnType<typeof import('./designer.store').createDesignerStore
 interface NewDesignDialogProps {
   store: StoreApi;
   onClose: () => void;
-  /** Returns false to abort (e.g. user declined to discard unsaved changes). */
-  guard: () => boolean;
+  /** Resolves false to abort (e.g. user declined to discard unsaved changes). */
+  guard: () => Promise<boolean>;
 }
 
 const CHIPS = [
@@ -34,11 +34,11 @@ export const NewDesignDialog: FC<NewDesignDialogProps> = ({ store, onClose, guar
   const [w, setW] = useState('1080');
   const [h, setH] = useState('1080');
 
-  const create = () => {
+  const create = async () => {
     const width = parseInt(w, 10);
     const height = parseInt(h, 10);
     if (!(width > 0 && height > 0)) return;
-    if (!guard()) return;
+    if (!(await guard())) return;
     const st = store.getState();
     st.reset(width, height);
     // Label the single output as a custom format before any mode conversion

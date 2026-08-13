@@ -1,6 +1,7 @@
 'use client';
 
-import { FC, useCallback, useMemo, useState } from 'react';
+import { FC, useCallback, useEffect, useMemo, useState } from 'react';
+import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import { useFetch } from '@postmill-ai/helpers/utils/custom.fetch';
 import { useT } from '@postmill-ai/react/translation/get.transation.service.client';
 import useSWR, { mutate as swrMutate } from 'swr';
@@ -26,6 +27,9 @@ export const CampaignsPage: FC = () => {
   const fetch = useFetch();
   const modal = useModals();
   const toast = useToaster();
+  const router = useRouter();
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
 
   const [filters, setFilters] = useState<CampaignFilters>(DEFAULT_CAMPAIGN_FILTERS);
   const [page, setPage] = useState(0);
@@ -101,6 +105,17 @@ export const CampaignsPage: FC = () => {
       ),
     });
   }, [modal, t]);
+
+  // `/campaigns?new=1` is promised by the dashboard header's New Campaign button
+  // and the campaigns widget's empty state; without this the param was ignored
+  // and both landed on a plain list. Strip it after opening so a refresh or a
+  // back-navigation doesn't reopen the modal.
+  const newParam = searchParams.get('new');
+  useEffect(() => {
+    if (newParam !== '1') return;
+    openCreateModal();
+    router.replace(pathname);
+  }, [newParam, openCreateModal, router, pathname]);
 
   const openCopyModal = useCallback((campaign: Campaign) => {
     modal.openModal({

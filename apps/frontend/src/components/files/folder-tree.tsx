@@ -3,23 +3,13 @@
 import React, { FC, useCallback, useState, useEffect, useRef } from 'react';
 import { useFetch } from '@postmill-ai/helpers/utils/custom.fetch';
 import { useToaster } from '@postmill-ai/react/toaster/toaster';
-import useSWR from 'swr';
 import clsx from 'clsx';
 import ProviderIcon from '@postmill-ai/frontend/components/shared/provider-icon';
 import { useT } from '@postmill-ai/react/translation/get.transation.service.client';
-
-type FolderItem = {
-  id: string;
-  name: string;
-  color: string | null;
-  tags: string | null;
-  description: string | null;
-  parentId: string | null;
-  children: FolderItem[];
-  _count: { files: number; children: number };
-  storageProviderId?: string | null;
-  storageProvider?: { id: string; type: string; name: string } | null;
-};
+import { ContextMenu } from '@postmill-ai/frontend/components/ui/context-menu';
+import { useContextMenu } from '@postmill-ai/frontend/components/ui/use-context-menu';
+import { useLongPress } from '@postmill-ai/frontend/components/ui/use-long-press';
+import { findFolder, useFolderDropTarget, type FolderItem } from './folder.utils';
 
 export const FolderTree: FC<{
   folders: FolderItem[];
@@ -28,7 +18,13 @@ export const FolderTree: FC<{
   onRefresh: () => void;
   onFileMoved?: () => void;
   drawerMode?: boolean;
-}> = ({ folders, selectedFolderId, onSelectFolder, onRefresh, onFileMoved, drawerMode }) => {
+  /**
+   * Show the "Folders" header and its new-folder button. Defaults to the
+   * inverse of `drawerMode` (the historical behaviour), but is separate so a
+   * modal host can use drawer *sizing* while keeping the create affordance.
+   */
+  showHeader?: boolean;
+}> = ({ folders, selectedFolderId, onSelectFolder, onRefresh, onFileMoved, drawerMode, showHeader }) => {
   const fetch = useFetch();
   const toaster = useToaster();
   const t = useT();
@@ -37,9 +33,10 @@ export const FolderTree: FC<{
   const [newFolderName, setNewFolderName] = useState('');
   const [renamingId, setRenamingId] = useState<string | null>(null);
   const [renamingName, setRenamingName] = useState('');
-  const [contextMenu, setContextMenu] = useState<{ x: number; y: number; folderId: string } | null>(null);
-  const [dragOverFolderId, setDragOverFolderId] = useState<string | null>(null);
-  const dragCounterRef = useRef<Map<string, number>>(new Map());
+  const { menu, openAt: openMenu, close: closeMenu } = useContextMenu<string>();
+  const longPress = useLongPress<string>((point, folderId) =>
+    openMenu({ ...point, currentTarget: null, preventDefault: () => undefined }, folderId)
+  );
 
   const toggleCollapse = (id: string) => {
     setCollapsed(prev => {
@@ -83,17 +80,9 @@ export const FolderTree: FC<{
       if (selectedFolderId === id) onSelectFolder(null);
     }
     onRefresh();
-    setContextMenu(null);
   }, [fetch, onRefresh, toaster, selectedFolderId, onSelectFolder, t]);
 
-  const handleDrop = useCallback(async (e: React.DragEvent, targetFolderId: string | null) => {
-    e.preventDefault();
-    setDragOverFolderId(null);
-    dragCounterRef.current.delete(targetFolderId || '__all__');
-
-    const fileId = e.dataTransfer.getData('text/plain');
-    if (!fileId) return;
-
+  const moveFile = useCallback(async (fileId: string, targetFolderId: string | null) => {
     const res = await fetch(`/files/${fileId}/move`, {
       method: 'PUT',
       body: JSON.stringify({ folderId: targetFolderId }),
@@ -109,44 +98,12 @@ export const FolderTree: FC<{
     onFileMoved?.();
   }, [fetch, onRefresh, onFileMoved, toaster, t]);
 
-  const handleDragOver = useCallback((e: React.DragEvent, folderId: string | null) => {
-    e.preventDefault();
-    e.dataTransfer.dropEffect = 'move';
-  }, []);
-
-  const handleDragEnter = useCallback((folderId: string | null) => {
-    const key = folderId || '__all__';
-    const count = (dragCounterRef.current.get(key) || 0) + 1;
-    dragCounterRef.current.set(key, count);
-    setDragOverFolderId(folderId);
-  }, []);
-
-  const handleDragLeave = useCallback((folderId: string | null) => {
-    const key = folderId || '__all__';
-    const count = (dragCounterRef.current.get(key) || 0) - 1;
-    if (count <= 0) {
-      dragCounterRef.current.delete(key);
-      setDragOverFolderId(prev => prev === folderId ? null : prev);
-    } else {
-      dragCounterRef.current.set(key, count);
-    }
-  }, []);
-
-  const handleContextMenu = (e: React.MouseEvent, id: string) => {
-    e.preventDefault();
-    setContextMenu({ x: e.clientX, y: e.clientY, folderId: id });
-  };
-
-  useEffect(() => {
-    const close = () => setContextMenu(null);
-    document.addEventListener('click', close);
-    return () => document.removeEventListener('click', close);
-  }, []);
+  const { dropProps, isOver } = useFolderDropTarget(moveFile);
 
   const renderFolder = (folder: FolderItem, depth: number = 0) => {
     const isCollapsed = collapsed.has(folder.id);
     const isSelected = selectedFolderId === folder.id;
-    const isDragOver = dragOverFolderId === folder.id;
+    const isDragOver = isOver(folder.id);
     const hasChildren = folder.children && folder.children.length > 0;
     const folderColor = folder.color || '#2B5CD3';
     const providerInfo = folder.storageProvider;
@@ -165,7 +122,6 @@ export const FolderTree: FC<{
                 ? 'bg-[#2B5CD3]/30 text-textColor'
                 : 'text-textColor hover:bg-newColColor/50'
           )}
-          style={{ paddingLeft: `${12 + depth * 16}px` }}
           onClick={() => onSelectFolder(folder.id)}
           onKeyDown={(e) => {
             if (e.key === 'Enter' || e.key === ' ') {
@@ -173,11 +129,10 @@ export const FolderTree: FC<{
               onSelectFolder(folder.id);
             }
           }}
-          onContextMenu={(e) => handleContextMenu(e, folder.id)}
-          onDragOver={(e) => handleDragOver(e, folder.id)}
-          onDragEnter={() => handleDragEnter(folder.id)}
-          onDragLeave={() => handleDragLeave(folder.id)}
-          onDrop={(e) => handleDrop(e, folder.id)}
+          onContextMenu={(e) => openMenu(e, folder.id)}
+          {...longPress.bind(folder.id)}
+          {...dropProps(folder.id)}
+          style={{ paddingLeft: `${12 + depth * 16}px`, WebkitTouchCallout: 'none' }}
         >
           <button
             onClick={(e) => { e.stopPropagation(); toggleCollapse(folder.id); }}
@@ -228,13 +183,20 @@ export const FolderTree: FC<{
   return (
     <div
       className={clsx(
-        'flex flex-col bg-newBgColorInner',
+        // min-h-0 lets the inner overflow-y-auto actually shrink and scroll — a
+        // flex item defaults to min-height:auto, which is what let the list grow
+        // past the viewport and scroll the whole page instead.
+        'flex flex-col bg-newBgColorInner min-h-0',
         drawerMode
-          ? 'flex-1 w-full overflow-hidden'
-          : 'w-[240px] shrink-0 rounded-[12px] border border-newBorder'
+          ? // The drawer is already a bounded flex column, so h-full is enough.
+            'h-full flex-1 w-full overflow-hidden'
+          : // On the page nothing above is bounded (the document scrolls), so the
+            // tree carries its own viewport-relative cap — 40px is the page's
+            // vertical padding. It still shrinks to content when folders are few.
+            'w-[240px] shrink-0 rounded-[12px] border border-newBorder max-h-[calc(100vh-40px)]'
       )}
     >
-      {!drawerMode && (
+      {(showHeader ?? !drawerMode) && (
         <div className="flex items-center justify-between px-[12px] py-[12px] border-b border-newBorder">
           <div className="text-[13px] font-[600] text-textColor">{t('folders', 'Folders')}</div>
           <button
@@ -259,15 +221,12 @@ export const FolderTree: FC<{
               onSelectFolder(null);
             }
           }}
-          onDragOver={(e) => handleDragOver(e, null)}
-          onDragEnter={() => handleDragEnter(null)}
-          onDragLeave={() => handleDragLeave(null)}
-          onDrop={(e) => handleDrop(e, null)}
+          {...dropProps(null)}
           className={clsx(
             'flex items-center gap-[8px] px-[12px] py-[8px] cursor-pointer text-[13px] transition-all',
             selectedFolderId === null
               ? 'bg-[#2B5CD3]/20 text-textColor'
-              : dragOverFolderId === null
+              : isOver(null)
                 ? 'bg-[#2B5CD3]/30 text-textColor'
                 : 'text-textColor hover:bg-newColColor/50'
           )}
@@ -298,40 +257,35 @@ export const FolderTree: FC<{
         )}
       </div>
 
-      {contextMenu && (
-        <div
-          className="fixed z-[1000] bg-newBgColorInner border border-newBorder rounded-[8px] shadow-menu py-[4px] min-w-[160px]"
-          style={{ left: contextMenu.x, top: contextMenu.y }}
-        >
-          <button
-            onClick={() => {
-              setRenamingId(contextMenu.folderId);
-              const f = findFolder(folders, contextMenu.folderId);
-              setRenamingName(f?.name || '');
-              setContextMenu(null);
-            }}
-            className="w-full text-left px-[12px] py-[8px] text-[13px] text-textColor hover:bg-boxHover transition-all"
-          >
-            {t('rename', 'Rename')}
-          </button>
-          <button
-            onClick={() => {
-              setNewFolderParent(contextMenu.folderId);
-              setNewFolderName('');
-              setContextMenu(null);
-            }}
-            className="w-full text-left px-[12px] py-[8px] text-[13px] text-textColor hover:bg-boxHover transition-all"
-          >
-            {t('new_subfolder', 'New Subfolder')}
-          </button>
-          <div className="border-t border-newBorder my-[4px]" />
-          <button
-            onClick={() => handleDelete(contextMenu.folderId)}
-            className="w-full text-left px-[12px] py-[8px] text-[13px] text-dangerText hover:bg-boxHover transition-all"
-          >
-            {t('delete', 'Delete')}
-          </button>
-        </div>
+      {menu && (
+        <ContextMenu
+          x={menu.x}
+          y={menu.y}
+          onClose={closeMenu}
+          ariaLabel={t('folder_actions', 'Folder actions')}
+          items={[
+            {
+              label: t('rename', 'Rename'),
+              onClick: () => {
+                setRenamingId(menu.target);
+                setRenamingName(findFolder(folders, menu.target)?.name || '');
+              },
+            },
+            {
+              label: t('new_subfolder', 'New Subfolder'),
+              onClick: () => {
+                setNewFolderParent(menu.target);
+                setNewFolderName('');
+              },
+            },
+            { divider: true },
+            {
+              label: t('delete', 'Delete'),
+              onClick: () => handleDelete(menu.target),
+              danger: true,
+            },
+          ]}
+        />
       )}
     </div>
   );
@@ -345,13 +299,3 @@ function AutoFocusInput(props: React.InputHTMLAttributes<HTMLInputElement>) {
   return <input ref={ref} {...props} />;
 }
 
-function findFolder(folders: FolderItem[], id: string): FolderItem | null {
-  for (const f of folders) {
-    if (f.id === id) return f;
-    if (f.children) {
-      const found = findFolder(f.children, id);
-      if (found) return found;
-    }
-  }
-  return null;
-}

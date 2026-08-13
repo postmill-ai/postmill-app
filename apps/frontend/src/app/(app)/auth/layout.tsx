@@ -6,6 +6,7 @@ import loadDynamic from 'next/dynamic';
 import Image from 'next/image';
 import { LogoTextComponent } from '@postmill-ai/frontend/components/ui/logo-text.component';
 const ReturnUrlComponent = loadDynamic(() => import('./return.url.component'));
+const SignupPlanComponent = loadDynamic(() => import('./signup.plan.component'));
 
 const features = [
   { key: 'auth_feature_channels', text: '28+ social & chat channels' },
@@ -27,6 +28,7 @@ export default async function AuthLayout({
   return (
     <div className="bg-[#0E0E0E] flex flex-1 p-[12px] gap-[12px] min-h-screen w-screen text-white">
       <ReturnUrlComponent />
+      <SignupPlanComponent />
       <div className="flex flex-col py-[40px] px-[20px] flex-1 lg:w-[600px] lg:flex-none rounded-[12px] text-white p-[12px] bg-[#1A1919]">
         <div className="w-full max-w-[440px] mx-auto justify-center gap-[20px] h-full flex flex-col text-white">
           <LogoTextComponent />

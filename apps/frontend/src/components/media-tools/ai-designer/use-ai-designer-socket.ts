@@ -16,6 +16,7 @@ import type {
   AiDesignerRenderResult,
   AiDesignerRevisePayload,
   AiDesignerSessionDto,
+  AiDesignerSessionState,
   AiDesignerStartPayload,
 } from '@postmill-ai/nestjs-libraries/ai-designer/ai-designer.types';
 
@@ -40,12 +41,21 @@ export interface AiDesignerSocketError {
   nonce?: string;
 }
 
+// The shared payload type gains `texts` with the backend accept:plan
+// contract; intersect it here until that lands so the emit stays typed.
+type AcceptPlanWirePayload = Omit<AiDesignerAcceptPlanPayload, 'nonce'> & {
+  /** Edited copy per selected plan: variantId → slotId → text. */
+  texts?: Record<string, Record<string, string>>;
+};
+
 export interface AiDesignerSocketCallbacks {
   onSessionState?: (
     session: AiDesignerSessionDto | null,
     messages: AiDesignerMessagePayload[]
   ) => void;
   onMessage?: (msg: AiDesignerServerMessage) => void;
+  /** Authoritative state change broadcast by the conductor's _setState. */
+  onSessionTransition?: (state: AiDesignerSessionState) => void;
   onProgress?: (msg: AiDesignerProgressMsg) => void;
   onPreview?: (result: AiDesignerRenderResult) => void;
   onError?: (err: AiDesignerSocketError) => void;
@@ -151,6 +161,15 @@ export function useAiDesignerSocket(
       }
     });
 
+    socket.on(
+      'session:transition',
+      (payload: { state: AiDesignerSessionState }) => {
+        if (payload?.state) {
+          callbacksRef.current.onSessionTransition?.(payload.state);
+        }
+      }
+    );
+
     socket.on('agent:progress', (msg: AiDesignerProgressMsg) => {
       callbacksRef.current.onProgress?.(msg);
     });
@@ -224,12 +243,16 @@ export function useAiDesignerSocket(
   );
 
   const acceptPlan = useCallback(
-    (replyTo: string, variantId?: string, saveTemplate?: boolean) => {
+    (
+      replyTo: string,
+      variantId?: string,
+      texts?: Record<string, Record<string, string>>
+    ) => {
       return emitGuarded('accept:plan', {
         replyTo,
         variantId,
-        saveTemplate,
-      } as Omit<AiDesignerAcceptPlanPayload, 'nonce'>);
+        texts,
+      } as AcceptPlanWirePayload);
     },
     [emitGuarded]
   );

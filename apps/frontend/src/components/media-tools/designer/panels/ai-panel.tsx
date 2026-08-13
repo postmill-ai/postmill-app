@@ -8,6 +8,8 @@ import { useT } from '@postmill-ai/react/translation/get.transation.service.clie
 
 interface AiPanelProps {
   store: any;
+  /** Set when hosted in a modal, so adding an image dismisses it. */
+  onClose?: () => void;
 }
 
 interface GeneratedImage {
@@ -19,7 +21,7 @@ interface GeneratedImage {
 // Explicit lifecycle states for an AI generation request (C7).
 type GenStatus = 'idle' | 'queued' | 'generating' | 'failed';
 
-export const AiPanel: FC<AiPanelProps> = ({ store }) => {
+export const AiPanel: FC<AiPanelProps> = ({ store, onClose }) => {
   const fetch = useFetch();
   const toaster = useToaster();
   const t = useT();
@@ -116,13 +118,14 @@ export const AiPanel: FC<AiPanelProps> = ({ store }) => {
           naturalHeight,
         });
         toaster.show(t('ai_panel_image_added_to_canvas', 'Image added to canvas'), 'success');
+        onClose?.();
       };
       img.onerror = () => {
         toaster.show(t('ai_panel_could_not_load_generated_image', 'Could not load generated image'), 'warning');
       };
       img.src = item.path;
     },
-    [store, toaster, t]
+    [store, toaster, t, onClose]
   );
 
   const handleKeyDown = useCallback(

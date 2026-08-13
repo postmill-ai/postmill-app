@@ -1,5 +1,6 @@
 import XHRUpload from '@uppy/xhr-upload';
 import Transloadit from '@uppy/transloadit';
+import { csrfHeader } from '@postmill-ai/helpers/utils/csrf.header';
 const fetchUploadApiEndpoint = async (
   fetch: any,
   endpoint: string,
@@ -46,6 +47,12 @@ export const getUppyUploadPlugin = (
           withCredentials: true,
           formData: true,
           allowedMetaFields: ['folderId'],
+          // XHRUpload bypasses the `useFetch` wrapper, so it never picks up the
+          // CSRF header that csrf.middleware requires on cookie-authenticated
+          // mutating routes — without this every upload 403s. Must stay a
+          // function: Uppy is instantiated once per component and evaluates this
+          // per request, so a snapshot would go stale when the cookie rotates.
+          headers: () => ({ ...csrfHeader() }),
         },
       };
 

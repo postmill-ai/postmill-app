@@ -5,40 +5,15 @@ import { useUsage } from '../hooks/useUsage';
 import { useAiUsage } from '../hooks/useAiUsage';
 import { EmptyState, TabSkeleton } from '@postmill-ai/frontend/components/analytics-v2/kit/states';
 import { useT } from '@postmill-ai/react/translation/get.transation.service.client';
+import {
+  AiSpendByProvider,
+  AiSpendTotals,
+  PlanUsageSection,
+  hasPlanUsage,
+} from './usage.sections';
 
-interface UsageBarProps {
-  label: string;
-  used: number;
-  limit: number | boolean;
-}
-
-const UsageBar: FC<UsageBarProps> = ({ label, used, limit }) => {
-  // 1000000 is the pricing.ts "effectively unlimited" sentinel — show usage
-  // without the literal " / 1,000,000" (same as a zero/false cap).
-  const numericLimit =
-    typeof limit === 'number' && limit < 1000000 ? limit : 0;
-  const pct = numericLimit > 0 ? Math.min(100, (used / numericLimit) * 100) : 0;
-  const color =
-    pct >= 100 ? 'bg-[var(--negative,#f97066)]' : pct >= 80 ? 'bg-amber-500' : 'bg-btnPrimary';
-
-  return (
-    <div className="flex flex-col gap-[4px]">
-      <div className="flex justify-between text-[12px]">
-        <span className="text-textColor">{label}</span>
-        <span className="text-newTableText">
-          {used.toLocaleString()}
-          {numericLimit > 0 ? ` / ${numericLimit.toLocaleString()}` : ''}
-        </span>
-      </div>
-      {numericLimit > 0 && (
-        <div className="h-[6px] w-full rounded-full bg-newTableBorder overflow-hidden">
-          <div className={`h-full ${color} transition-all`} style={{ width: `${pct}%` }} />
-        </div>
-      )}
-    </div>
-  );
-};
-
+// The card summary. The full picture — including spend by scope — is the Usage
+// tab in /analytics, which this card's "View all" opens.
 export const UsageWidget: FC = () => {
   const t = useT();
   const { data: usage, isLoading: usageLoading } = useUsage();
@@ -46,9 +21,7 @@ export const UsageWidget: FC = () => {
 
   if (usageLoading) return <TabSkeleton variant="list" />;
 
-  const hasPlan = usage?.billingEnabled && usage.limits && usage.usage;
-  const planLimits = hasPlan ? usage.limits : null;
-  const planUsageData = hasPlan ? usage.usage : null;
+  const hasPlan = hasPlanUsage(usage);
   const hasAi = !aiError && aiUsage;
 
   if (!hasPlan && !hasAi) {
@@ -70,36 +43,7 @@ export const UsageWidget: FC = () => {
           <h4 className="text-[12px] font-medium text-newTableText uppercase tracking-wide">
             {t('plan_label', 'Plan')}
           </h4>
-          <UsageBar
-            label={t('posts', 'Posts')}
-            used={planUsageData!.postsThisCycle}
-            limit={planLimits!.postsPerMonth}
-          />
-          <UsageBar
-            label={t('channels', 'Channels')}
-            used={planUsageData!.channels}
-            limit={planLimits!.channels}
-          />
-          <UsageBar
-            label={t('team', 'Team')}
-            used={planUsageData!.teamMembers}
-            limit={planLimits!.teamMembers}
-          />
-          <UsageBar
-            label={t('competitors', 'Competitors')}
-            used={planUsageData!.competitors}
-            limit={planLimits!.competitors}
-          />
-          <UsageBar
-            label={t('webhooks', 'Webhooks')}
-            used={planUsageData!.webhooks}
-            limit={planLimits!.webhooks}
-          />
-          <UsageBar
-            label={t('brand_kits', 'Brand kits')}
-            used={planUsageData!.brandKits}
-            limit={planLimits!.brandKits}
-          />
+          <PlanUsageSection usage={usage!} />
         </div>
       )}
 
@@ -108,58 +52,15 @@ export const UsageWidget: FC = () => {
           <h4 className="text-[12px] font-medium text-newTableText uppercase tracking-wide">
             {t('ai_spend_label', 'AI spend')}
           </h4>
-          <div className="grid grid-cols-2 gap-[12px]">
-            <div className="p-[10px] rounded-[8px] bg-newTableHeader">
-              <div className="text-[11px] text-newTableText">
-                {t('monthly_label', 'Monthly')}
-              </div>
-              <div className="text-[16px] font-semibold text-textColor">
-                ${aiUsage.monthlySpendUsd.toFixed(2)}
-              </div>
-              {aiUsage.budget?.monthlyCap != null && (
-                <div className="text-[11px] text-newTableText">
-                  ${aiUsage.budget.remainingMonthly?.toFixed(2)} {t('left_suffix', 'left')}
-                </div>
-              )}
-            </div>
-            <div className="p-[10px] rounded-[8px] bg-newTableHeader">
-              <div className="text-[11px] text-newTableText">{t('daily', 'Daily')}</div>
-              <div className="text-[16px] font-semibold text-textColor">
-                ${aiUsage.dailySpendUsd.toFixed(2)}
-              </div>
-              {aiUsage.budget?.dailyCap != null && (
-                <div className="text-[11px] text-newTableText">
-                  ${aiUsage.budget.remainingDaily?.toFixed(2)} {t('left_suffix', 'left')}
-                </div>
-              )}
-            </div>
-          </div>
-
-          {aiUsage.byProvider && aiUsage.byProvider.length > 0 && (
+          <AiSpendTotals usage={aiUsage} />
+          {!!aiUsage.byProvider?.length && (
             <div className="flex flex-col gap-[8px] mt-[4px]">
               <h5 className="text-[11px] font-medium text-newTableText uppercase tracking-wide">
                 {t('spend_by_provider', 'Spend by Provider')}
               </h5>
-              {aiUsage.byProvider.map((provider) => (
-                <div key={provider.provider} className="flex flex-col gap-[6px]">
-                  <div className="text-[12px] font-medium capitalize text-textColor">
-                    {provider.provider}
-                  </div>
-                  <UsageBar
-                    label={t('ai_budget_monthly_cap', 'Monthly cap')}
-                    used={provider.monthlySpendUsd}
-                    limit={provider.monthlyCap ?? false}
-                  />
-                  <UsageBar
-                    label={t('ai_budget_daily_cap', 'Daily cap')}
-                    used={provider.dailySpendUsd}
-                    limit={provider.dailyCap ?? false}
-                  />
-                </div>
-              ))}
+              <AiSpendByProvider usage={aiUsage} />
             </div>
           )}
-
           {aiLoading && (
             <div className="h-[40px] bg-newTableHeader rounded-[8px] animate-pulse" />
           )}

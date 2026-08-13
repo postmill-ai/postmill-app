@@ -20,7 +20,7 @@ const build = () => {
     { id: 'save', label: 'Save', menu: 'file', shortcut: '⌘S', run: saveRun },
     { id: 'export', label: 'Export…', menu: 'file', run: vi.fn() },
     { id: 'undo', label: 'Undo', menu: 'edit', enabled: () => false, run: undoRun },
-    { id: 'safe', label: 'Safe Zones', menu: 'options', checked: () => true, run: vi.fn() },
+    { id: 'safe', label: 'Safe Zones', menu: 'view', checked: () => true, run: vi.fn() },
   ];
   return { actions, saveRun, undoRun };
 };
@@ -31,7 +31,7 @@ describe('MenuBar', () => {
     render(<MenuBar actions={actions} />);
     expect(screen.getByText('File')).toBeDefined();
     expect(screen.getByText('Edit')).toBeDefined();
-    expect(screen.getByText('Options')).toBeDefined();
+    expect(screen.getByText('View')).toBeDefined();
     expect(screen.queryByText('Window')).toBeNull();
   });
 
@@ -65,7 +65,7 @@ describe('MenuBar', () => {
   it('marks a checked toggle with aria-checked', () => {
     const { actions } = build();
     render(<MenuBar actions={actions} />);
-    fireEvent.click(screen.getByText('Options'));
+    fireEvent.click(screen.getByText('View'));
     const item = screen.getByText('Safe Zones').closest('button')!;
     expect(item.getAttribute('role')).toBe('menuitemcheckbox');
     expect(item.getAttribute('aria-checked')).toBe('true');

@@ -1,4 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
+import fs from 'fs';
+import os from 'os';
+import path from 'path';
 import { CapabilityNotAvailable } from './errors';
 
 const mockImageModelGenerate = vi.fn().mockResolvedValue('https://cdn.example.com/image.png');
@@ -207,6 +210,21 @@ describe('AiMediaService', () => {
       expect(mockImageModelGenerate).toHaveBeenCalledWith('a cat', { size: '512x512' });
     });
 
+    it('maps the aspect hint to a gpt-image size on the facade model', async () => {
+      const service = bareService();
+      await service.generateImage('a cat', { aspect: 'wide' });
+      expect(mockImageModelGenerate).toHaveBeenCalledWith('a cat', { size: '1536x1024' });
+
+      await service.generateImage('a cat', { aspect: 'tall' });
+      expect(mockImageModelGenerate).toHaveBeenCalledWith('a cat', { size: '1024x1536' });
+    });
+
+    it('lets an explicit size win over the aspect hint on the facade model', async () => {
+      const service = bareService();
+      await service.generateImage('a cat', { size: '512x512', aspect: 'wide' });
+      expect(mockImageModelGenerate).toHaveBeenCalledWith('a cat', { size: '512x512' });
+    });
+
     it('records a media job with cost + creditType when orgId is provided', async () => {
       const service = bareService();
       await service.generateImage('a cat', { orgId: 'org-123', userId: 'user-1' });
@@ -298,6 +316,44 @@ describe('AiMediaService', () => {
       expect(mockImageModel).not.toHaveBeenCalled();
       expect(mockCreateMediaJob).toHaveBeenCalledWith(
         expect.objectContaining({ provider: 'openai', operation: 'image' }),
+      );
+    });
+
+    it('strips settings keys outside the image bucket before spreading into the adapter input', async () => {
+      // A stale org default row carrying an audio-only key ('response_format')
+      // must not reach the image adapter — it 400s on image APIs. Image-bucket
+      // keys pass through untouched; the stored row is not rewritten.
+      const adapter = makeAdapter('openai', { image: true });
+      const defaultsResolution = {
+        resolve: vi.fn().mockResolvedValue({
+          providerId: 'openai',
+          version: 'v1',
+          model: 'gpt-image-1',
+          settings: { quality: 'high', response_format: 'mp3' },
+        }),
+      };
+      const { service } = setup([adapter], [], defaultsResolution);
+
+      await service.generateImage('a cat', { orgId: 'org-1' });
+
+      expect(adapter.generateImage).toHaveBeenCalledWith(
+        'a cat',
+        expect.objectContaining({
+          model: 'gpt-image-1',
+          input: { quality: 'high' },
+        }),
+      );
+    });
+
+    it('forwards the aspect hint to the adapter (per-provider size mapping lives there)', async () => {
+      const adapter = makeAdapter('openai', { image: true });
+      const { service } = setup([adapter]);
+
+      await service.generateImage('a cat', { orgId: 'org-1', aspect: 'tall' });
+
+      expect(adapter.generateImage).toHaveBeenCalledWith(
+        'a cat',
+        expect.objectContaining({ aspect: 'tall' }),
       );
     });
 
@@ -681,6 +737,106 @@ describe('AiMediaService', () => {
 
       expect(result).toEqual({ x: 0.5, y: 0.5, source: 'fallback' });
       expect(mockGenerateTextWithModel).not.toHaveBeenCalled();
+    });
+
+    // Round 8 C1: the vision provider downloads the image from ITS OWN
+    // infrastructure, so a URL on this instance's storage host is unreachable —
+    // every lookup failed with "Error while downloading
+    // http://localhost:4200/uploads/…". The vision critic already inlined those
+    // as data URIs; the detector did not, and now shares the helper.
+    describe('local upload resolution', () => {
+      let uploadDir: string;
+      let previousUploadDirectory: string | undefined;
+      let previousFrontendUrl: string | undefined;
+
+      const visionDefaults = () => ({
+        resolve: vi.fn().mockResolvedValue({
+          providerId: 'openai',
+          version: 'v1',
+          model: 'gpt-4o',
+          source: 'auto',
+        }),
+      });
+
+      beforeEach(() => {
+        previousUploadDirectory = process.env.UPLOAD_DIRECTORY;
+        previousFrontendUrl = process.env.FRONTEND_URL;
+        uploadDir = fs.mkdtempSync(path.join(os.tmpdir(), 'focal-uploads-'));
+        process.env.UPLOAD_DIRECTORY = uploadDir;
+        process.env.FRONTEND_URL = 'http://localhost:4200';
+      });
+
+      const restoreEnv = () => {
+        if (previousUploadDirectory === undefined) delete process.env.UPLOAD_DIRECTORY;
+        else process.env.UPLOAD_DIRECTORY = previousUploadDirectory;
+        if (previousFrontendUrl === undefined) delete process.env.FRONTEND_URL;
+        else process.env.FRONTEND_URL = previousFrontendUrl;
+      };
+
+      it('inlines a local upload as a data URI instead of a localhost URL', async () => {
+        // A 1x1 PNG so the type sniffer has something real to read.
+        fs.writeFileSync(
+          path.join(uploadDir, 'photo.png'),
+          Buffer.from(
+            'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==',
+            'base64',
+          ),
+        );
+        mockGenerateTextWithModel.mockResolvedValueOnce('{"x":0.3,"y":0.7}');
+        const { service } = setup([], [], visionDefaults());
+
+        const result = await service.detectFocalPoint(
+          'http://localhost:4200/uploads/photo.png',
+          { orgId: 'org-1' },
+        );
+
+        expect(result).toEqual({ x: 0.3, y: 0.7, source: 'provider' });
+        const passed = mockGenerateTextWithModel.mock.calls.at(-1)![4].imageUrl;
+        expect(passed.startsWith('data:image/png;base64,')).toBe(true);
+        expect(passed).not.toContain('localhost');
+        restoreEnv();
+      });
+
+      it('passes a remote URL through unchanged', async () => {
+        mockGenerateTextWithModel.mockResolvedValueOnce('{"x":0.5,"y":0.5}');
+        const { service } = setup([], [], visionDefaults());
+
+        await service.detectFocalPoint('https://cdn.example.com/photo.jpg', {
+          orgId: 'org-1',
+        });
+
+        expect(mockGenerateTextWithModel.mock.calls.at(-1)![4].imageUrl).toBe(
+          'https://cdn.example.com/photo.jpg',
+        );
+        restoreEnv();
+      });
+
+      it('returns the centred fallback for a local upload it cannot read', async () => {
+        // No file written — the provider could never have fetched it either.
+        const { service } = setup([], [], visionDefaults());
+
+        const result = await service.detectFocalPoint(
+          'http://localhost:4200/uploads/missing.png',
+          { orgId: 'org-1' },
+        );
+
+        expect(result).toEqual({ x: 0.5, y: 0.5, source: 'fallback' });
+        expect(mockGenerateTextWithModel).not.toHaveBeenCalled();
+        restoreEnv();
+      });
+
+      it('refuses a traversal attempt out of the upload root', async () => {
+        const { service } = setup([], [], visionDefaults());
+
+        const result = await service.detectFocalPoint(
+          'http://localhost:4200/uploads/..%2F..%2Fetc%2Fpasswd',
+          { orgId: 'org-1' },
+        );
+
+        expect(result).toEqual({ x: 0.5, y: 0.5, source: 'fallback' });
+        expect(mockGenerateTextWithModel).not.toHaveBeenCalled();
+        restoreEnv();
+      });
     });
   });
 

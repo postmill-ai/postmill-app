@@ -2,8 +2,7 @@
 
 import React, { useCallback, useState } from 'react';
 import { useFetch } from '@postmill-ai/helpers/utils/custom.fetch';
-import { useModals } from '@postmill-ai/frontend/components/layout/new-modal';
-import { MediaSelectorModal } from '@postmill-ai/frontend/components/media-tools/media-selector-modal';
+import { useMediaPicker } from '@postmill-ai/frontend/components/media-tools/use-media-picker';
 import { useT } from '@postmill-ai/react/translation/get.transation.service.client';
 import { useReplicateStore } from './replicate.store';
 import { MaskPainter } from './mask-painter';
@@ -18,31 +17,24 @@ import type { FileValue } from './fields/file';
 export function InpaintMaskEditor() {
   const t = useT();
   const fetch = useFetch();
-  const modals = useModals();
   const setError = useReplicateStore((s) => s.setError);
   const updateFormField = useReplicateStore((s) => s.updateFormField);
   const saveFolderId = useReplicateStore((s) => s.saveFolderId);
   const formImage = useReplicateStore((s) => (s.formInput as Record<string, unknown>).image);
   const formMask = useReplicateStore((s) => (s.formInput as Record<string, unknown>).mask);
   const [source, setSource] = useState<FileValue | null>(null);
+  const picker = useMediaPicker({
+    title: t('select_source_image', 'Select source image'),
+    kinds: ['image'],
+    requireFile: true,
+    onSelect: (item) =>
+      setSource({ fileId: item.fileId, url: item.url, type: item.type }),
+  });
   const [uploading, setUploading] = useState(false);
 
   const openSourcePicker = useCallback(() => {
-    modals.openModal({
-      title: t('select_source_image', 'Select source image'),
-      removeLayout: true,
-      children: (close) => (
-        <MediaSelectorModal
-          open
-          onClose={close}
-          onSelect={(item) => {
-            setSource({ fileId: item.fileId, url: item.url, type: item.type });
-            close();
-          }}
-        />
-      ),
-    });
-  }, [modals, t]);
+    picker.open();
+  }, [picker]);
 
   const handleMaskReady = useCallback(
     async (maskFile: File) => {
@@ -106,6 +98,7 @@ export function InpaintMaskEditor() {
           </button>
         </div>
       )}
+      {picker.element}
     </EditorShell>
   );
 }

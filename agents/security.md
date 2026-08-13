@@ -119,11 +119,19 @@ enforcement point (exact file/symbol). Cross-refs: `agents/backend.md`,
 ## Throttling
 
 - Effective by default: `ThrottlerModule.forRoot` ttl 3 600 000 ms, limit
-  `API_LIMIT || 600` per client IP per hour, Redis-backed
-  (`apps/backend/src/app.module.ts:58-73`); applied globally as `APP_GUARD →
-  ThrottlerBehindProxyGuard` (`app.module.ts:81-84`, respects `X-Forwarded-For`).
-  Sensitive routes carry tighter per-minute `@Throttle()` overrides (login 10/min,
-  register 5/min, AI 10-30/min — comment :62-68).
+  `API_LIMIT || 600` per hour, Redis-backed (`apps/backend/src/app.module.ts:58-73`);
+  applied globally as `APP_GUARD → ThrottlerBehindProxyGuard` (`app.module.ts:81-84`).
+- **Bucket scope — read this before assuming a global budget.** The key is
+  `${controllerName}-${handlerName}-${throttlerName}` (base `ThrottlerGuard.generateKey`,
+  not overridden) combined with the tracker from
+  `ThrottlerBehindProxyGuard.getTracker`, which returns `req.org?.id || clientIp` (plus a
+  coarse `posts`/`other` suffix). So the limit is **per (handler, org)** for authenticated
+  routes and **per (handler, client IP)** only for unauthenticated ones; `clientIp` comes
+  from `X-Forwarded-For` via `TRUST_PROXY_HOPS` (never blanket-trusted).
+- Sensitive routes carry tighter per-minute `@Throttle()` overrides (login 10/min,
+  register 5/min, AI 10-30/min — comment :62-68). Endpoints the frontend **polls** at a
+  few seconds (job status, notifications) must raise the hourly cap instead — a 5s poll is
+  720/h and blows the 600/h default on its own.
 - CopilotKit `/copilot/chat` is policy- and budget-gated:
   `@CheckPolicies([AuthorizationActions.Create, Sections.MCP])`
   (`apps/backend/src/api/routes/copilot.controller.ts:356-357`) plus a per-request

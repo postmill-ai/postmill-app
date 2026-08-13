@@ -7,6 +7,7 @@ import { hasExtension } from '@postmill-ai/helpers/utils/has.extension';
 import { useLaunchStore } from '@postmill-ai/frontend/components/composer/store';
 import { useVariables } from '@postmill-ai/react/helpers/variable.context';
 import { useT } from '@postmill-ai/react/translation/get.transation.service.client';
+import { useToaster } from '@postmill-ai/react/toaster/toaster';
 const postUrlEmitter = new EventEmitter();
 
 export const MediaSettingsLayout = () => {
@@ -104,6 +105,7 @@ export const CreateThumbnail: FC<{
   const { onSelect, media } = props;
   const { backendUrl } = useVariables();
   const t = useT();
+  const toaster = useToaster();
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [currentTime, setCurrentTime] = useState(0);
@@ -196,16 +198,17 @@ export const CreateThumbnail: FC<{
         }
       } catch (fallbackError) {
         console.error('Fallback capture also failed:', fallbackError);
-        alert(
+        toaster.show(
           t(
             'unable_to_capture_frame',
             'Unable to capture frame. This might be due to CORS restrictions on the video source.'
-          )
+          ),
+          'warning'
         );
         setIsCapturing(false);
       }
     }
-  }, [onSelect, currentTime]);
+  }, [onSelect, currentTime, t, toaster]);
 
   const formatTime = useCallback((seconds: number) => {
     const mins = Math.floor(seconds / 60);

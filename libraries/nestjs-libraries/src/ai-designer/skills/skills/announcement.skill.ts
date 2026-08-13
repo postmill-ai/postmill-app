@@ -1,21 +1,51 @@
 import type { DesignBrief } from '../../ai-designer.types';
 import type { DesignSkill } from '../design-skill.interface';
+import { matchesAnySignal } from '../signal-match';
 
 export const AnnouncementSkill: DesignSkill = {
   id: 'announcement',
   title: 'Announcement',
   match: (brief: DesignBrief) => {
     const text = `${brief.intent} ${brief.audience || ''}`.toLowerCase();
-    const signals = ['announce', 'news', 'update', 'event', 'launching', 'we are', 'now open'];
-    return signals.some((s) => text.includes(s)) ? 0.9 : 0.25;
+    // `'announce'` covered announcing/announcement as a substring; whole-word
+    // matching needs them spelled out. `'news'` no longer matches
+    // "newsletter" — a newsletter design is not an announcement.
+    const signals = [
+      'announce',
+      'announcing',
+      'announcement',
+      'news',
+      'update',
+      'updated',
+      'updating',
+      'event',
+      'launching',
+      'we are',
+      'now open',
+    ];
+    return matchesAnySignal(text, signals) ? 0.9 : 0.25;
   },
   requiredBriefFields: ['intent'],
   systemPrompt: `You are an announcement designer. Rules:
-- Bold, authoritative headline first.
-- Supporting detail line second (shorter than headline).
-- Use brand accent color for emphasis.
-- Keep layout clean; one optional supporting image or icon.
-- Ensure headline is fully within safe zones.`,
+- The headline IS the announcement ("We're open", "Version 2 is here") — bold, authoritative, and the largest type on the canvas.
+- At most one supporting detail line — date, place, or the one thing that changed — and ONLY when the brief supplies it. Strictly smaller than the headline, never longer than one sentence. Never invent a date, time, or place to fill the slot: omit the slot instead.
+- Structure beats decoration: a clean editorial-sidebar or minimal-centered stack reads as news; clutter reads as an ad.
+- Use the brand accent color for exactly one element — the headline keyword, a rule, or a small badge. More than one accent reads as noise.
+- A date/location badge ("Sep 12", "Online") is welcome ONLY when the brief supplies that date or place — it anchors the news in time, and a fabricated one misinforms the user's audience. No date in the brief means no badge. Keep it small and out of the headline's way.
+- At most one supporting image or icon, clearly subordinate to the type. Text-only announcements are often stronger.
+- Generous whitespace is the medium: announcements need air to feel important. Keep margins at 6-8% minimum.
+- Left-align for editorial authority, center for ceremonial news — never mix the two on one canvas.
+- Headline fully inside safe zones, with extra clearance at the bottom where platform UI overlays live.
+- No hard-sell CTA. A soft "Learn more" text line is acceptable; a loud button cheapens the news.`,
+  layoutHints: {
+    formatTemplates: ['editorial-sidebar', 'minimal-centered'],
+    slotSchema: [
+      { id: 'headline', role: 'headline', kind: 'text' },
+      { id: 'detail', role: 'subhead', kind: 'text' },
+      { id: 'badge', role: 'date-badge', kind: 'badge' },
+      { id: 'image', role: 'image', kind: 'image' },
+    ],
+  },
   rubric: {
     criteria: [
       { name: 'headline_impact', description: 'Headline commands attention', weight: 0.35 },

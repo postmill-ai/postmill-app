@@ -10,17 +10,184 @@ import {
   DesignerGradient,
   DesignerOutput,
   DesignerMask,
+  DesignerBlendMode,
+  DesignerPattern,
+  DesignerLayerStyle,
   RenderOptions,
+  TextContrastViolation,
   TextRun,
 } from './design-render.types';
 import { FontLoaderService } from './font-loader.service';
+import { PromiseLruCache } from './promise-lru';
 import {
-  cssFilterForToken,
-  parseDesignerFilterToken,
-} from './filter-tokens';
-import { MAX_CANVAS_DIMENSION } from '../designer-doc/designer-doc.limits';
+  MAX_CANVAS_DIMENSION,
+  MAX_GROUP_RENDER_DEPTH,
+} from '../designer-doc/designer-doc.limits';
+import {
+  fitTextToBox,
+  measureLineWidth,
+  type FittedText,
+} from '../designer-doc/fit-text';
+import { pointsForShape, starPoints } from '../designer-doc/shape-geometry';
+import { warpedOutline, warpPadding } from '../designer-doc/warp';
+import { cornerRadii, hasCornerRadius } from '../designer-doc/shape-geometry';
+import { arcBaselineY, arcGeometry, arcVerticalOffset } from '../designer-doc/curved-text';
+import { arrowHeadPoints, strokeEndpoints } from '../designer-doc/stroke-style';
+import { tracePathNodes } from '../designer-doc/path-geometry';
+import { buildLayerTree, groupBounds, type LayerNode } from '../designer-doc/layer-tree';
+import { expandSymbols } from '../designer-doc/symbols';
+import { renderableSrc } from '../designer-doc/svg-src';
+import {
+  applyAdjustment,
+  blendPixels,
+  canvasCompositeFor,
+  isNativeBlend,
+} from '../designer-doc/pixel-ops';
+import { drawPatternTile, tileSizeFor } from '../designer-doc/pattern-tiles';
+import { splitStyles, styleOffset, styleBlur, stylePadding, elementStyles } from '../designer-doc/layer-styles';
+import {
+  buildStyleGradient,
+  paintBackdropFilter,
+  drawOverStyle,
+  drawUnderStyle,
+} from '../designer-doc/layer-style-render';
+import {
+  applyFilterTokensToCanvas,
+  hasFilterEffect,
+} from '../designer-doc/filter-pixels';
+import {
+  applySmartFilters,
+  hasSmartFilters,
+  smartFilterCacheKey,
+  smartFilterSource,
+} from '../designer-doc/smart-filter-stack';
 
 const MAX_IMAGE_BYTES = 25 * 1024 * 1024;
+
+/**
+ * Pixel ceiling for evaluating a smart-filter stack.
+ *
+ * `MAX_IMAGE_BYTES` bounds the COMPRESSED bytes; a 25 MB JPEG can decode to
+ * well over 100 megapixels, and the spatial filters are super-linear in area.
+ * Past this ceiling the source is evaluated downscaled and drawn back up, which
+ * costs sharpness on an image that is almost certainly being drawn into a much
+ * smaller box anyway — and is a great deal better than either stalling the
+ * render or dropping the treatment silently.
+ */
+const MAX_SMART_FILTER_PIXELS = 16_000_000;
+
+/** How many evaluated stacks to keep. Each entry holds a decoded canvas. */
+const SMART_FILTER_CACHE_MAX = 6;
+
+// Decoded source bitmaps, shared across every output of a render (and beyond,
+// since the bytes behind a URL are immutable by the same contract as
+// `originalSrc`). One photo across 30 linked outputs decodes once, not 30
+// times. Bounded: a decoded 1080² bitmap is ~4.5 MB.
+const IMAGE_CACHE_MAX = 16;
+
+// "Busy backdrop" thresholds for `auditTextContrast`. The WCAG ratio is
+// computed against the MEAN of the sampled box, so a photograph with bright
+// and dark detail averages to a mid tone that PASSES while the glyphs
+// themselves sit on high-frequency edges — the live serum-bottle headline,
+// legible only because it happened to carry a text shadow.
+//
+// Both signals are measured on a BACKDROP-ONLY render (text elements hidden),
+// never on the composite: a text box's own glyphs dominate the composite's
+// spread, so a clean white panel WITH glyphs measured stdev 71.9 while a
+// genuinely busy bokeh photo WITHOUT glyphs measured 86.3 — the signals do not
+// separate the cases at all until the glyphs are taken out.
+//
+//   * `BUSY_BACKDROP_CROSSING` — fraction of the sampled pixels whose WCAG
+//     ratio against the TEXT FILL is below the size-class requirement, i.e.
+//     the direct measure of "some glyphs land on backdrop they cannot be read
+//     against". This is the signal that does the discriminating.
+//   * `BUSY_BACKDROP_STDEV` — largest per-channel standard deviation of the
+//     glyph-free crop. A sanity gate ("the backdrop under the ink actually
+//     varies"), not the discriminator.
+//
+// Both are measured over the GLYPH FOOTPRINT — the per-line ink rects
+// `glyphLineRects` lays out with the renderer's own metrics — never the whole
+// text box. A box is mostly air: a centered short line in a full-width box,
+// the leading between wrapped lines, the ragged right edge. Those pixels are
+// backdrop no glyph ever touches, and averaging them in reports a different
+// backdrop from the one the reader sees. Re-measured on the live imagery,
+// glyph-footprint vs box: crossing 14.9% vs 11.1% (v1 subhead), 17.2% vs 6.9%
+// (v1 headline), 43.7% vs 29.2% (v2 headline); stdev 43.3 vs 46.0, 95.4 vs
+// 85.8. It moves in BOTH directions — it is a localization, not a correction.
+//
+// The thresholds are therefore re-derived on glyph-footprint numbers (the box
+// numbers the old pair came from no longer describe what is measured):
+//   * stdev — the glyph-footprint population separates cleanly: flat panel
+//     0.0, ink sitting inside a uniform region 1.1–7.7, genuinely textured
+//     photo 30.7–95.4. 25 sits in the empty gap. The old 45 was a BOX number
+//     and now cuts through the middle of the textured population, which would
+//     have silently un-flagged a live failure that measured 43.3 under its
+//     glyphs (46.0 over its box).
+//   * crossing — for the same population the calm cases measure ≤5.0% and the
+//     genuine failures 14.9%, 15.5%, 17.2%, 40.6%+. 0.12 sits in that gap and
+//     catches the two live failures the box measure hid (13.8% and 32.8%),
+//     while a well-lit bokeh headline at 5.0% stays clean.
+//
+// A flat backdrop still cannot be flagged busy however the mean lands: its
+// pixels are all the same, so crossing is 0 (mean passes) or 1 (mean fails,
+// and then the ratio check owns it) — and the stdev gate is 0 either way.
+//
+// The retired signals and why:
+//   * sharp's `sharpness` was a REQUIRED conjunct and is inverted against
+//     reality — the bokeh photo scores 0.83, the clean white panel 6.41. Edge
+//     energy measures focus, not legibility.
+//   * a ratio-headroom ceiling (`ratio < required * 1.6`) gated the variance
+//     check behind the contrast check, making it unsatisfiable for the exact
+//     failure case it was meant to catch: white-on-dark imagery measures 5.1
+//     to 8.5 against a 4.8 bar. Crossing fraction subsumes it — a backdrop
+//     that no glyph fails against scores 0.
+const BUSY_BACKDROP_STDEV = 25;
+const BUSY_BACKDROP_CROSSING = 0.12;
+
+// "Straddle" threshold for `auditTextContrast`: the glyph LINES sit on
+// backdrops so far apart in luminance that no single flat fill suits all of
+// them (live: a "POOL CLEANING" headline half on a pale top band, half on a
+// dark busy photo — the two averaged to a mid luma that a dark fill "passed"
+// against, and illegible text shipped). Measured as the WCAG-style luminance
+// ratio between the lightest and darkest per-line backdrop. 2.5 sits just
+// under the 3:1 large-text bar: once the surfaces diverge by more than the
+// bar itself, a fill sitting exactly at 3:1 against one surface is pinned
+// within ~1.2:1 of the other, so a flat flip cannot cure both lines and the
+// repair must separate the glyphs instead. Genuine straddles measure far
+// beyond it (the live one: ~17:1); same-surface line-to-line texture noise
+// stays well below it.
+const STRADDLE_LINE_LUMA_RATIO = 2.5;
+
+// Each line's ink band is inset from the top of its leading by this share of an
+// em (with a `top` baseline the em box starts at the line top and the cap
+// height sits below it) and cut at one em, which is where the descender ends.
+const GLYPH_ASCENDER_INSET_EM = 0.15;
+
+// `auditTextCollisions`: two ink rects must overlap by at least this many
+// document pixels on BOTH axes to be a collision — a sub-2px graze is
+// rounding/kerning noise, not two labels painted through each other.
+const COLLISION_MIN_OVERLAP_PX = 2;
+
+// `auditImageryVisibility`: an image ELEMENT only counts as "the imagery of
+// this output" when its visible box covers at least this share of the canvas —
+// a small logo washing out is not the defect this audit exists for.
+const IMAGERY_MIN_COVERAGE = 0.25;
+// The rendered region is "nearly invisible" when it is near-uniform (luma
+// stdev below this, conservative: real photos measure 30+ even when moody) AND
+// its mean is extreme (washed toward white / crushed toward black). Both must
+// hold — a flat mid-grey region is a design choice, not a defect.
+const WASHED_OUT_MAX_STDEV = 12;
+const WASHED_OUT_LIGHT_MEAN = 235;
+const WASHED_OUT_DARK_MEAN = 20;
+
+// Precomputed WCAG sRGB channel transform for 0..255. The audit walks every
+// pixel of every sampled text box, so the pow() comes out of the loop.
+const SRGB_CHANNEL_LUT = new Float64Array(256);
+for (let i = 0; i < 256; i++) {
+  const c = i / 255;
+  SRGB_CHANNEL_LUT[i] =
+    c <= 0.03928 ? c / 12.92 : Math.pow((c + 0.055) / 1.055, 2.4);
+}
 
 // node-canvas is a native module whose binary may not be built in every
 // environment. Load it lazily so a missing binary only disables the render
@@ -35,18 +202,75 @@ const loadCanvasModule = async (): Promise<CanvasModule> => {
   return _canvasModule;
 };
 
-// Canonical filter token vocabulary — must match the client tokens 1:1.
-// Each token is passed to ctx.filter as a CSS filter string.
-const mapFilters = (filters: string[]): string => {
-  const parts: string[] = [];
-  for (const token of filters) {
-    const parsed = parseDesignerFilterToken(token);
-    if (!parsed) continue;
-    parts.push(cssFilterForToken(parsed.key, parsed.value));
-  }
-  return parts.join(' ');
+// WCAG relative luminance of sRGB channels given as 0..1 floats.
+const srgbLuminance = (r: number, g: number, b: number): number => {
+  const channel = (c: number) =>
+    c <= 0.03928 ? c / 12.92 : Math.pow((c + 0.055) / 1.055, 2.4);
+  return 0.2126 * channel(r) + 0.7152 * channel(g) + 0.0722 * channel(b);
 };
 
+/** WCAG relative luminance of a #rrggbb color (unparseable → light). */
+const hexToLuminance = (hex: string): number => {
+  const m = /^#?([0-9a-f]{6})$/i.exec((hex || '').trim());
+  if (!m) return 1;
+  const n = parseInt(m[1], 16);
+  return srgbLuminance(
+    ((n >> 16) & 255) / 255,
+    ((n >> 8) & 255) / 255,
+    (n & 255) / 255
+  );
+};
+
+const aabbOverlap = (
+  a: { x: number; y: number; width: number; height: number },
+  b: { x: number; y: number; width: number; height: number }
+): boolean =>
+  a.x < b.x + b.width &&
+  a.x + a.width > b.x &&
+  a.y < b.y + b.height &&
+  a.y + a.height > b.y;
+
+// Do any two rects from the two ink-rect sets overlap by at least
+// COLLISION_MIN_OVERLAP_PX on BOTH axes? (`auditTextCollisions`.)
+const inkRectsCollide = (
+  a: { x: number; y: number; width: number; height: number }[],
+  b: { x: number; y: number; width: number; height: number }[]
+): boolean => {
+  for (const ra of a) {
+    for (const rb of b) {
+      const overlapW =
+        Math.min(ra.x + ra.width, rb.x + rb.width) - Math.max(ra.x, rb.x);
+      const overlapH =
+        Math.min(ra.y + ra.height, rb.y + rb.height) - Math.max(ra.y, rb.y);
+      if (
+        overlapW >= COLLISION_MIN_OVERLAP_PX &&
+        overlapH >= COLLISION_MIN_OVERLAP_PX
+      ) {
+        return true;
+      }
+    }
+  }
+  return false;
+};
+
+// Bounding union of a non-empty set of ink rects — carried on 'overlap'
+// violations so the composer's geometry guard can widen a declared box to
+// cover ink a fitted/overflowing line painted outside it.
+const inkUnionRect = (
+  rects: { x: number; y: number; width: number; height: number }[]
+): { x: number; y: number; width: number; height: number } => {
+  const x = Math.min(...rects.map((r) => r.x));
+  const y = Math.min(...rects.map((r) => r.y));
+  return {
+    x,
+    y,
+    width: Math.max(...rects.map((r) => r.x + r.width)) - x,
+    height: Math.max(...rects.map((r) => r.y + r.height)) - y,
+  };
+};
+
+// Canonical filter token vocabulary — must match the client tokens 1:1.
+// Each token is passed to ctx.filter as a CSS filter string.
 // Compute a cover source-rect from a source image to fill target w×h,
 // cropped toward a focalPoint (0–1, default centre).
 const computeCoverCrop = (
@@ -514,10 +738,14 @@ export class DesignRenderService {
       throw new Error(`Output ${outputIndex} is a video output; use /render-video`);
     }
 
+    // Symbol instances expand to ordinary elements before anything reads the
+    // layer list, so nothing below this line needs to know symbols exist.
+    const children = expandSymbols(output.children ?? [], doc.symbols);
+
     if (opts?.orgId) {
       await this._fontLoaderService.loadOrgFonts(opts.orgId);
     }
-    await this._fontLoaderService.loadCuratedFonts(output.children ?? []);
+    await this._fontLoaderService.loadCuratedFonts(children);
 
     const ratio = opts?.pixelRatio && opts.pixelRatio > 0 ? opts.pixelRatio : 1;
     const width = Math.max(
@@ -538,16 +766,14 @@ export class DesignRenderService {
       await this.drawBackground(ctx, output);
     }
 
-    for (const el of output.children ?? []) {
-      if (el.hidden) continue;
-      try {
-        await this.drawElement(ctx, el);
-      } catch (err) {
-        this._logger.warn(
-          `Skipping element ${el?.id} (${el?.type}) during render: ${(err as Error)?.message}`
-        );
-      }
-    }
+    await this.drawLayerTree(
+      ctx,
+      canvas,
+      buildLayerTree(children),
+      children,
+      ratio,
+      opts
+    );
 
     return canvas.toBuffer('image/png');
   }
@@ -561,6 +787,793 @@ export class DesignRenderService {
       out.push(await this.renderPage(doc, i, opts));
     }
     return out;
+  }
+
+  /**
+   * Deterministic WCAG contrast audit for text painted over IMAGERY (image
+   * elements, image or gradient backgrounds) — the doc-validator already
+   * covers solid-shape and solid-background backdrops, so those texts are
+   * skipped here. For each remaining visible text element the painted
+   * backdrop under its box is sampled from the rendered page (sharp
+   * extract) and the contrast ratio against the text fill is computed (3:1
+   * large text, 4.5:1 body).
+   *
+   * Sampling is done on a BACKDROP render — the same doc with every text
+   * element hidden — so a text box's own glyphs never pollute the pixels the
+   * audit judges it against. Pass `pages` (already-rendered composites, e.g.
+   * from the saver) and `backdropPages` (the `hideText: true` render) to avoid
+   * re-rendering; a missing backdrop page falls back to the composite rather
+   * than skipping the element.
+   */
+  /**
+   * Cheap precheck for `auditTextContrast`: could ANY text sit over imagery
+   * (an image element beneath it, or an image/gradient output background)?
+   * When nothing can, the audit is guaranteed empty, so the saver skips the
+   * backdrop (`hideText`) render entirely — a second full render the QC loop
+   * would otherwise pay for on every save. Conservative by design: a false
+   * positive only costs the backdrop render, a false negative would skip a
+   * real audit, so anything uncertain answers true.
+   */
+  docHasTextOverImagery(doc: DesignerDoc): boolean {
+    for (const out of doc.outputs ?? []) {
+      if (!('children' in out)) continue;
+      const children = expandSymbols(out.children ?? [], doc.symbols);
+      const texts = children.filter(
+        (el) =>
+          el.type === 'text' &&
+          !el.hidden &&
+          (el.opacity ?? 1) > 0 &&
+          !!(el.text?.trim() || el.richText?.length)
+      );
+      if (texts.length === 0) continue;
+      const bgType = (out as DesignerOutput).bg?.type;
+      if (bgType === 'image' || bgType === 'gradient') return true;
+      const images = children.filter((el) => el.type === 'image' && !el.hidden);
+      if (texts.some((t) => images.some((img) => aabbOverlap(t, img)))) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  async auditTextContrast(
+    doc: DesignerDoc,
+    pages?: Buffer[],
+    backdropPages?: Buffer[]
+  ): Promise<TextContrastViolation[]> {
+    const violations: TextContrastViolation[] = [];
+    const rendered = pages ?? (await this.renderAllPages(doc));
+    let backdrops = backdropPages;
+    if (!backdrops) {
+      try {
+        backdrops = await this.renderAllPages(doc, { hideText: true });
+      } catch (err) {
+        this._logger.warn(
+          `Backdrop render failed; sampling the composite instead: ${(err as Error)?.message}`
+        );
+      }
+    }
+    const sharp = (await import('sharp')).default;
+
+    // A 1×1 canvas used only for text metrics — the glyph footprints below are
+    // laid out with the renderer's own wrap/shrink-to-fit/align code, never a
+    // second render. A missing native binary only costs the audit its glyph
+    // precision (it falls back to the text box).
+    let measureCtx: any = null;
+    try {
+      const { createCanvas } = await loadCanvasModule();
+      measureCtx = createCanvas(1, 1).getContext('2d');
+    } catch (err) {
+      this._logger.warn(
+        `Text metrics unavailable; measuring contrast over the whole text box: ${(err as Error)?.message}`
+      );
+    }
+
+    for (
+      let outputIndex = 0;
+      outputIndex < (doc.outputs?.length ?? 0);
+      outputIndex++
+    ) {
+      const out = doc.outputs[outputIndex] as DesignerOutput | undefined;
+      const page = backdrops?.[outputIndex] ?? rendered[outputIndex];
+      if (!out || !('children' in out) || !page) continue;
+
+      let meta: { width?: number; height?: number };
+      try {
+        meta = await sharp(page).metadata();
+      } catch {
+        continue;
+      }
+      const pageW = meta.width || out.width;
+      const pageH = meta.height || out.height;
+      const scaleX = pageW / out.width;
+      const scaleY = pageH / out.height;
+
+      // The render path draws expandSymbols(children) — the audit must read
+      // the same layer list, or text inside a symbol instance is never
+      // checked and symbol-provided imagery is invisible to the backdrop scan.
+      const children = expandSymbols(out.children ?? [], doc.symbols);
+
+      for (let idx = 0; idx < children.length; idx++) {
+        const el = children[idx];
+        if (el.type !== 'text' || el.hidden || (el.opacity ?? 1) <= 0) continue;
+        const hasText = !!(el.text?.trim() || el.richText?.length);
+        if (!hasText || !(el.width > 0) || !(el.height > 0)) continue;
+        const fillMatch = /^#?[0-9a-f]{6}$/i.exec((el.fill || '').trim());
+        if (!fillMatch) continue;
+        const fill = fillMatch[0].startsWith('#')
+          ? fillMatch[0]
+          : `#${fillMatch[0]}`;
+
+        // Backdrop kind: the topmost earlier overlapping shape/image. A
+        // solid shape backdrop is the doc-validator's job — skip; imagery
+        // beneath (or an image/gradient output background) is what this
+        // pass samples.
+        let imagery = false;
+        let solidShape = false;
+        for (let k = idx - 1; k >= 0; k--) {
+          const other = children[k];
+          if (other.hidden) continue;
+          if (other.type !== 'shape' && other.type !== 'image') continue;
+          if (!aabbOverlap(el, other)) continue;
+          if (other.type === 'image') {
+            imagery = true;
+          } else if (other.fill || other.fillGradient) {
+            solidShape = true;
+          } else {
+            // Stroke-only shape (an outline CTA): it paints nothing across
+            // its box, so it is transparent to this scan. Keep looking down —
+            // stopping here hid the IMAGE under an unfilled button and shipped
+            // a #FF00E5 label on a magenta photo at 1.73:1.
+            continue;
+          }
+          break;
+        }
+        if (!imagery) {
+          if (solidShape) continue;
+          const bgType = out.bg?.type;
+          if (bgType !== 'image' && bgType !== 'gradient') continue;
+        }
+
+        try {
+          const fontSize = el.fontSize || 16;
+          const isLarge =
+            fontSize >= 24 ||
+            ((el.fontWeight ?? 400) >= 700 && fontSize >= 18);
+          const required = isLarge ? 3 : 4.5;
+          const fillLuma = hexToLuminance(fill);
+
+          // The GLYPH footprint, not the box: a text element's box is mostly
+          // air (a centered short line in a full-width box, the leading
+          // between wrapped lines, the ragged right edge), and every one of
+          // those pixels dilutes both signals with backdrop no glyph ever
+          // touches. Measured on live designs the box understated the
+          // under-glyph crossing fraction by up to 11.6 points. The rects are
+          // laid out with the renderer's OWN metrics on a 1×1 measuring
+          // canvas — no extra render. Curved / path / rich text falls back to
+          // the box, where its box is the only honest bound.
+          const regions =
+            (measureCtx && this.glyphLineRects(measureCtx, el)) || [
+              { x: el.x, y: el.y, width: el.width, height: el.height },
+            ];
+          const sample = await this._sampleBackdropRegions(
+            page,
+            regions,
+            { scaleX, scaleY, pageW, pageH },
+            fillLuma,
+            required
+          );
+          if (!sample) continue;
+          const { mean, backdropStdev, crossingFraction } = sample;
+          const wcag = (a: number, b: number) =>
+            (Math.max(a, b) + 0.05) / (Math.min(a, b) + 0.05);
+
+          // The element is judged by its WORST glyph line, never only by the
+          // union mean: a headline straddling a pale band and a dark photo
+          // averages to a mid luma that exists nowhere on canvas, so a dark
+          // fill "passed" against the mean while half the lines were
+          // illegible (live: the "POOL CLEANING" pool run). The union stays
+          // in the candidate set so a mean-failure (fill between two
+          // individually-passing surfaces) still flags as before; the
+          // reported `ratio`/`backdropLuma` are the worst candidate's, which
+          // points the repair at the surface where the text reads worst.
+          let backdropLuma = srgbLuminance(
+            mean[0] / 255,
+            mean[1] / 255,
+            mean[2] / 255
+          );
+          let ratio = wcag(fillLuma, backdropLuma);
+          const lineLumas = sample.regions.map((r) =>
+            srgbLuminance(r.mean[0] / 255, r.mean[1] / 255, r.mean[2] / 255)
+          );
+          for (const lineLuma of lineLumas) {
+            const lineRatio = wcag(fillLuma, lineLuma);
+            if (lineRatio < ratio) {
+              ratio = lineRatio;
+              backdropLuma = lineLuma;
+            }
+          }
+          // Straddle: the lines themselves sit on surfaces too far apart for
+          // any single flat fill — the repair must separate the glyphs
+          // (halo/stroke), not merely flip the fill.
+          const straddle =
+            lineLumas.length >= 2 &&
+            wcag(Math.max(...lineLumas), Math.min(...lineLumas)) >=
+              STRADDLE_LINE_LUMA_RATIO;
+
+          if (ratio >= required) {
+            // Busy stays a UNION judgment: stdev/crossing aggregate the
+            // pixels under all the ink, and a single high-variance line
+            // dominates them anyway.
+            if (
+              backdropStdev >= BUSY_BACKDROP_STDEV &&
+              crossingFraction >= BUSY_BACKDROP_CROSSING
+            ) {
+              violations.push({
+                outputIndex,
+                elementId: el.id,
+                originId: el.originId,
+                fill,
+                ratio,
+                backdropLuma,
+                reason: 'busy',
+                backdropStdev,
+                crossingFraction,
+                ...(straddle ? { straddle: true } : {}),
+              });
+            }
+            continue;
+          }
+          violations.push({
+            outputIndex,
+            elementId: el.id,
+            originId: el.originId,
+            fill,
+            ratio,
+            backdropLuma,
+            reason: 'contrast',
+            backdropStdev,
+            crossingFraction,
+            ...(straddle ? { straddle: true } : {}),
+          });
+        } catch (err) {
+          this._logger.warn(
+            `Contrast sampling failed for element ${el.id}: ${(err as Error)?.message}`
+          );
+        }
+      }
+    }
+
+    return violations;
+  }
+
+  /**
+   * Deterministic painted-ink collision audit: two different text elements (or
+   * symbol instances) whose INK genuinely overlaps ship as type painted through
+   * type — a defect no reader misses and no pixel sampling is needed to catch.
+   *
+   * Pure measurement. Each visible flat text element contributes its per-line
+   * ink rects (`glyphLineRects`, the renderer's own metrics); rich/path/curved/
+   * rotated text falls back to its BOX as a single rect — coarser, but better
+   * than exempting it. A symbol instance contributes its whole box as one
+   * opaque rect: its label is painted plate-wide, and its expanded children are
+   * judged as part of that box, never individually.
+   *
+   * Ignored pairs, by design:
+   *   * sub-`COLLISION_MIN_OVERLAP_PX` grazes on either axis;
+   *   * elements sharing a `groupId` (a lockup travels as one unit);
+   *   * a label and its own plate companion by the `X` / `X-bg` originId
+   *     convention (plates are shapes and shapes are never collected, but the
+   *     guard keeps a text-typed companion from flagging too).
+   */
+  async auditTextCollisions(doc: DesignerDoc): Promise<TextContrastViolation[]> {
+    const violations: TextContrastViolation[] = [];
+
+    // Same 1×1 measuring canvas as `auditTextContrast` — glyph precision when
+    // the native binary is present, box fallback when it is not.
+    let measureCtx: any = null;
+    try {
+      const { createCanvas } = await loadCanvasModule();
+      measureCtx = createCanvas(1, 1).getContext('2d');
+    } catch (err) {
+      this._logger.warn(
+        `Text metrics unavailable; collision audit falls back to element boxes: ${(err as Error)?.message}`
+      );
+    }
+
+    for (
+      let outputIndex = 0;
+      outputIndex < (doc.outputs?.length ?? 0);
+      outputIndex++
+    ) {
+      const out = doc.outputs[outputIndex] as DesignerOutput | undefined;
+      if (!out || !('children' in out)) continue;
+
+      interface InkItem {
+        el: DesignerElement;
+        label: string;
+        /** originId (or id) with a trailing `-bg` stripped — plate-pair key. */
+        base: string;
+        rects: { x: number; y: number; width: number; height: number }[];
+      }
+      const items: InkItem[] = [];
+      for (const el of out.children ?? []) {
+        if (el.hidden || (el.opacity ?? 1) <= 0) continue;
+        if (!(el.width > 0) || !(el.height > 0)) continue;
+        let rects: InkItem['rects'] | null = null;
+        if (el.type === 'text') {
+          if (!(el.text?.trim() || el.richText?.length)) continue;
+          // richText / path / curved / rotated text → null → the box.
+          rects = (measureCtx && this.glyphLineRects(measureCtx, el)) || [
+            { x: el.x, y: el.y, width: el.width, height: el.height },
+          ];
+        } else if (el.type === 'symbol') {
+          // An instance whose definition is gone renders nothing.
+          if (!el.symbolId || !doc.symbols?.some((s) => s.id === el.symbolId)) {
+            continue;
+          }
+          rects = [{ x: el.x, y: el.y, width: el.width, height: el.height }];
+        }
+        if (!rects) continue;
+        items.push({
+          el,
+          label: el.originId || el.name || el.id,
+          base: (el.originId || el.id).replace(/-bg$/, ''),
+          rects,
+        });
+      }
+
+      for (let i = 0; i < items.length; i++) {
+        for (let j = i + 1; j < items.length; j++) {
+          const a = items[i];
+          const b = items[j];
+          if (a.el.groupId && a.el.groupId === b.el.groupId) continue;
+          if (a.base === b.base) continue;
+          if (!inkRectsCollide(a.rects, b.rects)) continue;
+          const fillMatch = /^#?[0-9a-f]{6}$/i.exec((a.el.fill || '').trim());
+          violations.push({
+            outputIndex,
+            elementId: a.el.id,
+            originId: a.el.originId,
+            otherElementId: b.el.id,
+            fill: fillMatch
+              ? fillMatch[0].startsWith('#')
+                ? fillMatch[0]
+                : `#${fillMatch[0]}`
+              : '',
+            ratio: 0,
+            backdropLuma: 0,
+            reason: 'overlap',
+            message: `painted ink of "${a.label}" (${a.el.id}) overlaps "${b.label}" (${b.el.id})`,
+            inkRect: inkUnionRect(a.rects),
+            otherInkRect: inkUnionRect(b.rects),
+          });
+        }
+      }
+    }
+
+    return violations;
+  }
+
+  /**
+   * Deterministic imagery-visibility audit: an output that DECLARES imagery —
+   * an image background, or a visible image element covering at least
+   * `IMAGERY_MIN_COVERAGE` of the canvas — whose RENDERED pixels over that
+   * region are near-uniform and extreme has effectively lost its imagery (a
+   * heavy overlay washed it to white, or it crushed to black). Report-only.
+   *
+   * Samples the already-rendered composite `pages` when supplied (the saver's
+   * buffers) and renders only as a fallback. A doc that declares no imagery
+   * costs a children scan and returns without touching sharp.
+   */
+  async auditImageryVisibility(
+    doc: DesignerDoc,
+    pages?: Buffer[]
+  ): Promise<TextContrastViolation[]> {
+    interface Region {
+      elementId: string;
+      originId?: string;
+      label: string;
+      x: number;
+      y: number;
+      width: number;
+      height: number;
+    }
+    const perOutput: Region[][] = [];
+    let any = false;
+    for (const raw of doc.outputs ?? []) {
+      const regions: Region[] = [];
+      const out = raw as DesignerOutput;
+      if ('children' in out) {
+        if (out.bg?.type === 'image') {
+          regions.push({
+            elementId: 'bg',
+            label: 'background image',
+            x: 0,
+            y: 0,
+            width: out.width,
+            height: out.height,
+          });
+        }
+        // The render draws expandSymbols(children); symbol-provided imagery
+        // must be visible to this scan too.
+        for (const el of expandSymbols(out.children ?? [], doc.symbols)) {
+          if (el.type !== 'image' || el.hidden || (el.opacity ?? 1) <= 0) {
+            continue;
+          }
+          const x = Math.max(0, el.x);
+          const y = Math.max(0, el.y);
+          const width = Math.min(out.width, el.x + el.width) - x;
+          const height = Math.min(out.height, el.y + el.height) - y;
+          if (!(width > 0) || !(height > 0)) continue;
+          if (width * height < IMAGERY_MIN_COVERAGE * out.width * out.height) {
+            continue;
+          }
+          regions.push({
+            elementId: el.id,
+            originId: el.originId,
+            label: el.originId || el.name || el.id,
+            x,
+            y,
+            width,
+            height,
+          });
+        }
+      }
+      perOutput.push(regions);
+      if (regions.length > 0) any = true;
+    }
+    if (!any) return [];
+
+    const violations: TextContrastViolation[] = [];
+    const rendered = pages ?? (await this.renderAllPages(doc));
+    const sharp = (await import('sharp')).default;
+
+    for (let outputIndex = 0; outputIndex < perOutput.length; outputIndex++) {
+      const regions = perOutput[outputIndex];
+      const out = doc.outputs[outputIndex] as DesignerOutput;
+      const page = rendered[outputIndex];
+      if (regions.length === 0 || !page) continue;
+
+      let meta: { width?: number; height?: number };
+      try {
+        meta = await sharp(page).metadata();
+      } catch {
+        continue;
+      }
+      const pageW = meta.width || out.width;
+      const pageH = meta.height || out.height;
+      const scaleX = pageW / out.width;
+      const scaleY = pageH / out.height;
+
+      for (const region of regions) {
+        try {
+          const left = Math.min(
+            Math.max(0, Math.round(region.x * scaleX)),
+            pageW - 1
+          );
+          const top = Math.min(
+            Math.max(0, Math.round(region.y * scaleY)),
+            pageH - 1
+          );
+          const width = Math.max(
+            1,
+            Math.min(pageW - left, Math.round(region.width * scaleX))
+          );
+          const height = Math.max(
+            1,
+            Math.min(pageH - top, Math.round(region.height * scaleY))
+          );
+          const { data, info } = await sharp(page)
+            .extract({ left, top, width, height })
+            .raw()
+            .toBuffer({ resolveWithObject: true });
+
+          const channels = info.channels;
+          const pixels = Math.floor(data.length / channels);
+          if (pixels <= 0) continue;
+          const sum = [0, 0, 0];
+          let lumaSum = 0;
+          let lumaSumSq = 0;
+          for (let p = 0; p < pixels; p++) {
+            const i = p * channels;
+            const r = data[i];
+            const g = channels > 1 ? data[i + 1] : r;
+            const b = channels > 2 ? data[i + 2] : r;
+            sum[0] += r;
+            sum[1] += g;
+            sum[2] += b;
+            const luma = 0.2126 * r + 0.7152 * g + 0.0722 * b;
+            lumaSum += luma;
+            lumaSumSq += luma * luma;
+          }
+          const meanLuma = lumaSum / pixels;
+          const lumaStdev = Math.sqrt(
+            Math.max(0, lumaSumSq / pixels - meanLuma * meanLuma)
+          );
+          const washed =
+            lumaStdev < WASHED_OUT_MAX_STDEV &&
+            (meanLuma > WASHED_OUT_LIGHT_MEAN || meanLuma < WASHED_OUT_DARK_MEAN);
+          if (!washed) continue;
+          violations.push({
+            outputIndex,
+            elementId: region.elementId,
+            originId: region.originId,
+            fill: '',
+            ratio: 0,
+            backdropLuma: srgbLuminance(
+              sum[0] / pixels / 255,
+              sum[1] / pixels / 255,
+              sum[2] / pixels / 255
+            ),
+            reason: 'washed-out',
+            backdropStdev: lumaStdev,
+            message: `declared imagery ("${region.label}") is nearly invisible in the render (mean luma ${meanLuma.toFixed(1)}, stdev ${lumaStdev.toFixed(1)})`,
+          });
+        } catch (err) {
+          this._logger.warn(
+            `Imagery-visibility sampling failed for ${region.elementId}: ${(err as Error)?.message}`
+          );
+        }
+      }
+    }
+
+    return violations;
+  }
+
+  /**
+   * The per-LINE ink rects of a flat text element, in ELEMENT coordinates.
+   *
+   * Laid out with the renderer's own metrics — `fitFlatText` for the wrapped
+   * lines and the shrunk-to-fit size, `measureLine` for each line's advance,
+   * and the same `verticalAlign` / `align` offsets `drawText` applies — so the
+   * rects land where the glyphs actually paint. Each line is inset vertically
+   * by `GLYPH_ASCENDER_INSET_EM` (the air above the cap height with a `top`
+   * baseline) and cut at one em (the descender), leaving the band the glyphs
+   * occupy rather than the full leading.
+   *
+   * Returns null when the element is not laid out this way (rich text, text on
+   * a path, curved or rotated text) — there the box is the only honest bound.
+   */
+  private glyphLineRects(
+    ctx: any,
+    el: DesignerElement
+  ): { x: number; y: number; width: number; height: number }[] | null {
+    // Rotated text paints its glyphs rotated about the centre, so unrotated
+    // line rects would sample backdrop the glyphs never touch — fall back to
+    // the box, as rich/path/curved text already do.
+    if (
+      el.richText?.length ||
+      el.textPath ||
+      (el.curve || 0) !== 0 ||
+      (el.rotation || 0) !== 0
+    ) {
+      return null;
+    }
+    const text = el.text ?? '';
+    if (!text.trim() || !(el.width > 0) || !(el.height > 0)) return null;
+
+    const fontSize = el.fontSize || 16;
+    const fontWeight = el.fontWeight || 400;
+    const fontStyle = el.fontStyle === 'italic' ? 'italic' : 'normal';
+    const fontFamily = el.fontFamily || 'sans-serif';
+    const letterSpacing = el.letterSpacing || 0;
+    const align = el.align || 'left';
+
+    const fitted = this.fitFlatText(
+      ctx, text, el, fontSize, fontStyle, fontWeight, fontFamily, letterSpacing
+    );
+    ctx.font = `${fontStyle} ${fontWeight} ${fitted.fontSize}px ${fontFamily}`;
+
+    const contentHeight = fitted.lines.length * fitted.lineHeight;
+    let y = 0;
+    if (el.verticalAlign === 'middle') {
+      y = Math.max(0, (el.height - contentHeight) / 2);
+    } else if (el.verticalAlign === 'bottom') {
+      y = Math.max(0, el.height - contentHeight);
+    }
+
+    const inset = fitted.fontSize * GLYPH_ASCENDER_INSET_EM;
+    // Condensed text occupies less of the box, so the ink rects the contrast
+    // check samples have to shrink with it or it reports against empty pixels.
+    const scaleX = el.textScaleX || 1;
+    const boxWidth = el.width / scaleX;
+    const rects: { x: number; y: number; width: number; height: number }[] = [];
+    for (const line of fitted.lines) {
+      const lineWidth = this.measureLine(ctx, line, letterSpacing) * scaleX;
+      if (line.trim() && lineWidth > 0) {
+        let x = 0;
+        if (align === 'center') x = (boxWidth * scaleX - lineWidth) / 2;
+        else if (align === 'right') x = boxWidth * scaleX - lineWidth;
+        const left = Math.max(el.x, el.x + x);
+        const top = Math.max(el.y, el.y + y + inset);
+        rects.push({
+          x: left,
+          y: top,
+          width: Math.max(1, Math.min(lineWidth, el.x + el.width - left)),
+          height: Math.max(
+            1,
+            Math.min(fitted.fontSize - inset, el.y + el.height - top)
+          ),
+        });
+      }
+      y += fitted.lineHeight;
+    }
+    return rects.length > 0 ? rects : null;
+  }
+
+  /**
+   * Sample the painted backdrop under a set of ELEMENT-space rects: ONE crop
+   * of their union, its rows compacted down to the rects themselves, then a
+   * single statistics pass. One decode however many lines the text wrapped
+   * to, and the gaps between the lines never reach the statistics.
+   *
+   * `regions` carries the same statistics PER surviving input rect (in input
+   * order) from the same decoded bytes — the per-line view the straddle
+   * judgment needs. A union mean is a fiction when the lines sit on divergent
+   * surfaces: light band + dark photo average to a mid luma that exists
+   * nowhere on canvas.
+   */
+  private async _sampleBackdropRegions(
+    page: Buffer,
+    regions: { x: number; y: number; width: number; height: number }[],
+    frame: { scaleX: number; scaleY: number; pageW: number; pageH: number },
+    fillLuma: number,
+    required: number
+  ): Promise<{
+    mean: [number, number, number];
+    backdropStdev: number;
+    crossingFraction: number;
+    regions: {
+      mean: [number, number, number];
+      backdropStdev: number;
+      crossingFraction: number;
+    }[];
+  } | null> {
+    const { scaleX, scaleY, pageW, pageH } = frame;
+    const boxes = regions
+      .map((r) => {
+        const left = Math.min(Math.max(0, Math.round(r.x * scaleX)), pageW - 1);
+        const top = Math.min(Math.max(0, Math.round(r.y * scaleY)), pageH - 1);
+        return {
+          left,
+          top,
+          right: Math.min(
+            pageW,
+            Math.max(left + 1, Math.round((r.x + r.width) * scaleX))
+          ),
+          bottom: Math.min(
+            pageH,
+            Math.max(top + 1, Math.round((r.y + r.height) * scaleY))
+          ),
+        };
+      })
+      .filter((b) => b.right > b.left && b.bottom > b.top);
+    if (boxes.length === 0) return null;
+
+    const uLeft = Math.min(...boxes.map((b) => b.left));
+    const uTop = Math.min(...boxes.map((b) => b.top));
+    const uRight = Math.max(...boxes.map((b) => b.right));
+    const uBottom = Math.max(...boxes.map((b) => b.bottom));
+
+    // `.extract().stats()` reads the INPUT image and silently ignores the
+    // queued crop, so the audit used to measure the WHOLE PAGE for every
+    // element. Materialize the crop to raw pixels — one decode, and the
+    // per-pixel pass needs them anyway.
+    const sharp = (await import('sharp')).default;
+    const { data, info } = await sharp(page)
+      .extract({
+        left: uLeft,
+        top: uTop,
+        width: uRight - uLeft,
+        height: uBottom - uTop,
+      })
+      .raw()
+      .toBuffer({ resolveWithObject: true });
+
+    const channels = info.channels;
+    if (
+      boxes.length === 1 &&
+      boxes[0].left === uLeft &&
+      boxes[0].top === uTop &&
+      boxes[0].right === uRight &&
+      boxes[0].bottom === uBottom
+    ) {
+      const only = this._sampleBackdropCrop(data, channels, fillLuma, required);
+      return only && { ...only, regions: [only] };
+    }
+
+    const unionWidth = uRight - uLeft;
+    const total = boxes.reduce(
+      (n, b) => n + (b.right - b.left) * (b.bottom - b.top),
+      0
+    );
+    const packed = Buffer.allocUnsafe(total * channels);
+    let offset = 0;
+    const perRegion: {
+      mean: [number, number, number];
+      backdropStdev: number;
+      crossingFraction: number;
+    }[] = [];
+    for (const b of boxes) {
+      const rowBytes = (b.right - b.left) * channels;
+      const boxStart = offset;
+      for (let y = b.top; y < b.bottom; y++) {
+        const start = ((y - uTop) * unionWidth + (b.left - uLeft)) * channels;
+        data.copy(packed, offset, start, start + rowBytes);
+        offset += rowBytes;
+      }
+      // Per-line statistics from the bytes just packed — a second arithmetic
+      // pass over pixels already in hand, no extra decode. Filtered boxes are
+      // non-degenerate, so the slice is never empty.
+      const stats = this._sampleBackdropCrop(
+        packed.subarray(boxStart, offset),
+        channels,
+        fillLuma,
+        required
+      );
+      if (stats) perRegion.push(stats);
+    }
+    const union = this._sampleBackdropCrop(
+      packed.subarray(0, offset),
+      channels,
+      fillLuma,
+      required
+    );
+    return union && { ...union, regions: perRegion };
+  }
+
+  /**
+   * One pass over a raw RGB(A) crop: per-channel mean, the largest
+   * per-channel standard deviation, and the fraction of pixels whose WCAG
+   * ratio against `fillLuma` falls below `required`. Returns null for an
+   * empty crop.
+   */
+  private _sampleBackdropCrop(
+    data: Buffer,
+    channels: number,
+    fillLuma: number,
+    required: number
+  ): {
+    mean: [number, number, number];
+    backdropStdev: number;
+    crossingFraction: number;
+  } | null {
+    const pixels = Math.floor(data.length / channels);
+    if (pixels <= 0) return null;
+
+    const sum = [0, 0, 0];
+    const sumSq = [0, 0, 0];
+    let crossings = 0;
+    for (let p = 0; p < pixels; p++) {
+      const i = p * channels;
+      const r = data[i];
+      const g = channels > 1 ? data[i + 1] : r;
+      const b = channels > 2 ? data[i + 2] : r;
+      sum[0] += r;
+      sum[1] += g;
+      sum[2] += b;
+      sumSq[0] += r * r;
+      sumSq[1] += g * g;
+      sumSq[2] += b * b;
+      const luma =
+        0.2126 * SRGB_CHANNEL_LUT[r] +
+        0.7152 * SRGB_CHANNEL_LUT[g] +
+        0.0722 * SRGB_CHANNEL_LUT[b];
+      const pixelRatio =
+        (Math.max(fillLuma, luma) + 0.05) / (Math.min(fillLuma, luma) + 0.05);
+      if (pixelRatio < required) crossings++;
+    }
+
+    const mean: [number, number, number] = [
+      sum[0] / pixels,
+      sum[1] / pixels,
+      sum[2] / pixels,
+    ];
+    const backdropStdev = Math.max(
+      ...mean.map((m, c) => Math.sqrt(Math.max(0, sumSq[c] / pixels - m * m)))
+    );
+    return { mean, backdropStdev, crossingFraction: crossings / pixels };
   }
 
   async renderContactSheet(
@@ -694,7 +1707,13 @@ export class DesignRenderService {
       const img = await this.loadImageSafe(bg.src);
       if (img) {
         ctx.save();
-        ctx.drawImage(img, 0, 0, w, h);
+        // Cover-crop (uniform scale, focal-point crop) — never a non-uniform
+        // stretch. The crop centers when the bg carries no focalPoint (same
+        // math as image-element 'cover' fitMode below).
+        const srcW = (img as any).naturalWidth || img.width || w;
+        const srcH = (img as any).naturalHeight || img.height || h;
+        const { sx, sy, sw, sh } = computeCoverCrop(srcW, srcH, w, h, bg.focalPoint);
+        ctx.drawImage(img, sx, sy, sw, sh, 0, 0, w, h);
         ctx.restore();
         return;
       }
@@ -707,25 +1726,577 @@ export class DesignRenderService {
     ctx.restore();
   }
 
-  private async drawElement(ctx: any, el: DesignerElement): Promise<void> {
+  private async drawElement(
+    ctx: any,
+    el: DesignerElement,
+    ignoreBlend = false
+  ): Promise<void> {
     ctx.save();
     ctx.globalAlpha = el.opacity ?? 1;
+    // Native blends composite for free here; the custom ones are handled by
+    // `applyBlend` when the layer is drawn through an offscreen buffer.
+    // Callers rendering the element into an EMPTY buffer pass `ignoreBlend`,
+    // since blending against nothing erases the layer.
+    if (!ignoreBlend && isNativeBlend(el.blendMode)) {
+      ctx.globalCompositeOperation = canvasCompositeFor(el.blendMode);
+    }
 
-    const cx = el.x + el.width / 2;
-    const cy = el.y + el.height / 2;
-    ctx.translate(cx, cy);
+    // Rotation pivots on the element ORIGIN, not its centre.
+    //
+    // Konva rotates about the node's x/y and nothing ever sets an offset, so
+    // that is what a stored `rotation` has always meant — the canvas is the
+    // authoring surface. Pivoting on the centre here put a 45° element 158px
+    // away from where it was drawn, and every render fixture used rotation 0,
+    // so nothing caught it. Flip still mirrors about the centre, which is what
+    // "flip in place" means.
+    ctx.translate(el.x, el.y);
     if (el.rotation) ctx.rotate((el.rotation * Math.PI) / 180);
-    if (el.flipX || el.flipY) ctx.scale(el.flipX ? -1 : 1, el.flipY ? -1 : 1);
-    ctx.translate(-el.width / 2, -el.height / 2);
+    if (el.flipX || el.flipY) {
+      ctx.translate(el.width / 2, el.height / 2);
+      ctx.scale(el.flipX ? -1 : 1, el.flipY ? -1 : 1);
+      ctx.translate(-el.width / 2, -el.height / 2);
+    }
 
     if (el.type === 'shape') {
       this.drawShape(ctx, el);
     } else if (el.type === 'text') {
       this.drawText(ctx, el);
-    } else if (el.type === 'image' || el.type === 'icon') {
+    } else if (el.type === 'path') {
+      this.drawPath(ctx, el);
+    } else if (el.type === 'fill') {
+      await this.drawFill(ctx, el);
+    } else if (el.type === 'image' || el.type === 'icon' || el.type === 'raster') {
+      // A raster layer is a flattened bitmap referenced by `src`, so it draws
+      // through exactly the same path as an image — which is what makes painted
+      // pixels survive PDF and video render, not just the Konva PNG export.
       await this.drawImage(ctx, el);
     }
 
+    ctx.restore();
+  }
+
+  /**
+   * Render a layer tree onto `ctx`.
+   *
+   * Groups composite as a unit: their members are drawn into an offscreen
+   * canvas which is then blended onto the parent with the group's own opacity
+   * and blend mode. That is the whole reason groups exist — a group opacity of
+   * 50% must fade the composite, not each member independently.
+   *
+   * Adjustment layers transform the pixels ALREADY drawn beneath them in this
+   * scope, which is why the loop needs the canvas as well as the context.
+   */
+  private async drawLayerTree(
+    ctx: any,
+    canvas: any,
+    nodes: LayerNode[],
+    allChildren: DesignerElement[],
+    ratio: number,
+    opts?: RenderOptions,
+    depth = 0
+  ): Promise<void> {
+    for (let i = 0; i < nodes.length; i++) {
+      const node = nodes[i];
+      const el = node.element;
+      if (el.hidden) continue;
+      if (opts?.hideText && el.type === 'text') continue;
+
+      try {
+        if (el.type === 'group') {
+          await this.drawGroup(ctx, canvas, node, allChildren, ratio, opts, depth);
+          continue;
+        }
+
+        if (el.type === 'adjustment') {
+          // Bound to the layer below when clipped, otherwise the whole scope.
+          const below = el.clipped ? nodes[i - 1] : undefined;
+          await this.applyAdjustmentLayer(ctx, canvas, el, allChildren, ratio, opts, below);
+          continue;
+        }
+
+        // Frosted glass reads the pixels ALREADY on the page, so it has to run
+        // before the layer itself is drawn over them.
+        if (el.backdropFilter) await this.drawBackdropFilter(ctx, el, ratio);
+
+        if (el.maskSrc && el.maskEnabled !== false) {
+          await this.drawMaskedElement(ctx, el, ratio);
+        } else if (elementStyles(el)?.length) {
+          await this.drawElementWithStyles(ctx, el, ratio);
+        } else {
+          await this.drawElement(ctx, el);
+        }
+      } catch (err) {
+        this._logger.warn(
+          `Skipping element ${el?.id} (${el?.type}) during render: ${(err as Error)?.message}`
+        );
+      }
+    }
+  }
+
+  /**
+   * Draw one element with its layer styles.
+   *
+   * The layer is rendered once into an offscreen buffer, and that buffer's
+   * ALPHA is what every effect keys off — a drop shadow is the silhouette blurred
+   * and offset, an inner shadow is the same silhouette inverted and clipped back
+   * in. Working from the buffer is what lets these apply to any element type
+   * (text, image, path, shape) with one implementation.
+   */
+  private async drawElementWithStyles(
+    ctx: any,
+    el: DesignerElement,
+    ratio: number
+  ): Promise<void> {
+    const { under, over } = splitStyles(elementStyles(el));
+    if (!under.length && !over.length) {
+      await this.drawElement(ctx, el);
+      return;
+    }
+
+    const { createCanvas } = await loadCanvasModule();
+    const w = ctx.canvas.width;
+    const h = ctx.canvas.height;
+
+    // The layer alone, at page scale, so effects can read its silhouette.
+    // `ignoreBlend` matters: inside an empty buffer there is nothing to blend
+    // against, so a `multiply` layer would composite with transparent black and
+    // vanish. The blend belongs to the finished stack, applied below.
+    const layer = createCanvas(w, h);
+    const layerCtx: any = layer.getContext('2d');
+    layerCtx.scale(ratio, ratio);
+    await this.drawElement(layerCtx, el, true);
+
+    // Effects and layer composite into one buffer so the element's blend mode
+    // applies to the whole stack, exactly as a group's does.
+    const stack = createCanvas(w, h);
+    const sctx: any = stack.getContext('2d');
+    sctx.scale(ratio, ratio);
+
+    // The whole page is the surface here; the canvas passes an element-sized
+    // one. Pattern tiles are resolved up front because the shared painter is
+    // synchronous — the client has no async step to hide a load behind.
+    const surface = { x: 0, y: 0, width: w / ratio, height: h / ratio };
+    const tiles = await this.resolveStyleTiles(over);
+    const deps = { createCanvas, patternTile: (s: DesignerLayerStyle) => tiles.get(s) ?? null };
+
+    for (const style of under) {
+      drawUnderStyle(sctx, layer, style, ratio, surface, deps);
+    }
+
+    sctx.drawImage(layer, 0, 0, w / ratio, h / ratio);
+
+    for (const style of over) {
+      drawOverStyle(sctx, layer, el, style, ratio, surface, deps);
+    }
+
+    ctx.save();
+    this.applyBlend(ctx, stack, el.blendMode, ratio);
+    ctx.restore();
+  }
+
+  /**
+   * Blur/desaturate the page behind one layer, clipped to that layer's shape.
+   *
+   * The silhouette is the layer drawn alone into a buffer, which is the same
+   * alpha every layer style already keys off — so a frosted rounded panel is
+   * frosted to its corners rather than to its bounding box.
+   */
+  private async drawBackdropFilter(
+    ctx: any,
+    el: DesignerElement,
+    ratio: number
+  ): Promise<void> {
+    const filter = el.backdropFilter;
+    if (!filter || (!(filter.blur ?? 0) && (filter.saturate ?? 1) === 1)) return;
+
+    const { createCanvas } = await loadCanvasModule();
+    // Slack around the box so the blur has neighbouring pixels to pull from;
+    // without it the edges sample nothing and read as a dark rim.
+    const pad = Math.ceil((filter.blur ?? 0) * 2);
+    const region = {
+      x: (el.x - pad) * ratio,
+      y: (el.y - pad) * ratio,
+      width: (el.width + pad * 2) * ratio,
+      height: (el.height + pad * 2) * ratio,
+    };
+    const [tl, tr, br, bl] = cornerRadii(el.borderRadius, el.width, el.height);
+
+    paintBackdropFilter(ctx, filter, region, ratio, createCanvas, {
+      x: pad * ratio,
+      y: pad * ratio,
+      width: el.width * ratio,
+      height: el.height * ratio,
+      radii: [tl * ratio, tr * ratio, br * ratio, bl * ratio],
+    });
+  }
+
+  /**
+   * Draw an element through its painted layer mask.
+   *
+   * The layer goes into an offscreen buffer, the mask bitmap is composited
+   * `destination-in`, and the result is drawn onto the page — the same stencil
+   * the canvas applies through a cached Konva group. It wraps the WHOLE layer,
+   * styles included, so a masked layer's drop shadow is masked too.
+   */
+  private async drawMaskedElement(
+    ctx: any,
+    el: DesignerElement,
+    ratio: number
+  ): Promise<void> {
+    const mask = await this.loadImageSafe(el.maskSrc);
+    if (!mask) {
+      // An unreachable mask must not silently erase the layer.
+      if (elementStyles(el)?.length) await this.drawElementWithStyles(ctx, el, ratio);
+      else await this.drawElement(ctx, el);
+      return;
+    }
+
+    const { createCanvas } = await loadCanvasModule();
+    const w = ctx.canvas.width;
+    const h = ctx.canvas.height;
+    const buffer = createCanvas(w, h);
+    const bctx: any = buffer.getContext('2d');
+    bctx.scale(ratio, ratio);
+
+    if (elementStyles(el)?.length) await this.drawElementWithStyles(bctx, el, ratio);
+    else await this.drawElement(bctx, el);
+
+    bctx.globalCompositeOperation = 'destination-in';
+    bctx.drawImage(mask, el.x, el.y, el.width, el.height);
+    bctx.globalCompositeOperation = 'source-over';
+
+    // Composite through the layer's own blend mode, exactly as a styled or
+    // grouped layer does — drawing the buffer bare would silently render a
+    // masked `multiply` layer as `normal`.
+    ctx.save();
+    this.applyBlend(ctx, buffer, el.blendMode, ratio);
+    ctx.restore();
+  }
+
+  /**
+   * Pattern tiles for a style stack, resolved before painting.
+   *
+   * The shared painter is synchronous so the canvas can call it from a Konva
+   * `sceneFunc`; loading an image-backed tile is the one asynchronous step, so
+   * it happens here instead.
+   */
+  private async resolveStyleTiles(
+    styles: DesignerLayerStyle[]
+  ): Promise<Map<DesignerLayerStyle, any>> {
+    const tiles = new Map<DesignerLayerStyle, any>();
+    for (const style of styles) {
+      if (style.type !== 'pattern-overlay' || !style.pattern) continue;
+      const tile = await this.buildPatternTile(style.pattern);
+      if (tile) tiles.set(style, tile);
+    }
+    return tiles;
+  }
+
+  /** Draw a group's members offscreen, then composite the result as one layer. */
+  private async drawGroup(
+    ctx: any,
+    canvas: any,
+    node: LayerNode,
+    allChildren: DesignerElement[],
+    ratio: number,
+    opts?: RenderOptions,
+    depth = 0
+  ): Promise<void> {
+    if (!node.children.length) return;
+
+    // Each level costs a page-size buffer, and nesting is unbounded in the
+    // document. Past the cap, members draw straight into the parent: group
+    // opacity and blend stop applying to the composite, which is a far better
+    // failure than exhausting memory on a pathological document.
+    if (depth >= MAX_GROUP_RENDER_DEPTH) {
+      this._logger.warn(
+        `Group nesting deeper than ${MAX_GROUP_RENDER_DEPTH}; drawing members inline`
+      );
+      await this.drawLayerTree(ctx, canvas, node.children, allChildren, ratio, opts, depth + 1);
+      return;
+    }
+
+    const { createCanvas } = await loadCanvasModule();
+    const groupCanvas = createCanvas(ctx.canvas.width, ctx.canvas.height);
+    const groupCtx: any = groupCanvas.getContext('2d');
+    groupCtx.scale(ratio, ratio);
+
+    await this.drawLayerTree(
+      groupCtx, groupCanvas, node.children, allChildren, ratio, opts, depth + 1
+    );
+
+    ctx.save();
+    ctx.globalAlpha = node.element.opacity ?? 1;
+    this.applyBlend(ctx, groupCanvas, node.element.blendMode, ratio);
+    ctx.restore();
+  }
+
+  /**
+   * Composite an offscreen canvas onto `ctx` under a blend mode.
+   *
+   * Native modes go through `globalCompositeOperation`; the rest are evaluated
+   * per pixel by the shared `pixel-ops` module, which the Designer canvas uses
+   * too — that shared implementation is what keeps PNG and PDF identical.
+   */
+  private applyBlend(ctx: any, source: any, mode: DesignerBlendMode | undefined, ratio: number): void {
+    if (isNativeBlend(mode)) {
+      ctx.globalCompositeOperation = canvasCompositeFor(mode);
+      // The context is scaled; draw in logical units.
+      ctx.drawImage(source, 0, 0, ctx.canvas.width / ratio, ctx.canvas.height / ratio);
+      ctx.globalCompositeOperation = 'source-over';
+      return;
+    }
+
+    // Custom blend: read both sides in DEVICE pixels. `ctx.scale(ratio)` is
+    // applied once at page setup and never undone, so logical coordinates would
+    // read the wrong region on a hi-dpi render.
+    const w = ctx.canvas.width;
+    const h = ctx.canvas.height;
+    const backdrop = ctx.getImageData(0, 0, w, h);
+    const src = source.getContext('2d').getImageData(0, 0, w, h);
+    blendPixels(backdrop, src, mode as DesignerBlendMode, ctx.globalAlpha ?? 1);
+    ctx.putImageData(backdrop, 0, 0);
+  }
+
+  /**
+   * Transform everything drawn so far. Reads back in DEVICE pixels for the same
+   * `ctx.scale(ratio)` reason as above.
+   *
+   * A CLIPPED adjustment reaches only the pixels its base layer actually
+   * painted — not that layer's bounding box. The Designer canvas clips by
+   * caching the base layer alone and filtering that bitmap, so its transparent
+   * gaps are untouched; masking by the box here instead would recolour the
+   * backdrop showing through those gaps and the PNG would stop matching the PDF.
+   */
+  private async applyAdjustmentLayer(
+    ctx: any,
+    canvas: any,
+    el: DesignerElement,
+    allChildren: DesignerElement[],
+    ratio: number,
+    opts?: RenderOptions,
+    clipTo?: LayerNode
+  ): Promise<void> {
+    if (!el.adjustment) return;
+    if (canvas.width <= 0 || canvas.height <= 0) return;
+
+    // Unclipped: the whole scope. Clipped: only the region its base layer can
+    // reach, so a small clipped adjustment costs a small readback rather than a
+    // full page one — this runs on the shared render endpoint.
+    const region = clipTo
+      ? this.nodeRegion(clipTo, allChildren, canvas, ratio)
+      : { x: 0, y: 0, w: canvas.width, h: canvas.height };
+    if (!region || region.w <= 0 || region.h <= 0) return;
+
+    const data = ctx.getImageData(region.x, region.y, region.w, region.h);
+    const before = clipTo ? Uint8ClampedArray.from(data.data) : null;
+    applyAdjustment(data, el.adjustment);
+
+    if (clipTo && before) {
+      const mask = await this.renderNodeAlone(clipTo, allChildren, region, canvas, ratio, opts);
+      const px = data.data;
+      for (let i = 0; i < px.length; i += 4) {
+        const a = mask[i + 3] / 255;
+        if (a >= 1) continue;
+        // Feather with the base layer's own alpha so antialiased edges blend
+        // instead of stepping.
+        px[i] = before[i] + (px[i] - before[i]) * a;
+        px[i + 1] = before[i + 1] + (px[i + 1] - before[i + 1]) * a;
+        px[i + 2] = before[i + 2] + (px[i + 2] - before[i + 2]) * a;
+        px[i + 3] = before[i + 3] + (px[i + 3] - before[i + 3]) * a;
+      }
+    }
+
+    ctx.putImageData(data, region.x, region.y);
+  }
+
+  /**
+   * The device-pixel region a node's own drawing can reach, clamped to the
+   * canvas: its rotated bounding box plus whatever its effects and stroke add.
+   * Returns null when the node lands entirely off-page.
+   */
+  private nodeRegion(
+    node: LayerNode,
+    allChildren: DesignerElement[],
+    canvas: any,
+    ratio: number
+  ): { x: number; y: number; w: number; h: number } | null {
+    const el = node.element;
+    const box =
+      el.type === 'group'
+        ? groupBounds(allChildren, el.id)
+        : { x: el.x, y: el.y, width: el.width, height: el.height };
+    if (!box) return null;
+
+    // Rotation is applied about the element's centre, so the axis-aligned box
+    // it occupies is wider than width/height.
+    const rot = ((el.rotation || 0) * Math.PI) / 180;
+    const cos = Math.abs(Math.cos(rot));
+    const sin = Math.abs(Math.sin(rot));
+    const bw = box.width * cos + box.height * sin;
+    const bh = box.width * sin + box.height * cos;
+
+    // Slack for anything that paints outside the box: layer effects, a stroke
+    // straddling the edge, a text shadow, plus a couple of pixels of
+    // antialiasing. Too generous only costs a little memory; too tight would
+    // silently crop the adjustment.
+    const shadow = el.textShadow;
+    const pad =
+      stylePadding(elementStyles(el)) +
+      // A warp leaves the element rect; without this the readback cropped an
+      // arched banner's effects at the box.
+      warpPadding(el) +
+      (el.strokeWidth || 0) +
+      (shadow
+        ? (shadow.blur || 0) + Math.abs(shadow.offsetX || 0) + Math.abs(shadow.offsetY || 0)
+        : 0) +
+      4;
+
+    const cx = box.x + box.width / 2;
+    const cy = box.y + box.height / 2;
+    const x = Math.max(0, Math.floor((cx - bw / 2 - pad) * ratio));
+    const y = Math.max(0, Math.floor((cy - bh / 2 - pad) * ratio));
+    const w = Math.min(canvas.width - x, Math.ceil((bw + pad * 2) * ratio) + 2);
+    const h = Math.min(canvas.height - y, Math.ceil((bh + pad * 2) * ratio) + 2);
+    if (w <= 0 || h <= 0) return null;
+    return { x, y, w, h };
+  }
+
+  /**
+   * One layer (or group subtree) drawn alone, for use as a clipping mask; only
+   * `region` is read back.
+   *
+   * The buffer is page-sized rather than region-sized on purpose. Every
+   * offscreen buffer below this point (group compositing, layer styles) is
+   * built from `ctx.canvas` dimensions and assumes the page origin, so handing
+   * this path a translated context would misplace a styled or grouped base
+   * layer. Only the readback is bounded, which is where the cost actually is.
+   */
+  private async renderNodeAlone(
+    node: LayerNode,
+    allChildren: DesignerElement[],
+    region: { x: number; y: number; w: number; h: number },
+    canvas: any,
+    ratio: number,
+    opts?: RenderOptions
+  ): Promise<Uint8ClampedArray> {
+    const { createCanvas } = await loadCanvasModule();
+    const maskCanvas = createCanvas(canvas.width, canvas.height);
+    const maskCtx: any = maskCanvas.getContext('2d');
+    maskCtx.scale(ratio, ratio);
+    await this.drawLayerTree(maskCtx, maskCanvas, [node], allChildren, ratio, opts);
+    return maskCtx.getImageData(region.x, region.y, region.w, region.h).data;
+  }
+
+  /**
+   * A repeatable tile for a pattern — either the uploaded image it names, or a
+   * procedural preset drawn through the shared generator.
+   */
+  private async buildPatternTile(pattern: DesignerPattern): Promise<any | null> {
+    if (pattern.src) {
+      return this.loadImageSafe(pattern.src);
+    }
+    if (!pattern.preset) return null;
+
+    const { createCanvas } = await loadCanvasModule();
+    const size = tileSizeFor(pattern);
+    const tile = createCanvas(size, size);
+    drawPatternTile(tile.getContext('2d') as never, pattern, size);
+    return tile;
+  }
+
+  /** A `fill` layer paints its box with a solid colour, gradient or pattern. */
+  private async drawFill(ctx: any, el: DesignerElement): Promise<void> {
+    const style = el.fillStyle;
+    if (!style) return;
+
+    if (style.type === 'gradient' && style.gradient) {
+      ctx.fillStyle = this.buildGradient(ctx, style.gradient, el.width, el.height);
+    } else if (style.type === 'pattern' && style.pattern) {
+      const tile = await this.buildPatternTile(style.pattern);
+      ctx.fillStyle = tile ? ctx.createPattern(tile, 'repeat') : (style.color || '#000000');
+    } else {
+      ctx.fillStyle = style.color || '#000000';
+    }
+    ctx.fillRect(0, 0, el.width, el.height);
+  }
+
+  /**
+   * Pen-tool path. Traced through the shared `path-geometry` helper so the
+   * exported curve is byte-for-byte the curve the canvas drew.
+   */
+  private drawPath(ctx: any, el: DesignerElement): void {
+    const nodes = el.nodes;
+    if (!nodes?.length) return;
+    const fill = el.fillGradient
+      ? this.buildGradient(ctx, el.fillGradient, el.width, el.height)
+      : el.fill;
+
+    // Warping flattens the beziers to the polyline the deformation was
+    // evaluated on; an unwarped path still traces its real curve.
+    const warpedPath = warpedOutline(el);
+    if (warpedPath) {
+      this.tracePath(
+        ctx,
+        warpedPath.map((p) => [p.x, p.y] as [number, number]),
+        !!el.closed
+      );
+    } else {
+      tracePathNodes(ctx, nodes, !!el.closed);
+    }
+    // Only a closed path is fillable; an open one would fill its implicit chord.
+    if (fill && el.closed) {
+      ctx.fillStyle = fill;
+      ctx.fill();
+    }
+    if (el.stroke && (el.strokeWidth || 0) > 0) {
+      ctx.strokeStyle = el.stroke;
+      ctx.lineWidth = el.strokeWidth as number;
+      this.applyStrokeStyle(ctx, el);
+      ctx.stroke();
+      ctx.setLineDash([]);
+    }
+    this.drawArrowHeads(ctx, el, (el.nodes || []).map((n) => ({ x: n.x, y: n.y })));
+  }
+
+  /**
+   * Apply the Illustrator-grade stroke options canvas2d supports natively.
+   * Arrowheads are not among them; `drawArrowHeads` traces those.
+   */
+  private applyStrokeStyle(ctx: any, el: DesignerElement): void {
+    const st = el.strokeStyle;
+    ctx.setLineDash(st?.dash?.length ? st.dash : []);
+    ctx.lineDashOffset = st?.dashOffset || 0;
+    ctx.lineCap = st?.lineCap || 'butt';
+    ctx.lineJoin = st?.lineJoin || 'miter';
+    ctx.miterLimit = st?.miterLimit || 10;
+  }
+
+  /**
+   * Arrowheads at the ends of a line or open path, filled with the stroke
+   * colour. Shared geometry (designer-doc/stroke-style) so the head is the same
+   * shape in the editor, the PDF and an exported frame.
+   */
+  private drawArrowHeads(ctx: any, el: DesignerElement, points: { x: number; y: number }[]): void {
+    const st = el.strokeStyle;
+    if (!st || (!st.arrowStart && !st.arrowEnd)) return;
+    const ends = strokeEndpoints(points);
+    if (!ends) return;
+    const width = el.strokeWidth || 1;
+    ctx.save();
+    ctx.setLineDash([]);
+    ctx.fillStyle = el.stroke || el.fill || '#000000';
+    for (const [head, tip, angle] of [
+      [st.arrowStart, ends.start, ends.startAngle] as const,
+      [st.arrowEnd, ends.end, ends.endAngle] as const,
+    ]) {
+      const pts = arrowHeadPoints(head || 'none', tip, angle, width);
+      if (!pts.length) continue;
+      ctx.beginPath();
+      pts.forEach((p, i) => (i === 0 ? ctx.moveTo(p.x, p.y) : ctx.lineTo(p.x, p.y)));
+      ctx.closePath();
+      ctx.fill();
+    }
     ctx.restore();
   }
 
@@ -735,21 +2306,55 @@ export class DesignRenderService {
       : el.fill;
     const shape = el.shape || 'rect';
 
+    // A warped shape resamples to a single polyline whatever kind it was; the
+    // unwarped branches below are untouched so nothing existing shifts.
+    const warped = warpedOutline(el);
+    if (warped) {
+      this.tracePath(
+        ctx,
+        warped.map((p) => [p.x, p.y] as [number, number]),
+        shape !== 'line'
+      );
+      if (fill && shape !== 'line') { ctx.fillStyle = fill; ctx.fill(); }
+      if (el.stroke && (el.strokeWidth || 0) > 0) {
+        ctx.strokeStyle = el.stroke;
+        ctx.lineWidth = el.strokeWidth as number;
+        this.applyStrokeStyle(ctx, el);
+        ctx.stroke();
+        ctx.setLineDash([]);
+      }
+      return;
+    }
+
     if (shape === 'line') {
+      // A line ELEMENT is the diagonal of its box — that is what the tool draws
+      // (`tool-draw.ts`) and what the canvas renders. Drawing a horizontal
+      // midline here turned every diagonal rule and arrow flat in the export,
+      // and moved its arrowheads with it. (Video line CLIPS are a midline on
+      // both sides; they are a different model and stay as they are.)
       ctx.beginPath();
-      ctx.moveTo(0, el.height / 2);
-      ctx.lineTo(el.width, el.height / 2);
+      ctx.moveTo(0, 0);
+      ctx.lineTo(el.width, el.height);
       ctx.strokeStyle = el.stroke || el.fill || '#000000';
       ctx.lineWidth = el.strokeWidth || 1;
+      this.applyStrokeStyle(ctx, el);
       ctx.stroke();
+      ctx.setLineDash([]);
+      this.drawArrowHeads(ctx, el, [
+        { x: 0, y: 0 },
+        { x: el.width, y: el.height },
+      ]);
       return;
     }
 
     if (shape === 'ellipse') {
       ctx.beginPath();
       ctx.ellipse(el.width / 2, el.height / 2, el.width / 2, el.height / 2, 0, 0, Math.PI * 2);
-    } else if (shape === 'star') {
-      this.tracePath(ctx, this.starPoints(el.width, el.height));
+    } else if (shape === 'star' || shape === 'triangle' || shape === 'polygon') {
+      // Shared with the canvas (designer-doc/shape-geometry) so the exported
+      // polygon is the one the user drew.
+      const pts = pointsForShape(shape, el.width, el.height, el.sides, el.innerRatio);
+      this.tracePath(ctx, (pts || []).map((p) => [p.x, p.y] as [number, number]));
     } else {
       this.traceRoundRect(ctx, 0, 0, el.width, el.height, el.borderRadius || 0);
     }
@@ -758,7 +2363,9 @@ export class DesignRenderService {
     if (el.stroke && (el.strokeWidth || 0) > 0) {
       ctx.strokeStyle = el.stroke;
       ctx.lineWidth = el.strokeWidth as number;
+      this.applyStrokeStyle(ctx, el);
       ctx.stroke();
+      ctx.setLineDash([]);
     }
   }
 
@@ -779,7 +2386,24 @@ export class DesignRenderService {
     if (rich?.length) {
       const curve = el.curve || 0;
       if (curve !== 0) {
-        this.drawCurvedText(ctx, flatText, el, el.fontSize || 16, el.fontStyle ?? 'normal', el.fontWeight ?? 400, el.fontFamily || 'sans-serif', curve);
+        // `drawCurvedText` paints with whatever font state its caller left set,
+        // which the FLAT branch below does and this one did not — so curved rich
+        // text exported as 10px black, the bare context defaults.
+        const size = el.fontSize || 16;
+        const weight = el.fontWeight ?? 400;
+        const style = el.fontStyle === 'italic' ? 'italic' : 'normal';
+        const family = el.fontFamily || 'sans-serif';
+        ctx.font = `${style} ${weight} ${size}px ${family}`;
+        // `middle`, matching Konva's TextPath default and the flat branch
+        // below — with `top` a curved rich line exported half a font size
+        // lower than the canvas drew it.
+        ctx.textBaseline = 'middle';
+        ctx.fillStyle = el.fill || '#000000';
+        if (el.textStroke && el.textStroke.width > 0) {
+          ctx.strokeStyle = el.textStroke.color;
+          ctx.lineWidth = el.textStroke.width;
+        }
+        this.drawCurvedText(ctx, flatText, el, size, style, weight, family, curve);
         return;
       }
       this.drawRichText(ctx, el);
@@ -791,15 +2415,29 @@ export class DesignRenderService {
     const fontWeight = el.fontWeight || 400;
     const fontStyle = el.fontStyle === 'italic' ? 'italic' : 'normal';
     const fontFamily = el.fontFamily || 'sans-serif';
-    const lineHeight = (el.lineHeight || 1.2) * fontSize;
     const align = el.align || 'left';
     const letterSpacing = el.letterSpacing || 0;
     const curve = el.curve || 0;
 
     ctx.font = `${fontStyle} ${fontWeight} ${fontSize}px ${fontFamily}`;
-    ctx.textBaseline = 'top';
-    ctx.fillStyle = el.fill || '#000000';
+    // `middle`, matching Konva — see `paint` below.
+    ctx.textBaseline = 'middle';
+    // A gradient headline is a staple of poster work, and text was the only
+    // element type that ignored `fillGradient` — shape and path have honoured
+    // it all along. Same ramp builder, so a gradient reads identically
+    // whichever type carries it.
+    ctx.fillStyle = el.fillGradient?.stops?.length
+      ? buildStyleGradient(ctx, el.fillGradient, el.width, el.height)
+      : el.fill || '#000000';
     if (typeof ctx.textAlign === 'string') ctx.textAlign = 'left';
+
+    // The outline's own colour and width. `drawTextLine` calls `strokeText`
+    // whenever `textStroke` is set but never set the state, so a 4px white
+    // outline exported as the context defaults — a 1px black hairline.
+    if (el.textStroke && el.textStroke.width > 0) {
+      ctx.strokeStyle = el.textStroke.color;
+      ctx.lineWidth = el.textStroke.width;
+    }
 
     if (el.textShadow) {
       ctx.shadowColor = el.textShadow.color;
@@ -813,16 +2451,125 @@ export class DesignRenderService {
       return;
     }
 
-    const lines = this.wrapLines(ctx, text, el.width, letterSpacing);
+    // Auto-fit: shrink the font (down to a floor) until the wrapped block
+    // fits the box height — a flat text element must never silently overflow
+    // its box bottom.
+    const fitted = this.fitFlatText(ctx, text, el, fontSize, fontStyle, fontWeight, fontFamily, letterSpacing);
+    ctx.font = `${fontStyle} ${fontWeight} ${fitted.fontSize}px ${fontFamily}`;
+
+    const contentHeight =
+      fitted.lines.length * fitted.lineHeight +
+      fitted.lineGaps.reduce((sum, gap) => sum + gap, 0);
     let y = 0;
-    for (const line of lines) {
-      const lineWidth = this.measureLine(ctx, line, letterSpacing);
-      let x = 0;
-      if (align === 'center') x = (el.width - lineWidth) / 2;
-      else if (align === 'right') x = el.width - lineWidth;
-      this.drawTextLine(ctx, line, x, y, letterSpacing, el);
-      y += lineHeight;
+    if (el.verticalAlign === 'middle') y = Math.max(0, (el.height - contentHeight) / 2);
+    else if (el.verticalAlign === 'bottom') y = Math.max(0, el.height - contentHeight);
+
+    // Horizontal scale. Layout is measured in unscaled glyph space, so the box
+    // widens by 1/scale before the align maths — matching the Konva node's
+    // scaleX plus its compensating width.
+    const scaleX = el.textScaleX || 1;
+    const boxWidth = el.width / scaleX;
+
+    const paint = (target: any, top: number): void => {
+      let cursor = top;
+      fitted.lines.forEach((line, i) => {
+        // Paragraph spacing is leading ABOVE a paragraph's first line; the
+        // indent shifts that line right and narrows nothing else.
+        cursor += fitted.lineGaps[i] || 0;
+        const indent = fitted.lineIndents[i] || 0;
+        const lineWidth = this.measureLine(target, line, letterSpacing);
+        let x = indent;
+        if (align === 'center') x = indent + (boxWidth - indent - lineWidth) / 2;
+        else if (align === 'right') x = boxWidth - lineWidth;
+        // Centred in the line box, which is what Konva does: it draws every
+        // line with `textBaseline = 'middle'` at half a line-height down (see
+        // Text.js `translateY = lineHeightPx / 2`). Drawing from the TOP of the
+        // box instead put the export a fraction of a line-height above the
+        // canvas — ~13px on a 41px footer, and more the larger the type.
+        this.drawTextLine(target, line, x, cursor + fitted.lineHeight / 2, letterSpacing, el);
+        cursor += fitted.lineHeight;
+      });
+    };
+
+    if (scaleX === 1) {
+      paint(ctx, y);
+      return;
     }
+
+    // node-canvas renders glyphs at the font size and ignores the horizontal
+    // component of the transform, so `ctx.scale(scaleX, 1)` would leave the
+    // export unsqueezed while the browser condensed it. Rasterising at the
+    // natural width and squeezing the bitmap is the one operation both agree
+    // on. Buffered at device resolution so the squeeze doesn't cost detail.
+    const canvasModule = _canvasModule;
+    if (!canvasModule) {
+      paint(ctx, y);
+      return;
+    }
+    const device = Math.max(1, Math.abs(ctx.getTransform?.().a ?? 1));
+    const bufferHeight = contentHeight + fitted.fontSize;
+    const buffer = canvasModule.createCanvas(
+      Math.max(1, Math.ceil(boxWidth * device)),
+      Math.max(1, Math.ceil(bufferHeight * device))
+    );
+    const bctx: any = buffer.getContext('2d');
+    bctx.scale(device, device);
+    bctx.font = ctx.font;
+    bctx.textBaseline = 'middle';
+    // Rebuilt against the buffer, in the UNSCALED glyph space the text is
+    // painted in — the ramp is squeezed with the glyphs, as it is on the
+    // canvas where Konva scales the whole node.
+    bctx.fillStyle = el.fillGradient?.stops?.length
+      ? buildStyleGradient(bctx, el.fillGradient, boxWidth, bufferHeight)
+      : ctx.fillStyle;
+    if (typeof bctx.textAlign === 'string') bctx.textAlign = 'left';
+    if (el.textStroke && el.textStroke.width > 0) {
+      bctx.strokeStyle = el.textStroke.color;
+      bctx.lineWidth = el.textStroke.width;
+    }
+    paint(bctx, 0);
+
+    ctx.drawImage(
+      buffer,
+      0,
+      0,
+      buffer.width,
+      buffer.height,
+      0,
+      y,
+      boxWidth * scaleX,
+      bufferHeight
+    );
+  }
+
+  /**
+   * Measure (and shrink-to-fit) a flat text block. The algorithm lives in
+   * `designer-doc/fit-text` so the Designer canvas lays text out identically —
+   * see that module. The canvas font is left set to the returned size.
+   */
+  private fitFlatText(
+    ctx: any, text: string, el: DesignerElement,
+    fontSize: number, fontStyle: string, fontWeight: number,
+    fontFamily: string, letterSpacing: number
+  ): FittedText {
+    return fitTextToBox(
+      {
+        text,
+        width: el.width,
+        height: el.height,
+        fontSize,
+        lineHeight: el.lineHeight,
+        letterSpacing,
+        scaleX: el.textScaleX,
+        textTransform: el.textTransform,
+        paragraphSpacing: el.paragraphSpacing,
+        firstLineIndent: el.firstLineIndent,
+      },
+      (line, size) => {
+        ctx.font = `${fontStyle} ${fontWeight} ${size}px ${fontFamily}`;
+        return ctx.measureText(line).width;
+      }
+    );
   }
 
   private drawRichText(ctx: any, el: DesignerElement): void {
@@ -832,6 +2579,7 @@ export class DesignRenderService {
     const maxWidth = el.width;
     const align = el.align || 'left';
     const lineHeightFactor = el.lineHeight ?? 1.2;
+    const letterSpacing = el.letterSpacing || 0;
 
     if (el.textShadow) {
       ctx.shadowColor = el.textShadow.color;
@@ -862,13 +2610,13 @@ export class DesignRenderService {
         for (let wi = 0; wi < words.length; wi++) {
           const raw = words[wi];
           if (raw === '') {
-            const spw = ctx.measureText(' ').width;
+            const spw = this.measureLine(ctx, ' ', letterSpacing);
             if (lineWidth + spw > maxWidth && lineWidth > 0) { lines.push([]); lineWidth = 0; }
             lineWidth += spw;
             continue;
           }
           const display = wi < words.length - 1 ? raw + ' ' : raw;
-          const ww = ctx.measureText(display).width;
+          const ww = this.measureLine(ctx, display, letterSpacing);
           if (lineWidth > 0 && lineWidth + ww > maxWidth) { lines.push([]); lineWidth = 0; }
           lines[lines.length - 1].push({ text: display, run: { ...run } });
           lineWidth += ww;
@@ -877,38 +2625,51 @@ export class DesignRenderService {
       }
     }
 
-    let y = 0;
-    for (const line of lines) {
-      if (!line.length) { y += lineHeightFactor * (runs[0]?.fontSize ?? el.fontSize ?? 16); continue; }
-
-      let totalW = 0;
-      for (const seg of line) { setRunFont(seg.run); totalW += ctx.measureText(seg.text).width; }
-
-      let x = 0;
-      if (align === 'center') x = (maxWidth - totalW) / 2;
-      else if (align === 'right') x = maxWidth - totalW;
-
+    const emptyLineH = lineHeightFactor * (runs[0]?.fontSize ?? el.fontSize ?? 16);
+    const lineHeights = lines.map((line) => {
+      if (!line.length) return emptyLineH;
       let lineH = 0;
       for (const seg of line) {
         const sz = seg.run.fontSize ?? el.fontSize ?? 16;
         lineH = Math.max(lineH, lineHeightFactor * sz);
       }
+      return lineH;
+    });
+
+    // Vertical alignment mirrors the flat-text path: the wrapped block is
+    // offset inside el.height for middle/bottom, never pushed above the box.
+    const contentHeight = lineHeights.reduce((sum, h) => sum + h, 0);
+    let y = 0;
+    if (el.verticalAlign === 'middle') y = Math.max(0, (el.height - contentHeight) / 2);
+    else if (el.verticalAlign === 'bottom') y = Math.max(0, el.height - contentHeight);
+
+    for (let li = 0; li < lines.length; li++) {
+      const line = lines[li];
+      if (!line.length) { y += emptyLineH; continue; }
+
+      let totalW = 0;
+      for (const seg of line) { setRunFont(seg.run); totalW += this.measureLine(ctx, seg.text, letterSpacing); }
+
+      let x = 0;
+      if (align === 'center') x = (maxWidth - totalW) / 2;
+      else if (align === 'right') x = maxWidth - totalW;
 
       for (const seg of line) {
         setRunFont(seg.run);
         const fill = seg.run.fill || el.fill || '#000000';
         const sz = seg.run.fontSize ?? el.fontSize ?? 16;
         ctx.fillStyle = fill;
-        ctx.textBaseline = 'top';
+        // The canvas draws each rich run as its own Konva `Text` node, which
+        // centres its single line with `textBaseline = 'middle'` at half a line
+        // height — and those nodes carry no `lineHeight`, so Konva's default of
+        // 1 makes that half the RUN's font size, not the line's.
+        ctx.textBaseline = 'middle';
         ctx.textAlign = 'left';
 
-        if (el.textStroke?.width && el.textStroke.width > 0) {
-          ctx.strokeStyle = el.textStroke.color;
-          ctx.lineWidth = el.textStroke.width;
-          ctx.strokeText(seg.text, x, y);
-        }
+        const segW = this.measureLine(ctx, seg.text, letterSpacing);
 
-        ctx.fillText(seg.text, x, y);
+        // Glyph-by-glyph when letterSpacing is set — same as the flat path.
+        this.drawTextLine(ctx, seg.text, x, y + sz / 2, letterSpacing, el);
 
         if (seg.run.underline) {
           const uy = y + sz * 1.15;
@@ -916,13 +2677,13 @@ export class DesignRenderService {
           ctx.lineWidth = Math.max(1, sz / 14);
           ctx.beginPath();
           ctx.moveTo(x, uy);
-          ctx.lineTo(x + ctx.measureText(seg.text).width, uy);
+          ctx.lineTo(x + segW, uy);
           ctx.stroke();
         }
 
-        x += ctx.measureText(seg.text).width;
+        x += segW;
       }
-      y += lineH;
+      y += lineHeights[li];
     }
   }
 
@@ -931,21 +2692,53 @@ export class DesignRenderService {
     fontSize: number, fontStyle: string, fontWeight: number,
     fontFamily: string, curve: number
   ): void {
-    const radius = Math.abs(curve) > 0 ? (el.width / 2) / Math.sin(Math.abs(curve) * Math.PI / 360) : Infinity;
-    if (!isFinite(radius)) return;
+    // Shared with the canvas, which walks the same arc as an SVG path. The
+    // sign used to be thrown away here, so a negative Arc Angle bowed upward
+    // exactly like a positive one and half the slider did nothing.
+    const geometry = arcGeometry(el.width, curve);
+    if (!geometry) return;
+    const { radius } = geometry;
 
+    const letterSpacing = el.letterSpacing || 0;
     const totalAngle = (el.width / (2 * Math.PI * radius)) * (Math.PI * 2);
     const startAngle = -totalAngle / 2;
-    let charOffset = 0;
+
+    // Align along the arc, exactly as the flat path and `drawTextOnPath` do.
+    // This was missing entirely, so every curved line started at its box's
+    // LEFT edge however it was aligned — a centred accent inside a full-width
+    // band rendered hard left while the canvas, which hands `align` to Konva's
+    // `TextPath`, centred it. (The comment on the canvas side already claimed
+    // the server offset the run; it never did.)
+    let textWidth = 0;
+    for (const ch of text) textWidth += ctx.measureText(ch).width + letterSpacing;
+    textWidth = Math.max(0, textWidth - letterSpacing);
+
+    // Shared with the canvas via `arcPathData`, so a centred arc sits at the
+    // same height in both.
+    const verticalOffset = arcVerticalOffset(geometry, el.height, el.verticalAlign);
+
+    const align = el.align || 'left';
+    let charOffset =
+      align === 'center'
+        ? Math.max(0, (el.width - textWidth) / 2)
+        : align === 'right'
+        ? Math.max(0, el.width - textWidth)
+        : 0;
 
     for (const ch of text) {
       const charWidth = ctx.measureText(ch).width;
       const midAngle = startAngle + (charOffset + charWidth / 2) / (2 * Math.PI * radius) * (Math.PI * 2);
+      // A downward bow inverts the glyph TILT — the tangent of a ∪ slopes the
+      // opposite way to a ∩ — but NOT the direction of travel. Inverting the
+      // horizontal sweep too walked the string right to left, so every
+      // arc-down line exported character-reversed ("moc.egapruoy.www" for
+      // "www.yourpage.com") while the canvas, which lays glyphs along
+      // `arcPathData` in path order, drew it correctly.
       const cx = el.width / 2 + Math.sin(midAngle) * radius;
-      const cy = -Math.cos(midAngle) * radius + radius;
+      const cy = arcBaselineY(geometry, midAngle) + verticalOffset;
       ctx.save();
       ctx.translate(cx, cy);
-      ctx.rotate(midAngle);
+      ctx.rotate(geometry.up ? midAngle : -midAngle);
       if (el.textStroke && el.textStroke.width > 0) {
         ctx.strokeStyle = el.textStroke.color;
         ctx.lineWidth = el.textStroke.width;
@@ -953,7 +2746,8 @@ export class DesignRenderService {
       }
       ctx.fillText(ch, -charWidth / 2, 0);
       ctx.restore();
-      charOffset += charWidth;
+      // Spacing after every glyph, matching the flat path's drawTextLine.
+      charOffset += charWidth + letterSpacing;
     }
   }
 
@@ -965,8 +2759,14 @@ export class DesignRenderService {
     if (!text) return;
     const points = sampleSvgPath(pathData);
     if (points.length < 2) {
-      // Invalid path: fall back to straight text.
-      this.drawRichText(ctx, el);
+      // Invalid path: fall back to straight text. `drawRichText` opens with
+      // `el.richText!` and throws on a flat element, and the caller swallows
+      // that — so a half-typed custom path (the textarea writes on every
+      // keystroke) silently DELETED the layer from the export while the canvas
+      // still drew it.
+      // Re-enter without the bad path, which lands on the straight-text branch.
+      // Safe from recursion: `textPath` is cleared on the copy.
+      this.drawText(ctx, { ...el, textPath: undefined, curve: 0 });
       return;
     }
 
@@ -1044,16 +2844,11 @@ export class DesignRenderService {
   }
 
   private async drawImage(ctx: any, el: DesignerElement): Promise<void> {
-    const img = await this.loadImageSafe(el.src);
-    if (!img) return;
+    const loaded = await this.loadElementImage(el);
+    if (!loaded) return;
+    const { img } = loaded;
 
     ctx.save();
-
-    // Apply CSS filters via ctx.filter (server parity with client Konva filters)
-    if (el.filters?.length) {
-      const filterStr = mapFilters(el.filters);
-      if (filterStr) ctx.filter = filterStr;
-    }
 
     // Apply mask (photo-in-shape / photo-in-text). Shape masks clip via a path;
     // text masks are applied as an alpha stencil using destination-in after the
@@ -1067,43 +2862,122 @@ export class DesignRenderService {
     }
 
     // Apply border-radius clip (only if no mask — mask supersedes)
-    if (!el.mask && el.borderRadius && el.borderRadius > 0) {
+    if (!el.mask && hasCornerRadius(el.borderRadius)) {
       this.traceRoundRect(ctx, 0, 0, el.width, el.height, el.borderRadius);
       ctx.clip();
     }
 
-    // fitMode cover-crop (server parity with client ImageNode)
-    if (el.fitMode === 'cover') {
-      const { sx, sy, sw, sh } = computeCoverCrop(
-        (img as any).naturalWidth || img.width || el.width,
-        (img as any).naturalHeight || img.height || el.height,
-        el.width, el.height,
-        el.focalPoint
-      );
-      ctx.drawImage(img, sx, sy, sw, sh, 0, 0, el.width, el.height);
-    } else if (el.fitMode === 'fill') {
-      ctx.drawImage(img, 0, 0, el.width, el.height);
-    } else {
-      // 'contain' or default — letterbox behaviour
-      const crop = el.crop;
-      if (crop) {
-        ctx.drawImage(img, crop.x, crop.y, crop.width, crop.height, 0, 0, el.width, el.height);
-      } else {
-        const srcW = (img as any).naturalWidth || img.width || el.width;
-        const srcH = (img as any).naturalHeight || img.height || el.height;
-        const scale = Math.min(el.width / srcW, el.height / srcH, 1);
-        const dw = srcW * scale;
-        const dh = srcH * scale;
-        const dx = (el.width - dw) / 2;
-        const dy = (el.height - dh) / 2;
-        ctx.drawImage(img, 0, 0, srcW, srcH, dx, dy, dw, dh);
+    // Filters run over the drawn pixels, not through `ctx.filter` — node-canvas
+    // accepts that property and ignores it, which is why every grayscale, blur,
+    // brightness, contrast and saturate silently vanished from exports. So the
+    // image goes into a buffer, the buffer is filtered, and the buffer is what
+    // lands on the page.
+    const filtered = hasFilterEffect(el.filters);
+    const { createCanvas } = await loadCanvasModule();
+    const ratio = Math.max(1, Math.abs(ctx.getTransform?.().a ?? 1));
+
+    // The buffer covers only the part of the element that can land on the
+    // page. An element hanging far off-canvas used to allocate its FULL size
+    // (⌈width·ratio⌉ × ⌈height·ratio⌉) for pixels nothing can show. The page
+    // rect is mapped into element-local space through the inverse transform —
+    // a superset under rotation, which is fine: it stays bounded by the page
+    // either way — and the draw below is offset to match.
+    let visibleX = 0;
+    let visibleY = 0;
+    let visibleW = el.width;
+    let visibleH = el.height;
+    if (filtered) {
+      const transform = ctx.getTransform?.();
+      const pageW = ctx.canvas?.width;
+      const pageH = ctx.canvas?.height;
+      if (transform && pageW && pageH) {
+        try {
+          const inv = transform.inverse();
+          const corners = [
+            inv.transformPoint({ x: 0, y: 0 }),
+            inv.transformPoint({ x: pageW, y: 0 }),
+            inv.transformPoint({ x: 0, y: pageH }),
+            inv.transformPoint({ x: pageW, y: pageH }),
+          ];
+          const minX = Math.max(0, Math.min(...corners.map((c) => c.x)));
+          const minY = Math.max(0, Math.min(...corners.map((c) => c.y)));
+          const maxX = Math.min(el.width, Math.max(...corners.map((c) => c.x)));
+          const maxY = Math.min(el.height, Math.max(...corners.map((c) => c.y)));
+          if (maxX <= minX || maxY <= minY) {
+            // Fully off-page: nothing visible to filter or draw.
+            ctx.restore();
+            return;
+          }
+          visibleX = minX;
+          visibleY = minY;
+          visibleW = maxX - minX;
+          visibleH = maxY - minY;
+        } catch {
+          // No inverse (degenerate transform) — keep the full-element buffer.
+        }
       }
+    }
+
+    const target = filtered
+      ? createCanvas(
+          Math.max(1, Math.ceil(visibleW * ratio)),
+          Math.max(1, Math.ceil(visibleH * ratio))
+        )
+      : null;
+    const tctx: any = target ? target.getContext('2d') : ctx;
+    if (target) {
+      tctx.scale(ratio, ratio);
+      tctx.translate(-visibleX, -visibleY);
+    }
+
+    // An explicit crop wins over the fit mode, matching the canvas — dropped
+    // images default to `cover`, so honouring cover first made the crop tool a
+    // no-op on exactly the images people crop most.
+    const crop = loaded.preCropped ? undefined : el.crop;
+    const srcW = (img as any).naturalWidth || img.width || el.width;
+    const srcH = (img as any).naturalHeight || img.height || el.height;
+
+    if (crop) {
+      tctx.drawImage(img, crop.x, crop.y, crop.width, crop.height, 0, 0, el.width, el.height);
+    } else if (el.fitMode === 'cover') {
+      const { sx, sy, sw, sh } = computeCoverCrop(
+        srcW, srcH, el.width, el.height, el.focalPoint
+      );
+      tctx.drawImage(img, sx, sy, sw, sh, 0, 0, el.width, el.height);
+    } else if (el.fitMode === 'contain') {
+      // Letterbox. Upscaling is allowed: "Fit" that refuses to enlarge a small
+      // source is not what the control says it does.
+      const scale = Math.min(el.width / srcW, el.height / srcH);
+      const dw = srcW * scale;
+      const dh = srcH * scale;
+      tctx.drawImage(img, 0, 0, srcW, srcH, (el.width - dw) / 2, (el.height - dh) / 2, dw, dh);
+    } else {
+      // 'fill' and the unset default both stretch, which is what the canvas has
+      // always done for an element with no explicit fit mode.
+      tctx.drawImage(img, 0, 0, el.width, el.height);
+    }
+
+    if (target) {
+      applyFilterTokensToCanvas(target, el.filters, ratio);
+      ctx.drawImage(target, visibleX, visibleY, visibleW, visibleH);
     }
 
     // Text mask: stencil the already-drawn image to the glyph shapes.
     if (textMask) {
-      ctx.filter = 'none';
       await this.applyTextMask(ctx, textMask, el.width, el.height);
+    }
+
+    // Border, which the canvas draws as a stroked rect over the image and the
+    // server used not to draw at all.
+    if (el.strokeWidth && el.strokeWidth > 0) {
+      ctx.strokeStyle = el.stroke || '#000000';
+      ctx.lineWidth = el.strokeWidth;
+      if (hasCornerRadius(el.borderRadius)) {
+        this.traceRoundRect(ctx, 0, 0, el.width, el.height, el.borderRadius);
+        ctx.stroke();
+      } else {
+        ctx.strokeRect(0, 0, el.width, el.height);
+      }
     }
 
     ctx.restore();
@@ -1153,7 +3027,10 @@ export class DesignRenderService {
     } else if (shape === 'triangle') {
       this.tracePath(ctx, [[w / 2, 0], [w, h], [0, h]]);
     } else if (shape === 'star') {
-      this.tracePath(ctx, this.starPoints(w, h));
+      this.tracePath(
+        ctx,
+        starPoints(w, h).map((p) => [p.x, p.y] as [number, number])
+      );
     } else if (shape === 'hexagon') {
       this.tracePath(ctx, this.hexagonPoints(w, h));
     } else if (shape === 'heart') {
@@ -1186,85 +3063,176 @@ export class DesignRenderService {
 
   // -----------------------------------------------------------------
 
+  /** Delegates to the shared builder so the canvas paints the same ramp. */
   private buildGradient(ctx: any, g: DesignerGradient, width: number, height: number): any {
-    let grad: any;
-    if (g.type === 'radial') {
-      const r = Math.max(width, height) / 2;
-      grad = ctx.createRadialGradient(width / 2, height / 2, 0, width / 2, height / 2, r);
-    } else {
-      const angle = ((g.angle ?? 0) * Math.PI) / 180;
-      const halfW = width / 2, halfH = height / 2;
-      const dx = Math.cos(angle) * halfW, dy = Math.sin(angle) * halfH;
-      grad = ctx.createLinearGradient(halfW - dx, halfH - dy, halfW + dx, halfH + dy);
-    }
-    for (const stop of g.stops ?? []) {
-      grad.addColorStop(Math.min(1, Math.max(0, stop.offset)), stop.color);
-    }
-    return grad;
+    return buildStyleGradient(ctx, g, width, height);
   }
 
-  private traceRoundRect(ctx: any, x: number, y: number, w: number, h: number, r: number): void {
-    const radius = Math.min(r, w / 2, h / 2);
+  private traceRoundRect(
+    ctx: any,
+    x: number,
+    y: number,
+    w: number,
+    h: number,
+    r: number | [number, number, number, number] | undefined
+  ): void {
+    // Per corner, because `borderRadius` may be `[tl, tr, br, bl]` — `arcTo`
+    // takes a radius per corner already, so this is the same four calls.
+    const [tl, tr, br, bl] = cornerRadii(r, w, h);
     ctx.beginPath();
-    if (radius <= 0) { ctx.rect(x, y, w, h); return; }
-    ctx.moveTo(x + radius, y);
-    ctx.arcTo(x + w, y, x + w, y + h, radius);
-    ctx.arcTo(x + w, y + h, x, y + h, radius);
-    ctx.arcTo(x, y + h, x, y, radius);
-    ctx.arcTo(x, y, x + w, y, radius);
+    if (!(tl || tr || br || bl)) { ctx.rect(x, y, w, h); return; }
+    ctx.moveTo(x + tl, y);
+    ctx.arcTo(x + w, y, x + w, y + h, tr);
+    ctx.arcTo(x + w, y + h, x, y + h, br);
+    ctx.arcTo(x, y + h, x, y, bl);
+    ctx.arcTo(x, y, x + w, y, tl);
     ctx.closePath();
   }
 
-  private starPoints(w: number, h: number): Array<[number, number]> {
-    const cx = w / 2, cy = h / 2;
-    const outerX = w / 2, outerY = h / 2;
-    const inner = 0.5;
-    const points: Array<[number, number]> = [];
-    for (let i = 0; i < 10; i++) {
-      const angle = (Math.PI / 5) * i - Math.PI / 2;
-      const rx = i % 2 === 0 ? outerX : outerX * inner;
-      const ry = i % 2 === 0 ? outerY : outerY * inner;
-      points.push([cx + Math.cos(angle) * rx, cy + Math.sin(angle) * ry]);
-    }
-    return points;
-  }
-
-  private tracePath(ctx: any, points: Array<[number, number]>): void {
+  private tracePath(
+    ctx: any,
+    points: Array<[number, number]>,
+    close = true
+  ): void {
     if (!points.length) return;
     ctx.beginPath();
     ctx.moveTo(points[0][0], points[0][1]);
     for (let i = 1; i < points.length; i++) ctx.lineTo(points[i][0], points[i][1]);
-    ctx.closePath();
+    // An open warped path must not join back, or it draws its closing chord.
+    if (close) ctx.closePath();
   }
 
+  /**
+   * Width of one line at the font ALREADY set on `ctx` — callers set the fitted
+   * size before calling, so the size argument to the shared helper is unused
+   * here.
+   */
   private measureLine(ctx: any, line: string, letterSpacing: number): number {
-    if (!letterSpacing) return ctx.measureText(line).width;
-    let w = 0;
-    for (const ch of line) w += ctx.measureText(ch).width + letterSpacing;
-    return w;
+    return measureLineWidth(line, 0, letterSpacing, (t) => ctx.measureText(t).width);
   }
 
-  private wrapLines(ctx: any, text: string, maxWidth: number, letterSpacing: number): string[] {
-    const out: string[] = [];
-    for (const rawLine of text.split('\n')) {
-      const words = rawLine.split(' ');
-      let current = '';
-      for (const word of words) {
-        const candidate = current ? `${current} ${word}` : word;
-        if (this.measureLine(ctx, candidate, letterSpacing) > maxWidth && current) {
-          out.push(current);
-          current = word;
-        } else {
-          current = candidate;
-        }
-      }
-      out.push(current);
+  /**
+   * Evaluated smart-filter stacks, keyed by source URL + recipe.
+   *
+   * CONTENT-ADDRESSED, which is what makes a single shared cache safe here: the
+   * key names the exact pixels in and the exact operations over them, so two
+   * concurrent renders — or two orgs that happen to reference the same URL —
+   * asking for the same key genuinely want the same answer. Scoping it to one
+   * render pass instead would need either a context threaded through every draw
+   * call or a mutable field that two overlapping renders would stomp on.
+   *
+   * The one assumption is that a URL's bytes do not change under it. That holds
+   * by contract: `originalSrc` is written once and never rewritten, and a
+   * re-bake uploads to a new file rather than overwriting.
+   */
+  private readonly _smartFilterCache = new Map<string, any>();
+
+  private _cacheSmartFilter(key: string, canvas: any): void {
+    this._smartFilterCache.set(key, canvas);
+    while (this._smartFilterCache.size > SMART_FILTER_CACHE_MAX) {
+      const oldest = this._smartFilterCache.keys().next().value;
+      if (oldest === undefined) break;
+      this._smartFilterCache.delete(oldest);
     }
-    return out;
   }
 
-  private async loadImageSafe(src?: string): Promise<any | null> {
-    if (!src) return null;
+  /**
+   * The bitmap an element draws, with its smart-filter stack applied.
+   *
+   * Smart filters are stored as a RECIPE plus the pre-filter pixels, and the
+   * client re-bakes them into `src` to keep the canvas responsive. That made the
+   * renderers' job free — they drew a plain bitmap — but it also meant the
+   * recipe only ever became pixels if a browser was involved. A document built
+   * through `POST /media/apply-ops`, through the SDK, or by the AI Designer
+   * rendered completely unfiltered, and since the AI Designer's vision critic
+   * reviews the SERVER render, a treatment it asked for was invisible to the
+   * design, the preview and the critique alike.
+   *
+   * So the recipe is evaluated here too. The client bake stays, but as an
+   * optimisation rather than a correctness requirement: whichever way the
+   * document arrived, this is what it looks like.
+   */
+  private async loadElementImage(
+    el: DesignerElement
+  ): Promise<{ img: any; preCropped: boolean } | null> {
+    if (!hasSmartFilters(el)) {
+      // An icon element may carry raw SVG markup as its `src` (the icons
+      // panel stores the body, not a URL) — wrap it so it loads like any
+      // other bitmap. Parity with the client IconNode.
+      const img = await this.loadImageSafe(renderableSrc(el));
+      return img ? { img, preCropped: false } : null;
+    }
+
+    const source = smartFilterSource(el);
+    if (!source) return null;
+
+    // An explicit crop is in ORIGINAL source pixels, so it must be applied
+    // BEFORE the stack is evaluated (and before any downscale): evaluating the
+    // full >16MP source at the capped size would leave the crop coordinates
+    // pointing at pixels the cached bitmap no longer has.
+    const crop = el.crop;
+    const key =
+      smartFilterCacheKey(source, el.smartFilters) +
+      (crop ? `|crop:${crop.x},${crop.y},${crop.width},${crop.height}` : '');
+    const cached = this._smartFilterCache.get(key);
+    if (cached) return { img: cached, preCropped: !!crop };
+
+    const img = await this.loadImageSafe(source);
+    if (!img) return null;
+
+    try {
+      const { createCanvas } = await loadCanvasModule();
+      const srcW = Math.max(1, Math.round(img.naturalWidth || img.width));
+      const srcH = Math.max(1, Math.round(img.naturalHeight || img.height));
+      // The crop rect, clamped into the source — a crop can outlive a
+      // re-uploaded image's dimensions.
+      const sx = crop ? Math.min(Math.max(0, crop.x), srcW - 1) : 0;
+      const sy = crop ? Math.min(Math.max(0, crop.y), srcH - 1) : 0;
+      const baseW = crop ? Math.min(Math.max(1, crop.width), srcW - sx) : srcW;
+      const baseH = crop ? Math.min(Math.max(1, crop.height), srcH - sy) : srcH;
+
+      // Evaluate at the (possibly cropped) SOURCE's own resolution, not the
+      // element's box. A stack is a pixel operation, not a geometry one:
+      // keeping the source dimensions is what leaves `naturalWidth`/
+      // `naturalHeight`, `crop`, `fitMode` and `focalPoint` still meaning what
+      // they meant before a filter was added.
+      const area = baseW * baseH;
+      const scale = area > MAX_SMART_FILTER_PIXELS ? Math.sqrt(MAX_SMART_FILTER_PIXELS / area) : 1;
+      const w = Math.max(1, Math.round(baseW * scale));
+      const h = Math.max(1, Math.round(baseH * scale));
+
+      const canvas = createCanvas(w, h);
+      const cctx = canvas.getContext('2d');
+      cctx.drawImage(img, sx, sy, baseW, baseH, 0, 0, w, h);
+      const data = cctx.getImageData(0, 0, w, h);
+      applySmartFilters(data, el.smartFilters);
+      cctx.putImageData(data, 0, 0);
+
+      this._cacheSmartFilter(key, canvas);
+      return { img: canvas, preCropped: !!crop };
+    } catch (err) {
+      // Fail soft, as everything else on the draw path does: an unfiltered
+      // image is a worse design, a missing one is a broken render.
+      this._logger.warn(
+        `Smart filters skipped for element ${el?.id}: ${(err as Error)?.message}`
+      );
+      return { img, preCropped: false };
+    }
+  }
+
+  private readonly _imageCache = new PromiseLruCache<any | null>(IMAGE_CACHE_MAX);
+
+  /**
+   * Load and decode a bitmap by URL, memoised: 30 linked outputs drawing the
+   * same photo fetch and decode it exactly once, and a failed URL settles as
+   * a cached null instead of being retried per output.
+   */
+  private loadImageSafe(src?: string): Promise<any | null> {
+    if (!src) return Promise.resolve(null);
+    return this._imageCache.get(src, () => this._loadImageUncached(src));
+  }
+
+  private async _loadImageUncached(src: string): Promise<any | null> {
     try {
       const { loadImage } = await loadCanvasModule();
       if (src.startsWith('data:')) return await loadImage(src);

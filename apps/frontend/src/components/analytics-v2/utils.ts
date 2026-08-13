@@ -106,7 +106,7 @@ export interface DrillState {
   focusIntegration?: string;
   focusDate?: string;
   focusPost?: string;
-  tab?: 'overview' | 'channels' | 'posts' | 'insights' | 'best-time' | 'recommendations' | 'watchlist' | 'shortlinks';
+  tab?: 'overview' | 'channels' | 'posts' | 'insights' | 'best-time' | 'recommendations' | 'watchlist' | 'shortlinks' | 'usage';
 }
 
 export interface ChannelMetricResponse {
@@ -174,10 +174,30 @@ export {
   type FetchError,
 } from '@postmill-ai/frontend/components/settings/shared/fetch-error';
 
+const COMPACT_TIERS = [
+  { limit: 1_000_000_000, suffix: 'B' },
+  { limit: 1_000_000, suffix: 'M' },
+  { limit: 1_000, suffix: 'K' },
+] as const;
+
+/**
+ * Compact display number — the point is a value that fits in a narrow tile.
+ *
+ * Two things this deliberately gets right, because the naive version doesn't:
+ * - **Tier promotion.** `999_999 / 1_000` is `999.999`, which `toFixed(1)`
+ *   renders as `"1000.0K"` — six glyphs, *wider* than the `"1.0M"` it should be,
+ *   which defeats the purpose. Entering a tier at `limit * 0.9995` (the point
+ *   where the scaled value rounds to 1.0) promotes instead.
+ * - **Negatives.** Compacting on the absolute value means `-1_500_000` is
+ *   `-1.5M` rather than a full-width `-1,500,000`.
+ */
 export function formatCompactNumber(value: number): string {
-  if (value >= 1_000_000_000) return (value / 1_000_000_000).toFixed(1) + 'B';
-  if (value >= 1_000_000) return (value / 1_000_000).toFixed(1) + 'M';
-  if (value >= 1_000) return (value / 1_000).toFixed(1) + 'K';
+  const abs = Math.abs(value);
+  const sign = value < 0 ? '-' : '';
+  for (const { limit, suffix } of COMPACT_TIERS) {
+    if (abs < limit * 0.9995) continue;
+    return sign + (abs / limit).toFixed(1) + suffix;
+  }
   return value.toLocaleString();
 }
 

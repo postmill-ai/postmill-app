@@ -1,0 +1,90 @@
+import { filterById } from './filter-descriptors';
+import { applyFilter, type FilterParams } from './filter-ops';
+import type { PixelBuffer } from './filter-primitives';
+import type { DesignerElement, DesignerSmartFilter } from './designer-doc.schema';
+
+/**
+ * The rules a smart-filter stack is evaluated by, in one place.
+ *
+ * The stack is evaluated twice over: on the client into an uploadable bitmap
+ * (so the canvas stays responsive), and on the server at render time (so a
+ * document renders correctly whether or not a browser ever touched it). Those
+ * are two different execution environments — a Web Worker and node-canvas — but
+ * they must agree on *which* entries apply, in *what* order, and from *which*
+ * pixels, or the same document renders two ways.
+ *
+ * The pixel work itself is already shared (`filter-ops`). This module shares the
+ * decisions around it.
+ */
+
+/**
+ * Which pixels the stack is evaluated from.
+ *
+ * `originalSrc` always wins. Falling back to `src` is only for the very first
+ * bake, before the original has been frozen — after that, reading `src` would
+ * feed the already-filtered bitmap back through the stack and compound the
+ * effect every time it is evaluated. On the server that would mean an image
+ * that degrades a little on every single render.
+ */
+export const smartFilterSource = (
+  element: Pick<DesignerElement, 'originalSrc' | 'src'>
+): string | undefined => element.originalSrc || element.src;
+
+/**
+ * The entries that actually run: enabled, and known to this build.
+ *
+ * An unknown id is skipped rather than throwing — a document saved by a newer
+ * build naming a filter this one does not have should still render. `applyFilter`
+ * already no-ops on unknown ids; filtering here as well keeps
+ * `hasSmartFilters` honest, so a stack of nothing-but-unknowns doesn't send us
+ * down the expensive re-bake path for no change.
+ */
+export const enabledSmartFilters = (
+  stack: DesignerSmartFilter[] | undefined
+): DesignerSmartFilter[] =>
+  (stack || []).filter((f) => f.enabled !== false && !!filterById(f.id));
+
+/** Whether evaluating this element's stack would change any pixels. */
+export const hasSmartFilters = (
+  element: Pick<DesignerElement, 'smartFilters'>
+): boolean => enabledSmartFilters(element.smartFilters).length > 0;
+
+/**
+ * A cache key for an evaluated stack.
+ *
+ * Keyed by the SOURCE, not by the element: one photo used by five elements with
+ * the same treatment is one bake. Deliberately excludes the element's box — the
+ * stack is evaluated at the source's own resolution (see `applySmartFilters`),
+ * so two different-sized elements sharing a source share a result.
+ */
+export const smartFilterCacheKey = (
+  source: string,
+  stack: DesignerSmartFilter[] | undefined
+): string =>
+  `${source}\u0000${JSON.stringify(
+    enabledSmartFilters(stack).map((f) => [f.id, f.params ?? null])
+  )}`;
+
+/**
+ * Run the stack over `buf` in place.
+ *
+ * Order is the effect — a blur then a posterize is not a posterize then a blur —
+ * so entries apply in array order, and a disabled entry keeps its position
+ * rather than being spliced out.
+ *
+ * The buffer is expected to be at the SOURCE image's own resolution, not the
+ * element's box. Spatial filters are resolution-dependent (a 4px blur radius is
+ * a different picture on a 400px and a 4000px bitmap), so evaluating at source
+ * resolution is the only definition both renderers can agree on without also
+ * agreeing on layout. It is also the only one that leaves `naturalWidth` /
+ * `naturalHeight`, `crop`, `fitMode` and `focalPoint` still meaning what they
+ * meant before a filter was added.
+ */
+export const applySmartFilters = (
+  buf: PixelBuffer,
+  stack: DesignerSmartFilter[] | undefined
+): void => {
+  for (const entry of enabledSmartFilters(stack)) {
+    applyFilter(buf, entry.id, (entry.params || {}) as FilterParams);
+  }
+};

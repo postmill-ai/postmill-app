@@ -1,6 +1,7 @@
 'use client';
 import React, { useEffect, useRef } from 'react';
 import { useT } from '@postmill-ai/react/translation/get.transation.service.client';
+import { defaultTextBox } from './measure-text';
 
 interface ContextMenuProps {
   x: number;
@@ -104,7 +105,7 @@ export const ContextMenu: React.FC<ContextMenuProps> = ({ x, y, targetType, elem
           { label: '-', action: null },
           { label: t('designer_action_select_all_select_all', 'Select All'), action: () => s.setSelectedIds(imageOut?.children.map((c) => c.id) ?? []) },
           { label: '-', action: null },
-          { label: t('designer_context_add_text', 'Add Text'), action: () => s.addElement({ id: '', type: 'text', x: 100, y: 100, width: 200, height: 40, rotation: 0, opacity: 1, locked: false, hidden: false, text: 'Text' }) },
+          { label: t('designer_context_add_text', 'Add Text'), action: () => s.addElement({ id: '', type: 'text', x: 100, y: 100, ...defaultTextBox({ text: 'Text', fontSize: 16 }), rotation: 0, opacity: 1, locked: false, hidden: false, text: 'Text' }) },
           { label: t('designer_context_add_shape', 'Add Shape'), action: () => s.addElement({ id: '', type: 'shape', x: 100, y: 100, width: 200, height: 200, rotation: 0, opacity: 1, locked: false, hidden: false, shape: 'rect' }) },
           { label: t('designer_context_add_image', 'Add Image'), action: () => onAddImage?.() },
         ];

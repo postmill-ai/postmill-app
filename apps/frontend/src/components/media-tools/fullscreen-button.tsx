@@ -5,11 +5,11 @@ import { useFullscreen } from './use-fullscreen';
 import { useT } from '@postmill-ai/react/translation/get.transation.service.client';
 
 // Self-contained full-screen toggle for the media studios — drop it into any
-// studio header. Hidden when the browser doesn't support the Fullscreen API.
+// studio header. It expands the studio to fill the browser window; the matching
+// root class comes from `useFullscreenSurface`.
 export const FullscreenButton: FC<{ className?: string }> = ({ className }) => {
   const t = useT();
-  const { isFullscreen, toggle, supported } = useFullscreen();
-  if (!supported) return null;
+  const { isFullscreen, toggle } = useFullscreen();
 
   return (
     <button

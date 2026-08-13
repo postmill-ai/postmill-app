@@ -1,10 +1,25 @@
 'use client';
 
 import React, { FC, useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Slider, Stepper } from '../controls';
+import { ColorSwatch, Slider, Stepper } from '../controls';
 import type { VideoClip } from '../designer.store';
 import { TEXT_ANIMATION_PRESETS } from '../text-animation-presets';
+import { GraphEditor } from '../graph-editor';
+import { SmartFilterList } from './smart-filter-list';
+import { analyseBeats } from '../beat-sync';
+import { estimateBpm } from '@postmill-ai/nestjs-libraries/media/designer-doc/beat-detect';
+import {
+  CAPTION_PRESETS,
+  captionPreset,
+  type CaptionPreset,
+} from '@postmill-ai/nestjs-libraries/media/designer-doc/caption-styles';
+import {
+  DEFAULT_MOTION_BLUR_SAMPLES,
+  DEFAULT_SHUTTER_ANGLE,
+  MAX_MOTION_BLUR_SAMPLES,
+} from '@postmill-ai/nestjs-libraries/media/designer-doc/motion-blur';
 import type { EaseType } from '../video-preview';
+import type { KeyframeEase } from '@postmill-ai/nestjs-libraries/media/designer-doc/keyframes';
 import { useT } from '@postmill-ai/react/translation/get.transation.service.client';
 
 interface ClipInspectorProps {
@@ -19,10 +34,14 @@ const PRESET_STEPS: number[] = [0.25, 0.5, 1, 2, 4];
 interface KeyframeLike {
   tMs: number;
   props: Record<string, number>;
-  ease?: 'linear' | 'easeInOut' | 'easeIn' | 'easeOut';
+  /** A preset name, or the graph editor's bezier handles. */
+  ease?: KeyframeEase;
 }
 
-const EASE_OPTIONS: { value: KeyframeLike['ease']; label: string; labelKey: string }[] = [
+/** The preset dropdown offers only the four names; handles come from the graph. */
+type EasePresetName = 'linear' | 'easeInOut' | 'easeIn' | 'easeOut';
+
+const EASE_OPTIONS: { value: EasePresetName; label: string; labelKey: string }[] = [
   { value: 'linear', label: 'Linear', labelKey: 'designer_ease_linear' },
   { value: 'easeInOut', label: 'Ease In-Out', labelKey: 'designer_ease_in_out' },
   { value: 'easeIn', label: 'Ease In', labelKey: 'designer_ease_in' },
@@ -158,7 +177,7 @@ const KeyframePropRow: FC<{
   onAdd: (prop: string, tMs: number) => void;
   onMove: (oldTMs: number, newTMs: number) => void;
   onRemove: (tMs: number, prop?: string) => void;
-  onEase: (tMs: number, ease: 'linear' | 'easeInOut' | 'easeIn' | 'easeOut') => void;
+  onEase: (tMs: number, ease: EasePresetName) => void;
 }> = ({ prop, clip, keyframes, totalMs, onAdd, onMove, onRemove, onEase }) => {
   const t = useT();
   const ref = useRef<HTMLDivElement>(null);
@@ -249,10 +268,14 @@ const KeyframePropRow: FC<{
           {propKeyframes.map((kf) => (
             <select
               key={kf.tMs}
-              value={kf.ease || 'linear'}
-              onChange={(e) => onEase(kf.tMs, e.target.value as KeyframeLike['ease'])}
+              // Handles have no name; the dropdown says Custom until reset.
+              value={typeof kf.ease === 'string' ? kf.ease : 'custom'}
+              onChange={(e) => onEase(kf.tMs, e.target.value as EasePresetName)}
               className="h-5 px-1 rounded text-[9px] bg-newBgColor border border-studioBorder text-textColor outline-none"
             >
+              {typeof kf.ease === 'object' && (
+                <option value="custom">{t('designer_ease_custom', 'Custom')}</option>
+              )}
               {EASE_OPTIONS.map((opt) => (
                 <option key={opt.value} value={opt.value}>{t(opt.labelKey, opt.label)}</option>
               ))}
@@ -283,6 +306,8 @@ export const ClipInspector: FC<ClipInspectorProps> = ({ store, outputIndex, trac
 
   const clipTrackType = parentTrack?.type;
   const keyframes = useMemo(() => clip?.keyframes || [], [clip?.keyframes]);
+  const [graphOpen, setGraphOpen] = useState(false);
+  const [analysing, setAnalysing] = useState(false);
   const filters = useMemo(() => clip?.filters || [], [clip?.filters]);
   const totalMs = clip ? (clip.endMs + (clip.freezeAtMs || 0)) - clip.startMs : 1;
 
@@ -701,6 +726,142 @@ export const ClipInspector: FC<ClipInspectorProps> = ({ store, outputIndex, trac
           </button>
         )}
 
+        {/* Caption look. The presets are the karaoke/word-pop styles social
+            video runs on; the per-word timings they need already exist. */}
+        {clipTrackType === 'caption' && !!clip.words?.length && (
+          <div className="space-y-2">
+            <div className="text-[11px] text-textColor/50">
+              {translate('designer_caption_style', 'Caption style')}
+            </div>
+            <select
+              value={clip.captionStyle?.preset || 'plain'}
+              onChange={(e) =>
+                updateClip({
+                  captionStyle: {
+                    ...(clip.captionStyle || {}),
+                    preset: e.target.value as CaptionPreset,
+                  },
+                })
+              }
+              aria-label={translate('designer_caption_style', 'Caption style')}
+              className="w-full h-[28px] px-2 rounded-md bg-newBgColor border border-studioBorder text-[12px] text-textColor outline-none"
+            >
+              {CAPTION_PRESETS.map((p) => (
+                <option key={p.id} value={p.id}>
+                  {translate(`designer_caption_preset_${p.id}`, p.label)}
+                </option>
+              ))}
+            </select>
+            {clip.captionStyle?.preset && clip.captionStyle.preset !== 'plain' && (
+              <ColorSwatch
+                label={translate('designer_caption_active_color', 'Active word')}
+                value={
+                  clip.captionStyle.activeColor ||
+                  captionPreset(clip.captionStyle.preset).defaults.activeColor ||
+                  '#facc15'
+                }
+                onChange={(hex) =>
+                  updateClip({
+                    captionStyle: { ...(clip.captionStyle || {}), activeColor: hex },
+                  })
+                }
+              />
+            )}
+          </div>
+        )}
+
+        {/* Beat sync. Analysis runs once and the beats are stored on the clip,
+            so a saved project keeps its grid. */}
+        {clipTrackType === 'audio' && clip.src && (
+          <div className="space-y-1.5">
+            <button
+              type="button"
+              disabled={analysing}
+              onClick={async () => {
+                setAnalysing(true);
+                try {
+                  const { beats } = await analyseBeats(clip.src as string);
+                  updateClip({ beats });
+                } finally {
+                  setAnalysing(false);
+                }
+              }}
+              className="w-full px-2 py-1.5 rounded text-[11px] border border-designerAccent/30 text-btnPrimaryAccent hover:bg-designerAccent/10 disabled:opacity-50"
+            >
+              {analysing
+                ? translate('designer_detecting_beats', 'Detecting beats…')
+                : translate('designer_detect_beats', 'Detect Beats')}
+            </button>
+            {!!clip.beats?.length && (
+              <p className="text-[10px] text-textColor/40">
+                {translate('designer_beats_found', '{{count}} beats · ~{{bpm}} BPM', {
+                  count: clip.beats.length,
+                  bpm: estimateBpm(clip.beats) ?? '?',
+                })}
+              </p>
+            )}
+          </div>
+        )}
+
+        {/* Motion blur. Rendered at export only — the preview draws one
+            sample, the same trade every editor makes. */}
+        {keyframes.length > 1 && (
+          <div className="space-y-1.5">
+            <label className="flex items-center gap-2 text-[11px] text-textColor">
+              <input
+                type="checkbox"
+                checked={!!clip.motionBlur?.enabled}
+                onChange={(e) =>
+                  updateClip({
+                    motionBlur: { ...(clip.motionBlur || {}), enabled: e.target.checked },
+                  })
+                }
+                className="accent-designerAccent w-3.5 h-3.5"
+              />
+              {translate('designer_motion_blur', 'Motion blur')}
+            </label>
+            {clip.motionBlur?.enabled && (
+              <>
+                <Slider
+                  label={translate('designer_shutter_angle', 'Shutter angle')}
+                  min={0}
+                  max={360}
+                  step={5}
+                  suffix="°"
+                  value={clip.motionBlur.shutterAngle ?? DEFAULT_SHUTTER_ANGLE}
+                  onChange={(n) =>
+                    updateClip({ motionBlur: { ...clip.motionBlur, shutterAngle: n } })
+                  }
+                />
+                <Slider
+                  label={translate('designer_blur_samples', 'Samples')}
+                  min={2}
+                  max={MAX_MOTION_BLUR_SAMPLES}
+                  step={1}
+                  value={clip.motionBlur.samples ?? DEFAULT_MOTION_BLUR_SAMPLES}
+                  onChange={(n) =>
+                    updateClip({ motionBlur: { ...clip.motionBlur, samples: n } })
+                  }
+                />
+                <p className="text-[10px] text-textColor/40">
+                  {translate(
+                    'designer_motion_blur_export_only',
+                    'Applied when the video is rendered, not in the preview.'
+                  )}
+                </p>
+              </>
+            )}
+          </div>
+        )}
+
+        {/* The clip's non-destructive filter stack, same list the layers panel
+            shows. Only clips whose pixels are static carry one — see
+            `smartFilterClip` in use-pixel-ops. */}
+        <SmartFilterList
+          stack={clip.smartFilters}
+          onChange={(next) => updateClip({ smartFilters: next })}
+        />
+
         {/* Mini timeline for keyframe placement */}
         <MiniKeyframeTimeline
           keyframes={keyframes}
@@ -724,6 +885,30 @@ export const ClipInspector: FC<ClipInspectorProps> = ({ store, outputIndex, trac
             onEase={handleSetEase}
           />
         ))}
+
+        {/* The graph editor. Collapsed by default — it is the deep tool, and the
+            rows above are enough for a straight fade. */}
+        {keyframes.length > 1 && (
+          <div className="rounded border border-studioBorder overflow-hidden">
+            <button
+              type="button"
+              onClick={() => setGraphOpen((v) => !v)}
+              aria-expanded={graphOpen}
+              className="w-full flex items-center justify-between px-2 py-1.5 text-[11px] text-textColor/70 hover:bg-boxHover"
+            >
+              <span>{translate('designer_graph_editor', 'Graph editor')}</span>
+              <span className="text-[9px] text-textColor/40">{graphOpen ? '▾' : '▸'}</span>
+            </button>
+            {graphOpen && (
+              <GraphEditor
+                clip={clip}
+                totalMs={totalMs}
+                onChange={(next) => updateClip({ keyframes: next as VideoClip['keyframes'] })}
+                onCommit={() => store.getState().pushHistory()}
+              />
+            )}
+          </div>
+        )}
 
         {keyframes.length > 0 && (
           <button

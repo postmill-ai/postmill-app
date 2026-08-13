@@ -2,7 +2,9 @@ import {
   IsBoolean,
   IsIn,
   IsOptional,
+  IsString,
   Matches,
+  MaxLength,
   Allow,
   ValidateNested,
 } from 'class-validator';
@@ -14,6 +16,20 @@ export class XDto {
   // union; the service reads settings.__type. Allow it so forbidNonWhitelisted does not 400.
   @Allow()
   __type?: string;
+
+  // Thread finisher — the composer's ThreadFinisher registers these on the X
+  // settings form; they are persisted for upcoming publish support (nothing on
+  // the publish path reads them yet). Capped at the adapter's premium post
+  // limit (XProvider.maxLength: 4000 verified / 280 otherwise) since the
+  // finisher is meant to post as a standalone tweet.
+  @IsOptional()
+  @IsBoolean()
+  active_thread_finisher?: boolean;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(4000)
+  thread_finisher?: string;
 
   @IsOptional()
   @Matches(/^(https:\/\/x\.com\/i\/communities\/\d+)?$/, {

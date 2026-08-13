@@ -70,8 +70,8 @@ export const BillingAfter = () => {
               </div>
               <div>
                 {t(
-                  'pay_nothing_for_the_first_7_days',
-                  'Pay nothing for the first 7 days'
+                  'pay_nothing_for_the_first_30_days',
+                  'Pay nothing for the first 30 days'
                 )}
               </div>
             </div>

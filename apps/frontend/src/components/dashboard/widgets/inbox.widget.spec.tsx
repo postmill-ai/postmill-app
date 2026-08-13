@@ -170,7 +170,7 @@ describe('InboxWidget', () => {
     expect(screen.getByText('showing 4')).toBeTruthy();
   });
 
-  it('navigates to /replies when a comment row is clicked', () => {
+  it('opens that reply in the inbox when a comment row is clicked', () => {
     const comments = [
       makeComment({ id: '4', authorName: 'Charlie', content: 'Click me' }),
     ];
@@ -184,6 +184,7 @@ describe('InboxWidget', () => {
 
     fireEvent.click(screen.getByText('Charlie').closest('button')!);
     expect(mockPush).toHaveBeenCalledTimes(1);
-    expect(mockPush).toHaveBeenCalledWith('/replies');
+    // Unread-filtered so the target reply is on page one, plus the id to highlight.
+    expect(mockPush).toHaveBeenCalledWith('/replies?unreadOnly=true&comment=4');
   });
 });

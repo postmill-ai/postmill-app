@@ -1,4 +1,4 @@
-import { render, screen, fireEvent } from '@testing-library/react';
+import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { describe, it, expect, vi } from 'vitest';
 import React from 'react';
 
@@ -16,37 +16,73 @@ vi.mock('next/font/google', () => ({
   Plus_Jakarta_Sans: () => ({ className: 'mocked-font' }),
 }));
 
+const mockReplace = vi.fn();
+
 vi.mock('next/navigation', () => ({
   useSearchParams: () => new URLSearchParams(''),
   usePathname: () => '/dashboard',
-  useRouter: () => ({ replace: vi.fn() }),
+  useRouter: () => ({ replace: mockReplace }),
 }));
 
-vi.mock('@postmill-ai/helpers/utils/custom.fetch', () => ({
-  useFetch: () =>
-    vi.fn().mockResolvedValue({
-      json: () =>
-        Promise.resolve({
-          id: 'test-user',
-          name: 'Test User',
-          email: 'test@example.com',
-          picture: null,
-        }),
-    }),
-}));
-
-vi.mock('swr', () => ({
-  default: (key: string, fetcher: any) => ({
-    data: {
+// The response `/user/self` resolves to. Tests that exercise the real loader swap this
+// for a non-2xx response (the throttler's 429 body) — see the throttling describe below.
+let mockUserResponse: any = {
+  ok: true,
+  status: 200,
+  json: () =>
+    Promise.resolve({
       id: 'test-user',
       name: 'Test User',
       email: 'test@example.com',
       picture: null,
-      tier: { current: 'PRO' },
-      setupCompleted: true,
-    },
-    mutate: vi.fn(),
-  }),
+    }),
+};
+
+vi.mock('@postmill-ai/helpers/utils/custom.fetch', () => ({
+  useFetch: () => vi.fn().mockImplementation(() => Promise.resolve(mockUserResponse)),
+}));
+
+const stubbedUser = {
+  id: 'test-user',
+  name: 'Test User',
+  email: 'test@example.com',
+  picture: null,
+  tier: { current: 'PRO' },
+  setupCompleted: true,
+};
+
+// By default useSWR is stubbed out entirely (these tests are about the header chrome).
+// `useRealSwr` flips it to a minimal implementation that actually runs the fetcher, so
+// the `/user/self` loader — and its non-2xx handling — is under test.
+let useRealSwr = false;
+
+const swrStub = (_key: string, _fetcher: any) => ({
+  data: stubbedUser,
+  error: undefined,
+  mutate: vi.fn(),
+});
+
+vi.mock('swr', () => ({
+  // Named `use…` so react-hooks/rules-of-hooks treats the body as a hook; a
+  // function expression so the mock factory stays self-contained (vi.mock is
+  // hoisted above module scope). The useRealSwr check moved inside: the flag is
+  // set per test before render, so reading it at call time is safe.
+  default: function useMockSwr(key: string, fetcher: any) {
+    const [state, setState] = React.useState<{ data?: any; error?: any }>({});
+    React.useEffect(() => {
+      if (!useRealSwr) return;
+      let cancelled = false;
+      Promise.resolve(fetcher(key)).then(
+        (data) => !cancelled && setState({ data }),
+        (error) => !cancelled && setState({ error })
+      );
+      return () => {
+        cancelled = true;
+      };
+    }, [key, fetcher]);
+    if (!useRealSwr) return swrStub(key, fetcher);
+    return { data: state.data, error: state.error, mutate: vi.fn() };
+  },
   useSWRConfig: () => ({ mutate: vi.fn() }),
 }));
 
@@ -213,6 +249,8 @@ import { LayoutComponent } from './layout.component';
 
 describe('LayoutComponent header', () => {
   beforeEach(() => {
+    useRealSwr = false;
+    mockReplace.mockClear();
     mockPermissions = {
       isLoaded: true,
       isResolved: true,
@@ -382,5 +420,129 @@ describe('LayoutComponent header', () => {
 
     fireEvent.keyDown(document, { key: 'Escape' });
     expect(avatarButton.getAttribute('aria-expanded')).toBe('false');
+  });
+});
+
+// C4: a throttled `/user/self` used to be parsed as the user object, leaving
+// `setupCompleted` undefined and bouncing a perfectly healthy user to /setup.
+describe('LayoutComponent throttling (C4)', () => {
+  beforeEach(() => {
+    useRealSwr = true;
+    mockReplace.mockClear();
+    mockPermissions = {
+      isLoaded: true,
+      isResolved: true,
+      role: 'owner',
+      isSuperAdmin: false,
+      isOwner: true,
+      isAdmin: true,
+      hasPermission: () => true,
+      refresh: vi.fn(),
+    };
+  });
+
+  afterEach(() => {
+    useRealSwr = false;
+    mockUserResponse = {
+      ok: true,
+      status: 200,
+      json: () => Promise.resolve({ ...stubbedUser }),
+    };
+  });
+
+  it('does not redirect to /setup when /user/self is throttled', async () => {
+    mockUserResponse = {
+      ok: false,
+      status: 429,
+      json: () =>
+        Promise.resolve({
+          statusCode: 429,
+          message: 'ThrottlerException: Too Many Requests',
+        }),
+    };
+
+    render(
+      <LayoutComponent>
+        <div>Child Content</div>
+      </LayoutComponent>
+    );
+
+    // The 429 body must never be mistaken for a user; instead of navigating, the layout
+    // surfaces a retry affordance.
+    await waitFor(() => {
+      expect(
+        screen.getByText('We could not load your account. Please try again.')
+      ).toBeDefined();
+    });
+    expect(mockReplace).not.toHaveBeenCalled();
+    expect(screen.getByRole('button', { name: 'Retry' })).toBeDefined();
+  });
+
+  it('renders the app normally when /user/self succeeds', async () => {
+    mockUserResponse = {
+      ok: true,
+      status: 200,
+      json: () => Promise.resolve({ ...stubbedUser }),
+    };
+
+    render(
+      <LayoutComponent>
+        <div>Child Content</div>
+      </LayoutComponent>
+    );
+
+    await waitFor(() => {
+      expect(screen.getByText('Child Content')).toBeDefined();
+    });
+    expect(mockReplace).not.toHaveBeenCalled();
+  });
+
+  it('redirects to /setup only for a genuine incomplete-setup user', async () => {
+    mockUserResponse = {
+      ok: true,
+      status: 200,
+      json: () => Promise.resolve({ ...stubbedUser, setupCompleted: false }),
+    };
+
+    render(
+      <LayoutComponent>
+        <div>Child Content</div>
+      </LayoutComponent>
+    );
+
+    await waitFor(() => {
+      expect(mockReplace).toHaveBeenCalledWith('/setup');
+    });
+  });
+
+  it('does not blank the page forever when the role lookup fails', async () => {
+    // usePermissions throws on a non-2xx (e.g. a throttled /settings/roles/me), so
+    // `isResolved` never flips. Gating on `isLoaded` lets the app render anyway.
+    mockPermissions = {
+      isLoaded: true,
+      isResolved: false,
+      role: null,
+      isSuperAdmin: false,
+      isOwner: false,
+      isAdmin: false,
+      hasPermission: () => false,
+      refresh: vi.fn(),
+    };
+    mockUserResponse = {
+      ok: true,
+      status: 200,
+      json: () => Promise.resolve({ ...stubbedUser, setupCompleted: false }),
+    };
+
+    render(
+      <LayoutComponent>
+        <div>Child Content</div>
+      </LayoutComponent>
+    );
+
+    await waitFor(() => {
+      expect(screen.getByText('Child Content')).toBeDefined();
+    });
+    expect(mockReplace).not.toHaveBeenCalled();
   });
 });

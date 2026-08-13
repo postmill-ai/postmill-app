@@ -117,3 +117,97 @@ describe('FileRepository — deleteFolder soft-delete handling', () => {
     expect(model.fileFolder.delete).not.toHaveBeenCalled();
   });
 });
+
+describe('FileRepository — type filter', () => {
+  const findManyArgs = (model: ReturnType<typeof makeModel>) =>
+    model.file.findMany.mock.calls[0][0] as any;
+
+  it('matches both the bare category and the MIME form', async () => {
+    // AI Designer output is stored as 'image/png'; an exact match on 'image'
+    // hid every one of those files from the library's Images filter.
+    const { repo, model } = makeRepo();
+    model.file.count.mockResolvedValue(0);
+    model.file.findMany.mockResolvedValue([]);
+
+    await repo.getFiles('org-1', 1, undefined, undefined, 'image');
+
+    expect(findManyArgs(model).where.AND).toEqual([
+      { OR: [{ type: 'image' }, { type: { startsWith: 'image/' } }] },
+    ]);
+    expect(findManyArgs(model).where.type).toBeUndefined();
+  });
+
+  it('treats documents as application/* and text/* too', async () => {
+    const { repo, model } = makeRepo();
+    model.file.count.mockResolvedValue(0);
+    model.file.findMany.mockResolvedValue([]);
+
+    await repo.getFiles('org-1', 1, undefined, undefined, 'document');
+
+    expect(findManyArgs(model).where.AND).toEqual([
+      {
+        OR: [
+          { type: 'document' },
+          { type: { startsWith: 'application/' } },
+          { type: { startsWith: 'text/' } },
+        ],
+      },
+    ]);
+  });
+
+  it('leaves the search OR intact when both are used', async () => {
+    // `where.OR` carries the search clause — the type filter must not take it.
+    const { repo, model } = makeRepo();
+    model.file.count.mockResolvedValue(0);
+    model.file.findMany.mockResolvedValue([]);
+
+    await repo.getFiles('org-1', 1, 'alpha', undefined, 'video');
+
+    const { where } = findManyArgs(model);
+    expect(where.OR).toEqual([
+      { originalName: { contains: 'alpha', mode: 'insensitive' } },
+      { name: { contains: 'alpha', mode: 'insensitive' } },
+    ]);
+    expect(where.AND).toEqual([
+      { OR: [{ type: 'video' }, { type: { startsWith: 'video/' } }] },
+    ]);
+  });
+
+  it('matches an unknown type exactly', async () => {
+    const { repo, model } = makeRepo();
+    model.file.count.mockResolvedValue(0);
+    model.file.findMany.mockResolvedValue([]);
+
+    await repo.getFiles('org-1', 1, undefined, undefined, 'other');
+
+    expect(findManyArgs(model).where.AND).toEqual([{ type: 'other' }]);
+  });
+});
+
+describe('FileRepository — generated media type', () => {
+  it('stores the bare category when a caller passes a MIME type', async () => {
+    const { repo, model } = makeRepo();
+    model.file.create.mockResolvedValue({ id: 'file-1' });
+
+    await repo.saveGeneratedMedia('org-1', {
+      name: 'poster.png',
+      path: '/uploads/poster.png',
+      type: 'image/png',
+    });
+
+    expect(model.file.create.mock.calls[0][0].data.type).toBe('image');
+  });
+
+  it('leaves an already-bare category alone', async () => {
+    const { repo, model } = makeRepo();
+    model.file.create.mockResolvedValue({ id: 'file-2' });
+
+    await repo.saveGeneratedMedia('org-1', {
+      name: 'clip.mp4',
+      path: '/uploads/clip.mp4',
+      type: 'video',
+    });
+
+    expect(model.file.create.mock.calls[0][0].data.type).toBe('video');
+  });
+});

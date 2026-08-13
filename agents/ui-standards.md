@@ -51,6 +51,67 @@ Import alias: `@postmill-ai/react/*` → `libraries/react-shared-libraries/src/*
 | `Slider` | `@postmill-ai/react/form/slider` | Boolean toggle: `value: 'on'\|'off'`, `fill`, `onChange`. Not RHF-bound. |
 | `ColorPicker` | `@postmill-ai/react/form/color.picker` | react-colorful `HexColorPicker`; `name`, `label`, `enabled`, `canBeCancelled`. |
 
+### Tab bars and chip strips
+
+**There is one tab bar.** `OverflowTabs`
+(`apps/frontend/src/components/ui/overflow-tabs.tsx`) is the only way to render a horizontal
+tab/chip/sub-nav row. Below `mobile:` (≤1025px) it keeps **three items inline and folds the rest into
+a ⋮ menu**; at desktop widths everything stays inline.
+
+```tsx
+<OverflowTabs
+  items={tabs.map((t) => ({ key: t.key, label: t.label, section: t.section }))}
+  activeKey={tab}
+  onSelect={setTab}
+  variant="underline"        // 'underline' | 'pill' | 'outline'
+  semantics="tabs"           // 'tabs' → tablist/tab · 'nav' → aria-current · 'toolbar' → aria-pressed
+  ariaLabel={t('more_tabs', 'More tabs')}
+  renderItem={…}             // only for a bespoke selected style; must apply `slotProps`
+/>
+```
+
+- Pick `semantics` by what the bar *does*: swaps an in-page panel (`tabs`), navigates (`nav`), or
+  filters (`toolbar`). Don't put `role="tab"` on a `<Link>` that changes the route.
+- **The active item is always one of the three visible** — the component swaps it forward. Never
+  re-implement `items.slice(0, 3)` by hand; two copies of that had already drifted apart.
+- `section` groups the item under a header in the overflow menu (used by `/media` and `/settings`,
+  which can carry 14–47 entries). Pass an **already-translated** label.
+- Using `renderItem`? You must spread `slotProps` (class + `data-overflow-slot`) or your overflow
+  items stay visible on mobile and the component does nothing.
+- **Testing:** jsdom applies no CSS, so both the inline and desktop-only copies are queryable. Assert
+  on `[data-overflow-slot="inline"]` or the exported pure `splitOverflowItems` — never mock
+  `matchMedia`, the component deliberately doesn't use it.
+
+Deliberately *not* using this pattern (each solves mobile another way): the bottom tab bar
+(4 pinned + a bottom sheet), the Designer menu bar (`☰`), the Designer output tabs (`…` past 6), and
+the setup stepper (progress bar).
+
+### Picking a file or media asset
+
+**There is one picker.** `useMediaPicker()`
+(`apps/frontend/src/components/media-tools/use-media-picker.tsx`) is the only sanctioned way to let
+a user choose an existing file or stock asset — used by the composer, the Designer, every provider
+studio, the AI Designer, campaigns and settings.
+
+```tsx
+const picker = useMediaPicker({
+  title: t('background_image', 'Background image'), // default: "Select media"
+  kinds: ['image'],          // restricts the tabs; 'My Files' always survives
+  excludeTabs: ['Stock Icons'],
+  multiple: true,            // batch mode + Confirm tray, use with onConfirm
+  requireFile: true,         // import stock picks so you always get a fileId
+  onSelect: (item) => …,     // single-select; the picker closes itself
+});
+return <><Button onClick={picker.open} />{picker.element}</>;
+```
+
+- **Never wrap it in `openModal`** (rule 8 below) and never render `MediaSelectorModal` yourself.
+- **`requireFile`** replaces the hand-rolled "if `!fileId` → `POST /files/import`" block that had been
+  copied into six surfaces. Use it whenever you persist a reference. Don't combine it with a caller
+  that imports the batch itself (the AI Designer does).
+- The picker opens on **My Files**, not stock. `FileManager` embedded there renders no page chrome —
+  that is gated on its `standalone` prop.
+
 Name collisions to be aware of:
 
 - `apps/frontend/src/components/ui/color-picker.tsx` exports a **different** `ColorPicker` (post-color swatch palette, `value?: string | null`) — for post heading colors, not RHF forms.
@@ -62,10 +123,13 @@ Name collisions to be aware of:
 
 | Component | File | Contract |
 |---|---|---|
-| `DataTable<T>` + `StatusPill` + `AvatarCell` | `data-table.tsx` | Generic table: `columns: Column<T>[]` (`key`, `header`, `align`, `width`, `sortable`, `render`), `data`, `keyExtractor`, optional `loading` (built-in skeleton), `error`+`onRetry`, sorting, row selection, pagination, `emptyState`, `onRowClick`. Handles its own loading/error/empty states. `StatusPill`: `status: 'green'\|'blue'\|'amber'\|'red'`. |
+| `DataTable<T>` + `StatusPill` + `AvatarCell` | `data-table.tsx` | Generic table: `columns: Column<T>[]` (`key`, `header`, `align`, `width`, `sortable`, `render`), `data`, `keyExtractor`, optional `loading` (built-in skeleton), `error`+`onRetry`, sorting, row selection, pagination, `emptyState`, `onRowClick`, `leadingRows`, `rowProps`. Handles its own loading/error/empty states. `StatusPill`: `status: 'green'\|'blue'\|'amber'\|'red'`. |
 | `EmptyState` | `empty-state.tsx` | **Canonical** empty state: `icon?`, `title`, `description?`, `action?`, `className?`. Standard-card styled. |
 | `PageHeader` | `page-header.tsx` | `title`, `description?`, `action?`. The standard page top — use it (current adoption is low; it is still the standard). |
-| `KebabMenu` / `KebabMenuItem` | `kebab-menu.tsx` | `items` (label/onClick, or `href`+`download`, `divider`, `danger`), `ariaLabel` (required), `align`, `width`, `insideLink`, `active`, `size`, `triggerClassName`. |
+| `KebabMenu` / `KebabMenuItem` | `kebab-menu.tsx` | `items` (label/onClick, or `href`+`download`, `divider`, `danger`), `ariaLabel` (required), `align`, `width`, `insideLink`, `active`, `size`, `triggerClassName`. Anchors to its own trigger — for pointer-anchored menus use `ContextMenu`. |
+| `ContextMenu` / `ContextMenuItem` | `context-menu.tsx` | Pointer-anchored menu for right-click and long-press: `x`, `y`, `items` (label/onClick, `divider`, `danger`, `disabled`), `onClose`, `ariaLabel` (required), `width`. Portals to `document.body` (a `fixed` menu is otherwise clipped by scrolling or transformed ancestors), closes on outside **mousedown** (not click — click would swallow the first click of the action underneath), Escape, scroll and resize; clamps to the viewport on all four edges; `role="menu"` with arrow/Home/End roving focus and focus restored to the opener on close. |
+| `useContextMenu<T>()` | `use-context-menu.ts` | `{ menu, openAt, close }` — tracks `{x, y, target}` for a `ContextMenu`. `openAt` falls back to the element's bounding rect when `clientX/Y` are 0, so keyboard invocation (Shift+F10 / Menu key) anchors correctly. |
+| `useLongPress<T>()` | `use-long-press.ts` | Touch equivalent of right-click: `bind(payload)` returns the touch handlers for one element, so a single instance can serve a whole list. 500ms hold, cancelled by >10px drift. Its `onClickCapture` **swallows the synthetic click** touchend emits after firing — without it the underlying tile handler runs beneath the menu. Pair with `select-none` + `WebkitTouchCallout: 'none'` and `preventDefault()` in `onContextMenu` for iOS Safari. |
 | `LoadingRows` | `loading-rows.tsx` | Skeleton rows: `rows?` (3), `columns?` (4). |
 | `RouteError` / `RouteNotFound` | `components/errors/route-error.tsx`, `route-not-found.tsx` | Rendered by App Router `error.tsx` / `not-found.tsx` segment boundaries. `RouteNotFound` is async (server-safe, uses backend `getT`). |
 | `TranslatedLabel` | `translated-label.tsx` | Duplicate of the one in react-shared-libraries — prefer the shared import in library code. |
@@ -90,7 +154,9 @@ openModal({
 - A11y and chrome are built in: `role="dialog"` + `aria-modal`, `aria-labelledby` from `title`, focus trap (Tab cycles, focus restored on close), body scroll-lock, backdrop blur of `.blurMe` elements.
 - `useHasOpenModals()` — true while any modal is open (e.g. to hide the mobile nav).
 - `showModalEmitter(params)` — open a modal from non-React contexts (emitter).
-- **Confirm dialogs**: `const decision = useDecisionModal(); const ok = await decision.open({ title?, description?, approveLabel?, cancelLabel?, onlyApprove? })` → `Promise<boolean>` (resolves `false` on dismiss). `areYouSure({...})` is the same thing callable outside React via `decisionModalEmitter` (handled by `<DecisionEverywhere/>`).
+- **Confirm dialogs**: `const decision = useDecisionModal(); const ok = await decision.open({ title?, description?, approveLabel?, cancelLabel?, onlyApprove? })` → `Promise<boolean>` (resolves `false` on dismiss). `areYouSure({...})` is the same thing callable outside React via `decisionModalEmitter` (handled by `<DecisionEverywhere/>`). Note `areYouSure` does **not** forward `onlyApprove` — for an OK-only dialog use the hook.
+- **Text input (the `prompt()` replacement)**: `const prompt = usePromptModal(); const value = await prompt.open({ title?, label?, placeholder?, initialValue?, approveLabel?, cancelLabel? })` → `Promise<string | null>`. Resolves the **trimmed** value on submit and **`null`** when cancelled or dismissed — the `null` vs `''` distinction is load-bearing (callers use it to tell "aborted" from "submitted empty", e.g. clearing a link vs. leaving it alone).
+- **Native `alert`/`confirm`/`prompt` are banned and lint-enforced** — `no-alert` + `no-restricted-globals` in the frontend block of `eslint.config.mjs`. They block the event loop, ignore theme tokens, can't be translated, can't be focus-trapped alongside stacked modals, and are auto-dismissed by Playwright in `e2e/`.
 
 ## Feedback
 
@@ -141,8 +207,16 @@ Pattern (see `SectionCard`, `components/dashboard/kit/section-card.tsx`): **rend
 3. No `// eslint-disable-next-line` on hooks — every SWR/data call is its own hook (see `agents/frontend.md`).
 4. No `--color-custom*` vars; no raw hex where a token exists; no legacy alias colors (`primary`…`seventh`, `input`) in new code.
 5. No `@mantine/modals`; no new `react-tooltip` instances; no icon npm packages.
-6. Modals only via `useModals()`; confirms only via `useDecisionModal()`/`areYouSure()`.
-7. Match the surrounding component's style (token usage, spacing scale in `px-[…]`, comment density) — check `apps/frontend/src/app/global.scss` and neighboring components before writing new UI.
+6. Modals only via `useModals()`; confirms only via `useDecisionModal()`/`areYouSure()`; text input
+   via `usePromptModal()`. No native `alert`/`confirm`/`prompt` — enforced by `no-alert` +
+   `no-restricted-globals` (frontend block of `eslint.config.mjs`).
+7. File/media picking only via `useMediaPicker()` — never render `MediaSelectorModal` directly and
+   never wrap it in `openModal` (it renders its own dialog; wrapping stacks two chromes with
+   different headers). Enforced by `media-tools/media-picker-single-chrome.spec.ts`.
+8. Horizontal tab/chip/sub-nav rows only via `OverflowTabs` — never hand-roll a scroll track, and
+   never let a row rely on `overflow-x-auto` alone (the scrollbar is suppressed app-wide, so the
+   tail becomes unreachable).
+9. Match the surrounding component's style (token usage, spacing scale in `px-[…]`, comment density) — check `apps/frontend/src/app/global.scss` and neighboring components before writing new UI.
 
 ## Checklist
 

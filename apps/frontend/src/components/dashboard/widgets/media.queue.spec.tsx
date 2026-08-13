@@ -113,12 +113,12 @@ describe('MediaQueueWidget', () => {
     expect(screen.getByText('Generation failed')).toBeTruthy();
   });
 
-  it('navigates to the provider studio when a job row is clicked', () => {
+  it('navigates to that job in the render queue when a row is clicked', () => {
     mockMediaJobs = { data: makeJobs(), isLoading: false };
     render(<MediaQueueWidget />);
 
     fireEvent.click(screen.getByRole('img', { name: 'heygen icon' }).closest('button')!);
-    expect(mockPush).toHaveBeenCalledWith('/media/heygen');
+    expect(mockPush).toHaveBeenCalledWith('/media/queue?job=job-1');
   });
 
   it('does not show the failed count pill when failed7d is zero', () => {

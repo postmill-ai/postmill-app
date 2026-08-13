@@ -21,7 +21,9 @@ const BASE = 'https://api.replicate.com/v1';
 // client-side while the prediction keeps running (and billing). We ask for a short blocking
 // window and fall back to polling the returned prediction id (2.4).
 const PREFER_WAIT_SECONDS = 25;
-const DEFAULT_IMAGE_MODEL = 'black-forest-labs/flux-schnell';
+// flux-schnell was retired upstream ("No adapter found" 500s in prod); flux-1.1-pro is
+// allowlisted, cost-tabled, and verified live.
+const DEFAULT_IMAGE_MODEL = 'black-forest-labs/flux-1.1-pro';
 
 type ReplicateOutput = string | string[] | undefined;
 
@@ -134,10 +136,26 @@ export class ReplicateMediaAdapter implements MediaProviderAdapter {
     throw new Error('Replicate prediction timed out');
   }
 
+  // Flux-family image models take an `aspect_ratio` input token. The coarse
+  // aspect hint maps onto it; an explicit `options.input.aspect_ratio` (org
+  // default tunables) wins because `_createPrediction` spreads input last.
+  private static readonly ASPECT_RATIO: Record<string, string> = {
+    square: '1:1',
+    wide: '16:9',
+    tall: '9:16',
+  };
+
   async generateImage(prompt: string, options?: MediaGenerateOptions): Promise<MediaGenerationResult> {
+    const aspectRatio = options?.aspect
+      ? ReplicateMediaAdapter.ASPECT_RATIO[options.aspect]
+      : undefined;
+    // The resolved model rides back in the metadata: callers persist it with
+    // the job, and "which model painted this?" is otherwise unanswerable from
+    // the logs (the default is implicit).
+    const model = options?.version || options?.model || DEFAULT_IMAGE_MODEL;
     const created = await this._createPrediction(
-      { ...options, version: options?.version || options?.model || DEFAULT_IMAGE_MODEL },
-      { prompt },
+      { ...options, version: model },
+      { prompt, ...(aspectRatio ? { aspect_ratio: aspectRatio } : {}) },
       PREFER_WAIT_SECONDS,
     );
     const data = await this._resolvePrediction(created, options);
@@ -150,10 +168,10 @@ export class ReplicateMediaAdapter implements MediaProviderAdapter {
     if (Array.isArray(output)) {
       const urls = output.filter((u): u is string => typeof u === 'string');
       if (urls.length === 0) throw new Error('Replicate returned no image URLs');
-      return { multi: urls.length > 1, image: urls[0], images: urls, metadata: { provider: this.identifier } };
+      return { multi: urls.length > 1, image: urls[0], images: urls, metadata: { provider: this.identifier, model } };
     }
     if (typeof output === 'string') {
-      return { multi: false, image: output, images: [output], metadata: { provider: this.identifier } };
+      return { multi: false, image: output, images: [output], metadata: { provider: this.identifier, model } };
     }
     throw new Error(`Unexpected Replicate output format: ${JSON.stringify(output)}`);
   }

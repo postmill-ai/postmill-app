@@ -18,11 +18,8 @@ import {
 import { Transform, Type } from 'class-transformer';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { MediaDto } from '@postmill-ai/nestjs-libraries/dtos/file/media.dto';
-import {
-  allProviders,
-  type AllProvidersSettings,
-  EmptySettings,
-} from '@postmill-ai/nestjs-libraries/dtos/posts/providers-settings/all.providers.settings';
+import { type AllProvidersSettings } from '@postmill-ai/nestjs-libraries/dtos/posts/providers-settings/all.providers.settings';
+import { ProviderSettingsConstraint } from '@postmill-ai/nestjs-libraries/dtos/posts/provider.settings.constraint';
 import { ValidContent } from '@postmill-ai/helpers/utils/valid.images';
 import { sanitizePostContent } from '@postmill-ai/helpers/utils/sanitize.post.content';
 
@@ -100,14 +97,7 @@ export class Post {
     description: 'Per-provider settings (poll, first comment, etc.).',
   })
   @ValidateIf((o) => o.type !== 'draft')
-  @ValidateNested()
-  @Type(() => EmptySettings, {
-    keepDiscriminatorProperty: true,
-    discriminator: {
-      property: '__type',
-      subTypes: allProviders(EmptySettings),
-    },
-  })
+  @Validate(ProviderSettingsConstraint)
   settings: AllProvidersSettings;
 }
 

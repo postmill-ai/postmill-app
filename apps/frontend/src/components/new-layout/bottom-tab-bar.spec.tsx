@@ -57,6 +57,12 @@ vi.mock('@postmill-ai/frontend/components/layout/use-permissions', () => ({
   usePermissions: () => mockPermissions,
 }));
 
+let mockIsFullscreen = false;
+
+vi.mock('@postmill-ai/frontend/components/media-tools/use-fullscreen', () => ({
+  useFullscreen: () => ({ isFullscreen: mockIsFullscreen, toggle: vi.fn() }),
+}));
+
 import { BottomTabBar } from './bottom-tab-bar';
 
 describe('BottomTabBar', () => {
@@ -64,6 +70,7 @@ describe('BottomTabBar', () => {
     mockIsGeneral = true;
     mockBillingEnabled = false;
     mockPathname = '/analytics';
+    mockIsFullscreen = false;
     mockPermissions = {
       isLoaded: true,
       isResolved: true,
@@ -105,5 +112,17 @@ describe('BottomTabBar', () => {
     const homeLink = getPrimaryLinks(container)[0];
 
     expect(homeLink.className).toContain('text-btnPrimary');
+  });
+
+  it('gets out of the way while a studio is expanded', () => {
+    // The Designer and the studios fill the browser window for editing; this
+    // fixed bar would sit on top of their footer controls (e.g. the video
+    // timeline). Previously driven by its own fullscreenchange listener, which
+    // omitted the webkit variant and so never fired on WebKit.
+    mockIsFullscreen = true;
+    const { container } = render(<BottomTabBar />);
+
+    expect(container.querySelector('nav')).toBeNull();
+    expect(container.innerHTML).toBe('');
   });
 });

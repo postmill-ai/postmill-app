@@ -6,7 +6,7 @@ import { useFetch } from '@postmill-ai/helpers/utils/custom.fetch';
 import { useToaster } from '@postmill-ai/react/toaster/toaster';
 import { useMediaDirectory } from '@postmill-ai/react/helpers/use.media.directory';
 import { useModals } from '@postmill-ai/frontend/components/layout/new-modal';
-import { MediaSelectorModal } from '@postmill-ai/frontend/components/media-tools/media-selector-modal';
+import { useMediaPicker } from '@postmill-ai/frontend/components/media-tools/use-media-picker';
 import { AvatarPicker } from './avatar-picker';
 import { VoicePicker } from './voice-picker';
 import { HeyGenAvatar, HeyGenVoice } from './use-heygen';
@@ -46,6 +46,31 @@ export const Storyboard: FC<StoryboardProps> = ({ avatars, voices, onGenerated }
   const [title, setTitle] = useState('');
   const [generating, setGenerating] = useState(false);
   const [bgPickerScene, setBgPickerScene] = useState<string | null>(null);
+  // The element is rebuilt every render, so `onSelect` always sees the scene
+  // that was just clicked rather than the one captured when it first opened.
+  const backgroundPicker = useMediaPicker({
+    title: t('scene_background', 'Scene background'),
+    kinds: ['image', 'video'],
+    requireFile: true,
+    onSelect: (item) => {
+      if (!bgPickerScene || !item.fileId) return;
+      if (item.type !== 'image' && item.type !== 'video') {
+        toaster.show(
+          t('heygen_background_must_be_image_or_video', 'Background must be an image or video'),
+          'warning'
+        );
+        return;
+      }
+      patchScene(bgPickerScene, {
+        background: {
+          type: item.type,
+          fileId: item.fileId,
+          previewUrl: mediaDirectory.set(item.url),
+        },
+      });
+      setBgPickerScene(null);
+    },
+  });
 
   const patchScene = (key: string, patch: Partial<SceneState>) =>
     setScenes((prev) => prev.map((s) => (s.key === key ? { ...s, ...patch } : s)));
@@ -226,7 +251,7 @@ export const Storyboard: FC<StoryboardProps> = ({ avatars, voices, onGenerated }
                 />
                 <button
                   type="button"
-                  onClick={() => setBgPickerScene(scene.key)}
+                  onClick={() => { setBgPickerScene(scene.key); backgroundPicker.open(); }}
                   className="flex-1 px-[10px] h-[32px] rounded-[8px] border border-studioBorder text-[11px] text-newTextColor/70 hover:border-[#2B5CD3] hover:text-textColor transition-all truncate"
                 >
                   {scene.background && scene.background.type !== 'color'
@@ -274,25 +299,7 @@ export const Storyboard: FC<StoryboardProps> = ({ avatars, voices, onGenerated }
         {validation && <span className="text-[12px] text-amber-600">{validation}</span>}
       </div>
 
-      <MediaSelectorModal
-        open={!!bgPickerScene}
-        onClose={() => setBgPickerScene(null)}
-        onSelect={(item) => {
-          if (!bgPickerScene) return;
-          if (item.source !== 'file' || !item.fileId) {
-            toaster.show(t('heygen_save_asset_to_files_first', 'Save the asset to Files first, then pick it as a background'), 'warning');
-            return;
-          }
-          if (item.type !== 'image' && item.type !== 'video') {
-            toaster.show(t('heygen_background_must_be_image_or_video', 'Background must be an image or video'), 'warning');
-            return;
-          }
-          patchScene(bgPickerScene, {
-            background: { type: item.type, fileId: item.fileId, previewUrl: mediaDirectory.set(item.url) },
-          });
-          setBgPickerScene(null);
-        }}
-      />
+      {backgroundPicker.element}
     </div>
   );
 };

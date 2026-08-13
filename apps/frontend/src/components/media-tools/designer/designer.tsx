@@ -1,14 +1,17 @@
 'use client';
 
 import React, { FC, useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { createDesignerStore, migrateDoc, type DesignerStore, type DesignerDoc, type DesignerAttribution, type VideoOutput, type VideoClip } from './designer.store';
+import { createDesignerStore, migrateDoc, type DesignerStore, type DesignerDoc, type DesignerAttribution, type VideoOutput, type VideoClip, type DesignerOutput, type DesignerElement } from './designer.store';
 import { useCollaboration } from './collaboration';
 import type { TimelineAwareness, ImageAwareness } from './collaboration';
 import { CollaborationCursors, type PeerTimelineState } from './collaboration-cursors';
 import { DesignerCanvas } from './canvas';
 import { setImageFetch, clearImageCache } from './elements';
 import { useFetch } from '@postmill-ai/helpers/utils/custom.fetch';
-import { useModals } from '@postmill-ai/frontend/components/layout/new-modal';
+import {
+  useDecisionModal,
+  useModals,
+} from '@postmill-ai/frontend/components/layout/new-modal';
 import { useToaster } from '@postmill-ai/react/toaster/toaster';
 import { useT } from '@postmill-ai/react/translation/get.transation.service.client';
 import { useDebounce } from 'use-debounce';
@@ -16,12 +19,15 @@ import { useAiActive } from '@postmill-ai/frontend/components/layout/use-ai-acti
 import { useMediaToolsStatus } from '@postmill-ai/frontend/components/layout/use-media-tools-status';
 import { TemplatesPanel } from './panels/templates-panel';
 import { MyDesignsPanel } from './panels/my-designs-panel';
-import { TextPanel } from './panels/text-panel';
-import { ElementsPanel } from './panels/elements-panel';
-import { PhotosPanel } from './panels/photos-panel';
-import { UploadsPanel } from './panels/uploads-panel';
-import { BackgroundPanel } from './panels/background-panel';
 import { LayersPanel } from './panels/layers-panel';
+import { HistoryPanel } from './panels/history-panel';
+import { TemplateFillPanel } from './panels/template-fill-panel';
+import { LayersFooter } from './panels/layers-footer';
+import { usePixelOps } from './use-pixel-ops';
+import { FloatingPanel } from './floating-panel';
+import { useFloatingPanelState } from './use-floating-panel-state';
+import { ToolRail } from './tool-rail';
+import { ToolOptionsBar, defaultToolOptions } from './tool-options-bar';
 import { AiPanel } from './panels/ai-panel';
 import { BrandPanel } from './panels/brand-panel';
 import { IconsPanel } from './panels/icons-panel';
@@ -37,13 +43,13 @@ import { MenuBar } from './menu-bar';
 import { useDesignerActions, type DesignerActionCtx } from './actions';
 import { NewDesignDialog } from './new-design-dialog';
 import { CanvasInspector } from './panels/canvas-inspector';
-import { MediaSelectorModal } from '../media-selector-modal';
+import { useMediaPicker } from '../use-media-picker';
 import { StartDialog } from './start-dialog';
 import { aiRemoveBackground, aiUpscale, aiDetectSubject } from './ai-image-actions';
 import { addMediaToTimeline } from './add-media-to-timeline';
 import { Logo } from '@postmill-ai/frontend/components/new-layout/logo';
 import { FullscreenButton } from '@postmill-ai/frontend/components/media-tools/fullscreen-button';
-import { useFullscreen } from '@postmill-ai/frontend/components/media-tools/use-fullscreen';
+import { useFullscreenSurface } from '@postmill-ai/frontend/components/media-tools/use-fullscreen';
 import { getBrandViolations } from './brand-compliance';
 import { useBrandColors } from './panels/use-brand-colors';
 import { useBrandFonts } from './panels/use-brand-fonts';
@@ -202,7 +208,7 @@ export const Designer: FC<DesignerProps> = ({
   const toaster = useToaster();
   const translate = useT();
   const modals = useModals();
-  const [activePanel, setActivePanel] = useState<string | null>(null);
+  const decision = useDecisionModal();
   const [showSafeZones, setShowSafeZones] = useState(false);
   const [showRulers, setShowRulers] = useState(true);
   // Default the inspector collapsed on mobile so it doesn't cover the canvas
@@ -232,7 +238,46 @@ export const Designer: FC<DesignerProps> = ({
       mediaToolsStatus ? !!mediaToolsStatus.operations?.[operation]?.available : true,
     [mediaToolsStatus]
   );
+  // Video/audio generation is described under `tools`, not `operations` — the
+  // two halves of the payload are keyed differently.
+  const mediaToolAvailable = useCallback(
+    (category: string): boolean =>
+      mediaToolsStatus ? !!mediaToolsStatus.tools?.[category]?.available : true,
+    [mediaToolsStatus]
+  );
   const user = useUser();
+  // Layers floats instead of docking in the rail; its position and open state
+  // persist per org.
+  const layersPanel = useFloatingPanelState('layers', user?.orgId, {
+    x: 72,
+    y: 16,
+    height: 360,
+    open: false,
+  });
+  // Brand floats too — it is a reference surface you keep open while working,
+  // not a one-shot picker.
+  const brandPanel = useFloatingPanelState('brand', user?.orgId, {
+    x: 360,
+    y: 16,
+    height: 420,
+    open: false,
+  });
+  // History floats as well: it is a navigation surface you keep open while
+  // experimenting, and it needs the room a rail cannot give it.
+  const historyPanel = useFloatingPanelState('history', user?.orgId, {
+    x: 360,
+    y: 16,
+    height: 360,
+    open: false,
+  });
+  // The fill-in-the-blanks form for a slotted template. Floats like the rest,
+  // and stays closed until a template actually has slots.
+  const templatePanel = useFloatingPanelState('template', user?.orgId, {
+    x: 660,
+    y: 16,
+    height: 320,
+    open: false,
+  });
   const brandColors = useBrandColors();
   const brandFonts = useBrandFonts();
   const storeRef = useRef<ReturnType<typeof createDesignerStore> | null>(null);
@@ -291,11 +336,20 @@ export const Designer: FC<DesignerProps> = ({
     fetch,
   ]);
 
+  // Select / Fill / Stroke / Filter — they need the stage and the modals, which
+  // the action layer can't reach, so they are built here and passed in.
+  const pixelOps = usePixelOps({ store, fetchFn: fetch });
+
   const designName = store((s) => s.designName);
   const currentDesignId = store((s) => s.designId);
   const isDirty = store((s) => s.isDirty);
   const isSaving = store((s) => s.isSaving);
   const doc = store((s) => s.doc);
+  const activeTool = store((s) => s.activeTool);
+  const lastToolPerGroup = store((s) => s.lastToolPerGroup);
+  const toolOptions = store((s) => s.toolOptions);
+  const setActiveTool = store((s) => s.setActiveTool);
+  const setToolOption = store((s) => s.setToolOption);
   const currentOutput = store((s) => s.currentOutput);
   const selectedIds = store((s) => s.selectedIds);
   const selectedClip = store((s) => s.selectedClip);
@@ -410,15 +464,52 @@ export const Designer: FC<DesignerProps> = ({
 
   const [debouncedDoc] = useDebounce(doc, 2000);
 
+  // Snapshot the stage canvas to a small JPEG and upload it as a File. Falls
+  // back to the raw data URL when the upload fails so a preview is never lost.
+  // ANY failure here (incl. a SecurityError from a tainted cross-origin canvas)
+  // must degrade to "no preview" — the doc save is never gated on a thumbnail.
+  const uploadPreview = useCallback(async (): Promise<{
+    previewFileId?: string;
+    previewDataUrl?: string;
+  }> => {
+    try {
+      const stageEl = document.querySelector('.konva-stage canvas') as HTMLCanvasElement;
+      const previewDataUrl = getThumbnailDataUrl(stageEl);
+      const previewBlob = previewDataUrl ? dataUrlToBlob(previewDataUrl) : null;
+      if (previewBlob) {
+        try {
+          const form = new FormData();
+          form.append('file', previewBlob, 'thumbnail.jpg');
+          const uploadRes = await fetch('/files/upload-simple', { method: 'POST', body: form });
+          if (uploadRes.ok) {
+            const uploadData = await uploadRes.json();
+            return { previewFileId: uploadData.id };
+          }
+        } catch {
+          // Fall back to the data URL below.
+        }
+      }
+      return previewDataUrl ? { previewDataUrl } : {};
+    } catch {
+      return {};
+    }
+  }, [fetch]);
+
   useEffect(() => {
     if (!debouncedDoc || !currentDesignId || !isDirty) return;
     const sentDoc = debouncedDoc;
     store.getState().setSaving(true);
-    fetch(`/media/designs/${currentDesignId}`, {
-      method: 'PUT',
-      body: JSON.stringify({ doc: sentDoc }),
-    })
-      .then((res) => res.json())
+    (async () => {
+      const preview = await uploadPreview();
+      // If a newer edit landed while the thumbnail upload was in flight, skip
+      // the preview fields — a stale thumbnail must not clobber the design.
+      const previewFields = store.getState().doc === sentDoc ? preview : {};
+      const res = await fetch(`/media/designs/${currentDesignId}`, {
+        method: 'PUT',
+        body: JSON.stringify({ doc: sentDoc, ...previewFields }),
+      });
+      await res.json();
+    })()
       .then(() => {
         // Only clear isDirty if no edit landed while the PUT was in flight —
         // zustand replaces the doc object on every edit, so a reference mismatch
@@ -432,7 +523,7 @@ export const Designer: FC<DesignerProps> = ({
       .catch(() => {
         store.getState().setSaving(false);
       });
-  }, [debouncedDoc, currentDesignId, isDirty, fetch, store]);
+  }, [debouncedDoc, currentDesignId, isDirty, fetch, store, uploadPreview]);
 
   const handleExport = useCallback(() => {
     const s = store.getState();
@@ -453,23 +544,7 @@ export const Designer: FC<DesignerProps> = ({
     }
     s.setSaving(true);
     try {
-      const stageEl = document.querySelector('.konva-stage canvas') as HTMLCanvasElement;
-      const previewDataUrl = getThumbnailDataUrl(stageEl);
-      let previewFileId: string | undefined;
-      const previewBlob = previewDataUrl ? dataUrlToBlob(previewDataUrl) : null;
-      if (previewBlob) {
-        try {
-          const form = new FormData();
-          form.append('file', previewBlob, 'thumbnail.jpg');
-          const uploadRes = await fetch('/files/upload-simple', { method: 'POST', body: form });
-          if (uploadRes.ok) {
-            const uploadData = await uploadRes.json();
-            previewFileId = uploadData.id;
-          }
-        } catch {
-          // Fall back to storing the data URL below.
-        }
-      }
+      const { previewFileId, previewDataUrl } = await uploadPreview();
       const payload: Record<string, unknown> = {
         name: s.designName,
         doc: s.doc,
@@ -502,7 +577,7 @@ export const Designer: FC<DesignerProps> = ({
     } finally {
       s.setSaving(false);
     }
-  }, [fetch, toaster, store, brandViolations, translate]);
+  }, [fetch, toaster, store, brandViolations, translate, uploadPreview]);
 
   const handleSaveAsTemplate = useCallback(async () => {
     const s = store.getState();
@@ -709,15 +784,107 @@ export const Designer: FC<DesignerProps> = ({
   }, [initialTimelineMedia, store, toaster, translate]);
 
   // --- Unsaved-changes guard shared by New / Open / Templates (D-7b) ---
-  const confirmDiscardIfDirty = useCallback(() => {
+  const confirmDiscardIfDirty = useCallback(async () => {
     if (store.getState().isDirty) {
-      return window.confirm(translate('discard_unsaved_changes_confirm', 'Discard unsaved changes? Your current design will be replaced.'));
+      // Title/labels are left at the decision modal's defaults so the copy the
+      // user sees is exactly what the native confirm() showed (message only).
+      return decision.open({
+        description: translate('discard_unsaved_changes_confirm', 'Discard unsaved changes? Your current design will be replaced.'),
+      });
     }
     return true;
-  }, [store, translate]);
+  }, [store, translate, decision]);
 
   // Reusable image-from-media placement (centered + aspect-correct) — shared by
   // the Insert/Import media modal and the canvas "Add Image" (D-8).
+  /**
+   * Insert > Stock Icon.
+   *
+   * An Iconify pick used to go through `addImageFromMedia`, which stored the
+   * API URL as a raster `src` at the icon's own 24x24 — `fitWithin` never
+   * upscales, so it landed as a tiny black square with no fill control. The
+   * Designer already has the right element for this: `icon` holds SVG markup
+   * and paints in `fill`, which is what the icons panel and the AI composer
+   * both emit. The markup comes from the server resolver, the same one the
+   * composer uses.
+   */
+  const addStockIcon = useCallback(
+    async (item: { url: string }) => {
+      const name = /\/([a-z0-9-]+)\/([a-z0-9-]+)\.svg/.exec(item.url);
+      const resolved = name
+        ? await fetch(
+            `/media/icons/resolve?name=${encodeURIComponent(`${name[1]}:${name[2]}`)}`
+          )
+            .then((r) => (r.ok ? r.json() : null))
+            .catch(() => null)
+        : null;
+      if (!resolved?.body) {
+        toaster.show(
+          translate('couldnt_add_icon', "Couldn't add that icon"),
+          'warning'
+        );
+        return;
+      }
+      const state = store.getState();
+      const active = state.doc.outputs[state.currentOutput];
+      const size = Math.round(Math.min(active.width, active.height) * 0.2);
+      state.addElement({
+        id: '',
+        type: 'icon',
+        x: (active.width - size) / 2,
+        y: (active.height - size) / 2,
+        width: size,
+        height: size,
+        rotation: 0,
+        opacity: 1,
+        locked: false,
+        hidden: false,
+        src: resolved.body,
+        viewBox: resolved.viewBox,
+        fill: '#2B5CD3',
+      } as never);
+    },
+    [store, fetch, toaster, translate]
+  );
+
+  /**
+   * Convert the selected text layer to `path` outlines.
+   *
+   * Server-side: glyph contours live in the font file, which no canvas API
+   * exposes. The text layer is replaced, so this is a one-way conversion — the
+   * same as every vector editor, and undo still puts it back.
+   */
+  const onTextToOutlines = useCallback(async () => {
+    const state = store.getState();
+    const out = state.doc.outputs[state.currentOutput] as DesignerOutput | undefined;
+    const el = (out?.children || []).find(
+      (c: DesignerElement) => state.selectedIds.includes(c.id) && c.type === 'text'
+    );
+    if (!el) return;
+
+    const res = await fetch('/designs/text-outlines', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ element: el, perGlyph: true }),
+    }).catch(() => null);
+
+    const data = res?.ok ? ((await res.json()) as { elements?: DesignerElement[]; reason?: string }) : null;
+    if (!data?.elements?.length) {
+      toaster.show(
+        data?.reason === 'font-unavailable'
+          ? translate('outlines_font_unavailable', "That font isn't available for outlining")
+          : translate('couldnt_convert_to_outlines', "Couldn't convert that to outlines"),
+        'warning'
+      );
+      return;
+    }
+
+    for (const outline of data.elements) {
+      store.getState().addElement({ id: '', ...outline } as DesignerElement);
+    }
+    store.getState().removeElements([el.id]);
+  }, [store, fetch, toaster, translate]);
+
   const addImageFromMedia = useCallback(
     (item: { url: string; fileId?: string; width?: number; height?: number }) => {
       const state = store.getState();
@@ -748,21 +915,73 @@ export const Designer: FC<DesignerProps> = ({
     [store]
   );
 
-  const onOpenMedia = useCallback(() => {
-    modals.openModal({
-      title: translate('add_media', 'Add media'),
-      children: (close: () => void) => (
-        <MediaSelectorModal
-          open
-          onClose={close}
-          onSelect={(item) => {
-            addImageFromMedia(item as any);
-            close();
-          }}
-        />
-      ),
-    });
-  }, [modals, addImageFromMedia, translate]);
+  // The picker owns its own dialog; wrapping it in `openModal` stacked a titled
+  // modal around an untitled one.
+  const mediaPicker = useMediaPicker({
+    title: translate('add_media', 'Add media'),
+    onSelect: (item) => addImageFromMedia(item as any),
+  });
+  const onOpenMedia = mediaPicker.open;
+
+  /**
+   * Insert ▸ Image / Sticker / Vector / Video / Audio.
+   *
+   * One picker instance, narrowed per call through `openWith` — which is what
+   * that API exists for. Image-kind picks become elements; video and audio go to
+   * `addMediaToTimeline`, which finds or creates the track and probes the clip's
+   * real duration.
+   */
+  const onInsertMedia = useCallback(
+    (kind: 'image' | 'sticker' | 'vector' | 'icon' | 'video' | 'audio') => {
+      const TABS = {
+        image: ['My Files', 'Stock Photos'],
+        sticker: ['Stock Stickers'],
+        vector: ['Stock Vectors'],
+        // Iconify was reachable from Replace image but not from Insert, so the
+        // whole catalog was one indirection away and simply unwired.
+        icon: ['Stock Icons'],
+        video: ['My Files', 'Stock Videos'],
+        audio: ['My Files', 'Stock Audio'],
+      } as const;
+      const TITLES = {
+        image: translate('insert_image', 'Insert image'),
+        sticker: translate('insert_sticker', 'Insert sticker'),
+        vector: translate('insert_vector', 'Insert vector'),
+        icon: translate('insert_stock_icon', 'Insert icon'),
+        video: translate('insert_video', 'Insert video'),
+        audio: translate('insert_audio', 'Insert audio'),
+      };
+      const isTimelineMedia = kind === 'video' || kind === 'audio';
+
+      mediaPicker.openWith({
+        title: TITLES[kind],
+        tabs: TABS[kind],
+        onSelect: (item) => {
+          if (isTimelineMedia) {
+            void addMediaToTimeline(store, {
+              type: kind,
+              url: item.url,
+              fileId: item.fileId,
+              width: item.width,
+              height: item.height,
+            }).catch(() => {
+              toaster.show(
+                translate('couldnt_add_to_timeline', "Couldn't add that to the timeline"),
+                'warning'
+              );
+            });
+            return;
+          }
+          if (kind === 'icon') {
+            void addStockIcon(item as never);
+            return;
+          }
+          addImageFromMedia(item as never);
+        },
+      });
+    },
+    [mediaPicker, translate, addImageFromMedia, addStockIcon, store, toaster]
+  );
 
   const selectedImageId = useCallback(() => {
     const st = store.getState();
@@ -790,11 +1009,12 @@ export const Designer: FC<DesignerProps> = ({
       showRulers,
       aiActive,
       mediaOperationAvailable,
+      mediaToolAvailable,
       canShare: !!currentDesignId,
       collabEnabled,
       inModal: !!(setMedia || closeModal),
-      onNew: (mode) => {
-        if (!confirmDiscardIfDirty()) return;
+      onNew: async (mode) => {
+        if (!(await confirmDiscardIfDirty())) return;
         const st = store.getState();
         st.reset(1080, 1080);
         if (mode === 'video') st.setMode('video');
@@ -812,7 +1032,7 @@ export const Designer: FC<DesignerProps> = ({
           children: (close: () => void) => (
             <MyDesignsPanel
               onOpen={async (d) => {
-                if (!confirmDiscardIfDirty()) return;
+                if (!(await confirmDiscardIfDirty())) return;
                 const res = await fetch(`/media/designs/${d.id}`);
                 if (!res.ok) return;
                 const full = await res.json();
@@ -832,6 +1052,7 @@ export const Designer: FC<DesignerProps> = ({
       onSave: handleSave,
       onSaveAsTemplate: handleSaveAsTemplate,
       onOpenMedia,
+      onInsertMedia,
       onExport: handleExport,
       onUseInPost: setMedia ? handleExport : undefined,
       onClose: closeModal,
@@ -839,7 +1060,44 @@ export const Designer: FC<DesignerProps> = ({
         store.getState().setSelectedIds([]);
         setInspectorCollapsed(false);
       },
-      onTogglePanel: (id) => setActivePanel((p) => (p === id ? null : id)),
+      onTogglePanel: (id) => {
+        // Persistent surfaces float; one-shot pickers are modals. Both are still
+        // reached through the same Window-menu / ⌘K action ids.
+        if (id === 'layers') {
+          layersPanel.toggle();
+          return;
+        }
+        if (id === 'history') {
+          historyPanel.toggle();
+          return;
+        }
+        if (id === 'template') {
+          templatePanel.toggle();
+          return;
+        }
+        if (id === 'brand') {
+          brandPanel.toggle();
+          return;
+        }
+        if (id === 'icons') {
+          modals.openModal({
+            title: translate('panel_icons', 'Icons'),
+            children: (close: () => void) => (
+              <IconsPanel store={store as any} onClose={close} />
+            ),
+          });
+          return;
+        }
+        if (id === 'ai') {
+          modals.openModal({
+            title: translate('ai', 'AI'),
+            children: (close: () => void) => (
+              <AiPanel store={store as any} onClose={close} />
+            ),
+          });
+          return;
+        }
+      },
       onToggleInspector: () => setInspectorCollapsed((c) => !c),
       onToggleSafeZones: () => setShowSafeZones((v) => !v),
       onToggleRulers: () => setShowRulers((v) => !v),
@@ -853,7 +1111,8 @@ export const Designer: FC<DesignerProps> = ({
         modals.openModal({
           children: (close: () => void) => <ShortcutsOverlay onClose={close} />,
         }),
-      onConvertMode: () => {
+      onTextToOutlines,
+      onConvertMode: async () => {
         const st = store.getState();
         const cur = st.doc.mode;
         const target = cur === 'image' ? 'video' : 'image';
@@ -861,10 +1120,27 @@ export const Designer: FC<DesignerProps> = ({
           cur === 'image'
             ? translate('convert_to_video_mode_confirm', 'Convert to video mode? All image elements will be lost.')
             : translate('convert_to_image_mode_confirm', 'Convert to image mode? All video tracks and clips will be lost.');
-        if (window.confirm(msg)) st.setMode(target);
+        if (await decision.open({ description: msg })) st.setMode(target);
       },
       onToggleShare: () => setCollabEnabled((v) => !v),
-      onAiGenerate: () => setActivePanel('ai'),
+      onSelectAll: pixelOps.onSelectAll,
+      onSelectInverse: pixelOps.onSelectInverse,
+      canEditPixels: pixelOps.canEditPixels,
+      onFill: pixelOps.onFill,
+      onStroke: pixelOps.onStroke,
+      onFilter: pixelOps.onFilter,
+      onLastFilter: pixelOps.onLastFilter,
+      hasLastFilter: pixelOps.hasLastFilter,
+      lastFilterLabel: pixelOps.lastFilterLabel,
+      onFlattenFilters: pixelOps.onFlattenFilters,
+      hasSmartFilters: pixelOps.hasSmartFilters,
+      onAiGenerate: () =>
+        modals.openModal({
+          title: translate('ai', 'AI'),
+          children: (close: () => void) => (
+            <AiPanel store={store as any} onClose={close} />
+          ),
+        }),
       onAiRemoveBg: () =>
         runAi((id) => aiRemoveBackground({ fetch, store, elementId: id }), translate('background_removal_failed', 'Background removal failed')),
       onAiUpscale: (scale) =>
@@ -872,7 +1148,6 @@ export const Designer: FC<DesignerProps> = ({
       onAiInpaint: () => {
         const id = selectedImageId();
         if (!id) return;
-        setActivePanel(null);
         setInspectorCollapsed(false);
         toaster.show(translate('draw_mask_ai_tools_inpaint', 'Draw a mask in the inspector’s AI Tools, then Inpaint'), 'success');
       },
@@ -884,18 +1159,26 @@ export const Designer: FC<DesignerProps> = ({
       showRulers,
       aiActive,
       mediaOperationAvailable,
+      mediaToolAvailable,
       currentDesignId,
       collabEnabled,
       setMedia,
       closeModal,
       store,
       modals,
+      decision,
+      layersPanel,
+      historyPanel,
+      templatePanel,
+      brandPanel,
+      pixelOps,
       fetch,
       toaster,
       handleSave,
       handleSaveAsTemplate,
       handleExport,
       onOpenMedia,
+      onInsertMedia,
       confirmDiscardIfDirty,
       selectedImageId,
       runAi,
@@ -908,62 +1191,39 @@ export const Designer: FC<DesignerProps> = ({
   const hasInspectorTarget =
     selectedIds.length >= 1 || (doc.mode === 'video' && !!selectedClip);
 
-  const onSetBackgroundImage = useCallback(() => {
-    modals.openModal({
-      title: translate('background_image', 'Background image'),
-      children: (close: () => void) => (
-        <MediaSelectorModal
-          open
-          onClose={close}
-          onSelect={(item) => {
-            store.getState().setOutputBackground({
-              type: 'image',
-              src: (item as any).url,
-              fileId: (item as any).fileId,
-            });
-            close();
-          }}
-        />
-      ),
-    });
-  }, [modals, store, translate]);
-
-  const panels = [
-    { id: 'text', icon: 'T', label: translate('provider_chip_text', 'Text') },
-    { id: 'elements', icon: '◇', label: translate('panel_elements', 'Elements') },
-    { id: 'icons', icon: '★', label: translate('panel_icons', 'Icons') },
-    { id: 'photos', icon: '▣', label: translate('panel_photos', 'Photos') },
-    { id: 'uploads', icon: '☰', label: translate('panel_uploads', 'Uploads') },
-    { id: 'background', icon: '◨', label: translate('panel_background', 'Background') },
-    { id: 'layers', icon: '≡', label: translate('panel_layers', 'Layers') },
-    // AI panel only when the org has an active AI provider (E4).
-    ...(aiActive ? [{ id: 'ai', icon: '✦', label: translate('ai', 'AI') }] : []),
-    { id: 'brand', icon: '♥', label: translate('brand_label', 'Brand') },
-  ];
-
-  // Global ⌘E → Export (⌘S/⌘K already handled elsewhere; the rest of the
-  // shortcut map is canvas-focus-scoped). Ignore while typing in a field.
+  // Global ⌘E → Export and ? → Keyboard Shortcuts (⌘S/⌘K already handled
+  // elsewhere; the rest of the shortcut map is canvas-focus-scoped). Ignore
+  // while typing in a field.
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
+      const t = e.target as HTMLElement | null;
+      const tag = t?.tagName;
+      const typing = tag === 'INPUT' || tag === 'TEXTAREA' || t?.isContentEditable;
       if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'e') {
-        const t = e.target as HTMLElement | null;
-        const tag = t?.tagName;
-        if (tag === 'INPUT' || tag === 'TEXTAREA' || t?.isContentEditable) return;
+        if (typing) return;
         e.preventDefault();
         handleExport();
+        return;
+      }
+      // `?` was advertised in the Help menu but never bound.
+      if (e.key === '?' && !e.metaKey && !e.ctrlKey && !e.altKey && !typing) {
+        e.preventDefault();
+        modals.openModal({
+          children: (close: () => void) => <ShortcutsOverlay onClose={close} />,
+        });
       }
     };
     window.addEventListener('keydown', handler);
     return () => window.removeEventListener('keydown', handler);
-  }, [handleExport]);
+  }, [handleExport, modals]);
 
-  // Full-screen fills the canvas app, not the page: the document goes fullscreen and the
-  // Designer root goes immersive (fixed inset-0) to cover the app chrome. Modals/dialogs
-  // mount at the app root (z 200+) and stay above this z-[100] layer.
-  const { isFullscreen } = useFullscreen();
+  // Full screen fills the browser window, not the display: the root goes immersive
+  // (fixed inset-0) to cover the app chrome. Modals/dialogs mount at the app root
+  // (z 200+) and stay above this z-[100] layer.
+  const surface = useFullscreenSurface('relative mobile:h-[calc(100vh-200px)]');
 
   return (
-    <div className={`flex flex-col h-full w-full overflow-hidden bg-newBgColorInner ${isFullscreen ? 'fixed inset-0 z-[100]' : 'relative mobile:h-[calc(100vh-200px)]'}`}>
+    <div className={`flex flex-col h-full w-full overflow-hidden bg-newBgColorInner ${surface}`}>
       <div className="flex items-center gap-3 px-3 py-1.5 border-b border-studioBorder bg-newBgColorInner shrink-0">
         <div className="flex items-center gap-2 shrink-0">
           <Logo size={26} className="" />
@@ -978,11 +1238,18 @@ export const Designer: FC<DesignerProps> = ({
         <MenuBar actions={actions} />
 
         <div className="mobile:hidden flex items-center text-[11px] min-w-0 shrink-0">
-          {isSaving && <span className="text-newTextColor/60">{translate('saving_ellipsis', 'Saving…')}</span>}
-          {!isSaving && !isDirty && currentDesignId && (
+          {/* A smart-filter re-bake replays the whole stack and uploads; on a
+              large layer that is seconds of apparently nothing happening. */}
+          {pixelOps.baking && (
+            <span className="text-btnPrimaryAccent">
+              {translate('designer_applying_filters', 'Applying filters…')}
+            </span>
+          )}
+          {!pixelOps.baking && isSaving && <span className="text-newTextColor/60">{translate('saving_ellipsis', 'Saving…')}</span>}
+          {!pixelOps.baking && !isSaving && !isDirty && currentDesignId && (
             <span className="text-green-500">{translate('saved_status', 'Saved')}</span>
           )}
-          {!isSaving && isDirty && <span className="text-amber-600">{translate('unsaved_status', 'Unsaved')}</span>}
+          {!pixelOps.baking && !isSaving && isDirty && <span className="text-amber-600">{translate('unsaved_status', 'Unsaved')}</span>}
         </div>
 
         <div className="flex-1" />
@@ -1064,47 +1331,75 @@ export const Designer: FC<DesignerProps> = ({
         </div>
       </div>
 
-      <div className="relative flex flex-1 min-h-0 w-full overflow-hidden">
-        <div className="w-[48px] shrink-0 flex flex-col items-center pt-2 gap-1 border-r border-studioBorder bg-newBgColorInner z-30">
-          {panels.map((p) => (
-            <button
-              key={p.id}
-              tabIndex={0}
-              onClick={() => setActivePanel(activePanel === p.id ? null : p.id)}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter' || e.key === ' ') {
-                  e.preventDefault();
-                  setActivePanel(activePanel === p.id ? null : p.id);
-                }
-              }}
-              className={`w-9 h-9 flex items-center justify-center rounded-lg text-[15px] transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-designerAccent ${
-                activePanel === p.id
-                  ? 'bg-designerAccent/20 text-btnPrimaryAccent'
-                  : 'text-textColor/60 hover:bg-studioBorder/30 hover:text-textColor'
-              }`}
-              title={p.label}
-              aria-label={translate('panel_aria_label', '{{label}} panel', { label: p.label })}
-            >
-              {p.icon}
-            </button>
-          ))}
-        </div>
+      {/* Tool options for the active tool — Photoshop's options bar. Image mode
+          only: video mode drives the timeline, which owns its own bindings. */}
+      <ToolOptionsBar
+        activeTool={activeTool}
+        options={{
+          ...defaultToolOptions(activeTool),
+          ...(toolOptions[activeTool] || {}),
+        }}
+        onChange={(key, value) => setToolOption(activeTool, key, value)}
+      />
 
-        {activePanel && (
-          <div className="absolute left-[48px] top-0 bottom-0 w-[260px] z-20 border-r border-studioBorder bg-newBgColorInner overflow-y-auto p-3 shadow-xl">
-            <div className="text-[12px] font-medium text-textColor/60 uppercase tracking-wider mb-3">
-              {panels.find((p) => p.id === activePanel)?.label}
-            </div>
-            {activePanel === 'text' && <TextPanel store={store as any} />}
-            {activePanel === 'elements' && <ElementsPanel store={store as any} />}
-            {activePanel === 'icons' && <IconsPanel store={store as any} />}
-            {activePanel === 'photos' && <PhotosPanel store={store as any} />}
-            {activePanel === 'uploads' && <UploadsPanel store={store as any} />}
-            {activePanel === 'background' && <BackgroundPanel store={store as any} />}
-            {activePanel === 'layers' && <LayersPanel store={store as any} />}
-            {activePanel === 'ai' && <AiPanel store={store as any} />}
-            {activePanel === 'brand' && <BrandPanel store={store as any} />}
-          </div>
+      <div className="relative flex flex-1 min-h-0 w-full overflow-hidden">
+        {/* The tools apply to video as much as to images — a clip is a canvas
+            object like any other. */}
+        <ToolRail
+          activeTool={activeTool}
+          lastToolPerGroup={lastToolPerGroup}
+          onSelect={setActiveTool}
+          aiAvailable={aiActive}
+        />
+        {brandPanel.state.open && (
+          <FloatingPanel
+            title={translate('brand_label', 'Brand')}
+            onClose={() => brandPanel.setOpen(false)}
+            position={brandPanel.state}
+            onPositionChange={brandPanel.setPosition}
+            width={300}
+          >
+            <BrandPanel store={store as any} />
+          </FloatingPanel>
+        )}
+
+        {templatePanel.state.open && (
+          <FloatingPanel
+            title={translate('designer_template_fields', 'Template fields')}
+            onClose={() => templatePanel.setOpen(false)}
+            position={templatePanel.state}
+            onPositionChange={templatePanel.setPosition}
+            width={280}
+          >
+            <TemplateFillPanel store={store as any} />
+          </FloatingPanel>
+        )}
+
+        {historyPanel.state.open && (
+          <FloatingPanel
+            title={translate('designer_history', 'History')}
+            onClose={() => historyPanel.setOpen(false)}
+            position={historyPanel.state}
+            onPositionChange={historyPanel.setPosition}
+            width={260}
+          >
+            <HistoryPanel store={store as any} />
+          </FloatingPanel>
+        )}
+
+        {layersPanel.state.open && (
+          <FloatingPanel
+            title={translate('panel_layers', 'Layers')}
+            onClose={() => layersPanel.setOpen(false)}
+            position={layersPanel.state}
+            onPositionChange={layersPanel.setPosition}
+            footer={<LayersFooter store={store as any} />}
+          >
+            <LayersPanel
+              store={store as any}
+              onClose={() => layersPanel.setOpen(false)}
+            />
+          </FloatingPanel>
         )}
 
         <div className="flex-1 flex flex-col min-w-0">
@@ -1157,7 +1452,6 @@ export const Designer: FC<DesignerProps> = ({
                   <CanvasInspector
                     key={`canvas-${currentOutput}-${(doc.outputs[currentOutput] as any)?.width}x${(doc.outputs[currentOutput] as any)?.height}`}
                     store={store}
-                    onSetBackgroundImage={onSetBackgroundImage}
                   />
                 )}
               </div>
@@ -1182,6 +1476,7 @@ export const Designer: FC<DesignerProps> = ({
       {showStart && (
         <StartDialog store={store} fetchFn={fetch} onDone={() => setShowStart(false)} />
       )}
+      {mediaPicker.element}
     </div>
   );
 };

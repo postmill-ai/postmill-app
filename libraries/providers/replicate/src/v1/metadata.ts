@@ -25,8 +25,8 @@ export const metadata: ProviderMetadata = {
   "mediaModels": {
     "text-to-image": [
       {
-        "id": "black-forest-labs/flux-schnell",
-        "label": "flux-schnell",
+        "id": "black-forest-labs/flux-1.1-pro",
+        "label": "flux-1.1-pro",
         "fields": [
           {
             "name": "aspect_ratio",
@@ -35,16 +35,16 @@ export const metadata: ProviderMetadata = {
             "type": "select",
             "options": [
               {
+                "value": "custom",
+                "label": "custom"
+              },
+              {
                 "value": "1:1",
                 "label": "1:1"
               },
               {
                 "value": "16:9",
                 "label": "16:9"
-              },
-              {
-                "value": "21:9",
-                "label": "21:9"
               },
               {
                 "value": "3:2",
@@ -63,55 +63,24 @@ export const metadata: ProviderMetadata = {
                 "label": "5:4"
               },
               {
+                "value": "9:16",
+                "label": "9:16"
+              },
+              {
                 "value": "3:4",
                 "label": "3:4"
               },
               {
                 "value": "4:3",
                 "label": "4:3"
-              },
-              {
-                "value": "9:16",
-                "label": "9:16"
-              },
-              {
-                "value": "9:21",
-                "label": "9:21"
               }
             ],
             "default": "1:1"
           },
           {
-            "name": "num_outputs",
-            "label": "Num Outputs",
-            "help": "Number of outputs to generate",
-            "type": "number",
-            "min": 1,
-            "max": 4,
-            "step": 1,
-            "default": 1
-          },
-          {
-            "name": "num_inference_steps",
-            "label": "Num Inference Steps",
-            "help": "Number of denoising steps. 4 is recommended, and lower number of steps produce lower quality outputs, faster.",
-            "type": "number",
-            "min": 1,
-            "max": 4,
-            "step": 1,
-            "default": 4
-          },
-          {
-            "name": "seed",
-            "label": "Seed",
-            "help": "Random seed. Set for reproducible generation",
-            "type": "number",
-            "step": 1
-          },
-          {
             "name": "output_format",
             "label": "output_format",
-            "help": "Format of the output images",
+            "help": "Format of the output images.",
             "type": "select",
             "options": [
               {
@@ -130,6 +99,31 @@ export const metadata: ProviderMetadata = {
             "default": "webp"
           },
           {
+            "name": "seed",
+            "label": "Seed",
+            "help": "Random seed. Set for reproducible generation",
+            "type": "number",
+            "step": 1
+          },
+          {
+            "name": "width",
+            "label": "Width",
+            "help": "Width of the generated image in text-to-image mode. Only used when aspect_ratio=custom. Must be a multiple of 32 (if it's not, it will be rounded to nearest multiple of 32). Note: Ignored in img2img and inpainting modes.",
+            "type": "number",
+            "min": 256,
+            "max": 1440,
+            "step": 1
+          },
+          {
+            "name": "height",
+            "label": "Height",
+            "help": "Height of the generated image in text-to-image mode. Only used when aspect_ratio=custom. Must be a multiple of 32 (if it's not, it will be rounded to nearest multiple of 32). Note: Ignored in img2img and inpainting modes.",
+            "type": "number",
+            "min": 256,
+            "max": 1440,
+            "step": 1
+          },
+          {
             "name": "output_quality",
             "label": "Output Quality",
             "help": "Quality when saving the output images, from 0 to 100. 100 is best quality, 0 is lowest quality. Not relevant for .png outputs",
@@ -140,35 +134,21 @@ export const metadata: ProviderMetadata = {
             "default": 80
           },
           {
-            "name": "disable_safety_checker",
-            "label": "Disable Safety Checker",
-            "help": "Disable safety checker for generated images.",
+            "name": "safety_tolerance",
+            "label": "Safety Tolerance",
+            "help": "Safety tolerance, 1 is most strict and 6 is most permissive",
+            "type": "number",
+            "min": 1,
+            "max": 6,
+            "step": 1,
+            "default": 2
+          },
+          {
+            "name": "prompt_upsampling",
+            "label": "Prompt Upsampling",
+            "help": "Automatically modify the prompt for more creative generation",
             "type": "toggle",
             "default": false
-          },
-          {
-            "name": "go_fast",
-            "label": "Go Fast",
-            "help": "Run faster predictions with model optimized for speed (currently fp8 quantized); disable to run in original bf16. Note that outputs will not be deterministic when this is enabled, even if you set a seed.",
-            "type": "toggle",
-            "default": true
-          },
-          {
-            "name": "megapixels",
-            "label": "megapixels",
-            "help": "Approximate number of megapixels for generated image",
-            "type": "select",
-            "options": [
-              {
-                "value": "1",
-                "label": "1"
-              },
-              {
-                "value": "0.25",
-                "label": "0.25"
-              }
-            ],
-            "default": "1"
           }
         ]
       },
@@ -337,134 +317,6 @@ export const metadata: ProviderMetadata = {
               }
             ],
             "default": "1"
-          }
-        ]
-      },
-      {
-        "id": "black-forest-labs/flux-1.1-pro",
-        "label": "flux-1.1-pro",
-        "fields": [
-          {
-            "name": "aspect_ratio",
-            "label": "aspect_ratio",
-            "help": "Aspect ratio for the generated image",
-            "type": "select",
-            "options": [
-              {
-                "value": "custom",
-                "label": "custom"
-              },
-              {
-                "value": "1:1",
-                "label": "1:1"
-              },
-              {
-                "value": "16:9",
-                "label": "16:9"
-              },
-              {
-                "value": "3:2",
-                "label": "3:2"
-              },
-              {
-                "value": "2:3",
-                "label": "2:3"
-              },
-              {
-                "value": "4:5",
-                "label": "4:5"
-              },
-              {
-                "value": "5:4",
-                "label": "5:4"
-              },
-              {
-                "value": "9:16",
-                "label": "9:16"
-              },
-              {
-                "value": "3:4",
-                "label": "3:4"
-              },
-              {
-                "value": "4:3",
-                "label": "4:3"
-              }
-            ],
-            "default": "1:1"
-          },
-          {
-            "name": "output_format",
-            "label": "output_format",
-            "help": "Format of the output images.",
-            "type": "select",
-            "options": [
-              {
-                "value": "webp",
-                "label": "webp"
-              },
-              {
-                "value": "jpg",
-                "label": "jpg"
-              },
-              {
-                "value": "png",
-                "label": "png"
-              }
-            ],
-            "default": "webp"
-          },
-          {
-            "name": "seed",
-            "label": "Seed",
-            "help": "Random seed. Set for reproducible generation",
-            "type": "number",
-            "step": 1
-          },
-          {
-            "name": "width",
-            "label": "Width",
-            "help": "Width of the generated image in text-to-image mode. Only used when aspect_ratio=custom. Must be a multiple of 32 (if it's not, it will be rounded to nearest multiple of 32). Note: Ignored in img2img and inpainting modes.",
-            "type": "number",
-            "min": 256,
-            "max": 1440,
-            "step": 1
-          },
-          {
-            "name": "height",
-            "label": "Height",
-            "help": "Height of the generated image in text-to-image mode. Only used when aspect_ratio=custom. Must be a multiple of 32 (if it's not, it will be rounded to nearest multiple of 32). Note: Ignored in img2img and inpainting modes.",
-            "type": "number",
-            "min": 256,
-            "max": 1440,
-            "step": 1
-          },
-          {
-            "name": "output_quality",
-            "label": "Output Quality",
-            "help": "Quality when saving the output images, from 0 to 100. 100 is best quality, 0 is lowest quality. Not relevant for .png outputs",
-            "type": "number",
-            "min": 0,
-            "max": 100,
-            "step": 1,
-            "default": 80
-          },
-          {
-            "name": "safety_tolerance",
-            "label": "Safety Tolerance",
-            "help": "Safety tolerance, 1 is most strict and 6 is most permissive",
-            "type": "number",
-            "min": 1,
-            "max": 6,
-            "step": 1,
-            "default": 2
-          },
-          {
-            "name": "prompt_upsampling",
-            "label": "Prompt Upsampling",
-            "help": "Automatically modify the prompt for more creative generation",
-            "type": "toggle",
-            "default": false
           }
         ]
       },

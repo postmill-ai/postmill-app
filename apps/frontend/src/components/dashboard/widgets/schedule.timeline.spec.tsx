@@ -157,6 +157,33 @@ describe('ScheduleTimeline', () => {
     expect(avatars[2].getAttribute('data-identifier')).toBe('linkedin');
   });
 
+  it('opens the post a chip stands for', () => {
+    (useSWR as ReturnType<typeof vi.fn>).mockReturnValue({
+      data: { days: [{ date: '2026-07-06', count: 1 }], gaps: [] },
+      error: undefined,
+      isLoading: false,
+      mutate: vi.fn(),
+    });
+
+    render(
+      <ScheduleTimeline
+        upcomingPosts={[
+          {
+            id: 'post-1',
+            content: 'First post',
+            publishDate: '2026-07-06T09:00:00Z',
+            channelName: 'Channel A',
+            providerIdentifier: 'twitter',
+          },
+        ]}
+      />
+    );
+
+    // The chip already holds the post id — it used to be an inert div.
+    fireEvent.click(screen.getByText('First post').closest('button')!);
+    expect(mockPush).toHaveBeenCalledWith('/posts?post=post-1');
+  });
+
   it('highlights gap days and navigates to the composer when Fill is clicked', () => {
     (useSWR as ReturnType<typeof vi.fn>).mockReturnValue({
       data: {

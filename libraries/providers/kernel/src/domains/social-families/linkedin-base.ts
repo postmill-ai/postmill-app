@@ -48,6 +48,7 @@ export class LinkedinProvider extends SocialAbstract implements SocialProvider {
   override maxConcurrentJob = 2; // LinkedIn has professional posting limits
   refreshWait = true;
   editor = 'normal' as const;
+  dto = LinkedinDto;
   maxLength() {
     return 3000;
   }

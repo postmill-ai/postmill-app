@@ -9,8 +9,9 @@ import { useModals } from '@postmill-ai/frontend/components/layout/new-modal';
 import { useMediaToolsStatus } from '@postmill-ai/frontend/components/layout/use-media-tools-status';
 import { VoiceoverDialog } from './voiceover-dialog';
 import { addMediaToTimeline } from './add-media-to-timeline';
+import { timelineBeats } from './beat-sync';
 import { isArtifactPath } from '@postmill-ai/frontend/components/launches/ai.video';
-import { MediaSelectorModal } from '@postmill-ai/frontend/components/media-tools/media-selector-modal';
+import { useMediaPicker } from '@postmill-ai/frontend/components/media-tools/use-media-picker';
 import { useT } from '@postmill-ai/react/translation/get.transation.service.client';
 
 interface VideoTimelineProps {
@@ -29,6 +30,8 @@ const TRACK_COLORS: Record<VideoTrack['type'], string> = {
   video: '#4F46E5',
   image: '#059669',
   text: '#D97706',
+  shape: '#2B5CD3',
+  raster: '#9333EA',
   caption: '#22C55E',
   audio: '#DC2626',
   sticker: '#9333EA',
@@ -307,7 +310,11 @@ const AvatarDialog: FC<AvatarDialogProps> = ({ fetch, toaster, selectedImageSrc,
   const modals = useModals();
   const [script, setScript] = useState('');
   const [imageUrl, setImageUrl] = useState<string | undefined>(undefined);
-  const [pickerOpen, setPickerOpen] = useState(false);
+  const portraitPicker = useMediaPicker({
+    title: t('pick_portrait', 'Pick portrait'),
+    kinds: ['image'],
+    onSelect: (item) => setImageUrl(item.url),
+  });
   const [loading, setLoading] = useState(false);
 
   const generate = useCallback(async () => {
@@ -343,7 +350,7 @@ const AvatarDialog: FC<AvatarDialogProps> = ({ fetch, toaster, selectedImageSrc,
       />
       <div className="flex flex-wrap gap-2">
         <button
-          onClick={() => setPickerOpen(true)}
+          onClick={portraitPicker.open}
           className="px-2 py-1 rounded text-[11px] border border-studioBorder text-textColor hover:bg-studioBorder/30"
         >
           {t('pick_portrait', 'Pick portrait')}
@@ -367,12 +374,7 @@ const AvatarDialog: FC<AvatarDialogProps> = ({ fetch, toaster, selectedImageSrc,
       >
         {loading ? t('generating', 'Generating...') : t('generate', 'Generate')}
       </button>
-      <MediaSelectorModal
-        open={pickerOpen}
-        onClose={() => setPickerOpen(false)}
-        kinds={['image']}
-        onSelect={(item) => setImageUrl(item.url)}
-      />
+      {portraitPicker.element}
     </div>
   );
 };
@@ -388,7 +390,12 @@ const SlideshowDialog: FC<SlideshowDialogProps> = ({ fetch, toaster, onResult })
   const modals = useModals();
   const [prompt, setPrompt] = useState('');
   const [imageUrls, setImageUrls] = useState<string[]>([]);
-  const [pickerOpen, setPickerOpen] = useState(false);
+  const imagesPicker = useMediaPicker({
+    title: t('add_images', 'Add images'),
+    kinds: ['image'],
+    multiple: true,
+    onConfirm: (items) => setImageUrls((prev) => [...prev, ...items.map((i) => i.url)]),
+  });
   const [loading, setLoading] = useState(false);
 
   const generate = useCallback(async () => {
@@ -424,7 +431,7 @@ const SlideshowDialog: FC<SlideshowDialogProps> = ({ fetch, toaster, onResult })
         className="w-full bg-newBgColor border border-studioBorder rounded p-2 text-[12px] text-textColor placeholder:text-textColor/40 outline-none"
       />
       <button
-        onClick={() => setPickerOpen(true)}
+        onClick={imagesPicker.open}
         className="px-2 py-1 rounded text-[11px] border border-studioBorder text-textColor hover:bg-studioBorder/30 self-start"
       >
         {t('add_images', 'Add images')}
@@ -452,13 +459,7 @@ const SlideshowDialog: FC<SlideshowDialogProps> = ({ fetch, toaster, onResult })
       >
         {loading ? t('generating', 'Generating...') : t('generate', 'Generate')}
       </button>
-      <MediaSelectorModal
-        open={pickerOpen}
-        onClose={() => setPickerOpen(false)}
-        kinds={['image']}
-        multiple
-        onConfirm={(items) => setImageUrls((prev) => [...prev, ...items.map((i) => i.url)])}
-      />
+      {imagesPicker.element}
     </div>
   );
 };
@@ -467,6 +468,8 @@ const trackTypeKeys: Record<VideoTrack['type'], [string, string]> = {
   video: ['track_type_video', 'video'],
   image: ['file_type_image', 'image'],
   text: ['track_type_text', 'text'],
+  shape: ['track_type_shape', 'shape'],
+  raster: ['track_type_paint', 'paint'],
   caption: ['track_type_caption', 'caption'],
   audio: ['track_type_audio', 'audio'],
   sticker: ['track_type_sticker', 'sticker'],
@@ -836,6 +839,9 @@ export const VideoTimeline: FC<VideoTimelineProps> = ({ store, sendTimelineAware
           snapCandidates.push(c.startMs, c.endMs + (c.freezeAtMs || 0));
         }
       }
+      // Beats join the clip edges as snap targets, so a cut lands on the music
+      // rather than near it. Empty until an audio clip has been analysed.
+      snapCandidates.push(...timelineBeats(vo.tracks));
       const threshold = SNAP_THRESHOLD_MS / pixelsPerMs;
       let best = value;
       let bestDelta = threshold;
@@ -1341,6 +1347,30 @@ export const VideoTimeline: FC<VideoTimelineProps> = ({ store, sendTimelineAware
       ),
     });
   }, [modals, fetch, toaster, landOrPoll, translate]);
+
+  /**
+   * Open a dialog the Tools menu asked for.
+   *
+   * The menu can't reach these handlers — they close over `landOrPoll`, which
+   * lands a finished asset on a track — so it names what it wants on the store
+   * and this clears the request once it has been served.
+   */
+  const generateRequest = store((s) => s.generateRequest);
+  const openRequested = useRef<((kind: string) => void) | null>(null);
+  // Writing the ref in an effect rather than during render is what
+  // react-hooks/refs requires (same pattern as canvas.tsx's penDraftRef).
+  useEffect(() => {
+    openRequested.current = (kind: string) => {
+      if (kind === 'video') handleGenerateVideo();
+      else if (kind === 'music') handleGenerateMusic();
+      else if (kind === 'voiceover') handleGenerateVoiceover();
+    };
+  }, [handleGenerateVideo, handleGenerateMusic, handleGenerateVoiceover]);
+  useEffect(() => {
+    if (!generateRequest) return;
+    openRequested.current?.(generateRequest);
+    store.getState().requestGenerate(null);
+  }, [generateRequest, store]);
 
   if (!isVideo || !vo) {
     return null;

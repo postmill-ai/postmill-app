@@ -706,7 +706,7 @@ describe('AiSettingsRepository', () => {
 
       expect(mockMediaJob.findMany).toHaveBeenCalledWith({
         where: { organizationId: 'org1' },
-        orderBy: { createdAt: 'desc' },
+        orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
         take: 50,
       });
     });
@@ -716,9 +716,65 @@ describe('AiSettingsRepository', () => {
 
       expect(mockMediaJob.findMany).toHaveBeenCalledWith({
         where: { organizationId: 'org1' },
-        orderBy: { createdAt: 'desc' },
+        orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
         take: 10,
       });
+    });
+
+    it('filters by status and provider', async () => {
+      await repository.getMediaJobs('org1', 10, { status: 'failed', provider: 'runway' });
+
+      expect(mockMediaJob.findMany).toHaveBeenCalledWith({
+        where: { organizationId: 'org1', status: 'failed', provider: 'runway' },
+        orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
+        take: 10,
+      });
+    });
+
+    it("matches both spellings of finished when filtering by 'completed'", async () => {
+      await repository.getMediaJobs('org1', 10, { status: 'completed' });
+
+      expect(mockMediaJob.findMany).toHaveBeenCalledWith({
+        where: { organizationId: 'org1', status: { in: ['completed', 'done'] } },
+        orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
+        take: 10,
+      });
+    });
+
+    it('skips the cursor row so pages do not repeat their boundary job', async () => {
+      await repository.getMediaJobs('org1', 10, { cursor: 'job-9' });
+
+      expect(mockMediaJob.findMany).toHaveBeenCalledWith({
+        where: { organizationId: 'org1' },
+        orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
+        take: 10,
+        cursor: { id: 'job-9' },
+        skip: 1,
+      });
+    });
+
+    it('falls back to the first page when the cursor row no longer exists', async () => {
+      mockMediaJob.findMany
+        .mockRejectedValueOnce(
+          Object.assign(new Error('RecordNotFound'), { code: 'P2025' })
+        )
+        .mockResolvedValueOnce([{ id: 'job-1' }]);
+
+      const result = await repository.getMediaJobs('org1', 10, { cursor: 'gone' });
+
+      expect(mockMediaJob.findMany).toHaveBeenCalledTimes(2);
+      expect(mockMediaJob.findMany).toHaveBeenLastCalledWith({
+        where: { organizationId: 'org1' },
+        orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
+        take: 10,
+      });
+      expect(result).toEqual([{ id: 'job-1' }]);
+    });
+
+    it('rethrows when the failure is not cursor-related', async () => {
+      mockMediaJob.findMany.mockRejectedValueOnce(new Error('connection lost'));
+
+      await expect(repository.getMediaJobs('org1', 10)).rejects.toThrow('connection lost');
     });
   });
 

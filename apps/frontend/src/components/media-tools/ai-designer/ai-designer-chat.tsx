@@ -6,8 +6,8 @@ import { useToaster } from '@postmill-ai/react/toaster/toaster';
 import { useT } from '@postmill-ai/react/translation/get.transation.service.client';
 import { Logo } from '@postmill-ai/frontend/components/new-layout/logo';
 import { FullscreenButton } from '@postmill-ai/frontend/components/media-tools/fullscreen-button';
-import { useFullscreen } from '@postmill-ai/frontend/components/media-tools/use-fullscreen';
-import { MessageRenderer } from './message-renderer';
+import { useFullscreenSurface } from '@postmill-ai/frontend/components/media-tools/use-fullscreen';
+import { MessageRenderer, TypingIndicator } from './message-renderer';
 import { useAiDesignerSession } from './ai-designer.hooks';
 import {
   useAiDesignerSocket,
@@ -20,12 +20,15 @@ import type {
   AiDesignerProgressMsg,
   AiDesignerRenderResult,
   AiDesignerSessionDto,
+  AiDesignerSessionState,
 } from '@postmill-ai/nestjs-libraries/ai-designer/ai-designer.types';
 
 interface AiDesignerChatProps {
   sessionId: string;
   mode: AiDesignerMode;
   onReset?: () => void;
+  /** Opens the previous-sessions drawer (owned by the page, which holds sessionId). */
+  onOpenSessions?: () => void;
 }
 
 /** Local messages carry the emit nonce so the server echo can reconcile them. */
@@ -33,21 +36,53 @@ type ChatMessage = AiDesignerMessagePayload & { nonce?: string };
 
 const SEND_SAFETY_TIMEOUT_MS = 10_000;
 
+// The session states in which the conductor is actively working — the thinking
+// indicator's authoritative source. Everything else (intake, awaiting_plan,
+// delivered) is a resting state that waits on the user.
+const BUSY_SESSION_STATES: readonly AiDesignerSessionState[] = [
+  'planning',
+  'executing',
+  'revising',
+];
+
+const isBusyState = (state?: AiDesignerSessionState | null) =>
+  !!state && BUSY_SESSION_STATES.includes(state);
+
 export const AiDesignerChat: React.FC<AiDesignerChatProps> = ({
   sessionId,
   mode,
   onReset,
+  onOpenSessions,
 }) => {
   const toaster = useToaster();
   const t = useT();
-  const { isFullscreen } = useFullscreen();
+  const surface = useFullscreenSurface('rounded-[12px] overflow-hidden');
   const { data: hydrate } = useAiDesignerSession(sessionId);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [sessionState, setSessionState] = useState<AiDesignerSessionDto | null>(null);
+  // The session's authoritative state as last reported by the socket
+  // (session:state hydrate or session:transition broadcast). Null until the
+  // socket has spoken — the SWR hydrate fills the gap.
+  const [liveState, setLiveState] = useState<AiDesignerSessionState | null>(
+    null
+  );
+  // Local optimism: the gap between a user action and the server's first
+  // response (transition, message, or error). State-less turns (intake chat)
+  // never transition, so this is what keeps the indicator up for them.
+  const [optimisticBusy, setOptimisticBusy] = useState(false);
+  // An error event ended the run client-side. The conductor's failure
+  // recovery rolls the session back and broadcasts that transition, but the
+  // indicator must not stay up waiting for it — cleared the next time the
+  // server speaks (transition/hydrate) or the user acts.
+  const [errorHalted, setErrorHalted] = useState(false);
+  // Label-only: the latest agent:progress note. Never controls visibility.
   const [progress, setProgress] = useState<AiDesignerProgressMsg | null>(null);
   const [preview, setPreview] = useState<AiDesignerRenderResult | null>(null);
   const [input, setInput] = useState('');
   const [sending, setSending] = useState(false);
+  // Mirror of the derived `busy` for socket handlers (updated in the effect
+  // below the derivation) — event callbacks can't see the render-scope value.
+  const busyRef = useRef(false);
   const scrollRef = useRef<HTMLDivElement>(null);
   // Only auto-scroll when the user is already near the bottom — pinning
   // unconditionally would yank someone who scrolled up to re-read.
@@ -79,6 +114,8 @@ export const AiDesignerChat: React.FC<AiDesignerChatProps> = ({
     );
     setInput((cur) => (cur.trim() ? cur : pending.text));
     setSending(false);
+    // An undelivered send means nothing is working on it — drop the optimism.
+    setOptimisticBusy(false);
   }, []);
 
   const onMessage = useCallback((msg: AiDesignerServerMessage) => {
@@ -89,11 +126,17 @@ export const AiDesignerChat: React.FC<AiDesignerChatProps> = ({
       pendingSendRef.current = null;
       setSending(false);
     }
-    // The conductor emits no terminal progress event — any real agent message
-    // means the in-flight progress bubble is stale. Skip this for the user's
-    // own echo so an in-flight render stays visible.
+    // A real agent message answers the optimistic gap. Visibility stays with
+    // the session state: mid-pipeline chatter ("Plan accepted…") must NOT hide
+    // the indicator — only a resting-state transition/hydrate does that.
     if (msg.role !== 'user') {
-      setProgress(null);
+      setOptimisticBusy(false);
+    }
+    // A persisted media message is the delivery of the render the ephemeral
+    // preview was standing in for — drop the preview so it doesn't render
+    // twice (once as the preview bubble, once as the delivered message).
+    if (msg.content.kind === 'media') {
+      setPreview(null);
     }
     setMessages((prev) => {
       const next = msg.nonce
@@ -121,21 +164,36 @@ export const AiDesignerChat: React.FC<AiDesignerChatProps> = ({
           return Array.from(map.values());
         });
       }
-      // A state hydrate means the current render finished before we reconnected;
-      // any stale progress bubble is bogus.
-      setProgress(null);
+      // Join/reconnect hydrate is authoritative: the persisted session state
+      // decides busyness — a mid-pipeline reconnect shows the indicator again,
+      // a finished run hides it.
+      const state = session?.state ?? null;
+      setLiveState(state);
+      setOptimisticBusy(false);
+      setErrorHalted(false);
+      if (!isBusyState(state)) setProgress(null);
     },
     []
   );
 
+  const onSessionTransition = useCallback((state: AiDesignerSessionState) => {
+    setLiveState(state);
+    // The server has taken over — its state owns the indicator now.
+    setOptimisticBusy(false);
+    setErrorHalted(false);
+    if (!isBusyState(state)) setProgress(null);
+  }, []);
+
   const onProgress = useCallback((p: AiDesignerProgressMsg) => {
-    setProgress(p);
+    // Label only, and only while something is running — a stray progress
+    // event in a resting state must not park a stale phase on the next run.
+    if (busyRef.current) setProgress(p);
   }, []);
 
   const onPreview = useCallback((result: AiDesignerRenderResult) => {
+    // Label/visibility untouched: a preview is not the end of the pipeline
+    // (the vision-critic pass and further variants may still be running).
     setPreview(result);
-    // A preview means the render finished — drop the stale progress bubble.
-    setProgress(null);
   }, []);
 
   const onError = useCallback(
@@ -147,7 +205,8 @@ export const AiDesignerChat: React.FC<AiDesignerChatProps> = ({
         failPendingSend();
       }
       setSending(false);
-      // An error mid-render means the in-flight progress bubble is stale.
+      setOptimisticBusy(false);
+      setErrorHalted(true);
       setProgress(null);
       toaster.show(
         err.message || err.code || t('ai_designer_error', 'AI Designer error'),
@@ -161,6 +220,7 @@ export const AiDesignerChat: React.FC<AiDesignerChatProps> = ({
     {
       onMessage,
       onSessionState,
+      onSessionTransition,
       onProgress,
       onPreview,
       onError,
@@ -172,7 +232,19 @@ export const AiDesignerChat: React.FC<AiDesignerChatProps> = ({
     const map = new Map<string, ChatMessage>();
     for (const m of hydrate?.messages || []) map.set(m.id, m);
     for (const m of messages) map.set(m.id, m);
-    return Array.from(map.values()).sort((a, b) => a.seq - b.seq);
+    return (
+      Array.from(map.values())
+        // The conductor persists a `progress` row per phase transition, and
+        // neither read path (REST hydrate or the socket's after-seq replay)
+        // filters by kind — so every historical "Thinking…" came back and
+        // re-rendered as a live-looking animated indicator. Thinking is a
+        // transient state, never transcript. Dropping it here covers both read
+        // paths at once; filtering server-side in getMessagesAfterSeq would
+        // risk the client never acking those seqs. The live indicator is a
+        // separate pseudo-message (id 'progress') and is unaffected.
+        .filter((m) => m.kind !== 'progress')
+        .sort((a, b) => a.seq - b.seq)
+    );
   }, [hydrate?.messages, messages]);
 
   const handleScroll = () => {
@@ -182,24 +254,38 @@ export const AiDesignerChat: React.FC<AiDesignerChatProps> = ({
       el.scrollHeight - el.scrollTop - el.clientHeight < 120;
   };
 
+  const displaySession = sessionState ?? hydrate?.session ?? null;
+
+  // The indicator's lifetime is the session's state, not message traffic:
+  // socket-reported state wins, the SWR hydrate covers the pre-join gap, and
+  // the optimistic flags cover the action→server latency.
+  const effectiveState = liveState ?? displaySession?.state ?? null;
+  const busy =
+    !errorHalted && (sending || optimisticBusy || isBusyState(effectiveState));
+
+  useEffect(() => {
+    busyRef.current = busy;
+  }, [busy]);
+
   useEffect(() => {
     const el = scrollRef.current;
     if (!el || !nearBottomRef.current) return;
     el.scrollTop = el.scrollHeight;
-  }, [allMessages, progress, preview]);
+  }, [allMessages, progress, preview, busy]);
 
-  const displaySession = sessionState ?? hydrate?.session ?? null;
-
-  // Ephemeral progress/preview bubbles rendered as pseudo-messages.
-  const progressMessage: AiDesignerMessagePayload | null = progress
+  // Ephemeral progress/preview bubbles rendered as pseudo-messages. Progress
+  // events only relabel the thinking indicator — `busy` owns its existence.
+  const progressMessage: AiDesignerMessagePayload | null = busy
     ? {
         id: 'progress',
         seq: 0,
         sessionId,
         role: 'agent',
-        agent: progress.agent,
+        agent: progress?.agent ?? 'assistant',
         kind: 'progress',
-        content: progress,
+        content:
+          progress ??
+          ({ kind: 'progress', agent: 'assistant', phase: 'Working…' } as const),
         createdAt: new Date().toISOString(),
       }
     : null;
@@ -211,6 +297,7 @@ export const AiDesignerChat: React.FC<AiDesignerChatProps> = ({
           seq: 0,
           sessionId,
           role: 'assistant',
+          agent: 'composer',
           kind: 'media',
           content: {
             kind: 'media',
@@ -223,6 +310,28 @@ export const AiDesignerChat: React.FC<AiDesignerChatProps> = ({
           createdAt: new Date().toISOString(),
         }
       : null;
+
+  // Instant local busy the moment the user sends anything — the server's
+  // session:transition takes over as soon as it arrives.
+  const showThinking = () => {
+    setOptimisticBusy(true);
+    setErrorHalted(false);
+    setProgress({ kind: 'progress', agent: 'assistant', phase: 'Thinking…' });
+  };
+
+  // Cancel emits once per in-flight run: keyed to the progress label's object
+  // identity ('no-label' while none), so a replaced label re-arms the button.
+  // The indicator itself stays until the backend's rollback transition lands.
+  const [cancelSentFor, setCancelSentFor] = useState<
+    AiDesignerProgressMsg | 'no-label' | null
+  >(null);
+  const cancelSent =
+    cancelSentFor !== null && cancelSentFor === (progress ?? 'no-label');
+  const handleCancel = () => {
+    if (!busy || cancelSent) return;
+    setCancelSentFor(progress ?? 'no-label');
+    socket.cancel();
+  };
 
   const handleSend = () => {
     const text = input.trim();
@@ -244,6 +353,7 @@ export const AiDesignerChat: React.FC<AiDesignerChatProps> = ({
       createdAt: new Date().toISOString(),
     };
     setMessages((prev) => [...prev, optimistic]);
+    showThinking();
     if (pendingSendRef.current) clearTimeout(pendingSendRef.current.timer);
     pendingSendRef.current = {
       nonce,
@@ -269,11 +379,30 @@ export const AiDesignerChat: React.FC<AiDesignerChatProps> = ({
     }
   };
 
+  // Plan-card actions and intake-form submits bypass handleSend — give them
+  // the same instant thinking bubble.
+  const handleFormSubmit = (replyTo: string, values: Record<string, unknown>) => {
+    showThinking();
+    socket.submitForm(replyTo, values);
+  };
+
+  const handleAcceptPlan = (
+    replyTo: string,
+    variantId?: string,
+    texts?: Record<string, Record<string, string>>
+  ) => {
+    showThinking();
+    socket.acceptPlan(replyTo, variantId, texts);
+  };
+
+  const handleRevisePlan = (instruction: string, targetDesignId?: string) => {
+    showThinking();
+    socket.revisePlan(instruction, targetDesignId);
+  };
+
   return (
     <div
-      className={`flex flex-col h-full bg-studioBg${
-        isFullscreen ? ' fixed inset-0 z-[100]' : ' rounded-[12px] overflow-hidden'
-      }`}
+      className={`flex flex-col h-full bg-studioBg ${surface}`}
     >
       <div className="flex items-center justify-between gap-[10px] px-[16px] h-[52px] border-b border-studioBorder shrink-0">
         <div className="flex items-center gap-[10px] min-w-0">
@@ -281,9 +410,9 @@ export const AiDesignerChat: React.FC<AiDesignerChatProps> = ({
           <h1 className="text-[15px] font-[600] text-textColor whitespace-nowrap">
             {t('ai_designer', 'AI Designer')}
           </h1>
-          {displaySession?.state && (
+          {effectiveState && (
             <span className="text-[12px] text-textColor/50 capitalize truncate">
-              {displaySession.state.replace(/_/g, ' ')}
+              {effectiveState.replace(/_/g, ' ')}
             </span>
           )}
         </div>
@@ -303,6 +432,11 @@ export const AiDesignerChat: React.FC<AiDesignerChatProps> = ({
               {t('reconnect', 'Reconnect')}
             </Button>
           )}
+          {onOpenSessions && (
+            <Button type="button" secondary onClick={onOpenSessions}>
+              {t('previous_sessions', 'Previous sessions')}
+            </Button>
+          )}
           {onReset && (
             <Button type="button" secondary onClick={onReset}>
               {t('new_design', 'New Design')}
@@ -317,17 +451,24 @@ export const AiDesignerChat: React.FC<AiDesignerChatProps> = ({
         onScroll={handleScroll}
         className="flex-1 min-h-0 overflow-y-auto p-[16px] space-y-4"
       >
-        {allMessages.length === 0 && !progress && !preview && (
-          <div className="text-center text-[14px] text-textColor/50 py-10">
-            {(displaySession?.mode ?? mode) === 'prompt'
-              ? t(
-                  'prompt_sent_agent_will_respond',
-                  'Your prompt has been sent. The agent will respond here.'
-                )
-              : t(
-                  'describe_what_you_want_to_design',
-                  'Describe what you want to design.'
-                )}
+        {allMessages.length === 0 && !busy && !preview && (
+          // Fresh session: the backend dispatches intake on start, so show the
+          // typing indicator right away instead of a dead empty state.
+          <div className="flex flex-col items-start gap-2">
+            <div className="max-w-[80%] rounded-2xl px-4 py-3 border bg-newBgColorInner border-studioBorder rounded-bl-md">
+              <TypingIndicator />
+            </div>
+            <div className="text-[12px] text-textColor/50 ps-1">
+              {(displaySession?.mode ?? mode) === 'prompt'
+                ? t(
+                    'prompt_sent_agent_will_respond',
+                    'Your prompt has been sent. The agent will respond here.'
+                  )
+                : t(
+                    'describe_what_you_want_to_design',
+                    'Describe what you want to design.'
+                  )}
+            </div>
           </div>
         )}
 
@@ -335,31 +476,42 @@ export const AiDesignerChat: React.FC<AiDesignerChatProps> = ({
           <MessageBubble key={msg.id} message={msg}>
             <MessageRenderer
               message={msg}
-              onAcceptPlan={socket.acceptPlan}
-              onRevisePlan={socket.revisePlan}
-              onFormSubmit={socket.submitForm}
+              onAcceptPlan={handleAcceptPlan}
+              onRevisePlan={handleRevisePlan}
+              onFormSubmit={handleFormSubmit}
             />
           </MessageBubble>
         ))}
 
+        {/* Thinking is a state, not a message — no bubble, no agent caption.
+            Just the indicator and a way out of it. */}
         {progressMessage && (
-          <MessageBubble message={progressMessage}>
+          <div className="flex items-center gap-3">
             <MessageRenderer
               message={progressMessage}
-              onAcceptPlan={socket.acceptPlan}
-              onRevisePlan={socket.revisePlan}
-              onFormSubmit={socket.submitForm}
+              onAcceptPlan={handleAcceptPlan}
+              onRevisePlan={handleRevisePlan}
+              onFormSubmit={handleFormSubmit}
             />
-          </MessageBubble>
+            <Button
+              type="button"
+              secondary
+              disabled={cancelSent}
+              onClick={handleCancel}
+              className="!h-[28px] !px-[12px] text-[12px]"
+            >
+              {t('cancel', 'Cancel')}
+            </Button>
+          </div>
         )}
 
         {previewMessage && (
           <MessageBubble message={previewMessage}>
             <MessageRenderer
               message={previewMessage}
-              onAcceptPlan={socket.acceptPlan}
-              onRevisePlan={socket.revisePlan}
-              onFormSubmit={socket.submitForm}
+              onAcceptPlan={handleAcceptPlan}
+              onRevisePlan={handleRevisePlan}
+              onFormSubmit={handleFormSubmit}
             />
           </MessageBubble>
         )}

@@ -615,9 +615,15 @@ export class AiSettingsService {
     return this._repository.getMediaJobs(organizationId, limit);
   }
 
-  async getMediaJobsWithCounts(organizationId: string, limit = 20) {
+  async getMediaJobsWithCounts(
+    organizationId: string,
+    limit = 20,
+    opts: { status?: string; provider?: string; cursor?: string } = {}
+  ) {
     const [jobs, counts] = await Promise.all([
-      this._repository.getMediaJobs(organizationId, limit),
+      this._repository.getMediaJobs(organizationId, limit, opts),
+      // Counts stay unfiltered on purpose: they're the queue's headline totals,
+      // so they must not change as you filter the list beneath them.
       this._repository.getMediaJobStatusCounts(organizationId),
     ]);
     return { jobs, counts };

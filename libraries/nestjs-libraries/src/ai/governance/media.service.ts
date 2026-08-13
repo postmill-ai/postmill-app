@@ -5,6 +5,7 @@ import { AiSettingsService } from '@postmill-ai/nestjs-libraries/database/prisma
 import { AiSettingsManager } from '@postmill-ai/nestjs-libraries/ai/ai-settings.manager';
 import { AIModelProvider } from '@postmill-ai/nestjs-libraries/ai/ai-model.provider';
 import { DefaultsResolutionService } from '@postmill-ai/nestjs-libraries/ai/defaults/defaults-resolution.service';
+import { IMAGE_SETTINGS_KEYS } from '@postmill-ai/nestjs-libraries/ai/defaults/defaults-settings.validator';
 import { OrgMediaProviderSettingsService } from '@postmill-ai/nestjs-libraries/database/prisma/media-providers/org-media-provider-settings.service';
 import { OrgAiSettingsRepository } from '@postmill-ai/nestjs-libraries/database/prisma/ai-settings/org-ai-settings.repository';
 import { EncryptionService } from '@postmill-ai/nestjs-libraries/encryption/encryption.service';
@@ -16,6 +17,7 @@ import { FileService } from '@postmill-ai/nestjs-libraries/database/prisma/file/
 import { BrandsService } from '@postmill-ai/nestjs-libraries/brands/brands.service';
 import { ioRedis } from '@postmill-ai/nestjs-libraries/redis/redis.service';
 import { safeFetch } from '@postmill-ai/nestjs-libraries/dtos/webhooks/safe.fetch';
+import { resolveVisionImageUrl } from '@postmill-ai/nestjs-libraries/ai/vision-image-url';
 import {
   MediaProviderAdapter,
   MediaProviderCapabilities,
@@ -30,6 +32,7 @@ import type { MediaGenerateOptions } from '@postmill-ai/provider-kernel';
 import type { SlideService } from '@postmill-ai/nestjs-libraries/media/slide/slide.service';
 import type { CaptionService } from '@postmill-ai/nestjs-libraries/media/caption/caption.service';
 import { BudgetExceeded, CapabilityNotAvailable } from './errors';
+import { parseFontMetadata } from '@postmill-ai/nestjs-libraries/media/designer-doc/font-metadata';
 import type { MediaOperation } from '@postmill-ai/nestjs-libraries/ai/governance/media-operation.types';
 import {
   AI_MEDIA_CATEGORIES,
@@ -446,6 +449,22 @@ export class AiMediaService {
       return fallback;
     }
 
+    // The vision provider downloads the image from ITS infrastructure, so a URL
+    // served off this instance's own storage host is unreachable — every
+    // lookup on a self-hosted/dev deployment failed with "Error while
+    // downloading http://localhost:4200/uploads/…". Local uploads are inlined
+    // as a data URI by the same helper the vision critic uses; a remote URL is
+    // passed straight through (nothing here fetches it, and the provider is the
+    // better judge of whether it can reach a third-party host).
+    const resolvedUrl = await resolveVisionImageUrl(imageUrl, {
+      warn: (message) => this._logger.warn(message),
+      label: 'detectFocalPoint',
+      allowUnverifiedRemote: true,
+    });
+    if (!resolvedUrl) {
+      return fallback;
+    }
+
     try {
       const visionDefault = await this._defaultsResolution.resolve(
         'ai',
@@ -462,7 +481,7 @@ export class AiMediaService {
         visionDefault.version,
         visionDefault.model,
         {
-          imageUrl,
+          imageUrl: resolvedUrl,
           prompt:
             'You are an image-composition assistant. Given an image, identify the main subject or area of interest and return its normalized center coordinates as JSON: {"x": number, "y": number} where each value is between 0 and 1. Return only the JSON object, no markdown or explanation.',
         },
@@ -674,7 +693,7 @@ export class AiMediaService {
   async uploadFont(
     orgId: string,
     file: Express.Multer.File,
-  ): Promise<{ fonts: any[]; uploaded: { family: string; fileId: string; path: string; weights: number[] } }> {
+  ): Promise<{ fonts: any[]; uploaded: { family: string; fileId: string; path: string; weights: number[]; italic?: boolean } }> {
     if (!this._storageService || !this._brandsService) {
       throw new Error('Storage/brands services are not available');
     }
@@ -688,11 +707,17 @@ export class AiMediaService {
     const adapter = await this._storageService.getLocalAdapterForOrg(orgId, true);
     const uploaded = await adapter.uploadFile(file);
 
+    // The file names its own family and weight; the filename only stands in
+    // when it doesn't. Deriving both from the filename made every upload a
+    // separate 400-weight family, so two weights of one typeface could never
+    // be used as one family — see `parseFontMetadata`.
+    const meta = file.buffer ? parseFontMetadata(file.buffer) : {};
     const fontEntry = {
-      family: file.originalname.replace(/\.[^./\\]*$/, ''),
+      family: meta.family || file.originalname.replace(/\.[^./\\]*$/, ''),
       fileId: uploaded.filename || uploaded.originalname,
       path: uploaded.path,
-      weights: [400],
+      weights: [meta.weight ?? 400],
+      ...(meta.italic ? { italic: true } : {}),
     };
 
     const fonts = await this._brandsService.addCustomFont(orgId, fontEntry);
@@ -942,12 +967,33 @@ export class AiMediaService {
 
   // ── Image (synchronous, §10.3/§11.2) ──
 
+  // Aspect hint → gpt-image size token, used only on the AI-facade fallback
+  // path (the facade's image model takes a size, not an aspect). The media
+  // adapter path receives `aspect` directly and maps it per-provider.
+  private static readonly FACADE_ASPECT_SIZE: Record<string, string> = {
+    square: '1024x1024',
+    wide: '1536x1024',
+    tall: '1024x1536',
+  };
+
+  // Filter stored org default settings to the image-bucket keys before they are
+  // spread into an image adapter input (image path only — other operations pass
+  // their settings through unchanged).
+  private _imageSettings(
+    settings: Record<string, unknown> | undefined,
+  ): MediaGenerateOptions['input'] {
+    if (!settings) return settings as MediaGenerateOptions['input'];
+    return Object.fromEntries(
+      Object.entries(settings).filter(([key]) => IMAGE_SETTINGS_KEYS.has(key)),
+    ) as MediaGenerateOptions['input'];
+  }
+
   // All image generation routes through the media surface: org-configured image-capable
   // media providers first (standardized result), then the AI facade's imageModel() as a
   // behaviour-preserving fallback for orgs with no image-capable media provider.
   async generateImageResult(
     prompt: string,
-    options?: { size?: string; orgId?: string; userId?: string; isVertical?: boolean; sourceUrl?: string },
+    options?: { size?: string; aspect?: 'square' | 'wide' | 'tall'; orgId?: string; userId?: string; isVertical?: boolean; sourceUrl?: string; signal?: AbortSignal },
   ): Promise<MediaGenerationResult> {
     const size = options?.size || (options?.isVertical ? '1024x1536' : undefined);
     const candidates = await this._resolveForOperation(options?.orgId, 'image', options?.sourceUrl);
@@ -955,11 +1001,18 @@ export class AiMediaService {
     for (const candidate of candidates) {
       await this._assertMediaBudget(options?.orgId, candidate.adapter.identifier);
       try {
+        // MediaGenerateOptions carries no AbortSignal, so a cancel cannot
+        // interrupt an in-flight adapter HTTP call here — callers check the
+        // signal around this await. Only the facade fallback below aborts.
         const result = await candidate.adapter.generateImage(prompt, {
           credentials: candidate.credentials,
           model: candidate.model,
-          input: candidate.settings as MediaGenerateOptions['input'],
+          // A stale org default row can carry another modality's keys (live
+          // 400s from an audio-only 'response_format') — strip to the image
+          // bucket here; the stored row is untouched.
+          input: this._imageSettings(candidate.settings),
           size,
+          aspect: options?.aspect,
           sourceUrl: options?.sourceUrl,
         });
         const first = result.image || result.images?.[0];
@@ -990,7 +1043,10 @@ export class AiMediaService {
     if (!model) {
       throw new CapabilityNotAvailable('Image generation is not available on the current AI provider', 'image');
     }
-    const url = await model.generate(prompt, { size });
+    const url = await model.generate(prompt, {
+      size: size || (options?.aspect ? AiMediaService.FACADE_ASPECT_SIZE[options.aspect] : undefined),
+      signal: options?.signal,
+    });
 
     const aiConfig = await this._aiModelProvider.resolveConfigForScope('utility', options?.orgId);
     if (!aiConfig) {
@@ -1010,7 +1066,7 @@ export class AiMediaService {
 
   async generateImage(
     prompt: string,
-    options?: { size?: string; orgId?: string; userId?: string; isVertical?: boolean; sourceUrl?: string },
+    options?: { size?: string; aspect?: 'square' | 'wide' | 'tall'; orgId?: string; userId?: string; isVertical?: boolean; sourceUrl?: string; signal?: AbortSignal },
   ): Promise<string> {
     const result = await this.generateImageResult(prompt, options);
     return result.image || '';

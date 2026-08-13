@@ -1,4 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { mkdtempSync, writeFileSync, rmSync, ReadStream } from 'fs';
+import { tmpdir } from 'os';
+import { join } from 'path';
 import type { LoggerPort } from '@postmill-ai/provider-kernel';
 
 const mockSend = vi.fn();
@@ -66,5 +69,74 @@ describe('R2Storage.createMultipartUpload — MIME allowlist (5.8)', () => {
     expect(mockSend).toHaveBeenCalledWith(
       expect.objectContaining({ ContentType: 'image/png' }),
     );
+  });
+});
+
+describe('R2Storage.uploadFile — buffer vs disk path', () => {
+  // `/files/upload-simple` uses multer memoryStorage (file.buffer);
+  // `/files/upload-server` uses diskStorage (file.path, no buffer). Sniffing
+  // only from the buffer made every upload-server request fail with
+  // "Unsupported file type." on R2-backed orgs.
+  const PNG = Buffer.concat([
+    Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]),
+    Buffer.alloc(64),
+  ]);
+
+  let adapter: R2Storage;
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockSend.mockResolvedValue({});
+    adapter = new R2Storage(
+      logger,
+      vi.fn() as any,
+      { accessKeyId: 'a', secretAccessKey: 's' },
+      'bucket',
+      'https://acc.r2.cloudflarestorage.com',
+    );
+  });
+
+  it('uploads from a memory buffer', async () => {
+    const result = await adapter.uploadFile({ buffer: PNG, size: PNG.length });
+
+    const cmd = mockSend.mock.calls[0][0];
+    expect(cmd.ContentType).toBe('image/png');
+    expect(cmd.Body).toBe(PNG);
+    expect(result.path).toContain('.png');
+  });
+
+  it('uploads from a disk path when there is no buffer (upload-server)', async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'r2-upload-'));
+    const filePath = join(dir, 'upload.tmp');
+    writeFileSync(filePath, PNG);
+
+    try {
+      const result = await adapter.uploadFile({
+        path: filePath,
+        size: PNG.length,
+      });
+
+      const cmd = mockSend.mock.calls[0][0];
+      expect(cmd.ContentType).toBe('image/png');
+      expect(cmd.ContentLength).toBe(PNG.length);
+      expect(cmd.Body).toBeInstanceOf(ReadStream);
+      expect(result.path).toContain('.png');
+
+      // `send` is mocked, so nothing consumed the stream. Drain it here — both
+      // to prove the right bytes would be uploaded and so the temp dir isn't
+      // removed while the lazily-opened fd is still pending.
+      const chunks: Buffer[] = [];
+      for await (const chunk of cmd.Body) chunks.push(chunk as Buffer);
+      expect(Buffer.concat(chunks).equals(PNG)).toBe(true);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it('rejects a file with neither a buffer nor a path', async () => {
+    await expect(adapter.uploadFile({ size: 10 })).rejects.toThrow(
+      'Invalid file upload.'
+    );
+    expect(mockSend).not.toHaveBeenCalled();
   });
 });
