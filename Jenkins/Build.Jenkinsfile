@@ -13,21 +13,28 @@ pipeline {
             }
         }
 
-        // Stage 2: Setup Node.js v20 and install pnpm
+        // Stage 2: Setup Node.js and install pnpm.
+        // Versions must track package.json (`engines.node`, `packageManager`) and the
+        // native-module deps must match .github/workflows/* — canvas/sharp/bcrypt are
+        // compiled during install and `pnpm install` fails without them.
         stage('Setup Environment and Tools') {
             steps {
                 sh '''
                     echo "Ensuring required utilities and Node.js are installed..."
                     sudo apt-get update
-                    sudo apt-get install -y curl unzip nodejs
-                    
-                    # 1. Install Node.js v20 
-                    curl -fsSL https://deb.nodesource.com/setup_20.x | sudo -E bash -
+                    sudo apt-get install -y curl unzip
+
+                    # 1. Install Node.js v22 (package.json requires >=22.12.0 <23.0.0)
+                    curl -fsSL https://deb.nodesource.com/setup_22.x | sudo -E bash -
                     sudo apt-get install -y nodejs
                     echo "Node.js version: \$(node -v)"
-                    
-                    # 2. Install pnpm globally (version 8)
-                    npm install -g pnpm@8
+
+                    # 2. Native build deps for canvas / sharp / bcrypt
+                    sudo apt-get install -y libcairo2-dev libjpeg-dev libpango1.0-dev \\
+                        libgif-dev build-essential g++ libpixman-1-dev
+
+                    # 3. Install pnpm globally (must match package.json packageManager)
+                    npm install -g pnpm@10.34.4
                     echo "pnpm version: \$(pnpm -v)"
                 '''
             }
@@ -55,7 +62,7 @@ pipeline {
                         
                         # Download the stable scanner CLI package
                         curl -sS -o sonar-scanner.zip \
-                        "https://binaries.sonarsource.com/Distribution/sonar-scanner-cli/sonar-scanner-cli-4.7.0.2747.zip"
+                        "https://binaries.sonarsource.com/Distribution/sonar-scanner-cli/sonar-scanner-cli-7.0.2.4839.zip"
                         
                         # Added -o flag to force overwrite and prevent interactive prompt failure
                         unzip -o -q sonar-scanner.zip -d .
