@@ -81,6 +81,20 @@ libraries/
   helpers/             Shared utilities, useFetch hook
   react-shared-libraries/  Shared React components
   providers/           Provider kernel + per-provider packages
+
+tools/               Repo-owned tooling (not a workspace)
+  db/                Migration/backfill helpers + the CI schema gates
+  codegen/           Generators whose output is committed and drift-gated
+
+docker/              Dockerfiles, dev compose files, nginx.conf, entrypoints
+e2e/                 Playwright suite + seed data
+
+Dockerfile           Pinned at the root: the image CI publishes
+docker-compose.yaml  Pinned at the root: the self-hoster quick-start
+openapi.yml          Generated from the controllers — never hand-edited
 ```
+
+Root `scripts/` is maintainer-local and gitignored; a fresh clone does not have it. Anything CI or a
+documented workflow needs lives in `tools/`.
 
 > Verified against v1.0.0

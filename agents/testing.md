@@ -125,6 +125,27 @@ behavior in vitest.
   **required status check** that uploads SARIF to GitHub code scanning, stripping
   directive-suppressed and `react-hooks/*` + `jsx-a11y/*` results before upload.
 
+### Generated-artifact drift gates
+
+Three artifacts are generated but **committed**, so CI re-runs each generator with `--check` and
+fails if the committed copy disagrees with the code. Re-run the generator and commit its output —
+never hand-edit the artifact.
+
+| Gate | Workflow | Refresh with |
+|---|---|---|
+| Studio descriptor metadata | `test.yml` — "Studio descriptor metadata drift gate" | `node tools/codegen/generate-studio-descriptor-registry.mjs` |
+| Destructive schema diff | `test.yml` — "Destructive schema guard (vs origin/main)" | n/a — fix the migration, or set `ALLOW_DESTRUCTIVE_SCHEMA` |
+| `openapi.yml` | `boot-guard.yml` — "OpenAPI drift gate" | `pnpm run build:backend && pnpm run openapi:generate` |
+
+The OpenAPI gate lives in `boot-guard.yml` rather than `test.yml` because building the document
+constructs `AppModule`, which instantiates every provider and therefore needs Postgres, Redis and
+`JWT_SECRET` — only the boot-guard job provisions all three.
+
+A generator that depends on paths must be **deterministic**: anything randomly seeded at
+class-definition time (a `makeId()` in a decorator, say) leaks into the artifact and makes the gate
+fail on every run. See `libraries/nestjs-libraries/src/dtos/auth/matches.property.validator.ts` for
+the pattern that replaced one such case.
+
 ## Checklist
 
 - [ ] Specs co-located as `*.spec.ts` (unit) / `*.int-spec.ts` (DB or recorded-fixture integration), matching the package's include globs — frontend specs must land inside the `apps/frontend/vitest.config.ts` allowlist.
