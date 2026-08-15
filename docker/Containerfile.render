@@ -40,9 +40,11 @@ RUN addgroup --system render \
 WORKDIR /app
 COPY --chown=render:render . /app
 
-RUN pnpm install
+RUN pnpm install --frozen-lockfile
 RUN NODE_OPTIONS="--max-old-space-size=4096" pnpm run build:backend
 
 USER render
 
-ENTRYPOINT ["node", "/app/dist/apps/backend/src/media-render-worker.js"]
+# Path note: build:backend emits under apps/backend/dist (its tsconfig.build.json
+# outDir is "./dist", relative to apps/backend) — there is no repo-root dist/.
+ENTRYPOINT ["node", "/app/apps/backend/dist/apps/backend/src/media-render-worker.js"]

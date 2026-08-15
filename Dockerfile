@@ -79,4 +79,10 @@ HEALTHCHECK --interval=30s --timeout=5s --start-period=40s --retries=3 \
   CMD curl -fsS http://127.0.0.1:3000/health/live || exit 1
 
 # Single node process — no PM2, no shell supervisor.
-CMD ["node", "--experimental-require-module", "/app/dist/apps/backend/src/main.js"]
+#
+# Path note: `pnpm run build:backend` runs `nest build` inside apps/backend, whose
+# tsconfig.build.json sets outDir "./dist" — so the compiled entrypoint lands at
+# apps/backend/dist/apps/backend/src/main.js, NOT at a repo-root dist/. (The root
+# dist/ is excluded from the build context by .dockerignore and holds only out-tsc.)
+# This is the same path .github/workflows/boot-guard.yml executes.
+CMD ["node", "--experimental-require-module", "/app/apps/backend/dist/apps/backend/src/main.js"]

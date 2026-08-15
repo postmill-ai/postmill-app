@@ -51,3 +51,22 @@ jobs:
       - name: Verify pushed image
         run: |
           docker buildx imagetools inspect ghcr.io/postmill-ai/postmill-app:${{ github.ref_name }}
+
+      # imagetools inspect only reads registry metadata — it never starts the image, so a
+      # container that cannot boot (e.g. a CMD pointing at a path the build never produced)
+      # would publish green. Assert the entrypoint file actually exists in the image.
+      - name: Smoke-test the image entrypoint
+        run: |
+          IMAGE=ghcr.io/postmill-ai/postmill-app:${{ github.ref_name }}
+          docker pull "$IMAGE"
+          ENTRY=$(docker inspect -f '{{join .Config.Cmd " "}}' "$IMAGE" | tr ' ' '\n' | grep '\.js$')
+          echo "Image CMD entrypoint: $ENTRY"
+          docker run --rm --entrypoint node "$IMAGE" -e "
+            const fs = require('fs');
+            const p = '$ENTRY';
+            if (!fs.existsSync(p)) {
+              console.error('FAIL: image CMD points at ' + p + ', which does not exist in the image.');
+              process.exit(1);
+            }
+            console.log('OK: ' + p + ' exists.');
+          "
