@@ -38,6 +38,12 @@ RUN pnpm prune --prod
 # ---------- runtime ----------
 FROM node:22.20-bookworm-slim AS runtime
 
+# build-containers.yml passes --build-arg NEXT_PUBLIC_VERSION=<git tag>. Without this
+# ARG/ENV pair Docker accepted the flag and discarded it, so the released image carried
+# no version at all. Consumed by the Swagger document (served at /docs).
+ARG NEXT_PUBLIC_VERSION
+ENV NEXT_PUBLIC_VERSION=$NEXT_PUBLIC_VERSION
+
 # Runtime shared libraries: chromium + ffmpeg (in-process video renderer when Podman is
 # off), fonts, and the native libs canvas links against. No build toolchain here.
 RUN apt-get update && apt-get install -y --no-install-recommends \
