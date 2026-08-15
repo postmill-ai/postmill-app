@@ -33,7 +33,7 @@ test('post detail modal and interactions', async ({ page }) => {
   page.on('response', (r) => {
     const u = r.url();
     if (u.includes('/api/posts')) {
-      apiCalls.push(`${r.status()} ${u.split('?')[0].replace('https://postiz.reaatech.com/api/posts', '')}`);
+      apiCalls.push(`${r.status()} ${u.split('?')[0].replace('https://app.postmill.ai/api/posts', '')}`);
     }
   });
 

@@ -9,7 +9,7 @@
 # image -> bump the tag in Coolify -> redeploy (the container runs prisma-db-push on
 # boot). Use this only for a manual, in-place sync.
 set -euo pipefail
-CONTAINER="${POSTMILL_CONTAINER:-postiz-l4le990xi7me2e4pma11lzma}"
+CONTAINER="${POSTMILL_CONTAINER:-postmill-app}"
 SCHEMA="./libraries/nestjs-libraries/src/database/prisma/schema.prisma"
 
 if ! docker ps --format '{{.Names}}' | grep -qx "$CONTAINER"; then

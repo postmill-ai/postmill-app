@@ -29,7 +29,7 @@ test('settings pages full coverage', async ({ page }) => {
   page.on('response', (r) => {
     const u = r.url();
     if (u.includes('/api/') && r.status() >= 400) {
-      findings.apiErrors.push(`${r.status()} ${u.split('?')[0].replace('https://postiz.reaatech.com/api/', '')}`);
+      findings.apiErrors.push(`${r.status()} ${u.split('?')[0].replace('https://app.postmill.ai/api/', '')}`);
     }
   });
 

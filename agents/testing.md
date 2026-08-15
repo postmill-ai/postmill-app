@@ -93,7 +93,7 @@ vendor docs rather than a real API key, mark it at the top of the spec with a
 
 Playwright (`@playwright/test 1.58.2`, separate `e2e/package.json` outside the pnpm
 workspace scripts; `@axe-core/playwright` for the a11y audit config). `playwright.config.ts`:
-`testDir: ./tests`, `workers: 1`, `retries: 1`, `baseURL: https://postiz.reaatech.com`
+`testDir: ./tests`, `workers: 1`, `retries: 1`, `baseURL: https://app.postmill.ai`
 (live deployment — E2E specs exercise the real app, not a local boot), a `setup` project
 (`**/auth.setup.ts`) producing `.auth/state.json` consumed by the `chromium` project. Run:
 `cd e2e && pnpm test` (aliases: `test:headed`, `test:audit` with `playwright.audit.config.ts`,

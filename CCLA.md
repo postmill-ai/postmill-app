@@ -4,9 +4,9 @@ Based on the
 
 ## Entity Contributor License Agreement (CCLA)
 
-Thank you for your interest in contributing to GitroomHQ's Postmill ("We" or "Us").
+Thank you for your interest in contributing to Postmill, operated by REAA Technologies Inc., a Nevada corporation located in Las Vegas, Nevada, doing business as Postmill ("We" or "Us").
 
-The purpose of this contributor agreement ("Agreement") is to clarify and document the rights granted by contributors to Us. To make this document effective, please follow the instructions at https://contribute.postiz.com/p/postiz/cla.
+The purpose of this contributor agreement ("Agreement") is to clarify and document the rights granted by contributors to Us. To make this document effective, please review its terms and send Your written acceptance by email to legal@postmill.ai, referencing this Agreement (CCLA.md).
 
 ### Preamble
 
@@ -22,7 +22,7 @@ This process only serves for the transfer of economic rights. So-called moral ri
 
 ### How to use this FLA
 
-This is the version of the Agreement for Legal Entities. It should be accepted by an individual authorized to enter into this Agreement on behalf of the Legal Entity, such as an officer or other authorized representative. By accepting this Agreement, You confirm that You have the authority to bind the Legal Entity and that Contributions Submitted to Us on behalf of the Legal Entity, including Contributions Submitted by Your Designated Employees, are covered by this Agreement. You provide Your acceptance and the list of Your Designated Employees by following the instructions at https://contribute.postiz.com/p/postiz/cla. If the Legal Entity does not own the Copyright in the entire Contribution, any other author of the Contribution should also sign the applicable Agreement. In any event, please contact Us at nevo@postiz.com.
+This is the version of the Agreement for Legal Entities. It should be accepted by an individual authorized to enter into this Agreement on behalf of the Legal Entity, such as an officer or other authorized representative. By accepting this Agreement, You confirm that You have the authority to bind the Legal Entity and that Contributions Submitted to Us on behalf of the Legal Entity, including Contributions Submitted by Your Designated Employees, are covered by this Agreement. You provide Your acceptance and the list of Your Designated Employees by email to legal@postmill.ai. If the Legal Entity does not own the Copyright in the entire Contribution, any other author of the Contribution should also sign the applicable Agreement. In any event, please contact Us at legal@postmill.ai.
 
 ### Definitions
 
@@ -110,7 +110,7 @@ In the event of a termination of this Agreement Sections "Disclaimer", "Term" an
 
 ### Miscellaneous
 
-This Agreement and all disputes, claims, actions, suits or other proceedings arising out of this agreement or relating in any way to it shall be governed by the laws of Germany, excluding its private international law provisions.
+This Agreement and all disputes, claims, actions, suits or other proceedings arising out of this agreement or relating in any way to it shall be governed by the laws of the State of Nevada, United States, excluding its private international law provisions.
 
 This Agreement sets out the entire agreement between You and Us for Your Contributions to Us and overrides all other agreements or understandings.
 
@@ -124,4 +124,4 @@ You authorize each individual listed (Your "Designated Employees") to Submit Con
 
 It is Your responsibility to keep the list of Your Designated Employees current and to notify Us of any change to that list or to the individual You have identified as Your point of contact. Until We receive notice of a change, We may rely on the most recent list You have provided. You agree to notify Us promptly when an individual is no longer authorized to Submit Contributions on Your behalf.
 
-Should You wish to Submit work that is not Your original creation, You may Submit it to Us separately, marking the work clearly and identifying its source and any license or other restriction of which You are aware. Any such work of which You are aware on the date You accept this Agreement should be identified through the contribution form at https://contribute.postiz.com/p/postiz/cla.
+Should You wish to Submit work that is not Your original creation, You may Submit it to Us separately, marking the work clearly and identifying its source and any license or other restriction of which You are aware. Any such work of which You are aware on the date You accept this Agreement should be identified in Your acceptance email to legal@postmill.ai.

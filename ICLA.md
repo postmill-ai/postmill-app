@@ -4,9 +4,9 @@ Based on the
 
 ## Individual Contributor License Agreement (ICLA)
 
-Thank you for your interest in contributing to GitroomHQ's Postmill ("We" or "Us").
+Thank you for your interest in contributing to Postmill, operated by REAA Technologies Inc., a Nevada corporation located in Las Vegas, Nevada, doing business as Postmill ("We" or "Us").
 
-The purpose of this contributor agreement ("Agreement") is to clarify and document the rights granted by contributors to Us. To make this document effective, please follow the instructions at https://contribute.postiz.com/p/postiz/cla.
+The purpose of this contributor agreement ("Agreement") is to clarify and document the rights granted by contributors to Us. To make this document effective, please review its terms and send Your written acceptance by email to legal@postmill.ai, referencing this Agreement (ICLA.md).
 
 ### Preamble
 
@@ -22,7 +22,7 @@ This process only serves for the transfer of economic rights. So-called moral ri
 
 ### How to use this FLA
 
-If You are an employee and have created the Contribution as part of Your employment, You need to have Your employer approve this Agreement or sign the Entity version of this document. If You do not own the Copyright in Your Contribution, any other author of the Contribution should also sign this. In any event, please contact Us at nevo@postiz.com.
+If You are an employee and have created the Contribution as part of Your employment, You need to have Your employer approve this Agreement or sign the Entity version of this document. If You do not own the Copyright in Your Contribution, any other author of the Contribution should also sign this. In any event, please contact Us at legal@postmill.ai.
 
 ### Definitions
 
@@ -110,7 +110,7 @@ In the event of a termination of this Agreement Sections "Disclaimer", "Term" an
 
 ### Miscellaneous
 
-This Agreement and all disputes, claims, actions, suits or other proceedings arising out of this agreement or relating in any way to it shall be governed by the laws of Germany, excluding its private international law provisions.
+This Agreement and all disputes, claims, actions, suits or other proceedings arising out of this agreement or relating in any way to it shall be governed by the laws of the State of Nevada, United States, excluding its private international law provisions.
 
 This Agreement sets out the entire agreement between You and Us for Your Contributions to Us and overrides all other agreements or understandings.
 

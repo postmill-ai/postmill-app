@@ -15,7 +15,7 @@ test('render every real page + capture errors', async ({ page }) => {
     const consoleErrors: string[] = [];
     const apiErrors: string[] = [];
     const onC = (m: any) => { if (m.type() === 'error') consoleErrors.push(m.text().slice(0, 130)); };
-    const onR = (r: any) => { const u = r.url(); if (u.includes('/api/') && r.status() >= 400) apiErrors.push(`${r.status()} ${u.replace('https://postiz.reaatech.com','').split('?')[0]}`); };
+    const onR = (r: any) => { const u = r.url(); if (u.includes('/api/') && r.status() >= 400) apiErrors.push(`${r.status()} ${u.replace('https://app.postmill.ai','').split('?')[0]}`); };
     page.on('console', onC); page.on('response', onR);
 
     let httpStatus = 0, textLen = 0, toAuth = false;

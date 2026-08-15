@@ -65,7 +65,7 @@ const JoinOver: FC<{ onShowYouTube: () => void }> = ({ onShowYouTube }) => {
         </span>{' '}
         {t('billing_who_use', 'who use')}{' '}
         {t(
-          'billing_postiz_grow_social',
+          'billing_postmill_grow_social',
           'Postmill To Grow Their Social Presence'
         )}
       </div>
@@ -87,7 +87,7 @@ const JoinOver: FC<{ onShowYouTube: () => void }> = ({ onShowYouTube }) => {
           </div>
           <div>
             {t(
-              'billing_see_the_power_of_postiz',
+              'billing_see_the_power_of_postmill',
               'See the power of Postmill (click here)'
             )}
           </div>
@@ -181,14 +181,14 @@ export const FirstBillingComponent = () => {
   const showYouTube = () => {
     modals.openModal({
       title: t(
-        'billing_grow_fast_with_postiz_play_video',
+        'billing_grow_fast_with_postmill_play_video',
         'Grow Fast With Postmill (Play the video)'
       ),
       children: (
         <iframe
           className="h-full aspect-video min-w-[800px]"
           src="https://www.youtube.com/embed/BdsCVvEYgHU?si=vvhaZJ8I5oXXvVJS?autoplay=1"
-          title={t('billing_postiz_tutorial', 'Postmill Tutorial')}
+          title={t('billing_postmill_tutorial', 'Postmill Tutorial')}
           allow="autoplay"
           allowFullScreen
         />

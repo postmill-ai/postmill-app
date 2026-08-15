@@ -265,7 +265,7 @@ const McpSection = ({
           </div>
           <div className="text-[13px] text-newTableText mt-[2px]">
             {t(
-              'connect_your_mcp_client_to_postiz_to_schedule_your_posts_faster',
+              'connect_your_mcp_client_to_postmill_to_schedule_your_posts_faster',
               'Connect Postmill MCP server to your client (Http streaming) to schedule your posts faster!'
             )}
           </div>

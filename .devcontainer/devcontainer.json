@@ -1,6 +1,6 @@
 {
 	"name": "Postmill Dev Container",
-	"image": "localhost/postiz-devcontainer",
+	"image": "localhost/postmill-devcontainer",
 	"features": {},
 	"customizations": {
 		"vscode": {

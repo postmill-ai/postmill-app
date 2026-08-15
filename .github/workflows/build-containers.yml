@@ -7,7 +7,7 @@ on:
     tags:
       - '*'
 
-# NOTE (postmill-ai): repointed from gitroomhq -> reaatech -> postmill-ai, added packages:write,
+# NOTE (postmill-ai): repointed to postmill-ai, added packages:write,
 # and simplified to a single amd64 build (the target host is amd64-only) that pushes
 # both :<tag> and :latest directly. The previous multi-arch matrix + manifest job is
 # removed because the org has no arm64 runner and only amd64 is deployed.

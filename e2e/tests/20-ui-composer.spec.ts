@@ -8,7 +8,7 @@ test('compose a post through the UI', async ({ page }) => {
   page.on('response', r => {
     const u = r.url();
     if (u.includes('/api/') && (u.includes('/posts') || u.includes('preflight') || u.includes('valid') || u.includes('media'))) {
-      apiCalls.push(`${r.status()} ${r.request().method()} ${u.replace('https://postiz.reaatech.com','').split('?')[0]}`);
+      apiCalls.push(`${r.status()} ${r.request().method()} ${u.replace('https://app.postmill.ai','').split('?')[0]}`);
     }
   });
   page.on('console', m => { if (m.type() === 'error') consoleErrors.push(m.text().slice(0, 160)); });

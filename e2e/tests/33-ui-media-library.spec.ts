@@ -24,7 +24,7 @@ test('media library page coverage', async ({ page }) => {
   page.on('response', (r) => {
     const u = r.url();
     if (u.includes('/api/files')) {
-      findings.apiCalls.push(`${r.status()} ${u.split('?')[0].replace('https://postiz.reaatech.com/api/files', '')}`);
+      findings.apiCalls.push(`${r.status()} ${u.split('?')[0].replace('https://app.postmill.ai/api/files', '')}`);
     }
   });
 

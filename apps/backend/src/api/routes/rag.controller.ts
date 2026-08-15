@@ -179,7 +179,7 @@ export class RagController {
       vectorStore: rag.vectorStore || 'pgvector',
       // Qdrant (remote)
       qdrantUrl: rag.qdrantUrl || '',
-      qdrantCollection: rag.qdrantCollection || 'postiz_rag',
+      qdrantCollection: rag.qdrantCollection || 'postmill_rag',
       distance: rag.distance || 'Cosine',
       qdrantConfigured: !!(rag.qdrantUrl || secret.qdrantApiKey),
       // Remote pgvector — never return the connection string (it carries the password).

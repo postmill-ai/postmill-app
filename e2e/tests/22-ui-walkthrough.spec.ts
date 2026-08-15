@@ -17,7 +17,7 @@ test('navigate the app via sidebar clicks', async ({ page }) => {
     const consoleErrors: string[] = [];
     const apiErrors: string[] = [];
     const onC = (m: any) => { if (m.type() === 'error') consoleErrors.push(m.text().slice(0, 140)); };
-    const onR = (r: any) => { const u = r.url(); if (u.includes('/api/') && r.status() >= 400) apiErrors.push(`${r.status()} ${u.replace('https://postiz.reaatech.com','').split('?')[0]}`); };
+    const onR = (r: any) => { const u = r.url(); if (u.includes('/api/') && r.status() >= 400) apiErrors.push(`${r.status()} ${u.replace('https://app.postmill.ai','').split('?')[0]}`); };
     page.on('console', onC); page.on('response', onR);
 
     let clicked = false, urlAfter = '', visibleText = 0;
@@ -28,7 +28,7 @@ test('navigate the app via sidebar clicks', async ({ page }) => {
         clicked = true;
         await page.waitForLoadState('networkidle', { timeout: 12000 }).catch(() => {});
         await page.waitForTimeout(2000);
-        urlAfter = page.url().replace('https://postiz.reaatech.com', '');
+        urlAfter = page.url().replace('https://app.postmill.ai', '');
         visibleText = (await page.locator('body').innerText()).length;
         await page.screenshot({ path: `ui-nav-${label.replace(/\s+/g, '-').toLowerCase()}.png` });
       }

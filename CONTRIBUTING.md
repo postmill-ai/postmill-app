@@ -6,9 +6,9 @@ Contributions are welcome - code, docs, whatever it might be! If this is your fi
 
 The main documentation site has a [developer guide](https://docs.postmill.ai/developer-docs/). That guide provides you a good understanding of the project structure, and how to setup your development environment. Read this document after you have read that guide. This document is intended to provide you a good understanding of how to submit your first contribution.
 
-## Apply via the contribution form
+## Discuss your contribution first
 
-To submit your contribution, please fill out the [contribution form](https://contribute.postiz.com/p/postiz). This helps us evaluate whether your contribution is a good fit for the project. We will review your submission and get back to you as soon as possible.
+Before submitting a large contribution, please open a [GitHub Discussion](https://github.com/postmill-ai/postmill-app/discussions) or an issue. This helps us evaluate whether your contribution is a good fit for the project — and saves you time if it isn't. We will review your idea and get back to you as soon as possible.
 
 ## Sign the Contributor License Agreement (CLA)
 
@@ -17,7 +17,7 @@ Before we can merge your contribution, you must agree to our Contributor License
 - Contributing as an individual? The [Individual Contributor License Agreement (ICLA)](./ICLA.md) applies.
 - Contributing on behalf of a company or other legal entity? The [Entity Contributor License Agreement (CCLA)](./CCLA.md) applies.
 
-You accept the agreement by following the instructions on the [CLA page](https://contribute.postiz.com/p/postiz/cla). You only need to do this once, and it covers your present and future contributions to Postmill.
+You accept the agreement by sending your written acceptance by email to [legal@postmill.ai](mailto:legal@postmill.ai), referencing the applicable agreement (ICLA or CCLA) as described in those files. You only need to do this once, and it covers your present and future contributions to Postmill.
 
 ## Write code with others
 

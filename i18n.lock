@@ -5,7 +5,7 @@ checksums:
   ea62a503dab91e0107f1c8e1557d415b:
     calendar: f113fede755b1502d0a17ad5068ba005
     webhooks: 0329bc102d3ab3c73410d126e119de12
-    webhooks_are_a_way_to_get_notified_when_something_happens_in_postiz_via_an_http_request: 4211764226f06bf96e627edb0f5f004a
+    webhooks_are_a_way_to_get_notified_when_something_happens_in_postmill_via_an_http_request: 4211764226f06bf96e627edb0f5f004a
     name: 9368b5a047572b6051f334af5aa76819
     url: ca97457614226960d41dd18c3c29c86b
     edit: eee7f39ff90b18852afc1671f21fbaa9
@@ -42,12 +42,12 @@ checksums:
     connect: 8778ee245078a8be4a2ce855c8c56edc
     public_api: f02b394bb952777eb3e2432b3c78556b
     check_n8n: 2e6e406d2c46e83f52a80ef9bd810d10
-    use_postiz_api_to_integrate_with_your_tools: ccb5f5cd99f7f087ae360f231ae07985
+    use_postmill_api_to_integrate_with_your_tools: ccb5f5cd99f7f087ae360f231ae07985
     read_how_to_use_it_over_the_documentation: 05ac49c5bb91da62103dbbf2f69ea50f
     reveal: 3f7302cc2e097266e447b3e18f1b9ab7
     copy_key: 8f4f13acec7abf7c3aa6e680b6da99f8
     mcp: 62c2c8e6703c9e5224e98294a53e1884
-    connect_your_mcp_client_to_postiz_to_schedule_your_posts_faster: bb53d1093a6ab977f2eee0bbc7e0248c
+    connect_your_mcp_client_to_postmill_to_schedule_your_posts_faster: bb53d1093a6ab977f2eee0bbc7e0248c
     share_with_a_client: 8e27f69c841a9dda635f34fb1b38ad99
     post: 0beafa0cd18d45690b9b07104eb2c1b8
     comments: 502237cd1044491c48494aa60967a985
@@ -151,7 +151,7 @@ checksums:
     webhooks_1: 0329bc102d3ab3c73410d126e119de12
     auto_post: e2dee9c337a4523a626829d6f169ae88
     logout_from: 7e997e00bfc49b02589c10138f5da75c
-    join_10000_entrepreneurs_who_use_postiz: 3661c56dda210e631aff634117af31cc
+    join_10000_entrepreneurs_who_use_postmill: 3661c56dda210e631aff634117af31cc
     to_manage_all_your_social_media_channels: 155f69562b7a791691489f6c13f8ce50
     100_no_risk_trial: 4d8cf3bef45c64d898a678c8d2d7e32f
     pay_nothing_for_the_first_7_days: f85904a77eed00c8009f59b214e15ea1
@@ -313,7 +313,7 @@ checksums:
     forks: d692bdb4892481b1b4d9adf13b5b7ce0
     registration_is_disabled: eff7aff64ccfe6068849fe1a1212c0a0
     login_instead: 4e7a13b6c39065d8e093c554345ccd7c
-    gitroom: 6edccb5285794dba2f351f2fb1d2f803
+    postmill: 6edccb5285794dba2f351f2fb1d2f803
     select_a_conversation_and_chat_away: 941ced71a44545919a489e4e7e8223d0
     adding_channel_redirecting_you: 397169979a6de32672e54cf01c9e7f24
     could_not_add_provider: 9326fd712ed969f76071f9d2debee931
@@ -457,12 +457,12 @@ checksums:
     post_content_directly_to_tiktok: 2612250f75c43a3128016b99569c5fff
     upload_content_to_tiktok_without_posting: 6c3943e4d796b720933b90d250bd611c
     choose_upload_without_posting_description: 223c59be260eeaafe420791b76e2523c
-    faq_am_i_going_to_be_charged_by_postiz: f4aad17d35bcaf45427216a432f23af3
-    faq_to_confirm_credit_card_information_postiz_will_hold: ec475e644e3b5db2550c5bc06320b1cd
-    faq_can_i_trust_postiz_gitroom: 9ee3c694bc392c339333047484d36003
-    faq_postiz_gitroom_is_proudly_open_source: 17658906aec47f1557f84c71efadee03
+    faq_am_i_going_to_be_charged_by_postmill: f4aad17d35bcaf45427216a432f23af3
+    faq_to_confirm_credit_card_information_postmill_will_hold: ec475e644e3b5db2550c5bc06320b1cd
+    faq_can_i_trust_postmill: 9ee3c694bc392c339333047484d36003
+    faq_postmill_is_proudly_open_source: 17658906aec47f1557f84c71efadee03
     faq_what_are_channels: 22bc7aebd017e487d9a5ac8946a2a08d
-    faq_postiz_gitroom_allows_you_to_schedule_posts: 287ddb6d7f14970e29aa6e2431bbe207
+    faq_postmill_allows_you_to_schedule_posts: 287ddb6d7f14970e29aa6e2431bbe207
     faq_what_are_team_members: bb369e1b85f24dbc4519ce32d71953d6
     faq_if_you_have_a_team_with_multiple_members: ed9a422bfca288261c3959d0fd49f657
     faq_what_is_ai_auto_complete: 3ffc4a069c8e35e01e952375b3c401ba
@@ -510,7 +510,7 @@ checksums:
     billing_join_over: 6e1c237241ba00ddbb07fd603344c5c3
     billing_entrepreneurs_count: 1e90206cb8ea01d0a1084d3af1a4cbed
     billing_who_use: 63bdc59ef443e193eca87889e83ea07a
-    billing_postiz_grow_social: 3cf5ab166df9cb65e17b9a039ccbbbad
+    billing_postmill_grow_social: 3cf5ab166df9cb65e17b9a039ccbbbad
     billing_no_risk_trial: 6e5c60d9ddf3affa8ba8870272f9f9ab
     billing_pay_nothing_7_days: 2db15615cad39981069b65e6a0852b18
     billing_cancel_anytime: 91355fdc2e1f62fcb28b1d74ed342a90

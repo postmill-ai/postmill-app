@@ -63,13 +63,13 @@ jobs:
       postgres:
         image: postgres:15
         env:
-          POSTGRES_USER: postiz
-          POSTGRES_PASSWORD: postiz
-          POSTGRES_DB: postiz
+          POSTGRES_USER: postmill
+          POSTGRES_PASSWORD: postmill
+          POSTGRES_DB: postmill
         ports:
           - 5432:5432
         options: >-
-          --health-cmd "pg_isready -U postiz"
+          --health-cmd "pg_isready -U postmill"
           --health-interval 10s
           --health-timeout 5s
           --health-retries 5
@@ -83,7 +83,7 @@ jobs:
           --health-timeout 5s
           --health-retries 5
     env:
-      DATABASE_URL: postgresql://postiz:postiz@localhost:5432/postiz
+      DATABASE_URL: postgresql://postmill:postmill@localhost:5432/postmill
       REDIS_URL: redis://localhost:6379
       JWT_SECRET: ci-boot-guard-not-a-real-secret
       FRONTEND_URL: http://localhost:4200
