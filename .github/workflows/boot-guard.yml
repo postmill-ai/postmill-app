@@ -123,6 +123,12 @@ jobs:
       - name: Build backend
         run: pnpm run build:backend
 
+      # Lives here rather than in test.yml because generating the document constructs
+      # AppModule, which instantiates every provider and therefore needs the same
+      # Postgres/Redis/JWT env this job already provisions. test.yml has no Redis.
+      - name: OpenAPI drift gate
+        run: node tools/codegen/generate-openapi.mjs --check
+
       - name: Boot backend and assert it answers (not a 502/crash-loop)
         run: |
           node apps/backend/dist/apps/backend/src/main.js > backend-boot.log 2>&1 &

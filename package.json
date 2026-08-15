@@ -35,6 +35,7 @@
     "prisma-migrate-deploy": "pnpm dlx prisma@6.5.0 migrate deploy --schema ./libraries/nestjs-libraries/src/database/prisma/schema.prisma",
     "prisma-migrate-resolve": "pnpm dlx prisma@6.5.0 migrate resolve --schema ./libraries/nestjs-libraries/src/database/prisma/schema.prisma",
     "prisma-migrate-deploy-safe": "node tools/db/migrate-deploy-safe.mjs",
+    "openapi:generate": "node tools/codegen/generate-openapi.mjs",
     "prisma-reset": "cd ./libraries/nestjs-libraries/src/database/prisma && pnpm dlx prisma@6.5.0 db push --force-reset && pnpm dlx prisma@6.5.0 db push",
     "docker-build": "./docker/docker-build.sh",
     "docker-create": "./docker/docker-create.sh",
