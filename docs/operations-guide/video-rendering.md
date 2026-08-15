@@ -28,7 +28,7 @@ local compute; without bounds a backlog can starve the host.
 
 1. Build the worker image on the Podman host:
    ```bash
-   podman build -f Containerfile.render -t localhost/postmill-render:latest .
+   podman build -f docker/Containerfile.render -t localhost/postmill-render:latest .
    ```
 2. Enable it:
    ```bash

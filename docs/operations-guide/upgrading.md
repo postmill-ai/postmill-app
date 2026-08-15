@@ -152,10 +152,10 @@ If you prefer to build the container image locally:
 
 ```bash
 # Build the image
-./var/docker/docker-build.sh
+./docker/docker-build.sh
 
-# Or with the docker-compose.dev.yaml for local development
-docker compose -f docker-compose.dev.yaml up -d
+# Or with the dev compose stack for local development
+docker compose -f docker/docker-compose.dev.yaml up -d
 
 # Build all apps from source
 pnpm run build

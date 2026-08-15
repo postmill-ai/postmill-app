@@ -1,12 +1,20 @@
-# Do **not** use this yml for production. It is not up-to-date.
-# Use https://docs.postmill.com/installation/docker-compose
-# This is only for the dev enviroment
+# Do **not** use this yml for production — see the root docker-compose.yaml and
+# docs/operations-guide/docker.md for the production stack. This is dev only.
+#
+# Run from the repo root:
+#
+#   docker compose -f docker/docker-compose.dev.yaml up -d
 #
 # Profiles:
 #   default (no --profile): postgres + redis only — enough for `pnpm run dev:minimal`
 #   --profile jobs:         also starts the Inngest dev server (requires USE_INNGEST=true)
 #   --profile tools:        also starts pgAdmin
 #   --profile jobs --profile tools: everything
+
+# Pinned so the project name (and therefore the named-volume prefix) does not follow
+# this file's directory. Without it Compose would derive "docker" from docker/ and
+# orphan every existing postmill-app_* volume.
+name: postmill-app
 
 services:
   postmill-postgres:

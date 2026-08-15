@@ -10,6 +10,13 @@
 # IMPORTANT (v3.7.1): Channel provider credentials and AI provider config are
 # no longer read from environment variables. Configure them per-organization
 # in-app via Settings → Channels and Settings → AI respectively.
+#
+# This file deliberately stays at the repo root and declares no top-level `name:`.
+# Compose derives the project name from the directory containing it, and that name
+# prefixes the named volumes below (postmill-config, postmill-uploads,
+# postgres-volume). Pinning a name here, or moving this file, would re-prefix those
+# volumes and bring an existing install up against empty storage. The dev compose
+# files under docker/ DO pin `name: postmill-app`, precisely because they moved.
 services:
   postmill:
     image: ghcr.io/postmill-ai/postmill-app:latest

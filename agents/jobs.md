@@ -197,7 +197,7 @@ steps, retries, the run ledger, and per-org fan-out for free.
 ## 7. Local dev
 
 ```bash
-docker compose -f docker-compose.dev.yaml --profile jobs up -d   # postgres + redis + Inngest dev server
+docker compose -f docker/docker-compose.dev.yaml --profile jobs up -d   # postgres + redis + Inngest dev server
 ```
 
 - The `jobs` profile starts `postmill-inngest` (`inngest dev -u http://postmill-app:3000/api/inngest`),

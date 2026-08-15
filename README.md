@@ -82,7 +82,7 @@ git clone https://github.com/postmill-ai/postmill-app.git
 cd postmill-app
 pnpm install
 cp .env.example .env                                   # then fill in your values
-docker compose -f docker-compose.dev.yaml up -d        # postgres + redis
+docker compose -f docker/docker-compose.dev.yaml up -d        # postgres + redis
 pnpm run dev:minimal                                   # backend + frontend
 ```
 

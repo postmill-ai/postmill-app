@@ -121,9 +121,9 @@ responsive.
 
 ```bash
 # Required services only: postgres + redis
-docker compose -f docker-compose.dev.yaml up -d
+docker compose -f docker/docker-compose.dev.yaml up -d
 # Add background jobs (Inngest dev server)
-docker compose -f docker-compose.dev.yaml --profile jobs up -d
+docker compose -f docker/docker-compose.dev.yaml --profile jobs up -d
 
 # Skip heavy optional subsystems (all flags default to enabled)
 DEV_DISABLE_AI=true DEV_DISABLE_MCP=true DEV_DISABLE_MEDIA=true \

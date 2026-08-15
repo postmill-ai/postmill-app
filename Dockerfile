@@ -1,6 +1,6 @@
 # Production backend image — multi-stage, non-root, ONE node process per container.
 #
-# Differs from Dockerfile.dev (which bundled devDeps + ran nginx + PM2): this builds in a
+# Differs from docker/Dockerfile.dev (which bundled devDeps + ran nginx + PM2): this builds in a
 # throwaway stage, prunes dev dependencies, and the runtime stage runs the compiled backend
 # directly as an unprivileged user. Horizontal scaling is the orchestrator's job (run N
 # replicas) — NOT PM2 inside the container.
@@ -55,7 +55,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     curl \
 && rm -rf /var/lib/apt/lists/*
 
-# Distro Chromium for puppeteer (no bundled download); matches Containerfile.render.
+# Distro Chromium for puppeteer (no bundled download); matches docker/Containerfile.render.
 ENV PUPPETEER_SKIP_DOWNLOAD=1
 ENV PUPPETEER_EXECUTABLE_PATH=/usr/bin/chromium
 ENV NODE_ENV=production
