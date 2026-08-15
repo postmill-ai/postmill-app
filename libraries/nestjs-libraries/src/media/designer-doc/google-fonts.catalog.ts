@@ -2,7 +2,7 @@
  * Every family Google Fonts serves, as one compact row each:
  * `Family|category|weights`, category being s/f/d/h/m.
  *
- * GENERATED — run `node scripts/generate-font-catalog.mjs` to refresh. Do not
+ * GENERATED — run `node tools/codegen/generate-font-catalog.mjs` to refresh. Do not
  * hand-edit; the point of committing it is that the client picker, the canvas
  * loader and the server renderer all read the SAME list, which is what the
  * three hand-maintained copies could never guarantee.

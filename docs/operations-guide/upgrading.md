@@ -82,10 +82,10 @@ If you need an in-place schema sync outside the normal migration flow, use the h
 
 ```bash
 # Safe additive sync (refuses data loss)
-./scripts/postmill-migrate.sh
+./tools/db/postmill-migrate.sh
 
 # Destructive — back up first!
-./scripts/postmill-migrate.sh --accept-data-loss
+./tools/db/postmill-migrate.sh --accept-data-loss
 ```
 
 Or run directly in the container:

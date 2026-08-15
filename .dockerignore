@@ -21,6 +21,8 @@ dist
 .git
 .github
 reports
+# Maintainer-local scratch (gitignored, but still present in a local build context).
+scripts
 **/.env*
 **/.env.*
 .envrc

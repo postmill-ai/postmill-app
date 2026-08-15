@@ -2,7 +2,7 @@
 // Snapshot Replicate allowlist model input schemas into the provider metadata.
 //
 // Usage:
-//   REPLICATE_API_TOKEN=<token> node scripts/snapshot-replicate-catalog.mjs
+//   REPLICATE_API_TOKEN=<token> node tools/codegen/snapshot-replicate-catalog.mjs
 //
 // Without a token the script still emits model ids (so completeness tests pass)
 // but leaves fields empty; the output is marked NEEDS-LIVE-SMOKE-TEST.
@@ -19,15 +19,15 @@ import { createRequire } from 'node:module';
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const METADATA_FILE = path.join(
   __dirname,
-  '../libraries/providers/replicate/src/v1/metadata.ts',
+  '../../libraries/providers/replicate/src/v1/metadata.ts',
 );
 const ALLOWLIST_FILE = path.join(
   __dirname,
-  '../libraries/nestjs-libraries/src/media/replicate-studio/replicate-catalog.allowlist.ts',
+  '../../libraries/nestjs-libraries/src/media/replicate-studio/replicate-catalog.allowlist.ts',
 );
 const CONVERTER_FILE = path.join(
   __dirname,
-  '../libraries/nestjs-libraries/src/media/replicate-studio/replicate-schema-to-model-fields.ts',
+  '../../libraries/nestjs-libraries/src/media/replicate-studio/replicate-schema-to-model-fields.ts',
 );
 
 const BASE = 'https://api.replicate.com/v1';

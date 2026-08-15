@@ -62,7 +62,7 @@ independently safe and each can be rolled back by rolling forward:
 3. **Contract** — only once nothing references the old shape, author the migration that drops it.
 
 The contract step is the only destructive one, and it is gated: the diff must pass
-`scripts/schema-destructive-guard.mjs` (run via `pnpm run prisma-schema-check`), which **rejects**
+`tools/db/schema-destructive-guard.mjs` (run via `pnpm run prisma-schema-check`), which **rejects**
 `DROP TABLE`/`DROP COLUMN`/`DROP CONSTRAINT` and `ADD COLUMN … NOT NULL` without a `DEFAULT` unless
 explicitly acknowledged with `ALLOW_DESTRUCTIVE_SCHEMA=true`. CI runs the same guard against
 `origin/main` on every PR. See the

@@ -2,7 +2,7 @@
 /**
  * Regenerate the bundled Google Fonts catalog.
  *
- *   node scripts/generate-font-catalog.mjs
+ *   node tools/codegen/generate-font-catalog.mjs
  *
  * The Designer used to carry a hand-written list of ~50 families, repeated in
  * three places and loaded through a single `@import` that had reached 2,000
@@ -24,7 +24,7 @@ const METADATA_URL = 'https://fonts.google.com/metadata/fonts';
 
 const OUT = resolve(
   dirname(fileURLToPath(import.meta.url)),
-  '../libraries/nestjs-libraries/src/media/designer-doc/google-fonts.catalog.ts'
+  '../../libraries/nestjs-libraries/src/media/designer-doc/google-fonts.catalog.ts'
 );
 
 /** Google's category strings, shortened to one character per row. */
@@ -66,7 +66,7 @@ const main = async () => {
  * Every family Google Fonts serves, as one compact row each:
  * \`Family|category|weights\`, category being s/f/d/h/m.
  *
- * GENERATED — run \`node scripts/generate-font-catalog.mjs\` to refresh. Do not
+ * GENERATED — run \`node tools/codegen/generate-font-catalog.mjs\` to refresh. Do not
  * hand-edit; the point of committing it is that the client picker, the canvas
  * loader and the server renderer all read the SAME list, which is what the
  * three hand-maintained copies could never guarantee.

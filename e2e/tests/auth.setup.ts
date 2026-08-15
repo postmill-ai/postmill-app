@@ -17,7 +17,7 @@ fs.mkdirSync(AUTH_DIR, { recursive: true });
  *            member login; the separate state file keeps the config stable for when billing
  *            is enabled. See dev/UI_UX_AUDIT.md.
  *
- * Creds via env, defaulting to the seeded users (scripts/seed-test-data.js).
+ * Creds via env, defaulting to the seeded users (e2e/seed-test-data.js).
  */
 const PERSONAS = [
   { name: 'admin', email: process.env.E2E_ADMIN_EMAIL || 'test@test.com', password: process.env.E2E_ADMIN_PASSWORD || 'Test123!' },

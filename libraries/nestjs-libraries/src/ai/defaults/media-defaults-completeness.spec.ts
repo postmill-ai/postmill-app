@@ -22,7 +22,7 @@ import type { ProviderMetadata } from '@postmill-ai/provider-kernel';
  *   4. P is one of the live-`listModels` hubs (catalog is fetched at runtime).
  * Otherwise the provider declares a model-category with no source — FAIL.
  *
- * Enumeration mirrors the generator (`scripts/generate-studio-descriptor-registry.mjs`),
+ * Enumeration mirrors the generator (`tools/codegen/generate-studio-descriptor-registry.mjs`),
  * which scans `libraries/providers/*\/src/v1/metadata.ts`. We do the same here with
  * Vite's `import.meta.glob` rather than booting the Nest kernel (no DI needed — the
  * metadata is static truth authored per package), and filter to `domains: ['media']`.

@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 # Run a Prisma schema sync inside the live Postmill container.
 #
-#   ./scripts/postmill-migrate.sh                     # safe additive sync (refuses data loss)
-#   ./scripts/postmill-migrate.sh --accept-data-loss  # allow drops/retypes (DESTRUCTIVE — back up first!)
+#   ./tools/db/postmill-migrate.sh                     # safe additive sync (refuses data loss)
+#   ./tools/db/postmill-migrate.sh --accept-data-loss  # allow drops/retypes (DESTRUCTIVE — back up first!)
 #
 # This pushes whatever schema.prisma is baked into the RUNNING image. For anything
 # permanent, the clean path is: edit schema.prisma -> commit -> tag -> CI builds the

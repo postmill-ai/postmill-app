@@ -43,7 +43,7 @@ Scaffold one workspace package implementing `ShortLinkCapability`, register it w
    - `pnpm install` from repo root.
    Boot registration is automatic via `apps/backend/src/providers.bootstrap.ts`, gated by `DEV_DISABLE_SHORTLINKS`.
 
-10. Tests: copy `libraries/providers/bitly/src/v1/__tests__/conformance.spec.ts` (`runDomainConformance('shortlink', module, {...})`), add fetch-mocked adapter unit tests (mock `SafeFetchPort`, assert headers/URLs/parsing). Skip `scripts/generate-shortlink-icons.mjs` — legacy, no consumer of the PNGs (verified: `agents/providers/shortlink.md` §7).
+10. Tests: copy `libraries/providers/bitly/src/v1/__tests__/conformance.spec.ts` (`runDomainConformance('shortlink', module, {...})`), add fetch-mocked adapter unit tests (mock `SafeFetchPort`, assert headers/URLs/parsing). Skip the legacy shortlink icon PNGs — they have no consumer (verified: `agents/providers/shortlink.md` §7).
 
 ## Verify
 - `vitest run --root libraries/providers/<id>`
@@ -57,4 +57,4 @@ Scaffold one workspace package implementing `ShortLinkCapability`, register it w
 - Assuming OAuth2 machinery lives in the base class — it doesn't; only `bitly` has an `oauth` object. Copy its `authorizeUrl`/`exchangeCode` and read `clientId`/`clientSecret` from `ctx.extraConfig`.
 - Returning numeric clicks — `ShortLinkStat.clicks` is a string (`String(clicks)`).
 - Using bare `fetch` for provider API calls — all outbound HTTP goes through the injected `SafeFetchPort` (`this._fetch`).
-- Adding your provider to `scripts/generate-shortlink-icons.mjs` — the PNGs have no consumer; treat the script as legacy.
+- Adding a shortlink icon PNG for your provider — the PNGs have no consumer; treat them as legacy.

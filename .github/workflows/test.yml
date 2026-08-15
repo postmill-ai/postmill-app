@@ -153,10 +153,10 @@ jobs:
               --from-schema-datamodel /tmp/main-schema.prisma \
               --to-schema-datamodel libraries/nestjs-libraries/src/database/prisma/schema.prisma \
               --script > /tmp/pending.sql
-            node scripts/schema-destructive-guard.mjs --file /tmp/pending.sql
+            node tools/db/schema-destructive-guard.mjs --file /tmp/pending.sql
           else
             echo "origin/main schema not found — skipping destructive guard (first push to main)."
           fi
 
       - name: Studio descriptor metadata drift gate
-        run: node scripts/generate-studio-descriptor-registry.mjs --check
+        run: node tools/codegen/generate-studio-descriptor-registry.mjs --check

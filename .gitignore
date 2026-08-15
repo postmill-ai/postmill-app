@@ -94,3 +94,7 @@ capture/
 # image venv, and stray logs. ~90MB of binaries, none of it reproducible input.
 .tmp-*/
 scratchpad-logs/
+
+# Maintainer-local scratch scripts. Deliberately NOT tracked — repo-owned tooling
+# lives in tools/ (tools/db, tools/codegen). Don't "fix" this by committing it.
+/scripts/

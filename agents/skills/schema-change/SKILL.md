@@ -16,7 +16,7 @@ Prisma 6.5.0 + PostgreSQL. Migrations apply against the live production DB, so e
 1. Edit `libraries/nestjs-libraries/src/database/prisma/schema.prisma` (89 models — read it for ground truth).
 2. `pnpm run prisma-migrate-dev` — authors `migrations/<timestamp>_<name>/migration.sql` and applies it to the local dev DB. It does **not** git-commit; commit the migration directory yourself, in the same commit as the schema edit.
 3. `pnpm run prisma-schema-diff` — eyeball the SQL production will run (detail: `agents/database.md` § Scripts).
-4. `pnpm run prisma-schema-check` — pipes the diff through `scripts/schema-destructive-guard.mjs`. Flags `DROP TABLE`, `DROP COLUMN`, `DROP CONSTRAINT`, `ADD COLUMN ... NOT NULL` without `DEFAULT`.
+4. `pnpm run prisma-schema-check` — pipes the diff through `tools/db/schema-destructive-guard.mjs`. Flags `DROP TABLE`, `DROP COLUMN`, `DROP CONSTRAINT`, `ADD COLUMN ... NOT NULL` without `DEFAULT`.
 5. `pnpm run prisma-generate` — sync the client (also runs on postinstall).
 6. Commit schema + migration together. **A schema edit without its migration fails CI**: `.github/workflows/test.yml` applies committed migrations to an empty Postgres and runs `prisma migrate diff --exit-code` against the schema; divergence = failure (detail: `agents/database.md` § CI gates).
 7. Other environments apply via `pnpm run prisma-migrate-deploy` (or the P3005-recovery wrapper `pnpm run prisma-migrate-deploy-safe`). `migrate deploy` is the **only** apply path for shared/production DBs; `pnpm run prisma-db-push` bakes in `--accept-data-loss` and is local-prototyping/reset only.

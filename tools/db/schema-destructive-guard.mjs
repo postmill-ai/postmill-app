@@ -12,8 +12,8 @@
  *   - ADD COLUMN ... NOT NULL  without a DEFAULT (breaks on existing rows)
  *
  * Usage:
- *   node scripts/schema-destructive-guard.mjs --file path/to/pending.sql
- *   cat pending.sql | node scripts/schema-destructive-guard.mjs
+ *   node tools/db/schema-destructive-guard.mjs --file path/to/pending.sql
+ *   cat pending.sql | node tools/db/schema-destructive-guard.mjs
  *
  * Exit codes:
  *   1  destructive/unsafe statement(s) found and ALLOW_DESTRUCTIVE_SCHEMA !== 'true'

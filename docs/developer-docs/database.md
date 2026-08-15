@@ -40,7 +40,7 @@ This also runs automatically after `pnpm install` via a `postinstall` script.
 
 A database that was created **before migrations existed** (any older local dev DB, or the first production DB stood up via `db push`) already has every table from `migrations/0_init`. A bare `migrate deploy` against it aborts with **P3005 "database schema is not empty"**.
 
-**You normally don't need to do anything** — the canonical apply path used by `pm2-run` and CI is `pnpm run prisma-migrate-deploy-safe` (`scripts/migrate-deploy-safe.mjs`), which detects P3005, auto-baselines `0_init` as already-applied, and re-deploys. It is idempotent and a no-op on a fresh/already-baselined DB.
+**You normally don't need to do anything** — the canonical apply path used by `pm2-run` and CI is `pnpm run prisma-migrate-deploy-safe` (`tools/db/migrate-deploy-safe.mjs`), which detects P3005, auto-baselines `0_init` as already-applied, and re-deploys. It is idempotent and a no-op on a fresh/already-baselined DB.
 
 To baseline manually (e.g. before switching a long-lived DB over by hand):
 
@@ -92,7 +92,7 @@ pnpm run prisma-migrate-deploy
 
 - **`prisma-migrate-dev`** authors and applies the migration locally; the committed migration is the source of truth for what every other environment applies via `prisma-migrate-deploy`.
 - **`prisma-schema-diff`** = `prisma migrate diff --from-url $DATABASE_URL --to-schema-datamodel [schema] --script` — the forward SQL only (no rollback); used to feed the destructive guard.
-- **`prisma-schema-check`** runs `scripts/schema-destructive-guard.mjs` (Node, no deps). It reads SQL from `--file [path]` (or stdin) and **exits 1** if it finds `DROP TABLE`/`DROP COLUMN`/`DROP CONSTRAINT` or `ADD COLUMN ... NOT NULL` without a `DEFAULT`.
+- **`prisma-schema-check`** runs `tools/db/schema-destructive-guard.mjs` (Node, no deps). It reads SQL from `--file [path]` (or stdin) and **exits 1** if it finds `DROP TABLE`/`DROP COLUMN`/`DROP CONSTRAINT` or `ADD COLUMN ... NOT NULL` without a `DEFAULT`.
 - **Destructive changes** (drops, in-place renames, a new required column) must follow an **expand/contract** plan — add the new shape, backfill, switch reads/writes, then drop the old shape in a follow-up migration — and the guard must be explicitly overridden with `ALLOW_DESTRUCTIVE_SCHEMA=true` to acknowledge the data-loss risk:
 
   ```bash
