@@ -7,43 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-### Fixed
-
-- **Container images could not start.** Both `Dockerfile` and `Containerfile.render` ran an
-  entrypoint under `/app/dist/...`, but `pnpm run build:backend` emits to `apps/backend/dist/...`
-  and `.dockerignore` excludes `dist` from the build context, so the path never existed in the
-  image. CI published green because it only ran `docker buildx imagetools inspect`, which reads
-  registry metadata and never starts the container; a smoke step that asserts the entrypoint file
-  exists now runs after every push.
-- **`NEXT_PUBLIC_VERSION` was discarded.** CI passed it as a `--build-arg`, but the production
-  `Dockerfile` declared no matching `ARG`, so released images carried no version.
-- **`pnpm run docker-build` was broken** (since before the fork): it passed `--target dist` and
-  `--target devcontainer` to a single-stage Dockerfile. Also fixed the dev container, which pinned
-  an image only that broken build produced.
-- **Password-reset confirmation could be skipped.** `ForgotReturnPasswordDto` compared
-  `repeatPassword` against a random per-process sentinel; a request that happened to submit the
-  live sentinel bypassed the match check. Replaced with a real cross-field validator — same
-  behaviour and error message otherwise.
-
 ### Changed
 
-- **Docker files consolidated into `docker/`.** `docker-compose.yaml`, `Dockerfile`, and
-  `.dockerignore` stay at the repository root; the dev compose files, `Dockerfile.dev`,
-  `Dockerfile.dev-live`, `Containerfile.render`, and the former `var/docker/` contents moved.
-  **Production upgrades are unaffected** — no volume, env var, or image reference changes. Building
-  from source or running the dev stack uses new paths; see
-  [Upgrading](./docs/operations-guide/upgrading.md). The dev compose files now pin
-  `name: postmill-app` so the move does not re-prefix dev volumes.
-- **Repo-owned tooling moved to `tools/`** (`tools/db`, `tools/codegen`); root `scripts/` is now
-  maintainer-local and untracked. Operator-facing: `scripts/postmill-migrate.sh` is now
-  `tools/db/postmill-migrate.sh`.
-- **`openapi.yml` is now generated** from the controllers instead of hand-maintained, with a CI
-  drift gate. It covers 465 paths with inferred request/response schemas (previously 234 paths and
-  none) and reports the real release version (previously a stale `3.4.0`). Regenerate with
-  `pnpm run openapi:generate`; do not hand-edit.
-- **Inherited CI/deploy scaffolding brought up to date** so it works if adopted: the Jenkins
-  pipelines (Node 20 → 22, pnpm 8 → 10.34.4, current sonar-scanner, native build deps) and
-  `railway.toml` (pinned `nodejs_22`).
 - **Default image models:** OpenAI's default image model moved from `dall-e-3` to
   `gpt-image-1` (dall-e-3 is gone for new API keys) and Replicate's from
   `black-forest-labs/flux-schnell` (retired upstream) to `black-forest-labs/flux-1.1-pro`.
