@@ -102,17 +102,17 @@ All under `apps/frontend/src/components/media-tools/<id>/`:
 | `apps/frontend/src/app/(app)/(site)/media/<id>/page.tsx` | `dynamic(..., { ssr: false })` wrapper rendering the studio component |
 | nav entry | `apps/frontend/src/app/(app)/(site)/media/layout.tsx` — `{ href: '/media/<id>', label, section: 'Providers', icon: <svg …/> }` |
 
-Tab shape (`StudioTab`): `{ key, label, operation: 'image'|'video'|'audio', model?, fields: StudioField[], custom? }`. Field types: `prompt`, `media` (opens the one standardized picker via `useMediaPicker()` → `FileFieldValue`; see `agents/ui-standards.md`), `select` (a `select` named `model` + `source: 'models'` gives dynamic discovery via `listModels`), `number`, `toggle`, `text`. Field `name`s are the provider's **native** API params — the adapter routes them (Qwen splits `input` vs `parameters`). Category keys follow the taxonomy in `scripts/generate-studio-descriptor-registry.mjs` (`text-to-image`, `text-to-video`, `image-to-video`, `text-to-speech`, `text-to-music`, …).
+Tab shape (`StudioTab`): `{ key, label, operation: 'image'|'video'|'audio', model?, fields: StudioField[], custom? }`. Field types: `prompt`, `media` (opens the one standardized picker via `useMediaPicker()` → `FileFieldValue`; see `agents/ui-standards.md`), `select` (a `select` named `model` + `source: 'models'` gives dynamic discovery via `listModels`), `number`, `toggle`, `text`. Field `name`s are the provider's **native** API params — the adapter routes them (Qwen splits `input` vs `parameters`). Category keys follow the taxonomy in `tools/codegen/generate-studio-descriptor-registry.mjs` (`text-to-image`, `text-to-video`, `image-to-video`, `text-to-speech`, `text-to-music`, …).
 
 Backend for the generic path: **none**. `MediaStudioController` (`apps/backend/src/api/routes/media-studio.controller.ts`, `/media/studio/:provider/{status,jobs,models,generate}`) + `MediaStudioService` (`libraries/nestjs-libraries/src/media/studio/media-studio.service.ts`) are provider-agnostic; async completion comes from webhooks first with the Inngest `media-jobs-poll` cron as backstop. Settings UI (`/settings/media/providers` + `/settings/media/config`, `MediaProviderController`) is catalog-driven from kernel manifests — no new settings code.
 
 ### CI gate (do not skip)
 
-`scripts/generate-studio-descriptor-registry.mjs` reads every `media-tools/*/descriptor.ts` and merges generated `mediaModels`, `website`, `description.en`, and reconciled `mediaCategories`/`kind` into the provider package's `src/v1/metadata.ts`. `.github/workflows/test.yml` runs it with `--check` ("Studio descriptor metadata drift gate") and **fails the build on drift**. After adding/changing a descriptor, run write mode and commit the result:
+`tools/codegen/generate-studio-descriptor-registry.mjs` reads every `media-tools/*/descriptor.ts` and merges generated `mediaModels`, `website`, `description.en`, and reconciled `mediaCategories`/`kind` into the provider package's `src/v1/metadata.ts`. `.github/workflows/test.yml` runs it with `--check` ("Studio descriptor metadata drift gate") and **fails the build on drift**. After adding/changing a descriptor, run write mode and commit the result:
 
 ```bash
-node scripts/generate-studio-descriptor-registry.mjs          # write mode
-node scripts/generate-studio-descriptor-registry.mjs --check  # verify no drift
+node tools/codegen/generate-studio-descriptor-registry.mjs          # write mode
+node tools/codegen/generate-studio-descriptor-registry.mjs --check  # verify no drift
 ```
 
 Descriptor caveats: a descriptor that imports runtime values (custom panels) is skipped by the generator; orchestration categories (`image-focal-point`, `image-slide`, `video-caption`) declared in `metadata.ts` are preserved; live-`listModels` hubs and action-only providers are special-cased in the script's constant sets.
@@ -165,7 +165,7 @@ vitest run --root libraries/providers/<id>
 3. [ ] Register the package in `apps/backend/src/providers.generated.ts` (alphabetical), `tsconfig.base.json` paths, and `apps/backend/package.json`.
 4. [ ] Choose the credential mode: nothing for single-key, `credentialFields` for multi-field, or add the identifier to `UNIVERSAL_AI_CREDENTIAL` in `org-media-provider-settings.service.ts` for a shared AI key.
 5. [ ] Add the studio: `apps/frontend/src/components/media-tools/<id>/descriptor.ts` + `<id>-studio.tsx`, the page at `apps/frontend/src/app/(app)/(site)/media/<id>/page.tsx`, and a `Providers`-section nav entry in `apps/frontend/src/app/(app)/(site)/media/layout.tsx`.
-6. [ ] Run `node scripts/generate-studio-descriptor-registry.mjs` (write mode), commit the regenerated `src/v1/metadata.ts`, and confirm `--check` passes.
+6. [ ] Run `node tools/codegen/generate-studio-descriptor-registry.mjs` (write mode), commit the regenerated `src/v1/metadata.ts`, and confirm `--check` passes.
 7. [ ] (Optional) Add an `ICONS` entry in `apps/frontend/src/components/shared/provider-icon.tsx`.
 8. [ ] Write a `media.int-spec.ts` recorded-fixture spec and run `vitest run --root libraries/providers/<id>`.
 9. [ ] Verify in the app: provider appears under Settings → Media, `testConnection` passes, a generation lands an `AIMediaJob` and completes (webhook or `media-jobs-poll` backstop).

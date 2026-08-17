@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Run Playwright tests in the official container against postiz.reaatech.com
+# Run Playwright tests in the official container against app.postmill.ai
 set -e
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"

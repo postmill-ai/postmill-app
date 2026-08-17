@@ -13,11 +13,11 @@ const useFaqList = () => {
       ? [
           {
             title: t(
-              'faq_am_i_going_to_be_charged_by_postiz',
+              'faq_am_i_going_to_be_charged_by_postmill',
               'Am I going to be charged by Postmill?'
             ),
             description: t(
-              'faq_to_confirm_credit_card_information_postiz_will_hold',
+              'faq_to_confirm_credit_card_information_postmill_will_hold',
               'To confirm credit card information Postmill will hold $2 and release it immediately, you can cancel your subscription anytime from settings without talking to a person'
             ),
           },

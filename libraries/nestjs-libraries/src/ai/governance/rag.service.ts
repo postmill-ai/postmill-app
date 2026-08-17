@@ -369,7 +369,7 @@ export class RagService implements OnModuleInit, OnModuleDestroy {
       return new QdrantVectorStoreAdapter({
         url: rag.qdrantUrl,
         apiKey: rag.qdrantApiKey,
-        collectionName: rag.qdrantCollection || 'postiz_rag',
+        collectionName: rag.qdrantCollection || 'postmill_rag',
         dimension,
         distance: rag.distance || 'Cosine',
       });

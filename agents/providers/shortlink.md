@@ -142,7 +142,7 @@ A new provider with correct `manifest.credentialFields`/`capabilities`/`authType
 
 ## 7. Legacy: shortlink icon PNGs
 
-`scripts/generate-shortlink-icons.mjs` has a hand-maintained `PROVIDERS` map (id → hex color, 19 entries — `lnkify` is absent) and writes 48×48 PNG tiles to `apps/frontend/public/icons/shortlinks/<id>.png`. **Verification: nothing consumes these PNGs** — a repo-wide grep for `icons/shortlinks` outside the script and the `public/` output returns no references. Treat the script as optional/legacy: do not add your provider to `PROVIDERS` unless a consumer is (re)introduced.
+The 48×48 PNG tiles under `apps/frontend/public/icons/shortlinks/<id>.png` were produced by a generator that is no longer part of the repo. **Verification: nothing consumes these PNGs** — a repo-wide grep for `icons/shortlinks` outside the `public/` output returns no references. Do not add a tile for your provider unless a consumer is (re)introduced.
 
 ## 8. Tests
 
@@ -163,4 +163,4 @@ A new provider with correct `manifest.credentialFields`/`capabilities`/`authType
 7. [ ] Register: add the workspace dep to `apps/backend/package.json`, add the two path aliases to `tsconfig.base.json`, add import + spread to `apps/backend/src/providers.generated.ts`, run `pnpm install`.
 8. [ ] Add `__tests__/conformance.spec.ts` via `runDomainConformance` plus fetch-mocked adapter unit tests.
 9. [ ] Run `vitest run --root libraries/providers/<id>` and `vitest run --root libraries/providers/kernel`; verify the provider appears in `GET /settings/shortlinks/config` and the `/settings/shortlinks` UI.
-10. [ ] Skip the legacy icon script (`scripts/generate-shortlink-icons.mjs`) unless a PNG consumer exists.
+10. [ ] Skip the legacy shortlink icon PNGs (§7) unless a consumer exists.

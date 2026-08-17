@@ -1,7 +1,7 @@
 /**
  * Migration script: Populates ProviderConfiguration table from environment variables.
  *
- * Run with: npx ts-node scripts/migrate-channel-config.ts
+ * Run with: npx ts-node tools/db/migrate-channel-config.ts
  * (Requires DATABASE_URL and JWT_SECRET to be set in .env)
  *
  * This migration is idempotent and can be run multiple times. Channel credentials are stored in the DB

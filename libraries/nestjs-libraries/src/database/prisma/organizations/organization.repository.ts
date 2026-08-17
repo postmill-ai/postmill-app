@@ -46,7 +46,7 @@ export class OrganizationRepository {
                 activated: true,
                 email: email
                   ? email.split('@').join(`+${saasName}@`)
-                  : `${saasName}+` + makeId(10) + '@postiz.com',
+                  : `${saasName}+` + makeId(10) + '@postmill.ai',
                 providerName: 'LOCAL',
                 password: AuthService.hashPassword(makeId(500)),
                 profile: {

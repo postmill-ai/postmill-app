@@ -179,6 +179,7 @@
   "devDependencies": {
     "cross-env": "^10.0.0",
     "@nestjs/cli": "^11.0.21",
+    "@nestjs/swagger": "^11.4.4",
     "@nestjs/schematics": "^11.1.0",
     "@nestjs/testing": "^11.1.24",
     "@vitest/coverage-v8": "^4.1.0",

@@ -7,9 +7,9 @@ collaboration single-instance constraint, and OpenTelemetry tracing.
 ## Production image (one process per container)
 
 Use the multi-stage [`Dockerfile`](https://github.com/postmill-ai/postmill-app/blob/main/Dockerfile)
-at the repo root for production — **not** `Dockerfile.dev`. The differences matter:
+at the repo root for production — **not** `docker/Dockerfile.dev`. The differences matter:
 
-| | `Dockerfile.dev` | `Dockerfile` (production) |
+| | `docker/Dockerfile.dev` | `Dockerfile` (production) |
 |---|---|---|
 | Dependencies | all (including devDependencies) | production only (`pnpm prune --prod`) |
 | Process model | `nginx` + PM2 (multiple processes) | a single `node` process |
@@ -30,7 +30,7 @@ limits independently observable.
 
 ### Render worker image
 
-The Podman video-render worker (`Containerfile.render`) also runs as an unprivileged user
+The Podman video-render worker (`docker/Containerfile.render`) also runs as an unprivileged user
 (`render`), not root. See [Video Rendering](./video-rendering.md).
 
 ## Horizontal scaling

@@ -21,11 +21,11 @@ const __dirname = path.dirname(__filename);
 
 const DESCRIPTOR_GLOB = path.join(
   __dirname,
-  '../apps/frontend/src/components/media-tools/*/descriptor.ts',
+  '../../apps/frontend/src/components/media-tools/*/descriptor.ts',
 );
 const PROVIDER_METADATA_GLOB = path.join(
   __dirname,
-  '../libraries/providers/*/src/v1/metadata.ts',
+  '../../libraries/providers/*/src/v1/metadata.ts',
 );
 
 const AI_MEDIA_CATEGORIES = [

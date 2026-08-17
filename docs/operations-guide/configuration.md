@@ -136,7 +136,7 @@ Per-provider AI budgets are configured per-organization in **Settings → AI**. 
 | `API_LIMIT` | `600` | Public API rate limit per hour |
 | `AGENT_API_KEY` | — | API key for legacy `/public/agent` endpoint |
 | `OPENAI_APP_CHALLENGE` | — | Challenge string for OpenAI apps, served at `/.well-known/openai-apps-challenge` |
-| `MOBILE_APP_SCHEME` | `postiz://auth/callback` | Deep-link scheme the mobile OAuth callback (`GET /auth/oauth-mobile-callback`) redirects to |
+| `MOBILE_APP_SCHEME` | `postmill://auth/callback` | Deep-link scheme the mobile OAuth callback (`GET /auth/oauth-mobile-callback`) redirects to |
 | `NEXT_PUBLIC_OVERRIDE_BACKEND_URL` | — | Overrides the token endpoint advertised in the MCP OAuth discovery document (`/.well-known/oauth-authorization-server`); falls back to the backend URL |
 | `AGENT_MEDIA_SSO_KEY` | — | JWT signing key for the optional agent-media.ai SSO integration. Unset = `GET /user/agent-media-sso` returns `{ url: null }` |
 

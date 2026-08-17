@@ -77,8 +77,8 @@ with one `video_export` credit charged. Sibling docs: `agents/backend.md`,
   `DesignRenderJobSpec` / `MergeRenderJobSpec` (`RenderJobSpec`), `RENDER_OUTPUT_DIR`,
   `RENDER_THUMBNAIL_NAME`, `renderOutputName`. Dependency-free by design; both host and
   worker import it. Keep the two sides in lockstep when changing it.
-- **Image:** `Containerfile.render` (repo root) —
-  `podman build -f Containerfile.render -t localhost/postmill-render:latest .`
+- **Image:** `docker/Containerfile.render` —
+  `podman build -f docker/Containerfile.render -t localhost/postmill-render:latest .`
   (app build + distro Chromium/FFmpeg + the worker CLI as ENTRYPOINT).
 - The in-container Chromium resolves the render route/assets against `spec.baseUrl`
   (`NEXT_PUBLIC_BACKEND_URL`/`FRONTEND_URL`); `options.renderToken` comes from

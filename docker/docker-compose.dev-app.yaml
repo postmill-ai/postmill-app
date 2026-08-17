@@ -1,22 +1,29 @@
 # Live-reload app container. Use TOGETHER with docker-compose.dev.yaml (which provides
-# postgres, redis, etc.):
+# postgres, redis, etc.), from the repo root:
 #
-#   docker compose -f docker-compose.dev.yaml -f docker-compose.dev-app.yaml up
+#   docker compose -f docker/docker-compose.dev.yaml -f docker/docker-compose.dev-app.yaml up
 #
 # The whole repo is bind-mounted into the container and the backend/frontend run in watch
 # mode, so host edits hot-reload. node_modules are kept in named volumes so the host's
 # macOS-arm64 modules never shadow the Linux ones built inside the container.
+
+# Pinned so the project name (and therefore the named-volume prefix) does not follow
+# this file's directory. Without it Compose would derive "docker" from docker/ and
+# orphan every existing postmill-app_* volume.
+name: postmill-app
+
 services:
   postmill-app:
     build:
-      context: .
-      dockerfile: Dockerfile.dev-live
+      # Relative to THIS file's directory, so both point back at the repo root.
+      context: ..
+      dockerfile: docker/Dockerfile.dev-live
     container_name: postmill-app
     # The entrypoint exits if any watcher dies (e.g. OOM during a heavy route
     # compile) — auto-restart instead of leaving the stack dead.
     restart: unless-stopped
     working_dir: /app
-    command: ["bash", "/app/var/docker/dev-entrypoint.sh"]
+    command: ["bash", "/app/docker/dev-entrypoint.sh"]
     environment:
       # Frontend runs on the HOST (pnpm run dev:frontend). Turbopack needs 5-6.5 GB of
       # NATIVE memory (not bounded by --max-old-space-size) which, next to the ~3 GB
@@ -26,7 +33,7 @@ services:
     ports:
       - "3000:3000"   # backend (NestJS REST API)
     volumes:
-      - .:/app
+      - ..:/app
       # Mask every workspace node_modules with a named volume (Linux-built, never the host's).
       - app-node-modules-root:/app/node_modules
       - app-node-modules-backend:/app/apps/backend/node_modules

@@ -7,6 +7,27 @@ The Public API provides programmatic access for third-party integrations and aut
 
 All v1 routes are org-scoped. Mutating routes support idempotency keys, and reads are rate-limited per org.
 
+## OpenAPI specification
+
+The full machine-readable spec is committed at [`openapi.yml`](https://github.com/postmill-ai/postmill-app/blob/main/openapi.yml)
+in the repository root, and a running instance serves the same document as browsable Swagger UI at
+`/docs`.
+
+It is **generated from the controllers** — request and response schemas are inferred from the
+TypeScript types — so it tracks the code rather than drifting from it. CI fails the build if the
+committed file stops matching (`.github/workflows/boot-guard.yml`).
+
+If you are contributing, do not hand-edit `openapi.yml`. Change the controllers or DTOs, then:
+
+```bash
+pnpm run build:backend
+pnpm run openapi:generate
+```
+
+Generating constructs the Nest application, so it needs `DATABASE_URL`, `REDIS_URL`, and
+`JWT_SECRET` in the environment. To improve a route's documentation, add `@ApiOperation` /
+`@Api*Response` decorators or JSDoc to the controller and regenerate.
+
 ## Authentication
 
 Pass the credential in the `Authorization` header as a raw string (no `Bearer` prefix):

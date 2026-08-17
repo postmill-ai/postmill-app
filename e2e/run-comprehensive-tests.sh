@@ -2,7 +2,7 @@
 set -e
 
 echo "=========================================="
-echo "POSTIZ E2E COMPREHENSIVE UI TEST SUITE"
+echo "POSTMILL E2E COMPREHENSIVE UI TEST SUITE"
 echo "=========================================="
 echo ""
 

@@ -48,6 +48,17 @@ package to the root manifest unless it is genuinely shared across multiple works
 - `libraries/helpers` — shared utilities, incl. the `useFetch` hook. `libraries/react-shared-libraries`
   — shared React components (imported as `@postmill-ai/react/*`).
 - `libraries/providers` — the unified provider framework (kernel + one package per provider).
+- `tools/` — repo-owned tooling, **not** a workspace. `tools/db` (migration/backfill helpers, incl.
+  the two CI schema gates) and `tools/codegen` (generators whose output is committed). Anything CI
+  or a documented runbook invokes belongs here.
+- `docker/` — every Docker artifact except the three that must sit at the root: `Dockerfile` (the
+  image CI publishes), `docker-compose.yaml` (the self-hoster quick-start, whose directory
+  determines the Compose project name and therefore the volume prefix), and `.dockerignore` (read
+  from the build-context root).
+- `e2e/` — Playwright suite and its seed data. `agents/`, `docs/` — see the doc map below.
+
+> `scripts/` at the repo root is **maintainer-local and gitignored**. Never add anything CI, a
+> workspace script, or a doc depends on — that goes in `tools/`.
 
 Full directory tour, import aliases, and "where does new code go": [`agents/libraries.md`](./agents/libraries.md).
 
@@ -107,7 +118,17 @@ vitest run --root apps/backend            # run one package's tests
 # Database (Prisma 6.5.0)
 pnpm run prisma-generate  # regenerate client after editing schema.prisma
 pnpm run prisma-db-push   # push schema to the DB (local prototyping/reset only)
+
+# Generated artifacts (committed; CI fails the build if they drift)
+pnpm run build:backend && pnpm run openapi:generate   # refresh openapi.yml after a route/DTO change
+node tools/codegen/generate-studio-descriptor-registry.mjs   # refresh provider metadata
 ```
+
+**`openapi.yml` is generated — do not hand-edit it.** It is built from the controllers, so a route
+or DTO change means re-running the generator and committing the result. It needs the backend built
+plus `DATABASE_URL`/`REDIS_URL`/`JWT_SECRET`, because producing the document constructs `AppModule`.
+Enrich the output by adding `@ApiOperation`/`@Api*Response` decorators or JSDoc, never by editing
+the YAML.
 
 - **Tests run on Vitest** (`vitest run --root <pkg>`). The old root `jest.config.ts` has been
   deleted — do not resurrect jest-style configuration. Details: [`agents/testing.md`](./agents/testing.md).
@@ -121,9 +142,9 @@ responsive.
 
 ```bash
 # Required services only: postgres + redis
-docker compose -f docker-compose.dev.yaml up -d
+docker compose -f docker/docker-compose.dev.yaml up -d
 # Add background jobs (Inngest dev server)
-docker compose -f docker-compose.dev.yaml --profile jobs up -d
+docker compose -f docker/docker-compose.dev.yaml --profile jobs up -d
 
 # Skip heavy optional subsystems (all flags default to enabled)
 DEV_DISABLE_AI=true DEV_DISABLE_MCP=true DEV_DISABLE_MEDIA=true \

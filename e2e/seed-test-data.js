@@ -2,7 +2,7 @@
 // One-shot UI-testing seed: a SUPERADMIN user, an org, 2 channels (X + LinkedIn page),
 // ~2 weeks of posts, channel + post analytics snapshots, campaign folders, and a comment inbox.
 // Idempotent: re-running wipes the previous seed for test@test.com and recreates it.
-// Run inside the app container:  node scripts/seed-test-data.js
+// Run inside the app container:  node e2e/seed-test-data.js
 //
 // NO live/test posts are made — everything is written straight to the DB.
 

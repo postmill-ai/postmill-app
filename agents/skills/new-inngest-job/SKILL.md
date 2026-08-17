@@ -67,7 +67,7 @@ Rules that bite:
 ```bash
 vitest run --root apps/backend                          # factory specs
 vitest run --root libraries/nestjs-libraries            # activity specs
-docker compose -f docker-compose.dev.yaml --profile jobs up -d   # Inngest dev server, UI on :8288
+docker compose -f docker/docker-compose.dev.yaml --profile jobs up -d   # Inngest dev server, UI on :8288
 # set USE_INNGEST=true in backend env, restart backend, confirm the function appears at http://localhost:8288
 ```
 

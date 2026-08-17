@@ -8,14 +8,14 @@ test('capture composer valid/preflight request + response', async ({ page }) => 
   page.on('request', req => {
     const u = req.url();
     if (/\/api\/posts\/(valid|preflight)/.test(u)) {
-      captured.push({ phase: 'request', url: u.replace('https://postiz.reaatech.com', ''), method: req.method(), postData: req.postData()?.slice(0, 2000) });
+      captured.push({ phase: 'request', url: u.replace('https://app.postmill.ai', ''), method: req.method(), postData: req.postData()?.slice(0, 2000) });
     }
   });
   page.on('response', async res => {
     const u = res.url();
     if (/\/api\/posts\/(valid|preflight)/.test(u)) {
       let body = ''; try { body = (await res.text()).slice(0, 1000); } catch {}
-      captured.push({ phase: 'response', url: u.replace('https://postiz.reaatech.com', ''), status: res.status(), body });
+      captured.push({ phase: 'response', url: u.replace('https://app.postmill.ai', ''), status: res.status(), body });
     }
   });
 

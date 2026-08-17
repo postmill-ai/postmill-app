@@ -1,6 +1,6 @@
 # Production backend image — multi-stage, non-root, ONE node process per container.
 #
-# Differs from Dockerfile.dev (which bundled devDeps + ran nginx + PM2): this builds in a
+# Differs from docker/Dockerfile.dev (which bundled devDeps + ran nginx + PM2): this builds in a
 # throwaway stage, prunes dev dependencies, and the runtime stage runs the compiled backend
 # directly as an unprivileged user. Horizontal scaling is the orchestrator's job (run N
 # replicas) — NOT PM2 inside the container.
@@ -38,6 +38,12 @@ RUN pnpm prune --prod
 # ---------- runtime ----------
 FROM node:22.20-bookworm-slim AS runtime
 
+# build-containers.yml passes --build-arg NEXT_PUBLIC_VERSION=<git tag>. Without this
+# ARG/ENV pair Docker accepted the flag and discarded it, so the released image carried
+# no version at all. Consumed by the Swagger document (served at /docs).
+ARG NEXT_PUBLIC_VERSION
+ENV NEXT_PUBLIC_VERSION=$NEXT_PUBLIC_VERSION
+
 # Runtime shared libraries: chromium + ffmpeg (in-process video renderer when Podman is
 # off), fonts, and the native libs canvas links against. No build toolchain here.
 RUN apt-get update && apt-get install -y --no-install-recommends \
@@ -55,7 +61,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     curl \
 && rm -rf /var/lib/apt/lists/*
 
-# Distro Chromium for puppeteer (no bundled download); matches Containerfile.render.
+# Distro Chromium for puppeteer (no bundled download); matches docker/Containerfile.render.
 ENV PUPPETEER_SKIP_DOWNLOAD=1
 ENV PUPPETEER_EXECUTABLE_PATH=/usr/bin/chromium
 ENV NODE_ENV=production
@@ -79,4 +85,10 @@ HEALTHCHECK --interval=30s --timeout=5s --start-period=40s --retries=3 \
   CMD curl -fsS http://127.0.0.1:3000/health/live || exit 1
 
 # Single node process — no PM2, no shell supervisor.
-CMD ["node", "--experimental-require-module", "/app/dist/apps/backend/src/main.js"]
+#
+# Path note: `pnpm run build:backend` runs `nest build` inside apps/backend, whose
+# tsconfig.build.json sets outDir "./dist" — so the compiled entrypoint lands at
+# apps/backend/dist/apps/backend/src/main.js, NOT at a repo-root dist/. (The root
+# dist/ is excluded from the build context by .dockerignore and holds only out-tsc.)
+# This is the same path .github/workflows/boot-guard.yml executes.
+CMD ["node", "--experimental-require-module", "/app/apps/backend/dist/apps/backend/src/main.js"]

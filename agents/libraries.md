@@ -4,6 +4,21 @@ How the Postmill monorepo's shared packages are laid out, what each contains, an
 belongs. Sibling docs: `agents/backend.md`, `agents/frontend.md`, `agents/ui-standards.md`,
 `agents/providers/overview.md`, root `ARCHITECTURE.md`.
 
+## Top-level directories that are not workspaces
+
+`pnpm-workspace.yaml` covers `apps/*` and `libraries/*`. These sit alongside them and are **not**
+workspaces — no `package.json`, no install step, run directly with `node`/`bash`:
+
+| Directory | Contains | Add here when… |
+|---|---|---|
+| `tools/db/` | `migrate-deploy-safe.mjs` and `schema-destructive-guard.mjs` (both CI gates), `postmill-migrate.sh` (documented runbook step), one-shot backfills | A migration/schema helper that CI or an operator runbook invokes. |
+| `tools/codegen/` | `generate-studio-descriptor-registry.mjs`, `generate-openapi.mjs`, `generate-font-catalog.mjs`, `snapshot-replicate-catalog.mjs` | A generator whose **output is committed**. Follow the existing `--check` convention so CI can gate drift. |
+| `docker/` | `Dockerfile.dev`, `Dockerfile.dev-live`, `Containerfile.render`, both dev compose files, `nginx.conf`, `dev-entrypoint.sh`, the build/create scripts | Any Docker artifact — except the three pinned at the repo root (see `AGENTS.md` § Repository layout). |
+| `e2e/` | Playwright specs, `auth.setup.ts`, `seed-test-data.js` | Browser-level tests and the fixtures they need. |
+
+`scripts/` at the root is **maintainer-local and gitignored**. If CI, a workspace script, or a doc
+needs it, it belongs in `tools/` instead — a fresh clone does not have `scripts/`.
+
 ## How imports resolve (read this first)
 
 Cross-package imports do **not** resolve through each workspace's `package.json` `exports`/`main`.
@@ -86,7 +101,7 @@ Framework-agnostic utilities used by **both** frontend and backend. Key files un
 | `auth/auth.service.ts` | Static `AuthService`: `signJWT`/`verifyJWT` (HS256), `fixedEncryption`/`fixedDecryption` (AES-256-GCM, `v2:` prefix — the global encryption route, same key as `EncryptionService`), `fixedEncryptionDeterministic`, plus legacy IV helpers. |
 | `decorators/plug.decorator.ts` + `decorators/post.plug.ts` | `@Plug` / `@PostPlug` — decorate provider methods that run before/after posting. |
 | `configuration/configuration.checker.ts` | `ConfigurationChecker` — fail-fast env validation at boot. |
-| `swagger/load.swagger.ts` | `loadSwagger(app)` — OpenAPI setup. |
+| `swagger/load.swagger.ts` | `loadSwagger(app)` mounts Swagger UI at `/docs`; `buildSwaggerDocument(app, opts)` returns the document and is what `tools/codegen/generate-openapi.mjs` uses, so `openapi.yml` and `/docs` can never disagree. |
 | `subdomain/` | `subdomain.management.ts`, `all.two.level.subdomain.ts` — subdomain helpers. |
 | `upload-limits.client.ts` | Client-side upload-limit constants. |
 | `utils/` (rest) | `is.dev.ts`, `timer.ts`, `strip.html.validation.ts`, `sanitize.post.content.ts`, `count.length.ts`, `utm.saver.tsx`, `valid.images.ts`, `valid.url.path.ts`, `strip.tags.ts`, `strip.links.ts`, `remove.markdown.ts`, `html.to.text.ts`, `read.or.fetch.ts`, `posts.list.minify.ts`, `use.fire.events.ts`, `use.wait.for.class.tsx`, `linkedin.company.prevent.remove.ts`, `has.extension.ts`, `is.general.server.side.ts` |

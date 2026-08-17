@@ -24,7 +24,7 @@ test('analytics page full coverage', async ({ page }) => {
   page.on('response', (r) => {
     const u = r.url();
     if (u.includes('/api/analytics/v2/')) {
-      const endpoint = u.replace('https://postiz.reaatech.com/api/analytics/v2/', '').split('?')[0];
+      const endpoint = u.replace('https://app.postmill.ai/api/analytics/v2/', '').split('?')[0];
       findings.apiCalls.push({
         endpoint,
         status: r.status(),

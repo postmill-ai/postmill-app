@@ -24,7 +24,7 @@ test('error states and edge cases', async ({ page }) => {
       const u = r.url();
       findings.apiErrors.push({
         status: r.status(),
-        endpoint: u.split('?')[0].replace('https://postiz.reaatech.com/api/', ''),
+        endpoint: u.split('?')[0].replace('https://app.postmill.ai/api/', ''),
         timestamp: new Date().toISOString(),
       });
     }

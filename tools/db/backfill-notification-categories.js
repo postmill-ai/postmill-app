@@ -18,7 +18,7 @@
 // are intentionally left absent — `toData()` fills them with defaults on read.
 //
 // Idempotent: re-running is a no-op once every row is migrated.
-// Run inside the app container:  node scripts/backfill-notification-categories.js
+// Run inside the app container:  node tools/db/backfill-notification-categories.js
 
 const { PrismaClient } = require('@prisma/client');
 

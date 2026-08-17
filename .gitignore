@@ -11,6 +11,7 @@ node_modules
 
 # IDEs and editors
 /.idea
+/.run/
 .project
 .classpath
 .c9/
@@ -94,3 +95,13 @@ capture/
 # image venv, and stray logs. ~90MB of binaries, none of it reproducible input.
 .tmp-*/
 scratchpad-logs/
+
+# Maintainer-local scratch scripts. Deliberately NOT tracked — repo-owned tooling
+# lives in tools/ (tools/db, tools/codegen). Don't "fix" this by committing it.
+/scripts/
+
+# Test-run output. Nothing in this repo is configured to write to the ROOT of
+# either; Playwright writes to e2e/test-results/ (see e2e/.gitignore). These
+# only appear when a tool is invoked from the repo root by hand.
+/reports/
+/test-results/

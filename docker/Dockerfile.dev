@@ -20,7 +20,7 @@ RUN npm --no-update-notifier --no-fund --global install pnpm@10.34.4 pm2
 WORKDIR /app
 
 COPY . /app
-COPY var/docker/nginx.conf /etc/nginx/nginx.conf
+COPY docker/nginx.conf /etc/nginx/nginx.conf
 
 RUN pnpm install --frozen-lockfile
 RUN NODE_OPTIONS="--max-old-space-size=4096" pnpm run build

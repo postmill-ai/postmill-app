@@ -1,5 +1,39 @@
 # Upgrading
 
+## v1.0.0 — repository paths moved
+
+If you build from source, or you have scripts or CI that reference files in this repository by path,
+note that the Docker files were consolidated in v1.0.0. **Nothing about a normal image-tag upgrade
+changes** — the production `docker-compose.yaml` and `Dockerfile` are still at the repository root,
+volume names are unchanged, and no env var moved.
+
+| Was | Now |
+|---|---|
+| `docker-compose.dev.yaml` | `docker/docker-compose.dev.yaml` |
+| `docker-compose.dev-app.yaml` | `docker/docker-compose.dev-app.yaml` |
+| `Dockerfile.dev`, `Dockerfile.dev-live` | `docker/Dockerfile.dev`, `docker/Dockerfile.dev-live` |
+| `Containerfile.render` | `docker/Containerfile.render` |
+| `./var/docker/docker-build.sh`, `docker-create.sh` | `./docker/docker-build.sh`, `./docker/docker-create.sh` |
+| `scripts/postmill-migrate.sh` | `tools/db/postmill-migrate.sh` |
+
+`docker-compose.yaml`, `Dockerfile`, and `.dockerignore` deliberately stay at the root.
+
+The two dev compose files now declare `name: postmill-app`. Compose otherwise derives the project
+name — and therefore the volume prefix — from the directory holding the compose file, so without
+this the move would have renamed your `postmill-app_*` volumes. If you run the dev stack from a
+clone directory **not** named `postmill-app`, your existing dev volumes were prefixed with that
+directory name and the pin will point Compose at differently-named volumes. Either rename them or
+re-create the dev stack:
+
+```bash
+docker volume ls | grep postgres-volume      # find <yourdir>_postgres-volume
+```
+
+This affects the **development** stack only; production volumes are untouched.
+
+`pnpm run docker-build` also works again — it had been failing since before the fork, passing
+`--target` stage names that the Dockerfile it builds does not define.
+
 ## Clean upgrade path
 
 The recommended upgrade process follows the immutable-infrastructure model: new container image,
@@ -82,10 +116,10 @@ If you need an in-place schema sync outside the normal migration flow, use the h
 
 ```bash
 # Safe additive sync (refuses data loss)
-./scripts/postmill-migrate.sh
+./tools/db/postmill-migrate.sh
 
 # Destructive — back up first!
-./scripts/postmill-migrate.sh --accept-data-loss
+./tools/db/postmill-migrate.sh --accept-data-loss
 ```
 
 Or run directly in the container:
@@ -152,10 +186,10 @@ If you prefer to build the container image locally:
 
 ```bash
 # Build the image
-./var/docker/docker-build.sh
+./docker/docker-build.sh
 
-# Or with the docker-compose.dev.yaml for local development
-docker compose -f docker-compose.dev.yaml up -d
+# Or with the dev compose stack for local development
+docker compose -f docker/docker-compose.dev.yaml up -d
 
 # Build all apps from source
 pnpm run build

@@ -243,7 +243,7 @@ generator script exists in-repo — maintain it by hand:
 | Domain | Frontend work | Where |
 |---|---|---|
 | social | **Yes** | Composer component under `apps/frontend/src/components/composer/providers/<id>/` (wired via `high.order.provider.tsx` + `show.all.providers.tsx`) and icon at `apps/frontend/public/icons/platforms/<id>.png`. |
-| media (studio) | **Yes** | Descriptor `apps/frontend/src/components/media-tools/<id>/descriptor.ts`, studio page under `apps/frontend/src/app/(app)/(site)/media/<id>/`, nav entry in `apps/frontend/src/app/(app)/(site)/media/layout.tsx`; then re-run `node scripts/generate-studio-descriptor-registry.mjs` (merges descriptor data into the package's `metadata.ts`; CI gate `--check` in `.github/workflows/test.yml`). |
+| media (studio) | **Yes** | Descriptor `apps/frontend/src/components/media-tools/<id>/descriptor.ts`, studio page under `apps/frontend/src/app/(app)/(site)/media/<id>/`, nav entry in `apps/frontend/src/app/(app)/(site)/media/layout.tsx`; then re-run `node tools/codegen/generate-studio-descriptor-registry.mjs` (merges descriptor data into the package's `metadata.ts`; CI gate `--check` in `.github/workflows/test.yml`). |
 | ai | Minor | Optional icon in `apps/frontend/src/components/shared/provider-icon.tsx`; `BASE_URL_PROVIDERS` in `apps/frontend/src/components/settings/shared/kit/descriptors/ai.descriptor.ts` only for endpoint-bringing providers (currently just `openai-compatible`). |
 | shortlink, vpn, contentpack, storage | No | Catalog-driven settings kits render from manifest `credentialFields`. |
 | email | No | Env-only credentials (e.g. `resend` reads `process.env.EMAIL_API_KEY`); no per-org config UI. |

@@ -93,7 +93,7 @@ vendor docs rather than a real API key, mark it at the top of the spec with a
 
 Playwright (`@playwright/test 1.58.2`, separate `e2e/package.json` outside the pnpm
 workspace scripts; `@axe-core/playwright` for the a11y audit config). `playwright.config.ts`:
-`testDir: ./tests`, `workers: 1`, `retries: 1`, `baseURL: https://postiz.reaatech.com`
+`testDir: ./tests`, `workers: 1`, `retries: 1`, `baseURL: https://app.postmill.ai`
 (live deployment — E2E specs exercise the real app, not a local boot), a `setup` project
 (`**/auth.setup.ts`) producing `.auth/state.json` consumed by the `chromium` project. Run:
 `cd e2e && pnpm test` (aliases: `test:headed`, `test:audit` with `playwright.audit.config.ts`,
@@ -124,6 +124,27 @@ behavior in vitest.
   migration gates). `.github/workflows/eslint.yml` (workflow `ESLint`) is a separate
   **required status check** that uploads SARIF to GitHub code scanning, stripping
   directive-suppressed and `react-hooks/*` + `jsx-a11y/*` results before upload.
+
+### Generated-artifact drift gates
+
+Three artifacts are generated but **committed**, so CI re-runs each generator with `--check` and
+fails if the committed copy disagrees with the code. Re-run the generator and commit its output —
+never hand-edit the artifact.
+
+| Gate | Workflow | Refresh with |
+|---|---|---|
+| Studio descriptor metadata | `test.yml` — "Studio descriptor metadata drift gate" | `node tools/codegen/generate-studio-descriptor-registry.mjs` |
+| Destructive schema diff | `test.yml` — "Destructive schema guard (vs origin/main)" | n/a — fix the migration, or set `ALLOW_DESTRUCTIVE_SCHEMA` |
+| `openapi.yml` | `boot-guard.yml` — "OpenAPI drift gate" | `pnpm run build:backend && pnpm run openapi:generate` |
+
+The OpenAPI gate lives in `boot-guard.yml` rather than `test.yml` because building the document
+constructs `AppModule`, which instantiates every provider and therefore needs Postgres, Redis and
+`JWT_SECRET` — only the boot-guard job provisions all three.
+
+A generator that depends on paths must be **deterministic**: anything randomly seeded at
+class-definition time (a `makeId()` in a decorator, say) leaks into the artifact and makes the gate
+fail on every run. See `libraries/nestjs-libraries/src/dtos/auth/matches.property.validator.ts` for
+the pattern that replaced one such case.
 
 ## Checklist
 

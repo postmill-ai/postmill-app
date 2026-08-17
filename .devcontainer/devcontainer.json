@@ -1,6 +1,14 @@
 {
 	"name": "Postmill Dev Container",
-	"image": "localhost/postiz-devcontainer",
+	// Built from the production Dockerfile's `builder` stage: it already has the
+	// toolchain for the native modules (canvas, sharp, bcrypt) and the full source
+	// with devDependencies installed, which is exactly what a dev container needs.
+	// The runtime stage is deliberately pruned of devDeps, so don't target it.
+	"build": {
+		"dockerfile": "../Dockerfile",
+		"context": "..",
+		"target": "builder"
+	},
 	"features": {},
 	"customizations": {
 		"vscode": {
@@ -8,7 +16,5 @@
 			"extensions": []
 		}
 	},
-	"forwardPorts": ["4200:4200", "3000:3000"],
-	"mounts": ["source=/apps,destination=/apps/dist/,type=bind,consistency=cached"]
+	"forwardPorts": [4200, 3000]
 }
-

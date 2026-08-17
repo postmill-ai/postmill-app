@@ -882,7 +882,7 @@ describe('RagService', () => {
           enabled: true,
           vectorStore: 'qdrant',
           qdrantUrl: 'http://qdrant:6333',
-          qdrantCollection: 'postiz_rag',
+          qdrantCollection: 'postmill_rag',
         },
       });
     }

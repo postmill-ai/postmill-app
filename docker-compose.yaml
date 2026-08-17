@@ -1,14 +1,22 @@
-# ⚠️  UPGRADING FROM A POSTIZ-BRANDED COMPOSE?
-# This file renames Docker volumes (postiz-* -> postmill-*) and the Postgres
-# role/database (postiz-user/postiz-db-local -> postmill-user/postmill-db-local).
-# A fresh install needs no action. An EXISTING install must migrate its data, or
-# it will come up empty (old volumes are not mounted, and the renamed Postgres
-# role/db won't exist on the already-initialized volume). See the migration
-# steps in docs/operations-guide/upgrading.md before running `docker compose up`.
+# ⚠️  UPGRADING FROM A PRE-REBRAND COMPOSE (before the Postmill rename)?
+# This file uses renamed Docker volumes (postmill-*) and a renamed Postgres
+# role/database (postmill-user/postmill-db-local) — older installs used the
+# previous names. A fresh install needs no action. An EXISTING install must
+# migrate its data, or it will come up empty (old volumes are not mounted,
+# and the renamed Postgres role/db won't exist on the already-initialized
+# volume). See the migration steps in docs/operations-guide/upgrading.md
+# before running `docker compose up`.
 #
 # IMPORTANT (v3.7.1): Channel provider credentials and AI provider config are
 # no longer read from environment variables. Configure them per-organization
 # in-app via Settings → Channels and Settings → AI respectively.
+#
+# This file deliberately stays at the repo root and declares no top-level `name:`.
+# Compose derives the project name from the directory containing it, and that name
+# prefixes the named volumes below (postmill-config, postmill-uploads,
+# postgres-volume). Pinning a name here, or moving this file, would re-prefix those
+# volumes and bring an existing install up against empty storage. The dev compose
+# files under docker/ DO pin `name: postmill-app`, precisely because they moved.
 services:
   postmill:
     image: ghcr.io/postmill-ai/postmill-app:latest

@@ -61,7 +61,13 @@ PNPM monorepo; workspaces driven by `pnpm --filter`. **pnpm only — never npm/y
 | `libraries/helpers` | Shared isomorphic utilities: `useFetch` (`src/utils/custom.fetch.tsx`), `AuthService` JWT helpers, `ConfigurationChecker`. |
 | `libraries/react-shared-libraries` | Shared React components/hooks (canonical `Button`, `Input`), i18n (`useT`). |
 | `libraries/providers` | Unified provider framework: `kernel/` + ~150 provider packages, one directory per provider id. |
+| `tools/` | Repo-owned tooling, **not a workspace**: `tools/db` (migration/backfill helpers, incl. two CI schema gates) and `tools/codegen` (generators whose output is committed and drift-gated). |
+| `docker/` | All Docker artifacts except the three pinned at the root — `Dockerfile` (the published image), `docker-compose.yaml` (its directory sets the Compose project name, hence the volume prefix), and `.dockerignore` (read from the build-context root). |
+| `e2e/` | Playwright suite, auth setup, and seed data. |
 | `agents/` | Agent-facing how-to docs (see §11). |
+
+> Root `scripts/` is maintainer-local and gitignored — a fresh clone does not have it. Anything CI,
+> a workspace script, or a doc depends on belongs in `tools/`.
 
 Import aliases (`tsconfig.base.json` `compilerOptions.paths`):
 

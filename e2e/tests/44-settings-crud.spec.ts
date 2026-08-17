@@ -343,7 +343,7 @@ test('settings CRUD completeness + Teams deep-dive', async ({ page }) => {
           const u: string = req.url();
           const m: string = req.method();
           if (m !== 'GET' && /\/api\/(settings\/team|user|teams)/i.test(u)) {
-            inviteReq = { method: m, url: u.split('?')[0].replace('https://postiz.reaatech.com', '') };
+            inviteReq = { method: m, url: u.split('?')[0].replace('https://app.postmill.ai', '') };
           }
         };
         let inviteResStatus: number | null = null;

@@ -28,7 +28,7 @@ Wire a new media provider into the `ProviderKernel` and ship its descriptor-driv
    - `apps/frontend/src/app/(app)/(site)/media/<id>/page.tsx` — `dynamic(…, { ssr: false })` wrapper.
    - Nav entry `{ href: '/media/<id>', label, section: 'Providers', icon }` in `apps/frontend/src/app/(app)/(site)/media/layout.tsx`.
    Tab shape: `{ key, label, operation: 'image'|'video'|'audio', model?, fields: StudioField[] }`; field types `prompt`, `media`, `select` (a `select` named `model` with `source: 'models'` enables dynamic discovery via `listModels`), `number`, `toggle`, `text`. Field `name`s are the provider's native API params — the adapter routes them. Backend: **none** — `MediaStudioController` (`apps/backend/src/api/routes/media-studio.controller.ts`, `/media/studio/:provider/{status,jobs,models,generate}`) and `MediaStudioService` (`libraries/nestjs-libraries/src/media/studio/media-studio.service.ts`) are provider-agnostic; async completion comes from webhooks with the Inngest `media-jobs-poll` cron as backstop.
-9. **CRITICAL**: run `node scripts/generate-studio-descriptor-registry.mjs` (write mode) to merge descriptor data (`mediaModels`, `website`, `description.en`, categories) into the package's `src/v1/metadata.ts`; commit the result. `.github/workflows/test.yml` runs `--check` ("Studio descriptor metadata drift gate") and fails the build on drift.
+9. **CRITICAL**: run `node tools/codegen/generate-studio-descriptor-registry.mjs` (write mode) to merge descriptor data (`mediaModels`, `website`, `description.en`, categories) into the package's `src/v1/metadata.ts`; commit the result. `.github/workflows/test.yml` runs `--check` ("Studio descriptor metadata drift gate") and fails the build on drift.
 10. No DB schema change: per-org config rows land in `MediaProviderConfig` (`@@unique([organizationId, identifier, version])`, encrypted `credentials`, one `isActive` Primary per org), jobs in `AIMediaJob` (`provider`, `operation`, `status`, `artifactUrl`, `costUsd`, redacted `error`) — both in `libraries/nestjs-libraries/src/database/prisma/schema.prisma`. Access only via `OrgMediaProviderSettingsRepository`/`OrgMediaProviderSettingsService` — never Prisma from a controller.
 11. Bespoke escape hatch only when the descriptor form can't express the UX (non-artifact output, structured multi-step UX, schema-dynamic catalogs): Deepgram, HeyGen, Replicate, Designer are the existing exceptions with custom backend (detail: `agents/providers/media.md` § Bespoke-studio exceptions).
 12. Wrap-up:
@@ -40,11 +40,11 @@ Wire a new media provider into the `ProviderKernel` and ship its descriptor-driv
 ## Verify
 - `vitest run --root libraries/providers/<id>` — package specs.
 - `vitest run --root libraries/providers` — kernel conformance + metadata specs (pure `create()`, all required methods).
-- `node scripts/generate-studio-descriptor-registry.mjs --check` — no descriptor/metadata drift.
+- `node tools/codegen/generate-studio-descriptor-registry.mjs --check` — no descriptor/metadata drift.
 - In-app: provider appears under Settings → Media, `testConnection` passes, a generation lands an `AIMediaJob` and completes (webhook or `media-jobs-poll` cron backstop).
 
 ## Pitfalls
-- Forgetting `scripts/generate-studio-descriptor-registry.mjs` after adding/changing a descriptor — CI's `--check` gate fails the build on metadata drift.
+- Forgetting `tools/codegen/generate-studio-descriptor-registry.mjs` after adding/changing a descriptor — CI's `--check` gate fails the build on metadata drift.
 - Building a new backend controller/service for a standard studio — the generic `MediaStudioController`/`MediaStudioService` already route `/media/studio/:provider/*`; bespoke backend is for the four documented exceptions only.
 - Setting the manifest's `universalCredentialFrom` field and expecting runtime behavior — nothing consumes it; the `UNIVERSAL_AI_CREDENTIAL` hardcoded set is the working fallback mechanism.
 - Making `generateImage` return a job id — the contract is synchronous; task-based APIs must do bounded internal polling (see `QwenMediaAdapter`).

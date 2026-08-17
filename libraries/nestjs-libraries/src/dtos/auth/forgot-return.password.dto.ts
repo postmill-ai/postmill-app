@@ -1,11 +1,5 @@
-import {
-  IsDefined,
-  IsIn,
-  IsString,
-  MinLength,
-  ValidateIf,
-} from 'class-validator';
-import { makeId } from '@postmill-ai/nestjs-libraries/services/make.is';
+import { IsDefined, IsString, MinLength } from 'class-validator';
+import { MatchesProperty } from '@postmill-ai/nestjs-libraries/dtos/auth/matches.property.validator';
 
 export class ForgotReturnPasswordDto {
   @IsString()
@@ -15,10 +9,9 @@ export class ForgotReturnPasswordDto {
 
   @IsString()
   @IsDefined()
-  @IsIn([makeId(10)], {
+  @MatchesProperty('password', {
     message: 'Passwords do not match',
   })
-  @ValidateIf((o) => o.password !== o.repeatPassword)
   repeatPassword: string;
 
   @IsString()
