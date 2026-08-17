@@ -1,5 +1,17 @@
 import { describe, it, expect, vi } from 'vitest';
 import sharp from 'sharp';
+
+// The unreachable-mask test below asserts the renderer's behaviour when a remote
+// mask fails to load. Left unmocked it reaches safeFetch, whose SSRF guard does an
+// unbounded DNS lookup — fast locally, but slow enough on a CI runner under
+// coverage instrumentation to blow vitest's 5s per-test budget. Failing the fetch
+// here keeps the assertion identical and makes the timing deterministic.
+vi.mock('@postmill-ai/nestjs-libraries/dtos/webhooks/safe.fetch', () => ({
+  safeFetch: vi.fn(async () => {
+    throw new Error('network disabled in tests');
+  }),
+}));
+
 import { DesignRenderService } from './design-render.service';
 
 class FakeFontLoaderService {
