@@ -218,7 +218,7 @@ when unset). Because there is one key, rotating it requires re-encrypting every 
 secret in a controlled migration:
 
 1. Add a one-time, ledger-gated `BackfillService` step (see the migration runbook in the
-   [Upgrading guide](./upgrading.md#schema-changes-rollback)) that reads each encrypted
+   [Upgrading guide](./upgrading.md#manual-schema-sync)) that reads each encrypted
    column with the **old** key, then re-encrypts and writes it back with the **new** key.
 2. Deploy with **both** keys available to that step, run it once (the migration ledger
    ensures it runs exactly once), then drop the old key.
