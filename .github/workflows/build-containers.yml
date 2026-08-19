@@ -24,6 +24,19 @@ jobs:
         with:
           fetch-depth: 0
 
+      # The published image tag IS the release contract; version.txt is the canonical
+      # version. Refuse to publish when they disagree (tag pushed without bumping
+      # version.txt, or a stale version.txt on the tagged commit).
+      - name: Assert the tag matches version.txt
+        run: |
+          TAG="${GITHUB_REF_NAME#v}"
+          VER="$(tr -d '[:space:]' < version.txt)"; VER="${VER#v}"
+          if [ "$TAG" != "$VER" ]; then
+            echo "::error::Tag '${GITHUB_REF_NAME}' does not match version.txt ('$(tr -d '[:space:]' < version.txt)'). Bump version.txt before tagging, or fix the tag."
+            exit 1
+          fi
+          echo "OK: tag ${GITHUB_REF_NAME} matches version.txt."
+
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v4
 

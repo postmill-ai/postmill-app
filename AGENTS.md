@@ -26,7 +26,13 @@ convention, contract, or invariant, update the matching `agents/` doc in the sam
 
 The current release version is tracked in [`version.txt`](./version.txt) (now `v1.0.0`). **Bump it on
 every release.** Root docs speak only of `v1.0.0` as the first public release; the inherited 3.x/4.x
-numbering was pre-release internal development.
+numbering was pre-release internal development. The release workflow refuses to publish a container
+image whose git tag does not match `version.txt`.
+
+Two artifacts version **independently** of the product release: `apps/sdk` (the published
+`@postmill-ai/postmill-sdk` npm package) and `apps/extension` (the browser extension, published to
+the Chrome Web Store). Do not "align" them to `version.txt`; bump each per its own semver when that
+artifact changes.
 
 > **This system is in production with many users.** Before changing anything, be sure you are not
 > breaking existing users — a data/schema change may need a migration story. Prefer

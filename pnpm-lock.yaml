@@ -1545,7 +1545,7 @@ importers:
         specifier: ^2.1.35
         version: 2.1.35
       multer:
-        specifier: '>=2.2.0 <3'
+        specifier: ^2.2.0
         version: 2.2.0
       music-metadata:
         specifier: ^11.12.3
