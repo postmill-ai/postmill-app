@@ -30,13 +30,15 @@ jobs:
 
       - name: Install native dependencies for node-canvas
         run: |
-          # azure.archive.ubuntu.com stalls happen (two multi-hour hangs on 2026-08-18/19).
-          # Bound each attempt and retry so a stuck mirror fails into a retry instead of
-          # eating the whole job timeout.
+          # azure.archive.ubuntu.com both stalls outright AND degrades to a crawl
+          # (multi-minute per-package fetches; observed 2026-08-18/19). Give a
+          # degraded-but-alive mirror room to finish — a tight outer timeout just
+          # restarts a progressing download — while apt's own 25s connect timeouts
+          # catch dead connections. Retry once if the outer bound still trips.
           ok=0
-          for i in 1 2 3; do
-            if timeout 180 sudo apt-get -o Acquire::http::Timeout=25 -o Acquire::https::Timeout=25 -o Acquire::Retries=1 update \
-              && timeout 300 sudo apt-get -o Acquire::http::Timeout=25 -o Acquire::https::Timeout=25 -o Acquire::Retries=1 install -y \
+          for i in 1 2; do
+            if timeout 300 sudo apt-get -o Acquire::http::Timeout=25 -o Acquire::https::Timeout=25 -o Acquire::Retries=2 update \
+              && timeout 900 sudo apt-get -o Acquire::http::Timeout=25 -o Acquire::https::Timeout=25 -o Acquire::Retries=2 install -y \
                 libcairo2-dev libjpeg-dev libpango1.0-dev libgif-dev build-essential g++ libpixman-1-dev; then
               ok=1; break
             fi
@@ -44,7 +46,7 @@ jobs:
             sleep 15
           done
           if [ "$ok" != 1 ]; then
-            echo "::error::apt-get failed after 3 attempts"
+            echo "::error::apt-get failed after 2 attempts"
             exit 1
           fi
 
