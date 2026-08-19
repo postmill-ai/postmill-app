@@ -203,8 +203,8 @@ function getEncryptionKey(): Buffer {
 - `AIOrgProviderConfig` credentials — AI provider API keys
 - `StorageProviderConfig` credentials — storage access keys
 - `OrgShortLinkConfig` credentials — short-link provider API keys
-- `MediaProviderConfig` credentials — media-generation provider API keys (v3.8.10)
-- `AuthProviderConfig` — login provider `clientId`/`clientSecret` (v3.8.10)
+- `MediaProviderConfig` credentials — media-generation provider API keys
+- `AuthProviderConfig` — login provider `clientId`/`clientSecret`
 - Nostr private keys
 - Browser extension cookies (Skool)
 - Third-party API keys
@@ -251,7 +251,7 @@ static verifyJWT(token: string) {
 }
 ```
 
-### Sessions & refresh tokens (v3.8.10)
+### Sessions & refresh tokens
 
 Login also issues a **refresh token** backed by a `Session` row. The token itself is never
 stored — only its SHA-256 hash (`Session.tokenHash`). `POST /auth/refresh` rotates the hash on
@@ -301,14 +301,14 @@ actually take effect (unlike earlier versions where most routes bypassed the thr
 
 ## Additional security invariants
 
-### RBAC (v3.8.10)
+### RBAC
 
 Member actions inside an organisation are gated by role-based access control: five seeded system
 roles (`owner`/`admin`/`editor`/`member`/`viewer`) plus per-org custom roles, enforced by
 `@RequirePermission` → HTTP **403**. This is orthogonal to the billing/tier gate
 (`@CheckPolicies` → HTTP **402**). The platform super-admin flag (`isSuperAdmin`) bypasses RBAC
 only — it is a separate axis from the org owner role. See
-[Backend Conventions](../developer-docs/backend-conventions.md#two-orthogonal-access-gates-v3-8-10).
+[Backend Conventions](../developer-docs/backend-conventions.md#two-orthogonal-access-gates).
 
 ### OAuth 2.0 / PKCE
 

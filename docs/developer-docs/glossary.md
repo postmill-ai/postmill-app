@@ -22,7 +22,7 @@ A single connected channel instance — credentials and settings for one account
 The durable job engine that schedules and executes background work. Postmill uses Inngest Cloud (or the local Inngest dev server) for event-driven and cron-triggered functions: post publishing, analytics collection, comment syncing, email delivery, autopost processing, and token refresh. Functions are served by the backend at `/api/inngest`.
 
 **Orchestrator** (legacy)
-The former Temporal worker application (`apps/orchestrator`) that hosted workflow and activity implementations. Removed in v3.9.0; all background jobs now run through Inngest inside the backend.
+The former Temporal worker application (`apps/orchestrator`) that hosted workflow and activity implementations. Removed before v1.0.0 (pre-release internal development); all background jobs now run through Inngest inside the backend.
 
 **Durable Execution**
 An execution model where job state is persisted on every step. Inngest provides retries, concurrency controls, and idempotency so that background work resumes reliably after restarts or failures.
@@ -161,19 +161,19 @@ A dev-only environment variable that disables security hardening: skips Helmet, 
 ## Identity & access
 
 **AppRole**
-An RBAC role assigned to an org membership (v3.8.10). Five system roles are seeded — `owner`, `admin`, `editor`, `member`, `viewer` — and organizations can define custom roles. A role carries fine-grained `(resource, action)` permissions; routes gate on them with `@RequirePermission` (HTTP 403 on failure).
+An RBAC role assigned to an org membership. Five system roles are seeded — `owner`, `admin`, `editor`, `member`, `viewer` — and organizations can define custom roles. A role carries fine-grained `(resource, action)` permissions; routes gate on them with `@RequirePermission` (HTTP 403 on failure).
 
 **Super-admin**
 The platform operator flag (`User.isSuperAdmin`) — a different axis from the org `owner` role. Grants access to the super-admin `/admin/*` backend APIs (consumed by the separate administration app — this repo ships no `/admin` UI), AI admin settings, and impersonation, and bypasses RBAC, but not billing gates.
 
 **Session**
-A login session backing refresh-token rotation (v3.8.10). Stores only the SHA-256 hash of the refresh token; rotated on every refresh, revoked on logout or token reuse. Backs the per-user device list.
+A login session backing refresh-token rotation. Stores only the SHA-256 hash of the refresh token; rotated on every refresh, revoked on logout or token reuse. Backs the per-user device list.
 
 **Brand**
-A brand voice profile (`AIBrandProfile`) — instructions, language, and per-platform overrides injected into AI generation. Since v3.8.10 an org can have many brands with one default; individual posts can select a brand (`Post.brandId`).
+A brand voice profile (`AIBrandProfile`) — instructions, language, and per-platform overrides injected into AI generation. An org can have many brands with one default; individual posts can select a brand (`Post.brandId`).
 
 **Media Provider**
-An AI media-generation backend (Runway, ElevenLabs, HeyGen, …) configured per organization via `MediaProviderConfig` (v3.8.10), with credentials encrypted at rest and output bound to the tenant's own storage under typed folders.
+An AI media-generation backend (Runway, ElevenLabs, HeyGen, …) configured per organization via `MediaProviderConfig`, with credentials encrypted at rest and output bound to the tenant's own storage under typed folders.
 
 **Content Pack**
 A premium, BYOK stock-media provider (Adobe Stock, Envato Elements, Magnific, Vecteezy) configured per organization. Resolved per capability; falls back to the free stock provider for any capability the active pack does not cover.

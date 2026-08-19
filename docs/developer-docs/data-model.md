@@ -2,7 +2,7 @@
 
 89 Prisma models and 8 enums in a single schema at `libraries/nestjs-libraries/src/database/prisma/schema.prisma`. This page lists every model grouped by domain with a one-line purpose and key relationships.
 
-> **v3.8.10 restructure:** the `User` god-table was split (profile fields moved to `UserProfile`), the flat `Role` enum was replaced by a full RBAC layer (`AppRole`/`Permission`/`AppRolePermission`), and the dead marketplace/GitHub-stars models were dropped. See [Dropped in v3.8.10](#dropped-in-v3-8-10) below.
+> **Pre-release restructure (before v1.0.0):** the `User` god-table was split (profile fields moved to `UserProfile`), the flat `Role` enum was replaced by a full RBAC layer (`AppRole`/`Permission`/`AppRolePermission`), and the dead marketplace/GitHub-stars models were dropped. See [Dropped before v1.0.0](#dropped-before-v1-0-0) below.
 
 ---
 
@@ -14,7 +14,7 @@
 | `User` | Identity/auth only — email, password, `providerName`/`providerId`, `isSuperAdmin`, `activated`, last-online telemetry | Unique on `(email, providerName)`; has one `UserProfile`, many `Session`, `UserOrganization` |
 | `UserProfile` | 1:1 profile split off from `User` — name, lastName, bio, `avatarUrl` (provider/Gravatar), `pictureId` (uploaded), IANA `timezone`, notification prefs | FK → `User` (unique, cascade), `File` (picture) |
 | `Session` | Login session backing refresh-token rotation — `tokenHash` (sha256 of the refresh token, rotated on every use), `previousTokenHash` (last rotated-out hash; reusing it revokes the session), userAgent/ip, `expiresAt`, `revokedAt` | FK → `User` (cascade) |
-| `UserOrganization` | Many-to-many join between users and orgs. The legacy `role` enum column was dropped in v3.8.10 — `roleId` → `AppRole` is the role pointer. | FK → `Organization`, `User`, `AppRole` (nullable `roleId`) |
+| `UserOrganization` | Many-to-many join between users and orgs. The legacy `role` enum column was dropped before v1.0.0 (pre-release internal development) — `roleId` → `AppRole` is the role pointer. | FK → `Organization`, `User`, `AppRole` (nullable `roleId`) |
 | `AppRole` | RBAC role. Org-scoped when `organizationId` is set; NULL org = seeded system role (`owner`/`admin`/`editor`/`member`/`viewer`, `isSystem: true`) | FK → `Organization` (nullable); has many `AppRolePermission`, `UserOrganization` |
 | `Permission` | Fine-grained `(resource, action)` capability — 18 resources × 5 actions = 90 seeded | Unique on `(resource, action)`; has many `AppRolePermission` |
 | `AppRolePermission` | Join table linking roles to permissions | Composite PK `(roleId, permissionId)`; cascade on both |
@@ -77,7 +77,7 @@
 |---|---|---|
 | `OrgProviderConfiguration` | Per-org channel provider OAuth credentials (encrypted). **Many named sets per provider** — unique on `(organizationId, identifier, name, version)`; resolved by row `id`. Replaces `ProviderConfiguration`. | FK → `Organization`; back-ref → `Integration[]` |
 | `OrgVpnConfig` | Per-org VPN/proxy provider config (Settings → VPN) — encrypted credentials, enabled `regions` JSON; SOCKS5/HTTP-CONNECT proxies power per-channel VPN egress | FK → `Organization` |
-| `ProviderConfiguration` | **DEPRECATED v3.6.0** — global provider config; replaced by per-tenant `OrgProviderConfiguration` | Standalone |
+| `ProviderConfiguration` | **DEPRECATED (pre-release)** — global provider config; replaced by per-tenant `OrgProviderConfiguration` | Standalone |
 | `FeaturedProvider` | Platform-wide curated featured-provider list surfaced at the top of each domain's provider configuration UI | Unique on `(domain, providerId)` |
 
 A connected `Integration` carries a nullable `providerConfigId` FK (`onDelete: SetNull`) binding it to the named credential set it was connected through, so OAuth handshake, token refresh, and API calls use that set's own auth. When `providerConfigId` is `NULL` (legacy / unbound connections), credential resolution falls back to the org's primary set for the provider identifier (enabled-first).
@@ -123,14 +123,14 @@ A connected `Integration` carries a nullable `providerConfigId` FK (`onDelete: S
 |---|---|---|
 | `AIOrgProviderConfig` | Per-org AI provider + encrypted credentials + `defaultModel` and `reasoningModel` | FK → `Organization` |
 | `AISpendLog` | Cost ledger — input/output tokens, cost, provider, model, scope | FK → `Organization` (nullable), `User` (nullable) |
-| `AIBrandProfile` | Brand voice instructions + language + brand kit (`palette`, `fontFamilies`, `logoFileIds`, `enforcement`, `assets[]`). Many per org since v3.8.10 (`name`, `isDefault`, `slug`); one default per org, selectable per-post via `Post.brandId`. | FK → `Organization`; has many `Post` |
+| `AIBrandProfile` | Brand voice instructions + language + brand kit (`palette`, `fontFamilies`, `logoFileIds`, `enforcement`, `assets[]`). Many per org (`name`, `isDefault`, `slug`); one default per org, selectable per-post via `Post.brandId`. | FK → `Organization`; has many `Post` |
 | `AIPromptTemplate` | Editable prompt templates (org-scoped or global, with key) | FK → `Organization` (nullable) |
 | `AISettingsAudit` | Append-only audit of AI-settings changes | FK → `User` (nullable) |
 | `AIMediaJob` | Media pipeline job — operation, status, artifact URL, provenance, cost. Tracks async media generation (video/audio/avatar/stt) in the media-provider system. | FK → `Organization`, `User` (nullable) |
 | `AIPromptLibraryItem` | User-created reusable prompt library entries | FK → `Organization` |
 | `AIContentIndex` | RAG index — chunk metadata + BM25 text; embeddings in side table | FK → `Organization` |
-| `AIProviderConfig` | **DEPRECATED v3.6.0** — replaced by `AIOrgProviderConfig`; carries `reasoningModel` for parity | Standalone |
-| `AISystemSettings` | **DEPRECATED v3.6.0** — active provider moved to per-tenant; kept for scope models and governance | Standalone |
+| `AIProviderConfig` | **DEPRECATED (pre-release)** — replaced by `AIOrgProviderConfig`; carries `reasoningModel` for parity | Standalone |
+| `AISystemSettings` | **DEPRECATED (pre-release)** — active provider moved to per-tenant; kept for scope models and governance | Standalone |
 | `OrgDefaultModel` | Per-org per-domain/category default model/media settings (`domain`, `category`, `providerId`, `version`, `model`, `settings`) | Unique on `(organizationId, domain, category)` |
 
 ---
@@ -139,7 +139,7 @@ A connected `Integration` carries a nullable `providerConfigId` FK (`onDelete: S
 
 | Model | Purpose | Key Relationships |
 |---|---|---|
-| `OrgShortLinkConfig` | Per-org short-link provider config — provider type, API credentials (encrypted), custom domain, active flag. Multi-account since v3.8.10: `name` + `accountFingerprint` with unique on `(organizationId, identifier, version, accountFingerprint)`. | FK → `Organization` |
+| `OrgShortLinkConfig` | Per-org short-link provider config — provider type, API credentials (encrypted), custom domain, active flag. Multi-account: `name` + `accountFingerprint` with unique on `(organizationId, identifier, version, accountFingerprint)`. | FK → `Organization` |
 | `ShortLink` | Ledger of generated short links — original URL, short URL, provider, post reference | FK → `Organization`, `Post` (nullable) |
 | `ShortLinkSnapshot` | Daily click-count snapshot per short link, collected by the analytics sweep | FK → `ShortLink` |
 
@@ -234,14 +234,14 @@ data rewrite).
 
 ---
 
-## Dropped in v3.8.10
+## Dropped before v1.0.0
 
-The dead marketplace/GitHub-stars subsystems were removed in a single destructive push (preceded by a DB snapshot):
+The dead marketplace/GitHub-stars subsystems were removed pre-release in a single destructive push (preceded by a DB snapshot):
 
 - **Models:** `SocialMediaAgency`, `SocialMediaAgencyNiche`, `MessagesGroup`, `Messages`, `Orders`, `OrderItems`, `PayoutProblems`, `ItemUser`, `GitHub`, `Star`, `Trending`, `TrendingLog`
 - **Enums:** `Role` (`SUPERADMIN`/`ADMIN`/`USER` — superseded by `AppRole`-based RBAC), `OrderStatus`, `From`
 - **Columns:** `User` profile/notification/marketplace columns (moved to `UserProfile` or dropped), `UserOrganization.role`, `Post` marketplace fields (`submittedForOrderId`, `submittedForOrganizationId`, `approvedSubmitForOrder`), `AIOrgProviderConfig.imageModel` / `AIProviderConfig.imageModel`, and the old `OrgShortLinkConfig` per-provider unique constraint
 
-See [Upgrading → v3.8.9 → v3.8.10](../operations-guide/upgrading.md#v3-8-9-v3-8-10) for the operational procedure.
+See [Upgrading → Migrating from a pre-release build](../operations-guide/upgrading.md#migrating-from-a-pre-release-build) for the operational procedure.
 
 > Verified against v1.0.0

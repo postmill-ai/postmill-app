@@ -195,17 +195,37 @@ docker compose -f docker/docker-compose.dev.yaml up -d
 pnpm run build
 ```
 
-## Per-release notes
+## Migrating from a pre-rebrand install (volume & Postgres role rename)
 
-### v3.8.10 and later
+A fresh install needs no action here. If your install predates the Postmill rename, its Docker
+volumes and Postgres role/database use the previous names, while the current
+`docker-compose.yaml` mounts the renamed `postmill-*` volumes and expects the
+`postmill-user`/`postmill-db-local` Postgres role and database. Bringing the new compose file up
+without migrating starts against **empty storage** — the old volumes are not mounted, and the
+renamed Postgres role/db does not exist on the already-initialized volume.
 
-v3.8.10 restructures identity, roles, and the provider-surface settings, and includes a
-**destructive schema push** that drops dead tables and migrated columns.
+Migrate by moving the data across:
 
-**Take a database snapshot before applying the migration.** This is not optional:
+1. Dump the database from the **old** Postgres container before switching compose files (see the
+   backup step in the clean upgrade path above).
+2. Bring the new stack up, then restore the dump into the new database (see the restore command
+   under Rollback below).
+3. Copy the contents of the old uploads and config volumes into the new `postmill-uploads` and
+   `postmill-config` volumes. Find the old names with `docker volume ls`, then copy with a
+   throwaway container, e.g.
+   `docker run --rm -v <old-uploads-volume>:/from -v $(basename "$PWD")_postmill-uploads:/to alpine sh -c 'cp -a /from/. /to/'`.
+
+## Migrating from a pre-release build
+
+Versions 3.x/4.x were pre-release internal development; **v1.0.0 is the first public release.** If
+you run a pre-release build, upgrade straight to v1.0.0 — the notes below condense every breaking
+change from the pre-release line.
+
+**Take a database snapshot before applying migrations.** The v1.0.0 schema includes a destructive
+push that drops dead tables and migrated columns. This is not optional:
 
 ```bash
-docker exec postmill-postgres pg_dump -U postmill-user postmill-db-local > pre_3810_$(date +%Y%m%d).sql
+docker exec postmill-postgres pg_dump -U postmill-user postmill-db-local > pre_upgrade_$(date +%Y%m%d).sql
 # Then run migrate deploy (or db push in local dev)
 docker exec postmill pnpm dlx prisma@6.5.0 migrate deploy \
   --schema ./libraries/nestjs-libraries/src/database/prisma/schema.prisma
@@ -225,150 +245,64 @@ docker exec postmill pnpm dlx prisma@6.5.0 migrate deploy \
 - `UserOrganization.role` and the `Role` enum — replaced by `roleId` → `AppRole` (RBAC).
 - `AIOrgProviderConfig.imageModel` / `AIProviderConfig.imageModel` — image generation moved to
   the Media provider system.
+- `StorageProviderConfig.isDefault` — LOCAL is the always-on base storage; the
+  `POST /settings/storage/:id/set-default` API route is deleted. Remove any scripts or tooling
+  that call it.
 - Enums `OrderStatus`, `From`.
 - The old `OrgShortLinkConfig` `@@unique([organizationId, identifier])` constraint (replaced by
   the per-account unique, enabling multiple accounts per provider).
 
 **Automatic seed + backfill:** on first boot the backend idempotently seeds the RBAC catalog
-(5 system roles, 80 permissions) and backfills `UserProfile` rows, `UserOrganization.roleId`
+(5 system roles, 90 permissions) and backfills `UserProfile` rows, `UserOrganization.roleId`
 (legacy `SUPERADMIN → owner`, `ADMIN → admin`, `USER → member`), one default brand per org,
 storage/short-link account fingerprints, and media provider configs from the old
 `ragSettings.mediaProviders` blob. No manual data migration is required.
 
+**Env vars removed — reconfigure in-app.** Stale pre-release env vars are silently ignored. Keep
+`ENCRYPTION_KEY` (or `JWT_SECRET`, if you never set `ENCRYPTION_KEY`) **stable** across the
+upgrade — stored secrets are encrypted with it and won't decrypt if it changes.
+
+- **Channel & AI credentials** are read only from the database (Settings → Channels, Settings →
+  AI), encrypted at rest. The per-provider OAuth env vars (`LINKEDIN_CLIENT_ID`,
+  `FACEBOOK_APP_ID`, etc.) and any `OPENAI_API_KEY` are no longer read — configure providers
+  in-app.
+- **Google My Business** no longer falls back to `YOUTUBE_CLIENT_ID`/`YOUTUBE_CLIENT_SECRET`.
+  Enter GMB credentials explicitly under Settings → Channels (you can reuse the same Google Cloud
+  OAuth client you used for YouTube).
+- **Email:** `RESEND_API_KEY` and `EMAIL_HOST`/`EMAIL_PORT`/`EMAIL_SECURE`/`EMAIL_USER`/
+  `EMAIL_PASS` are removed. Set `EMAIL_PROVIDER=resend` with `EMAIL_API_KEY`, or
+  `EMAIL_PROVIDER=smtp` with the `EMAIL_SMTP_*` vars. With no recognized `EMAIL_PROVIDER`, the
+  `EmptyAdapter` activates and activation/reset/invite/billing emails **stop sending**.
+  `EMAIL_WEBHOOK_SECRET` is required for delivery tracking on webhook-capable providers (Resend,
+  SendGrid, Mailgun, Postmark, SES).
+- **Storage:** the global `STORAGE_PROVIDER` and `CLOUDFLARE_*` vars
+  (`CLOUDFLARE_ACCOUNT_ID`, `CLOUDFLARE_ACCESS_KEY`, `CLOUDFLARE_SECRET_ACCESS_KEY`,
+  `CLOUDFLARE_BUCKETNAME`, `CLOUDFLARE_BUCKET_URL`, `CLOUDFLARE_REGION`) are removed — configure
+  cloud storage per-org in Settings → Storage. Ensure `UPLOAD_DIRECTORY` is set and writable.
+  Avatars and app-internal image writes always use LOCAL storage; old avatar URLs pointing at
+  `CLOUDFLARE_BUCKET_URL` are left as-is and re-fetched on the next token refresh/reconnect.
+- **Short links:** all 10 short-link env vars (`DUB_*`, `SHORT_IO_*`, `KUTT_*`, `LINK_DRIP_*`)
+  are removed — reconfigure in Settings → Shortlinks. The Kutt and LinkDrip providers no longer
+  exist; choose one of the remaining supported providers. Already-generated short URLs in post
+  content keep working as opaque links.
+
 **New env vars:**
 
 - `LOCAL_STORAGE_QUOTA_GB` (default `5`) — default soft quota for each org's local storage.
+- `MEDIA_UPLOAD_MAX_BYTES` (default 1 GB) — large media uploads stream through
+  `/files/upload-server` (formerly `/media/upload-server`); the presigned multipart Cloudflare R2
+  path is removed.
 
 **Behaviour changes to verify after upgrading:**
 
-- Login providers are now managed by the **separate administration app** (a distinct repo); this
-  repo reads `AuthProviderConfig` DB-first and ships no `/admin` frontend — env vars remain the
+- Login providers are managed by the **separate administration app** (a distinct repo); this repo
+  reads `AuthProviderConfig` DB-first and ships no `/admin` frontend — env vars remain the
   bootstrap fallback, so existing env-configured logins keep working.
-- Login now issues a refresh token backed by the `Session` table; users get a device list with
+- Login issues a refresh token backed by the `Session` table, with a per-user device list and
   per-session revoke under Profile → Security. Existing JWTs keep verifying (no forced re-auth).
-- The post composer moved to `/schedule/post` and `/schedule/post/<id>` (was a modal).
+- The post composer lives at `/schedule/post` and `/schedule/post/<id>` (was a modal).
 - Local uploads are partitioned per tenant under `<UPLOAD_DIRECTORY>/<tenantId>/`; existing files
   remain readable at their recorded paths.
-
-### v3.8.3 → v3.8.4
-
-**No schema changes.** v3.8.4 is a remediation release addressing bugs introduced in v3.8.3.
-
-**If you use Amazon SES for email:** Re-test webhook delivery. SNS subscription confirmation
-and bounce/complaint/delivery event processing were fixed in this release.
-
-**No env var or config changes required.** A simple redeploy with the new image tag is sufficient.
-
-### v3.8.2 → v3.8.3
-
-**Destructive schema change:** The `StorageProviderConfig.isDefault` column was dropped
-(`prisma migrate deploy` or `db push --accept-data-loss` required). The `POST /settings/storage/:id/set-default`
-API route was deleted. LOCAL is now the implicit always-on base storage; all other providers
-(S3/R2/B2/IDriveE2) mount onto it.
-
-**Required actions:**
-
-1. Apply the migration. If using `db push`, pass `--accept-data-loss` to apply the column drop.
-2. Remove any scripts or tooling that call the deleted `set-default` endpoint.
-3. All other changes (Schedule rename, settings sort, profile in avatar menu) are additive
-   — no env var changes needed.
-
-**No env var changes.** Calendar → Schedule routing is a permanent redirect; no config needed.
-
-### v3.8.1 → v3.8.2
-
-Avatars and all app-internal image writes now always use the org's LOCAL storage (not Cloudflare R2
-via env vars). The global-env `STORAGE_PROVIDER` and `CLOUDFLARE_*` vars are **removed**.
-Large media uploads stream through `/files/upload-server` (formerly `/media/upload-server`) with a
-configurable limit (`MEDIA_UPLOAD_MAX_BYTES`, default 1 GB). The presigned multipart Cloudflare R2
-path is removed.
-
-Cloud providers (S3/R2/B2/IDrive e2) remain configurable per-organization in Settings → Storage,
-but they are **write-inert** for avatars and app-internal writes. Media-library uploads also go
-through local storage.
-
-**Required actions:**
-
-1. Remove the following env vars from your `.env` and `docker-compose.yaml`:
-   - `STORAGE_PROVIDER`
-   - `CLOUDFLARE_ACCOUNT_ID`, `CLOUDFLARE_ACCESS_KEY`, `CLOUDFLARE_SECRET_ACCESS_KEY`
-   - `CLOUDFLARE_BUCKETNAME`, `CLOUDFLARE_BUCKET_URL`, `CLOUDFLARE_REGION`
-2. Ensure `UPLOAD_DIRECTORY` is set and writable.
-3. Optionally set `MEDIA_UPLOAD_MAX_BYTES` (default 1 GB).
-4. The configuration checker still prints deprecation warnings for these vars if they remain in
-   the environment — that is intentional and harmless; clean them up at your convenience.
-
-**No data migration needed.** Existing `Integration.picture` URLs that point at the old
-`CLOUDFLARE_BUCKET_URL` are left as-is; avatars are re-fetched and stored locally on the next token
-refresh / reconnect.
-
-### v3.8.0 → v3.8.1
-
-Email configuration moves from the old 2-provider env scheme (Resend / nodemailer) to a
-standardized 6-provider system.
-
-**Breaking changes:**
-
-- **`RESEND_API_KEY` is removed.** Set `EMAIL_PROVIDER=resend` and `EMAIL_API_KEY` with your
-  Resend API key.
-- **`EMAIL_HOST`, `EMAIL_PORT`, `EMAIL_SECURE`, `EMAIL_USER`, `EMAIL_PASS` are removed.**
-  Set `EMAIL_PROVIDER=smtp` and use `EMAIL_SMTP_HOST`, `EMAIL_SMTP_PORT`, `EMAIL_SMTP_SECURE`,
-  `EMAIL_SMTP_USER`, `EMAIL_SMTP_PASS`.
-- **New `EMAIL_WEBHOOK_SECRET`** — required for delivery tracking on webhook-capable providers
-  (Resend, SendGrid, Mailgun, Postmark, SES). See the Configuration reference for per-provider
-  signing-secret locations.
-
-**Impact:** Stale pre-v3.8.1 env vars (`RESEND_API_KEY`, `EMAIL_HOST`, etc.) are silently ignored.
-The `EmptyAdapter` activates when no recognized `EMAIL_PROVIDER` is set, which means
-activation/reset/invite/billing emails **stop sending**. After upgrading, verify `EMAIL_PROVIDER`
-and the corresponding API key are configured.
-
-**No schema migration required.** The new `EmailLog` Prisma model is additive.
-
-### v3.7.1 → v3.8.0
-
-Short-link provider configuration moves from environment variables to per-org in-app settings.
-
-**Breaking changes:**
-
-- **Short-link env vars removed.** All 10 short-link env vars (`DUB_TOKEN`, `DUB_API_ENDPOINT`, `DUB_SHORT_LINK_DOMAIN`, `SHORT_IO_SECRET_KEY`, `KUTT_API_KEY`, `KUTT_API_ENDPOINT`, `KUTT_SHORT_LINK_DOMAIN`, `LINK_DRIP_API_KEY`, `LINK_DRIP_API_ENDPOINT`, `LINK_DRIP_SHORT_LINK_DOMAIN`) are no longer read. Admins must reconfigure their provider in **Settings → Shortlinks** after upgrading.
-- **Existing short links in scheduled/published posts** are not migrated. Already-generated short link URLs in post content continue to work as opaque URLs — they will not break. New short links will be generated by the newly configured provider.
-- **Kutt and LinkDrip providers are no longer available.** These two providers have been removed from the 19-provider adapter set. If you were using Kutt or LinkDrip, choose one of the remaining supported providers.
-
-**No schema migration required.** The three new Prisma models (`OrgShortLinkConfig`, `ShortLink`, `ShortLinkSnapshot`) are additive with nullable/defaulted columns.
-
-### v3.7.0 → v3.7.1
-
-v3.7.1 removes the last `process.env` credential fallbacks and the env-migration services. All
-channel and AI credentials now come **only** from the database (Settings → Channels, Settings →
-AI), encrypted at rest.
-
-**Seed-then-upgrade (if you still rely on channel/AI env vars).** On v3.7.0 the env-migration
-services seed each org's database config from your env vars on every boot. So the safe path is:
-
-1. Boot **once on v3.7.0** with your existing channel/AI env vars set — this seeds them into the
-   database for every org.
-2. Upgrade to v3.7.1. It reads only the database; the env vars are now ignored.
-3. Remove the deprecated channel/AI env vars from your deployment config.
-
-> Keep `ENCRYPTION_KEY` (or `JWT_SECRET`, if you never set `ENCRYPTION_KEY`) **stable** across the
-> two boots — the seeded secrets are encrypted with it and won't decrypt if it changes.
-
-**Google My Business credential change.** Before v3.7.1, GMB fell back to `YOUTUBE_CLIENT_ID` /
-`YOUTUBE_CLIENT_SECRET` when `GOOGLE_GMB_CLIENT_ID` was not set. That implicit fallback is **gone** —
-GMB now resolves only its own `gmb` channel config. If you ran GMB off the YouTube credentials
-(without ever setting `GOOGLE_GMB_CLIENT_ID`), the seed step above won't create a `gmb` row, and GMB
-connect/publish will return a "provider not configured" error after upgrade. Fix: enter Google My
-Business credentials explicitly under Settings → Channels (you can reuse the same Google Cloud
-OAuth client you used for YouTube).
-
-### Pre-v3.6.0 → v3.6.0
-
-- `OPENAI_API_KEY` is no longer read by the AI layer; configure AI providers in Settings → AI.
-- Per-provider OAuth env vars (`LINKEDIN_CLIENT_ID`, `FACEBOOK_APP_ID`, etc.) are deprecated;
-  migrate to Settings → Channels.
-- Per-tenant storage replaces global `STORAGE_PROVIDER`/`CLOUDFLARE_*` vars; migrate to Settings
-  → Storage.
 
 ## Rollback
 

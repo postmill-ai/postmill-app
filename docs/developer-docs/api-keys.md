@@ -1,6 +1,6 @@
 # API Keys
 
-Postmill uses per-user, per-organization API keys for programmatic access. The old single org-level key (`Organization.apiKey`) was retired in v3.8.8; all integrations and MCP clients must use the new keys.
+Postmill uses per-user, per-organization API keys for programmatic access. The old single org-level key (`Organization.apiKey`) was retired before v1.0.0 (pre-release internal development); all integrations and MCP clients must use the new keys.
 
 ## Key format
 
