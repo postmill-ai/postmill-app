@@ -27,25 +27,42 @@ jobs:
     # Bound the job: a hung `apt-get update` (Ubuntu mirror stall) otherwise sits for
     # the 6-hour default. A healthy run finishes in ~5 minutes.
     timeout-minutes: 30
+    permissions:
+      contents: read
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
         with:
           fetch-depth: 0
 
       - name: Use Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v7
         with:
           node-version: '22.12.0'
 
       - name: Install pnpm
-        uses: pnpm/action-setup@v2
+        uses: pnpm/action-setup@v6
         with:
           run_install: false
 
       - name: Install native dependencies for node-canvas
         run: |
-          sudo apt-get update
-          sudo apt-get install -y libcairo2-dev libjpeg-dev libpango1.0-dev libgif-dev build-essential g++ libpixman-1-dev
+          # azure.archive.ubuntu.com stalls happen (two multi-hour hangs on 2026-08-18/19).
+          # Bound each attempt and retry so a stuck mirror fails into a retry instead of
+          # eating the whole job timeout.
+          ok=0
+          for i in 1 2 3; do
+            if timeout 180 sudo apt-get -o Acquire::http::Timeout=25 -o Acquire::https::Timeout=25 -o Acquire::Retries=1 update \
+              && timeout 300 sudo apt-get -o Acquire::http::Timeout=25 -o Acquire::https::Timeout=25 -o Acquire::Retries=1 install -y \
+                libcairo2-dev libjpeg-dev libpango1.0-dev libgif-dev build-essential g++ libpixman-1-dev; then
+              ok=1; break
+            fi
+            echo "::warning::apt attempt $i failed or stalled; retrying in 15s"
+            sleep 15
+          done
+          if [ "$ok" != 1 ]; then
+            echo "::error::apt-get failed after 3 attempts"
+            exit 1
+          fi
 
       - name: Assert lockfile matches package.json (frozen install)
         run: pnpm install --frozen-lockfile
@@ -65,9 +82,11 @@ jobs:
     # Bound the job: a hung `apt-get update` (Ubuntu mirror stall) otherwise sits for
     # the 6-hour default. Healthy runs take ~15-22 min, so 45 leaves headroom.
     timeout-minutes: 45
+    permissions:
+      contents: read
     services:
       postgres:
-        image: postgres:15
+        image: postgres:17-alpine
         env:
           POSTGRES_USER: postmill
           POSTGRES_PASSWORD: postmill
@@ -101,24 +120,39 @@ jobs:
       INNGEST_DEV: '1'
       PORT: '3000'
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
         with:
           fetch-depth: 0
 
       - name: Use Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v7
         with:
           node-version: '22.12.0'
 
       - name: Install pnpm
-        uses: pnpm/action-setup@v2
+        uses: pnpm/action-setup@v6
         with:
           run_install: false
 
       - name: Install native dependencies for node-canvas
         run: |
-          sudo apt-get update
-          sudo apt-get install -y libcairo2-dev libjpeg-dev libpango1.0-dev libgif-dev build-essential g++ libpixman-1-dev
+          # azure.archive.ubuntu.com stalls happen (two multi-hour hangs on 2026-08-18/19).
+          # Bound each attempt and retry so a stuck mirror fails into a retry instead of
+          # eating the whole job timeout.
+          ok=0
+          for i in 1 2 3; do
+            if timeout 180 sudo apt-get -o Acquire::http::Timeout=25 -o Acquire::https::Timeout=25 -o Acquire::Retries=1 update \
+              && timeout 300 sudo apt-get -o Acquire::http::Timeout=25 -o Acquire::https::Timeout=25 -o Acquire::Retries=1 install -y \
+                libcairo2-dev libjpeg-dev libpango1.0-dev libgif-dev build-essential g++ libpixman-1-dev; then
+              ok=1; break
+            fi
+            echo "::warning::apt attempt $i failed or stalled; retrying in 15s"
+            sleep 15
+          done
+          if [ "$ok" != 1 ]; then
+            echo "::error::apt-get failed after 3 attempts"
+            exit 1
+          fi
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
@@ -186,7 +220,7 @@ jobs:
 
       - name: Upload boot log on failure
         if: failure()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: backend-boot-log
           path: backend-boot.log

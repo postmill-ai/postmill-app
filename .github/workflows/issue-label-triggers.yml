@@ -9,6 +9,7 @@ jobs:
   closed-public-website:
     if: github.event.label.name == 'trigger-public-website'
     runs-on: ubuntu-latest
+    timeout-minutes: 5
     permissions:
       issues: write
     steps:
