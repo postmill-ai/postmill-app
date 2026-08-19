@@ -8,6 +8,13 @@ vi.mock('../hooks/useDayDrill', () => ({
   useDayDrill: () => ({ data: undefined as DayDetailResponse | undefined }),
 }));
 
+// Mock the translation hook like the sibling panel specs do — the real hook
+// suspends on i18next's async locale init, which races the synchronous render()
+// assertions and flakes on cold-cache CI runners.
+vi.mock('@postmill-ai/react/translation/get.transation.service.client', () => ({
+  useT: () => (_k: string, d: string) => d,
+}));
+
 const fullData: DayDetailResponse = {
   date: '2024-06-15',
   metric: 'Impressions',
