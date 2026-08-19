@@ -14,19 +14,18 @@ jobs:
       contents: read
       security-events: write
 
-    strategy:
-      matrix:
-        node-version: ['24.19.0']
-
     steps:
       - uses: actions/checkout@v7
         with:
           fetch-depth: 0
 
-      - name: Use Node.js ${{ matrix.node-version }}
+      # Pinned directly (no single-element matrix): the matrix put the version into
+      # the check-run name ("lint (24.19.0)"), which breaks branch protection's
+      # required-check contexts on every Node bump.
+      - name: Use Node.js
         uses: actions/setup-node@v7
         with:
-          node-version: ${{ matrix.node-version }}
+          node-version: '24.19.0'
 
       - name: Install pnpm
         uses: pnpm/action-setup@v6
@@ -95,19 +94,17 @@ jobs:
           --health-timeout 5s
           --health-retries 5
 
-    strategy:
-      matrix:
-        node-version: ['24.19.0']
-
     steps:
       - uses: actions/checkout@v7
         with:
           fetch-depth: 0
 
-      - name: Use Node.js ${{ matrix.node-version }}
+      # Pinned directly (no single-element matrix): see the lint job for why the
+      # version must not appear in the check-run name.
+      - name: Use Node.js
         uses: actions/setup-node@v7
         with:
-          node-version: ${{ matrix.node-version }}
+          node-version: '24.19.0'
 
       - name: Install pnpm
         uses: pnpm/action-setup@v6

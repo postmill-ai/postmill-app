@@ -22,17 +22,17 @@ jobs:
       contents: read
       security-events: write
       actions: read
-    strategy:
-      matrix:
-        node-version: ['24.19.0']
     steps:
       - name: Checkout code
         uses: actions/checkout@v7
 
-      - name: Use Node.js ${{ matrix.node-version }}
+      # Pinned directly (no single-element matrix): matrix values leak into the
+      # check-run name and break branch protection's required-check contexts on
+      # every Node bump.
+      - name: Use Node.js
         uses: actions/setup-node@v7
         with:
-          node-version: ${{ matrix.node-version }}
+          node-version: '24.19.0'
 
       - name: Install pnpm
         uses: pnpm/action-setup@v6
