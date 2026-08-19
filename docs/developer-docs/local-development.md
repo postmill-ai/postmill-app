@@ -10,7 +10,7 @@ This guide gets the Postmill stack running on a normal developer machine without
 
 | Tool | Required version | Notes |
 |---|---|---|
-| Node.js | `>=22.12.0 <23.0.0` | See `engines` in root `package.json` |
+| Node.js | `>=24.0.0 <25.0.0` | See `engines` in root `package.json` |
 | pnpm | `10.34.4` | Specified in `packageManager`; other versions may silently break |
 | Docker / Docker Compose | Recent stable | For Postgres + Redis + optional services |
 | ffmpeg | Recent stable | Required for the video merge feature in `/media/replicate`. Install with `brew install ffmpeg` (macOS) or `apt-get install ffmpeg` / `dnf install ffmpeg` (Linux). |

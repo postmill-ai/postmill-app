@@ -16,26 +16,35 @@ jobs:
 
       - uses: actions/setup-node@v7
         with:
-          node-version: '22.12.0'
+          node-version: '24.19.0'
           cache: 'pnpm'
 
       - name: Install native dependencies for node-canvas
         run: |
-          # azure.archive.ubuntu.com stalls happen (two multi-hour hangs on 2026-08-18/19).
-          # Bound each attempt and retry so a stuck mirror fails into a retry instead of
-          # eating the whole job timeout.
+          # azure.archive.ubuntu.com (the runner default) has been stalling/crawling for
+          # days (2026-08-18/19). Try it once with bounded timeouts; on failure rewrite
+          # the apt sources to archive.ubuntu.com and try again. apt's 25s socket timeouts
+          # catch dead connections; the outer `timeout` bounds a crawling-but-alive mirror.
           ok=0
-          for i in 1 2 3; do
-            if timeout 180 sudo apt-get -o Acquire::http::Timeout=25 -o Acquire::https::Timeout=25 -o Acquire::Retries=1 update \
-              && timeout 300 sudo apt-get -o Acquire::http::Timeout=25 -o Acquire::https::Timeout=25 -o Acquire::Retries=1 install -y \
+          for i in 1 2; do
+            if [ "$i" = "2" ]; then
+              echo "::warning::default mirror failed; switching apt sources to archive.ubuntu.com"
+              # GitHub runners route Ubuntu packages through a mirror list
+              # (mirror+file:/etc/apt/apt-mirrors.txt) that currently resolves to the
+              # stalling azure.archive.ubuntu.com. Point apt at Canonical directly.
+              sudo sed -i -e 's|mirror+file:/etc/apt/apt-mirrors.txt/ubuntu|http://archive.ubuntu.com/ubuntu|g' \
+                          -e 's|azure\.archive\.ubuntu\.com|archive.ubuntu.com|g' \
+                /etc/apt/sources.list /etc/apt/sources.list.d/*.list /etc/apt/sources.list.d/*.sources 2>/dev/null || true
+            fi
+            if timeout 300 sudo apt-get -o Acquire::http::Timeout=25 -o Acquire::https::Timeout=25 -o Acquire::Retries=1 update \
+              && timeout 900 sudo apt-get -o Acquire::http::Timeout=25 -o Acquire::https::Timeout=25 -o Acquire::Retries=1 install -y \
                 libcairo2-dev libjpeg-dev libpango1.0-dev libgif-dev build-essential g++ libpixman-1-dev; then
               ok=1; break
             fi
-            echo "::warning::apt attempt $i failed or stalled; retrying in 15s"
-            sleep 15
+            echo "::warning::apt attempt $i failed or stalled"
           done
           if [ "$ok" != 1 ]; then
-            echo "::error::apt-get failed after 3 attempts"
+            echo "::error::apt-get failed on both mirrors"
             exit 1
           fi
 

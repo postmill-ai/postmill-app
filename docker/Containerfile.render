@@ -8,7 +8,7 @@
 # Build (on the Podman host):
 #   podman build -f docker/Containerfile.render -t localhost/postmill-render:latest .
 # Then set VIDEO_RENDER_PODMAN_ENABLED=true (+ VIDEO_RENDER_IMAGE if not the default).
-FROM node:22.20-bookworm-slim
+FROM node:24.19.0-bookworm-slim
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
     g++ \

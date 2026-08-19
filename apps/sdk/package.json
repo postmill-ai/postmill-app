@@ -35,12 +35,12 @@
     "url": "https://github.com/postmill-ai/postmill-app/issues"
   },
   "devDependencies": {
-    "@types/node": "^22.13.0",
+    "@types/node": "^24.0.0",
     "tsup": "^8.5.1",
     "typescript": "5.5.4",
     "vitest": "^4.1.0"
   },
   "engines": {
-    "node": ">=22.12.0 <23.0.0"
+    "node": ">=24.0.0 <25.0.0"
   }
 }
