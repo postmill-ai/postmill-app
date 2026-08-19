@@ -57,8 +57,12 @@ jobs:
           for i in 1 2; do
             if [ "$i" = "2" ]; then
               echo "::warning::default mirror failed; switching apt sources to archive.ubuntu.com"
-              sudo sed -i 's|azure\.archive\.ubuntu\.com|archive.ubuntu.com|g' \
-                /etc/apt/sources.list /etc/apt/sources.list.d/*.sources /etc/apt/sources.list.d/*.list 2>/dev/null || true
+              # GitHub runners route Ubuntu packages through a mirror list
+              # (mirror+file:/etc/apt/apt-mirrors.txt) that currently resolves to the
+              # stalling azure.archive.ubuntu.com. Point apt at Canonical directly.
+              sudo sed -i -e 's|mirror+file:/etc/apt/apt-mirrors.txt/ubuntu|http://archive.ubuntu.com/ubuntu|g' \
+                          -e 's|azure\.archive\.ubuntu\.com|archive.ubuntu.com|g' \
+                /etc/apt/sources.list /etc/apt/sources.list.d/*.list /etc/apt/sources.list.d/*.sources 2>/dev/null || true
             fi
             if timeout 300 sudo apt-get -o Acquire::http::Timeout=25 -o Acquire::https::Timeout=25 -o Acquire::Retries=1 update \
               && timeout 900 sudo apt-get -o Acquire::http::Timeout=25 -o Acquire::https::Timeout=25 -o Acquire::Retries=1 install -y \
@@ -126,8 +130,12 @@ jobs:
           for i in 1 2; do
             if [ "$i" = "2" ]; then
               echo "::warning::default mirror failed; switching apt sources to archive.ubuntu.com"
-              sudo sed -i 's|azure\.archive\.ubuntu\.com|archive.ubuntu.com|g' \
-                /etc/apt/sources.list /etc/apt/sources.list.d/*.sources /etc/apt/sources.list.d/*.list 2>/dev/null || true
+              # GitHub runners route Ubuntu packages through a mirror list
+              # (mirror+file:/etc/apt/apt-mirrors.txt) that currently resolves to the
+              # stalling azure.archive.ubuntu.com. Point apt at Canonical directly.
+              sudo sed -i -e 's|mirror+file:/etc/apt/apt-mirrors.txt/ubuntu|http://archive.ubuntu.com/ubuntu|g' \
+                          -e 's|azure\.archive\.ubuntu\.com|archive.ubuntu.com|g' \
+                /etc/apt/sources.list /etc/apt/sources.list.d/*.list /etc/apt/sources.list.d/*.sources 2>/dev/null || true
             fi
             if timeout 300 sudo apt-get -o Acquire::http::Timeout=25 -o Acquire::https::Timeout=25 -o Acquire::Retries=1 update \
               && timeout 900 sudo apt-get -o Acquire::http::Timeout=25 -o Acquire::https::Timeout=25 -o Acquire::Retries=1 install -y \
