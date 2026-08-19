@@ -12,7 +12,7 @@ overrides:
   react-dom: 19.2.7
   '@types/react': 19.1.8
   '@types/react-dom': 19.1.6
-  # Security overrides — see dev/PACKAGE_UPGRADE.md §4. Both parents are at their
+  # Security overrides — each entry is documented inline below. Both parents are at their
   # latest and pin the vulnerable version *exactly*, so there is no upgrade-the-parent
   # path; these patched ranges are the only way to close the high advisories.
   # protobufjs 8.x <8.4.1: high GHSAs; the lockfile already resolves the patched 8.4.x

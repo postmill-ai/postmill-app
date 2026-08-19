@@ -7,7 +7,7 @@
 # volume). See the migration steps in docs/operations-guide/upgrading.md
 # before running `docker compose up`.
 #
-# IMPORTANT (v3.7.1): Channel provider credentials and AI provider config are
+# IMPORTANT (v1.0.0): Channel provider credentials and AI provider config are
 # no longer read from environment variables. Configure them per-organization
 # in-app via Settings → Channels and Settings → AI respectively.
 #
@@ -72,7 +72,7 @@ services:
       STRIPE_SECRET_KEY: ''
       STRIPE_SIGNING_KEY: ''
 
-      # === Email Settings (v3.8.1+)
+      # === Email Settings
       # EMAIL_PROVIDER: ""
       # EMAIL_API_KEY: ""
       # EMAIL_FROM_ADDRESS: ""
