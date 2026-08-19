@@ -11,7 +11,7 @@
 # The frontend is built/served separately. This image is the NestJS API + Inngest handler.
 
 # ---------- builder ----------
-FROM node:22.20-bookworm-slim AS builder
+FROM node:24.19.0-bookworm-slim AS builder
 
 # Toolchain for native modules (canvas, sharp, bcrypt) compiled during install.
 RUN apt-get update && apt-get install -y --no-install-recommends \
@@ -36,7 +36,7 @@ RUN NODE_OPTIONS="--max-old-space-size=4096" pnpm run build:backend
 RUN pnpm prune --prod
 
 # ---------- runtime ----------
-FROM node:22.20-bookworm-slim AS runtime
+FROM node:24.19.0-bookworm-slim AS runtime
 
 # build-containers.yml passes --build-arg NEXT_PUBLIC_VERSION=<git tag>. Without this
 # ARG/ENV pair Docker accepted the flag and discarded it, so the released image carried

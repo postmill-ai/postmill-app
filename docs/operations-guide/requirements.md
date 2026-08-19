@@ -26,7 +26,7 @@ The heavy pieces:
 
 | Tool      | Required version      | Notes |
 |-----------|-----------------------|-------|
-| Node.js   | `>=22.12.0 <23.0.0`   | See `engines` in `package.json` |
+| Node.js   | `>=24.0.0 <25.0.0`   | See `engines` in `package.json` |
 | pnpm      | `10.34.4`             | Specified in `packageManager`; other versions may silently break |
 | Docker    | Recent stable         | Only needed for Docker Compose deployment |
 | git       | Any                   | For cloning the repository |

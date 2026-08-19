@@ -129,7 +129,7 @@ export default bitlyProviderModules;
   "types": "src/index.ts",
   "dependencies": { "@postmill-ai/provider-kernel": "workspace:*" },
   "license": "AGPL-3.0",
-  "engines": { "node": ">=22.12.0 <23.0.0" },
+  "engines": { "node": ">=24.0.0 <25.0.0" },
   "scripts": { "test": "vitest run" }
 }
 ```

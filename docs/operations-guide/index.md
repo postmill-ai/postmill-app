@@ -21,7 +21,7 @@ through Inngest, and media can live on local disk or cloud object storage.
 
 | Component          | Technology                          | Role                                |
 |--------------------|-------------------------------------|-------------------------------------|
-| Application        | Node.js >=22.12.0, Next.js 16, NestJS 11 | API + frontend server           |
+| Application        | Node.js >=24.0.0, Next.js 16, NestJS 11 | API + frontend server           |
 | Primary database   | PostgreSQL 17                       | Users, orgs, posts, integrations, config |
 | Cache / queue      | Redis 7                             | Session cache, throttle store, analytics cache |
 | Background jobs    | Inngest                             | Analytics, comments, publish, token refresh |

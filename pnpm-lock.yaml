@@ -158,8 +158,8 @@ importers:
         specifier: ^1.4.11
         version: 1.4.13
       '@types/node':
-        specifier: ^22.13.0
-        version: 22.19.20
+        specifier: ^24.0.0
+        version: 24.13.3
       '@types/node-telegram-bot-api':
         specifier: ^0.64.7
         version: 0.64.14
@@ -231,7 +231,7 @@ importers:
         version: 2.8.8
       ts-node:
         specifier: 10.9.2
-        version: 10.9.2(@swc/core@1.15.40(@swc/helpers@0.5.23))(@types/node@22.19.20)(typescript@5.5.4)
+        version: 10.9.2(@swc/core@1.15.40(@swc/helpers@0.5.23))(@types/node@24.13.3)(typescript@5.5.4)
       typescript:
         specifier: 5.5.4
         version: 5.5.4
@@ -1136,8 +1136,8 @@ importers:
   apps/sdk:
     devDependencies:
       '@types/node':
-        specifier: ^22.13.0
-        version: 22.19.20
+        specifier: ^24.0.0
+        version: 24.13.3
       tsup:
         specifier: ^8.5.1
         version: 8.5.1(@swc/core@1.15.40(@swc/helpers@0.5.23))(jiti@2.6.1)(postcss@8.5.22)(typescript@5.5.4)(yaml@2.9.0)
@@ -1146,7 +1146,7 @@ importers:
         version: 5.5.4
       vitest:
         specifier: ^4.1.0
-        version: 4.1.8(@opentelemetry/api@1.9.1)(@types/node@22.19.20)(@vitest/coverage-v8@4.1.8)(@vitest/ui@4.1.8)(happy-dom@20.10.2(bufferutil@4.1.0)(utf-8-validate@6.0.6))(jsdom@29.1.1(@noble/hashes@2.0.1)(canvas@3.2.3))(vite@6.4.3(@types/node@22.19.20)(jiti@2.6.1)(lightningcss@1.31.1)(sass@1.100.0)(terser@5.49.0)(yaml@2.9.0))
+        version: 4.1.8(@opentelemetry/api@1.9.1)(@types/node@24.13.3)(@vitest/coverage-v8@4.1.8)(@vitest/ui@4.1.8)(happy-dom@20.10.2(bufferutil@4.1.0)(utf-8-validate@6.0.6))(jsdom@29.1.1(@noble/hashes@2.0.1)(canvas@3.2.3))(vite@6.4.3(@types/node@24.13.3)(jiti@2.6.1)(lightningcss@1.31.1)(sass@1.100.0)(terser@5.49.0)(yaml@2.9.0))
 
   libraries/helpers:
     dependencies:
@@ -7947,571 +7947,571 @@ packages:
 
   '@postmill-ai/helpers@file:libraries/helpers':
     resolution: {directory: libraries/helpers, type: directory}
-    engines: {node: '>=22.12.0 <23.0.0'}
+    engines: {node: '>=24.0.0 <25.0.0'}
 
   '@postmill-ai/nestjs-libraries@file:libraries/nestjs-libraries':
     resolution: {directory: libraries/nestjs-libraries, type: directory}
-    engines: {node: '>=22.12.0 <23.0.0'}
+    engines: {node: '>=24.0.0 <25.0.0'}
 
   '@postmill-ai/provider-adobe-stock@file:libraries/providers/adobe-stock':
     resolution: {directory: libraries/providers/adobe-stock, type: directory}
-    engines: {node: '>=22.12.0 <23.0.0'}
+    engines: {node: '>=24.0.0 <25.0.0'}
 
   '@postmill-ai/provider-anthropic@file:libraries/providers/anthropic':
     resolution: {directory: libraries/providers/anthropic, type: directory}
-    engines: {node: '>=22.12.0 <23.0.0'}
+    engines: {node: '>=24.0.0 <25.0.0'}
 
   '@postmill-ai/provider-apertus@file:libraries/providers/apertus':
     resolution: {directory: libraries/providers/apertus, type: directory}
-    engines: {node: '>=22.12.0 <23.0.0'}
+    engines: {node: '>=24.0.0 <25.0.0'}
 
   '@postmill-ai/provider-backblaze-b2@file:libraries/providers/backblaze-b2':
     resolution: {directory: libraries/providers/backblaze-b2, type: directory}
-    engines: {node: '>=22.12.0 <23.0.0'}
+    engines: {node: '>=24.0.0 <25.0.0'}
 
   '@postmill-ai/provider-bitdeer@file:libraries/providers/bitdeer':
     resolution: {directory: libraries/providers/bitdeer, type: directory}
-    engines: {node: '>=22.12.0 <23.0.0'}
+    engines: {node: '>=24.0.0 <25.0.0'}
 
   '@postmill-ai/provider-bitly@file:libraries/providers/bitly':
     resolution: {directory: libraries/providers/bitly, type: directory}
-    engines: {node: '>=22.12.0 <23.0.0'}
+    engines: {node: '>=24.0.0 <25.0.0'}
 
   '@postmill-ai/provider-black-forest-labs@file:libraries/providers/black-forest-labs':
     resolution: {directory: libraries/providers/black-forest-labs, type: directory}
-    engines: {node: '>=22.12.0 <23.0.0'}
+    engines: {node: '>=24.0.0 <25.0.0'}
 
   '@postmill-ai/provider-blink@file:libraries/providers/blink':
     resolution: {directory: libraries/providers/blink, type: directory}
-    engines: {node: '>=22.12.0 <23.0.0'}
+    engines: {node: '>=24.0.0 <25.0.0'}
 
   '@postmill-ai/provider-bluesky@file:libraries/providers/bluesky':
     resolution: {directory: libraries/providers/bluesky, type: directory}
-    engines: {node: '>=22.12.0 <23.0.0'}
+    engines: {node: '>=24.0.0 <25.0.0'}
 
   '@postmill-ai/provider-cleanuri@file:libraries/providers/cleanuri':
     resolution: {directory: libraries/providers/cleanuri, type: directory}
-    engines: {node: '>=22.12.0 <23.0.0'}
+    engines: {node: '>=24.0.0 <25.0.0'}
 
   '@postmill-ai/provider-cloudflare-r2@file:libraries/providers/cloudflare-r2':
     resolution: {directory: libraries/providers/cloudflare-r2, type: directory}
-    engines: {node: '>=22.12.0 <23.0.0'}
+    engines: {node: '>=24.0.0 <25.0.0'}
 
   '@postmill-ai/provider-custom-proxy@file:libraries/providers/custom-proxy':
     resolution: {directory: libraries/providers/custom-proxy, type: directory}
-    engines: {node: '>=22.12.0 <23.0.0'}
+    engines: {node: '>=24.0.0 <25.0.0'}
 
   '@postmill-ai/provider-cuttly@file:libraries/providers/cuttly':
     resolution: {directory: libraries/providers/cuttly, type: directory}
-    engines: {node: '>=22.12.0 <23.0.0'}
+    engines: {node: '>=24.0.0 <25.0.0'}
 
   '@postmill-ai/provider-cyberghost@file:libraries/providers/cyberghost':
     resolution: {directory: libraries/providers/cyberghost, type: directory}
-    engines: {node: '>=22.12.0 <23.0.0'}
+    engines: {node: '>=24.0.0 <25.0.0'}
 
   '@postmill-ai/provider-deepgram@file:libraries/providers/deepgram':
     resolution: {directory: libraries/providers/deepgram, type: directory}
-    engines: {node: '>=22.12.0 <23.0.0'}
+    engines: {node: '>=24.0.0 <25.0.0'}
 
   '@postmill-ai/provider-deepinfra@file:libraries/providers/deepinfra':
     resolution: {directory: libraries/providers/deepinfra, type: directory}
-    engines: {node: '>=22.12.0 <23.0.0'}
+    engines: {node: '>=24.0.0 <25.0.0'}
 
   '@postmill-ai/provider-devto@file:libraries/providers/devto':
     resolution: {directory: libraries/providers/devto, type: directory}
-    engines: {node: '>=22.12.0 <23.0.0'}
+    engines: {node: '>=24.0.0 <25.0.0'}
 
   '@postmill-ai/provider-did@file:libraries/providers/did':
     resolution: {directory: libraries/providers/did, type: directory}
-    engines: {node: '>=22.12.0 <23.0.0'}
+    engines: {node: '>=24.0.0 <25.0.0'}
 
   '@postmill-ai/provider-digitalocean-spaces@file:libraries/providers/digitalocean-spaces':
     resolution: {directory: libraries/providers/digitalocean-spaces, type: directory}
-    engines: {node: '>=22.12.0 <23.0.0'}
+    engines: {node: '>=24.0.0 <25.0.0'}
 
   '@postmill-ai/provider-discord@file:libraries/providers/discord':
     resolution: {directory: libraries/providers/discord, type: directory}
-    engines: {node: '>=22.12.0 <23.0.0'}
+    engines: {node: '>=24.0.0 <25.0.0'}
 
   '@postmill-ai/provider-dribbble@file:libraries/providers/dribbble':
     resolution: {directory: libraries/providers/dribbble, type: directory}
-    engines: {node: '>=22.12.0 <23.0.0'}
+    engines: {node: '>=24.0.0 <25.0.0'}
 
   '@postmill-ai/provider-dub@file:libraries/providers/dub':
     resolution: {directory: libraries/providers/dub, type: directory}
-    engines: {node: '>=22.12.0 <23.0.0'}
+    engines: {node: '>=24.0.0 <25.0.0'}
 
   '@postmill-ai/provider-elevenlabs@file:libraries/providers/elevenlabs':
     resolution: {directory: libraries/providers/elevenlabs, type: directory}
-    engines: {node: '>=22.12.0 <23.0.0'}
+    engines: {node: '>=24.0.0 <25.0.0'}
 
   '@postmill-ai/provider-empty@file:libraries/providers/empty':
     resolution: {directory: libraries/providers/empty, type: directory}
-    engines: {node: '>=22.12.0 <23.0.0'}
+    engines: {node: '>=24.0.0 <25.0.0'}
 
   '@postmill-ai/provider-envato@file:libraries/providers/envato':
     resolution: {directory: libraries/providers/envato, type: directory}
-    engines: {node: '>=22.12.0 <23.0.0'}
+    engines: {node: '>=24.0.0 <25.0.0'}
 
   '@postmill-ai/provider-expressvpn@file:libraries/providers/expressvpn':
     resolution: {directory: libraries/providers/expressvpn, type: directory}
-    engines: {node: '>=22.12.0 <23.0.0'}
+    engines: {node: '>=24.0.0 <25.0.0'}
 
   '@postmill-ai/provider-facebook@file:libraries/providers/facebook':
     resolution: {directory: libraries/providers/facebook, type: directory}
-    engines: {node: '>=22.12.0 <23.0.0'}
+    engines: {node: '>=24.0.0 <25.0.0'}
 
   '@postmill-ai/provider-fal@file:libraries/providers/fal':
     resolution: {directory: libraries/providers/fal, type: directory}
-    engines: {node: '>=22.12.0 <23.0.0'}
+    engines: {node: '>=24.0.0 <25.0.0'}
 
   '@postmill-ai/provider-generic@file:libraries/providers/generic':
     resolution: {directory: libraries/providers/generic, type: directory}
-    engines: {node: '>=22.12.0 <23.0.0'}
+    engines: {node: '>=24.0.0 <25.0.0'}
 
   '@postmill-ai/provider-genviral@file:libraries/providers/genviral':
     resolution: {directory: libraries/providers/genviral, type: directory}
-    engines: {node: '>=22.12.0 <23.0.0'}
+    engines: {node: '>=24.0.0 <25.0.0'}
 
   '@postmill-ai/provider-github@file:libraries/providers/github':
     resolution: {directory: libraries/providers/github, type: directory}
-    engines: {node: '>=22.12.0 <23.0.0'}
+    engines: {node: '>=24.0.0 <25.0.0'}
 
   '@postmill-ai/provider-gmb@file:libraries/providers/gmb':
     resolution: {directory: libraries/providers/gmb, type: directory}
-    engines: {node: '>=22.12.0 <23.0.0'}
+    engines: {node: '>=24.0.0 <25.0.0'}
 
   '@postmill-ai/provider-gmihub@file:libraries/providers/gmihub':
     resolution: {directory: libraries/providers/gmihub, type: directory}
-    engines: {node: '>=22.12.0 <23.0.0'}
+    engines: {node: '>=24.0.0 <25.0.0'}
 
   '@postmill-ai/provider-google-ai@file:libraries/providers/google-ai':
     resolution: {directory: libraries/providers/google-ai, type: directory}
-    engines: {node: '>=22.12.0 <23.0.0'}
+    engines: {node: '>=24.0.0 <25.0.0'}
 
   '@postmill-ai/provider-google@file:libraries/providers/google':
     resolution: {directory: libraries/providers/google, type: directory}
-    engines: {node: '>=22.12.0 <23.0.0'}
+    engines: {node: '>=24.0.0 <25.0.0'}
 
   '@postmill-ai/provider-hashnode@file:libraries/providers/hashnode':
     resolution: {directory: libraries/providers/hashnode, type: directory}
-    engines: {node: '>=22.12.0 <23.0.0'}
+    engines: {node: '>=24.0.0 <25.0.0'}
 
   '@postmill-ai/provider-hedra@file:libraries/providers/hedra':
     resolution: {directory: libraries/providers/hedra, type: directory}
-    engines: {node: '>=22.12.0 <23.0.0'}
+    engines: {node: '>=24.0.0 <25.0.0'}
 
   '@postmill-ai/provider-hetzner@file:libraries/providers/hetzner':
     resolution: {directory: libraries/providers/hetzner, type: directory}
-    engines: {node: '>=22.12.0 <23.0.0'}
+    engines: {node: '>=24.0.0 <25.0.0'}
 
   '@postmill-ai/provider-heygen@file:libraries/providers/heygen':
     resolution: {directory: libraries/providers/heygen, type: directory}
-    engines: {node: '>=22.12.0 <23.0.0'}
+    engines: {node: '>=24.0.0 <25.0.0'}
 
   '@postmill-ai/provider-hideme@file:libraries/providers/hideme':
     resolution: {directory: libraries/providers/hideme, type: directory}
-    engines: {node: '>=22.12.0 <23.0.0'}
+    engines: {node: '>=24.0.0 <25.0.0'}
 
   '@postmill-ai/provider-higgsfield@file:libraries/providers/higgsfield':
     resolution: {directory: libraries/providers/higgsfield, type: directory}
-    engines: {node: '>=22.12.0 <23.0.0'}
+    engines: {node: '>=24.0.0 <25.0.0'}
 
   '@postmill-ai/provider-hotspotshield@file:libraries/providers/hotspotshield':
     resolution: {directory: libraries/providers/hotspotshield, type: directory}
-    engines: {node: '>=22.12.0 <23.0.0'}
+    engines: {node: '>=24.0.0 <25.0.0'}
 
   '@postmill-ai/provider-ideogram@file:libraries/providers/ideogram':
     resolution: {directory: libraries/providers/ideogram, type: directory}
-    engines: {node: '>=22.12.0 <23.0.0'}
+    engines: {node: '>=24.0.0 <25.0.0'}
 
   '@postmill-ai/provider-idrive-e2@file:libraries/providers/idrive-e2':
     resolution: {directory: libraries/providers/idrive-e2, type: directory}
-    engines: {node: '>=22.12.0 <23.0.0'}
+    engines: {node: '>=24.0.0 <25.0.0'}
 
   '@postmill-ai/provider-instagram-standalone@file:libraries/providers/instagram-standalone':
     resolution: {directory: libraries/providers/instagram-standalone, type: directory}
-    engines: {node: '>=22.12.0 <23.0.0'}
+    engines: {node: '>=24.0.0 <25.0.0'}
 
   '@postmill-ai/provider-instagram@file:libraries/providers/instagram':
     resolution: {directory: libraries/providers/instagram, type: directory}
-    engines: {node: '>=22.12.0 <23.0.0'}
+    engines: {node: '>=24.0.0 <25.0.0'}
 
   '@postmill-ai/provider-ipvanish@file:libraries/providers/ipvanish':
     resolution: {directory: libraries/providers/ipvanish, type: directory}
-    engines: {node: '>=22.12.0 <23.0.0'}
+    engines: {node: '>=24.0.0 <25.0.0'}
 
   '@postmill-ai/provider-isgd@file:libraries/providers/isgd':
     resolution: {directory: libraries/providers/isgd, type: directory}
-    engines: {node: '>=22.12.0 <23.0.0'}
+    engines: {node: '>=24.0.0 <25.0.0'}
 
   '@postmill-ai/provider-kernel@file:libraries/providers/kernel':
     resolution: {directory: libraries/providers/kernel, type: directory}
-    engines: {node: '>=22.12.0 <23.0.0'}
+    engines: {node: '>=24.0.0 <25.0.0'}
 
   '@postmill-ai/provider-kick@file:libraries/providers/kick':
     resolution: {directory: libraries/providers/kick, type: directory}
-    engines: {node: '>=22.12.0 <23.0.0'}
+    engines: {node: '>=24.0.0 <25.0.0'}
 
   '@postmill-ai/provider-kimi@file:libraries/providers/kimi':
     resolution: {directory: libraries/providers/kimi, type: directory}
-    engines: {node: '>=22.12.0 <23.0.0'}
+    engines: {node: '>=24.0.0 <25.0.0'}
 
   '@postmill-ai/provider-lemmy@file:libraries/providers/lemmy':
     resolution: {directory: libraries/providers/lemmy, type: directory}
-    engines: {node: '>=22.12.0 <23.0.0'}
+    engines: {node: '>=24.0.0 <25.0.0'}
 
   '@postmill-ai/provider-leonardo@file:libraries/providers/leonardo':
     resolution: {directory: libraries/providers/leonardo, type: directory}
-    engines: {node: '>=22.12.0 <23.0.0'}
+    engines: {node: '>=24.0.0 <25.0.0'}
 
   '@postmill-ai/provider-lightning@file:libraries/providers/lightning':
     resolution: {directory: libraries/providers/lightning, type: directory}
-    engines: {node: '>=22.12.0 <23.0.0'}
+    engines: {node: '>=24.0.0 <25.0.0'}
 
   '@postmill-ai/provider-linkedin-page@file:libraries/providers/linkedin-page':
     resolution: {directory: libraries/providers/linkedin-page, type: directory}
-    engines: {node: '>=22.12.0 <23.0.0'}
+    engines: {node: '>=24.0.0 <25.0.0'}
 
   '@postmill-ai/provider-linkedin@file:libraries/providers/linkedin':
     resolution: {directory: libraries/providers/linkedin, type: directory}
-    engines: {node: '>=22.12.0 <23.0.0'}
+    engines: {node: '>=24.0.0 <25.0.0'}
 
   '@postmill-ai/provider-linkly@file:libraries/providers/linkly':
     resolution: {directory: libraries/providers/linkly, type: directory}
-    engines: {node: '>=22.12.0 <23.0.0'}
+    engines: {node: '>=24.0.0 <25.0.0'}
 
   '@postmill-ai/provider-linode@file:libraries/providers/linode':
     resolution: {directory: libraries/providers/linode, type: directory}
-    engines: {node: '>=22.12.0 <23.0.0'}
+    engines: {node: '>=24.0.0 <25.0.0'}
 
   '@postmill-ai/provider-listmonk@file:libraries/providers/listmonk':
     resolution: {directory: libraries/providers/listmonk, type: directory}
-    engines: {node: '>=22.12.0 <23.0.0'}
+    engines: {node: '>=24.0.0 <25.0.0'}
 
   '@postmill-ai/provider-lnkify@file:libraries/providers/lnkify':
     resolution: {directory: libraries/providers/lnkify, type: directory}
-    engines: {node: '>=22.12.0 <23.0.0'}
+    engines: {node: '>=24.0.0 <25.0.0'}
 
   '@postmill-ai/provider-local@file:libraries/providers/local':
     resolution: {directory: libraries/providers/local, type: directory}
-    engines: {node: '>=22.12.0 <23.0.0'}
+    engines: {node: '>=24.0.0 <25.0.0'}
 
   '@postmill-ai/provider-ltx@file:libraries/providers/ltx':
     resolution: {directory: libraries/providers/ltx, type: directory}
-    engines: {node: '>=22.12.0 <23.0.0'}
+    engines: {node: '>=24.0.0 <25.0.0'}
 
   '@postmill-ai/provider-luma@file:libraries/providers/luma':
     resolution: {directory: libraries/providers/luma, type: directory}
-    engines: {node: '>=22.12.0 <23.0.0'}
+    engines: {node: '>=24.0.0 <25.0.0'}
 
   '@postmill-ai/provider-magnific@file:libraries/providers/magnific':
     resolution: {directory: libraries/providers/magnific, type: directory}
-    engines: {node: '>=22.12.0 <23.0.0'}
+    engines: {node: '>=24.0.0 <25.0.0'}
 
   '@postmill-ai/provider-mailgun@file:libraries/providers/mailgun':
     resolution: {directory: libraries/providers/mailgun, type: directory}
-    engines: {node: '>=22.12.0 <23.0.0'}
+    engines: {node: '>=24.0.0 <25.0.0'}
 
   '@postmill-ai/provider-mastodon@file:libraries/providers/mastodon':
     resolution: {directory: libraries/providers/mastodon, type: directory}
-    engines: {node: '>=22.12.0 <23.0.0'}
+    engines: {node: '>=24.0.0 <25.0.0'}
 
   '@postmill-ai/provider-medialocker@file:libraries/providers/medialocker':
     resolution: {directory: libraries/providers/medialocker, type: directory}
-    engines: {node: '>=22.12.0 <23.0.0'}
+    engines: {node: '>=24.0.0 <25.0.0'}
 
   '@postmill-ai/provider-medium@file:libraries/providers/medium':
     resolution: {directory: libraries/providers/medium, type: directory}
-    engines: {node: '>=22.12.0 <23.0.0'}
+    engines: {node: '>=24.0.0 <25.0.0'}
 
   '@postmill-ai/provider-meta-llama@file:libraries/providers/meta-llama':
     resolution: {directory: libraries/providers/meta-llama, type: directory}
-    engines: {node: '>=22.12.0 <23.0.0'}
+    engines: {node: '>=24.0.0 <25.0.0'}
 
   '@postmill-ai/provider-mewe@file:libraries/providers/mewe':
     resolution: {directory: libraries/providers/mewe, type: directory}
-    engines: {node: '>=22.12.0 <23.0.0'}
+    engines: {node: '>=24.0.0 <25.0.0'}
 
   '@postmill-ai/provider-minimax@file:libraries/providers/minimax':
     resolution: {directory: libraries/providers/minimax, type: directory}
-    engines: {node: '>=22.12.0 <23.0.0'}
+    engines: {node: '>=24.0.0 <25.0.0'}
 
   '@postmill-ai/provider-moltbook@file:libraries/providers/moltbook':
     resolution: {directory: libraries/providers/moltbook, type: directory}
-    engines: {node: '>=22.12.0 <23.0.0'}
+    engines: {node: '>=24.0.0 <25.0.0'}
 
   '@postmill-ai/provider-mozillavpn@file:libraries/providers/mozillavpn':
     resolution: {directory: libraries/providers/mozillavpn, type: directory}
-    engines: {node: '>=22.12.0 <23.0.0'}
+    engines: {node: '>=24.0.0 <25.0.0'}
 
   '@postmill-ai/provider-mullvad@file:libraries/providers/mullvad':
     resolution: {directory: libraries/providers/mullvad, type: directory}
-    engines: {node: '>=22.12.0 <23.0.0'}
+    engines: {node: '>=24.0.0 <25.0.0'}
 
   '@postmill-ai/provider-nordvpn@file:libraries/providers/nordvpn':
     resolution: {directory: libraries/providers/nordvpn, type: directory}
-    engines: {node: '>=22.12.0 <23.0.0'}
+    engines: {node: '>=24.0.0 <25.0.0'}
 
   '@postmill-ai/provider-nostr@file:libraries/providers/nostr':
     resolution: {directory: libraries/providers/nostr, type: directory}
-    engines: {node: '>=22.12.0 <23.0.0'}
+    engines: {node: '>=24.0.0 <25.0.0'}
 
   '@postmill-ai/provider-nvidia@file:libraries/providers/nvidia':
     resolution: {directory: libraries/providers/nvidia, type: directory}
-    engines: {node: '>=22.12.0 <23.0.0'}
+    engines: {node: '>=24.0.0 <25.0.0'}
 
   '@postmill-ai/provider-openai-compatible@file:libraries/providers/openai-compatible':
     resolution: {directory: libraries/providers/openai-compatible, type: directory}
-    engines: {node: '>=22.12.0 <23.0.0'}
+    engines: {node: '>=24.0.0 <25.0.0'}
 
   '@postmill-ai/provider-openai@file:libraries/providers/openai':
     resolution: {directory: libraries/providers/openai, type: directory}
-    engines: {node: '>=22.12.0 <23.0.0'}
+    engines: {node: '>=24.0.0 <25.0.0'}
 
   '@postmill-ai/provider-owly@file:libraries/providers/owly':
     resolution: {directory: libraries/providers/owly, type: directory}
-    engines: {node: '>=22.12.0 <23.0.0'}
+    engines: {node: '>=24.0.0 <25.0.0'}
 
   '@postmill-ai/provider-peertube@file:libraries/providers/peertube':
     resolution: {directory: libraries/providers/peertube, type: directory}
-    engines: {node: '>=22.12.0 <23.0.0'}
+    engines: {node: '>=24.0.0 <25.0.0'}
 
   '@postmill-ai/provider-pia@file:libraries/providers/pia':
     resolution: {directory: libraries/providers/pia, type: directory}
-    engines: {node: '>=22.12.0 <23.0.0'}
+    engines: {node: '>=24.0.0 <25.0.0'}
 
   '@postmill-ai/provider-pinterest@file:libraries/providers/pinterest':
     resolution: {directory: libraries/providers/pinterest, type: directory}
-    engines: {node: '>=22.12.0 <23.0.0'}
+    engines: {node: '>=24.0.0 <25.0.0'}
 
   '@postmill-ai/provider-pixelfed@file:libraries/providers/pixelfed':
     resolution: {directory: libraries/providers/pixelfed, type: directory}
-    engines: {node: '>=22.12.0 <23.0.0'}
+    engines: {node: '>=24.0.0 <25.0.0'}
 
   '@postmill-ai/provider-pixelme@file:libraries/providers/pixelme':
     resolution: {directory: libraries/providers/pixelme, type: directory}
-    engines: {node: '>=22.12.0 <23.0.0'}
+    engines: {node: '>=24.0.0 <25.0.0'}
 
   '@postmill-ai/provider-postmark@file:libraries/providers/postmark':
     resolution: {directory: libraries/providers/postmark, type: directory}
-    engines: {node: '>=22.12.0 <23.0.0'}
+    engines: {node: '>=24.0.0 <25.0.0'}
 
   '@postmill-ai/provider-protonvpn@file:libraries/providers/protonvpn':
     resolution: {directory: libraries/providers/protonvpn, type: directory}
-    engines: {node: '>=22.12.0 <23.0.0'}
+    engines: {node: '>=24.0.0 <25.0.0'}
 
   '@postmill-ai/provider-purevpn@file:libraries/providers/purevpn':
     resolution: {directory: libraries/providers/purevpn, type: directory}
-    engines: {node: '>=22.12.0 <23.0.0'}
+    engines: {node: '>=24.0.0 <25.0.0'}
 
   '@postmill-ai/provider-qwen@file:libraries/providers/qwen':
     resolution: {directory: libraries/providers/qwen, type: directory}
-    engines: {node: '>=22.12.0 <23.0.0'}
+    engines: {node: '>=24.0.0 <25.0.0'}
 
   '@postmill-ai/provider-rebrandly@file:libraries/providers/rebrandly':
     resolution: {directory: libraries/providers/rebrandly, type: directory}
-    engines: {node: '>=22.12.0 <23.0.0'}
+    engines: {node: '>=24.0.0 <25.0.0'}
 
   '@postmill-ai/provider-recraft@file:libraries/providers/recraft':
     resolution: {directory: libraries/providers/recraft, type: directory}
-    engines: {node: '>=22.12.0 <23.0.0'}
+    engines: {node: '>=24.0.0 <25.0.0'}
 
   '@postmill-ai/provider-reddit@file:libraries/providers/reddit':
     resolution: {directory: libraries/providers/reddit, type: directory}
-    engines: {node: '>=22.12.0 <23.0.0'}
+    engines: {node: '>=24.0.0 <25.0.0'}
 
   '@postmill-ai/provider-reelfarm@file:libraries/providers/reelfarm':
     resolution: {directory: libraries/providers/reelfarm, type: directory}
-    engines: {node: '>=22.12.0 <23.0.0'}
+    engines: {node: '>=24.0.0 <25.0.0'}
 
   '@postmill-ai/provider-replicate@file:libraries/providers/replicate':
     resolution: {directory: libraries/providers/replicate, type: directory}
-    engines: {node: '>=22.12.0 <23.0.0'}
+    engines: {node: '>=24.0.0 <25.0.0'}
 
   '@postmill-ai/provider-replug@file:libraries/providers/replug':
     resolution: {directory: libraries/providers/replug, type: directory}
-    engines: {node: '>=22.12.0 <23.0.0'}
+    engines: {node: '>=24.0.0 <25.0.0'}
 
   '@postmill-ai/provider-resend@file:libraries/providers/resend':
     resolution: {directory: libraries/providers/resend, type: directory}
-    engines: {node: '>=22.12.0 <23.0.0'}
+    engines: {node: '>=24.0.0 <25.0.0'}
 
   '@postmill-ai/provider-runway@file:libraries/providers/runway':
     resolution: {directory: libraries/providers/runway, type: directory}
-    engines: {node: '>=22.12.0 <23.0.0'}
+    engines: {node: '>=24.0.0 <25.0.0'}
 
   '@postmill-ai/provider-s3-compatible@file:libraries/providers/s3-compatible':
     resolution: {directory: libraries/providers/s3-compatible, type: directory}
-    engines: {node: '>=22.12.0 <23.0.0'}
+    engines: {node: '>=24.0.0 <25.0.0'}
 
   '@postmill-ai/provider-s3@file:libraries/providers/s3':
     resolution: {directory: libraries/providers/s3, type: directory}
-    engines: {node: '>=22.12.0 <23.0.0'}
+    engines: {node: '>=24.0.0 <25.0.0'}
 
   '@postmill-ai/provider-scaleway@file:libraries/providers/scaleway':
     resolution: {directory: libraries/providers/scaleway, type: directory}
-    engines: {node: '>=22.12.0 <23.0.0'}
+    engines: {node: '>=24.0.0 <25.0.0'}
 
   '@postmill-ai/provider-sendgrid@file:libraries/providers/sendgrid':
     resolution: {directory: libraries/providers/sendgrid, type: directory}
-    engines: {node: '>=22.12.0 <23.0.0'}
+    engines: {node: '>=24.0.0 <25.0.0'}
 
   '@postmill-ai/provider-ses@file:libraries/providers/ses':
     resolution: {directory: libraries/providers/ses, type: directory}
-    engines: {node: '>=22.12.0 <23.0.0'}
+    engines: {node: '>=24.0.0 <25.0.0'}
 
   '@postmill-ai/provider-shortio@file:libraries/providers/shortio':
     resolution: {directory: libraries/providers/shortio, type: directory}
-    engines: {node: '>=22.12.0 <23.0.0'}
+    engines: {node: '>=24.0.0 <25.0.0'}
 
   '@postmill-ai/provider-siliconflow@file:libraries/providers/siliconflow':
     resolution: {directory: libraries/providers/siliconflow, type: directory}
-    engines: {node: '>=22.12.0 <23.0.0'}
+    engines: {node: '>=24.0.0 <25.0.0'}
 
   '@postmill-ai/provider-skool@file:libraries/providers/skool':
     resolution: {directory: libraries/providers/skool, type: directory}
-    engines: {node: '>=22.12.0 <23.0.0'}
+    engines: {node: '>=24.0.0 <25.0.0'}
 
   '@postmill-ai/provider-slack@file:libraries/providers/slack':
     resolution: {directory: libraries/providers/slack, type: directory}
-    engines: {node: '>=22.12.0 <23.0.0'}
+    engines: {node: '>=24.0.0 <25.0.0'}
 
   '@postmill-ai/provider-smtp@file:libraries/providers/smtp':
     resolution: {directory: libraries/providers/smtp, type: directory}
-    engines: {node: '>=22.12.0 <23.0.0'}
+    engines: {node: '>=24.0.0 <25.0.0'}
 
   '@postmill-ai/provider-sniply@file:libraries/providers/sniply':
     resolution: {directory: libraries/providers/sniply, type: directory}
-    engines: {node: '>=22.12.0 <23.0.0'}
+    engines: {node: '>=24.0.0 <25.0.0'}
 
   '@postmill-ai/provider-stability@file:libraries/providers/stability':
     resolution: {directory: libraries/providers/stability, type: directory}
-    engines: {node: '>=22.12.0 <23.0.0'}
+    engines: {node: '>=24.0.0 <25.0.0'}
 
   '@postmill-ai/provider-storj@file:libraries/providers/storj':
     resolution: {directory: libraries/providers/storj, type: directory}
-    engines: {node: '>=22.12.0 <23.0.0'}
+    engines: {node: '>=24.0.0 <25.0.0'}
 
   '@postmill-ai/provider-suno@file:libraries/providers/suno':
     resolution: {directory: libraries/providers/suno, type: directory}
-    engines: {node: '>=22.12.0 <23.0.0'}
+    engines: {node: '>=24.0.0 <25.0.0'}
 
   '@postmill-ai/provider-surfshark@file:libraries/providers/surfshark':
     resolution: {directory: libraries/providers/surfshark, type: directory}
-    engines: {node: '>=22.12.0 <23.0.0'}
+    engines: {node: '>=24.0.0 <25.0.0'}
 
   '@postmill-ai/provider-switchy@file:libraries/providers/switchy':
     resolution: {directory: libraries/providers/switchy, type: directory}
-    engines: {node: '>=22.12.0 <23.0.0'}
+    engines: {node: '>=24.0.0 <25.0.0'}
 
   '@postmill-ai/provider-t2m@file:libraries/providers/t2m':
     resolution: {directory: libraries/providers/t2m, type: directory}
-    engines: {node: '>=22.12.0 <23.0.0'}
+    engines: {node: '>=24.0.0 <25.0.0'}
 
   '@postmill-ai/provider-tavus@file:libraries/providers/tavus':
     resolution: {directory: libraries/providers/tavus, type: directory}
-    engines: {node: '>=22.12.0 <23.0.0'}
+    engines: {node: '>=24.0.0 <25.0.0'}
 
   '@postmill-ai/provider-telegram@file:libraries/providers/telegram':
     resolution: {directory: libraries/providers/telegram, type: directory}
-    engines: {node: '>=22.12.0 <23.0.0'}
+    engines: {node: '>=24.0.0 <25.0.0'}
 
   '@postmill-ai/provider-threads@file:libraries/providers/threads':
     resolution: {directory: libraries/providers/threads, type: directory}
-    engines: {node: '>=22.12.0 <23.0.0'}
+    engines: {node: '>=24.0.0 <25.0.0'}
 
   '@postmill-ai/provider-tiktok@file:libraries/providers/tiktok':
     resolution: {directory: libraries/providers/tiktok, type: directory}
-    engines: {node: '>=22.12.0 <23.0.0'}
+    engines: {node: '>=24.0.0 <25.0.0'}
 
   '@postmill-ai/provider-tinycc@file:libraries/providers/tinycc':
     resolution: {directory: libraries/providers/tinycc, type: directory}
-    engines: {node: '>=22.12.0 <23.0.0'}
+    engines: {node: '>=24.0.0 <25.0.0'}
 
   '@postmill-ai/provider-tinyurl@file:libraries/providers/tinyurl':
     resolution: {directory: libraries/providers/tinyurl, type: directory}
-    engines: {node: '>=22.12.0 <23.0.0'}
+    engines: {node: '>=24.0.0 <25.0.0'}
 
   '@postmill-ai/provider-tly@file:libraries/providers/tly':
     resolution: {directory: libraries/providers/tly, type: directory}
-    engines: {node: '>=22.12.0 <23.0.0'}
+    engines: {node: '>=24.0.0 <25.0.0'}
 
   '@postmill-ai/provider-tumblr@file:libraries/providers/tumblr':
     resolution: {directory: libraries/providers/tumblr, type: directory}
-    engines: {node: '>=22.12.0 <23.0.0'}
+    engines: {node: '>=24.0.0 <25.0.0'}
 
   '@postmill-ai/provider-tunnelbear@file:libraries/providers/tunnelbear':
     resolution: {directory: libraries/providers/tunnelbear, type: directory}
-    engines: {node: '>=22.12.0 <23.0.0'}
+    engines: {node: '>=24.0.0 <25.0.0'}
 
   '@postmill-ai/provider-twitch@file:libraries/providers/twitch':
     resolution: {directory: libraries/providers/twitch, type: directory}
-    engines: {node: '>=22.12.0 <23.0.0'}
+    engines: {node: '>=24.0.0 <25.0.0'}
 
   '@postmill-ai/provider-vecteezy@file:libraries/providers/vecteezy':
     resolution: {directory: libraries/providers/vecteezy, type: directory}
-    engines: {node: '>=22.12.0 <23.0.0'}
+    engines: {node: '>=24.0.0 <25.0.0'}
 
   '@postmill-ai/provider-vgd@file:libraries/providers/vgd':
     resolution: {directory: libraries/providers/vgd, type: directory}
-    engines: {node: '>=22.12.0 <23.0.0'}
+    engines: {node: '>=24.0.0 <25.0.0'}
 
   '@postmill-ai/provider-vk@file:libraries/providers/vk':
     resolution: {directory: libraries/providers/vk, type: directory}
-    engines: {node: '>=22.12.0 <23.0.0'}
+    engines: {node: '>=24.0.0 <25.0.0'}
 
   '@postmill-ai/provider-vultr@file:libraries/providers/vultr':
     resolution: {directory: libraries/providers/vultr, type: directory}
-    engines: {node: '>=22.12.0 <23.0.0'}
+    engines: {node: '>=24.0.0 <25.0.0'}
 
   '@postmill-ai/provider-vyprvpn@file:libraries/providers/vyprvpn':
     resolution: {directory: libraries/providers/vyprvpn, type: directory}
-    engines: {node: '>=22.12.0 <23.0.0'}
+    engines: {node: '>=24.0.0 <25.0.0'}
 
   '@postmill-ai/provider-wallet@file:libraries/providers/wallet':
     resolution: {directory: libraries/providers/wallet, type: directory}
-    engines: {node: '>=22.12.0 <23.0.0'}
+    engines: {node: '>=24.0.0 <25.0.0'}
 
   '@postmill-ai/provider-wan@file:libraries/providers/wan':
     resolution: {directory: libraries/providers/wan, type: directory}
-    engines: {node: '>=22.12.0 <23.0.0'}
+    engines: {node: '>=24.0.0 <25.0.0'}
 
   '@postmill-ai/provider-wasabi@file:libraries/providers/wasabi':
     resolution: {directory: libraries/providers/wasabi, type: directory}
-    engines: {node: '>=22.12.0 <23.0.0'}
+    engines: {node: '>=24.0.0 <25.0.0'}
 
   '@postmill-ai/provider-whop@file:libraries/providers/whop':
     resolution: {directory: libraries/providers/whop, type: directory}
-    engines: {node: '>=22.12.0 <23.0.0'}
+    engines: {node: '>=24.0.0 <25.0.0'}
 
   '@postmill-ai/provider-windscribe@file:libraries/providers/windscribe':
     resolution: {directory: libraries/providers/windscribe, type: directory}
-    engines: {node: '>=22.12.0 <23.0.0'}
+    engines: {node: '>=24.0.0 <25.0.0'}
 
   '@postmill-ai/provider-wordpress@file:libraries/providers/wordpress':
     resolution: {directory: libraries/providers/wordpress, type: directory}
-    engines: {node: '>=22.12.0 <23.0.0'}
+    engines: {node: '>=24.0.0 <25.0.0'}
 
   '@postmill-ai/provider-wrapcast@file:libraries/providers/wrapcast':
     resolution: {directory: libraries/providers/wrapcast, type: directory}
-    engines: {node: '>=22.12.0 <23.0.0'}
+    engines: {node: '>=24.0.0 <25.0.0'}
 
   '@postmill-ai/provider-x@file:libraries/providers/x':
     resolution: {directory: libraries/providers/x, type: directory}
-    engines: {node: '>=22.12.0 <23.0.0'}
+    engines: {node: '>=24.0.0 <25.0.0'}
 
   '@postmill-ai/provider-youtube@file:libraries/providers/youtube':
     resolution: {directory: libraries/providers/youtube, type: directory}
-    engines: {node: '>=22.12.0 <23.0.0'}
+    engines: {node: '>=24.0.0 <25.0.0'}
 
   '@postmill-ai/provider-zai@file:libraries/providers/zai':
     resolution: {directory: libraries/providers/zai, type: directory}
-    engines: {node: '>=22.12.0 <23.0.0'}
+    engines: {node: '>=24.0.0 <25.0.0'}
 
   '@postmill-ai/react-shared-libraries@file:libraries/react-shared-libraries':
     resolution: {directory: libraries/react-shared-libraries, type: directory}
-    engines: {node: '>=22.12.0 <23.0.0'}
+    engines: {node: '>=24.0.0 <25.0.0'}
 
   '@preact/signals-core@1.14.2':
     resolution: {integrity: sha512-RZHdBj9ZF4n40Rp4jS052EHHjBWf96P9oNdXPfhQTovCuWY9iQn3Gq+gOTJSgBO9A/JBuPfMOWsSX/lIU9Pc/A==}
@@ -11406,6 +11406,9 @@ packages:
 
   '@types/node@22.19.20':
     resolution: {integrity: sha512-6tELRwSDYWW9EdZhbeZmYGZ1/7Djkt+Ah3/ScEYT9cDord7UJzasR/4D3VONg9tQI5CDp+/CZC1AXj2pCFOvpw==}
+
+  '@types/node@24.13.3':
+    resolution: {integrity: sha512-Dh8vAsV36ig5wa9OX4pXvMc9D3Veibfw2wix0CUwYODLD8nkj9UsLjASr49nPg+2eKzxhBV+v7L8pXvT4e639Q==}
 
   '@types/node@26.1.1':
     resolution: {integrity: sha512-nxAkRSVkN1Y0JC1W8ky/fTfkGsMmcrRsbx+3XoZE+rMOX71kLYTV7fLXpqud1GpbpP5TuffXFqfX7fH2GgZREw==}
@@ -20384,6 +20387,9 @@ packages:
   undici-types@6.21.0:
     resolution: {integrity: sha512-iwDZqg0QAGrg9Rav5H4n0M64c3mkR59cJ6wQp+7C4nI0gsmExaedaYLNO44eT4AtBBwjbTiGPMlt2Md0T9H9JQ==}
 
+  undici-types@7.18.2:
+    resolution: {integrity: sha512-AsuCzffGHJybSaRrmr5eHr81mwJU3kjw6M+uprWvCXiNeN9SOGwQ3Jn8jb8m3Z6izVgknn1R0FTCEAP2QrLY/w==}
+
   undici-types@8.3.0:
     resolution: {integrity: sha512-j375ScV60dom+YkPFIfTLcOiPxkN/buHz5GobjLhixFuANaNs3C9l4GmrWqejgXWJ7BbJcFYpTEUkS1Ge8bpZQ==}
 
@@ -25315,14 +25321,14 @@ snapshots:
     dependencies:
       '@jest/fake-timers': 29.7.0
       '@jest/types': 29.6.3
-      '@types/node': 22.19.20
+      '@types/node': 24.13.3
       jest-mock: 29.7.0
 
   '@jest/fake-timers@29.7.0':
     dependencies:
       '@jest/types': 29.6.3
       '@sinonjs/fake-timers': 10.3.0
-      '@types/node': 22.19.20
+      '@types/node': 24.13.3
       jest-message-util: 29.7.0
       jest-mock: 29.7.0
       jest-util: 29.7.0
@@ -25356,7 +25362,7 @@ snapshots:
       '@jest/schemas': 29.6.3
       '@types/istanbul-lib-coverage': 2.0.6
       '@types/istanbul-reports': 3.0.4
-      '@types/node': 22.19.20
+      '@types/node': 24.13.3
       '@types/yargs': 17.0.35
       chalk: 4.1.2
 
@@ -34525,16 +34531,16 @@ snapshots:
 
   '@types/bcrypt@5.0.2':
     dependencies:
-      '@types/node': 22.19.20
+      '@types/node': 24.13.3
 
   '@types/body-parser@1.19.6':
     dependencies:
       '@types/connect': 3.4.38
-      '@types/node': 22.19.20
+      '@types/node': 24.13.3
 
   '@types/bunyan@1.8.11':
     dependencies:
-      '@types/node': 22.19.20
+      '@types/node': 24.13.3
 
   '@types/cache-manager-redis-store@2.0.4':
     dependencies:
@@ -34549,7 +34555,7 @@ snapshots:
     dependencies:
       '@types/http-cache-semantics': 4.2.0
       '@types/keyv': 3.1.4
-      '@types/node': 22.19.20
+      '@types/node': 24.13.3
       '@types/responselike': 1.0.3
 
   '@types/caseless@0.12.5': {}
@@ -34567,11 +34573,11 @@ snapshots:
   '@types/compression@1.8.1':
     dependencies:
       '@types/express': 5.0.6
-      '@types/node': 22.19.20
+      '@types/node': 24.13.3
 
   '@types/connect@3.4.38':
     dependencies:
-      '@types/node': 22.19.20
+      '@types/node': 24.13.3
 
   '@types/cookie-parser@1.4.10(@types/express@5.0.6)':
     dependencies:
@@ -34579,7 +34585,7 @@ snapshots:
 
   '@types/cors@2.8.19':
     dependencies:
-      '@types/node': 22.19.20
+      '@types/node': 24.13.3
 
   '@types/d3-array@3.2.2': {}
 
@@ -34722,7 +34728,7 @@ snapshots:
 
   '@types/express-serve-static-core@5.1.1':
     dependencies:
-      '@types/node': 22.19.20
+      '@types/node': 24.13.3
       '@types/qs': 6.15.0
       '@types/range-parser': 1.2.7
       '@types/send': 1.2.1
@@ -34743,13 +34749,13 @@ snapshots:
 
   '@types/fluent-ffmpeg@2.1.28':
     dependencies:
-      '@types/node': 22.19.20
+      '@types/node': 24.13.3
 
   '@types/geojson@7946.0.16': {}
 
   '@types/graceful-fs@4.1.9':
     dependencies:
-      '@types/node': 22.19.20
+      '@types/node': 24.13.3
 
   '@types/har-format@1.2.16': {}
 
@@ -34779,7 +34785,7 @@ snapshots:
 
   '@types/jsdom@21.1.7':
     dependencies:
-      '@types/node': 22.19.20
+      '@types/node': 24.13.3
       '@types/tough-cookie': 4.0.5
       parse5: 7.3.0
 
@@ -34790,13 +34796,13 @@ snapshots:
   '@types/jsonwebtoken@9.0.10':
     dependencies:
       '@types/ms': 2.1.0
-      '@types/node': 22.19.20
+      '@types/node': 24.13.3
 
   '@types/katex@0.16.8': {}
 
   '@types/keyv@3.1.4':
     dependencies:
-      '@types/node': 22.19.20
+      '@types/node': 24.13.3
 
   '@types/lodash@4.17.24': {}
 
@@ -34815,7 +34821,7 @@ snapshots:
 
   '@types/memcached@2.2.10':
     dependencies:
-      '@types/node': 22.19.20
+      '@types/node': 24.13.3
 
   '@types/mime-types@2.1.4': {}
 
@@ -34829,20 +34835,20 @@ snapshots:
 
   '@types/multipipe@3.0.5':
     dependencies:
-      '@types/node': 22.19.20
+      '@types/node': 24.13.3
 
   '@types/mysql@2.15.27':
     dependencies:
-      '@types/node': 22.19.20
+      '@types/node': 24.13.3
 
   '@types/node-fetch@2.6.13':
     dependencies:
-      '@types/node': 22.19.20
+      '@types/node': 24.13.3
       form-data: 4.0.6
 
   '@types/node-telegram-bot-api@0.64.14':
     dependencies:
-      '@types/node': 22.19.20
+      '@types/node': 24.13.3
       '@types/request': 2.48.13
 
   '@types/node@10.17.60': {}
@@ -34857,6 +34863,10 @@ snapshots:
     dependencies:
       undici-types: 6.21.0
 
+  '@types/node@24.13.3':
+    dependencies:
+      undici-types: 7.18.2
+
   '@types/node@26.1.1':
     dependencies:
       undici-types: 8.3.0
@@ -34864,13 +34874,13 @@ snapshots:
 
   '@types/nodemailer@8.0.0':
     dependencies:
-      '@types/node': 22.19.20
+      '@types/node': 24.13.3
 
   '@types/opentype.js@1.3.10': {}
 
   '@types/oracledb@6.5.2':
     dependencies:
-      '@types/node': 22.19.20
+      '@types/node': 24.13.3
 
   '@types/parse-json@4.0.2': {}
 
@@ -34880,7 +34890,7 @@ snapshots:
 
   '@types/pg@8.15.6':
     dependencies:
-      '@types/node': 22.19.20
+      '@types/node': 24.13.3
       pg-protocol: 1.14.0
       pg-types: 2.2.0
 
@@ -34916,18 +34926,18 @@ snapshots:
 
   '@types/readable-stream@4.0.23':
     dependencies:
-      '@types/node': 22.19.20
+      '@types/node': 24.13.3
 
   '@types/redis@2.8.32':
     dependencies:
-      '@types/node': 22.19.20
+      '@types/node': 24.13.3
 
   '@types/remove-markdown@0.3.4': {}
 
   '@types/request@2.48.13':
     dependencies:
       '@types/caseless': 0.12.5
-      '@types/node': 22.19.20
+      '@types/node': 24.13.3
       '@types/tough-cookie': 4.0.5
       form-data: 2.5.6
 
@@ -34935,7 +34945,7 @@ snapshots:
 
   '@types/responselike@1.0.3':
     dependencies:
-      '@types/node': 22.19.20
+      '@types/node': 24.13.3
 
   '@types/retry@0.12.0': {}
 
@@ -34945,16 +34955,16 @@ snapshots:
 
   '@types/send@1.2.1':
     dependencies:
-      '@types/node': 22.19.20
+      '@types/node': 24.13.3
 
   '@types/serve-static@2.2.0':
     dependencies:
       '@types/http-errors': 2.0.5
-      '@types/node': 22.19.20
+      '@types/node': 24.13.3
 
   '@types/sha256@0.2.2':
     dependencies:
-      '@types/node': 22.19.20
+      '@types/node': 24.13.3
 
   '@types/sortablejs@1.15.9': {}
 
@@ -34964,7 +34974,7 @@ snapshots:
 
   '@types/tedious@4.0.14':
     dependencies:
-      '@types/node': 22.19.20
+      '@types/node': 24.13.3
 
   '@types/tough-cookie@4.0.5': {}
 
@@ -34992,11 +35002,11 @@ snapshots:
 
   '@types/ws@7.4.7':
     dependencies:
-      '@types/node': 22.19.20
+      '@types/node': 24.13.3
 
   '@types/ws@8.18.1':
     dependencies:
-      '@types/node': 22.19.20
+      '@types/node': 24.13.3
 
   '@types/yargs-parser@21.0.3': {}
 
@@ -35006,7 +35016,7 @@ snapshots:
 
   '@types/yauzl@2.10.3':
     dependencies:
-      '@types/node': 22.19.20
+      '@types/node': 24.13.3
     optional: true
 
   '@types/yup@0.32.0':
@@ -35536,13 +35546,13 @@ snapshots:
       chai: 6.2.2
       tinyrainbow: 3.1.0
 
-  '@vitest/mocker@4.1.8(vite@6.4.3(@types/node@22.19.20)(jiti@2.6.1)(lightningcss@1.31.1)(sass@1.100.0)(terser@5.49.0)(yaml@2.9.0))':
+  '@vitest/mocker@4.1.8(vite@6.4.3(@types/node@24.13.3)(jiti@2.6.1)(lightningcss@1.31.1)(sass@1.100.0)(terser@5.49.0)(yaml@2.9.0))':
     dependencies:
       '@vitest/spy': 4.1.8
       estree-walker: 3.0.3
       magic-string: 0.30.21
     optionalDependencies:
-      vite: 6.4.3(@types/node@22.19.20)(jiti@2.6.1)(lightningcss@1.31.1)(sass@1.100.0)(terser@5.49.0)(yaml@2.9.0)
+      vite: 6.4.3(@types/node@24.13.3)(jiti@2.6.1)(lightningcss@1.31.1)(sass@1.100.0)(terser@5.49.0)(yaml@2.9.0)
 
   '@vitest/mocker@4.1.8(vite@6.4.3(@types/node@26.1.1)(jiti@1.21.7)(lightningcss@1.31.1)(sass@1.100.0)(terser@5.49.0)(yaml@2.9.0))':
     dependencies:
@@ -36683,7 +36693,7 @@ snapshots:
 
   buffer-image-size@0.6.4:
     dependencies:
-      '@types/node': 22.19.20
+      '@types/node': 24.13.3
 
   buffer-xor@1.0.3: {}
 
@@ -36908,7 +36918,7 @@ snapshots:
 
   chrome-launcher@0.15.2:
     dependencies:
-      '@types/node': 22.19.20
+      '@types/node': 24.13.3
       escape-string-regexp: 4.0.0
       is-wsl: 2.2.0
       lighthouse-logger: 1.4.2
@@ -36926,7 +36936,7 @@ snapshots:
 
   chromium-edge-launcher@0.2.0:
     dependencies:
-      '@types/node': 22.19.20
+      '@types/node': 24.13.3
       escape-string-regexp: 4.0.0
       is-wsl: 2.2.0
       lighthouse-logger: 1.4.2
@@ -37990,7 +38000,7 @@ snapshots:
   engine.io@6.6.9(bufferutil@4.1.0)(utf-8-validate@6.0.6):
     dependencies:
       '@types/cors': 2.8.19
-      '@types/node': 22.19.20
+      '@types/node': 24.13.3
       '@types/ws': 8.18.1
       accepts: 1.3.8
       base64id: 2.0.0
@@ -39778,7 +39788,7 @@ snapshots:
 
   happy-dom@20.10.2(bufferutil@4.1.0)(utf-8-validate@6.0.6):
     dependencies:
-      '@types/node': 22.19.20
+      '@types/node': 24.13.3
       '@types/whatwg-mimetype': 3.0.2
       '@types/ws': 8.18.1
       buffer-image-size: 0.6.4
@@ -40719,7 +40729,7 @@ snapshots:
       '@jest/environment': 29.7.0
       '@jest/fake-timers': 29.7.0
       '@jest/types': 29.6.3
-      '@types/node': 22.19.20
+      '@types/node': 24.13.3
       jest-mock: 29.7.0
       jest-util: 29.7.0
 
@@ -40729,7 +40739,7 @@ snapshots:
     dependencies:
       '@jest/types': 29.6.3
       '@types/graceful-fs': 4.1.9
-      '@types/node': 22.19.20
+      '@types/node': 24.13.3
       anymatch: 3.1.3
       fb-watchman: 2.0.2
       graceful-fs: 4.2.11
@@ -40756,7 +40766,7 @@ snapshots:
   jest-mock@29.7.0:
     dependencies:
       '@jest/types': 29.6.3
-      '@types/node': 22.19.20
+      '@types/node': 24.13.3
       jest-util: 29.7.0
 
   jest-regex-util@29.6.3: {}
@@ -40764,7 +40774,7 @@ snapshots:
   jest-util@29.7.0:
     dependencies:
       '@jest/types': 29.6.3
-      '@types/node': 22.19.20
+      '@types/node': 24.13.3
       chalk: 4.1.2
       ci-info: 3.9.0
       graceful-fs: 4.2.11
@@ -40781,13 +40791,13 @@ snapshots:
 
   jest-worker@27.5.1:
     dependencies:
-      '@types/node': 22.19.20
+      '@types/node': 24.13.3
       merge-stream: 2.0.0
       supports-color: 8.1.1
 
   jest-worker@29.7.0:
     dependencies:
-      '@types/node': 22.19.20
+      '@types/node': 24.13.3
       jest-util: 29.7.0
       merge-stream: 2.0.0
       supports-color: 8.1.1
@@ -43803,7 +43813,7 @@ snapshots:
       '@protobufjs/path': 1.1.2
       '@protobufjs/pool': 1.1.0
       '@protobufjs/utf8': 1.1.1
-      '@types/node': 22.19.20
+      '@types/node': 24.13.3
       long: 5.3.2
 
   protobufjs@8.7.1:
@@ -46021,14 +46031,14 @@ snapshots:
     dependencies:
       tslib: 2.8.1
 
-  ts-node@10.9.2(@swc/core@1.15.40(@swc/helpers@0.5.23))(@types/node@22.19.20)(typescript@5.5.4):
+  ts-node@10.9.2(@swc/core@1.15.40(@swc/helpers@0.5.23))(@types/node@24.13.3)(typescript@5.5.4):
     dependencies:
       '@cspotcode/source-map-support': 0.8.1
       '@tsconfig/node10': 1.0.12
       '@tsconfig/node12': 1.0.11
       '@tsconfig/node14': 1.0.3
       '@tsconfig/node16': 1.0.4
-      '@types/node': 22.19.20
+      '@types/node': 24.13.3
       acorn: 8.16.0
       acorn-walk: 8.3.5
       arg: 4.1.3
@@ -46165,7 +46175,7 @@ snapshots:
   type-graphql@2.0.0-rc.1(class-validator@0.14.4)(graphql-scalars@1.25.0(graphql@16.13.1))(graphql@16.13.1):
     dependencies:
       '@graphql-yoga/subscription': 5.0.5
-      '@types/node': 22.19.20
+      '@types/node': 24.13.3
       '@types/semver': 7.7.1
       graphql: 16.13.1
       graphql-query-complexity: 0.12.0(graphql@16.13.1)
@@ -46178,7 +46188,7 @@ snapshots:
   type-graphql@2.0.0-rc.1(class-validator@0.14.4)(graphql-scalars@1.25.0(graphql@16.14.2))(graphql@16.14.2):
     dependencies:
       '@graphql-yoga/subscription': 5.0.5
-      '@types/node': 22.19.20
+      '@types/node': 24.13.3
       '@types/semver': 7.7.1
       graphql: 16.14.2
       graphql-query-complexity: 0.12.0(graphql@16.14.2)
@@ -46290,6 +46300,8 @@ snapshots:
   undici-types@5.26.5: {}
 
   undici-types@6.21.0: {}
+
+  undici-types@7.18.2: {}
 
   undici-types@8.3.0:
     optional: true
@@ -46640,7 +46652,7 @@ snapshots:
       - supports-color
       - typescript
 
-  vite@6.4.3(@types/node@22.19.20)(jiti@2.6.1)(lightningcss@1.31.1)(sass@1.100.0)(terser@5.49.0)(yaml@2.9.0):
+  vite@6.4.3(@types/node@24.13.3)(jiti@2.6.1)(lightningcss@1.31.1)(sass@1.100.0)(terser@5.49.0)(yaml@2.9.0):
     dependencies:
       esbuild: 0.28.1
       fdir: 6.5.0(picomatch@4.0.4)
@@ -46649,7 +46661,7 @@ snapshots:
       rollup: 4.61.1
       tinyglobby: 0.2.17
     optionalDependencies:
-      '@types/node': 22.19.20
+      '@types/node': 24.13.3
       fsevents: 2.3.3
       jiti: 2.6.1
       lightningcss: 1.31.1
@@ -46691,10 +46703,10 @@ snapshots:
       terser: 5.49.0
       yaml: 2.9.0
 
-  vitest@4.1.8(@opentelemetry/api@1.9.1)(@types/node@22.19.20)(@vitest/coverage-v8@4.1.8)(@vitest/ui@4.1.8)(happy-dom@20.10.2(bufferutil@4.1.0)(utf-8-validate@6.0.6))(jsdom@29.1.1(@noble/hashes@2.0.1)(canvas@3.2.3))(vite@6.4.3(@types/node@22.19.20)(jiti@2.6.1)(lightningcss@1.31.1)(sass@1.100.0)(terser@5.49.0)(yaml@2.9.0)):
+  vitest@4.1.8(@opentelemetry/api@1.9.1)(@types/node@24.13.3)(@vitest/coverage-v8@4.1.8)(@vitest/ui@4.1.8)(happy-dom@20.10.2(bufferutil@4.1.0)(utf-8-validate@6.0.6))(jsdom@29.1.1(@noble/hashes@2.0.1)(canvas@3.2.3))(vite@6.4.3(@types/node@24.13.3)(jiti@2.6.1)(lightningcss@1.31.1)(sass@1.100.0)(terser@5.49.0)(yaml@2.9.0)):
     dependencies:
       '@vitest/expect': 4.1.8
-      '@vitest/mocker': 4.1.8(vite@6.4.3(@types/node@22.19.20)(jiti@2.6.1)(lightningcss@1.31.1)(sass@1.100.0)(terser@5.49.0)(yaml@2.9.0))
+      '@vitest/mocker': 4.1.8(vite@6.4.3(@types/node@24.13.3)(jiti@2.6.1)(lightningcss@1.31.1)(sass@1.100.0)(terser@5.49.0)(yaml@2.9.0))
       '@vitest/pretty-format': 4.1.8
       '@vitest/runner': 4.1.8
       '@vitest/snapshot': 4.1.8
@@ -46711,11 +46723,11 @@ snapshots:
       tinyexec: 1.2.4
       tinyglobby: 0.2.17
       tinyrainbow: 3.1.0
-      vite: 6.4.3(@types/node@22.19.20)(jiti@2.6.1)(lightningcss@1.31.1)(sass@1.100.0)(terser@5.49.0)(yaml@2.9.0)
+      vite: 6.4.3(@types/node@24.13.3)(jiti@2.6.1)(lightningcss@1.31.1)(sass@1.100.0)(terser@5.49.0)(yaml@2.9.0)
       why-is-node-running: 2.3.0
     optionalDependencies:
       '@opentelemetry/api': 1.9.1
-      '@types/node': 22.19.20
+      '@types/node': 24.13.3
       '@vitest/coverage-v8': 4.1.8(vitest@4.1.8)
       '@vitest/ui': 4.1.8(vitest@4.1.8)
       happy-dom: 20.10.2(bufferutil@4.1.0)(utf-8-validate@6.0.6)

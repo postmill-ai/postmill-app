@@ -16,7 +16,7 @@ jobs:
 
     strategy:
       matrix:
-        node-version: ['22.12.0']
+        node-version: ['24.19.0']
 
     steps:
       - uses: actions/checkout@v7
@@ -97,7 +97,7 @@ jobs:
 
     strategy:
       matrix:
-        node-version: ['22.12.0']
+        node-version: ['24.19.0']
 
     steps:
       - uses: actions/checkout@v7
