@@ -9,11 +9,12 @@ jobs:
   close-issues:
     if: github.repository == 'postmill-ai/postmill-app'
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     permissions:
       issues: write
       pull-requests: write
     steps:
-      - uses: actions/stale@v9
+      - uses: actions/stale@v11
         with:
           days-before-issue-stale: 90
           days-before-issue-close: 7

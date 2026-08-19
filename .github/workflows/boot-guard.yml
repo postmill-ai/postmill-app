@@ -27,18 +27,20 @@ jobs:
     # Bound the job: a hung `apt-get update` (Ubuntu mirror stall) otherwise sits for
     # the 6-hour default. A healthy run finishes in ~5 minutes.
     timeout-minutes: 30
+    permissions:
+      contents: read
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
         with:
           fetch-depth: 0
 
       - name: Use Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v7
         with:
           node-version: '22.12.0'
 
       - name: Install pnpm
-        uses: pnpm/action-setup@v2
+        uses: pnpm/action-setup@v6
         with:
           run_install: false
 
@@ -65,9 +67,11 @@ jobs:
     # Bound the job: a hung `apt-get update` (Ubuntu mirror stall) otherwise sits for
     # the 6-hour default. Healthy runs take ~15-22 min, so 45 leaves headroom.
     timeout-minutes: 45
+    permissions:
+      contents: read
     services:
       postgres:
-        image: postgres:15
+        image: postgres:17-alpine
         env:
           POSTGRES_USER: postmill
           POSTGRES_PASSWORD: postmill
@@ -101,17 +105,17 @@ jobs:
       INNGEST_DEV: '1'
       PORT: '3000'
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
         with:
           fetch-depth: 0
 
       - name: Use Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v7
         with:
           node-version: '22.12.0'
 
       - name: Install pnpm
-        uses: pnpm/action-setup@v2
+        uses: pnpm/action-setup@v6
         with:
           run_install: false
 
@@ -186,7 +190,7 @@ jobs:
 
       - name: Upload boot log on failure
         if: failure()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: backend-boot-log
           path: backend-boot.log

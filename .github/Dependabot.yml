@@ -9,3 +9,10 @@ updates:
     directory: "/" # Location of package manifests
     schedule:
       interval: "daily"
+
+  # Keep GitHub Actions pins current — without this ecosystem the `uses:` majors
+  # silently rot (the repo drifted 2-4 majors behind before 2026-08).
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
