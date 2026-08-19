@@ -62,7 +62,7 @@ Run this **once** per such database, then `pnpm run prisma-migrate-deploy` appli
 | Renames/drops need an **expand-contract plan** | Deploy the new column, backfill data, switch reads, then remove the old column in a follow-up. |
 | Always test `prisma-generate` after edits | Prevents type mismatches between the client and the schema. |
 
-> **Operator runbook.** The step-by-step backup, expand-contract, rollback, and drift-check procedure for applying schema changes to a live database lives in [Upgrading → Schema changes & rollback](../operations-guide/upgrading.md#schema-changes-rollback).
+> **Operator runbook.** The step-by-step backup, expand-contract, rollback, and drift-check procedure for applying schema changes to a live database lives in [Upgrading → Clean upgrade path](../operations-guide/upgrading.md#clean-upgrade-path) and [Upgrading → Rollback](../operations-guide/upgrading.md#rollback).
 
 ---
 
