@@ -4,9 +4,9 @@ Postmill supports generic OpenID Connect (OIDC) providers for user authenticatio
 self-hosters integrate with Authentik, Keycloak, Authelia, Dex, Supabase, or any OIDC-compliant
 identity provider. SAML is not supported — OIDC only.
 
-## Admin-managed login providers (v3.8.10)
+## Admin-managed login providers
 
-Since v3.8.10, login providers are configured in the **separate administration app** (a distinct
+Login providers are configured in the **separate administration app** (a distinct
 repository — this repo ships no `/admin` frontend and no login-provider write API), stored
 platform-wide in the `AuthProviderConfig` table with client ID/secret **encrypted at
 rest** (one config per provider: Google, GitHub, or generic OIDC). For each provider you can set:
@@ -43,7 +43,7 @@ Example redirect URI: `https://postmill.example.com/auth/callback`
 
 ### 2. Configure the provider
 
-**Preferred (v3.8.10):** in the administration app, enable the **Generic OIDC** provider
+**Preferred:** in the administration app, enable the **Generic OIDC** provider
 and enter the client ID/secret, the three endpoints, scopes, and a display name. No redeploy
 needed.
 

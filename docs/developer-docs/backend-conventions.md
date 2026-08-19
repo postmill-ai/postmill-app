@@ -81,7 +81,7 @@ new ValidationPipe({
 
 ---
 
-## Two orthogonal access gates (v3.8.10)
+## Two orthogonal access gates
 
 Routes are gated by two independent guards. **Do not merge them.**
 

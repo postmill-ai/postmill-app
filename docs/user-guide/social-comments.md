@@ -1,6 +1,6 @@
 # Social Comments
 
-The Social Comments system (v3.5.0) provides a unified inbox for managing comments from all your
+The Social Comments system provides a unified inbox for managing comments from all your
 connected social channels. Comments from supported platforms are synced periodically and available
 for triage, reply, and assignment.
 

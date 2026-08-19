@@ -1,6 +1,6 @@
 # AI Architecture
 
-Postmill ships a pluggable, multi-provider AI layer. Every AI surface resolves its provider through a single injection point (`AIModelProvider`) — there are no hardcoded provider calls, and **no `OPENAI_API_KEY` env-var fallback** (removed in v3.6.3). If an organization has no active provider, AI is off.
+Postmill ships a pluggable, multi-provider AI layer. Every AI surface resolves its provider through a single injection point (`AIModelProvider`) — there are no hardcoded provider calls, and **no `OPENAI_API_KEY` env-var fallback** (removed before v1.0.0, during pre-release internal development). If an organization has no active provider, AI is off.
 
 > For the end-user view, see [AI Tools](../user-guide/ai-tools.md).
 
@@ -19,7 +19,7 @@ Postmill ships a pluggable, multi-provider AI layer. Every AI surface resolves i
 | 3 | Per-scope override | `scopeModels[scope]` in `AISystemSettings` (legacy, consulted only when category defaults are kill-switched) |
 | 4 | Surface default | Hardcoded `SURFACE_DEFAULTS` map |
 
-There is **no env-key fallback** — the pre-v3.6.3 `OPENAI_API_KEY` fallback was removed. When resolution fails, `resolveConfigForScope` returns `null`, the caller surfaces "AI not configured," and the frontend routes the user to **Settings → AI**.
+There is **no env-key fallback** — the old `OPENAI_API_KEY` env fallback was removed before v1.0.0 (pre-release internal development). When resolution fails, `resolveConfigForScope` returns `null`, the caller surfaces "AI not configured," and the frontend routes the user to **Settings → AI**.
 
 Category defaults can be disabled with `AI_MODEL_DEFAULTS_ENABLED=false`; the system then falls back to the legacy org-active / scoped-models chain. `AISystemSettings.activeProvider` is deprecated and no longer participates in runtime resolution.
 
@@ -108,7 +108,7 @@ Per-org provider configuration is a two-step flow:
 1. **Auth** — API credentials (encrypted at rest; OAuth where a provider offers it).
 2. **Model defaults** — the tenant picks a standard default (`defaultModel`) and an optional reasoning default (`reasoningModel`).
 
-`imageModel` columns were dropped in v3.8.10. Image, video, audio, and avatar generation belong to the **Media provider system**, not the AI-provider config. Embeddings remain an internal capability for RAG only.
+`imageModel` columns were dropped before v1.0.0 (pre-release internal development). Image, video, audio, and avatar generation belong to the **Media provider system**, not the AI-provider config. Embeddings remain an internal capability for RAG only.
 
 Tenants may configure multiple providers (`enabled` per row); one row per org is `isActive`. Category defaults (`OrgDefaultModel`) override the active row's `defaultModel` when `AI_MODEL_DEFAULTS_ENABLED` is true.
 

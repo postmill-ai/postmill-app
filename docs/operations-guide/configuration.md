@@ -203,7 +203,7 @@ Plan and add-on prices are created dynamically from `pricing.ts`; no `STRIPE_PRI
 
 ## SSO / OIDC login
 
-Since v3.8.10, login providers are managed by the **separate administration app** (a distinct repository) and stored encrypted in `AuthProviderConfig`. This repo reads that config DB-first and ships no `/admin` frontend or login-provider write API. The variables below remain supported as the bootstrap fallback when no enabled DB config exists for that provider. Email/password (`LOCAL`) login is always available regardless of provider config.
+Login providers are managed by the **separate administration app** (a distinct repository) and stored encrypted in `AuthProviderConfig`. This repo reads that config DB-first and ships no `/admin` frontend or login-provider write API. The variables below remain supported as the bootstrap fallback when no enabled DB config exists for that provider. Email/password (`LOCAL`) login is always available regardless of provider config.
 
 See [OAuth / SSO](./oauth-sso.md) for a complete setup walkthrough.
 
