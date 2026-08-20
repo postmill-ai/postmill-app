@@ -233,14 +233,14 @@ export const AnalyticsFilterBar: FC<AnalyticsFilterBarProps> = ({
   }, [resetDate, onChannelsChange, onCampaignsChange]);
 
   const navBtn =
-    'cursor-pointer text-textColor px-[10px] bg-newBgColorInner h-full flex items-center justify-center hover:text-textColor hover:bg-designerAccent/15 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-designerAccent/60';
+    'cursor-pointer text-textColor px-[10px] bg-newBgColorInner h-full flex items-center justify-center hover:text-textColor hover:bg-designerAccent/15 transition-colors focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-designerAccent/60';
 
   const drawer = (
     <div
       aria-hidden={!open}
       inert={!open}
       className={clsx(
-        'fixed inset-0 z-[300] flex justify-end',
+        'fixed inset-0 z-300 flex justify-end',
         !open && 'pointer-events-none'
       )}
     >
@@ -290,7 +290,7 @@ export const AnalyticsFilterBar: FC<AnalyticsFilterBarProps> = ({
             <div className="flex flex-col gap-[8px]">
               <SubLabel>{t('date_range', 'Date range')}</SubLabel>
               <div className="flex items-center gap-[10px]">
-                <div className="flex-1 border h-[42px] border-newTableBorder bg-newTableBorder gap-[1px] flex items-center rounded-[8px] overflow-hidden">
+                <div className="flex-1 border h-[42px] border-newTableBorder bg-newTableBorder gap-px flex items-center rounded-[8px] overflow-hidden">
                   <button
                     type="button"
                     aria-label={t('previous_period', 'Previous period')}
@@ -330,7 +330,7 @@ export const AnalyticsFilterBar: FC<AnalyticsFilterBarProps> = ({
                 <button
                   type="button"
                   onClick={goToday}
-                  className="shrink-0 h-[42px] px-[12px] flex justify-center items-center rounded-[8px] cursor-pointer text-[14px] font-[500] bg-newBgColorInner border border-newTableBorder hover:text-textColor hover:bg-designerAccent/15 transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-designerAccent/60"
+                  className="shrink-0 h-[42px] px-[12px] flex justify-center items-center rounded-[8px] cursor-pointer text-[14px] font-[500] bg-newBgColorInner border border-newTableBorder hover:text-textColor hover:bg-designerAccent/15 transition-all focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-designerAccent/60"
                 >
                   {t('today', 'Today')}
                 </button>
@@ -346,7 +346,7 @@ export const AnalyticsFilterBar: FC<AnalyticsFilterBarProps> = ({
                     key={mode}
                     onClick={() => setWindow(mode)}
                     className={clsx(
-                      'flex-1 pt-[6px] pb-[5px] cursor-pointer text-center rounded-[6px] transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-designerAccent/60',
+                      'flex-1 pt-[6px] pb-[5px] cursor-pointer text-center rounded-[6px] transition-colors focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-designerAccent/60',
                       !customOpen && win === mode
                         ? 'text-white bg-designerAccent'
                         : 'text-newTableText hover:text-textColor'
@@ -362,7 +362,7 @@ export const AnalyticsFilterBar: FC<AnalyticsFilterBarProps> = ({
                     setCustomOpen(true);
                   }}
                   className={clsx(
-                    'flex-1 pt-[6px] pb-[5px] cursor-pointer text-center rounded-[6px] transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-designerAccent/60',
+                    'flex-1 pt-[6px] pb-[5px] cursor-pointer text-center rounded-[6px] transition-colors focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-designerAccent/60',
                     (customOpen || win === 'custom')
                       ? 'text-white bg-designerAccent'
                       : 'text-newTableText hover:text-textColor'
@@ -389,10 +389,10 @@ export const AnalyticsFilterBar: FC<AnalyticsFilterBarProps> = ({
                       }
                     }}
                     classNames={{
-                      day: '!text-textColor data-[outside]:!text-newTableText data-[selected]:!bg-designerAccent data-[selected]:!text-white data-[in-range]:!bg-designerAccent/20 data-[in-range]:!text-white',
-                      calendarHeaderControl: 'text-textColor hover:!bg-designerAccent/15',
-                      calendarHeaderLevel: 'text-textColor hover:!bg-designerAccent/15',
-                      weekday: '!text-newTableText',
+                      day: 'text-text!Color data-[outside]:text-new!TableText data-[selected]:bg-designer!Accent data-[selected]:text-white! data-[in-range]:bg-designer!Accent/20 data-[in-range]:text-white!',
+                      calendarHeaderControl: 'text-textColor hover:bg-designer!Accent/15',
+                      calendarHeaderLevel: 'text-textColor hover:bg-designer!Accent/15',
+                      weekday: 'text-new!TableText',
                     }}
                   />
                 </div>
@@ -408,7 +408,7 @@ export const AnalyticsFilterBar: FC<AnalyticsFilterBarProps> = ({
                   onRangeChange({ from, to, compare: e.target.checked })
                 }
               />
-              <div className="relative w-[44px] h-[24px] shrink-0 bg-newTableBorder peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:start-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-[20px] after:w-[20px] after:transition-all peer-checked:bg-btnPrimary" />
+              <div className="relative w-[44px] h-[24px] shrink-0 bg-newTableBorder peer-focus:outline-hidden rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:inset-s-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-[20px] after:w-[20px] after:transition-all peer-checked:bg-btnPrimary" />
               {t('compare_previous', 'Compare to previous period')}
             </label>
           </Section>
@@ -534,7 +534,7 @@ export const AnalyticsFilterBar: FC<AnalyticsFilterBarProps> = ({
           />
         </svg>
         {appliedCount > 0 && (
-          <span className="absolute -top-[6px] -end-[6px] min-w-[18px] h-[18px] px-[4px] rounded-full bg-designerAccent text-white text-[11px] font-[600] leading-[18px] text-center">
+          <span className="absolute top-[-6px] inset-e-[-6px] min-w-[18px] h-[18px] px-[4px] rounded-full bg-designerAccent text-white text-[11px] font-[600] leading-[18px] text-center">
             {appliedCount}
           </span>
         )}

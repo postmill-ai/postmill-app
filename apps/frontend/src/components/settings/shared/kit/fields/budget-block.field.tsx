@@ -38,7 +38,7 @@ export const BudgetBlockField: React.FC<ExtraFieldProps> = ({
             }
           }}
         />
-        <div className="relative w-[44px] h-[24px] bg-newTableBorder peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:start-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-[20px] after:w-[20px] after:transition-all peer-checked:bg-btnPrimary" />
+        <div className="relative w-[44px] h-[24px] bg-newTableBorder peer-focus:outline-hidden rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:inset-s-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-[20px] after:w-[20px] after:transition-all peer-checked:bg-btnPrimary" />
         <span className="text-[13px] text-textColor">
           {t('provider_field_budgetEnabled', 'Budget limits')}
         </span>

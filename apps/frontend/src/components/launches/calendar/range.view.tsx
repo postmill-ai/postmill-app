@@ -58,7 +58,7 @@ export const RangeView = () => {
           {localizedDays.map((day) => (
             <div
               key={day.day}
-              className="p-2 text-center bg-newTableHeader flex justify-center items-center flex-col h-[62px] rounded-[8px] sticky top-0 z-[20]"
+              className="p-2 text-center bg-newTableHeader flex justify-center items-center flex-col h-[62px] rounded-[8px] sticky top-0 z-20"
             >
               <div className="text-[14px] font-[500] text-newTableText">
                 {day.name}

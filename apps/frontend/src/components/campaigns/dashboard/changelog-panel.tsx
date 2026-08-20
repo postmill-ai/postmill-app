@@ -108,7 +108,7 @@ export const ChangelogPanel: FC<ChangelogPanelProps> = ({ logs }) => {
         <ul className="flex flex-col gap-[10px]">
           {items.map((item) => (
             <li key={item.id} className="flex items-start gap-[8px] text-[13px]">
-              <span className="mt-[6px] w-[6px] h-[6px] rounded-full bg-btnPrimary flex-shrink-0" />
+              <span className="mt-[6px] w-[6px] h-[6px] rounded-full bg-btnPrimary shrink-0" />
               <div className="flex flex-col gap-[2px]">
                 <span className="text-textColor">{item.text}</span>
                 <span className="text-[11px] text-newTableText" title={item.fullDate}>

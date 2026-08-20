@@ -263,7 +263,7 @@ export const TextInspector: FC<TextInspectorProps> = ({ store }) => {
                   <button
                     type="button"
                     onClick={() => applyPairingPreset(pairing.heading)}
-                    className="text-[10px] px-2 py-1 rounded bg-designerAccent/10 hover:bg-designerAccent/20 text-textColor"
+                    className="text-[10px] px-2 py-1 rounded-sm bg-designerAccent/10 hover:bg-designerAccent/20 text-textColor"
                     title={t('designer_pairing_heading_title', '{{font}} heading', { font: pairing.heading.fontFamily })}
                   >
                     H
@@ -271,7 +271,7 @@ export const TextInspector: FC<TextInspectorProps> = ({ store }) => {
                   <button
                     type="button"
                     onClick={() => applyPairingPreset(pairing.body)}
-                    className="text-[10px] px-2 py-1 rounded bg-designerAccent/10 hover:bg-designerAccent/20 text-textColor"
+                    className="text-[10px] px-2 py-1 rounded-sm bg-designerAccent/10 hover:bg-designerAccent/20 text-textColor"
                     title={t('designer_pairing_body_title', '{{font}} body', { font: pairing.body.fontFamily })}
                   >
                     B
@@ -283,23 +283,23 @@ export const TextInspector: FC<TextInspectorProps> = ({ store }) => {
 
           <div className="flex flex-col gap-2">
             <button
-              className="w-full px-3 py-2 bg-designerAccent/10 hover:bg-designerAccent/20 text-sm rounded border border-designerAccent/30 text-left"
+              className="w-full px-3 py-2 bg-designerAccent/10 hover:bg-designerAccent/20 text-sm rounded-sm border border-designerAccent/30 text-left"
               onClick={handleAddBackdrop}
             >
               {t('designer_add_text_backdrop', 'Add Text Backdrop')}
             </button>
 
             {isLowContrast && (
-              <div className="flex items-center gap-2 px-3 py-2 bg-yellow-500/10 border border-yellow-500/30 rounded text-sm text-yellow-400">
+              <div className="flex items-center gap-2 px-3 py-2 bg-yellow-500/10 border border-yellow-500/30 rounded-sm text-sm text-yellow-400">
                 <span>{t('designer_low_contrast', '⚠ Low contrast ({{ratio}}:1)', { ratio: ratio.toFixed(1) })}</span>
                 <button
-                  className="px-2 py-0.5 bg-yellow-500/20 hover:bg-yellow-500/30 rounded text-xs"
+                  className="px-2 py-0.5 bg-yellow-500/20 hover:bg-yellow-500/30 rounded-sm text-xs"
                   onClick={handleAddBackdrop}
                 >
                   {t('designer_add_backdrop', 'Add backdrop')}
                 </button>
                 <button
-                  className="px-2 py-0.5 bg-yellow-500/20 hover:bg-yellow-500/30 rounded text-xs"
+                  className="px-2 py-0.5 bg-yellow-500/20 hover:bg-yellow-500/30 rounded-sm text-xs"
                   onClick={() => {
                     store.getState().updateElement(primary.id, { fill: '#000000' });
                   }}

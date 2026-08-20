@@ -65,7 +65,7 @@ export const CampaignCard: FC<CampaignCardProps> = ({
           <div className="flex items-center gap-[8px] min-w-0">
             <span className="text-[15px] font-medium truncate">{campaign.name}</span>
             {campaign.archived && (
-              <span className="shrink-0 text-[11px] bg-newTableText/20 text-newTableText px-[6px] py-[1px] rounded-full">
+              <span className="shrink-0 text-[11px] bg-newTableText/20 text-newTableText px-[6px] py-px rounded-full">
                 {t('archived', 'Archived')}
               </span>
             )}

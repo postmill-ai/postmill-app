@@ -98,7 +98,7 @@ const Toggle: React.FC<{
         checked={checked}
         onChange={(e) => onChange(e.target.checked)}
       />
-      <div className="relative w-[44px] h-[24px] bg-newTableBorder peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:start-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-[20px] after:w-[20px] after:transition-all peer-checked:bg-btnPrimary" />
+      <div className="relative w-[44px] h-[24px] bg-newTableBorder peer-focus:outline-hidden rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:inset-s-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-[20px] after:w-[20px] after:transition-all peer-checked:bg-btnPrimary" />
       {label && <span className="text-[13px] text-textColor">{label}</span>}
     </label>
   );
@@ -326,7 +326,7 @@ export const NotificationPreferencesPanel: React.FC = () => {
               updateDigest(e.target.value as NotificationPreferences['digestFrequency'])
             }
             disabled={saving}
-            className="px-[12px] py-[8px] bg-newBgColor border border-newTableBorder rounded-[8px] text-[14px] outline-none"
+            className="px-[12px] py-[8px] bg-newBgColor border border-newTableBorder rounded-[8px] text-[14px] outline-hidden"
           >
             <option value="instant">{t('instant', 'Instant')}</option>
             <option value="daily">{t('daily', 'Daily')}</option>

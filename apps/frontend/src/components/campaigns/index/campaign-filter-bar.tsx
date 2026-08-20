@@ -90,7 +90,7 @@ export const CampaignFilterBar: FC<CampaignFilterBarProps> = ({
   ];
 
   const inputCls =
-    'px-[12px] py-[8px] bg-newBgColor border border-newTableBorder rounded-[8px] text-[14px] outline-none';
+    'px-[12px] py-[8px] bg-newBgColor border border-newTableBorder rounded-[8px] text-[14px] outline-hidden';
 
   return (
     <div className="flex flex-col gap-[12px]">
@@ -158,7 +158,7 @@ export const CampaignFilterBar: FC<CampaignFilterBarProps> = ({
         aria-hidden={!sheetOpen}
         inert={!sheetOpen}
         className={clsx(
-          'fixed inset-0 z-[210] flex justify-end',
+          'fixed inset-0 z-210 flex justify-end',
           !sheetOpen && 'pointer-events-none'
         )}
       >
@@ -211,7 +211,7 @@ export const CampaignFilterBar: FC<CampaignFilterBarProps> = ({
               <select
                 value={filters.sort}
                 onChange={(e) => set({ sort: e.target.value as CampaignSort })}
-                className="w-full h-[42px] px-[12px] rounded-[8px] text-[14px] bg-newBgColorInner border border-newTableBorder outline-none"
+                className="w-full h-[42px] px-[12px] rounded-[8px] text-[14px] bg-newBgColorInner border border-newTableBorder outline-hidden"
                 aria-label={t('sort_by', 'Sort by')}
               >
                 {sortOptions.map((o) => (
@@ -287,7 +287,7 @@ export const CampaignFilterBar: FC<CampaignFilterBarProps> = ({
                 <select
                   value={filters.client}
                   onChange={(e) => set({ client: e.target.value })}
-                  className="w-full h-[42px] px-[12px] rounded-[8px] text-[14px] bg-newBgColorInner border border-newTableBorder outline-none"
+                  className="w-full h-[42px] px-[12px] rounded-[8px] text-[14px] bg-newBgColorInner border border-newTableBorder outline-hidden"
                 >
                   <option value="">{t('all_clients', 'All clients')}</option>
                   {clients.map((c) => (

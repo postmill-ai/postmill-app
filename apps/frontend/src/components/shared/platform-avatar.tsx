@@ -18,7 +18,7 @@ export const PlatformAvatar: FC<{
     <div
       className={clsx(
         'relative rounded-full flex justify-center items-center bg-newTableHeader filter transition-all duration-500 shrink-0',
-        selected ? 'border-[2px] border-[#622FF6]' : 'border-[2px] border-transparent'
+        selected ? 'border-2 border-[#622FF6]' : 'border-2 border-transparent'
       )}
     >
       <ImageWithFallback
@@ -38,13 +38,13 @@ export const PlatformAvatar: FC<{
         <img
           alt="YouTube"
           src="/icons/platforms/youtube.svg"
-          className="absolute z-10 bottom-0 -end-[5px] min-w-[16px]"
+          className="absolute z-10 bottom-0 inset-e-[-5px] min-w-[16px]"
           width={16}
         />
       ) : identifier ? (
         <SafeImage
           src={`/icons/platforms/${identifier}.png`}
-          className="rounded-[4px] absolute z-10 bottom-0 -end-[5px] min-w-[16px] min-h-[16px]"
+          className="rounded-[4px] absolute z-10 bottom-0 inset-e-[-5px] min-w-[16px] min-h-[16px]"
           alt={identifier}
           width={16}
           height={16}

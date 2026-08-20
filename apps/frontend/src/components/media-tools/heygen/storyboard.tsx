@@ -171,12 +171,12 @@ export const Storyboard: FC<StoryboardProps> = ({ avatars, voices, onGenerated }
           value={title}
           onChange={(e) => setTitle(e.target.value)}
           placeholder={t('heygen_video_title_optional', 'Video title (optional)')}
-          className="flex-1 min-w-[180px] h-[38px] px-[12px] rounded-[8px] bg-newBgColorInner border border-studioBorder text-[13px] text-textColor outline-none focus:border-[#2B5CD3]"
+          className="flex-1 min-w-[180px] h-[38px] px-[12px] rounded-[8px] bg-newBgColorInner border border-studioBorder text-[13px] text-textColor outline-hidden focus:border-[#2B5CD3]"
         />
         <select
           value={dimensionKey}
           onChange={(e) => setDimensionKey(e.target.value)}
-          className="h-[38px] px-[10px] rounded-[8px] bg-newBgColorInner border border-studioBorder text-[13px] text-textColor outline-none focus:border-[#2B5CD3]"
+          className="h-[38px] px-[10px] rounded-[8px] bg-newBgColorInner border border-studioBorder text-[13px] text-textColor outline-hidden focus:border-[#2B5CD3]"
         >
           {DIMENSIONS.map((d) => (
             <option key={d.key} value={d.key}>{d.label}</option>
@@ -237,7 +237,7 @@ export const Storyboard: FC<StoryboardProps> = ({ avatars, voices, onGenerated }
                 onChange={(e) => patchScene(scene.key, { inputText: e.target.value })}
                 placeholder={t('heygen_what_should_avatar_say', 'What should the avatar say?')}
                 rows={4}
-                className="w-full px-[10px] py-[8px] rounded-[8px] bg-newBgColor border border-studioBorder text-[12px] text-textColor outline-none focus:border-[#2B5CD3] resize-none"
+                className="w-full px-[10px] py-[8px] rounded-[8px] bg-newBgColor border border-studioBorder text-[12px] text-textColor outline-hidden focus:border-[#2B5CD3] resize-none"
               />
 
               {/* Background */}
@@ -280,7 +280,7 @@ export const Storyboard: FC<StoryboardProps> = ({ avatars, voices, onGenerated }
         <button
           type="button"
           onClick={() => setScenes((prev) => [...prev, newScene()])}
-          className="shrink-0 w-[88px] rounded-[12px] border-[2px] border-dashed border-studioBorder hover:border-[#2B5CD3] text-newTextColor/65 hover:text-btnPrimaryAccent flex flex-col items-center justify-center gap-[6px] transition-all"
+          className="shrink-0 w-[88px] rounded-[12px] border-2 border-dashed border-studioBorder hover:border-[#2B5CD3] text-newTextColor/65 hover:text-btnPrimaryAccent flex flex-col items-center justify-center gap-[6px] transition-all"
         >
           <span className="text-[26px] leading-none">＋</span>
           <span className="text-[11px]">{t('heygen_scene_label', 'Scene')}</span>

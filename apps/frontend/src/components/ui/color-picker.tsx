@@ -33,7 +33,7 @@ const Swatch: FC<{
     onClick={onClick}
     style={{ backgroundColor: color }}
     className={clsx(
-      'w-[28px] h-[28px] rounded-full flex items-center justify-center transition-transform hover:scale-110 outline-none',
+      'w-[28px] h-[28px] rounded-full flex items-center justify-center transition-transform hover:scale-110 outline-hidden',
       selected && 'ring-2 ring-offset-2 ring-offset-newBgColorInner ring-[#2B5CD3]'
     )}
   >

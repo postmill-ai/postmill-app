@@ -723,7 +723,7 @@ export const Filters = () => {
             fill="none"
             stroke="currentColor"
             strokeWidth={2}
-            className="absolute start-[10px] pointer-events-none text-newTableText"
+            className="absolute inset-s-[10px] pointer-events-none text-newTableText"
             aria-hidden="true"
           >
             <path
@@ -738,14 +738,14 @@ export const Filters = () => {
             onChange={(e) => calendar.setContentSearch(e.target.value)}
             placeholder={t('search_posts', 'Search posts...')}
             aria-label={t('search_posts', 'Search posts')}
-            className="w-[190px] h-[42px] ps-[32px] pe-[26px] rounded-[8px] bg-newBgColorInner border border-newTableBorder text-[14px] text-textColor outline-none focus:border-btnPrimary placeholder:text-newTableText"
+            className="w-[190px] h-[42px] ps-[32px] pe-[26px] rounded-[8px] bg-newBgColorInner border border-newTableBorder text-[14px] text-textColor outline-hidden focus:border-btnPrimary placeholder:text-newTableText"
           />
           {!!calendar.contentSearch && (
             <button
               type="button"
               aria-label={t('clear_search', 'Clear search')}
               onClick={() => calendar.setContentSearch('')}
-              className="absolute end-[7px] w-[18px] h-[18px] flex items-center justify-center rounded-full text-newTableText hover:bg-boxFocused hover:text-textColor transition-all"
+              className="absolute inset-e-[7px] w-[18px] h-[18px] flex items-center justify-center rounded-full text-newTableText hover:bg-boxFocused hover:text-textColor transition-all"
             >
               <svg
                 xmlns="http://www.w3.org/2000/svg"
@@ -794,7 +794,7 @@ export const Filters = () => {
             />
           </svg>
           {calendar.appliedFilterCount > 0 && (
-            <span className="absolute -top-[6px] -end-[6px] min-w-[18px] h-[18px] px-[4px] rounded-full bg-btnPrimary text-white text-[11px] font-[600] leading-[18px] text-center">
+            <span className="absolute top-[-6px] inset-e-[-6px] min-w-[18px] h-[18px] px-[4px] rounded-full bg-btnPrimary text-white text-[11px] font-[600] leading-[18px] text-center">
               {calendar.appliedFilterCount}
             </span>
           )}
@@ -843,13 +843,13 @@ export const Filters = () => {
         </div>
       )}
 
-      {/* Right-side filter drawer. z-[210] sits above the mobile bottom tab bar.
+      {/* Right-side filter drawer. z-210 sits above the mobile bottom tab bar.
           Always mounted so it can slide in/out; pointer-events off when closed. */}
       <div
         aria-hidden={!drawerOpen}
         inert={!drawerOpen}
         className={clsx(
-          'fixed inset-0 z-[210] flex justify-end',
+          'fixed inset-0 z-210 flex justify-end',
           !drawerOpen && 'pointer-events-none'
         )}
       >
@@ -909,7 +909,7 @@ export const Filters = () => {
                 <div className="flex flex-col gap-[8px]">
                   {sectionHeader(t('date_range', 'Date range'))}
                   <div className="flex items-center gap-[10px]">
-                    <div className="flex-1 border h-[42px] border-newTableBorder bg-newTableBorder gap-[1px] flex items-center rounded-[8px] overflow-hidden">
+                    <div className="flex-1 border h-[42px] border-newTableBorder bg-newTableBorder gap-px flex items-center rounded-[8px] overflow-hidden">
                       <button type="button"
                         onClick={previous}
                         className="cursor-pointer text-textColor rtl:rotate-180 px-[9px] bg-newBgColorInner h-full flex items-center justify-center hover:text-textItemFocused hover:bg-boxFocused"
@@ -1018,12 +1018,12 @@ export const Filters = () => {
                           }
                         }}
                         classNames={{
-                          day: '!text-textColor hover:bg-boxFocused data-[outside]:!text-newTableText data-[selected]:!bg-btnPrimary data-[selected]:!text-white data-[in-range]:!bg-btnPrimary/20 data-[in-range]:!text-white',
+                          day: 'text-text!Color hover:bg-boxFocused data-[outside]:text-new!TableText data-[selected]:bg-btn!Primary data-[selected]:text-white! data-[in-range]:bg-btn!Primary/20 data-[in-range]:text-white!',
                           calendarHeaderControl:
-                            'text-textColor hover:!bg-boxFocused',
+                            'text-textColor hover:bg-box!Focused',
                           calendarHeaderLevel:
-                            'text-textColor hover:!bg-boxFocused',
-                          weekday: '!text-newTableText',
+                            'text-textColor hover:bg-box!Focused',
+                          weekday: 'text-new!TableText',
                         }}
                       />
                     </div>
@@ -1059,7 +1059,7 @@ export const Filters = () => {
                       value={calendar.contentSearch}
                       onChange={(e) => calendar.setContentSearch(e.target.value)}
                       placeholder={t('search_post_content', 'Search post content...')}
-                      className="w-full h-[38px] pl-[38px] pr-[10px] rounded-[8px] bg-newBgColorInner border border-newColColor text-[14px] text-textColor outline-none focus:border-btnPrimary"
+                      className="w-full h-[38px] pl-[38px] pr-[10px] rounded-[8px] bg-newBgColorInner border border-newColColor text-[14px] text-textColor outline-hidden focus:border-btnPrimary"
                     />
                   </div>
                 </div>

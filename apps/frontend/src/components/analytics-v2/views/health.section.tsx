@@ -38,7 +38,7 @@ const HealthRow: FC<{ item: HealthItem }> = ({ item }) => {
             {item.name}
           </span>
           {item.supportsAnalytics && item.stale && (
-            <span className="inline-flex items-center gap-[4px] text-[11px] font-semibold uppercase tracking-wide text-amber-600 border border-amber-600/40 rounded-full px-[6px] py-[1px]">
+            <span className="inline-flex items-center gap-[4px] text-[11px] font-semibold uppercase tracking-wide text-amber-600 border border-amber-600/40 rounded-full px-[6px] py-px">
               <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                 <path d="M12 9v4m0 4h.01M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0Z" />
               </svg>

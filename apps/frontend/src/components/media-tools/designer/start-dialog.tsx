@@ -107,7 +107,7 @@ export const StartDialog: FC<StartDialogProps> = ({ store, fetchFn, onDone }) =>
   );
 
   return (
-    <div className="absolute inset-0 z-[400] flex items-center justify-center bg-black/60 p-4">
+    <div className="absolute inset-0 z-400 flex items-center justify-center bg-black/60 p-4">
       <div
         role="dialog"
         aria-modal="true"
@@ -197,14 +197,14 @@ export const StartDialog: FC<StartDialogProps> = ({ store, fetchFn, onDone }) =>
                       onClick={() => toggle(p.id)}
                       aria-pressed={active}
                       title={`${p.name} · ${p.width} × ${p.height}`}
-                      className={`group relative flex flex-col items-center gap-2 px-2 py-3 rounded-xl border transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-designerAccent ${
+                      className={`group relative flex flex-col items-center gap-2 px-2 py-3 rounded-xl border transition-all focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-designerAccent ${
                         active
                           ? 'border-designerAccent ring-1 ring-designerAccent bg-designerAccent/10'
                           : 'border-studioBorder hover:border-designerAccent/60 hover:bg-studioBorder/5'
                       }`}
                     >
                       {active && (
-                        <span className="absolute top-1.5 right-1.5 z-10 w-[16px] h-[16px] rounded-full bg-designerAccent text-white text-[10px] flex items-center justify-center shadow">
+                        <span className="absolute top-1.5 right-1.5 z-10 w-[16px] h-[16px] rounded-full bg-designerAccent text-white text-[10px] flex items-center justify-center shadow-sm">
                           ✓
                         </span>
                       )}
@@ -271,7 +271,7 @@ export const StartDialog: FC<StartDialogProps> = ({ store, fetchFn, onDone }) =>
                 value={cw}
                 onChange={(e) => setCw(e.target.value)}
                 placeholder={translate('designer_width_short', 'W')}
-                className="w-full h-[40px] rounded-lg border border-studioBorder bg-newBgColor px-3 text-[14px] text-textColor text-center outline-none focus:border-designerAccent"
+                className="w-full h-[40px] rounded-lg border border-studioBorder bg-newBgColor px-3 text-[14px] text-textColor text-center outline-hidden focus:border-designerAccent"
               />
               <span className="text-textColor/40">×</span>
               <input
@@ -279,7 +279,7 @@ export const StartDialog: FC<StartDialogProps> = ({ store, fetchFn, onDone }) =>
                 value={ch}
                 onChange={(e) => setCh(e.target.value)}
                 placeholder={translate('designer_height_short', 'H')}
-                className="w-full h-[40px] rounded-lg border border-studioBorder bg-newBgColor px-3 text-[14px] text-textColor text-center outline-none focus:border-designerAccent"
+                className="w-full h-[40px] rounded-lg border border-studioBorder bg-newBgColor px-3 text-[14px] text-textColor text-center outline-hidden focus:border-designerAccent"
               />
             </div>
             <div className="flex justify-end">

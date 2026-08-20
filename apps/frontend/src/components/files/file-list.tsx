@@ -175,7 +175,7 @@ export const FileList: FC<{
                 if (e.key === 'Enter') handleRename(file.id);
                 if (e.key === 'Escape') setRenamingId(null);
               }}
-              className="bg-transparent border-b border-[#2B5CD3] text-[13px] text-textColor outline-none"
+              className="bg-transparent border-b border-[#2B5CD3] text-[13px] text-textColor outline-hidden"
             />
           );
         }

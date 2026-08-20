@@ -96,7 +96,7 @@ export const SimpleMultiSelect: FC<{
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
                 placeholder={t('search', 'Search...')}
-                className="w-full h-[36px] px-[12px] rounded-[8px] bg-newBgColorInner border border-newColColor text-[14px] text-textColor outline-none focus:border-[#2B5CD3]"
+                className="w-full h-[36px] px-[12px] rounded-[8px] bg-newBgColorInner border border-newColColor text-[14px] text-textColor outline-hidden focus:border-[#2B5CD3]"
               />
             </div>
           )}

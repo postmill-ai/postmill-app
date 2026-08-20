@@ -32,7 +32,7 @@ const Label: FC<{ label?: string; required?: boolean }> = ({ label, required }) 
 };
 
 const inputClass =
-  'w-full px-[12px] py-[9px] rounded-[8px] bg-newBgColorInner border border-studioBorder text-[13px] text-textColor outline-none focus:border-[#2B5CD3] transition-colors';
+  'w-full px-[12px] py-[9px] rounded-[8px] bg-newBgColorInner border border-studioBorder text-[13px] text-textColor outline-hidden focus:border-[#2B5CD3] transition-colors';
 
 const MediaPicker: FC<{ field: StudioField & { type: 'media' }; value?: FileFieldValue; onChange: (v: FileFieldValue | undefined) => void }> = ({
   field,

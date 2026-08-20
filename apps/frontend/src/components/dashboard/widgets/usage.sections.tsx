@@ -28,7 +28,7 @@ export const UsageBar: FC<UsageBarProps> = ({ label, used, limit, money }) => {
   const numericLimit = typeof limit === 'number' && limit < 1000000 ? limit : 0;
   const pct = numericLimit > 0 ? Math.min(100, (used / numericLimit) * 100) : 0;
   const color =
-    pct >= 100 ? 'bg-[var(--negative,#f97066)]' : pct >= 80 ? 'bg-amber-500' : 'bg-btnPrimary';
+    pct >= 100 ? 'bg-(--negative,#f97066)' : pct >= 80 ? 'bg-amber-500' : 'bg-btnPrimary';
   const fmt = (value: number) => (money ? `$${value.toFixed(2)}` : value.toLocaleString());
 
   return (

@@ -126,14 +126,14 @@ const RedditPreview: FC = (props) => {
                         height={48}
                         src={integration?.picture!}
                         alt="x"
-                        className="rounded-full w-full h-full relative z-[2]"
+                        className="rounded-full w-full h-full relative z-2"
                       />
                       <SafeImage
                         width={24}
                         height={24}
                         src={`/icons/platforms/${integration?.identifier!}.png`}
                         alt="x"
-                        className="rounded-full absolute -end-[5px] -bottom-[5px] z-[2]"
+                        className="rounded-full absolute inset-e-[-5px] bottom-[-5px] z-2"
                       />
                     </div>
                     <div className="flex-1 flex flex-col leading-[16px] w-full pe-[64px] pb-[8px] rounded-[8px]">
@@ -188,7 +188,7 @@ const RedditSettings: FC = () => {
           <div key={field.id} className="flex flex-col relative">
             <div
               onClick={deleteField(index)}
-              className="absolute -start-[10px] justify-center items-center flex -top-[10px] w-[20px] h-[20px] bg-red-600 rounded-full text-textColor"
+              className="absolute inset-s-[-10px] justify-center items-center flex top-[-10px] w-[20px] h-[20px] bg-red-600 rounded-full text-textColor"
             >
               x
             </div>

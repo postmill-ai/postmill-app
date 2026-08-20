@@ -57,14 +57,14 @@ export const DatePicker: FC<{
       {open && (
         <div
           onClick={(e) => e.stopPropagation()}
-          className="animate-fadeIn absolute bottom-[100%] mb-[16px] start-[50%] -translate-x-[50%] bg-newBgColorInner border border-newTableBorder text-textColor rounded-[16px] z-[300] p-[16px] flex flex-col"
+          className="animate-fadeIn absolute bottom-full mb-[16px] inset-s-[50%] translate-x-[-50%] bg-newBgColorInner border border-newTableBorder text-textColor rounded-[16px] z-300 p-[16px] flex flex-col"
         >
           <MantineDatePicker
             onChange={(day) => day && changeDate('date')(day)}
             value={date.format('YYYY-MM-DD')}
             minDate={newDayjs().startOf('day').format('YYYY-MM-DD')}
             classNames={{
-              day: 'hover:bg-seventh !text-textColor data-[weekend]:!text-textColor data-[outside]:!text-gray data-[selected]:!text-textColor data-[selected]:!bg-seventh data-[selected]:!outline-none',
+              day: 'hover:bg-seventh text-text!Color data-[weekend]:text-text!Color data-[outside]:text-gray! data-[selected]:text-text!Color data-[selected]:bg-seventh! data-selected:outline-hidden!',
               calendarHeaderControl: 'text-textColor hover:bg-third',
               calendarHeaderLevel: 'text-textColor hover:bg-third',
             }}
@@ -75,7 +75,7 @@ export const DatePicker: FC<{
             classNames={{
               label: 'text-textColor py-[12px]',
               input:
-                'bg-newBgColorInner h-[40px] border border-newTableBorder text-textColor rounded-[4px] outline-none',
+                'bg-newBgColorInner h-[40px] border border-newTableBorder text-textColor rounded-[4px] outline-hidden',
             }}
             defaultValue={date.format('HH:mm')}
           />

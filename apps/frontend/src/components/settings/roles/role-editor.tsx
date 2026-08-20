@@ -175,7 +175,7 @@ export const RoleEditor: React.FC<RoleEditorProps> = ({
           value={name}
           onChange={(e) => setName(e.target.value)}
           placeholder={t('role_name_placeholder', 'e.g. Content Manager')}
-          className="w-full px-[12px] py-[8px] bg-newBgColor border border-newTableBorder rounded-[8px] text-[14px] outline-none"
+          className="w-full px-[12px] py-[8px] bg-newBgColor border border-newTableBorder rounded-[8px] text-[14px] outline-hidden"
         />
       </div>
 
@@ -195,7 +195,7 @@ export const RoleEditor: React.FC<RoleEditorProps> = ({
             'role_description_placeholder',
             'What can this role do?'
           )}
-          className="w-full px-[12px] py-[8px] bg-newBgColor border border-newTableBorder rounded-[8px] text-[14px] outline-none"
+          className="w-full px-[12px] py-[8px] bg-newBgColor border border-newTableBorder rounded-[8px] text-[14px] outline-hidden"
         />
       </div>
 

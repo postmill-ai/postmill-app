@@ -299,7 +299,7 @@ export const LinkedinPreview: FC<{
           <img
             src={integration?.picture || '/no-picture.jpg'}
             alt={t('alt_social', 'social')}
-            className="rounded-full relative z-[2] w-[48px] h-[48px]"
+            className="rounded-full relative z-2 w-[48px] h-[48px]"
           />
         </div>
         <div className="flex flex-col leading-[16px]">
@@ -331,7 +331,7 @@ export const LinkedinPreview: FC<{
         content={renderContent?.[0]?.text || ''}
       />
       {!!renderContent?.[0]?.images?.length && (
-        <div className="h-[280px] -mx-[15px] overflow-hidden flex">
+        <div className="h-[280px] mx-[-15px] overflow-hidden flex">
           {renderContent?.[0]?.images.map((image) => (
             <a
               key={image.id}
@@ -441,7 +441,7 @@ export const LinkedinPreview: FC<{
                   <img
                     src={integration?.picture || '/no-picture.jpg'}
                     alt={t('alt_social', 'social')}
-                    className="rounded-full relative z-[2] h-[34px] w-[34px]"
+                    className="rounded-full relative z-2 h-[34px] w-[34px]"
                   />
                 </div>
                 <div className="flex flex-col gap-[12px]">

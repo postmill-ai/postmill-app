@@ -259,21 +259,21 @@ export const CommonInspector: FC<CommonInspectorProps> = ({
           <button
             onClick={() => alignV('top')}
             aria-label={isMulti ? t('designer_align_tops', 'Align tops') : t('designer_align_top', 'Align top')}
-            className="flex-1 h-7 rounded text-[11px] border border-studioBorder text-textColor hover:bg-studioBorder/30"
+            className="flex-1 h-7 rounded-sm text-[11px] border border-studioBorder text-textColor hover:bg-studioBorder/30"
           >
             {t('designer_align_btn_top', '↑ Top')}
           </button>
           <button
             onClick={() => alignV('middle')}
             aria-label={isMulti ? t('designer_align_vertical_centers', 'Align vertical centers') : t('designer_align_vertical_center', 'Align vertical center')}
-            className="flex-1 h-7 rounded text-[11px] border border-studioBorder text-textColor hover:bg-studioBorder/30"
+            className="flex-1 h-7 rounded-sm text-[11px] border border-studioBorder text-textColor hover:bg-studioBorder/30"
           >
             {t('designer_align_btn_middle', '↕ Middle')}
           </button>
           <button
             onClick={() => alignV('bottom')}
             aria-label={isMulti ? t('designer_align_bottoms', 'Align bottoms') : t('designer_align_bottom', 'Align bottom')}
-            className="flex-1 h-7 rounded text-[11px] border border-studioBorder text-textColor hover:bg-studioBorder/30"
+            className="flex-1 h-7 rounded-sm text-[11px] border border-studioBorder text-textColor hover:bg-studioBorder/30"
           >
             {t('designer_align_btn_bottom', '↓ Bottom')}
           </button>
@@ -282,21 +282,21 @@ export const CommonInspector: FC<CommonInspectorProps> = ({
           <button
             onClick={() => alignH('left')}
             aria-label={isMulti ? t('designer_align_left_edges', 'Align left edges') : t('designer_align_left', 'Align left')}
-            className="flex-1 h-7 rounded text-[11px] border border-studioBorder text-textColor hover:bg-studioBorder/30"
+            className="flex-1 h-7 rounded-sm text-[11px] border border-studioBorder text-textColor hover:bg-studioBorder/30"
           >
             {t('designer_align_btn_left', '← Left')}
           </button>
           <button
             onClick={() => alignH(ALIGN_CENTER)}
             aria-label={isMulti ? t('designer_align_horizontal_centers', 'Align horizontal centers') : t('designer_align_horizontal_center', 'Align horizontal center')}
-            className="flex-1 h-7 rounded text-[11px] border border-studioBorder text-textColor hover:bg-studioBorder/30"
+            className="flex-1 h-7 rounded-sm text-[11px] border border-studioBorder text-textColor hover:bg-studioBorder/30"
           >
             {t('designer_align_btn_center', '↔ Center')}
           </button>
           <button
             onClick={() => alignH('right')}
             aria-label={isMulti ? t('designer_align_right_edges', 'Align right edges') : t('designer_align_right', 'Align right')}
-            className="flex-1 h-7 rounded text-[11px] border border-studioBorder text-textColor hover:bg-studioBorder/30"
+            className="flex-1 h-7 rounded-sm text-[11px] border border-studioBorder text-textColor hover:bg-studioBorder/30"
           >
             {t('designer_align_btn_right', '→ Right')}
           </button>
@@ -306,14 +306,14 @@ export const CommonInspector: FC<CommonInspectorProps> = ({
             <button
               onClick={distributeHorizontal}
               aria-label={t('designer_distribute_horizontally', 'Distribute horizontally')}
-              className="flex-1 h-7 rounded text-[11px] border border-studioBorder text-textColor hover:bg-studioBorder/30"
+              className="flex-1 h-7 rounded-sm text-[11px] border border-studioBorder text-textColor hover:bg-studioBorder/30"
             >
               {t('designer_distribute_btn_h', '↔ H')}
             </button>
             <button
               onClick={distributeVertical}
               aria-label={t('designer_distribute_vertically', 'Distribute vertically')}
-              className="flex-1 h-7 rounded text-[11px] border border-studioBorder text-textColor hover:bg-studioBorder/30"
+              className="flex-1 h-7 rounded-sm text-[11px] border border-studioBorder text-textColor hover:bg-studioBorder/30"
             >
               {t('designer_distribute_btn_v', '↕ V')}
             </button>
@@ -327,28 +327,28 @@ export const CommonInspector: FC<CommonInspectorProps> = ({
           <button
             onClick={() => reorder(ids, 'back')}
             aria-label={t('designer_send_to_back', 'Send to back')}
-            className="flex-1 h-7 rounded text-[11px] border border-studioBorder text-textColor hover:bg-studioBorder/30"
+            className="flex-1 h-7 rounded-sm text-[11px] border border-studioBorder text-textColor hover:bg-studioBorder/30"
           >
             {t('designer_layer_btn_back', '⤒ Back')}
           </button>
           <button
             onClick={() => reorder(ids, 'backward')}
             aria-label={t('designer_send_backward', 'Send backward')}
-            className="flex-1 h-7 rounded text-[11px] border border-studioBorder text-textColor hover:bg-studioBorder/30"
+            className="flex-1 h-7 rounded-sm text-[11px] border border-studioBorder text-textColor hover:bg-studioBorder/30"
           >
             {t('designer_layer_btn_bwd', '↓ Bwd')}
           </button>
           <button
             onClick={() => reorder(ids, 'forward')}
             aria-label={t('designer_bring_forward', 'Bring forward')}
-            className="flex-1 h-7 rounded text-[11px] border border-studioBorder text-textColor hover:bg-studioBorder/30"
+            className="flex-1 h-7 rounded-sm text-[11px] border border-studioBorder text-textColor hover:bg-studioBorder/30"
           >
             {t('designer_layer_btn_fwd', '↑ Fwd')}
           </button>
           <button
             onClick={() => reorder(ids, 'front')}
             aria-label={t('designer_bring_to_front', 'Bring to front')}
-            className="flex-1 h-7 rounded text-[11px] border border-studioBorder text-textColor hover:bg-studioBorder/30"
+            className="flex-1 h-7 rounded-sm text-[11px] border border-studioBorder text-textColor hover:bg-studioBorder/30"
           >
             {t('designer_layer_btn_front', '⤓ Front')}
           </button>

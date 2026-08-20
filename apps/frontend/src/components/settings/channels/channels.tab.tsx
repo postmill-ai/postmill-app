@@ -165,7 +165,7 @@ const CapabilityFilter: FC<{
       >
         {t('capabilities', 'Capabilities')}
         {selected.length > 0 && (
-          <span className="text-[11px] bg-btnPrimary text-white rounded-full px-[6px] py-[1px]">
+          <span className="text-[11px] bg-btnPrimary text-white rounded-full px-[6px] py-px">
             {selected.length}
           </span>
         )}
@@ -174,7 +174,7 @@ const CapabilityFilter: FC<{
         </svg>
       </button>
       {open && (
-        <div className="absolute right-0 mobile:right-auto mobile:left-0 top-[42px] z-[300] w-[220px] bg-newBgColorInner border border-newTableBorder rounded-[8px] shadow-lg py-[6px]">
+        <div className="absolute right-0 mobile:right-auto mobile:left-0 top-[42px] z-300 w-[220px] bg-newBgColorInner border border-newTableBorder rounded-[8px] shadow-lg py-[6px]">
           {CAPABILITY_FILTERS.map((f) => {
             const checked = selected.includes(f.key);
             return (
@@ -295,12 +295,12 @@ const ProviderPicker: FC<{
                   <span className="flex items-center gap-[6px] flex-wrap">
                     <span className="text-[14px] font-[500] text-textColor">{p.name}</span>
                     {vi && vi.status === 'deprecated' && (
-                      <span className="text-[10px] rounded-[4px] px-[6px] py-[1px] bg-amber-500/15 text-amber-800 dark:text-amber-400">
+                      <span className="text-[10px] rounded-[4px] px-[6px] py-px bg-amber-500/15 text-amber-800 dark:text-amber-400">
                         {t('deprecated', 'Deprecated')}
                       </span>
                     )}
                     {retired && (
-                      <span className="text-[10px] rounded-[4px] px-[6px] py-[1px] bg-red-500/15 text-dangerText">
+                      <span className="text-[10px] rounded-[4px] px-[6px] py-px bg-red-500/15 text-dangerText">
                         {t('retired', 'Retired')}
                       </span>
                     )}

@@ -17,7 +17,7 @@ function RequiredMark({ required }: { required?: boolean }) {
 }
 
 const inputClass =
-  'w-full px-3 py-2 rounded-lg border border-studioBorder bg-newBgColorInner text-textColor text-sm focus:outline-none focus:border-designerAccent';
+  'w-full px-3 py-2 rounded-lg border border-studioBorder bg-newBgColorInner text-textColor text-sm focus:outline-hidden focus:border-designerAccent';
 
 // ── Prompt (with inline AI enhancement) ──────────────────────────────────────
 function PromptField({
@@ -175,7 +175,7 @@ function AdvancedField({
           type="checkbox"
           checked={!!value}
           onChange={(e) => onChange(e.target.checked)}
-          className="rounded accent-designerAccent"
+          className="rounded-sm accent-designerAccent"
         />
         <span className="text-xs text-newTextColor/70">
           {schema.title || name}

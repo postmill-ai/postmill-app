@@ -75,7 +75,7 @@ export const IconButton: FC<{
       }
     }}
     className={clsx(
-      'hidden group-hover:block hover:underline cursor-pointer outline-none focus-visible:ring-2 focus-visible:ring-white/70 rounded-[4px]',
+      'hidden group-hover:block hover:underline cursor-pointer outline-hidden focus-visible:ring-2 focus-visible:ring-white/70 rounded-[4px]',
       colored && 'mix-blend-difference'
     )}
   >

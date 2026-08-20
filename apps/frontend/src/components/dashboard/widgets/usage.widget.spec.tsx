@@ -252,7 +252,7 @@ describe('UsageWidget', () => {
 
     const overBar = container.querySelector('[style*="width: 100%"]') as HTMLElement;
     expect(overBar).toBeTruthy();
-    expect(overBar.className).toContain('bg-[var(--negative,#f97066)]');
+    expect(overBar.className).toContain('bg-(--negative,#f97066)');
   });
 
   it('omits the progress bar and slash when a limit is disabled (boolean false)', () => {

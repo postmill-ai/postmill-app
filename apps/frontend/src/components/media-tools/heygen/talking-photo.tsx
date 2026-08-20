@@ -121,13 +121,13 @@ export const TalkingPhoto: FC<TalkingPhotoProps> = ({ voices, onGenerated }) => 
         onChange={(e) => setText(e.target.value)}
         placeholder={t('heygen_what_should_photo_say', 'What should the photo say?')}
         rows={5}
-        className="w-full px-[12px] py-[10px] rounded-[10px] bg-newBgColorInner border border-studioBorder text-[13px] text-textColor outline-none focus:border-[#2B5CD3] resize-none"
+        className="w-full px-[12px] py-[10px] rounded-[10px] bg-newBgColorInner border border-studioBorder text-[13px] text-textColor outline-hidden focus:border-[#2B5CD3] resize-none"
       />
 
       <select
         value={dimensionKey}
         onChange={(e) => setDimensionKey(e.target.value)}
-        className="h-[38px] px-[10px] rounded-[8px] bg-newBgColorInner border border-studioBorder text-[13px] text-textColor outline-none focus:border-[#2B5CD3] w-fit"
+        className="h-[38px] px-[10px] rounded-[8px] bg-newBgColorInner border border-studioBorder text-[13px] text-textColor outline-hidden focus:border-[#2B5CD3] w-fit"
       >
         {DIMENSIONS.map((d) => (
           <option key={d.key} value={d.key}>{d.label}</option>

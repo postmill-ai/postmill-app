@@ -103,7 +103,7 @@ export const IconsPanel: FC<IconsPanelProps> = ({ store, onClose }) => {
         value={query}
         onChange={(e) => setQuery(e.target.value)}
         placeholder={t('icons_panel_search_icons_placeholder', 'Search icons…')}
-        className="w-full h-[36px] px-3 rounded-lg bg-newBgColorInner border border-studioBorder text-[13px] outline-none focus:border-designerAccent text-textColor"
+        className="w-full h-[36px] px-3 rounded-lg bg-newBgColorInner border border-studioBorder text-[13px] outline-hidden focus:border-designerAccent text-textColor"
       />
 
       {filtered.length === 0 ? (

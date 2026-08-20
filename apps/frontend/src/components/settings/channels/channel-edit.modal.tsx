@@ -276,7 +276,7 @@ export const ChannelConfigForm: FC<ChannelConfigFormProps> = ({
         <label className="text-[14px] font-[500]">{t('client_id', 'Client ID / API Key')}</label>
         <div className="bg-newBgColorInner h-[42px] border-newTableBorder border rounded-[8px] text-textColor flex items-center justify-center">
           <input
-            className="h-full bg-transparent outline-none flex-1 text-[14px] text-textColor placeholder-textColor px-[16px]"
+            className="h-full bg-transparent outline-hidden flex-1 text-[14px] text-textColor placeholder-textColor px-[16px]"
             placeholder={credentialPlaceholder}
             value={clientId}
             onChange={(e) => setClientId(e.target.value)}
@@ -289,7 +289,7 @@ export const ChannelConfigForm: FC<ChannelConfigFormProps> = ({
         <div className="bg-newBgColorInner h-[42px] border-newTableBorder border rounded-[8px] text-textColor flex items-center justify-center">
           <input
             type="password"
-            className="h-full bg-transparent outline-none flex-1 text-[14px] text-textColor placeholder-textColor px-[16px]"
+            className="h-full bg-transparent outline-hidden flex-1 text-[14px] text-textColor placeholder-textColor px-[16px]"
             placeholder={credentialPlaceholder}
             value={clientSecret}
             onChange={(e) => setClientSecret(e.target.value)}
@@ -374,7 +374,7 @@ export const ChannelConfigForm: FC<ChannelConfigFormProps> = ({
         <div className="flex gap-[8px]">
           <Button
             type="button"
-            className="!bg-transparent border border-newTableBorder text-textColor"
+            className="bg-transparent! border border-newTableBorder text-textColor"
             onClick={onClose}
           >
             {t('cancel', 'Cancel')}
@@ -385,7 +385,7 @@ export const ChannelConfigForm: FC<ChannelConfigFormProps> = ({
             <>
               <Button
                 type="button"
-                className="!bg-transparent border border-red-500/30 text-dangerText text-[12px]"
+                className="bg-transparent! border border-red-500/30 text-dangerText text-[12px]"
                 onClick={handleDelete}
                 disabled={saving}
               >
@@ -394,7 +394,7 @@ export const ChannelConfigForm: FC<ChannelConfigFormProps> = ({
               {isConfigured && (
                 <Button
                   type="button"
-                  className="!bg-transparent border border-newTableBorder text-textColor text-[12px]"
+                  className="bg-transparent! border border-newTableBorder text-textColor text-[12px]"
                   onClick={handleTest}
                 >
                   {t('test', 'Test')}

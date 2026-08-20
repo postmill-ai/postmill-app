@@ -35,7 +35,7 @@ export const VoicePicker: FC<VoicePickerProps> = ({ voices, selectedId, onSelect
         value={query}
         onChange={(e) => setQuery(e.target.value)}
         placeholder={t('heygen_search_by_name_or_language', 'Search by name or language...')}
-        className="w-full h-[40px] px-[12px] rounded-[8px] bg-newBgColorInner border border-studioBorder text-[14px] text-textColor outline-none focus:border-[#2B5CD3]"
+        className="w-full h-[40px] px-[12px] rounded-[8px] bg-newBgColorInner border border-studioBorder text-[14px] text-textColor outline-hidden focus:border-[#2B5CD3]"
       />
       {filtered.length === 0 ? (
         <div className="h-[200px] flex items-center justify-center text-[13px] text-newTextColor/65">

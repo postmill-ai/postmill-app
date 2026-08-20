@@ -23,7 +23,7 @@ export const ShareButton: FC = () => {
     <button
       type="button"
       onClick={open}
-      className="px-[12px] py-[6px] text-[13px] font-medium rounded-[8px] bg-newTableHeader border border-newTableBorder text-newTableText hover:text-btnText hover:border-newTableText transition-colors flex items-center gap-[6px] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-designerAccent/60"
+      className="px-[12px] py-[6px] text-[13px] font-medium rounded-[8px] bg-newTableHeader border border-newTableBorder text-newTableText hover:text-btnText hover:border-newTableText transition-colors flex items-center gap-[6px] focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-designerAccent/60"
     >
       <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
         <circle cx="18" cy="5" r="3" />

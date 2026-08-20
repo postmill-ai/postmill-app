@@ -35,7 +35,7 @@ export const UpDownArrow: FC<{
         onClick={changePosition('up')}
         aria-label={t('move_up', 'Move up')}
         className={clsx(
-          'outline-none w-[20px] h-[20px] flex justify-center items-center',
+          'outline-hidden w-[20px] h-[20px] flex justify-center items-center',
           isUp
             ? 'cursor-pointer'
             : 'pointer-events-none text-textColor opacity-50'
@@ -47,7 +47,7 @@ export const UpDownArrow: FC<{
         onClick={changePosition('down')}
         aria-label={t('move_down', 'Move down')}
         className={clsx(
-          'outline-none rounded-bl-[20px] w-[20px] h-[20px] flex justify-center items-center',
+          'outline-hidden rounded-bl-[20px] w-[20px] h-[20px] flex justify-center items-center',
           isDown
             ? 'cursor-pointer'
             : 'pointer-events-none text-textColor opacity-50'

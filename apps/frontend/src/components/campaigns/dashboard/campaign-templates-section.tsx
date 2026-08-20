@@ -142,7 +142,7 @@ export const CampaignTemplatesSection: FC<{
             <span className="text-[12px] text-newTableText">({templates.length})</span>
           )}
         </div>
-        <Button onClick={openAddModal} className="!h-[32px] !px-[12px] text-[13px]">
+        <Button onClick={openAddModal} className="h-[32px]! px-[12px]! text-[13px]">
           {t('add', 'Add')}
         </Button>
       </div>

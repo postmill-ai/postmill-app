@@ -25,7 +25,7 @@ export const DummyCodeComponent: FC<{ code: any }> = ({ code }) => {
         </Button>
       </TopTitle>
       <button
-        className="outline-none absolute end-[20px] top-[20px] mantine-UnstyledButton-root mantine-ActionIcon-root hover:bg-tableBorder cursor-pointer mantine-Modal-close mantine-1dcetaa"
+        className="outline-hidden absolute inset-e-[20px] top-[20px] mantine-UnstyledButton-root mantine-ActionIcon-root hover:bg-tableBorder cursor-pointer mantine-Modal-close mantine-1dcetaa"
         type="button"
         onClick={() => modal.closeAll()}
       >

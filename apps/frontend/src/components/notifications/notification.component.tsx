@@ -64,7 +64,7 @@ const NotificationRow: FC<{
             </div>
           )}
           <SafeContent
-            className="text-[13px] text-textColor/90 break-words"
+            className="text-[13px] text-textColor/90 wrap-break-word"
             content={replaceLinks(notification.content)}
           />
           {notification.link && (
@@ -198,7 +198,7 @@ export const NotificationOpenComponent: FC<{
   return (
     <div
       id="notification-popup"
-      className="opacity-0 animate-normalFadeDown mt-[10px] absolute w-[420px] min-h-[200px] top-[100%] end-0 bg-newBgColorInner text-textColor rounded-[16px] flex flex-col border border-newTableBorder z-[600] shadow-lg"
+      className="opacity-0 animate-normalFadeDown mt-[10px] absolute w-[420px] min-h-[200px] top-full end-0 bg-newBgColorInner text-textColor rounded-[16px] flex flex-col border border-newTableBorder z-600 shadow-lg"
     >
       <div className="p-[16px] border-b border-newTableBorder flex items-center justify-between">
         <div className="font-bold">{t('notifications', 'Notifications')}</div>
@@ -302,7 +302,7 @@ const NotificationComponent = () => {
           />
         </svg>
         {!!data?.total && (
-          <span className="absolute -top-[2px] -right-[2px] min-w-[16px] h-[16px] px-[4px] flex items-center justify-center bg-badge text-white text-[10px] font-bold rounded-full border border-newBgColorInner">
+          <span className="absolute top-[-2px] right-[-2px] min-w-[16px] h-[16px] px-[4px] flex items-center justify-center bg-badge text-white text-[10px] font-bold rounded-full border border-newBgColorInner">
             {data.total > 99 ? '99+' : data.total}
           </span>
         )}

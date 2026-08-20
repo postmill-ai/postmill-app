@@ -428,7 +428,7 @@ export const ImageInspector: FC<ImageInspectorProps> = ({
           </button>
         </div>
         <div
-          className="relative w-full h-[96px] rounded overflow-hidden border border-studioBorder bg-newBgColorInner cursor-crosshair"
+          className="relative w-full h-[96px] rounded-sm overflow-hidden border border-studioBorder bg-newBgColorInner cursor-crosshair"
           style={{
             backgroundImage: element.src ? `url(${element.src})` : undefined,
             backgroundSize: 'cover',
@@ -450,7 +450,7 @@ export const ImageInspector: FC<ImageInspectorProps> = ({
         <div className="grid grid-cols-3 gap-1">
           <div />
           <button
-            className="px-2 py-1 bg-newBgColor hover:bg-studioBorder/10 rounded border border-studioBorder text-xs"
+            className="px-2 py-1 bg-newBgColor hover:bg-studioBorder/10 rounded-sm border border-studioBorder text-xs"
             onClick={() => nudgeFocal(0, -0.02)}
             aria-label={t('designer_move_focal_point_up', 'Move focal point up')}
           >
@@ -458,21 +458,21 @@ export const ImageInspector: FC<ImageInspectorProps> = ({
           </button>
           <div />
           <button
-            className="px-2 py-1 bg-newBgColor hover:bg-studioBorder/10 rounded border border-studioBorder text-xs"
+            className="px-2 py-1 bg-newBgColor hover:bg-studioBorder/10 rounded-sm border border-studioBorder text-xs"
             onClick={() => nudgeFocal(-0.02, 0)}
             aria-label={t('designer_move_focal_point_left', 'Move focal point left')}
           >
             ←
           </button>
           <button
-            className="px-2 py-1 bg-newBgColor hover:bg-studioBorder/10 rounded border border-studioBorder text-xs"
+            className="px-2 py-1 bg-newBgColor hover:bg-studioBorder/10 rounded-sm border border-studioBorder text-xs"
             onClick={() => nudgeFocal(0, 0.02)}
             aria-label={t('designer_move_focal_point_down', 'Move focal point down')}
           >
             ↓
           </button>
           <button
-            className="px-2 py-1 bg-newBgColor hover:bg-studioBorder/10 rounded border border-studioBorder text-xs"
+            className="px-2 py-1 bg-newBgColor hover:bg-studioBorder/10 rounded-sm border border-studioBorder text-xs"
             onClick={() => nudgeFocal(0.02, 0)}
             aria-label={t('designer_move_focal_point_right', 'Move focal point right')}
           >
@@ -482,7 +482,7 @@ export const ImageInspector: FC<ImageInspectorProps> = ({
       </div>
 
       <button
-        className="w-full px-3 py-2 bg-newBgColor hover:bg-studioBorder/10 text-sm rounded border border-studioBorder text-left"
+        className="w-full px-3 py-2 bg-newBgColor hover:bg-studioBorder/10 text-sm rounded-sm border border-studioBorder text-left"
         onClick={resetFormatLayout}
       >
         {t('designer_reset_format_layout', 'Reset this format’s layout')}
@@ -530,7 +530,7 @@ export const ImageInspector: FC<ImageInspectorProps> = ({
       </div>
 
       <button
-        className="w-full px-3 py-1.5 text-[12px] border border-studioBorder bg-newBgColorInner hover:bg-newBgColor text-textColor/70 hover:text-textColor rounded transition-colors"
+        className="w-full px-3 py-1.5 text-[12px] border border-studioBorder bg-newBgColorInner hover:bg-newBgColor text-textColor/70 hover:text-textColor rounded-sm transition-colors"
         disabled={!!aiLoading}
         onClick={async () => {
           if (!element.src) return;
@@ -738,7 +738,7 @@ export const ImageInspector: FC<ImageInspectorProps> = ({
               }
             }}
             placeholder={t('designer_placeholder_photo_in_text', 'Enter text for photo-in-text…')}
-            className="w-full h-[34px] px-[8px] rounded-[6px] bg-newBgColor border border-studioBorder text-[13px] text-textColor outline-none focus:border-designerAccent"
+            className="w-full h-[34px] px-[8px] rounded-[6px] bg-newBgColor border border-studioBorder text-[13px] text-textColor outline-hidden focus:border-designerAccent"
           />
         </div>
 
@@ -777,7 +777,7 @@ export const ImageInspector: FC<ImageInspectorProps> = ({
             updateElement(element.id, { alt: e.target.value })
           }
           placeholder={t('designer_placeholder_describe_image', 'Describe this image…')}
-          className="w-full h-[34px] px-[8px] rounded-[6px] bg-newBgColor border border-studioBorder text-[13px] text-textColor outline-none focus:border-designerAccent"
+          className="w-full h-[34px] px-[8px] rounded-[6px] bg-newBgColor border border-studioBorder text-[13px] text-textColor outline-hidden focus:border-designerAccent"
         />
       </div>
 
@@ -844,7 +844,7 @@ export const ImageInspector: FC<ImageInspectorProps> = ({
         <h4 className="text-xs font-semibold text-gray-400 mb-2 uppercase tracking-wider">{t('designer_ai_tools', 'AI Tools')}</h4>
         <div className="space-y-2">
           <button
-            className="w-full px-3 py-2 bg-designerAccent/10 hover:bg-designerAccent/20 text-sm rounded border border-designerAccent/30 text-left"
+            className="w-full px-3 py-2 bg-designerAccent/10 hover:bg-designerAccent/20 text-sm rounded-sm border border-designerAccent/30 text-left"
             onClick={handleRemoveBackground}
             disabled={!!aiLoading}
           >
@@ -853,7 +853,7 @@ export const ImageInspector: FC<ImageInspectorProps> = ({
 
           <div className="flex gap-2">
             <select
-              className="flex-1 px-2 py-1.5 bg-newBgColor border border-studioBorder rounded text-sm text-textColor"
+              className="flex-1 px-2 py-1.5 bg-newBgColor border border-studioBorder rounded-sm text-sm text-textColor"
               value={upscaleScale}
               onChange={e => setUpscaleScale(Number(e.target.value))}
             >
@@ -861,7 +861,7 @@ export const ImageInspector: FC<ImageInspectorProps> = ({
               <option value={4}>{t('designer_upscale_4x', '4× Upscale')}</option>
             </select>
             <button
-              className="px-3 py-1.5 bg-designerAccent/10 hover:bg-designerAccent/20 text-sm rounded border border-designerAccent/30"
+              className="px-3 py-1.5 bg-designerAccent/10 hover:bg-designerAccent/20 text-sm rounded-sm border border-designerAccent/30"
               onClick={handleUpscale}
               disabled={!!aiLoading}
             >
@@ -871,13 +871,13 @@ export const ImageInspector: FC<ImageInspectorProps> = ({
 
           <div className="flex flex-col gap-2">
             <input
-              className="w-full px-2 py-1.5 bg-newBgColor border border-studioBorder rounded text-sm text-textColor"
+              className="w-full px-2 py-1.5 bg-newBgColor border border-studioBorder rounded-sm text-sm text-textColor"
               placeholder={t('designer_placeholder_image_to_image', 'Image-to-image prompt...')}
               value={imageToImagePrompt}
               onChange={(e) => setImageToImagePrompt(e.target.value)}
             />
             <button
-              className="w-full px-3 py-1.5 bg-designerAccent/10 hover:bg-designerAccent/20 text-sm rounded border border-designerAccent/30 text-left"
+              className="w-full px-3 py-1.5 bg-designerAccent/10 hover:bg-designerAccent/20 text-sm rounded-sm border border-designerAccent/30 text-left"
               onClick={handleImageToImage}
               disabled={!!aiLoading || !imageToImagePrompt.trim()}
             >
@@ -887,7 +887,7 @@ export const ImageInspector: FC<ImageInspectorProps> = ({
 
           <div className="flex flex-col gap-2">
             <input
-              className="w-full px-2 py-1.5 bg-newBgColor border border-studioBorder rounded text-sm text-textColor"
+              className="w-full px-2 py-1.5 bg-newBgColor border border-studioBorder rounded-sm text-sm text-textColor"
               placeholder={t('designer_placeholder_inpaint', 'Inpaint prompt...')}
               value={inpaintPrompt}
               onChange={(e) => setInpaintPrompt(e.target.value)}
@@ -896,7 +896,7 @@ export const ImageInspector: FC<ImageInspectorProps> = ({
             {masking && (
               <div className="flex flex-col gap-2">
                 <div
-                  className="relative w-full rounded overflow-hidden border border-studioBorder cursor-crosshair"
+                  className="relative w-full rounded-sm overflow-hidden border border-studioBorder cursor-crosshair"
                   onPointerDown={handleMaskPointerDown}
                   onPointerMove={handleMaskPointerMove}
                   onPointerUp={handleMaskPointerUp}
@@ -926,13 +926,13 @@ export const ImageInspector: FC<ImageInspectorProps> = ({
                 />
                 <div className="flex gap-2">
                   <button
-                    className="flex-1 px-2 py-1.5 bg-newBgColor hover:bg-studioBorder/10 text-xs rounded border border-studioBorder"
+                    className="flex-1 px-2 py-1.5 bg-newBgColor hover:bg-studioBorder/10 text-xs rounded-sm border border-studioBorder"
                     onClick={clearMask}
                   >
                     {t('clear', 'Clear')}
                   </button>
                   <button
-                    className="flex-1 px-2 py-1.5 bg-designerAccent/10 hover:bg-designerAccent/20 text-xs rounded border border-designerAccent/30"
+                    className="flex-1 px-2 py-1.5 bg-designerAccent/10 hover:bg-designerAccent/20 text-xs rounded-sm border border-designerAccent/30"
                     onClick={uploadMask}
                     disabled={!!aiLoading}
                   >
@@ -944,7 +944,7 @@ export const ImageInspector: FC<ImageInspectorProps> = ({
 
             {!masking && (
               <button
-                className="w-full px-3 py-1.5 bg-newBgColor hover:bg-studioBorder/10 text-sm rounded border border-studioBorder text-left"
+                className="w-full px-3 py-1.5 bg-newBgColor hover:bg-studioBorder/10 text-sm rounded-sm border border-studioBorder text-left"
                 onClick={() => setMasking(true)}
                 disabled={!!aiLoading}
               >
@@ -957,7 +957,7 @@ export const ImageInspector: FC<ImageInspectorProps> = ({
             )}
 
             <button
-              className="w-full px-3 py-1.5 bg-designerAccent/10 hover:bg-designerAccent/20 text-sm rounded border border-designerAccent/30 text-left"
+              className="w-full px-3 py-1.5 bg-designerAccent/10 hover:bg-designerAccent/20 text-sm rounded-sm border border-designerAccent/30 text-left"
               onClick={handleInpaint}
               disabled={!!aiLoading || !inpaintPrompt || !inpaintMaskUrl}
             >

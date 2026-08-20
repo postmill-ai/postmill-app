@@ -125,7 +125,7 @@ const FileTile: FC<{
         disabled={removing}
         onClick={onRemove}
         aria-label={t('remove_from_campaign', 'Remove from campaign')}
-        className="absolute top-[6px] end-[6px] w-[22px] h-[22px] rounded-full bg-black/60 text-white text-[13px] flex items-center justify-center opacity-0 group-hover:opacity-100 hover:bg-red-500 transition-all disabled:opacity-40"
+        className="absolute top-[6px] inset-e-[6px] w-[22px] h-[22px] rounded-full bg-black/60 text-white text-[13px] flex items-center justify-center opacity-0 group-hover:opacity-100 hover:bg-red-500 transition-all disabled:opacity-40"
       >
         ×
       </button>
@@ -309,7 +309,7 @@ export const CampaignFilesSection: FC<{
             <span className="text-[12px] text-newTableText">({count})</span>
           )}
         </div>
-        <Button onClick={filesPicker.open} className="!h-[32px] !px-[12px] text-[13px]">
+        <Button onClick={filesPicker.open} className="h-[32px]! px-[12px]! text-[13px]">
           {t('add_files', 'Add files')}
         </Button>
         {filesPicker.element}

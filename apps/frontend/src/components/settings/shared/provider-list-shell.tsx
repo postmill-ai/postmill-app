@@ -297,7 +297,7 @@ const ProviderListShell: React.FC<ProviderListShellProps> = ({
                       {provider.capabilities.map((cap) => (
                         <span
                           key={cap}
-                          className="text-[10px] bg-newTableText/20 text-newTableText rounded-[2px] px-[4px] py-[1px]"
+                          className="text-[10px] bg-newTableText/20 text-newTableText rounded-[2px] px-[4px] py-px"
                         >
                           {cap}
                         </span>

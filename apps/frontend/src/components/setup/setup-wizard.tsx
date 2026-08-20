@@ -211,7 +211,7 @@ export function SetupWizard() {
           type="button"
           onClick={handleBack}
           disabled={currentStep === 0}
-          className="!bg-transparent border border-newTableBorder text-textColor"
+          className="bg-transparent! border border-newTableBorder text-textColor"
         >
           {t('back', 'Back')}
         </Button>
@@ -221,7 +221,7 @@ export function SetupWizard() {
             <Button
               type="button"
               onClick={handleSkip}
-              className="!bg-transparent border border-newTableBorder text-textColor"
+              className="bg-transparent! border border-newTableBorder text-textColor"
             >
               {t('skip', 'Skip')}
             </Button>

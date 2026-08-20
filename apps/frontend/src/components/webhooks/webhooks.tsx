@@ -252,7 +252,7 @@ export const Webhooks: FC = () => {
             value={search}
             onChange={(e) => { setSearch(e.target.value); setPage(0); }}
             placeholder={t('search_webhooks', 'Search by URL or name...')}
-            className="w-full px-[12px] py-[8px] bg-newBgColor border border-newTableBorder rounded-[8px] text-[14px] outline-none"
+            className="w-full px-[12px] py-[8px] bg-newBgColor border border-newTableBorder rounded-[8px] text-[14px] outline-hidden"
           />
         </div>
         <Button onClick={addWebhook()}>{t('add_webhook', 'Add webhook')}</Button>
@@ -292,7 +292,7 @@ export const Webhooks: FC = () => {
         {!isLoading && data && data.length > 0 && (
           <>
             <div className="min-w-[700px]">
-            <div className="grid grid-cols-[2fr,1.5fr,1fr,1fr,1fr] gap-[12px] text-[12px] text-newTableText uppercase font-medium pb-[12px] border-b border-newTableBorder items-center">
+            <div className="grid grid-cols-[2fr_1.5fr_1fr_1fr_1fr] gap-[12px] text-[12px] text-newTableText uppercase font-medium pb-[12px] border-b border-newTableBorder items-center">
               <div>{t('url', 'URL')}</div>
               <div>{t('events', 'Events')}</div>
               <div>{t('status', 'Status:')}</div>
@@ -302,7 +302,7 @@ export const Webhooks: FC = () => {
 
             <div className="flex flex-col">
               {filtered.map((w: any) => (
-                <div key={w.id} className="grid grid-cols-[2fr,1.5fr,1fr,1fr,1fr] gap-[12px] py-[12px] border-b border-newTableBorder/50 items-center text-[14px]">
+                <div key={w.id} className="grid grid-cols-[2fr_1.5fr_1fr_1fr_1fr] gap-[12px] py-[12px] border-b border-newTableBorder/50 items-center text-[14px]">
                   <div className="truncate text-newTableText" title={w.url}>{w.url}</div>
                   <div className="flex flex-wrap gap-[4px]">
                     {(w.events || ['post.published']).slice(0, 3).map((ev: string) => (

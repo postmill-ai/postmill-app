@@ -23,12 +23,12 @@ const FindingCard: FC<{ finding: ContentFinding }> = ({ finding }) => {
   const t = useT();
   const outperforms = finding.ratio >= 1;
   const multiple = finding.ratio.toFixed(1);
-  const ratioColor = outperforms ? 'text-[var(--positive,#32d583)]' : 'text-amber-600';
+  const ratioColor = outperforms ? 'text-(--positive,#32d583)' : 'text-amber-600';
 
   return (
     <Link
       href={bucketLink(finding)}
-      className="flex items-center justify-between gap-[12px] p-[16px] bg-newBgColorInner border border-newTableBorder rounded-[12px] hover:border-designerAccent/50 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-designerAccent/60"
+      className="flex items-center justify-between gap-[12px] p-[16px] bg-newBgColorInner border border-newTableBorder rounded-[12px] hover:border-designerAccent/50 transition-colors focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-designerAccent/60"
     >
       <div className="min-w-0">
         <div className="text-[14px] font-medium text-textColor">{finding.label}</div>

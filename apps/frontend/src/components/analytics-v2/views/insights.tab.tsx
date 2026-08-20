@@ -42,7 +42,7 @@ export const InsightsTab: FC<InsightsTabProps> = ({ integrations, section }) => 
           <a
             key={p.id}
             href={`#insights-${p.id}`}
-            className="px-[12px] py-[6px] text-[13px] font-medium rounded-full border border-newTableBorder text-newTableText hover:text-textColor hover:border-designerAccent/50 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-designerAccent/60"
+            className="px-[12px] py-[6px] text-[13px] font-medium rounded-full border border-newTableBorder text-newTableText hover:text-textColor hover:border-designerAccent/50 transition-colors focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-designerAccent/60"
           >
             {p.label}
           </a>

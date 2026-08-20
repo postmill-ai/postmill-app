@@ -20,7 +20,7 @@ export function EditorShell({
 }) {
   return (
     <div className="flex flex-col h-full">
-      <div className="flex items-center justify-between h-12 flex-shrink-0 px-4 border-b border-studioBorder">
+      <div className="flex items-center justify-between h-12 shrink-0 px-4 border-b border-studioBorder">
         <h2 className="text-sm font-medium text-textColor">{title}</h2>
         {toolbar && <div className="flex items-center gap-2">{toolbar}</div>}
       </div>
@@ -31,7 +31,7 @@ export function EditorShell({
           {children}
         </div>
         {inspector && (
-          <div className="w-72 flex-shrink-0 border-l border-studioBorder overflow-y-auto bg-newBgColorInner mobile:w-full mobile:border-l-0 mobile:border-t mobile:max-h-[45%]">
+          <div className="w-72 shrink-0 border-l border-studioBorder overflow-y-auto bg-newBgColorInner mobile:w-full mobile:border-l-0 mobile:border-t mobile:max-h-[45%]">
             {inspector}
           </div>
         )}

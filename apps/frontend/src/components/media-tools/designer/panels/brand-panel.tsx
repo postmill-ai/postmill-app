@@ -354,7 +354,7 @@ export const BrandPanel: FC<BrandPanelProps> = ({ store }) => {
           onChange={() => {
             // Brand selection is informational; palette/fonts are reactive.
           }}
-          className="w-full h-[34px] px-[8px] rounded-[6px] bg-newBgColor border border-studioBorder text-[13px] text-textColor outline-none focus:border-designerAccent"
+          className="w-full h-[34px] px-[8px] rounded-[6px] bg-newBgColor border border-studioBorder text-[13px] text-textColor outline-hidden focus:border-designerAccent"
         >
           {brands.map((brand) => (
             <option key={brand.id} value={brand.id}>
@@ -553,7 +553,7 @@ export const BrandPanel: FC<BrandPanelProps> = ({ store }) => {
                 state.pushHistory();
                 toaster.show(t('designer_intro_added_to_timeline', 'Intro added to timeline'), 'success');
               }}
-              className="flex-1 px-2 py-1.5 rounded text-[11px] border border-designerAccent/30 text-btnPrimaryAccent hover:bg-designerAccent/10 disabled:opacity-40"
+              className="flex-1 px-2 py-1.5 rounded-sm text-[11px] border border-designerAccent/30 text-btnPrimaryAccent hover:bg-designerAccent/10 disabled:opacity-40"
             >
               {t('designer_apply_intro', 'Apply intro')}
             </button>
@@ -584,7 +584,7 @@ export const BrandPanel: FC<BrandPanelProps> = ({ store }) => {
                 state.pushHistory();
                 toaster.show(t('designer_outro_added_to_timeline', 'Outro added to timeline'), 'success');
               }}
-              className="flex-1 px-2 py-1.5 rounded text-[11px] border border-designerAccent/30 text-btnPrimaryAccent hover:bg-designerAccent/10 disabled:opacity-40"
+              className="flex-1 px-2 py-1.5 rounded-sm text-[11px] border border-designerAccent/30 text-btnPrimaryAccent hover:bg-designerAccent/10 disabled:opacity-40"
             >
               {t('designer_apply_outro', 'Apply outro')}
             </button>

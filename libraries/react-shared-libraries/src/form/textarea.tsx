@@ -50,7 +50,7 @@ export const Textarea: FC<
       <textarea
         {...(disableForm ? {} : form.register(props.name))}
         className={clsx(
-          'bg-input min-h-[150px] p-[16px] outline-none border-newTableBorder border rounded-[8px] text-inputText placeholder-inputText focus:border-btnPrimary focus:ring-2 ring-btnPrimary/20',
+          'bg-input min-h-[150px] p-[16px] outline-hidden border-newTableBorder border rounded-[8px] text-inputText placeholder-inputText focus:border-btnPrimary focus:ring-2 ring-btnPrimary/20',
           className
         )}
         {...rest}

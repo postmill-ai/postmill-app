@@ -75,7 +75,7 @@ export const TemplateFillPanel: FC<TemplateFillPanelProps> = ({ store }) => {
                 store.getState().updateElement(field.elementId, fillSlot('text', e.target.value))
               }
               onBlur={() => store.getState().pushHistory('Fill slot')}
-              className="h-[30px] px-2 rounded-md bg-newBgColor border border-studioBorder text-[12px] text-textColor outline-none focus:border-designerAccent"
+              className="h-[30px] px-2 rounded-md bg-newBgColor border border-studioBorder text-[12px] text-textColor outline-hidden focus:border-designerAccent"
             />
           )}
 

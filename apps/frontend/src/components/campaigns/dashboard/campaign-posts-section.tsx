@@ -272,7 +272,7 @@ export const CampaignPostsSection: FC<{ campaignId: string; posts: CampaignPost[
       <div className="flex items-center justify-between gap-[8px]">
         <h3 className="text-[16px] font-semibold text-textColor">{t('posts', 'Posts')}</h3>
         <div className="flex items-center gap-[8px]">
-          <Button onClick={openNewDraft} className="!h-[32px] !px-[12px] text-[13px]">
+          <Button onClick={openNewDraft} className="h-[32px]! px-[12px]! text-[13px]">
             {t('new_draft', 'New Draft')}
           </Button>
           {viewToggle('flex lg:hidden')}
@@ -286,13 +286,13 @@ export const CampaignPostsSection: FC<{ campaignId: string; posts: CampaignPost[
             value={search}
             onChange={(e) => update(setSearch)(e.target.value)}
             placeholder={t('search_posts', 'Search content or channel...')}
-            className="flex-1 min-w-[160px] px-[12px] py-[8px] bg-newBgColorInner border border-newTableBorder rounded-[8px] text-[14px] outline-none"
+            className="flex-1 min-w-[160px] px-[12px] py-[8px] bg-newBgColorInner border border-newTableBorder rounded-[8px] text-[14px] outline-hidden"
           />
           <select
             value={status}
             onChange={(e) => update(setStatus)(e.target.value as typeof status)}
             aria-label={t('status', 'Status:')}
-            className="px-[12px] py-[8px] bg-newBgColorInner border border-newTableBorder rounded-[8px] text-[14px] outline-none"
+            className="px-[12px] py-[8px] bg-newBgColorInner border border-newTableBorder rounded-[8px] text-[14px] outline-hidden"
           >
             <option value="all">{t('all_statuses', 'All statuses')}</option>
             <option value="DRAFT">{t('draft', 'Draft')}</option>
@@ -304,7 +304,7 @@ export const CampaignPostsSection: FC<{ campaignId: string; posts: CampaignPost[
               value={channel}
               onChange={(e) => update(setChannel)(e.target.value)}
               aria-label={t('channel', 'Channel')}
-              className="px-[12px] py-[8px] bg-newBgColorInner border border-newTableBorder rounded-[8px] text-[14px] outline-none max-w-[180px]"
+              className="px-[12px] py-[8px] bg-newBgColorInner border border-newTableBorder rounded-[8px] text-[14px] outline-hidden max-w-[180px]"
             >
               <option value="">{t('all_channels', 'All channels')}</option>
               {channels.map(([id, name]) => (
@@ -318,7 +318,7 @@ export const CampaignPostsSection: FC<{ campaignId: string; posts: CampaignPost[
             value={sort}
             onChange={(e) => update(setSort)(e.target.value as typeof sort)}
             aria-label={t('sort_by', 'Sort by')}
-            className="px-[12px] py-[8px] bg-newBgColorInner border border-newTableBorder rounded-[8px] text-[14px] outline-none"
+            className="px-[12px] py-[8px] bg-newBgColorInner border border-newTableBorder rounded-[8px] text-[14px] outline-hidden"
           >
             <option value="newest">{t('sort_newest', 'Newest')}</option>
             <option value="oldest">{t('sort_oldest', 'Oldest')}</option>
@@ -406,7 +406,7 @@ export const CampaignPostsSection: FC<{ campaignId: string; posts: CampaignPost[
               'Create a draft to start building this campaign.'
             ),
             action: (
-              <Button onClick={openNewDraft} className="!h-[32px] !px-[12px] text-[13px]">
+              <Button onClick={openNewDraft} className="h-[32px]! px-[12px]! text-[13px]">
                 {t('new_draft', 'New Draft')}
               </Button>
             ),

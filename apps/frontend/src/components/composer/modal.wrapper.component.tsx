@@ -44,7 +44,7 @@ export const ModalWrapperComponent: FC<{
   return (
     <>
       <div className="relative">
-        <div className="absolute -top-[30px] left-0" ref={ref} />
+        <div className="absolute top-[-30px] left-0" ref={ref} />
       </div>
       <div
         className="p-[32px] flex flex-col text-newTextColor bg-newBgColorInner rounded-[24px]"

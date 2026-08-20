@@ -15,7 +15,7 @@ export const Testimonial: FC<{
           <SafeImage src={picture} alt={name} width={36} height={36} />
         </div>
 
-        <div className="flex flex-col -mt-[4px] min-w-0">
+        <div className="flex flex-col mt-[-4px] min-w-0">
           <div className="text-[16px] font-[700] truncate">{name}</div>
           <div className="text-[11px] font-[400] text-[#D1D1D1]">
             {description}

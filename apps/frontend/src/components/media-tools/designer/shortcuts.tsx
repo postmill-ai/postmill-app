@@ -38,7 +38,7 @@ export const ShortcutsOverlay: FC<{ onClose: () => void }> = ({ onClose }) => {
         {SHORTCUTS.map((s) => (
           <div key={s.keys} className="flex items-center justify-between text-[12px]">
             <span className="text-textColor/70">{t(s.labelKey, s.label)}</span>
-            <kbd className="px-2 py-0.5 rounded bg-studioBorder/40 border border-studioBorder text-textColor/80 text-[11px]">
+            <kbd className="px-2 py-0.5 rounded-sm bg-studioBorder/40 border border-studioBorder text-textColor/80 text-[11px]">
               {s.keys}
             </kbd>
           </div>

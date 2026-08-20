@@ -48,7 +48,7 @@ export const OrganizationSelector: FC<{ asOpenSelect?: boolean }> = ({
       <div className="hover:text-newTextColor">
         <div className="group text-[12px] relative">
           {asOpenSelect && (
-            <div className="bg-btnPrimary !flex !relative max-w-[500px] mx-auto py-[12px] px-[12px]">{t('select_organization', 'Select organization')}</div>
+            <div className="bg-btnPrimary flex! relative! max-w-[500px] mx-auto py-[12px] px-[12px]">{t('select_organization', 'Select organization')}</div>
           )}
           {!asOpenSelect && (
             <div className="flex items-center">
@@ -70,8 +70,8 @@ export const OrganizationSelector: FC<{ asOpenSelect?: boolean }> = ({
           {orgs.length > 1 && (
             <div
               className={clsx(
-                'hidden py-[12px] px-[12px] group-hover:flex absolute top-[100%] end-0 bg-third border-newTableBorder border gap-[12px] cursor-pointer flex-col',
-                asOpenSelect ? '!flex !relative max-w-[500px] mx-auto mb-[10px]' : '',
+                'hidden py-[12px] px-[12px] group-hover:flex absolute top-full end-0 bg-third border-newTableBorder border gap-[12px] cursor-pointer flex-col',
+                asOpenSelect ? 'flex! relative! max-w-[500px] mx-auto mb-[10px]' : '',
               )}
             >
               {orgs.map((org: { name: string; id: string }) => (
@@ -83,7 +83,7 @@ export const OrganizationSelector: FC<{ asOpenSelect?: boolean }> = ({
           )}
         </div>
       </div>
-      {!asOpenSelect && <div className="w-[1px] h-[20px] bg-blockSeparator" />}
+      {!asOpenSelect && <div className="w-px h-[20px] bg-blockSeparator" />}
     </>
   );
 };

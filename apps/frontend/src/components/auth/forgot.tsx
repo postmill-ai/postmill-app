@@ -57,7 +57,7 @@ export function Forgot() {
               </div>
               <div className="text-center mt-6">
                 <div className="w-full flex">
-                  <Button type="submit" className="flex-1 !h-[52px] !rounded-[10px]" loading={loading}>
+                  <Button type="submit" className="flex-1 h-[52px]! rounded-[10px]!" loading={loading}>
                     {t(
                       'send_password_reset_email',
                       'Send Password Reset Email'

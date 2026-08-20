@@ -167,7 +167,7 @@ export const ToolRail: FC<ToolRailProps> = ({
               {hasFlyout && (
                 <span
                   aria-hidden="true"
-                  className="absolute bottom-[3px] end-[3px] w-0 h-0 border-l-[4px] border-l-transparent border-b-[4px] border-b-current opacity-70"
+                  className="absolute bottom-[3px] inset-e-[3px] w-0 h-0 border-l-4 border-l-transparent border-b-4 border-b-current opacity-70"
                 />
               )}
             </button>
@@ -184,7 +184,7 @@ export const ToolRail: FC<ToolRailProps> = ({
                 // the rail sits in a z-30 stacking context, so a z-40 child
                 // still loses to the LATER z-30 sibling rail beside it and the
                 // flyout was painted over (visibly cut off at its left edge).
-                className="fixed z-[400] min-w-[212px] py-1 rounded-lg border border-studioBorder bg-newBgColorInner shadow-2xl"
+                className="fixed z-400 min-w-[212px] py-1 rounded-lg border border-studioBorder bg-newBgColorInner shadow-2xl"
               >
                 {tools.map((tool) => {
                   const RowIcon = tool.icon;

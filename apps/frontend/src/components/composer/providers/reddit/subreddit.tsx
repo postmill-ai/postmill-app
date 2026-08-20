@@ -253,7 +253,7 @@ export const Subreddit: FC<{
             }}
           />
           {!!results.length && !loading && (
-            <div className="z-[400] w-full absolute bg-input -mt-[20px] outline-none border-newTableBorder border cursor-pointer">
+            <div className="z-400 w-full absolute bg-input mt-[-20px] outline-hidden border-newTableBorder border cursor-pointer">
               {results.map((r: { id: string; name: string }) => (
                 <div
                   onClick={setResult(r)}

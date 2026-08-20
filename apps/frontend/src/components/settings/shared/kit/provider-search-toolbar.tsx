@@ -38,7 +38,7 @@ export const ProviderSearchToolbar: React.FC<ProviderSearchToolbarProps> = ({
           value={search}
           onChange={(e) => onSearch(e.target.value)}
           placeholder={placeholder || t('search_providers', 'Search providers...')}
-          className="w-full px-[12px] py-[8px] pr-[36px] bg-newBgColor border border-newTableBorder rounded-[8px] text-[14px] outline-none [&::-webkit-search-cancel-button]:appearance-none"
+          className="w-full px-[12px] py-[8px] pr-[36px] bg-newBgColor border border-newTableBorder rounded-[8px] text-[14px] outline-hidden [&::-webkit-search-cancel-button]:appearance-none"
         />
         {search && (
           <button

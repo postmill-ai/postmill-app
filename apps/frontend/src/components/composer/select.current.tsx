@@ -99,7 +99,7 @@ export const SelectCurrent: FC = () => {
 
   return (
     <>
-      <div className="select-none left-0 absolute w-full z-[100] px-[20px]">
+      <div className="select-none left-0 absolute w-full z-100 px-[20px]">
         <div
           ref={contentRef}
           className={clsx(
@@ -138,7 +138,7 @@ export const SelectCurrent: FC = () => {
               <button
                 type="button"
                 onClick={removeSocial(integration)}
-                className="absolute z-10 justify-center items-center flex w-[8px] h-[8px] -top-[1px] -start-[3px] bg-red-500 rounded-full text-white text-[8px] border-0 p-0 cursor-pointer"
+                className="absolute z-10 justify-center items-center flex w-[8px] h-[8px] -top-px inset-s-[-3px] bg-red-500 rounded-full text-white text-[8px] border-0 p-0 cursor-pointer"
               >
                 X
               </button>
@@ -172,7 +172,7 @@ export const SelectCurrent: FC = () => {
                   <Image
                     alt="YouTube"
                     src="/icons/platforms/youtube.svg"
-                    className="absolute z-10 bottom-[2px] end-[2px] min-w-[12px]"
+                    className="absolute z-10 bottom-[2px] inset-e-[2px] min-w-[12px]"
                     width={12}
                     height={12}
                     unoptimized
@@ -180,7 +180,7 @@ export const SelectCurrent: FC = () => {
                 ) : (
                   <SafeImage
                     src={`/icons/platforms/${integration.identifier}.png`}
-                    className="min-w-[12px] min-h-[12px] rounded-[3px] absolute z-10 bottom-[6px] end-[6px]"
+                    className="min-w-[12px] min-h-[12px] rounded-[3px] absolute z-10 bottom-[6px] inset-e-[6px]"
                     alt={integration.identifier}
                     width={12}
                     height={12}
@@ -215,7 +215,7 @@ export const IsGlobal: FC<{ id: string }> = ({ id }) => {
         'no_longer_global_mode',
         'No longer in global mode'
       )}
-      className="w-[8px] h-[8px] bg-[#2b5cd3] -top-[1px] -end-[3px] absolute rounded-full"
+      className="w-[8px] h-[8px] bg-[#2b5cd3] -top-px inset-e-[-3px] absolute rounded-full"
     />
   );
 };

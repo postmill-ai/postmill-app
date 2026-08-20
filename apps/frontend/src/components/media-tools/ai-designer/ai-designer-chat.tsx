@@ -498,7 +498,7 @@ export const AiDesignerChat: React.FC<AiDesignerChatProps> = ({
               secondary
               disabled={cancelSent}
               onClick={handleCancel}
-              className="!h-[28px] !px-[12px] text-[12px]"
+              className="h-[28px]! px-[12px]! text-[12px]"
             >
               {t('cancel', 'Cancel')}
             </Button>
@@ -529,7 +529,7 @@ export const AiDesignerChat: React.FC<AiDesignerChatProps> = ({
             onKeyDown={handleKeyDown}
             placeholder={t('type_a_message_ellipsis', 'Type a message…')}
             rows={2}
-            className="flex-1 min-h-[48px] max-h-[160px] rounded-lg border border-studioBorder bg-newBgColorInner p-3 text-[14px] text-textColor outline-none focus:border-designerAccent resize-none"
+            className="flex-1 min-h-[48px] max-h-[160px] rounded-lg border border-studioBorder bg-newBgColorInner p-3 text-[14px] text-textColor outline-hidden focus:border-designerAccent resize-none"
           />
           <Button
             type="button"

@@ -38,7 +38,7 @@ const AiSearchModal: FC<{ close: () => void }> = (props) => {
           height="16"
           viewBox="0 0 16 16"
           fill="none"
-          className="absolute left-[12px] top-[50%] -translate-y-[50%] text-newTextColor/60"
+          className="absolute left-[12px] top-[50%] translate-y-[-50%] text-newTextColor/60"
         >
           <circle
             cx="7"
@@ -61,7 +61,7 @@ const AiSearchModal: FC<{ close: () => void }> = (props) => {
             'search_past_content',
             'Search past content semantically...'
           )}
-          className="bg-input w-full pl-[36px] pr-[12px] h-[42px] outline-none border-newTableBorder border rounded-[6px] text-inputText placeholder-inputText text-[14px]"
+          className="bg-input w-full pl-[36px] pr-[12px] h-[42px] outline-hidden border-newTableBorder border rounded-[6px] text-inputText placeholder-inputText text-[14px]"
         />
       </div>
 

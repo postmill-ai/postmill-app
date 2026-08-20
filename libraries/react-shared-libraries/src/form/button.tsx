@@ -52,7 +52,7 @@ const ReactLoading = ({ width = 20, height = 20 }: { type?: string; color?: stri
           danger ? 'bg-red-500/10 text-red-400 hover:bg-red-500/20 active:scale-[0.98]'
           : secondary ? 'bg-btnSimple text-btnText border border-newTableBorder hover:bg-boxHover'
           : 'bg-btnPrimary text-white hover:bg-btnPrimary/90 active:scale-[0.98]'
-        } px-[20px] h-[40px] text-[14px] font-[500] rounded-[8px] cursor-pointer items-center justify-center flex relative transition-all duration-150 focus-visible:ring-2 ring-btnPrimary/40 outline-none`,
+        } px-[20px] h-[40px] text-[14px] font-[500] rounded-[8px] cursor-pointer items-center justify-center flex relative transition-all duration-150 focus-visible:ring-2 ring-btnPrimary/40 outline-hidden`,
         props?.className
       )}
     >

@@ -170,7 +170,7 @@ export const BulkToolbar: FC<{
 
       {showMoveDialog && (
         <div
-          className="fixed inset-0 z-[1000] flex items-center justify-center bg-black/50"
+          className="fixed inset-0 z-1000 flex items-center justify-center bg-black/50"
           role="button"
           tabIndex={0}
           aria-label={t('close_move_dialog', 'Close move dialog')}

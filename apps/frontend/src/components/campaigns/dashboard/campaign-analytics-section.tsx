@@ -111,7 +111,7 @@ export const CampaignAnalyticsSection: FC<CampaignAnalyticsSectionProps> = ({
             <div className="text-[12px] font-medium text-newTableText mb-[8px]">
               {metricLabelT(primary.metric, t)}
             </div>
-            <div className="w-full aspect-[16/9] sm:aspect-[21/9] max-h-[320px]">
+            <div className="w-full aspect-16/9 sm:aspect-[21/9] max-h-[320px]">
               <LineChart series={primary.series} height={300} />
             </div>
           </div>
@@ -121,7 +121,7 @@ export const CampaignAnalyticsSection: FC<CampaignAnalyticsSectionProps> = ({
               <div className="text-[12px] font-medium text-newTableText mb-[8px]">
                 {t('by_channel', 'By Channel')}
               </div>
-              <div className="w-full aspect-[4/3] max-h-[260px]">
+              <div className="w-full aspect-4/3 max-h-[260px]">
                 <BarChart labels={channelBars.labels} values={channelBars.values} height={250} />
               </div>
             </div>

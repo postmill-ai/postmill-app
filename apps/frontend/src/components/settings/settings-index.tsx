@@ -29,7 +29,7 @@ import {
 type Tone = 'ready' | 'attention' | 'neutral';
 
 const DOT: Record<Tone, string> = {
-  ready: 'bg-[var(--positive,#32d583)]',
+  ready: 'bg-(--positive,#32d583)',
   attention: 'bg-amber-500',
   neutral: 'bg-newTableText',
 };
@@ -50,7 +50,7 @@ const SettingsCard: React.FC<{
     href={item.href}
     className="group flex items-start gap-[12px] rounded-[12px] border border-newTableBorder bg-newBgColorInner p-[16px] hover:border-[#2B5CD3]/50 transition-colors"
   >
-    <span className="mt-[1px] w-[18px] h-[18px] shrink-0 flex items-center justify-center text-newTableText group-hover:text-btnPrimaryAccent transition-colors">
+    <span className="mt-px w-[18px] h-[18px] shrink-0 flex items-center justify-center text-newTableText group-hover:text-btnPrimaryAccent transition-colors">
       {item.icon}
     </span>
     <span className="min-w-0 flex flex-col gap-[5px]">

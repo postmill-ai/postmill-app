@@ -2,6 +2,7 @@ import { MantineWrapper } from '@postmill-ai/react/helpers/mantine.wrapper';
 
 export const dynamic = 'force-dynamic';
 export const metadata = { title: { default: 'Postmill', template: '%s' } };
+import '../tailwind.css';
 import '../global.scss';
 import 'react-tooltip/dist/react-tooltip.css';
 import '@copilotkit/react-ui/styles.css';
@@ -25,7 +26,7 @@ export default async function AppLayout({ children }: { children: ReactNode }) {
         <link rel="icon" href="/favicon.ico" sizes="any" />
       </head>
       <body
-        className={clsx(jakartaSans.className, 'dark text-primary !bg-primary')}
+        className={clsx(jakartaSans.className, 'dark text-primary bg-primary!')}
       >
         <VariableContextComponent
           language="en"

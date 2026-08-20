@@ -192,7 +192,7 @@ export const RepliesFilterBar: FC<RepliesFilterBarProps> = ({
     <div
       aria-hidden={!open}
       inert={!open}
-      className={clsx('fixed inset-0 z-[300] flex justify-end', !open && 'pointer-events-none')}
+      className={clsx('fixed inset-0 z-300 flex justify-end', !open && 'pointer-events-none')}
     >
       <div
         className={clsx(
@@ -256,7 +256,7 @@ export const RepliesFilterBar: FC<RepliesFilterBarProps> = ({
                 checked={unreadOnly}
                 onChange={(e) => onUnreadChange(e.target.checked)}
               />
-              <div className="relative w-[44px] h-[24px] shrink-0 bg-newTableBorder peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:start-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-[20px] after:w-[20px] after:transition-all peer-checked:bg-btnPrimary" />
+              <div className="relative w-[44px] h-[24px] shrink-0 bg-newTableBorder peer-focus:outline-hidden rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:inset-s-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-[20px] after:w-[20px] after:transition-all peer-checked:bg-btnPrimary" />
               {t('comment_inbox.filter_unread_only', 'Unread only')}
             </label>
           </Section>
@@ -342,7 +342,7 @@ export const RepliesFilterBar: FC<RepliesFilterBarProps> = ({
               <select
                 value={assigneeId || ''}
                 onChange={(e) => onAssigneeChange(e.target.value || undefined)}
-                className="w-full bg-newBgColorInner border border-newTableBorder rounded-[8px] px-[10px] h-[38px] text-[13px] text-textColor outline-none"
+                className="w-full bg-newBgColorInner border border-newTableBorder rounded-[8px] px-[10px] h-[38px] text-[13px] text-textColor outline-hidden"
               >
                 <option value="">{t('comment_inbox.filter_all_assignees', 'Anyone')}</option>
                 {teamMembers.map((m) => (
@@ -434,7 +434,7 @@ export const RepliesFilterBar: FC<RepliesFilterBarProps> = ({
           />
         </svg>
         {appliedCount > 0 && (
-          <span className="absolute -top-[6px] -end-[6px] min-w-[18px] h-[18px] px-[4px] rounded-full bg-[#2B5CD3] text-white text-[11px] font-[600] leading-[18px] text-center">
+          <span className="absolute top-[-6px] inset-e-[-6px] min-w-[18px] h-[18px] px-[4px] rounded-full bg-[#2B5CD3] text-white text-[11px] font-[600] leading-[18px] text-center">
             {appliedCount}
           </span>
         )}

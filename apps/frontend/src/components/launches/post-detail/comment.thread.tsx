@@ -178,17 +178,17 @@ const CommentItem: FC<{
             title={statusLabels[currentStatus] || currentStatus}
           />
           {sentimentLabel && (
-            <span className={`text-[10px] px-[6px] py-[1px] rounded-full border ${sentimentColors[sentimentLabel] || sentimentColors.neutral}`}>
+            <span className={`text-[10px] px-[6px] py-px rounded-full border ${sentimentColors[sentimentLabel] || sentimentColors.neutral}`}>
               {t(`sentiment_${sentimentLabel}`, sentimentLabel)}
             </span>
           )}
           {priorityLabel && (
-            <span className={`text-[10px] px-[6px] py-[1px] rounded-full border ${priorityColors[priorityLabel] || priorityColors.medium}`}>
+            <span className={`text-[10px] px-[6px] py-px rounded-full border ${priorityColors[priorityLabel] || priorityColors.medium}`}>
               {t(`priority_${priorityLabel}`, priorityLabel)}
             </span>
           )}
         </div>
-        <div className="text-[13px] mt-[2px] break-words whitespace-pre-wrap">
+        <div className="text-[13px] mt-[2px] wrap-break-word whitespace-pre-wrap">
           {comment.content}
         </div>
         <div className="flex items-center gap-[12px] mt-[4px]">
@@ -228,7 +228,7 @@ const CommentItem: FC<{
               value={assignInput}
               onChange={(e) => setAssignInput(e.target.value)}
               placeholder={t('assignee_placeholder', 'Assignee ID...')}
-              className="flex-1 bg-newTableHeader border border-newTableBorder rounded-[4px] px-[8px] py-[4px] text-[12px] text-textColor outline-none"
+              className="flex-1 bg-newTableHeader border border-newTableBorder rounded-[4px] px-[8px] py-[4px] text-[12px] text-textColor outline-hidden"
             />
             <button
               type="button"

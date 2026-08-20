@@ -24,7 +24,7 @@ interface PanelSkeletonGridProps {
 export const PanelSkeletonGrid: FC<PanelSkeletonGridProps> = ({
   count = 6,
   columnsClassName = 'grid-cols-2',
-  aspectClassName = 'aspect-[4/3]',
+  aspectClassName = 'aspect-4/3',
 }) => {
   const t = useT();
   return (

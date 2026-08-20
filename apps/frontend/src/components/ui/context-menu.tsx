@@ -150,7 +150,7 @@ export const ContextMenu: FC<ContextMenuProps> = ({
       onKeyDown={onMenuKeyDown}
       onContextMenu={(e) => e.preventDefault()}
       style={{ left: pos.left, top: pos.top, width }}
-      className="fixed z-[1000] py-[4px] bg-newBgColorInner border border-newTableBorder rounded-[8px] shadow-menu"
+      className="fixed z-1000 py-[4px] bg-newBgColorInner border border-newTableBorder rounded-[8px] shadow-menu"
     >
       {items.map((item, i) => {
         if (!isAction(item)) {
@@ -172,7 +172,7 @@ export const ContextMenu: FC<ContextMenuProps> = ({
             }}
             className={clsx(
               'w-full text-left px-[12px] py-[8px] text-[13px] transition-colors',
-              'focus-visible:outline-none focus:bg-boxHover',
+              'focus-visible:outline-hidden focus:bg-boxHover',
               item.disabled
                 ? 'opacity-40 cursor-not-allowed'
                 : 'hover:bg-boxHover cursor-pointer',

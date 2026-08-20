@@ -114,7 +114,7 @@ export const FacebookPreview: FC<{
           <img
             src={integration?.picture || '/no-picture.jpg'}
             alt={t('alt_social', 'social')}
-            className="rounded-full relative z-[2] w-[36px] h-[36px]"
+            className="rounded-full relative z-2 w-[36px] h-[36px]"
           />
         </div>
         <div className="flex flex-col leading-[18px]">
@@ -143,7 +143,7 @@ export const FacebookPreview: FC<{
         content={renderContent?.[0]?.text || ''}
       />
       {!!renderContent?.[0]?.images?.length && (
-        <div className="h-[280px] -mx-[15px] overflow-hidden flex">
+        <div className="h-[280px] mx-[-15px] overflow-hidden flex">
           {renderContent?.[0]?.images.map((image) => (
             <a
               key={image.path}
@@ -260,7 +260,7 @@ export const FacebookPreview: FC<{
                   <img
                     src={integration?.picture || '/no-picture.jpg'}
                     alt={t('alt_social', 'social')}
-                    className="rounded-full relative z-[2] h-[34px] w-[34px]"
+                    className="rounded-full relative z-2 h-[34px] w-[34px]"
                   />
                 </div>
                 <div className="flex flex-col gap-[6px] min-w-[150px]">
@@ -277,7 +277,7 @@ export const FacebookPreview: FC<{
                       content={value.text}
                     />
                     {!!value.images?.length && (
-                      <div className="h-[100px] mt-[12px] -mx-[15px] overflow-hidden flex">
+                      <div className="h-[100px] mt-[12px] mx-[-15px] overflow-hidden flex">
                         {value.images.map((image) => (
                           <a
                             key={image.path}

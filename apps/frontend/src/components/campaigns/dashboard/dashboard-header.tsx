@@ -146,7 +146,7 @@ export const DashboardHeader: FC<DashboardHeaderProps> = ({ campaign, onMutate }
   return (
     <div className="relative flex flex-col gap-[16px] p-[16px] border border-newTableBorder rounded-[12px] bg-newBgColor">
       {/* Pinned to the card's top-right so it never stacks below the content on mobile. */}
-      <div className="absolute top-[16px] right-[16px] z-[10]">
+      <div className="absolute top-[16px] right-[16px] z-10">
         <KebabMenu
           ariaLabel={t('campaign_actions', 'Campaign actions')}
           width={190}

@@ -149,7 +149,7 @@ export const ShortlinkPicker: FC<{
         </div>
       </button>
       {isOpen && (
-        <div className="z-[300] absolute start-0 bottom-[100%] w-[240px] bg-newBgColorInner p-[12px] menu-shadow -translate-y-[10px] flex flex-col">
+        <div className="z-300 absolute start-0 bottom-full w-[240px] bg-newBgColorInner p-[12px] menu-shadow translate-y-[-10px] flex flex-col">
           <button
             type="button"
             onClick={() => {
@@ -157,7 +157,7 @@ export const ShortlinkPicker: FC<{
               setIsOpen(false);
             }}
             className={clsx(
-              'h-[40px] py-[8px] px-[20px] -mx-[12px] hover:bg-newBgColor cursor-pointer flex items-center border-0 bg-transparent text-left',
+              'h-[40px] py-[8px] px-[20px] mx-[-12px] hover:bg-newBgColor cursor-pointer flex items-center border-0 bg-transparent text-left',
               !enabled && 'text-btnPrimaryAccent'
             )}
           >
@@ -171,7 +171,7 @@ export const ShortlinkPicker: FC<{
                 key={provider.identifier}
                 onClick={() => activate(provider.identifier)}
                 className={clsx(
-                  'h-[40px] py-[8px] px-[20px] -mx-[12px] hover:bg-newBgColor cursor-pointer flex flex-col justify-center border-0 bg-transparent text-left',
+                  'h-[40px] py-[8px] px-[20px] mx-[-12px] hover:bg-newBgColor cursor-pointer flex flex-col justify-center border-0 bg-transparent text-left',
                   selected && 'text-btnPrimaryAccent'
                 )}
               >

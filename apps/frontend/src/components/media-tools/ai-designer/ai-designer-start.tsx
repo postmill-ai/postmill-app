@@ -440,7 +440,7 @@ export const AiDesignerStart: React.FC<AiDesignerStartProps> = ({
                 value={customW}
                 onChange={(e) => setCustomW(e.target.value)}
                 placeholder={t('width_abbreviation', 'W')}
-                className="w-24 h-[40px] rounded-lg border border-studioBorder bg-newBgColorInner px-3 text-[14px] text-textColor text-center outline-none focus:border-designerAccent"
+                className="w-24 h-[40px] rounded-lg border border-studioBorder bg-newBgColorInner px-3 text-[14px] text-textColor text-center outline-hidden focus:border-designerAccent"
               />
               <span className="text-textColor/40">×</span>
               <label htmlFor="custom-height" className="sr-only">
@@ -452,7 +452,7 @@ export const AiDesignerStart: React.FC<AiDesignerStartProps> = ({
                 value={customH}
                 onChange={(e) => setCustomH(e.target.value)}
                 placeholder={t('height_abbreviation', 'H')}
-                className="w-24 h-[40px] rounded-lg border border-studioBorder bg-newBgColorInner px-3 text-[14px] text-textColor text-center outline-none focus:border-designerAccent"
+                className="w-24 h-[40px] rounded-lg border border-studioBorder bg-newBgColorInner px-3 text-[14px] text-textColor text-center outline-hidden focus:border-designerAccent"
               />
               <Button
                 type="button"
@@ -514,7 +514,7 @@ export const AiDesignerStart: React.FC<AiDesignerStartProps> = ({
                 id="brandProfileId"
                 value={brandProfileId}
                 onChange={(e) => setBrandProfileId(e.target.value)}
-                className="h-[42px] rounded-[8px] border border-studioBorder bg-newBgColorInner px-[16px] text-[14px] text-textColor outline-none focus:border-designerAccent"
+                className="h-[42px] rounded-[8px] border border-studioBorder bg-newBgColorInner px-[16px] text-[14px] text-textColor outline-hidden focus:border-designerAccent"
               >
                 <option value="">{t('none', 'None')}</option>
                 {brands?.map((brand) => (
@@ -533,7 +533,7 @@ export const AiDesignerStart: React.FC<AiDesignerStartProps> = ({
                 id="aiDesignerStyleId"
                 value={styleId}
                 onChange={(e) => setStyleId(e.target.value)}
-                className="h-[42px] rounded-[8px] border border-studioBorder bg-newBgColorInner px-[16px] text-[14px] text-textColor outline-none focus:border-designerAccent"
+                className="h-[42px] rounded-[8px] border border-studioBorder bg-newBgColorInner px-[16px] text-[14px] text-textColor outline-hidden focus:border-designerAccent"
               >
                 <option value="">{t('let_ai_decide', 'Let AI decide')}</option>
                 {STYLE_PRESETS.map((preset) => (
@@ -607,7 +607,7 @@ export const AiDesignerStart: React.FC<AiDesignerStartProps> = ({
                     <img
                       src={item.thumbnail || item.url}
                       alt=""
-                      className="w-5 h-5 rounded object-cover"
+                      className="w-5 h-5 rounded-sm object-cover"
                     />
                   ) : null}
                   <span className="truncate max-w-[120px]">
@@ -650,7 +650,7 @@ export const AiDesignerStart: React.FC<AiDesignerStartProps> = ({
                   'Describe the design you want…'
                 )}
                 rows={4}
-                className="w-full rounded-lg border border-studioBorder bg-newBgColorInner p-3 text-[14px] text-textColor outline-none focus:border-designerAccent resize-none"
+                className="w-full rounded-lg border border-studioBorder bg-newBgColorInner p-3 text-[14px] text-textColor outline-hidden focus:border-designerAccent resize-none"
               />
             </section>
           )}

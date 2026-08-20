@@ -73,7 +73,7 @@ export const ScheduleTimeline: FC<ScheduleTimelineProps> = ({ upcomingPosts = []
         return (
           <div
             key={day.date}
-            className={`flex-shrink-0 w-[120px] mobile:w-[100px] rounded-[10px] border p-[10px] flex flex-col gap-[8px] ${
+            className={`shrink-0 w-[120px] mobile:w-[100px] rounded-[10px] border p-[10px] flex flex-col gap-[8px] ${
               isGap ? 'border-amber-500/40 bg-amber-500/5' : 'border-newTableBorder bg-newTableHeader'
             }`}
           >

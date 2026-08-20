@@ -181,7 +181,7 @@ export const CampaignCommentsSection: FC<CampaignCommentsSectionProps> = ({
                 type="checkbox"
                 checked={selected.has(comment.id)}
                 onChange={() => toggleSelect(comment.id)}
-                className="mt-[18px] w-[16px] h-[16px] rounded-[4px] accent-btnPrimary flex-shrink-0"
+                className="mt-[18px] w-[16px] h-[16px] rounded-[4px] accent-btnPrimary shrink-0"
               />
               <div className="flex-1 min-w-0">
                 <CommentCard

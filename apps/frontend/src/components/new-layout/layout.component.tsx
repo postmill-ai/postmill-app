@@ -202,7 +202,7 @@ export const LayoutComponent = ({ children }: { children: ReactNode }) => {
                       <div
                         id="left-menu"
                         className={clsx(
-                          'fixed h-full w-[64px] start-[17px] flex flex-1 top-0'
+                          'fixed h-full w-[64px] inset-s-[17px] flex flex-1 top-0'
                         )}
                       >
                         <div className="flex flex-col h-full gap-[32px] flex-1 py-[12px]">
@@ -213,7 +213,7 @@ export const LayoutComponent = ({ children }: { children: ReactNode }) => {
                         </div>
                       </div>
                     </div>
-                    <div className="flex-1 min-w-0 bg-newBgLineColor rounded-[12px] overflow-hidden flex flex-col gap-[1px] blurMe">
+                    <div className="flex-1 min-w-0 bg-newBgLineColor rounded-[12px] overflow-hidden flex flex-col gap-px blurMe">
                       <div className="flex bg-newBgColorInner h-[56px] lg:h-[80px] px-[20px] items-center">
                         <div className="text-[24px] font-[600] flex flex-1 items-center gap-[10px] min-w-0">
                           {/* Mobile: the left rail is hidden, so always show the
@@ -251,7 +251,7 @@ export const LayoutComponent = ({ children }: { children: ReactNode }) => {
                             <div className="flex items-center justify-center w-[36px] h-[36px]">
                               <StreakComponent />
                             </div>
-                            <div className="w-[1px] h-[20px] bg-blockSeparator" />
+                            <div className="w-px h-[20px] bg-blockSeparator" />
                             <OrganizationSelector />
                             <div className="hover:text-newTextColor flex items-center justify-center w-[36px] h-[36px]">
                               <ModeComponent />
@@ -259,7 +259,7 @@ export const LayoutComponent = ({ children }: { children: ReactNode }) => {
                             <div className="flex items-center justify-center w-[36px] h-[36px] empty:hidden">
                               <ChromeExtensionComponent />
                             </div>
-                            <div className="w-[1px] h-[20px] bg-blockSeparator" />
+                            <div className="w-px h-[20px] bg-blockSeparator" />
                             <div className="flex items-center justify-center w-[36px] h-[36px] empty:hidden">
                               <AttachToFeedbackIcon />
                             </div>
@@ -273,7 +273,7 @@ export const LayoutComponent = ({ children }: { children: ReactNode }) => {
                           </div>
                         </div>
                       </div>
-                      <div className="flex flex-1 gap-[1px]">{children}</div>
+                      <div className="flex flex-1 gap-px">{children}</div>
                     </div>
                   </div>
                   <BottomTabBar />
@@ -535,7 +535,7 @@ const CreateMenu = () => {
       </button>
       {open && (
         <div
-          className="absolute right-0 top-[40px] w-[210px] bg-newBgColorInner border border-newTableBorder rounded-[8px] shadow-lg z-[300] py-[4px]"
+          className="absolute right-0 top-[40px] w-[210px] bg-newBgColorInner border border-newTableBorder rounded-[8px] shadow-lg z-300 py-[4px]"
           role="menu"
         >
           <CreateMenuItems

@@ -47,7 +47,7 @@ package to the root manifest unless it is genuinely shared across multiple works
 
 - `apps/backend` — NestJS REST API. Kept **thin**: controllers + module wiring. Real logic lives in
   libraries. Serves the Inngest handler at `/api/inngest`.
-- `apps/frontend` — **Next.js (App Router) + React**, port `4200`. Tailwind 3, Sentry-instrumented.
+- `apps/frontend` — **Next.js (App Router) + React**, port `4200`. Tailwind 4, Sentry-instrumented.
 - `apps/extension` — browser extension. `apps/commands` — CLI commands. `apps/sdk` — published SDK.
 - `libraries/nestjs-libraries` — the bulk of shared server logic, Prisma schema, repositories. **Most
   backend logic belongs here.**

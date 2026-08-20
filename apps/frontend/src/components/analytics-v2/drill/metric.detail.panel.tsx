@@ -36,7 +36,7 @@ export const MetricDetailPanel: FC<MetricDetailPanelProps> = ({ data, open, onCl
           <button
             onClick={onClose}
             aria-label={t('close', 'Close')}
-            className="p-[6px] hover:bg-boxHover rounded-[6px] transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-designerAccent/60"
+            className="p-[6px] hover:bg-boxHover rounded-[6px] transition-colors focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-designerAccent/60"
           >
             <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
               <path d="M4 4L12 12M12 4L4 12" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
@@ -48,7 +48,7 @@ export const MetricDetailPanel: FC<MetricDetailPanelProps> = ({ data, open, onCl
           <div className="flex items-baseline gap-[12px]">
             <div className="text-[40px] font-semibold leading-tight tabular-nums">{displayTotal}</div>
             {data.percentageChange !== 0 && (
-              <div className={`flex items-center gap-[4px] text-[14px] font-medium ${isPositive ? 'text-[var(--positive,#32d583)]' : 'text-[var(--negative,#f97066)]'}`}>
+              <div className={`flex items-center gap-[4px] text-[14px] font-medium ${isPositive ? 'text-(--positive,#32d583)' : 'text-(--negative,#f97066)'}`}>
                 <svg width="12" height="12" viewBox="0 0 12 12" fill="none" className={isPositive ? '' : 'rotate-180'}>
                   <path d="M6 2.5L10 7.5H2L6 2.5Z" fill="currentColor" />
                 </svg>
@@ -99,7 +99,7 @@ export const MetricDetailPanel: FC<MetricDetailPanelProps> = ({ data, open, onCl
           {data.movers.up.length > 0 && data.movers.down.length > 0 && (
             <div className="grid grid-cols-2 gap-[12px]">
               <div>
-                <h4 className="text-[13px] font-medium text-[var(--positive,#32d583)] mb-[6px]">{t('biggest_movers_up', 'Biggest Movers ↑')}</h4>
+                <h4 className="text-[13px] font-medium text-(--positive,#32d583) mb-[6px]">{t('biggest_movers_up', 'Biggest Movers ↑')}</h4>
                 {data.movers.up.slice(0, 3).map((m) => (
                   <div key={m.integrationId} className="text-[12px] py-[4px] flex justify-between">
                     <span className="truncate">{m.name}</span>
@@ -108,7 +108,7 @@ export const MetricDetailPanel: FC<MetricDetailPanelProps> = ({ data, open, onCl
                 ))}
               </div>
               <div>
-                <h4 className="text-[13px] font-medium text-[var(--negative,#f97066)] mb-[6px]">{t('biggest_movers_down', 'Biggest Movers ↓')}</h4>
+                <h4 className="text-[13px] font-medium text-(--negative,#f97066) mb-[6px]">{t('biggest_movers_down', 'Biggest Movers ↓')}</h4>
                 {data.movers.down.slice(0, 3).map((m) => (
                   <div key={m.integrationId} className="text-[12px] py-[4px] flex justify-between">
                     <span className="truncate">{m.name}</span>

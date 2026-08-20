@@ -16,7 +16,7 @@ import { CANONICAL_METRICS } from '../utils';
 import { TabSkeleton, ErrorState } from '../kit/states';
 
 const SELECT_CLS =
-  'px-[10px] py-[7px] bg-newBgColor border border-newTableBorder rounded-[8px] text-[13px] outline-none focus-visible:ring-2 focus-visible:ring-designerAccent/60';
+  'px-[10px] py-[7px] bg-newBgColor border border-newTableBorder rounded-[8px] text-[13px] outline-hidden focus-visible:ring-2 focus-visible:ring-designerAccent/60';
 
 const COMPARATORS: { value: AlertComparator; labelKey: string; fallback: string }[] = [
   { value: 'gte', labelKey: 'alert_cmp_gte', fallback: 'is at or above' },
@@ -152,9 +152,9 @@ export const AlertRulesModal: FC = () => {
                 <button
                   type="button"
                   onClick={() => toggle(rule)}
-                  className={`px-[8px] py-[4px] text-[12px] rounded-[6px] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-designerAccent/60 ${
+                  className={`px-[8px] py-[4px] text-[12px] rounded-[6px] focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-designerAccent/60 ${
                     rule.enabled
-                      ? 'bg-[var(--positive,#32d583)] text-white'
+                      ? 'bg-(--positive,#32d583) text-white'
                       : 'bg-newTableHeader text-newTableText'
                   }`}
                 >
@@ -163,7 +163,7 @@ export const AlertRulesModal: FC = () => {
                 <button
                   type="button"
                   onClick={() => startEdit(rule)}
-                  className="px-[8px] py-[4px] text-[12px] rounded-[6px] bg-newTableHeader text-newTableText hover:text-textColor focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-designerAccent/60"
+                  className="px-[8px] py-[4px] text-[12px] rounded-[6px] bg-newTableHeader text-newTableText hover:text-textColor focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-designerAccent/60"
                 >
                   {t('edit', 'Edit')}
                 </button>
@@ -171,7 +171,7 @@ export const AlertRulesModal: FC = () => {
                   type="button"
                   onClick={() => del(rule.id)}
                   aria-label={t('alert_rule_delete', 'Delete rule')}
-                  className="px-[8px] py-[4px] text-[12px] rounded-[6px] text-amber-600 hover:bg-newTableHeader focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-designerAccent/60"
+                  className="px-[8px] py-[4px] text-[12px] rounded-[6px] text-amber-600 hover:bg-newTableHeader focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-designerAccent/60"
                 >
                   {t('delete', 'Delete')}
                 </button>
@@ -285,7 +285,7 @@ export const AlertRulesModal: FC = () => {
             type="button"
             onClick={submit}
             disabled={saving}
-            className="px-[16px] py-[8px] bg-btnPrimary text-white rounded-[8px] text-[13px] font-medium disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-designerAccent/60"
+            className="px-[16px] py-[8px] bg-btnPrimary text-white rounded-[8px] text-[13px] font-medium disabled:opacity-50 focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-designerAccent/60"
           >
             {editingId ? t('save', 'Save') : t('add', 'Add')}
           </button>
@@ -293,7 +293,7 @@ export const AlertRulesModal: FC = () => {
             <button
               type="button"
               onClick={resetForm}
-              className="px-[16px] py-[8px] bg-newTableHeader text-newTableText rounded-[8px] text-[13px] font-medium focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-designerAccent/60"
+              className="px-[16px] py-[8px] bg-newTableHeader text-newTableText rounded-[8px] text-[13px] font-medium focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-designerAccent/60"
             >
               {t('cancel', 'Cancel')}
             </button>

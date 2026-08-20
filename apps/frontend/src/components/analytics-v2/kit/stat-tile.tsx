@@ -128,7 +128,7 @@ const RichTile: FC<{ kpi: KPI; color: string; onClick?: () => void }> = ({
       {...interactiveProps}
       className={`group bg-newBgColorInner border border-newTableBorder rounded-[12px] overflow-hidden transition-all duration-200 hover:border-newTableText flex flex-col ${
         onClick
-          ? 'cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-designerAccent/60'
+          ? 'cursor-pointer focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-designerAccent/60'
           : ''
       }`}
     >
@@ -140,8 +140,8 @@ const RichTile: FC<{ kpi: KPI; color: string; onClick?: () => void }> = ({
           <div
             className={`flex items-center gap-[4px] text-[13px] mobile:text-[11px] font-medium shrink-0 ${
               isPositive
-                ? 'text-[var(--positive,#32d583)]'
-                : 'text-[var(--negative,#f97066)]'
+                ? 'text-(--positive,#32d583)'
+                : 'text-(--negative,#f97066)'
             }`}
           >
             <svg

@@ -36,7 +36,7 @@ interface KebabMenuProps {
   className?: string;
   /** Trigger button size in px (square). Default 28. */
   size?: number;
-  /** Extra classes for the trigger button (e.g. `!text-white` on a coloured bar). */
+  /** Extra classes for the trigger button (e.g. `text-white!` on a coloured bar). */
   triggerClassName?: string;
   /**
    * Replaces the kebab icon — e.g. a labelled "New Design" button. `size` and
@@ -122,7 +122,7 @@ export const KebabMenu: FC<KebabMenuProps> = ({
           className={clsx(
             // Capped and scrollable: a grouped overflow menu can hold 40+ entries,
             // which would otherwise run straight off the bottom of a phone.
-            'absolute top-[calc(100%+4px)] z-[50] py-[4px] bg-newBgColorInner border border-newTableBorder rounded-[8px] shadow-lg max-h-[70vh] overflow-y-auto',
+            'absolute top-[calc(100%+4px)] z-50 py-[4px] bg-newBgColorInner border border-newTableBorder rounded-[8px] shadow-lg max-h-[70vh] overflow-y-auto',
             align === 'right' ? 'right-0' : 'left-0'
           )}
         >

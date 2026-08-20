@@ -83,7 +83,7 @@ function SaveFolderPicker() {
         id="replicate-save-folder"
         value={saveFolderId || ''}
         onChange={(e) => setSaveFolderId(e.target.value || null)}
-        className="px-2 py-1 rounded-lg border border-studioBorder bg-newBgColorInner text-textColor text-xs focus:outline-none max-w-[140px]"
+        className="px-2 py-1 rounded-lg border border-studioBorder bg-newBgColorInner text-textColor text-xs focus:outline-hidden max-w-[140px]"
       >
         <option value="">{t('files_root_ellipsis', 'Files root…')}</option>
         {folders.map((f) => (
@@ -120,7 +120,7 @@ function MenuSpine({
   const t = useT();
   const mediums = MEDIUM_ORDER.filter((m) => categories.some((c) => c.medium === m));
   return (
-    <div className="w-[52px] flex-shrink-0 flex flex-col items-center pt-2 gap-1 border-r border-studioBorder bg-newBgColorInner z-30">
+    <div className="w-[52px] shrink-0 flex flex-col items-center pt-2 gap-1 border-r border-studioBorder bg-newBgColorInner z-30">
       {mediums.map((m) => {
         const active = openMedium === m || activeMedium === m;
         return (
@@ -261,7 +261,7 @@ function StudioHeader({ activeCategoryLabel }: { activeCategoryLabel?: string })
           : 'text-newTextColor/65';
 
   return (
-    <div className="flex items-center justify-between h-12 flex-shrink-0 border-b border-studioBorder px-3 bg-newBgColorInner">
+    <div className="flex items-center justify-between h-12 shrink-0 border-b border-studioBorder px-3 bg-newBgColorInner">
       <div className="flex items-center gap-2 min-w-0">
         <Logo size={20} className="" />
         <h1 className="text-sm font-semibold text-textColor whitespace-nowrap">
@@ -274,7 +274,7 @@ function StudioHeader({ activeCategoryLabel }: { activeCategoryLabel?: string })
       </div>
       <div className="flex items-center gap-3">
         <SaveFolderPicker />
-        <span className="mobile:hidden text-[10px] text-newTextColor/65 border border-studioBorder rounded px-1.5 py-0.5">
+        <span className="mobile:hidden text-[10px] text-newTextColor/65 border border-studioBorder rounded-sm px-1.5 py-0.5">
           ⌘K
         </span>
         <FullscreenButton />
@@ -328,7 +328,7 @@ export function ReplicateStudio() {
   // Controls: rendered only when open (⚙ toggles). In-flow column on desktop,
   // absolute overlay on mobile. When closed, the hero takes the full width.
   const controlsClasses =
-    'w-[360px] flex-shrink-0 border-r border-studioBorder flex flex-col bg-newBgColor ' +
+    'w-[360px] shrink-0 border-r border-studioBorder flex flex-col bg-newBgColor ' +
     'mobile:absolute mobile:left-[52px] mobile:inset-y-0 mobile:z-20 mobile:w-[min(340px,82vw)] mobile:shadow-2xl';
 
   return (
@@ -407,7 +407,7 @@ export function ReplicateStudio() {
                   {selectedModel && <DynamicForm />}
                 </div>
                 {selectedModel && (
-                  <div className="flex-shrink-0 border-t border-studioBorder p-4 space-y-3">
+                  <div className="shrink-0 border-t border-studioBorder p-4 space-y-3">
                     <CostBar />
                     <GenerateButton category={selectedCategory} />
                   </div>

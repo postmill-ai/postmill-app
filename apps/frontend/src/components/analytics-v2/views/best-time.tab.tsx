@@ -71,7 +71,7 @@ export const BestTimeTab: FC<BestTimeTabProps> = ({ integrations }) => {
             value={channel}
             onChange={(e) => setChannel(e.target.value)}
             aria-label={t('best_time_channel', 'Channel')}
-            className="px-[10px] py-[7px] bg-newBgColor border border-newTableBorder rounded-[8px] text-[13px] outline-none focus-visible:ring-2 focus-visible:ring-designerAccent/60"
+            className="px-[10px] py-[7px] bg-newBgColor border border-newTableBorder rounded-[8px] text-[13px] outline-hidden focus-visible:ring-2 focus-visible:ring-designerAccent/60"
           >
             <option value="">{t('best_time_all_channels', 'All channels')}</option>
             {channelOptions.map((i) => (

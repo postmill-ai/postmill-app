@@ -35,7 +35,7 @@ export const CollaborationCursors: React.FC<Props> = ({
   if (mode === 'video' && peers && durationMs) {
     return (
       <div className="absolute inset-0 pointer-events-none z-50">
-        <div className="absolute top-2 right-2 bg-green-500/20 border border-green-500/30 rounded px-2 py-0.5 text-xs text-green-700 dark:text-green-400">
+        <div className="absolute top-2 right-2 bg-green-500/20 border border-green-500/30 rounded-sm px-2 py-0.5 text-xs text-green-700 dark:text-green-400">
           {t('peers_connected_count', '{{count}} connected', { count: connectedCount })}
         </div>
         {peers.map((peer, i) => (
@@ -68,7 +68,7 @@ export const CollaborationCursors: React.FC<Props> = ({
 
   return (
     <div className="absolute inset-0 pointer-events-none z-50">
-      <div className="absolute top-2 right-2 bg-green-500/20 border border-green-500/30 rounded px-2 py-0.5 text-xs text-green-700 dark:text-green-400">
+      <div className="absolute top-2 right-2 bg-green-500/20 border border-green-500/30 rounded-sm px-2 py-0.5 text-xs text-green-700 dark:text-green-400">
         {t('peers_connected_count', '{{count}} connected', { count: connectedCount })}
       </div>
 
@@ -100,7 +100,7 @@ export const CollaborationCursors: React.FC<Props> = ({
                 <path d="M3 3l8 20 3-9 9-3L3 3z" />
               </svg>
               <span
-                className="absolute left-3 top-3 px-1.5 py-0.5 rounded text-[10px] text-white whitespace-nowrap"
+                className="absolute left-3 top-3 px-1.5 py-0.5 rounded-sm text-[10px] text-white whitespace-nowrap"
                 style={{ backgroundColor: color }}
               >
                 {t('peer_number', 'Peer {{n}}', { n: i + 1 })}
@@ -113,7 +113,7 @@ export const CollaborationCursors: React.FC<Props> = ({
             {selectedBoxes.map((el: any) => (
               <div
                 key={`${peer.clientId || i}-${el.id}`}
-                className="absolute border-2 border-dashed rounded"
+                className="absolute border-2 border-dashed rounded-sm"
                 style={{
                   left: `${el.x}px`,
                   top: `${el.y}px`,

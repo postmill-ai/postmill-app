@@ -1,0 +1,31 @@
+/* Tailwind 4 entry. Kept as plain CSS because Sass cannot parse the v4
+   at-rules (@import "tailwindcss", @config, @custom-variant, @source) — every
+   App Router layout imports this file before global.scss, which keeps the
+   SCSS-side @apply blocks. */
+@import 'tailwindcss';
+
+/* v3 compatibility bridge: the theme (CSS-var colors, raw screens, shadows,
+   keyframes) and the tailwind-scrollbar plugin stay in tailwind.config.cjs. */
+@config '../../tailwind.config.cjs';
+
+/* v4 auto source detection does not cross the workspace root, so register the
+   shared component packages (the v3 `content` glob covered them). */
+@source '../../../libraries';
+
+/* darkMode: 'class' from the JS config — v4 spells it as a custom variant. */
+@custom-variant dark (&:where(.dark, .dark *));
+
+/* Project variants, formerly an inline v3 plugin in tailwind.config.cjs. */
+@custom-variant child (& > *);
+@custom-variant child-hover (& > *:hover);
+
+/* Custom screens — raw media queries. Kept out of the JS config's `screens`
+   because the @config bridge feeds them to the `container` utility and emits
+   invalid `@media (width >= (raw query))` CSS. */
+@custom-variant mobile (@media (max-width: 1025px));
+@custom-variant tablet (@media (max-width: 1300px));
+@custom-variant iconBreak (@media (max-width: 1560px));
+@custom-variant maxMedia (@media (max-width: 1400px));
+@custom-variant minCustom (@media (min-height: 800px));
+@custom-variant custom (@media (max-height: 800px));
+@custom-variant xs (@media (max-width: 401px));

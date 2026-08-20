@@ -204,7 +204,7 @@ export function DataTable<T>({
           className,
         )}
       >
-        <div className="text-[var(--negative,#f97066)] text-[14px]">{t('failed_to_load_data', 'Failed to load data')}</div>
+        <div className="text-(--negative,#f97066) text-[14px]">{t('failed_to_load_data', 'Failed to load data')}</div>
         {error.message && <div className="text-[12px] text-newTableText">{error.message}</div>}
         {onRetry && (
           <button

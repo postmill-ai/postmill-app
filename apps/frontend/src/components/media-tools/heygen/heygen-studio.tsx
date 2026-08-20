@@ -34,7 +34,7 @@ export function HeyGenStudio() {
   const { data: voicesData } = useHeygenVoices(configured);
   const { data: jobs, isLoading: jobsLoading, mutate: mutateJobs } = useHeygenJobs(configured);
   // Full screen fills the browser window, not the display: the studio root goes
-  // immersive to cover the app nav/sidebar. z-[100] sits below modals (200+),
+  // immersive to cover the app nav/sidebar. z-100 sits below modals (200+),
   // which mount at the app root and stay usable.
   const surface = useFullscreenSurface('rounded-[12px] overflow-hidden');
 

@@ -102,7 +102,7 @@ export const BrandList = () => {
             value={newName}
             onChange={(e) => setNewName(e.target.value)}
             placeholder={t('brand_name_placeholder', 'Brand name...')}
-            className="bg-newBgColor border border-newTableBorder rounded-[4px] px-[12px] py-[8px] text-textColor text-[14px] outline-none flex-1"
+            className="bg-newBgColor border border-newTableBorder rounded-[4px] px-[12px] py-[8px] text-textColor text-[14px] outline-hidden flex-1"
             onKeyDown={(e) => e.key === 'Enter' && handleCreate()}
           />
           <button
@@ -142,7 +142,7 @@ export const BrandList = () => {
               {brand.palette?.length || brand.assets?.length ? (
                 <div className="flex items-center gap-[10px] mt-[6px]">
                   {!!brand.palette?.length && (
-                    <div className="flex items-center -space-x-[4px]">
+                    <div className="flex items-center space-x-[-4px]">
                       {brand.palette.slice(0, 6).map((c, i) => (
                         <div
                           key={`${c}-${i}`}

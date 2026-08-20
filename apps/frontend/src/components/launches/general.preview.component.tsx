@@ -78,13 +78,13 @@ export const GeneralPreviewComponent: FC<{
                       : integration?.picture || '/no-picture.jpg'
                   }
                   alt="x"
-                  className="rounded-full relative z-[2]"
+                  className="rounded-full relative z-2"
                 />
 
                 {current !== 'global' && (
                   <SafeImage
                     src={`/icons/platforms/${integration?.identifier}.png`}
-                    className="min-w-[20px] min-h-[20px] rounded-full absolute z-10 -bottom-[5px] -end-[5px] border border-newTableBorder"
+                    className="min-w-[20px] min-h-[20px] rounded-full absolute z-10 bottom-[-5px] inset-e-[-5px] border border-newTableBorder"
                     alt={integration.identifier}
                     width={20}
                     height={20}
@@ -92,7 +92,7 @@ export const GeneralPreviewComponent: FC<{
                 )}
               </div>
               {index !== topValue.length - 1 && (
-                <div className="flex-1 w-[2px] h-[calc(100%-10px)] bg-newTableBorder absolute top-[10px] z-[1]" />
+                <div className="flex-1 w-[2px] h-[calc(100%-10px)] bg-newTableBorder absolute top-[10px] z-1" />
               )}
             </div>
             <div className="flex-1 flex flex-col gap-[4px]">
@@ -102,7 +102,7 @@ export const GeneralPreviewComponent: FC<{
                     ? t('global_edit', 'Global Edit')
                     : integration?.name}
                 </div>
-                <div className="text-[15px] text-textColor mt-[1px] ms-[2px]">
+                <div className="text-[15px] text-textColor mt-px ms-[2px]">
                   <svg
                     viewBox="0 0 22 22"
                     aria-label={t('verified_account', 'Verified account')}

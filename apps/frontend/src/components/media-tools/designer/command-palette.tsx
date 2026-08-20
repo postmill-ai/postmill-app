@@ -132,7 +132,7 @@ export const CommandPalette: React.FC<CommandPaletteProps> = ({ actions }) => {
 
   return (
     <div
-      className="fixed inset-0 z-[200] flex items-start justify-center pt-[15vh]"
+      className="fixed inset-0 z-200 flex items-start justify-center pt-[15vh]"
       onClick={() => setOpen(false)}
     >
       <div
@@ -144,7 +144,7 @@ export const CommandPalette: React.FC<CommandPaletteProps> = ({ actions }) => {
       >
         <input
           ref={inputRef}
-          className="w-full px-4 py-3 bg-transparent text-textColor text-lg outline-none border-b border-studioBorder placeholder:text-textColor/50"
+          className="w-full px-4 py-3 bg-transparent text-textColor text-lg outline-hidden border-b border-studioBorder placeholder:text-textColor/50"
           placeholder={t('designer_type_a_command', 'Type a command...')}
           value={query}
           onChange={(e) => {

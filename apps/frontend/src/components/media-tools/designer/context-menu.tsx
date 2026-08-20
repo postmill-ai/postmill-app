@@ -113,7 +113,7 @@ export const ContextMenu: React.FC<ContextMenuProps> = ({ x, y, targetType, elem
   return (
     <div
       ref={menuRef}
-      className="fixed z-[150] bg-[#1a1a2e] border border-[#2a2a4a] rounded-lg py-1 min-w-[200px] shadow-xl"
+      className="fixed z-150 bg-[#1a1a2e] border border-[#2a2a4a] rounded-lg py-1 min-w-[200px] shadow-xl"
       style={{ left: Math.min(x, window.innerWidth - 220), top: Math.min(y, window.innerHeight - 400) }}
     >
       {items.map((item, i) => {
@@ -122,7 +122,7 @@ export const ContextMenu: React.FC<ContextMenuProps> = ({ x, y, targetType, elem
         return (
           <button
             key={item.label}
-            className="w-full text-left px-3 py-1.5 text-sm text-gray-300 hover:bg-white/10 hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-designerAccent focus-visible:ring-inset"
+            className="w-full text-left px-3 py-1.5 text-sm text-gray-300 hover:bg-white/10 hover:text-white focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-designerAccent focus-visible:ring-inset"
             onClick={() => {
               item.action?.();
               onClose();

@@ -157,7 +157,7 @@ export const AiPanel: FC<AiPanelProps> = ({ store, onClose }) => {
           onChange={(e) => setPrompt(e.target.value)}
           onKeyDown={handleKeyDown}
           placeholder={t('ai_panel_describe_image_placeholder', 'Describe the image...')}
-          className="flex-1 h-[36px] px-[10px] rounded-[6px] bg-newBgColor border border-studioBorder text-[13px] text-textColor outline-none focus:border-designerAccent"
+          className="flex-1 h-[36px] px-[10px] rounded-[6px] bg-newBgColor border border-studioBorder text-[13px] text-textColor outline-hidden focus:border-designerAccent"
         />
         {inFlight ? (
           <button

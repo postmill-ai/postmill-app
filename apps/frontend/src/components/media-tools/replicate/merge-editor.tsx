@@ -35,7 +35,7 @@ const TRANSITION_OPTIONS = [
 
 const fieldLabel = 'text-[10px] uppercase tracking-wider text-newTextColor/65';
 const fieldInput =
-  'w-full px-2 py-1 rounded border border-studioBorder bg-newBgColor text-textColor text-xs focus:outline-none focus:border-designerAccent';
+  'w-full px-2 py-1 rounded-sm border border-studioBorder bg-newBgColor text-textColor text-xs focus:outline-hidden focus:border-designerAccent';
 
 type MergeJobData = { status: string; result: { kind: string; urls: string[] } | null };
 
@@ -323,7 +323,7 @@ export function MergeEditor() {
       title={t('merge_videos_title', 'Merge Videos')}
       toolbar={toolbar}
       inspector={inspector}
-      stageClassName="!items-stretch !justify-start flex-col"
+      stageClassName="items-stretch! justify-start! flex-col"
     >
       {clips.length === 0 ? (
         <div className="flex-1 flex items-center justify-center text-newTextColor/65 text-sm">
@@ -337,7 +337,7 @@ export function MergeEditor() {
               <React.Fragment key={idx}>
                 <button
                   onClick={() => setSelected(idx)}
-                  className={`flex-shrink-0 w-40 h-24 rounded-lg border flex flex-col items-center justify-center gap-1 transition-colors ${
+                  className={`shrink-0 w-40 h-24 rounded-lg border flex flex-col items-center justify-center gap-1 transition-colors ${
                     selected === idx
                       ? 'border-designerAccent bg-designerAccent/15 text-textColor'
                       : 'border-studioBorder bg-newBgColorInner text-newTextColor/70 hover:bg-boxHover'
@@ -352,7 +352,7 @@ export function MergeEditor() {
                   )}
                 </button>
                 {idx < clips.length - 1 && (
-                  <div className="flex-shrink-0 flex flex-col items-center justify-center w-16 text-center">
+                  <div className="shrink-0 flex flex-col items-center justify-center w-16 text-center">
                     <span className="text-newTextColor/65 text-lg">⟶</span>
                     <span className="text-[9px] text-newTextColor/65">{transitions[idx]?.type || 'fade'}</span>
                   </div>

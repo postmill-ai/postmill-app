@@ -83,7 +83,7 @@ export const DashboardHeader: FC<DashboardHeaderProps> = ({
           ariaLabel={t('new_design_aria', 'New design')}
           align="left"
           width={200}
-          triggerClassName="bg-btnSimple text-btnText border border-newTableBorder hover:bg-boxHover px-[12px] h-[40px] text-[14px] font-[500] !rounded-[8px] gap-[6px] focus-visible:ring-2 ring-btnPrimary/40 outline-none"
+          triggerClassName="bg-btnSimple text-btnText border border-newTableBorder hover:bg-boxHover px-[12px] h-[40px] text-[14px] font-[500] rounded-[8px]! gap-[6px] focus-visible:ring-2 ring-btnPrimary/40 outline-hidden"
           trigger={
             <>
               + {t('new_design', 'New Design')}

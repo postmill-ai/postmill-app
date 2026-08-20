@@ -137,7 +137,7 @@ export const ManageRolesModal: React.FC = () => {
                   <span className="text-[14px] font-semibold truncate">
                     {role.name}
                   </span>
-                  <span className="text-[10px] bg-newTableText/20 text-newTableText rounded-[2px] px-[4px] py-[1px]">
+                  <span className="text-[10px] bg-newTableText/20 text-newTableText rounded-[2px] px-[4px] py-px">
                     {role.key}
                   </span>
                   {role.isSystem && (

@@ -207,13 +207,13 @@ export const TagsComponentInner: FC<{
         <DropdownArrowIcon rotated={isOpen} />
       </button>
       {isOpen && (
-        <div className="z-[300] absolute start-0 bottom-[100%] w-[240px] bg-newBgColorInner p-[12px] menu-shadow -translate-y-[10px] flex flex-col">
+        <div className="z-300 absolute start-0 bottom-full w-[240px] bg-newBgColorInner p-[12px] menu-shadow translate-y-[-10px] flex flex-col">
           {(data?.tags || []).map((p: any) => {
             const selected = !!tagValue.find((a) => a.id === p.id);
             return (
               <div
                 key={p.name}
-                className="min-h-[40px] py-[8px] px-[20px] -mx-[12px] flex gap-[8px] items-center group"
+                className="min-h-[40px] py-[8px] px-[20px] mx-[-12px] flex gap-[8px] items-center group"
               >
                 <button
                   type="button"
@@ -444,14 +444,14 @@ export const TagsComponentA: FC<{
             );
             return (
               <div
-                className={`min-w-[50px] float-left ms-[4px] p-[3px] rounded-sm relative`}
+                className={`min-w-[50px] float-left ms-[4px] p-[3px] rounded-xs relative`}
                 style={{
                   backgroundColor: findTag?.color,
                 }}
               >
                 <button
                   type="button"
-                  className="absolute -top-[5px] start-[10px] text-[12px] text-red-600 bg-white px-[3px] rounded-full"
+                  className="absolute top-[-5px] inset-s-[10px] text-[12px] text-red-600 bg-white px-[3px] rounded-full"
                   onClick={edit(findTag)}
                 >
                   {t('edit', 'Edit')}
@@ -459,7 +459,7 @@ export const TagsComponentA: FC<{
                 <button
                   type="button"
                   aria-label={t('delete_tag', 'Delete tag')}
-                  className="absolute -top-[5px] -start-[5px] text-[12px] text-red-600 bg-white px-[3px] rounded-full"
+                  className="absolute top-[-5px] inset-s-[-5px] text-[12px] text-red-600 bg-white px-[3px] rounded-full"
                   onClick={() => onDelete(findIndex)}
                 >
                   X

@@ -46,7 +46,7 @@ export const RenameDialog: FC<{
               save();
             }
           }}
-          className="h-[40px] px-[12px] rounded-[8px] bg-newBgColorInner border border-newColColor text-[14px] text-textColor outline-none focus:border-[#2B5CD3]"
+          className="h-[40px] px-[12px] rounded-[8px] bg-newBgColorInner border border-newColColor text-[14px] text-textColor outline-hidden focus:border-[#2B5CD3]"
         />
       </label>
       <div className="flex items-center justify-end gap-[8px]">

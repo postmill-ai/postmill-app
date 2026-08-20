@@ -246,7 +246,7 @@ export const PickPlatforms: FC<{
                           <Image
                             alt="YouTube"
                             src="/icons/platforms/youtube.svg"
-                            className="absolute z-10 bottom-0 -end-[5px]"
+                            className="absolute z-10 bottom-0 inset-e-[-5px]"
                             width={20}
                             height={20}
                             unoptimized
@@ -254,7 +254,7 @@ export const PickPlatforms: FC<{
                         ) : (
                           <SafeImage
                             src={`/icons/platforms/${integration.identifier}.png`}
-                            className="rounded-full absolute z-10 -bottom-[5px] -end-[5px] border border-newTableBorder"
+                            className="rounded-full absolute z-10 bottom-[-5px] inset-e-[-5px] border border-newTableBorder"
                             alt={integration.identifier}
                             width={20}
                             height={20}
@@ -287,7 +287,7 @@ export const PickPlatforms: FC<{
                             />
                             <SafeImage
                               src={`/icons/platforms/${integration.identifier}.png`}
-                              className="rounded-full absolute z-10 -bottom-[5px] -end-[5px] border border-newTableBorder"
+                              className="rounded-full absolute z-10 bottom-[-5px] inset-e-[-5px] border border-newTableBorder"
                               alt={integration.identifier}
                               width={15}
                               height={15}

@@ -1,32 +1,10 @@
-const { join } = require('path');
-
-/**
- * A token whose CSS variable holds a plain colour (`#0e0e0e`), made safe to use
- * with Tailwind's opacity modifier.
- *
- * Tailwind can only apply `/50` to a colour it can parse or to one written with
- * `<alpha-value>`. Given a bare `var(--x)` it silently emits NOTHING, so
- * `text-textColor/30` produced no rule at all and the element just inherited
- * its parent's colour — disabled menu items rendered at full strength in one
- * theme and near-invisible in the other. `color-mix` gives the same result the
- * `<alpha-value>` form would, without needing every variable restated as
- * channel triplets. Without a modifier the output is the plain `var()` it
- * always was.
- */
-const alphaVar = (name) => ({ opacityValue }) => {
-  // Utilities without a `/50` modifier are handed the `--tw-*-opacity` variable
-  // rather than a number, so anything non-numeric means "no modifier" and must
-  // fall through to the plain colour. (`bg-opacity-*`, the legacy spelling,
-  // therefore does not apply to these tokens — the slash syntax does.)
-  const alpha = Number(opacityValue);
-  return !Number.isFinite(alpha) || alpha === 1
-    ? `var(${name})`
-    : `color-mix(in srgb, var(${name}) ${alpha * 100}%, transparent)`;
-};
-
 module.exports = {
-  darkMode: 'class',
-  content: ['./src/**/*.{ts,tsx,html}', '../../libraries/**/*.{ts,tsx,html}'],
+  // Tailwind 4: darkMode ('class') and the content globs are expressed in
+  // src/app/tailwind.css (@custom-variant dark / @source) — v4 ignores both
+  // options here. The theme below is loaded through the v4 @config bridge.
+  // Note: v3-era function colors (the old `alphaVar` helper) are silently
+  // dropped by the bridge; v4 applies `/opacity` to any value via color-mix,
+  // so plain `var(--x)` strings suffice.
   theme: {
     extend: {
       colors: {
@@ -58,7 +36,7 @@ module.exports = {
         newBorder: 'var(--new-border)',
         newBgColorInner: 'var(--new-bgColorInner)',
         studioBg: 'var(--studio-bg)',
-        studioBorder: alphaVar('--studio-border'),
+        studioBorder: 'var(--studio-border)',
         newBgLineColor: 'var(--new-bgLineColor)',
         textItemFocused: 'var(--new-textItemFocused)',
         textItemBlur: 'var(--new-textItemBlur)',
@@ -235,37 +213,16 @@ module.exports = {
           },
         },
       }),
-      screens: {
-        mobile: {
-          raw: '(max-width: 1025px)',
-        },
-        tablet: {
-          raw: '(max-width: 1300px)',
-        },
-        iconBreak: {
-          raw: '(max-width: 1560px)',
-        },
-        maxMedia: {
-          raw: '(max-width: 1400px)',
-        },
-        minCustom: {
-          raw: '(min-height: 800px)',
-        },
-        custom: {
-          raw: '(max-height: 800px)',
-        },
-        xs: {
-          max: '401px',
-        },
-      },
+      // The custom screens (mobile/tablet/iconBreak/maxMedia/minCustom/custom/
+      // xs) are NOT here: raw media-query screens poison v4's `container`
+      // utility through the @config bridge (it emits `@media (width >= (raw
+      // query))` — invalid CSS). They live as @custom-variant in
+      // src/app/tailwind.css instead.
     },
   },
   plugins: [
     require('tailwind-scrollbar'),
-    require('tailwindcss-rtl'),
-    function ({ addVariant }) {
-      addVariant('child', '& > *');
-      addVariant('child-hover', '& > *:hover');
-    },
+    // tailwindcss-rtl is dropped (rtl:/ltr: are core v4 variants) and the
+    // child:/child-hover: variants moved to @custom-variant in tailwind.css.
   ],
 };

@@ -154,7 +154,7 @@ const WaveformBars: FC<{ src: string | undefined; width: number }> = ({ src, wid
         {Array.from({ length: barCount }).map((_, i) => (
           <div
             key={i}
-            className="flex-1 bg-white/70 rounded-sm"
+            className="flex-1 bg-white/70 rounded-xs"
             style={{ height: `${20 + ((i * 7) % 80)}%` }}
           />
         ))}
@@ -166,7 +166,7 @@ const WaveformBars: FC<{ src: string | undefined; width: number }> = ({ src, wid
       {bars.map((h, i) => (
         <div
           key={i}
-          className="flex-1 bg-white/70 rounded-sm"
+          className="flex-1 bg-white/70 rounded-xs"
           style={{ height: `${Math.max(4, h * 100)}%` }}
         />
       ))}
@@ -220,7 +220,7 @@ const AiVideoDialog: FC<AiVideoDialogProps> = ({ fetch, toaster, selectedImageSr
         value={prompt}
         onChange={(e) => setPrompt(e.target.value)}
         placeholder={t('describe_the_video_you_want_to_generate', 'Describe the video you want to generate...')}
-        className="w-full bg-newBgColor border border-studioBorder rounded p-2 text-[12px] text-textColor placeholder:text-textColor/40 outline-none min-h-[80px]"
+        className="w-full bg-newBgColor border border-studioBorder rounded-sm p-2 text-[12px] text-textColor placeholder:text-textColor/40 outline-hidden min-h-[80px]"
       />
       {selectedImageSrc && (
         <label className="flex items-center gap-2 text-[11px] text-textColor cursor-pointer">
@@ -236,7 +236,7 @@ const AiVideoDialog: FC<AiVideoDialogProps> = ({ fetch, toaster, selectedImageSr
       <button
         onClick={generate}
         disabled={loading || !prompt.trim()}
-        className="px-3 py-1.5 rounded text-[12px] border border-studioBorder text-textColor hover:bg-studioBorder/30 disabled:opacity-40 disabled:cursor-not-allowed"
+        className="px-3 py-1.5 rounded-sm text-[12px] border border-studioBorder text-textColor hover:bg-studioBorder/30 disabled:opacity-40 disabled:cursor-not-allowed"
       >
         {loading ? t('generating', 'Generating...') : t('generate', 'Generate')}
       </button>
@@ -285,12 +285,12 @@ const MusicDialog: FC<MusicDialogProps> = ({ fetch, toaster, onResult }) => {
         value={prompt}
         onChange={(e) => setPrompt(e.target.value)}
         placeholder={t('describe_the_music_you_want_to_generate', 'Describe the music you want to generate...')}
-        className="w-full bg-newBgColor border border-studioBorder rounded p-2 text-[12px] text-textColor placeholder:text-textColor/40 outline-none min-h-[80px]"
+        className="w-full bg-newBgColor border border-studioBorder rounded-sm p-2 text-[12px] text-textColor placeholder:text-textColor/40 outline-hidden min-h-[80px]"
       />
       <button
         onClick={generate}
         disabled={loading || !prompt.trim()}
-        className="px-3 py-1.5 rounded text-[12px] border border-studioBorder text-textColor hover:bg-studioBorder/30 disabled:opacity-40 disabled:cursor-not-allowed"
+        className="px-3 py-1.5 rounded-sm text-[12px] border border-studioBorder text-textColor hover:bg-studioBorder/30 disabled:opacity-40 disabled:cursor-not-allowed"
       >
         {loading ? t('generating', 'Generating...') : t('generate', 'Generate')}
       </button>
@@ -346,19 +346,19 @@ const AvatarDialog: FC<AvatarDialogProps> = ({ fetch, toaster, selectedImageSrc,
         value={script}
         onChange={(e) => setScript(e.target.value)}
         placeholder={t('enter_the_script_for_the_avatar', 'Enter the script for the avatar...')}
-        className="w-full bg-newBgColor border border-studioBorder rounded p-2 text-[12px] text-textColor placeholder:text-textColor/40 outline-none min-h-[80px]"
+        className="w-full bg-newBgColor border border-studioBorder rounded-sm p-2 text-[12px] text-textColor placeholder:text-textColor/40 outline-hidden min-h-[80px]"
       />
       <div className="flex flex-wrap gap-2">
         <button
           onClick={portraitPicker.open}
-          className="px-2 py-1 rounded text-[11px] border border-studioBorder text-textColor hover:bg-studioBorder/30"
+          className="px-2 py-1 rounded-sm text-[11px] border border-studioBorder text-textColor hover:bg-studioBorder/30"
         >
           {t('pick_portrait', 'Pick portrait')}
         </button>
         {selectedImageSrc && (
           <button
             onClick={() => setImageUrl(selectedImageSrc)}
-            className="px-2 py-1 rounded text-[11px] border border-studioBorder text-textColor hover:bg-studioBorder/30"
+            className="px-2 py-1 rounded-sm text-[11px] border border-studioBorder text-textColor hover:bg-studioBorder/30"
           >
             {t('use_selected_image', 'Use selected image')}
           </button>
@@ -370,7 +370,7 @@ const AvatarDialog: FC<AvatarDialogProps> = ({ fetch, toaster, selectedImageSrc,
       <button
         onClick={generate}
         disabled={loading || !script.trim()}
-        className="px-3 py-1.5 rounded text-[12px] border border-studioBorder text-textColor hover:bg-studioBorder/30 disabled:opacity-40 disabled:cursor-not-allowed"
+        className="px-3 py-1.5 rounded-sm text-[12px] border border-studioBorder text-textColor hover:bg-studioBorder/30 disabled:opacity-40 disabled:cursor-not-allowed"
       >
         {loading ? t('generating', 'Generating...') : t('generate', 'Generate')}
       </button>
@@ -428,18 +428,18 @@ const SlideshowDialog: FC<SlideshowDialogProps> = ({ fetch, toaster, onResult })
         value={prompt}
         onChange={(e) => setPrompt(e.target.value)}
         placeholder={t('describe_the_slideshow', 'Describe the slideshow...')}
-        className="w-full bg-newBgColor border border-studioBorder rounded p-2 text-[12px] text-textColor placeholder:text-textColor/40 outline-none"
+        className="w-full bg-newBgColor border border-studioBorder rounded-sm p-2 text-[12px] text-textColor placeholder:text-textColor/40 outline-hidden"
       />
       <button
         onClick={imagesPicker.open}
-        className="px-2 py-1 rounded text-[11px] border border-studioBorder text-textColor hover:bg-studioBorder/30 self-start"
+        className="px-2 py-1 rounded-sm text-[11px] border border-studioBorder text-textColor hover:bg-studioBorder/30 self-start"
       >
         {t('add_images', 'Add images')}
       </button>
       {imageUrls.length > 0 && (
         <div className="flex flex-wrap gap-1">
           {imageUrls.map((url, i) => (
-            <div key={`${url}-${i}`} className="flex items-center gap-1 px-1.5 py-0.5 rounded bg-newBgColorInner border border-studioBorder text-[10px] text-textColor">
+            <div key={`${url}-${i}`} className="flex items-center gap-1 px-1.5 py-0.5 rounded-sm bg-newBgColorInner border border-studioBorder text-[10px] text-textColor">
               <span className="truncate max-w-[120px]">{url.split('/').pop()}</span>
               <button
                 onClick={() => setImageUrls((prev) => prev.filter((_, idx) => idx !== i))}
@@ -455,7 +455,7 @@ const SlideshowDialog: FC<SlideshowDialogProps> = ({ fetch, toaster, onResult })
       <button
         onClick={generate}
         disabled={loading || !prompt.trim()}
-        className="px-3 py-1.5 rounded text-[12px] border border-studioBorder text-textColor hover:bg-studioBorder/30 disabled:opacity-40 disabled:cursor-not-allowed"
+        className="px-3 py-1.5 rounded-sm text-[12px] border border-studioBorder text-textColor hover:bg-studioBorder/30 disabled:opacity-40 disabled:cursor-not-allowed"
       >
         {loading ? t('generating', 'Generating...') : t('generate', 'Generate')}
       </button>
@@ -1388,7 +1388,7 @@ export const VideoTimeline: FC<VideoTimelineProps> = ({ store, sendTimelineAware
       <div className="flex items-center gap-2 px-3 py-1.5 border-b border-studioBorder">
         <button
           onClick={handlePlayPause}
-          className="w-7 h-7 flex items-center justify-center rounded text-textColor hover:bg-studioBorder/30 text-[13px]"
+          className="w-7 h-7 flex items-center justify-center rounded-sm text-textColor hover:bg-studioBorder/30 text-[13px]"
           title={isPlaying ? translate('pause', 'Pause') : translate('play', 'Play')}
           aria-label={isPlaying ? translate('pause', 'Pause') : translate('play', 'Play')}
         >
@@ -1403,7 +1403,7 @@ export const VideoTimeline: FC<VideoTimelineProps> = ({ store, sendTimelineAware
         <div className="flex-1" />
         <button
           onClick={handleZoomOut}
-          className="w-6 h-6 flex items-center justify-center rounded text-textColor/60 hover:text-textColor text-[13px]"
+          className="w-6 h-6 flex items-center justify-center rounded-sm text-textColor/60 hover:text-textColor text-[13px]"
           title={translate('zoom_out', 'Zoom out')}
           aria-label={translate('zoom_out', 'Zoom out')}
         >
@@ -1411,7 +1411,7 @@ export const VideoTimeline: FC<VideoTimelineProps> = ({ store, sendTimelineAware
         </button>
         <button
           onClick={handleZoomIn}
-          className="w-6 h-6 flex items-center justify-center rounded text-textColor/60 hover:text-textColor text-[13px]"
+          className="w-6 h-6 flex items-center justify-center rounded-sm text-textColor/60 hover:text-textColor text-[13px]"
           title={translate('zoom_in', 'Zoom in')}
           aria-label={translate('zoom_in', 'Zoom in')}
         >
@@ -1419,7 +1419,7 @@ export const VideoTimeline: FC<VideoTimelineProps> = ({ store, sendTimelineAware
         </button>
         <button
           onClick={() => store.getState().addTrack(currentOutput, 'video')}
-          className="px-2 py-0.5 rounded text-[10px] border border-studioBorder text-textColor/60 hover:text-textColor"
+          className="px-2 py-0.5 rounded-sm text-[10px] border border-studioBorder text-textColor/60 hover:text-textColor"
           title={translate('add_video_track', 'Add video track')}
         >
           {translate('plus_track', '+ Track')}
@@ -1427,7 +1427,7 @@ export const VideoTimeline: FC<VideoTimelineProps> = ({ store, sendTimelineAware
         <button
           onClick={handleGenerateVoiceover}
           disabled={!ttsAvailable}
-          className="px-2 py-0.5 rounded text-[10px] border border-studioBorder text-textColor/60 hover:text-textColor disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:text-textColor/60"
+          className="px-2 py-0.5 rounded-sm text-[10px] border border-studioBorder text-textColor/60 hover:text-textColor disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:text-textColor/60"
           title={
             ttsAvailable
               ? translate('generate_ai_voiceover', 'Generate AI voiceover')
@@ -1439,7 +1439,7 @@ export const VideoTimeline: FC<VideoTimelineProps> = ({ store, sendTimelineAware
         <button
           onClick={handleGenerateCaptions}
           disabled={!sttAvailable}
-          className="px-2 py-0.5 rounded text-[10px] border border-studioBorder text-textColor/60 hover:text-textColor disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:text-textColor/60"
+          className="px-2 py-0.5 rounded-sm text-[10px] border border-studioBorder text-textColor/60 hover:text-textColor disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:text-textColor/60"
           title={
             sttAvailable
               ? translate('auto_generate_captions_from_audio', 'Auto-generate captions from audio')
@@ -1451,7 +1451,7 @@ export const VideoTimeline: FC<VideoTimelineProps> = ({ store, sendTimelineAware
         <button
           onClick={handleGenerateVideo}
           disabled={!textToVideoAvailable && !imageToVideoAvailable}
-          className="px-2 py-0.5 rounded text-[10px] border border-studioBorder text-textColor/60 hover:text-textColor disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:text-textColor/60"
+          className="px-2 py-0.5 rounded-sm text-[10px] border border-studioBorder text-textColor/60 hover:text-textColor disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:text-textColor/60"
           title={
             textToVideoAvailable || imageToVideoAvailable
               ? translate('generate_ai_video_from_a_prompt_or_selected_image', 'Generate AI video from a prompt (or selected image)')
@@ -1465,7 +1465,7 @@ export const VideoTimeline: FC<VideoTimelineProps> = ({ store, sendTimelineAware
         <button
           onClick={handleGenerateMusic}
           disabled={!textToMusicAvailable}
-          className="px-2 py-0.5 rounded text-[10px] border border-studioBorder text-textColor/60 hover:text-textColor disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:text-textColor/60"
+          className="px-2 py-0.5 rounded-sm text-[10px] border border-studioBorder text-textColor/60 hover:text-textColor disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:text-textColor/60"
           title={
             textToMusicAvailable
               ? translate('generate_ai_music', 'Generate AI music')
@@ -1478,7 +1478,7 @@ export const VideoTimeline: FC<VideoTimelineProps> = ({ store, sendTimelineAware
         <button
           onClick={handleGenerateAvatar}
           disabled={!videoAvatarAvailable}
-          className="px-2 py-0.5 rounded text-[10px] border border-studioBorder text-textColor/60 hover:text-textColor disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:text-textColor/60"
+          className="px-2 py-0.5 rounded-sm text-[10px] border border-studioBorder text-textColor/60 hover:text-textColor disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:text-textColor/60"
           title={
             videoAvatarAvailable
               ? translate('generate_avatar_video_hint', 'Generate avatar video')
@@ -1491,7 +1491,7 @@ export const VideoTimeline: FC<VideoTimelineProps> = ({ store, sendTimelineAware
         <button
           onClick={handleGenerateSlideshow}
           disabled={!imageSlideAvailable}
-          className="px-2 py-0.5 rounded text-[10px] border border-studioBorder text-textColor/60 hover:text-textColor disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:text-textColor/60"
+          className="px-2 py-0.5 rounded-sm text-[10px] border border-studioBorder text-textColor/60 hover:text-textColor disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:text-textColor/60"
           title={
             imageSlideAvailable
               ? translate('generate_slideshow_from_prompt_images', 'Generate slideshow from prompt + images')
@@ -1705,7 +1705,7 @@ export const VideoTimeline: FC<VideoTimelineProps> = ({ store, sendTimelineAware
                     >
                       <button
                         type="button"
-                        className={`w-2 h-full flex items-center justify-center rounded-sm ${
+                        className={`w-2 h-full flex items-center justify-center rounded-xs ${
                           isTransitioning ? 'bg-yellow-500/40 hover:bg-yellow-500/60' : 'bg-transparent hover:bg-white/10'
                         }`}
                         onClick={(e) => {
@@ -1766,7 +1766,7 @@ export const VideoTimeline: FC<VideoTimelineProps> = ({ store, sendTimelineAware
             onClick={() => setTrackSettings(null)}
           />
           <div
-            className="fixed z-[60] bg-newBgColor border border-studioBorder rounded-lg p-2 shadow-xl min-w-[160px]"
+            className="fixed z-60 bg-newBgColor border border-studioBorder rounded-lg p-2 shadow-xl min-w-[160px]"
             style={{
               left: trackSettings.x,
               top: (trackSettings.y ?? 0) + 8,
@@ -1817,7 +1817,7 @@ export const VideoTimeline: FC<VideoTimelineProps> = ({ store, sendTimelineAware
             onClick={() => setTransitionPopover(null)}
           />
           <div
-            className="fixed z-[60] bg-newBgColor border border-studioBorder rounded-lg p-2 shadow-xl min-w-[140px]"
+            className="fixed z-60 bg-newBgColor border border-studioBorder rounded-lg p-2 shadow-xl min-w-[140px]"
             style={{
               left: transitionPopover.x,
               top: transitionPopover.y + 8,
@@ -1844,7 +1844,7 @@ export const VideoTimeline: FC<VideoTimelineProps> = ({ store, sendTimelineAware
                     <button
                       key={dir}
                       onClick={() => handleSetTransition(transitionPopover.trackId, transitionPopover.fromClipId, transitionPopover.toClipId, 'slide', dir)}
-                      className="px-1.5 py-0.5 rounded text-[10px] border border-studioBorder text-textColor/60 hover:text-textColor hover:border-newTextColor/40 capitalize"
+                      className="px-1.5 py-0.5 rounded-sm text-[10px] border border-studioBorder text-textColor/60 hover:text-textColor hover:border-newTextColor/40 capitalize"
                     >
                       {directionLabel(dir)}
                     </button>
@@ -1869,7 +1869,7 @@ export const VideoTimeline: FC<VideoTimelineProps> = ({ store, sendTimelineAware
             }}
           />
           <div
-            className="fixed z-[60] bg-newBgColor border border-studioBorder rounded-lg p-2 shadow-xl min-w-[160px]"
+            className="fixed z-60 bg-newBgColor border border-studioBorder rounded-lg p-2 shadow-xl min-w-[160px]"
             style={{
               left: clipMenu.x,
               top: clipMenu.y + 8,
@@ -1893,13 +1893,13 @@ export const VideoTimeline: FC<VideoTimelineProps> = ({ store, sendTimelineAware
                     <div className="text-[11px] font-medium text-textColor/60 mb-1 px-1">{translate('upscale_video', 'Upscale video')}</div>
                     <button
                       onClick={() => runClipTransform('/media/upscale-video', { videoUrl: clipSrc })}
-                      className="w-full text-left px-2 py-1 rounded text-[12px] hover:bg-studioBorder/30 text-textColor"
+                      className="w-full text-left px-2 py-1 rounded-sm text-[12px] hover:bg-studioBorder/30 text-textColor"
                     >
                       {translate('upscale_video', 'Upscale video')}
                     </button>
                     <button
                       onClick={() => setClipTransformMode(null)}
-                      className="w-full text-left px-2 py-1 rounded text-[12px] hover:bg-studioBorder/30 text-textColor"
+                      className="w-full text-left px-2 py-1 rounded-sm text-[12px] hover:bg-studioBorder/30 text-textColor"
                     >
                       {translate('back', 'Back')}
                     </button>
@@ -1912,13 +1912,13 @@ export const VideoTimeline: FC<VideoTimelineProps> = ({ store, sendTimelineAware
                     <div className="text-[11px] font-medium text-textColor/60 mb-1 px-1">{translate('remove_background', 'Remove background')}</div>
                     <button
                       onClick={() => runClipTransform('/media/remove-video-background', { videoUrl: clipSrc })}
-                      className="w-full text-left px-2 py-1 rounded text-[12px] hover:bg-studioBorder/30 text-textColor"
+                      className="w-full text-left px-2 py-1 rounded-sm text-[12px] hover:bg-studioBorder/30 text-textColor"
                     >
                       {translate('remove_background', 'Remove background')}
                     </button>
                     <button
                       onClick={() => setClipTransformMode(null)}
-                      className="w-full text-left px-2 py-1 rounded text-[12px] hover:bg-studioBorder/30 text-textColor"
+                      className="w-full text-left px-2 py-1 rounded-sm text-[12px] hover:bg-studioBorder/30 text-textColor"
                     >
                       {translate('back', 'Back')}
                     </button>
@@ -1934,18 +1934,18 @@ export const VideoTimeline: FC<VideoTimelineProps> = ({ store, sendTimelineAware
                       value={clipTransformPrompt}
                       onChange={(e) => setClipTransformPrompt(e.target.value)}
                       placeholder={translate('describe_the_transformation', 'Describe the transformation...')}
-                      className="w-full bg-newBgColor border border-studioBorder rounded px-2 py-1 text-[11px] text-textColor placeholder:text-textColor/40 outline-none"
+                      className="w-full bg-newBgColor border border-studioBorder rounded-sm px-2 py-1 text-[11px] text-textColor placeholder:text-textColor/40 outline-hidden"
                     />
                     <button
                       onClick={() => runClipTransform('/media/video-to-video', { videoUrl: clipSrc, prompt: clipTransformPrompt.trim() })}
                       disabled={!clipTransformPrompt.trim()}
-                      className="w-full text-left px-2 py-1 rounded text-[12px] hover:bg-studioBorder/30 text-textColor disabled:opacity-40 disabled:cursor-not-allowed"
+                      className="w-full text-left px-2 py-1 rounded-sm text-[12px] hover:bg-studioBorder/30 text-textColor disabled:opacity-40 disabled:cursor-not-allowed"
                     >
                       {translate('transform', 'Transform')}
                     </button>
                     <button
                       onClick={() => setClipTransformMode(null)}
-                      className="w-full text-left px-2 py-1 rounded text-[12px] hover:bg-studioBorder/30 text-textColor"
+                      className="w-full text-left px-2 py-1 rounded-sm text-[12px] hover:bg-studioBorder/30 text-textColor"
                     >
                       {translate('back', 'Back')}
                     </button>
@@ -1957,28 +1957,28 @@ export const VideoTimeline: FC<VideoTimelineProps> = ({ store, sendTimelineAware
                   <button
                     onClick={() => setClipTransformMode('upscale')}
                     disabled={!videoUpscaleAvailable}
-                    className="w-full text-left px-2 py-1 rounded text-[12px] hover:bg-studioBorder/30 text-textColor disabled:opacity-40 disabled:cursor-not-allowed"
+                    className="w-full text-left px-2 py-1 rounded-sm text-[12px] hover:bg-studioBorder/30 text-textColor disabled:opacity-40 disabled:cursor-not-allowed"
                   >
                     {translate('upscale', 'Upscale')}
                   </button>
                   <button
                     onClick={() => setClipTransformMode('remove-bg')}
                     disabled={!videoBackgroundAvailable}
-                    className="w-full text-left px-2 py-1 rounded text-[12px] hover:bg-studioBorder/30 text-textColor disabled:opacity-40 disabled:cursor-not-allowed"
+                    className="w-full text-left px-2 py-1 rounded-sm text-[12px] hover:bg-studioBorder/30 text-textColor disabled:opacity-40 disabled:cursor-not-allowed"
                   >
                     {translate('remove_background', 'Remove background')}
                   </button>
                   <button
                     onClick={() => setClipTransformMode('video-to-video')}
                     disabled={!videoToVideoAvailable}
-                    className="w-full text-left px-2 py-1 rounded text-[12px] hover:bg-studioBorder/30 text-textColor disabled:opacity-40 disabled:cursor-not-allowed"
+                    className="w-full text-left px-2 py-1 rounded-sm text-[12px] hover:bg-studioBorder/30 text-textColor disabled:opacity-40 disabled:cursor-not-allowed"
                   >
                     {translate('transform_with_prompt', 'Transform with prompt')}
                   </button>
                   <div className="border-t border-studioBorder my-1" />
                   <button
                     onClick={() => setClipMenu(null)}
-                    className="w-full text-left px-2 py-1 rounded text-[12px] hover:bg-studioBorder/30 text-textColor"
+                    className="w-full text-left px-2 py-1 rounded-sm text-[12px] hover:bg-studioBorder/30 text-textColor"
                   >
                     {translate('cancel', 'Cancel')}
                   </button>

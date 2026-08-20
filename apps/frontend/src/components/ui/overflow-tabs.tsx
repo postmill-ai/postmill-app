@@ -148,12 +148,12 @@ export const OverflowTabs: FC<OverflowTabsProps> = ({
 
   // The focus ring is carried over from analytics — it was the only bar that had one.
   const focusRing =
-    'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-designerAccent/60';
+    'focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-designerAccent/60';
 
   const itemClass = (active: boolean) => {
     if (variant === 'underline') {
       return clsx(
-        'px-[16px] py-[10px] text-[14px] font-[500] whitespace-nowrap border-b-2 -mb-[1px] transition-colors',
+        'px-[16px] py-[10px] text-[14px] font-[500] whitespace-nowrap border-b-2 -mb-px transition-colors',
         focusRing,
         active
           ? 'border-btnPrimary text-textColor'
@@ -250,7 +250,7 @@ export const OverflowTabs: FC<OverflowTabsProps> = ({
         labels can still exceed a 390px row.
       */}
       <div
-        className="flex-1 overflow-x-auto overflow-y-hidden [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+        className="flex-1 overflow-x-auto overflow-y-hidden scrollbar-none [&::-webkit-scrollbar]:hidden"
         data-slot="tabs-track"
         {...(semantics === 'tabs'
           ? { role: 'tablist' as const, 'aria-label': listAriaLabel }

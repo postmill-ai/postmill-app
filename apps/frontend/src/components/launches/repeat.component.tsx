@@ -99,7 +99,7 @@ export const RepeatComponent: FC<{
         </div>
       </div>
       {isOpen && (
-        <div className="z-[300] absolute start-0 bottom-[100%] w-[240px] bg-newBgColorInner p-[12px] menu-shadow -translate-y-[10px] flex flex-col">
+        <div className="z-300 absolute start-0 bottom-full w-[240px] bg-newBgColorInner p-[12px] menu-shadow translate-y-[-10px] flex flex-col">
           {list.map((p) => (
             <div
               onClick={() => {
@@ -107,7 +107,7 @@ export const RepeatComponent: FC<{
                 setIsOpen(false);
               }}
               key={p.label}
-              className="h-[40px] py-[8px] px-[20px] -mx-[12px] hover:bg-newBgColor"
+              className="h-[40px] py-[8px] px-[20px] mx-[-12px] hover:bg-newBgColor"
             >
               {p.label}
             </div>

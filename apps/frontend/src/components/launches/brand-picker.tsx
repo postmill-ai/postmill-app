@@ -107,10 +107,10 @@ export const BrandPicker = ({
       {isOpen && (
         <ul
           className={clsx(
-            'z-[300] absolute start-0 w-[240px] bg-newBgColorInner p-[12px] menu-shadow flex flex-col list-none m-0',
+            'z-300 absolute start-0 w-[240px] bg-newBgColorInner p-[12px] menu-shadow flex flex-col list-none m-0',
             openDirection === 'down'
-              ? 'top-[100%] translate-y-[10px]'
-              : 'bottom-[100%] -translate-y-[10px]'
+              ? 'top-full translate-y-[10px]'
+              : 'bottom-full translate-y-[-10px]'
           )}
         >
           <li className="m-0 p-0">
@@ -118,7 +118,7 @@ export const BrandPicker = ({
               type="button"
               onClick={() => select(null)}
               className={clsx(
-                'w-full text-left h-[40px] py-[8px] px-[20px] -mx-[12px] hover:bg-newBgColor cursor-pointer flex items-center bg-transparent border-none text-textColor',
+                'w-full text-left h-[40px] py-[8px] px-[20px] mx-[-12px] hover:bg-newBgColor cursor-pointer flex items-center bg-transparent border-none text-textColor',
                 !brandId && 'text-btnPrimaryAccent'
               )}
             >
@@ -131,7 +131,7 @@ export const BrandPicker = ({
                 type="button"
                 onClick={() => select(brand.id)}
                 className={clsx(
-                  'w-full text-left h-[40px] py-[8px] px-[20px] -mx-[12px] hover:bg-newBgColor cursor-pointer flex items-center bg-transparent border-none text-textColor',
+                  'w-full text-left h-[40px] py-[8px] px-[20px] mx-[-12px] hover:bg-newBgColor cursor-pointer flex items-center bg-transparent border-none text-textColor',
                   brandId === brand.id && 'text-btnPrimaryAccent'
                 )}
               >

@@ -21,9 +21,9 @@ export const LoginWithOidc = () => {
       </div>
       <OauthProvider />
       <div className="h-[20px] mb-[24px] mt-[24px] relative">
-        <div className="absolute w-full h-[1px] bg-newTableBorder top-[50%] -translate-y-[50%]" />
+        <div className="absolute w-full h-px bg-newTableBorder top-[50%] translate-y-[-50%]" />
         <div
-          className={`absolute z-[1] justify-center items-center w-full start-0 top-0 flex`}
+          className={`absolute z-1 justify-center items-center w-full start-0 top-0 flex`}
         />
       </div>
     </>

@@ -145,7 +145,7 @@ export const Subreddit: FC<{
             }}
           />
           {!!results.length && !loading && (
-            <div className="z-[400] w-full absolute bg-input -mt-[20px] outline-none border-newTableBorder border">
+            <div className="z-400 w-full absolute bg-input mt-[-20px] outline-hidden border-newTableBorder border">
               {results.map((r: { id: string; name: string }) => (
                 <button
                   type="button"

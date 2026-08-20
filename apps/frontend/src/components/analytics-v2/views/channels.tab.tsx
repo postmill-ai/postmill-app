@@ -74,7 +74,7 @@ export const ChannelsTab: FC<ChannelsTabProps> = ({
               type="button"
               onClick={() => onSelectChannel(ch.integrationId)}
               aria-label={t('view_channel', 'View {{name}}', { name: ch.name })}
-              className="flex-1 min-w-0 text-left flex items-center gap-[12px] cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-designerAccent/60 rounded-[8px]"
+              className="flex-1 min-w-0 text-left flex items-center gap-[12px] cursor-pointer focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-designerAccent/60 rounded-[8px]"
             >
               <ChannelAvatar
                 src={ch.picture}
@@ -98,8 +98,8 @@ export const ChannelsTab: FC<ChannelsTabProps> = ({
                   <div
                     className={`text-[12px] tabular-nums ${
                       mainKpi.percentageChange >= 0
-                        ? 'text-[var(--positive,#32d583)]'
-                        : 'text-[var(--negative,#f97066)]'
+                        ? 'text-(--positive,#32d583)'
+                        : 'text-(--negative,#f97066)'
                     }`}
                   >
                     {mainKpi.percentageChange >= 0 ? '+' : ''}

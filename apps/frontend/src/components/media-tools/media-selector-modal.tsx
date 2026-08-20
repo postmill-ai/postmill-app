@@ -407,7 +407,7 @@ export const MediaSelectorModal: React.FC<MediaSelectorModalProps> = ({
 
   return (
     <div
-      className="fixed inset-0 z-[100] flex items-center justify-center bg-black/50"
+      className="fixed inset-0 z-100 flex items-center justify-center bg-black/50"
       onClick={(e) => {
         if (e.target === e.currentTarget) onClose();
       }}
@@ -473,7 +473,7 @@ export const MediaSelectorModal: React.FC<MediaSelectorModalProps> = ({
                 aria-selected={active}
                 data-overflow-slot={slotProps['data-overflow-slot']}
                 className={clsx(
-                  'px-4 py-1.5 rounded text-sm font-medium whitespace-nowrap transition-colors',
+                  'px-4 py-1.5 rounded-sm text-sm font-medium whitespace-nowrap transition-colors',
                   slotProps.className,
                   active
                     ? 'bg-[#2B5CD3] text-white'
@@ -588,17 +588,17 @@ export const MediaSelectorModal: React.FC<MediaSelectorModalProps> = ({
               {selection.map((item, index) => (
                 <div
                   key={`${item.source}-${item.url}-${index}`}
-                  className="flex items-center gap-2 px-2 py-1 rounded bg-newBgColorInner border border-newColColor shrink-0"
+                  className="flex items-center gap-2 px-2 py-1 rounded-sm bg-newBgColorInner border border-newColColor shrink-0"
                 >
                   {item.thumbnail || item.source === 'stock' ? (
                     // eslint-disable-next-line @next/next/no-img-element -- external media thumbnail
                     <img
                       src={item.thumbnail || item.url}
                       alt=""
-                      className="w-6 h-6 rounded object-cover"
+                      className="w-6 h-6 rounded-sm object-cover"
                     />
                   ) : (
-                    <div className="w-6 h-6 rounded bg-newColColor" />
+                    <div className="w-6 h-6 rounded-sm bg-newColColor" />
                   )}
                   <span className="text-xs text-textColor truncate max-w-[120px]">
                     {item.name || item.url.split('/').pop() || t('selected', 'Selected')}
@@ -618,7 +618,7 @@ export const MediaSelectorModal: React.FC<MediaSelectorModalProps> = ({
               type="button"
               disabled={selection.length === 0 || isResolving}
               onClick={confirmSelection}
-              className="px-4 py-2 rounded bg-[#2B5CD3] text-white text-sm font-medium shrink-0 disabled:opacity-50 disabled:cursor-not-allowed"
+              className="px-4 py-2 rounded-sm bg-[#2B5CD3] text-white text-sm font-medium shrink-0 disabled:opacity-50 disabled:cursor-not-allowed"
             >
               {isResolving
                 ? t('importing_media', 'Importing…')

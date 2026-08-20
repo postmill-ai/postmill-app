@@ -154,7 +154,7 @@ export const FolderTree: FC<{
               onChange={(e) => setRenamingName(e.target.value)}
               onBlur={() => handleRename(folder.id)}
               onKeyDown={(e) => { if (e.key === 'Enter') handleRename(folder.id); if (e.key === 'Escape') setRenamingId(null); }}
-              className="flex-1 bg-transparent border-b border-[#2B5CD3] text-textColor text-[13px] outline-none"
+              className="flex-1 bg-transparent border-b border-[#2B5CD3] text-textColor text-[13px] outline-hidden"
               onClick={(e) => e.stopPropagation()}
             />
           ) : (
@@ -251,7 +251,7 @@ export const FolderTree: FC<{
                 if (e.key === 'Escape') { setNewFolderParent(null); setNewFolderName(''); }
               }}
               placeholder={t('folder_name_placeholder', 'Folder name...')}
-              className="flex-1 bg-transparent border-b border-[#2B5CD3] text-textColor text-[13px] outline-none placeholder:text-newTextColor/30"
+              className="flex-1 bg-transparent border-b border-[#2B5CD3] text-textColor text-[13px] outline-hidden placeholder:text-newTextColor/30"
             />
           </div>
         )}

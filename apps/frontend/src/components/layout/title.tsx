@@ -10,5 +10,5 @@ export const Title = () => {
     return menuItems.find((item) => path.indexOf(item.path) > -1)?.name;
   }, [path, menuItems]);
 
-  return <h1 className="text-[color:var(--heading-h1)]">{currentTitle}</h1>;
+  return <h1 className="text-(--heading-h1)">{currentTitle}</h1>;
 };

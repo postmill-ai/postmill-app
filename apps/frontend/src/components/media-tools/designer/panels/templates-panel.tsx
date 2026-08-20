@@ -134,7 +134,7 @@ export const TemplatesPanel: FC<TemplatesPanelProps> = ({ store, onClose, guard 
               key={template.id}
               className="rounded-lg border border-studioBorder bg-newBgColorInner overflow-hidden group"
             >
-              <div className="aspect-[4/3] bg-studioBorder/10 flex items-center justify-center text-[20px] text-newTextColor/20">
+              <div className="aspect-4/3 bg-studioBorder/10 flex items-center justify-center text-[20px] text-newTextColor/20">
                 {template.thumbnail ? (
                   // eslint-disable-next-line @next/next/no-img-element -- server-rendered template thumbnail
                   <img src={template.thumbnail} alt={template.name} className="w-full h-full object-cover" />
@@ -149,7 +149,7 @@ export const TemplatesPanel: FC<TemplatesPanelProps> = ({ store, onClose, guard 
                 </div>
                 <button
                   onClick={() => applyTemplate(template)}
-                  className="mt-1 w-full px-2 py-1 rounded text-[11px] bg-designerAccent text-white hover:bg-designerAccent/80"
+                  className="mt-1 w-full px-2 py-1 rounded-sm text-[11px] bg-designerAccent text-white hover:bg-designerAccent/80"
                 >
                   {t('apply', 'Apply')}
                 </button>

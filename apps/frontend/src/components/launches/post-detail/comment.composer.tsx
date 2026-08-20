@@ -147,7 +147,7 @@ export const CommentComposer: FC<CommentComposerProps> = ({
         aria-label={t('reply_input', 'Reply')}
         placeholder={t('write_a_reply', 'Write a reply...')}
         rows={2}
-        className="bg-newBgColor border border-newTableBorder rounded-[6px] px-[10px] py-[6px] text-[13px] text-textColor outline-none resize-none"
+        className="bg-newBgColor border border-newTableBorder rounded-[6px] px-[10px] py-[6px] text-[13px] text-textColor outline-hidden resize-none"
       />
       {error && (
         <div className="text-[12px] text-red-500" role="alert">{error}</div>

@@ -60,7 +60,7 @@ export const useDefaultCatalog = (domain: 'ai' | 'media', category: string) => {
 };
 
 const selectClass =
-  'w-full px-[12px] py-[9px] rounded-[8px] bg-newBgColorInner border border-newTableBorder text-[13px] text-textColor outline-none focus:border-[#2B5CD3] transition-colors appearance-none cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed';
+  'w-full px-[12px] py-[9px] rounded-[8px] bg-newBgColorInner border border-newTableBorder text-[13px] text-textColor outline-hidden focus:border-[#2B5CD3] transition-colors appearance-none cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed';
 
 // A real native <select> dropdown. Options come from the parent row (which owns the catalog
 // SWR hook), so the same data drives both the dropdown and the row's enabled/disabled state.

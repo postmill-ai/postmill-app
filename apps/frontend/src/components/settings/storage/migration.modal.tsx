@@ -173,7 +173,7 @@ export const MigrationModal: React.FC<MigrationModalProps> = ({
                 value={targetId}
                 onChange={(e) => setTargetId(e.target.value)}
                 disabled={running}
-                className="w-full bg-newBgColorInner border border-newTableBorder rounded-[8px] px-[12px] py-[8px] text-[14px] text-textColor outline-none focus:border-btnPrimary disabled:opacity-50"
+                className="w-full bg-newBgColorInner border border-newTableBorder rounded-[8px] px-[12px] py-[8px] text-[14px] text-textColor outline-hidden focus:border-btnPrimary disabled:opacity-50"
               >
                 {targets.map((t) => (
                   <option key={t.id} value={t.id}>

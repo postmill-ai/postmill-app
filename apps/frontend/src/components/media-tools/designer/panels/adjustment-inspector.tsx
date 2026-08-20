@@ -87,7 +87,7 @@ export const AdjustmentInspector: FC<AdjustmentInspectorProps> = ({
             });
             pushHistory();
           }}
-          className="px-2 h-[22px] rounded text-[11px] text-textColor/60 hover:bg-boxHover"
+          className="px-2 h-[22px] rounded-sm text-[11px] text-textColor/60 hover:bg-boxHover"
         >
           {t('reset', 'Reset')}
         </button>

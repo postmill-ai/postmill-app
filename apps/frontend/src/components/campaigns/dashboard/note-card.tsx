@@ -178,7 +178,7 @@ export const NoteCard: FC<NoteCardProps> = ({
         />
       ) : (
         <SafeContent
-          className="note-body text-[13px] text-textColor break-words"
+          className="note-body text-[13px] text-textColor wrap-break-word"
           content={note.content}
         />
       )}
@@ -210,7 +210,7 @@ export const NoteCard: FC<NoteCardProps> = ({
           ＋
         </button>
         {emojiOpen && (
-          <div className="absolute z-[50] top-[28px] left-0 flex items-center gap-[4px] p-[6px] rounded-[8px] border border-newTableBorder bg-newBgColorInner shadow-lg">
+          <div className="absolute z-50 top-[28px] left-0 flex items-center gap-[4px] p-[6px] rounded-[8px] border border-newTableBorder bg-newBgColorInner shadow-lg">
             {QUICK_EMOJI.map((e) => (
               <button
                 key={e}

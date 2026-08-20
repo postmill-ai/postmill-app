@@ -60,7 +60,7 @@ const Blending: FC<{
         <select
           value={value.blendMode}
           onChange={(e) => onChange({ blendMode: e.target.value as DesignerBlendMode })}
-          className="h-[30px] px-2 rounded-md bg-newBgColor border border-studioBorder text-[12px] text-textColor outline-none"
+          className="h-[30px] px-2 rounded-md bg-newBgColor border border-studioBorder text-[12px] text-textColor outline-hidden"
         >
           {SELECTABLE_BLEND_MODES.map((m) => (
             <option key={m} value={m}>{BLEND_LABELS[m] || m}</option>
@@ -116,7 +116,7 @@ export const FillDialog: FC<{
         <select
           value={settings.contents}
           onChange={(e) => patch({ contents: e.target.value as FillContents })}
-          className="h-[30px] px-2 rounded-md bg-newBgColor border border-studioBorder text-[12px] text-textColor outline-none"
+          className="h-[30px] px-2 rounded-md bg-newBgColor border border-studioBorder text-[12px] text-textColor outline-hidden"
         >
           {CONTENTS.map((c) => (
             <option key={c.value} value={c.value}>{t(c.labelKey, c.label)}</option>

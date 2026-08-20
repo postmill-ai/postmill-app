@@ -134,7 +134,7 @@ export const InteractiveForm: React.FC<InteractiveFormProps> = ({
               value={(values[field.name] as string) || ''}
               placeholder={field.placeholder}
               onChange={(e) => setValue(field.name, e.target.value)}
-              className="h-[40px] rounded-lg border border-studioBorder bg-newBgColorInner px-3 text-[14px] text-textColor outline-none focus:border-designerAccent"
+              className="h-[40px] rounded-lg border border-studioBorder bg-newBgColorInner px-3 text-[14px] text-textColor outline-hidden focus:border-designerAccent"
             />
           )}
 
@@ -154,7 +154,7 @@ export const InteractiveForm: React.FC<InteractiveFormProps> = ({
                   e.target.value === '' ? '' : Number(e.target.value)
                 )
               }
-              className="h-[40px] rounded-lg border border-studioBorder bg-newBgColorInner px-3 text-[14px] text-textColor outline-none focus:border-designerAccent"
+              className="h-[40px] rounded-lg border border-studioBorder bg-newBgColorInner px-3 text-[14px] text-textColor outline-hidden focus:border-designerAccent"
             />
           )}
 
@@ -178,7 +178,7 @@ export const InteractiveForm: React.FC<InteractiveFormProps> = ({
               id={field.name}
               value={(values[field.name] as string) || ''}
               onChange={(e) => setValue(field.name, e.target.value)}
-              className="h-[40px] rounded-lg border border-studioBorder bg-newBgColorInner px-3 text-[14px] text-textColor outline-none focus:border-designerAccent"
+              className="h-[40px] rounded-lg border border-studioBorder bg-newBgColorInner px-3 text-[14px] text-textColor outline-hidden focus:border-designerAccent"
             >
               <option value="">{t('select_ellipsis', 'Select…')}</option>
               {field.options.map((opt) => (

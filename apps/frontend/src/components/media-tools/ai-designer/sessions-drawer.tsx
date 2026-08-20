@@ -48,7 +48,7 @@ const formatLabel = (count: number, t: ReturnType<typeof useT>): string =>
  * only thing you actually scan for.
  */
 const stateDot = (state: string): string => {
-  if (state === 'delivered') return 'bg-[var(--positive,#32d583)]';
+  if (state === 'delivered') return 'bg-(--positive,#32d583)';
   if (state === 'error' || state === 'cancelled') return 'bg-newTableText';
   return 'bg-designerAccent';
 };
@@ -171,7 +171,7 @@ export const AiDesignerSessionsDrawer: React.FC<{
                       </button>
 
                       {confirming ? (
-                        <span className="absolute top-[8px] end-[8px] flex items-center gap-[8px] text-[11px]">
+                        <span className="absolute top-[8px] inset-e-[8px] flex items-center gap-[8px] text-[11px]">
                           <button
                             type="button"
                             disabled={busyId === session.id}
@@ -195,7 +195,7 @@ export const AiDesignerSessionsDrawer: React.FC<{
                           type="button"
                           onClick={() => setConfirmId(session.id)}
                           aria-label={t('delete_session', 'Delete session')}
-                          className="absolute top-[8px] end-[8px] w-[24px] h-[24px] rounded-[6px] flex items-center justify-center text-newTableText opacity-0 group-hover:opacity-100 focus-visible:opacity-100 hover:text-dangerText hover:bg-studioBorder/60 transition-all"
+                          className="absolute top-[8px] inset-e-[8px] w-[24px] h-[24px] rounded-[6px] flex items-center justify-center text-newTableText opacity-0 group-hover:opacity-100 focus-visible:opacity-100 hover:text-dangerText hover:bg-studioBorder/60 transition-all"
                         >
                           <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
                             <path d="M3 6h18M8 6V4a1 1 0 0 1 1-1h6a1 1 0 0 1 1 1v2M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6" />

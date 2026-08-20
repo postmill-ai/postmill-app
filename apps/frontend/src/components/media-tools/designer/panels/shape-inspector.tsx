@@ -126,7 +126,7 @@ export const ShapeInspector: FC<ShapeInspectorProps> = ({
                 <select
                   value={element.strokeStyle?.lineCap || 'butt'}
                   onChange={(e) => setStroke({ lineCap: e.target.value as LineCap })}
-                  className="h-[28px] px-2 rounded-md bg-newBgColor border border-studioBorder text-[12px] text-textColor outline-none"
+                  className="h-[28px] px-2 rounded-md bg-newBgColor border border-studioBorder text-[12px] text-textColor outline-hidden"
                 >
                   <option value="butt">{t('designer_cap_butt', 'Butt')}</option>
                   <option value="round">{t('designer_cap_round', 'Round')}</option>
@@ -138,7 +138,7 @@ export const ShapeInspector: FC<ShapeInspectorProps> = ({
                 <select
                   value={element.strokeStyle?.lineJoin || 'miter'}
                   onChange={(e) => setStroke({ lineJoin: e.target.value as LineJoin })}
-                  className="h-[28px] px-2 rounded-md bg-newBgColor border border-studioBorder text-[12px] text-textColor outline-none"
+                  className="h-[28px] px-2 rounded-md bg-newBgColor border border-studioBorder text-[12px] text-textColor outline-hidden"
                 >
                   <option value="miter">{t('designer_join_miter', 'Miter')}</option>
                   <option value="round">{t('designer_join_round', 'Round')}</option>
@@ -157,7 +157,7 @@ export const ShapeInspector: FC<ShapeInspectorProps> = ({
                   <select
                     value={element.strokeStyle?.arrowStart || 'none'}
                     onChange={(e) => setStroke({ arrowStart: e.target.value as ArrowHead })}
-                    className="h-[28px] px-2 rounded-md bg-newBgColor border border-studioBorder text-[12px] text-textColor outline-none"
+                    className="h-[28px] px-2 rounded-md bg-newBgColor border border-studioBorder text-[12px] text-textColor outline-hidden"
                   >
                     {ARROW_HEADS.map((h) => (
                       <option key={h.value} value={h.value}>{t(h.labelKey, h.label)}</option>
@@ -171,7 +171,7 @@ export const ShapeInspector: FC<ShapeInspectorProps> = ({
                   <select
                     value={element.strokeStyle?.arrowEnd || 'none'}
                     onChange={(e) => setStroke({ arrowEnd: e.target.value as ArrowHead })}
-                    className="h-[28px] px-2 rounded-md bg-newBgColor border border-studioBorder text-[12px] text-textColor outline-none"
+                    className="h-[28px] px-2 rounded-md bg-newBgColor border border-studioBorder text-[12px] text-textColor outline-hidden"
                   >
                     {ARROW_HEADS.map((h) => (
                       <option key={h.value} value={h.value}>{t(h.labelKey, h.label)}</option>
@@ -206,7 +206,7 @@ export const ShapeInspector: FC<ShapeInspectorProps> = ({
                 : undefined,
             })
           }
-          className="w-full h-[28px] px-2 rounded-md bg-newBgColor border border-studioBorder text-[12px] text-textColor outline-none"
+          className="w-full h-[28px] px-2 rounded-md bg-newBgColor border border-studioBorder text-[12px] text-textColor outline-hidden"
         >
           <option value="">{t('designer_warp_none', 'None')}</option>
           {WARP_PRESETS.map((p) => (

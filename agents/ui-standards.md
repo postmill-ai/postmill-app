@@ -1,10 +1,10 @@
 # UI standards: tokens, primitives, and component rules
 
-The rulebook for writing any frontend UI in `apps/frontend` (Next.js App Router, Tailwind 3, class-based dark mode). Read before creating or modifying any component. Data-fetching rules live in `agents/frontend.md`; this file covers visual/style/component conventions only.
+The rulebook for writing any frontend UI in `apps/frontend` (Next.js App Router, Tailwind 4, class-based dark mode). Read before creating or modifying any component. Data-fetching rules live in `agents/frontend.md`; this file covers visual/style/component conventions only.
 
 ## Design tokens
 
-Source of truth is `apps/frontend/src/app/colors.scss` — CSS custom properties declared twice, under `:root .dark` and `:root .light` — mapped to Tailwind color names in `apps/frontend/tailwind.config.cjs` (`darkMode: 'class'`; the `dark`/`light` class on a root element selects the values). Use the **Tailwind name**, never the CSS var and never raw hex.
+Source of truth is `apps/frontend/src/app/colors.scss` — CSS custom properties declared twice, under `:root .dark` and `:root .light` — mapped to Tailwind color names in `apps/frontend/tailwind.config.cjs` (loaded via the v4 `@config` bridge in `apps/frontend/src/app/tailwind.css`; dark mode is `@custom-variant dark (&:where(.dark, .dark *))` there — the `dark`/`light` class on a root element selects the values). Use the **Tailwind name**, never the CSS var and never raw hex.
 
 | Group | Tailwind names (→ CSS var) | Notes |
 |---|---|---|
@@ -28,12 +28,20 @@ Rules:
   bg-newBgColorInner border border-newTableBorder rounded-[12px]
   ```
 
-## Tailwind extensions (tailwind.config.cjs)
+## Tailwind extensions (tailwind.config.cjs + src/app/tailwind.css)
+
+Tailwind 4.3 runs CSS-first: `src/app/tailwind.css` holds `@import 'tailwindcss'`, the `@config`
+bridge to `tailwind.config.cjs`, `@source '../../../libraries'` (v4 auto-detection doesn't cross the
+workspace root), and the `@custom-variant`s. Sass cannot parse those at-rules, which is why the entry
+is plain CSS — every App Router layout imports it **before** `global.scss`, and `global.scss` keeps
+its `@apply` blocks working via `@reference './tailwind.css'`. PostCSS uses `@tailwindcss/postcss`
+(`postcss.config.mjs`).
 
 - **Custom screens** (all raw media queries): `mobile` ≤1025px (the app-wide phone breakpoint), `tablet` ≤1300px, `maxMedia` ≤1400px, `iconBreak` ≤1560px, `xs` ≤401px, `minCustom` min-height 800px, `custom` max-height 800px. DataTable reflows to stacked cards at `mobile`.
 - **Shadows**: `shadow-menu` (themed), `shadow-previewShadow` (themed), `shadow-yellowToast`, `shadow-greenToast`, `shadow-yellow`; `drop-shadow-glow` (note: `glow` is a **dropShadow**, not boxShadow).
 - **Animations**: `animate-fade`, `animate-fadeIn`, `animate-normalFadeIn`, `animate-normalFadeOut`, `animate-fadeDown` (toasts), `animate-normalFadeDown`, `animate-overflow`, `animate-overflowReverse`, `animate-newMessages`, `animate-marqueeUp`, `animate-marqueeDown`.
-- **Plugins**: `tailwind-scrollbar`, `tailwindcss-rtl`, plus custom variants `child:` (`& > *`) and `child-hover:`.
+- **Plugins**: `tailwind-scrollbar` (v4) only. `tailwindcss-rtl` is gone — `rtl:`/`ltr:` are core v4 variants. Custom variants `child:` (`& > *`) and `child-hover:` live in `tailwind.css` as `@custom-variant`.
+- **v4 spellings** (don't reintroduce the v3 names): `outline-hidden` (not `outline-none`), `shrink-*` (not `flex-shrink-*`), `rounded-xs`/`blur-xs`/`shadow-xs` for the old `*-sm`, bare `rounded`→`rounded-sm`, bare `shadow`→`shadow-sm`, `/opacity` modifiers instead of `bg-opacity-*`, and trailing `!` for important (`bg-red-700!`, not `!bg-red-700`). Function colors are not supported through the `@config` bridge — theme colors are plain `var(--x)` strings; v4 applies `/opacity` via `color-mix`.
 - **RTL is supported.** Use logical utilities — `ps-`/`pe-`, `ms-`/`me-`, `start-`/`end-`, `text-start` — instead of `pl-`/`pr-`/`left-`/`right-` in anything user-facing.
 
 ## Primitive catalog

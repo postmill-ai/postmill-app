@@ -67,7 +67,7 @@ export const BroadcastTab: React.FC = () => {
               type="text"
               value={title}
               onChange={(e) => setTitle(e.target.value)}
-              className="w-full px-[12px] py-[8px] bg-newBgColor border border-newTableBorder rounded-[8px] text-[14px] outline-none"
+              className="w-full px-[12px] py-[8px] bg-newBgColor border border-newTableBorder rounded-[8px] text-[14px] outline-hidden"
               placeholder={t('broadcast_title_placeholder', 'Announcement title')}
             />
           </div>
@@ -79,7 +79,7 @@ export const BroadcastTab: React.FC = () => {
               value={message}
               onChange={(e) => setMessage(e.target.value)}
               rows={3}
-              className="w-full px-[12px] py-[8px] bg-newBgColor border border-newTableBorder rounded-[8px] text-[14px] outline-none resize-none"
+              className="w-full px-[12px] py-[8px] bg-newBgColor border border-newTableBorder rounded-[8px] text-[14px] outline-hidden resize-none"
               placeholder={t('broadcast_message_placeholder', 'Announcement message')}
             />
           </div>
@@ -90,7 +90,7 @@ export const BroadcastTab: React.FC = () => {
                 aria-label={t('type', 'Type')}
                 value={type}
                 onChange={(e) => setType(e.target.value)}
-                className="px-[12px] py-[8px] bg-newBgColor border border-newTableBorder rounded-[8px] text-[14px] outline-none"
+                className="px-[12px] py-[8px] bg-newBgColor border border-newTableBorder rounded-[8px] text-[14px] outline-hidden"
               >
                 <option value="info">{t('info', 'Info')}</option>
                 <option value="warning">{t('warning', 'Warning')}</option>
@@ -105,7 +105,7 @@ export const BroadcastTab: React.FC = () => {
                 type="text"
                 value={targetRoles}
                 onChange={(e) => setTargetRoles(e.target.value)}
-                className="w-full px-[12px] py-[8px] bg-newBgColor border border-newTableBorder rounded-[8px] text-[14px] outline-none"
+                className="w-full px-[12px] py-[8px] bg-newBgColor border border-newTableBorder rounded-[8px] text-[14px] outline-hidden"
                 placeholder={t('target_roles_placeholder', 'owner,admin')}
               />
             </div>

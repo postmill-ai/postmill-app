@@ -103,7 +103,7 @@ export function SetupStepper({
               {index < steps.length - 1 && (
                 <div
                   className={clsx(
-                    'w-[24px] h-[1px] shrink-0',
+                    'w-[24px] h-px shrink-0',
                     state === 'complete' ? 'bg-[#2B5CD3]' : 'bg-newBorder'
                   )}
                 />

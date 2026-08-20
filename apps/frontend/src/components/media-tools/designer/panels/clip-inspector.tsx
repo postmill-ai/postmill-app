@@ -118,7 +118,7 @@ const MiniKeyframeTimeline: FC<{
       aria-valuemax={Math.round(totalMs)}
       aria-valuenow={Math.round(keyboardMs)}
       aria-label={t('designer_keyframe_timeline', 'Keyframe timeline')}
-      className="relative h-5 bg-newBgColorInner border border-studioBorder/30 rounded overflow-hidden cursor-crosshair focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-designerAccent"
+      className="relative h-5 bg-newBgColorInner border border-studioBorder/30 rounded-sm overflow-hidden cursor-crosshair focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-designerAccent"
       onClick={(e) => {
         if (justDraggedRef.current) return; // ignore the click that follows a drag
         if (!ref.current) return;
@@ -145,7 +145,7 @@ const MiniKeyframeTimeline: FC<{
           role="button"
           tabIndex={0}
           aria-label={t('designer_keyframe_at_ms', 'Keyframe at {{ms}}ms', { ms: Math.round(kf.tMs) })}
-          className="absolute top-0 bottom-0 w-0.5 bg-designerAccent cursor-ew-resize focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-designerAccent"
+          className="absolute top-0 bottom-0 w-0.5 bg-designerAccent cursor-ew-resize focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-designerAccent"
           style={{ left: `${(kf.tMs / totalMs) * 100}%` }}
           title={t('designer_keyframe_at_ms', 'Keyframe at {{ms}}ms', { ms: kf.tMs })}
           onMouseDown={(e) => {
@@ -210,7 +210,7 @@ const KeyframePropRow: FC<{
         aria-valuemax={Math.round(totalMs)}
         aria-valuenow={Math.round(keyboardMs)}
         aria-label={t('designer_prop_keyframe_timeline', '{{prop}} keyframe timeline', { prop })}
-        className="relative h-3 bg-newBgColorInner border border-studioBorder/30 rounded overflow-hidden focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-designerAccent"
+        className="relative h-3 bg-newBgColorInner border border-studioBorder/30 rounded-sm overflow-hidden focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-designerAccent"
         onClick={(e) => {
           if (justDraggedRef.current) return; // ignore the click that follows a drag
           if (!ref.current) return;
@@ -237,7 +237,7 @@ const KeyframePropRow: FC<{
             role="button"
             tabIndex={0}
             aria-label={t('designer_prop_keyframe_at_ms', '{{prop}} keyframe at {{ms}}ms', { prop, ms: Math.round(kf.tMs) })}
-            className="absolute top-0 bottom-0 w-2 h-2 rounded-full bg-designerAccent -translate-x-1/2 -translate-y-1/2 top-1/2 cursor-pointer hover:scale-125 transition-transform focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-designerAccent"
+            className="absolute top-0 bottom-0 w-2 h-2 rounded-full bg-designerAccent -translate-x-1/2 -translate-y-1/2 top-1/2 cursor-pointer hover:scale-125 transition-transform focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-designerAccent"
             style={{ left: `${(kf.tMs / totalMs) * 100}%` }}
             title={t('designer_prop_keyframe_value_at', '{{prop}}: {{value}} at {{ms}}ms', { prop, value: kf.props[prop], ms: kf.tMs })}
             onMouseDown={(e) => {
@@ -271,7 +271,7 @@ const KeyframePropRow: FC<{
               // Handles have no name; the dropdown says Custom until reset.
               value={typeof kf.ease === 'string' ? kf.ease : 'custom'}
               onChange={(e) => onEase(kf.tMs, e.target.value as EasePresetName)}
-              className="h-5 px-1 rounded text-[9px] bg-newBgColor border border-studioBorder text-textColor outline-none"
+              className="h-5 px-1 rounded-sm text-[9px] bg-newBgColor border border-studioBorder text-textColor outline-hidden"
             >
               {typeof kf.ease === 'object' && (
                 <option value="custom">{t('designer_ease_custom', 'Custom')}</option>
@@ -701,7 +701,7 @@ export const ClipInspector: FC<ClipInspectorProps> = ({ store, outputIndex, trac
               <button
                 key={preset.name}
                 onClick={() => handleApplyTextAnimation(preset.name)}
-                className="px-2 py-1 rounded text-[10px] border border-studioBorder text-textColor hover:border-designerAccent hover:bg-boxHover transition-all"
+                className="px-2 py-1 rounded-sm text-[10px] border border-studioBorder text-textColor hover:border-designerAccent hover:bg-boxHover transition-all"
               >
                 {translate(preset.nameKey, preset.name)}
               </button>
@@ -720,7 +720,7 @@ export const ClipInspector: FC<ClipInspectorProps> = ({ store, outputIndex, trac
         {(clipTrackType === 'image' || clipTrackType === 'text') && (
           <button
             onClick={handleKenBurns}
-            className="w-full px-2 py-1.5 rounded text-[11px] border border-designerAccent/30 text-btnPrimaryAccent hover:bg-designerAccent/10"
+            className="w-full px-2 py-1.5 rounded-sm text-[11px] border border-designerAccent/30 text-btnPrimaryAccent hover:bg-designerAccent/10"
           >
             {translate('designer_ken_burns_preset', 'Ken Burns Preset')}
           </button>
@@ -744,7 +744,7 @@ export const ClipInspector: FC<ClipInspectorProps> = ({ store, outputIndex, trac
                 })
               }
               aria-label={translate('designer_caption_style', 'Caption style')}
-              className="w-full h-[28px] px-2 rounded-md bg-newBgColor border border-studioBorder text-[12px] text-textColor outline-none"
+              className="w-full h-[28px] px-2 rounded-md bg-newBgColor border border-studioBorder text-[12px] text-textColor outline-hidden"
             >
               {CAPTION_PRESETS.map((p) => (
                 <option key={p.id} value={p.id}>
@@ -786,7 +786,7 @@ export const ClipInspector: FC<ClipInspectorProps> = ({ store, outputIndex, trac
                   setAnalysing(false);
                 }
               }}
-              className="w-full px-2 py-1.5 rounded text-[11px] border border-designerAccent/30 text-btnPrimaryAccent hover:bg-designerAccent/10 disabled:opacity-50"
+              className="w-full px-2 py-1.5 rounded-sm text-[11px] border border-designerAccent/30 text-btnPrimaryAccent hover:bg-designerAccent/10 disabled:opacity-50"
             >
               {analysing
                 ? translate('designer_detecting_beats', 'Detecting beats…')
@@ -889,7 +889,7 @@ export const ClipInspector: FC<ClipInspectorProps> = ({ store, outputIndex, trac
         {/* The graph editor. Collapsed by default — it is the deep tool, and the
             rows above are enough for a straight fade. */}
         {keyframes.length > 1 && (
-          <div className="rounded border border-studioBorder overflow-hidden">
+          <div className="rounded-sm border border-studioBorder overflow-hidden">
             <button
               type="button"
               onClick={() => setGraphOpen((v) => !v)}
@@ -913,7 +913,7 @@ export const ClipInspector: FC<ClipInspectorProps> = ({ store, outputIndex, trac
         {keyframes.length > 0 && (
           <button
             onClick={() => updateClip({ keyframes: [] })}
-            className="w-full px-2 py-1 rounded text-[11px] border border-red-400/40 text-dangerText hover:bg-red-400/5"
+            className="w-full px-2 py-1 rounded-sm text-[11px] border border-red-400/40 text-dangerText hover:bg-red-400/5"
           >
             {translate('designer_clear_all_keyframes', 'Clear all keyframes')}
           </button>

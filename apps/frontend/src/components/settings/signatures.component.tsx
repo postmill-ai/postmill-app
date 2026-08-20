@@ -173,7 +173,7 @@ const AddOrEditSignature: FC<{
           value={name}
           onChange={(e) => setName(e.target.value)}
           placeholder={t('signature_name_placeholder', 'e.g. Brand sign-off')}
-          className="w-full bg-newBgColor border border-newTableBorder rounded-[8px] px-[12px] py-[8px] text-[14px] text-textColor outline-none focus:border-btnPrimary"
+          className="w-full bg-newBgColor border border-newTableBorder rounded-[8px] px-[12px] py-[8px] text-[14px] text-textColor outline-hidden focus:border-btnPrimary"
         />
       </div>
 
@@ -184,7 +184,7 @@ const AddOrEditSignature: FC<{
         <textarea
           value={content}
           onChange={(e) => setContent(e.target.value)}
-          className="min-h-[120px] max-h-[240px] w-full p-[12px] bg-newBgColor border border-newTableBorder rounded-[8px] text-[14px] text-textColor outline-none resize-y scrollbar scrollbar-thumb-tableBorder"
+          className="min-h-[120px] max-h-[240px] w-full p-[12px] bg-newBgColor border border-newTableBorder rounded-[8px] text-[14px] text-textColor outline-hidden resize-y scrollbar scrollbar-thumb-tableBorder"
           placeholder={t('write_signature', 'Write your signature...')}
         />
         <div className="text-[11px] text-newTableText text-end mt-[4px]">
@@ -419,7 +419,7 @@ export const SignaturesComponent: FC<{
               setPage(0);
             }}
             placeholder={t('search_signatures', 'Search signatures...')}
-            className="w-full px-[12px] py-[8px] bg-newBgColor border border-newTableBorder rounded-[8px] text-[14px] text-textColor outline-none"
+            className="w-full px-[12px] py-[8px] bg-newBgColor border border-newTableBorder rounded-[8px] text-[14px] text-textColor outline-hidden"
           />
         </div>
         <Button onClick={openModal()}>{t('add_signature', 'Add Signature')}</Button>
@@ -523,7 +523,7 @@ export const SignaturesComponent: FC<{
                         {t('all_channels', 'All channels')}
                       </span>
                     ) : (
-                      <div className="flex items-center -space-x-[6px]">
+                      <div className="flex items-center space-x-[-6px]">
                         {scoped.slice(0, 5).map((c) => (
                           <ChannelAvatar key={c.id} channel={c} size={20} />
                         ))}

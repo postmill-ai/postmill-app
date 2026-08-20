@@ -11,9 +11,9 @@ import { useT } from '@postmill-ai/react/translation/get.transation.service.clie
 
 const priorityClass = (priority: number) => {
   const base = 'text-[10px] font-semibold px-[6px] py-[2px] rounded-full border';
-  if (priority === 1) return `${base} text-[var(--negative,#f97066)] border-[var(--negative,#f97066)]`;
+  if (priority === 1) return `${base} text-(--negative,#f97066) border-(--negative,#f97066)`;
   if (priority === 2) return `${base} text-amber-700 dark:text-amber-400 border-amber-500`;
-  return `${base} text-[var(--chart-3,#1d9bf0)] border-[var(--chart-3,#1d9bf0)]`;
+  return `${base} text-(--chart-3,#1d9bf0) border-(--chart-3,#1d9bf0)`;
 };
 
 export const RecommendationsStrip: FC = () => {

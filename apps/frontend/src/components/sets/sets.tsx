@@ -208,7 +208,7 @@ export const Sets: FC = () => {
             value={search}
             onChange={(e) => { setSearch(e.target.value); setPage(0); }}
             placeholder={t('search_templates', 'Search by name...')}
-            className="w-full px-[12px] py-[8px] bg-newBgColor border border-newTableBorder rounded-[8px] text-[14px] outline-none"
+            className="w-full px-[12px] py-[8px] bg-newBgColor border border-newTableBorder rounded-[8px] text-[14px] outline-hidden"
           />
         </div>
         <Button onClick={addSet()}>{t('add_template', 'Add Template')}</Button>
@@ -256,7 +256,7 @@ export const Sets: FC = () => {
               >
                 {/* Media preview stack */}
                 {media.length > 0 ? (
-                  <div className="flex items-center -space-x-[10px] shrink-0">
+                  <div className="flex items-center space-x-[-10px] shrink-0">
                     {media.slice(0, 3).map((m) => (
                       // eslint-disable-next-line @next/next/no-img-element -- external media thumbnail
                       <img
@@ -288,7 +288,7 @@ export const Sets: FC = () => {
                   <div className="text-[14px] text-textColor truncate">{s.name}</div>
                   <div className="flex items-center gap-[10px] mt-[6px]">
                     {channels.length > 0 ? (
-                      <div className="flex items-center -space-x-[6px]">
+                      <div className="flex items-center space-x-[-6px]">
                         {channels.slice(0, 6).map((c: any) => (
                           c?.picture ? (
                             // eslint-disable-next-line @next/next/no-img-element -- external channel avatar

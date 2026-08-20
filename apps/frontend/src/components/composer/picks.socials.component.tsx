@@ -131,7 +131,7 @@ export const PicksSocialsComponent: FC<{ toolTip?: boolean }> = ({
         ref={containerRef}
         className={clsx(
           'relative',
-          open && 'z-[300]',
+          open && 'z-300',
           locked && 'opacity-50 pointer-events-none'
         )}
       >
@@ -149,17 +149,17 @@ export const PicksSocialsComponent: FC<{ toolTip?: boolean }> = ({
           )}
         >
           {selectedList.length > 0 ? (
-            <div className="flex -space-x-[10px]">
+            <div className="flex space-x-[-10px]">
               {selectedList.slice(0, 4).map(({ integration }) => (
                 <div
                   key={integration.id}
-                  className="rounded-full border-[2px] border-newBgColor"
+                  className="rounded-full border-2 border-newBgColor"
                 >
                   <PlatformAvatar integration={integration} selected size={24} />
                 </div>
               ))}
               {selectedList.length > 4 && (
-                <div className="rounded-full border-[2px] border-newBgColor bg-boxHover w-[24px] h-[24px] flex items-center justify-center text-[11px] font-semibold text-textColor">
+                <div className="rounded-full border-2 border-newBgColor bg-boxHover w-[24px] h-[24px] flex items-center justify-center text-[11px] font-semibold text-textColor">
                   +{selectedList.length - 4}
                 </div>
               )}
@@ -184,7 +184,7 @@ export const PicksSocialsComponent: FC<{ toolTip?: boolean }> = ({
           <div
             role="listbox"
             aria-label={t('channels', 'Channels')}
-            className="absolute z-[300] top-[calc(100%+8px)] left-0 w-[320px] max-h-[360px] bg-newBgColorInner border border-newTextColor/10 rounded-[12px] menu-shadow flex flex-col"
+            className="absolute z-300 top-[calc(100%+8px)] left-0 w-[320px] max-h-[360px] bg-newBgColorInner border border-newTextColor/10 rounded-[12px] menu-shadow flex flex-col"
           >
             <div className="p-[12px] border-b border-newTextColor/10">
               <div className="relative">
@@ -206,7 +206,7 @@ export const PicksSocialsComponent: FC<{ toolTip?: boolean }> = ({
                   value={search}
                   onChange={(e) => setSearch(e.target.value)}
                   placeholder={t('search_channels', 'Search channels...')}
-                  className="w-full h-[40px] pl-[38px] pr-[12px] rounded-[8px] bg-newBgColorInner border border-newColColor text-[14px] text-textColor outline-none focus:border-[#2B5CD3]"
+                  className="w-full h-[40px] pl-[38px] pr-[12px] rounded-[8px] bg-newBgColorInner border border-newColColor text-[14px] text-textColor outline-hidden focus:border-[#2B5CD3]"
                 />
               </div>
             </div>
@@ -218,7 +218,7 @@ export const PicksSocialsComponent: FC<{ toolTip?: boolean }> = ({
               )}
               {grouped.map(([platform, items]) => (
                 <div key={platform} className="mb-[8px]">
-                  <div className="sticky top-0 bg-newBgColorInner text-[11px] uppercase tracking-wider text-newTableText px-[8px] py-[4px] z-[1]">
+                  <div className="sticky top-0 bg-newBgColorInner text-[11px] uppercase tracking-wider text-newTableText px-[8px] py-[4px] z-1">
                     {platform}
                   </div>
                   <div className="flex flex-col gap-[2px]">
@@ -309,7 +309,7 @@ export const PicksSocialsComponent: FC<{ toolTip?: boolean }> = ({
                   <div
                     onClick={() => toggle(integration)}
                     className={clsx(
-                      'cursor-pointer border-[2px] relative rounded-full flex justify-center items-center bg-newTableHeader filter transition-all duration-500',
+                      'cursor-pointer border-2 relative rounded-full flex justify-center items-center bg-newTableHeader filter transition-all duration-500',
                       selected
                         ? 'border-[#622FF6]'
                         : 'grayscale border-transparent'

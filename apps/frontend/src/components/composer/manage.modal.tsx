@@ -213,7 +213,7 @@ export const ManageModal: FC<AddEditModalProps> = (props) => {
           />
           <SettingsIcon
             size={15}
-            className="text-white absolute -end-[5px] -bottom-[5px]"
+            className="text-white absolute inset-e-[-5px] bottom-[-5px]"
           />
         </div>
         <div>
@@ -437,7 +437,7 @@ export const ManageModal: FC<AddEditModalProps> = (props) => {
                 'template_name_placeholder',
                 'e.g. Product launch boilerplate'
               )}
-              className="w-full bg-newBgColor border border-newTableBorder rounded-[8px] px-[12px] py-[8px] text-[14px] text-textColor outline-none focus:border-btnPrimary mb-[16px]"
+              className="w-full bg-newBgColor border border-newTableBorder rounded-[8px] px-[12px] py-[8px] text-[14px] text-textColor outline-hidden focus:border-btnPrimary mb-[16px]"
             />
 
             <div className="flex gap-2 justify-end">
@@ -808,7 +808,7 @@ export const ManageModal: FC<AddEditModalProps> = (props) => {
               mobileTab === 'preview' ? 'hidden lg:flex' : 'flex'
             )}
           >
-            <div className="bg-newBgColor h-[65px] lg:rounded-s-[20px] !rounded-b-[0] hidden lg:flex items-center gap-[12px] px-[20px] text-[20px] font-[600]">
+            <div className="bg-newBgColor h-[65px] lg:rounded-s-[20px] rounded-b-none! hidden lg:flex items-center gap-[12px] px-[20px] text-[20px] font-[600]">
               {t('create_post_title', 'Create Post')}
               <CreationMethodBadge
                 creationMethod={existingData?.posts?.[0]?.creationMethod}
@@ -940,7 +940,7 @@ export const ManageModal: FC<AddEditModalProps> = (props) => {
                     onClick={() => setShowSettings(!showSettings)}
                     className={clsx(
                       'bg-[#2B5CD3] rounded-[12px] flex items-center gap-[8px] cursor-pointer p-[12px]',
-                      showSettings ? '!rounded-b-none' : ''
+                      showSettings ? 'rounded-b-none!' : ''
                     )}
                   >
                     <div className="flex-1 text-[14px] font-[600] text-white">
@@ -983,12 +983,12 @@ export const ManageModal: FC<AddEditModalProps> = (props) => {
               mobileTab === 'compose' ? 'hidden lg:flex' : 'flex'
             )}
           >
-            <div className="bg-newBgColor h-[65px] lg:rounded-e-[20px] !rounded-b-[0] hidden lg:flex items-center px-[20px] text-[20px] font-[600]">
+            <div className="bg-newBgColor h-[65px] lg:rounded-e-[20px] rounded-b-none! hidden lg:flex items-center px-[20px] text-[20px] font-[600]">
               <div className="flex-1">{t('post_preview', 'Post Preview')}</div>
             </div>
             <div className="flex-1 relative min-h-0">
               <Scrollable
-                scrollClasses="!pe-[20px]"
+                scrollClasses="pe-[20px]!"
                 className="absolute top-0 p-[20px] pe-[8px] left-0 w-full h-full overflow-x-hidden overflow-y-scroll scrollbar scrollbar-thumb-newColColor scrollbar-track-newBgColorInner"
               >
                 <ShowAllProviders ref={ref} />
@@ -1092,7 +1092,7 @@ export const ManageModal: FC<AddEditModalProps> = (props) => {
                   className="relative cursor-pointer disabled:cursor-not-allowed px-[12px] lg:px-[20px] h-[36px] lg:h-[44px] bg-btnSimple justify-center items-center flex gap-[6px] rounded-[8px] text-[13px] lg:text-[15px] font-[600]"
                 >
                   {loading && (
-                    <div className="absolute left-[50%] top-[50%] -translate-y-[50%] -translate-x-[50%]">
+                    <div className="absolute left-[50%] top-[50%] translate-y-[-50%] translate-x-[-50%]">
                       <div className="animate-spin h-[20px] w-[20px] border-4 border-textColor border-t-transparent rounded-full" />
                     </div>
                   )}
@@ -1106,7 +1106,7 @@ export const ManageModal: FC<AddEditModalProps> = (props) => {
                     <DropdownArrowSmallIcon className="group-hover:rotate-180 text-textColor" />
                   </div>
                 </button>
-                <div className="hidden group-hover:flex flex-col absolute bottom-[100%] left-0 mb-[8px] w-[200px] bg-newBgColorInner border border-newTableBorder rounded-[8px] p-[8px] gap-[6px] z-[300]">
+                <div className="hidden group-hover:flex flex-col absolute bottom-full left-0 mb-[8px] w-[200px] bg-newBgColorInner border border-newTableBorder rounded-[8px] p-[8px] gap-[6px] z-300">
                   <button
                     type="button"
                     disabled={
@@ -1132,7 +1132,7 @@ export const ManageModal: FC<AddEditModalProps> = (props) => {
             )}
             {addEditSets && (
               <button
-                className="text-white text-[15px] font-[600] min-w-[180px] btnSub disabled:cursor-not-allowed disabled:opacity-80 outline-none gap-[8px] flex justify-center items-center h-[44px] rounded-[8px] bg-[#2B5CD3] ps-[20px] pe-[16px]"
+                className="text-white text-[15px] font-[600] min-w-[180px] btnSub disabled:cursor-not-allowed disabled:opacity-80 outline-hidden gap-[8px] flex justify-center items-center h-[44px] rounded-[8px] bg-[#2B5CD3] ps-[20px] pe-[16px]"
                 disabled={
                   selectedIntegrations.length === 0 || loading || locked
                 }
@@ -1148,10 +1148,10 @@ export const ManageModal: FC<AddEditModalProps> = (props) => {
                     selectedIntegrations.length === 0 || loading || locked
                   }
                   onClick={schedule('schedule')}
-                  className="text-white relative w-full lg:min-w-[180px] btnSub disabled:cursor-not-allowed disabled:opacity-80 outline-none gap-[8px] flex justify-center items-center h-[38px] lg:h-[44px] rounded-[8px] bg-[#2B5CD3] ps-[14px] lg:ps-[20px] pe-[12px] lg:pe-[16px]"
+                  className="text-white relative w-full lg:min-w-[180px] btnSub disabled:cursor-not-allowed disabled:opacity-80 outline-hidden gap-[8px] flex justify-center items-center h-[38px] lg:h-[44px] rounded-[8px] bg-[#2B5CD3] ps-[14px] lg:ps-[20px] pe-[12px] lg:pe-[16px]"
                 >
                   {loading && (
-                    <div className="absolute left-[50%] top-[50%] -translate-y-[50%] -translate-x-[50%]">
+                    <div className="absolute left-[50%] top-[50%] translate-y-[-50%] translate-x-[-50%]">
                       <div className="animate-spin h-[20px] w-[20px] border-4 border-white border-t-transparent rounded-full" />
                     </div>
                   )}
@@ -1184,7 +1184,7 @@ export const ManageModal: FC<AddEditModalProps> = (props) => {
                     disabled={
                       selectedIntegrations.length === 0 || loading || locked
                     }
-                    className="rounded-[8px] z-[300] disabled:cursor-not-allowed disabled:opacity-80 hidden group-hover:flex absolute bottom-[100%] -left-[12px] p-[12px] w-[206px] bg-newBgColorInner"
+                    className="rounded-[8px] z-300 disabled:cursor-not-allowed disabled:opacity-80 hidden group-hover:flex absolute bottom-full left-[-12px] p-[12px] w-[206px] bg-newBgColorInner"
                   >
                     <div className="text-white rounded-[8px] bg-[#2b5cd3] h-[44px] w-full flex justify-center items-center post-now">
                       {t('post_now', 'Post now')}
@@ -1222,9 +1222,9 @@ export const ManageModal: FC<AddEditModalProps> = (props) => {
       {aiActive &&
         assistantOpen &&
         createPortal(
-          <div className="fixed inset-0 z-[300] flex items-center justify-center p-[16px]">
+          <div className="fixed inset-0 z-300 flex items-center justify-center p-[16px]">
             <div
-              className="absolute inset-0 bg-black/50 backdrop-blur-sm"
+              className="absolute inset-0 bg-black/50 backdrop-blur-xs"
               onClick={() => setAssistantOpen(false)}
             />
             <div className="relative w-[600px] max-w-full h-[80vh] max-h-[720px] bg-newBgColorInner border border-newBorder rounded-[16px] shadow-xl flex flex-col overflow-hidden">

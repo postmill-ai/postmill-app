@@ -34,7 +34,7 @@ export const SliderComponent: FC<{
       {canGoPrevious && (
         <button
           onClick={goToPrevious}
-          className="absolute top-[50%] start-[10px] -translate-y-[50%] flex items-center justify-center w-8 h-8 rounded-full bg-black/60 hover:bg-black/80 text-white transition-colors backdrop-blur-sm cursor-pointer"
+          className="absolute top-[50%] inset-s-[10px] translate-y-[-50%] flex items-center justify-center w-8 h-8 rounded-full bg-black/60 hover:bg-black/80 text-white transition-colors backdrop-blur-xs cursor-pointer"
           aria-label={t('previous_slide', 'Previous slide')}
         >
           <ChevronLeftIcon size={18} />
@@ -45,7 +45,7 @@ export const SliderComponent: FC<{
       {canGoNext && (
         <button
           onClick={goToNext}
-          className="absolute top-[50%] end-[10px] -translate-y-[50%] flex items-center justify-center w-8 h-8 rounded-full bg-black/60 hover:bg-black/80 text-white transition-colors backdrop-blur-sm cursor-pointer"
+          className="absolute top-[50%] inset-e-[10px] translate-y-[-50%] flex items-center justify-center w-8 h-8 rounded-full bg-black/60 hover:bg-black/80 text-white transition-colors backdrop-blur-xs cursor-pointer"
           aria-label={t('next_slide', 'Next slide')}
         >
           <ChevronRightIcon size={18} />
@@ -54,7 +54,7 @@ export const SliderComponent: FC<{
 
       {/* Pagination Dots */}
       {list.length > 1 && (
-        <div className="absolute bottom-[10px] left-[50%] -translate-x-[50%] flex gap-2">
+        <div className="absolute bottom-[10px] left-[50%] translate-x-[-50%] flex gap-2">
           {list.map((child, index) => (
             <button
               key={(child as any)?.key ?? index}
