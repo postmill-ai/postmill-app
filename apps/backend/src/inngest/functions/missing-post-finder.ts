@@ -8,8 +8,11 @@ export const createMissingPostFinder = (
   runRepo: InngestRunService
 ) =>
   inngest.createFunction(
-    { id: 'missing-post-finder', concurrency: 1 },
-    { cron: 'TZ=UTC 0 * * * *' },
+    {
+      id: 'missing-post-finder',
+      concurrency: 1,
+      triggers: [{ cron: 'TZ=UTC 0 * * * *' }],
+    },
     async ({ step }) =>
       trackRun(step, runRepo, 'missing-post-finder', async () => {
         await step.run('find-missing', () =>

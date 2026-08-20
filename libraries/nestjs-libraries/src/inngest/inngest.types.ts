@@ -1,5 +1,5 @@
-import { EventSchemas } from 'inngest';
-import { ChannelSnapshotIntegrationRef } from './activities/analytics.activity';
+import { eventType, staticSchema } from 'inngest';
+import type { ChannelSnapshotIntegrationRef } from './activities/analytics.activity';
 
 export type InngestEvents = {
   'post/publish': {
@@ -107,4 +107,49 @@ export type InngestEvents = {
 
 };
 
-export const inngestSchemas = new EventSchemas().fromRecord<InngestEvents>();
+// Inngest v4 removed the client-level `EventSchemas`; typed events are now
+// decentralized `eventType()` definitions carrying a type-only
+// `staticSchema()` (no runtime validation). Pass them directly as function
+// triggers so handlers keep a typed `event.data`. **Add new events to
+// `InngestEvents` first**, then export their `eventType` here.
+export const postPublishEvent = eventType('post/publish', {
+  schema: staticSchema<InngestEvents['post/publish']['data']>(),
+});
+export const emailSendEvent = eventType('email/send', {
+  schema: staticSchema<InngestEvents['email/send']['data']>(),
+});
+export const autopostProcessEvent = eventType('autopost/process', {
+  schema: staticSchema<InngestEvents['autopost/process']['data']>(),
+});
+export const integrationRefreshTokenEvent = eventType(
+  'integration/refresh-token',
+  { schema: staticSchema<InngestEvents['integration/refresh-token']['data']>() }
+);
+export const streakStartEvent = eventType('streak/start', {
+  schema: staticSchema<InngestEvents['streak/start']['data']>(),
+});
+export const analyticsBackfillEvent = eventType('analytics/backfill', {
+  schema: staticSchema<InngestEvents['analytics/backfill']['data']>(),
+});
+export const commentsSyncOrgEvent = eventType('comments/sync-org', {
+  schema: staticSchema<InngestEvents['comments/sync-org']['data']>(),
+});
+export const analyticsSyncOrgEvent = eventType('analytics/sync-org', {
+  schema: staticSchema<InngestEvents['analytics/sync-org']['data']>(),
+});
+export const analyticsSyncIntegrationEvent = eventType(
+  'analytics/sync-integration',
+  { schema: staticSchema<InngestEvents['analytics/sync-integration']['data']>() }
+);
+export const digestSendOneEvent = eventType('digest/send-one', {
+  schema: staticSchema<InngestEvents['digest/send-one']['data']>(),
+});
+export const mediaRenderEvent = eventType('media/render', {
+  schema: staticSchema<InngestEvents['media/render']['data']>(),
+});
+export const mediaPollJobEvent = eventType('media/poll-job', {
+  schema: staticSchema<InngestEvents['media/poll-job']['data']>(),
+});
+export const agentDigestOrgEvent = eventType('agent/digest-org', {
+  schema: staticSchema<InngestEvents['agent/digest-org']['data']>(),
+});

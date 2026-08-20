@@ -30,7 +30,9 @@ dayjs.extend(isoWeek);
 // I-02: the fields required by the per-integration fan-out event and by
 // collectChannelSnapshotForIntegration. Matches the 'analytics/sync-integration'
 // Inngest event payload so the handler can pass event.data through directly.
-export interface ChannelSnapshotIntegrationRef {
+// A `type` (not an `interface`) because Inngest v4's `staticSchema<T>` requires
+// `T extends Record<string, unknown>`, which interfaces don't satisfy.
+export type ChannelSnapshotIntegrationRef = {
   id: string;
   type: string;
   disabled: boolean;

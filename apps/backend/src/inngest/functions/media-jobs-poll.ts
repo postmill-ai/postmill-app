@@ -8,8 +8,11 @@ export const createMediaJobsPoll = (
   runRepo: InngestRunService
 ) =>
   inngest.createFunction(
-    { id: 'media-jobs-poll', concurrency: 1 },
-    { cron: 'TZ=UTC * * * * *' },
+    {
+      id: 'media-jobs-poll',
+      concurrency: 1,
+      triggers: [{ cron: 'TZ=UTC * * * * *' }],
+    },
     async ({ step }) =>
       trackRun(step, runRepo, 'media-jobs-poll', async () => {
         await step.run('poll-media-jobs', () =>

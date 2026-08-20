@@ -1,4 +1,5 @@
 import { inngest } from '@postmill-ai/nestjs-libraries/inngest/inngest.client';
+import { mediaRenderEvent } from '@postmill-ai/nestjs-libraries/inngest/inngest.types';
 import { MediaJobsActivity } from '@postmill-ai/nestjs-libraries/inngest/activities/media-jobs.activity';
 import { getRenderConcurrency } from '@postmill-ai/nestjs-libraries/media/design-render/render-config';
 
@@ -8,8 +9,11 @@ import { getRenderConcurrency } from '@postmill-ai/nestjs-libraries/media/design
 // container (or the in-process encoder when Podman is disabled).
 export const createMediaRender = (mediaJobsActivity: MediaJobsActivity) =>
   inngest.createFunction(
-    { id: 'media-render', concurrency: { limit: getRenderConcurrency() } },
-    { event: 'media/render' },
+    {
+      id: 'media-render',
+      concurrency: { limit: getRenderConcurrency() },
+      triggers: [mediaRenderEvent],
+    },
     async ({ step, event }) =>
       step.run('render', () => mediaJobsActivity.processRenderJob(event.data.jobId)),
   );

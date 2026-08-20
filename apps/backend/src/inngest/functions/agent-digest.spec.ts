@@ -8,6 +8,7 @@ vi.mock('@postmill-ai/nestjs-libraries/inngest/inngest.client', () => ({
 }));
 
 import { inngest } from '@postmill-ai/nestjs-libraries/inngest/inngest.client';
+import { agentDigestOrgEvent } from '@postmill-ai/nestjs-libraries/inngest/inngest.types';
 import { createAgentDigest, createAgentDigestOrg } from './agent-digest';
 import { createMockStep, captureFunctionHandler } from '../test/step.mock';
 
@@ -46,8 +47,11 @@ describe('createAgentDigest (cron, fan-out)', () => {
 
   it('registers a Monday 07:00 ET cron with concurrency 1', () => {
     expect(inngest.createFunction).toHaveBeenCalledWith(
-      expect.objectContaining({ id: 'agent-digest', concurrency: 1 }),
-      { cron: 'TZ=America/New_York 0 7 * * 1' },
+      expect.objectContaining({
+        id: 'agent-digest',
+        concurrency: 1,
+        triggers: [{ cron: 'TZ=America/New_York 0 7 * * 1' }],
+      }),
       expect.any(Function)
     );
   });
@@ -103,8 +107,11 @@ describe('createAgentDigestOrg (per-org event handler)', () => {
 
   it('registers an event handler with concurrency 2', () => {
     expect(inngest.createFunction).toHaveBeenCalledWith(
-      expect.objectContaining({ id: 'agent-digest-org', concurrency: 2 }),
-      { event: 'agent/digest-org' },
+      expect.objectContaining({
+        id: 'agent-digest-org',
+        concurrency: 2,
+        triggers: [agentDigestOrgEvent],
+      }),
       expect.any(Function)
     );
   });

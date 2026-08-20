@@ -1,4 +1,5 @@
 import { inngest } from '@postmill-ai/nestjs-libraries/inngest/inngest.client';
+import { commentsSyncOrgEvent } from '@postmill-ai/nestjs-libraries/inngest/inngest.types';
 import { CommentsActivity } from '@postmill-ai/nestjs-libraries/inngest/activities/comments.activity';
 import { InngestRunService } from '@postmill-ai/nestjs-libraries/inngest/inngest-run.service';
 import { trackRun } from './track-run';
@@ -13,9 +14,10 @@ export const createCommentsCollection = (
   runRepo: InngestRunService
 ) =>
   inngest.createFunction(
-    { id: 'comments-collection', concurrency: 1 },
     {
-      cron: 'TZ=UTC * * * * *',
+      id: 'comments-collection',
+      concurrency: 1,
+      triggers: [{ cron: 'TZ=UTC * * * * *' }],
     },
     async ({ step }) => {
       // Pure env-parse reads (no I/O, deterministic across replays) — intentionally NOT
@@ -55,8 +57,11 @@ export const createCommentsCollection = (
 // the non-sync steps swallow errors so one failing side-effect can't fail the org.
 export const createCommentsSyncOrg = (commentsActivity: CommentsActivity) =>
   inngest.createFunction(
-    { id: 'comments-sync-org', concurrency: 5 },
-    { event: 'comments/sync-org' },
+    {
+      id: 'comments-sync-org',
+      concurrency: 5,
+      triggers: [commentsSyncOrgEvent],
+    },
     async ({ step, event }) => {
       const { organizationId, daysBack } = event.data;
 

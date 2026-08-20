@@ -15,8 +15,7 @@ export const createCampaignTagPurge = (
   runRepo: InngestRunService
 ) =>
   inngest.createFunction(
-    { id: 'campaign-tag-purge' },
-    { cron: 'TZ=UTC 0 3 * * *' },
+    { id: 'campaign-tag-purge', triggers: [{ cron: 'TZ=UTC 0 3 * * *' }] },
     async ({ step }) =>
       trackRun(step, runRepo, 'campaign-tag-purge', async () => {
         const days = getPurgeDays();

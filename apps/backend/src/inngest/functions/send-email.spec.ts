@@ -8,6 +8,7 @@ vi.mock('@postmill-ai/nestjs-libraries/inngest/inngest.client', () => ({
 }));
 
 import { inngest } from '@postmill-ai/nestjs-libraries/inngest/inngest.client';
+import { emailSendEvent } from '@postmill-ai/nestjs-libraries/inngest/inngest.types';
 import { createSendEmail } from './send-email';
 import { createMockStep, captureFunctionHandler } from '../test/step.mock';
 
@@ -28,8 +29,10 @@ describe('createSendEmail', () => {
 
   it('registers an email/send event handler', () => {
     expect(inngest.createFunction).toHaveBeenCalledWith(
-      expect.objectContaining({ id: 'send-email' }),
-      { event: 'email/send' },
+      expect.objectContaining({
+        id: 'send-email',
+        triggers: [emailSendEvent],
+      }),
       expect.any(Function)
     );
   });

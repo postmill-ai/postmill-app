@@ -8,6 +8,7 @@ vi.mock('@postmill-ai/nestjs-libraries/inngest/inngest.client', () => ({
 }));
 
 import { inngest } from '@postmill-ai/nestjs-libraries/inngest/inngest.client';
+import { commentsSyncOrgEvent } from '@postmill-ai/nestjs-libraries/inngest/inngest.types';
 import {
   createCommentsCollection,
   createCommentsSyncOrg,
@@ -58,8 +59,11 @@ describe('createCommentsCollection (cron, fan-out)', () => {
 
   it('registers a minutely UTC cron handler with concurrency 1', () => {
     expect(inngest.createFunction).toHaveBeenCalledWith(
-      expect.objectContaining({ id: 'comments-collection', concurrency: 1 }),
-      { cron: 'TZ=UTC * * * * *' },
+      expect.objectContaining({
+        id: 'comments-collection',
+        concurrency: 1,
+        triggers: [{ cron: 'TZ=UTC * * * * *' }],
+      }),
       expect.any(Function)
     );
   });
@@ -120,8 +124,11 @@ describe('createCommentsSyncOrg (per-org event handler)', () => {
 
   it('registers an event handler with a concurrency cap', () => {
     expect(inngest.createFunction).toHaveBeenCalledWith(
-      expect.objectContaining({ id: 'comments-sync-org', concurrency: 5 }),
-      { event: 'comments/sync-org' },
+      expect.objectContaining({
+        id: 'comments-sync-org',
+        concurrency: 5,
+        triggers: [commentsSyncOrgEvent],
+      }),
       expect.any(Function)
     );
   });

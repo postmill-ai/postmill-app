@@ -2,9 +2,9 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 
 vi.mock('@postmill-ai/nestjs-libraries/inngest/inngest.client', () => ({
   inngest: {
-    createFunction: vi.fn((opts: any, trigger: any, handler: any) => ({
+    // Inngest v4: createFunction(options, handler) — triggers live in options.
+    createFunction: vi.fn((opts: any, handler: any) => ({
       opts,
-      trigger,
       handler,
     })),
   },
@@ -25,6 +25,7 @@ vi.mock('@postmill-ai/backend/providers.generated', () => ({
 
 import { createPostPublishFunctions } from './post-publish';
 import { inngest } from '@postmill-ai/nestjs-libraries/inngest/inngest.client';
+import { postPublishEvent } from '@postmill-ai/nestjs-libraries/inngest/inngest.types';
 import { providerModules } from '@postmill-ai/backend/providers.generated';
 
 describe('createPostPublishFunctions', () => {
@@ -83,10 +84,12 @@ describe('createPostPublishFunctions', () => {
       (call) => call[0].id === 'post-publish-mastodon'
     );
 
-    expect(mastodonCall![1]).toEqual({
-      event: 'post/publish',
-      if: 'event.data.taskQueue == "mastodon"',
-    });
+    expect(mastodonCall![0].triggers).toEqual([
+      {
+        event: postPublishEvent,
+        if: 'event.data.taskQueue == "mastodon"',
+      },
+    ]);
   });
 
   it('declares cancelOn keyed by postId on every generated function', () => {
@@ -165,8 +168,8 @@ const makeActivity = (over: any = {}) => {
 const getHandler = (postActivity: any) => {
   vi.mocked(inngest.createFunction).mockClear();
   createPostPublishFunctions(postActivity);
-  // createFunction(opts, trigger, handler) — index 2 is the handler.
-  return vi.mocked(inngest.createFunction).mock.calls[0][2] as (a: any) => any;
+  // v4 — createFunction(opts, handler): index 1 is the handler.
+  return vi.mocked(inngest.createFunction).mock.calls[0][1] as (a: any) => any;
 };
 
 const runEvent = (over: any = {}) => ({

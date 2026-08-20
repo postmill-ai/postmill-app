@@ -1,12 +1,17 @@
 import { inngest } from '@postmill-ai/nestjs-libraries/inngest/inngest.client';
 import { DigestActivity } from '@postmill-ai/nestjs-libraries/inngest/activities/digest.activity';
-import { InngestEvents } from '@postmill-ai/nestjs-libraries/inngest/inngest.types';
+import {
+  digestSendOneEvent,
+  InngestEvents,
+} from '@postmill-ai/nestjs-libraries/inngest/inngest.types';
 import dayjs from 'dayjs';
 
 export const createDigestEmailDaily = (digestActivity: DigestActivity) =>
   inngest.createFunction(
-    { id: 'digest-email-daily' },
-    { cron: 'TZ=America/New_York 0 9 * * *' },
+    {
+      id: 'digest-email-daily',
+      triggers: [{ cron: 'TZ=America/New_York 0 9 * * *' }],
+    },
     async ({ step }) => {
       const targets = await step.run('get-daily-digest-targets', () =>
         digestActivity.getPendingDigestTargets('daily')
@@ -37,8 +42,7 @@ export const createDigestEmailDaily = (digestActivity: DigestActivity) =>
 
 export const createDigestSendOne = (digestActivity: DigestActivity) =>
   inngest.createFunction(
-    { id: 'digest-send-one' },
-    { event: 'digest/send-one' },
+    { id: 'digest-send-one', triggers: [digestSendOneEvent] },
     async ({ step, event }) => {
       const result = await step.run('send-one-digest', () =>
         digestActivity.sendOneDigest(event.data)

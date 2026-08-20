@@ -5,8 +5,10 @@ import dayjs from 'dayjs';
 
 export const createDigestEmailWeekly = (digestActivity: DigestActivity) =>
   inngest.createFunction(
-    { id: 'digest-email-weekly' },
-    { cron: 'TZ=America/New_York 0 9 * * 1' },
+    {
+      id: 'digest-email-weekly',
+      triggers: [{ cron: 'TZ=America/New_York 0 9 * * 1' }],
+    },
     async ({ step }) => {
       const targets = await step.run('get-weekly-digest-targets', () =>
         digestActivity.getPendingDigestTargets('weekly')

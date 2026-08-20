@@ -37,8 +37,11 @@ describe('createMissingPostFinder', () => {
 
   it('registers an hourly UTC cron handler with concurrency 1', () => {
     expect(inngest.createFunction).toHaveBeenCalledWith(
-      expect.objectContaining({ id: 'missing-post-finder', concurrency: 1 }),
-      { cron: 'TZ=UTC 0 * * * *' },
+      expect.objectContaining({
+        id: 'missing-post-finder',
+        concurrency: 1,
+        triggers: [{ cron: 'TZ=UTC 0 * * * *' }],
+      }),
       expect.any(Function)
     );
   });
