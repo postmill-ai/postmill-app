@@ -158,10 +158,3 @@ auditConfig:
     # if the Solana wallet adapters are dropped or image-size ships a fix.
     - GHSA-w3rx-r6r6-pgpr
     - GHSA-5p2g-fcmc-qvqq
-    # extract-zip <=2.0.1 unvalidated symlink path traversal (GHSA-jmr9-qjv8-65gv): no
-    # patched version exists (the package is unmaintained; "patched: <0.0.0"). Path is
-    # puppeteer > @puppeteer/browsers > extract-zip, used ONLY to unpack a Chrome build
-    # downloaded from Google's own CDN during browser install — never to extract a
-    # user-supplied archive. Removing it means dropping puppeteer, which the design
-    # renderer needs. Revisit when @puppeteer/browsers moves off extract-zip.
-    - GHSA-jmr9-qjv8-65gv
