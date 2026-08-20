@@ -14,6 +14,8 @@ overrides:
   '@types/react-dom': 19.1.6
   vitest>vite: ^6.4.3
   protobufjs@>=8.0.0 <8.4.1: ^8.4.1
+  shell-quote@<=1.8.4: '>=1.9.0'
+  js-yaml@>=3.0.0 <3.15.1: '>=3.15.1 <4'
   form-data@<2.5.6: '>=2.5.6 <3'
   form-data@>=3.0.0 <3.0.5: '>=3.0.5 <4'
   form-data@>=4.0.0 <4.0.6: '>=4.0.6 <5'
@@ -53,7 +55,7 @@ importers:
     dependencies:
       axios:
         specifier: ^1.18.0
-        version: 1.18.1
+        version: 1.18.1(debug@4.4.3)
       bufferutil:
         specifier: ^4.0.8
         version: 4.1.0
@@ -16298,8 +16300,8 @@ packages:
   js-tokens@4.0.0:
     resolution: {integrity: sha512-RdJUflcE3cUzKiMqQgsCu06FPu9UdIJO0beYbPhHN4k6apgJtifcoCtT9bcxOpYBtpD2kCM6Sbzg4CausW/PKQ==}
 
-  js-yaml@3.15.0:
-    resolution: {integrity: sha512-ttBQIIQPDeLjpPOohtUdXuXUVoA2uIB6fEH9HyJ7234s5mBJ5wTx20njxplLZQgLaOfpmPQA7X2t5AX6tIPbog==}
+  js-yaml@3.15.1:
+    resolution: {integrity: sha512-S99WuO3HlhO3XN41EtYUNl9zzXjoJx7QvmipxsJVxtCBT0YHEFy+iOJhjSvrmV12nYhWpZaM8lPHkJm0yUMbag==}
     hasBin: true
 
   js-yaml@4.3.1:
@@ -19451,10 +19453,6 @@ packages:
 
   shell-quote@1.10.0:
     resolution: {integrity: sha512-w1aiOKwKuRgtwAReIIj89puqg+I7GvX4IbLrvmhXbzQsj1+Zwi4VO3+fa6ZF91TWSjIxoEkKnMeHcLEODK5ZXA==}
-    engines: {node: '>= 0.4'}
-
-  shell-quote@1.8.4:
-    resolution: {integrity: sha512-VsC6n6vz1ihYYyZZwX7YZSF5l5x36ca17OC+a69h94YqB7X6XLwf+5MOgynYir2SLFUbl8gIYvBo8K8RoNQ6bQ==}
     engines: {node: '>= 0.4'}
 
   shiki@3.23.0:
@@ -25291,7 +25289,7 @@ snapshots:
       camelcase: 5.3.1
       find-up: 4.1.0
       get-package-type: 0.1.0
-      js-yaml: 3.15.0
+      js-yaml: 3.15.1
       resolve-from: 5.0.0
 
   '@istanbuljs/schema@0.1.6': {}
@@ -26811,7 +26809,7 @@ snapshots:
 
   '@neynar/nodejs-sdk@3.176.0(bufferutil@4.1.0)(typescript@5.9.3)(utf-8-validate@6.0.6)(zod@4.4.3)':
     dependencies:
-      axios: 1.18.1
+      axios: 1.18.1(debug@4.4.3)
       semver: 7.8.2
       viem: 2.52.2(bufferutil@4.1.0)(typescript@5.9.3)(utf-8-validate@6.0.6)(zod@4.4.3)
     transitivePeerDependencies:
@@ -32901,7 +32899,7 @@ snapshots:
   '@sendgrid/client@8.1.6':
     dependencies:
       '@sendgrid/helpers': 8.0.0
-      axios: 1.18.1
+      axios: 1.18.1(debug@4.4.3)
     transitivePeerDependencies:
       - debug
       - supports-color
@@ -36269,19 +36267,9 @@ snapshots:
 
   axe-core@4.11.1: {}
 
-  axios@1.18.1:
-    dependencies:
-      follow-redirects: 1.16.0(debug@4.3.7)
-      form-data: 4.0.6
-      https-proxy-agent: 5.0.1
-      proxy-from-env: 2.1.0
-    transitivePeerDependencies:
-      - debug
-      - supports-color
-
   axios@1.18.1(debug@4.4.3):
     dependencies:
-      follow-redirects: 1.16.0(debug@4.4.3)
+      follow-redirects: 1.16.0(debug@4.3.7)
       form-data: 4.0.6
       https-proxy-agent: 5.0.1
       proxy-from-env: 2.1.0
@@ -38740,7 +38728,7 @@ snapshots:
 
   facebook-nodejs-business-sdk@21.0.5:
     dependencies:
-      axios: 1.18.1
+      axios: 1.18.1(debug@4.4.3)
       currency-codes: 1.5.1
       iso-3166-1: 2.1.1
       js-sha256: 0.9.0
@@ -39103,10 +39091,6 @@ snapshots:
   follow-redirects@1.16.0(debug@4.3.7):
     optionalDependencies:
       debug: 4.3.7
-
-  follow-redirects@1.16.0(debug@4.4.3):
-    optionalDependencies:
-      debug: 4.4.3(supports-color@5.5.0)
 
   fontkit@1.9.0:
     dependencies:
@@ -39645,7 +39629,7 @@ snapshots:
 
   gray-matter@4.0.3:
     dependencies:
-      js-yaml: 3.15.0
+      js-yaml: 3.15.1
       kind-of: 6.0.3
       section-matter: 1.0.0
       strip-bom-string: 1.0.0
@@ -40117,7 +40101,7 @@ snapshots:
       isstream: 0.1.2
       jsonwebtoken: 9.0.3
       mime-types: 2.1.35
-      retry-axios: 2.6.0(axios@1.18.1)
+      retry-axios: 2.6.0(axios@1.18.1(debug@4.4.3))
       tough-cookie: 4.1.4
     transitivePeerDependencies:
       - supports-color
@@ -40749,7 +40733,7 @@ snapshots:
 
   js-tokens@4.0.0: {}
 
-  js-yaml@3.15.0:
+  js-yaml@3.15.1:
     dependencies:
       argparse: 1.0.10
       esprima: 4.0.1
@@ -41362,7 +41346,7 @@ snapshots:
 
   mailgun.js@11.0.0:
     dependencies:
-      axios: 1.18.1
+      axios: 1.18.1(debug@4.4.3)
       base-64: 1.0.0
       url-join: 4.0.1
     transitivePeerDependencies:
@@ -41417,7 +41401,7 @@ snapshots:
       semver: 7.8.2
       serve: 14.2.6
       serve-handler: 6.1.7
-      shell-quote: 1.8.4
+      shell-quote: 1.10.0
       strip-json-comments: 5.0.3
       tinyglobby: 0.2.17
       yocto-spinner: 1.1.0
@@ -43462,7 +43446,7 @@ snapshots:
 
   postmark@4.0.7:
     dependencies:
-      axios: 1.18.1
+      axios: 1.18.1(debug@4.4.3)
     transitivePeerDependencies:
       - debug
       - supports-color
@@ -44503,9 +44487,9 @@ snapshots:
 
   ret@0.5.0: {}
 
-  retry-axios@2.6.0(axios@1.18.1):
+  retry-axios@2.6.0(axios@1.18.1(debug@4.4.3)):
     dependencies:
-      axios: 1.18.1
+      axios: 1.18.1(debug@4.4.3)
 
   retry-request@7.0.2:
     dependencies:
@@ -44959,8 +44943,6 @@ snapshots:
   shebang-regex@3.0.0: {}
 
   shell-quote@1.10.0: {}
-
-  shell-quote@1.8.4: {}
 
   shiki@3.23.0:
     dependencies:

@@ -24,6 +24,13 @@ overrides:
   # protobufjs 8.x <8.4.1: high GHSAs; the lockfile already resolves the patched 8.4.x
   # line (this matches the previously applied package.json override — do not force 7.x back).
   'protobufjs@>=8.0.0 <8.4.1': '^8.4.1'
+  # shell-quote <=1.8.4: high quadratic-complexity DoS in parse() (GHSA-395f-4hp3-45gv),
+  # pulled by nestjs-libraries > mastra > serve > serve-handler. Bump to patched 1.9+.
+  'shell-quote@<=1.8.4': '>=1.9.0'
+  # js-yaml >=3.0.0 <3.15.1: high quadratic CPU in !!omap resolution (GHSA-5p4m-2wfm-xmqj),
+  # pulled by the Solana mobile wallet adapter chain in apps/frontend. Bump the 3.x line
+  # to the patched 3.15.1 (the chain pins major 3; do not cross to 4.x here).
+  'js-yaml@>=3.0.0 <3.15.1': '>=3.15.1 <4'
   # form-data <2.5.6: critical unsafe-random boundary (GHSA-fjxv-7rqg-78g4) + high CRLF
   # injection (GHSA-hmw2-7cc7-3qxx), pulled by node-telegram-bot-api@0.66.0 ->
   # @cypress/request-promise -> request@2.88.2 (pins form-data ~2.3.2). Widen from <2.5.4 to
