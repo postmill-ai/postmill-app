@@ -237,8 +237,13 @@ export class CampaignReportService {
     });
     try {
       const page = await browser.newPage();
-      await page.setContent(html, { waitUntil: 'networkidle0' });
-      return await page.pdf({ format: 'A4', printBackground: true });
+      // puppeteer 25: setContent() no longer accepts networkidle0 (it cannot
+      // observe network state during a content write); load + explicit idle wait
+      // preserves the old semantics. pdf() now returns Uint8Array — wrap for the
+      // Buffer contract.
+      await page.setContent(html, { waitUntil: 'load' });
+      await page.waitForNetworkIdle();
+      return Buffer.from(await page.pdf({ format: 'A4', printBackground: true }));
     } finally {
       await browser.close();
     }

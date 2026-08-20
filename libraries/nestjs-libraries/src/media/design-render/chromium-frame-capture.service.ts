@@ -136,7 +136,11 @@ export class ChromiumFrameCaptureService {
           fontLinks: fontLinksForOutput(output),
         });
 
-        await page.setContent(html, { waitUntil: 'networkidle0' });
+        // puppeteer 25: setContent() no longer accepts networkidle0; load +
+        // explicit idle wait preserves the semantics (fonts/asset links resolve
+        // before the frame API is awaited below).
+        await page.setContent(html, { waitUntil: 'load' });
+        await page.waitForNetworkIdle();
       }
       await page.waitForFunction(
         () => !!(window as any).__FRAME_API,
