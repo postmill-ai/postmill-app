@@ -79,6 +79,11 @@ describe('R2Storage.uploadFile — buffer vs disk path', () => {
   // "Unsupported file type." on R2-backed orgs.
   const PNG = Buffer.concat([
     Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]),
+    // file-type v19+ validates the IHDR chunk; magic bytes alone are rejected.
+    Buffer.from([0x00, 0x00, 0x00, 0x0d]),
+    Buffer.from('IHDR'),
+    Buffer.from([0, 0, 0, 1, 0, 0, 0, 1, 8, 6, 0, 0, 0]),
+    Buffer.from([0x1f, 0x15, 0xc4, 0x89]),
     Buffer.alloc(64),
   ]);
 

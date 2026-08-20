@@ -241,8 +241,14 @@ describe('S3StorageBase', () => {
     // `/files/upload-server` uses diskStorage (file.path, no buffer). Sniffing
     // only from the buffer made every upload-server request fail with
     // "Unsupported file type." on S3-backed orgs.
+    // The fixture must be a real minimal PNG — file-type v19+ validates the IHDR
+    // chunk and rejects magic-bytes-only buffers.
     const PNG = Buffer.concat([
       Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]),
+      Buffer.from([0x00, 0x00, 0x00, 0x0d]),
+      Buffer.from('IHDR'),
+      Buffer.from([0, 0, 0, 1, 0, 0, 0, 1, 8, 6, 0, 0, 0]),
+      Buffer.from([0x1f, 0x15, 0xc4, 0x89]),
       Buffer.alloc(64),
     ]);
 
