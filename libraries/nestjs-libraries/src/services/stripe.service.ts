@@ -24,7 +24,12 @@ import { StripeEventRepository } from '@postmill-ai/nestjs-libraries/database/pr
 import { NotificationService } from '@postmill-ai/nestjs-libraries/database/prisma/notifications/notification.service';
 import { AuditService } from '@postmill-ai/nestjs-libraries/database/prisma/audit/audit.service';
 
-const stripe = new Stripe(process.env.STRIPE_SECRET_KEY || 'sk_nothing');
+const stripe = new Stripe(process.env.STRIPE_SECRET_KEY || 'sk_nothing', {
+  // Pinned deliberately: dahlia (the SDK default from v21 on) renamed the Checkout
+  // ui_mode enum and dropped 'custom', which the custom-checkout flow at :901 relies
+  // on. Move to dahlia only with that flow migrated — never silently via an SDK bump.
+  apiVersion: '2025-09-30.clover' as Stripe.LatestApiVersion,
+});
 
 @Injectable()
 export class StripeService {
