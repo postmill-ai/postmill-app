@@ -14,8 +14,7 @@ export const createRetentionPurge = (
   runRepo: InngestRunService
 ) =>
   inngest.createFunction(
-    { id: 'retention-purge' },
-    { cron: 'TZ=UTC 30 3 * * *' },
+    { id: 'retention-purge', triggers: [{ cron: 'TZ=UTC 30 3 * * *' }] },
     async ({ step }) =>
       trackRun(step, runRepo, 'retention-purge', async () => {
         const result = await step.run('run-retention', () =>

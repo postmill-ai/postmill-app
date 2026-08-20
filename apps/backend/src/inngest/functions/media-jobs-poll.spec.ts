@@ -37,8 +37,11 @@ describe('createMediaJobsPoll', () => {
 
   it('registers a minutely UTC cron handler with concurrency 1', () => {
     expect(inngest.createFunction).toHaveBeenCalledWith(
-      expect.objectContaining({ id: 'media-jobs-poll', concurrency: 1 }),
-      { cron: 'TZ=UTC * * * * *' },
+      expect.objectContaining({
+        id: 'media-jobs-poll',
+        concurrency: 1,
+        triggers: [{ cron: 'TZ=UTC * * * * *' }],
+      }),
       expect.any(Function)
     );
   });

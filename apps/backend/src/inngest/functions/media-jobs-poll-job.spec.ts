@@ -8,6 +8,7 @@ vi.mock('@postmill-ai/nestjs-libraries/inngest/inngest.client', () => ({
 }));
 
 import { inngest } from '@postmill-ai/nestjs-libraries/inngest/inngest.client';
+import { mediaPollJobEvent } from '@postmill-ai/nestjs-libraries/inngest/inngest.types';
 import { createMediaJobsPollJob } from './media-jobs-poll-job';
 import { createMockStep, captureFunctionHandler } from '../test/step.mock';
 
@@ -30,8 +31,11 @@ describe('createMediaJobsPollJob', () => {
 
   it('registers a media/poll-job handler with concurrency 15', () => {
     expect(inngest.createFunction).toHaveBeenCalledWith(
-      expect.objectContaining({ id: 'media-jobs-poll-job', concurrency: 15 }),
-      { event: 'media/poll-job' },
+      expect.objectContaining({
+        id: 'media-jobs-poll-job',
+        concurrency: 15,
+        triggers: [mediaPollJobEvent],
+      }),
       expect.any(Function)
     );
   });

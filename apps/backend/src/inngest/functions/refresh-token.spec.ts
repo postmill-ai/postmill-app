@@ -8,6 +8,7 @@ vi.mock('@postmill-ai/nestjs-libraries/inngest/inngest.client', () => ({
 }));
 
 import { inngest } from '@postmill-ai/nestjs-libraries/inngest/inngest.client';
+import { integrationRefreshTokenEvent } from '@postmill-ai/nestjs-libraries/inngest/inngest.types';
 import { createRefreshToken } from './refresh-token';
 import { createMockStep, captureFunctionHandler } from '../test/step.mock';
 
@@ -40,8 +41,8 @@ describe('createRefreshToken', () => {
             if: 'async.data.integrationId == event.data.integrationId',
           },
         ],
+        triggers: [integrationRefreshTokenEvent],
       }),
-      { event: 'integration/refresh-token' },
       expect.any(Function)
     );
   });

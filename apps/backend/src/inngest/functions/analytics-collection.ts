@@ -1,5 +1,9 @@
 import { inngest } from '@postmill-ai/nestjs-libraries/inngest/inngest.client';
 import {
+  analyticsSyncIntegrationEvent,
+  analyticsSyncOrgEvent,
+} from '@postmill-ai/nestjs-libraries/inngest/inngest.types';
+import {
   AnalyticsActivity,
   ChannelSnapshotIntegrationRef,
 } from '@postmill-ai/nestjs-libraries/inngest/activities/analytics.activity';
@@ -21,8 +25,11 @@ export const createAnalyticsCollection = (
   runRepo: InngestRunService
 ) =>
   inngest.createFunction(
-    { id: 'analytics-collection', concurrency: 1 },
-    { cron: 'TZ=UTC 0 2 * * *' },
+    {
+      id: 'analytics-collection',
+      concurrency: 1,
+      triggers: [{ cron: 'TZ=UTC 0 2 * * *' }],
+    },
     async ({ step }) =>
       trackRun(step, runRepo, 'analytics-collection', async () => {
         const orgIds = await step.run('get-org-ids', () =>
@@ -53,8 +60,11 @@ export const createAnalyticsCollection = (
 // fail the org. Mirrors `createCommentsSyncOrg`.
 export const createAnalyticsSyncOrg = (analyticsActivity: AnalyticsActivity) =>
   inngest.createFunction(
-    { id: 'analytics-sync-org', concurrency: 5 },
-    { event: 'analytics/sync-org' },
+    {
+      id: 'analytics-sync-org',
+      concurrency: 5,
+      triggers: [analyticsSyncOrgEvent],
+    },
     async ({ step, event }) => {
       const { organizationId } = event.data;
 
@@ -140,8 +150,11 @@ export const createAnalyticsSyncIntegration = (
   analyticsActivity: AnalyticsActivity
 ) =>
   inngest.createFunction(
-    { id: 'analytics-sync-integration', concurrency: 10 },
-    { event: 'analytics/sync-integration' },
+    {
+      id: 'analytics-sync-integration',
+      concurrency: 10,
+      triggers: [analyticsSyncIntegrationEvent],
+    },
     async ({ step, event }) => {
       const integration = event.data as ChannelSnapshotIntegrationRef;
       const { organizationId } = integration;

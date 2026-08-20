@@ -1,4 +1,5 @@
 import { inngest } from '@postmill-ai/nestjs-libraries/inngest/inngest.client';
+import { autopostProcessEvent } from '@postmill-ai/nestjs-libraries/inngest/inngest.types';
 import { AutopostActivity } from '@postmill-ai/nestjs-libraries/inngest/activities/autopost.activity';
 
 export const createAutopostProcess = (autopostActivity: AutopostActivity) =>
@@ -11,8 +12,8 @@ export const createAutopostProcess = (autopostActivity: AutopostActivity) =>
           if: 'async.data.id == event.data.id',
         },
       ],
+      triggers: [autopostProcessEvent],
     },
-    { event: 'autopost/process' },
     async ({ step, event }) => {
       await step.run('process', () =>
         autopostActivity.autoPost(event.data.id, event.data.organizationId)

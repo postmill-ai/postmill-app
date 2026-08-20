@@ -9,6 +9,10 @@ vi.mock('@postmill-ai/nestjs-libraries/inngest/inngest.client', () => ({
 
 import { inngest } from '@postmill-ai/nestjs-libraries/inngest/inngest.client';
 import {
+  analyticsSyncIntegrationEvent,
+  analyticsSyncOrgEvent,
+} from '@postmill-ai/nestjs-libraries/inngest/inngest.types';
+import {
   createAnalyticsCollection,
   createAnalyticsSyncOrg,
   createAnalyticsSyncIntegration,
@@ -53,8 +57,11 @@ describe('createAnalyticsCollection (cron, fan-out)', () => {
 
   it('registers a daily UTC cron handler with concurrency 1', () => {
     expect(inngest.createFunction).toHaveBeenCalledWith(
-      expect.objectContaining({ id: 'analytics-collection', concurrency: 1 }),
-      { cron: 'TZ=UTC 0 2 * * *' },
+      expect.objectContaining({
+        id: 'analytics-collection',
+        concurrency: 1,
+        triggers: [{ cron: 'TZ=UTC 0 2 * * *' }],
+      }),
       expect.any(Function)
     );
   });
@@ -118,8 +125,11 @@ describe('createAnalyticsSyncOrg (per-org event handler)', () => {
 
   it('registers an event handler with a concurrency cap', () => {
     expect(inngest.createFunction).toHaveBeenCalledWith(
-      expect.objectContaining({ id: 'analytics-sync-org', concurrency: 5 }),
-      { event: 'analytics/sync-org' },
+      expect.objectContaining({
+        id: 'analytics-sync-org',
+        concurrency: 5,
+        triggers: [analyticsSyncOrgEvent],
+      }),
       expect.any(Function)
     );
   });
@@ -216,8 +226,11 @@ describe('createAnalyticsSyncIntegration (per-integration event handler)', () =>
 
   it('registers an event handler with a concurrency cap', () => {
     expect(inngest.createFunction).toHaveBeenCalledWith(
-      expect.objectContaining({ id: 'analytics-sync-integration', concurrency: 10 }),
-      { event: 'analytics/sync-integration' },
+      expect.objectContaining({
+        id: 'analytics-sync-integration',
+        concurrency: 10,
+        triggers: [analyticsSyncIntegrationEvent],
+      }),
       expect.any(Function)
     );
   });

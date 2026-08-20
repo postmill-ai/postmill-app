@@ -1,4 +1,5 @@
 import { inngest } from '@postmill-ai/nestjs-libraries/inngest/inngest.client';
+import { agentDigestOrgEvent } from '@postmill-ai/nestjs-libraries/inngest/inngest.types';
 import { AgentDigestActivity } from '@postmill-ai/nestjs-libraries/inngest/activities/agent-digest.activity';
 import { OrganizationService } from '@postmill-ai/nestjs-libraries/database/prisma/organizations/organization.service';
 
@@ -9,8 +10,11 @@ export const createAgentDigest = (
   organizationService: OrganizationService
 ) =>
   inngest.createFunction(
-    { id: 'agent-digest', concurrency: 1 },
-    { cron: 'TZ=America/New_York 0 7 * * 1' },
+    {
+      id: 'agent-digest',
+      concurrency: 1,
+      triggers: [{ cron: 'TZ=America/New_York 0 7 * * 1' }],
+    },
     async ({ step }) => {
       if (process.env.AGENT_DIGEST_ENABLED !== 'true') {
         return { skipped: true, reason: 'AGENT_DIGEST_ENABLED not set to true' };
@@ -36,8 +40,11 @@ export const createAgentDigest = (
 
 export const createAgentDigestOrg = (agentDigestActivity: AgentDigestActivity) =>
   inngest.createFunction(
-    { id: 'agent-digest-org', concurrency: 2 },
-    { event: 'agent/digest-org' },
+    {
+      id: 'agent-digest-org',
+      concurrency: 2,
+      triggers: [agentDigestOrgEvent],
+    },
     async ({ step, event }) => {
       const { organizationId } = event.data;
 

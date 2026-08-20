@@ -8,6 +8,7 @@ vi.mock('@postmill-ai/nestjs-libraries/inngest/inngest.client', () => ({
 }));
 
 import { inngest } from '@postmill-ai/nestjs-libraries/inngest/inngest.client';
+import { autopostProcessEvent } from '@postmill-ai/nestjs-libraries/inngest/inngest.types';
 import { createAutopostProcess } from './autopost-process';
 import { createMockStep, captureFunctionHandler } from '../test/step.mock';
 
@@ -36,8 +37,8 @@ describe('createAutopostProcess', () => {
             if: 'async.data.id == event.data.id',
           },
         ],
+        triggers: [autopostProcessEvent],
       }),
-      { event: 'autopost/process' },
       expect.any(Function)
     );
   });

@@ -8,6 +8,7 @@ vi.mock('@postmill-ai/nestjs-libraries/inngest/inngest.client', () => ({
 }));
 
 import { inngest } from '@postmill-ai/nestjs-libraries/inngest/inngest.client';
+import { analyticsBackfillEvent } from '@postmill-ai/nestjs-libraries/inngest/inngest.types';
 import { createAnalyticsBackfill } from './analytics-backfill';
 import { createMockStep, captureFunctionHandler } from '../test/step.mock';
 
@@ -30,8 +31,10 @@ describe('createAnalyticsBackfill', () => {
 
   it('registers an analytics/backfill event handler', () => {
     expect(inngest.createFunction).toHaveBeenCalledWith(
-      expect.objectContaining({ id: 'analytics-backfill' }),
-      { event: 'analytics/backfill' },
+      expect.objectContaining({
+        id: 'analytics-backfill',
+        triggers: [analyticsBackfillEvent],
+      }),
       expect.any(Function)
     );
   });

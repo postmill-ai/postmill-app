@@ -18,7 +18,7 @@ import { InngestFunction } from 'inngest';
 
 @Injectable()
 export class InngestService {
-  private readonly functions: InngestFunction<any, any, any>[];
+  private readonly functions: InngestFunction.Any[];
 
   constructor(
     postActivity: PostActivity,
@@ -56,7 +56,7 @@ export class InngestService {
     });
   }
 
-  getFunctions(): InngestFunction<any, any, any>[] {
+  getFunctions(): InngestFunction.Any[] {
     return this.functions;
   }
 

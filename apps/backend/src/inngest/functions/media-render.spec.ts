@@ -8,6 +8,7 @@ vi.mock('@postmill-ai/nestjs-libraries/inngest/inngest.client', () => ({
 }));
 
 import { inngest } from '@postmill-ai/nestjs-libraries/inngest/inngest.client';
+import { mediaRenderEvent } from '@postmill-ai/nestjs-libraries/inngest/inngest.types';
 import { createMediaRender } from './media-render';
 import { createMockStep, captureFunctionHandler } from '../test/step.mock';
 
@@ -27,8 +28,8 @@ describe('createMediaRender', () => {
       expect.objectContaining({
         id: 'media-render',
         concurrency: { limit: 3 },
+        triggers: [mediaRenderEvent],
       }),
-      { event: 'media/render' },
       expect.any(Function),
     );
   });

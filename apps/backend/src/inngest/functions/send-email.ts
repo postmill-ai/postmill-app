@@ -1,4 +1,5 @@
 import { inngest } from '@postmill-ai/nestjs-libraries/inngest/inngest.client';
+import { emailSendEvent } from '@postmill-ai/nestjs-libraries/inngest/inngest.types';
 import { EmailActivity } from '@postmill-ai/nestjs-libraries/inngest/activities/email.activity';
 
 export const createSendEmail = (emailActivity: EmailActivity) =>
@@ -12,8 +13,8 @@ export const createSendEmail = (emailActivity: EmailActivity) =>
         limit: 1,
         period: '1s',
       },
+      triggers: [emailSendEvent],
     },
-    { event: 'email/send' },
     async ({ step, event }) => {
       const { to, subject, html, replyTo } = event.data;
       await step.run('send', () =>

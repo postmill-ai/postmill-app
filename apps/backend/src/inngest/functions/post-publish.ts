@@ -1,4 +1,5 @@
 import { inngest } from '@postmill-ai/nestjs-libraries/inngest/inngest.client';
+import { postPublishEvent } from '@postmill-ai/nestjs-libraries/inngest/inngest.types';
 import { PostActivity } from '@postmill-ai/nestjs-libraries/inngest/activities/post.activity';
 import {
   RefreshTokenError,
@@ -527,8 +528,10 @@ export const createPostPublishFunctions = (postActivity: PostActivity) =>
             if: 'async.data.postId == event.data.postId',
           },
         ],
+        triggers: [
+          { event: postPublishEvent, if: `event.data.taskQueue == "${taskQueue}"` },
+        ],
       },
-      { event: 'post/publish', if: `event.data.taskQueue == "${taskQueue}"` },
       runPostPublish(postActivity)
     )
   );

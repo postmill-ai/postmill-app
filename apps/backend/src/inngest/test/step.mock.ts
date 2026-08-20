@@ -9,7 +9,8 @@ export const createMockStep = () => ({
 
 export const captureFunctionHandler = (createFunctionMock: ReturnType<typeof vi.fn>) => {
   let handler: any;
-  createFunctionMock.mockImplementation((_opts: any, _trigger: any, fn: any) => {
+  // Inngest v4: createFunction(options, handler) — triggers live in options.
+  createFunctionMock.mockImplementation((_opts: any, fn: any) => {
     handler = fn;
     return { id: 'mock' } as any;
   });

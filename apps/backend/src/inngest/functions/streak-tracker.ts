@@ -1,4 +1,5 @@
 import { inngest } from '@postmill-ai/nestjs-libraries/inngest/inngest.client';
+import { streakStartEvent } from '@postmill-ai/nestjs-libraries/inngest/inngest.types';
 import { EmailActivity } from '@postmill-ai/nestjs-libraries/inngest/activities/email.activity';
 import { PostActivity } from '@postmill-ai/nestjs-libraries/inngest/activities/post.activity';
 
@@ -15,8 +16,8 @@ export const createStreakTracker = (
           if: 'async.data.organizationId == event.data.organizationId',
         },
       ],
+      triggers: [streakStartEvent],
     },
-    { event: 'streak/start' },
     async ({ step, event }) => {
       const { organizationId } = event.data;
       await step.run('set-streak-start', () =>

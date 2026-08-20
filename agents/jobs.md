@@ -13,11 +13,11 @@ Cross-references: `agents/backend.md` (module wiring), `agents/database.md` (Pri
 
 | Piece | Path | Role |
 |---|---|---|
-| Client singleton | `libraries/nestjs-libraries/src/inngest/inngest.client.ts` | `export const inngest = new Inngest({ id: 'postmill', schemas: inngestSchemas })`; SDK reads `eventKey`/`signingKey`/`env`/`baseUrl`/`isDev` from env automatically. Also exports `isInngestEnabled()` → `USE_INNGEST === 'true' \|\| USE_INNGEST === '1'`. |
-| Event schemas | `libraries/nestjs-libraries/src/inngest/inngest.types.ts` | `InngestEvents` record (`'post/publish'`, `'email/send'`, `'analytics/sync-org'`, …) compiled by `new EventSchemas().fromRecord<InngestEvents>()`. **Add new events here first.** |
+| Client singleton | `libraries/nestjs-libraries/src/inngest/inngest.client.ts` | `export const inngest = new Inngest({ id: 'postmill' })`; SDK reads `eventKey`/`signingKey`/`env`/`baseUrl` from env automatically (`INNGEST_DEV=1` selects dev mode — v4 defaults to cloud mode). Also exports `isInngestEnabled()` → `USE_INNGEST === 'true' \|\| USE_INNGEST === '1'`. |
+| Event types | `libraries/nestjs-libraries/src/inngest/inngest.types.ts` | `InngestEvents` record (`'post/publish'`, `'email/send'`, `'analytics/sync-org'`, …) plus one exported `eventType(name, { schema: staticSchema<...>() })` per trigger event (v4 — the client-level `EventSchemas` was removed; the eventType is passed directly as the function trigger so handlers keep a typed `event.data`). **Add new events here first.** |
 | Nest module | `libraries/nestjs-libraries/src/inngest/inngest.module.ts` | Registers all `*Activity` classes + `InngestRunService` + `InngestService` as providers/exports; imports `DatabaseModule`. |
 | Function builder | `libraries/nestjs-libraries/src/inngest/inngest.service.ts` | `InngestService` constructor injects every activity and calls `createFunctions({...})`; `getFunctions()` returns the array. Built in the **constructor** (not `onModuleInit`) so `InngestController` (instantiated after) sees the populated list. |
-| Function factories | `apps/backend/src/inngest/functions/*.ts` | Each exports `createX(activity, ...) => inngest.createFunction(opts, trigger, handler)`. Wired in `apps/backend/src/inngest/functions/index.ts` via `InngestActivities` interface + `createFunctions(activities)` array. |
+| Function factories | `apps/backend/src/inngest/functions/*.ts` | Each exports `createX(activity, ...) => inngest.createFunction(optsWithTriggers, handler)` — v4 moves the trigger into options as `triggers: [...]`. Wired in `apps/backend/src/inngest/functions/index.ts` via `InngestActivities` interface + `createFunctions(activities)` array. |
 | Serve handler | `apps/backend/src/inngest/serve.ts` | `createInngestServeHandler(functions)` → `serve({ client: inngest, functions })` from `inngest/express`. |
 | HTTP endpoint | `apps/backend/src/api/controllers/inngest.controller.ts` | `@Controller('/api/inngest')`, `@All()` delegating `req,res` to the handler built in its constructor. Registered in `apps/backend/src/app.module.ts`. |
 | Domain logic | `libraries/nestjs-libraries/src/inngest/activities/*.activity.ts` | One `@Injectable()` per domain (`PostActivity`, `AnalyticsActivity`, `CommentsActivity`, `EmailActivity`, `IntegrationsActivity`, `AutopostActivity`, `MediaJobsActivity`, `DigestActivity`, `CampaignActivity`, `RetentionActivity`, `AgentDigestActivity`). Activities use repositories/services; function files contain **zero** Prisma. |
@@ -99,7 +99,7 @@ sweep. Canonical example: `analytics-collection.ts` (mirrored by `comments-colle
 ### 3.3 Activity pattern
 
 Function factories are thin: `createX(activity)` returns
-`inngest.createFunction(opts, trigger, ({ step, event }) => step.run(...activity.method...))`.
+`inngest.createFunction({ id, triggers: [...] }, ({ step, event }) => step.run(...activity.method...))`.
 All domain logic (Prisma via repositories, provider calls, notifications) lives in
 `libraries/nestjs-libraries/src/inngest/activities/*.activity.ts` `@Injectable()` classes.
 Wiring in function files; logic in activities. Never import Prisma in
@@ -130,14 +130,15 @@ Verified against `analytics-collection.ts`. Touch points in order:
    `AnalyticsActivity.getAllOrganizationIds`). New domains: create a new `*.activity.ts`
    `@Injectable()`. Activities call repositories/services — never Prisma directly outside
    repositories (see `agents/backend.md`).
-2. **Event schema + factory** — if event-triggered, add the event to `InngestEvents` in
-   `libraries/nestjs-libraries/src/inngest/inngest.types.ts` (schema-validated at client
-   level). Create `apps/backend/src/inngest/functions/<name>.ts`:
+2. **Event type + factory** — if event-triggered, add the event to `InngestEvents` in
+   `libraries/nestjs-libraries/src/inngest/inngest.types.ts` and export its
+   `eventType(name, { schema: staticSchema<...>() })` (type-only schema; pass the eventType
+   directly as the trigger). Create `apps/backend/src/inngest/functions/<name>.ts`:
    ```ts
    export const createMyJob = (myActivity: MyActivity, runRepo: InngestRunService) =>
      inngest.createFunction(
-       { id: 'my-job', concurrency: 1 },
-       { cron: 'TZ=UTC 0 4 * * *' },            // crons are 'TZ=<IANA> <expr>' strings; events: { event: 'my/job' }
+       { id: 'my-job', concurrency: 1, triggers: [{ cron: 'TZ=UTC 0 4 * * *' }] },
+       // crons are 'TZ=<IANA> <expr>' strings; events: triggers: [myJobEvent]
        async ({ step }) =>
          trackRun(step, runRepo, 'my-job', async () => {
            const orgIds = await step.run('get-org-ids', () => myActivity.getAllIds());
@@ -229,13 +230,13 @@ Factory-spec pattern (canonical: `analytics-collection.spec.ts`):
    ```
 2. Capture the handler and invoke it directly:
    `captureFunctionHandler(vi.mocked(inngest.createFunction))` (from
-   `apps/backend/src/inngest/test/step.mock.ts`) stores the 3rd `createFunction` arg; call
+   `apps/backend/src/inngest/test/step.mock.ts`) stores the 2nd `createFunction` arg; call
    `createX(mockActivity, mockRunRepo)` then `getHandler()({ step, event })`.
 3. `createMockStep()` executes `step.run(id, fn)` inline (`fn()` immediately), stubs
    `sleep`/`sendEvent`/`waitForEvent`.
 4. Assert on three levels: registration (`expect(inngest.createFunction).toHaveBeenCalledWith(
-   expect.objectContaining({ id: 'analytics-collection', concurrency: 1 }),
-   { cron: 'TZ=UTC 0 2 * * *' }, expect.any(Function))`), step ids
+   expect.objectContaining({ id: 'analytics-collection', concurrency: 1,
+   triggers: [{ cron: 'TZ=UTC 0 2 * * *' }] }), expect.any(Function))`), step ids
    (`expect(step.run).toHaveBeenCalledWith('get-org-ids', ...)`), and activity calls
    (`expect(analyticsActivity.getAllOrganizationIds).toHaveBeenCalled()`).
 

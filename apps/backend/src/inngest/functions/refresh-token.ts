@@ -1,5 +1,6 @@
 import { randomUUID } from 'crypto';
 import { inngest } from '@postmill-ai/nestjs-libraries/inngest/inngest.client';
+import { integrationRefreshTokenEvent } from '@postmill-ai/nestjs-libraries/inngest/inngest.types';
 import { IntegrationsActivity } from '@postmill-ai/nestjs-libraries/inngest/activities/integrations.activity';
 
 // F3: consecutive failed refresh cycles are bounded — after this many the
@@ -20,8 +21,8 @@ export const createRefreshToken = (integrationsActivity: IntegrationsActivity) =
           if: 'async.data.integrationId == event.data.integrationId',
         },
       ],
+      triggers: [integrationRefreshTokenEvent],
     },
-    { event: 'integration/refresh-token' },
     async ({ step, event }) => {
       const { integrationId, organizationId } = event.data;
       const retries = event.data.retries ?? 0;

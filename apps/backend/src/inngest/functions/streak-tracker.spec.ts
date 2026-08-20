@@ -8,6 +8,7 @@ vi.mock('@postmill-ai/nestjs-libraries/inngest/inngest.client', () => ({
 }));
 
 import { inngest } from '@postmill-ai/nestjs-libraries/inngest/inngest.client';
+import { streakStartEvent } from '@postmill-ai/nestjs-libraries/inngest/inngest.types';
 import { createStreakTracker } from './streak-tracker';
 import { createMockStep, captureFunctionHandler } from '../test/step.mock';
 
@@ -44,8 +45,8 @@ describe('createStreakTracker', () => {
             if: 'async.data.organizationId == event.data.organizationId',
           },
         ],
+        triggers: [streakStartEvent],
       }),
-      { event: 'streak/start' },
       expect.any(Function)
     );
   });
