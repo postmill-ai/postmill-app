@@ -89,12 +89,12 @@ const MenuButton: FC<{
         createPortal(
           <>
             {/* Dismiss layer: a click anywhere else closes the menu. */}
-            <div className="fixed inset-0 z-[399]" onClick={() => setPos(null)} />
+            <div className="fixed inset-0 z-399" onClick={() => setPos(null)} />
             <div
               role="menu"
               aria-label={label}
               style={{ left: pos.left, bottom: pos.bottom }}
-              className="fixed z-[400] min-w-[200px] max-h-[60vh] overflow-y-auto py-1 rounded-lg border border-studioBorder bg-newBgColorInner shadow-2xl"
+              className="fixed z-400 min-w-[200px] max-h-[60vh] overflow-y-auto py-1 rounded-lg border border-studioBorder bg-newBgColorInner shadow-2xl"
             >
               {enabled.map((action) => (
                 <button

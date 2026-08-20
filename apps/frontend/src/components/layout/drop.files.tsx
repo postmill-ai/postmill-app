@@ -27,7 +27,7 @@ export const DropFiles: FC<{
   return (
     <div {...getRootProps()} className={clsx("relative", props.className)}>
       {isDragActive && (
-        <div className="absolute start-0 top-0 w-full h-full bg-black/90 flex items-center justify-center z-[200] animate-normalFadeIn">
+        <div className="absolute start-0 top-0 w-full h-full bg-black/90 flex items-center justify-center z-200 animate-normalFadeIn">
           {t('drag_n_drop_some_files_here', 'Drag n drop some files here')}
         </div>
       )}

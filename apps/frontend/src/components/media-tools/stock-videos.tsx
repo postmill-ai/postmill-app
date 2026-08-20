@@ -137,14 +137,14 @@ export const StockVideos: FC<StockVideosProps> = ({ mode = 'browse', onSelect, o
             value={query}
             onChange={e => setQuery(e.target.value)}
             placeholder={t('search_videos_placeholder', 'Search videos...')}
-            className="w-full h-[44px] pl-[38px] pr-[34px] rounded-[8px] bg-newBgColorInner border border-newColColor text-[14px] outline-none focus:border-[#2B5CD3] text-textColor"
+            className="w-full h-[44px] pl-[38px] pr-[34px] rounded-[8px] bg-newBgColorInner border border-newColColor text-[14px] outline-hidden focus:border-[#2B5CD3] text-textColor"
           />
           {query && (
             <button
               type="button"
               onClick={() => setQuery('')}
               aria-label={t('clear_search', 'Clear search')}
-              className="absolute right-[10px] top-1/2 -translate-y-1/2 w-[20px] h-[20px] flex items-center justify-center text-newTextColor/60 hover:text-newTextColor rounded-full focus:outline-none focus-visible:ring-2 focus-visible:ring-[#2B5CD3]"
+              className="absolute right-[10px] top-1/2 -translate-y-1/2 w-[20px] h-[20px] flex items-center justify-center text-newTextColor/60 hover:text-newTextColor rounded-full focus:outline-hidden focus-visible:ring-2 focus-visible:ring-[#2B5CD3]"
             >
               ✕
             </button>
@@ -155,7 +155,7 @@ export const StockVideos: FC<StockVideosProps> = ({ mode = 'browse', onSelect, o
             value={orientation}
             onChange={e => setOrientation(e.target.value)}
             aria-label={t('filter_by_orientation', 'Filter by orientation')}
-            className="appearance-none h-[44px] w-full sm:w-auto pl-[12px] pr-[32px] rounded-[8px] bg-newBgColorInner border border-newColColor text-[13px] text-textColor outline-none cursor-pointer"
+            className="appearance-none h-[44px] w-full sm:w-auto pl-[12px] pr-[32px] rounded-[8px] bg-newBgColorInner border border-newColColor text-[13px] text-textColor outline-hidden cursor-pointer"
           >
             <option value="">{t('all_orientations', 'All orientations')}</option>
             <option value="landscape">{t('landscape', 'Landscape')}</option>
@@ -171,7 +171,7 @@ export const StockVideos: FC<StockVideosProps> = ({ mode = 'browse', onSelect, o
             value={size}
             onChange={e => setSize(e.target.value)}
             aria-label={t('filter_by_size', 'Filter by size')}
-            className="appearance-none h-[44px] w-full sm:w-auto pl-[12px] pr-[32px] rounded-[8px] bg-newBgColorInner border border-newColColor text-[13px] text-textColor outline-none cursor-pointer"
+            className="appearance-none h-[44px] w-full sm:w-auto pl-[12px] pr-[32px] rounded-[8px] bg-newBgColorInner border border-newColColor text-[13px] text-textColor outline-hidden cursor-pointer"
           >
             <option value="">{t('all_sizes', 'All sizes')}</option>
             <option value="small">{t('small', 'Small')}</option>
@@ -189,7 +189,7 @@ export const StockVideos: FC<StockVideosProps> = ({ mode = 'browse', onSelect, o
           type="button"
           onClick={() => setColor('')}
           aria-pressed={color === ''}
-          className={`h-[30px] px-[12px] rounded-full border text-[12px] transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-[#2B5CD3] ${
+          className={`h-[30px] px-[12px] rounded-full border text-[12px] transition-colors focus:outline-hidden focus-visible:ring-2 focus-visible:ring-[#2B5CD3] ${
             color === ''
               ? 'border-[#2B5CD3] bg-[#2B5CD3]/15 text-btnPrimaryAccent font-[500]'
               : 'border-newColColor text-newTextColor/70 hover:text-textColor hover:border-newTextColor/40'
@@ -207,7 +207,7 @@ export const StockVideos: FC<StockVideosProps> = ({ mode = 'browse', onSelect, o
             aria-pressed={color === c.value}
             aria-label={t('color_name', 'Color: {{color}}', { color: colorLabel })}
             title={colorLabel}
-            className={`relative w-[30px] h-[30px] rounded-full border transition-transform focus:outline-none focus-visible:ring-2 focus-visible:ring-[#2B5CD3] hover:scale-110 ${
+            className={`relative w-[30px] h-[30px] rounded-full border transition-transform focus:outline-hidden focus-visible:ring-2 focus-visible:ring-[#2B5CD3] hover:scale-110 ${
               color === c.value ? 'border-[#2B5CD3] ring-2 ring-[#2B5CD3]/40' : 'border-newColColor'
             }`}
           >
@@ -237,7 +237,7 @@ export const StockVideos: FC<StockVideosProps> = ({ mode = 'browse', onSelect, o
           <button
             type="button"
             onClick={() => mutate()}
-            className="mt-[6px] px-[16px] h-[36px] rounded-[8px] bg-[#2B5CD3] text-white text-[13px] hover:bg-[#1e4ab5] focus:outline-none focus-visible:ring-2 focus-visible:ring-[#2B5CD3]"
+            className="mt-[6px] px-[16px] h-[36px] rounded-[8px] bg-[#2B5CD3] text-white text-[13px] hover:bg-[#1e4ab5] focus:outline-hidden focus-visible:ring-2 focus-visible:ring-[#2B5CD3]"
           >
             {t('try_again', 'Try again')}
           </button>
@@ -274,7 +274,7 @@ export const StockVideos: FC<StockVideosProps> = ({ mode = 'browse', onSelect, o
                 key={s}
                 type="button"
                 onClick={() => setQuery(s)}
-                className="h-[30px] px-[14px] rounded-full border border-newColColor text-[12px] text-newTextColor/70 hover:text-btnPrimaryAccent hover:border-[#2B5CD3] transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-[#2B5CD3]"
+                className="h-[30px] px-[14px] rounded-full border border-newColColor text-[12px] text-newTextColor/70 hover:text-btnPrimaryAccent hover:border-[#2B5CD3] transition-colors focus:outline-hidden focus-visible:ring-2 focus-visible:ring-[#2B5CD3]"
               >
                 {s}
               </button>
@@ -317,7 +317,7 @@ export const StockVideos: FC<StockVideosProps> = ({ mode = 'browse', onSelect, o
                     activate();
                   }
                 }}
-                className="group text-left rounded-[8px] overflow-hidden border border-newBorder bg-newBgColorInner cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-[#2B5CD3]"
+                className="group text-left rounded-[8px] overflow-hidden border border-newBorder bg-newBgColorInner cursor-pointer focus:outline-hidden focus-visible:ring-2 focus-visible:ring-[#2B5CD3]"
               >
                 <div className="aspect-video relative overflow-hidden bg-black">
                   {/* eslint-disable-next-line @next/next/no-img-element -- external stock thumbnail */}
@@ -331,7 +331,7 @@ export const StockVideos: FC<StockVideosProps> = ({ mode = 'browse', onSelect, o
                     {Math.floor(video.duration / 60)}:{(video.duration % 60).toString().padStart(2, '0')}
                   </div>
                   <div className="absolute inset-0 pointer-events-none">
-                    <div className="absolute bottom-0 left-0 right-0 h-[70px] bg-gradient-to-t from-black/40 to-transparent opacity-0 group-hover:opacity-100 transition-opacity" />
+                    <div className="absolute bottom-0 left-0 right-0 h-[70px] bg-linear-to-t from-black/40 to-transparent opacity-0 group-hover:opacity-100 transition-opacity" />
                     <div className="absolute bottom-[8px] right-[8px] opacity-0 group-hover:opacity-100 transition-opacity">
                       <svg className="w-[18px] h-[18px] text-white drop-shadow-[0_1px_2px_rgba(0,0,0,0.5)]" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                         <path strokeLinecap="round" strokeLinejoin="round" d="M4 8V4m0 0h4M4 4l5 5m11-1V4m0 0h-4m4 0l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5l-5-5m5 5v-4m0 4h-4" />

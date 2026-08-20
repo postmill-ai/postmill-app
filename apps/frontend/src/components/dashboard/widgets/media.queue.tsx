@@ -16,11 +16,11 @@ const statusPill = (status: string) => {
   const base = 'text-[10px] font-semibold px-[6px] py-[2px] rounded-full uppercase';
   switch (status) {
     case 'completed':
-      return `${base} bg-[var(--positive,#32d583)]/10 text-[var(--positive,#32d583)]`;
+      return `${base} bg-(--positive,#32d583)/10 text-(--positive,#32d583)`;
     case 'failed':
-      return `${base} bg-[var(--negative,#f97066)]/10 text-[var(--negative,#f97066)]`;
+      return `${base} bg-(--negative,#f97066)/10 text-(--negative,#f97066)`;
     case 'processing':
-      return `${base} bg-[var(--chart-5,#ffac30)]/10 text-[var(--chart-5,#ffac30)]`;
+      return `${base} bg-(--chart-5,#ffac30)/10 text-(--chart-5,#ffac30)`;
     default:
       return `${base} bg-newTableBorder text-newTableText`;
   }
@@ -72,7 +72,7 @@ const MediaJobRow: FC<{ job: MediaJob }> = ({ job }) => {
           {dayjs(job.createdAt).fromNow()}
         </p>
         {job.error && (
-          <p className="text-[11px] text-[var(--negative,#f97066)] truncate">
+          <p className="text-[11px] text-(--negative,#f97066) truncate">
             {job.error}
           </p>
         )}
@@ -118,7 +118,7 @@ export const MediaQueueWidget: FC = () => {
           {t('processing_label', 'processing')}
         </div>
         {data.counts.failed7d > 0 && (
-          <div className="text-[12px] text-[var(--negative,#f97066)]">
+          <div className="text-[12px] text-(--negative,#f97066)">
             <span className="font-medium">{data.counts.failed7d}</span>{' '}
             {t('failed_label', 'failed')}
           </div>

@@ -90,7 +90,7 @@ export const NewDesignDialog: FC<NewDesignDialogProps> = ({ store, onClose, guar
           value={w}
           onChange={(e) => setW(e.target.value)}
           placeholder={t('designer_width_short', 'W')}
-          className="w-full h-[38px] rounded-lg border border-studioBorder bg-newBgColor px-3 text-[13px] text-textColor text-center outline-none focus:border-designerAccent"
+          className="w-full h-[38px] rounded-lg border border-studioBorder bg-newBgColor px-3 text-[13px] text-textColor text-center outline-hidden focus:border-designerAccent"
         />
         <span className="text-textColor/40">×</span>
         <input
@@ -98,7 +98,7 @@ export const NewDesignDialog: FC<NewDesignDialogProps> = ({ store, onClose, guar
           value={h}
           onChange={(e) => setH(e.target.value)}
           placeholder={t('designer_height_short', 'H')}
-          className="w-full h-[38px] rounded-lg border border-studioBorder bg-newBgColor px-3 text-[13px] text-textColor text-center outline-none focus:border-designerAccent"
+          className="w-full h-[38px] rounded-lg border border-studioBorder bg-newBgColor px-3 text-[13px] text-textColor text-center outline-hidden focus:border-designerAccent"
         />
       </div>
 

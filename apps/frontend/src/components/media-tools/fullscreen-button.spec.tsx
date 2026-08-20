@@ -43,7 +43,7 @@ describe('full screen', () => {
     fireEvent.click(toggle());
 
     // z-100 is deliberate: modals mount at 200+ and must stay above.
-    expect(root().className).toContain('fixed inset-0 z-[100]');
+    expect(root().className).toContain('fixed inset-0 z-100');
     expect(root().className).not.toContain(COLLAPSED);
     // The base classes survive the swap.
     expect(root().className).toContain('bg-studioBg');

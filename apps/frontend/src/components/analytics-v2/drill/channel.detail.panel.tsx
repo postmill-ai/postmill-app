@@ -163,8 +163,8 @@ export const ChannelDetailPanel: FC<ChannelDetailPanelProps> = ({
                     <div
                       className={`flex items-center gap-[4px] text-[12px] font-medium ${
                         metricData.percentageChange >= 0
-                          ? 'text-[var(--positive,#32d583)]'
-                          : 'text-[var(--negative,#f97066)]'
+                          ? 'text-(--positive,#32d583)'
+                          : 'text-(--negative,#f97066)'
                       }`}
                     >
                       <svg
@@ -312,7 +312,7 @@ export const ChannelDetailPanel: FC<ChannelDetailPanelProps> = ({
                       setDrillMetric(kpi.metric);
                     }
                   }}
-                  className="bg-newTableHeader border border-newTableBorder rounded-[10px] p-[14px] cursor-pointer hover:border-newTableText transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-designerAccent/60"
+                  className="bg-newTableHeader border border-newTableBorder rounded-[10px] p-[14px] cursor-pointer hover:border-newTableText transition-colors focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-designerAccent/60"
                 >
                   <div className="flex items-center justify-between mb-[8px]">
                     <span className="text-[13px] font-medium text-newTableText uppercase tracking-wide">
@@ -322,8 +322,8 @@ export const ChannelDetailPanel: FC<ChannelDetailPanelProps> = ({
                       <div
                         className={`flex items-center gap-[4px] text-[12px] font-medium ${
                           isPositive
-                            ? 'text-[var(--positive,#32d583)]'
-                            : 'text-[var(--negative,#f97066)]'
+                            ? 'text-(--positive,#32d583)'
+                            : 'text-(--negative,#f97066)'
                         }`}
                       >
                         <svg

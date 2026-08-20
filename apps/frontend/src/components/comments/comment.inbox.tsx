@@ -225,7 +225,7 @@ export const CommentInbox: FC = () => {
           fill="none"
           stroke="currentColor"
           strokeWidth={2}
-          className="absolute start-[10px] top-1/2 -translate-y-1/2 pointer-events-none text-newTableText"
+          className="absolute inset-s-[10px] top-1/2 -translate-y-1/2 pointer-events-none text-newTableText"
           aria-hidden="true"
         >
           <path
@@ -240,14 +240,14 @@ export const CommentInbox: FC = () => {
           onChange={(e) => setSearch(e.target.value)}
           placeholder={t('comment_inbox.search', 'Search replies...')}
           aria-label={t('comment_inbox.search', 'Search replies')}
-          className="w-[190px] h-[42px] ps-[32px] pe-[26px] rounded-[8px] bg-newBgColorInner border border-newTableBorder text-[14px] text-textColor outline-none focus:border-btnPrimary placeholder:text-newTableText"
+          className="w-[190px] h-[42px] ps-[32px] pe-[26px] rounded-[8px] bg-newBgColorInner border border-newTableBorder text-[14px] text-textColor outline-hidden focus:border-btnPrimary placeholder:text-newTableText"
         />
         {!!search && (
           <button
             type="button"
             aria-label={t('clear_search', 'Clear search')}
             onClick={() => setSearch('')}
-            className="absolute end-[7px] top-1/2 -translate-y-1/2 w-[18px] h-[18px] flex items-center justify-center rounded-full text-newTableText hover:bg-boxFocused hover:text-textColor transition-all"
+            className="absolute inset-e-[7px] top-1/2 -translate-y-1/2 w-[18px] h-[18px] flex items-center justify-center rounded-full text-newTableText hover:bg-boxFocused hover:text-textColor transition-all"
           >
             <svg
               xmlns="http://www.w3.org/2000/svg"
@@ -298,7 +298,7 @@ export const CommentInbox: FC = () => {
                 checked={prioritySort}
                 onChange={(e) => setPrioritySort(e.target.checked)}
               />
-              <div className="relative w-[36px] h-[20px] shrink-0 bg-newTableBorder rounded-full peer-checked:bg-btnPrimary after:content-[''] after:absolute after:top-[2px] after:start-[2px] after:bg-white after:rounded-full after:h-[16px] after:w-[16px] after:transition-all peer-checked:after:translate-x-full" />
+              <div className="relative w-[36px] h-[20px] shrink-0 bg-newTableBorder rounded-full peer-checked:bg-btnPrimary after:content-[''] after:absolute after:top-[2px] after:inset-s-[2px] after:bg-white after:rounded-full after:h-[16px] after:w-[16px] after:transition-all peer-checked:after:translate-x-full" />
               {t('comment_inbox.sort_priority_first', 'High priority first')}
             </label>
           }
@@ -310,8 +310,8 @@ export const CommentInbox: FC = () => {
   if (error && statusCode === 402) {
     return (
       <div className="flex flex-col items-center justify-center py-[48px] text-center">
-        <div className="w-[48px] h-[48px] mb-[16px] rounded-full bg-[var(--negative,#f97066)]/10 flex items-center justify-center">
-          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="text-[var(--negative,#f97066)]">
+        <div className="w-[48px] h-[48px] mb-[16px] rounded-full bg-(--negative,#f97066)/10 flex items-center justify-center">
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="text-(--negative,#f97066)">
             <rect x="3" y="11" width="18" height="11" rx="2" ry="2" />
             <path d="M7 11V7a5 5 0 0 1 10 0v4" />
           </svg>
@@ -335,8 +335,8 @@ export const CommentInbox: FC = () => {
   if (error) {
     return (
       <div className="flex flex-col items-center justify-center py-[48px] text-center">
-        <div className="w-[48px] h-[48px] mb-[16px] rounded-full bg-[var(--negative,#f97066)]/10 flex items-center justify-center">
-          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="text-[var(--negative,#f97066)]">
+        <div className="w-[48px] h-[48px] mb-[16px] rounded-full bg-(--negative,#f97066)/10 flex items-center justify-center">
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="text-(--negative,#f97066)">
             <circle cx="12" cy="12" r="10" />
             <path d="M12 8v4m0 4h.01" />
           </svg>
@@ -356,7 +356,7 @@ export const CommentInbox: FC = () => {
         <div className="space-y-[8px] animate-pulse">
           {[1, 2, 3].map((i) => (
             <div key={i} className="bg-newBgColorInner rounded-[8px] border border-newTableBorder p-[16px] flex items-start gap-[12px]">
-              <div className="w-[36px] h-[36px] rounded-full bg-newTableHeader flex-shrink-0" />
+              <div className="w-[36px] h-[36px] rounded-full bg-newTableHeader shrink-0" />
               <div className="flex-1 space-y-[8px]">
                 <div className="h-[14px] w-[180px] bg-newTableHeader rounded-[4px]" />
                 <div className="h-[12px] w-full bg-newTableHeader rounded-[4px]" />

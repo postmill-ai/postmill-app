@@ -188,7 +188,7 @@ export const CurvesEditor: FC<CurvesEditorProps> = ({
             write(IDENTITY_CURVE.map((p) => ({ ...p })));
             onCommit?.();
           }}
-          className="ml-auto px-2 h-[22px] rounded text-[11px] text-textColor/60 hover:bg-boxHover"
+          className="ml-auto px-2 h-[22px] rounded-sm text-[11px] text-textColor/60 hover:bg-boxHover"
         >
           {t('designer_curves_reset', 'Reset')}
         </button>
@@ -200,7 +200,7 @@ export const CurvesEditor: FC<CurvesEditorProps> = ({
           nonce={nonce}
           channel={channel === 'rgb' ? 'luma' : channel}
           height={SIZE}
-          className="!rounded-[6px]"
+          className="rounded-[6px]!"
         />
         <svg
           ref={svgRef}

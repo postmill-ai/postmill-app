@@ -74,7 +74,7 @@ export const Voiceover: FC<VoiceoverProps> = ({ voices, onGenerated }) => {
         onChange={(e) => setText(e.target.value)}
         placeholder={t('heygen_type_script_to_read_aloud', 'Type the script to read aloud…')}
         rows={7}
-        className="w-full px-[12px] py-[10px] rounded-[10px] bg-newBgColorInner border border-studioBorder text-[13px] text-textColor outline-none focus:border-[#2B5CD3] resize-none"
+        className="w-full px-[12px] py-[10px] rounded-[10px] bg-newBgColorInner border border-studioBorder text-[13px] text-textColor outline-hidden focus:border-[#2B5CD3] resize-none"
       />
 
       <button

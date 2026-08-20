@@ -9,10 +9,10 @@ import { EmptyState, TabSkeleton } from '@postmill-ai/frontend/components/analyt
 import { useT } from '@postmill-ai/react/translation/get.transation.service.client';
 
 const BAR_COLORS: Record<string, string> = {
-  queue: 'bg-[var(--chart-5,#ffac30)]',
-  published: 'bg-[var(--chart-2,#32d583)]',
-  draft: 'bg-[var(--chart-3,#1d9bf0)]',
-  error: 'bg-[var(--negative,#f97066)]',
+  queue: 'bg-(--chart-5,#ffac30)',
+  published: 'bg-(--chart-2,#32d583)',
+  draft: 'bg-(--chart-3,#1d9bf0)',
+  error: 'bg-(--negative,#f97066)',
 };
 
 const PostStateBar: FC<{ counts: CampaignSummary['postCounts'] }> = ({ counts }) => {
@@ -41,7 +41,7 @@ const GoalBar: FC<{ target: number; current: number; metric: string }> = ({
   metric,
 }) => {
   const pct = target > 0 ? Math.min(100, Math.round((current / target) * 100)) : 0;
-  const color = pct >= 100 ? 'bg-[var(--positive,#32d583)]' : 'bg-btnPrimary';
+  const color = pct >= 100 ? 'bg-(--positive,#32d583)' : 'bg-btnPrimary';
   return (
     <div className="flex flex-col gap-[4px]">
       <div className="flex justify-between text-[11px] text-newTableText">

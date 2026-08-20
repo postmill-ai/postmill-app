@@ -21,7 +21,7 @@ const Btn: FC<{ onClick: () => void; title: string; children: React.ReactNode }>
     onClick={onClick}
     title={title}
     aria-label={title}
-    className="w-8 h-8 flex items-center justify-center rounded text-textColor/80 hover:bg-studioBorder/40 hover:text-textColor text-[14px] transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-designerAccent"
+    className="w-8 h-8 flex items-center justify-center rounded-sm text-textColor/80 hover:bg-studioBorder/40 hover:text-textColor text-[14px] transition-colors focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-designerAccent"
   >
     {children}
   </button>

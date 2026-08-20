@@ -156,7 +156,7 @@ export const SaveToFilesModal: FC<SaveToFilesModalProps> = ({ url, name, source,
           type="text"
           value={fileName}
           onChange={e => setFileName(e.target.value)}
-          className="w-full h-[40px] px-[12px] rounded-[8px] bg-newBgColorInner border border-newColColor text-[14px] text-textColor outline-none focus:border-[#2B5CD3]"
+          className="w-full h-[40px] px-[12px] rounded-[8px] bg-newBgColorInner border border-newColColor text-[14px] text-textColor outline-hidden focus:border-[#2B5CD3]"
         />
         {source && (
           <div className="mt-[8px] text-[12px] text-newTextColor/60">
@@ -217,7 +217,7 @@ export const SaveToFilesModal: FC<SaveToFilesModalProps> = ({ url, name, source,
           value={newFolderName}
           onChange={e => setNewFolderName(e.target.value)}
           placeholder={t('new_folder_name_placeholder', 'New folder name...')}
-          className="flex-1 h-[36px] px-[12px] rounded-[8px] bg-newBgColorInner border border-newColColor text-[13px] text-textColor outline-none focus:border-[#2B5CD3]"
+          className="flex-1 h-[36px] px-[12px] rounded-[8px] bg-newBgColorInner border border-newColColor text-[13px] text-textColor outline-hidden focus:border-[#2B5CD3]"
           onKeyDown={e => { if (e.key === 'Enter') handleCreateFolder(); }}
         />
         <button

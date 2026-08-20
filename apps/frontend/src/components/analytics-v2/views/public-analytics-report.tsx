@@ -46,7 +46,7 @@ export const PublicAnalyticsReportView: FC<{ report: PublicAnalyticsReport }> = 
 
         {series.length > 0 && (
           <div className="bg-newTableHeader border border-newTableBorder rounded-[12px] p-[16px]">
-            <div className="w-full aspect-[16/10] sm:aspect-[21/9] max-h-[360px]">
+            <div className="w-full aspect-16/10 sm:aspect-[21/9] max-h-[360px]">
               <LineChart series={series} height={320} format={mainMetric?.format} />
             </div>
           </div>

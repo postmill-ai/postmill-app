@@ -1219,7 +1219,7 @@ export const Designer: FC<DesignerProps> = ({
 
   // Full screen fills the browser window, not the display: the root goes immersive
   // (fixed inset-0) to cover the app chrome. Modals/dialogs mount at the app root
-  // (z 200+) and stay above this z-[100] layer.
+  // (z 200+) and stay above this z-100 layer.
   const surface = useFullscreenSurface('relative mobile:h-[calc(100vh-200px)]');
 
   return (
@@ -1231,7 +1231,7 @@ export const Designer: FC<DesignerProps> = ({
             value={designName}
             onChange={(e) => store.getState().setDesignName(e.target.value)}
             aria-label={translate('design_name_label', 'Design name')}
-            className="mobile:hidden bg-transparent border-none text-textColor text-[14px] font-medium outline-none focus:border-b focus:border-designerAccent px-1 py-0.5 w-[150px]"
+            className="mobile:hidden bg-transparent border-none text-textColor text-[14px] font-medium outline-hidden focus:border-b focus:border-designerAccent px-1 py-0.5 w-[150px]"
           />
         </div>
 
@@ -1260,7 +1260,7 @@ export const Designer: FC<DesignerProps> = ({
           <div className="contents mobile:hidden">
           <button
             onClick={() => undo()}
-            className="w-8 h-8 flex items-center justify-center rounded text-textColor hover:bg-studioBorder/30 text-[13px] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-designerAccent"
+            className="w-8 h-8 flex items-center justify-center rounded-sm text-textColor hover:bg-studioBorder/30 text-[13px] focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-designerAccent"
             title={translate('undo_ctrl_z', 'Undo (Ctrl+Z)')}
             aria-label={translate('undo_ctrl_z', 'Undo (Ctrl+Z)')}
           >
@@ -1268,7 +1268,7 @@ export const Designer: FC<DesignerProps> = ({
           </button>
           <button
             onClick={() => redo()}
-            className="w-8 h-8 flex items-center justify-center rounded text-textColor hover:bg-studioBorder/30 text-[13px] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-designerAccent"
+            className="w-8 h-8 flex items-center justify-center rounded-sm text-textColor hover:bg-studioBorder/30 text-[13px] focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-designerAccent"
             title={translate('redo_ctrl_shift_z', 'Redo (Ctrl+Shift+Z)')}
             aria-label={translate('redo_ctrl_shift_z', 'Redo (Ctrl+Shift+Z)')}
           >
@@ -1291,17 +1291,17 @@ export const Designer: FC<DesignerProps> = ({
           <button
             onClick={handleSave}
             disabled={isSaving}
-            className="px-3 py-1.5 rounded-md text-[12px] border border-studioBorder text-textColor hover:bg-boxHover disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-designerAccent"
+            className="px-3 py-1.5 rounded-md text-[12px] border border-studioBorder text-textColor hover:bg-boxHover disabled:opacity-50 focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-designerAccent"
             aria-label={translate('save_ctrl_s', 'Save (Ctrl+S)')}
           >
             {translate('save', 'Save')}
           </button>
           </div>
-          <FullscreenButton className="w-8 h-8 flex items-center justify-center rounded text-textColor hover:bg-studioBorder/30 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-designerAccent shrink-0" />
+          <FullscreenButton className="w-8 h-8 flex items-center justify-center rounded-sm text-textColor hover:bg-studioBorder/30 focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-designerAccent shrink-0" />
           <button
             onClick={handleExport}
             disabled={isSaving}
-            className="px-4 py-1.5 rounded-md text-[12px] bg-designerAccent text-white hover:bg-designerAccent/80 disabled:opacity-50 font-medium focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white"
+            className="px-4 py-1.5 rounded-md text-[12px] bg-designerAccent text-white hover:bg-designerAccent/80 disabled:opacity-50 font-medium focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-white"
           >
             {translate('export', 'Export')}
           </button>
@@ -1309,7 +1309,7 @@ export const Designer: FC<DesignerProps> = ({
             <button
               onClick={handleExport}
               disabled={isSaving}
-              className="px-4 py-1.5 rounded-md text-[12px] bg-green-600 text-white hover:bg-green-700 disabled:opacity-50 font-medium focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white"
+              className="px-4 py-1.5 rounded-md text-[12px] bg-green-600 text-white hover:bg-green-700 disabled:opacity-50 font-medium focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-white"
               aria-label={translate('use_in_post', 'Use in post')}
             >
               {translate('use_in_post', 'Use in post')}
@@ -1320,7 +1320,7 @@ export const Designer: FC<DesignerProps> = ({
               <div className="w-px h-6 bg-studioBorder mx-1" />
               <button
                 onClick={closeModal}
-                className="w-8 h-8 flex items-center justify-center rounded text-textColor hover:bg-studioBorder/30 text-[15px] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-designerAccent"
+                className="w-8 h-8 flex items-center justify-center rounded-sm text-textColor hover:bg-studioBorder/30 text-[15px] focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-designerAccent"
                 title={translate('close', 'Close')}
                 aria-label={translate('close_designer', 'Close designer')}
               >
@@ -1439,7 +1439,7 @@ export const Designer: FC<DesignerProps> = ({
                   </div>
                   <button
                     onClick={() => setInspectorCollapsed(true)}
-                    className="w-6 h-6 flex items-center justify-center rounded text-textColor/60 hover:bg-studioBorder/30 hover:text-textColor text-[14px] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-designerAccent"
+                    className="w-6 h-6 flex items-center justify-center rounded-sm text-textColor/60 hover:bg-studioBorder/30 hover:text-textColor text-[14px] focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-designerAccent"
                     title={translate('collapse_panel', 'Collapse panel')}
                     aria-label={translate('collapse_properties_panel', 'Collapse properties panel')}
                   >
@@ -1460,7 +1460,7 @@ export const Designer: FC<DesignerProps> = ({
             {inspectorCollapsed && (
               <button
                 onClick={() => setInspectorCollapsed(false)}
-                className="absolute right-0 top-2 z-20 px-1.5 py-3 rounded-l-md border border-r-0 border-studioBorder bg-newBgColorInner text-textColor/60 hover:text-textColor shadow-xl text-[14px] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-designerAccent focus-visible:ring-inset"
+                className="absolute right-0 top-2 z-20 px-1.5 py-3 rounded-l-md border border-r-0 border-studioBorder bg-newBgColorInner text-textColor/60 hover:text-textColor shadow-xl text-[14px] focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-designerAccent focus-visible:ring-inset"
                 title={translate('show_properties', 'Show properties')}
                 aria-label={translate('expand_properties_panel', 'Expand properties panel')}
               >

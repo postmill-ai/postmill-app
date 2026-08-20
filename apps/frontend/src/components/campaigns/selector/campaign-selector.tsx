@@ -123,10 +123,10 @@ export const CampaignSelector: FC<{
               onFocus={() => setOpen(true)}
               onBlur={() => (blurTimer.current = setTimeout(() => setOpen(false), 120))}
               onChange={(e) => setQuery(e.target.value)}
-              className="w-full h-[38px] px-[12px] rounded-[8px] bg-newBgColorInner border border-newTableBorder text-[13px] text-textColor placeholder-newTableText outline-none"
+              className="w-full h-[38px] px-[12px] rounded-[8px] bg-newBgColorInner border border-newTableBorder text-[13px] text-textColor placeholder-newTableText outline-hidden"
             />
             {open && options.length > 0 && (
-              <div className="absolute z-[20] mt-[4px] w-full max-h-[200px] overflow-y-auto rounded-[8px] border border-newTableBorder bg-newBgColorInner shadow-lg">
+              <div className="absolute z-20 mt-[4px] w-full max-h-[200px] overflow-y-auto rounded-[8px] border border-newTableBorder bg-newBgColorInner shadow-lg">
                 {options.map((c) => (
                   <button
                     key={c.id}

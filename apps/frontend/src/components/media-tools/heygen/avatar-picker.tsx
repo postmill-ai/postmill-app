@@ -30,7 +30,7 @@ export const AvatarPicker: FC<AvatarPickerProps> = ({ avatars, selectedId, onSel
         value={query}
         onChange={(e) => setQuery(e.target.value)}
         placeholder={t('heygen_search_avatars', 'Search avatars...')}
-        className="w-full h-[40px] px-[12px] rounded-[8px] bg-newBgColorInner border border-studioBorder text-[14px] text-textColor outline-none focus:border-[#2B5CD3]"
+        className="w-full h-[40px] px-[12px] rounded-[8px] bg-newBgColorInner border border-studioBorder text-[14px] text-textColor outline-hidden focus:border-[#2B5CD3]"
       />
       {filtered.length === 0 ? (
         <div className="h-[200px] flex items-center justify-center text-[13px] text-newTextColor/65">
@@ -48,11 +48,11 @@ export const AvatarPicker: FC<AvatarPickerProps> = ({ avatars, selectedId, onSel
                 onSelect(a);
                 modal.closeAll();
               }}
-              className={`group flex flex-col rounded-[10px] overflow-hidden border-[2px] transition-all text-left ${
+              className={`group flex flex-col rounded-[10px] overflow-hidden border-2 transition-all text-left ${
                 selectedId === a.avatarId ? 'border-[#2B5CD3]' : 'border-transparent hover:border-[#2B5CD3]/40'
               }`}
             >
-              <div className="aspect-[3/4] bg-newBgColorInner overflow-hidden">
+              <div className="aspect-3/4 bg-newBgColorInner overflow-hidden">
                 {a.previewImageUrl ? (
                   // eslint-disable-next-line @next/next/no-img-element -- external provider asset
                   <img src={a.previewImageUrl} alt={a.name} className="w-full h-full object-cover" loading="lazy" />

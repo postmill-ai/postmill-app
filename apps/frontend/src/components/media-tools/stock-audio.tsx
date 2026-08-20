@@ -113,14 +113,14 @@ export const StockAudio: FC<StockAudioProps> = ({ mode = 'browse', onSelect, onS
           value={query}
           onChange={(e) => setQuery(e.target.value)}
           placeholder={t('search_music_audio_placeholder', 'Search music & audio...')}
-          className="w-full h-[44px] pl-[38px] pr-[34px] rounded-[8px] bg-newBgColorInner border border-newColColor text-[14px] outline-none focus:border-[#2B5CD3] text-textColor"
+          className="w-full h-[44px] pl-[38px] pr-[34px] rounded-[8px] bg-newBgColorInner border border-newColColor text-[14px] outline-hidden focus:border-[#2B5CD3] text-textColor"
         />
         {query && (
           <button
             type="button"
             onClick={() => setQuery('')}
             aria-label={t('clear_search', 'Clear search')}
-            className="absolute right-[10px] top-1/2 -translate-y-1/2 w-[20px] h-[20px] flex items-center justify-center text-newTextColor/60 hover:text-newTextColor rounded-full focus:outline-none focus-visible:ring-2 focus-visible:ring-[#2B5CD3]"
+            className="absolute right-[10px] top-1/2 -translate-y-1/2 w-[20px] h-[20px] flex items-center justify-center text-newTextColor/60 hover:text-newTextColor rounded-full focus:outline-hidden focus-visible:ring-2 focus-visible:ring-[#2B5CD3]"
           >
             ✕
           </button>

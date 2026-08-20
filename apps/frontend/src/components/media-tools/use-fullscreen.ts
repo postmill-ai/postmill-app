@@ -43,7 +43,7 @@ export function useFullscreen() {
 }
 
 /** The class applied to an expanded studio root: over everything, under modals (z-200+). */
-const EXPANDED_CLASS = 'fixed inset-0 z-[100]';
+const EXPANDED_CLASS = 'fixed inset-0 z-100';
 
 /**
  * Root-class hook for a studio surface. Returns `collapsedClass` normally and

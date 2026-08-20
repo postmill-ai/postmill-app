@@ -111,17 +111,17 @@ export const ChannelFilterSelect: FC<{
           aria-expanded={open}
           className="flex w-full items-center gap-[10px] px-[12px] py-[6px] rounded-full border border-newColColor bg-newBgColor hover:bg-boxHover transition-colors"
         >
-          <div className="flex -space-x-[10px]">
+          <div className="flex space-x-[-10px]">
             {selectedList.slice(0, 4).map((integration) => (
               <div
                 key={integration.id}
-                className="rounded-full border-[2px] border-newBgColor"
+                className="rounded-full border-2 border-newBgColor"
               >
                 <PlatformAvatar integration={integration} selected size={28} />
               </div>
             ))}
             {selectedList.length > 4 && (
-              <div className="rounded-full border-[2px] border-newBgColor bg-boxHover w-[28px] h-[28px] flex items-center justify-center text-[11px] font-semibold text-textColor">
+              <div className="rounded-full border-2 border-newBgColor bg-boxHover w-[28px] h-[28px] flex items-center justify-center text-[11px] font-semibold text-textColor">
                 +{selectedList.length - 4}
               </div>
             )}
@@ -165,7 +165,7 @@ export const ChannelFilterSelect: FC<{
             className={clsx(
               'w-full max-h-[300px] bg-newBgColor border border-newBorder rounded-[12px] shadow-lg flex flex-col',
               menuAbsolute
-                ? 'absolute top-full left-0 mt-[8px] z-[50]'
+                ? 'absolute top-full left-0 mt-[8px] z-50'
                 : 'mt-[8px]'
             )}
           >
@@ -189,7 +189,7 @@ export const ChannelFilterSelect: FC<{
                   value={search}
                   onChange={(e) => setSearch(e.target.value)}
                   placeholder={t('search_channels', 'Search channels...')}
-                  className="w-full h-[40px] pl-[38px] pr-[12px] rounded-[8px] bg-newBgColorInner border border-newColColor text-[14px] text-textColor outline-none focus:border-[#2B5CD3]"
+                  className="w-full h-[40px] pl-[38px] pr-[12px] rounded-[8px] bg-newBgColorInner border border-newColColor text-[14px] text-textColor outline-hidden focus:border-[#2B5CD3]"
                 />
               </div>
             </div>
@@ -201,7 +201,7 @@ export const ChannelFilterSelect: FC<{
               )}
               {grouped.map(([platform, items]) => (
                 <div key={platform} className="mb-[8px]">
-                  <div className="sticky top-0 bg-newBgColor text-[11px] uppercase tracking-wider text-newTableText px-[8px] py-[4px] z-[1]">
+                  <div className="sticky top-0 bg-newBgColor text-[11px] uppercase tracking-wider text-newTableText px-[8px] py-[4px] z-1">
                     {platform}
                   </div>
                   <div className="flex flex-col gap-[2px]">
@@ -284,7 +284,7 @@ export const ChannelFilterSelect: FC<{
             data-tooltip-content={integration.name}
             onClick={() => onToggle(integration)}
             className={clsx(
-              'cursor-pointer border-[2px] relative rounded-full flex justify-center items-center bg-newTableHeader filter transition-all duration-500',
+              'cursor-pointer border-2 relative rounded-full flex justify-center items-center bg-newTableHeader filter transition-all duration-500',
               selected ? 'border-[#622FF6]' : 'grayscale border-transparent'
             )}
           >

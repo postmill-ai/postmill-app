@@ -546,7 +546,7 @@ export const FileManager: FC<{
         // Without inert the closed drawer's buttons stay in the tab order.
         inert={!folderDrawerOpen}
         className={clsx(
-          'fixed inset-0 z-[210] flex justify-start',
+          'fixed inset-0 z-210 flex justify-start',
           inlineSidebar && 'lg:hidden',
           !folderDrawerOpen && 'pointer-events-none'
         )}
@@ -629,10 +629,10 @@ export const FileManager: FC<{
                 value={search}
                 onChange={e => setSearchAndReset(e.target.value)}
                 placeholder={t('search_files_by_name_tags', 'Search files by name, tags...')}
-                className="w-full h-[44px] pl-[40px] pr-[14px] rounded-[8px] bg-newBgColorInner border border-newColColor text-[14px] outline-none focus:border-[#2B5CD3] text-textColor"
+                className="w-full h-[44px] pl-[40px] pr-[14px] rounded-[8px] bg-newBgColorInner border border-newColColor text-[14px] outline-hidden focus:border-[#2B5CD3] text-textColor"
               />
               <svg
-                className="absolute left-[12px] top-[50%] -translate-y-[50%] text-newTextColor/60"
+                className="absolute left-[12px] top-[50%] translate-y-[-50%] text-newTextColor/60"
                 width="16" height="16" viewBox="0 0 16 16" fill="none"
               >
                 <circle cx="6.5" cy="6.5" r="4.5" stroke="currentColor" strokeWidth="1.5" />
@@ -646,7 +646,7 @@ export const FileManager: FC<{
                 value={filterType}
                 aria-label={t('filter_by_file_type', 'Filter by file type')}
                 onChange={e => setFilterTypeAndReset(e.target.value)}
-                className="h-[44px] px-[12px] rounded-[8px] bg-newBgColorInner border border-newColColor text-[13px] text-textColor outline-none focus:border-[#2B5CD3] shrink-0"
+                className="h-[44px] px-[12px] rounded-[8px] bg-newBgColorInner border border-newColColor text-[13px] text-textColor outline-hidden focus:border-[#2B5CD3] shrink-0"
               >
                 <option value="">{t('all_types', 'All types')}</option>
                 <option value="image">{t('images', 'Images')}</option>
@@ -663,7 +663,7 @@ export const FileManager: FC<{
                 const picked = SORT_OPTIONS.find(o => `${o.field}-${o.order}` === e.target.value);
                 if (picked) setSortAndReset(picked.field, picked.order);
               }}
-              className="h-[44px] px-[12px] rounded-[8px] bg-newBgColorInner border border-newColColor text-[13px] text-textColor outline-none focus:border-[#2B5CD3] shrink-0"
+              className="h-[44px] px-[12px] rounded-[8px] bg-newBgColorInner border border-newColColor text-[13px] text-textColor outline-hidden focus:border-[#2B5CD3] shrink-0"
             >
               {SORT_OPTIONS.map(option => (
                 <option key={`${option.field}-${option.order}`} value={`${option.field}-${option.order}`}>
@@ -878,7 +878,7 @@ export const FileManager: FC<{
 
       {/* Mobile details drawer */}
       {detailsFile && (
-        <div className="fixed inset-0 z-[210] flex justify-end lg:hidden">
+        <div className="fixed inset-0 z-210 flex justify-end lg:hidden">
           <div
             role="button"
             tabIndex={0}

@@ -56,7 +56,7 @@ const Toggle: FC<{ checked: boolean; onChange: () => void; label: ReactNode }> =
         aria-checked={checked}
         onClick={onChange}
         className={[
-          'relative w-[36px] h-[20px] rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-btnPrimary/40',
+          'relative w-[36px] h-[20px] rounded-full transition-colors focus:outline-hidden focus:ring-2 focus:ring-btnPrimary/40',
           checked ? 'bg-btnPrimary' : 'bg-newTableBorder',
         ].join(' ')}
       >

@@ -401,7 +401,7 @@ export const TextFormatPanel: FC<TextFormatPanelProps> = ({ store }) => {
                   placeholder={t('designer_placeholder_search_fonts', 'Search fonts...')}
                   value={fontSearch}
                   onChange={(e) => setFontSearch(e.target.value)}
-                  className="w-full h-[30px] px-[8px] rounded-[6px] bg-newBgColor border border-studioBorder text-[12px] text-textColor outline-none focus:border-designerAccent placeholder:text-textColor/30"
+                  className="w-full h-[30px] px-[8px] rounded-[6px] bg-newBgColor border border-studioBorder text-[12px] text-textColor outline-hidden focus:border-designerAccent placeholder:text-textColor/30"
                 />
               </div>
               <div className="max-h-[300px] overflow-y-auto p-[4px]">
@@ -487,7 +487,7 @@ export const TextFormatPanel: FC<TextFormatPanelProps> = ({ store }) => {
                 update({ fontSize: value, ...growBoxFor(element, value) });
               }
             }}
-            className="w-full h-[34px] px-[8px] rounded-[6px] bg-newBgColor border border-studioBorder text-[13px] text-textColor outline-none focus:border-designerAccent"
+            className="w-full h-[34px] px-[8px] rounded-[6px] bg-newBgColor border border-studioBorder text-[13px] text-textColor outline-hidden focus:border-designerAccent"
           />
           {fittedNotice && (
             <span className="text-[10px] text-amber-400/80">{fittedNotice}</span>
@@ -503,7 +503,7 @@ export const TextFormatPanel: FC<TextFormatPanelProps> = ({ store }) => {
               const value = parseInt(e.target.value, 10);
               update({ fontWeight: value });
             }}
-            className="w-full h-[34px] px-[8px] rounded-[6px] bg-newBgColor border border-studioBorder text-[13px] text-textColor outline-none focus:border-designerAccent"
+            className="w-full h-[34px] px-[8px] rounded-[6px] bg-newBgColor border border-studioBorder text-[13px] text-textColor outline-hidden focus:border-designerAccent"
           >
             {WEIGHTS.map((w) => (
               <option key={w} value={w}>
@@ -576,7 +576,7 @@ export const TextFormatPanel: FC<TextFormatPanelProps> = ({ store }) => {
               const value = parseFloat(e.target.value);
               if (!Number.isNaN(value) && value >= 0) update({ paragraphSpacing: value });
             }}
-            className="w-full h-[34px] px-[8px] rounded-[6px] bg-newBgColor border border-studioBorder text-[13px] text-textColor outline-none focus:border-designerAccent"
+            className="w-full h-[34px] px-[8px] rounded-[6px] bg-newBgColor border border-studioBorder text-[13px] text-textColor outline-hidden focus:border-designerAccent"
           />
         </div>
 
@@ -595,7 +595,7 @@ export const TextFormatPanel: FC<TextFormatPanelProps> = ({ store }) => {
               const value = parseFloat(e.target.value);
               if (!Number.isNaN(value) && value >= 0) update({ firstLineIndent: value });
             }}
-            className="w-full h-[34px] px-[8px] rounded-[6px] bg-newBgColor border border-studioBorder text-[13px] text-textColor outline-none focus:border-designerAccent"
+            className="w-full h-[34px] px-[8px] rounded-[6px] bg-newBgColor border border-studioBorder text-[13px] text-textColor outline-hidden focus:border-designerAccent"
           />
         </div>
       </div>
@@ -616,7 +616,7 @@ export const TextFormatPanel: FC<TextFormatPanelProps> = ({ store }) => {
                 update({ lineHeight: value });
               }
             }}
-            className="w-full h-[34px] px-[8px] rounded-[6px] bg-newBgColor border border-studioBorder text-[13px] text-textColor outline-none focus:border-designerAccent"
+            className="w-full h-[34px] px-[8px] rounded-[6px] bg-newBgColor border border-studioBorder text-[13px] text-textColor outline-hidden focus:border-designerAccent"
           />
         </div>
 
@@ -635,7 +635,7 @@ export const TextFormatPanel: FC<TextFormatPanelProps> = ({ store }) => {
                 update({ letterSpacing: value });
               }
             }}
-            className="w-full h-[34px] px-[8px] rounded-[6px] bg-newBgColor border border-studioBorder text-[13px] text-textColor outline-none focus:border-designerAccent"
+            className="w-full h-[34px] px-[8px] rounded-[6px] bg-newBgColor border border-studioBorder text-[13px] text-textColor outline-hidden focus:border-designerAccent"
           />
         </div>
       </div>
@@ -662,7 +662,7 @@ export const TextFormatPanel: FC<TextFormatPanelProps> = ({ store }) => {
                 update({ textScaleX: value === 1 ? undefined : value });
               }
             }}
-            className="w-full h-[34px] px-[8px] rounded-[6px] bg-newBgColor border border-studioBorder text-[13px] text-textColor outline-none focus:border-designerAccent"
+            className="w-full h-[34px] px-[8px] rounded-[6px] bg-newBgColor border border-studioBorder text-[13px] text-textColor outline-hidden focus:border-designerAccent"
           />
         </div>
       </div>
@@ -707,7 +707,7 @@ export const TextFormatPanel: FC<TextFormatPanelProps> = ({ store }) => {
               update({ textPath: value || undefined, curve: 0 });
             }}
             placeholder={t('designer_placeholder_custom_path', 'M 0,50 Q 50,0 100,50 ...')}
-            className="w-full h-[80px] px-[8px] py-[6px] rounded-[6px] bg-newBgColor border border-studioBorder text-[12px] text-textColor outline-none focus:border-designerAccent resize-none font-mono"
+            className="w-full h-[80px] px-[8px] py-[6px] rounded-[6px] bg-newBgColor border border-studioBorder text-[12px] text-textColor outline-hidden focus:border-designerAccent resize-none font-mono"
           />
         )}
         {pathMode === 'arc' && (

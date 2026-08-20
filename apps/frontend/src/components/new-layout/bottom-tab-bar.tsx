@@ -83,7 +83,7 @@ export const BottomTabBar: FC = () => {
   return (
     <>
       <nav
-        className="hidden mobile:flex fixed bottom-0 inset-x-0 z-[200] bg-newBgColorInner border-t border-newTableBorder pb-[env(safe-area-inset-bottom)]"
+        className="hidden mobile:flex fixed bottom-0 inset-x-0 z-200 bg-newBgColorInner border-t border-newTableBorder pb-[env(safe-area-inset-bottom)]"
         aria-label={t('primary', 'Primary')}
       >
         <div className="flex flex-1 items-stretch h-[60px]">
@@ -125,7 +125,7 @@ export const BottomTabBar: FC = () => {
       </nav>
 
       {moreOpen && (
-        <div className="mobile:block hidden fixed inset-0 z-[210]">
+        <div className="mobile:block hidden fixed inset-0 z-210">
           <button
             type="button"
             aria-label={t('close_menu', 'Close menu')}

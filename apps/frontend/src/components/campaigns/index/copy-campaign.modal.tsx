@@ -65,7 +65,7 @@ export const CopyCampaignModal: FC<{ campaignId: string; name: string; onDone: (
           type="text"
           value={copyName}
           onChange={(e) => setCopyName(e.target.value)}
-          className="px-[12px] py-[8px] bg-newBgColor border border-newTableBorder rounded-[8px] text-[14px] outline-none"
+          className="px-[12px] py-[8px] bg-newBgColor border border-newTableBorder rounded-[8px] text-[14px] outline-hidden"
           placeholder={t('campaign_name_placeholder', 'Campaign name')}
         />
       </div>

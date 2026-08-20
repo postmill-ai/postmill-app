@@ -114,7 +114,7 @@ const HashtagsModal: FC<{ close: () => void; onSelect?: (hashtags: string[]) => 
           value={content}
           onChange={(e) => setContent(e.target.value)}
           placeholder={t('enter_your_post_content', 'Enter your post content...')}
-          className="bg-input min-h-[80px] p-[16px] outline-none border-newTableBorder border rounded-[4px] text-inputText placeholder-inputText"
+          className="bg-input min-h-[80px] p-[16px] outline-hidden border-newTableBorder border rounded-[4px] text-inputText placeholder-inputText"
         />
       </div>
 

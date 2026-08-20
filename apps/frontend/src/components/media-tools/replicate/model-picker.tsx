@@ -79,7 +79,7 @@ export function ModelPicker({ categoryKey }: ModelPickerProps) {
         id="replicate-model"
         value={selectedModel?.id || ''}
         onChange={(e) => loadModel(e.target.value)}
-        className="w-full px-3 py-2.5 rounded-lg border border-studioBorder bg-newBgColorInner text-textColor text-sm focus:outline-none focus:border-designerAccent"
+        className="w-full px-3 py-2.5 rounded-lg border border-studioBorder bg-newBgColorInner text-textColor text-sm focus:outline-hidden focus:border-designerAccent"
       >
         <option value="">{t('select_a_model', 'Select a model…')}</option>
         {warm.length > 0 && (

@@ -162,7 +162,7 @@ export function ProviderConfigForm<Meta = any>({
             width="16"
             height="16"
             fill="currentColor"
-            className="text-btnPrimary shrink-0 mt-[1px]"
+            className="text-btnPrimary shrink-0 mt-px"
             aria-hidden="true"
           >
             <path d="M10 2a8 8 0 100 16 8 8 0 000-16zm0 4a1 1 0 110 2 1 1 0 010-2zm1.25 9h-2.5v-1.25H9.5v-2.5H8.75V10h1.75a.75.75 0 01.75.75v3h.75V15z" />

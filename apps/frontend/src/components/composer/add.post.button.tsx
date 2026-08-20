@@ -36,7 +36,7 @@ export const AddPostButton: FC<{
             />
           </svg>
         </div>
-        <div className="!text-white">
+        <div className="text-white!">
           {t(
             ...(props.postComment === PostComment.ALL
               ? ['add_comment_or_post', 'Add comment or post']

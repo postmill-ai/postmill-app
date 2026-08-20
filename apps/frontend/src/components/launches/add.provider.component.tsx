@@ -288,7 +288,7 @@ const ExtensionNotFound: FC = () => {
         </Button>
         <Button
           type="button"
-          className="flex-1 !bg-transparent border border-newTableBorder text-textColor"
+          className="flex-1 bg-transparent! border border-newTableBorder text-textColor"
           onClick={() => modals.closeCurrent()}
         >
           {t('cancel', 'Cancel')}
@@ -357,7 +357,7 @@ const ChromeExtensionWarning: FC<{
         </Button>
         <Button
           type="button"
-          className="flex-1 !bg-transparent border border-newTableBorder text-textColor"
+          className="flex-1 bg-transparent! border border-newTableBorder text-textColor"
           onClick={() => {
             modals.closeCurrent();
             onCancel();
@@ -403,7 +403,7 @@ const ConfigPicker: FC<{
       </div>
       <Button
         type="button"
-        className="!bg-transparent border border-newTableBorder text-textColor"
+        className="bg-transparent! border border-newTableBorder text-textColor"
         onClick={() => {
           modals.closeCurrent();
           onResolve(undefined);
@@ -812,7 +812,7 @@ export const AddProviderComponent: FC<{
           withCloseButton: true,
           children: (
             <div className="p-[16px] max-h-[60vh] overflow-y-auto">
-              <div className="whitespace-pre-wrap text-[14px] text-textColor break-words">{instructions}</div>
+              <div className="whitespace-pre-wrap text-[14px] text-textColor wrap-break-word">{instructions}</div>
               {!instructions && (
                 <div className="text-textColor/50 text-[14px]">
                   {t(
@@ -908,7 +908,7 @@ export const AddProviderComponent: FC<{
                   {item.name}
                   {(!!item.setupInstructions || !!item.toolTip) && !isMobile && (
                     <div
-                      className="absolute top-[6px] end-[6px] w-[22px] h-[22px] flex items-center justify-center rounded-full hover:bg-tableBorder cursor-help z-10"
+                      className="absolute top-[6px] inset-e-[6px] w-[22px] h-[22px] flex items-center justify-center rounded-full hover:bg-tableBorder cursor-help z-10"
                       onClick={showSetupInstructions(
                         item.name,
                         item.identifier,

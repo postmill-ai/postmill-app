@@ -60,14 +60,14 @@ export const AiErrorDisplay: FC<AiErrorDisplayProps> = ({ error, onDismiss }) =>
         strokeWidth="2"
         strokeLinecap="round"
         strokeLinejoin="round"
-        className="mt-[1px] shrink-0"
+        className="mt-px shrink-0"
       >
         <path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z" />
         <line x1="12" y1="9" x2="12" y2="13" />
         <line x1="12" y1="17" x2="12.01" y2="17" />
       </svg>
       <div className="flex-1 min-w-0">
-        <p className="text-[14px] leading-[1.5] break-words">{displayedMessage}</p>
+        <p className="text-[14px] leading-[1.5] wrap-break-word">{displayedMessage}</p>
       </div>
       {onDismiss && (
         <button

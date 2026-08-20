@@ -220,7 +220,7 @@ export const LayersPanel: FC<LayersPanelProps> = ({ store, onClose }) => {
           onChange={(e) =>
             store.getState().setLayerBlend(selectedIds, e.target.value as never)
           }
-          className="flex-1 min-w-0 h-[26px] px-1.5 rounded-md bg-newBgColor border border-studioBorder text-[11px] text-textColor outline-none disabled:opacity-40"
+          className="flex-1 min-w-0 h-[26px] px-1.5 rounded-md bg-newBgColor border border-studioBorder text-[11px] text-textColor outline-hidden disabled:opacity-40"
         >
           {SELECTABLE_BLEND_MODES.map((m) => (
             <option key={m} value={m}>{BLEND_LABELS[m] || m}</option>
@@ -245,7 +245,7 @@ export const LayersPanel: FC<LayersPanelProps> = ({ store, onClose }) => {
             onKeyDown={(e) => {
               if (e.key === 'Enter') commitOpacity();
             }}
-            className="w-[46px] h-[26px] px-1 rounded-md bg-newBgColor border border-studioBorder text-[11px] text-textColor outline-none disabled:opacity-40"
+            className="w-[46px] h-[26px] px-1 rounded-md bg-newBgColor border border-studioBorder text-[11px] text-textColor outline-hidden disabled:opacity-40"
           />
         </label>
       </div>
@@ -398,7 +398,7 @@ export const LayersPanel: FC<LayersPanelProps> = ({ store, onClose }) => {
                     if (e.key === 'Escape') stopRename();
                   }}
                   onClick={(e) => e.stopPropagation()}
-                  className="flex-1 min-w-0 h-[22px] px-1 rounded bg-newBgColor border border-designerAccent text-[12px] text-textColor outline-none"
+                  className="flex-1 min-w-0 h-[22px] px-1 rounded-sm bg-newBgColor border border-designerAccent text-[12px] text-textColor outline-hidden"
                 />
               ) : (
                 <span className="flex-1 truncate">{layerLabel(el)}</span>

@@ -63,7 +63,7 @@ export const InstagramPreview: FC<{
           <img
             src={integration?.picture || '/no-picture.jpg'}
             alt={t('alt_social', 'social')}
-            className="rounded-full relative z-[2] w-[36px] h-[36px]"
+            className="rounded-full relative z-2 w-[36px] h-[36px]"
           />
         </div>
         <div className="flex flex-col leading-[18px]">
@@ -87,7 +87,7 @@ export const InstagramPreview: FC<{
       ) : (
         <div
           style={{ background: 'url(/no-video-youtube.png)' }}
-          className="!bg-cover w-full aspect-[calc(16/9)] rounded-[8px] overflow-hidden"
+          className="bg-cover! w-full aspect-[calc(16/9)] rounded-[8px] overflow-hidden"
         />
       )}
       <SafeContent
@@ -183,7 +183,7 @@ export const InstagramPreview: FC<{
                   <img
                     src={integration?.picture || '/no-picture.jpg'}
                     alt={t('alt_social', 'social')}
-                    className="rounded-full relative z-[2] h-[34px] w-[34px]"
+                    className="rounded-full relative z-2 h-[34px] w-[34px]"
                   />
                 </div>
                 <div className="flex flex-col gap-[6px] flex-1">

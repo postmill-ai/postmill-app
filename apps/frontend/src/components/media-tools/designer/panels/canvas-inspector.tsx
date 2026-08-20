@@ -108,7 +108,7 @@ export const CanvasInspector: FC<CanvasInspectorProps> = ({ store }) => {
               value={w}
               onChange={(e) => setW(e.target.value)}
               aria-label={t('designer_label_width', 'Width')}
-              className="w-full h-[34px] rounded-[6px] border border-studioBorder bg-newBgColor px-2 text-[13px] text-textColor text-center outline-none focus:border-designerAccent"
+              className="w-full h-[34px] rounded-[6px] border border-studioBorder bg-newBgColor px-2 text-[13px] text-textColor text-center outline-hidden focus:border-designerAccent"
             />
             <span className="text-textColor/30">×</span>
             <input
@@ -116,7 +116,7 @@ export const CanvasInspector: FC<CanvasInspectorProps> = ({ store }) => {
               value={h}
               onChange={(e) => setH(e.target.value)}
               aria-label={t('designer_label_height', 'Height')}
-              className="w-full h-[34px] rounded-[6px] border border-studioBorder bg-newBgColor px-2 text-[13px] text-textColor text-center outline-none focus:border-designerAccent"
+              className="w-full h-[34px] rounded-[6px] border border-studioBorder bg-newBgColor px-2 text-[13px] text-textColor text-center outline-hidden focus:border-designerAccent"
             />
             <button
               onClick={applySize}

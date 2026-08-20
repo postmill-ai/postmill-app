@@ -53,7 +53,7 @@ export const InspectorPanel: FC<InspectorProps> = ({ store }) => {
           </div>
           <button
             onClick={() => setSelectedClip(null)}
-            className="w-6 h-6 flex items-center justify-center rounded text-textColor/60 hover:bg-studioBorder/30 hover:text-textColor text-[14px] shrink-0"
+            className="w-6 h-6 flex items-center justify-center rounded-sm text-textColor/60 hover:bg-studioBorder/30 hover:text-textColor text-[14px] shrink-0"
             title={t('designer_clear_selection', 'Clear selection')}
             aria-label={t('designer_clear_selection', 'Clear selection')}
           >
@@ -98,7 +98,7 @@ export const InspectorPanel: FC<InspectorProps> = ({ store }) => {
         </div>
         <button
           onClick={() => setSelectedIds([])}
-          className="w-6 h-6 flex items-center justify-center rounded text-textColor/60 hover:bg-studioBorder/30 hover:text-textColor text-[14px] shrink-0"
+          className="w-6 h-6 flex items-center justify-center rounded-sm text-textColor/60 hover:bg-studioBorder/30 hover:text-textColor text-[14px] shrink-0"
           title={t('designer_clear_selection', 'Clear selection')}
           aria-label={t('designer_clear_selection', 'Clear selection')}
         >
@@ -108,7 +108,7 @@ export const InspectorPanel: FC<InspectorProps> = ({ store }) => {
 
       {primary.originId && (
         <button
-          className="w-full text-xs px-2 py-1.5 rounded border border-[#2a2a4a] text-gray-400 hover:text-white hover:border-red-500/50"
+          className="w-full text-xs px-2 py-1.5 rounded-sm border border-[#2a2a4a] text-gray-400 hover:text-white hover:border-red-500/50"
           onClick={() => { unlinkElement(primary.id); }}
         >
           {t('designer_unlink', 'Unlink')}
@@ -117,7 +117,7 @@ export const InspectorPanel: FC<InspectorProps> = ({ store }) => {
 
       {!primary.originId && primary.type !== 'icon' && (
         <button
-          className="w-full text-xs px-2 py-1.5 rounded border border-designerAccent/30 text-btnPrimaryAccent hover:bg-designerAccent/10"
+          className="w-full text-xs px-2 py-1.5 rounded-sm border border-designerAccent/30 text-btnPrimaryAccent hover:bg-designerAccent/10"
           onClick={() => {
             const newOriginId = `relink-${Date.now()}`;
             relinkElement(primary.id, newOriginId);

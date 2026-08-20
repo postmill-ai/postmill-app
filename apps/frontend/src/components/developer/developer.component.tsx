@@ -296,7 +296,7 @@ export const DeveloperComponent: FC = () => {
                 {t('app_name', 'App Name')} *
               </label>
               <input
-                className="bg-newBgColorInner border border-newBorder rounded-[8px] px-[16px] h-[44px] text-textColor outline-none"
+                className="bg-newBgColorInner border border-newBorder rounded-[8px] px-[16px] h-[44px] text-textColor outline-hidden"
                 value={name}
                 onChange={(e) => setName(e.target.value)}
                 placeholder={t('my_application_placeholder', 'My Application')}
@@ -308,7 +308,7 @@ export const DeveloperComponent: FC = () => {
                 {t('description', 'Description')}
               </label>
               <textarea
-                className="bg-newBgColorInner border border-newBorder rounded-[8px] p-[16px] text-textColor outline-none min-h-[80px]"
+                className="bg-newBgColorInner border border-newBorder rounded-[8px] p-[16px] text-textColor outline-hidden min-h-[80px]"
                 value={description}
                 onChange={(e) => setDescription(e.target.value)}
                 placeholder={t('describe_what_your_app_does', 'Describe what your app does')}
@@ -346,7 +346,7 @@ export const DeveloperComponent: FC = () => {
                 {t('redirect_url', 'Redirect URL')} *
               </label>
               <input
-                className="bg-newBgColorInner border border-newBorder rounded-[8px] px-[16px] h-[44px] text-textColor outline-none"
+                className="bg-newBgColorInner border border-newBorder rounded-[8px] px-[16px] h-[44px] text-textColor outline-hidden"
                 value={redirectUrl}
                 onChange={(e) => setRedirectUrl(e.target.value)}
                 placeholder={t('redirect_url_placeholder', 'https://yourapp.com/callback')}
@@ -421,7 +421,7 @@ export const DeveloperComponent: FC = () => {
                 {t('app_name', 'App Name')} *
               </label>
               <input
-                className="bg-newBgColorInner border border-newBorder rounded-[8px] px-[16px] h-[44px] text-textColor outline-none"
+                className="bg-newBgColorInner border border-newBorder rounded-[8px] px-[16px] h-[44px] text-textColor outline-hidden"
                 value={name}
                 onChange={(e) => setName(e.target.value)}
                 placeholder={t('my_application_placeholder', 'My Application')}
@@ -433,7 +433,7 @@ export const DeveloperComponent: FC = () => {
                 {t('description', 'Description')}
               </label>
               <textarea
-                className="bg-newBgColorInner border border-newBorder rounded-[8px] p-[16px] text-textColor outline-none min-h-[80px]"
+                className="bg-newBgColorInner border border-newBorder rounded-[8px] p-[16px] text-textColor outline-hidden min-h-[80px]"
                 value={description}
                 onChange={(e) => setDescription(e.target.value)}
                 placeholder={t('describe_what_your_app_does', 'Describe what your app does')}
@@ -471,7 +471,7 @@ export const DeveloperComponent: FC = () => {
                 {t('redirect_url', 'Redirect URL')} *
               </label>
               <input
-                className="bg-newBgColorInner border border-newBorder rounded-[8px] px-[16px] h-[44px] text-textColor outline-none"
+                className="bg-newBgColorInner border border-newBorder rounded-[8px] px-[16px] h-[44px] text-textColor outline-hidden"
                 value={redirectUrl}
                 onChange={(e) => setRedirectUrl(e.target.value)}
                 placeholder={t('redirect_url_placeholder', 'https://yourapp.com/callback')}

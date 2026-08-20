@@ -93,7 +93,7 @@ ${style}
             'describe_the_image_you_want_to_generate',
             'Describe the image you want to generate'
           )}
-          className="bg-input min-h-[150px] p-[16px] outline-none border-newTableBorder border rounded-[4px] text-inputText placeholder-inputText"
+          className="bg-input min-h-[150px] p-[16px] outline-hidden border-newTableBorder border rounded-[4px] text-inputText placeholder-inputText"
         />
       </div>
       <div className="flex flex-col gap-[6px]">
@@ -168,7 +168,7 @@ export const AiImage: FC<{
         )}
       >
         {loading && (
-          <div className="absolute start-[50%] -translate-x-[50%]">
+          <div className="absolute inset-s-[50%] translate-x-[-50%]">
             <Loading height={15} width={15} type="spin" color="#fff" />
           </div>
         )}

@@ -32,7 +32,7 @@ export function StudioLanding({
       <div className="max-w-[760px] mx-auto px-[24px] py-[40px] mobile:py-[28px] flex flex-col">
         {/* Hero */}
         <div className="flex flex-col items-center text-center gap-[16px]">
-          <span className="inline-flex items-center justify-center w-[88px] h-[88px] rounded-[20px] bg-newBgColor border border-studioBorder shadow-sm">
+          <span className="inline-flex items-center justify-center w-[88px] h-[88px] rounded-[20px] bg-newBgColor border border-studioBorder shadow-xs">
             <ProviderIcon identifier={landing.icon || identifier} name={title} size={56} />
           </span>
 
@@ -102,7 +102,7 @@ export function StudioLanding({
             <div className="grid grid-cols-2 mobile:grid-cols-1 gap-x-[20px] gap-y-[12px]">
               {landing.highlights.map((h, i) => (
                 <div key={h} className="flex items-start gap-[10px]">
-                  <span className="mt-[1px] inline-flex items-center justify-center w-[18px] h-[18px] shrink-0 rounded-full bg-[#2B5CD3]/15 text-btnPrimaryAccent">
+                  <span className="mt-px inline-flex items-center justify-center w-[18px] h-[18px] shrink-0 rounded-full bg-[#2B5CD3]/15 text-btnPrimaryAccent">
                     <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
                       <path d="M20 6 9 17l-5-5" />
                     </svg>

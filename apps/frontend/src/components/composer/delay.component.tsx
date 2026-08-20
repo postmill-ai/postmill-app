@@ -100,7 +100,7 @@ export const DelayComponent: FC<{
         <DelayIcon />
       </button>
       {isOpen && (
-        <div className="z-[300] absolute end-0 top-[100%] w-[200px] bg-newBgColorInner p-[8px] menu-shadow translate-y-[10px] flex flex-col rounded-[8px]">
+        <div className="z-300 absolute end-0 top-full w-[200px] bg-newBgColorInner p-[8px] menu-shadow translate-y-[10px] flex flex-col rounded-[8px]">
           <div className="grid grid-cols-4 gap-[4px]">
             {delayOptions.map((option) => (
               <button
@@ -127,7 +127,7 @@ export const DelayComponent: FC<{
                 onClick={(e) => e.stopPropagation()}
                 placeholder={t('custom_min_placeholder', 'Custom min')}
                 className={clsx(
-                  'flex-1 w-full h-[32px] px-[8px] rounded-[4px] bg-newBgColor border text-[13px] outline-none focus:border-[#2B5CD3]',
+                  'flex-1 w-full h-[32px] px-[8px] rounded-[4px] bg-newBgColor border text-[13px] outline-hidden focus:border-[#2B5CD3]',
                   isCustomDelay ? 'border-[#2B5CD3]' : 'border-newTextColor/10'
                 )}
               />

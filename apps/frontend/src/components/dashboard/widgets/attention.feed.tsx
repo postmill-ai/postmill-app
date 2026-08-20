@@ -14,14 +14,14 @@ import {
 } from '../destinations';
 
 const severityBorder: Record<string, string> = {
-  critical: 'border-l-[var(--negative,#f97066)]',
+  critical: 'border-l-(--negative,#f97066)',
   warning: 'border-l-amber-500',
   info: 'border-l-newTableBorder',
   default: 'border-l-newTableBorder',
 };
 
 const severityIconBg: Record<string, string> = {
-  critical: 'bg-[var(--negative,#f97066)]/10 text-[var(--negative,#f97066)]',
+  critical: 'bg-(--negative,#f97066)/10 text-(--negative,#f97066)',
   warning: 'bg-amber-500/10 text-amber-700 dark:text-amber-400',
   info: 'bg-newTableBorder text-newTableText',
   default: 'bg-newTableBorder text-newTableText',
@@ -270,8 +270,8 @@ const AttentionRow: FC<{
 const AllClear: FC = () => {
   const t = useT();
   return (
-    <div className="flex items-center gap-[10px] p-[12px] rounded-[10px] border border-newTableBorder border-l-[3px] border-l-[var(--positive,#32d583)] bg-newTableHeader">
-      <div className="shrink-0 w-[28px] h-[28px] rounded-full bg-[var(--positive,#32d583)]/10 text-[var(--positive,#32d583)] flex items-center justify-center">
+    <div className="flex items-center gap-[10px] p-[12px] rounded-[10px] border border-newTableBorder border-l-[3px] border-l-(--positive,#32d583) bg-newTableHeader">
+      <div className="shrink-0 w-[28px] h-[28px] rounded-full bg-(--positive,#32d583)/10 text-(--positive,#32d583) flex items-center justify-center">
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
           <path d="M20 6 9 17l-5-5" strokeLinecap="round" strokeLinejoin="round" />
         </svg>

@@ -98,7 +98,7 @@ export const UserAvatarMenu = () => {
         )}
       </button>
       {open && (
-        <div className="absolute right-0 top-[36px] w-[200px] mobile:w-[260px] bg-newBgColorInner border border-newTableBorder rounded-[8px] shadow-lg z-[300] py-[4px]" role="menu">
+        <div className="absolute right-0 top-[36px] w-[200px] mobile:w-[260px] bg-newBgColorInner border border-newTableBorder rounded-[8px] shadow-lg z-300 py-[4px]" role="menu">
           <div className="px-[14px] py-[8px] border-b border-newTableBorder">
             <div className="text-[13px] font-[600] text-textColor truncate">
               {user.profile?.name || user.email}

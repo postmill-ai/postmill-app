@@ -365,9 +365,9 @@ export const EditorWrapper: FC<{
       {aiActive && <EditorCopilotBridge items={items} setValue={setValue} />}
       {isCreateSet && current !== 'global' && (
         <>
-          <div className="text-center absolute w-full h-full left-0 top-0 items-center justify-center flex z-[101] flex-col gap-[16px]">
+          <div className="text-center absolute w-full h-full left-0 top-0 items-center justify-center flex z-101 flex-col gap-[16px]">
             <div>
-              <div className="w-[54px] h-[54px] rounded-full absolute z-[101] flex justify-center items-center">
+              <div className="w-[54px] h-[54px] rounded-full absolute z-101 flex justify-center items-center">
                 <LockIcon />
               </div>
               <div className="w-[54px] h-[54px] rounded-full bg-newSettings opacity-80" />
@@ -379,7 +379,7 @@ export const EditorWrapper: FC<{
               )}
             </div>
           </div>
-          <div className="absolute w-full h-full left-0 top-0 bg-newBackdrop opacity-60 z-[100] rounded-[12px]" />
+          <div className="absolute w-full h-full left-0 top-0 bg-newBackdrop opacity-60 z-100 rounded-[12px]" />
         </>
       )}
       {!canEdit && !isCreateSet && (
@@ -390,10 +390,10 @@ export const EditorWrapper: FC<{
               setMountKey((k) => k + 1);
               addRemoveInternal(current);
             }}
-            className="text-center absolute w-full h-full p-[20px] left-0 top-0 items-center justify-center flex z-[101] flex-col gap-[16px]"
+            className="text-center absolute w-full h-full p-[20px] left-0 top-0 items-center justify-center flex z-101 flex-col gap-[16px]"
           >
             <div>
-              <div className="w-[54px] h-[54px] rounded-full absolute z-[101] flex justify-center items-center">
+              <div className="w-[54px] h-[54px] rounded-full absolute z-101 flex justify-center items-center">
                 <LockIcon />
               </div>
               <div className="w-[54px] h-[54px] rounded-full bg-newSettings opacity-80" />
@@ -410,7 +410,7 @@ export const EditorWrapper: FC<{
               </div>
             </div>
           </button>
-          <div className="absolute w-full h-full left-0 top-0 bg-newBackdrop opacity-60 z-[100] rounded-[12px]" />
+          <div className="absolute w-full h-full left-0 top-0 bg-newBackdrop opacity-60 z-100 rounded-[12px]" />
         </>
       )}
       {items.map((g, index) => (
@@ -722,7 +722,7 @@ export const Editor: FC<{
         <div
           className={clsx(
             'relative flex-1 min-w-0 px-[12px] pt-[12px] pb-[12px] flex flex-col',
-            num > 0 && '!rounded-bs-[0]'
+            num > 0 && 'rounded-bs-[0]!'
           )}
           id={id}
         >
@@ -730,13 +730,13 @@ export const Editor: FC<{
           <div {...getRootProps()} className="flex flex-1 flex-col">
             <div
               className={clsx(
-                'absolute left-0 top-0 w-full h-full bg-black/70 z-[300] transition-all items-center justify-center flex text-white text-sm',
+                'absolute left-0 top-0 w-full h-full bg-black/70 z-300 transition-all items-center justify-center flex text-white text-sm',
                 !isDragActive ? 'pointer-events-none opacity-0' : 'opacity-100'
               )}
             >
               {t('drop_files_here_to_upload', 'Drop your files here to upload')}
             </div>
-            <div className="px-[10px] pt-[10px] bg-newBgColorInner rounded-t-[6px] relative z-[99]">
+            <div className="px-[10px] pt-[10px] bg-newBgColorInner rounded-t-[6px] relative z-99">
               <OnlyEditor
                 value={props.value}
                 editorType={editorType}

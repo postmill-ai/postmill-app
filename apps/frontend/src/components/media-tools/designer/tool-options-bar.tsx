@@ -230,7 +230,7 @@ export const ToolOptionsBar: FC<ToolOptionsBarProps> = ({ activeTool, options, o
                   step={spec.step ?? 1}
                   value={Number(valueOf(spec))}
                   onChange={(e) => onChange(spec.key, Number(e.target.value))}
-                  className="w-[64px] h-[26px] px-2 rounded-md bg-newBgColor border border-studioBorder text-[12px] text-textColor outline-none focus:border-designerAccent"
+                  className="w-[64px] h-[26px] px-2 rounded-md bg-newBgColor border border-studioBorder text-[12px] text-textColor outline-hidden focus:border-designerAccent"
                 />
                 {spec.suffix && (
                   <span className="text-[12px] text-textColor/40">{spec.suffix}</span>
@@ -244,7 +244,7 @@ export const ToolOptionsBar: FC<ToolOptionsBarProps> = ({ activeTool, options, o
                 value={String(valueOf(spec) ?? '')}
                 placeholder={spec.placeholder}
                 onChange={(e) => onChange(spec.key, e.target.value)}
-                className="w-[220px] h-[26px] px-2 rounded-md bg-newBgColor border border-studioBorder text-[12px] font-mono text-textColor outline-none focus:border-designerAccent"
+                className="w-[220px] h-[26px] px-2 rounded-md bg-newBgColor border border-studioBorder text-[12px] font-mono text-textColor outline-hidden focus:border-designerAccent"
               />
             )}
 
@@ -261,7 +261,7 @@ export const ToolOptionsBar: FC<ToolOptionsBarProps> = ({ activeTool, options, o
               <select
                 value={String(valueOf(spec))}
                 onChange={(e) => onChange(spec.key, e.target.value)}
-                className="h-[26px] px-2 rounded-md bg-newBgColor border border-studioBorder text-[12px] text-textColor outline-none focus:border-designerAccent"
+                className="h-[26px] px-2 rounded-md bg-newBgColor border border-studioBorder text-[12px] text-textColor outline-hidden focus:border-designerAccent"
               >
                 {spec.options.map((o) => (
                   <option key={o.value} value={o.value}>
@@ -277,7 +277,7 @@ export const ToolOptionsBar: FC<ToolOptionsBarProps> = ({ activeTool, options, o
                 aria-label={t(spec.labelKey, spec.label)}
                 value={String(valueOf(spec))}
                 onChange={(e) => onChange(spec.key, e.target.value)}
-                className="w-[34px] h-[26px] p-0 rounded-md bg-newBgColor border border-studioBorder outline-none cursor-pointer focus:border-designerAccent"
+                className="w-[34px] h-[26px] p-0 rounded-md bg-newBgColor border border-studioBorder outline-hidden cursor-pointer focus:border-designerAccent"
               />
             )}
           </label>

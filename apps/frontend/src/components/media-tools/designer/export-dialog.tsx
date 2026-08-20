@@ -1281,7 +1281,7 @@ export const ExportDialog: FC<ExportDialogProps> = ({ store, onClose }) => {
                   <select
                     value={fmt}
                     onChange={(e) => setFormatForOutput(output.id, e.target.value as FormatValue)}
-                    className="h-[30px] px-2 rounded-[5px] bg-newBgColor border border-studioBorder text-[12px] text-textColor outline-none cursor-pointer"
+                    className="h-[30px] px-2 rounded-[5px] bg-newBgColor border border-studioBorder text-[12px] text-textColor outline-hidden cursor-pointer"
                   >
                     {formatDefs.map((f) => (
                       <option key={f.value} value={f.value}>
@@ -1456,7 +1456,7 @@ export const ExportDialog: FC<ExportDialogProps> = ({ store, onClose }) => {
               value={newFolderName}
               onChange={(e) => setNewFolderName(e.target.value)}
               placeholder={t('designer_new_folder_name_placeholder', 'New folder name...')}
-              className="flex-1 h-[36px] px-[12px] rounded-[8px] bg-newBgColorInner border border-studioBorder text-[13px] text-textColor outline-none focus:border-designerAccent"
+              className="flex-1 h-[36px] px-[12px] rounded-[8px] bg-newBgColorInner border border-studioBorder text-[13px] text-textColor outline-hidden focus:border-designerAccent"
               onKeyDown={(e) => {
                 if (e.key === 'Enter') handleCreateFolder();
               }}
@@ -1667,10 +1667,10 @@ export const ExportDialog: FC<ExportDialogProps> = ({ store, onClose }) => {
                       checked={row.checked}
                       disabled={isSkipped}
                       onChange={() => toggleDraftRow(idx)}
-                      className="accent-designerAccent w-[14px] h-[14px] flex-shrink-0"
+                      className="accent-designerAccent w-[14px] h-[14px] shrink-0"
                     />
 
-                    <div className="w-[36px] h-[36px] rounded-[4px] overflow-hidden flex-shrink-0 bg-newBgColor border border-studioBorder/50">
+                    <div className="w-[36px] h-[36px] rounded-[4px] overflow-hidden shrink-0 bg-newBgColor border border-studioBorder/50">
                       {previews[row.outputIdx]?.dataUrl ? (
                         // eslint-disable-next-line @next/next/no-img-element -- data URL preview
                         <img
@@ -1704,7 +1704,7 @@ export const ExportDialog: FC<ExportDialogProps> = ({ store, onClose }) => {
                             value={row.altText}
                             onChange={(e) => setAltText(idx, e.target.value)}
                             placeholder={t('designer_alt_text_recommended_placeholder', 'Alt text (recommended)...')}
-                            className="w-full mt-1 h-[24px] px-[8px] rounded-[4px] bg-newBgColor border border-yellow-500/40 text-[11px] text-textColor outline-none focus:border-yellow-500"
+                            className="w-full mt-1 h-[24px] px-[8px] rounded-[4px] bg-newBgColor border border-yellow-500/40 text-[11px] text-textColor outline-hidden focus:border-yellow-500"
                           />
                         </div>
                       )}
@@ -1852,7 +1852,7 @@ export const ExportDialog: FC<ExportDialogProps> = ({ store, onClose }) => {
                       setPosterUploading(false);
                     }
                   }}
-                  className="text-[12px] text-textColor file:mr-2 file:px-2 file:py-1 file:rounded file:border-0 file:bg-designerAccent file:text-white"
+                  className="text-[12px] text-textColor file:mr-2 file:px-2 file:py-1 file:rounded-sm file:border-0 file:bg-designerAccent file:text-white"
                 />
                 {posterUrl && (
                   <button

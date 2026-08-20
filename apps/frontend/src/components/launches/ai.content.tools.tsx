@@ -187,7 +187,7 @@ const ContentToolsModal: FC<{ close: () => void }> = (props) => {
             'enter_your_post_content',
             'Enter your post content...'
           )}
-          className="bg-input min-h-[120px] p-[16px] outline-none border-newTableBorder border rounded-[4px] text-inputText placeholder-inputText"
+          className="bg-input min-h-[120px] p-[16px] outline-hidden border-newTableBorder border rounded-[4px] text-inputText placeholder-inputText"
         />
       </div>
 

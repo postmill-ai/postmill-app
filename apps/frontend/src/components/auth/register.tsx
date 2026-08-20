@@ -169,7 +169,7 @@ export function RegisterAfter({
       <form className="flex-1 flex" onSubmit={form.handleSubmit(onSubmit)}>
         <div className="flex flex-col flex-1">
           <div>
-            <h1 className="text-[40px] font-[500] -tracking-[0.8px] text-start cursor-pointer">
+            <h1 className="text-[40px] font-[500] tracking-[-0.8px] text-start cursor-pointer">
               {t('sign_up', 'Sign Up')}
             </h1>
           </div>
@@ -180,9 +180,9 @@ export function RegisterAfter({
             {!isAfterProvider && renderProviders()}
             {!isAfterProvider && (
               <div className="h-[20px] mb-[24px] mt-[24px] relative">
-                <div className="absolute w-full h-[1px] bg-newTableBorder top-[50%] -translate-y-[50%]" />
+                <div className="absolute w-full h-px bg-newTableBorder top-[50%] translate-y-[-50%]" />
                 <div
-                  className={`absolute z-[1] justify-center items-center w-full start-0 -top-[4px] flex`}
+                  className={`absolute z-1 justify-center items-center w-full start-0 top-[-4px] flex`}
                 >
                   <div className="px-[16px]">{t('or', 'OR')}</div>
                 </div>
@@ -254,7 +254,7 @@ export function RegisterAfter({
                 <div className="w-full flex">
                   <Button
                     type="submit"
-                    className="flex-1 rounded-[10px] !h-[52px]"
+                    className="flex-1 rounded-[10px] h-[52px]!"
                     loading={loading}
                   >
                     {t('create_account', 'Create Account')}

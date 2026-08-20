@@ -270,7 +270,7 @@ const Accept: FC<{ resolve: (res: boolean) => void }> = ({ resolve }) => {
         <Button loading={loading} onClick={apply}>
           {t('billing_apply_50_discount_3_months', 'Apply 50% discount for 3 months')}
         </Button>
-        <Button onClick={() => resolve(false)} className="!bg-red-800">
+        <Button onClick={() => resolve(false)} className="bg-red-800!">
           {t('billing_cancel_my_subscription', 'Cancel my subscription')}
         </Button>
       </div>

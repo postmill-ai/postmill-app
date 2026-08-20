@@ -87,7 +87,7 @@ const ItemButton: FC<{ action: DesignerAction; onRun: () => void; indent?: boole
         onRun();
       }}
       className={clsx(
-        'w-full flex items-center gap-3 px-3 py-1.5 text-left text-[13px] rounded transition-colors',
+        'w-full flex items-center gap-3 px-3 py-1.5 text-left text-[13px] rounded-sm transition-colors',
         indent && 'pl-6',
         // Disabled still has to be READABLE, just clearly inert — it names the
         // command you'd get if you selected something first.
@@ -207,7 +207,7 @@ const SubmenuItem: FC<{ entry: Extract<Entry, { type: 'sub' }>; onClose: () => v
             onMouseEnter={openNow}
             onMouseLeave={closeSoon}
             style={{ left: pos.left, top: pos.top, width: 230 }}
-            className="fixed max-h-[70vh] overflow-y-auto bg-newBgColorInner border border-studioBorder rounded-lg shadow-xl py-1.5 px-1 z-[400]"
+            className="fixed max-h-[70vh] overflow-y-auto bg-newBgColorInner border border-studioBorder rounded-lg shadow-xl py-1.5 px-1 z-400"
           >
             <EntryList entries={entry.items} onClose={onClose} />
           </div>,
@@ -280,7 +280,7 @@ const Dropdown: FC<{ items: DesignerAction[]; onClose: () => void }> = ({ items,
     <div
       ref={measure}
       role="menu"
-      className="absolute top-full mt-1 min-w-[220px] max-w-[min(300px,calc(100vw-16px))] max-h-[70vh] overflow-y-auto bg-newBgColorInner border border-studioBorder rounded-lg shadow-xl py-1.5 px-1 z-[120]"
+      className="absolute top-full mt-1 min-w-[220px] max-w-[min(300px,calc(100vw-16px))] max-h-[70vh] overflow-y-auto bg-newBgColorInner border border-studioBorder rounded-lg shadow-xl py-1.5 px-1 z-120"
     >
       <EntryList entries={entries} onClose={onClose} />
     </div>
@@ -336,7 +336,7 @@ export const MenuBar: FC<MenuBarProps> = ({ actions, visibleOnMobile = 4 }) => {
           onClick={() => setOpen((cur) => (cur === menu ? null : menu))}
           onMouseEnter={() => setOpen((cur) => (cur !== null ? menu : cur))}
           className={clsx(
-            'px-2.5 py-1 rounded text-[13px] transition-colors',
+            'px-2.5 py-1 rounded-sm text-[13px] transition-colors',
             open === menu
               ? 'bg-studioBorder/30 text-textColor'
               : 'text-textColor/70 hover:bg-studioBorder/20 hover:text-textColor'
@@ -363,7 +363,7 @@ export const MenuBar: FC<MenuBarProps> = ({ actions, visibleOnMobile = 4 }) => {
             aria-label={t('designer_more_menus', 'More menus')}
             onClick={() => setOpen((cur) => (cur === 'more' ? null : 'more'))}
             className={clsx(
-              'px-2.5 py-1 rounded text-[15px] leading-none transition-colors',
+              'px-2.5 py-1 rounded-sm text-[15px] leading-none transition-colors',
               open === 'more'
                 ? 'bg-studioBorder/30 text-textColor'
                 : 'text-textColor/70 hover:bg-studioBorder/20 hover:text-textColor'
@@ -374,7 +374,7 @@ export const MenuBar: FC<MenuBarProps> = ({ actions, visibleOnMobile = 4 }) => {
           {open === 'more' && (
             <div
               role="menu"
-              className="absolute right-0 top-full mt-1 min-w-[230px] max-w-[300px] bg-newBgColorInner border border-studioBorder rounded-lg shadow-xl py-1.5 px-1 z-[120] max-h-[70vh] overflow-y-auto"
+              className="absolute right-0 top-full mt-1 min-w-[230px] max-w-[300px] bg-newBgColorInner border border-studioBorder rounded-lg shadow-xl py-1.5 px-1 z-120 max-h-[70vh] overflow-y-auto"
             >
               {overflowMenus.map((g) => (
                 <div key={g.menu} className="mb-1">

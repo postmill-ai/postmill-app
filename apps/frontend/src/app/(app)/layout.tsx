@@ -5,6 +5,10 @@ export const dynamic = 'force-dynamic';
 // global.scss so the bespoke Tailwind overrides in the pickers win on ties.
 import '@mantine/core/styles.css';
 import '@mantine/dates/styles.css';
+// Tailwind 4 entry (plain CSS — Sass cannot parse @import "tailwindcss"/@theme/
+// @config/@custom-variant). Must precede global.scss, whose @apply rules resolve
+// against it.
+import '../tailwind.css';
 import '../global.scss';
 import 'react-tooltip/dist/react-tooltip.css';
 import '@copilotkit/react-ui/styles.css';
@@ -68,7 +72,7 @@ export default async function AppLayout({ children }: { children: ReactNode }) {
       </head>
       <ChangeDirClient />
       <body
-        className={clsx(jakartaSans.className, mode === 'dark' ? 'dark' : 'light', 'text-primary !bg-primary')}
+        className={clsx(jakartaSans.className, mode === 'dark' ? 'dark' : 'light', 'text-primary bg-primary!')}
       >
         <VariableContextComponent
           storageProvider={'local'}

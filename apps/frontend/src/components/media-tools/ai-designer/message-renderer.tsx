@@ -119,7 +119,7 @@ const MarkdownMessage: React.FC<{ md: string }> = ({ md }) => {
   return (
     <SafeContent
       content={html}
-      className="text-[14px] text-textColor max-w-none space-y-2 [&_ul]:list-disc [&_ol]:list-decimal [&_ul]:ps-5 [&_ol]:ps-5 [&_code]:text-[13px] [&_code]:bg-boxHover [&_code]:rounded [&_code]:px-1 [&_a]:text-btnPrimaryAccent [&_a]:underline"
+      className="text-[14px] text-textColor max-w-none space-y-2 [&_ul]:list-disc [&_ol]:list-decimal [&_ul]:ps-5 [&_ol]:ps-5 [&_code]:text-[13px] [&_code]:bg-boxHover [&_code]:rounded-sm [&_code]:px-1 [&_a]:text-btnPrimaryAccent [&_a]:underline"
     />
   );
 };
@@ -451,7 +451,7 @@ const PlanMessage: React.FC<{
                         {plan.concept}
                         <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-[12px] font-normal text-textColor/60">
                           {styleTitle && (
-                            <span className="px-1.5 py-0.5 rounded bg-designerAccent/15 text-[10px] font-medium text-textColor">
+                            <span className="px-1.5 py-0.5 rounded-sm bg-designerAccent/15 text-[10px] font-medium text-textColor">
                               {styleTitle}
                             </span>
                           )}
@@ -513,7 +513,7 @@ const PlanMessage: React.FC<{
                                     e.target.value
                                   )
                                 }
-                                className="rounded-lg border border-studioBorder bg-newBgColorInner p-3 text-[14px] text-textColor outline-none focus:border-designerAccent resize-none"
+                                className="rounded-lg border border-studioBorder bg-newBgColorInner p-3 text-[14px] text-textColor outline-hidden focus:border-designerAccent resize-none"
                               />
                             </div>
                           );
@@ -595,7 +595,7 @@ const PlanMessage: React.FC<{
             value={reviseText}
             onChange={(e) => setReviseText(e.target.value)}
             placeholder={t('what_would_you_like_to_change', 'What would you like to change?')}
-            className="min-h-[80px] rounded-lg border border-studioBorder bg-newBgColorInner p-3 text-[14px] text-textColor outline-none focus:border-designerAccent resize-none"
+            className="min-h-[80px] rounded-lg border border-studioBorder bg-newBgColorInner p-3 text-[14px] text-textColor outline-hidden focus:border-designerAccent resize-none"
           />
           <div className="flex justify-end gap-2">
             <Button

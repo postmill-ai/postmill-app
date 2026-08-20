@@ -263,7 +263,7 @@ export const CreateThumbnail: FC<{
             <button
               onClick={captureFrame}
               disabled={isCapturing}
-              className="bg-btnPrimary text-white px-6 py-2 rounded-lg hover:bg-opacity-80 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+              className="bg-btnPrimary text-white px-6 py-2 rounded-lg hover:bg-btnPrimary/80 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
             >
               {isCapturing
                 ? t('capturing', 'Capturing...')
@@ -431,14 +431,14 @@ export const MediaComponentInner: FC<{
             'describe_the_image_video_content',
             'Describe the image/video content...'
           )}
-          className="w-full px-3 py-2 bg-newBgColorInner border border-newTableBorder rounded-lg text-textColor placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-btnPrimary focus:border-transparent"
+          className="w-full px-3 py-2 bg-newBgColorInner border border-newTableBorder rounded-lg text-textColor placeholder-gray-400 focus:outline-hidden focus:ring-2 focus:ring-btnPrimary focus:border-transparent"
         />
         <div className="flex items-center gap-[8px]">
           <button
             type="button"
             disabled={altTextLoading}
             onClick={generateAltText}
-            className="text-[12px] font-medium px-[12px] py-[6px] rounded-[6px] bg-btnPrimary text-white hover:bg-opacity-80 transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-[6px]"
+            className="text-[12px] font-medium px-[12px] py-[6px] rounded-[6px] bg-btnPrimary text-white hover:bg-btnPrimary/80 transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-[6px]"
           >
             {altTextLoading ? (
               <svg
@@ -497,7 +497,7 @@ export const MediaComponentInner: FC<{
                   <button
                     disabled={loading}
                     onClick={() => setIsEditingThumbnail(true)}
-                    className="bg-third text-textColor px-6 py-2 rounded-lg hover:bg-opacity-80 transition-all flex-1 border border-newTableBorder"
+                    className="bg-third text-textColor px-6 py-2 rounded-lg hover:bg-third/80 transition-all flex-1 border border-newTableBorder"
                   >
                     {media.thumbnail || newThumbnail
                       ? t('edit_thumbnail', 'Edit Thumbnail')
@@ -510,7 +510,7 @@ export const MediaComponentInner: FC<{
                         setNewThumbnail(null);
                         setThumbnail(null);
                       }}
-                      className="bg-red-600 text-white px-6 py-2 rounded-lg hover:bg-opacity-80 transition-all flex-1 border border-red-700"
+                      className="bg-red-600 text-white px-6 py-2 rounded-lg hover:bg-red-600/80 transition-all flex-1 border border-red-700"
                     >
                       {t('clear_thumbnail', 'Clear Thumbnail')}
                     </button>
@@ -569,17 +569,17 @@ export const MediaComponentInner: FC<{
       )}
 
       {!isEditingThumbnail && (
-        <div className="flex space-x-2 !mt-[20px]">
+        <div className="flex space-x-2 mt-[20px]!">
           <button
             disabled={loading}
             onClick={onClose}
-            className="flex-1 bg-gray-600 text-white px-6 py-2 rounded-lg hover:bg-opacity-80 transition-all"
+            className="flex-1 bg-gray-600 text-white px-6 py-2 rounded-lg hover:bg-gray-600/80 transition-all"
           >
             {t('cancel', 'Cancel')}
           </button>
           <button
             onClick={save}
-            className="flex-1 bg-btnPrimary text-white px-6 py-2 rounded-lg hover:bg-opacity-80 transition-all"
+            className="flex-1 bg-btnPrimary text-white px-6 py-2 rounded-lg hover:bg-btnPrimary/80 transition-all"
           >
             {t('save_changes', 'Save Changes')}
           </button>

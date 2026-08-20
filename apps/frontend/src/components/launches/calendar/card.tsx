@@ -206,7 +206,7 @@ export const CalendarItem: FC<{
     >
       {state === 'ERROR' && (
         <div
-          className="absolute -top-[6px] -left-[6px] z-20 w-[18px] h-[18px] rounded-full bg-red-500 flex items-center justify-center text-white text-[11px] font-bold cursor-pointer"
+          className="absolute top-[-6px] left-[-6px] z-20 w-[18px] h-[18px] rounded-full bg-red-500 flex items-center justify-center text-white text-[11px] font-bold cursor-pointer"
           data-tooltip-id="tooltip"
           data-tooltip-content={
             post.error ||
@@ -221,7 +221,7 @@ export const CalendarItem: FC<{
       )}
       {(post.unreadComments || 0) > 0 && (
         <div
-          className="absolute -top-[6px] -end-[6px] z-20 bg-red-500 text-white text-[10px] font-bold rounded-full min-w-[18px] h-[18px] flex items-center justify-center px-1"
+          className="absolute top-[-6px] inset-e-[-6px] z-20 bg-red-500 text-white text-[10px] font-bold rounded-full min-w-[18px] h-[18px] flex items-center justify-center px-1"
           data-tooltip-id="tooltip"
           data-tooltip-content={t('unread_comments', '{{count}} unread reply', {
             count: post.unreadComments,
@@ -231,7 +231,7 @@ export const CalendarItem: FC<{
         </div>
       )}
       {showCreationMethodBadge && (
-        <div className="absolute -bottom-[4px] -right-[4px] z-10">
+        <div className="absolute bottom-[-4px] right-[-4px] z-10">
           <CreationMethodBadge
             creationMethod={post.creationMethod}
             ringColor="var(--new-bgColor)"
@@ -271,10 +271,10 @@ export const CalendarItem: FC<{
             width={188}
             items={actionItems}
             triggerClassName={clsx(
-              '!text-inherit',
+              'text-inherit!',
               headerTextColor === '#000000'
-                ? 'hover:!bg-black/10'
-                : 'hover:!bg-white/25'
+                ? 'hover:bg-black/10!'
+                : 'hover:bg-white/25!'
             )}
           />
         </div>
@@ -287,7 +287,7 @@ export const CalendarItem: FC<{
           'w-full flex flex-col gap-[3px] p-[5px] rounded-br-[10px] rounded-bl-[10px] bg-newColColor cursor-pointer',
           // Muted style only for missed QUEUE/DRAFT slots — published and
           // failed posts keep full colour.
-          isBeforeNow && (state === 'QUEUE' || state === 'DRAFT') && '!grayscale'
+          isBeforeNow && (state === 'QUEUE' || state === 'DRAFT') && 'grayscale!'
         )}
       >
         <div className="flex items-center gap-[4px] min-w-0">
@@ -300,7 +300,7 @@ export const CalendarItem: FC<{
             />
             <Image
               alt=""
-              className="w-[9px] h-[9px] rounded-full absolute z-10 -bottom-[2px] -end-[2px] border border-newTableBorder"
+              className="w-[9px] h-[9px] rounded-full absolute z-10 bottom-[-2px] inset-e-[-2px] border border-newTableBorder"
               src={`/icons/platforms/${post.integration?.providerIdentifier}.png`}
               width={9}
               height={9}
@@ -315,7 +315,7 @@ export const CalendarItem: FC<{
             </div>
           )}
         </div>
-        <div className="min-w-0 text-[10px] leading-[13px] whitespace-pre-wrap break-words line-clamp-3">
+        <div className="min-w-0 text-[10px] leading-[13px] whitespace-pre-wrap wrap-break-word line-clamp-3">
           {stripHtmlValidation('none', post.content, false, true, false) ||
             t('no_content', 'no content')}
         </div>
@@ -338,7 +338,7 @@ export const CalendarItem: FC<{
               </div>
             )}
             {post.thumb.count > 1 && (
-              <div className="absolute bottom-[2px] end-[2px] bg-black/60 text-white text-[8px] px-[3px] rounded-full leading-[11px]">
+              <div className="absolute bottom-[2px] inset-e-[2px] bg-black/60 text-white text-[8px] px-[3px] rounded-full leading-[11px]">
                 +{post.thumb.count - 1}
               </div>
             )}

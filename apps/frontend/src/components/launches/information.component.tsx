@@ -205,7 +205,7 @@ export const InformationComponent: FC<{
       {((isGlobal && selectedIntegrations.length) || !isValid) && (
         <div
           className={clsx(
-            'z-[300] hidden rounded-[12px] bg-newBgColorInner group-hover:flex absolute end-0 bottom-[100%] mb-[5px] p-[12px] flex-col',
+            'z-300 hidden rounded-[12px] bg-newBgColorInner group-hover:flex absolute end-0 bottom-full mb-[5px] p-[12px] flex-col',
             isValid ? 'border border-newColColor' : 'border border-[#FF3F3F]'
           )}
         >

@@ -166,7 +166,7 @@ export const AddItemsModal: FC<{
               setSelectedType(e.target.value as CampaignEntitySlug);
               setQuery('');
             }}
-            className="px-[12px] py-[8px] bg-newBgColor border border-newTableBorder rounded-[8px] text-[14px] text-textColor outline-none"
+            className="px-[12px] py-[8px] bg-newBgColor border border-newTableBorder rounded-[8px] text-[14px] text-textColor outline-hidden"
           >
             {types.map((slug) => (
               <option key={slug} value={slug}>
@@ -184,7 +184,7 @@ export const AddItemsModal: FC<{
           value={query}
           onChange={(e) => setQuery(e.target.value)}
           placeholder={t('search_entities', 'Search…')}
-          className="px-[12px] py-[8px] bg-newBgColor border border-newTableBorder rounded-[8px] text-[14px] text-textColor placeholder-newTableText outline-none"
+          className="px-[12px] py-[8px] bg-newBgColor border border-newTableBorder rounded-[8px] text-[14px] text-textColor placeholder-newTableText outline-hidden"
         />
       </div>
 
@@ -316,9 +316,9 @@ export const TaggedItemsPanels: FC<{
         height: 'auto',
         children: (
           <div className="flex flex-col gap-[14px] p-[4px] text-textColor">
-            <div className="text-[15px] font-semibold break-words">{item.name}</div>
+            <div className="text-[15px] font-semibold wrap-break-word">{item.name}</div>
             {item.subtitle ? (
-              <div className="text-[13px] text-newTableText whitespace-pre-wrap break-words max-h-[240px] overflow-y-auto rounded-[8px] border border-newTableBorder bg-newBgColorInner p-[12px]">
+              <div className="text-[13px] text-newTableText whitespace-pre-wrap wrap-break-word max-h-[240px] overflow-y-auto rounded-[8px] border border-newTableBorder bg-newBgColorInner p-[12px]">
                 {item.subtitle}
               </div>
             ) : (
@@ -388,7 +388,7 @@ export const TaggedItemsPanels: FC<{
     <div className="p-[16px] border border-newTableBorder rounded-[12px] bg-newBgColor">
       <div className="flex items-center justify-between mb-[12px]">
         <h3 className="text-[16px] font-semibold text-textColor">{t('tagged_items', 'Tagged Items')}</h3>
-        <Button onClick={openAddModal} className="!h-[32px] !px-[12px] text-[13px]">
+        <Button onClick={openAddModal} className="h-[32px]! px-[12px]! text-[13px]">
           {t('add_items', 'Add items')}
         </Button>
       </div>

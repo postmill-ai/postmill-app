@@ -352,7 +352,7 @@ const CalendarColumn: FC<{
           )}
         >
           {loading && (
-            <div className="h-full w-full p-[5px] animate-pulse absolute left-0 top-0 z-[50]">
+            <div className="h-full w-full p-[5px] animate-pulse absolute left-0 top-0 z-50">
               <div className="h-full w-full bg-newSettings rounded-[10px]" />
             </div>
           )}
@@ -457,13 +457,13 @@ const CalendarColumn: FC<{
                           <SafeImage
                             src="/icons/platforms/youtube.svg"
                             alt={selectedIntegrations.identifier}
-                            className="absolute z-10 -bottom-[5px] -end-[5px]"
+                            className="absolute z-10 bottom-[-5px] inset-e-[-5px]"
                             width={20}
                           />
                         ) : (
                           <SafeImage
                             src={`/icons/platforms/${selectedIntegrations.identifier}.png`}
-                            className="rounded-[8px] absolute z-10 -bottom-[5px] -end-[5px] border border-newTableBorder"
+                            className="rounded-[8px] absolute z-10 bottom-[-5px] inset-e-[-5px] border border-newTableBorder"
                             alt={selectedIntegrations.identifier}
                             width={20}
                             height={20}

@@ -54,7 +54,7 @@ export const RefreshButton: FC<RefreshButtonProps> = ({
       onClick={onClick}
       disabled={busy}
       aria-label={t('analytics_refresh', 'Refresh analytics')}
-      className={`shrink-0 p-[6px] rounded-[6px] text-newTableText hover:text-textColor hover:bg-newTableHeader transition-colors disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-designerAccent/60 ${
+      className={`shrink-0 p-[6px] rounded-[6px] text-newTableText hover:text-textColor hover:bg-newTableHeader transition-colors disabled:opacity-50 focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-designerAccent/60 ${
         className ?? ''
       }`}
     >

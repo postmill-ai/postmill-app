@@ -216,7 +216,7 @@ export const ApiKeysSection: FC<{ onKeyCreated?: (key: CreatedKey) => void }> = 
                 {t('key_name', 'Key Name')} *
               </label>
               <input
-                className="bg-newBgColorInner border border-newBorder rounded-[8px] px-[16px] h-[44px] text-textColor outline-none"
+                className="bg-newBgColorInner border border-newBorder rounded-[8px] px-[16px] h-[44px] text-textColor outline-hidden"
                 value={newKeyName}
                 onChange={(e) => setNewKeyName(e.target.value)}
                 placeholder={t('my_api_key_placeholder', 'My API Key')}
@@ -229,7 +229,7 @@ export const ApiKeysSection: FC<{ onKeyCreated?: (key: CreatedKey) => void }> = 
               </label>
               <input
                 type="datetime-local"
-                className="bg-newBgColorInner border border-newBorder rounded-[8px] px-[16px] h-[44px] text-textColor outline-none"
+                className="bg-newBgColorInner border border-newBorder rounded-[8px] px-[16px] h-[44px] text-textColor outline-hidden"
                 value={newKeyExpiry}
                 onChange={(e) => setNewKeyExpiry(e.target.value)}
               />
@@ -298,7 +298,7 @@ export const ApiKeysSection: FC<{ onKeyCreated?: (key: CreatedKey) => void }> = 
                       {rotatingId === key.id ? (
                         <div className="flex gap-[6px] items-center">
                           <input
-                            className="bg-newBgColorInner border border-newBorder rounded-[4px] px-[8px] h-[28px] text-[12px] text-textColor outline-none w-[100px]"
+                            className="bg-newBgColorInner border border-newBorder rounded-[4px] px-[8px] h-[28px] text-[12px] text-textColor outline-hidden w-[100px]"
                             value={rotateName}
                             onChange={(e) => setRotateName(e.target.value)}
                             placeholder={key.name}

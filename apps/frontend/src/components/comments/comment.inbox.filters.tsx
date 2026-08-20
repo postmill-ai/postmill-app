@@ -82,7 +82,7 @@ export const CommentInboxFilters: FC<CommentInboxFiltersProps> = ({
         <select
           value={filters.integrationId || ''}
           onChange={(e) => onChange({ ...filters, integrationId: e.target.value || undefined })}
-          className="bg-newBgColorInner border border-newTableBorder rounded-[6px] px-[10px] py-[4px] text-[13px] text-newTableText outline-none"
+          className="bg-newBgColorInner border border-newTableBorder rounded-[6px] px-[10px] py-[4px] text-[13px] text-newTableText outline-hidden"
         >
           <option value="">{t('comment_inbox.filter_all_channels', 'All channels')}</option>
           {channels.map((c) => (
@@ -95,7 +95,7 @@ export const CommentInboxFilters: FC<CommentInboxFiltersProps> = ({
       <select
         value={filters.sentiment || ''}
         onChange={(e) => setSentiment(e.target.value || undefined)}
-        className="bg-newBgColorInner border border-newTableBorder rounded-[6px] px-[10px] py-[4px] text-[13px] text-newTableText outline-none"
+        className="bg-newBgColorInner border border-newTableBorder rounded-[6px] px-[10px] py-[4px] text-[13px] text-newTableText outline-hidden"
       >
         <option value="">{t('filter_sentiment', 'All sentiments')}</option>
         <option value="positive">{t('sentiment_positive', 'Positive')}</option>
@@ -105,7 +105,7 @@ export const CommentInboxFilters: FC<CommentInboxFiltersProps> = ({
       <select
         value={filters.priority || ''}
         onChange={(e) => setPriority(e.target.value || undefined)}
-        className="bg-newBgColorInner border border-newTableBorder rounded-[6px] px-[10px] py-[4px] text-[13px] text-newTableText outline-none"
+        className="bg-newBgColorInner border border-newTableBorder rounded-[6px] px-[10px] py-[4px] text-[13px] text-newTableText outline-hidden"
       >
         <option value="">{t('filter_priority', 'All priorities')}</option>
         <option value="high">{t('priority_high', 'High')}</option>
@@ -116,7 +116,7 @@ export const CommentInboxFilters: FC<CommentInboxFiltersProps> = ({
         <select
           value={filters.assigneeId || ''}
           onChange={(e) => onChange({ ...filters, assigneeId: e.target.value || undefined })}
-          className="bg-newBgColorInner border border-newTableBorder rounded-[6px] px-[10px] py-[4px] text-[13px] text-newTableText outline-none"
+          className="bg-newBgColorInner border border-newTableBorder rounded-[6px] px-[10px] py-[4px] text-[13px] text-newTableText outline-hidden"
         >
           <option value="">{t('comment_inbox.filter_all_assignees', 'Anyone')}</option>
           {teamMembers.map((m) => (
@@ -133,7 +133,7 @@ export const CommentInboxFilters: FC<CommentInboxFiltersProps> = ({
           checked={filters.unreadOnly}
           onChange={toggleUnreadOnly}
         />
-        <div className="relative w-[36px] h-[20px] shrink-0 bg-newTableBorder rounded-full peer-checked:bg-btnPrimary after:content-[''] after:absolute after:top-[2px] after:start-[2px] after:bg-white after:rounded-full after:h-[16px] after:w-[16px] after:transition-all peer-checked:after:translate-x-full" />
+        <div className="relative w-[36px] h-[20px] shrink-0 bg-newTableBorder rounded-full peer-checked:bg-btnPrimary after:content-[''] after:absolute after:top-[2px] after:inset-s-[2px] after:bg-white after:rounded-full after:h-[16px] after:w-[16px] after:transition-all peer-checked:after:translate-x-full" />
         {t('comment_inbox.filter_unread_only', 'Unread only')}
       </label>
     </div>

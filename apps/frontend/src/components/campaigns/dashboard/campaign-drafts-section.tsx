@@ -122,7 +122,7 @@ export const CampaignDraftsSection: FC<{
           <h3 className="text-[16px] font-semibold text-textColor">{t('post_drafts', 'Post Drafts')}</h3>
           {count > 0 && <span className="text-[12px] text-newTableText">({count})</span>}
         </div>
-        <Button onClick={openNewDraft} className="!h-[32px] !px-[12px] text-[13px]">
+        <Button onClick={openNewDraft} className="h-[32px]! px-[12px]! text-[13px]">
           {t('new_draft', 'New Draft')}
         </Button>
       </div>
@@ -158,7 +158,7 @@ export const CampaignDraftsSection: FC<{
                 <div className="flex items-center justify-between gap-[8px]">
                   <div className="flex items-center">
                     {channels.slice(0, 4).map((c) => (
-                      <div key={c!.id} className="-ms-[6px] first:ms-0">
+                      <div key={c!.id} className="ms-[-6px] first:ms-0">
                         <PlatformAvatar
                           picture={c!.picture || undefined}
                           identifier={c!.providerIdentifier}

@@ -6,7 +6,7 @@ import clsx from 'clsx';
 
 // Shared right-side slide-over. Replaces the four hand-rolled shells (F3) in
 // posts.tab and the metric/day/channel drill panels. filter.bar keeps its own
-// z-[300] portal (it sits above this layer).
+// z-300 portal (it sits above this layer).
 
 // Module-level stack of open drawer ids. Only the top drawer reacts to Esc and
 // runs its Tab focus-trap — `e.stopPropagation()` does NOT stop sibling keydown
@@ -113,20 +113,20 @@ export const Drawer: FC<DrawerProps> = ({
 
   return createPortal(
     <div
-      className="fixed inset-0 z-[100] flex justify-end"
+      className="fixed inset-0 z-100 flex justify-end"
       role="dialog"
       aria-modal="true"
       aria-label={ariaLabel}
     >
       <div
-        className="absolute inset-0 bg-black/20 backdrop-blur-sm transition-opacity"
+        className="absolute inset-0 bg-black/20 backdrop-blur-xs transition-opacity"
         onClick={onClose}
       />
       <div
         ref={panelRef}
         tabIndex={-1}
         className={clsx(
-          'relative w-full sm:max-w-[520px] bg-newBgColorInner border-l border-newTableBorder h-full overflow-y-auto outline-none',
+          'relative w-full sm:max-w-[520px] bg-newBgColorInner border-l border-newTableBorder h-full overflow-y-auto outline-hidden',
           'transition-transform duration-300 ease-out will-change-transform',
           entered ? 'translate-x-0' : 'translate-x-full rtl:-translate-x-full',
           panelClassName

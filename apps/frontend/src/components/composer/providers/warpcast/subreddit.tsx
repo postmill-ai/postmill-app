@@ -129,7 +129,7 @@ export const Subreddit: FC<{
             }}
           />
           {!!results.length && !loading && (
-            <ul className="z-[400] w-full absolute bg-input -mt-[20px] outline-none border-newTableBorder border list-none m-0 p-0">
+            <ul className="z-400 w-full absolute bg-input mt-[-20px] outline-hidden border-newTableBorder border list-none m-0 p-0">
               {results.map((r: { id: string; name: string }) => (
                 <li key={r.id} className="m-0 p-0">
                   <button

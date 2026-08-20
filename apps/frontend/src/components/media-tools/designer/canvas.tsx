@@ -1881,7 +1881,7 @@ export const DesignerCanvas: FC<CanvasProps> = ({
 
       {hud && (
         <div
-          className="absolute pointer-events-none z-10 px-2 py-1 rounded bg-designerAccent text-white text-[11px] font-medium"
+          className="absolute pointer-events-none z-10 px-2 py-1 rounded-sm bg-designerAccent text-white text-[11px] font-medium"
           style={{ left: viewportX + hud.x * zoom, top: viewportY + hud.y * zoom }}
         >
           {hud.text}
@@ -1951,7 +1951,7 @@ export const DesignerCanvas: FC<CanvasProps> = ({
       <div className="absolute bottom-4 right-4 flex items-center gap-2 bg-newBgColorInner border border-studioBorder rounded-lg px-3 py-2 text-[12px] text-newTextColor/60">
         <button
           onClick={() => setZoom(zoom / 1.25)}
-          className="w-7 h-7 flex items-center justify-center rounded hover:bg-studioBorder/30"
+          className="w-7 h-7 flex items-center justify-center rounded-sm hover:bg-studioBorder/30"
           aria-label={t('zoom_out', 'Zoom out')}
         >
           −
@@ -1959,14 +1959,14 @@ export const DesignerCanvas: FC<CanvasProps> = ({
         <span className="min-w-[40px] text-center">{Math.round(zoom * 100)}%</span>
         <button
           onClick={() => setZoom(zoom * 1.25)}
-          className="w-7 h-7 flex items-center justify-center rounded hover:bg-studioBorder/30"
+          className="w-7 h-7 flex items-center justify-center rounded-sm hover:bg-studioBorder/30"
           aria-label={t('zoom_in', 'Zoom in')}
         >
           +
         </button>
         <button
           onClick={fitToScreen}
-          className="w-7 h-7 flex items-center justify-center rounded hover:bg-studioBorder/30 text-[10px]"
+          className="w-7 h-7 flex items-center justify-center rounded-sm hover:bg-studioBorder/30 text-[10px]"
           aria-label={t('fit_to_screen', 'Fit to screen')}
         >
           ⊞

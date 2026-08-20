@@ -130,7 +130,7 @@ export const AnalyticsShareModal: FC = () => {
         <select
           value={range}
           onChange={(e) => setRangePreset(e.target.value)}
-          className="px-[10px] py-[8px] bg-newBgColor border border-newTableBorder rounded-[8px] text-[13px] outline-none focus-visible:ring-2 focus-visible:ring-designerAccent/60"
+          className="px-[10px] py-[8px] bg-newBgColor border border-newTableBorder rounded-[8px] text-[13px] outline-hidden focus-visible:ring-2 focus-visible:ring-designerAccent/60"
         >
           {RANGE_PRESETS.map((r) => (
             <option key={r.value} value={r.value}>
@@ -171,7 +171,7 @@ export const AnalyticsShareModal: FC = () => {
           <button
             type="button"
             onClick={copy}
-            className="px-[10px] py-[5px] text-[12px] font-medium bg-newTableHeader text-newTableText rounded-[6px] hover:text-textColor focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-designerAccent/60"
+            className="px-[10px] py-[5px] text-[12px] font-medium bg-newTableHeader text-newTableText rounded-[6px] hover:text-textColor focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-designerAccent/60"
           >
             {t('copy', 'Copy')}
           </button>
@@ -183,7 +183,7 @@ export const AnalyticsShareModal: FC = () => {
           type="button"
           onClick={() => mint(data?.enabled ?? false)}
           disabled={busy}
-          className="px-[16px] py-[8px] bg-btnPrimary text-white rounded-[8px] text-[13px] font-medium disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-designerAccent/60"
+          className="px-[16px] py-[8px] bg-btnPrimary text-white rounded-[8px] text-[13px] font-medium disabled:opacity-50 focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-designerAccent/60"
         >
           {data?.enabled
             ? t('share_save_rotate', 'Save / rotate link')
@@ -194,7 +194,7 @@ export const AnalyticsShareModal: FC = () => {
             type="button"
             onClick={turnOff}
             disabled={busy}
-            className="px-[16px] py-[8px] bg-newTableHeader text-amber-600 rounded-[8px] text-[13px] font-medium disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-designerAccent/60"
+            className="px-[16px] py-[8px] bg-newTableHeader text-amber-600 rounded-[8px] text-[13px] font-medium disabled:opacity-50 focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-designerAccent/60"
           >
             {t('share_disable', 'Disable link')}
           </button>

@@ -31,7 +31,7 @@ export const WrapcasterProvider: FC<Web3ProviderInterface> = (props) => {
   return (
     <div className="justify-center items-center flex">
       {hide ? (
-        <div className="justify-center items-center flex -mt-[90px]">
+        <div className="justify-center items-center flex mt-[-90px]">
           <LoadingComponent width={100} height={100} />
         </div>
       ) : (

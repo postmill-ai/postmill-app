@@ -36,7 +36,7 @@ const AlertCard: FC<{ anomaly: AnomalyRow; onDismiss: (id: string) => void }> = 
   const isSpike = anomaly.direction === 'spike';
   // Token colours only — spike = positive token, drop = amber-600 (repo
   // light-mode warning rule); no raw tailwind palette classes.
-  const dirColor = isSpike ? 'text-[var(--positive,#32d583)]' : 'text-amber-600';
+  const dirColor = isSpike ? 'text-(--positive,#32d583)' : 'text-amber-600';
   const dirLabel = isSpike
     ? t('analytics_alert_spike', 'Spike')
     : t('analytics_alert_drop', 'Drop');
@@ -62,7 +62,7 @@ const AlertCard: FC<{ anomaly: AnomalyRow; onDismiss: (id: string) => void }> = 
                 {dirLabel}
               </span>
               {anomaly.ruleId && (
-                <span className="text-[10px] font-semibold uppercase tracking-wide text-btnPrimary border border-btnPrimary rounded-full px-[6px] py-[1px]">
+                <span className="text-[10px] font-semibold uppercase tracking-wide text-btnPrimary border border-btnPrimary rounded-full px-[6px] py-px">
                   {t('analytics_alert_rule_badge', 'Rule')}
                 </span>
               )}
@@ -76,7 +76,7 @@ const AlertCard: FC<{ anomaly: AnomalyRow; onDismiss: (id: string) => void }> = 
           type="button"
           onClick={() => onDismiss(anomaly.id)}
           aria-label={t('analytics_alert_dismiss', 'Dismiss alert')}
-          className="shrink-0 text-newTableText hover:text-textColor transition-colors rounded-[6px] p-[4px] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-designerAccent/60"
+          className="shrink-0 text-newTableText hover:text-textColor transition-colors rounded-[6px] p-[4px] focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-designerAccent/60"
         >
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
             <path d="M18 6 6 18M6 6l12 12" strokeLinecap="round" />
@@ -178,7 +178,7 @@ export const AlertsSection: FC = () => {
         <button
           type="button"
           onClick={openRules}
-          className="inline-flex items-center gap-[6px] px-[12px] py-[6px] text-[13px] font-medium rounded-[8px] bg-newTableHeader border border-newTableBorder text-newTableText hover:text-textColor hover:border-newTableText transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-designerAccent/60"
+          className="inline-flex items-center gap-[6px] px-[12px] py-[6px] text-[13px] font-medium rounded-[8px] bg-newTableHeader border border-newTableBorder text-newTableText hover:text-textColor hover:border-newTableText transition-colors focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-designerAccent/60"
         >
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
             <circle cx="12" cy="12" r="3" />
@@ -204,7 +204,7 @@ export const AnomalyOverviewStrip: FC = () => {
   return (
     <Link
       href="/analytics?tab=insights&section=alerts"
-      className="flex items-center gap-[8px] px-[14px] py-[10px] rounded-[10px] bg-newTableHeader border border-newTableBorder text-[13px] text-textColor hover:border-amber-600/50 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-designerAccent/60"
+      className="flex items-center gap-[8px] px-[14px] py-[10px] rounded-[10px] bg-newTableHeader border border-newTableBorder text-[13px] text-textColor hover:border-amber-600/50 transition-colors focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-designerAccent/60"
     >
       <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="text-amber-600 shrink-0">
         <path d="M12 9v4m0 4h.01M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0Z" strokeLinecap="round" strokeLinejoin="round" />

@@ -94,9 +94,9 @@ export const TiktokPreview: FC<{
           <img
             src={integration?.picture || '/no-picture.jpg'}
             alt={t('alt_social', 'social')}
-            className="rounded-full z-[2] w-[29px] h-[29px]"
+            className="rounded-full z-2 w-[29px] h-[29px]"
           />
-          <div className="absolute left-[50%] -translate-x-[50%] bottom-0 translate-y-[50%] z-[1]">
+          <div className="absolute left-[50%] translate-x-[-50%] bottom-0 translate-y-[50%] z-1">
             <svg
               width="13"
               height="13"
@@ -185,7 +185,7 @@ export const TiktokPreview: FC<{
           <img
             src={integration?.picture || '/no-picture.jpg'}
             alt={t('alt_social', 'social')}
-            className="rounded-full relative z-[2] w-[29px] h-[29px]"
+            className="rounded-full relative z-2 w-[29px] h-[29px]"
           />
         </div>
       </div>

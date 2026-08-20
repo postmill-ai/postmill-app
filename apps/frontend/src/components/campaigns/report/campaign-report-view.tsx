@@ -331,7 +331,7 @@ export const CampaignReportView: FC<{ report: CampaignReport; publicMode?: boole
               {t('post_metrics_trend', 'Post metrics')} · {metricLabelT(trend.metric, t)}
             </span>
           </div>
-          <div className="w-full aspect-[16/9] sm:aspect-[21/9] max-h-[320px]">
+          <div className="w-full aspect-16/9 sm:aspect-[21/9] max-h-[320px]">
             <LineChart series={trend.series} height={300} />
           </div>
           {analyticsChannelBars.labels.length > 0 && (
@@ -339,7 +339,7 @@ export const CampaignReportView: FC<{ report: CampaignReport; publicMode?: boole
               <div className="text-[12px] font-medium text-newTableText mb-[8px]">
                 {t('by_channel', 'By Channel')}
               </div>
-              <div className="w-full aspect-[4/3] max-h-[260px]">
+              <div className="w-full aspect-4/3 max-h-[260px]">
                 <BarChart labels={analyticsChannelBars.labels} values={analyticsChannelBars.values} height={250} />
               </div>
             </div>
@@ -377,7 +377,7 @@ export const CampaignReportView: FC<{ report: CampaignReport; publicMode?: boole
             <input
               readOnly
               value={shareUrl}
-              className="flex-1 px-[12px] py-[8px] bg-newBgColor border border-newTableBorder rounded-[8px] text-[13px] text-textColor outline-none"
+              className="flex-1 px-[12px] py-[8px] bg-newBgColor border border-newTableBorder rounded-[8px] text-[13px] text-textColor outline-hidden"
             />
             <Button secondary onClick={() => copyToClipboard(shareUrl)}>
               <span className="flex items-center gap-[8px]">

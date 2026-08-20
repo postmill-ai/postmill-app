@@ -105,7 +105,7 @@ export const ListView = () => {
 
       {totalPages > 1 && (
         <div className="shrink-0 flex items-center justify-center gap-[10px] select-none text-textColor pt-[4px]">
-          <div className="border h-[36px] border-newTableBorder bg-newTableBorder gap-[1px] flex items-center rounded-[8px] overflow-hidden">
+          <div className="border h-[36px] border-newTableBorder bg-newTableBorder gap-px flex items-center rounded-[8px] overflow-hidden">
             <div
               onClick={() => setPage((p) => Math.max(0, p - 1))}
               className={clsx(

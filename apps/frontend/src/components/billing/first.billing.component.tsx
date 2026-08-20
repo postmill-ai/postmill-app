@@ -58,7 +58,7 @@ const JoinOver: FC<{ onShowYouTube: () => void }> = ({ onShowYouTube }) => {
   const user = useUser();
   return (
     <>
-      <div className="text-[46px] font-[600] leading-[110%] tablet:text-[36px] mobile:!text-[30px] whitespace-pre-line text-balance">
+      <div className="text-[46px] font-[600] leading-[110%] tablet:text-[36px] mobile:text-![30px] whitespace-pre-line text-balance">
         {t('billing_join_over', 'Join Over')}{' '}
         <span className="text-[#1d9bf0]">
           {t('billing_entrepreneurs_count', '20,000+ Entrepreneurs')}
@@ -212,7 +212,7 @@ export const FirstBillingComponent = () => {
 
   return (
     <div className="blurMe flex flex-1 flex-col bg-newBgColorInner pb-[60px] mobile:pb-[100px]">
-      <div className="h-[92px] px-[80px] tablet:px-[32px] mobile:!px-[16px] py-[20px] flex border-b border-newColColor">
+      <div className="h-[92px] px-[80px] tablet:px-[32px] mobile:px-![16px] py-[20px] flex border-b border-newColColor">
         <div className="flex-1 flex items-center text-textColor">
           <LogoTextComponent />
         </div>
@@ -222,9 +222,9 @@ export const FirstBillingComponent = () => {
             <div className="hover:text-newTextColor">
               <ModeComponent />
             </div>
-            <div className="w-[1px] h-[20px] bg-blockSeparator" />
+            <div className="w-px h-[20px] bg-blockSeparator" />
             <LanguageComponent />
-            <div className="w-[1px] h-[20px] bg-blockSeparator" />
+            <div className="w-px h-[20px] bg-blockSeparator" />
             <AttachToFeedbackIcon />
             <DeveloperIconComponent />
             <NotificationComponent />
@@ -234,7 +234,7 @@ export const FirstBillingComponent = () => {
           </div>
         </div>
       </div>
-      <div className="flex px-[80px] tablet:px-[32px] mobile:!px-[16px] flex-1 flex-row tablet:flex-none tablet:flex-col-reverse">
+      <div className="flex px-[80px] tablet:px-[32px] mobile:px-![16px] flex-1 flex-row tablet:flex-none tablet:flex-col-reverse">
         <div className="flex-1 py-[40px] tablet:pt-[80px] flex flex-col pe-[40px] tablet:pe-0">
           <div className="block tablet:hidden">
             <JoinOver onShowYouTube={showYouTube} />
@@ -250,7 +250,7 @@ export const FirstBillingComponent = () => {
             <LoadingComponent />
           )}
         </div>
-        <div className="flex flex-col ps-[40px] tablet:!ps-[0] border-l border-newColColor py-[40px] mobile:!pt-[24px] tablet:border-none tablet:pb-0">
+        <div className="flex flex-col ps-[40px] tablet:ps-![0] border-l border-newColColor py-[40px] mobile:pt-![24px] tablet:border-none tablet:pb-0">
           <div className="top-[20px] sticky">
             <div className="hidden tablet:block">
               <JoinOver onShowYouTube={showYouTube} />
@@ -289,7 +289,7 @@ export const FirstBillingComponent = () => {
                 </button>
               </div>
             </div>
-            <div className="grid grid-cols-2 gap-[8px] mobile:!grid-cols-2 tablet:grid-cols-4">
+            <div className="grid grid-cols-2 gap-[8px] mobile:grid-cols-2! tablet:grid-cols-4">
               {price.map(
                 ([key, value]) => (
                   <button
@@ -506,7 +506,7 @@ export const BillingFeatures: FC<{ tier: PlanInterface['current'] }> = ({
             {feature.badge && feature.badge !== 'unlimited' && (
               <span
                 className={clsx(
-                  'inline-flex items-center px-[6px] py-[1px] rounded-[4px] text-[11px] font-[500]',
+                  'inline-flex items-center px-[6px] py-px rounded-[4px] text-[11px] font-[500]',
                   feature.badge === 'no'
                     ? 'bg-red-500/20 text-red-500'
                     : 'bg-green-500/20 text-green-500'

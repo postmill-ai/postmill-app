@@ -215,10 +215,10 @@ export const CommentCard: FC<CommentCardProps> = ({
         <img
           src={comment.authorPicture}
           alt={comment.authorName}
-          className="w-[36px] h-[36px] rounded-full object-cover flex-shrink-0"
+          className="w-[36px] h-[36px] rounded-full object-cover shrink-0"
         />
       ) : (
-        <div className="w-[36px] h-[36px] rounded-full bg-btnPrimary flex items-center justify-center text-white text-[14px] font-bold flex-shrink-0">
+        <div className="w-[36px] h-[36px] rounded-full bg-btnPrimary flex items-center justify-center text-white text-[14px] font-bold shrink-0">
           {comment.authorName?.[0]?.toUpperCase() || '?'}
         </div>
       )}
@@ -237,14 +237,14 @@ export const CommentCard: FC<CommentCardProps> = ({
           <span className="text-[11px] text-newTableText ml-auto flex items-center gap-[6px]">
             {comment.sentiment && (
               <span
-                className={`text-[10px] px-[6px] py-[1px] rounded-full border ${SENTIMENT_COLORS[comment.sentiment] || SENTIMENT_COLORS.neutral}`}
+                className={`text-[10px] px-[6px] py-px rounded-full border ${SENTIMENT_COLORS[comment.sentiment] || SENTIMENT_COLORS.neutral}`}
               >
                 {t(`sentiment_${comment.sentiment}`, comment.sentiment)}
               </span>
             )}
             {comment.priority && (
               <span
-                className={`text-[10px] px-[6px] py-[1px] rounded-full border ${PRIORITY_COLORS[comment.priority] || PRIORITY_COLORS.medium}`}
+                className={`text-[10px] px-[6px] py-px rounded-full border ${PRIORITY_COLORS[comment.priority] || PRIORITY_COLORS.medium}`}
               >
                 {t(`priority_${comment.priority}`, comment.priority)}
               </span>
@@ -262,7 +262,7 @@ export const CommentCard: FC<CommentCardProps> = ({
           </span>
         </div>
 
-        <p className="text-[13px] text-textColor break-words whitespace-pre-wrap mb-[8px]">{comment.content}</p>
+        <p className="text-[13px] text-textColor wrap-break-word whitespace-pre-wrap mb-[8px]">{comment.content}</p>
 
         {postId && (
           <button
@@ -342,7 +342,7 @@ export const CommentCard: FC<CommentCardProps> = ({
               value={comment.assigneeId || ''}
               onChange={(e) => assign(e.target.value || null)}
               disabled={busy}
-              className="bg-newBgColor border border-newTableBorder rounded-[6px] px-[8px] py-[4px] text-[12px] text-textColor outline-none"
+              className="bg-newBgColor border border-newTableBorder rounded-[6px] px-[8px] py-[4px] text-[12px] text-textColor outline-hidden"
             >
               <option value="">{t('unassigned', 'Unassigned')}</option>
               {teamMembers.map((m) => (

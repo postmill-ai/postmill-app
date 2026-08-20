@@ -335,7 +335,7 @@ export const ComposerLibraryModal: FC<ComposerLibraryModalProps> = ({
           value={search}
           onChange={(e) => setSearch(e.target.value)}
           placeholder={t('search_library', 'Search...')}
-          className="w-full px-[12px] py-[8px] bg-newBgColor border border-newTableBorder rounded-[8px] text-[14px] text-textColor outline-none focus:border-btnPrimary"
+          className="w-full px-[12px] py-[8px] bg-newBgColor border border-newTableBorder rounded-[8px] text-[14px] text-textColor outline-hidden focus:border-btnPrimary"
         />
       </div>
 
@@ -444,7 +444,7 @@ export const ComposerLibraryModal: FC<ComposerLibraryModalProps> = ({
                       </div>
                       <div className="flex items-center gap-[8px] mt-[4px]">
                         {channels.length > 0 ? (
-                          <div className="flex items-center -space-x-[4px]">
+                          <div className="flex items-center space-x-[-4px]">
                             {channels.slice(0, 4).map((c: Integrations, i: number) =>
                               c?.picture ? (
                                 <SafeImage

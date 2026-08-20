@@ -172,7 +172,7 @@ export const FileDetailsPanel: FC<{
                 onChange={(e) => setName(e.target.value)}
                 onBlur={handleSaveName}
                 onKeyDown={(e) => { if (e.key === 'Enter') handleSaveName(); if (e.key === 'Escape') { setName(displayName); setEditingName(false); } }}
-                className="w-full mt-[4px] bg-transparent border-b border-[#2B5CD3] text-[13px] text-textColor outline-none"
+                className="w-full mt-[4px] bg-transparent border-b border-[#2B5CD3] text-[13px] text-textColor outline-hidden"
               />
             ) : (
               <div
@@ -198,7 +198,7 @@ export const FileDetailsPanel: FC<{
               onBlur={handleSaveDescription}
               placeholder={t('add_a_description_placeholder', 'Add a description...')}
               rows={3}
-              className="w-full mt-[4px] bg-newBgColor border border-newColColor rounded-[6px] px-[10px] py-[8px] text-[13px] text-textColor outline-none focus:border-[#2B5CD3] resize-none placeholder:text-textColor/30"
+              className="w-full mt-[4px] bg-newBgColor border border-newColColor rounded-[6px] px-[10px] py-[8px] text-[13px] text-textColor outline-hidden focus:border-[#2B5CD3] resize-none placeholder:text-textColor/30"
             />
           </div>
 
@@ -230,7 +230,7 @@ export const FileDetailsPanel: FC<{
                   if (e.key === ',' || e.key === 'Tab') { e.preventDefault(); handleAddTag(tagsInput.replace(',', '')); }
                 }}
                 placeholder={t('add_tag_placeholder', 'Add tag...')}
-                className="flex-1 min-w-[80px] bg-transparent border-b border-newColColor text-[12px] text-textColor outline-none focus:border-[#2B5CD3] placeholder:text-textColor/30"
+                className="flex-1 min-w-[80px] bg-transparent border-b border-newColColor text-[12px] text-textColor outline-hidden focus:border-[#2B5CD3] placeholder:text-textColor/30"
               />
             </div>
           </div>

@@ -228,8 +228,8 @@ export const Component: FC<{
           !modal.fullScreen
             ? 'pb-[50px] min-w-full min-h-full'
             : 'w-full h-full',
-          'fixed flex left-0 top-0 bg-popup backdrop-blur-sm transition-all animate-fadeIn overflow-y-auto text-newTextColor outline-none',
-          !isLast && '!overflow-hidden'
+          'fixed flex left-0 top-0 bg-popup backdrop-blur-xs transition-all animate-fadeIn overflow-y-auto text-newTextColor outline-hidden',
+          !isLast && 'overflow-hidden!'
         )}
       >
         <div className={clsx(modal.fullScreen && 'flex', 'relative flex-1')}>
@@ -267,7 +267,7 @@ export const Component: FC<{
         onClick={closeModalFunction}
         style={{ zIndex }}
         className={clsx(
-          'fixed flex left-0 top-0 min-w-full min-h-full bg-popup backdrop-blur-sm transition-all animate-fadeIn overflow-y-auto text-newTextColor outline-none',
+          'fixed flex left-0 top-0 min-w-full min-h-full bg-popup backdrop-blur-xs transition-all animate-fadeIn overflow-y-auto text-newTextColor outline-hidden',
           !modal.fullScreen && 'pb-[50px]'
         )}
       >
@@ -319,7 +319,7 @@ export const Component: FC<{
                 modal.withCloseButton ? (
                   <div className="cursor-pointer">
                     <button
-                      className="outline-none absolute end-[20px] top-[20px] mantine-UnstyledButton-root mantine-ActionIcon-root hover:bg-tableBorder cursor-pointer mantine-Modal-close mantine-1dcetaa"
+                      className="outline-hidden absolute inset-e-[20px] top-[20px] mantine-UnstyledButton-root mantine-ActionIcon-root hover:bg-tableBorder cursor-pointer mantine-Modal-close mantine-1dcetaa"
                       type="button"
                       onClick={closeModalFunction}
                     >

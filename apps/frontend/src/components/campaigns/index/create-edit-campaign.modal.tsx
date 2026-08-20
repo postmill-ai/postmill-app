@@ -103,7 +103,7 @@ export const CreateEditCampaignModal: FC<CreateEditCampaignModalProps> = ({ edit
           type="text"
           value={name}
           onChange={(e) => setName(e.target.value)}
-          className="px-[12px] py-[8px] bg-newBgColor border border-newTableBorder rounded-[8px] text-[14px] outline-none"
+          className="px-[12px] py-[8px] bg-newBgColor border border-newTableBorder rounded-[8px] text-[14px] outline-hidden"
           placeholder={t('campaign_name_placeholder', 'Campaign name')}
         />
       </div>
@@ -116,7 +116,7 @@ export const CreateEditCampaignModal: FC<CreateEditCampaignModalProps> = ({ edit
         <textarea
           value={description}
           onChange={(e) => setDescription(e.target.value)}
-          className="px-[12px] py-[8px] bg-newBgColor border border-newTableBorder rounded-[8px] text-[14px] outline-none resize-none min-h-[60px]"
+          className="px-[12px] py-[8px] bg-newBgColor border border-newTableBorder rounded-[8px] text-[14px] outline-hidden resize-none min-h-[60px]"
           placeholder={t('campaign_desc_placeholder', 'Optional description')}
         />
       </div>
@@ -127,7 +127,7 @@ export const CreateEditCampaignModal: FC<CreateEditCampaignModalProps> = ({ edit
             type="text"
             value={client}
             onChange={(e) => setClient(e.target.value)}
-            className="px-[12px] py-[8px] bg-newBgColor border border-newTableBorder rounded-[8px] text-[14px] outline-none"
+            className="px-[12px] py-[8px] bg-newBgColor border border-newTableBorder rounded-[8px] text-[14px] outline-hidden"
             placeholder={t('campaign_client_placeholder', 'Which client is this for?')}
           />
         </div>
@@ -137,7 +137,7 @@ export const CreateEditCampaignModal: FC<CreateEditCampaignModalProps> = ({ edit
             type="text"
             value={project}
             onChange={(e) => setProject(e.target.value)}
-            className="px-[12px] py-[8px] bg-newBgColor border border-newTableBorder rounded-[8px] text-[14px] outline-none"
+            className="px-[12px] py-[8px] bg-newBgColor border border-newTableBorder rounded-[8px] text-[14px] outline-hidden"
             placeholder={t('campaign_project_placeholder', 'Which project?')}
           />
         </div>
@@ -157,7 +157,7 @@ export const CreateEditCampaignModal: FC<CreateEditCampaignModalProps> = ({ edit
             type="date"
             value={startDate}
             onChange={(e) => setStartDate(e.target.value)}
-            className="px-[12px] py-[8px] bg-newBgColor border border-newTableBorder rounded-[8px] text-[14px] outline-none w-full"
+            className="px-[12px] py-[8px] bg-newBgColor border border-newTableBorder rounded-[8px] text-[14px] outline-hidden w-full"
           />
         </div>
         <div className="flex flex-col gap-[4px] flex-1">
@@ -166,7 +166,7 @@ export const CreateEditCampaignModal: FC<CreateEditCampaignModalProps> = ({ edit
             type="date"
             value={endDate}
             onChange={(e) => setEndDate(e.target.value)}
-            className="px-[12px] py-[8px] bg-newBgColor border border-newTableBorder rounded-[8px] text-[14px] outline-none w-full"
+            className="px-[12px] py-[8px] bg-newBgColor border border-newTableBorder rounded-[8px] text-[14px] outline-hidden w-full"
           />
         </div>
       </div>
@@ -206,7 +206,7 @@ export const CreateEditCampaignModal: FC<CreateEditCampaignModalProps> = ({ edit
             <select
               value={goal.metric}
               onChange={(e) => updateGoal(idx, { metric: e.target.value })}
-              className="px-[10px] py-[8px] bg-newBgColor border border-newTableBorder rounded-[8px] text-[13px] outline-none capitalize"
+              className="px-[10px] py-[8px] bg-newBgColor border border-newTableBorder rounded-[8px] text-[13px] outline-hidden capitalize"
             >
               {GOAL_METRICS.map((m) => (
                 <option key={m} value={m}>
@@ -220,7 +220,7 @@ export const CreateEditCampaignModal: FC<CreateEditCampaignModalProps> = ({ edit
               value={goal.target}
               onChange={(e) => updateGoal(idx, { target: e.target.value })}
               placeholder={t('target', 'Target')}
-              className="flex-1 px-[10px] py-[8px] bg-newBgColor border border-newTableBorder rounded-[8px] text-[13px] outline-none"
+              className="flex-1 px-[10px] py-[8px] bg-newBgColor border border-newTableBorder rounded-[8px] text-[13px] outline-hidden"
             />
             <button
               type="button"

@@ -124,7 +124,7 @@ const PromptLibraryDropdown: FC<{
   return (
     <div
       ref={ref}
-      className="absolute z-[200] top-full mt-[4px] w-[280px] bg-newBgColorInner border border-newTableBorder rounded-[8px] shadow-lg overflow-hidden"
+      className="absolute z-200 top-full mt-[4px] w-[280px] bg-newBgColorInner border border-newTableBorder rounded-[8px] shadow-lg overflow-hidden"
     >
       <div className="p-[8px] border-b border-newTableBorder flex justify-between items-center">
         <div className="text-[12px] font-[600]">
@@ -144,13 +144,13 @@ const PromptLibraryDropdown: FC<{
             value={newTitle}
             onChange={(e) => setNewTitle(e.target.value)}
             placeholder={t('prompt_title', 'Prompt title...')}
-            className="bg-newBgColorInner px-[10px] h-[32px] outline-none border-newTableBorder border rounded-[8px] text-textColor placeholder-inputText text-[12px]"
+            className="bg-newBgColorInner px-[10px] h-[32px] outline-hidden border-newTableBorder border rounded-[8px] text-textColor placeholder-inputText text-[12px]"
           />
           <textarea
             value={newContent}
             onChange={(e) => setNewContent(e.target.value)}
             placeholder={t('prompt_content', 'Prompt content...')}
-            className="bg-newBgColorInner min-h-[60px] p-[10px] outline-none border-newTableBorder border rounded-[8px] text-textColor placeholder-inputText text-[12px]"
+            className="bg-newBgColorInner min-h-[60px] p-[10px] outline-hidden border-newTableBorder border rounded-[8px] text-textColor placeholder-inputText text-[12px]"
           />
           <button
             onClick={savePrompt}

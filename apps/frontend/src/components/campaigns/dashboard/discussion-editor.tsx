@@ -130,7 +130,7 @@ export const DiscussionEditor: FC<DiscussionEditorProps> = ({
     editorProps: {
       attributes: {
         class:
-          'prose-sm max-w-none min-h-[64px] px-[12px] py-[10px] text-[14px] text-textColor focus:outline-none',
+          'prose-sm max-w-none min-h-[64px] px-[12px] py-[10px] text-[14px] text-textColor focus:outline-hidden',
       },
     },
   });
@@ -217,7 +217,7 @@ export const DiscussionEditor: FC<DiscussionEditorProps> = ({
           🖼️
         </ToolbarButton>
         {emojiOpen && (
-          <div className="absolute z-[500] top-[36px] left-0">
+          <div className="absolute z-500 top-[36px] left-0">
             <EmojiPicker
               height={360}
               theme={(typeof window !== 'undefined' && (localStorage.getItem('mode') as Theme)) || Theme.DARK}

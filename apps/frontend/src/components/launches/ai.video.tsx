@@ -139,7 +139,7 @@ const AiVideoModal: FC<{
             'describe_the_video_you_want_to_generate',
             'Describe the video you want to generate...'
           )}
-          className="bg-input min-h-[150px] p-[16px] outline-none border-newTableBorder border rounded-[4px] text-inputText placeholder-inputText"
+          className="bg-input min-h-[150px] p-[16px] outline-hidden border-newTableBorder border rounded-[4px] text-inputText placeholder-inputText"
         />
       </div>
       <div className="flex flex-col gap-[6px]">
@@ -220,7 +220,7 @@ export const AiVideo: FC<{
         )}
       >
         {loading && (
-          <div className="absolute start-[50%] -translate-x-[50%]">
+          <div className="absolute inset-s-[50%] translate-x-[-50%]">
             <Loading height={30} width={30} type="spin" color="#fff" />
           </div>
         )}

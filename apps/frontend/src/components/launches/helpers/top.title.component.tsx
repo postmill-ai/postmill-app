@@ -33,7 +33,7 @@ export const TopTitle: FC<{
   return (
     <div
       className={clsx(
-        'border-b flex items-center border-newBgLineColor -mx-[24px]',
+        'border-b flex items-center border-newBgLineColor mx-[-24px]',
         props.extraClass ? props.extraClass : 'h-[57px]'
       )}
     >

@@ -42,7 +42,7 @@ export const FinishTrial: FC<{ close: () => void }> = (props) => {
   }, [fetch]);
 
   return (
-    <div className="text-textColor fixed start-0 top-0 bg-primary/80 z-[300] w-full h-full p-[60px] animate-fade justify-center flex bg-black/50">
+    <div className="text-textColor fixed start-0 top-0 bg-primary/80 z-300 w-full h-full p-[60px] animate-fade justify-center flex bg-black/50">
       <div>
         <div className="flex gap-[10px] flex-col w-[500px] h-auto bg-newBgColorInner border-newTableBorder border-2 rounded-xl pb-[20px] px-[20px] relative">
           <div className="flex">
@@ -51,7 +51,7 @@ export const FinishTrial: FC<{ close: () => void }> = (props) => {
             </div>
             <button
               onClick={props.close}
-              className="outline-none absolute end-[10px] top-[10px] mantine-UnstyledButton-root mantine-ActionIcon-root bg-primary hover:bg-tableBorder cursor-pointer mantine-Modal-close mantine-1dcetaa"
+              className="outline-hidden absolute inset-e-[10px] top-[10px] mantine-UnstyledButton-root mantine-ActionIcon-root bg-primary hover:bg-tableBorder cursor-pointer mantine-Modal-close mantine-1dcetaa"
               type="button"
             >
               <svg

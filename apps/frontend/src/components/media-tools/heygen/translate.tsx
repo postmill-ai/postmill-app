@@ -105,7 +105,7 @@ export const Translate: FC<TranslateProps> = ({ onGenerated }) => {
           value={query}
           onChange={(e) => setQuery(e.target.value)}
           placeholder={t('heygen_search_languages', 'Search languages…')}
-          className="w-full h-[36px] px-[12px] mb-[8px] rounded-[8px] bg-newBgColorInner border border-studioBorder text-[13px] text-textColor outline-none focus:border-[#2B5CD3]"
+          className="w-full h-[36px] px-[12px] mb-[8px] rounded-[8px] bg-newBgColorInner border border-studioBorder text-[13px] text-textColor outline-hidden focus:border-[#2B5CD3]"
         />
         {langsLoading ? (
           <div className="text-[12px] text-newTextColor/60 py-[10px]">{t('heygen_loading_languages', 'Loading languages…')}</div>

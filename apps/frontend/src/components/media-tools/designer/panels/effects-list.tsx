@@ -86,7 +86,7 @@ export const EffectsList: FC<EffectsListProps> = ({ element, ids, store }) => {
           onChange={(e) => {
             if (e.target.value) add(e.target.value as DesignerLayerStyle['type']);
           }}
-          className="h-[26px] px-2 rounded-md bg-newBgColor border border-studioBorder text-[12px] text-textColor outline-none"
+          className="h-[26px] px-2 rounded-md bg-newBgColor border border-studioBorder text-[12px] text-textColor outline-hidden"
         >
           <option value="">{t('designer_add_effect', 'Add effect')}</option>
           {LAYER_STYLE_DESCRIPTORS.map((d) => (

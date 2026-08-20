@@ -145,14 +145,14 @@ export const StockPhotos: FC<StockPhotosProps> = ({ mode = 'browse', onSelect, o
             value={query}
             onChange={e => setQuery(e.target.value)}
             placeholder={t('search_photos_placeholder', 'Search photos...')}
-            className="w-full h-[44px] pl-[38px] pr-[34px] rounded-[8px] bg-newBgColorInner border border-newColColor text-[14px] outline-none focus:border-btnPrimary text-textColor"
+            className="w-full h-[44px] pl-[38px] pr-[34px] rounded-[8px] bg-newBgColorInner border border-newColColor text-[14px] outline-hidden focus:border-btnPrimary text-textColor"
           />
           {query && (
             <button
               type="button"
               onClick={() => setQuery('')}
               aria-label={t('clear_search', 'Clear search')}
-              className="absolute right-[10px] top-1/2 -translate-y-1/2 w-[20px] h-[20px] flex items-center justify-center text-newTextColor/60 hover:text-newTextColor rounded-full focus:outline-none focus-visible:ring-2 focus-visible:ring-btnPrimary"
+              className="absolute right-[10px] top-1/2 -translate-y-1/2 w-[20px] h-[20px] flex items-center justify-center text-newTextColor/60 hover:text-newTextColor rounded-full focus:outline-hidden focus-visible:ring-2 focus-visible:ring-btnPrimary"
             >
               ✕
             </button>
@@ -163,7 +163,7 @@ export const StockPhotos: FC<StockPhotosProps> = ({ mode = 'browse', onSelect, o
             value={orientation}
             onChange={e => setOrientation(e.target.value)}
             aria-label={t('filter_by_orientation', 'Filter by orientation')}
-            className="appearance-none h-[44px] w-full sm:w-auto pl-[12px] pr-[32px] rounded-[8px] bg-newBgColorInner border border-newColColor text-[13px] text-textColor outline-none cursor-pointer"
+            className="appearance-none h-[44px] w-full sm:w-auto pl-[12px] pr-[32px] rounded-[8px] bg-newBgColorInner border border-newColColor text-[13px] text-textColor outline-hidden cursor-pointer"
           >
             <option value="">{t('all_orientations', 'All orientations')}</option>
             <option value="landscape">{t('landscape', 'Landscape')}</option>
@@ -182,7 +182,7 @@ export const StockPhotos: FC<StockPhotosProps> = ({ mode = 'browse', onSelect, o
           type="button"
           onClick={() => setColor('')}
           aria-pressed={color === ''}
-          className={`h-[30px] px-[12px] rounded-full border text-[12px] transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-btnPrimary ${
+          className={`h-[30px] px-[12px] rounded-full border text-[12px] transition-colors focus:outline-hidden focus-visible:ring-2 focus-visible:ring-btnPrimary ${
             color === ''
               ? 'border-btnPrimary bg-btnPrimary/15 text-btnPrimaryAccent font-[500]'
               : 'border-newColColor text-newTextColor/70 hover:text-textColor hover:border-newTextColor/40'
@@ -200,7 +200,7 @@ export const StockPhotos: FC<StockPhotosProps> = ({ mode = 'browse', onSelect, o
             aria-pressed={color === c.value}
             aria-label={t('color_name', 'Color: {{color}}', { color: colorLabel })}
             title={colorLabel}
-            className={`relative w-[30px] h-[30px] rounded-full border transition-transform focus:outline-none focus-visible:ring-2 focus-visible:ring-btnPrimary hover:scale-110 ${
+            className={`relative w-[30px] h-[30px] rounded-full border transition-transform focus:outline-hidden focus-visible:ring-2 focus-visible:ring-btnPrimary hover:scale-110 ${
               color === c.value ? 'border-btnPrimary ring-2 ring-btnPrimary/40' : 'border-newColColor'
             }`}
           >
@@ -230,7 +230,7 @@ export const StockPhotos: FC<StockPhotosProps> = ({ mode = 'browse', onSelect, o
           <button
             type="button"
             onClick={() => mutate()}
-            className="mt-[6px] px-[16px] h-[36px] rounded-[8px] bg-btnPrimary text-white text-[13px] hover:bg-[#1e4ab5] focus:outline-none focus-visible:ring-2 focus-visible:ring-btnPrimary"
+            className="mt-[6px] px-[16px] h-[36px] rounded-[8px] bg-btnPrimary text-white text-[13px] hover:bg-[#1e4ab5] focus:outline-hidden focus-visible:ring-2 focus-visible:ring-btnPrimary"
           >
             {t('try_again', 'Try again')}
           </button>
@@ -270,7 +270,7 @@ export const StockPhotos: FC<StockPhotosProps> = ({ mode = 'browse', onSelect, o
                 key={s.key}
                 type="button"
                 onClick={() => setQuery(s.label)}
-                className="h-[30px] px-[14px] rounded-full border border-newColColor text-[12px] text-newTextColor/70 hover:text-btnPrimary hover:border-btnPrimary transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-btnPrimary"
+                className="h-[30px] px-[14px] rounded-full border border-newColColor text-[12px] text-newTextColor/70 hover:text-btnPrimary hover:border-btnPrimary transition-colors focus:outline-hidden focus-visible:ring-2 focus-visible:ring-btnPrimary"
               >
                 {t(s.key, s.label)}
               </button>
@@ -315,7 +315,7 @@ export const StockPhotos: FC<StockPhotosProps> = ({ mode = 'browse', onSelect, o
                     activate();
                   }
                 }}
-                className="group block w-full mb-[12px] break-inside-avoid text-left rounded-[8px] overflow-hidden border border-newBorder bg-newBgColorInner cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-btnPrimary"
+                className="group block w-full mb-[12px] break-inside-avoid text-left rounded-[8px] overflow-hidden border border-newBorder bg-newBgColorInner cursor-pointer focus:outline-hidden focus-visible:ring-2 focus-visible:ring-btnPrimary"
               >
                 <div
                   className="relative overflow-hidden"
@@ -329,7 +329,7 @@ export const StockPhotos: FC<StockPhotosProps> = ({ mode = 'browse', onSelect, o
                     loading="lazy"
                   />
                   <div className="absolute inset-0 pointer-events-none">
-                    <div className="absolute bottom-0 left-0 right-0 h-[70px] bg-gradient-to-t from-black/40 to-transparent opacity-0 group-hover:opacity-100 transition-opacity" />
+                    <div className="absolute bottom-0 left-0 right-0 h-[70px] bg-linear-to-t from-black/40 to-transparent opacity-0 group-hover:opacity-100 transition-opacity" />
                     <div className="absolute bottom-[8px] right-[8px] opacity-0 group-hover:opacity-100 transition-opacity">
                       <svg className="w-[18px] h-[18px] text-white drop-shadow-[0_1px_2px_rgba(0,0,0,0.5)]" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                         <path strokeLinecap="round" strokeLinejoin="round" d="M4 8V4m0 0h4M4 4l5 5m11-1V4m0 0h-4m4 0l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5l-5-5m5 5v-4m0 4h-4" />

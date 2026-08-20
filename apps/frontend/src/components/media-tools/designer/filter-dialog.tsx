@@ -71,7 +71,7 @@ const Control: FC<{
         <select
           value={String(value)}
           onChange={(e) => onChange(e.target.value)}
-          className="h-[30px] px-2 rounded-md bg-newBgColor border border-studioBorder text-[12px] text-textColor outline-none"
+          className="h-[30px] px-2 rounded-md bg-newBgColor border border-studioBorder text-[12px] text-textColor outline-hidden"
         >
           {options.map((o) => (
             <option key={o.value} value={o.value}>

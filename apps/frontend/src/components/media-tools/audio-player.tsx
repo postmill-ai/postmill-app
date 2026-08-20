@@ -213,7 +213,7 @@ export const AudioPlayer: FC<AudioPlayerProps> = ({ src, lazy = false, height = 
         type="button"
         onClick={toggle}
         aria-label={playing ? t('pause', 'Pause') : t('play', 'Play')}
-        className="shrink-0 w-[34px] h-[34px] rounded-full bg-[#2B5CD3] text-white flex items-center justify-center hover:bg-[#2B5CD3]/85 transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-[#2B5CD3]/50"
+        className="shrink-0 w-[34px] h-[34px] rounded-full bg-[#2B5CD3] text-white flex items-center justify-center hover:bg-[#2B5CD3]/85 transition-colors focus:outline-hidden focus-visible:ring-2 focus-visible:ring-[#2B5CD3]/50"
       >
         {playing ? (
           <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="5" width="4" height="14" rx="1" /><rect x="14" y="5" width="4" height="14" rx="1" /></svg>

@@ -436,7 +436,7 @@ export const Slider: React.FC<SliderProps> = ({
         onPointerUp={onCommit}
         onKeyUp={onCommit}
         onBlur={onCommit}
-        className="designer-slider w-full h-[4px] appearance-none rounded-full cursor-pointer focus:outline-none"
+        className="designer-slider w-full h-[4px] appearance-none rounded-full cursor-pointer focus:outline-hidden"
         style={{
           background: `linear-gradient(90deg, ${ACCENT} 0%, ${ACCENT} ${pct}%, var(--studio-border) ${pct}%, var(--studio-border) 100%)`,
         }}
@@ -570,7 +570,7 @@ export const Stepper: React.FC<StepperProps> = ({
             const n = Number(e.target.value);
             if (!Number.isNaN(n)) onChange(clamp(n));
           }}
-          className="w-[56px] h-full text-center bg-transparent text-textColor text-[13px] font-mono border-x border-studioBorder focus:outline-none [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+          className="w-[56px] h-full text-center bg-transparent text-textColor text-[13px] font-mono border-x border-studioBorder focus:outline-hidden [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
         />
         <button
           type="button"

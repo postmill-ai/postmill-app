@@ -268,14 +268,14 @@ export const TeamsComponent = () => {
             value={search}
             onChange={(e) => { setSearch(e.target.value); setPage(0); }}
             placeholder={t('search_by_name_or_email', 'Search by name or email...')}
-            className="w-full px-[12px] py-[8px] bg-newBgColor border border-newTableBorder rounded-[8px] text-[14px] outline-none"
+            className="w-full px-[12px] py-[8px] bg-newBgColor border border-newTableBorder rounded-[8px] text-[14px] outline-hidden"
           />
         </div>
         <select
           aria-label={t('filter_by_role', 'Filter by role')}
           value={roleFilter}
           onChange={(e) => { setRoleFilter(e.target.value); setPage(0); }}
-          className="mobile:w-full px-[12px] py-[8px] bg-newBgColor border border-newTableBorder rounded-[8px] text-[14px] outline-none"
+          className="mobile:w-full px-[12px] py-[8px] bg-newBgColor border border-newTableBorder rounded-[8px] text-[14px] outline-hidden"
         >
           <option value="all">{t('all_roles', 'All Roles')}</option>
           {(rolesList || []).map((r) => (
@@ -286,7 +286,7 @@ export const TeamsComponent = () => {
           aria-label={t('sort_by', 'Sort by')}
           value={sortBy}
           onChange={(e) => setSortBy(e.target.value as 'name' | 'joined')}
-          className="mobile:w-full px-[12px] py-[8px] bg-newBgColor border border-newTableBorder rounded-[8px] text-[14px] outline-none"
+          className="mobile:w-full px-[12px] py-[8px] bg-newBgColor border border-newTableBorder rounded-[8px] text-[14px] outline-hidden"
         >
           <option value="joined">{t('joined_date', 'Joined Date')}</option>
           <option value="name">{t('name', 'Name')}</option>
@@ -348,7 +348,7 @@ export const TeamsComponent = () => {
                         })}
                         value={m.roleId || ''}
                         onChange={changeRole(m)}
-                        className="bg-newBgColor border border-newTableBorder rounded-[8px] px-[8px] py-[4px] text-[13px] outline-none"
+                        className="bg-newBgColor border border-newTableBorder rounded-[8px] px-[8px] py-[4px] text-[13px] outline-hidden"
                       >
                         {!m.roleId && <option value="">{t('select_role', 'Select Role')}</option>}
                         {(rolesList || []).map((r) => (
@@ -398,7 +398,7 @@ export const TeamsComponent = () => {
                 <span className="text-[13px] text-newTableText">
                   {t('n_selected_count', '{{count}} selected', { count: selected.size })}
                 </span>
-                <Button secondary className="!h-[32px] !text-[12px]" onClick={bulkRemove}>
+                <Button secondary className="h-[32px]! text-[12px]!" onClick={bulkRemove}>
                   {t('remove_selected', 'Remove Selected')}
                 </Button>
               </div>

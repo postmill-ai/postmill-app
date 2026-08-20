@@ -833,7 +833,7 @@ const ToolCallCard: FC<{
       </button>
       {expanded && (
         <div className="mt-[8px] text-[11px] text-newTableText overflow-auto max-h-[200px]">
-          <pre className="whitespace-pre-wrap break-words">{details}</pre>
+          <pre className="whitespace-pre-wrap wrap-break-word">{details}</pre>
         </div>
       )}
     </div>

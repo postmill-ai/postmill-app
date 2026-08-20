@@ -51,10 +51,10 @@ export const ChannelVpnRegionSelect: FC<{
           blurTimer.current = setTimeout(() => setOpen(false), 120);
         }}
         onChange={(e) => setQuery(e.target.value)}
-        className="w-full h-[42px] px-[16px] rounded-[8px] bg-newBgColorInner border border-newTableBorder text-[14px] text-textColor placeholder-textColor outline-none disabled:opacity-50"
+        className="w-full h-[42px] px-[16px] rounded-[8px] bg-newBgColorInner border border-newTableBorder text-[14px] text-textColor placeholder-textColor outline-hidden disabled:opacity-50"
       />
       {open && filtered.length > 0 && (
-        <div className="absolute z-[20] mt-[4px] w-full max-h-[220px] overflow-y-auto rounded-[8px] border border-newTableBorder bg-newBgColorInner shadow-lg">
+        <div className="absolute z-20 mt-[4px] w-full max-h-[220px] overflow-y-auto rounded-[8px] border border-newTableBorder bg-newBgColorInner shadow-lg">
           {filtered.map((o) => (
             <button
               key={o.value}

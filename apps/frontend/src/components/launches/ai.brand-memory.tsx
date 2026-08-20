@@ -91,7 +91,7 @@ export const BrandMemoryPanel: FC = () => {
             'brand_memory_placeholder',
             'Describe what you want to write...',
           )}
-          className="flex-1 px-[12px] py-[8px] bg-newBgColor border border-newTableBorder rounded-[8px] text-[14px] outline-none"
+          className="flex-1 px-[12px] py-[8px] bg-newBgColor border border-newTableBorder rounded-[8px] text-[14px] outline-hidden"
           onKeyDown={(e) => e.key === 'Enter' && handleSearch()}
         />
         <button

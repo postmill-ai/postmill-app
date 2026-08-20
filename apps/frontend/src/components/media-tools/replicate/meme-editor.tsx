@@ -47,7 +47,7 @@ function buildFontString(layer: TextLayer) {
 
 const fieldLabel = 'text-[10px] uppercase tracking-wider text-newTextColor/65';
 const fieldInput =
-  'w-full px-2 py-1 rounded border border-studioBorder bg-newBgColor text-textColor text-xs focus:outline-none focus:border-designerAccent';
+  'w-full px-2 py-1 rounded-sm border border-studioBorder bg-newBgColor text-textColor text-xs focus:outline-hidden focus:border-designerAccent';
 
 export function MemeEditor() {
   const t = useT();
@@ -384,7 +384,7 @@ export function MemeEditor() {
                 <button
                   key={c}
                   onClick={() => updateLayer(selectedLayer.id, { fill: c })}
-                  className={`w-5 h-5 rounded border ${selectedLayer.fill === c ? 'border-designerAccent' : 'border-studioBorder'}`}
+                  className={`w-5 h-5 rounded-sm border ${selectedLayer.fill === c ? 'border-designerAccent' : 'border-studioBorder'}`}
                   style={{ backgroundColor: c }}
                   aria-label={t('fill_color_aria', 'Fill {{color}}', { color: c })}
                 />
@@ -404,7 +404,7 @@ export function MemeEditor() {
                 <button
                   key={c}
                   onClick={() => updateLayer(selectedLayer.id, { outlineColor: c })}
-                  className={`w-5 h-5 rounded border ${selectedLayer.outlineColor === c ? 'border-designerAccent' : 'border-studioBorder'}`}
+                  className={`w-5 h-5 rounded-sm border ${selectedLayer.outlineColor === c ? 'border-designerAccent' : 'border-studioBorder'}`}
                   style={{ backgroundColor: c }}
                   aria-label={t('outline_color_aria', 'Outline {{color}}', { color: c })}
                 />

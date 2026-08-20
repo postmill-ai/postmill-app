@@ -69,7 +69,7 @@ const WatchlistGrowthChart: FC<{ id: string; name: string }> = ({ id, name }) =>
           </span>
         </div>
       </div>
-      <div className="w-full aspect-[16/9] max-h-[320px]">
+      <div className="w-full aspect-16/9 max-h-[320px]">
         <LineChart
           series={own}
           comparisonSeries={watched}
@@ -164,7 +164,7 @@ export const WatchlistTab: FC = () => {
           <select
             value={provider}
             onChange={(e) => setProvider(e.target.value)}
-            className="px-[12px] py-[8px] bg-newBgColor border border-newTableBorder rounded-[8px] text-[14px] outline-none"
+            className="px-[12px] py-[8px] bg-newBgColor border border-newTableBorder rounded-[8px] text-[14px] outline-hidden"
           >
             <option value="x">X/Twitter</option>
             <option value="instagram">Instagram</option>
@@ -181,7 +181,7 @@ export const WatchlistTab: FC = () => {
             value={handle}
             onChange={(e) => setHandle(e.target.value)}
             placeholder="@username"
-            className="px-[12px] py-[8px] bg-newBgColor border border-newTableBorder rounded-[8px] text-[14px] outline-none"
+            className="px-[12px] py-[8px] bg-newBgColor border border-newTableBorder rounded-[8px] text-[14px] outline-hidden"
           />
         </div>
         <div className="flex flex-col gap-[4px]">
@@ -192,7 +192,7 @@ export const WatchlistTab: FC = () => {
             type="text"
             value={displayName}
             onChange={(e) => setDisplayName(e.target.value)}
-            className="px-[12px] py-[8px] bg-newBgColor border border-newTableBorder rounded-[8px] text-[14px] outline-none"
+            className="px-[12px] py-[8px] bg-newBgColor border border-newTableBorder rounded-[8px] text-[14px] outline-hidden"
           />
         </div>
         <button
@@ -254,7 +254,7 @@ export const WatchlistTab: FC = () => {
                     )
                   }
                   aria-pressed={growthAccount?.id === account.id}
-                  className={`px-[8px] py-[4px] text-[12px] rounded-[4px] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-designerAccent/60 ${
+                  className={`px-[8px] py-[4px] text-[12px] rounded-[4px] focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-designerAccent/60 ${
                     growthAccount?.id === account.id
                       ? 'bg-btnPrimary text-white'
                       : 'bg-newTableHeader text-newTableText'
@@ -265,9 +265,9 @@ export const WatchlistTab: FC = () => {
                 <button
                   type="button"
                   onClick={() => toggleEnabled(account.id, account.enabled)}
-                  className={`px-[8px] py-[4px] text-[12px] rounded-[4px] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-designerAccent/60 ${
+                  className={`px-[8px] py-[4px] text-[12px] rounded-[4px] focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-designerAccent/60 ${
                     account.enabled
-                      ? 'bg-[var(--positive,#32d583)] text-white'
+                      ? 'bg-(--positive,#32d583) text-white'
                       : 'bg-newTableHeader text-newTableText'
                   }`}
                 >
@@ -278,7 +278,7 @@ export const WatchlistTab: FC = () => {
                 <button
                   type="button"
                   onClick={() => removeAccount(account.id)}
-                  className="px-[8px] py-[4px] text-[12px] bg-[var(--negative,#f97066)] text-white rounded-[4px] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-designerAccent/60"
+                  className="px-[8px] py-[4px] text-[12px] bg-(--negative,#f97066) text-white rounded-[4px] focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-designerAccent/60"
                 >
                   {t('remove', 'Remove')}
                 </button>

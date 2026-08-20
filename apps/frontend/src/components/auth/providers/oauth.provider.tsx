@@ -34,7 +34,7 @@ export const OauthProvider = () => {
           alt="genericOauth"
           width={40}
           height={40}
-          className="-mt-[7px]"
+          className="mt-[-7px]"
         />
       </div>
       <div>

@@ -119,15 +119,15 @@ export default async function Auth(
                 <div className="flex space-x-3">
                   <div>
                     <div className="flex shrink-0 rounded-full h-30 w-30 relative">
-                      <div className="w-[50px] h-[50px] z-[20]">
+                      <div className="w-[50px] h-[50px] z-20">
                         {/* eslint-disable-next-line @next/next/no-img-element -- external integration avatar */}
                         <img
-                          className="w-full h-full relative z-[20] bg-black aspect-square rounded-full border-tableBorder"
+                          className="w-full h-full relative z-20 bg-black aspect-square rounded-full border-tableBorder"
                           alt={post[0].integration.name}
                           src={post[0].integration.picture}
                         />
                       </div>
-                      <div className="absolute -end-[5px] -bottom-[5px] w-[30px] h-[30px] z-[20]">
+                      <div className="absolute inset-e-[-5px] bottom-[-5px] w-[30px] h-[30px] z-20">
                         <Image
                           className="w-full h-full bg-black aspect-square rounded-full border-tableBorder"
                           alt={post[0].integration.providerIdentifier}
@@ -181,7 +181,7 @@ export default async function Auth(
             ))}
           </div>
         </div>
-        <div className="w-full lg:w-96 lg:flex-shrink-0">
+        <div className="w-full lg:w-96 lg:shrink-0">
           <div className="p-4 pt-0">
             <CommentsComponents postId={id} />
           </div>

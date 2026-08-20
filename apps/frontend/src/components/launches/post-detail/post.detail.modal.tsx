@@ -229,7 +229,7 @@ const DetailRow: FC<{ label: string; children: React.ReactNode }> = ({
 }) => (
   <div className="flex flex-col gap-[2px] min-w-0">
     <div className="text-[11px] text-newTableText">{label}</div>
-    <div className="text-[13px] min-w-0 break-words">{children}</div>
+    <div className="text-[13px] min-w-0 wrap-break-word">{children}</div>
   </div>
 );
 
@@ -818,7 +818,7 @@ export const PostDetailModal: FC<PostDetailModalProps> = ({
           {integration?.providerIdentifier && (
             <SafeImage
               src={`/icons/platforms/${integration.providerIdentifier}.png`}
-              className="w-[14px] h-[14px] rounded-[4px] absolute -bottom-[4px] -end-[4px] border border-newTableBorder"
+              className="w-[14px] h-[14px] rounded-[4px] absolute bottom-[-4px] inset-e-[-4px] border border-newTableBorder"
               alt={integration.providerIdentifier}
               width={14}
               height={14}
@@ -848,10 +848,10 @@ export const PostDetailModal: FC<PostDetailModalProps> = ({
             width={188}
             items={actionItems}
             triggerClassName={clsx(
-              '!text-inherit',
+              'text-inherit!',
               headerTextColor === '#000000'
-                ? 'hover:!bg-black/10'
-                : 'hover:!bg-white/25'
+                ? 'hover:bg-black/10!'
+                : 'hover:bg-white/25!'
             )}
           />
         )}
@@ -864,8 +864,8 @@ export const PostDetailModal: FC<PostDetailModalProps> = ({
           className={clsx(
             'shrink-0 w-[24px] h-[24px] rounded-[6px] flex items-center justify-center transition-colors',
             headerTextColor === '#000000'
-              ? 'hover:!bg-black/10'
-              : 'hover:!bg-white/25'
+              ? 'hover:bg-black/10!'
+              : 'hover:bg-white/25!'
           )}
         >
           <svg
@@ -893,7 +893,7 @@ export const PostDetailModal: FC<PostDetailModalProps> = ({
           <div className="text-[12px] text-red-500 font-[500] mb-[2px]">
             {t('error_details', 'Error details')}
           </div>
-          <div className="text-[12px] text-dangerText break-words">
+          <div className="text-[12px] text-dangerText wrap-break-word">
             {activePost?.error ||
               (activePost?.errors || [])
                 .map((e: any) => e.message || e.error)

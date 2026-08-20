@@ -577,7 +577,7 @@ export const CouponInput: FC<{ autoApplyCoupon?: string }> = ({
           onChange={(e) => setCouponCode(e.target.value)}
           placeholder={t('billing_enter_coupon_code', 'Enter coupon code')}
           disabled={isApplying}
-          className="flex-1 h-[44px] px-[16px] rounded-[8px] border border-newColColor bg-newBgColor text-textColor placeholder:text-textColor/50 focus:outline-none focus:border-boxFocused disabled:opacity-50"
+          className="flex-1 h-[44px] px-[16px] rounded-[8px] border border-newColColor bg-newBgColor text-textColor placeholder:text-textColor/50 focus:outline-hidden focus:border-boxFocused disabled:opacity-50"
           onKeyDown={(e) => {
             if (e.key === 'Enter') {
               e.preventDefault();
@@ -612,8 +612,8 @@ const SubmitBar: FC<{ loading: boolean }> = ({ loading }) => {
   }
 
   return (
-    <div className="animate-fadeIn h-[92px] mobile:h-auto fixed bottom-0 w-full px-[12px] pb-[12px] left-0 bg-newBgColor z-[100]">
-      <div className="w-full h-full border-t border-newColColor bg-newBgColorInner px-[80px] tablet:px-[33px] mobile:!px-[16px] flex mobile:flex-col gap-[32px] mobile:gap-[16px] justify-end items-center font-[400] text-[14px] text-[#A3A3A3] mobile:py-[16px]">
+    <div className="animate-fadeIn h-[92px] mobile:h-auto fixed bottom-0 w-full px-[12px] pb-[12px] left-0 bg-newBgColor z-100">
+      <div className="w-full h-full border-t border-newColColor bg-newBgColorInner px-[80px] tablet:px-[33px] mobile:px-![16px] flex mobile:flex-col gap-[32px] mobile:gap-[16px] justify-end items-center font-[400] text-[14px] text-[#A3A3A3] mobile:py-[16px]">
         {checkout.checkout.recurring?.trial?.trialEnd ? (
           <div>
             {t('billing_your_30_day_trial_is', 'Your 30-day trial is')}{' '}

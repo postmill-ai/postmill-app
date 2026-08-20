@@ -24,7 +24,7 @@ export const PreflightPanel: FC<PreflightPanelProps> = ({
   const hasBlocks = blocking.length > 0;
 
   return (
-    <div className="fixed inset-0 z-[1000] bg-black/50 flex items-center justify-center">
+    <div className="fixed inset-0 z-1000 bg-black/50 flex items-center justify-center">
       <div className="bg-newBgColor rounded-[16px] border border-newTableBorder w-full max-w-[600px] max-h-[80vh] flex flex-col" role="dialog" aria-modal="true" aria-labelledby="preflight-title">
         <div className="p-[20px] border-b border-newTableBorder">
           <h2 id="preflight-title" className="text-[18px] font-bold">{t('preflight_title', 'Content QA Preflight')}</h2>

@@ -88,7 +88,7 @@ export const TagsInput: FC<{
             setDraft('');
           }
         }}
-        className="flex-1 min-w-[80px] bg-transparent text-[14px] outline-none"
+        className="flex-1 min-w-[80px] bg-transparent text-[14px] outline-hidden"
         placeholder={value.length ? '' : placeholder}
       />
     </div>

@@ -194,9 +194,9 @@ const ChatDrawer: FC<{ override: boolean | null; onClose: () => void }> = ({
 
       {/* Mobile: left overlay drawer */}
       {overlayOpen && (
-        <div className="hidden mobile:flex fixed inset-0 z-[100] justify-start">
+        <div className="hidden mobile:flex fixed inset-0 z-100 justify-start">
           <div
-            className="absolute inset-0 bg-black/20 backdrop-blur-sm"
+            className="absolute inset-0 bg-black/20 backdrop-blur-xs"
             onClick={onClose}
           />
           <div className="relative w-[280px] max-w-[85%] h-full border-r border-newTableBorder bg-newBgColorInner animate-fadeIn">
@@ -225,7 +225,7 @@ const DrawerContent: FC<{ onNavigate?: () => void }> = ({ onNavigate }) => {
         <Link
           href={`/agents`}
           onClick={onNavigate}
-          className="text-white whitespace-nowrap flex-1 pt-[12px] pb-[14px] ps-[16px] pe-[20px] min-h-[44px] max-h-[44px] rounded-md bg-btnPrimary flex justify-center items-center gap-[5px] outline-none"
+          className="text-white whitespace-nowrap flex-1 pt-[12px] pb-[14px] ps-[16px] pe-[20px] min-h-[44px] max-h-[44px] rounded-md bg-btnPrimary flex justify-center items-center gap-[5px] outline-hidden"
         >
           <svg
             xmlns="http://www.w3.org/2000/svg"
@@ -248,11 +248,11 @@ const DrawerContent: FC<{ onNavigate?: () => void }> = ({ onNavigate }) => {
           </div>
         </Link>
       </div>
-      <div className="flex flex-col gap-[1px]">
+      <div className="flex flex-col gap-px">
         {data?.threads?.map((p: any) => (
           <Link
             className={clsx(
-              'overflow-ellipsis overflow-hidden whitespace-nowrap hover:bg-newBgColor px-[10px] py-[6px] rounded-[10px] cursor-pointer',
+              'text-ellipsis overflow-hidden whitespace-nowrap hover:bg-newBgColor px-[10px] py-[6px] rounded-[10px] cursor-pointer',
               p.id === id && 'bg-newBgColor'
             )}
             href={`/agents/${p.id}`}

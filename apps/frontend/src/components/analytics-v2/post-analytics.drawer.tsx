@@ -71,7 +71,7 @@ export const PostDetailBody: FC<PostDetailBodyProps> = ({
         )}
         {error && (
           <div className="flex flex-col items-center justify-center py-[24px] text-center">
-            <p className="text-[var(--negative,#f97066)] text-[14px] mb-[4px]">
+            <p className="text-(--negative,#f97066) text-[14px] mb-[4px]">
               {t('failed_to_load_post_details', 'Failed to load post details')}
             </p>
             <p className="text-[12px] text-newTableText opacity-60">

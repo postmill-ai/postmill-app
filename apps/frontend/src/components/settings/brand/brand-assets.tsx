@@ -108,7 +108,7 @@ export const BrandAssets = ({
               <button
                 onClick={() => setPalette((p) => p.filter((x) => x !== c))}
                 aria-label={`Remove ${c}`}
-                className="absolute -top-[6px] -right-[6px] w-[16px] h-[16px] rounded-full bg-newBgColorInner border border-newTableBorder text-[10px] text-dangerText opacity-0 group-hover/sw:opacity-100 transition-opacity flex items-center justify-center"
+                className="absolute top-[-6px] right-[-6px] w-[16px] h-[16px] rounded-full bg-newBgColorInner border border-newTableBorder text-[10px] text-dangerText opacity-0 group-hover/sw:opacity-100 transition-opacity flex items-center justify-center"
               >
                 ×
               </button>
@@ -131,7 +131,7 @@ export const BrandAssets = ({
             value={newColor}
             onChange={(e) => setNewColor(e.target.value)}
             aria-label="Hex color value"
-            className="w-[110px] bg-newBgColor border border-newTableBorder rounded-[8px] px-[10px] py-[6px] text-[13px] text-textColor outline-none"
+            className="w-[110px] bg-newBgColor border border-newTableBorder rounded-[8px] px-[10px] py-[6px] text-[13px] text-textColor outline-hidden"
           />
           <button
             onClick={addColor}
@@ -166,7 +166,7 @@ export const BrandAssets = ({
                     )
                   }
                   placeholder={t('caption_optional', 'Caption (optional)')}
-                  className="w-full bg-newBgColorInner border border-newTableBorder rounded-[6px] px-[8px] py-[5px] text-[12px] text-textColor outline-none"
+                  className="w-full bg-newBgColorInner border border-newTableBorder rounded-[6px] px-[8px] py-[5px] text-[12px] text-textColor outline-hidden"
                 />
                 <button
                   onClick={() => setAssets((list) => list.filter((_, idx) => idx !== i))}

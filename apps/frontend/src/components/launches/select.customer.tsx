@@ -52,13 +52,13 @@ export const SelectCustomer: FC<{
   }
 
   return (
-    <div className="relative select-none z-[500]" ref={ref}>
+    <div className="relative select-none z-500" ref={ref}>
       <div
         data-tooltip-id="tooltip"
         data-tooltip-content={t('select_customer_tooltip', 'Select Customer')}
         onClick={openClose}
         className={clsx(
-          'relative z-[20] cursor-pointer h-[42px] rounded-[8px] pl-[16px] pr-[12px] gap-[8px] border flex items-center',
+          'relative z-20 cursor-pointer h-[42px] rounded-[8px] pl-[16px] pr-[12px] gap-[8px] border flex items-center',
           open ? 'border-[#2B5CD3]' : 'border-newColColor'
         )}
       >

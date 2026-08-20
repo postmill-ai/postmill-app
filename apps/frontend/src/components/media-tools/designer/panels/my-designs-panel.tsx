@@ -90,7 +90,7 @@ export const MyDesignsPanel: FC<MyDesignsPanelProps> = ({ onOpen, onClose }) => 
                   e.stopPropagation();
                   handleDelete(d.id);
                 }}
-                className="absolute top-1 right-1 p-1 bg-red-500/80 rounded text-[10px] text-white opacity-0 group-hover:opacity-100 transition-opacity"
+                className="absolute top-1 right-1 p-1 bg-red-500/80 rounded-sm text-[10px] text-white opacity-0 group-hover:opacity-100 transition-opacity"
               >
                 ✕
               </button>

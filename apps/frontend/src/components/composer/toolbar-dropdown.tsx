@@ -31,7 +31,7 @@ export const MenuItem: FC<{
       data-nested={nested ? 'true' : undefined}
     >
       {children}
-      <span className="absolute start-[40px] top-1/2 -translate-y-1/2 pointer-events-none text-[13px] font-[500] text-textColor whitespace-nowrap">
+      <span className="absolute inset-s-[40px] top-1/2 -translate-y-1/2 pointer-events-none text-[13px] font-[500] text-textColor whitespace-nowrap">
         {label}
       </span>
     </div>
@@ -128,7 +128,7 @@ export const ToolbarDropdown: FC<{
             }}
             className={clsx(
               mode,
-              'z-[400] bg-newBgColorInner text-textColor menu-shadow rounded-[8px] p-[6px] flex flex-col gap-[1px]'
+              'z-400 bg-newBgColorInner text-textColor menu-shadow rounded-[8px] p-[6px] flex flex-col gap-px'
             )}
           >
             {children}

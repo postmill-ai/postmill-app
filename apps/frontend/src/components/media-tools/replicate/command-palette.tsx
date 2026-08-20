@@ -135,7 +135,7 @@ export function CommandPalette({ categories }: { categories: CategoryDefinition[
 
   return (
     <div
-      className="fixed inset-0 z-[100] bg-black/50 flex items-start justify-center pt-[15vh]"
+      className="fixed inset-0 z-100 bg-black/50 flex items-start justify-center pt-[15vh]"
       onClick={closePalette}
     >
       <div
@@ -164,7 +164,7 @@ export function CommandPalette({ categories }: { categories: CategoryDefinition[
             }
           }}
           placeholder={t('search_commands_placeholder', 'Search commands…')}
-          className="w-full px-4 py-3 bg-transparent text-textColor text-sm focus:outline-none border-b border-studioBorder"
+          className="w-full px-4 py-3 bg-transparent text-textColor text-sm focus:outline-hidden border-b border-studioBorder"
         />
         <div className="max-h-80 overflow-y-auto py-1">
           {filtered.length === 0 && (

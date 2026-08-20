@@ -121,7 +121,7 @@ export const Pagination: FC<{
       <li className={clsx(current === 0 && 'opacity-20 pointer-events-none')}>
         <button
           type="button"
-          className="cursor-pointer inline-flex items-center justify-center whitespace-nowrap rounded-md text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:size-4 [&_svg]:shrink-0 h-10 px-4 py-2 gap-1 ps-2.5 text-gray-400 hover:text-white border-[#1F1F1F] hover:bg-boxHover"
+          className="cursor-pointer inline-flex items-center justify-center whitespace-nowrap rounded-md text-sm font-medium ring-offset-background transition-colors focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:size-4 [&_svg]:shrink-0 h-10 px-4 py-2 gap-1 ps-2.5 text-gray-400 hover:text-white border-[#1F1F1F] hover:bg-boxHover"
           aria-label={t('go_to_previous_page', 'Go to previous page')}
           onClick={() => setPage(current - 1)}
           disabled={current === 0}
@@ -143,9 +143,9 @@ export const Pagination: FC<{
               onClick={() => setPage(item - 1)}
               disabled={current === item - 1}
               className={clsx(
-                'cursor-pointer inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-md text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:size-4 [&_svg]:shrink-0 border hover:bg-boxHover h-10 w-10 hover:text-white border-newBorder',
+                'cursor-pointer inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-md text-sm font-medium ring-offset-background transition-colors focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:size-4 [&_svg]:shrink-0 border hover:bg-boxHover h-10 w-10 hover:text-white border-newBorder',
                 current === item - 1
-                  ? 'bg-btnPrimary !text-white'
+                  ? 'bg-btnPrimary text-white!'
                   : 'text-textColor hover:text-white'
               )}
             >
@@ -161,7 +161,7 @@ export const Pagination: FC<{
       >
         <button
           type="button"
-          className="text-textColor hover:text-white group cursor-pointer inline-flex items-center justify-center whitespace-nowrap rounded-md text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:size-4 [&_svg]:shrink-0 h-10 px-4 py-2 gap-1 pe-2.5 text-gray-400 border-[#1F1F1F] hover:bg-boxHover"
+          className="text-textColor hover:text-white group cursor-pointer inline-flex items-center justify-center whitespace-nowrap rounded-md text-sm font-medium ring-offset-background transition-colors focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:size-4 [&_svg]:shrink-0 h-10 px-4 py-2 gap-1 pe-2.5 text-gray-400 border-[#1F1F1F] hover:bg-boxHover"
           aria-label={t('go_to_next_page', 'Go to next page')}
           onClick={() => setPage(current + 1)}
           disabled={current + 1 === totalPages}
@@ -415,7 +415,7 @@ export const MultiFileComponent: FC<{
             >
               {value.map((media, index) => (
                   <div key={media.id} className="cursor-pointer rounded-[5px] w-[40px] h-[40px] border-2 border-newTableBorder relative flex transition-all">
-                    <DragHandleIcon className="z-[20] dragging absolute pe-[1px] pb-[3px] -start-[4px] -top-[4px] cursor-move" />
+                    <DragHandleIcon className="z-20 dragging absolute pe-px pb-[3px] inset-s-[-4px] top-[-4px] cursor-move" />
 
                     <div className="w-full h-full relative group">
                       <button
@@ -447,10 +447,10 @@ export const MultiFileComponent: FC<{
                             ),
                           });
                         }}
-                        className="absolute top-[50%] left-[50%] -translate-x-[50%] -translate-y-[50%] bg-black/80 rounded-[10px] opacity-0 group-hover:opacity-100 transition-opacity z-[9] p-0 border-0"
+                        className="absolute top-[50%] left-[50%] translate-x-[-50%] translate-y-[-50%] bg-black/80 rounded-[10px] opacity-0 group-hover:opacity-100 transition-opacity z-9 p-0 border-0"
                         aria-label={t('media_settings', 'Media Settings')}
                       >
-                        <MediaSettingsIcon className="cursor-pointer relative z-[200]" />
+                        <MediaSettingsIcon className="cursor-pointer relative z-200" />
                       </button>
                       {hasExtension(media?.path, 'mp4') ? (
                         <VideoFrame url={mediaDirectory.set(media?.path)} />
@@ -474,7 +474,7 @@ export const MultiFileComponent: FC<{
 
                     <CloseCircleIcon
                       onClick={clearMedia(index)}
-                      className="absolute -end-[4px] -top-[4px] z-[20] rounded-full bg-white"
+                      className="absolute inset-e-[-4px] top-[-4px] z-20 rounded-full bg-white"
                     />
                   </div>
               ))}
@@ -487,7 +487,7 @@ export const MultiFileComponent: FC<{
                   <div className="w-4 h-4 border-2 border-textColor border-t-transparent rounded-full animate-spin" />
                   <CloseCircleIcon
                     onClick={clearPending(pending.key)}
-                    className="absolute -end-[4px] -top-[4px] z-[20] rounded-full bg-white cursor-pointer"
+                    className="absolute inset-e-[-4px] top-[-4px] z-20 rounded-full bg-white cursor-pointer"
                   />
                 </div>
               ))}
@@ -699,7 +699,7 @@ export const FileComponent: FC<{
       <div className="flex gap-[5px]">
         <Button onClick={mediaPicker.open}>{t('select', 'Select')}</Button>
         {permissions.hasPermission('media', 'read') && (
-          <Button onClick={showDesignModal} className="!bg-btnPrimary">
+          <Button onClick={showDesignModal} className="bg-btnPrimary!">
             {t('editor', 'Editor')}
           </Button>
         )}

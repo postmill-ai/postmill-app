@@ -44,12 +44,12 @@ export const WeekView = () => {
   return (
     <div className="flex flex-col text-textColor flex-1">
       <div className="flex-1 relative">
-        <div className="grid [grid-template-columns:136px_repeat(7,_minmax(0,_1fr))] gap-[4px] rounded-[10px] absolute h-full start-0 top-0 w-full overflow-auto scrollbar scrollbar-thumb-fifth scrollbar-track-newBgColor">
+        <div className="grid grid-cols-[136px_repeat(7,minmax(0,1fr))] gap-[4px] rounded-[10px] absolute h-full start-0 top-0 w-full overflow-auto scrollbar scrollbar-thumb-fifth scrollbar-track-newBgColor">
           <div className="z-10 bg-newTableHeader flex justify-center items-center flex-col h-[62px] rounded-[8px] sticky top-0"></div>
           {localizedDays.map((day, index) => (
             <div
               key={day.name}
-              className="p-2 text-center bg-newTableHeader flex justify-center items-center flex-col h-[62px] rounded-[8px] sticky top-0 z-[20]"
+              className="p-2 text-center bg-newTableHeader flex justify-center items-center flex-col h-[62px] rounded-[8px] sticky top-0 z-20"
             >
               <div className="text-[14px] font-[500] text-newTableText">
                 {day.name}

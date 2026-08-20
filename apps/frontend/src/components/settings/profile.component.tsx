@@ -32,7 +32,7 @@ export const ProfileComponent: FC<{
           {...form.register('bio')}
           aria-label={t('bio', 'Bio')}
           rows={3}
-          className="bg-newBgColor border border-newTableBorder rounded-[6px] px-[12px] py-[8px] text-[13px] text-textColor outline-none resize-none"
+          className="bg-newBgColor border border-newTableBorder rounded-[6px] px-[12px] py-[8px] text-[13px] text-textColor outline-hidden resize-none"
         />
       </div>
       <div className="flex flex-col gap-[8px]">

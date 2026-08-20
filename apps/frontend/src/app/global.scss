@@ -3,15 +3,18 @@
 @use '@uppy/core/dist/style.css' as uppyCore;
 @use '@uppy/dashboard/dist/style.css' as uppyDashboard;
 
+/* Tailwind 4: this file's @apply blocks resolve against the plain-CSS entry
+   (Sass passes the unknown @reference at-rule through to PostCSS untouched). */
+@reference './tailwind.css';
+
 /* Designer fonts are NOT imported here any more. Every family Google serves is
    reachable from the picker and its stylesheet is injected on first use — see
    `designer/fonts.ts` and `designer-doc/font-catalog.ts`. The single @import
    that used to live here carried ~50 families on every page load, Designer or
    not, and had reached the 2,000-character mark with nowhere left to grow. */
 
-@tailwind base;
-@tailwind components;
-@tailwind utilities;
+/* Tailwind's directives live in ./tailwind.css (plain CSS — Sass cannot parse
+   the v4 at-rules); every layout imports it before this file. */
 
 @font-face {
   font-family: 'Playwrite England Joined';
@@ -125,24 +128,24 @@ body * {
 }
 
 .swal2-modal {
-  @apply bg-primary #{!important};
+  @apply bg-primary!;
   @apply border-b-[2px] border-b-sixth;
 }
 
 .swal2-modal * {
-  @apply text-textColor #{!important};
+  @apply text-textColor!;
 }
 
 .swal2-icon {
-  @apply text-textColor bg-primary #{!important};
+  @apply text-textColor! bg-primary!;
 }
 
 .swal2-cancel {
-  @apply text-white #{!important};
+  @apply text-white!;
 }
 .swal2-confirm {
-  @apply bg-newBackdrop #{!important};
-  @apply text-white #{!important};
+  @apply bg-newBackdrop!;
+  @apply text-white!;
 }
 
 .w-md-editor-text {
@@ -329,7 +332,7 @@ body * {
 /*    display: none;*/
 /*}*/
 .w-md-editor {
-  @apply bg-input #{!important};
+  @apply bg-input!;
   border: 0 !important;
   box-shadow: none !important;
   border-radius: 8px !important;
@@ -338,7 +341,7 @@ body * {
 }
 
 .w-md-editor-toolbar {
-  @apply bg-input border-fifth #{!important};
+  @apply bg-input! border-fifth!;
   height: 40px !important;
   min-height: 40px !important;
   padding: 0 8px !important;

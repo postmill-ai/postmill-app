@@ -20,7 +20,7 @@ export const Support = () => {
   return (
     <div
       id="support-discord"
-      className="bg-btnPrimary w-[194px] h-[58px] fixed end-[20px] bottom-[20px] mobile:bottom-[84px] z-[500] text-[16px] text-btnText rounded-[30px] !rounded-br-[0] cursor-pointer flex justify-center items-center gap-[10px]"
+      className="bg-btnPrimary w-[194px] h-[58px] fixed inset-e-[20px] bottom-[20px] mobile:bottom-[84px] z-500 text-[16px] text-btnText rounded-[30px] rounded-br-none! cursor-pointer flex justify-center items-center gap-[10px]"
       onClick={() => window.open(discordUrl)}
     >
       <div>
