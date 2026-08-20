@@ -7,7 +7,7 @@ overrides:
   # @reaatech/structured-repair-core declares a zod ^3.23.0 peer but was resolving
   # to zod 4.x, breaking type/runtime compatibility with workspace zod 3.x schemas.
   '@reaatech/structured-repair-core>zod': '^3.25.76'
-  next: 16.2.11
+  next: 16.3.1
   react: 19.2.7
   react-dom: 19.2.7
   '@types/react': 19.1.8

@@ -39,10 +39,9 @@ const nextConfig: NextConfig = {
   serverExternalPackages: ['jsdom', 'isomorphic-dompurify', 'canvas'],
   experimental: {
     proxyTimeout: 90_000,
-    // Turbopack's dev cache is native (Rust) memory, unbounded by default and
-    // outside --max-old-space-size; without a target it grows past 5 GB on this
-    // app. This sets a GC target (bytes) so dev fits in a memory-limited VM.
-    ...(isDev ? { turbopackMemoryLimit: 3 * 1024 * 1024 * 1024 } : {}),
+    // Note: the dev-only `experimental.turbopackMemoryLimit` was removed with the
+    // Next 16.3 upgrade — 16.3 manages the Turbopack dev cache itself (on-disk
+    // cache eviction), and the key is rejected as unrecognized.
   },
   async headers() {
     const headers: { key: string; value: string }[] = [
