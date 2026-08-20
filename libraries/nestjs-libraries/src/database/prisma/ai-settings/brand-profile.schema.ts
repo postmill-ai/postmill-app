@@ -5,14 +5,14 @@ import { z } from 'zod';
  * Kept in lockstep with schema.prisma defaults and the controller DTO.
  */
 
-export const PlatformInstructionsSchema = z.record(z.string()).default({});
+export const PlatformInstructionsSchema = z.record(z.string(), z.string()).default({});
 
 export const LanguageProfileSchema = z.object({
   instructions: z.string().optional(),
-  overrides: z.record(z.string()).optional(),
+  overrides: z.record(z.string(), z.string()).optional(),
 });
 
-export const LanguageProfilesSchema = z.record(LanguageProfileSchema).default({});
+export const LanguageProfilesSchema = z.record(z.string(), LanguageProfileSchema).default({});
 
 export const LogoFileIdsSchema = z.array(z.string()).default([]);
 
@@ -48,7 +48,7 @@ export const EnforcementRuleSchema = z.object({
   value: z.union([z.string(), z.number(), z.boolean()]).optional(),
 });
 
-export const EnforcementSchema = z.record(z.union([z.string(), z.boolean(), z.array(EnforcementRuleSchema)])).default({});
+export const EnforcementSchema = z.record(z.string(), z.union([z.string(), z.boolean(), z.array(EnforcementRuleSchema)])).default({});
 
 export const BrandAssetSchema = z.object({
   fileId: z.string(),
@@ -64,14 +64,18 @@ export const UpsertBrandProfileDataSchema = z.object({
   enabled: z.boolean().optional(),
   name: z.string().optional(),
   slug: z.string().optional(),
-  platformInstructions: PlatformInstructionsSchema.optional(),
-  languageProfiles: LanguageProfilesSchema.optional(),
-  logoFileIds: LogoFileIdsSchema.optional(),
-  palette: PaletteSchema.optional(),
-  fontFamilies: FontFamiliesSchema.optional(),
-  customFonts: CustomFontsSchema.optional(),
-  enforcement: EnforcementSchema.optional(),
-  assets: BrandAssetsSchema.optional(),
+  // .unwrap(): zod 4 applies an inner .default() even through .optional(), so
+  // an absent key would parse to {} / [] — and this service passes the parsed
+  // object straight into a partial updateMany, clobbering stored columns on
+  // every partial upsert. Unwrapping keeps zod 3 semantics: absent stays absent.
+  platformInstructions: PlatformInstructionsSchema.unwrap().optional(),
+  languageProfiles: LanguageProfilesSchema.unwrap().optional(),
+  logoFileIds: LogoFileIdsSchema.unwrap().optional(),
+  palette: PaletteSchema.unwrap().optional(),
+  fontFamilies: FontFamiliesSchema.unwrap().optional(),
+  customFonts: CustomFontsSchema.unwrap().optional(),
+  enforcement: EnforcementSchema.unwrap().optional(),
+  assets: BrandAssetsSchema.unwrap().optional(),
 });
 
 export type UpsertBrandProfileData = z.infer<typeof UpsertBrandProfileDataSchema>;

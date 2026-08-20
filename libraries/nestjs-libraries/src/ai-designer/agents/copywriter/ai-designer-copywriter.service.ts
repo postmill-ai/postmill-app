@@ -240,7 +240,7 @@ export class AiDesignerCopywriterService implements OnModuleInit {
     // and a mangled input still "repairs" into a partial map that used to
     // return early and shadow the intact parse below.
     try {
-      const repaired = await parseOrRepair(z.record(z.string()), raw);
+      const repaired = await parseOrRepair(z.record(z.string(), z.string()), raw);
       if (repaired && typeof repaired === 'object' && !Array.isArray(repaired)) {
         const matched = this._matchSlots(repaired as Record<string, string>, slots);
         if (Object.keys(matched).length > 0) return matched;

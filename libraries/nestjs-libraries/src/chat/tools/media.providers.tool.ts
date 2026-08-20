@@ -32,7 +32,7 @@ export class ListMediaProvidersTool implements AgentToolInterface {
         z.object({
           identifier: z.string(),
           name: z.string(),
-          capabilities: z.record(z.boolean()),
+          capabilities: z.record(z.string(), z.boolean()),
         })
       ),
       execute: async (_inputData, context) => {

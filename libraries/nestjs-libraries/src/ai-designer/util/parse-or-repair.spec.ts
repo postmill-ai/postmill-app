@@ -42,7 +42,7 @@ describe('parseOrRepair', () => {
     // Trailing comma + unquoted key: not parseable, so repair() earns its keep.
     const raw = '{ headline: "Hello", subhead: "World", }';
 
-    await expect(parseOrRepair(z.record(z.string()), raw)).resolves.toEqual({
+    await expect(parseOrRepair(z.record(z.string(), z.string()), raw)).resolves.toEqual({
       headline: 'Hello',
       subhead: 'World',
     });

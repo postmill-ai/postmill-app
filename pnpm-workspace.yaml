@@ -4,9 +4,10 @@ packages:
   - libraries/providers/*
 
 overrides:
-  # @reaatech/structured-repair-core declares a zod ^3.23.0 peer but was resolving
-  # to zod 4.x, breaking type/runtime compatibility with workspace zod 3.x schemas.
-  '@reaatech/structured-repair-core>zod': '^3.25.76'
+  # @reaatech/structured-repair-core >=1.1.0 supports zod 3 and 4 natively (peer
+  # ^3.23.0 || ^4.4.0). Pin it onto the workspace's zod 4 line so the whole graph
+  # resolves one major.
+  '@reaatech/structured-repair-core>zod': '^4.4.3'
   next: 16.3.1
   react: 19.2.7
   react-dom: 19.2.7

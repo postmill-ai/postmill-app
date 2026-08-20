@@ -46,6 +46,7 @@ import { ValidateDocDto } from '@postmill-ai/nestjs-libraries/dtos/design/valida
 import { ApplyOpsDto } from '@postmill-ai/nestjs-libraries/dtos/design/apply-ops.dto';
 import type { DesignerDoc } from '@postmill-ai/nestjs-libraries/media/design-render/design-render.types';
 import { DesignerDocService } from '@postmill-ai/nestjs-libraries/media/designer-doc/designer-doc.service';
+import type { DesignerDocOp } from '@postmill-ai/nestjs-libraries/media/designer-doc/designer-doc-ops.schema';
 import type { Response } from 'express';
 import { ioRedis } from '@postmill-ai/nestjs-libraries/redis/redis.service';
 import {
@@ -241,7 +242,9 @@ export class DesignController {
     @Body() body: ApplyOpsDto,
   ) {
     const doc = this._designerDocService.validateStrict(body.doc);
-    const result = this._designerDocService.applyOps(doc, body.ops ?? []);
+    // The DTO types ops as Record<string, any>[]; applyOps strict-parses them
+    // against DesignerDocOpsSchema on entry, so the cast is checked at runtime.
+    const result = this._designerDocService.applyOps(doc, (body.ops ?? []) as DesignerDocOp[]);
     return { doc: result };
   }
 
