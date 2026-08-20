@@ -23,7 +23,7 @@ export class BrandProfileTool implements AgentToolInterface {
             name: z.string(),
             instructions: z.string().nullable().optional(),
             language: z.string().nullable().optional(),
-            platformInstructions: z.record(z.string()).nullable().optional(),
+            platformInstructions: z.record(z.string(), z.string()).nullable().optional(),
           })
           .optional(),
         all: z.array(

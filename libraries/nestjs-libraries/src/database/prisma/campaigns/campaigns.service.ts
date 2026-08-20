@@ -100,7 +100,7 @@ export class CampaignsService {
     const parsed = CampaignGoalsSchema.safeParse(goals);
     if (!parsed.success) {
       throw new BadRequestException(
-        `Invalid campaign goals: ${parsed.error.errors.map((e) => e.message).join(', ')}`
+        `Invalid campaign goals: ${parsed.error.issues.map((e) => e.message).join(', ')}`
       );
     }
     return parsed.data;

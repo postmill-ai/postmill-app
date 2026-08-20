@@ -1310,6 +1310,12 @@ const { strict: strictElement, lenient: lenientElement } = dualObject(
   }
 );
 
+// Unguarded strict element: the ops schema (.omit() patch shapes) must derive
+// from this, not from StrictDesignerElementSchema — zod 4 carries refinements
+// on the object itself (no ZodEffects wrapper) and .omit() throws on objects
+// with checks. The icon-src guard does not apply to partial patches anyway.
+export const StrictDesignerElementBaseSchema = strictElement;
+
 /**
  * Raw SVG markup in `src` is only meaningful on `icon` elements (see
  * svg-src.ts) — anywhere else it would pass SrcSchema yet never load.
@@ -1320,7 +1326,7 @@ const iconSrcGuard = (
 ) => {
   if (el.src && el.type !== 'icon' && isSvgMarkupSrc(el.src)) {
     ctx.addIssue({
-      code: z.ZodIssueCode.custom,
+      code: 'custom',
       message: 'raw SVG markup src is only valid on icon elements',
       path: ['src'],
     });
@@ -1401,12 +1407,12 @@ const { strict: StrictKeyframeSchema, lenient: LenientKeyframeSchema } =
   dualObject(
     {
       tMs: strictNum(0, MAX_VIDEO_DURATION_MS),
-      props: z.record(z.number().finite()),
+      props: z.record(z.string(), z.number().finite()),
       ease: EaseSchema.optional(),
     },
     {
       tMs: lenientNum(0, MAX_VIDEO_DURATION_MS, 0),
-      props: z.record(z.number().finite()),
+      props: z.record(z.string(), z.number().finite()),
       ease: EaseSchema.optional(),
     }
   );
@@ -1738,15 +1744,15 @@ export { VideoDocStrictSchema, VideoDocLenientSchema };
  *
  * The runtime schemas are unchanged; only their declared type is pinned.
  */
-export const DesignerDocStrictSchema: z.ZodType<DesignerDoc, z.ZodTypeDef, unknown> =
+export const DesignerDocStrictSchema: z.ZodType<DesignerDoc, unknown> =
   z.discriminatedUnion('mode', [
     ImageDocStrictSchema,
     VideoDocStrictSchema,
-  ]) as unknown as z.ZodType<DesignerDoc, z.ZodTypeDef, unknown>;
+  ]) as unknown as z.ZodType<DesignerDoc, unknown>;
 
-export const DesignerDocLenientSchema: z.ZodType<DesignerDoc, z.ZodTypeDef, unknown> =
+export const DesignerDocLenientSchema: z.ZodType<DesignerDoc, unknown> =
   z.discriminatedUnion('mode', [
     ImageDocLenientSchema,
     VideoDocLenientSchema,
-  ]) as unknown as z.ZodType<DesignerDoc, z.ZodTypeDef, unknown>;
+  ]) as unknown as z.ZodType<DesignerDoc, unknown>;
 

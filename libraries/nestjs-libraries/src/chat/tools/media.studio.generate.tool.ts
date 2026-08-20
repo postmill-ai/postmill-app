@@ -36,10 +36,10 @@ export class MediaStudioGenerateTool implements AgentToolInterface {
           .optional()
           .describe('Optional model id; provider default is used when omitted'),
         input: z
-          .record(z.union([z.string(), z.number(), z.boolean()]))
+          .record(z.string(), z.union([z.string(), z.number(), z.boolean()]))
           .describe('Provider-native generation parameters (e.g. prompt, resolution, duration)'),
         mediaInputs: z
-          .record(z.string())
+          .record(z.string(), z.string())
           .optional()
           .describe('Map of provider media-field names to /files fileIds (resolved to public URLs)'),
         folderId: z
@@ -71,8 +71,8 @@ export class MediaStudioGenerateTool implements AgentToolInterface {
             provider: z.string(),
             operation: z.enum(['image', 'video', 'audio']),
             model: z.string().optional(),
-            input: z.record(z.union([z.string(), z.number(), z.boolean()])),
-            mediaInputs: z.record(z.string()).optional(),
+            input: z.record(z.string(), z.union([z.string(), z.number(), z.boolean()])),
+            mediaInputs: z.record(z.string(), z.string()).optional(),
             folderId: z.string().optional(),
           }),
         }),

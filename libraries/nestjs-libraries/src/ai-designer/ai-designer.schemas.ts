@@ -218,7 +218,7 @@ const AssetNeedSchema = z
   })
   .passthrough();
 
-const TypeScaleSchema = z.record(z.number().min(0).max(1000));
+const TypeScaleSchema = z.record(z.string(), z.number().min(0).max(1000));
 
 export const DesignPlanSchema = z
   .object({
@@ -235,7 +235,7 @@ export const DesignPlanSchema = z
     // Plan-time copy per copy-slot id — shown on the plan card and editable
     // by the user before acceptance.
     texts: z.record(z.string().max(200), z.string().max(500)).optional(),
-    perChannel: z.record(z.object({ note: z.string().max(1000) })).optional(),
+    perChannel: z.record(z.string(), z.object({ note: z.string().max(1000) })).optional(),
     channelLayouts: z.record(z.string().max(100), ChannelLayoutSchema).optional(),
     // Plan schema v3 — the design language. All optional, so v1/v2 plans keep
     // composing unchanged.

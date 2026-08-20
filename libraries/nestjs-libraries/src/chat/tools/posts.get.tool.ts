@@ -40,7 +40,7 @@ export class PostsGetTool implements AgentToolInterface {
         group: z.string().optional(),
         integrationId: z.string().optional(),
         integrationPicture: z.string().optional(),
-        settings: z.record(z.any()).optional(),
+        settings: z.record(z.string(), z.any()).optional(),
         posts: z
           .array(
             z.object({

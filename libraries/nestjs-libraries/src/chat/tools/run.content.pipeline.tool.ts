@@ -45,7 +45,7 @@ export class RunContentPipelineTool implements AgentToolInterface {
           .array(z.string())
           .describe('Flat list of finalized copy variants'),
         perPlatform: z
-          .record(z.string())
+          .record(z.string(), z.string())
           .describe('Map of platform id to finalized copy'),
       }),
       mcp: {
