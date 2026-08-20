@@ -28,6 +28,12 @@ const eslintConfig = [
       // Repo root is not the Next.js app (App Router lives in apps/frontend),
       // so this rule only emits a spurious "Pages directory cannot be found" notice.
       '@next/next/no-html-link-for-pages': 'off',
+      // New in eslint-config-next 16.3: flags every location.assign/href to a
+      // relative destination assuming an internal Next page. This app navigates
+      // by full-page load DELIBERATELY for backend endpoints (/auth/logout) and
+      // post-auth state resets — 17 sites, all intentional hard navigations.
+      // The rule's assumption doesn't hold for this codebase.
+      '@next/next/no-location-assign-relative-destination': 'off',
       'react/no-unescaped-entities': 'off',
       // The following rules are globally disabled because the existing codebase
       // has a large volume of occurrences and fixing them safely is tracked
