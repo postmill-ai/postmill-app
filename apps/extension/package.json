@@ -16,7 +16,7 @@
     "postcss": "^8.5.10",
     "vite": "^8.2.2",
     "vite-tsconfig-paths": "^6.1.1",
-    "vitest": "^4.1.0"
+    "vitest": "^4.1.11"
   },
   "engines": {
     "node": ">=24.0.0 <25.0.0"
