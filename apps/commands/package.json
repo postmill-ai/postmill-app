@@ -17,7 +17,7 @@
     "@nestjs/cli": "^11.0.21",
     "cross-env": "^10.0.0",
     "dotenv-cli": "^8.0.0",
-    "vitest": "^4.1.0"
+    "vitest": "^4.1.11"
   },
   "keywords": [],
   "author": "",
