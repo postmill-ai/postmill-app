@@ -20,7 +20,7 @@ import {
   SimpleOption,
 } from '@postmill-ai/frontend/components/launches/simple-multi-select';
 import SafeImage from '@postmill-ai/react/helpers/safe.image';
-import { RangeCalendar } from '@mantine/dates';
+import { DatePicker } from '@mantine/dates';
 import { useT } from '@postmill-ai/react/translation/get.transation.service.client';
 import i18next from 'i18next';
 import { newDayjs } from '@postmill-ai/frontend/components/layout/set.timezone';
@@ -80,8 +80,10 @@ export const Filters = () => {
     timeframe: true,
   });
   // Custom date-range picker (inline calendar) open state + draft selection.
+  // Mantine 8+ pickers work in 'YYYY-MM-DD' strings — the same format the
+  // calendar context stores, so the draft needs no Date conversion.
   const [customOpen, setCustomOpen] = useState(false);
-  const [rangeDraft, setRangeDraft] = useState<[Date | null, Date | null]>([
+  const [rangeDraft, setRangeDraft] = useState<[string | null, string | null]>([
     null,
     null,
   ]);
@@ -993,8 +995,8 @@ export const Filters = () => {
                       )}
                       onClick={() => {
                         setRangeDraft([
-                          newDayjs(calendar.startDate).toDate(),
-                          newDayjs(calendar.endDate).toDate(),
+                          newDayjs(calendar.startDate).format('YYYY-MM-DD'),
+                          newDayjs(calendar.endDate).format('YYYY-MM-DD'),
                         ]);
                         setCustomOpen(true);
                       }}
@@ -1005,25 +1007,18 @@ export const Filters = () => {
 
                   {showCustomPicker && (
                     <div className="flex justify-center rounded-[8px] border border-newTableBorder bg-newBgColorInner p-[8px]">
-                      <RangeCalendar
+                      <DatePicker
+                        type="range"
+                        allowSingleDateInRange
                         value={rangeDraft}
                         onChange={(range) => {
                           setRangeDraft(range);
                           if (range[0] && range[1]) {
-                            calendar.applyCustomRange(
-                              dayjs(range[0]).format('YYYY-MM-DD'),
-                              dayjs(range[1]).format('YYYY-MM-DD')
-                            );
+                            calendar.applyCustomRange(range[0], range[1]);
                           }
                         }}
-                        dayClassName={(_d, modifiers) =>
-                          modifiers.selected || modifiers.inRange
-                            ? '!text-white'
-                            : modifiers.outside
-                            ? '!text-newTableText'
-                            : '!text-textColor'
-                        }
                         classNames={{
+                          day: '!text-textColor hover:bg-boxFocused data-[outside]:!text-newTableText data-[selected]:!bg-btnPrimary data-[selected]:!text-white data-[in-range]:!bg-btnPrimary/20 data-[in-range]:!text-white',
                           calendarHeaderControl:
                             'text-textColor hover:!bg-boxFocused',
                           calendarHeaderLevel:

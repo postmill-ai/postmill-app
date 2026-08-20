@@ -117,7 +117,14 @@ Name collisions to be aware of:
 - `apps/frontend/src/components/ui/color-picker.tsx` exports a **different** `ColorPicker` (post-color swatch palette, `value?: string | null`) — for post heading colors, not RHF forms.
 - `apps/frontend/src/components/ui/slider.component.tsx` exports `SliderComponent` (carousel with arrows/dots) — unrelated to the form `Slider` toggle.
 
-**Mantine is sanctioned only for:** `Autocomplete` (`@mantine/core`), the date picker (`@mantine/dates`), and hooks (`@mantine/hooks`). All Mantine packages are v5 (`^5.10.5`). Reach for these before hand-rolling equivalents. **Never add a new UI kit** (no shadcn, MUI, Chakra, etc.).
+**Mantine is sanctioned only for:** `Autocomplete` (`@mantine/core`), the date picker (`@mantine/dates`), and hooks (`@mantine/hooks`). All Mantine packages are v9 (`^9.5.1`). Reach for these before hand-rolling equivalents. **Never add a new UI kit** (no shadcn, MUI, Chakra, etc.).
+
+Notes on the v9 line (very different from the old v5 behavior):
+
+- **Styles are plain CSS, not emotion** — `@mantine/core/styles.css` and `@mantine/dates/styles.css` are imported once in `apps/frontend/src/app/(app)/layout.tsx` (before `global.scss`). No `MantineProvider` anywhere.
+- **Date values are `'YYYY-MM-DD'` strings, not `Date`** — `DatePicker`/`TimeInput` `value`/`onChange` hand back strings (`TimeInput` is a native `input[type=time]`, `'HH:mm'`).
+- **`RangeCalendar` and `dayClassName` are gone** — range picking is `<DatePicker type="range" allowSingleDateInRange />`; day states (selected/weekend/outside/in-range) are styled with Tailwind `data-[selected]:` / `data-[outside]:` / `data-[in-range]:` variant classes in `classNames.day`, not a callback.
+- `@mantine/dates` needs `dayjs` as a peer — it is a declared `apps/frontend` dependency.
 
 ## App-level kit (`apps/frontend/src/components/ui/`)
 
@@ -138,7 +145,7 @@ There is a **second `EmptyState`** in `components/analytics-v2/kit/states.tsx` (
 
 ## Modals
 
-Single bespoke system: `apps/frontend/src/components/layout/new-modal.tsx` (zustand store). **`@mantine/modals` is vestigial** — it is in `apps/frontend/package.json` but has zero imports in source; never use it.
+Single bespoke system: `apps/frontend/src/components/layout/new-modal.tsx` (zustand store). **`@mantine/modals` is not installed** — it was dropped with the Mantine v9 upgrade; never use it.
 
 ```tsx
 const { openModal, closeAll, closeById, closeCurrent } = useModals();
@@ -184,7 +191,7 @@ openModal({
 ## Dates & i18n
 
 - **dayjs everywhere** — never `moment`, never raw `Date` math for display.
-- Date/time picking: `DatePicker` (`components/launches/helpers/date.picker.tsx`) wraps `@mantine/dates` `Calendar` + `TimeInput`; it works in `newDayjs` values.
+- Date/time picking: `DatePicker` (`components/launches/helpers/date.picker.tsx`) wraps `@mantine/dates` `DatePicker` (single date) + `TimeInput`; it works in `newDayjs` values. Range picking (calendar filters, analytics filter bar) uses `@mantine/dates` `DatePicker type="range"`, which speaks `'YYYY-MM-DD'` strings.
 - Timezone handling: `components/layout/set.timezone.tsx` — `getTimezone()` (user's stored timezone, `localStorage('timezone')`, falling back to `dayjs.tz.guess()`), `newDayjs()` (timezone-aware construction; date-only strings parse as midnight **in the user's timezone**), `getTimezoneAbbr()`.
 - UTC→local rendering: `UtcToLocalDateRender` (`@postmill-ai/react/helpers/utc.date.render`) — `date`, `format`.
 - **All user-facing strings** go through `useT()` from `@postmill-ai/react/translation/get.transation.service.client` (the filename typo `transation` is real — import it exactly). Pattern: `t('snake_case_key', 'English fallback', params?)`. Server components use `getT()` from `@postmill-ai/react/translation/get.translation.service.backend`. Form labels use `TranslatedLabel` (`label` = fallback, `translationKey` optional).

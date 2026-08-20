@@ -1,7 +1,7 @@
 'use client';
 import { FC, useCallback, useState } from 'react';
 import dayjs from 'dayjs';
-import { Calendar, TimeInput } from '@mantine/dates';
+import { DatePicker as MantineDatePicker, TimeInput } from '@mantine/dates';
 import { useClickOutside } from '@mantine/hooks';
 import { Button } from '@postmill-ai/react/form/button';
 import { isUSCitizen } from './isuscitizen.utils';
@@ -25,13 +25,15 @@ export const DatePicker: FC<{
   const ref = useClickOutside<HTMLDivElement>(() => {
     setOpen(false);
   });
+  // Mantine 8+ date components work in 'YYYY-MM-DD' strings; TimeInput is a
+  // native input[type=time] and hands back an 'HH:mm' string.
   const changeDate = useCallback(
-    (type: 'date' | 'time') => (day: Date) => {
+    (type: 'date' | 'time') => (value: string) => {
       onChange(
         newDayjs(
           type === 'time'
-            ? date.format('YYYY-MM-DD') + ' ' + newDayjs(day).format('HH:mm:ss')
-            : newDayjs(day).format('YYYY-MM-DD') + ' ' + date.format('HH:mm:ss')
+            ? date.format('YYYY-MM-DD') + ' ' + value
+            : value + ' ' + date.format('HH:mm:ss')
         )
       );
     },
@@ -57,37 +59,25 @@ export const DatePicker: FC<{
           onClick={(e) => e.stopPropagation()}
           className="animate-fadeIn absolute bottom-[100%] mb-[16px] start-[50%] -translate-x-[50%] bg-newBgColorInner border border-newTableBorder text-textColor rounded-[16px] z-[300] p-[16px] flex flex-col"
         >
-          <Calendar
-            onChange={changeDate('date')}
-            value={date.toDate()}
-            minDate={newDayjs().startOf('day').toDate()}
-            dayClassName={(date, modifiers) => {
-              if (modifiers.weekend) {
-                return '!text-textColor';
-              }
-              if (modifiers.outside) {
-                return '!text-gray';
-              }
-              if (modifiers.selected) {
-                return '!text-textColor !bg-seventh !outline-none';
-              }
-              return '!text-textColor';
-            }}
+          <MantineDatePicker
+            onChange={(day) => day && changeDate('date')(day)}
+            value={date.format('YYYY-MM-DD')}
+            minDate={newDayjs().startOf('day').format('YYYY-MM-DD')}
             classNames={{
-              day: 'hover:bg-seventh',
+              day: 'hover:bg-seventh !text-textColor data-[weekend]:!text-textColor data-[outside]:!text-gray data-[selected]:!text-textColor data-[selected]:!bg-seventh data-[selected]:!outline-none',
               calendarHeaderControl: 'text-textColor hover:bg-third',
-              calendarHeaderLevel: 'text-textColor hover:bg-third', // cell: 'child:!text-textColor'
+              calendarHeaderLevel: 'text-textColor hover:bg-third',
             }}
           />
           <TimeInput
-            onChange={changeDate('time')}
+            onChange={(event) => changeDate('time')(event.currentTarget.value)}
             label={t('label_pick_time', 'Pick time')}
             classNames={{
               label: 'text-textColor py-[12px]',
               input:
                 'bg-newBgColorInner h-[40px] border border-newTableBorder text-textColor rounded-[4px] outline-none',
             }}
-            defaultValue={date.toDate()}
+            defaultValue={date.format('HH:mm')}
           />
           <Button className="mt-[12px]" onClick={changeShow}>
             {t('close', 'Close')}

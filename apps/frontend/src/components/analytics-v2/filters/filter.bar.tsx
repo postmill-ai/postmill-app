@@ -11,7 +11,7 @@ import {
 import { createPortal } from 'react-dom';
 import clsx from 'clsx';
 import dayjs from 'dayjs';
-import { RangeCalendar } from '@mantine/dates';
+import { DatePicker } from '@mantine/dates';
 import { useT } from '@postmill-ai/react/translation/get.transation.service.client';
 import { newDayjs } from '@postmill-ai/frontend/components/layout/set.timezone';
 import { Integrations } from '@postmill-ai/frontend/components/launches/calendar.context';
@@ -374,26 +374,22 @@ export const AnalyticsFilterBar: FC<AnalyticsFilterBarProps> = ({
 
               {(customOpen || win === 'custom') && (
                 <div className="flex justify-center rounded-[8px] border border-newTableBorder bg-newBgColorInner p-[8px]">
-                  <RangeCalendar
-                    value={[newDayjs(from).toDate(), newDayjs(to).toDate()]}
+                  <DatePicker
+                    type="range"
+                    allowSingleDateInRange
+                    value={[from, to]}
                     onChange={(range) => {
                       setCustomOpen(true);
                       if (range[0] && range[1]) {
                         onRangeChange({
-                          from: dayjs(range[0]).format(FMT),
-                          to: dayjs(range[1]).format(FMT),
+                          from: range[0],
+                          to: range[1],
                           compare,
                         });
                       }
                     }}
-                    dayClassName={(_d, modifiers) =>
-                      modifiers.selected || modifiers.inRange
-                        ? '!text-white'
-                        : modifiers.outside
-                        ? '!text-newTableText'
-                        : '!text-textColor'
-                    }
                     classNames={{
+                      day: '!text-textColor data-[outside]:!text-newTableText data-[selected]:!bg-designerAccent data-[selected]:!text-white data-[in-range]:!bg-designerAccent/20 data-[in-range]:!text-white',
                       calendarHeaderControl: 'text-textColor hover:!bg-designerAccent/15',
                       calendarHeaderLevel: 'text-textColor hover:!bg-designerAccent/15',
                       weekday: '!text-newTableText',
