@@ -87,7 +87,7 @@
     "i18n-iso-countries": "^7.14.0",
     "isomorphic-dompurify": "^3.15.0",
     "konva": "^9.3.6",
-    "next": "16.2.11",
+    "next": "16.3.1",
     "react": "19.2.7",
     "react-country-flag": "^3.1.0",
     "react-dnd": "^16.0.1",
@@ -109,7 +109,7 @@
     "zustand": "^5.0.14"
   },
   "devDependencies": {
-    "@next/bundle-analyzer": "16.2.7",
+    "@next/bundle-analyzer": "16.3.1",
     "@pmmmwh/react-refresh-webpack-plugin": "^0.5.7",
     "@svgr/webpack": "^8.1.0",
     "@testing-library/react": "16.3.0",
