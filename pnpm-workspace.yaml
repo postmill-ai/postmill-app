@@ -12,6 +12,11 @@ overrides:
   react-dom: 19.2.7
   '@types/react': 19.1.8
   '@types/react-dom': 19.1.6
+  # vite 8 lives only in apps/extension (its build toolchain). vitest must keep
+  # running on vite 6: vite 8's module runner breaks CJS default-export interop
+  # (dayjs.extend et al) across the backend specs, and under the hoisted linker
+  # the peer context otherwise follows whatever version wins the root hoist.
+  'vitest>vite': '^6.4.3'
   # Security overrides — each entry is documented inline below. Both parents are at their
   # latest and pin the vulnerable version *exactly*, so there is no upgrade-the-parent
   # path; these patched ranges are the only way to close the high advisories.

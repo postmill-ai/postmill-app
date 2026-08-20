@@ -144,7 +144,7 @@
     "sharp": "^0.35.0",
     "slugify": "^1.6.9",
     "socks": "^2.8.9",
-    "stripe": "^20.4.0",
+    "stripe": "^22.5.0",
     "subtitle": "4.2.2-alpha.0",
     "svix": "1.63.0",
     "transloadit": "^3.0.2",
