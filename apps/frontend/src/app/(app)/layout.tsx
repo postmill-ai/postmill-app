@@ -1,6 +1,10 @@
 import { SentryComponent } from '@postmill-ai/frontend/components/layout/sentry.component';
 
 export const dynamic = 'force-dynamic';
+// Mantine 7+ ships plain CSS (no more emotion auto-inject); import it before
+// global.scss so the bespoke Tailwind overrides in the pickers win on ties.
+import '@mantine/core/styles.css';
+import '@mantine/dates/styles.css';
 import '../global.scss';
 import 'react-tooltip/dist/react-tooltip.css';
 import '@copilotkit/react-ui/styles.css';

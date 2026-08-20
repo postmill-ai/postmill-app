@@ -63,9 +63,10 @@ vi.mock('./views/insights.tab', () => ({
   ),
 }));
 
-// The filter drawer embeds the Mantine range calendar; stub it (no provider in tests).
+// The filter drawer embeds the Mantine range picker (DatePicker type="range");
+// stub it (no provider in tests).
 vi.mock('@mantine/dates', () => ({
-  RangeCalendar: () => <div data-testid="range-calendar" />,
+  DatePicker: () => <div data-testid="range-calendar" />,
 }));
 
 // 6.1 — the focusPost deep-link drawer. Stub it so the spec tests wiring, not
