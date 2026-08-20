@@ -18,8 +18,6 @@ overrides:
   # protobufjs 8.x <8.4.1: high GHSAs; the lockfile already resolves the patched 8.4.x
   # line (this matches the previously applied package.json override — do not force 7.x back).
   'protobufjs@>=8.0.0 <8.4.1': '^8.4.1'
-  # rollup <2.80.0: high path-traversal, pinned exactly by @crxjs/vite-plugin@2.4.0.
-  rollup: '>=2.80.0'
   # form-data <2.5.6: critical unsafe-random boundary (GHSA-fjxv-7rqg-78g4) + high CRLF
   # injection (GHSA-hmw2-7cc7-3qxx), pulled by node-telegram-bot-api@0.66.0 ->
   # @cypress/request-promise -> request@2.88.2 (pins form-data ~2.3.2). Widen from <2.5.4 to

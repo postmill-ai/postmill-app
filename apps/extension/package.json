@@ -5,17 +5,17 @@
   "license": "AGPL-3.0",
   "scripts": {
     "build": "rm -rf dist && vite build && cp manifest.json dist/manifest.json && cd dist && zip -r ../extension.zip .",
-    "dev": "rm -rf dist && HOT_RELOAD_EXTENSION_VITE_PORT=8081 NODE_ENV=development dotenv -e ../../.env -- vite build --config vite.config.chrome.ts --mode development --watch",
+    "dev": "rm -rf dist && NODE_ENV=development dotenv -e ../../.env -- vite build --config vite.config.chrome.ts --mode development --watch",
     "test": "vitest run"
   },
   "type": "module",
   "devDependencies": {
-    "@crxjs/vite-plugin": "^2.4.0",
+    "@crxjs/vite-plugin": "^2.7.1",
+    "@vitejs/plugin-react": "^6.1.0",
     "dotenv-cli": "^8.0.0",
-    "hot-reload-extension-vite": "^1.0.13",
     "postcss": "^8.5.10",
-    "vite": "^6.4.2",
-    "vite-tsconfig-paths": "^5.1.4",
+    "vite": "^8.2.2",
+    "vite-tsconfig-paths": "^6.1.1",
     "vitest": "^4.1.0"
   },
   "engines": {
