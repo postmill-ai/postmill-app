@@ -4,12 +4,16 @@ import React, { FC, useCallback, useEffect, useMemo, useRef, useState } from 're
 import { createRoot } from 'react-dom/client';
 import { Stage, Layer, Rect, Group, Image as KonvaImage } from 'react-konva';
 import type Konva from 'konva';
+import { useRouter } from 'next/navigation';
 import useSWR from 'swr';
 import { useFetch } from '@postmill-ai/helpers/utils/custom.fetch';
 import { useToaster } from '@postmill-ai/react/toaster/toaster';
 import { useT } from '@postmill-ai/react/translation/get.transation.service.client';
 import ProviderIcon from '@postmill-ai/frontend/components/shared/provider-icon';
 import { useUser } from '@postmill-ai/frontend/components/layout/user.context';
+import { useLaunchStore } from '@postmill-ai/frontend/components/composer/store';
+import type { SelectedIntegrations } from '@postmill-ai/frontend/components/composer/store';
+import { PicksSocialsComponent } from '@postmill-ai/frontend/components/composer/picks.socials.component';
 import { useBrandColors } from './panels/use-brand-colors';
 import { useBrandFonts } from './panels/use-brand-fonts';
 import { getBrandViolations } from './brand-compliance';
@@ -20,10 +24,11 @@ import {
   outputToSvg,
 } from '@postmill-ai/nestjs-libraries/media/designer-doc/svg-export';
 import { CanvasElements, gradientFillProps, getImageNaturalSize } from './elements';
-import type { DesignerDoc, DesignerOutput, VideoOutput } from './designer.store';
+import type { DesignerDoc, DesignerOutput } from './designer.store';
 import { getThumbnailDataUrl } from './designer';
 import { CHANNEL_PRESETS } from '@postmill-ai/nestjs-libraries/integrations/social/channel-presets';
 import type { Integrations } from '@postmill-ai/frontend/components/launches/calendar.context';
+import { variantProviders, groupFilesByProvider } from './export-channels';
 
 const useFocusTrap = (containerRef: React.RefObject<HTMLElement | null>) => {
   useEffect(() => {
@@ -59,9 +64,19 @@ const useFocusTrap = (containerRef: React.RefObject<HTMLElement | null>) => {
 interface ExportDialogProps {
   store: any;
   onClose: () => void;
+  /**
+   * Entry action from the Export dropdown. When set, ALL outputs (variants)
+   * are exported — the per-output/export-all choice is not offered.
+   *  - 'save':        options → folder → export → done.
+   *  - 'create-post': options → folder → channels → export → one draft per
+   *                   selected channel, then redirect into the composer.
+   * Unset keeps the legacy behavior (current output, opt-in export-all) used
+   * by the composer-embedded "Use in post" button.
+   */
+  initialAction?: 'save' | 'create-post';
 }
 
-type Step = 'options' | 'folder' | 'export' | 'done' | 'draft-posts' | 'video-render' | 'video-rendering';
+type Step = 'options' | 'folder' | 'channels' | 'export' | 'done' | 'video-render' | 'video-rendering';
 type FormatValue = 'png' | 'jpeg' | 'transparent' | 'webp' | 'pdf' | 'svg' | 'gif' | 'webp-animated' | 'mp4' | 'webm';
 
 interface FormatDef {
@@ -474,12 +489,29 @@ const renderOutputThumbnail = async (
 
 // --- Main component ---
 
-export const ExportDialog: FC<ExportDialogProps> = ({ store, onClose }) => {
+// Connected org channels for the create-post channel step. One hook per
+// resource; disabled (null key) unless the dialog was opened with the
+// 'create-post' action.
+const useOrgChannels = (enabled: boolean) => {
+  const fetch = useFetch();
+  return useSWR(enabled ? 'designer-export-org-channels' : null, async () => {
+    const res = await fetch('/integrations/list');
+    if (!res.ok) return [] as Integrations[];
+    const json = await res.json().catch(() => null);
+    return (Array.isArray(json?.integrations) ? json.integrations : []) as Integrations[];
+  }, { revalidateOnFocus: false });
+};
+
+export const ExportDialog: FC<ExportDialogProps> = ({ store, onClose, initialAction }) => {
   const fetch = useFetch();
   const toaster = useToaster();
   const t = useT();
+  const router = useRouter();
   const dialogRef = useRef<HTMLDivElement>(null);
   useFocusTrap(dialogRef);
+
+  const forceAllOutputs = !!initialAction;
+  const isCreatePost = initialAction === 'create-post';
 
   const [step, setStep] = useState<Step>('options');
   const [outputFormats, setOutputFormats] = useState<Record<string, FormatValue>>({});
@@ -557,11 +589,13 @@ export const ExportDialog: FC<ExportDialogProps> = ({ store, onClose }) => {
 
   const selectedOutputs = useMemo(() => {
     const state = store.getState();
-    if (exportAll || !multiOutput) {
+    // The dropdown actions ('save' / 'create-post') always export every
+    // variant; only the legacy entry point offers the current-output choice.
+    if (forceAllOutputs || exportAll || !multiOutput) {
       return doc.outputs;
     }
     return [doc.outputs[state.currentOutput]];
-  }, [doc.outputs, exportAll, multiOutput, store]);
+  }, [doc.outputs, exportAll, multiOutput, store, forceAllOutputs]);
 
   const outputCount = selectedOutputs.length;
 
@@ -700,6 +734,69 @@ export const ExportDialog: FC<ExportDialogProps> = ({ store, onClose }) => {
     [selectedFolderId, providersMap]
   );
 
+  // --- Channels step (create-post action) ---
+  const { data: orgChannels, isLoading: channelsLoading } = useOrgChannels(isCreatePost);
+
+  const designProviders = useMemo(() => variantProviders(doc.outputs), [doc.outputs]);
+
+  const matchingChannels = useMemo(
+    () =>
+      (orgChannels || []).filter(
+        (i) => designProviders.includes(i.identifier) && !i.disabled && !i.inBetweenSteps
+      ),
+    [orgChannels, designProviders]
+  );
+
+  // The composer channel picker reads/writes the global launch store, which
+  // the designer page never seeds — and which may be LIVE if the designer is
+  // embedded in the composer. Snapshot it, seed only the matching channels,
+  // and restore on unmount so the pick selection can't leak into (or wipe) a
+  // composer session.
+  const launchStoreSnapshotRef = useRef<{
+    integrations: Integrations[];
+    selectedIntegrations: SelectedIntegrations[];
+  } | null>(null);
+
+  useEffect(() => {
+    if (!isCreatePost || step !== 'channels' || channelsLoading || launchStoreSnapshotRef.current) {
+      return;
+    }
+    const st = useLaunchStore.getState();
+    launchStoreSnapshotRef.current = {
+      integrations: st.integrations,
+      selectedIntegrations: st.selectedIntegrations,
+    };
+    st.setAllIntegrations(matchingChannels);
+    st.setSelectedIntegrations([]);
+  }, [isCreatePost, step, channelsLoading, matchingChannels]);
+
+  useEffect(
+    () => () => {
+      const snapshot = launchStoreSnapshotRef.current;
+      if (!snapshot) return;
+      const st = useLaunchStore.getState();
+      st.setAllIntegrations(snapshot.integrations);
+      st.setSelectedIntegrations(
+        snapshot.selectedIntegrations.map((s) => ({
+          selectedIntegrations: s.integration,
+          settings: s.settings,
+        }))
+      );
+    },
+    []
+  );
+
+  const pickedChannels = useLaunchStore((s) => s.selectedIntegrations);
+  const pickedChannelCount = useMemo(
+    () =>
+      pickedChannels.filter((s) =>
+        matchingChannels.some((m) => m.id === s.integration.id)
+      ).length,
+    [pickedChannels, matchingChannels]
+  );
+
+  const [creatingDrafts, setCreatingDrafts] = useState(false);
+
   // --- Step transitions ---
 
   const goToFolder = useCallback(() => setStep('folder'), []);
@@ -712,11 +809,26 @@ export const ExportDialog: FC<ExportDialogProps> = ({ store, onClose }) => {
     }
   }, [isVideoMode]);
 
+  // Folder → channels for create-post (the channel pick precedes the export);
+  // the save action and the legacy flow go straight to the export step.
+  const goNextFromFolder = useCallback(() => {
+    if (isCreatePost) {
+      setStep('channels');
+      return;
+    }
+    goToExport();
+  }, [isCreatePost, goToExport]);
+
+  const goNextFromChannels = useCallback(() => {
+    if (pickedChannelCount === 0) return;
+    goToExport();
+  }, [pickedChannelCount, goToExport]);
+
   const startVideoRender = useCallback(async () => {
     setRenderJobs([]);
     setIsEnqueuing(true);
     try {
-      const outputsToRender = exportAll
+      const outputsToRender = exportAll || forceAllOutputs
         ? doc.outputs.filter((o) => 'tracks' in o)
         : [doc.outputs[store.getState().currentOutput || 0]];
       const jobs: RenderJob[] = [];
@@ -777,7 +889,7 @@ export const ExportDialog: FC<ExportDialogProps> = ({ store, onClose }) => {
     } finally {
       setIsEnqueuing(false);
     }
-  }, [doc, store, exportAll, outputFormats, videoFormat, videoQuality, videoBitrateKbps, posterUrl, selectedFolderId, fetch, toaster]);
+  }, [doc, store, exportAll, forceAllOutputs, outputFormats, videoFormat, videoQuality, videoBitrateKbps, posterUrl, selectedFolderId, fetch, toaster]);
 
   useEffect(() => {
     if (step !== 'video-rendering' || renderJobsRef.current.length === 0) {
@@ -830,215 +942,6 @@ export const ExportDialog: FC<ExportDialogProps> = ({ store, onClose }) => {
     };
   }, [step, fetch, posterSource]);
 
-  const handleVideoDone = useCallback(() => {
-    const files: ExportedFile[] = renderJobs
-      .filter((j) => j.status === 'completed' && j.artifactUrl)
-      .map((j) => ({
-        id: j.id,
-        path: j.artifactUrl || '',
-        thumbnailPath: posterUrl || undefined,
-        name: `${j.outputName}.${extFor(j.format)}`,
-        outputId: j.outputId,
-      }));
-    setSavedFiles(files.length ? files : []);
-    setStep('done');
-  }, [renderJobs, posterUrl]);
-
-  // --- T-30: Draft posts state ---
-
-  interface DraftRow {
-    output: DesignerOutput | VideoOutput;
-    outputIdx: number;
-    file: ExportedFile;
-    provider: string | null;
-    integration: Integrations | null;
-    integrationName: string;
-    checked: boolean;
-    altText: string;
-    missingAlt: boolean;
-  }
-
-  const [draftRows, setDraftRows] = useState<DraftRow[]>([]);
-  const [draftLoading, setDraftLoading] = useState(false);
-  const [draftCreating, setDraftCreating] = useState(false);
-
-  const goToDraftPosts = useCallback(async () => {
-    setStep('draft-posts');
-    setDraftLoading(true);
-    try {
-      const res = await fetch('/integrations');
-      const allIntegrations: Integrations[] = res.ok ? await res.json() : [];
-
-      const rows: DraftRow[] = [];
-      for (let i = 0; i < savedFiles.length; i++) {
-        const file = savedFiles[i];
-        const output = doc.outputs.find((o) => o.id === file.outputId);
-        if (!output) continue;
-        const preset = CHANNEL_PRESETS.find((p) => p.id === output.formatId);
-        const provider = preset?.provider ?? null;
-
-        const altFromElements = 'children' in output
-          ? (output as DesignerOutput).children
-              .filter((el) => el.type === 'image')
-              .map((el) => el.alt)
-              .filter(Boolean)
-              .join(' | ')
-          : '';
-
-        const hasAlt = !!file.alt || !!altFromElements;
-        const hasImageElements = 'children' in output
-          ? (output as DesignerOutput).children.some((el) => el.type === 'image')
-          : false;
-
-        if (!provider) {
-          rows.push({
-            output,
-            outputIdx: i,
-            file,
-            provider: null,
-            integration: null,
-            integrationName: t('designer_no_supported_channel_skipped', 'No supported channel — skipped'),
-            checked: false,
-            altText: file.alt || altFromElements || '',
-            missingAlt: !hasAlt && hasImageElements,
-          });
-          continue;
-        }
-
-        const matchingIntegrations = allIntegrations.filter(
-          (integ) => integ.id === provider || integ.id.startsWith(provider + '-')
-        );
-
-        if (!matchingIntegrations.length) {
-          rows.push({
-            output,
-            outputIdx: i,
-            file,
-            provider,
-            integration: null,
-            integrationName: t('designer_no_connected_provider_accounts_skipped', 'No connected {{provider}} accounts — skipped', { provider }),
-            checked: false,
-            altText: file.alt || altFromElements || '',
-            missingAlt: !hasAlt && hasImageElements,
-          });
-          continue;
-        }
-
-        for (const integ of matchingIntegrations) {
-          rows.push({
-            output,
-            outputIdx: i,
-            file,
-            provider,
-            integration: integ,
-            integrationName: integ.name,
-            checked: true,
-            altText: file.alt || altFromElements || '',
-            missingAlt: !hasAlt && hasImageElements,
-          });
-        }
-      }
-      setDraftRows(rows);
-    } catch {
-      toaster.show(t('designer_failed_to_load_integrations', 'Failed to load integrations'), 'warning');
-    } finally {
-      setDraftLoading(false);
-    }
-  }, [savedFiles, doc.outputs, fetch, toaster]);
-
-  const toggleDraftRow = useCallback((idx: number) => {
-    setDraftRows((prev) =>
-      prev.map((r, i) => (i === idx ? { ...r, checked: !r.checked } : r))
-    );
-  }, []);
-
-  const setAltText = useCallback((idx: number, text: string) => {
-    setDraftRows((prev) =>
-      prev.map((r, i) => (i === idx ? { ...r, altText: text } : r))
-    );
-  }, []);
-
-  const confirmedDraftCount = useMemo(
-    () => draftRows.filter((r) => r.checked && r.integration).length,
-    [draftRows]
-  );
-
-  const handleCreateDraftPosts = useCallback(async () => {
-    setDraftCreating(true);
-    let created = 0;
-    let failed = 0;
-
-    for (const row of draftRows) {
-      if (!row.checked || !row.integration) continue;
-      try {
-        const mediaItem: { id: string; path: string; alt?: string; thumbnail?: string } = {
-          id: row.file.id,
-          path: row.file.path,
-          alt: row.altText || undefined,
-        };
-        if (row.file.thumbnailPath) {
-          mediaItem.thumbnail = row.file.thumbnailPath;
-        }
-
-        const payload = {
-          type: 'draft' as const,
-          date: new Date().toISOString(),
-          shortLink: false,
-          tags: [] as string[],
-          posts: [
-            {
-              integration: { id: row.integration.id },
-              value: [
-                {
-                  content: '',
-                  image: [mediaItem],
-                },
-              ],
-            },
-          ],
-        };
-
-        const res = await fetch('/posts', {
-          method: 'POST',
-          body: JSON.stringify(payload),
-        });
-
-        if (res.ok) {
-          created++;
-        } else {
-          failed++;
-          toaster.show(
-            t('designer_failed_to_create_draft_for', 'Failed to create draft for {{name}}', {
-              name: row.integrationName,
-            }),
-            'warning'
-          );
-        }
-      } catch {
-        failed++;
-        toaster.show(
-          t('designer_failed_to_create_draft_for', 'Failed to create draft for {{name}}', {
-            name: row.integrationName,
-          }),
-          'warning'
-        );
-      }
-    }
-
-    if (created > 0) {
-      toaster.show(
-        t('designer_n_drafts_created', '{{count}} draft created', {
-          count: created,
-        }),
-        'success'
-      );
-    }
-    if (failed === 0 && created > 0) {
-      onClose();
-    }
-    setDraftCreating(false);
-  }, [draftRows, fetch, toaster, onClose]);
-
   // Pre-fill alt from the output's alt when exporting
   const getOutputAlt = useCallback(
     (outputId: string): string | undefined => {
@@ -1052,6 +955,134 @@ export const ExportDialog: FC<ExportDialogProps> = ({ store, onClose }) => {
     },
     [doc.outputs]
   );
+
+  // --- Create-post: one draft per selected channel, then composer redirect ---
+
+  const createDraftPosts = useCallback(
+    async (files: ExportedFile[]) => {
+      const selected = useLaunchStore
+        .getState()
+        .selectedIntegrations.map((s) => s.integration)
+        .filter((i) => designProviders.includes(i.identifier));
+      const filesByProvider = groupFilesByProvider(files, doc.outputs);
+
+      setCreatingDrafts(true);
+      const created: { postId: string; name: string }[] = [];
+      let failed = 0;
+
+      for (const integration of selected) {
+        // Every variant of this channel's provider attaches to its draft.
+        const providerFiles = filesByProvider[integration.identifier] || [];
+        if (!providerFiles.length) continue;
+        try {
+          const res = await fetch('/posts', {
+            method: 'POST',
+            body: JSON.stringify({
+              type: 'draft',
+              date: new Date().toISOString(),
+              shortLink: false,
+              tags: [],
+              posts: [
+                {
+                  integration: { id: integration.id },
+                  // Per-post `type: 'draft'` — create.post.dto skips per-provider
+                  // settings validation only for drafts (see manage.modal).
+                  type: 'draft',
+                  value: [
+                    {
+                      content: '',
+                      image: providerFiles.map((f) => ({
+                        id: f.id,
+                        path: f.path,
+                        alt: f.alt || getOutputAlt(f.outputId) || undefined,
+                        ...(f.thumbnailPath ? { thumbnail: f.thumbnailPath } : {}),
+                      })),
+                    },
+                  ],
+                },
+              ],
+            }),
+          });
+          if (!res.ok) {
+            failed++;
+            continue;
+          }
+          const json = await res.json().catch(() => null);
+          const first = Array.isArray(json) ? json[0] : null;
+          if (first?.postId) {
+            created.push({ postId: first.postId, name: integration.name });
+          } else {
+            failed++;
+          }
+        } catch {
+          failed++;
+        }
+      }
+
+      if (failed > 0) {
+        toaster.show(
+          t('designer_failed_to_create_n_drafts', 'Failed to create {{count}} draft', {
+            count: failed,
+          }),
+          'warning'
+        );
+      }
+
+      if (!created.length) {
+        toaster.show(t('designer_failed_to_create_drafts', 'Failed to create drafts'), 'warning');
+        setCreatingDrafts(false);
+        return;
+      }
+
+      if (created.length > 1) {
+        toaster.show(
+          t(
+            'designer_other_drafts_in_composer',
+            '{{count}} drafts created — the rest are in Composer → Drafts',
+            { count: created.length }
+          ),
+          'success'
+        );
+      }
+
+      // Redirect into the first draft's composer. Each channel got its own
+      // server-side group; read it back from the created post.
+      try {
+        const postRes = await fetch(`/posts/${created[0].postId}`);
+        const post = postRes.ok ? await postRes.json() : null;
+        onClose();
+        if (post?.group) {
+          router.push(`/posts/post/${post.group}`);
+        } else {
+          router.push('/posts');
+        }
+      } catch {
+        onClose();
+        router.push('/posts');
+      }
+    },
+    [designProviders, doc.outputs, fetch, toaster, t, router, onClose, getOutputAlt]
+  );
+
+  const handleVideoDone = useCallback(() => {
+    const files: ExportedFile[] = renderJobs
+      .filter((j) => j.status === 'completed' && j.artifactUrl)
+      .map((j) => ({
+        id: j.id,
+        path: j.artifactUrl || '',
+        thumbnailPath: posterUrl || undefined,
+        name: `${j.outputName}.${extFor(j.format)}`,
+        outputId: j.outputId,
+      }));
+    setSavedFiles(files.length ? files : []);
+    if (isCreatePost) {
+      // Video renders are already uploaded to the chosen folder by the server
+      // pipeline — go straight to draft creation.
+      createDraftPosts(files);
+      return;
+    }
+    setStep('done');
+  }, [renderJobs, posterUrl, isCreatePost, createDraftPosts]);
 
   // --- Upload ---
 
@@ -1236,6 +1267,12 @@ export const ExportDialog: FC<ExportDialogProps> = ({ store, onClose }) => {
         }),
         'success'
       );
+      if (isCreatePost) {
+        // Variants are in /files now — attach them to one draft per picked
+        // channel and redirect into the first draft's composer.
+        await createDraftPosts(results);
+        return;
+      }
       setStep('done');
     } catch {
       toaster.show(t('designer_export_failed', 'Export failed'), 'warning');
@@ -1253,6 +1290,8 @@ export const ExportDialog: FC<ExportDialogProps> = ({ store, onClose }) => {
     uploadBlob,
     toaster,
     getOutputAlt,
+    isCreatePost,
+    createDraftPosts,
   ]);
 
   // --- Render ---
@@ -1347,7 +1386,7 @@ export const ExportDialog: FC<ExportDialogProps> = ({ store, onClose }) => {
             </div>
           )}
 
-          {multiOutput && (
+          {multiOutput && !forceAllOutputs && (
             <label className="flex items-center gap-2 cursor-pointer select-none">
               <input
                 type="checkbox"
@@ -1363,7 +1402,13 @@ export const ExportDialog: FC<ExportDialogProps> = ({ store, onClose }) => {
             </label>
           )}
 
-          {!multiOutput && (
+          {forceAllOutputs && (
+            <div className="text-[13px] text-newTextColor/60">
+              {t('designer_export_all_n_outputs', 'Export all {{count}} outputs', { count: doc.outputs.length })}
+            </div>
+          )}
+
+          {!multiOutput && !forceAllOutputs && (
             <div className="text-[13px] text-newTextColor/60">
               {t('designer_exporting_current_output', 'Exporting current output')}
             </div>
@@ -1477,10 +1522,73 @@ export const ExportDialog: FC<ExportDialogProps> = ({ store, onClose }) => {
               {t('back', 'Back')}
             </button>
             <button
-              onClick={goToExport}
+              onClick={goNextFromFolder}
               className="px-4 h-[38px] rounded-[6px] bg-designerAccent text-white text-[13px] font-medium hover:bg-designerAccent/80 transition-all"
             >
-              {t('designer_next_export_n_files', 'Next: Export {{count}} file', { count: outputCount })}
+              {isCreatePost
+                ? t('designer_next_choose_channels', 'Next: Choose Channels')
+                : t('designer_next_export_n_files', 'Next: Export {{count}} file', { count: outputCount })}
+            </button>
+          </div>
+        </>
+      )}
+
+      {/* ---- Step 2b: Channels (create-post only) ---- */}
+      {step === 'channels' && (
+        <>
+          <div className="text-[13px] font-medium text-textColor">
+            {t('designer_choose_channels_title', 'Choose channels')}
+          </div>
+          <div className="text-[12px] text-newTextColor/60">
+            {t(
+              'designer_choose_channels_description',
+              'Only channels matching this design’s variant types are shown. Each selected channel gets a draft with its matching variant(s) attached.'
+            )}
+          </div>
+
+          {designProviders.length === 0 && (
+            <div className="text-[12px] text-newTextColor/60 text-center py-4 border border-studioBorder rounded-[8px] bg-newBgColorInner">
+              {t(
+                'designer_no_channel_variants',
+                'None of this design’s variants map to a channel type, so there is nothing to post. Use Save to Files instead.'
+              )}
+            </div>
+          )}
+
+          {designProviders.length > 0 && channelsLoading && (
+            <div className="text-[12px] text-newTextColor/60 text-center py-4">
+              {t('designer_loading_channels_ellipsis', 'Loading channels...')}
+            </div>
+          )}
+
+          {designProviders.length > 0 && !channelsLoading && matchingChannels.length === 0 && (
+            <div className="text-[12px] text-newTextColor/60 text-center py-4 border border-studioBorder rounded-[8px] bg-newBgColorInner">
+              {t(
+                'designer_no_matching_channels',
+                'No connected channels match this design’s variant types. Connect one under Channels first.'
+              )}
+            </div>
+          )}
+
+          {designProviders.length > 0 && !channelsLoading && matchingChannels.length > 0 && (
+            <div className="border border-studioBorder rounded-[8px] bg-newBgColorInner p-[8px]">
+              <PicksSocialsComponent allowedIdentifiers={designProviders} />
+            </div>
+          )}
+
+          <div className="flex justify-between gap-2 mt-2">
+            <button
+              onClick={goToFolder}
+              className="px-4 h-[38px] rounded-[6px] border border-studioBorder text-[13px] text-textColor hover:bg-boxHover transition-all"
+            >
+              {t('back', 'Back')}
+            </button>
+            <button
+              onClick={goNextFromChannels}
+              disabled={pickedChannelCount === 0}
+              className="px-4 h-[38px] rounded-[6px] bg-designerAccent text-white text-[13px] font-medium hover:bg-designerAccent/80 disabled:opacity-50 transition-all"
+            >
+              {t('designer_next_save_and_create_post', 'Next: Save & Create Post')}
             </button>
           </div>
         </>
@@ -1551,19 +1659,23 @@ export const ExportDialog: FC<ExportDialogProps> = ({ store, onClose }) => {
 
           <div className="flex justify-between gap-2 mt-2">
             <button
-              onClick={goToFolder}
+              onClick={isCreatePost ? () => setStep('channels') : goToFolder}
               className="px-4 h-[38px] rounded-[6px] border border-studioBorder text-[13px] text-textColor hover:bg-boxHover transition-all"
             >
               {t('back', 'Back')}
             </button>
             <button
               onClick={handleExport}
-              disabled={exporting}
+              disabled={exporting || creatingDrafts}
               className="px-4 h-[38px] rounded-[6px] bg-green-600 text-white text-[13px] font-medium hover:bg-green-700 disabled:opacity-50 transition-all"
             >
               {exporting
                 ? t('designer_exporting_ellipsis', 'Exporting...')
-                : t('designer_export_n_files', 'Export {{count}} file', { count: outputCount })}
+                : creatingDrafts
+                  ? t('designer_creating_drafts_ellipsis', 'Creating drafts...')
+                  : isCreatePost
+                    ? t('designer_save_and_create_post', 'Save & Create Post')
+                    : t('designer_export_n_files', 'Export {{count}} file', { count: outputCount })}
             </button>
           </div>
         </>
@@ -1617,138 +1729,6 @@ export const ExportDialog: FC<ExportDialogProps> = ({ store, onClose }) => {
               className="px-4 h-[38px] rounded-[6px] border border-studioBorder text-[13px] text-textColor hover:bg-boxHover transition-all"
             >
               {t('close', 'Close')}
-            </button>
-            <button
-              onClick={goToDraftPosts}
-              className="px-4 h-[38px] rounded-[6px] bg-green-600 text-white text-[13px] font-medium hover:bg-green-700 transition-all"
-            >
-              {t('designer_create_draft_posts', 'Create draft posts')}
-            </button>
-          </div>
-        </>
-      )}
-
-      {/* ---- Step 5: Draft Posts ---- */}
-      {step === 'draft-posts' && (
-        <>
-          <div className="text-[15px] font-semibold text-textColor">
-            {t('designer_create_draft_posts_title', 'Create Draft Posts')}
-          </div>
-          <div className="text-[12px] text-newTextColor/60">
-            {t('designer_turn_into_drafts_prefix', 'Turn these into draft posts — this will create')}{' '}
-            <strong>{confirmedDraftCount}</strong> {t('designer_draft_plural_suffix', 'draft', { count: confirmedDraftCount })}
-          </div>
-
-          <div className="max-h-[300px] overflow-y-auto flex flex-col gap-2">
-            {draftLoading && (
-              <div className="text-[12px] text-newTextColor/60 text-center py-4">
-                {t('designer_loading_integrations_ellipsis', 'Loading integrations...')}
-              </div>
-            )}
-
-            {!draftLoading &&
-              draftRows.map((row, idx) => {
-                const isSkipped = !row.integration || !row.provider;
-                const isUnchecked = !row.checked;
-
-                return (
-                  <div
-                    key={`${row.outputIdx}-${row.integration?.id || idx}`}
-                    className={`flex items-center gap-2 p-2 rounded-[8px] border ${
-                      isSkipped
-                        ? 'border-studioBorder/30 bg-newBgColorInner/30'
-                        : 'border-studioBorder bg-newBgColorInner'
-                    } ${
-                      isUnchecked && !isSkipped ? 'opacity-50' : ''
-                    }`}
-                  >
-                    <input
-                      type="checkbox"
-                      checked={row.checked}
-                      disabled={isSkipped}
-                      onChange={() => toggleDraftRow(idx)}
-                      className="accent-designerAccent w-[14px] h-[14px] shrink-0"
-                    />
-
-                    <div className="w-[36px] h-[36px] rounded-[4px] overflow-hidden shrink-0 bg-newBgColor border border-studioBorder/50">
-                      {previews[row.outputIdx]?.dataUrl ? (
-                        // eslint-disable-next-line @next/next/no-img-element -- data URL preview
-                        <img
-                          src={previews[row.outputIdx].dataUrl}
-                          alt=""
-                          className="w-full h-full object-cover"
-                        />
-                      ) : (
-                        <div className="w-full h-full flex items-center justify-center text-[10px] text-newTextColor/30">
-                          #
-                        </div>
-                      )}
-                    </div>
-
-                    <div className="flex-1 min-w-0">
-                      <div
-                        className={`text-[12px] truncate ${
-                          isSkipped ? 'text-newTextColor/60' : 'text-textColor'
-                        }`}
-                      >
-                        {row.output.name || row.output.formatId} → {row.integrationName}
-                      </div>
-
-                      {row.missingAlt && !isSkipped && (
-                        <div className="mt-1">
-                          <span className="text-[10px] text-yellow-500 font-medium">
-                            {t('designer_missing_alt_text', 'Missing alt text')}
-                          </span>
-                          <input
-                            type="text"
-                            value={row.altText}
-                            onChange={(e) => setAltText(idx, e.target.value)}
-                            placeholder={t('designer_alt_text_recommended_placeholder', 'Alt text (recommended)...')}
-                            className="w-full mt-1 h-[24px] px-[8px] rounded-[4px] bg-newBgColor border border-yellow-500/40 text-[11px] text-textColor outline-hidden focus:border-yellow-500"
-                          />
-                        </div>
-                      )}
-
-                      {!row.missingAlt && row.altText && !isSkipped && (
-                        <div className="text-[10px] text-newTextColor/65 truncate mt-0.5">
-                          {t('designer_alt_prefix', 'Alt: {{text}}', { text: row.altText })}
-                        </div>
-                      )}
-                    </div>
-
-                    {row.provider && row.integration && (
-                      <ProviderIcon
-                        identifier={row.provider}
-                        name={row.provider}
-                        size={16}
-                      />
-                    )}
-                  </div>
-                );
-              })}
-          </div>
-
-          {!draftLoading && draftRows.length === 0 && (
-            <div className="text-[12px] text-newTextColor/60 text-center py-4">
-              {t('designer_no_outputs_to_create_drafts_for', 'No outputs to create drafts for')}
-            </div>
-          )}
-
-          <div className="flex justify-end gap-2 mt-2">
-            <button
-              onClick={onClose}
-              className="px-4 h-[38px] rounded-[6px] border border-studioBorder text-[13px] text-textColor hover:bg-boxHover transition-all"
-            >
-              {t('designer_skip_slash_done', 'Skip / Done')}
-            </button>
-            <button
-              onClick={handleCreateDraftPosts}
-              disabled={confirmedDraftCount === 0 || draftCreating}
-              className="px-4 h-[38px] rounded-[6px] bg-green-600 text-white text-[13px] font-medium hover:bg-green-700 disabled:opacity-50 transition-all"
-            >
-              {draftCreating
-                ? t('designer_creating_ellipsis', 'Creating...')
-                : t('designer_create_n_drafts', 'Create {{count}} draft', { count: confirmedDraftCount })}
             </button>
           </div>
         </>
@@ -1875,7 +1855,7 @@ export const ExportDialog: FC<ExportDialogProps> = ({ store, onClose }) => {
 
           <div className="flex justify-between gap-2 mt-2">
             <button
-              onClick={goToFolder}
+              onClick={isCreatePost ? () => setStep('channels') : goToFolder}
               className="px-4 h-[38px] rounded-[6px] border border-studioBorder text-[13px] text-textColor hover:bg-boxHover transition-all"
             >
               {t('back', 'Back')}
@@ -2059,9 +2039,14 @@ export const ExportDialog: FC<ExportDialogProps> = ({ store, onClose }) => {
             {renderStatus === 'completed' && (
               <button
                 onClick={handleVideoDone}
-                className="px-4 h-[38px] rounded-[6px] bg-green-600 text-white text-[13px] font-medium hover:bg-green-700 transition-all"
+                disabled={creatingDrafts}
+                className="px-4 h-[38px] rounded-[6px] bg-green-600 text-white text-[13px] font-medium hover:bg-green-700 disabled:opacity-50 transition-all"
               >
-                {t('done', 'Done')}
+                {creatingDrafts
+                  ? t('designer_creating_drafts_ellipsis', 'Creating drafts...')
+                  : isCreatePost
+                    ? t('designer_save_and_create_post', 'Save & Create Post')
+                    : t('done', 'Done')}
               </button>
             )}
             {renderStatus === 'failed' && (
