@@ -26,9 +26,16 @@ const PlatformAvatar: FC<{
   />
 );
 
-export const PicksSocialsComponent: FC<{ toolTip?: boolean }> = ({
-  toolTip,
-}) => {
+export const PicksSocialsComponent: FC<{
+  toolTip?: boolean;
+  /**
+   * When set, only integrations whose `identifier` (provider id, e.g.
+   * 'instagram', 'x') is listed are shown/selectable. Used by the Designer's
+   * "Create Post" export to limit the picker to channels matching the
+   * design's variant types.
+   */
+  allowedIdentifiers?: string[];
+}> = ({ toolTip, allowedIdentifiers }) => {
   const t = useT();
   const existingData = useExistingData();
   const containerRef = useRef<HTMLDivElement>(null);
@@ -52,12 +59,18 @@ export const PicksSocialsComponent: FC<{ toolTip?: boolean }> = ({
   const selectableIntegrations = useMemo(
     () =>
       integrations.filter((f) => {
+        if (
+          allowedIdentifiers?.length &&
+          !allowedIdentifiers.includes(f.identifier)
+        ) {
+          return false;
+        }
         if (existingData.integration) {
           return f.id === existingData.integration;
         }
         return !f.inBetweenSteps && !f.disabled;
       }),
-    [integrations, existingData.integration]
+    [integrations, existingData.integration, allowedIdentifiers]
   );
 
   const isSelected = useCallback(

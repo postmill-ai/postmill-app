@@ -112,4 +112,41 @@ describe('PicksSocialsComponent', () => {
     fireEvent.click(trigger);
     expect(trigger.getAttribute('aria-expanded')).toBe('true');
   });
+
+  it('allowedIdentifiers limits the icon-row list to matching identifiers', () => {
+    useLaunchStore.setState({ integrations: makeIntegrations(4) });
+    const { container } = render(
+      <PicksSocialsComponent allowedIdentifiers={['twitter']} />
+    );
+    const channelWrappers = container.querySelectorAll(
+      '.flex.flex-wrap.gap-\\[12px\\].flex-1 > div'
+    );
+    expect(channelWrappers.length).toBe(2);
+  });
+
+  it('allowedIdentifiers limits dropdown options to matching identifiers', () => {
+    // 10 integrations → facebook holds 6 (>4), so the filtered list still
+    // renders in dropdown mode.
+    useLaunchStore.setState({ integrations: makeIntegrations(10) });
+    render(<PicksSocialsComponent allowedIdentifiers={['facebook']} />);
+    const trigger = screen.getByRole('button', { name: /select channels/i });
+    fireEvent.click(trigger);
+    const options = screen.getAllByRole('option');
+    expect(options.length).toBe(6);
+  });
+
+  it('hides selected channels that fall outside allowedIdentifiers', () => {
+    const integrations = makeIntegrations(6);
+    useLaunchStore.setState({
+      integrations,
+      selectedIntegrations: [
+        { integration: integrations[0], settings: {} }, // twitter
+        { integration: integrations[2], settings: {} }, // linkedin
+      ],
+    });
+    render(<PicksSocialsComponent allowedIdentifiers={['linkedin']} />);
+    // Only the linkedin pick survives the filter → 1 channel → icon-row mode,
+    // no dropdown trigger with a count.
+    expect(screen.queryByRole('button', { name: /select channels/i })).toBeNull();
+  });
 });

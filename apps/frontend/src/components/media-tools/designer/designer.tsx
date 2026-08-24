@@ -54,6 +54,8 @@ import { getBrandViolations } from './brand-compliance';
 import { useBrandColors } from './panels/use-brand-colors';
 import { useBrandFonts } from './panels/use-brand-fonts';
 import { useUser } from '@postmill-ai/frontend/components/layout/user.context';
+import { KebabMenu } from '@postmill-ai/frontend/components/ui/kebab-menu';
+import { DropdownArrowIcon } from '@postmill-ai/frontend/components/ui/icons';
 
 // 4.4: hoisted so the memoized onPeerTimeline callback has no changing closure dep.
 const PEER_COLORS = ['#f43f5e', '#8b5cf6', '#06b6d4', '#f59e0b', '#22c55e', '#ec4899'];
@@ -525,16 +527,25 @@ export const Designer: FC<DesignerProps> = ({
       });
   }, [debouncedDoc, currentDesignId, isDirty, fetch, store, uploadPreview]);
 
-  const handleExport = useCallback(() => {
-    const s = store.getState();
-    if (s.brandEnforcement && !s.brandAdminOverride && brandViolations.length > 0) {
-      toaster.show(translate('export_blocked_off_brand', 'Export blocked: off-brand elements detected. Fix them or use admin override.'), 'warning');
-      return;
-    }
-    modals.openModal({
-      children: <ExportDialog store={store} onClose={() => modals.closeAll()} />,
-    });
-  }, [modals, store, brandViolations, toaster, translate]);
+  const openExportDialog = useCallback(
+    (initialAction?: 'save' | 'create-post') => {
+      const s = store.getState();
+      if (s.brandEnforcement && !s.brandAdminOverride && brandViolations.length > 0) {
+        toaster.show(translate('export_blocked_off_brand', 'Export blocked: off-brand elements detected. Fix them or use admin override.'), 'warning');
+        return;
+      }
+      modals.openModal({
+        children: <ExportDialog store={store} initialAction={initialAction} onClose={() => modals.closeAll()} />,
+      });
+    },
+    [modals, store, brandViolations, toaster, translate]
+  );
+
+  // Legacy entry (composer-embedded "Use in post"): current output, opt-in
+  // export-all. The dropdown actions always export every variant.
+  const handleExport = useCallback(() => openExportDialog(), [openExportDialog]);
+  const handleSaveToFiles = useCallback(() => openExportDialog('save'), [openExportDialog]);
+  const handleCreatePost = useCallback(() => openExportDialog('create-post'), [openExportDialog]);
 
   const handleSave = useCallback(async () => {
     const s = store.getState();
@@ -1053,7 +1064,7 @@ export const Designer: FC<DesignerProps> = ({
       onSaveAsTemplate: handleSaveAsTemplate,
       onOpenMedia,
       onInsertMedia,
-      onExport: handleExport,
+      onExport: handleSaveToFiles,
       onUseInPost: setMedia ? handleExport : undefined,
       onClose: closeModal,
       onCanvasProperties: () => {
@@ -1177,6 +1188,7 @@ export const Designer: FC<DesignerProps> = ({
       handleSave,
       handleSaveAsTemplate,
       handleExport,
+      handleSaveToFiles,
       onOpenMedia,
       onInsertMedia,
       confirmDiscardIfDirty,
@@ -1202,7 +1214,7 @@ export const Designer: FC<DesignerProps> = ({
       if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'e') {
         if (typing) return;
         e.preventDefault();
-        handleExport();
+        handleSaveToFiles();
         return;
       }
       // `?` was advertised in the Help menu but never bound.
@@ -1215,7 +1227,7 @@ export const Designer: FC<DesignerProps> = ({
     };
     window.addEventListener('keydown', handler);
     return () => window.removeEventListener('keydown', handler);
-  }, [handleExport, modals]);
+  }, [handleSaveToFiles, modals]);
 
   // Full screen fills the browser window, not the display: the root goes immersive
   // (fixed inset-0) to cover the app chrome. Modals/dialogs mount at the app root
@@ -1298,13 +1310,29 @@ export const Designer: FC<DesignerProps> = ({
           </button>
           </div>
           <FullscreenButton className="w-8 h-8 flex items-center justify-center rounded-sm text-textColor hover:bg-studioBorder/30 focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-designerAccent shrink-0" />
-          <button
-            onClick={handleExport}
-            disabled={isSaving}
-            className="px-4 py-1.5 rounded-md text-[12px] bg-designerAccent text-white hover:bg-designerAccent/80 disabled:opacity-50 font-medium focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-white"
-          >
-            {translate('export', 'Export')}
-          </button>
+          <KebabMenu
+            ariaLabel={translate('export', 'Export')}
+            align="right"
+            triggerClassName={`px-4 py-1.5 rounded-md text-[12px] bg-designerAccent text-white hover:bg-designerAccent/80 font-medium focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-white gap-1 ${
+              isSaving ? 'opacity-50 pointer-events-none' : ''
+            }`}
+            trigger={
+              <>
+                {translate('export', 'Export')}
+                <DropdownArrowIcon size={12} className="text-white" />
+              </>
+            }
+            items={[
+              {
+                label: translate('designer_save_to_files', 'Save to Files'),
+                onClick: handleSaveToFiles,
+              },
+              {
+                label: translate('designer_create_post', 'Create Post'),
+                onClick: handleCreatePost,
+              },
+            ]}
+          />
           {setMedia && (
             <button
               onClick={handleExport}
