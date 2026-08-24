@@ -117,6 +117,23 @@ function mockProviders(providers: { provider: string; displayName: string }[]) {
   return fetchMock;
 }
 
+// Leaves the /auth/providers fetch pending forever, simulating the SWR
+// in-flight state.
+function mockProvidersPending() {
+  const fetchMock = vi.fn((url: string) => {
+    if (url === '/auth/providers') {
+      return new Promise(() => {});
+    }
+    return Promise.resolve({
+      ok: true,
+      json: async () => ({}),
+      text: async () => '',
+    });
+  });
+  mockedUseFetch.mockReturnValue(fetchMock);
+  return fetchMock;
+}
+
 function renderWithFreshSWR(ui: React.ReactElement) {
   return render(
     <SWRConfig value={{ provider: () => new Map(), dedupingInterval: 0 }}>
@@ -140,6 +157,18 @@ function expectNoSocialButton() {
   }
 }
 
+// The "Continue With" label and "OR" divider must appear only when a real
+// provider button renders — never for LOCAL-only, loading, or error states.
+function expectNoDivider() {
+  expect(screen.queryByText('Continue With')).toBeNull();
+  expect(screen.queryByText('OR')).toBeNull();
+}
+
+function expectDivider() {
+  expect(screen.getByText('Continue With')).toBeTruthy();
+  expect(screen.getByText('OR')).toBeTruthy();
+}
+
 describe('Login social providers (F10)', () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -152,6 +181,7 @@ describe('Login social providers (F10)', () => {
     await settleProvidersFetch(fetchMock);
 
     expectNoSocialButton();
+    expectNoDivider();
     expect(screen.getByPlaceholderText('Email Address')).toBeTruthy();
     expect(screen.getByPlaceholderText('Password')).toBeTruthy();
   });
@@ -164,6 +194,20 @@ describe('Login social providers (F10)', () => {
     expect(await screen.findByTestId('google-provider')).toBeTruthy();
     expect(screen.queryByTestId('github-provider')).toBeNull();
     expect(screen.queryByTestId('oauth-provider')).toBeNull();
+    expectDivider();
+  });
+
+  it('renders neither label nor divider while the providers fetch is in flight', async () => {
+    const fetchMock = mockProvidersPending();
+
+    renderWithFreshSWR(<Login />);
+    await waitFor(() =>
+      expect(fetchMock).toHaveBeenCalledWith('/auth/providers')
+    );
+
+    expectNoSocialButton();
+    expectNoDivider();
+    expect(screen.getByPlaceholderText('Email Address')).toBeTruthy();
   });
 });
 
@@ -179,6 +223,7 @@ describe('Register social providers (F10)', () => {
     await settleProvidersFetch(fetchMock);
 
     expectNoSocialButton();
+    expectNoDivider();
     expect(screen.getByPlaceholderText('Email Address')).toBeTruthy();
     expect(screen.getByPlaceholderText('Password')).toBeTruthy();
   });
@@ -191,5 +236,19 @@ describe('Register social providers (F10)', () => {
     expect(await screen.findByTestId('google-provider')).toBeTruthy();
     expect(screen.queryByTestId('github-provider')).toBeNull();
     expect(screen.queryByTestId('oauth-provider')).toBeNull();
+    expectDivider();
+  });
+
+  it('renders neither label nor divider while the providers fetch is in flight', async () => {
+    const fetchMock = mockProvidersPending();
+
+    renderWithFreshSWR(<RegisterAfter token="" provider="LOCAL" />);
+    await waitFor(() =>
+      expect(fetchMock).toHaveBeenCalledWith('/auth/providers')
+    );
+
+    expectNoSocialButton();
+    expectNoDivider();
+    expect(screen.getByPlaceholderText('Email Address')).toBeTruthy();
   });
 });

@@ -59,6 +59,11 @@ export function Login() {
   const [loading, setLoading] = useState(false);
   const [notActivated, setNotActivated] = useState(false);
   const { data: providersData, error: providersError } = useAuthProviders();
+  // Providers with a real button (LOCAL maps to null) — the "Continue With"
+  // label and "OR" divider render only when at least one button will.
+  const visibleProviders = (providersData?.providers ?? []).filter(
+    (p) => p.provider !== 'LOCAL' && providerComponents[p.provider]
+  );
   const resolver = useMemo(() => {
     return classValidatorResolver(LoginUserDto);
   }, []);
@@ -96,16 +101,11 @@ export function Login() {
   };
 
   const renderProviders = () => {
-    const fetchedProviders = providersData?.providers?.filter(
-      (p) => p.provider !== 'LOCAL'
-    );
-
-    if (fetchedProviders && fetchedProviders.length > 0) {
+    if (visibleProviders.length > 0) {
       return (
         <div className="gap-[8px] flex flex-wrap">
-          {fetchedProviders.map((p) => {
+          {visibleProviders.map((p) => {
             const Component = providerComponents[p.provider];
-            if (!Component) return null;
             return <Component key={p.provider} />;
           })}
         </div>
@@ -134,19 +134,23 @@ export function Login() {
               {t('sign_in', 'Sign In')}
             </h1>
           </div>
-          <div className="text-[14px] mt-[32px] mb-[12px]">
-            {t('continue_with', 'Continue With')}
-          </div>
+          {visibleProviders.length > 0 && (
+            <div className="text-[14px] mt-[32px] mb-[12px]">
+              {t('continue_with', 'Continue With')}
+            </div>
+          )}
           <div className="flex flex-col">
             {renderProviders()}
-            <div className="h-[20px] mb-[24px] mt-[24px] relative">
-              <div className="absolute w-full h-px bg-newTableBorder top-[50%] translate-y-[-50%]" />
-              <div
-                className={`absolute z-1 justify-center items-center w-full start-0 top-[-4px] flex`}
-              >
-                <div className="px-[16px]">{t('or', 'OR')}</div>
+            {visibleProviders.length > 0 && (
+              <div className="h-[20px] mb-[24px] mt-[24px] relative">
+                <div className="absolute w-full h-px bg-newTableBorder top-[50%] translate-y-[-50%]" />
+                <div
+                  className={`absolute z-1 justify-center items-center w-full start-0 top-[-4px] flex`}
+                >
+                  <div className="px-[16px]">{t('or', 'OR')}</div>
+                </div>
               </div>
-            </div>
+            )}
             <div className="flex flex-col gap-[12px]">
               <div className="text-textColor">
                 <Input

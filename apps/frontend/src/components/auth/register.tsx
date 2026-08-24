@@ -80,6 +80,11 @@ export function RegisterAfter({
 }) {
   const t = useT();
   const { data: providersData, error: providersError } = useAuthProviders();
+  // Providers with a real button (LOCAL maps to null) — the "Continue With"
+  // label and "OR" divider render only when at least one button will.
+  const visibleProviders = (providersData?.providers ?? []).filter(
+    (p) => p.provider !== 'LOCAL' && providerComponents[p.provider]
+  );
   const [loading, setLoading] = useState(false);
   const router = useRouter();
   const fireEvents = useFireEvents();
@@ -136,16 +141,11 @@ export function RegisterAfter({
       });
   };
   const renderProviders = () => {
-    const fetchedProviders = providersData?.providers?.filter(
-      (p) => p.provider !== 'LOCAL'
-    );
-
-    if (fetchedProviders && fetchedProviders.length > 0) {
+    if (visibleProviders.length > 0) {
       return (
         <div className="gap-[8px] flex flex-wrap">
-          {fetchedProviders.map((p) => {
+          {visibleProviders.map((p) => {
             const Component = providerComponents[p.provider];
-            if (!Component) return null;
             return <Component key={p.provider} />;
           })}
         </div>
@@ -173,12 +173,14 @@ export function RegisterAfter({
               {t('sign_up', 'Sign Up')}
             </h1>
           </div>
-          <div className="text-[14px] mt-[32px] mb-[12px]">
-            {t('continue_with', 'Continue With')}
-          </div>
+          {!isAfterProvider && visibleProviders.length > 0 && (
+            <div className="text-[14px] mt-[32px] mb-[12px]">
+              {t('continue_with', 'Continue With')}
+            </div>
+          )}
           <div className="flex flex-col">
             {!isAfterProvider && renderProviders()}
-            {!isAfterProvider && (
+            {!isAfterProvider && visibleProviders.length > 0 && (
               <div className="h-[20px] mb-[24px] mt-[24px] relative">
                 <div className="absolute w-full h-px bg-newTableBorder top-[50%] translate-y-[-50%]" />
                 <div
@@ -233,7 +235,7 @@ export function RegisterAfter({
                 )}
                 &nbsp;
                 <a
-                  href={`https://postmill.com/terms`}
+                  href={`https://postmill.ai/terms`}
                   className="underline hover:font-bold"
                   rel="nofollow"
                 >
@@ -242,7 +244,7 @@ export function RegisterAfter({
                 &nbsp;
                 {t('and', 'and')}&nbsp;
                 <a
-                  href={`https://postmill.com/privacy`}
+                  href={`https://postmill.ai/privacy`}
                   rel="nofollow"
                   className="underline hover:font-bold"
                 >
