@@ -32,6 +32,12 @@ const DEMO_MEDIA_PREFIX = 'demo-';
 const DEMO_ID_PREFIX = 'demo-';
 const DEMO_CAST_EMAIL_DOMAIN = 'solstice.demo';
 
+// The password every seeded login shares — the owner (test@test.com) and all
+// three cast members. Read at call time, not module load, so a caller can set
+// DEV_SEED_DEMO_PASSWORD before invoking the seeder. Kept in one place because
+// owner and cast drifting apart would silently break the e2e personas.
+const seedPassword = () => process.env.DEV_SEED_DEMO_PASSWORD || 'Test123!';
+
 type ChannelSpec = { identifier: string; name: string; profile: string };
 
 // Fictional brand: "Solstice Supply Co." — outdoor gear & coffee. Handles and
@@ -273,7 +279,7 @@ export class DemoSeeder {
     const created = await this._organizationService.createOrgAndUser(
       {
         email,
-        password: process.env.DEV_SEED_DEMO_PASSWORD || 'Test123!',
+        password: seedPassword(),
         provider: 'LOCAL' as any,
         company: 'Solstice Supply Co.',
         name: 'Maya',
@@ -324,10 +330,21 @@ export class DemoSeeder {
         user = await this._prisma.user.create({
           data: {
             email: memberEmail,
-            password: null, // never logs in — cast member for team UI only
+            // Real hash, not null: these three are the editor/member/viewer
+            // personas e2e/tests/auth.setup.ts signs in as. Same password as
+            // the owner so one E2E_*_PASSWORD covers every persona.
+            password: AuthService.hashPassword(seedPassword()),
             providerName: 'LOCAL' as any,
             activated: true,
           },
+        });
+      } else if (!user.password) {
+        // Backfill: rows created by an earlier seeder version have a null
+        // password and cannot sign in. Reseeding alone would not fix them
+        // because the branch above only runs for brand-new users.
+        user = await this._prisma.user.update({
+          where: { id: user.id },
+          data: { password: AuthService.hashPassword(seedPassword()), activated: true },
         });
       }
       await this._prisma.userProfile.upsert({
