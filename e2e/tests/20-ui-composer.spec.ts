@@ -1,4 +1,5 @@
 import { test, expect } from '@playwright/test';
+import { openComposer } from './lib/composer';
 
 // Drive the REAL composer UI like a user: open it, pick a channel, type content,
 // and try to save/schedule. Screenshot every step; capture network + console.
@@ -17,10 +18,8 @@ test('compose a post through the UI', async ({ page }) => {
   await page.waitForLoadState('networkidle');
   await page.waitForTimeout(1500);
 
-  // 1) Open the composer
-  const createBtn = page.getByText('Create Post', { exact: false }).first();
-  await expect(createBtn, 'Create Post button should be visible').toBeVisible({ timeout: 10000 });
-  await createBtn.click();
+  // 1) Open the composer (header "Create new" menu → "New Post" → /posts/post)
+  await openComposer(page);
   await page.waitForTimeout(2500);
   await page.screenshot({ path: 'ui-01-composer-open.png' });
   console.log('STEP 1 — composer opened. URL:', page.url());

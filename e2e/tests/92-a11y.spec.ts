@@ -17,7 +17,8 @@ const PERSONA = () => test.info().project.name || 'admin';
 const THEME = process.env.E2E_THEME === 'light' ? 'light' : 'dark';
 
 test('axe a11y scan every route', async ({ page, context }) => {
-  test.setTimeout(300_000);
+  // The full-route axe crawl (incl. all /media/* studios) runs past 5 minutes.
+  test.setTimeout(600_000);
   const persona = PERSONA();
   const findings: any[] = [];
   if (THEME === 'light') {

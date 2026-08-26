@@ -2,6 +2,7 @@ import { test } from '@playwright/test';
 import * as fs from 'fs';
 import * as path from 'path';
 import { PageAuditor } from './lib/audit';
+import { openComposer } from './lib/composer';
 
 /**
  * Composer CRUD walkthrough (one sequential test, never hard-fails).
@@ -17,6 +18,9 @@ import { PageAuditor } from './lib/audit';
  * a CSS string, which throws.
  */
 test('composer CRUD lifecycle', async ({ page }) => {
+  // Full sequential walkthrough (open → channel → type → save → reload → delete) —
+  // far beyond the 30s default.
+  test.setTimeout(120_000);
   const marker = `e2e-crud-${Date.now()}`;
   const content = `E2E composer CRUD ${marker}`;
 
@@ -88,13 +92,10 @@ test('composer CRUD lifecycle', async ({ page }) => {
     await page.waitForTimeout(2000);
 
     try {
-      const createBtn = page.getByRole('button', { name: /create post/i }).first();
-      const createFallback = page.getByText('Create Post').first();
-      const btn = (await createBtn.isVisible({ timeout: 4000 }).catch(() => false))
-        ? createBtn
-        : createFallback;
+      // Composer entry is the header "Create new" icon-button → "New Post" menuitem.
+      const btn = page.locator('button[aria-label="Create new"]').first();
       if (await btn.isVisible({ timeout: 4000 }).catch(() => false)) {
-        await btn.click({ timeout: 5000 });
+        await openComposer(page);
         await page.waitForTimeout(2000);
       } else {
         // The button is gated on having at least one connected integration, so a
@@ -105,12 +106,11 @@ test('composer CRUD lifecycle', async ({ page }) => {
       findings.errors.push('open-composer: ' + String(e.message).slice(0, 80));
     }
 
-    // Modal/editor visibility check.
+    // Composer page visibility check (navigates to /posts/post; editor is contenteditable).
     const editorLoc = page.locator('[contenteditable="true"], .ProseMirror').first();
-    const modalLoc = page.locator('[role="dialog"], [class*="modal"]').first();
     findings.composerOpened =
-      (await editorLoc.isVisible({ timeout: 5000 }).catch(() => false)) ||
-      (await modalLoc.isVisible({ timeout: 2000 }).catch(() => false));
+      page.url().includes('/posts/post') &&
+      (await editorLoc.isVisible({ timeout: 5000 }).catch(() => false));
     step(`composer opened: ${findings.composerOpened}`);
 
     // ---- 2. Select first channel ----

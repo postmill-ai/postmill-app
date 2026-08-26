@@ -1,4 +1,5 @@
 import { test } from '@playwright/test';
+import { openComposer } from './lib/composer';
 import * as fs from 'fs';
 import * as path from 'path';
 
@@ -43,9 +44,9 @@ test('error states and edge cases', async ({ page }) => {
     await page.waitForLoadState('networkidle', { timeout: 8000 }).catch(() => {});
     await page.waitForTimeout(800);
 
-    const createBtn = page.getByText('Create Post', { exact: false }).first();
+    const createBtn = page.locator('button[aria-label="Create new"]').first();
     if (await createBtn.isVisible({ timeout: 5000 }).catch(() => false)) {
-      await createBtn.click();
+      await openComposer(page);
       await page.waitForTimeout(1500);
 
       // Try to submit without typing or selecting channel

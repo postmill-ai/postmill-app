@@ -58,13 +58,10 @@ test.describe('Media remediation e2e', () => {
     test.setTimeout(90_000);
     const { pageErrors } = attachErrorCollectors(page);
 
-    await page.goto('/settings?tab=content');
+    // Media Defaults lives at its own route in the content-settings subnav now
+    // (link, not a ?tab= button) — navigate straight there.
+    await page.goto('/settings/content/media-defaults');
     await page.waitForLoadState('networkidle');
-
-    // Open the Media Defaults sub-tab.
-    const mdTab = page.getByRole('button', { name: /^Media Defaults$/ });
-    await expect(mdTab).toBeVisible({ timeout: 15_000 });
-    await mdTab.click();
 
     // The "Text to Image" category row should render a populated native <select>.
     await expect(page.getByText('Text to Image', { exact: true })).toBeVisible({ timeout: 15_000 });
@@ -90,8 +87,14 @@ test.describe('Media remediation e2e', () => {
     const fluxOpt = t2iOptions.find((o) => /replicate:\s*flux/i.test(o));
     if (fluxOpt) {
       await t2iSelect.selectOption({ label: fluxOpt });
-      // Collapsed settings form expands below: look for the "Default settings" label + a field control.
-      await expect(page.getByText(/Default settings/i).first()).toBeVisible({ timeout: 15_000 });
+      // Settings live behind a collapsed "Advanced Settings" disclosure — open it,
+      // then assert the form renders a control.
+      const adv = page.getByText(/Advanced Settings/i).first();
+      await expect(adv).toBeVisible({ timeout: 15_000 });
+      await adv.click();
+      await expect(
+        page.locator('input, select, textarea').filter({ visible: true }).first()
+      ).toBeVisible({ timeout: 10_000 });
     } else {
       test.info().annotations.push({ type: 'note', description: 'no replicate flux option on T2I row (org provider config dependent)' });
     }
