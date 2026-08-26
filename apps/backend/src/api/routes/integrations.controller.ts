@@ -57,6 +57,8 @@ import { RequirePermission } from '@postmill-ai/backend/services/auth/rbac/requi
 @ApiTags('Integrations')
 @Controller('/integrations')
 export class IntegrationsController {
+  private readonly _logger = new Logger(IntegrationsController.name);
+
   constructor(
     private _integrationManager: IntegrationManager,
     private _integrationService: IntegrationService,
@@ -254,6 +256,12 @@ export class IntegrationsController {
         redirectUrl,
       });
     } catch (err) {
+      // Was a silent `{ err: true }` — a provider misconfig (e.g. disabled org
+      // channel config, X app without a whitelisted callback) was invisible in
+      // logs and undebuggable in prod. Log the cause; the response shape stays.
+      this._logger.warn(
+        `generateAuthUrl failed for ${integration}: ${(err as Error)?.message || err}`
+      );
       return { err: true };
     }
   }
