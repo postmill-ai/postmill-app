@@ -4,6 +4,10 @@ packages:
   - libraries/providers/*
 
 overrides:
+  # nestjs-command allows yargs up to v18, whose ESM-only entry breaks its compiled
+  # CJS (`require('yargs').default.scriptName` — the default export is the factory,
+  # not the singleton) under Node 24. Pin its yargs back to the CJS 17.x line.
+  'nestjs-command>yargs': '17.7.2'
   # @reaatech/structured-repair-core >=1.1.0 supports zod 3 and 4 natively (peer
   # ^3.23.0 || ^4.4.0). Pin it onto the workspace's zod 4 line so the whole graph
   # resolves one major.
