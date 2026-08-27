@@ -38,6 +38,26 @@ const PROVIDER_APP_LINKS: Record<string, { label: string; url: string | null }> 
   bluesky: { label: 'Bluesky Settings', url: 'https://bsky.app/settings/app-passwords' },
 };
 
+// Mirrors the kernel's ChannelSetupDescriptor (libraries/providers/kernel) as
+// serialized by IntegrationManager.getSocialProviderCatalog(). Metadata only —
+// saving still posts the same DTO (clientId/clientSecret/redirectUri/scopes).
+export interface ChannelCredentialField {
+  key: 'clientId' | 'clientSecret';
+  label: string;
+  placeholder?: string;
+  help?: string;
+  secret?: boolean;
+}
+
+export interface ChannelSetupDescriptor {
+  authType: 'oauth1' | 'oauth2';
+  credentialFields: ChannelCredentialField[];
+  portalUrl?: string;
+  portalLabel?: string;
+  callbackInstructions?: string;
+  setupSteps?: string[];
+}
+
 export interface ChannelVpnSelection {
   enabled: boolean;
   identifier?: string;
@@ -62,6 +82,8 @@ interface ChannelConfigFormProps {
   identifier: string;
   providerName: string;
   defaultScopes?: string;
+  setup?: ChannelSetupDescriptor | null;
+  callbackUrl?: string;
   config?: ChannelConfigInstance; // present => edit mode
   onClose: () => void;
   onSaved: () => void;
@@ -71,6 +93,8 @@ export const ChannelConfigForm: FC<ChannelConfigFormProps> = ({
   identifier,
   providerName,
   defaultScopes = '',
+  setup = null,
+  callbackUrl = '',
   config,
   onClose,
   onSaved,
@@ -89,6 +113,8 @@ export const ChannelConfigForm: FC<ChannelConfigFormProps> = ({
   const [editSetupNotes, setEditSetupNotes] = useState(config?.setupNotes || '');
   const [enabled, setEnabled] = useState(config?.enabled || false);
   const [saving, setSaving] = useState(false);
+  const [showAdvanced, setShowAdvanced] = useState(false);
+  const [callbackCopied, setCallbackCopied] = useState(false);
 
   const {
     versions,
@@ -215,7 +241,29 @@ export const ChannelConfigForm: FC<ChannelConfigFormProps> = ({
   }, [config, fetch, toaster, t]);
 
   const credentialPlaceholder = isConfigured ? t('already_configured', 'Already configured') : '';
-  const appLink = PROVIDER_APP_LINKS[identifier];
+  // Descriptor-driven portal link wins; the static map is the fallback for
+  // providers that don't declare a setupDescriptor yet.
+  const appLink = setup?.portalUrl
+    ? { label: setup.portalLabel || setup.portalUrl, url: setup.portalUrl }
+    : PROVIDER_APP_LINKS[identifier];
+  // Descriptor-driven credential fields; the generic pair is the fallback.
+  const credentialFields: ChannelCredentialField[] = setup?.credentialFields?.length
+    ? setup.credentialFields
+    : [
+        { key: 'clientId', label: t('client_id', 'Client ID / API Key') },
+        { key: 'clientSecret', label: t('client_secret', 'Client Secret / API Secret'), secret: true },
+      ];
+
+  const handleCopyCallback = useCallback(async () => {
+    if (!callbackUrl) return;
+    try {
+      await navigator.clipboard.writeText(callbackUrl);
+      setCallbackCopied(true);
+      setTimeout(() => setCallbackCopied(false), 2000);
+    } catch {
+      toaster.show(t('copy_failed', 'Copy failed'), 'warning');
+    }
+  }, [callbackUrl, toaster, t]);
 
   return (
     <div className="flex flex-col gap-[12px] min-w-[460px] mobile:min-w-0">
@@ -229,6 +277,19 @@ export const ChannelConfigForm: FC<ChannelConfigFormProps> = ({
           >
             {appLink.label}
           </a>
+        </div>
+      )}
+
+      {!!setup?.setupSteps?.length && (
+        <div className="flex flex-col gap-[6px] bg-newBgColorInner border border-newTableBorder rounded-[8px] p-[12px]">
+          <label className="text-[14px] font-[500]">{t('setup_steps', 'How to set this up')}</label>
+          <ol className="flex flex-col gap-[4px] list-decimal ps-[18px]">
+            {setup.setupSteps!.map((step, idx) => (
+              <li key={idx} className="text-[13px] text-newTableText">
+                {step}
+              </li>
+            ))}
+          </ol>
         </div>
       )}
 
@@ -272,47 +333,90 @@ export const ChannelConfigForm: FC<ChannelConfigFormProps> = ({
         />
       </div>
 
-      <div className="flex flex-col gap-[6px]">
-        <label className="text-[14px] font-[500]">{t('client_id', 'Client ID / API Key')}</label>
-        <div className="bg-newBgColorInner h-[42px] border-newTableBorder border rounded-[8px] text-textColor flex items-center justify-center">
-          <input
-            className="h-full bg-transparent outline-hidden flex-1 text-[14px] text-textColor placeholder-textColor px-[16px]"
-            placeholder={credentialPlaceholder}
-            value={clientId}
-            onChange={(e) => setClientId(e.target.value)}
-          />
+      {credentialFields.map((field) => {
+        const value = field.key === 'clientId' ? clientId : clientSecret;
+        const setValue = field.key === 'clientId' ? setClientId : setClientSecret;
+        return (
+          <div key={field.key} className="flex flex-col gap-[6px]">
+            <label className="text-[14px] font-[500]">{field.label}</label>
+            <div className="bg-newBgColorInner h-[42px] border-newTableBorder border rounded-[8px] text-textColor flex items-center justify-center">
+              <input
+                type={field.secret ? 'password' : 'text'}
+                className="h-full bg-transparent outline-hidden flex-1 text-[14px] text-textColor placeholder-textColor px-[16px]"
+                placeholder={credentialPlaceholder || field.placeholder || ''}
+                value={value}
+                onChange={(e) => setValue(e.target.value)}
+              />
+            </div>
+            {field.help && (
+              <div className="text-[12px] text-newTableText">{field.help}</div>
+            )}
+          </div>
+        );
+      })}
+
+      {!!callbackUrl && (
+        <div className="flex flex-col gap-[6px]">
+          <label className="text-[14px] font-[500]">{t('callback_url', 'Callback URL')}</label>
+          <div className="flex gap-[8px] items-center">
+            <div className="bg-newBgColorInner h-[42px] border-newTableBorder border rounded-[8px] text-textColor flex items-center justify-center flex-1 min-w-0">
+              <input
+                readOnly
+                className="h-full bg-transparent outline-hidden flex-1 min-w-0 text-[14px] text-textColor placeholder-textColor px-[16px]"
+                value={callbackUrl}
+              />
+            </div>
+            <Button
+              type="button"
+              className="bg-transparent! border border-newTableBorder text-textColor text-[12px] whitespace-nowrap"
+              onClick={handleCopyCallback}
+            >
+              {callbackCopied ? t('copied', 'Copied') : t('copy', 'Copy')}
+            </Button>
+          </div>
+          {setup?.callbackInstructions && (
+            <div className="text-[12px] text-newTableText">{setup.callbackInstructions}</div>
+          )}
         </div>
-      </div>
+      )}
 
-      <div className="flex flex-col gap-[6px]">
-        <label className="text-[14px] font-[500]">{t('client_secret', 'Client Secret / API Secret')}</label>
-        <div className="bg-newBgColorInner h-[42px] border-newTableBorder border rounded-[8px] text-textColor flex items-center justify-center">
-          <input
-            type="password"
-            className="h-full bg-transparent outline-hidden flex-1 text-[14px] text-textColor placeholder-textColor px-[16px]"
-            placeholder={credentialPlaceholder}
-            value={clientSecret}
-            onChange={(e) => setClientSecret(e.target.value)}
-          />
+      {!!defaultScopes && (
+        <div className="flex flex-col gap-[4px]">
+          <label className="text-[14px] font-[500]">{t('default_scopes', 'Default scopes')}</label>
+          <div className="text-[12px] text-newTableText break-words">{defaultScopes}</div>
         </div>
+      )}
+
+      <div className="flex flex-col gap-[8px]">
+        <button
+          type="button"
+          onClick={() => setShowAdvanced((v) => !v)}
+          className="flex items-center gap-[6px] text-[13px] text-newTableText hover:text-textColor"
+        >
+          <span className={`inline-block transition-transform ${showAdvanced ? 'rotate-90' : ''}`}>›</span>
+          {t('advanced_settings', 'Advanced settings')}
+        </button>
+        {showAdvanced && (
+          <div className="flex flex-col gap-[12px]">
+            <Input
+              label={t('redirect_uri', 'Redirect URI')}
+              name={`redirect_${identifier}`}
+              disableForm={true}
+              value={editRedirectUri}
+              onChange={(e) => setEditRedirectUri(e.target.value)}
+              placeholder={t('redirect_uri_placeholder', 'Leave empty for default callback URL')}
+            />
+
+            <Input
+              label={t('scopes_comma', 'Scopes (comma separated)')}
+              name={`scopes_${identifier}`}
+              disableForm={true}
+              value={editScopes}
+              onChange={(e) => setEditScopes(e.target.value)}
+            />
+          </div>
+        )}
       </div>
-
-      <Input
-        label={t('redirect_uri', 'Redirect URI')}
-        name={`redirect_${identifier}`}
-        disableForm={true}
-        value={editRedirectUri}
-        onChange={(e) => setEditRedirectUri(e.target.value)}
-        placeholder={t('redirect_uri_placeholder', 'Leave empty for default callback URL')}
-      />
-
-      <Input
-        label={t('scopes_comma', 'Scopes (comma separated)')}
-        name={`scopes_${identifier}`}
-        disableForm={true}
-        value={editScopes}
-        onChange={(e) => setEditScopes(e.target.value)}
-      />
 
       {(config?.setupNotes || editSetupNotes) && (
         <div className="flex flex-col gap-[4px]">

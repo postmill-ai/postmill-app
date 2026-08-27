@@ -28,6 +28,8 @@ Required members (enforced by the conformance gate, `kernel/src/__tests__/all-pr
 
 Optional flags on `SocialProvider`: `toolTip`, `refreshWait`, `refreshCron`, `convertToJPEG`, `stripLinks()`, `oneTimeToken`, `isWeb3`, `isChromeExtension`, `externalUrl()`, `mention()`/`mentionFormat()`, `fetchPageInformation()`, `analytics()`/`postAnalytics()`, `changeNickname()`/`changeProfilePicture()`/`missing()`, `reConnect()`, `dto`.
 
+Optional `setupDescriptor?: ChannelSetupDescriptor` (declared on `SocialAbstract` and `SocialProvider`, kernel `social-provider.ts`; bridged via `social-bridge.ts`): beginner-friendly metadata for the per-tenant "Add channel" config form — `authType` (`'oauth1' | 'oauth2'`), provider-terminology `credentialFields` (mapped onto the unchanged `clientId`/`clientSecret` DTO), `portalUrl`/`portalLabel`, `callbackInstructions`, and 3–5 `setupSteps`. `IntegrationManager.getSocialProviderCatalog()` exposes it as `setup` plus a computed default `callbackUrl` (`${FRONTEND_URL}/integrations/social/<identifier>`, trailing slash stripped) — descriptors must NOT hardcode the callback URL, and an org-level `redirectUri` override still wins at connect time. Reference implementation: `libraries/providers/x` (OAuth 1.0a).
+
 ### Auth models
 
 - **OAuth2** (tumblr): implement `generateAuthUrl` (build the authorize URL from `clientInformation?.client_id`, `this.scopes`, and a redirect URI `${process.env.FRONTEND_URL}/integrations/social/<identifier>`), `authenticate` (exchange code → tokens, fetch profile, return `AuthTokenDetails`), `refreshToken`.

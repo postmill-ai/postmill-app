@@ -54,6 +54,15 @@ const { createMockProvider } = vi.hoisted(() => {
 vi.mock('@postmill-ai/nestjs-libraries/integrations/social/x.provider', () => ({
   XProvider: createMockProvider('x', 'X', {
     extensionCookies: [{ name: 'auth_token', domain: 'x.com' }],
+    setupDescriptor: {
+      authType: 'oauth1',
+      credentialFields: [
+        { key: 'clientId', label: 'API Key (Consumer Key)' },
+        { key: 'clientSecret', label: 'API Secret (Consumer Secret)', secret: true },
+      ],
+      portalUrl: 'https://developer.x.com/en/portal/dashboard',
+      portalLabel: 'X Developer Portal',
+    },
   }),
 }));
 
@@ -1103,6 +1112,42 @@ describe('IntegrationManager', () => {
       expect(catalog.length).toBeGreaterThanOrEqual(36);
       for (const entry of catalog) {
         expect(entry).toHaveProperty('capabilities');
+      }
+    });
+
+    it('passes the provider setupDescriptor through as setup', async () => {
+      const catalog = await manager.getSocialProviderCatalog();
+
+      const xEntry = catalog.find((c) => c.identifier === 'x');
+      expect(xEntry?.setup).toEqual({
+        authType: 'oauth1',
+        credentialFields: [
+          { key: 'clientId', label: 'API Key (Consumer Key)' },
+          { key: 'clientSecret', label: 'API Secret (Consumer Secret)', secret: true },
+        ],
+        portalUrl: 'https://developer.x.com/en/portal/dashboard',
+        portalLabel: 'X Developer Portal',
+      });
+    });
+
+    it('falls back to setup: null for providers without a descriptor', async () => {
+      const catalog = await manager.getSocialProviderCatalog();
+
+      const linkedinEntry = catalog.find((c) => c.identifier === 'linkedin');
+      expect(linkedinEntry?.setup).toBeNull();
+    });
+
+    it('computes callbackUrl from FRONTEND_URL, stripping a trailing slash', async () => {
+      vi.stubEnv('FRONTEND_URL', 'https://app.example.com/');
+      try {
+        const catalog = await manager.getSocialProviderCatalog();
+
+        const xEntry = catalog.find((c) => c.identifier === 'x');
+        expect(xEntry?.callbackUrl).toBe(
+          'https://app.example.com/integrations/social/x'
+        );
+      } finally {
+        vi.unstubAllEnvs();
       }
     });
   });

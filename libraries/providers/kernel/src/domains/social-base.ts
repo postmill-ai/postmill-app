@@ -1,4 +1,5 @@
 import { Integration } from '@prisma/client';
+import { ChannelSetupDescriptor } from './social-provider';
 
 /**
  * SocialAbstract — the base class every social provider extends. Relocated into
@@ -96,6 +97,14 @@ function safeStringify(obj: any) {
 export abstract class SocialAbstract {
   abstract identifier: string;
   maxConcurrentJob = 1;
+
+  /**
+   * Optional beginner-friendly setup metadata for the per-tenant channel
+   * config form (credential labels, portal link, callback instructions).
+   * Metadata only — the saved-data contract is unchanged. Surfaced through
+   * `IntegrationManager.getSocialProviderCatalog()` as `setup`.
+   */
+  setupDescriptor?: ChannelSetupDescriptor;
 
   get commentsCapabilities() {
     return { read: false, reply: false, like: false };

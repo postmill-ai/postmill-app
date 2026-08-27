@@ -12,6 +12,7 @@ import {
   SocialProvider,
   SocialAbstract,
   ProviderKernel,
+  ChannelSetupDescriptor,
 } from '@postmill-ai/provider-kernel';
 import { PROVIDER_KERNEL } from '@postmill-ai/nestjs-libraries/providers/providers.module';
 import { ProviderResolutionService } from '@postmill-ai/nestjs-libraries/providers/provider-resolution.service';
@@ -257,9 +258,15 @@ export class IntegrationManager {
       customFields: boolean | any[];
       scopes: string;
       capabilities: ProviderCapability | null;
+      setup: ChannelSetupDescriptor | null;
+      callbackUrl: string;
     }>
   > {
     const providers = this.getSocialProviders();
+    // Default OAuth callback for provider <id>. An org-level `redirectUri`
+    // override (adapter `instanceUrl` from the saved channel config) takes
+    // precedence at connect time, so this is the DEFAULT shown in the form.
+    const frontendUrl = (process.env.FRONTEND_URL || '').replace(/\/+$/, '');
     return Promise.all(
       providers.map(async (p) => ({
         identifier: p.identifier,
@@ -271,6 +278,8 @@ export class IntegrationManager {
         customFields: p.customFields ? await p.customFields() : false,
         scopes: p.scopes?.join(', ') || '',
         capabilities: this._capabilitiesFor(p.identifier),
+        setup: p.setupDescriptor || null,
+        callbackUrl: `${frontendUrl}/integrations/social/${p.identifier}`,
       }))
     );
   }

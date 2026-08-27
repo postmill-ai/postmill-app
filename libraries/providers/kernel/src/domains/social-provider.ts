@@ -189,6 +189,35 @@ export type FetchPageInformationResult = {
   username: string;
 };
 
+/**
+ * One credential the per-tenant "Add channel" config form must collect, mapped
+ * onto the existing saved-data DTO (`clientId` / `clientSecret`). Lets a
+ * provider speak its own terminology ("API Key (Consumer Key)") instead of the
+ * generic "Client ID" labels.
+ */
+export interface ChannelCredentialField {
+  key: 'clientId' | 'clientSecret'; // maps onto the existing DTO fields
+  label: string; // provider terminology, e.g. 'API Key (Consumer Key)'
+  placeholder?: string;
+  help?: string; // where to find it in the provider portal
+  secret?: boolean; // render as password input
+}
+
+/**
+ * Beginner-friendly setup metadata for the per-tenant channel config form.
+ * Purely presentational: the saved-data contract (POST/PUT /channels/config)
+ * is unchanged. The backend catalog attaches this as `setup` and computes the
+ * default `callbackUrl` itself — descriptors must NOT hardcode the URL.
+ */
+export interface ChannelSetupDescriptor {
+  authType: 'oauth1' | 'oauth2'; // only these two for now — X is oauth1
+  credentialFields: ChannelCredentialField[]; // ordered; defaults to the generic pair
+  portalUrl?: string;
+  portalLabel?: string;
+  callbackInstructions?: string; // where to paste the callback in the portal
+  setupSteps?: string[]; // 3-5 short numbered steps
+}
+
 export interface SocialProvider
   extends IAuthenticator,
     ISocialMediaIntegration,
@@ -221,6 +250,7 @@ export interface SocialProvider
   >;
   name: string;
   toolTip?: string;
+  setupDescriptor?: ChannelSetupDescriptor;
   oneTimeToken?: boolean;
   isBetweenSteps: boolean;
   scopes: string[];
