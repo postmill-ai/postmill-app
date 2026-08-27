@@ -13,6 +13,8 @@ const withBundleAnalyzerFn =
 // dev split :4200 → :3000), that origin must be in connect-src or the browser
 // blocks the request with "Failed to fetch" before it leaves the page. Same-origin
 // deployments already covered by 'self'; adding it explicitly is harmless.
+const isDev = process.env.NODE_ENV === 'development';
+
 const backendOrigin = (() => {
   try {
     return new URL(process.env.NEXT_PUBLIC_BACKEND_URL!).origin;
@@ -21,7 +23,16 @@ const backendOrigin = (() => {
   }
 })();
 
-const isDev = process.env.NODE_ENV === 'development';
+// A production build without NEXT_PUBLIC_BACKEND_URL bakes an empty origin into
+// connect-src, and the browser then blocks EVERY backend call (site loads, login
+// dies with CSP violations). Fail the build instead of shipping a broken app.
+// (Observed in prod 2026-08-26 after an env-less `next build`.)
+if (!isDev && !backendOrigin) {
+  throw new Error(
+    'NEXT_PUBLIC_BACKEND_URL is required for production builds (CSP connect-src). ' +
+      'Build with the env loaded, e.g. `dotenv -e ../../.env -- next build`.'
+  );
+}
 
 // Sentry adds significant build overhead (source-map upload, release creation)
 // and should not run in local dev unless the developer explicitly configures it.
