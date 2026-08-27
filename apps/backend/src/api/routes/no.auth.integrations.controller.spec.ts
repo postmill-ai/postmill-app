@@ -272,4 +272,75 @@ describe('NoAuthIntegrationsController — OAuth state replay (F11)', () => {
       )
     ).rejects.toThrow('Invalid state');
   });
+
+  it('externalUrl provider: merges the stashed dynamic credentials into authenticate and persists them encrypted', async () => {
+    const provider = makeProvider({
+      externalUrl: async () => ({ client_id: 'dyn-id', client_secret: 'dyn-secret' }),
+    });
+    getSocialIntegration.mockResolvedValue(provider);
+    requireClientInformation.mockResolvedValue({
+      client_id: 'static-id',
+      client_secret: 'static-secret',
+    });
+    redisStore.set('login:state-ext', 'verifier');
+    redisStore.set('organization:state-ext', 'org-1');
+    const externalDetails = JSON.stringify({
+      client_id: 'dyn-id',
+      client_secret: 'dyn-secret',
+      instanceUrl: 'https://mastodon.example',
+    });
+    redisStore.set('external:state-ext', externalDetails);
+
+    await controller.connectSocialMedia('testprovider', body('state-ext'));
+
+    // The per-instance app credentials (and instanceUrl) must reach the token
+    // exchange, winning over the static org/env app.
+    expect(provider.authenticate).toHaveBeenCalledWith(
+      { code: 'code', codeVerifier: 'verifier', refresh: undefined },
+      {
+        client_id: 'dyn-id',
+        client_secret: 'dyn-secret',
+        instanceUrl: 'https://mastodon.example',
+      }
+    );
+    // The one-time Redis stash is consumed and persisted encrypted as
+    // customInstanceDetails (arg 16 of createOrUpdateIntegration).
+    expect(redisStore.has('external:state-ext')).toBe(false);
+    expect(createOrUpdateIntegration.mock.calls[0][15]).toBe(
+      `enc:${externalDetails}`
+    );
+  });
+
+  it('externalUrl provider: works when the deployment has no static credentials at all', async () => {
+    const provider = makeProvider({
+      externalUrl: async () => ({ client_id: 'dyn-id', client_secret: 'dyn-secret' }),
+    });
+    getSocialIntegration.mockResolvedValue(provider);
+    requireClientInformation.mockRejectedValue(new Error('not configured'));
+    redisStore.set('login:state-ext2', 'verifier');
+    redisStore.set('organization:state-ext2', 'org-1');
+    redisStore.set(
+      'external:state-ext2',
+      JSON.stringify({
+        client_id: 'dyn-id',
+        client_secret: 'dyn-secret',
+        instanceUrl: 'https://mastodon.example',
+      })
+    );
+
+    const result = await controller.connectSocialMedia(
+      'testprovider',
+      body('state-ext2')
+    );
+
+    expect(result.id).toBe('int-1');
+    expect(provider.authenticate).toHaveBeenCalledWith(
+      expect.anything(),
+      {
+        client_id: 'dyn-id',
+        client_secret: 'dyn-secret',
+        instanceUrl: 'https://mastodon.example',
+      }
+    );
+  });
 });

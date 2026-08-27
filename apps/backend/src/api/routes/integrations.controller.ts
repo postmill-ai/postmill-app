@@ -231,11 +231,20 @@ export class IntegrationsController {
     }
 
     try {
-      const clientInformation = await this._integrationManager.requireClientInformation(
-        integration,
-        org.id,
-        config || undefined
-      );
+      // externalUrl providers register a per-instance app dynamically, so
+      // static org/env credentials are optional for them — requiring them
+      // would make the dynamic flow unstartable on keyless deployments.
+      const clientInformation = integrationProvider.externalUrl
+        ? await this._integrationManager.getClientInformation(
+            integration,
+            org.id,
+            config || undefined
+          )
+        : await this._integrationManager.requireClientInformation(
+            integration,
+            org.id,
+            config || undefined
+          );
 
       // Campaign-scoped connect/invite: verify ownership before trusting the id.
       const validatedCampaign =

@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { Logger, NotFoundException } from '@nestjs/common';
 import 'reflect-metadata';
 
@@ -229,6 +229,21 @@ vi.mock('@postmill-ai/nestjs-libraries/integrations/social.abstract', () => ({
 // (the manager is constructed manually with a fake kernel below).
 vi.mock('@postmill-ai/nestjs-libraries/providers/providers.module', () => ({
   PROVIDER_KERNEL: Symbol('ProviderKernel'),
+}));
+
+// In-memory Redis so generateAuthUrl's state-binding writes can be asserted
+// without a real server.
+const { redisStore } = vi.hoisted(() => ({ redisStore: new Map<string, string>() }));
+vi.mock('@postmill-ai/nestjs-libraries/redis/redis.service', () => ({
+  ioRedis: {
+    get: vi.fn(async (key: string) => redisStore.get(key) ?? null),
+    set: vi.fn(async (key: string, value: string) => {
+      redisStore.set(key, value);
+    }),
+    del: vi.fn(async (key: string) => {
+      redisStore.delete(key);
+    }),
+  },
 }));
 
 // ---------------------------------------------------------------------------
@@ -1151,4 +1166,139 @@ describe('IntegrationManager', () => {
       }
     });
   });
+
+  // ---- generateAuthUrl: externalUrl dynamic credential merge ----
+
+  describe('generateAuthUrl (externalUrl dynamic registration)', () => {
+    const discord = () => providerById.get('discord')!;
+
+    const enabledOrgManager = () => {
+      const orgPcm = { isEnabled: vi.fn().mockResolvedValue(true) };
+      const m = new IntegrationManager(
+        mockPcm as any,
+        orgPcm as any,
+        fakeKernel,
+        fakeResolutionService(fakeKernel),
+      );
+      return m;
+    };
+
+    let generateAuthUrlSpy: ReturnType<typeof vi.fn>;
+    let externalUrlSpy: ReturnType<typeof vi.fn>;
+
+    beforeEach(() => {
+      redisStore.clear();
+      // The discord mock carries a prototype-level externalUrl; override both
+      // hooks per-test on the instance so other describes are unaffected.
+      generateAuthUrlSpy = vi.fn(async () => ({
+        url: 'https://authorize.example/abc',
+        codeVerifier: 'verifier-1',
+        state: 'state-1',
+      }));
+      externalUrlSpy = vi.fn(async () => ({
+        client_id: 'dyn-id',
+        client_secret: 'dyn-secret',
+      }));
+      discord().generateAuthUrl = generateAuthUrlSpy;
+      discord().externalUrl = externalUrlSpy;
+    });
+
+    afterEach(() => {
+      delete discord().generateAuthUrl;
+      delete discord().externalUrl;
+    });
+
+    it('merges the dynamic credentials into generateAuthUrl (dynamic wins over static)', async () => {
+      const m = enabledOrgManager();
+
+      const result = await m.generateAuthUrl(
+        'discord',
+        'org-1',
+        { client_id: 'static-id', client_secret: 'static-secret' },
+        { externalUrl: 'https://mastodon.example' }
+      );
+
+      expect(result).toEqual({ url: 'https://authorize.example/abc' });
+      expect(generateAuthUrlSpy).toHaveBeenCalledWith({
+        client_id: 'dyn-id',
+        client_secret: 'dyn-secret',
+        instanceUrl: 'https://mastodon.example',
+      });
+    });
+
+    it('normalizes the instance URL before calling the hook and stashing state', async () => {
+      const m = enabledOrgManager();
+
+      await m.generateAuthUrl('discord', 'org-1', undefined, {
+        externalUrl: 'Mastodon.Example/',
+      });
+
+      expect(externalUrlSpy).toHaveBeenCalledWith('https://mastodon.example');
+      const stashed = JSON.parse(redisStore.get('external:state-1')!);
+      expect(stashed).toEqual({
+        client_id: 'dyn-id',
+        client_secret: 'dyn-secret',
+        instanceUrl: 'https://mastodon.example',
+      });
+      expect(redisStore.get('organization:state-1')).toBe('org-1');
+      expect(redisStore.get('login:state-1')).toBe('verifier-1');
+    });
+
+    it('rejects an http:// instance URL', async () => {
+      const m = enabledOrgManager();
+
+      await expect(
+        m.generateAuthUrl('discord', 'org-1', undefined, {
+          externalUrl: 'http://mastodon.example',
+        })
+      ).rejects.toThrow(/https/);
+      expect(externalUrlSpy).not.toHaveBeenCalled();
+      expect(generateAuthUrlSpy).not.toHaveBeenCalled();
+    });
+
+    it('rejects an instance URL with a path', async () => {
+      const m = enabledOrgManager();
+
+      await expect(
+        m.generateAuthUrl('discord', 'org-1', undefined, {
+          externalUrl: 'https://mastodon.example/some/path',
+        })
+      ).rejects.toThrow(/bare server host/);
+      expect(externalUrlSpy).not.toHaveBeenCalled();
+    });
+
+    it('throws when the provider requires an external url but none is given', async () => {
+      const m = enabledOrgManager();
+
+      await expect(
+        m.generateAuthUrl('discord', 'org-1', undefined, {})
+      ).rejects.toThrow('Missing external url');
+    });
+
+    it('passes static clientInformation through unchanged for non-external providers', async () => {
+      const m = enabledOrgManager();
+      const xProvider = providerById.get('x')!;
+      const spy = vi.fn(async () => ({
+        url: 'https://x.example/auth',
+        codeVerifier: 'v',
+        state: 'state-x',
+      }));
+      xProvider.generateAuthUrl = spy;
+      try {
+        await m.generateAuthUrl(
+          'x',
+          'org-1',
+          { client_id: 'static-id', client_secret: 'static-secret' },
+          {}
+        );
+        expect(spy).toHaveBeenCalledWith({
+          client_id: 'static-id',
+          client_secret: 'static-secret',
+        });
+      } finally {
+        delete xProvider.generateAuthUrl;
+      }
+    });
+  });
 });
+

@@ -26,6 +26,7 @@ export * from './domains/social-tool-decorator';
 export * from './domains/social-rules-decorator';
 export * from './domains/social-credentials';
 export * from './domains/social-dtos';
+export * from './domains/social-external-url';
 export * from './domains/social-bridge';
 export * from './domains/social-families';
 export * from './domains/vpn';

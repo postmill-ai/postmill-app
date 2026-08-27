@@ -13,6 +13,7 @@ import {
   SocialAbstract,
   ProviderKernel,
   ChannelSetupDescriptor,
+  normalizeExternalInstanceUrl,
 } from '@postmill-ai/provider-kernel';
 import { PROVIDER_KERNEL } from '@postmill-ai/nestjs-libraries/providers/providers.module';
 import { ProviderResolutionService } from '@postmill-ai/nestjs-libraries/providers/provider-resolution.service';
@@ -519,15 +520,29 @@ export class IntegrationManager {
       throw new Error('Missing external url');
     }
 
-    const getExternalUrl = integrationProvider.externalUrl
+    // Dynamic per-instance client registration (the `externalUrl` hook —
+    // Mastodon today, any variable-host channel tomorrow). The user-supplied
+    // instance URL is normalized once here so every provider shares the same
+    // https/bare-host contract, and the hook is called with the normalized
+    // origin. The dynamic client_id/secret + instanceUrl must REACH
+    // generateAuthUrl (merged over the static org/env clientInformation,
+    // which belongs to a different host) — otherwise the authorize URL is
+    // built with an app the target instance has never seen.
+    const instanceUrl = integrationProvider.externalUrl
+      ? normalizeExternalInstanceUrl(options.externalUrl!)
+      : undefined;
+
+    const getExternalUrl = instanceUrl
       ? {
-          ...(await integrationProvider.externalUrl(options.externalUrl)),
-          instanceUrl: options.externalUrl,
+          ...(await integrationProvider.externalUrl!(instanceUrl)),
+          instanceUrl,
         }
       : undefined;
 
     const { codeVerifier, state, url } =
-      await integrationProvider.generateAuthUrl(clientInformation);
+      await integrationProvider.generateAuthUrl(
+        getExternalUrl ? { ...clientInformation, ...getExternalUrl } : clientInformation
+      );
 
     // Bind the chosen named credential config to this connection so the callback
     // (and later refresh/publish) use that config's own auth.
