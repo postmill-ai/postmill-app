@@ -17,6 +17,7 @@ import { IntegrationManager } from '@postmill-ai/nestjs-libraries/integrations/i
 import { IntegrationService } from '@postmill-ai/nestjs-libraries/database/prisma/integrations/integration.service';
 import { GetOrgFromRequest } from '@postmill-ai/nestjs-libraries/user/org.from.request';
 import { isAllowedReturnUrl } from '@postmill-ai/nestjs-libraries/security/return-url.validator';
+import { InvalidExternalUrlError } from '@postmill-ai/provider-kernel';
 import { Organization, User } from '@prisma/client';
 import { IntegrationFunctionDto } from '@postmill-ai/nestjs-libraries/dtos/integrations/integration.function.dto';
 import { CheckPolicies } from '@postmill-ai/backend/services/auth/permissions/permissions.ability';
@@ -256,7 +257,10 @@ export class IntegrationsController {
         throw new Error('Invalid redirect URL');
       }
 
-      return this._integrationManager.generateAuthUrl(integration, org.id, clientInformation, {
+      // `await` matters: without it a rejected promise from generateAuthUrl
+      // bypasses this try/catch entirely (observed as a bare 500 on an invalid
+      // externalUrl).
+      return await this._integrationManager.generateAuthUrl(integration, org.id, clientInformation, {
         externalUrl,
         configId: config || undefined,
         refresh,
@@ -265,6 +269,10 @@ export class IntegrationsController {
         redirectUrl,
       });
     } catch (err) {
+      // User-supplied instance URL failed request-shape validation → 400.
+      if (err instanceof InvalidExternalUrlError) {
+        throw new BadRequestException(err.message);
+      }
       // Was a silent `{ err: true }` — a provider misconfig (e.g. disabled org
       // channel config, X app without a whitelisted callback) was invisible in
       // logs and undebuggable in prod. Log the cause; the response shape stays.

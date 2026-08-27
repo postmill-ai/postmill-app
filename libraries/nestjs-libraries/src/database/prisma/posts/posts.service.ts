@@ -252,11 +252,14 @@ export class PostsService {
     }
 
     try {
-      const clientInformation = await this._integrationManager.requireClientInformation(
-        getIntegration.providerIdentifier,
-        getIntegration.organizationId,
-        getIntegration.providerConfigId
-      ).catch(() => undefined);
+      const clientInformation = this._integrationManager.mergeExternalInstanceDetails(
+        getIntegration,
+        await this._integrationManager.requireClientInformation(
+          getIntegration.providerIdentifier,
+          getIntegration.organizationId,
+          getIntegration.providerConfigId
+        ).catch(() => undefined)
+      );
 
       const loadAnalytics = await integrationProvider.postAnalytics(
         getIntegration.internalId,

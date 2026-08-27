@@ -13,30 +13,38 @@
  * NOTE: this is request-shape validation, not SSRF protection — the actual
  * outbound call must still go through the kernel `safeFetch` port.
  */
+/** Request-shape rejection for `normalizeExternalInstanceUrl` — callers map it to HTTP 400. */
+export class InvalidExternalUrlError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'InvalidExternalUrlError';
+  }
+}
+
 export function normalizeExternalInstanceUrl(raw: string): string {
   const input = (raw ?? '').trim();
   if (!input) {
-    throw new Error('Instance URL is required');
+    throw new InvalidExternalUrlError('Instance URL is required');
   }
   if (/^http:\/\//i.test(input)) {
-    throw new Error('Instance URL must use https');
+    throw new InvalidExternalUrlError('Instance URL must use https');
   }
 
   let parsed: URL;
   try {
     parsed = new URL(input.startsWith('https://') ? input : `https://${input}`);
   } catch {
-    throw new Error(`Invalid instance URL: ${input}`);
+    throw new InvalidExternalUrlError(`Invalid instance URL: ${input}`);
   }
 
   if (parsed.protocol !== 'https:') {
-    throw new Error('Instance URL must use https');
+    throw new InvalidExternalUrlError('Instance URL must use https');
   }
   if (parsed.username || parsed.password) {
-    throw new Error('Instance URL must not embed credentials');
+    throw new InvalidExternalUrlError('Instance URL must not embed credentials');
   }
   if (parsed.pathname !== '/' || parsed.search || parsed.hash) {
-    throw new Error(
+    throw new InvalidExternalUrlError(
       'Instance URL must be a bare server host (no path, query, or fragment)'
     );
   }

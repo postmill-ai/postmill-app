@@ -28,6 +28,7 @@ import {
 import { IntegrationRepository } from '@postmill-ai/nestjs-libraries/database/prisma/integrations/integration.repository';
 import { RefreshIntegrationService } from '@postmill-ai/nestjs-libraries/integrations/refresh.integration.service';
 import { ioRedis } from '@postmill-ai/nestjs-libraries/redis/redis.service';
+import { AuthService } from '@postmill-ai/helpers/auth/auth.service';
 import { RefreshToken } from '@postmill-ai/nestjs-libraries/integrations/social.abstract';
 import { timer } from '@postmill-ai/helpers/utils/timer';
 import {
@@ -387,6 +388,31 @@ export class IntegrationManager {
       (await this._providerConfigManager.getClientInfo(integration)) ||
       getEnvClientInfo(integration);
     return globalInfo ? { ...globalInfo, version: configVersion } : undefined;
+  }
+
+  /**
+   * externalUrl providers (dynamic per-instance registration, e.g. Mastodon)
+   * carry their instance URL + per-instance app credentials encrypted on
+   * Integration.customInstanceDetails. Those stored values are authoritative —
+   * org/env client info and any provider default host can belong to a different
+   * instance. Analytics/read paths build clientInformation without the
+   * integration row; merge the stored details over it here. Tampered/legacy
+   * blobs fall back to the passed clientInformation unchanged.
+   */
+  mergeExternalInstanceDetails<T extends Record<string, any> | undefined>(
+    integration: { customInstanceDetails?: string | null } | undefined,
+    clientInformation: T
+  ): T {
+    if (!integration?.customInstanceDetails) return clientInformation;
+    try {
+      const details = JSON.parse(
+        AuthService.fixedDecryption(integration.customInstanceDetails)
+      );
+      if (!details || typeof details !== 'object') return clientInformation;
+      return { ...(clientInformation || {}), ...details } as T;
+    } catch {
+      return clientInformation;
+    }
   }
 
   async requireClientInformation(integration: string, orgId?: string, configId?: string | null) {
