@@ -1,4 +1,5 @@
 import { test, expect } from '@playwright/test';
+import { openComposer } from './lib/composer';
 import * as fs from 'fs';
 import * as path from 'path';
 
@@ -13,6 +14,8 @@ import * as path from 'path';
  * - Validation errors
  */
 test('composer flow - multiple submission paths', async ({ page }) => {
+  // Loops over several submission paths, each opening the composer fresh — needs room.
+  test.setTimeout(180_000);
   const findings: any[] = [];
 
   const scenarios = [
@@ -52,12 +55,12 @@ test('composer flow - multiple submission paths', async ({ page }) => {
 
       // Step 2: Open composer
       result.steps.push('open-composer');
-      const createBtn = page.getByText('Create Post', { exact: false }).first();
+      const createBtn = page.locator('button[aria-label="Create new"]').first();
       if (!(await createBtn.isVisible({ timeout: 5000 }).catch(() => false))) {
         result.errors.push('CREATE_POST_BUTTON_NOT_FOUND');
         continue;
       }
-      await createBtn.click();
+      await openComposer(page);
       await page.waitForTimeout(2000);
 
       // Step 3: Select channel(s)

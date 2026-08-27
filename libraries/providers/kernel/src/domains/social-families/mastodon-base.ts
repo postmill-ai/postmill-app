@@ -9,10 +9,12 @@ import {
 import { SocialCommentDTO } from '../social';
 import { makeId, makeOauthState } from '../social-make-id';
 import { SocialAbstract } from '../social-base';
+import { normalizeExternalInstanceUrl } from '../social-external-url';
 import dayjs from 'dayjs';
 import { Integration } from '@prisma/client';
 import { number, string } from 'yup';
 import { htmlToText } from '@postmill-ai/helpers/utils/html.to.text';
+import { AuthService } from '@postmill-ai/helpers/auth/auth.service';
 import { Logger } from '@nestjs/common';
 import { safeFetch } from '../social-base';
 
@@ -68,6 +70,77 @@ export class MastodonProvider extends SocialAbstract implements SocialProvider {
     return `${customUrl}/oauth/authorize?client_id=${clientId}&response_type=code&redirect_uri=${encodeURIComponent(
       `${url}/integrations/social/mastodon`
     )}&scope=${this.scopes.join('+')}&state=${state}`;
+  }
+
+  // Dynamic client registration, implemented on the shared family base (not
+  // the mastodon package subclass) because it is a Mastodon-API capability:
+  // any Mastodon-API provider connecting to a user-chosen host needs the
+  // identical POST /api/v1/apps flow. The user-supplied instance URL is
+  // normalized (https, bare host) and the outbound call goes through the
+  // kernel safeFetch port (SSRF-hardened, per-hop revalidation) — never bare
+  // fetch. The IntegrationManager stashes the returned credentials plus the
+  // instanceUrl in Redis (`external:<state>`) for the callback.
+  async externalUrl(url: string): Promise<{ client_id: string; client_secret: string }> {
+    const instanceUrl = normalizeExternalInstanceUrl(url);
+    const frontendUrl = (
+      process.env.FRONTEND_URL || 'http://localhost:5000'
+    ).replace(/\/+$/, '');
+
+    const response = await safeFetch(`${instanceUrl}/api/v1/apps`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        client_name: 'Postmill',
+        redirect_uris: `${frontendUrl}/integrations/social/${this.identifier}`,
+        // Mastodon's /api/v1/apps wants the scope list space-separated (unlike
+        // the authorize URL, which takes '+'-joined scopes).
+        scopes: this.scopes.join(' '),
+        website: frontendUrl,
+      }),
+    });
+
+    if (!response.ok) {
+      throw new Error(
+        `Failed to register the Postmill app on ${instanceUrl} (HTTP ${response.status})`
+      );
+    }
+
+    const data = (await response.json()) as {
+      client_id?: string;
+      client_secret?: string;
+    };
+    if (!data.client_id || !data.client_secret) {
+      throw new Error(
+        `Instance ${instanceUrl} did not return OAuth app credentials`
+      );
+    }
+
+    return { client_id: data.client_id, client_secret: data.client_secret };
+  }
+
+  // Resolve the instance a connected channel actually lives on. Channels
+  // connected through the dynamic externalUrl flow carry their instance (plus
+  // the per-instance app credentials) encrypted on
+  // Integration.customInstanceDetails; that stored value is authoritative —
+  // org/env clientInformation and the mastodon.social default can belong to a
+  // different host. Same decrypt-on-read pattern as bluesky/lemmy/pixelfed.
+  protected resolveInstanceUrl(
+    integration?: Integration,
+    clientInformation?: ClientInformation
+  ): string {
+    if (integration?.customInstanceDetails) {
+      try {
+        const details = JSON.parse(
+          AuthService.fixedDecryption(integration.customInstanceDetails)
+        );
+        if (details?.instanceUrl) {
+          return details.instanceUrl;
+        }
+      } catch {
+        // Not an externalUrl-shaped blob (or undecryptable) — fall through.
+      }
+    }
+    return clientInformation?.instanceUrl || 'https://mastodon.social';
   }
 
   async generateAuthUrl(clientInformation?: ClientInformation) {
@@ -263,7 +336,7 @@ export class MastodonProvider extends SocialAbstract implements SocialProvider {
     integration?: Integration,
     clientInformation?: ClientInformation
   ): Promise<PostResponse[]> {
-    const instanceUrl = clientInformation?.instanceUrl || 'https://mastodon.social';
+    const instanceUrl = this.resolveInstanceUrl(integration, clientInformation);
     return this.dynamicPost(
       id,
       accessToken,
@@ -281,7 +354,7 @@ export class MastodonProvider extends SocialAbstract implements SocialProvider {
     integration: Integration,
     clientInformation?: ClientInformation
   ): Promise<PostResponse[]> {
-    const instanceUrl = clientInformation?.instanceUrl || 'https://mastodon.social';
+    const instanceUrl = this.resolveInstanceUrl(integration, clientInformation);
     return this.dynamicComment(
       id,
       postId,
@@ -297,11 +370,11 @@ export class MastodonProvider extends SocialAbstract implements SocialProvider {
     accessToken: string,
     postId: string,
     _cursor: string | undefined,
-    _integration: Integration,
+    integration: Integration,
     clientInformation?: ClientInformation
   ): Promise<{ comments: SocialCommentDTO[]; nextCursor?: string }> {
     try {
-      const instanceUrl = clientInformation?.instanceUrl || 'https://mastodon.social';
+      const instanceUrl = this.resolveInstanceUrl(integration, clientInformation);
 
       const context = await (
         await this.fetch(`${instanceUrl}/api/v1/statuses/${postId}/context`, {
@@ -340,11 +413,11 @@ export class MastodonProvider extends SocialAbstract implements SocialProvider {
     _postId: string,
     parentCommentId: string,
     message: string,
-    _integration: Integration,
+    integration: Integration,
     clientInformation?: ClientInformation
   ) {
     try {
-      const instanceUrl = clientInformation?.instanceUrl || 'https://mastodon.social';
+      const instanceUrl = this.resolveInstanceUrl(integration, clientInformation);
 
       const form = new FormData();
       form.append('status', message);
@@ -393,10 +466,10 @@ export class MastodonProvider extends SocialAbstract implements SocialProvider {
     _postId: string,
     commentId: string,
     like: boolean,
-    _integration: Integration,
+    integration: Integration,
     clientInformation?: ClientInformation
   ) {
-    const instanceUrl = clientInformation?.instanceUrl || 'https://mastodon.social';
+    const instanceUrl = this.resolveInstanceUrl(integration, clientInformation);
     const endpoint = like ? 'favourite' : 'unfavourite';
 
     try {

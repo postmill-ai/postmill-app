@@ -1,6 +1,7 @@
 import {
   AnalyticsData,
   AuthTokenDetails,
+  ChannelSetupDescriptor,
   ClientInformation,
   PostDetails,
   PostResponse,
@@ -97,6 +98,38 @@ export class YoutubeProvider extends SocialAbstract implements SocialProvider {
     'https://www.googleapis.com/auth/youtubepartner',
     'https://www.googleapis.com/auth/yt-analytics.readonly',
   ];
+
+  // Beginner-friendly setup metadata for the per-tenant "Add channel" form.
+  // The default callback URL is computed by the catalog
+  // (IntegrationManager.getSocialProviderCatalog) — do NOT hardcode it here.
+  override setupDescriptor: ChannelSetupDescriptor = {
+    authType: 'oauth2',
+    credentialFields: [
+      {
+        key: 'clientId',
+        label: 'Client ID',
+        placeholder: 'e.g. 1234567890-abcd1234.apps.googleusercontent.com',
+        help: 'Google Cloud Console → APIs & Services → Credentials → your OAuth 2.0 Client ID',
+      },
+      {
+        key: 'clientSecret',
+        label: 'Client Secret',
+        secret: true,
+        help: 'Google Cloud Console → APIs & Services → Credentials → your OAuth 2.0 Client ID',
+      },
+    ],
+    portalUrl: 'https://console.cloud.google.com/apis/credentials',
+    portalLabel: 'Google Cloud Console',
+    callbackInstructions:
+      "In Google Cloud Console → APIs & Services → Credentials: create an OAuth 2.0 Client ID of type 'Web application' and add this URL under Authorized redirect URIs.",
+    setupSteps: [
+      'Open the Google Cloud Console and create a project (or pick an existing one).',
+      'Under APIs & Services → Library, enable the YouTube Data API v3 and the YouTube Analytics API.',
+      'Configure the OAuth consent screen and add yourself as a test user.',
+      "Create an OAuth 2.0 Client ID of type 'Web application' and add the redirect URL shown below to Authorized redirect URIs.",
+      'Copy the Client ID and Client Secret into the fields below.',
+    ],
+  };
 
   private readonly logger = new Logger(YoutubeProvider.name);
 

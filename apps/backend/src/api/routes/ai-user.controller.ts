@@ -367,11 +367,13 @@ export class AiUserController {
           return { url };
         }
         case 'video': {
-          const url = await this._aiMediaService.generateVideo(
+          // Async like audio/avatar: generateVideo returns a job id, not a URL —
+          // return it under `jobId` so callers don't treat it as a playable artifact.
+          const jobId = await this._aiMediaService.generateVideo(
             body.prompt || '',
             { orgId, userId },
           );
-          return { url };
+          return { jobId };
         }
         case 'audio': {
           const jobId = await this._aiMediaService.generateAudio(

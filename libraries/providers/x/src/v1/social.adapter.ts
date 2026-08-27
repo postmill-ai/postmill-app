@@ -3,6 +3,7 @@ import { createHmac, randomBytes } from 'crypto';
 import {
   AnalyticsData,
   AuthTokenDetails,
+  ChannelSetupDescriptor,
   ClientInformation,
   PostDetails,
   PostResponse,
@@ -48,6 +49,37 @@ export class XProvider extends SocialAbstract implements SocialProvider {
 
   editor = 'normal' as const;
   dto = XDto;
+
+  // Beginner-friendly setup metadata for the per-tenant "Add channel" form.
+  // The default callback URL is computed by the catalog
+  // (IntegrationManager.getSocialProviderCatalog) — do NOT hardcode it here.
+  override setupDescriptor: ChannelSetupDescriptor = {
+    authType: 'oauth1',
+    credentialFields: [
+      {
+        key: 'clientId',
+        label: 'API Key (Consumer Key)',
+        placeholder: 'e.g. a1b2c3d4e5…',
+        help: 'X Developer Portal → your app → Keys and tokens → Consumer Keys',
+      },
+      {
+        key: 'clientSecret',
+        label: 'API Secret (Consumer Secret)',
+        secret: true,
+        help: 'X Developer Portal → your app → Keys and tokens → Consumer Keys',
+      },
+    ],
+    portalUrl: 'https://developer.x.com/en/portal/dashboard',
+    portalLabel: 'X Developer Portal',
+    callbackInstructions:
+      "In the X Developer Portal → your app → User authentication settings: set Type of App to 'Web App, Automated App or Bot', enable OAuth 1.0a with Read and write permissions, and add this Callback URI.",
+    setupSteps: [
+      'Open the X Developer Portal and create a project + app (or pick an existing one).',
+      "Under User authentication settings, set Type of App to 'Web App, Automated App or Bot' and enable OAuth 1.0a with Read and write permissions.",
+      'Add the Callback URI shown below to the allowed Callback URIs list.',
+      'Copy the API Key and API Secret from Keys and tokens → Consumer Keys into the fields below.',
+    ],
+  };
 
   maxLength(additionalSettings?: any) {
     // Accepts either the parsed additionalSettings array (from validation) or a

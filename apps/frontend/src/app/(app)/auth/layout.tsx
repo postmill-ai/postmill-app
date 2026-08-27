@@ -3,6 +3,7 @@ import { getT } from '@postmill-ai/react/translation/get.translation.service.bac
 export const dynamic = 'force-dynamic';
 import { ReactNode } from 'react';
 import loadDynamic from 'next/dynamic';
+import { Logo } from '@postmill-ai/frontend/components/new-layout/logo';
 import { Wordmark } from '@postmill-ai/frontend/components/new-layout/wordmark';
 const ReturnUrlComponent = loadDynamic(() => import('./return.url.component'));
 const SignupPlanComponent = loadDynamic(() => import('./signup.plan.component'));
@@ -39,14 +40,20 @@ export default async function AuthLayout({
       <SignupPlanComponent />
       <div className="flex flex-col py-[40px] px-[20px] flex-1 lg:w-[600px] lg:flex-none rounded-[12px] text-white p-[12px] bg-[#1A1919]">
         <div className="w-full max-w-[440px] mx-auto justify-center gap-[20px] h-full flex flex-col text-white">
-          <Wordmark className="text-white" />
+          <div className="flex items-center gap-[10px]">
+            <Logo size={28} className="" />
+            <Wordmark className="text-white" />
+          </div>
           <div className="flex">{children}</div>
         </div>
       </div>
       <div className="flex-1 hidden lg:flex flex-col items-center justify-center bg-newBgColorInner">
         <div className="flex flex-col items-center gap-[32px] max-w-[440px] px-[40px]">
           <div className="flex flex-col items-center gap-[16px]">
-            <Wordmark height={32} className="text-textColor" />
+            <div className="flex items-center gap-[12px]">
+              <Logo size={40} className="" />
+              <Wordmark height={32} className="text-textColor" />
+            </div>
             <h1 className="text-[28px] font-[700] text-textColor text-center leading-tight">
               {t('auth_tagline', 'Create. Post. Track. Engage.')}
             </h1>

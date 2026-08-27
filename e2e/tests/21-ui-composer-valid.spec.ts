@@ -1,4 +1,5 @@
 import { test } from '@playwright/test';
+import { openComposer } from './lib/composer';
 import * as fs from 'fs';
 import * as path from 'path';
 
@@ -22,7 +23,7 @@ test('capture composer valid/preflight request + response', async ({ page }) => 
   await page.goto('/launches');
   await page.waitForLoadState('networkidle');
   await page.waitForTimeout(1500);
-  await page.getByText('Create Post', { exact: false }).first().click();
+  await openComposer(page);
   await page.waitForTimeout(2500);
   // Hybrid channel selector: dropdown (>4 channels) or icon row (<=4).
   const dropdown = page.locator('button[aria-haspopup="listbox"]').first();

@@ -252,11 +252,14 @@ export class PostsService {
     }
 
     try {
-      const clientInformation = await this._integrationManager.requireClientInformation(
-        getIntegration.providerIdentifier,
-        getIntegration.organizationId,
-        getIntegration.providerConfigId
-      ).catch(() => undefined);
+      const clientInformation = this._integrationManager.mergeExternalInstanceDetails(
+        getIntegration,
+        await this._integrationManager.requireClientInformation(
+          getIntegration.providerIdentifier,
+          getIntegration.organizationId,
+          getIntegration.providerConfigId
+        ).catch(() => undefined)
+      );
 
       const loadAnalytics = await integrationProvider.postAnalytics(
         getIntegration.internalId,
@@ -848,7 +851,7 @@ export class PostsService {
   }
 
   async deletePost(orgId: string, group: string) {
-    const post = await this._postRepository.deletePost(orgId, group);
+    const { count, post } = await this._postRepository.deletePost(orgId, group);
 
     if (post?.id) {
       try {
@@ -865,7 +868,9 @@ export class PostsService {
       } catch (err) {}
     }
 
-    return { error: true };
+    // Was an unconditional `{ error: true }` — every successful delete reported
+    // failure to the caller. Report whether the soft-delete actually matched.
+    return { error: count === 0 };
   }
 
   async countPostsFromDay(orgId: string, date: Date) {

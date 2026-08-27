@@ -176,11 +176,14 @@ export class AnalyticsActivity {
     }[] = [];
 
     try {
-      const clientInformation = await this._integrationManager.requireClientInformation(
-        integration.providerIdentifier,
-        integration.organizationId,
-        integration.providerConfigId
-      ).catch(() => undefined);
+      const clientInformation = this._integrationManager.mergeExternalInstanceDetails(
+        integration,
+        await this._integrationManager.requireClientInformation(
+          integration.providerIdentifier,
+          integration.organizationId,
+          integration.providerConfigId
+        ).catch(() => undefined)
+      );
 
       const data = await provider.analytics(
         integration.internalId,
@@ -279,11 +282,14 @@ export class AnalyticsActivity {
           }
         }
 
-        const clientInformation = await this._integrationManager.requireClientInformation(
-          post.integration.providerIdentifier,
-          post.integration.organizationId,
-          post.integration.providerConfigId
-        ).catch(() => undefined);
+        const clientInformation = this._integrationManager.mergeExternalInstanceDetails(
+          post.integration,
+          await this._integrationManager.requireClientInformation(
+            post.integration.providerIdentifier,
+            post.integration.organizationId,
+            post.integration.providerConfigId
+          ).catch(() => undefined)
+        );
 
         const data = await provider.postAnalytics(
           post.integration.internalId,
@@ -632,11 +638,14 @@ export class AnalyticsActivity {
     }[] = [];
 
     try {
-      const clientInformation = await this._integrationManager.requireClientInformation(
-        integration.providerIdentifier,
-        integration.organizationId,
-        integration.providerConfigId
-      ).catch(() => undefined);
+      const clientInformation = this._integrationManager.mergeExternalInstanceDetails(
+        integration,
+        await this._integrationManager.requireClientInformation(
+          integration.providerIdentifier,
+          integration.organizationId,
+          integration.providerConfigId
+        ).catch(() => undefined)
+      );
 
       const data = await provider.analytics(integration.internalId, token, 90, clientInformation);
 

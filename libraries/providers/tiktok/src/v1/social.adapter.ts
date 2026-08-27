@@ -1,6 +1,7 @@
 import {
   AnalyticsData,
   AuthTokenDetails,
+  ChannelSetupDescriptor,
   ClientInformation,
   PostDetails,
   PostResponse,
@@ -41,6 +42,38 @@ export class TiktokProvider extends SocialAbstract implements SocialProvider {
   override maxConcurrentJob = 300;
   dto = TikTokDto;
   editor = 'normal' as const;
+
+  // Beginner-friendly setup metadata for the per-tenant "Add channel" form.
+  // The default callback URL is computed by the catalog
+  // (IntegrationManager.getSocialProviderCatalog) — do NOT hardcode it here.
+  override setupDescriptor: ChannelSetupDescriptor = {
+    authType: 'oauth2',
+    credentialFields: [
+      {
+        key: 'clientId',
+        label: 'Client key',
+        placeholder: 'e.g. aw1a2b3c4d5e…',
+        help: 'TikTok for Developers → Manage apps → your app → Basic information',
+      },
+      {
+        key: 'clientSecret',
+        label: 'Client secret',
+        secret: true,
+        help: 'TikTok for Developers → Manage apps → your app → Basic information',
+      },
+    ],
+    portalUrl: 'https://developers.tiktok.com/apps',
+    portalLabel: 'TikTok for Developers',
+    callbackInstructions:
+      'In TikTok for Developers → Manage apps → your app → Basic information: check Web under Platforms, then add this URL under Login Kit → Web → Redirect URI. The URL must be HTTPS.',
+    setupSteps: [
+      'Open TikTok for Developers and create an app (or pick an existing one) under Manage apps.',
+      'Add the Login Kit and Content Posting API products to your app and request the scopes: video.list, video.publish, video.upload, user.info.basic, user.info.profile, user.info.stats.',
+      'Under Basic information, check Web under Platforms and add the Redirect URI shown below in Login Kit → Web → Redirect URI.',
+      'Copy the Client key and Client secret from Basic information into the fields below.',
+    ],
+  };
+
   maxLength() {
     return 2000;
   }

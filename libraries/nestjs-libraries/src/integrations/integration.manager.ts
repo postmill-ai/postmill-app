@@ -12,6 +12,8 @@ import {
   SocialProvider,
   SocialAbstract,
   ProviderKernel,
+  ChannelSetupDescriptor,
+  normalizeExternalInstanceUrl,
 } from '@postmill-ai/provider-kernel';
 import { PROVIDER_KERNEL } from '@postmill-ai/nestjs-libraries/providers/providers.module';
 import { ProviderResolutionService } from '@postmill-ai/nestjs-libraries/providers/provider-resolution.service';
@@ -26,6 +28,7 @@ import {
 import { IntegrationRepository } from '@postmill-ai/nestjs-libraries/database/prisma/integrations/integration.repository';
 import { RefreshIntegrationService } from '@postmill-ai/nestjs-libraries/integrations/refresh.integration.service';
 import { ioRedis } from '@postmill-ai/nestjs-libraries/redis/redis.service';
+import { AuthService } from '@postmill-ai/helpers/auth/auth.service';
 import { RefreshToken } from '@postmill-ai/nestjs-libraries/integrations/social.abstract';
 import { timer } from '@postmill-ai/helpers/utils/timer';
 import {
@@ -257,9 +260,15 @@ export class IntegrationManager {
       customFields: boolean | any[];
       scopes: string;
       capabilities: ProviderCapability | null;
+      setup: ChannelSetupDescriptor | null;
+      callbackUrl: string;
     }>
   > {
     const providers = this.getSocialProviders();
+    // Default OAuth callback for provider <id>. An org-level `redirectUri`
+    // override (adapter `instanceUrl` from the saved channel config) takes
+    // precedence at connect time, so this is the DEFAULT shown in the form.
+    const frontendUrl = (process.env.FRONTEND_URL || '').replace(/\/+$/, '');
     return Promise.all(
       providers.map(async (p) => ({
         identifier: p.identifier,
@@ -271,6 +280,8 @@ export class IntegrationManager {
         customFields: p.customFields ? await p.customFields() : false,
         scopes: p.scopes?.join(', ') || '',
         capabilities: this._capabilitiesFor(p.identifier),
+        setup: p.setupDescriptor || null,
+        callbackUrl: `${frontendUrl}/integrations/social/${p.identifier}`,
       }))
     );
   }
@@ -377,6 +388,31 @@ export class IntegrationManager {
       (await this._providerConfigManager.getClientInfo(integration)) ||
       getEnvClientInfo(integration);
     return globalInfo ? { ...globalInfo, version: configVersion } : undefined;
+  }
+
+  /**
+   * externalUrl providers (dynamic per-instance registration, e.g. Mastodon)
+   * carry their instance URL + per-instance app credentials encrypted on
+   * Integration.customInstanceDetails. Those stored values are authoritative —
+   * org/env client info and any provider default host can belong to a different
+   * instance. Analytics/read paths build clientInformation without the
+   * integration row; merge the stored details over it here. Tampered/legacy
+   * blobs fall back to the passed clientInformation unchanged.
+   */
+  mergeExternalInstanceDetails<T extends Record<string, any> | undefined>(
+    integration: object | null | undefined,
+    clientInformation: T
+  ): T {
+    const stored = (integration as { customInstanceDetails?: string | null } | null | undefined)
+      ?.customInstanceDetails;
+    if (!stored) return clientInformation;
+    try {
+      const details = JSON.parse(AuthService.fixedDecryption(stored));
+      if (!details || typeof details !== 'object') return clientInformation;
+      return { ...(clientInformation || {}), ...details } as T;
+    } catch {
+      return clientInformation;
+    }
   }
 
   async requireClientInformation(integration: string, orgId?: string, configId?: string | null) {
@@ -510,15 +546,29 @@ export class IntegrationManager {
       throw new Error('Missing external url');
     }
 
-    const getExternalUrl = integrationProvider.externalUrl
+    // Dynamic per-instance client registration (the `externalUrl` hook —
+    // Mastodon today, any variable-host channel tomorrow). The user-supplied
+    // instance URL is normalized once here so every provider shares the same
+    // https/bare-host contract, and the hook is called with the normalized
+    // origin. The dynamic client_id/secret + instanceUrl must REACH
+    // generateAuthUrl (merged over the static org/env clientInformation,
+    // which belongs to a different host) — otherwise the authorize URL is
+    // built with an app the target instance has never seen.
+    const instanceUrl = integrationProvider.externalUrl
+      ? normalizeExternalInstanceUrl(options.externalUrl!)
+      : undefined;
+
+    const getExternalUrl = instanceUrl
       ? {
-          ...(await integrationProvider.externalUrl(options.externalUrl)),
-          instanceUrl: options.externalUrl,
+          ...(await integrationProvider.externalUrl!(instanceUrl)),
+          instanceUrl,
         }
       : undefined;
 
     const { codeVerifier, state, url } =
-      await integrationProvider.generateAuthUrl(clientInformation);
+      await integrationProvider.generateAuthUrl(
+        getExternalUrl ? { ...clientInformation, ...getExternalUrl } : clientInformation
+      );
 
     // Bind the chosen named credential config to this connection so the callback
     // (and later refresh/publish) use that config's own auth.

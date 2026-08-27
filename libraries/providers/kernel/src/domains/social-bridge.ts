@@ -10,6 +10,7 @@ import {
 import {
   ClientInformation,
   SocialProvider,
+  ChannelSetupDescriptor,
 } from './social-provider';
 
 /**
@@ -258,6 +259,10 @@ export class SocialProviderKernelAdapter implements SocialCapability {
 
   get scopes(): string[] {
     return this._provider.scopes;
+  }
+
+  get setupDescriptor(): ChannelSetupDescriptor | undefined {
+    return this._provider.setupDescriptor;
   }
 
   get isWeb3(): boolean | undefined {

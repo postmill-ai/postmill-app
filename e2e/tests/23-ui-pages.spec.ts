@@ -4,12 +4,17 @@ import * as path from 'path';
 
 const ROUTES: [string, string][] = [
   ['Calendar', '/launches'], ['Analytics', '/analytics'], ['Media', '/media'],
-  ['Campaigns', '/campaigns'], ['Comments', '/comments'], ['Plugs', '/plugs'],
+  ['Campaigns', '/campaigns'], ['Comments', '/comments'], ['Replies', '/replies'],
   ['Settings', '/settings'], ['Billing', '/billing'],
   ['Agents', '/agents'],
 ];
 
 test('render every real page + capture errors', async ({ page }) => {
+  // 9 routes × (goto + networkidle + settle + screenshot) + the post-detail pass
+  // below far exceeds the 30s default — give the crawl room. networkidle expires
+  // on most routes (app-wide SWR polling), so keep the per-route settle short.
+  test.setTimeout(300_000);
+  const t0 = Date.now();
   const findings: any[] = [];
   for (const [name, route] of ROUTES) {
     const consoleErrors: string[] = [];
@@ -22,7 +27,7 @@ test('render every real page + capture errors', async ({ page }) => {
     try {
       const r = await page.goto(route, { timeout: 25000 });
       httpStatus = r?.status() ?? 0;
-      await page.waitForLoadState('networkidle', { timeout: 12000 }).catch(() => {});
+      await page.waitForLoadState('networkidle', { timeout: 6000 }).catch(() => {});
       await page.waitForTimeout(2000);
       textLen = (await page.locator('main, body').first().innerText()).length;
       toAuth = /\/auth\//.test(page.url());
@@ -34,13 +39,21 @@ test('render every real page + capture errors', async ({ page }) => {
   }
 
   // ---- Interaction: open a post-detail modal by clicking a card (month view) ----
+  console.log(`[23] route crawl done in ${Date.now() - t0}ms`);
   const postDetail = { attempted: false, opened: false, note: '' };
+  const pdStart = Date.now();
+  const pdLog = (m: string) => console.log(`[post-detail +${Date.now() - pdStart}ms] ${m}`);
   try {
-    await page.goto('/launches');
-    await page.waitForLoadState('networkidle');
-    await page.getByText('Month', { exact: true }).first().click().catch(() => {});
+    await page.goto('/launches', { timeout: 25000 });
+    pdLog('navigated');
+    // networkidle may never settle here (calendar long-polls/SWR) — bound it.
+    await page.waitForLoadState('networkidle', { timeout: 8000 }).catch(() => {});
+    pdLog('idle');
+    await page.getByText('Month', { exact: true }).first().click({ timeout: 8000 }).catch(() => {});
+    pdLog('month clicked');
     await page.waitForTimeout(3500);
     const card = page.getByText(/Published|Draft|FREE AI/i).first();
+    pdLog('card probe');
     if (await card.count()) {
       postDetail.attempted = true;
       await card.click({ timeout: 5000 }).catch(e => { postDetail.note = e.message.slice(0, 80); });

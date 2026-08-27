@@ -136,6 +136,8 @@ describe('AnalyticsActivity', () => {
     integrationManager = {
       getSocialIntegrationUnchecked: vi.fn(),
       requireClientInformation: vi.fn().mockResolvedValue({ client_id: 'mock-id', client_secret: 'mock-secret', instanceUrl: '' }),
+      // Passthrough: no customInstanceDetails on these fixture rows.
+      mergeExternalInstanceDetails: vi.fn((_integration: any, ci: any) => ci),
     } as any;
 
     providerConfigManager = {

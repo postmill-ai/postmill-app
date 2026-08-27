@@ -139,8 +139,10 @@ test.describe('composer — full UI walkthrough', () => {
     for (const label of ['Drafts', 'Post Templates', 'Signatures']) {
       await expect(page.getByText(label, { exact: true }).first(), `${label} tab present`).toBeVisible();
     }
-    // Drafts tab is default — data should be real (no "undefined"/"Invalid Date")
-    const libText = await page.locator('[role="dialog"], body').innerText();
+    // Drafts tab is default — data should be real (no "undefined"/"Invalid Date").
+    // Scope to the Library dialog: with it open, `[role="dialog"], body` matches both
+    // the dialog and <body> (strict-mode violation).
+    const libText = await page.getByRole('dialog', { name: 'Library' }).innerText();
     expect(libText).not.toContain('Invalid Date');
     // Visit the other two tabs
     for (const label of ['Post Templates', 'Signatures']) {

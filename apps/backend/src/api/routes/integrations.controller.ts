@@ -17,6 +17,7 @@ import { IntegrationManager } from '@postmill-ai/nestjs-libraries/integrations/i
 import { IntegrationService } from '@postmill-ai/nestjs-libraries/database/prisma/integrations/integration.service';
 import { GetOrgFromRequest } from '@postmill-ai/nestjs-libraries/user/org.from.request';
 import { isAllowedReturnUrl } from '@postmill-ai/nestjs-libraries/security/return-url.validator';
+import { InvalidExternalUrlError } from '@postmill-ai/provider-kernel';
 import { Organization, User } from '@prisma/client';
 import { IntegrationFunctionDto } from '@postmill-ai/nestjs-libraries/dtos/integrations/integration.function.dto';
 import { CheckPolicies } from '@postmill-ai/backend/services/auth/permissions/permissions.ability';
@@ -57,6 +58,8 @@ import { RequirePermission } from '@postmill-ai/backend/services/auth/rbac/requi
 @ApiTags('Integrations')
 @Controller('/integrations')
 export class IntegrationsController {
+  private readonly _logger = new Logger(IntegrationsController.name);
+
   constructor(
     private _integrationManager: IntegrationManager,
     private _integrationService: IntegrationService,
@@ -229,11 +232,20 @@ export class IntegrationsController {
     }
 
     try {
-      const clientInformation = await this._integrationManager.requireClientInformation(
-        integration,
-        org.id,
-        config || undefined
-      );
+      // externalUrl providers register a per-instance app dynamically, so
+      // static org/env credentials are optional for them — requiring them
+      // would make the dynamic flow unstartable on keyless deployments.
+      const clientInformation = integrationProvider.externalUrl
+        ? await this._integrationManager.getClientInformation(
+            integration,
+            org.id,
+            config || undefined
+          )
+        : await this._integrationManager.requireClientInformation(
+            integration,
+            org.id,
+            config || undefined
+          );
 
       // Campaign-scoped connect/invite: verify ownership before trusting the id.
       const validatedCampaign =
@@ -245,7 +257,10 @@ export class IntegrationsController {
         throw new Error('Invalid redirect URL');
       }
 
-      return this._integrationManager.generateAuthUrl(integration, org.id, clientInformation, {
+      // `await` matters: without it a rejected promise from generateAuthUrl
+      // bypasses this try/catch entirely (observed as a bare 500 on an invalid
+      // externalUrl).
+      return await this._integrationManager.generateAuthUrl(integration, org.id, clientInformation, {
         externalUrl,
         configId: config || undefined,
         refresh,
@@ -254,6 +269,16 @@ export class IntegrationsController {
         redirectUrl,
       });
     } catch (err) {
+      // User-supplied instance URL failed request-shape validation → 400.
+      if (err instanceof InvalidExternalUrlError) {
+        throw new BadRequestException(err.message);
+      }
+      // Was a silent `{ err: true }` — a provider misconfig (e.g. disabled org
+      // channel config, X app without a whitelisted callback) was invisible in
+      // logs and undebuggable in prod. Log the cause; the response shape stays.
+      this._logger.warn(
+        `generateAuthUrl failed for ${integration}: ${(err as Error)?.message || err}`
+      );
       return { err: true };
     }
   }

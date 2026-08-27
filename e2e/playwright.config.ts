@@ -21,10 +21,15 @@ export default defineConfig({
       testMatch: '**/auth.setup.ts',
     },
     {
-      name: 'chromium',
+      // Named 'admin' (not 'chromium') because persona-aware specs read
+      // test.info().project.name (e.g. 94-setup-rbac) — this project runs the
+      // super-admin session from .auth/admin.json.
+      name: 'admin',
       use: {
         ...devices['Desktop Chrome'],
-        storageState: '.auth/state.json',
+        // auth.setup.ts writes one state per persona (admin/member/free);
+        // the main sweep runs as admin (super-admin sees every surface).
+        storageState: '.auth/admin.json',
       },
       dependencies: ['setup'],
     },

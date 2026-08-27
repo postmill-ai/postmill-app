@@ -1,5 +1,6 @@
 import {
   AuthTokenDetails,
+  ChannelSetupDescriptor,
   PostDetails,
   PostResponse,
   SocialCommentDTO,
@@ -26,6 +27,22 @@ export class HashnodeProvider extends SocialAbstract implements SocialProvider {
     return 10000;
   }
   dto = HashnodeSettingsDto;
+
+  // Direct-credentials channel: no developer app, no callback — the channel
+  // connects with the Hashnode API key in the composer connect flow
+  // (customFields); the config form shows guidance only.
+  override setupDescriptor: ChannelSetupDescriptor = {
+    authType: 'direct',
+    credentialFields: [],
+    portalUrl: 'https://hashnode.com/settings/developer',
+    portalLabel: 'Hashnode Developer Settings',
+    setupSteps: [
+      'Open Hashnode Developer Settings (profile picture → Account Settings → Developer).',
+      'Click "Generate New Token" and give it a descriptive name (e.g. Postmill).',
+      'Copy the generated Personal Access Token — you will paste it as the API key.',
+      'In Postmill, connect from the composer: Create new → New Channel → Hashnode, and paste the token into the API key field.',
+    ],
+  };
 
   async generateAuthUrl() {
     const state = makeOauthState();

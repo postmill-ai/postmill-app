@@ -605,11 +605,14 @@ export class IntegrationService {
 
     if (integrationProvider.analytics) {
       try {
-        const clientInformation = await this._integrationManager.requireClientInformation(
-          integration,
-          getIntegration.organizationId,
-          getIntegration.providerConfigId
-        ).catch(() => undefined);
+        const clientInformation = this._integrationManager.mergeExternalInstanceDetails(
+          getIntegration,
+          await this._integrationManager.requireClientInformation(
+            integration,
+            getIntegration.organizationId,
+            getIntegration.providerConfigId
+          ).catch(() => undefined)
+        );
 
         const loadAnalytics = await integrationProvider.analytics(
           getIntegration.internalId,

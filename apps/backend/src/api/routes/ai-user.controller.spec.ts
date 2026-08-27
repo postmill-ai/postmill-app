@@ -43,7 +43,8 @@ vi.mock('@postmill-ai/nestjs-libraries/ai/ai-settings.manager', () => ({
 vi.mock('@postmill-ai/nestjs-libraries/ai/governance/media.service', () => ({
   AiMediaService: class {
     generateImage = vi.fn().mockResolvedValue('https://cdn/image.png');
-    generateVideo = vi.fn().mockResolvedValue('https://cdn/video.mp4');
+    // Video is async: the service returns a media-job id, not a playable URL.
+    generateVideo = vi.fn().mockResolvedValue('job-video-123');
     upscaleImage = vi.fn().mockResolvedValue('https://cdn/upscaled.png');
     removeBackground = vi.fn().mockResolvedValue('https://cdn/nobg.png');
     inpaintImage = vi.fn().mockResolvedValue('https://cdn/inpainted.png');
@@ -253,12 +254,12 @@ describe('AiUserController', () => {
       });
     });
 
-    it('video → generateVideo returns url', async () => {
+    it('video → generateVideo returns jobId', async () => {
       const result: any = await controller.createMediaJob(mockOrg, mockUser, {
         operation: 'video',
         prompt: 'a dog running',
       });
-      expect(result).toEqual({ url: 'https://cdn/video.mp4' });
+      expect(result).toEqual({ jobId: 'job-video-123' });
       expect(mediaService.generateVideo).toHaveBeenCalledWith('a dog running', {
         orgId: 'org-1',
         userId: 'user-1',

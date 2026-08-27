@@ -18,6 +18,5 @@ Put a "X" in the boxes below to indicate you have followed the checklist;
 
 - [ ] I have read the [CONTRIBUTING](https://github.com/postmill-ai/postmill-app/blob/main/CONTRIBUTING.md) guide.
 - [ ] I have signed the Contributor License Agreement (CLA) by emailing my acceptance to legal@postmill.ai ([ICLA](https://github.com/postmill-ai/postmill-app/blob/main/ICLA.md) for individuals, [CCLA](https://github.com/postmill-ai/postmill-app/blob/main/CCLA.md) for entities).
-- [ ] I confirm I have not used AI to submit this PR or generate code for it.
 - [ ] I checked that there were no similar issues or PRs already open for this.
 - [ ] This PR fixes just ONE issue

@@ -54,9 +54,13 @@ export default async function AppLayout({ children }: { children: ReactNode }) {
   const cookieStore = await cookies();
   const language = cookieStore.get(cookieName)?.value || fallbackLng;
   const mode = cookieStore.get('mode')?.value || 'dark';
-  const Plausible = !!process.env.STRIPE_PUBLISHABLE_KEY
-    ? PlausibleProvider
-    : Fragment;
+  // Plausible tracking has its own switch now (NEXT_PUBLIC_PLAUSIBLE_DOMAIN) —
+  // it was gated on STRIPE_PUBLISHABLE_KEY, so analytics went dark on any
+  // deployment with billing off. Legacy fallback keeps the old behavior.
+  const plausibleDomain =
+    process.env.NEXT_PUBLIC_PLAUSIBLE_DOMAIN ||
+    (process.env.STRIPE_PUBLISHABLE_KEY ? 'postmill.ai' : '');
+  const Plausible = plausibleDomain ? PlausibleProvider : Fragment;
   return (
     <html lang="en">
       <head>
@@ -117,7 +121,7 @@ export default async function AppLayout({ children }: { children: ReactNode }) {
             <FacebookComponent />
             <GoogleTagManagerComponent gtmId={process.env.NEXT_PUBLIC_GTM_ID} />
             <Plausible
-              domain={'postmill.ai'}
+              domain={plausibleDomain}
             >
               <PHProvider
                 phkey={process.env.NEXT_PUBLIC_POSTHOG_KEY}

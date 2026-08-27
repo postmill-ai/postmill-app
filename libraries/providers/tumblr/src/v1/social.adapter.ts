@@ -1,5 +1,5 @@
 import {
-  AuthTokenDetails, ClientInformation, PostDetails, PostResponse, SocialProvider,
+  AuthTokenDetails, ChannelSetupDescriptor, ClientInformation, PostDetails, PostResponse, SocialProvider,
 } from '@postmill-ai/provider-kernel';
 import { SocialAbstract } from '@postmill-ai/provider-kernel';
 import { makeId, makeOauthState } from '@postmill-ai/provider-kernel';
@@ -17,6 +17,38 @@ export class TumblrProvider extends SocialAbstract implements SocialProvider {
   editor = 'normal' as const;
   scopes = ['basic', 'write', 'offline_access'];
   override maxConcurrentJob = 3;
+
+  // Beginner-friendly setup metadata for the per-tenant "Add channel" form.
+  // The default callback URL is computed by the catalog
+  // (IntegrationManager.getSocialProviderCatalog) — do NOT hardcode it here.
+  override setupDescriptor: ChannelSetupDescriptor = {
+    authType: 'oauth2',
+    credentialFields: [
+      {
+        key: 'clientId',
+        label: 'OAuth Consumer Key',
+        placeholder: 'e.g. a1b2c3d4e5…',
+        help: 'Tumblr OAuth Apps → your app → OAuth Consumer Key (shown under the app name)',
+      },
+      {
+        key: 'clientSecret',
+        label: 'Secret Key',
+        secret: true,
+        help: 'Tumblr OAuth Apps → your app → Secret Key (click "Show secret key" to reveal it)',
+      },
+    ],
+    portalUrl: 'https://www.tumblr.com/oauth/apps',
+    portalLabel: 'Tumblr OAuth Apps',
+    callbackInstructions:
+      "On Tumblr OAuth Apps, open your app's settings and paste this URL into the 'Default callback URL' field, then save.",
+    setupSteps: [
+      'Open Tumblr OAuth Apps and click "Register application" (or pick an existing app).',
+      'Fill in the application name and website, and set the Default callback URL to the one shown below.',
+      'Save the app, then copy the OAuth Consumer Key shown under its name.',
+      'Click "Show secret key" and copy the Secret Key into the fields below.',
+    ],
+  };
+
   maxLength() {
     return 4096;
   }

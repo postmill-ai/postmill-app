@@ -1,6 +1,6 @@
 import { defineConfig, devices } from '@playwright/test';
 
-// Local composer run: reuse the saved localhost session (e2e/.auth/state.json) — no auth.setup
+// Local composer run: reuse the saved admin session (e2e/.auth/admin.json) — no auth.setup
 // dependency, no password — against the host dev frontend. Covers the composer functional
 // walkthrough (60) and the mobile capture/audit (61).
 export default defineConfig({
@@ -23,7 +23,7 @@ export default defineConfig({
   use: {
     baseURL: 'http://localhost:4200',
     ignoreHTTPSErrors: true,
-    storageState: '.auth/state.json',
+    storageState: '.auth/admin.json',
     screenshot: 'only-on-failure',
     trace: 'retain-on-failure',
   },

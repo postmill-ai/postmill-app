@@ -126,6 +126,19 @@ export class NoAuthIntegrationsController {
       providerConfigId || undefined
     ).catch(() => undefined);
 
+    // Dynamic-registered (externalUrl) channels: the per-instance app
+    // credentials captured at generate time (`external:${state}`) must win over
+    // any static org/env app — the token exchange runs against the user's
+    // instance, which only knows the app it just registered.
+    let authClientInformation = clientInformation;
+    if (details) {
+      try {
+        authClientInformation = { ...clientInformation, ...JSON.parse(details) };
+      } catch {
+        // Not parseable (shouldn't happen — we wrote it) — fall back to static.
+      }
+    }
+
     const {
       error,
       accessToken,
@@ -145,7 +158,7 @@ export class NoAuthIntegrationsController {
             codeVerifier: getCodeVerifier,
             refresh: body.refresh,
           },
-          clientInformation
+          authClientInformation
         );
 
         if (typeof auth === 'string') {

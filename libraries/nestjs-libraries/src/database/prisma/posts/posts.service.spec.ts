@@ -426,7 +426,7 @@ describe('PostsService Inngest dispatch', () => {
     vi.mocked(inngest.send).mockResolvedValue(undefined);
 
     postRepositoryMock = {
-      deletePost: vi.fn().mockResolvedValue({ id: 'post-123' }),
+      deletePost: vi.fn().mockResolvedValue({ count: 1, post: { id: 'post-123' } }),
     };
 
     integrationManagerMock = {
@@ -459,12 +459,20 @@ describe('PostsService Inngest dispatch', () => {
     });
   });
 
-  it('deletePost swallows inngest.send errors and still returns error:true', async () => {
+  it('deletePost reports success (error:false) when the soft-delete matched, even if inngest.send fails', async () => {
     vi.mocked(inngest.send).mockRejectedValue(new Error('Inngest down'));
 
     const result = await service.deletePost('org-1', 'group-1');
 
     expect(inngest.send).toHaveBeenCalled();
+    expect(result).toEqual({ error: false });
+  });
+
+  it('deletePost reports error:true when no post matched the group', async () => {
+    postRepositoryMock.deletePost.mockResolvedValue({ count: 0, post: null });
+
+    const result = await service.deletePost('org-1', 'missing-group');
+
     expect(result).toEqual({ error: true });
   });
 

@@ -31,7 +31,8 @@ async function modalOpen(page: any): Promise<boolean> {
 }
 
 test('exercise menus, modals and forms on every route', async ({ page }) => {
-  test.setTimeout(600_000);
+  // Exercising every opener on every route runs past 10 minutes.
+  test.setTimeout(900_000);
   const persona = PERSONA();
   const auditor = new PageAuditor(page).attach();
   const findings: any[] = [];

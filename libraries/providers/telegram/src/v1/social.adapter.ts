@@ -1,6 +1,7 @@
 import {
   AnalyticsData,
   AuthTokenDetails,
+  ChannelSetupDescriptor,
   PostDetails,
   PostResponse,
   SocialCommentDTO,
@@ -28,6 +29,29 @@ export class TelegramProvider extends SocialAbstract implements SocialProvider {
   isWeb3 = true;
   scopes = [] as string[];
   editor = 'html' as const;
+
+  // Bot-token channel: no OAuth, no callback — the token IS the credential
+  // (read from the org config's clientId at connect time).
+  override setupDescriptor: ChannelSetupDescriptor = {
+    authType: 'token',
+    credentialFields: [
+      {
+        key: 'clientId',
+        label: 'Bot Token',
+        placeholder: 'e.g. 123456789:AAEhBOweik6ad9r_QXMENQjcrGbqCr4K-4rI',
+        secret: true,
+        help: 'Telegram → @BotFather → /mybots → your bot → API Token',
+      },
+    ],
+    portalUrl: 'https://t.me/botfather',
+    portalLabel: 'Telegram BotFather',
+    setupSteps: [
+      'Open Telegram and start a chat with @BotFather.',
+      'Send /newbot (or pick an existing bot with /mybots) and follow the prompts.',
+      'Copy the API token BotFather gives you into the field below.',
+      'Add the bot to your channel or group as an admin so it can post.',
+    ],
+  };
 
   private createBot(token: string): TelegramBot {
     return new TelegramBot(token);

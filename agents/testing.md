@@ -92,14 +92,24 @@ vendor docs rather than a real API key, mark it at the top of the spec with a
 ## E2E (`e2e/`)
 
 Playwright (`@playwright/test 1.58.2`, separate `e2e/package.json` outside the pnpm
-workspace scripts; `@axe-core/playwright` for the a11y audit config). `playwright.config.ts`:
+workspace scripts — install it standalone with `pnpm install --ignore-workspace`;
+`@axe-core/playwright` for the a11y audit config). `playwright.config.ts`:
 `testDir: ./tests`, `workers: 1`, `retries: 1`, `baseURL: https://app.postmill.ai`
 (live deployment — E2E specs exercise the real app, not a local boot), a `setup` project
-(`**/auth.setup.ts`) producing `.auth/state.json` consumed by the `chromium` project. Run:
-`cd e2e && pnpm test` (aliases: `test:headed`, `test:audit` with `playwright.audit.config.ts`,
-`report`). Add an E2E spec only for cross-page user flows that unit/integration tests can't
-cover (auth flows, composer end-to-end, settings CRUD round-trips); keep component-level
-behavior in vitest.
+(`**/auth.setup.ts`) writing one storage state per persona (`.auth/admin.json` /
+`member.json` / `free.json`); the main project is named `admin` and consumes
+`.auth/admin.json` (persona-aware specs read `test.info().project.name`). The composer
+entry is the header "Create new" icon-button → "New Post" menuitem → `/posts/post` —
+specs open it via `tests/lib/composer.ts` (`openComposer`), not by looking for a
+"Create Post" text button. A full run exceeds the default API throttle (600 req/h/IP) —
+raise `API_LIMIT` for the run window and restart the backend, or expect 429-cascade
+failures. Run: `cd e2e && pnpm test` (aliases: `test:headed`, `test:audit` with
+`playwright.audit.config.ts`, `report`). Never run `e2e/seed-test-data.js` against the
+prod deployment — it deletes the Organization row of every org `test@test.com` belongs
+to; use the `seed:demo` fixtures (Solstice cast) with `E2E_MEMBER_EMAIL` /
+`E2E_FREE_EMAIL` overrides instead. Add an E2E spec only for cross-page user flows that
+unit/integration tests can't cover (auth flows, composer end-to-end, settings CRUD
+round-trips); keep component-level behavior in vitest.
 
 ## Lint
 
