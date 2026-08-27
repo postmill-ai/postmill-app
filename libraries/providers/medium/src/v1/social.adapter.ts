@@ -1,5 +1,6 @@
 import {
   AuthTokenDetails,
+  ChannelSetupDescriptor,
   PostDetails,
   PostResponse,
   SocialCommentDTO,
@@ -21,6 +22,23 @@ export class MediumProvider extends SocialAbstract implements SocialProvider {
   scopes = [] as string[];
   editor = 'markdown' as const;
   dto = MediumSettingsDto;
+
+  // Credential-based channel: no developer app, no callback — the API key
+  // (Medium integration token) is collected in the composer connect flow
+  // (customFields); the config form shows guidance only.
+  override setupDescriptor: ChannelSetupDescriptor = {
+    authType: 'direct',
+    credentialFields: [],
+    portalUrl: 'https://medium.com/me/settings/security',
+    portalLabel: 'Medium Settings',
+    setupSteps: [
+      'Open Medium Settings → Security and apps and scroll to Integration tokens.',
+      'Enter a description for the token (e.g. "Postmill") and create it.',
+      'Copy the Integration token — Medium shows it only once.',
+      'Back in Postmill, go to Create new → New Channel → Medium and paste the token into the API key field.',
+    ],
+  };
+
   maxLength() {
     return 100000;
   }

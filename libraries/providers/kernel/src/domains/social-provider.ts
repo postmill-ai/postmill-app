@@ -210,11 +210,17 @@ export interface ChannelCredentialField {
  * default `callbackUrl` itself — descriptors must NOT hardcode the URL.
  */
 export interface ChannelSetupDescriptor {
-  authType: 'oauth1' | 'oauth2'; // only these two for now — X is oauth1
+  // oauth1/oauth2: BYO developer app + callback registration. token: a single
+  // user-issued credential (bot token, PAT) stored on the org config's clientId —
+  // no callback is involved, so the callback block is hidden for these.
+  // direct: no developer app at all — the channel connects with account
+  // credentials in the composer connect flow (customFields); the config form
+  // shows guidance only (no credential inputs, no callback).
+  authType: 'oauth1' | 'oauth2' | 'token' | 'direct';
   credentialFields: ChannelCredentialField[]; // ordered; defaults to the generic pair
   portalUrl?: string;
   portalLabel?: string;
-  callbackInstructions?: string; // where to paste the callback in the portal
+  callbackInstructions?: string; // where to paste the callback in the portal (oauth only)
   setupSteps?: string[]; // 3-5 short numbered steps
 }
 

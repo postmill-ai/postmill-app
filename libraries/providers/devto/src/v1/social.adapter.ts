@@ -1,5 +1,6 @@
 import {
   AuthTokenDetails,
+  ChannelSetupDescriptor,
   PostDetails,
   PostResponse,
   SocialCommentDTO,
@@ -24,6 +25,22 @@ export class DevToProvider extends SocialAbstract implements SocialProvider {
     return 100000;
   }
   dto = DevToSettingsDto;
+
+  // API-key channel: no developer app, no callback — the channel connects with
+  // the account's DEV Community API key in the composer connect flow
+  // (customFields); the config form shows guidance only.
+  override setupDescriptor: ChannelSetupDescriptor = {
+    authType: 'direct',
+    credentialFields: [],
+    portalUrl: 'https://dev.to/settings/extensions',
+    portalLabel: 'Dev.to Settings',
+    setupSteps: [
+      'Sign in to dev.to and open Settings → Extensions.',
+      'Scroll to the DEV Community API Keys section, give the key a description (e.g. "Postmill") and click Generate API key.',
+      'Copy the generated API key — it is shown only once.',
+      'In Postmill, connect from the composer: Create new → New Channel → Dev.to, and paste the API key into the API key field.',
+    ],
+  };
 
   async generateAuthUrl() {
     const state = makeOauthState();

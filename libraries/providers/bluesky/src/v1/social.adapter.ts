@@ -1,6 +1,7 @@
 import {
   AnalyticsData,
   AuthTokenDetails,
+  ChannelSetupDescriptor,
   PostDetails,
   PostResponse,
   SocialCommentAuthor,
@@ -222,6 +223,22 @@ export class BlueskyProvider extends SocialAbstract implements SocialProvider {
   name = 'Bluesky';
   toolTip = "We don’t currently support two-factor authentication. If it’s enabled on Bluesky, you’ll need to disable it."
   isBetweenSteps = false;
+
+  // Direct-credential channel: no developer app, no callback — the account
+  // handle + app password are collected by the composer connect flow
+  // (customFields below), so the config form shows setup guidance only.
+  override setupDescriptor: ChannelSetupDescriptor = {
+    authType: 'direct',
+    credentialFields: [],
+    portalUrl: 'https://bsky.app/settings/app-passwords',
+    portalLabel: 'Bluesky Settings',
+    setupSteps: [
+      'Open Bluesky and go to Settings → Privacy & Security → App passwords.',
+      "Select 'Add App Password', give it a name (e.g. Postmill), and copy the generated app password.",
+      "Back here, open 'Create new' → 'New Channel' and pick Bluesky.",
+      "Enter your Bluesky handle (e.g. you.bsky.social) as the Identifier and the app password as the Password, then click Connect.",
+    ],
+  };
   scopes = ['write:statuses', 'profile', 'write:media'];
   editor = 'normal' as const;
   maxLength() {

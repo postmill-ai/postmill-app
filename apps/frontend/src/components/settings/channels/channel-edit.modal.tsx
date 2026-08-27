@@ -50,7 +50,7 @@ export interface ChannelCredentialField {
 }
 
 export interface ChannelSetupDescriptor {
-  authType: 'oauth1' | 'oauth2';
+  authType: 'oauth1' | 'oauth2' | 'token' | 'direct';
   credentialFields: ChannelCredentialField[];
   portalUrl?: string;
   portalLabel?: string;
@@ -104,16 +104,16 @@ export const ChannelConfigForm: FC<ChannelConfigFormProps> = ({
   const toaster = useToaster();
   const isEdit = !!config;
   const isConfigured = config?.isConfigured || false;
+  // Direct channels connect with account credentials in the composer flow —
+  // the config form collects no credentials for them.
+  const isDirect = setup?.authType === 'direct';
 
   const [name, setName] = useState(config?.name || '');
   const [clientId, setClientId] = useState('');
   const [clientSecret, setClientSecret] = useState('');
-  const [editScopes, setEditScopes] = useState(config?.scopes || defaultScopes);
-  const [editRedirectUri, setEditRedirectUri] = useState(config?.redirectUri || '');
   const [editSetupNotes, setEditSetupNotes] = useState(config?.setupNotes || '');
   const [enabled, setEnabled] = useState(config?.enabled || false);
   const [saving, setSaving] = useState(false);
-  const [showAdvanced, setShowAdvanced] = useState(false);
   const [callbackCopied, setCallbackCopied] = useState(false);
 
   const {
@@ -149,7 +149,7 @@ export const ChannelConfigForm: FC<ChannelConfigFormProps> = ({
       toaster.show(t('channel_name_required', 'Please enter a name for this channel.'), 'warning');
       return;
     }
-    if (enabled && !clientId.trim() && !isConfigured) {
+    if (enabled && !isDirect && !clientId.trim() && !isConfigured) {
       toaster.show(
         t('credentials_required', 'Please enter a Client ID / API Key before enabling this provider.'),
         'warning'
@@ -162,12 +162,10 @@ export const ChannelConfigForm: FC<ChannelConfigFormProps> = ({
       const payload: Record<string, any> = {
         name: name.trim(),
         enabled,
-        scopes: editScopes || '',
       };
       if (clientId.trim()) payload.clientId = clientId.trim();
       if (clientSecret.trim()) payload.clientSecret = clientSecret.trim();
       if (selectedVersion) payload.version = selectedVersion;
-      if (editRedirectUri.trim()) payload.redirectUri = editRedirectUri.trim();
       if (editSetupNotes.trim()) payload.setupNotes = editSetupNotes.trim();
       if (vpnOptions.length) {
         if (vpnEnabled && vpnValue) {
@@ -207,7 +205,7 @@ export const ChannelConfigForm: FC<ChannelConfigFormProps> = ({
     } finally {
       setSaving(false);
     }
-  }, [name, enabled, clientId, clientSecret, selectedVersion, editScopes, editRedirectUri, editSetupNotes, vpnOptions, vpnEnabled, vpnValue, isConfigured, isEdit, config, identifier, fetch, toaster, t, onSaved, onClose]);
+  }, [name, enabled, clientId, clientSecret, selectedVersion, editSetupNotes, isDirect, vpnOptions, vpnEnabled, vpnValue, isConfigured, isEdit, config, identifier, fetch, toaster, t, onSaved, onClose]);
 
   const handleDelete = useCallback(async () => {
     if (!config) return;
@@ -320,7 +318,7 @@ export const ChannelConfigForm: FC<ChannelConfigFormProps> = ({
           type="checkbox"
           checked={enabled}
           onChange={(e) => {
-            if (e.target.checked && !clientId.trim() && !isConfigured) {
+            if (e.target.checked && !isDirect && !clientId.trim() && !isConfigured) {
               toaster.show(
                 t('credentials_required', 'Please enter a Client ID / API Key before enabling this provider.'),
                 'warning'
@@ -333,7 +331,7 @@ export const ChannelConfigForm: FC<ChannelConfigFormProps> = ({
         />
       </div>
 
-      {credentialFields.map((field) => {
+      {setup?.authType !== 'direct' && credentialFields.map((field) => {
         const value = field.key === 'clientId' ? clientId : clientSecret;
         const setValue = field.key === 'clientId' ? setClientId : setClientSecret;
         return (
@@ -355,7 +353,9 @@ export const ChannelConfigForm: FC<ChannelConfigFormProps> = ({
         );
       })}
 
-      {!!callbackUrl && (
+      {/* Callback registration is an OAuth-app concern only; token and direct
+          channels never register a callback. */}
+      {!!callbackUrl && setup?.authType !== 'token' && setup?.authType !== 'direct' && (
         <div className="flex flex-col gap-[6px]">
           <label className="text-[14px] font-[500]">{t('callback_url', 'Callback URL')}</label>
           <div className="flex gap-[8px] items-center">
@@ -382,41 +382,14 @@ export const ChannelConfigForm: FC<ChannelConfigFormProps> = ({
 
       {!!defaultScopes && (
         <div className="flex flex-col gap-[4px]">
-          <label className="text-[14px] font-[500]">{t('default_scopes', 'Default scopes')}</label>
+          <label className="text-[14px] font-[500]">{t('default_scopes', "Permissions we'll request")}</label>
           <div className="text-[12px] text-newTableText break-words">{defaultScopes}</div>
         </div>
       )}
 
-      <div className="flex flex-col gap-[8px]">
-        <button
-          type="button"
-          onClick={() => setShowAdvanced((v) => !v)}
-          className="flex items-center gap-[6px] text-[13px] text-newTableText hover:text-textColor"
-        >
-          <span className={`inline-block transition-transform ${showAdvanced ? 'rotate-90' : ''}`}>›</span>
-          {t('advanced_settings', 'Advanced settings')}
-        </button>
-        {showAdvanced && (
-          <div className="flex flex-col gap-[12px]">
-            <Input
-              label={t('redirect_uri', 'Redirect URI')}
-              name={`redirect_${identifier}`}
-              disableForm={true}
-              value={editRedirectUri}
-              onChange={(e) => setEditRedirectUri(e.target.value)}
-              placeholder={t('redirect_uri_placeholder', 'Leave empty for default callback URL')}
-            />
-
-            <Input
-              label={t('scopes_comma', 'Scopes (comma separated)')}
-              name={`scopes_${identifier}`}
-              disableForm={true}
-              value={editScopes}
-              onChange={(e) => setEditScopes(e.target.value)}
-            />
-          </div>
-        )}
-      </div>
+      {/* No Redirect-URI / scopes overrides here: those are platform wiring, not
+          user settings. The default callback is displayed read-only above; the
+          adapter-declared scopes always apply. */}
 
       {(config?.setupNotes || editSetupNotes) && (
         <div className="flex flex-col gap-[4px]">

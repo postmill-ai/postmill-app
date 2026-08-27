@@ -1,5 +1,6 @@
 import {
   AuthTokenDetails,
+  ChannelSetupDescriptor,
   PostDetails,
   PostResponse,
   SocialCommentDTO,
@@ -91,6 +92,24 @@ export class WordpressProvider
   scopes = [] as string[];
   override maxConcurrentJob = 5; // WordPress self-hosted typically has generous limits
   dto = WordpressDto;
+
+  // Direct channel: no developer app, no callback — the channel connects with
+  // the site's URL + account credentials in the composer connect flow
+  // (customFields). The config form shows guidance only.
+  override setupDescriptor: ChannelSetupDescriptor = {
+    authType: 'direct',
+    credentialFields: [],
+    portalUrl:
+      'https://developer.wordpress.org/advanced-administration/security/application-passwords/',
+    portalLabel: 'WordPress Application Passwords guide',
+    setupSteps: [
+      "Log in to your WordPress site's admin dashboard (your Domain URL + /wp-admin).",
+      'Go to Users → Profile and scroll to the Application Passwords section (requires WordPress 5.6 or later).',
+      'Name the new password (e.g. "Postmill"), click "Add New Application Password", and copy the generated password.',
+      'Back here, open Create new → New Channel → WordPress and enter your Domain URL, Username, and the application password as the Password.',
+    ],
+  };
+
   maxLength() {
     return 100000;
   }
