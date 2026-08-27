@@ -1,6 +1,7 @@
 import {
   AnalyticsData,
   AuthTokenDetails,
+  ChannelSetupDescriptor,
   ClientInformation,
   PostDetails,
   PostResponse,
@@ -39,6 +40,35 @@ export class PinterestProvider
     'user_accounts:read',
   ];
   override maxConcurrentJob = 3; // Pinterest has more lenient rate limits
+
+  override setupDescriptor: ChannelSetupDescriptor = {
+    authType: 'oauth2',
+    credentialFields: [
+      {
+        key: 'clientId',
+        label: 'App ID',
+        placeholder: 'e.g. 1234567890123…',
+        help: 'Pinterest Developers → your app → Manage → App ID',
+      },
+      {
+        key: 'clientSecret',
+        label: 'App secret key',
+        secret: true,
+        help: 'Pinterest Developers → your app → Manage → App secret key',
+      },
+    ],
+    portalUrl: 'https://developers.pinterest.com/apps',
+    portalLabel: 'Pinterest Developers',
+    callbackInstructions:
+      'In the Pinterest Developers app dashboard, open your app’s settings and add this URL to the allowed OAuth redirect URIs.',
+    setupSteps: [
+      'Open Pinterest Developers and create an app (or pick an existing one) — a Pinterest business account is required.',
+      'In your app’s settings, add the redirect URL shown below to the allowed OAuth redirect URIs.',
+      'Copy the App ID and App secret key from the app’s Manage screen into the fields below.',
+      'Save, then connect — Pinterest will ask you to authorize the requested scopes.',
+    ],
+  };
+
   maxLength() {
     return 500;
   }

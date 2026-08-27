@@ -1,5 +1,6 @@
 import {
   AuthTokenDetails,
+  ChannelSetupDescriptor,
   ClientInformation,
   PostDetails,
   PostResponse,
@@ -46,6 +47,38 @@ export class InstagramStandaloneProvider
     override maxConcurrentJob = 200; // Instagram standalone has stricter limits
   dto = InstagramDto;
   private readonly logger = new Logger(InstagramStandaloneProvider.name);
+
+  // Beginner-friendly setup metadata for the per-tenant "Add channel" form.
+  // The default callback URL is computed by the catalog
+  // (IntegrationManager.getSocialProviderCatalog) — do NOT hardcode it here.
+  override setupDescriptor: ChannelSetupDescriptor = {
+    authType: 'oauth2',
+    credentialFields: [
+      {
+        key: 'clientId',
+        label: 'Instagram App ID',
+        placeholder: 'e.g. 1234567890123456',
+        help: 'Meta for Developers → your app → Instagram → API setup with Instagram Login → Instagram App ID',
+      },
+      {
+        key: 'clientSecret',
+        label: 'Instagram App Secret',
+        secret: true,
+        help: 'Meta for Developers → your app → Instagram → API setup with Instagram Login → Instagram App Secret',
+      },
+    ],
+    portalUrl: 'https://developers.facebook.com/apps',
+    portalLabel: 'Meta for Developers',
+    callbackInstructions:
+      'In Meta for Developers → your app → Instagram → API setup with Instagram Login: under Business login settings, add this URL to the OAuth redirect URIs list.',
+    setupSteps: [
+      "Open Meta for Developers and create an app (type 'Other' → 'Business'), or pick an existing one.",
+      "Add the Instagram product and choose 'API setup with Instagram Login'.",
+      'Under Business login settings, add the callback URL shown below to the OAuth redirect URIs list.',
+      'Copy the Instagram App ID and Instagram App Secret into the fields below.',
+      'Make sure the Instagram account you connect is a professional (Business or Creator) account.',
+    ],
+  };
 
   editor = 'normal' as const;
   maxLength() {

@@ -1,6 +1,7 @@
 import {
   AnalyticsData,
   AuthTokenDetails,
+  ChannelSetupDescriptor,
   ClientInformation,
   PostDetails,
   PostResponse,
@@ -40,6 +41,37 @@ export class RedditProvider extends SocialAbstract implements SocialProvider {
   scopes = ['read', 'identity', 'submit', 'flair'];
   editor = 'normal' as const;
   dto = RedditSettingsDto;
+
+  // Beginner-friendly setup metadata for the per-tenant "Add channel" form.
+  // The default callback URL is computed by the catalog
+  // (IntegrationManager.getSocialProviderCatalog) — do NOT hardcode it here.
+  override setupDescriptor: ChannelSetupDescriptor = {
+    authType: 'oauth2',
+    credentialFields: [
+      {
+        key: 'clientId',
+        label: 'Client ID',
+        placeholder: 'e.g. Ab1Cd2Ef3Gh4Ij…',
+        help: 'Reddit Apps → your app → the string shown directly under the app name ("web app")',
+      },
+      {
+        key: 'clientSecret',
+        label: 'Client Secret',
+        secret: true,
+        help: 'Reddit Apps → your app → the "secret" field in the app details',
+      },
+    ],
+    portalUrl: 'https://www.reddit.com/prefs/apps',
+    portalLabel: 'Reddit Apps',
+    callbackInstructions:
+      'On Reddit Apps → your app (create or edit): set the "redirect uri" field to this Callback URL. The redirect uri must match exactly.',
+    setupSteps: [
+      'Open Reddit Apps and click "create app" (or "create another app").',
+      'Pick a name and choose the "web app" type, then paste the Callback URL shown below into the "redirect uri" field.',
+      'Create the app, then copy the Client ID (the string under the app name) and the "secret" value into the fields below.',
+      'Save here and connect — you will be asked to log in to Reddit and approve the requested permissions.',
+    ],
+  };
 
   maxLength() {
     return 10000;

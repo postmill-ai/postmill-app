@@ -1,5 +1,6 @@
 import {
   AuthTokenDetails,
+  ChannelSetupDescriptor,
   ClientInformation,
   PostDetails,
   PostResponse,
@@ -29,6 +30,37 @@ export class SlackProvider extends SocialAbstract implements SocialProvider {
     'chat:write.customize',
   ];
   dto = SlackDto;
+
+  // Beginner-friendly setup metadata for the per-tenant "Add channel" form.
+  // The default callback URL is computed by the catalog
+  // (IntegrationManager.getSocialProviderCatalog) — do NOT hardcode it here.
+  override setupDescriptor: ChannelSetupDescriptor = {
+    authType: 'oauth2',
+    credentialFields: [
+      {
+        key: 'clientId',
+        label: 'Client ID',
+        placeholder: 'e.g. 1234567890.123456789012',
+        help: 'Slack API → your app → Basic Information → App Credentials',
+      },
+      {
+        key: 'clientSecret',
+        label: 'Client Secret',
+        secret: true,
+        help: 'Slack API → your app → Basic Information → App Credentials',
+      },
+    ],
+    portalUrl: 'https://api.slack.com/apps',
+    portalLabel: 'Slack API: Your Apps',
+    callbackInstructions:
+      'In your Slack app → OAuth & Permissions → Redirect URLs, click "Add New Redirect URL", paste this callback URL, and save.',
+    setupSteps: [
+      'Open the Slack API portal and click "Create New App" → "From scratch" (or pick an existing app).',
+      'Under OAuth & Permissions → Redirect URLs, add the callback URL shown below and save.',
+      'Under OAuth & Permissions → Scopes → Bot Token Scopes, add: channels:read, chat:write, users:read, groups:read, channels:join, chat:write.customize.',
+      'Copy the Client ID and Client Secret from Basic Information → App Credentials into the fields below.',
+    ],
+  };
 
   maxLength() {
     return 400000;

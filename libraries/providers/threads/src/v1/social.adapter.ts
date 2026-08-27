@@ -1,6 +1,7 @@
 import {
   AnalyticsData,
   AuthTokenDetails,
+  ChannelSetupDescriptor,
   ClientInformation,
   PostDetails,
   PostResponse,
@@ -42,6 +43,38 @@ export class ThreadsProvider extends SocialAbstract implements SocialProvider {
 
   editor = 'normal' as const;
   dto = ThreadsSettingsDto;
+
+  // Beginner-friendly setup metadata for the per-tenant "Add channel" form.
+  // The default callback URL is computed by the catalog
+  // (IntegrationManager.getSocialProviderCatalog) — do NOT hardcode it here.
+  override setupDescriptor: ChannelSetupDescriptor = {
+    authType: 'oauth2',
+    credentialFields: [
+      {
+        key: 'clientId',
+        label: 'Threads App ID',
+        placeholder: 'e.g. 1234567890123456',
+        help: 'Meta for Developers → your app → Access the Threads API → Settings',
+      },
+      {
+        key: 'clientSecret',
+        label: 'Threads App Secret',
+        secret: true,
+        help: 'Meta for Developers → your app → Access the Threads API → Settings → Show next to Threads App Secret',
+      },
+    ],
+    portalUrl: 'https://developers.facebook.com/apps',
+    portalLabel: 'Meta for Developers',
+    callbackInstructions:
+      'In Meta for Developers → your app → Access the Threads API → Settings: paste this URL into Redirect Callback URLs and save.',
+    setupSteps: [
+      'Open Meta for Developers and create an app (or pick an existing one), choosing "Access the Threads API" as the use case.',
+      'In the app dashboard, open Access the Threads API → Settings.',
+      'Add the callback URL shown below to Redirect Callback URLs and save.',
+      'Copy the Threads App ID and Threads App Secret (click Show) from the same Settings page into the fields below.',
+    ],
+  };
+
   maxLength() {
     return 500;
   }

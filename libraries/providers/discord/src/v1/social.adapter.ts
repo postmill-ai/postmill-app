@@ -1,6 +1,7 @@
 import {
   AnalyticsData,
   AuthTokenDetails,
+  ChannelSetupDescriptor,
   ClientInformation,
   PostDetails,
   PostResponse,
@@ -33,6 +34,39 @@ export class DiscordProvider extends SocialAbstract implements SocialProvider {
     return 1980;
   }
   dto = DiscordDto;
+
+  // Beginner-friendly setup metadata for the per-tenant "Add channel" form.
+  // The default callback URL is computed by the catalog
+  // (IntegrationManager.getSocialProviderCatalog) — do NOT hardcode it here.
+  // Note: posting itself runs on the bot token (org credential `discord.token`);
+  // this descriptor covers the OAuth2 app credentials the connect flow needs.
+  override setupDescriptor: ChannelSetupDescriptor = {
+    authType: 'oauth2',
+    credentialFields: [
+      {
+        key: 'clientId',
+        label: 'Client ID',
+        placeholder: 'e.g. 1234567890123456789',
+        help: 'Discord Developer Portal → your application → OAuth2 → Client Information',
+      },
+      {
+        key: 'clientSecret',
+        label: 'Client Secret',
+        secret: true,
+        help: 'Discord Developer Portal → your application → OAuth2 → Client Information (click "Reset Secret" to generate one)',
+      },
+    ],
+    portalUrl: 'https://discord.com/developers/applications',
+    portalLabel: 'Discord Developer Portal',
+    callbackInstructions:
+      'In the Discord Developer Portal → your application → OAuth2 → General, add this URL under Redirects and save your changes.',
+    setupSteps: [
+      'Open the Discord Developer Portal and create a new application (or pick an existing one).',
+      'Under Bot, add a bot to the application — connecting a server installs this bot, and posting uses it.',
+      'Under OAuth2 → General, add the Redirect URL shown below and save.',
+      'Copy the Client ID and Client Secret from OAuth2 → Client Information into the fields below.',
+    ],
+  };
 
   async refreshToken(refreshToken: string, clientInformation?: ClientInformation): Promise<AuthTokenDetails> {
     const clientId = clientInformation?.client_id || '';

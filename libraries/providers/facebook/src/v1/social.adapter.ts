@@ -1,6 +1,7 @@
 import {
   AnalyticsData,
   AuthTokenDetails,
+  ChannelSetupDescriptor,
   ClientInformation,
   PostDetails,
   PostResponse,
@@ -45,6 +46,37 @@ export class FacebookProvider extends SocialAbstract implements SocialProvider {
     return 63206;
   }
   dto = FacebookDto;
+
+  // Beginner-friendly setup metadata for the per-tenant "Add channel" form.
+  // The default callback URL is computed by the catalog
+  // (IntegrationManager.getSocialProviderCatalog) — do NOT hardcode it here.
+  override setupDescriptor: ChannelSetupDescriptor = {
+    authType: 'oauth2',
+    credentialFields: [
+      {
+        key: 'clientId',
+        label: 'App ID',
+        placeholder: 'e.g. 1234567890123456',
+        help: 'Meta for Developers → your app → App settings → Basic',
+      },
+      {
+        key: 'clientSecret',
+        label: 'App Secret',
+        secret: true,
+        help: 'Meta for Developers → your app → App settings → Basic',
+      },
+    ],
+    portalUrl: 'https://developers.facebook.com/apps',
+    portalLabel: 'Meta for Developers',
+    callbackInstructions:
+      'In Meta for Developers → your app, add the "Facebook Login" product, then open Facebook Login → Settings and paste this URL into "Valid OAuth Redirect URIs".',
+    setupSteps: [
+      'Open Meta for Developers and create an app (type "Business"), or pick an existing one.',
+      'Add the "Facebook Login" product to the app.',
+      'Under Facebook Login → Settings, add the Callback URL shown below to "Valid OAuth Redirect URIs".',
+      'Copy the App ID and App Secret from App settings → Basic into the fields below.',
+    ],
+  };
 
   override async checkValidity(
     [firstPost]: Array<ValidityMedia[]>,
