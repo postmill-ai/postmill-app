@@ -400,14 +400,14 @@ export class IntegrationManager {
    * blobs fall back to the passed clientInformation unchanged.
    */
   mergeExternalInstanceDetails<T extends Record<string, any> | undefined>(
-    integration: { customInstanceDetails?: string | null } | undefined,
+    integration: object | null | undefined,
     clientInformation: T
   ): T {
-    if (!integration?.customInstanceDetails) return clientInformation;
+    const stored = (integration as { customInstanceDetails?: string | null } | null | undefined)
+      ?.customInstanceDetails;
+    if (!stored) return clientInformation;
     try {
-      const details = JSON.parse(
-        AuthService.fixedDecryption(integration.customInstanceDetails)
-      );
+      const details = JSON.parse(AuthService.fixedDecryption(stored));
       if (!details || typeof details !== 'object') return clientInformation;
       return { ...(clientInformation || {}), ...details } as T;
     } catch {

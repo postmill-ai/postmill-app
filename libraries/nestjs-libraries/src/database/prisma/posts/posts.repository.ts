@@ -486,7 +486,7 @@ export class PostsRepository {
   }
 
   async deletePost(orgId: string, group: string) {
-    await this._post.model.post.updateMany({
+    const { count } = await this._post.model.post.updateMany({
       where: {
         organizationId: orgId,
         group,
@@ -496,7 +496,7 @@ export class PostsRepository {
       },
     });
 
-    return this._post.model.post.findFirst({
+    const post = await this._post.model.post.findFirst({
       where: {
         organizationId: orgId,
         group,
@@ -506,6 +506,8 @@ export class PostsRepository {
         id: true,
       },
     });
+
+    return { count, post };
   }
 
   // No pagination/cap here on purpose: the `where: { group }` already bounds this to a single
