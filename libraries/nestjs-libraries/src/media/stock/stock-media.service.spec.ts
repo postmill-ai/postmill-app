@@ -204,6 +204,36 @@ describe('StockMediaService', () => {
       expect(result.configured).toBe(false);
       expect(result.error).toBeUndefined();
     });
+
+    it('jamendo !res.ok surfaces an error instead of misreporting configured:false', async () => {
+      process.env.JAMENDO_CLIENT_ID = 'client-id';
+      mockSafeFetch.mockResolvedValue({
+        ok: false,
+        status: 401,
+        headers: new Headers({ 'content-type': 'application/json' }),
+        json: async () => ({}),
+        text: async () => 'unauthorized',
+      });
+      const { service } = makeService();
+
+      const result = await service.searchAudio('org-1', 'lofi', 1);
+
+      expect(result.configured).toBe(true);
+      expect(result.results).toEqual([]);
+      expect(result.error).toBe('jamendo request failed (HTTP 401)');
+    });
+
+    it('jamendo network/parse failure keeps configured:true with a safe error', async () => {
+      process.env.JAMENDO_CLIENT_ID = 'client-id';
+      mockSafeFetch.mockRejectedValue(new Error('socket hangup'));
+      const { service } = makeService();
+
+      const result = await service.searchAudio('org-1', 'lofi', 1);
+
+      expect(result.configured).toBe(true);
+      expect(result.error).toBe('jamendo request failed (network or invalid response)');
+      expect(result.error).not.toContain('socket hangup');
+    });
   });
 
   describe('C3 — brand/adult safety on the Unsplash photo search', () => {
