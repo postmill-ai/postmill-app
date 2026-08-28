@@ -122,6 +122,12 @@ export const ManageModal: FC<AddEditModalProps> = (props) => {
 
   const { addEditSets, mutate, customClose, dummy } = props;
 
+  // The store date freezes at composer mount; a user who never opens the date
+  // picker and submits minutes later hits a 400 "Cannot schedule a post in the
+  // past" (seen live 2026-08-28). Track deliberate picks so submit can snap an
+  // untouched, expired default to the current minute instead of dead-ending.
+  const dateUserPicked = useRef(false);
+
   const {
     selectedIntegrations,
     hide,
@@ -162,6 +168,14 @@ export const ManageModal: FC<AddEditModalProps> = (props) => {
       global: state.global,
       internal: state.internal,
     }))
+  );
+
+  const pickDate = useCallback(
+    (d: dayjs.Dayjs) => {
+      dateUserPicked.current = true;
+      setDate(d);
+    },
+    [setDate]
   );
 
   useEffect(() => {
@@ -508,6 +522,21 @@ export const ManageModal: FC<AddEditModalProps> = (props) => {
         }
       }
 
+      // Snap an untouched, expired default date past the current minute before
+      // preflight/submit. Deliberate picks keep the server's 400 so a chosen
+      // past time stays visible instead of being silently rewritten. The server
+      // compares millisecond-precise (posts.service: isBefore(dayjs())), so
+      // "now" is already marginally past when the request lands — round UP.
+      let effectiveDate = date;
+      if (
+        type === 'schedule' &&
+        !dateUserPicked.current &&
+        date.isBefore(dayjs())
+      ) {
+        effectiveDate = dayjs().add(1, 'minute').startOf('minute');
+        setDate(effectiveDate);
+      }
+
       // 2J: Run preflight check for schedule/now (skip for draft, and when the
       // user already reviewed the panel and clicked Proceed → skipPreflight).
       if ((type === 'schedule' || type === 'now') && !skipPreflight) {
@@ -531,7 +560,7 @@ export const ManageModal: FC<AddEditModalProps> = (props) => {
           })),
         }));
 
-        const preflightResult = await runPreflight({ type, posts, date: date.utc().format('YYYY-MM-DDTHH:mm:ss') });
+        const preflightResult = await runPreflight({ type, posts, date: effectiveDate.utc().format('YYYY-MM-DDTHH:mm:ss') });
 
         if (
           preflightResult &&
@@ -680,7 +709,7 @@ export const ManageModal: FC<AddEditModalProps> = (props) => {
         shortLink,
         brandId,
         ...(campaignId ? { campaignId } : {}),
-        date: date.utc().format('YYYY-MM-DDTHH:mm:ss'),
+        date: effectiveDate.utc().format('YYYY-MM-DDTHH:mm:ss'),
         posts,
       };
 
@@ -753,6 +782,7 @@ export const ManageModal: FC<AddEditModalProps> = (props) => {
       repeater,
       tags,
       date,
+      setDate,
       addEditSets,
       dummy,
       shortLinkEnabled,
@@ -1081,7 +1111,7 @@ export const ManageModal: FC<AddEditModalProps> = (props) => {
                 <div>{t('delete_post', 'Delete Post')}</div>
               </button>
             )}
-            <DatePicker onChange={setDate} date={date} />
+            <DatePicker onChange={pickDate} date={date} />
             {!addEditSets && (
               <div className="group cursor-pointer relative">
                 <button

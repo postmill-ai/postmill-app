@@ -10,7 +10,7 @@ export default function CampaignReportPage() {
   const { id } = useParams<{ id: string }>();
   const { data, isLoading, error } = useCampaignReport(id, 'json');
 
-  if (error) return <div className="p-[24px] text-center text-red-500">{t('report_failed_to_load', 'Failed to load report.')}</div>;
+  if (error) return <div className="p-[24px] text-center text-dangerText">{t('report_failed_to_load', 'Failed to load report.')}</div>;
   if (isLoading || !data) return <div className="p-[24px] text-center">{t('loading_ellipsis', 'Loading…')}</div>;
 
   return <CampaignReportView report={data} />;

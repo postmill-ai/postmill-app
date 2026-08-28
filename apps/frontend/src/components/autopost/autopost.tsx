@@ -317,7 +317,7 @@ export const Autopost: FC = () => {
                         return ints.length > 0 ? (
                           <>
                             {ints.slice(0, 3).map((i: any) => (
-                              <span key={i.id} className="text-[11px] bg-btnPrimary/20 text-btnPrimary px-[6px] py-[2px] rounded-full">
+                              <span key={i.id} className="text-[11px] bg-btnPrimary/20 text-btnPrimaryAccent px-[6px] py-[2px] rounded-full">
                                 {i.name || i.id?.slice(0, 8)}
                               </span>
                             ))}

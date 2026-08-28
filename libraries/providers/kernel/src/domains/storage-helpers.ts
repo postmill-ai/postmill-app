@@ -155,6 +155,12 @@ export class S3StorageBase implements StorageCapability {
         secretAccessKey: credentials.secretAccessKey,
       },
       endpoint,
+      // A custom endpoint means a self-hosted/S3-compatible service (MinIO,
+      // Ceph, B2, R2, …) — the SDK's virtual-hosted default would resolve
+      // `<bucket>.<endpoint-host>`, which does not exist there. Path-style is
+      // universally supported by those services. Native AWS S3 (no custom
+      // endpoint) keeps the virtual-hosted default.
+      forcePathStyle: !!endpoint,
       requestChecksumCalculation: 'WHEN_REQUIRED',
     });
   }

@@ -134,7 +134,7 @@ export const CampaignCard: FC<CampaignCardProps> = ({
           </div>
         )}
         {engagement?.topPost && (
-          <div className="text-[11px] text-newTableText/70">
+          <div className="text-[11px] text-newTableText">
             {t('top_post', 'Top Post')}: {engagement.topPost.title} ({engagement.topPost.integration})
             {engagement.topPost.lastLikes ? ` — ${Math.round(engagement.topPost.lastLikes)} likes` : ''}
           </div>

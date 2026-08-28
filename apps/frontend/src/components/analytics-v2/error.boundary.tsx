@@ -44,7 +44,7 @@ export class ErrorBoundary extends Component<Props, State> {
                 defaultValue: 'Something went wrong',
               })}
             </p>
-            <p className="text-[12px] text-newTableText opacity-60 mt-[8px]">
+            <p className="text-[12px] text-newTableText mt-[8px]">
               {errorMessage}
             </p>
             <button

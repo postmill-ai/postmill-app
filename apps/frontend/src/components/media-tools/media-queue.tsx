@@ -50,7 +50,7 @@ const CountPill: React.FC<{ label: string; value: number; tone: 'active' | 'fail
       className={clsx(
         'text-[20px] font-[700] tabular-nums leading-none',
         tone === 'failed' && 'text-red-600 dark:text-red-400',
-        tone === 'active' && 'text-[#2B5CD3]',
+        tone === 'active' && 'text-btnPrimaryAccent',
         tone === 'muted' && 'text-textColor'
       )}
     >
@@ -254,7 +254,7 @@ export const MediaQueuePanel: React.FC = () => {
         </h2>
         <Link
           href={MEDIA_QUEUE_HREF}
-          className="text-[12px] text-[#2B5CD3] hover:underline"
+          className="text-[12px] text-btnPrimaryAccent hover:underline"
         >
           {t('view_all', 'View all')}
         </Link>

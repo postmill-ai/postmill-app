@@ -298,12 +298,12 @@ export const CampaignReportView: FC<{ report: CampaignReport; publicMode?: boole
         style={{ backgroundColor: color, color: readableTextColor(color) }}
       >
         <h1 className="text-[28px] font-[600]">{campaign.name}</h1>
-        <p className="text-[14px] opacity-90">
+        <p className="text-[14px]">
           {t('campaign_report', 'Campaign Report')} &bull; {dayjs().format(t('campaign_report_header_date_format', 'MMM D, YYYY'))}
         </p>
-        {campaign.description && <p className="text-[13px] opacity-90 max-w-[720px]">{campaign.description}</p>}
+        {campaign.description && <p className="text-[13px] max-w-[720px]">{campaign.description}</p>}
         {(campaign.startDate || campaign.endDate) && (
-          <p className="text-[13px] opacity-90">
+          <p className="text-[13px]">
             {campaign.startDate ? formatDate(campaign.startDate, t('campaign_report_date_format', 'MMM D, YYYY')) : ''}
             {campaign.startDate && campaign.endDate ? ' — ' : ''}
             {campaign.endDate ? formatDate(campaign.endDate, t('campaign_report_date_format', 'MMM D, YYYY')) : ''}

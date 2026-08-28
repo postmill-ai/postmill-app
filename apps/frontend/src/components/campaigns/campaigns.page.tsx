@@ -190,7 +190,7 @@ export const CampaignsPage: FC = () => {
       {!isLoading && campaigns && campaigns.length === 0 && (
         <div className="flex flex-col items-center justify-center py-[60px] gap-[16px]">
           <div className="text-[16px] text-newTableText">{t('campaigns_empty', 'No campaigns yet')}</div>
-          <p className="text-[13px] text-newTableText/70 max-w-[400px] text-center">
+          <p className="text-[13px] text-newTableText max-w-[400px] text-center">
             {t('campaigns_empty_hint', 'Campaigns let you group related posts together to track their collective performance and measure the impact of your marketing initiatives.')}
           </p>
           <Button onClick={() => openCreateModal()}>{t('create_first_campaign', 'Create your first campaign')}</Button>

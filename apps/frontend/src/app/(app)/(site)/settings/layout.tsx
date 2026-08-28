@@ -55,7 +55,7 @@ export default function SettingsLayout({ children }: { children: React.ReactNode
             'Your role does not include access to organization settings. Ask an organization admin if you need it.'
           )}
         </div>
-        <a href="/dashboard" className="text-[14px] text-btnPrimary hover:underline">
+        <a href="/dashboard" className="text-[14px] text-btnPrimaryAccent hover:underline">
           {t('back_to_dashboard', 'Back to dashboard')}
         </a>
       </div>

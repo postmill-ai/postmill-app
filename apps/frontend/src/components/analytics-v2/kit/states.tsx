@@ -98,7 +98,7 @@ export const ErrorState: FC<ErrorStateProps> = ({ title, message, onRetry }) => 
       <p className="text-newTableText text-[14px] mb-[12px]">
         {title ?? t('analytics_error_title', 'Something went wrong')}
       </p>
-      {message && <p className="text-[12px] text-newTableText opacity-60 mb-[12px]">{message}</p>}
+      {message && <p className="text-[12px] text-newTableText mb-[12px]">{message}</p>}
       {onRetry && (
         <button
           type="button"

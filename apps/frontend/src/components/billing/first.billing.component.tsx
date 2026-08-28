@@ -508,7 +508,7 @@ export const BillingFeatures: FC<{ tier: PlanInterface['current'] }> = ({
                 className={clsx(
                   'inline-flex items-center px-[6px] py-px rounded-[4px] text-[11px] font-[500]',
                   feature.badge === 'no'
-                    ? 'bg-red-500/20 text-red-500'
+                    ? 'bg-red-500/20 text-dangerText'
                     : 'bg-green-500/20 text-green-500'
                 )}
               >
