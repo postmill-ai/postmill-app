@@ -14,22 +14,11 @@ vi.mock('@copilotkit/react-core', () => ({
   CopilotKit: ({ children }: any) => <>{children}</>,
   useCopilotAction: () => undefined,
   useDefaultTool: () => undefined,
-  useCopilotMessagesContext: () => ({ setMessages, messages: [] }),
+  useCopilotChatInternal: () => ({ setMessages, messages: [] }),
 }));
 
 vi.mock('@copilotkit/react-ui', () => ({
   CopilotChat: () => <div />,
-}));
-
-vi.mock('@copilotkit/runtime-client-gql', () => ({
-  TextMessage: class TextMessage {
-    content: string;
-    role: string;
-    constructor(o: { content: string; role: string }) {
-      this.content = o.content;
-      this.role = o.role;
-    }
-  },
 }));
 
 vi.mock('@postmill-ai/frontend/components/composer/composer', () => ({
@@ -143,6 +132,33 @@ describe('LoadMessages thread-switch race (7.1)', () => {
     expect(
       applied.some((arr) => arr.some((m: any) => m.content === 'A'))
     ).toBe(false);
+  });
+
+  it('maps format-2 memory rows (parts-only content) to text and drops tool-only messages', async () => {
+    render(<LoadMessages id="T" />);
+    await act(async () => {
+      resolvers.get('/copilot/T/list')!([
+        { id: '1', role: 'user', content: { content: 'hello' } },
+        {
+          id: '2',
+          role: 'assistant',
+          content: { parts: [{ type: 'text', text: 'hi there' }] },
+        },
+        // tool-only assistant row: no text anywhere — must not render as an
+        // empty bubble.
+        { id: '3', role: 'assistant', content: { parts: [{ type: 'tool-invocation' }] } },
+        { id: '4', role: 'system', content: 'hidden' },
+      ]);
+    });
+
+    const applied = setMessages.mock.calls
+      .map((c) => c[0])
+      .filter((arg) => Array.isArray(arg) && arg.length > 0);
+    expect(applied).toHaveLength(1);
+    expect(applied[0]).toEqual([
+      { id: '1', role: 'user', content: 'hello' },
+      { id: '2', role: 'assistant', content: 'hi there' },
+    ]);
   });
 });
 

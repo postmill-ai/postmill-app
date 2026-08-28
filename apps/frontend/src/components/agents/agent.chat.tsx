@@ -16,7 +16,7 @@ import { useModals } from '@postmill-ai/frontend/components/layout/new-modal';
 import {
   CopilotKit,
   useCopilotAction,
-  useCopilotMessagesContext,
+  useCopilotChatInternal,
   useDefaultTool,
 } from '@copilotkit/react-core';
 import {
@@ -27,7 +27,6 @@ import { useVariables } from '@postmill-ai/react/helpers/variable.context';
 import { useParams, useRouter } from 'next/navigation';
 import { Button } from '@postmill-ai/react/form/button';
 import { useFetch } from '@postmill-ai/helpers/utils/custom.fetch';
-import { TextMessage } from '@copilotkit/runtime-client-gql';
 import { Composer } from '@postmill-ai/frontend/components/composer/composer';
 import dayjs from 'dayjs';
 import { makeId } from '@postmill-ai/nestjs-libraries/services/make.is';
@@ -141,8 +140,31 @@ You can also use me as an MCP Server — see Settings >> Public API.
   );
 };
 
+// Mastra memory rows carry content as a plain string or a format-2 object
+// ({ content?: string, parts?: [...] }); tool-only assistant messages have no
+// text at all. Map to ag-ui plain messages (what CopilotKit's v2 agent store
+// renders) and drop text-less/non-chat roles, which would render as empty bubbles.
+const toChatMessage = (p: any) => {
+  if (p.role !== 'user' && p.role !== 'assistant') return null;
+  const content =
+    typeof p.content === 'string'
+      ? p.content
+      : p.content?.content ??
+        (Array.isArray(p.content?.parts)
+          ? p.content.parts
+              .filter((part: any) => part?.type === 'text')
+              .map((part: any) => part.text)
+              .join('\n')
+          : '');
+  return content
+    ? { id: p.id, role: p.role as 'user' | 'assistant', content }
+    : null;
+};
+
 export const LoadMessages: FC<{ id: string }> = ({ id }) => {
-  const { setMessages } = useCopilotMessagesContext();
+  // CopilotKit >=1.59 renders from the v2 agent store (useCopilotChatInternal);
+  // the legacy useCopilotMessagesContext is a dead store nothing reads anymore.
+  const { setMessages } = useCopilotChatInternal();
   const fetch = useFetch();
 
   useEffect(() => {
@@ -161,12 +183,7 @@ export const LoadMessages: FC<{ id: string }> = ({ id }) => {
         return;
       }
       setMessages(
-        data.messages.map((p: any) => {
-          return new TextMessage({
-            content: p.content.content,
-            role: p.role,
-          });
-        })
+        (data.messages || []).map(toChatMessage).filter((m: any) => !!m)
       );
     })().catch(() => {});
     return () => {
@@ -182,7 +199,7 @@ export const LoadMessages: FC<{ id: string }> = ({ id }) => {
 // in agent.tsx) won't reflect it until revalidated. Refresh that key once per new
 // session so the new conversation appears without a manual reload.
 const ThreadListRefresher: FC<{ id: string }> = ({ id }) => {
-  const { messages } = useCopilotMessagesContext();
+  const { messages } = useCopilotChatInternal();
   const { mutate } = useSWRConfig();
   const refreshedRef = useRef(false);
   const lastIdRef = useRef(id);
