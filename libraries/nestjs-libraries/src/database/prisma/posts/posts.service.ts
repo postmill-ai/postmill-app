@@ -851,9 +851,10 @@ export class PostsService {
   }
 
   async deletePost(orgId: string, group: string) {
-    const { count, post } = await this._postRepository.deletePost(orgId, group);
+    const { count, posts } = await this._postRepository.deletePost(orgId, group);
 
-    if (post?.id) {
+    // One pending publish run per parent (channel) post — cancel them all.
+    for (const post of posts) {
       try {
         if (isInngestEnabled()) {
           await inngest.send({
@@ -865,7 +866,13 @@ export class PostsService {
             `Skipping post/cancel event for post ${post.id} — Inngest is disabled`
           );
         }
-      } catch (err) {}
+      } catch (err) {
+        Logger.warn(
+          `Failed to send post/cancel event for post ${post.id}: ${
+            (err as Error)?.message
+          }`
+        );
+      }
     }
 
     // Was an unconditional `{ error: true }` — every successful delete reported

@@ -184,6 +184,11 @@ const runPostPublish = (postActivity: PostActivity) =>
                 postsList[i],
               ])
             );
+            // Empty result = the post was deleted after the claim; end the run
+            // quietly (no update-post, no ERROR state, no failure notification).
+            if (!result?.length) {
+              return;
+            }
             postsResults.push(...result);
           } else {
             if (postsList[i].delay) {
@@ -203,6 +208,10 @@ const runPostPublish = (postActivity: PostActivity) =>
                 [postsList[i]]
               )
             );
+            // Same deleted-after-claim bail as post-social above.
+            if (!result?.length) {
+              return;
+            }
             postsResults.push(...result);
           }
 

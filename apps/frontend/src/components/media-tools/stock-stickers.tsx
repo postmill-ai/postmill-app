@@ -77,6 +77,9 @@ export const StockStickers: FC<StockStickersProps> = ({ mode = 'browse', onSelec
 
   const initialLoading = isLoading && items.length === 0 && !error;
   const showEmpty = !initialLoading && !error && items.length === 0;
+  // Provider-reported failure (e.g. invalid API key → HTTP 4xx swallowed into
+  // an empty 200 payload). Distinct from a genuine "no results" empty state.
+  const providerError = lastPage?.error;
   const isFirstFetch = size === 1;
 
   if (lastPage && !lastPage.configured) {
@@ -145,6 +148,25 @@ export const StockStickers: FC<StockStickersProps> = ({ mode = 'browse', onSelec
               </div>
             </div>
           ))}
+        </div>
+      ) : showEmpty && providerError ? (
+        <div className="flex flex-col items-center justify-center h-[320px] gap-[10px] text-center px-[20px]">
+          <svg className="w-[44px] h-[44px] text-dangerText/60" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+            <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v3.75m0 3.75h.008M10.34 3.94l-7.5 12.99A1.5 1.5 0 004.14 19.5h15.72a1.5 1.5 0 001.3-2.25l-7.5-12.99a1.5 1.5 0 00-2.6 0z" />
+          </svg>
+          <div className="text-[15px] font-[600] text-dangerText">
+            {t('stock_provider_unreachable', "Couldn't reach {{provider}}", { provider: stockSourceLabel(lastPage?.source || '') })}
+          </div>
+          <div className="text-[13px] text-newTextColor/65 max-w-[340px]">
+            {t('stock_provider_check_key', 'Check the API key/configuration.')} ({providerError})
+          </div>
+          <button
+            type="button"
+            onClick={() => mutate()}
+            className="mt-[6px] px-[16px] h-[36px] rounded-[8px] bg-[#2B5CD3] text-white text-[13px] hover:bg-[#1e4ab5] focus:outline-hidden focus-visible:ring-2 focus-visible:ring-[#2B5CD3]"
+          >
+            {t('try_again', 'Try again')}
+          </button>
         </div>
       ) : showEmpty ? (
         <div className="flex flex-col items-center justify-center h-[320px] gap-[10px] text-center px-[20px]">

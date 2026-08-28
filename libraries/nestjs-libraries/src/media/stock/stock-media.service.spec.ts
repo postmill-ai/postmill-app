@@ -159,6 +159,53 @@ describe('StockMediaService', () => {
     });
   });
 
+  describe('provider failure surfaces a safe error message', () => {
+    it('ok path is unchanged — no error field on a successful search', async () => {
+      process.env.UNSPLASH_ACCESS_KEY = 'secret-key';
+      mockSafeFetch.mockResolvedValue(
+        jsonResponse({ results: [], total_pages: 0 }),
+      );
+      const { service } = makeService();
+
+      const result = await service.searchPhotos('org-1', 'cats', 1);
+
+      expect(result.configured).toBe(true);
+      expect(result.error).toBeUndefined();
+    });
+
+    it('!res.ok populates error with the HTTP status and keeps results empty', async () => {
+      process.env.PIXABAY_API_KEY = 'bad-key';
+      mockSafeFetch.mockResolvedValue({
+        ok: false,
+        status: 400,
+        headers: new Headers({ 'content-type': 'application/json' }),
+        json: async () => ({}),
+        text: async () => '[ERROR 400] Invalid API key',
+      });
+      const { service } = makeService();
+
+      const result = await service.searchVectors('org-1', 'cats', 1);
+
+      expect(result.configured).toBe(true);
+      expect(result.results).toEqual([]);
+      expect(result.error).toBe('pixabay request failed (HTTP 400)');
+      // The error message must never leak the key or the response body.
+      expect(result.error).not.toContain('bad-key');
+      expect(result.error).not.toContain('Invalid API key');
+    });
+
+    it('missing key still returns configured:false with no error field', async () => {
+      delete process.env.PIXABAY_API_KEY;
+      const { service } = makeService();
+
+      const result = await service.searchVectors('org-1', 'cats', 1);
+
+      expect(mockSafeFetch).not.toHaveBeenCalled();
+      expect(result.configured).toBe(false);
+      expect(result.error).toBeUndefined();
+    });
+  });
+
   describe('C3 — brand/adult safety on the Unsplash photo search', () => {
     it('sends content_filter=high on every photo search', async () => {
       process.env.UNSPLASH_ACCESS_KEY = 'secret-key';

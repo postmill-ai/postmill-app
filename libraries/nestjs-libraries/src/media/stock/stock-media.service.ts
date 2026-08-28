@@ -113,7 +113,7 @@ export class StockMediaService {
           headers: { Authorization: `Client-ID ${this.unsplashKey}` },
         });
         if (!res.ok) {
-          return { results: [], page, totalPages: 0, configured: true, source: 'unsplash' };
+          return { results: [], page, totalPages: 0, configured: true, source: 'unsplash', error: `unsplash request failed (HTTP ${res.status})` };
         }
         const data = await res.json();
         const photos = Array.isArray(data) ? data : [];
@@ -138,7 +138,7 @@ export class StockMediaService {
         headers: { Authorization: `Client-ID ${this.unsplashKey}` },
       });
       if (!res.ok) {
-        return { results: [], page, totalPages: 0, configured: true, source: 'unsplash' };
+        return { results: [], page, totalPages: 0, configured: true, source: 'unsplash', error: `unsplash request failed (HTTP ${res.status})` };
       }
       const data = (await res.json()) as any;
       return {
@@ -206,7 +206,7 @@ export class StockMediaService {
         headers: { Authorization: this.pexelsKey! },
       });
       if (!res.ok) {
-        return { results: [], page, totalPages: 0, configured: true, source: 'pexels' };
+        return { results: [], page, totalPages: 0, configured: true, source: 'pexels', error: `pexels request failed (HTTP ${res.status})` };
       }
       const data = (await res.json()) as any;
       return {
@@ -278,7 +278,7 @@ export class StockMediaService {
 
       const res = await safeFetch(`https://pixabay.com/api/?${params}`);
       if (!res.ok) {
-        return { results: [], page, totalPages: 0, configured: true, source: 'pixabay' };
+        return { results: [], page, totalPages: 0, configured: true, source: 'pixabay', error: `pixabay request failed (HTTP ${res.status})` };
       }
       const data = (await res.json()) as any;
       const hits = Array.isArray(data?.hits) ? data.hits : [];
@@ -339,7 +339,7 @@ export class StockMediaService {
 
       const res = await safeFetch(`${endpoint}?${params}`);
       if (!res.ok) {
-        return { results: [], page, totalPages: 0, configured: true, source: 'giphy' };
+        return { results: [], page, totalPages: 0, configured: true, source: 'giphy', error: `giphy request failed (HTTP ${res.status})` };
       }
       const data = (await res.json()) as any;
       const items = Array.isArray(data?.data) ? data.data : [];
@@ -391,7 +391,7 @@ export class StockMediaService {
 
       const res = await safeFetch(`https://api.iconify.design/search?${params}`);
       if (!res.ok) {
-        return { results: [], page, totalPages: 0, configured: true, source: 'iconify' };
+        return { results: [], page, totalPages: 0, configured: true, source: 'iconify', error: `iconify request failed (HTTP ${res.status})` };
       }
       const data = (await res.json()) as any;
       const icons: string[] = Array.isArray(data?.icons) ? data.icons : [];

@@ -486,17 +486,11 @@ export class PostsRepository {
   }
 
   async deletePost(orgId: string, group: string) {
-    const { count } = await this._post.model.post.updateMany({
-      where: {
-        organizationId: orgId,
-        group,
-      },
-      data: {
-        deletedAt: new Date(),
-      },
-    });
-
-    const post = await this._post.model.post.findFirst({
+    // Collect ALL parent (channel-root) post ids BEFORE the soft-delete: every
+    // parent has its own pending Inngest publish run (one post/publish per
+    // channel), and post/cancel matches a single postId — the caller needs the
+    // full list to cancel the whole group.
+    const posts = await this._post.model.post.findMany({
       where: {
         organizationId: orgId,
         group,
@@ -507,7 +501,28 @@ export class PostsRepository {
       },
     });
 
-    return { count, post };
+    const { count } = await this._post.model.post.updateMany({
+      where: {
+        organizationId: orgId,
+        group,
+      },
+      data: {
+        deletedAt: new Date(),
+      },
+    });
+
+    return { count, post: posts[0] ?? null, posts };
+  }
+
+  // Publish-time delete guard: cheap deletedAt re-read by primary key. A group
+  // delete landing after the atomic publish claim (state PUBLISHING) is
+  // otherwise never re-checked before postSocial/postComment publish.
+  async isDeleted(id: string): Promise<boolean> {
+    const post = await this._post.model.post.findUnique({
+      where: { id },
+      select: { deletedAt: true },
+    });
+    return !post || !!post.deletedAt;
   }
 
   // No pagination/cap here on purpose: the `where: { group }` already bounds this to a single
