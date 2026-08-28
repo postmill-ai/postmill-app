@@ -32,8 +32,9 @@ RUN pnpm install --frozen-lockfile
 RUN NODE_OPTIONS="--max-old-space-size=4096" pnpm run build:backend
 
 # Drop devDependencies so only production deps ship in the runtime stage. Native modules
-# stay compiled; pruning only removes extraneous (dev) packages.
-RUN pnpm prune --prod
+# stay compiled; pruning only removes extraneous (dev) packages. CI=true: without a TTY
+# pnpm aborts the modules-dir purge (ERR_PNPM_ABORTED_REMOVE_MODULES_DIR_NO_TTY).
+RUN CI=true pnpm prune --prod
 
 # ---------- runtime ----------
 FROM node:24.19.0-bookworm-slim AS runtime
