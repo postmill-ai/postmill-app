@@ -124,6 +124,14 @@ overrides:
   'js-yaml@>=4.0.0 <4.3.1': '^4.3.1'
   'sharp@<0.35.0': '^0.35.0'
   'svgo@3': '^3.3.4'
+  # find-my-way <=9.6.0: high HTTP/2 DDoS (GHSA-c96f-x56v-gq3h), pulled by fastify via
+  # @reaatech/agent-auth-proxy-server. Bump to patched 9.7+ (same major).
+  'find-my-way@<=9.6.0': '>=9.7.0 <10'
+  # @ag-ui/mastra 1.1.2 calls tokenUsageFromAiSdkUsage, added in @ag-ui/core 0.0.58 —
+  # but the graph resolved 0.0.54/0.0.57 (via @copilotkit/*), so ESM loaders (vitest
+  # apps/backend suite) fail at import time ("does not provide an export"). CJS prod
+  # is unaffected (property access + try/catch), but pin the graph to 0.0.59.
+  '@ag-ui/core': '0.0.59'
 
 onlyBuiltDependencies:
   - bcrypt
