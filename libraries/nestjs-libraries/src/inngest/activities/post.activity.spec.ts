@@ -26,7 +26,7 @@ const build = (over: Partial<Record<string, any>> = {}) => {
     _orgVpnConfigService: {},
     _vpnDispatcherService: {},
     _campaignsRepository: {},
-    _postsRepository: {},
+    _postsRepository: { isDeleted: vi.fn().mockResolvedValue(false) },
     ...over,
   };
   const activity = new PostActivity(
@@ -254,6 +254,46 @@ describe('postSocial poll mapping + capability guard (2.2)', () => {
       )
     ).rejects.toThrow(/does not support polls/);
     expect(postSpy).not.toHaveBeenCalled();
+  });
+});
+
+describe('postSocial/postComment delete-after-claim guard', () => {
+  it('postSocial returns [] without touching the provider when the post was deleted', async () => {
+    const isDeleted = vi.fn().mockResolvedValue(true);
+    const getSocialIntegration = vi.fn();
+    const { activity } = build({
+      _postsRepository: { isDeleted },
+      _integrationManager: { getSocialIntegration },
+    });
+
+    const result = await activity.postSocial(
+      { id: 'int-1', organizationId: 'org-1', providerIdentifier: 'x' } as any,
+      [{ id: 'p1', content: 'hi' } as any]
+    );
+
+    expect(isDeleted).toHaveBeenCalledWith('p1');
+    expect(result).toEqual([]);
+    expect(getSocialIntegration).not.toHaveBeenCalled();
+  });
+
+  it('postComment returns [] without touching the provider when the post was deleted', async () => {
+    const isDeleted = vi.fn().mockResolvedValue(true);
+    const getSocialIntegration = vi.fn();
+    const { activity } = build({
+      _postsRepository: { isDeleted },
+      _integrationManager: { getSocialIntegration },
+    });
+
+    const result = await activity.postComment(
+      'root-release-id',
+      undefined,
+      { id: 'int-1', organizationId: 'org-1', providerIdentifier: 'x' } as any,
+      [{ id: 'p2', content: 'comment' } as any]
+    );
+
+    expect(isDeleted).toHaveBeenCalledWith('p2');
+    expect(result).toEqual([]);
+    expect(getSocialIntegration).not.toHaveBeenCalled();
   });
 });
 

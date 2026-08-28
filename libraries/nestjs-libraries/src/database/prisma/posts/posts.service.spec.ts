@@ -1,4 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { Logger } from '@nestjs/common';
 
 vi.mock('@postmill-ai/nestjs-libraries/database/prisma/posts/posts.repository', () => ({
   PostsRepository: vi.fn(),
@@ -426,7 +427,11 @@ describe('PostsService Inngest dispatch', () => {
     vi.mocked(inngest.send).mockResolvedValue(undefined);
 
     postRepositoryMock = {
-      deletePost: vi.fn().mockResolvedValue({ count: 1, post: { id: 'post-123' } }),
+      deletePost: vi.fn().mockResolvedValue({
+        count: 1,
+        post: { id: 'post-123' },
+        posts: [{ id: 'post-123' }],
+      }),
     };
 
     integrationManagerMock = {
@@ -469,11 +474,51 @@ describe('PostsService Inngest dispatch', () => {
   });
 
   it('deletePost reports error:true when no post matched the group', async () => {
-    postRepositoryMock.deletePost.mockResolvedValue({ count: 0, post: null });
+    postRepositoryMock.deletePost.mockResolvedValue({ count: 0, post: null, posts: [] });
 
     const result = await service.deletePost('org-1', 'missing-group');
 
     expect(result).toEqual({ error: true });
+  });
+
+  it('deletePost emits one post/cancel per parent post in the group', async () => {
+    postRepositoryMock.deletePost.mockResolvedValue({
+      count: 3,
+      post: { id: 'post-1' },
+      posts: [{ id: 'post-1' }, { id: 'post-2' }, { id: 'post-3' }],
+    });
+
+    const result = await service.deletePost('org-1', 'group-1');
+
+    expect(inngest.send).toHaveBeenCalledTimes(3);
+    for (const postId of ['post-1', 'post-2', 'post-3']) {
+      expect(inngest.send).toHaveBeenCalledWith({
+        name: 'post/cancel',
+        data: { postId },
+      });
+    }
+    expect(result).toEqual({ error: false });
+  });
+
+  it('deletePost logs a warning when a cancel send fails and still cancels the rest', async () => {
+    const warnSpy = vi.spyOn(Logger, 'warn').mockImplementation(() => {});
+    postRepositoryMock.deletePost.mockResolvedValue({
+      count: 2,
+      post: { id: 'post-1' },
+      posts: [{ id: 'post-1' }, { id: 'post-2' }],
+    });
+    vi.mocked(inngest.send)
+      .mockRejectedValueOnce(new Error('Inngest down'))
+      .mockResolvedValue(undefined);
+
+    const result = await service.deletePost('org-1', 'group-1');
+
+    expect(inngest.send).toHaveBeenCalledTimes(2);
+    expect(warnSpy).toHaveBeenCalledWith(
+      expect.stringContaining('post-1')
+    );
+    expect(result).toEqual({ error: false });
+    warnSpy.mockRestore();
   });
 
   it('startWorkflow emits post/publish with a unique-per-send id and current payload fields', async () => {

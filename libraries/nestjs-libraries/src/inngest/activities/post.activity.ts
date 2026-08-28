@@ -282,12 +282,35 @@ export class PostActivity {
     return !!getIntegration.comment;
   }
 
+  // Delete-after-claim race guard: the atomic claim flips state to PUBLISHING
+  // before the publish work, and a group delete landing after it is never
+  // re-checked. Re-read the post's deletedAt (cheap primary-key lookup) and
+  // bail quietly — the caller treats an empty result as "nothing published,
+  // end the run", so no spurious ERROR state or failure notification lands on
+  // a post the user deleted. Every post in a group is soft-deleted together,
+  // so checking the first payload post covers threads too.
+  private async _bailIfDeleted(posts: Post[]): Promise<boolean> {
+    const id = posts?.[0]?.id;
+    if (!id) {
+      return false;
+    }
+    const deleted = await this._postsRepository.isDeleted(id);
+    if (deleted) {
+      this.logger.warn(`Skipping publish for post ${id} — post was deleted`);
+    }
+    return deleted;
+  }
+
   async postComment(
     postId: string,
     lastPostId: string | undefined,
     integration: Integration,
     posts: Post[]
   ) {
+    if (await this._bailIfDeleted(posts)) {
+      return [];
+    }
+
     // 2.5: re-read the decrypted token (slimmed out of step state).
     integration = await this._withDecryptedIntegration(integration);
 
@@ -434,6 +457,10 @@ export class PostActivity {
   }
 
   async postSocial(integration: Integration, posts: Post[]) {
+    if (await this._bailIfDeleted(posts)) {
+      return [];
+    }
+
     if (process.env.STRIPE_SECRET_KEY) {
       const subscription = await this._subscriptionService.getSubscription(
         integration.organizationId

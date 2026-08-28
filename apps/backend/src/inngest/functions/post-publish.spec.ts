@@ -217,6 +217,24 @@ describe('runPostPublish handler', () => {
     expect(activity.postSocial).toHaveBeenCalledTimes(1);
   });
 
+  it('deleted-after-claim — an empty postSocial result ends the run quietly (no ERROR, no notify)', async () => {
+    const activity = makeActivity({
+      postSocial: vi.fn(async () => []),
+    });
+    const handler = getHandler(activity);
+
+    await handler({ step: makeStep(), event: runEvent() });
+
+    expect(activity.postSocial).toHaveBeenCalledTimes(1);
+    expect(activity.updatePost).not.toHaveBeenCalled();
+    expect(activity.notifyPostPublished).not.toHaveBeenCalled();
+    expect(
+      activity.changeState.mock.calls.some((c: any[]) => c[1] === 'ERROR')
+    ).toBe(false);
+    expect(activity.notifyPostFailed).not.toHaveBeenCalled();
+    expect(activity.sendWebhooks).not.toHaveBeenCalled();
+  });
+
   it('0.10 — a step-propagated RefreshTokenError (name only) reaches refresh-token', async () => {
     const refreshErr = Object.assign(new Error('x'), {
       name: 'RefreshTokenError',

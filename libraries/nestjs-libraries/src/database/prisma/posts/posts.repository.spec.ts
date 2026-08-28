@@ -43,6 +43,85 @@ describe('PostsRepository', () => {
     });
   });
 
+  describe('deletePost', () => {
+    it('soft-deletes the whole group and returns every parent post id', async () => {
+      const findMany = vi.fn().mockResolvedValue([{ id: 'post-1' }, { id: 'post-2' }]);
+      const updateMany = vi.fn().mockResolvedValue({ count: 5 });
+      const repository = Object.create(PostsRepository.prototype) as PostsRepository;
+      (repository as any)._post = { model: { post: { findMany, updateMany } } };
+
+      const result = await repository.deletePost('org-1', 'group-1');
+
+      expect(findMany).toHaveBeenCalledWith({
+        where: { organizationId: 'org-1', group: 'group-1', parentPostId: null },
+        select: { id: true },
+      });
+      expect(updateMany).toHaveBeenCalledWith({
+        where: { organizationId: 'org-1', group: 'group-1' },
+        data: { deletedAt: expect.any(Date) },
+      });
+      expect(result.count).toBe(5);
+      expect(result.posts).toEqual([{ id: 'post-1' }, { id: 'post-2' }]);
+      // Backwards-compatible single-post field (first parent).
+      expect(result.post).toEqual({ id: 'post-1' });
+    });
+
+    it('collects parent ids BEFORE the soft-delete so the lookup is not filtered out', async () => {
+      const order: string[] = [];
+      const findMany = vi.fn().mockImplementation(async () => {
+        order.push('findMany');
+        return [{ id: 'post-1' }];
+      });
+      const updateMany = vi.fn().mockImplementation(async () => {
+        order.push('updateMany');
+        return { count: 1 };
+      });
+      const repository = Object.create(PostsRepository.prototype) as PostsRepository;
+      (repository as any)._post = { model: { post: { findMany, updateMany } } };
+
+      await repository.deletePost('org-1', 'group-1');
+
+      expect(order).toEqual(['findMany', 'updateMany']);
+    });
+
+    it('returns post:null and an empty list when nothing matched', async () => {
+      const findMany = vi.fn().mockResolvedValue([]);
+      const updateMany = vi.fn().mockResolvedValue({ count: 0 });
+      const repository = Object.create(PostsRepository.prototype) as PostsRepository;
+      (repository as any)._post = { model: { post: { findMany, updateMany } } };
+
+      const result = await repository.deletePost('org-1', 'missing-group');
+
+      expect(result).toEqual({ count: 0, post: null, posts: [] });
+    });
+  });
+
+  describe('isDeleted', () => {
+    it('returns true for a soft-deleted post and false for a live one', async () => {
+      const findUnique = vi
+        .fn()
+        .mockResolvedValueOnce({ deletedAt: new Date() })
+        .mockResolvedValueOnce({ deletedAt: null });
+      const repository = Object.create(PostsRepository.prototype) as PostsRepository;
+      (repository as any)._post = { model: { post: { findUnique } } };
+
+      expect(await repository.isDeleted('post-1')).toBe(true);
+      expect(await repository.isDeleted('post-2')).toBe(false);
+      expect(findUnique).toHaveBeenCalledWith({
+        where: { id: 'post-2' },
+        select: { deletedAt: true },
+      });
+    });
+
+    it('returns true when the post is gone entirely', async () => {
+      const findUnique = vi.fn().mockResolvedValue(null);
+      const repository = Object.create(PostsRepository.prototype) as PostsRepository;
+      (repository as any)._post = { model: { post: { findUnique } } };
+
+      expect(await repository.isDeleted('missing')).toBe(true);
+    });
+  });
+
   describe('searchForMissingThreeHoursPosts (2.1)', () => {
     it('only recovers posts overdue by more than 3 hours', () => {
       const findMany = vi.fn().mockResolvedValue([]);
