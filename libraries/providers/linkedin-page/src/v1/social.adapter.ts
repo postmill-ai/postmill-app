@@ -1,6 +1,7 @@
 import {
   AnalyticsData,
   AuthTokenDetails,
+  ChannelSetupDescriptor,
   ClientInformation,
   PostDetails,
   PostResponse,
@@ -38,6 +39,39 @@ export class LinkedinPageProvider
   ];
 
   override editor = 'normal' as const;
+
+  // Beginner-friendly setup metadata for the per-tenant "Add channel" form.
+  // Two-step connect: after OAuth the user picks the LinkedIn Page (company)
+  // to post as. The default callback URL is computed by the catalog
+  // (IntegrationManager.getSocialProviderCatalog) — do NOT hardcode it here.
+  override setupDescriptor: ChannelSetupDescriptor = {
+    authType: 'oauth2',
+    credentialFields: [
+      {
+        key: 'clientId',
+        label: 'Client ID',
+        placeholder: 'e.g. 77a1b2c3d4e5f6g7',
+        help: 'LinkedIn Developer Portal → your app → Auth tab → Application credentials',
+      },
+      {
+        key: 'clientSecret',
+        label: 'Primary Client Secret',
+        secret: true,
+        help: 'LinkedIn Developer Portal → your app → Auth tab → Application credentials',
+      },
+    ],
+    portalUrl: 'https://www.linkedin.com/developers/apps',
+    portalLabel: 'LinkedIn Developer Portal',
+    callbackInstructions:
+      "In the LinkedIn Developer Portal → your app → Auth tab → OAuth 2.0 settings: add this URL under 'Authorized redirect URLs for your app' and save.",
+    setupSteps: [
+      'Open the LinkedIn Developer Portal and create an app (or pick an existing one), linked to the LinkedIn Page you admin.',
+      "On the Products tab, request access to 'Sign In with LinkedIn using OpenID Connect', 'Share on LinkedIn', and the Community Management API (for organization posting).",
+      "On the Auth tab, under OAuth 2.0 settings, add the redirect URL shown below to 'Authorized redirect URLs for your app'.",
+      'Copy the Client ID and Primary Client Secret from the Auth tab into the fields below.',
+      'When connecting, sign in and then pick the LinkedIn Page you want to post to.',
+    ],
+  };
 
   override async refreshToken(
     refresh_token: string,

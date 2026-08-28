@@ -1,5 +1,6 @@
 import {
   AuthTokenDetails,
+  ChannelSetupDescriptor,
   ClientInformation,
   PostDetails,
   PostResponse,
@@ -21,6 +22,35 @@ export class KickProvider extends SocialAbstract implements SocialProvider {
   editor = 'normal' as const;
   scopes = ['chat:write', 'user:read', 'channel:read'];
   dto = KickDto;
+
+  // Beginner-friendly setup metadata for the per-tenant "Add channel" form.
+  // The default callback URL is computed by the catalog
+  // (IntegrationManager.getSocialProviderCatalog) — do NOT hardcode it here.
+  override setupDescriptor: ChannelSetupDescriptor = {
+    authType: 'oauth2',
+    credentialFields: [
+      {
+        key: 'clientId',
+        label: 'Client ID',
+        help: 'Kick → Settings → Developer tab → your app',
+      },
+      {
+        key: 'clientSecret',
+        label: 'Client Secret',
+        secret: true,
+        help: 'Kick → Settings → Developer tab → your app',
+      },
+    ],
+    portalUrl: 'https://kick.com/settings/developer',
+    portalLabel: 'Kick Developer Settings',
+    callbackInstructions:
+      'In Kick → Settings → Developer tab → your app: add this URL to the app’s Redirect URLs and save.',
+    setupSteps: [
+      'Sign in to Kick and open Settings → Developer tab.',
+      'Create an app (or pick an existing one) and add the callback URL shown below to its Redirect URLs.',
+      'Copy the app’s Client ID and Client Secret into the fields below.',
+    ],
+  };
 
   maxLength() {
     return 500; // Kick chat message max length

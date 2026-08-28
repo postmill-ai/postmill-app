@@ -147,6 +147,20 @@ describe('IsgdAdapter', () => {
 
       fetchSpy.mockRestore();
     });
+
+    // Seen live 2026-08-28: is.gd was down and answered HTTP 200 with a
+    // plain-text body ("Error, database insert failed") — that must surface as
+    // the provider's message, not a JSON parse error.
+    it('surfaces a plain-text error body on HTTP 200', async () => {
+      const fetchSpy = vi.spyOn(globalThis, 'fetch').mockResolvedValue(
+        mockResponse(200, 'Error, database insert failed'),
+      );
+
+      await expect(adapter.createShortLink(mockContext, 'https://example.com'))
+        .rejects.toThrow('is.gd create failed (200): Error, database insert failed');
+
+      fetchSpy.mockRestore();
+    });
   });
 
   describe('expandShortLink', () => {

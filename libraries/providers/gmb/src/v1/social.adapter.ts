@@ -1,6 +1,7 @@
 import {
   AnalyticsData,
   AuthTokenDetails,
+  ChannelSetupDescriptor,
   ClientInformation,
   PostDetails,
   PostResponse,
@@ -73,6 +74,38 @@ export class GmbProvider extends SocialAbstract implements SocialProvider {
   ];
   editor = 'normal' as const;
   dto = GmbSettingsDto;
+
+  // Beginner-friendly setup metadata for the per-tenant "Add channel" form.
+  // The default callback URL is computed by the catalog
+  // (IntegrationManager.getSocialProviderCatalog) — do NOT hardcode it here.
+  override setupDescriptor: ChannelSetupDescriptor = {
+    authType: 'oauth2',
+    credentialFields: [
+      {
+        key: 'clientId',
+        label: 'Client ID',
+        placeholder: 'e.g. 1234567890-abc…apps.googleusercontent.com',
+        help: 'Google Cloud Console → APIs & Services → Credentials → your OAuth 2.0 Client ID',
+      },
+      {
+        key: 'clientSecret',
+        label: 'Client Secret',
+        secret: true,
+        help: 'Google Cloud Console → APIs & Services → Credentials → your OAuth 2.0 Client ID',
+      },
+    ],
+    portalUrl: 'https://console.cloud.google.com/apis/credentials',
+    portalLabel: 'Google Cloud Console',
+    callbackInstructions:
+      'In Google Cloud Console → APIs & Services → Credentials → your OAuth 2.0 Client ID (Web application): add this URL under Authorized redirect URIs and save.',
+    setupSteps: [
+      'Open Google Cloud Console, pick (or create) a project, and enable the Google Business Profile APIs for it.',
+      'Configure the OAuth consent screen, then create an OAuth 2.0 Client ID of type Web application under APIs & Services → Credentials.',
+      'Add the callback URL shown below to the client’s Authorized redirect URIs.',
+      'Copy the Client ID and Client Secret into the fields below.',
+      'When connecting, sign in with the Google account that manages the Business Profile — you will pick the business location right after.',
+    ],
+  };
 
   maxLength() {
     return 1500;

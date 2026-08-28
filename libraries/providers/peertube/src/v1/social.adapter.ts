@@ -1,5 +1,5 @@
 import {
-  AuthTokenDetails, PostDetails, PostResponse, SocialProvider,
+  AuthTokenDetails, ChannelSetupDescriptor, PostDetails, PostResponse, SocialProvider,
 } from '@postmill-ai/provider-kernel';
 import { SocialAbstract, ValidityMedia } from '@postmill-ai/provider-kernel';
 import { makeId, makeOauthState } from '@postmill-ai/provider-kernel';
@@ -79,6 +79,20 @@ export class PeerTubeProvider extends SocialAbstract implements SocialProvider {
   scopes = [] as string[];
   override maxConcurrentJob = 2;
   toolTip = 'Enter your PeerTube instance URL and login.';
+
+  // Instance + account channel: no developer app, no callback — the channel
+  // connects with the instance URL + username/password in the composer connect
+  // flow (customFields); the config form shows guidance only.
+  override setupDescriptor: ChannelSetupDescriptor = {
+    authType: 'direct',
+    credentialFields: [],
+    setupSteps: [
+      'Make sure you have an account on a PeerTube instance with permission to upload videos.',
+      'Back here, open Create new → New Channel and pick PeerTube.',
+      'Enter your Instance URL, Username and Password, then click Connect.',
+    ],
+  };
+
   maxLength() {
     return 10000;
   }

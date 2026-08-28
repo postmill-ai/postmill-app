@@ -1,5 +1,6 @@
 import {
   AuthTokenDetails,
+  ChannelSetupDescriptor,
   ClientInformation,
   PostDetails,
   PostResponse,
@@ -32,6 +33,35 @@ export class FarcasterProvider
   scopes = [] as string[];
   override maxConcurrentJob = 3; // Farcaster has moderate limits
   editor = 'normal' as const;
+
+  // BYO Neynar app: sign-in happens client-side via the "Sign in with
+  // Farcaster" button in the composer connect flow (no callback registration),
+  // and publishing uses the app's API key server-side. No callback block for
+  // this channel — the config form collects the Neynar credentials only.
+  override setupDescriptor: ChannelSetupDescriptor = {
+    authType: 'token',
+    credentialFields: [
+      {
+        key: 'clientId',
+        label: 'Neynar Client ID',
+        placeholder: 'e.g. 04d3b7e2-…',
+        help: 'Neynar Developer Portal → your app → Overview → Client ID',
+      },
+      {
+        key: 'clientSecret',
+        label: 'Neynar API Key',
+        secret: true,
+        help: 'Neynar Developer Portal → your app → Keys',
+      },
+    ],
+    portalUrl: 'https://dev.neynar.com',
+    portalLabel: 'Neynar Developer Portal',
+    setupSteps: [
+      'Open the Neynar Developer Portal, sign in, and create an app (or pick an existing one).',
+      'Copy the app’s Client ID and API Key into the fields below.',
+      "Back here, open Create new → New Channel → Farcaster and click 'Sign in with Farcaster' (Neynar) to connect your account.",
+    ],
+  };
 
   private getClient(apiKey: string): NeynarAPIClient {
     return new NeynarAPIClient({

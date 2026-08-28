@@ -1,5 +1,6 @@
 import {
   AuthTokenDetails,
+  ChannelSetupDescriptor,
   ClientInformation,
   PostDetails,
   PostResponse,
@@ -20,6 +21,36 @@ export class TwitchProvider extends SocialAbstract implements SocialProvider {
   editor = 'normal' as const;
   scopes = ['user:write:chat', 'user:read:chat', 'moderator:manage:announcements'];
   dto = TwitchDto;
+
+  // Beginner-friendly setup metadata for the per-tenant "Add channel" form.
+  // The default callback URL is computed by the catalog
+  // (IntegrationManager.getSocialProviderCatalog) — do NOT hardcode it here.
+  override setupDescriptor: ChannelSetupDescriptor = {
+    authType: 'oauth2',
+    credentialFields: [
+      {
+        key: 'clientId',
+        label: 'Client ID',
+        help: 'Twitch Developer Console → Applications → your app → Manage',
+      },
+      {
+        key: 'clientSecret',
+        label: 'Client Secret',
+        secret: true,
+        help: 'Twitch Developer Console → Applications → your app → Manage → New Secret',
+      },
+    ],
+    portalUrl: 'https://dev.twitch.tv/console/apps',
+    portalLabel: 'Twitch Developer Console',
+    callbackInstructions:
+      'In the Twitch Developer Console → Applications → your app → Manage: add this URL under OAuth Redirect URLs and save.',
+    setupSteps: [
+      'Open the Twitch Developer Console and sign in with the Twitch account that owns the channel.',
+      'Click Register Your Application, choose a name, and add the callback URL shown below under OAuth Redirect URLs (Category: Other).',
+      'Open the app (Manage), copy the Client ID, and generate a Client Secret (New Secret).',
+      'Paste the Client ID and Client Secret into the fields below.',
+    ],
+  };
 
   maxLength() {
     return 500; // Twitch chat message max length

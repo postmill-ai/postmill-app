@@ -1,6 +1,7 @@
 import { Logger } from '@nestjs/common';
 import {
   AuthTokenDetails,
+  ChannelSetupDescriptor,
   PostDetails,
   PostResponse,
   SocialProvider,
@@ -41,6 +42,19 @@ export class NostrProvider extends SocialAbstract implements SocialProvider {
   scopes = [] as string[];
   editor = 'normal' as const;
   toolTip = 'Make sure you private a HEX key of your Nostr private key, you can get it from websites like iris.to'
+
+  // Key-based channel: no developer app, no callback — the channel connects
+  // with the account's private key (hex) in the composer connect flow
+  // (customFields); the config form shows guidance only.
+  override setupDescriptor: ChannelSetupDescriptor = {
+    authType: 'direct',
+    credentialFields: [],
+    setupSteps: [
+      'Get your Nostr private key in HEX format (your Nostr client’s settings usually expose it; tools like iris.to can convert an nsec key).',
+      'Keep the key safe — it controls your Nostr identity.',
+      'Back here, open Create new → New Channel → Nostr and paste the HEX private key, then click Connect.',
+    ],
+  };
 
   maxLength() {
     return 100000;

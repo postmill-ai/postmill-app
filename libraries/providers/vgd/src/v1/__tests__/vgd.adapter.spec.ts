@@ -121,6 +121,17 @@ describe('VgdAdapter', () => {
 
       fetchSpy.mockRestore();
     });
+
+    // Seen live 2026-08-28: v.gd answers some URLs with HTTP 200 + plain-text
+    // "Error, database insert failed" — surface the message, not a parse error.
+    it('surfaces a plain-text error body on HTTP 200', async () => {
+      const fetchSpy = vi.spyOn(globalThis, 'fetch').mockResolvedValue(mockResponse(200, 'Error, database insert failed'));
+
+      await expect(adapter.createShortLink(mockContext, 'https://example.com'))
+        .rejects.toThrow('v.gd create failed (200): Error, database insert failed');
+
+      fetchSpy.mockRestore();
+    });
   });
 
   describe('expandShortLink', () => {

@@ -1,5 +1,5 @@
 import {
-  AuthTokenDetails, PostDetails, PostResponse, SocialProvider,
+  AuthTokenDetails, ChannelSetupDescriptor, PostDetails, PostResponse, SocialProvider,
 } from '@postmill-ai/provider-kernel';
 import { SocialAbstract, ValidityMedia } from '@postmill-ai/provider-kernel';
 import { makeId, makeOauthState } from '@postmill-ai/provider-kernel';
@@ -17,6 +17,20 @@ export class PixelfedProvider extends SocialAbstract implements SocialProvider {
   scopes = [] as string[];
   override maxConcurrentJob = 3;
   toolTip = 'Create an access token in your Pixelfed instance settings.';
+
+  // Instance + token channel: no developer app, no callback — the channel
+  // connects with the instance URL + an access token in the composer connect
+  // flow (customFields); the config form shows guidance only.
+  override setupDescriptor: ChannelSetupDescriptor = {
+    authType: 'direct',
+    credentialFields: [],
+    setupSteps: [
+      'Log in to your Pixelfed instance and open Settings → Applications (or Developer).',
+      'Create a new access token with write permissions and copy it.',
+      'Back here, open Create new → New Channel → Pixelfed and enter your Instance URL and the Access Token, then click Connect.',
+    ],
+  };
+
   maxLength() {
     return 500;
   }

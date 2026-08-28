@@ -1,6 +1,7 @@
 import { createHash, randomBytes } from 'crypto';
 import {
   AuthTokenDetails,
+  ChannelSetupDescriptor,
   ClientInformation,
   MediaContent,
   PostDetails,
@@ -25,6 +26,31 @@ export class WhopProvider extends SocialAbstract implements SocialProvider {
   editor = 'markdown' as const;
   dto = WhopDto;
   toolTip = 'Schedule posts to forums';
+
+  // Beginner-friendly setup metadata for the per-tenant "Add channel" form.
+  // Whop OAuth uses PKCE with only the Client ID (no client secret in this
+  // flow). The default callback URL is computed by the catalog
+  // (IntegrationManager.getSocialProviderCatalog) — do NOT hardcode it here.
+  override setupDescriptor: ChannelSetupDescriptor = {
+    authType: 'oauth2',
+    credentialFields: [
+      {
+        key: 'clientId',
+        label: 'Client ID',
+        placeholder: 'e.g. app_…',
+        help: 'Whop Dashboard → Developer → Apps → your app → OAuth',
+      },
+    ],
+    portalUrl: 'https://whop.com/dashboard/developer',
+    portalLabel: 'Whop Developer Dashboard',
+    callbackInstructions:
+      'In the Whop Dashboard → Developer → Apps → your app → OAuth: add this URL as a redirect URL and save.',
+    setupSteps: [
+      'Open your Whop Dashboard, go to the Developer page, and create an app (or pick an existing one).',
+      'In the app’s OAuth section, add the callback URL shown below as a redirect URL.',
+      'Copy the app’s Client ID (starts with app_) into the field below — this flow uses PKCE, so no client secret is needed.',
+    ],
+  };
 
   maxLength() {
     return 50000;

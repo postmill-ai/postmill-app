@@ -28,11 +28,7 @@ export class IsgdAdapter implements ShortLinkCapability {
   async createShortLink(_ctx: ShortLinkContext, originalUrl: string): Promise<{ shortUrl: string; providerLinkId?: string }> {
     const params = new URLSearchParams({ format: 'json', url: originalUrl });
     const response = await this._fetch(`https://is.gd/create.php?${params.toString()}`, { method: 'GET' });
-    if (!response.ok) {
-      const text = await response.text();
-      throw new Error(`is.gd create failed (${response.status}): ${text}`);
-    }
-    const data = (await response.json()) as any;
+    const data = await parseIsgdResponse(response, 'create');
     if (data.errorcode) {
       throw new Error(`is.gd create failed: ${data.errormessage || data.error}`);
     }
@@ -42,11 +38,7 @@ export class IsgdAdapter implements ShortLinkCapability {
   async expandShortLink(_ctx: ShortLinkContext, shortUrl: string): Promise<string> {
     const params = new URLSearchParams({ format: 'json', shorturl: shortUrl });
     const response = await this._fetch(`https://is.gd/forward.php?${params.toString()}`, { method: 'GET' });
-    if (!response.ok) {
-      const text = await response.text();
-      throw new Error(`is.gd expand failed (${response.status}): ${text}`);
-    }
-    const data = (await response.json()) as any;
+    const data = await parseIsgdResponse(response, 'expand');
     if (data.errorcode) {
       throw new Error(`is.gd expand failed: ${data.errormessage || data.error}`);
     }
@@ -55,6 +47,23 @@ export class IsgdAdapter implements ShortLinkCapability {
 }
 
 const _meta: ShortLinkCapability = new IsgdAdapter(undefined as unknown as SafeFetchPort);
+
+// is.gd answers failures with HTTP 200 + a plain-text "Error, …" body (seen
+// live 2026-08-28: "Error, database insert failed" — their service was down),
+// so read text first and surface it instead of a bare JSON parse error.
+async function parseIsgdResponse(response: any, action: string): Promise<any> {
+  const text = await response.text();
+  let data: any;
+  try {
+    data = JSON.parse(text);
+  } catch {
+    data = undefined;
+  }
+  if (!response.ok || data === undefined || data === null) {
+    throw new Error(`is.gd ${action} failed (${response.status}): ${text}`);
+  }
+  return data;
+}
 
 export const isgdShortlinkModule: ProviderModule<any, any> = {
   metadata: providerMetadata,

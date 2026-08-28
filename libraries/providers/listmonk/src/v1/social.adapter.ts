@@ -2,6 +2,7 @@ import { makeId, makeOauthState } from '@postmill-ai/provider-kernel';
 import { SocialAbstract } from '@postmill-ai/provider-kernel';
 import {
   AuthTokenDetails,
+  ChannelSetupDescriptor,
   PostDetails,
   PostResponse,
   SocialProvider,
@@ -87,6 +88,19 @@ export class ListmonkProvider extends SocialAbstract implements SocialProvider {
   scopes = [] as string[];
   editor = 'html' as const;
   dto = ListmonkDto;
+
+  // Self-hosted instance channel: no developer app, no callback — the channel
+  // connects with the instance URL + admin username/password in the composer
+  // connect flow (customFields); the config form shows guidance only.
+  override setupDescriptor: ChannelSetupDescriptor = {
+    authType: 'direct',
+    credentialFields: [],
+    setupSteps: [
+      'Make sure you have a ListMonk instance running and an admin account on it.',
+      'Back here, open Create new → New Channel and pick ListMonk.',
+      'Enter your instance URL, the admin Username and Password, then click Connect.',
+    ],
+  };
 
   maxLength() {
     return 100000000;
