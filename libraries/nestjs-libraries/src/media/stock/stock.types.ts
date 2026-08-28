@@ -60,4 +60,10 @@ export interface StockSearchResponse<T> {
   totalPages: number;
   configured: boolean;
   source?: string;
+  /**
+   * Set when the provider call itself failed (e.g. an invalid API key → HTTP
+   * 400/401) so the UI can distinguish "configured but failing" from a genuine
+   * empty result. Short safe message only — never keys or response bodies.
+   */
+  error?: string;
 }

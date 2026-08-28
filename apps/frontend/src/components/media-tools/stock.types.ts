@@ -59,6 +59,8 @@ export interface StockSearchResponse<T> {
   totalPages: number;
   configured: boolean;
   source?: string;
+  /** Set when the provider call failed (e.g. bad API key) — safe, secret-free message. */
+  error?: string;
 }
 
 export type StockPreviewableItem =
