@@ -26,7 +26,7 @@ export function RouteError({
       <div className="flex flex-col items-center gap-[12px] max-w-[420px]">
         <div className="text-[42px]">😬</div>
         <h2 className="text-[18px] font-[600] text-textColor">{resolvedTitle}</h2>
-        <p className="text-[13px] text-newTableText/70">
+        <p className="text-[13px] text-newTableText">
           {error?.message || t('unexpected_error_occurred', 'An unexpected error occurred. Please try again.')}
         </p>
         <button

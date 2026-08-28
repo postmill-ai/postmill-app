@@ -161,7 +161,9 @@ export const BestTimeTab: FC<BestTimeTabProps> = ({ integrations }) => {
                 <div
                   key={`${slot.day}-${slot.hour}`}
                   className={`bg-newBgColorInner border border-newTableBorder rounded-[8px] px-[12px] py-[8px] text-[13px] ${
-                    low ? 'opacity-60' : ''
+                    // a11y: was `opacity-60`, which dimmed the text below AA; mute
+                    // low-confidence slots via the table-text token instead (>=6:1).
+                    low ? 'text-newTableText' : ''
                   }`}
                 >
                   <span className="font-medium">

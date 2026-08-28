@@ -306,7 +306,7 @@ export const Webhooks: FC = () => {
                   <div className="truncate text-newTableText" title={w.url}>{w.url}</div>
                   <div className="flex flex-wrap gap-[4px]">
                     {(w.events || ['post.published']).slice(0, 3).map((ev: string) => (
-                      <span key={ev} className="text-[11px] bg-btnPrimary/20 text-btnPrimary px-[6px] py-[2px] rounded-full">
+                      <span key={ev} className="text-[11px] bg-btnPrimary/20 text-btnPrimaryAccent px-[6px] py-[2px] rounded-full">
                         {t(`webhook_event_${ev.replace('.', '_')}`, ev.replace('.', ' '))}
                       </span>
                     ))}

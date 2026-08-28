@@ -28,7 +28,7 @@ export async function RouteNotFound({
       <div className="flex flex-col items-center gap-[12px] max-w-[420px]">
         <div className="text-[42px]">🧭</div>
         <h2 className="text-[18px] font-[600] text-textColor">{resolvedTitle}</h2>
-        <p className="text-[13px] text-newTableText/70">{resolvedDescription}</p>
+        <p className="text-[13px] text-newTableText">{resolvedDescription}</p>
         <Link
           href={homeHref}
           className="mt-[4px] px-[16px] py-[9px] rounded-[8px] bg-btnPrimary text-white text-[13px] font-[500] hover:opacity-90 transition-opacity"

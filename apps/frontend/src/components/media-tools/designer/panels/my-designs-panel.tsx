@@ -75,7 +75,7 @@ export const MyDesignsPanel: FC<MyDesignsPanelProps> = ({ onOpen, onClose }) => 
                   className="w-full aspect-square object-cover"
                 />
               ) : (
-                <div className="w-full aspect-square bg-studioBorder/10 flex items-center justify-center text-newTextColor/30 text-xs">
+                <div className="w-full aspect-square bg-studioBorder/10 flex items-center justify-center text-newTextColor/70 text-xs">
                   {t('my_designs_panel_no_preview', 'No preview')}
                 </div>
               )}

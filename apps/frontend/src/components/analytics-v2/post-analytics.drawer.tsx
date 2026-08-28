@@ -74,7 +74,7 @@ export const PostDetailBody: FC<PostDetailBodyProps> = ({
             <p className="text-(--negative,#f97066) text-[14px] mb-[4px]">
               {t('failed_to_load_post_details', 'Failed to load post details')}
             </p>
-            <p className="text-[12px] text-newTableText opacity-60">
+            <p className="text-[12px] text-newTableText">
               {(() => {
                 const fe = error as FetchError;
                 return fe.messageKey ? t(fe.messageKey, fe.message) : fe.message;
