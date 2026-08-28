@@ -278,6 +278,66 @@ describe('MediaStudioService', () => {
     });
   });
 
+  describe('generate mediaInputs resolution', () => {
+    it('resolves a media-library file id to its provider-reachable URL', async () => {
+      const { service, fileService, adapter } = makeService();
+      fileService.getFileById.mockResolvedValue({
+        id: 'file-1',
+        path: 'https://cdn.test/cat.png',
+        folderId: null,
+      });
+      adapter.generateImage.mockResolvedValue({ multi: false, image: 'https://provider.test/out.png' });
+
+      const result = await service.generate('org-1', 'user-1', 'test-provider', {
+        operation: 'image',
+        input: { prompt: 'make it night' },
+        mediaInputs: { image: 'file-1' },
+      });
+
+      expect(result).toEqual({ jobId: 'job-1' });
+      expect(adapter.generateImage).toHaveBeenCalledWith(
+        'make it night',
+        expect.objectContaining({ input: { image: 'https://cdn.test/cat.png' } }),
+      );
+    });
+
+    it('accepts an artifact URL that matches an org File row (agents hand over URLs, not ids)', async () => {
+      const { service, fileService, adapter } = makeService();
+      const url = 'https://app.example.com/uploads/org-1/cat.png';
+      fileService.getFileById.mockRejectedValue(new Error('File not found'));
+      fileService.getFilesByPaths.mockResolvedValue([{ path: url, id: 'file-1' }]);
+      adapter.generateImage.mockResolvedValue({ multi: false, image: 'https://provider.test/out.png' });
+
+      const result = await service.generate('org-1', 'user-1', 'test-provider', {
+        operation: 'image',
+        input: { prompt: 'make it night' },
+        mediaInputs: { image: url },
+      });
+
+      expect(result).toEqual({ jobId: 'job-1' });
+      expect(fileService.getFilesByPaths).toHaveBeenCalledWith('org-1', [url]);
+      expect(adapter.generateImage).toHaveBeenCalledWith(
+        'make it night',
+        expect.objectContaining({ input: { image: url } }),
+      );
+    });
+
+    it('rejects an unknown external URL instead of passing it through to the provider', async () => {
+      const { service, fileService, adapter } = makeService();
+      fileService.getFileById.mockRejectedValue(new Error('File not found'));
+      fileService.getFilesByPaths.mockResolvedValue([]);
+
+      await expect(
+        service.generate('org-1', 'user-1', 'test-provider', {
+          operation: 'image',
+          input: { prompt: 'make it night' },
+          mediaInputs: { image: 'https://evil.test/spy.png' },
+        }),
+      ).rejects.toThrow('File not found');
+      expect(adapter.generateImage).not.toHaveBeenCalled();
+    });
+  });
+
   describe('listJobs drive-on-read fan-out (§3.3)', () => {
     it('bounds concurrent processJob calls to the drive-concurrency limit (≤3) with 20 pending', async () => {
       const { service, aiSettings, lifecycle } = makeService();
