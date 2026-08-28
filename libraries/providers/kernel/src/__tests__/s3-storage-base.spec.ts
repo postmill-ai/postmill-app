@@ -7,9 +7,16 @@ const s3ClientMock = {
   send: vi.fn(),
 };
 
+// Records each S3Client constructor config so tests can assert client options
+// (e.g. forcePathStyle) without a live S3 service.
+const s3ClientConfigs: any[] = [];
+
 vi.mock('@aws-sdk/client-s3', () => ({
   S3Client: class {
     send = s3ClientMock.send;
+    constructor(public config: any) {
+      s3ClientConfigs.push(config);
+    }
   },
   PutObjectCommand: class {
     constructor(public config: any) {}
@@ -114,6 +121,23 @@ describe('S3StorageBase', () => {
       expect(cmd.config.ContentType).toBe('text/plain');
       expect(cmd.config.Key).toMatch(/\.txt$/);
       expect(url).toContain('https://cdn.example.com/');
+    });
+  });
+
+  describe('client construction', () => {
+    // A custom endpoint means self-hosted S3 (MinIO/Ceph/…) where the SDK's
+    // virtual-hosted default would resolve <bucket>.<endpoint-host> — a host
+    // that does not exist. Seen live: MinIO connection test ENOTFOUND.
+    it('uses path-style addressing when a custom endpoint is set', () => {
+      s3ClientConfigs.length = 0;
+      make('us-east-1', 'bucket', 'http://minio.internal:9000');
+      expect(s3ClientConfigs[0].forcePathStyle).toBe(true);
+    });
+
+    it('keeps the virtual-hosted default for native AWS S3 (no custom endpoint)', () => {
+      s3ClientConfigs.length = 0;
+      make('us-east-1', 'bucket');
+      expect(s3ClientConfigs[0].forcePathStyle).toBe(false);
     });
   });
 
