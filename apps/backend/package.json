@@ -11,7 +11,7 @@
   },
   "dependencies": {
     "@casl/ability": "^6.5.0",
-    "@copilotkit/runtime": "^1.59.5",
+    "@copilotkit/runtime": "^1.69.3",
     "@postmill-ai/helpers": "workspace:*",
     "@postmill-ai/nestjs-libraries": "workspace:*",
     "@postmill-ai/provider-adobe-stock": "workspace:*",
