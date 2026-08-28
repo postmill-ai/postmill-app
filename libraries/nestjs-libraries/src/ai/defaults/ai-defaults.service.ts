@@ -136,7 +136,9 @@ export class AiDefaultsService {
         return {
           category,
           ...(r || {}),
-          source: s ? 'stored' : (r ? 'auto' : null),
+          // Trust the resolver's source when a resolution exists — a stored row
+          // whose model/provider fell through to auto-pick must not read 'stored'.
+          source: r ? r.source : s ? 'stored' : null,
         };
       }),
     };

@@ -291,6 +291,47 @@ describe('DefaultsResolutionService', () => {
     ]);
   });
 
+  it('ranks row-backed media providers before universal-credential-inherited ones when auto-picking', async () => {
+    const repository = makeRepository();
+    // gateway qualifies only via the universal AI-key inheritance (configured as
+    // LLM, no media row); replicate has an explicit media provider row. The hub
+    // sorts first by registration order — without row-backed ranking it would
+    // capture every media default.
+    const mediaSettings = makeMediaSettings([
+      { identifier: 'gateway', enabled: true, isConfigured: true, isActive: false, version: 'v1', hasExplicitRow: false },
+      { identifier: 'replicate', enabled: true, isConfigured: true, isActive: false, version: 'v1', hasExplicitRow: true },
+    ]);
+    const kernel = makeKernel({
+      getMetadata: vi.fn().mockImplementation((_domain: string, providerId: string) => ({
+        id: providerId,
+        displayName: providerId,
+        kind: providerId === 'replicate' ? 'direct' : 'hub',
+        domains: ['media'],
+        mediaCategories: ['text-to-image'],
+        hasModelList: true,
+      })),
+      get: vi.fn().mockReturnValue({
+        create: () => ({
+          listModels: vi.fn().mockResolvedValue([{ id: 'model-1' }]),
+        }),
+      }),
+    });
+    service = new DefaultsResolutionService(
+      repository as any,
+      makeAiSettings() as any,
+      mediaSettings as any,
+      kernel as any,
+      makeRuntimeContextFactory() as any,
+    );
+
+    const candidates = await service.candidates('media', 'text-to-image', 'org-1');
+    expect(candidates.map((c) => c.providerId)).toEqual(['replicate', 'gateway']);
+
+    const result = await service.resolve('media', 'text-to-image', 'org-1');
+    expect(result?.source).toBe('auto');
+    expect(result?.providerId).toBe('replicate');
+  });
+
   it('returns undefined model for action-only providers', async () => {
     const repository = makeRepository();
     const aiSettings = makeAiSettings([

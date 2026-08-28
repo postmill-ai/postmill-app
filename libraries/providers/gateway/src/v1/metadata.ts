@@ -15,8 +15,6 @@ export const metadata: ProviderMetadata = {
     "vision"
   ],
   "mediaCategories": [
-    "image-focal-point",
-    "image-slide",
     "image-to-image",
     "image-to-video",
     "text-to-image",
@@ -43,6 +41,26 @@ export const metadata: ProviderMetadata = {
       "gpt-4.1",
       "claude-sonnet-4",
       "llama-3.2-11b-vision"
+    ],
+    "text-to-image": [
+      "gpt-image-1",
+      "flux-2-pro",
+      "flux-2-flex"
+    ],
+    "image-to-image": [
+      "flux-kontext-pro",
+      "flux-kontext-max",
+      "gpt-image-1"
+    ],
+    "text-to-video": [
+      "wan-v2.6-t2v",
+      "wan-v2.5-t2v",
+      "seedance-2.0"
+    ],
+    "image-to-video": [
+      "wan-v2.6-i2v",
+      "wan-v2.6-i2v-flash",
+      "seedance"
     ]
   },
   "website": "https://vercel.com/ai-gateway",

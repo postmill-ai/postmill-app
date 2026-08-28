@@ -404,6 +404,9 @@ describe('AiDefaultsService', () => {
     });
 
     it('getModelDefaults returns resolved and stored categories', async () => {
+      vi.mocked(mockResolution.resolveAll).mockResolvedValue({
+        'low-reasoning': { providerId: 'openai', version: 'v1', model: 'gpt-4.1', source: 'stored' },
+      });
       mockDefaultsRepository.getAll.mockResolvedValue([
         { category: 'low-reasoning', providerId: 'openai', version: 'v1', model: 'gpt-4.1' },
       ]);
@@ -418,6 +421,23 @@ describe('AiDefaultsService', () => {
         version: 'v1',
         model: 'gpt-4.1',
         source: 'stored',
+      });
+    });
+
+    it('getModelDefaults labels a fell-through stored row as auto (trusts the resolver source)', async () => {
+      // A stored row exists, but the resolver fell through to an auto-pick (e.g.
+      // the stored model left the provider catalog) — the UI must not read 'stored'.
+      mockDefaultsRepository.getAll.mockResolvedValue([
+        { category: 'low-reasoning', providerId: 'openai', version: 'v1', model: 'gpt-4.1' },
+      ]);
+
+      const result = await service.getModelDefaults('org-1');
+
+      const low = result.categories.find((c: any) => c.category === 'low-reasoning');
+      expect(low).toMatchObject({
+        category: 'low-reasoning',
+        providerId: 'openai',
+        source: 'auto',
       });
     });
 

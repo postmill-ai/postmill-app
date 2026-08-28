@@ -302,6 +302,9 @@ export class OrgMediaProviderSettingsService {
         enabled: dbConfig ? !!dbConfig.enabled : inherited,
         isActive: dbConfig?.isActive || false,
         isConfigured: !!dbConfig?.credentials || inherited,
+        // Row-backed (explicit media config) vs. universal-AI-credential
+        // inheritance — the media-defaults resolver ranks explicit rows first.
+        hasExplicitRow: !!dbConfig,
         storageProviderId: dbConfig?.storageProviderId || null,
         storageRootFolderId: dbConfig?.storageRootFolderId || null,
         version: dbConfig?.version ?? 'v1',

@@ -103,7 +103,7 @@ describe('MediaDefaultsService', () => {
 
   it('getMediaDefaults returns resolved and stored categories', async () => {
     mockDefaultsResolveAll.mockResolvedValue({
-      'text-to-image': { providerId: 'openai', version: 'v1', model: 'dall-e-3' },
+      'text-to-image': { providerId: 'openai', version: 'v1', model: 'dall-e-3', source: 'stored' },
     });
     mockRepositoryGetAll.mockResolvedValue([
       { category: 'text-to-image', providerId: 'openai', version: 'v1', model: 'dall-e-3' },
@@ -120,6 +120,27 @@ describe('MediaDefaultsService', () => {
       version: 'v1',
       model: 'dall-e-3',
       source: 'stored',
+    });
+  });
+
+  it('getMediaDefaults labels a fell-through stored row as auto (trusts the resolver source)', async () => {
+    // A stored row exists, but the resolver fell through to an auto-pick (e.g.
+    // the stored model left the provider catalog) — the UI must not read 'stored'.
+    mockDefaultsResolveAll.mockResolvedValue({
+      'text-to-image': { providerId: 'replicate', version: 'v1', model: 'flux-schnell', source: 'auto' },
+    });
+    mockRepositoryGetAll.mockResolvedValue([
+      { category: 'text-to-image', providerId: 'openai', version: 'v1', model: 'dall-e-3' },
+    ]);
+
+    const service = makeService();
+    const result = await service.getMediaDefaults(orgId);
+
+    const imageRow = result.categories.find((c: any) => c.category === 'text-to-image');
+    expect(imageRow).toMatchObject({
+      category: 'text-to-image',
+      providerId: 'replicate',
+      source: 'auto',
     });
   });
 

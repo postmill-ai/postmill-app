@@ -155,7 +155,13 @@ export class DefaultsResolutionService {
       const aiProviders = await this._orgAiSettings.getProviders(orgId);
 
       // Determine primary media provider (isActive + enabled + configured).
-      const enabledMedia = mediaProviders.filter((p) => p.enabled && p.isConfigured);
+      // Row-backed providers (explicit media config) outrank providers that only
+      // qualify via universal AI-credential inheritance — otherwise a hub saved
+      // as LLM-first captures every media default purely by registration order.
+      // The sort is stable, so registration order is preserved within each group.
+      const enabledMedia = mediaProviders
+        .filter((p) => p.enabled && p.isConfigured)
+        .sort((a, b) => Number(b.hasExplicitRow) - Number(a.hasExplicitRow));
       const primaryMedia = enabledMedia.find((p) => p.isActive) || enabledMedia[0];
 
       const addCandidate = (providerId: string, version: string, metadata: ProviderMetadata) => {

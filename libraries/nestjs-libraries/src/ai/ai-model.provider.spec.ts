@@ -269,6 +269,24 @@ describe('AIModelProvider', () => {
     });
   });
 
+  describe('_enforceContextWindow', () => {
+    // 40k chars ≈ 10k tokens: over the 8000-token unknown-model default, well
+    // under gpt-4o's 128000.
+    const prompt = 'x'.repeat(40000);
+
+    it('resolves hub-prefixed model IDs via the unprefixed tail', () => {
+      expect((provider as any)._enforceContextWindow(prompt, 'openai/gpt-4o')).toBe(prompt);
+    });
+
+    it('keeps the exact-table lookup for unprefixed IDs', () => {
+      expect((provider as any)._enforceContextWindow(prompt, 'gpt-4o')).toBe(prompt);
+    });
+
+    it('still truncates unknown models at the 8000-token default', () => {
+      expect((provider as any)._enforceContextWindow(prompt, 'unknown-model')).not.toBe(prompt);
+    });
+  });
+
   describe('languageModel', () => {
     it('returns a language model when config is active', async () => {
       const model = await provider.languageModel('utility', 'org-123');
@@ -439,14 +457,98 @@ describe('AIModelProvider', () => {
         defaultModel: 'claude-sonnet-4-20250514',
         credentials: { apiKey: 'sk-anthropic' },
       });
+      // The fallback provider differs from the active one → its own org config
+      // supplies the credentials; the model is the surface image default (the
+      // active provider's text defaultModel must NOT leak across providers).
+      mockGetByIdentifier.mockImplementation((_orgId: string, id: string) =>
+        id === 'openai'
+          ? { credentials: { apiKey: 'sk-openai-own' }, defaultModel: 'gpt-4o' }
+          : null,
+      );
 
       const model = await provider.imageModel('utility', 'org-123');
       const result = await model.generate('test prompt');
 
       expect(result).toBe('fallback-image');
       expect(createFallbackImageModel).toHaveBeenCalledWith(
-        { apiKey: 'sk-anthropic' },
-        'claude-sonnet-4-20250514',
+        { apiKey: 'sk-openai-own' },
+        'chatgpt-image-latest',
+      );
+    });
+
+    it('uses the org-resolved text-to-image media default when it belongs to the active provider', async () => {
+      const createGatewayImageModel = vi.fn().mockReturnValue({
+        doGenerate: vi.fn().mockResolvedValue({ images: ['hub-image'] }),
+      });
+      (resolution.resolveAI as any).mockImplementation((id: string) => {
+        if (id === 'gateway') {
+          return {
+            identifier: 'gateway',
+            name: 'Vercel AI',
+            credentialFields: [{ key: 'apiKey', required: true }],
+            createLanguageModel: vi.fn(),
+            createImageModel: createGatewayImageModel,
+          };
+        }
+        return undefined;
+      });
+      mockGetActiveProvider.mockResolvedValue({
+        identifier: 'gateway',
+        defaultModel: 'openai/gpt-4o',
+        credentials: { apiKey: 'gw-key' },
+      });
+      (defaultsResolution.resolve as any).mockImplementation((domain: string, category: string) =>
+        domain === 'media' && category === 'text-to-image'
+          ? { providerId: 'gateway', version: 'v1', model: 'openai/gpt-image-1', source: 'stored' }
+          : null,
+      );
+
+      const model = await provider.imageModel('utility', 'org-123');
+      const result = await model.generate('test prompt');
+
+      expect(result).toBe('hub-image');
+      // Not the hardcoded surface default — the hub's own resolved image model.
+      expect(createGatewayImageModel).toHaveBeenCalledWith(
+        { apiKey: 'gw-key' },
+        'openai/gpt-image-1',
+      );
+    });
+
+    it('ignores a text-to-image media default owned by a different provider', async () => {
+      const createGatewayImageModel = vi.fn().mockReturnValue({
+        doGenerate: vi.fn().mockResolvedValue({ images: ['hub-image'] }),
+      });
+      (resolution.resolveAI as any).mockImplementation((id: string) => {
+        if (id === 'gateway') {
+          return {
+            identifier: 'gateway',
+            name: 'Vercel AI',
+            credentialFields: [{ key: 'apiKey', required: true }],
+            createLanguageModel: vi.fn(),
+            createImageModel: createGatewayImageModel,
+          };
+        }
+        return undefined;
+      });
+      mockGetActiveProvider.mockResolvedValue({
+        identifier: 'gateway',
+        defaultModel: 'openai/gpt-4o',
+        credentials: { apiKey: 'gw-key' },
+      });
+      // Replicate owns the media default — its model ID is foreign to the
+      // gateway adapter, so the surface default applies instead.
+      (defaultsResolution.resolve as any).mockImplementation((domain: string, category: string) =>
+        domain === 'media' && category === 'text-to-image'
+          ? { providerId: 'replicate', version: 'v1', model: 'black-forest-labs/flux-schnell', source: 'stored' }
+          : null,
+      );
+
+      const model = await provider.imageModel('utility', 'org-123');
+      await model.generate('test prompt');
+
+      expect(createGatewayImageModel).toHaveBeenCalledWith(
+        { apiKey: 'gw-key' },
+        'chatgpt-image-latest',
       );
     });
   });
@@ -471,6 +573,33 @@ describe('AIModelProvider', () => {
       expect(spend.inputTokens).toBe(10);
       expect(spend.outputTokens).toBe(20);
       expect(spend.costUsd).toBeGreaterThan(0);
+    });
+
+    it('normalizes AI SDK v6 object-shaped usage ({inputTokens: {total}}) to plain ints', async () => {
+      (budget.recordSpend as any).mockClear();
+      mockDoGenerate.mockResolvedValueOnce({
+        content: [{ type: 'text', text: 'Generated response' }],
+        usage: {
+          inputTokens: { total: 191, noCache: 191, cacheRead: 0, cacheWrite: 0 },
+          outputTokens: { total: 9, text: 9, reasoning: 0 },
+        },
+        finishReason: 'stop',
+      });
+      await provider.generateText('utility', 'Hello world', { orgId: 'org-123' });
+      expect(budget.recordSpend).toHaveBeenCalledTimes(1);
+      const spend = (budget.recordSpend as any).mock.calls[0][0];
+      expect(spend.inputTokens).toBe(191);
+      expect(spend.outputTokens).toBe(9);
+      expect(Number.isFinite(spend.costUsd)).toBe(true);
+    });
+
+    it('does not fail the generation when recordSpend throws', async () => {
+      (budget.recordSpend as any).mockClear();
+      (budget.recordSpend as any).mockRejectedValueOnce(new Error('Prisma validation'));
+      const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+      const result = await provider.generateText('utility', 'Hello world', { orgId: 'org-123' });
+      expect(result).toBe('Generated response');
+      warn.mockRestore();
     });
 
     it('uses the fallback provider default model when scoped primary model belongs to another provider', async () => {
@@ -525,13 +654,20 @@ describe('AIModelProvider', () => {
         defaultModel: 'claude-sonnet-4-20250514',
         credentials: { apiKey: 'sk-anthropic' },
       });
+      // Fallback provider differs from the active one → the fallback's OWN org
+      // config supplies credentials and the default model (not anthropic's).
+      mockGetByIdentifier.mockImplementation((_orgId: string, id: string) =>
+        id === 'openai'
+          ? { credentials: { apiKey: 'sk-openai-own' }, defaultModel: 'gpt-4o-mini' }
+          : null,
+      );
 
       const result = await provider.generateText('utility', 'Hello world', { orgId: 'org-123' });
 
       expect(result).toBe('Fallback response');
       expect(createFallbackLanguageModel).toHaveBeenCalledWith(
-        { apiKey: 'sk-anthropic' },
-        'claude-sonnet-4-20250514',
+        { apiKey: 'sk-openai-own' },
+        'gpt-4o-mini',
         expect.any(Object),
       );
     });
@@ -541,6 +677,102 @@ describe('AIModelProvider', () => {
       await expect(
         provider.generateText('utility', 'Hello', { orgId: 'org-123' })
       ).rejects.toThrow(BudgetExceeded);
+    });
+  });
+
+  describe('cross-provider fallback credentials', () => {
+    const failingGatewayModel = {
+      doGenerate: vi.fn().mockRejectedValue(new Error('gateway down')),
+    };
+
+    function wireHubPrimaryWithOpenaiFallback() {
+      const createOpenaiLanguageModel = vi.fn().mockReturnValue({
+        doGenerate: vi.fn().mockResolvedValue({
+          content: [{ type: 'text', text: 'OpenAI fallback response' }],
+          usage: { inputTokens: 1, outputTokens: 1 },
+        }),
+      });
+      (resolution.resolveAI as any).mockImplementation((id: string) => {
+        if (id === 'gateway') {
+          return {
+            identifier: 'gateway',
+            name: 'Vercel AI',
+            credentialFields: [{ key: 'apiKey', required: true }],
+            createLanguageModel: vi.fn().mockReturnValue(failingGatewayModel),
+            createLangchainModel: vi.fn(),
+          };
+        }
+        if (id === 'openai') {
+          return {
+            identifier: 'openai',
+            name: 'OpenAI',
+            credentialFields: [{ key: 'apiKey', required: true }],
+            createLanguageModel: createOpenaiLanguageModel,
+            createLangchainModel: vi.fn(),
+          };
+        }
+        return undefined;
+      });
+      (settingsManager.getSettings as any).mockResolvedValue({
+        ...mockSettings,
+        fallbackProvider: 'openai',
+      });
+      return createOpenaiLanguageModel;
+    }
+
+    it('fetches the fallback provider\'s own credentials when it differs from the active provider', async () => {
+      const createOpenaiLanguageModel = wireHubPrimaryWithOpenaiFallback();
+      mockGetActiveProvider.mockResolvedValue({
+        identifier: 'gateway',
+        defaultModel: 'openai/gpt-4o',
+        credentials: { apiKey: 'gw-key' },
+      });
+      mockGetByIdentifier.mockImplementation((_orgId: string, id: string) =>
+        id === 'openai'
+          ? { credentials: { apiKey: 'sk-openai-own' }, defaultModel: 'gpt-4o-mini' }
+          : null,
+      );
+
+      const result = await provider.generateText('utility', 'Hello world', { orgId: 'org-123' });
+
+      expect(result).toBe('OpenAI fallback response');
+      // Not the gateway key — cross-provider reuse is a guaranteed 401, and the
+      // active provider's hub-prefixed defaultModel is foreign to the fallback.
+      expect(createOpenaiLanguageModel).toHaveBeenCalledWith(
+        { apiKey: 'sk-openai-own' },
+        'gpt-4o-mini',
+        expect.any(Object),
+      );
+    });
+
+    it('reuses the active provider credentials when the active provider IS the fallback', async () => {
+      const createOpenaiLanguageModel = wireHubPrimaryWithOpenaiFallback();
+      // The scope default resolves to gateway while the org's ACTIVE provider is
+      // openai — fallback "openai" === active provider, so its creds/defaultModel
+      // are reused without a per-identifier config fetch.
+      (defaultsResolution.resolve as any).mockImplementation((_domain: string, category: string) =>
+        category === 'low-reasoning'
+          ? { providerId: 'gateway', version: 'v1', model: 'openai/gpt-4o', source: 'stored' }
+          : null,
+      );
+      mockGetActiveProvider.mockResolvedValue({
+        identifier: 'openai',
+        defaultModel: 'gpt-4.1',
+        credentials: { apiKey: 'sk-org-key' },
+      });
+      mockGetByIdentifier.mockImplementation((_orgId: string, id: string) =>
+        id === 'gateway' ? { credentials: { apiKey: 'gw-key' } } : null,
+      );
+
+      const result = await provider.generateText('utility', 'Hello world', { orgId: 'org-123' });
+
+      expect(result).toBe('OpenAI fallback response');
+      expect(createOpenaiLanguageModel).toHaveBeenCalledWith(
+        { apiKey: 'sk-org-key' },
+        'gpt-4.1',
+        expect.any(Object),
+      );
+      expect(mockGetByIdentifier).not.toHaveBeenCalledWith('org-123', 'openai', expect.anything());
     });
   });
 
@@ -1226,6 +1458,155 @@ describe('AIModelProvider', () => {
         { prompt: 'Hello' },
       );
       expect(anthropicResult).toBe('Anthropic response');
+    });
+  });
+
+  describe('prompt tool-output sanitization (gateway poisoning fix)', () => {
+    // Live-verified prod crash (2026-08-27, org on the gateway hub): Mastra's
+    // agent-delegation tool stores providerMetadata.mastra.modelOutput =
+    // {type:'text', value: output.text}; when the sub-agent result is an error
+    // object without `text` (tool-input validation failure), JSONB persistence
+    // drops the undefined value and Mastra's MessageList.llmPrompt() later swaps
+    // {type:'text'} (no value) into the tool-result output verbatim. The Vercel
+    // AI Gateway zod-rejects that shape ("Invalid input" at
+    // prompt[N].content[0]), the stream dies, and the poisoned memory row bricks
+    // every later turn of the thread. The wrapper must repair the shape before
+    // the prompt leaves for the provider.
+    const poisonedPrompt = () => [
+      { role: 'user', content: [{ type: 'text', text: 'generate a bird image' }] },
+      {
+        role: 'assistant',
+        content: [
+          { type: 'tool-call', toolCallId: 'call_1', toolName: 'agent-media', input: { prompt: 'bird' } },
+        ],
+      },
+      {
+        role: 'tool',
+        content: [
+          // The exact shape recalled from mastra_messages for a failed
+          // agent-media delegation (value key dropped by JSONB).
+          { type: 'tool-result', toolCallId: 'call_1', toolName: 'agent-media', output: { type: 'text' } },
+        ],
+      },
+      { role: 'user', content: [{ type: 'text', text: 'approved, proceed' }] },
+    ];
+
+    const sanitize = (prompt: any) =>
+      (provider as any)._sanitizePromptToolOutputs(prompt, 'gateway', 'openai/gpt-4.1-mini');
+
+    it('repairs a text output whose value was dropped (the poisoned shape)', () => {
+      const result = sanitize(poisonedPrompt());
+      expect(result[2].content[0].output).toEqual({ type: 'text', value: '' });
+    });
+
+    it('repairs every other value-less / mis-shaped output variant', () => {
+      const tool = (output: any) => ({
+        role: 'tool',
+        content: [{ type: 'tool-result', toolCallId: 'c', toolName: 't', output }],
+      });
+      // Missing output entirely.
+      expect(sanitize([{ role: 'tool', content: [{ type: 'tool-result', toolCallId: 'c', toolName: 't' }] }])[0].content[0].output)
+        .toEqual({ type: 'json', value: null });
+      // Bare string output.
+      expect(sanitize([tool('raw string')])[0].content[0].output).toEqual({ type: 'text', value: 'raw string' });
+      // json with undefined value -> null.
+      expect(sanitize([tool({ type: 'json' })])[0].content[0].output).toEqual({ type: 'json', value: null });
+      // error-text with non-string value.
+      expect(sanitize([tool({ type: 'error-text', value: { code: 1 } })])[0].content[0].output)
+        .toEqual({ type: 'error-text', value: '{"code":1}' });
+      // content with non-array value -> re-homed as json.
+      expect(sanitize([tool({ type: 'content', value: 'x' })])[0].content[0].output)
+        .toEqual({ type: 'json', value: 'x' });
+      // unknown output type -> re-homed as json.
+      expect(sanitize([tool({ type: 'weird', value: 7 })])[0].content[0].output)
+        .toEqual({ type: 'json', value: 7 });
+    });
+
+    it('passes spec-valid prompts through by reference', () => {
+      const prompt = [
+        { role: 'system', content: [{ type: 'text', text: 'sys' }] },
+        { role: 'user', content: [{ type: 'text', text: 'hi' }] },
+        {
+          role: 'assistant',
+          content: [{ type: 'tool-call', toolCallId: 'c1', toolName: 't', input: {} }],
+        },
+        {
+          role: 'tool',
+          content: [
+            { type: 'tool-result', toolCallId: 'c1', toolName: 't', output: { type: 'json', value: { needsConfirmation: true } } },
+            { type: 'tool-result', toolCallId: 'c2', toolName: 't', output: { type: 'text', value: 'done' } },
+            { type: 'tool-result', toolCallId: 'c3', toolName: 't', output: { type: 'json', value: null } },
+            { type: 'tool-result', toolCallId: 'c4', toolName: 't', output: { type: 'execution-denied', reason: 'no' } },
+            { type: 'tool-result', toolCallId: 'c5', toolName: 't', output: { type: 'content', value: [{ type: 'text', text: 'x' }] } },
+          ],
+        },
+      ];
+      expect(sanitize(prompt)).toBe(prompt);
+    });
+
+    it('returns non-array prompts untouched', () => {
+      expect(sanitize(undefined)).toBe(undefined);
+      expect(sanitize('plain string prompt')).toBe('plain string prompt');
+    });
+
+    it('does not mutate the caller-owned prompt', async () => {
+      const prompt = poisonedPrompt();
+      const model = await provider.languageModel('agent', 'org-123');
+      const doStream = vi.fn().mockResolvedValue({ stream: new ReadableStream() });
+      (mockLanguageModel as any).doStream = doStream;
+
+      await (model as any).doStream({ prompt });
+
+      expect(prompt[2].content[0].output).toEqual({ type: 'text' });
+      expect(doStream.mock.calls[0][0].prompt[2].content[0].output).toEqual({ type: 'text', value: '' });
+    });
+
+    it('repairs the prompt on the doGenerate path too', async () => {
+      const model = await provider.languageModel('agent', 'org-123');
+      await (model as any).doGenerate({ prompt: poisonedPrompt() });
+      const sent = mockDoGenerate.mock.calls.at(-1)?.[0]?.prompt;
+      expect(sent[2].content[0].output).toEqual({ type: 'text', value: '' });
+    });
+
+    it('sends a gateway-schema-valid payload after repair (mocked fetch, real @ai-sdk/gateway serialization)', async () => {
+      const { createGateway } = await import('@ai-sdk/gateway');
+      const fetchSpy = vi.fn().mockResolvedValue(
+        new Response('data: {"type":"finish","finishReason":"stop","usage":{"inputTokens":1,"outputTokens":1}}\n\n', {
+          status: 200,
+          headers: { 'content-type': 'text/event-stream' },
+        }),
+      );
+      (resolution.resolveAI as any).mockImplementation((id: string) =>
+        id === 'gateway'
+          ? {
+              identifier: 'gateway',
+              name: 'Vercel AI',
+              credentialFields: [{ key: 'apiKey', label: 'API Key', type: 'password', required: true }],
+              capabilities: { text: true, image: true, vision: true, embeddings: true, speech: true, tools: true },
+              createLanguageModel: vi.fn().mockImplementation(() =>
+                createGateway({ apiKey: 'gw-test', fetch: fetchSpy as any }).languageModel('openai/gpt-4.1-mini'),
+              ),
+            }
+          : undefined,
+      );
+      mockGetActiveProvider.mockResolvedValue({
+        identifier: 'gateway',
+        defaultModel: 'openai/gpt-4.1-mini',
+        credentials: { apiKey: 'gw-test' },
+      });
+
+      const model = await provider.languageModel('agent', 'org-123');
+      await (model as any).doStream({ prompt: poisonedPrompt() });
+
+      expect(fetchSpy).toHaveBeenCalledTimes(1);
+      const body = JSON.parse(fetchSpy.mock.calls[0][1].body as string);
+      // The shape the gateway zod-rejected live (output.value undefined) is now
+      // a valid text output.
+      expect(body.prompt[2].content[0]).toMatchObject({
+        type: 'tool-result',
+        toolCallId: 'call_1',
+        output: { type: 'text', value: '' },
+      });
     });
   });
 });

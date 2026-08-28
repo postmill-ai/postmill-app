@@ -15,8 +15,6 @@ export const metadata: ProviderMetadata = {
     "vision"
   ],
   "mediaCategories": [
-    "image-focal-point",
-    "image-slide",
     "image-to-image",
     "text-to-image"
   ],
@@ -41,6 +39,15 @@ export const metadata: ProviderMetadata = {
       "gpt-4.1",
       "claude-sonnet-4",
       "llama-3.2-11b-vision"
+    ],
+    "text-to-image": [
+      "gemini-2.5-flash-image",
+      "gpt-5.4-image",
+      "gpt-5-image-mini"
+    ],
+    "image-to-image": [
+      "gemini-2.5-flash-image",
+      "gpt-5.4-image"
     ]
   },
   "mediaModels": {
