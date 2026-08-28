@@ -16,29 +16,46 @@ export NEXT_PUBLIC_BACKEND_URL="${NEXT_PUBLIC_BACKEND_URL:-http://localhost:4007
 # CSP connect-src baked into .next/routes-manifest.json (see the CSP guard in
 # apps/frontend/next.config.ts). The image is install-agnostic, so it ships a
 # placeholder absolute URL and we rewrite it here, on every boot, before any
-# process serves traffic. Note: a container RESTART keeps the already-
-# substituted files (only a recreate re-runs on the pristine image), so the
-# grep guard below simply no-ops.
+# process serves traffic. A container RESTART keeps the already-substituted
+# files (only a recreate re-runs on the pristine image), so we record the last
+# substituted values in a state file under .next and rewrite FROM those — a
+# restart with a changed NEXT_PUBLIC_BACKEND_URL now re-substitutes correctly.
 NEXT_DIR=/app/apps/frontend/.next
+STATE_FILE="$NEXT_DIR/.backend-url-state"
 PLACEHOLDER_URL='https://backend-url-not-set.postmill.invalid/api'
 PLACEHOLDER_ORIGIN='https://backend-url-not-set.postmill.invalid'
 
 # Escape sed replacement specials (& | \) in runtime values.
 esc() { printf '%s' "$1" | sed -e 's/[&|\\]/\\&/g'; }
 
-if grep -rlq "$PLACEHOLDER_ORIGIN" "$NEXT_DIR" 2>/dev/null; then
-  # connect-src holds the bare ORIGIN (no /api path) — compute it the same way
-  # apps/frontend/next.config.ts does. Empty when the URL is unparseable.
-  BACKEND_ORIGIN="$(node -e 'try { console.log(new URL(process.env.NEXT_PUBLIC_BACKEND_URL).origin); } catch {}')"
+# connect-src holds the bare ORIGIN (no /api path) — compute it the same way
+# apps/frontend/next.config.ts does. Empty when the URL is unparseable.
+BACKEND_ORIGIN="$(node -e 'try { console.log(new URL(process.env.NEXT_PUBLIC_BACKEND_URL).origin); } catch {}')"
+
+# What is currently baked into .next: the placeholder on first boot, else the
+# values from the previous run's state file.
+PREV_URL="$PLACEHOLDER_URL"
+PREV_ORIGIN="$PLACEHOLDER_ORIGIN"
+if [ -f "$STATE_FILE" ]; then
+  PREV_URL="$(sed -n '1p' "$STATE_FILE")"
+  PREV_ORIGIN="$(sed -n '2p' "$STATE_FILE")"
+fi
+
+if [ "$PREV_URL" != "$NEXT_PUBLIC_BACKEND_URL" ] && [ -n "$PREV_ORIGIN" ] && grep -rlqF -- "$PREV_ORIGIN" "$NEXT_DIR" 2>/dev/null; then
   url_esc="$(esc "$NEXT_PUBLIC_BACKEND_URL")"
   origin_esc="$(esc "$BACKEND_ORIGIN")"
   # Full URL first (its occurrences also contain the origin string), then the
   # bare origin that remains in the baked CSP.
-  grep -rl "$PLACEHOLDER_URL" "$NEXT_DIR" 2>/dev/null | xargs -r sed -i "s|$PLACEHOLDER_URL|$url_esc|g"
+  grep -rlF -- "$PREV_URL" "$NEXT_DIR" 2>/dev/null | xargs -r sed -i "s|$(esc "$PREV_URL")|$url_esc|g"
   if [ -n "$BACKEND_ORIGIN" ]; then
-    grep -rl "$PLACEHOLDER_ORIGIN" "$NEXT_DIR" 2>/dev/null | xargs -r sed -i "s|$PLACEHOLDER_ORIGIN|$origin_esc|g"
+    grep -rlF -- "$PREV_ORIGIN" "$NEXT_DIR" 2>/dev/null | xargs -r sed -i "s|$(esc "$PREV_ORIGIN")|$origin_esc|g"
   fi
 fi
+
+# Record what is baked in now, for the next boot (also on the no-op path, so a
+# crash between sed and state-write can't wedge the container — worst case the
+# next boot re-runs the same substitution, which then no-ops).
+printf '%s\n%s\n' "$NEXT_PUBLIC_BACKEND_URL" "$BACKEND_ORIGIN" > "$STATE_FILE"
 
 mkdir -p /tmp/nginx
 
