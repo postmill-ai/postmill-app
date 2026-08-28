@@ -18,6 +18,26 @@ export const metadata: ProviderMetadata = {
     "text-to-video"
   ],
   "hasModelList": true,
+  "modelHints": {
+    "text-to-image": [
+      "FLUX-1-schnell",
+      "FLUX"
+    ],
+    "image-to-image": [
+      "FLUX"
+    ],
+    "text-to-video": [
+      "veo",
+      "Wan"
+    ],
+    "image-to-video": [
+      "Wan",
+      "veo"
+    ],
+    "text-to-speech": [
+      "Kokoro"
+    ]
+  },
   "mediaModels": {
     "text-to-image": [
       {

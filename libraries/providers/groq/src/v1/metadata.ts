@@ -38,6 +38,10 @@ export const metadata: ProviderMetadata = {
     "vision": [
       "llama-3.2-11b-vision",
       "llama-3.2-90b-vision"
+    ],
+    "text-to-speech": [
+      "playai-tts",
+      "playai"
     ]
   },
   "mediaModels": {

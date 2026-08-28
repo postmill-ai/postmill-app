@@ -37,6 +37,13 @@ export const metadata: ProviderMetadata = {
     "vision": [
       "grok-2-vision",
       "grok-3-vision"
+    ],
+    "text-to-image": [
+      "grok-2-image",
+      "grok"
+    ],
+    "image-to-image": [
+      "grok-2-image"
     ]
   },
   "mediaModels": {

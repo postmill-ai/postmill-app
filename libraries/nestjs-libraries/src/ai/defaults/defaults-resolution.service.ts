@@ -217,6 +217,13 @@ export class DefaultsResolutionService {
         const match = models.find((m: { id: string }) => m.id.includes(hint));
         if (match) return match.id;
       }
+      // Every hint missed the live catalog — the hint list is stale against this
+      // provider (catalogs churn; seen live with openrouter seeding the
+      // openrouter/auto-beta router alias). Make the silent models[0] fallback
+      // observable so the metadata can be re-pointed.
+      this._logger.warn(
+        `No modelHints matched for ${candidate.providerId}@${candidate.version} category "${category}" (org ${orgId}, hints: ${hints.join(', ')}) — falling back to first catalog entry "${models[0].id}".`
+      );
     }
 
     return models[0].id;

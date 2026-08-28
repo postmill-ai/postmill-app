@@ -456,6 +456,10 @@ export class CopilotController {
       return await memory.recall({
         resourceId: organization.id,
         threadId,
+        // Default lastMessages only returns the tail — load a generous window so
+        // reopened threads show real history, not just the last exchange.
+        perPage: 100,
+        page: 0,
       });
     } catch (err) {
       return { messages: [] };

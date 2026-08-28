@@ -17,9 +17,9 @@
     "test": "vitest run"
   },
   "dependencies": {
-    "@copilotkit/react-core": "^1.59.5",
-    "@copilotkit/react-textarea": "^1.59.5",
-    "@copilotkit/react-ui": "^1.59.5",
+    "@copilotkit/react-core": "^1.69.3",
+    "@copilotkit/react-textarea": "^1.69.3",
+    "@copilotkit/react-ui": "^1.69.3",
     "@dub/analytics": "^0.0.32",
     "@hookform/resolvers": "^3.3.4",
     "@mantine/core": "^9.5.1",
