@@ -1,11 +1,16 @@
 import { withSentryConfig } from '@sentry/nextjs';
 import type { NextConfig } from 'next';
 import { redirects } from './src/redirects.config';
-import withBundleAnalyzer from '@next/bundle-analyzer';
 
-const withBundleAnalyzerFn =
+// @next/bundle-analyzer is a devDependency — it does not exist in the pruned
+// production image, where `next start` re-loads this (compiled) config. A
+// top-level import would crash the prod server with MODULE_NOT_FOUND, so load
+// it lazily and only for `ANALYZE=true` builds (same require-guard idiom as
+// the helmet load in apps/backend/src/main.ts).
+const withBundleAnalyzerFn: (config: NextConfig) => NextConfig =
   process.env.ANALYZE === 'true'
-    ? withBundleAnalyzer({ enabled: true })
+    ? // eslint-disable-next-line @typescript-eslint/no-require-imports
+      require('@next/bundle-analyzer')({ enabled: true })
     : (config: NextConfig) => config;
 
 // The browser fetches the backend directly (NEXT_PUBLIC_BACKEND_URL). When the

@@ -28,7 +28,7 @@ The application will be available at `http://localhost:4007`.
 
 | Service              | Image                                   | Port            | Purpose |
 |----------------------|-----------------------------------------|-----------------|---------|
-| `postmill`           | `ghcr.io/postmill-ai/postmill-app:latest`  | `4007:5000`     | API + frontend (Next.js server on port 5000 internally) |
+| `postmill`           | `ghcr.io/postmill-ai/postmill-app:latest`  | `4007:5000`     | All-in-one app: nginx on :5000 routes `/api/*` → NestJS backend (:3000) and everything else → Next.js frontend (:4200); backend and frontend are internal-only |
 | `postmill-postgres`  | `postgres:17-alpine`                    | —               | Application database |
 | `spotlight`          | `ghcr.io/getsentry/spotlight:latest`    | `8969:8969`     | Sentry debug proxy (dev/monitoring) |
 
@@ -143,14 +143,14 @@ services:
 
 ### Migrations on first boot
 
-The container runs `prisma-generate` on boot (via `postinstall`), regenerating the Prisma client to
-match the schema baked into the image. It does **not** apply committed migrations automatically.
-Apply migrations after deploy using the canonical path described in
-[Database](../developer-docs/database.md):
+The container does **not** apply migrations (or run `prisma-generate`) on boot — the Prisma client is
+generated at image build time and migrations are applied explicitly. Apply migrations after deploy
+using the canonical path described in [Database](../developer-docs/database.md). `pnpm` is not
+installed in the runtime image, so use `npx`:
 
 ```bash
 # Run inside the container once the image is up
-docker exec postmill pnpm dlx prisma@6.5.0 migrate deploy \
+docker exec postmill npx --yes prisma@6.5.0 migrate deploy \
   --schema ./libraries/nestjs-libraries/src/database/prisma/schema.prisma
 ```
 

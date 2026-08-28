@@ -1,10 +1,10 @@
 # Scaling & Deployment
 
-This page covers running Postmill's backend in production: the dedicated production image,
+This page covers running Postmill in production: the published all-in-one image,
 horizontal scaling, health probes, graceful shutdown, fail-fast configuration, the
 collaboration single-instance constraint, and OpenTelemetry tracing.
 
-## Production image (one process per container)
+## Production image (all-in-one)
 
 Use the multi-stage [`Dockerfile`](https://github.com/postmill-ai/postmill-app/blob/main/Dockerfile)
 at the repo root for production — **not** `docker/Dockerfile.dev`. The differences matter:
@@ -12,21 +12,33 @@ at the repo root for production — **not** `docker/Dockerfile.dev`. The differe
 | | `docker/Dockerfile.dev` | `Dockerfile` (production) |
 |---|---|---|
 | Dependencies | all (including devDependencies) | production only (`pnpm prune --prod`) |
-| Process model | `nginx` + PM2 (multiple processes) | a single `node` process |
+| Process model | `nginx` + PM2 (multiple processes) | `nginx` + backend + frontend via a plain bash entrypoint (no PM2) |
 | User | root | unprivileged `app` user |
 | Build | in-image, every boot | separate builder stage, artifacts only |
-| Healthcheck | none | `HEALTHCHECK` → `/health/live` |
+| Healthcheck | none | `HEALTHCHECK` → `/health/live` through nginx |
 
 ```bash
-docker build -f Dockerfile -t postmill-backend .
-docker run -p 3000:3000 --env-file .env postmill-backend
+docker build -f Dockerfile -t postmill-app .
+docker run -p 4007:5000 --env-file .env postmill-app
 ```
 
-**One process per container.** The production image runs exactly one Node process and does
-**not** use PM2 to spawn worker processes. Horizontal scaling is the orchestrator's responsibility:
-run N replicas of the container behind a load balancer (Kubernetes `replicas`, ECS desired
-count, Nomad `count`, etc.). This keeps each replica's lifecycle, health, and resource
-limits independently observable.
+**All-in-one process model.** The image runs three processes under
+[`docker/entrypoint.sh`](https://github.com/postmill-ai/postmill-app/blob/main/docker/entrypoint.sh):
+nginx on container port **5000** (the only published port), the NestJS backend on 127.0.0.1:**3000**,
+and the Next.js frontend prod server on 127.0.0.1:**4200**. nginx routes `/api/*` to the backend
+(stripping the `/api` prefix — the backend serves routes at root), serves `/uploads/*` from the
+uploads volume, and proxies everything else to the frontend. There is no PM2: the entrypoint is a
+plain bash script that starts the three children, traps signals, and exits if any child dies, so the
+container restart policy restores a healthy stack.
+
+**Install-agnostic frontend URL.** The frontend build bakes `NEXT_PUBLIC_BACKEND_URL` into the
+client bundles and the CSP `connect-src`, so the image is built with a placeholder URL
+(`https://backend-url-not-set.postmill.invalid/api`) which the entrypoint substitutes with the real
+runtime `NEXT_PUBLIC_BACKEND_URL` across `.next/` on every container start.
+
+**Scaling out** means running N replicas of this container behind a load balancer (Kubernetes
+`replicas`, ECS desired count, Nomad `count`, etc.). The collaboration caveat below applies to the
+backend inside each replica.
 
 ### Render worker image
 

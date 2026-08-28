@@ -13,7 +13,7 @@ workspaces — no `package.json`, no install step, run directly with `node`/`bas
 |---|---|---|
 | `tools/db/` | `migrate-deploy-safe.mjs` and `schema-destructive-guard.mjs` (both CI gates), `postmill-migrate.sh` (documented runbook step), one-shot backfills | A migration/schema helper that CI or an operator runbook invokes. |
 | `tools/codegen/` | `generate-studio-descriptor-registry.mjs`, `generate-openapi.mjs`, `generate-font-catalog.mjs`, `snapshot-replicate-catalog.mjs` | A generator whose **output is committed**. Follow the existing `--check` convention so CI can gate drift. |
-| `docker/` | `Dockerfile.dev`, `Dockerfile.dev-live`, `Containerfile.render`, both dev compose files, `nginx.conf`, `dev-entrypoint.sh`, the build/create scripts | Any Docker artifact — except the three pinned at the repo root (see `AGENTS.md` § Repository layout). |
+| `docker/` | `Dockerfile.dev`, `Dockerfile.dev-live`, `Containerfile.render`, both dev compose files, `nginx.conf` + `nginx.prod.conf` (prod = the all-in-one image's front proxy), `entrypoint.sh` (prod) + `dev-entrypoint.sh`, the build/create scripts | Any Docker artifact — except the three pinned at the repo root (see `AGENTS.md` § Repository layout). |
 | `e2e/` | Playwright specs, `auth.setup.ts`, `seed-test-data.js` | Browser-level tests and the fixtures they need. |
 
 `scripts/` at the root is **maintainer-local and gitignored**. If CI, a workspace script, or a doc

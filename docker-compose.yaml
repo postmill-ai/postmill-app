@@ -92,6 +92,9 @@ services:
     volumes:
       - postmill-config:/config/
       - postmill-uploads:/uploads/
+    # The all-in-one image runs nginx on container port 5000, routing /api/* to
+    # the NestJS backend (:3000) and everything else to the Next.js frontend
+    # (:4200) — both internal only. Publish nginx, nothing else.
     ports:
       - "4007:5000"
     networks:
