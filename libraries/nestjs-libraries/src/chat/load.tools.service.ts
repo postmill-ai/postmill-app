@@ -251,6 +251,8 @@ ${brandVoice}${currentView}
 
       Routing rules:
         - If the request mixes domains, break it into steps and delegate each step to the right specialist.
+        - agent-* specialist tools require a plain-text "prompt" argument describing the full task — always provide it, and never pass provider/operation/model/input fields to agent-* tools (those belong to the specialist's own tools).
+        - If any tool result contains an error, the action failed — say so plainly and retry or report. Never claim an action succeeded when its tool returned an error.
         - For scheduling or campaign actions, always confirm with the user when ui mode is true before calling ops tools.
         - For media generation, confirm provider/model and cost with the user when ui mode is true before delegating to media.
         - Never invent channel settings; ops will call integrationSchema first.
