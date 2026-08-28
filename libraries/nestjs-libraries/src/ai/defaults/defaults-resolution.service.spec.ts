@@ -532,4 +532,51 @@ describe('DefaultsResolutionService', () => {
     expect(result?.source).toBe('auto');
     expect(result?.model).toBe('gpt-4.1-mini');
   });
+
+  it('warns when every modelHint misses the live catalog and falls back to models[0]', async () => {
+    const repository = makeRepository();
+    const aiSettings = makeAiSettings([
+      { identifier: 'openrouter', enabled: true, isConfigured: true, version: 'v1' },
+    ]);
+    const kernel = makeKernel({
+      get: vi.fn().mockReturnValue({
+        create: () => ({
+          listModels: vi.fn().mockResolvedValue([
+            { id: 'openrouter/auto-beta' },
+            { id: 'openai/gpt-5-image' },
+          ]),
+        }),
+      }),
+      getMetadata: vi.fn().mockReturnValue({
+        id: 'openrouter',
+        displayName: 'OpenRouter',
+        kind: 'hub',
+        domains: ['ai'],
+        modelCategories: AI_MODEL_CATEGORIES,
+        hasModelList: true,
+        modelHints: {
+          // Stale hints — the provider retired these models.
+          'low-reasoning': ['gpt-image-1', 'flux'],
+        },
+      }),
+    });
+    service = new DefaultsResolutionService(
+      repository as any,
+      aiSettings as any,
+      makeMediaSettings() as any,
+      kernel as any,
+      makeRuntimeContextFactory() as any,
+    );
+    const warn = vi
+      .spyOn((service as any)._logger, 'warn')
+      .mockImplementation(() => undefined);
+
+    const result = await service.resolve('ai', 'low-reasoning', 'org-1');
+
+    expect(result?.source).toBe('auto');
+    expect(result?.model).toBe('openrouter/auto-beta');
+    expect(warn).toHaveBeenCalledWith(
+      expect.stringContaining('No modelHints matched')
+    );
+  });
 });

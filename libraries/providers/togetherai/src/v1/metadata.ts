@@ -43,6 +43,16 @@ export const metadata: ProviderMetadata = {
     "vision": [
       "llama-3.2-11b-vision",
       "llama-3.2-90b-vision"
+    ],
+    "text-to-image": [
+      "FLUX.1-schnell",
+      "FLUX"
+    ],
+    "image-to-image": [
+      "FLUX"
+    ],
+    "text-to-speech": [
+      "sonic"
     ]
   },
   "mediaModels": {

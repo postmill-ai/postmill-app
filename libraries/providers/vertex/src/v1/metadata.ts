@@ -21,6 +21,16 @@ export const metadata: ProviderMetadata = {
     "text-to-video"
   ],
   "hasModelList": true,
+  "modelHints": {
+    "text-to-image": [
+      "imagen-3.0-generate",
+      "imagen"
+    ],
+    "text-to-video": [
+      "veo-2.0-generate",
+      "veo"
+    ]
+  },
   "mediaModels": {
     "text-to-image": [
       {

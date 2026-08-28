@@ -17,6 +17,26 @@ export const metadata: ProviderMetadata = {
     "text-to-video"
   ],
   "hasModelList": true,
+  "modelHints": {
+    "text-to-image": [
+      "FLUX.1-schnell",
+      "FLUX"
+    ],
+    "image-to-image": [
+      "FLUX"
+    ],
+    "text-to-video": [
+      "Wan2.2-T2V",
+      "Wan"
+    ],
+    "image-to-video": [
+      "Wan2.2-I2V",
+      "Wan"
+    ],
+    "text-to-speech": [
+      "fish-speech"
+    ]
+  },
   "mediaModels": {
     "image-to-video": [
       {

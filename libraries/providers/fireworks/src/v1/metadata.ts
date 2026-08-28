@@ -37,6 +37,13 @@ export const metadata: ProviderMetadata = {
     "vision": [
       "llama-v3p2-11b-vision",
       "llama-v3p1-70b"
+    ],
+    "text-to-image": [
+      "flux-1-schnell",
+      "flux"
+    ],
+    "image-to-image": [
+      "flux"
     ]
   },
   "mediaModels": {
