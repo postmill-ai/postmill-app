@@ -108,16 +108,16 @@ export class GatewayAdapter implements AIProviderAdapter {
   }
 
   /**
-   * LangChain support is limited to OpenAI models routed through the Gateway.
-   * Model IDs must be prefixed with "openai/" (e.g. "openai/gpt-4o").
+   * LangChain mode routes any prefixed model ID through the Gateway's
+   * OpenAI-compatible endpoint — ChatOpenAI forwards IDs like
+   * "anthropic/claude-…" verbatim. The base URL MUST default to the gateway
+   * endpoint (never to LangChain's api.openai.com default, which would leak
+   * the gateway key to OpenAI).
    */
   createLangchainModel(creds: Record<string, string>, modelId: string, opts?: AIModelOptions): BaseChatModel {
-    if (!modelId.startsWith('openai/')) {
-      throw new Error(`Only OpenAI models routed through Gateway support LangChain mode (got: "${modelId}")`);
-    }
     return new ChatOpenAI({
       openAIApiKey: creds.apiKey,
-      configuration: { baseURL: creds.baseURL || undefined },
+      configuration: { baseURL: creds.baseURL || GATEWAY_DEFAULT_BASE_URL },
       model: modelId,
       temperature: opts?.temperature,
       topP: opts?.topP,

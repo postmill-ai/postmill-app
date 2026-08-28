@@ -18,6 +18,7 @@ vi.mock('@langchain/openai', () => ({
   ChatOpenAI: vi.fn(function() { return {}; }),
 }));
 
+import { ChatOpenAI } from '@langchain/openai';
 import { GatewayAdapter } from '../ai.adapter';
 
 describe('GatewayAdapter', () => {
@@ -135,13 +136,38 @@ describe('GatewayAdapter', () => {
       expect(model).toBeDefined();
     });
 
-    it('throws for non-openai model prefix', () => {
-      expect(() =>
-        adapter.createLangchainModel(
-          { apiKey: 'gw_test', baseURL: 'https://gateway.ai.cloudflare.com/v1/test' },
-          'anthropic/claude-sonnet-4-20250514',
-        ),
-      ).toThrow(/Only OpenAI models routed through Gateway/);
+    it('accepts non-openai prefixed model IDs (routed through the gateway endpoint)', () => {
+      const model = adapter.createLangchainModel(
+        { apiKey: 'gw_test' },
+        'anthropic/claude-sonnet-4-20250514',
+      );
+      expect(model).toBeDefined();
+      expect(ChatOpenAI).toHaveBeenCalledWith(
+        expect.objectContaining({ model: 'anthropic/claude-sonnet-4-20250514' }),
+      );
+    });
+
+    it('defaults the LangChain base URL to the gateway endpoint when creds.baseURL is unset', () => {
+      // Regression: `baseURL: undefined` made LangChain fall back to
+      // api.openai.com, leaking the gateway key to OpenAI.
+      adapter.createLangchainModel({ apiKey: 'gw_test' }, 'openai/gpt-4o');
+      expect(ChatOpenAI).toHaveBeenCalledWith(
+        expect.objectContaining({
+          configuration: { baseURL: 'https://ai-gateway.vercel.sh/v1' },
+        }),
+      );
+    });
+
+    it('uses the custom baseURL when provided', () => {
+      adapter.createLangchainModel(
+        { apiKey: 'gw_test', baseURL: 'https://gateway.ai.cloudflare.com/v1/test' },
+        'openai/gpt-4o',
+      );
+      expect(ChatOpenAI).toHaveBeenCalledWith(
+        expect.objectContaining({
+          configuration: { baseURL: 'https://gateway.ai.cloudflare.com/v1/test' },
+        }),
+      );
     });
   });
 

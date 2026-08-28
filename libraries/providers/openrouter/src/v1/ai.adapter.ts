@@ -99,13 +99,15 @@ export class OpenRouterAdapter implements AIProviderAdapter {
     return this._getProvider(creds).languageModel(modelId) as unknown as LanguageModel;
   }
 
+  /**
+   * LangChain mode routes any prefixed model ID through OpenRouter's
+   * OpenAI-compatible endpoint — ChatOpenAI forwards IDs like
+   * "anthropic/claude-…" verbatim.
+   */
   createLangchainModel(creds: Record<string, string>, modelId: string, opts?: AIModelOptions): BaseChatModel {
-    if (!modelId.startsWith('openai/')) {
-      throw new Error(`Only OpenAI-compatible models support LangChain mode through OpenRouter (got: "${modelId}")`);
-    }
     return new ChatOpenAI({
       openAIApiKey: creds.apiKey,
-      configuration: { baseURL: creds.baseURL || 'https://openrouter.ai/api/v1' },
+      configuration: { baseURL: creds.baseURL || OPENROUTER_BASE_URL },
       model: modelId,
       temperature: opts?.temperature,
       topP: opts?.topP,

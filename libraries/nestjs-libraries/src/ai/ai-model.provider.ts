@@ -43,6 +43,10 @@ const PROVIDER_PRICING: Record<string, { inputPer1K: number; outputPer1K: number
   deepseek: { inputPer1K: 0.00014, outputPer1K: 0.00028 },
   togetherai: { inputPer1K: 0.0002, outputPer1K: 0.0004 },
   fireworks: { inputPer1K: 0.0002, outputPer1K: 0.0006 },
+  // Hubs pass through upstream provider pricing — approximate with the OpenAI
+  // rates (already the generic fallback in _estimateCost).
+  gateway: { inputPer1K: 0.00015, outputPer1K: 0.0006 },
+  openrouter: { inputPer1K: 0.00015, outputPer1K: 0.0006 },
 };
 
 const SURFACE_DEFAULTS: Record<AIScope, SurfaceDefaults> = {
@@ -331,6 +335,28 @@ export class AIModelProvider {
     throw lastError || new Error('Failed to resolve AI config');
   }
 
+  /**
+   * Resolve the org config to use for a fallback provider. The active provider's
+   * credentials/defaultModel only apply when the active provider IS the configured
+   * fallback; otherwise fetch the fallback provider's own org config by
+   * identifier+version — sending the active provider's key to a different
+   * provider is a guaranteed 401, and its defaultModel may be a hub-prefixed ID
+   * foreign to the fallback provider.
+   */
+  private async _fallbackProviderConfig(
+    orgId: string | undefined,
+    fallbackRef: { providerId: string; version?: string },
+  ): Promise<{ isActiveProvider: boolean; config: any | null }> {
+    const orgActive = orgId ? await this._orgAiSettings.getActiveProvider(orgId) : null;
+    if (orgActive?.identifier === fallbackRef.providerId) {
+      return { isActiveProvider: true, config: orgActive };
+    }
+    const own = orgId
+      ? await this._orgAiSettings.getByIdentifier(orgId, fallbackRef.providerId, fallbackRef.version)
+      : null;
+    return { isActiveProvider: false, config: own };
+  }
+
   private async _withFallback<T>(
     fn: (config: ResolvedConfig) => Promise<T>,
     scope: AIScope,
@@ -366,12 +392,11 @@ export class AIModelProvider {
       const globalSettings = config.settings || await this._aiSettingsManager.getSettings();
       if (globalSettings?.fallbackProvider && globalSettings.fallbackProvider !== config.providerId) {
         const fallbackRef = this._parseProviderRef(globalSettings.fallbackProvider);
-        const fallbackOrgActive = orgId
-          ? await this._orgAiSettings.getActiveProvider(orgId)
-          : null;
+        const { config: fallbackOrgConfig } = await this._fallbackProviderConfig(orgId, fallbackRef);
+        const fallbackCreds = fallbackOrgConfig?.credentials || {};
         const fallbackAdapter = this._resolveAI(fallbackRef.providerId, {
           version: fallbackRef.version,
-          credentials: fallbackOrgActive?.credentials || {},
+          credentials: fallbackCreds,
           orgId,
         });
         if (fallbackAdapter) {
@@ -379,8 +404,6 @@ export class AIModelProvider {
             throw primaryErr;
           }
           attemptedFallbackProvider = globalSettings.fallbackProvider;
-
-          const fallbackCreds = fallbackOrgActive?.credentials || {};
 
           // Legacy scoped-models read: only consulted for the fallback provider when
           // the new category defaults are kill-switched off.
@@ -391,7 +414,7 @@ export class AIModelProvider {
             fallbackScopeConfig?.provider === globalSettings.fallbackProvider
               ? fallbackScopeConfig.model
               : undefined;
-          const fallbackModel = fallbackScopedModel || fallbackOrgActive?.defaultModel || SURFACE_DEFAULTS[scope].textModel;
+          const fallbackModel = fallbackScopedModel || fallbackOrgConfig?.defaultModel || SURFACE_DEFAULTS[scope].textModel;
           const fallbackConfig: ResolvedConfig = {
             adapter: fallbackAdapter,
             modelId: fallbackModel,
@@ -427,7 +450,22 @@ export class AIModelProvider {
     }
   }
 
-  private _resolveImageModelId(config: ResolvedConfig): string {
+  // The scope image model: prefer the org's resolved `text-to-image` media
+  // default when it belongs to the config's provider (a hub-only org pins its
+  // image model through media defaults — the hardcoded surface default is an
+  // OpenAI model ID). Only same-provider defaults apply: a media default owned
+  // by another provider carries a model ID foreign to this adapter.
+  private async _resolveImageModelId(config: ResolvedConfig, orgId?: string): Promise<string> {
+    if (orgId && AI_MODEL_DEFAULTS_ENABLED) {
+      try {
+        const mediaDefault = await this._defaultsResolution.resolve('media', 'text-to-image', orgId);
+        if (mediaDefault?.model && mediaDefault.providerId === config.providerId) {
+          return mediaDefault.model;
+        }
+      } catch {
+        // Resolution failure must not break image generation — fall through.
+      }
+    }
     if (config.defaultSurface?.imageModel) {
       return config.defaultSurface.imageModel;
     }
@@ -514,7 +552,7 @@ export class AIModelProvider {
         span.setAttribute(TelemetryService.ATTR_GEN_AI_SYSTEM, config.providerId);
         span.setAttribute(TelemetryService.ATTR_GEN_AI_REQUEST_MODEL, config.modelId);
         if (orgId) span.setAttribute('ai.organizationId', orgId);
-        const imageModelId = this._resolveImageModelId(config);
+        const imageModelId = await this._resolveImageModelId(config, orgId);
         let imageModel: ImageModel | undefined;
         if (config.adapter.createImageModel) {
           imageModel = config.adapter.createImageModel(config.creds, imageModelId);
@@ -524,10 +562,8 @@ export class AIModelProvider {
           const fallbackImageProvider = globalSettings?.fallbackImageProvider;
           if (fallbackImageProvider && fallbackImageProvider !== config.providerId) {
             const fallbackRef = this._parseProviderRef(fallbackImageProvider);
-            const fallbackOrgActive = orgId
-              ? await this._orgAiSettings.getActiveProvider(orgId)
-              : null;
-            const fallbackCreds = fallbackOrgActive?.credentials || {};
+            const { isActiveProvider, config: fallbackOrgConfig } = await this._fallbackProviderConfig(orgId, fallbackRef);
+            const fallbackCreds = fallbackOrgConfig?.credentials || {};
             const fallbackAdapter = this._resolveAI(fallbackRef.providerId, {
               version: fallbackRef.version,
               credentials: fallbackCreds,
@@ -535,7 +571,7 @@ export class AIModelProvider {
             });
             if (fallbackAdapter?.createImageModel) {
               const fallbackModelId =
-                fallbackOrgActive?.defaultModel ||
+                (isActiveProvider ? fallbackOrgConfig?.defaultModel : undefined) ||
                 SURFACE_DEFAULTS[scope].imageModel ||
                 imageModelId;
               imageModel = fallbackAdapter.createImageModel(fallbackCreds, fallbackModelId);
@@ -653,7 +689,10 @@ export class AIModelProvider {
       if (!budgetCheck.allowed) {
         throw new BudgetExceeded(budgetCheck.reason || 'Budget exceeded', scope, orgId);
       }
-      const result = await (raw as any).doGenerate(opts);
+      const result = await (raw as any).doGenerate({
+        ...opts,
+        prompt: this._sanitizePromptToolOutputs(opts?.prompt, providerId, modelId),
+      });
       await this._recordUsage({
         usage: result?.usage,
         span,
@@ -670,7 +709,10 @@ export class AIModelProvider {
       if (!budgetCheck.allowed) {
         throw new BudgetExceeded(budgetCheck.reason || 'Budget exceeded', scope, orgId);
       }
-      const response = await (raw as any).doStream(opts);
+      const response = await (raw as any).doStream({
+        ...opts,
+        prompt: this._sanitizePromptToolOutputs(opts?.prompt, providerId, modelId),
+      });
       const originalConsume = response?.consumeStream?.bind(response);
       if (originalConsume) {
         response.consumeStream = async () => {
@@ -697,6 +739,93 @@ export class AIModelProvider {
       },
     }) as LanguageModel;
   }
+
+  /**
+   * Repair malformed `tool-result` parts in a prompt before it leaves for the
+   * provider. Source of the corruption: Mastra's agent-delegation tools
+   * (`agent-*`) store `toModelOutput(output) => ({ type: 'text', value:
+   * output.text })` into `providerMetadata.mastra.modelOutput` — when the
+   * sub-agent result has no `text` (e.g. a tool-input validation error result
+   * `{error, message, validationErrors}`), `value` is undefined, JSONB
+   * persistence drops the key, and Mastra's `MessageList.llmPrompt()` later
+   * swaps the stored `{ type: 'text' }` (no value) into the tool-result output
+   * verbatim. Lenient providers ignore the shape; strict ones (Vercel AI
+   * Gateway) zod-reject the WHOLE request (`GatewayInvalidRequestError:
+   * Invalid input` at `prompt[N].content[0]`), killing the agent stream and
+   * bricking the thread for every subsequent turn. Mastra fixed the source in
+   * @mastra/core 1.55 (`output.text ?? ''`), but already-poisoned memory rows
+   * keep replaying the bad shape, so the repair belongs here at the egress
+   * boundary. Only invalid shapes are touched; anything already spec-valid
+   * passes through by reference.
+   */
+  private _sanitizePromptToolOutputs(prompt: any, providerId: string, modelId: string): any {
+    if (!Array.isArray(prompt)) return prompt;
+    let repaired = 0;
+    const messages = prompt.map((message: any) => {
+      if (!message || message.role !== 'tool' || !Array.isArray(message.content)) return message;
+      let touched = false;
+      const content = message.content.map((part: any) => {
+        const fixed = this._repairToolResultPart(part);
+        if (fixed !== part) {
+          touched = true;
+          repaired++;
+        }
+        return fixed;
+      });
+      return touched ? { ...message, content } : message;
+    });
+    if (repaired === 0) return prompt;
+    // No part contents logged — tool results may carry user data.
+    this._logger.warn(
+      `Repaired ${repaired} malformed tool-result part(s) in the prompt for ${providerId}/${modelId}`,
+    );
+    return messages;
+  }
+
+  private _repairToolResultPart(part: any): any {
+    if (!part || typeof part !== 'object' || part.type !== 'tool-result') return part;
+    const output = part.output;
+
+    // Output must be an object; a bare string is a text output.
+    if (typeof output === 'string') {
+      return { ...part, output: { type: 'text', value: output } };
+    }
+    if (!output || typeof output !== 'object' || Array.isArray(output)) {
+      return { ...part, output: { type: 'json', value: output ?? null } };
+    }
+
+    const asText = (value: any): string =>
+      typeof value === 'string'
+        ? value
+        : value == null
+          ? ''
+          : typeof value === 'object'
+            ? JSON.stringify(value)
+            : String(value);
+
+    switch (output.type) {
+      case 'text':
+      case 'error-text':
+        if (typeof output.value === 'string') return part;
+        return { ...part, output: { ...output, value: asText(output.value) } };
+      case 'json':
+      case 'error-json':
+        if (output.value !== undefined) return part;
+        return { ...part, output: { ...output, value: null } };
+      case 'content':
+        if (Array.isArray(output.value)) return part;
+        return { ...part, output: { type: 'json', value: output.value ?? null } };
+      case 'execution-denied':
+        return part;
+      default:
+        // Unknown output type — re-home the payload as JSON.
+        return {
+          ...part,
+          output: { type: 'json', value: 'value' in output ? output.value ?? null : output },
+        };
+    }
+  }
+
 
   private _wrapLangchainModelWithBudget(
     raw: BaseChatModel,
@@ -839,8 +968,21 @@ export class AIModelProvider {
     return undefined;
   }
 
+  // Hub model IDs carry a "provider/" prefix (e.g. "openai/gpt-4o") that never
+  // matches the table — try the full ID first, then the unprefixed tail.
+  private _contextWindowLimit(modelId: string): number {
+    const direct = CONTEXT_WINDOW_LIMITS[modelId];
+    if (direct) return direct;
+    const slash = modelId.indexOf('/');
+    if (slash !== -1) {
+      const stripped = CONTEXT_WINDOW_LIMITS[modelId.slice(slash + 1)];
+      if (stripped) return stripped;
+    }
+    return 8000;
+  }
+
   private _enforceContextWindow(prompt: string, modelId: string): string {
-    const maxTokens = CONTEXT_WINDOW_LIMITS[modelId] || 8000;
+    const maxTokens = this._contextWindowLimit(modelId);
     try {
       const estimatedTokens = Math.ceil(prompt.length / 4);
       if (estimatedTokens <= maxTokens) return prompt;
@@ -884,10 +1026,20 @@ export class AIModelProvider {
       .join('\n');
   }
 
+  // AI SDK v6 (via Mastra) reports usage as objects
+  // ({ inputTokens: { total, noCache, cacheRead, cacheWrite }, … }), not plain
+  // numbers — normalize before anything downstream assumes Int (Prisma) or a
+  // finite multiplier (cost estimate).
+  private _usageCount(value: number | { total?: number } | undefined): number {
+    if (typeof value === 'number') return value;
+    if (value && typeof value.total === 'number') return value.total;
+    return 0;
+  }
+
   private async _recordUsage(args: {
     usage?: {
-      inputTokens?: number;
-      outputTokens?: number;
+      inputTokens?: number | { total?: number };
+      outputTokens?: number | { total?: number };
       promptTokens?: number;
       completionTokens?: number;
     };
@@ -900,21 +1052,27 @@ export class AIModelProvider {
   }) {
     if (!args.usage) return;
 
-    const promptTokens = args.usage.inputTokens ?? args.usage.promptTokens ?? 0;
-    const completionTokens = args.usage.outputTokens ?? args.usage.completionTokens ?? 0;
+    const promptTokens = this._usageCount(args.usage.inputTokens) || args.usage.promptTokens || 0;
+    const completionTokens = this._usageCount(args.usage.outputTokens) || args.usage.completionTokens || 0;
     args.span.setAttribute(TelemetryService.ATTR_GEN_AI_USAGE_INPUT_TOKENS, promptTokens);
     args.span.setAttribute(TelemetryService.ATTR_GEN_AI_USAGE_OUTPUT_TOKENS, completionTokens);
 
-    await this._budget.recordSpend({
-      organizationId: args.orgId,
-      userId: args.userId,
-      provider: args.providerId,
-      model: args.modelId,
-      scope: args.scope,
-      inputTokens: promptTokens,
-      outputTokens: completionTokens,
-      costUsd: this._estimateCost(promptTokens, completionTokens, args.providerId),
-    });
+    const estimated = this._estimateCost(promptTokens, completionTokens, args.providerId);
+    try {
+      await this._budget.recordSpend({
+        organizationId: args.orgId,
+        userId: args.userId,
+        provider: args.providerId,
+        model: args.modelId,
+        scope: args.scope,
+        inputTokens: promptTokens,
+        outputTokens: completionTokens,
+        costUsd: Number.isFinite(estimated) ? estimated : 0,
+      });
+    } catch (err) {
+      // Bookkeeping must never break a generation that already succeeded.
+      console.warn(`[AIModelProvider] recordSpend failed for ${args.providerId}/${args.modelId}:`, (err as Error)?.message);
+    }
   }
 
   private async _prepareGeneration(

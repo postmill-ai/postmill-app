@@ -52,6 +52,7 @@ describe('MediaStudioGenerateTool', () => {
     const mediaStudio = { generate: vi.fn() };
     const providerSettings = {
       getConfigForProvider: vi.fn().mockResolvedValue(null),
+      getProviders: vi.fn().mockResolvedValue([]),
     };
     const tool = new MediaStudioGenerateTool(
       mediaStudio as any,
@@ -73,6 +74,66 @@ describe('MediaStudioGenerateTool', () => {
     expect(result).toEqual({
       error: 'runway is not configured. Add credentials in Settings → Media.',
     });
+  });
+
+  it('lists configured providers in the error so the LLM can self-correct', async () => {
+    const mediaStudio = { generate: vi.fn() };
+    const providerSettings = {
+      getConfigForProvider: vi.fn().mockResolvedValue(null),
+      getProviders: vi.fn().mockResolvedValue([
+        { identifier: 'gateway', name: 'Vercel AI', isConfigured: true },
+        { identifier: 'runway', name: 'Runway', isConfigured: false },
+      ]),
+    };
+    const tool = new MediaStudioGenerateTool(
+      mediaStudio as any,
+      providerSettings as any
+    );
+
+    const result = await executeTool(tool, {
+      inputData: { provider: 'unknown-xyz', operation: 'image', input: { prompt: 'x' } },
+      organization: org,
+      user,
+      access: { mode: 'user' },
+    });
+
+    expect(result).toEqual({
+      error:
+        'unknown-xyz is not configured. Add credentials in Settings → Media. Configured providers: gateway (Vercel AI).',
+    });
+  });
+
+  it('resolves LLM-guessed display names to the real identifier', async () => {
+    const mediaStudio = {
+      generate: vi.fn().mockResolvedValue({ jobId: 'job-789' }),
+    };
+    const providerSettings = {
+      getConfigForProvider: vi.fn().mockImplementation((_orgId: string, id: string) =>
+        id === 'gateway' ? { credentials: { apiKey: 'secret' } } : null,
+      ),
+      getProviders: vi.fn().mockResolvedValue([
+        { identifier: 'gateway', name: 'Vercel AI', isConfigured: true },
+      ]),
+    };
+    const tool = new MediaStudioGenerateTool(
+      mediaStudio as any,
+      providerSettings as any
+    );
+
+    for (const guess of ['vercel', 'Vercel AI', 'vercel_ai_gateway']) {
+      const result = await executeTool(tool, {
+        inputData: { provider: guess, operation: 'image', input: { prompt: 'a blue bird' } },
+        organization: org,
+        user,
+        access: { mode: 'mcp', scopes: ['mcp:posts:write'] },
+        ui: false,
+      });
+      expect(result).toMatchObject({ jobId: 'job-789', status: 'submitted' });
+    }
+    // every guessed variant ended up submitted against the real identifier
+    for (const call of mediaStudio.generate.mock.calls) {
+      expect(call[2]).toBe('gateway');
+    }
   });
 
   it('returns a draft (needsConfirmation) without creating a job in a UI session', async () => {

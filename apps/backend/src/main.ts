@@ -63,6 +63,9 @@ async function start() {
         'showorg',
         'impersonate',
         'x-csrf-token',
+        // The agent confirm-card dispatch (PendingApprovalCard) sends this for
+        // safe retries — without it the preflight fails and Approve never lands.
+        'x-idempotency-key',
         'x-copilotkit-runtime-client-gql-version',
       ],
       exposedHeaders: [

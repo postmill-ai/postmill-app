@@ -14,6 +14,7 @@ vi.mock('@langchain/openai', () => ({
   ChatOpenAI: vi.fn(function() { return {}; }),
 }));
 
+import { ChatOpenAI } from '@langchain/openai';
 import { OpenRouterAdapter } from '../ai.adapter';
 
 describe('OpenRouterAdapter', () => {
@@ -120,13 +121,15 @@ describe('OpenRouterAdapter', () => {
       expect(model).toBeDefined();
     });
 
-    it('throws for non-openai model prefix', () => {
-      expect(() =>
-        adapter.createLangchainModel(
-          { apiKey: 'sk-or-test' },
-          'anthropic/claude-sonnet-4-20250514',
-        ),
-      ).toThrow(/Only OpenAI-compatible models/);
+    it('accepts non-openai prefixed model IDs (routed through the OpenRouter endpoint)', () => {
+      const model = adapter.createLangchainModel(
+        { apiKey: 'sk-or-test' },
+        'anthropic/claude-sonnet-4-20250514',
+      );
+      expect(model).toBeDefined();
+      expect(ChatOpenAI).toHaveBeenCalledWith(
+        expect.objectContaining({ model: 'anthropic/claude-sonnet-4-20250514' }),
+      );
     });
 
     it('uses custom baseURL when provided', () => {
@@ -135,6 +138,11 @@ describe('OpenRouterAdapter', () => {
         'openai/gpt-4o-mini',
       );
       expect(model).toBeDefined();
+      expect(ChatOpenAI).toHaveBeenCalledWith(
+        expect.objectContaining({
+          configuration: { baseURL: 'https://custom.openrouter.ai/api/v1' },
+        }),
+      );
     });
   });
 

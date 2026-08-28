@@ -27,7 +27,7 @@ export class MediaStudioGenerateTool implements AgentToolInterface {
       inputSchema: z.object({
         provider: z
           .string()
-          .describe('The provider identifier, e.g. "runway", "luma", "openai", "elevenlabs"'),
+          .describe('The provider identifier, e.g. "runway", "luma", "openai", "elevenlabs", "gateway". Call listMediaProviders first and copy its `identifier` exactly — display names like "Vercel AI" are not identifiers.'),
         operation: z
           .enum(['image', 'video', 'audio'])
           .describe('The media operation to perform'),
@@ -83,13 +83,32 @@ export class MediaStudioGenerateTool implements AgentToolInterface {
         const org = parseOrg(context);
         const user = parseUser(context);
 
-        const config = await this._orgMediaProviderSettings.getConfigForProvider(
+        let provider = inputData.provider;
+        let config = await this._orgMediaProviderSettings.getConfigForProvider(
           org.id,
-          inputData.provider
+          provider
         );
         if (!config || Object.keys(config.credentials).length === 0) {
+          // LLM-supplied provider strings are often display names ("Vercel AI",
+          // "vercel_ai_gateway") rather than identifiers ("gateway") — resolve
+          // against the org's provider list before giving up.
+          const resolved = await this._resolveProviderIdentifier(org.id, provider);
+          if (resolved && resolved !== provider) {
+            provider = resolved;
+            config = await this._orgMediaProviderSettings.getConfigForProvider(
+              org.id,
+              provider
+            );
+          }
+        }
+        if (!config || Object.keys(config.credentials).length === 0) {
+          const available = (await this._orgMediaProviderSettings.getProviders(org.id))
+            .filter((p) => p.isConfigured)
+            .map((p) => `${p.identifier} (${p.name})`);
           return {
-            error: `${inputData.provider} is not configured. Add credentials in Settings → Media.`,
+            error:
+              `${inputData.provider} is not configured. Add credentials in Settings → Media.` +
+              (available.length ? ` Configured providers: ${available.join(', ')}.` : ''),
           } as any;
         }
 
@@ -106,7 +125,7 @@ export class MediaStudioGenerateTool implements AgentToolInterface {
           return {
             needsConfirmation: true as const,
             draft: {
-              provider: inputData.provider,
+              provider,
               operation: inputData.operation,
               model: inputData.model,
               input: inputData.input,
@@ -116,7 +135,7 @@ export class MediaStudioGenerateTool implements AgentToolInterface {
           } as any;
         }
 
-        const { jobId } = await this._mediaStudio.generate(org.id, user.id, inputData.provider, {
+        const { jobId } = await this._mediaStudio.generate(org.id, user.id, provider, {
           operation: inputData.operation,
           model: inputData.model,
           input: inputData.input,
@@ -131,5 +150,32 @@ export class MediaStudioGenerateTool implements AgentToolInterface {
         };
       },
     });
+  }
+
+  // Map an LLM-guessed provider string (display name, snake_case variant) to a
+  // real identifier from the org's media provider list. Exact normalized match
+  // on identifier or name wins; a unique substring match is accepted ("vercel
+  // ai gateway" contains "gateway"). Returns undefined when ambiguous/unknown.
+  private async _resolveProviderIdentifier(
+    orgId: string,
+    guess: string,
+  ): Promise<string | undefined> {
+    const norm = (s: string) => (s || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+    const g = norm(guess);
+    if (!g) return undefined;
+    const providers = await this._orgMediaProviderSettings.getProviders(orgId);
+    const exact = providers.filter(
+      (p) => norm(p.identifier) === g || norm(p.name) === g,
+    );
+    if (exact.length === 1) return exact[0].identifier;
+    const partial = providers.filter(
+      (p) =>
+        norm(p.identifier).includes(g) ||
+        g.includes(norm(p.identifier)) ||
+        norm(p.name).includes(g) ||
+        g.includes(norm(p.name)),
+    );
+    if (partial.length === 1) return partial[0].identifier;
+    return undefined;
   }
 }

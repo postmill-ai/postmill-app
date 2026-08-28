@@ -163,7 +163,7 @@ export class MediaStudioService {
     const input: Record<string, string | number | boolean> = { ...params.input };
     if (params.mediaInputs) {
       for (const [field, fileId] of Object.entries(params.mediaInputs)) {
-        if (fileId) input[field] = await this._resolvePublicUrl(orgId, fileId);
+        if (fileId) input[field] = await this._resolveMediaInput(orgId, fileId);
       }
     }
 
@@ -278,5 +278,20 @@ export class MediaStudioService {
       ? await this._storage.resolveAdapterForFolder(file.folderId, orgId)
       : await this._storage.getLocalAdapterForOrg(orgId, true);
     return adapter.getFileUrl(file.path);
+  }
+
+  // Agents often hand over an artifact URL (what they saw in a prior job result) rather
+  // than a file id. Accept both: id first, then an exact match against the org's own
+  // File paths — never pass an unknown external URL through to the provider.
+  private async _resolveMediaInput(orgId: string, ref: string): Promise<string> {
+    const file = await this._fileService.getFileById(orgId, ref).catch(() => null);
+    if (file) return this._resolvePublicUrl(orgId, ref);
+    if (/^https?:\/\//.test(ref)) {
+      const [byPath] = await this._fileService
+        .getFilesByPaths(orgId, [ref])
+        .catch(() => [] as Array<{ id: string }>);
+      if (byPath) return ref;
+    }
+    throw new ForbiddenException('File not found');
   }
 }
