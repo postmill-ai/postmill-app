@@ -1,5 +1,6 @@
 import {
   AuthTokenDetails,
+  ChannelSetupDescriptor,
   ClientInformation,
   PostDetails,
   PostResponse,
@@ -25,6 +26,39 @@ export class MeweProvider extends SocialAbstract implements SocialProvider {
   scopes = [] as string[];
   editor = 'normal' as const;
   dto = MeweDto;
+
+  // Beginner-friendly setup metadata for the per-tenant "Add channel" form.
+  // MeWe hands out API access per developer application (App ID + API Key) and
+  // the connect flow redirects to {instance}/login with a redirect_uri, so the
+  // callback must be registered on the app. The default callback URL is
+  // computed by the catalog (IntegrationManager.getSocialProviderCatalog) —
+  // do NOT hardcode it here.
+  override setupDescriptor: ChannelSetupDescriptor = {
+    authType: 'oauth2',
+    credentialFields: [
+      {
+        key: 'clientId',
+        label: 'App ID',
+        help: 'MeWe Developer Portal → your application',
+      },
+      {
+        key: 'clientSecret',
+        label: 'API Key',
+        secret: true,
+        help: 'MeWe Developer Portal → your application',
+      },
+    ],
+    portalUrl: 'https://dev.mewe.com',
+    portalLabel: 'MeWe Developer Portal',
+    callbackInstructions:
+      'In the MeWe Developer Portal → your application: add this URL as an allowed redirect/callback URL and save.',
+    setupSteps: [
+      'Sign in to MeWe and request a developer account on the MeWe Developer Portal (approval is manual).',
+      'Once approved, create an application in the portal.',
+      'Add the callback URL shown below to the application’s allowed redirect URLs.',
+      'Copy the application’s App ID and API Key into the fields below.',
+    ],
+  };
 
   private _resolveBaseUrl(instanceUrl?: string): string {
     let base = (instanceUrl || 'https://mewe.com').trim();

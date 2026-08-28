@@ -1,5 +1,6 @@
 import {
   AuthTokenDetails,
+  ChannelSetupDescriptor,
   PostDetails,
   PostResponse,
   SocialProvider,
@@ -90,6 +91,20 @@ export class LemmyProvider extends SocialAbstract implements SocialProvider {
   isBetweenSteps = false;
   scopes = [] as string[];
   editor = 'normal' as const;
+
+  // Instance + account channel: no developer app, no callback — the channel
+  // connects with the instance URL + username/password in the composer connect
+  // flow (customFields); the config form shows guidance only.
+  override setupDescriptor: ChannelSetupDescriptor = {
+    authType: 'direct',
+    credentialFields: [],
+    setupSteps: [
+      'Make sure you have an account on a Lemmy instance (e.g. lemmy.world).',
+      'Back here, open Create new → New Channel and pick Lemmy.',
+      'Enter your instance URL as the Service, and your Lemmy username as the Identifier and your account password as the Password, then click Connect.',
+    ],
+  };
+
   maxLength() {
     return 10000;
   }

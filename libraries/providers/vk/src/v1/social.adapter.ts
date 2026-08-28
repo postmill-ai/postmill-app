@@ -1,5 +1,6 @@
 import {
   AuthTokenDetails,
+  ChannelSetupDescriptor,
   ClientInformation,
   PostDetails,
   PostResponse,
@@ -30,6 +31,31 @@ export class VkProvider extends SocialAbstract implements SocialProvider {
   ];
 
   editor = 'normal' as const;
+
+  // Beginner-friendly setup metadata for the per-tenant "Add channel" form.
+  // VK ID uses OAuth 2.1 with PKCE and only needs the Application ID (no
+  // client secret). The default callback URL is computed by the catalog
+  // (IntegrationManager.getSocialProviderCatalog) — do NOT hardcode it here.
+  override setupDescriptor: ChannelSetupDescriptor = {
+    authType: 'oauth2',
+    credentialFields: [
+      {
+        key: 'clientId',
+        label: 'Application ID',
+        help: 'VK ID console → your app → Application ID',
+      },
+    ],
+    portalUrl: 'https://id.vk.com/about/business/go',
+    portalLabel: 'VK ID Console',
+    callbackInstructions:
+      'In the VK ID console → your app: add this URL to the app’s allowed redirect URLs and save.',
+    setupSteps: [
+      'Open the VK ID console, sign in, and create an application (platform: Website).',
+      'Add the callback URL shown below to the application’s redirect URLs.',
+      'Copy the Application ID into the field below — VK ID sign-in uses PKCE, so no client secret is needed.',
+    ],
+  };
+
   maxLength() {
     return 2048;
   }

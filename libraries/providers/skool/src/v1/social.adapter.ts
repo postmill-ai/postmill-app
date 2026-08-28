@@ -2,6 +2,7 @@ import { makeId, makeOauthState } from '@postmill-ai/provider-kernel';
 import { SocialAbstract } from '@postmill-ai/provider-kernel';
 import {
   AuthTokenDetails,
+  ChannelSetupDescriptor,
   MediaContent,
   PostDetails,
   PostResponse,
@@ -23,6 +24,19 @@ export class SkoolProvider extends SocialAbstract implements SocialProvider {
   scopes = [] as string[];
   editor = 'normal' as const;
   dto = SkoolDto;
+
+  // Session-cookie channel: no developer app, no callback — the composer
+  // connect flow captures the logged-in skool.com session via the Postmill
+  // browser extension; the config form shows guidance only.
+  override setupDescriptor: ChannelSetupDescriptor = {
+    authType: 'direct',
+    credentialFields: [],
+    setupSteps: [
+      'Install the Postmill browser extension in Chrome (or a Chromium browser).',
+      'Log in to skool.com in that browser with the account that can post to your group.',
+      'Back here, open Create new → New Channel and pick Skool — the extension captures the session and connects the channel.',
+    ],
+  };
 
   extensionCookies = [
     { name: 'client_id', domain: '.skool.com' },

@@ -1,5 +1,6 @@
 import {
   AuthTokenDetails,
+  ChannelSetupDescriptor,
   MoltbookDto,
   PostDetails,
   PostResponse,
@@ -22,6 +23,23 @@ export class MoltbookProvider extends SocialAbstract implements SocialProvider {
   isWeb3 = true;
   editor = 'normal' as const;
   dto = MoltbookDto;
+
+  // Agent-registration channel: no developer app, no callback — the composer
+  // connect flow registers a Moltbook agent, the owner claims it via the claim
+  // URL, and the issued agent API key becomes the channel token. The config
+  // form shows guidance only.
+  override setupDescriptor: ChannelSetupDescriptor = {
+    authType: 'direct',
+    credentialFields: [],
+    portalUrl: 'https://www.moltbook.com',
+    portalLabel: 'Moltbook',
+    setupSteps: [
+      'Back here, open Create new → New Channel and pick Moltbook.',
+      'Give your agent a name (and an optional description) and click Register Agent.',
+      'Open the claim URL shown in the connect dialog and verify the agent with your Moltbook account.',
+      'The channel connects automatically once the agent is claimed.',
+    ],
+  };
 
   maxLength() {
     return 300;

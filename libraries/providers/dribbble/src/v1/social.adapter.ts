@@ -1,6 +1,7 @@
 import {
   AnalyticsData,
   AuthTokenDetails,
+  ChannelSetupDescriptor,
   ClientInformation,
   PostDetails,
   PostResponse,
@@ -24,6 +25,37 @@ export class DribbbleProvider extends SocialAbstract implements SocialProvider {
   isBetweenSteps = false;
   scopes = ['public', 'upload'];
   editor = 'normal' as const;
+
+  // Beginner-friendly setup metadata for the per-tenant "Add channel" form.
+  // The default callback URL is computed by the catalog
+  // (IntegrationManager.getSocialProviderCatalog) — do NOT hardcode it here.
+  override setupDescriptor: ChannelSetupDescriptor = {
+    authType: 'oauth2',
+    credentialFields: [
+      {
+        key: 'clientId',
+        label: 'Client ID',
+        placeholder: 'e.g. 1a2b3c4d5e…',
+        help: 'Dribbble → Account settings → Applications → your application',
+      },
+      {
+        key: 'clientSecret',
+        label: 'Client Secret',
+        secret: true,
+        help: 'Dribbble → Account settings → Applications → your application',
+      },
+    ],
+    portalUrl: 'https://dribbble.com/account/applications/new',
+    portalLabel: 'Dribbble Applications',
+    callbackInstructions:
+      'In the Dribbble application form (Account settings → Applications → Register a new application): paste this URL into the Callback URL field and save.',
+    setupSteps: [
+      'Sign in to Dribbble and open Account settings → Applications → Register a new application.',
+      'Give the application a name and paste the callback URL shown below into the Callback URL field.',
+      'Register the application, then copy its Client ID and Client Secret into the fields below.',
+    ],
+  };
+
   maxLength() {
     return 40000;
   }
