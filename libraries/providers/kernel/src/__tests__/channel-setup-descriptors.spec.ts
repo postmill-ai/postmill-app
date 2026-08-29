@@ -129,14 +129,20 @@ describe('channel setup descriptors — completeness and authType consistency', 
     expect(violations).toEqual([]);
   });
 
-  it('descriptor credentialFields map only onto clientId/clientSecret', () => {
+  it('descriptor credentialFields map onto clientId/clientSecret, or are optional extras', () => {
+    // Extra keys (e.g. Meta FBfB `configId`) are allowed only when marked
+    // `optional: true` — they persist into the org config's encrypted
+    // additionalConfig JSON, and an empty value must never be required.
     const violations: string[] = [];
     for (const file of files) {
       const block = extractDescriptorBlock(read(file));
       if (!block) continue;
-      for (const match of block.matchAll(/key:\s*'([^']+)'/g)) {
-        if (match[1] !== 'clientId' && match[1] !== 'clientSecret') {
-          violations.push(`${path.relative(providersRoot, file)}: key '${match[1]}'`);
+      for (const fieldMatch of block.matchAll(/\{[^{}]*\}/g)) {
+        const field = fieldMatch[0];
+        const key = field.match(/key:\s*'([^']+)'/)?.[1];
+        if (!key || key === 'clientId' || key === 'clientSecret') continue;
+        if (!/optional:\s*true/.test(field)) {
+          violations.push(`${path.relative(providersRoot, file)}: key '${key}'`);
         }
       }
     }

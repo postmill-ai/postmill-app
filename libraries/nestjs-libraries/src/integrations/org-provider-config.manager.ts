@@ -146,12 +146,21 @@ export class OrgProviderConfigManager {
     if (!config) return undefined;
     if (requireEnabled && !config.enabled) return undefined;
 
+    // additionalConfig arrives already decrypted (whole-blob, see
+    // OrgProviderConfigService.getDecryptedConfigs) — values inside the parsed
+    // JSON are plaintext, unlike the platform-level ProviderConfigManager.
     let token: string | undefined;
+    let configId: string | undefined;
     if (config.additionalConfig) {
       try {
         const parsed = JSON.parse(config.additionalConfig);
         if (parsed?.botToken) {
           token = parsed.botToken;
+        }
+        // Meta "Facebook Login for Business" configuration id (facebook /
+        // instagram channels) — switches the OAuth dialog to config_id.
+        if (parsed?.configId) {
+          configId = parsed.configId;
         }
       } catch {}
     }
@@ -165,6 +174,7 @@ export class OrgProviderConfigManager {
       client_secret: config.clientSecret || '',
       instanceUrl: config.redirectUri || '',
       ...(token ? { token } : {}),
+      ...(configId ? { configId } : {}),
     };
   }
 
@@ -173,6 +183,7 @@ export class OrgProviderConfigManager {
     client_secret: string;
     instanceUrl: string;
     token?: string;
+    configId?: string;
   } | undefined> {
     await this.ensureFresh(orgId);
     return this.#buildClientInfo(this.orgCaches.get(orgId)?.configs.get(identifier), true);
@@ -184,6 +195,7 @@ export class OrgProviderConfigManager {
     client_secret: string;
     instanceUrl: string;
     token?: string;
+    configId?: string;
   } | undefined> {
     await this.ensureFresh(orgId);
     return this.#buildClientInfo(this.orgCaches.get(orgId)?.byId.get(configId), false);

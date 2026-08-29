@@ -39,14 +39,16 @@ const PROVIDER_APP_LINKS: Record<string, { label: string; url: string | null }> 
 };
 
 // Mirrors the kernel's ChannelSetupDescriptor (libraries/providers/kernel) as
-// serialized by IntegrationManager.getSocialProviderCatalog(). Metadata only —
-// saving still posts the same DTO (clientId/clientSecret/redirectUri/scopes).
+// serialized by IntegrationManager.getSocialProviderCatalog(). clientId /
+// clientSecret post the same DTO fields as before; any other key is folded
+// into the DTO's `additionalConfig` JSON (e.g. Meta FBfB `configId`).
 export interface ChannelCredentialField {
-  key: 'clientId' | 'clientSecret';
+  key: 'clientId' | 'clientSecret' | (string & {});
   label: string;
   placeholder?: string;
   help?: string;
   secret?: boolean;
+  optional?: boolean; // empty value is accepted and not persisted
 }
 
 export interface ChannelSetupDescriptor {
@@ -111,6 +113,11 @@ export const ChannelConfigForm: FC<ChannelConfigFormProps> = ({
   const [name, setName] = useState(config?.name || '');
   const [clientId, setClientId] = useState('');
   const [clientSecret, setClientSecret] = useState('');
+  // Extra descriptor credential fields (keys other than clientId/clientSecret,
+  // e.g. Meta FBfB `configId`). Values are write-only — additionalConfig is
+  // masked server-side, so edit mode starts blank and an empty field keeps the
+  // stored value (same semantics as clientSecret).
+  const [extraFields, setExtraFields] = useState<Record<string, string>>({});
   const [editSetupNotes, setEditSetupNotes] = useState(config?.setupNotes || '');
   const [enabled, setEnabled] = useState(config?.enabled || false);
   const [saving, setSaving] = useState(false);
@@ -165,6 +172,19 @@ export const ChannelConfigForm: FC<ChannelConfigFormProps> = ({
       };
       if (clientId.trim()) payload.clientId = clientId.trim();
       if (clientSecret.trim()) payload.clientSecret = clientSecret.trim();
+      // Extra descriptor fields persist into the encrypted additionalConfig
+      // JSON blob. Sent only when at least one has a value: the blob replaces
+      // the stored one wholesale, so omitting it keeps stored values (and
+      // other keys) intact. Empty optional fields are never persisted.
+      const extras: Record<string, string> = {};
+      for (const field of setup?.credentialFields || []) {
+        if (field.key === 'clientId' || field.key === 'clientSecret') continue;
+        const value = (extraFields[field.key] || '').trim();
+        if (value) extras[field.key] = value;
+      }
+      if (Object.keys(extras).length) {
+        payload.additionalConfig = JSON.stringify(extras);
+      }
       if (selectedVersion) payload.version = selectedVersion;
       if (editSetupNotes.trim()) payload.setupNotes = editSetupNotes.trim();
       if (vpnOptions.length) {
@@ -205,7 +225,7 @@ export const ChannelConfigForm: FC<ChannelConfigFormProps> = ({
     } finally {
       setSaving(false);
     }
-  }, [name, enabled, clientId, clientSecret, selectedVersion, editSetupNotes, isDirect, vpnOptions, vpnEnabled, vpnValue, isConfigured, isEdit, config, identifier, fetch, toaster, t, onSaved, onClose]);
+  }, [name, enabled, clientId, clientSecret, extraFields, setup, selectedVersion, editSetupNotes, isDirect, vpnOptions, vpnEnabled, vpnValue, isConfigured, isEdit, config, identifier, fetch, toaster, t, onSaved, onClose]);
 
   const handleDelete = useCallback(async () => {
     if (!config) return;
@@ -332,16 +352,30 @@ export const ChannelConfigForm: FC<ChannelConfigFormProps> = ({
       </div>
 
       {setup?.authType !== 'direct' && credentialFields.map((field) => {
-        const value = field.key === 'clientId' ? clientId : clientSecret;
-        const setValue = field.key === 'clientId' ? setClientId : setClientSecret;
+        const isExtra = field.key !== 'clientId' && field.key !== 'clientSecret';
+        const value = field.key === 'clientId'
+          ? clientId
+          : field.key === 'clientSecret'
+            ? clientSecret
+            : (extraFields[field.key] || '');
+        const setValue = field.key === 'clientId'
+          ? setClientId
+          : field.key === 'clientSecret'
+            ? setClientSecret
+            : (v: string) => setExtraFields((prev) => ({ ...prev, [field.key]: v }));
         return (
           <div key={field.key} className="flex flex-col gap-[6px]">
-            <label className="text-[14px] font-[500]">{field.label}</label>
+            <label className="text-[14px] font-[500]">
+              {field.label}
+              {field.optional && (
+                <span className="text-[12px] text-newTableText font-[400]"> ({t('optional', 'optional')})</span>
+              )}
+            </label>
             <div className="bg-newBgColorInner h-[42px] border-newTableBorder border rounded-[8px] text-textColor flex items-center justify-center">
               <input
                 type={field.secret ? 'password' : 'text'}
                 className="h-full bg-transparent outline-hidden flex-1 text-[14px] text-textColor placeholder-textColor px-[16px]"
-                placeholder={credentialPlaceholder || field.placeholder || ''}
+                placeholder={(isExtra ? '' : credentialPlaceholder) || field.placeholder || ''}
                 value={value}
                 onChange={(e) => setValue(e.target.value)}
               />

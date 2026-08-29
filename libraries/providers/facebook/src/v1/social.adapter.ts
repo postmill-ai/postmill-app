@@ -65,6 +65,14 @@ export class FacebookProvider extends SocialAbstract implements SocialProvider {
         secret: true,
         help: 'Meta for Developers → your app → App settings → Basic',
       },
+      {
+        // Extra keys (not clientId/clientSecret) persist into the org config's
+        // encrypted additionalConfig JSON; optional = empty is not persisted.
+        key: 'configId',
+        label: 'Configuration ID',
+        optional: true,
+        help: 'Meta for Developers → your app → Facebook Login for Business → Configurations (only needed when your app uses Facebook Login for Business; leave empty for classic Facebook Login)',
+      },
     ],
     portalUrl: 'https://developers.facebook.com/apps',
     portalLabel: 'Meta for Developers',
@@ -72,9 +80,10 @@ export class FacebookProvider extends SocialAbstract implements SocialProvider {
       'In Meta for Developers → your app, add the "Facebook Login" product, then open Facebook Login → Settings and paste this URL into "Valid OAuth Redirect URIs".',
     setupSteps: [
       'Open Meta for Developers and create an app (type "Business"), or pick an existing one.',
-      'Add the "Facebook Login" product to the app.',
+      'Add the "Facebook Login" product to the app (or "Facebook Login for Business" — the only option on new apps).',
       'Under Facebook Login → Settings, add the Callback URL shown below to "Valid OAuth Redirect URIs".',
       'Copy the App ID and App Secret from App settings → Basic into the fields below.',
+      'Facebook Login for Business only: create a Configuration under Facebook Login for Business → Configurations and paste its ID into "Configuration ID" below (replaces the permission scopes).',
     ],
   };
 
@@ -270,6 +279,11 @@ export class FacebookProvider extends SocialAbstract implements SocialProvider {
 
   async generateAuthUrl(clientInformation?: ClientInformation) {
     const state = makeOauthState();
+    // Facebook Login for Business (FBfB) replaces the scope parameter with
+    // config_id referencing a Configuration created in the Meta dashboard
+    // (bundles token type + assets + permissions); Meta rejects scope= on
+    // FBfB-only apps. Classic Facebook Login keeps the scope= URL unchanged.
+    const configId = clientInformation?.configId;
     return {
       url:
         'https://www.facebook.com/v20.0/dialog/oauth' +
@@ -278,7 +292,9 @@ export class FacebookProvider extends SocialAbstract implements SocialProvider {
           `${process.env.FRONTEND_URL}/integrations/social/facebook`
         )}` +
         `&state=${state}` +
-        `&scope=${this.scopes.join(',')}`,
+        (configId
+          ? `&config_id=${encodeURIComponent(configId)}`
+          : `&scope=${this.scopes.join(',')}`),
       codeVerifier: makeId(10),
       state,
     };

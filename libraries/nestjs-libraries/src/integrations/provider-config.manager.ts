@@ -223,6 +223,7 @@ export class ProviderConfigManager implements OnModuleInit, OnModuleDestroy {
     client_secret: string;
     instanceUrl: string;
     token?: string;
+    configId?: string;
   } | undefined> {
     await this.ensureFresh();
     const config = this.cache.get(identifier);
@@ -230,11 +231,21 @@ export class ProviderConfigManager implements OnModuleInit, OnModuleDestroy {
       return undefined;
     }
     let token: string | undefined;
+    let configId: string | undefined;
     if (config.additionalConfig) {
       try {
         const parsed = JSON.parse(config.additionalConfig);
         if (parsed?.botToken) {
           token = AuthService.fixedDecryption(parsed.botToken);
+        }
+        // Meta "Facebook Login for Business" configuration id — stored like
+        // botToken: an encrypted value inside the additionalConfig JSON.
+        if (parsed?.configId) {
+          try {
+            configId = AuthService.fixedDecryption(parsed.configId);
+          } catch {
+            /* ignore a malformed configId rather than losing the whole config */
+          }
         }
       } catch {}
     }
@@ -249,6 +260,7 @@ export class ProviderConfigManager implements OnModuleInit, OnModuleDestroy {
       // redirectUri doubles as instanceUrl for self-hosted providers (Mastodon, etc.)
       instanceUrl: config.redirectUri || '',
       ...(token ? { token } : {}),
+      ...(configId ? { configId } : {}),
     };
   }
 }
