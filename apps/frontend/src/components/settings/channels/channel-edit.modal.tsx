@@ -74,6 +74,10 @@ export interface ChannelConfigInstance {
   redirectUri: string;
   setupNotes: string;
   isConfigured: boolean;
+  /** Non-secret stored credential values (App ID, FBfB Configuration ID, …),
+   *  returned by the API so edit mode can prefill them. Secret fields are
+   *  never included — they stay write-only. */
+  displayValues?: Record<string, string>;
   /** Pinned provider version of this config — keeps the version select on the
    *  stored version instead of silently defaulting to latest-active on edit. */
   version?: string;
@@ -111,13 +115,18 @@ export const ChannelConfigForm: FC<ChannelConfigFormProps> = ({
   const isDirect = setup?.authType === 'direct';
 
   const [name, setName] = useState(config?.name || '');
-  const [clientId, setClientId] = useState('');
+  // Non-secret stored values prefill in edit mode (they're identifiers, not
+  // secrets — the API returns them in displayValues). Secrets (clientSecret,
+  // bot tokens) stay write-only: blank keeps the stored value.
+  const [clientId, setClientId] = useState(config?.displayValues?.clientId || '');
   const [clientSecret, setClientSecret] = useState('');
-  // Extra descriptor credential fields (keys other than clientId/clientSecret,
-  // e.g. Meta FBfB `configId`). Values are write-only — additionalConfig is
-  // masked server-side, so edit mode starts blank and an empty field keeps the
-  // stored value (same semantics as clientSecret).
-  const [extraFields, setExtraFields] = useState<Record<string, string>>({});
+  const [extraFields, setExtraFields] = useState<Record<string, string>>(() => {
+    const out: Record<string, string> = {};
+    for (const [k, v] of Object.entries(config?.displayValues || {})) {
+      if (k !== 'clientId' && k !== 'clientSecret') out[k] = v;
+    }
+    return out;
+  });
   const [editSetupNotes, setEditSetupNotes] = useState(config?.setupNotes || '');
   const [enabled, setEnabled] = useState(config?.enabled || false);
   const [saving, setSaving] = useState(false);
@@ -258,7 +267,9 @@ export const ChannelConfigForm: FC<ChannelConfigFormProps> = ({
     }
   }, [config, fetch, toaster, t]);
 
-  const credentialPlaceholder = isConfigured ? t('already_configured', 'Already configured') : '';
+  const credentialPlaceholder = isConfigured
+    ? t('configured_keep_or_replace', 'Configured — leave blank to keep, or paste a new value to replace')
+    : '';
   // Descriptor-driven portal link wins; the static map is the fallback for
   // providers that don't declare a setupDescriptor yet.
   const appLink = setup?.portalUrl
@@ -374,6 +385,12 @@ export const ChannelConfigForm: FC<ChannelConfigFormProps> = ({
             <div className="bg-newBgColorInner h-[42px] border-newTableBorder border rounded-[8px] text-textColor flex items-center justify-center">
               <input
                 type={field.secret ? 'password' : 'text'}
+                // Keep browser password managers out of credential fields —
+                // without this the App ID input autofills with the account
+                // email and saving would silently overwrite the stored ID
+                // (observed live: test@test.com sitting in the App ID box).
+                autoComplete="off"
+                name={`cred_${field.key}_${identifier}`}
                 className="h-full bg-transparent outline-hidden flex-1 text-[14px] text-textColor placeholder-textColor px-[16px]"
                 placeholder={(isExtra ? '' : credentialPlaceholder) || field.placeholder || ''}
                 value={value}

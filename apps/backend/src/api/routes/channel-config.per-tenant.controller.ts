@@ -42,14 +42,20 @@ export class ChannelConfigPerTenantController {
   @Get('/')
   @RequirePermission('channels', 'manage')
   async listConfigs(@GetOrgFromRequest() org: Organization) {
-    const [configs, catalog] = await Promise.all([
+    const [configs, catalog, decrypted] = await Promise.all([
       this._orgProviderConfigService.getConfigs(org.id),
       this._integrationManager.getSocialProviderCatalog(),
+      this._orgProviderConfigService.getDecryptedConfigs(org.id),
     ]);
     const entryByIdentifier = new Map(catalog.map((e) => [e.identifier, e]));
+    const decryptedById = new Map(decrypted.map((d) => [d.id, d]));
     return configs.map((c) => ({
       ...c,
       capabilities: entryByIdentifier.get(c.identifier)?.capabilities || null,
+      displayValues: this.#displayValues(
+        entryByIdentifier.get(c.identifier),
+        decryptedById.get(c.id)
+      ),
     }));
   }
 
@@ -65,10 +71,56 @@ export class ChannelConfigPerTenantController {
     }
     const catalog = await this._integrationManager.getSocialProviderCatalog();
     const entry = catalog.find((e) => e.identifier === config.identifier);
+    const decrypted = (await this._orgProviderConfigService.getDecryptedConfigs(org.id)).find(
+      (d) => d.id === id
+    );
     return {
       ...config,
       capabilities: entry?.capabilities || null,
+      displayValues: this.#displayValues(entry, decrypted),
     };
+  }
+
+  // Non-secret credential values (App IDs, configuration IDs, …) are returned so
+  // the edit form can prefill them — they are identifiers, not secrets (they
+  // travel in plaintext OAuth URLs). Fields marked `secret` in the descriptor
+  // (clientSecret, bot tokens) stay write-only. Without a descriptor the
+  // generic pair applies: clientId shown, clientSecret withheld.
+  #displayValues(
+    entry:
+      | Awaited<
+          ReturnType<IntegrationManager['getSocialProviderCatalog']>
+        >[number]
+      | undefined,
+    decrypted:
+      | Awaited<ReturnType<OrgProviderConfigService['getDecryptedConfigs']>>[number]
+      | undefined
+  ): Record<string, string> {
+    if (!decrypted) return {};
+    let extras: Record<string, unknown> = {};
+    try {
+      extras = decrypted.additionalConfig
+        ? JSON.parse(decrypted.additionalConfig)
+        : {};
+    } catch {
+      // malformed blob — treat as no extras rather than failing the read
+    }
+    const fields = entry?.setup?.credentialFields ?? [
+      { key: 'clientId' },
+      { key: 'clientSecret', secret: true },
+    ];
+    const out: Record<string, string> = {};
+    for (const field of fields) {
+      if ((field as { secret?: boolean }).secret) continue;
+      const value =
+        field.key === 'clientId'
+          ? decrypted.clientId
+          : field.key === 'clientSecret'
+            ? decrypted.clientSecret
+            : extras[field.key];
+      if (typeof value === 'string' && value) out[field.key] = value;
+    }
+    return out;
   }
 
   @Post('/')
