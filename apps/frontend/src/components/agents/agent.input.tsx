@@ -4,6 +4,7 @@ import React, { useMemo, useRef, useState } from 'react';
 import { useCopilotContext } from '@copilotkit/react-core';
 import AutoResizingTextarea from '@postmill-ai/frontend/components/agents/agent.textarea';
 import { InputProps, useChatContext } from '@copilotkit/react-ui';
+import { useT } from '@postmill-ai/react/translation/get.transation.service.client';
 const MAX_NEWLINES = 6;
 
 export const Input = ({
@@ -17,6 +18,7 @@ export const Input = ({
 }: InputProps & { onChange: (value: string) => void }) => {
   const context = useChatContext();
   const copilotContext = useCopilotContext();
+  const t = useT();
   const showPoweredBy = !copilotContext.copilotApiConfig?.publicApiKey;
 
   const textareaRef = useRef<HTMLTextAreaElement>(null);
@@ -96,7 +98,11 @@ export const Input = ({
         />
         <div className="copilotKitInputControls">
           {onUpload && (
-            <button onClick={onUpload} className="copilotKitInputControlButton">
+            <button
+              onClick={onUpload}
+              className="copilotKitInputControlButton"
+              aria-label={t('upload_attachment', 'Upload attachment')}
+            >
               {context.icons.uploadIcon}
             </button>
           )}
@@ -105,6 +111,11 @@ export const Input = ({
           <button
             disabled={sendDisabled}
             onClick={isInProgress && !hideStopButton ? onStop : send}
+            aria-label={
+              isInProgress && !hideStopButton
+                ? t('stop_generating', 'Stop generating')
+                : t('send_message', 'Send message')
+            }
             data-copilotkit-in-progress={inProgress}
             data-test-id={
               inProgress
