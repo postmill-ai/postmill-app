@@ -35,7 +35,7 @@ const Panel: FC<{
     <div className="flex items-center justify-between gap-[10px]">
       <h3 className="text-[13px] font-[600] text-textColor">{title}</h3>
       {action && (
-        <Link href={action.href} className="text-[12px] text-btnPrimary hover:underline">
+        <Link href={action.href} className="text-[12px] text-btnPrimaryAccent hover:underline">
           {action.label}
         </Link>
       )}

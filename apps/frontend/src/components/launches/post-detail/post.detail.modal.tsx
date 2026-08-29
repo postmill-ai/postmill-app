@@ -249,7 +249,7 @@ const CopyableId: FC<{ value: string }> = ({ value }) => {
           // clipboard unavailable (permissions) — the id is still selectable
         }
       }}
-      className="font-mono text-[12px] text-left truncate max-w-full hover:text-btnPrimary transition-colors"
+      className="font-mono text-[12px] text-left truncate max-w-full hover:text-btnPrimaryAccent transition-colors"
       data-tooltip-id="tooltip"
       data-tooltip-content={
         copied ? t('copied', 'Copied!') : t('click_to_copy', 'Click to copy')
@@ -1042,7 +1042,7 @@ export const PostDetailModal: FC<PostDetailModalProps> = ({
                 {creator && (
                   <Link
                     href="/settings"
-                    className="flex items-center gap-[5px] min-w-0 text-btnPrimary hover:underline"
+                    className="flex items-center gap-[5px] min-w-0 text-btnPrimaryAccent hover:underline"
                   >
                     <span className="w-[18px] h-[18px] rounded-full bg-btnPrimary text-white text-[9px] font-bold flex items-center justify-center shrink-0">
                       {creator.name
@@ -1125,7 +1125,7 @@ export const PostDetailModal: FC<PostDetailModalProps> = ({
             <DetailRow label={t('campaign', 'Campaign')}>
               <Link
                 href={`/campaigns/${activePost.campaignId}`}
-                className="text-btnPrimary hover:underline break-all"
+                className="text-btnPrimaryAccent hover:underline break-all"
               >
                 {campaignData?.name || activePost.campaignId}
               </Link>
@@ -1161,7 +1161,7 @@ export const PostDetailModal: FC<PostDetailModalProps> = ({
                 href={activePost.releaseURL}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="inline-flex items-center gap-[4px] text-btnPrimary hover:underline break-all"
+                className="inline-flex items-center gap-[4px] text-btnPrimaryAccent hover:underline break-all"
               >
                 {activePost.releaseId || t('open_on_platform', 'Open on platform')}
                 <svg

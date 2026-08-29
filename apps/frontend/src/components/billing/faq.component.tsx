@@ -61,19 +61,16 @@ export const FAQSection: FC<{
     setShow(!show);
   }, [show]);
   return (
-    <div
-      className="bg-newBgColorInner p-[24px] border border-newTableBorder rounded-[8px] flex flex-col"
-      onClick={changeShow}
-      onKeyDown={(e) => {
-        if (e.key === 'Enter' || e.key === ' ') {
-          e.preventDefault();
-          changeShow();
-        }
-      }}
-      role="button"
-      tabIndex={0}
-    >
-      <div className={`text-[20px] cursor-pointer flex justify-center`}>
+    // The card is a plain container; the header row is the single interactive
+    // control. The expanded body can hold links (SafeContent HTML), so a
+    // role=button wrapper around the whole card was nested-interactive.
+    <div className="bg-newBgColorInner p-[24px] border border-newTableBorder rounded-[8px] flex flex-col">
+      <button
+        type="button"
+        onClick={changeShow}
+        aria-expanded={show}
+        className="text-[20px] cursor-pointer flex justify-center text-left rounded-[4px] focus:outline-hidden focus-visible:ring-2 focus-visible:ring-btnPrimary"
+      >
         <div className="flex-1">{title}</div>
         <div className="flex items-center justify-center w-[32px]">
           {!show ? (
@@ -108,7 +105,7 @@ export const FAQSection: FC<{
             </svg>
           )}
         </div>
-      </div>
+      </button>
       <div
         className={clsx(
           'transition-all duration-500 overflow-hidden',
@@ -116,9 +113,6 @@ export const FAQSection: FC<{
         )}
       >
         <SafeContent
-          onClick={(e: React.MouseEvent) => {
-            e.stopPropagation();
-          }}
           className="mt-[16px] w-full text-wrap font-[400] text-[16px] text-newTableText select-text max-w-[450px]"
           content={description}
         />

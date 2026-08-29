@@ -315,7 +315,7 @@ export const Webhooks: FC = () => {
                     )}
                   </div>
                   <div>
-                    <span className={clsx('text-[12px]', w.active !== false ? 'text-green-500' : 'text-newTableText')}>
+                    <span className={clsx('text-[12px]', w.active !== false ? 'text-(--positive,#32d583)' : 'text-newTableText')}>
                       {w.active !== false ? t('active', 'Active') : t('disabled', 'Disabled')}
                     </span>
                   </div>

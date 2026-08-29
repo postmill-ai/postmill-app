@@ -62,7 +62,7 @@ const AlertCard: FC<{ anomaly: AnomalyRow; onDismiss: (id: string) => void }> = 
                 {dirLabel}
               </span>
               {anomaly.ruleId && (
-                <span className="text-[10px] font-semibold uppercase tracking-wide text-btnPrimary border border-btnPrimary rounded-full px-[6px] py-px">
+                <span className="text-[10px] font-semibold uppercase tracking-wide text-btnPrimaryAccent border border-btnPrimary rounded-full px-[6px] py-px">
                   {t('analytics_alert_rule_badge', 'Rule')}
                 </span>
               )}
@@ -106,7 +106,7 @@ const AlertCard: FC<{ anomaly: AnomalyRow; onDismiss: (id: string) => void }> = 
       <div className="flex flex-wrap items-center gap-[12px]">
         <Link
           href={bellLink(anomaly)}
-          className="text-[13px] font-medium text-btnPrimary hover:opacity-80 transition-opacity"
+          className="text-[13px] font-medium text-btnPrimaryAccent hover:opacity-80 transition-opacity"
         >
           {t('analytics_alert_view_metric', 'View metric')}
         </Link>

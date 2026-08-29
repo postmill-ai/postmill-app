@@ -509,7 +509,7 @@ export const BillingFeatures: FC<{ tier: PlanInterface['current'] }> = ({
                   'inline-flex items-center px-[6px] py-px rounded-[4px] text-[11px] font-[500]',
                   feature.badge === 'no'
                     ? 'bg-red-500/20 text-dangerText'
-                    : 'bg-green-500/20 text-green-500'
+                    : 'bg-green-500/20 text-(--positive,#32d583)'
                 )}
               >
                 {feature.badge === 'yes'

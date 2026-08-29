@@ -69,7 +69,7 @@ export default async function AuthLayout({
                   height="20"
                   viewBox="0 0 24 24"
                   fill="none"
-                  className="shrink-0 text-btnPrimary"
+                  className="shrink-0 text-btnPrimaryAccent"
                 >
                   <circle cx="12" cy="12" r="10" fill="currentColor" />
                   <path

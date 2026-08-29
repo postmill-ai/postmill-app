@@ -51,7 +51,7 @@ export const DatePicker: FC<{
       </div>
       <div className="cursor-pointer flex items-center gap-[4px]">
         {date.format(isUSCitizen() ? 'MM/DD/YYYY hh:mm A' : 'DD/MM/YYYY HH:mm')}
-        <span className="text-[11px] text-textColor/50 font-[400]">
+        <span className="text-[11px] text-newTableText font-[400]">
           {getTimezoneAbbr(date)}
         </span>
       </div>

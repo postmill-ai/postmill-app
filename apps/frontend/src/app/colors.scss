@@ -103,8 +103,9 @@
     --new-table-text: #595d63;
     --new-table-text-focused: #0e6ba8;
     /* Semantic up/down metric colors — darkened for AA as text on light surfaces
-       (green-700 / red-700). White-on-solid and tint/border uses only gain contrast. */
-    --positive: #15803d;
+       (green-800 / red-700). green-800 is needed (not green-700) so positive text on a
+       `bg-(--positive)/10` chip still clears 4.5:1 (green-700 measured 4.39:1 there). */
+    --positive: #166534;
     --negative: #b91c1c;
     --heading-accent: #2f53a8;
     --heading-h1: var(--new-btn-primary);

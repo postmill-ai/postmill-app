@@ -112,7 +112,7 @@ export const ShortlinkPicker: FC<{
           'connect_shortlink_provider',
           'Connect a short-link provider to track clicks'
         )}
-        className="border rounded-[8px] border-newTextColor/10 h-[36px] lg:h-[44px] px-[12px] lg:px-[16px] flex items-center gap-[8px] text-[13px] lg:text-[15px] font-[600] text-btnPrimary select-none"
+        className="border rounded-[8px] border-newTextColor/10 h-[36px] lg:h-[44px] px-[12px] lg:px-[16px] flex items-center gap-[8px] text-[13px] lg:text-[15px] font-[600] text-btnPrimaryAccent select-none"
       >
         <LinkIcon />
         {t('connect_shortlink', 'Connect short-link')}

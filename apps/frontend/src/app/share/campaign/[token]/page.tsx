@@ -10,7 +10,7 @@ export default function PublicCampaignSharePage() {
   const { token } = useParams<{ token: string }>();
   const { data, isLoading, error } = usePublicCampaignReport(token);
 
-  if (error) return <div className="p-[24px] text-center text-red-500">{t('report_unavailable', 'Report unavailable.')}</div>;
+  if (error) return <div className="p-[24px] text-center text-dangerText">{t('report_unavailable', 'Report unavailable.')}</div>;
   if (isLoading || !data) return <div className="p-[24px] text-center">{t('loading_ellipsis', 'Loading…')}</div>;
 
   return <CampaignReportView report={data} publicMode token={token} />;
