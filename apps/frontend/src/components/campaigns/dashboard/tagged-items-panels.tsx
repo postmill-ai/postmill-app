@@ -62,7 +62,7 @@ export const PanelItem: FC<{
         // eslint-disable-next-line @next/next/no-img-element
         <img src={iconSrc} alt="" className="w-[24px] h-[24px] rounded-[4px] object-cover shrink-0" />
       ) : (
-        <div className="w-[24px] h-[24px] rounded-[4px] bg-btnPrimary/10 text-btnPrimary flex items-center justify-center text-[10px] font-medium shrink-0">
+        <div className="w-[24px] h-[24px] rounded-[4px] bg-btnPrimary/10 text-btnPrimaryAccent flex items-center justify-center text-[10px] font-medium shrink-0">
           {(item.name || '?').charAt(0).toUpperCase()}
         </div>
       )}
@@ -80,7 +80,7 @@ export const PanelItem: FC<{
         <button
           type="button"
           onClick={onOpen}
-          className="flex items-center gap-[8px] min-w-0 flex-1 hover:text-btnPrimary transition-colors"
+          className="flex items-center gap-[8px] min-w-0 flex-1 hover:text-btnPrimaryAccent transition-colors"
         >
           {inner}
         </button>
@@ -218,7 +218,7 @@ export const AddItemsModal: FC<{
                 // eslint-disable-next-line @next/next/no-img-element
                 <img src={entity.icon} alt="" className="w-[24px] h-[24px] rounded-[4px] object-cover shrink-0" />
               ) : (
-                <div className="w-[24px] h-[24px] rounded-[4px] bg-btnPrimary/10 text-btnPrimary flex items-center justify-center text-[10px] font-medium shrink-0">
+                <div className="w-[24px] h-[24px] rounded-[4px] bg-btnPrimary/10 text-btnPrimaryAccent flex items-center justify-center text-[10px] font-medium shrink-0">
                   {entity.name.charAt(0).toUpperCase()}
                 </div>
               )}
@@ -275,7 +275,7 @@ export const TaggedItemsPanels: FC<{
         children: (
           <div className="flex flex-col gap-[14px] p-[4px] text-textColor">
             <div className="flex items-center gap-[12px]">
-              <div className="w-[40px] h-[40px] rounded-[8px] bg-btnPrimary/10 text-btnPrimary flex items-center justify-center text-[16px] font-semibold shrink-0">
+              <div className="w-[40px] h-[40px] rounded-[8px] bg-btnPrimary/10 text-btnPrimaryAccent flex items-center justify-center text-[16px] font-semibold shrink-0">
                 {(item.name || '?').charAt(0).toUpperCase()}
               </div>
               <div className="flex flex-col min-w-0">

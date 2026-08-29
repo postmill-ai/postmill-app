@@ -43,7 +43,7 @@ export const AgentMediaModal: FC = () => {
         </div>
         <ul className="flex flex-col gap-[8px] text-[14px] leading-[20px] text-newTextColor opacity-80">
           <li className="flex gap-[8px]">
-            <span className="text-btnPrimary">•</span>
+            <span className="text-btnPrimaryAccent">•</span>
             <span>
               {t(
                 'agent_media_feature_videos',
@@ -52,7 +52,7 @@ export const AgentMediaModal: FC = () => {
             </span>
           </li>
           <li className="flex gap-[8px]">
-            <span className="text-btnPrimary">•</span>
+            <span className="text-btnPrimaryAccent">•</span>
             <span>
               {t(
                 'agent_media_feature_quality',
@@ -61,7 +61,7 @@ export const AgentMediaModal: FC = () => {
             </span>
           </li>
           <li className="flex gap-[8px]">
-            <span className="text-btnPrimary">•</span>
+            <span className="text-btnPrimaryAccent">•</span>
             <span>
               {t(
                 'agent_media_feature_publish',

@@ -451,6 +451,9 @@ export class StockMediaService {
 
       try {
         const res = await safeFetch(`https://api.jamendo.com/v3.0/tracks?${params}`);
+        if (!res.ok) {
+          return { results: [], page, totalPages: 0, configured: true, source: 'jamendo', error: `jamendo request failed (HTTP ${res.status})` };
+        }
         const data = (await res.json()) as any;
         const hits = Array.isArray(data?.results) ? data.results : [];
         const total =
@@ -476,7 +479,10 @@ export class StockMediaService {
           source: 'jamendo',
         };
       } catch {
-        return { results: [], page, totalPages: 0, configured: false, source: 'jamendo' };
+        // A key IS configured (we passed the guard above) — the failure is
+        // network/parse-level, so report it as a provider error, not as
+        // "not configured".
+        return { results: [], page, totalPages: 0, configured: true, source: 'jamendo', error: 'jamendo request failed (network or invalid response)' };
       }
     });
   }

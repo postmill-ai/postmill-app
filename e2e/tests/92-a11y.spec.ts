@@ -22,7 +22,10 @@ test('axe a11y scan every route', async ({ page, context }) => {
   const persona = PERSONA();
   const findings: any[] = [];
   if (THEME === 'light') {
-    await context.addCookies([{ name: 'mode', value: 'light', domain: 'localhost', path: '/' }]);
+    // `url` (not `domain`) so the cookie lands on whatever baseURL the run
+    // targets — a hardcoded domain silently no-ops off-localhost.
+    const base = test.info().project.use.baseURL || 'http://localhost:4200';
+    await context.addCookies([{ name: 'mode', value: 'light', url: base }]);
   }
 
   for (const route of ROUTES) {

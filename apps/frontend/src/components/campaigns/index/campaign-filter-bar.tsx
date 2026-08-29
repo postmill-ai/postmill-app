@@ -109,7 +109,7 @@ export const CampaignFilterBar: FC<CampaignFilterBarProps> = ({
           className={clsx(
             'shrink-0 flex items-center gap-[6px] px-[12px] py-[8px] rounded-[8px] border text-[14px] transition-colors',
             activeCount > 0
-              ? 'border-btnPrimary text-btnPrimary bg-btnPrimary/10'
+              ? 'border-btnPrimary text-btnPrimaryAccent bg-btnPrimary/10'
               : 'border-newTableBorder text-textColor bg-newBgColor hover:bg-newTableBorder/30'
           )}
           aria-label={t('filters', 'Filters')}

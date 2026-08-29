@@ -227,7 +227,7 @@ const PlanCard: React.FC<{
       <div className="flex items-center justify-between">
         <span className="text-[14px] font-semibold text-textColor">{tier}</span>
         {isCurrent && (
-          <span className="text-[11px] font-medium px-[6px] py-[2px] rounded-full bg-btnPrimary/10 text-btnPrimary">
+          <span className="text-[11px] font-medium px-[6px] py-[2px] rounded-full bg-btnPrimary/10 text-btnPrimaryAccent">
             {t('billing_current_plan', 'Current')}
           </span>
         )}
@@ -501,7 +501,7 @@ export const SubscriptionPanel: React.FC = () => {
                 {t('current_plan', 'Current plan')}
               </h3>
               {user?.isTrailing && (
-                <span className="text-[11px] font-medium px-[6px] py-[2px] rounded-full bg-btnPrimary/10 text-btnPrimary">
+                <span className="text-[11px] font-medium px-[6px] py-[2px] rounded-full bg-btnPrimary/10 text-btnPrimaryAccent">
                   {t('trial', 'Trial')}
                 </span>
               )}
@@ -522,7 +522,7 @@ export const SubscriptionPanel: React.FC = () => {
               </div>
             )}
             {subscription?.isLifetime && (
-              <div className="text-[13px] text-btnPrimary">
+              <div className="text-[13px] text-btnPrimaryAccent">
                 {t('lifetime_plan', 'Lifetime plan')}
               </div>
             )}

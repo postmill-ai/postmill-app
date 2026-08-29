@@ -268,7 +268,7 @@ export const CommentCard: FC<CommentCardProps> = ({
           <button
             type="button"
             onClick={openPost}
-            className="inline-flex items-center gap-[3px] text-[11px] text-btnPrimary hover:underline mb-[8px]"
+            className="inline-flex items-center gap-[3px] text-[11px] text-btnPrimaryAccent hover:underline mb-[8px]"
           >
             {t('view_post', 'View Post')}
             <svg

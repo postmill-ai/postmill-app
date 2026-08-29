@@ -109,7 +109,7 @@ export const KebabMenu: FC<KebabMenuProps> = ({
         className={clsx(
           'flex items-center justify-center rounded-[6px] transition-colors',
           !trigger && 'hover:bg-newTableBorder/40',
-          !trigger && (active ? 'text-btnPrimary' : 'text-newTableText hover:text-textColor'),
+          !trigger && (active ? 'text-btnPrimaryAccent' : 'text-newTableText hover:text-textColor'),
           triggerClassName
         )}
       >

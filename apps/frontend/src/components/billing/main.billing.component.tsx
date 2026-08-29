@@ -227,7 +227,7 @@ export const Features: FC<{
                   'inline-flex items-center px-[8px] py-[2px] rounded-[4px] text-[12px] font-[500] w-fit',
                   feature.badge === 'no'
                     ? 'bg-red-500/20 text-dangerText'
-                    : 'bg-green-500/20 text-green-500'
+                    : 'bg-green-500/20 text-(--positive,#32d583)'
                 )}
               >
                 {badgeLabel(feature.badge)}

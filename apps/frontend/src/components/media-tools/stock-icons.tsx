@@ -210,7 +210,9 @@ export const StockIcons: FC<StockIconsProps> = ({ mode = 'browse', onSelect, onS
         <>
           <div className="columns-2 sm:columns-3 lg:columns-4 xl:columns-5 gap-[12px]">
             {items.map((icon) => {
-              // role=button div (not <button>) so the author-credit <a> is valid HTML.
+              // Plain container tile; the media area is the single interactive
+              // control (a real <button>) so the author-credit <a> below stays a
+              // sibling — never nested inside another interactive element.
               const activate = () => {
                 if (mode === 'select' && (onSelect || onSelectFull)) {
                   const payload = {
@@ -232,18 +234,14 @@ export const StockIcons: FC<StockIconsProps> = ({ mode = 'browse', onSelect, onS
               return (
               <div
                 key={icon.id}
-                role="button"
-                tabIndex={0}
-                onClick={activate}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter' || e.key === ' ') {
-                    e.preventDefault();
-                    activate();
-                  }
-                }}
-                className="group block w-full mb-[12px] break-inside-avoid text-left rounded-[8px] overflow-hidden border border-newBorder bg-newBgColorInner cursor-pointer focus:outline-hidden focus-visible:ring-2 focus-visible:ring-[#2B5CD3]"
+                className="group block w-full mb-[12px] break-inside-avoid text-left rounded-[8px] overflow-hidden border border-newBorder bg-newBgColorInner"
               >
-                <div className="relative overflow-hidden p-[16px] flex items-center justify-center aspect-square">
+                <button
+                  type="button"
+                  onClick={activate}
+                  aria-label={icon.description || t('open_preview', 'Open preview')}
+                  className="block w-full relative overflow-hidden p-[16px] flex items-center justify-center aspect-square cursor-pointer focus:outline-hidden focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-btnPrimary"
+                >
                   {/* Iconify icons are monochrome `currentColor` SVGs — rendered via <img>
                       they'd come out black (invisible in dark mode) and at their tiny 24px
                       intrinsic size. Paint them as a mask filled with the theme text color so
@@ -271,7 +269,7 @@ export const StockIcons: FC<StockIconsProps> = ({ mode = 'browse', onSelect, onS
                       </svg>
                     </div>
                   </div>
-                </div>
+                </button>
                 <div className="p-[8px]">
                   <div className="text-[11px] text-newTextColor/60 truncate">
                     {t('by', 'by')}{' '}

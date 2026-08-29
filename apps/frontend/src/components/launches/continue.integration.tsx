@@ -299,7 +299,7 @@ export const ContinueIntegration: FC<{
           <div className="text-[28px] font-semibold mb-[12px]">
             {t('channel_connected', 'Channel Connected!')}
           </div>
-          <div className="text-[16px] text-gray-400 max-w-[400px]">
+          <div className="text-[16px] text-newTableText max-w-[400px]">
             {successState.message ||
               t(
                 'channel_connected_description',
@@ -328,7 +328,7 @@ export const ContinueIntegration: FC<{
               <h1 className="text-[24px] font-semibold">
                 {t('configure_your_channel', 'Configure Your Channel')}
               </h1>
-              <p className="text-[14px] text-gray-400">
+              <p className="text-[14px] text-newTableText">
                 {t(
                   'select_the_page_or_account',
                   `Select the ${providerDisplayName} page or account you want to connect.`
@@ -396,7 +396,7 @@ export const ContinueIntegration: FC<{
           <div className="text-[28px] font-semibold mb-[12px]">
             {t('could_not_add_provider', 'Could not add provider.')}
           </div>
-          <div className="text-[16px] text-gray-400 max-w-[400px]">
+          <div className="text-[16px] text-newTableText max-w-[400px]">
             {errorMessage ||
               t(
                 'you_are_being_redirected_back',
@@ -422,7 +422,7 @@ export const ContinueIntegration: FC<{
         <div className="text-[28px] font-semibold mb-[12px]">
           {t('adding_channel', 'Adding Channel')}
         </div>
-        <div className="text-[16px] text-gray-400">
+        <div className="text-[16px] text-newTableText">
           {t('please_wait', 'Please wait while we connect your account...')}
         </div>
         {/* Loading spinner */}

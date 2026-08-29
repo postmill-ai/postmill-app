@@ -308,7 +308,9 @@ export const StockVideos: FC<StockVideosProps> = ({ mode = 'browse', onSelect, o
           {/* Responsive aspect-video grid (F6) */}
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-[12px]">
             {items.map((video) => {
-              // role=button div (not <button>) so the author-credit <a> is valid HTML.
+              // Plain container tile; the media area is the single interactive
+              // control (a real <button>) so the author-credit <a> below stays a
+              // sibling — never nested inside another interactive element.
               const activate = () => {
                 if (mode === 'select' && (onSelect || onSelectFull)) {
                   const payload = {
@@ -330,18 +332,14 @@ export const StockVideos: FC<StockVideosProps> = ({ mode = 'browse', onSelect, o
               return (
               <div
                 key={video.id}
-                role="button"
-                tabIndex={0}
-                onClick={activate}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter' || e.key === ' ') {
-                    e.preventDefault();
-                    activate();
-                  }
-                }}
-                className="group text-left rounded-[8px] overflow-hidden border border-newBorder bg-newBgColorInner cursor-pointer focus:outline-hidden focus-visible:ring-2 focus-visible:ring-[#2B5CD3]"
+                className="group text-left rounded-[8px] overflow-hidden border border-newBorder bg-newBgColorInner"
               >
-                <div className="aspect-video relative overflow-hidden bg-black">
+                <button
+                  type="button"
+                  onClick={activate}
+                  aria-label={video.description || t('open_preview', 'Open preview')}
+                  className="block w-full aspect-video relative overflow-hidden bg-black cursor-pointer focus:outline-hidden focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-btnPrimary"
+                >
                   {/* eslint-disable-next-line @next/next/no-img-element -- external stock thumbnail */}
                   <img
                     src={video.thumbUrl}
@@ -360,7 +358,7 @@ export const StockVideos: FC<StockVideosProps> = ({ mode = 'browse', onSelect, o
                       </svg>
                     </div>
                   </div>
-                </div>
+                </button>
                 <div className="p-[8px]">
                   <div className="text-[11px] text-newTextColor/60 truncate">
                     {t('by', 'by')}{' '}

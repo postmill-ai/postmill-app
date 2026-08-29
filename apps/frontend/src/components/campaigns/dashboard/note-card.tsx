@@ -156,7 +156,7 @@ export const NoteCard: FC<NoteCardProps> = ({
               <span className="text-[11px] text-newTableText">({t('edited', 'edited')})</span>
             )}
             {note.pinned && (
-              <span className="text-[11px] text-btnPrimary">📌 {t('pinned', 'Pinned')}</span>
+              <span className="text-[11px] text-btnPrimaryAccent">📌 {t('pinned', 'Pinned')}</span>
             )}
             {resolved && (
               <span className="text-[11px] text-newTableText">✓ {t('resolved_label', 'Resolved')}</span>

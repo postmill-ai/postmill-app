@@ -70,7 +70,7 @@ export const TagsInput: FC<{
           <button
             type="button"
             onClick={() => removeTag(idx)}
-            className="text-btnPrimary/70 hover:text-btnPrimary"
+            className="text-btnPrimaryAccent hover:opacity-70"
             aria-label={t('remove_tag_name', 'Remove {{tag}}', { tag })}
           >
             ×

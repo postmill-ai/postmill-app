@@ -16,7 +16,7 @@ type StatusMeta = { labelKey: string; label: string; className: string };
 const STATUS_META: Record<StudioJob['status'], StatusMeta> = {
   pending: { labelKey: 'render_status_queued', label: 'Queued', className: 'text-amber-600 bg-amber-500/10' },
   processing: { labelKey: 'render_status_rendering', label: 'Rendering', className: 'text-amber-600 bg-amber-500/10' },
-  completed: { labelKey: 'render_status_ready', label: 'Ready', className: 'text-green-500 bg-green-500/10' },
+  completed: { labelKey: 'render_status_ready', label: 'Ready', className: 'text-(--positive,#32d583) bg-green-500/10' },
   failed: { labelKey: 'render_status_failed', label: 'Failed', className: 'text-red-700 dark:text-red-400 bg-red-500/10' },
 };
 

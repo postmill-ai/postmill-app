@@ -6,7 +6,7 @@ export default async function IntegrationLayout({
   children: ReactNode;
 }) {
   return (
-    <div className="bg-[#0B0A0A] flex flex-1 min-h-screen w-screen">
+    <div className="bg-newBgColor flex flex-1 min-h-screen w-screen">
       {children}
     </div>
   );

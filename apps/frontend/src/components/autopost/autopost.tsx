@@ -286,7 +286,7 @@ export const Autopost: FC = () => {
 
         {!isLoading && !error && (!data || data.length === 0) && (
           <div className="flex flex-col items-center py-[40px] gap-[16px]">
-            <div className="text-textColor/50 text-[14px]">{t('no_autopost_rules', 'No auto post rules yet')}</div>
+            <div className="text-newTableText text-[14px]">{t('no_autopost_rules', 'No auto post rules yet')}</div>
             <p className="text-[12px] text-newTableText max-w-[400px] text-center">
               {t('autopost_empty_hint', 'Autopost creates posts for you from an RSS feed. Add a feed to get started.')}
             </p>

@@ -116,7 +116,7 @@ export const StartDialog: FC<StartDialogProps> = ({ store, fetchFn, onDone }) =>
         {step === 'home' && (
           <div className="p-6">
             <h2 className="text-[20px] font-bold text-textColor mb-1">{translate('designer_start_a_design_title', 'Start a design')}</h2>
-            <p className="text-[13px] text-textColor/50 mb-5">
+            <p className="text-[13px] text-newTableText mb-5">
               {translate('designer_start_dialog_subtitle', 'Create a new design or open an existing one.')}
             </p>
 
@@ -127,7 +127,7 @@ export const StartDialog: FC<StartDialogProps> = ({ store, fetchFn, onDone }) =>
               >
                 <span className="text-[22px]">🖼️</span>
                 <span className="text-[14px] font-semibold text-textColor">{translate('designer_new_photo', 'New Photo')}</span>
-                <span className="text-[11px] text-textColor/50">{translate('designer_new_photo_description', 'Image design, one or more formats')}</span>
+                <span className="text-[11px] text-newTableText">{translate('designer_new_photo_description', 'Image design, one or more formats')}</span>
               </button>
               <button
                 onClick={() => startNew('video')}
@@ -135,7 +135,7 @@ export const StartDialog: FC<StartDialogProps> = ({ store, fetchFn, onDone }) =>
               >
                 <span className="text-[22px]">🎬</span>
                 <span className="text-[14px] font-semibold text-textColor">{translate('designer_new_video', 'New Video')}</span>
-                <span className="text-[11px] text-textColor/50">{translate('designer_new_video_description', 'Video design with a timeline')}</span>
+                <span className="text-[11px] text-newTableText">{translate('designer_new_video_description', 'Video design with a timeline')}</span>
               </button>
             </div>
 
@@ -147,7 +147,7 @@ export const StartDialog: FC<StartDialogProps> = ({ store, fetchFn, onDone }) =>
                   className={`px-3 py-2 text-[13px] font-medium transition-colors ${
                     tab === t
                       ? 'text-btnPrimaryAccent border-b-2 border-designerAccent'
-                      : 'text-textColor/50 hover:text-textColor/80'
+                      : 'text-newTableText hover:text-textColor'
                   }`}
                 >
                   {t === 'my-designs' ? translate('designer_recent_designs', 'Recent Designs') : translate('designer_templates', 'Templates')}

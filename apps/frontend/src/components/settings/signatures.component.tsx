@@ -452,7 +452,7 @@ export const SignaturesComponent: FC<{
 
       {!isLoading && !error && (!data || data.length === 0) && (
         <div className="bg-newBgColorInner border border-newTableBorder rounded-[12px] flex flex-col items-center py-[40px] gap-[16px]">
-          <div className="text-textColor/50 text-[14px]">
+          <div className="text-newTableText text-[14px]">
             {t('no_signatures', 'No signatures yet')}
           </div>
           <p className="text-[12px] text-newTableText max-w-[400px] text-center">

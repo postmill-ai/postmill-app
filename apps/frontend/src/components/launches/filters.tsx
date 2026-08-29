@@ -640,7 +640,7 @@ export const Filters = () => {
             className={clsx(
               'w-[14px] h-[14px] transition-transform duration-200',
               open && 'rotate-180',
-              activeCount > 0 ? 'text-btnPrimary' : 'text-newTableText'
+              activeCount > 0 ? 'text-btnPrimaryAccent' : 'text-newTableText'
             )}
             fill="none"
             viewBox="0 0 24 24"

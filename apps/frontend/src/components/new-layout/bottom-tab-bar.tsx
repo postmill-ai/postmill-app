@@ -94,7 +94,7 @@ export const BottomTabBar: FC = () => {
               className={clsx(
                 'flex flex-1 flex-col items-center justify-center gap-[3px] text-[10px] font-[600] min-w-0',
                 isActive(item.path)
-                  ? 'text-btnPrimary'
+                  ? 'text-btnPrimaryAccent'
                   : 'text-textItemBlur hover:text-newTextColor'
               )}
             >
@@ -113,7 +113,7 @@ export const BottomTabBar: FC = () => {
             aria-haspopup="true"
             className={clsx(
               'flex flex-1 flex-col items-center justify-center gap-[3px] text-[10px] font-[600]',
-              moreOpen ? 'text-btnPrimary' : 'text-textItemBlur hover:text-newTextColor'
+              moreOpen ? 'text-btnPrimaryAccent' : 'text-textItemBlur hover:text-newTextColor'
             )}
           >
             <span className="w-[22px] h-[22px] flex items-center justify-center">
