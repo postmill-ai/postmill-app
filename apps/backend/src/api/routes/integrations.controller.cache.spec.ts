@@ -3,11 +3,13 @@ import type { Organization } from '@prisma/client';
 
 const getIntegrationListResponse = vi.fn();
 const invalidateIntegrationListCache = vi.fn();
+const getAllIntegrations = vi.fn();
 
 vi.mock('@postmill-ai/nestjs-libraries/integrations/integration.manager', () => ({
   IntegrationManager: class {
     getIntegrationListResponse = getIntegrationListResponse;
     invalidateIntegrationListCache = invalidateIntegrationListCache;
+    getAllIntegrations = getAllIntegrations;
   },
 }));
 
@@ -50,6 +52,17 @@ describe('IntegrationsController — delegation (A-19)', () => {
 
     expect(res).toEqual({ integrations: [] });
     expect(getIntegrationListResponse).toHaveBeenCalledWith('org-1');
+  });
+
+  it('GET / delegates to IntegrationManager.getAllIntegrations with the org id', async () => {
+    // The root GET moved here from NoAuthIntegrationsController so the org's
+    // BYO provider configs are merged into the enabled set.
+    getAllIntegrations.mockResolvedValue({ social: [], article: [] });
+
+    const res = await controller.getIntegrations(org);
+
+    expect(res).toEqual({ social: [], article: [] });
+    expect(getAllIntegrations).toHaveBeenCalledWith('org-1');
   });
 
   it('delegates list invalidation to IntegrationManager.invalidateIntegrationListCache', async () => {

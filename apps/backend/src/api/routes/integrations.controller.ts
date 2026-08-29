@@ -68,6 +68,14 @@ export class IntegrationsController {
     private _subscriptionService: SubscriptionService
   ) {}
 
+  @Get('/')
+  // The composer's "New Channel" dialog source. Authenticated so the org's own
+  // (BYO) provider configs are merged with the platform-global enabled set —
+  // the pre-move no-auth variant served only the global scope.
+  getIntegrations(@GetOrgFromRequest() org: Organization) {
+    return this._integrationManager.getAllIntegrations(org.id);
+  }
+
   @Post('/provider/:id/connect')
   @RequirePermission('channels', 'create')
   @CheckPolicies([AuthorizationActions.Create, Sections.CHANNEL])
