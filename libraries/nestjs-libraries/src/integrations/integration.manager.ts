@@ -88,17 +88,22 @@ export class IntegrationManager {
   }
 
   async getAllIntegrations(orgId?: string) {
-    if (orgId) {
-      await this._orgProviderConfigManager.ensureFresh(orgId);
-    } else {
-      await this._providerConfigManager.ensureFresh();
-    }
+    // Merge scopes: in an org context the enabled set and the config list are
+    // the UNION of the platform-global scope and the org's own (BYO per-tenant
+    // channel app) scope — the previous either/or hid org-only providers
+    // whenever any global config existed, and vice versa. Both managers'
+    // getters run ensureFresh internally.
+    const globalEnabled = await this._providerConfigManager.getEnabledIdentifiers();
+    const globalConfigs = await this._providerConfigManager.getAllConfigs();
     const enabledIdentifiers = orgId
-      ? await this._orgProviderConfigManager.getEnabledIdentifiers(orgId)
-      : await this._providerConfigManager.getEnabledIdentifiers();
+      ? [
+          ...globalEnabled,
+          ...(await this._orgProviderConfigManager.getEnabledIdentifiers(orgId)),
+        ]
+      : globalEnabled;
     const allConfigs = orgId
-      ? await this._orgProviderConfigManager.getAllConfigs(orgId)
-      : await this._providerConfigManager.getAllConfigs();
+      ? [...globalConfigs, ...(await this._orgProviderConfigManager.getAllConfigs(orgId))]
+      : globalConfigs;
     // Providers the deployment env supplies a platform OAuth app for always stay
     // connectable (click-connect), even after the org has added its own configs.
     const envEnabled = getEnvEnabledIdentifiers();
@@ -110,8 +115,14 @@ export class IntegrationManager {
         this.getSocialProviders()
           .filter((p) => !hasAnyConfigs || enabledSet.has(p.identifier))
           .map(async (p) => {
+            // Org config wins for display metadata (setupNotes); fall back to
+            // the platform-global config (setupInstructions) so a global-only
+            // enabled provider keeps its instructions in an org context.
             const config = orgId
-              ? await this._orgProviderConfigManager.getConfig(orgId, p.identifier)
+              ? (await this._orgProviderConfigManager.getConfig(
+                  orgId,
+                  p.identifier
+                )) ?? (await this._providerConfigManager.getConfig(p.identifier))
               : await this._providerConfigManager.getConfig(p.identifier);
             return {
               name: p.name,

@@ -1,7 +1,6 @@
 import {
   Body,
   Controller,
-  Get,
   HttpException,
   Logger,
   Param,
@@ -43,11 +42,6 @@ export class NoAuthIntegrationsController {
     private _organizationService: OrganizationService,
     private _campaignTagService: CampaignTagService
   ) {}
-
-  @Get('/')
-  getIntegrations() {
-    return this._integrationManager.getAllIntegrations();
-  }
 
   @Post('/social-connect/:integration')
   @CheckPolicies([AuthorizationActions.Create, Sections.CHANNEL])

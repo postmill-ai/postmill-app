@@ -396,6 +396,14 @@ describe('IntegrationManager', () => {
     isEnabled: ReturnType<typeof vi.fn>;
     ensureFresh: ReturnType<typeof vi.fn>;
   };
+  let mockOrgPcm: {
+    getEnabledIdentifiers: ReturnType<typeof vi.fn>;
+    getAllConfigs: ReturnType<typeof vi.fn>;
+    getConfig: ReturnType<typeof vi.fn>;
+    getClientInfo: ReturnType<typeof vi.fn>;
+    isEnabled: ReturnType<typeof vi.fn>;
+    ensureFresh: ReturnType<typeof vi.fn>;
+  };
   let manager: IntegrationManager;
 
   beforeEach(() => {
@@ -407,9 +415,17 @@ describe('IntegrationManager', () => {
       isEnabled: vi.fn(),
       ensureFresh: vi.fn(),
     };
+    mockOrgPcm = {
+      getEnabledIdentifiers: vi.fn(),
+      getAllConfigs: vi.fn(),
+      getConfig: vi.fn(),
+      getClientInfo: vi.fn(),
+      isEnabled: vi.fn(),
+      ensureFresh: vi.fn(),
+    };
     manager = new IntegrationManager(
       mockPcm as any,
-      {} as any,
+      mockOrgPcm as any,
       fakeKernel,
       fakeResolutionService(fakeKernel),
     );
@@ -552,6 +568,105 @@ describe('IntegrationManager', () => {
       );
       expect(telegram.isWeb3).toBe(true);
       expect(telegram.isChromeExtension).toBe(false);
+    });
+
+    // ---- scope merge (orgId passed → global ∪ org ∪ env) ----
+
+    it('org context: includes a provider enabled only via an org-level config', async () => {
+      mockPcm.getEnabledIdentifiers.mockResolvedValue([]);
+      mockPcm.getAllConfigs.mockResolvedValue([]);
+      mockOrgPcm.getEnabledIdentifiers.mockResolvedValue(['instagramstandalone']);
+      mockOrgPcm.getAllConfigs.mockResolvedValue([
+        { identifier: 'instagramstandalone', enabled: true } as any,
+      ]);
+      mockOrgPcm.getConfig.mockResolvedValue(undefined);
+
+      const result = await manager.getAllIntegrations('org-1');
+
+      expect(result.social).toHaveLength(1);
+      expect(result.social[0].identifier).toBe('instagramstandalone');
+    });
+
+    it('org context: keeps globally-enabled providers alongside org-enabled ones', async () => {
+      // Regression guard for the merge: the org scope must not hide the
+      // platform-global enabled set.
+      mockPcm.getEnabledIdentifiers.mockResolvedValue(['x']);
+      mockPcm.getAllConfigs.mockResolvedValue([
+        { identifier: 'x', enabled: true } as any,
+      ]);
+      mockOrgPcm.getEnabledIdentifiers.mockResolvedValue(['instagramstandalone']);
+      mockOrgPcm.getAllConfigs.mockResolvedValue([
+        { identifier: 'instagramstandalone', enabled: true } as any,
+      ]);
+      mockOrgPcm.getConfig.mockResolvedValue(undefined);
+      mockPcm.getConfig.mockResolvedValue(undefined);
+
+      const result = await manager.getAllIntegrations('org-1');
+
+      expect(result.social.map((s: any) => s.identifier)).toEqual([
+        'x',
+        'instagramstandalone',
+      ]);
+    });
+
+    it('org context: org config wins for setupNotes, global setupInstructions survive as fallback', async () => {
+      mockPcm.getEnabledIdentifiers.mockResolvedValue(['x', 'linkedin']);
+      mockPcm.getAllConfigs.mockResolvedValue([
+        { identifier: 'x', enabled: true } as any,
+        { identifier: 'linkedin', enabled: true } as any,
+      ]);
+      mockPcm.getConfig.mockImplementation(async (identifier: string) =>
+        identifier === 'linkedin'
+          ? ({ identifier: 'linkedin', setupInstructions: 'Global steps' } as any)
+          : undefined
+      );
+      mockOrgPcm.getEnabledIdentifiers.mockResolvedValue([]);
+      mockOrgPcm.getAllConfigs.mockResolvedValue([]);
+      mockOrgPcm.getConfig.mockImplementation(async (_orgId: string, identifier: string) =>
+        identifier === 'x'
+          ? ({ identifier: 'x', setupNotes: 'Org notes' } as any)
+          : undefined
+      );
+
+      const result = await manager.getAllIntegrations('org-1');
+
+      expect(
+        result.social.find((s: any) => s.identifier === 'x').setupInstructions
+      ).toBe('Org notes');
+      expect(
+        result.social.find((s: any) => s.identifier === 'linkedin')
+          .setupInstructions
+      ).toBe('Global steps');
+    });
+
+    it('without orgId: consults only the global scope (behavior unchanged)', async () => {
+      mockPcm.getEnabledIdentifiers.mockResolvedValue(['x']);
+      mockPcm.getAllConfigs.mockResolvedValue([
+        { identifier: 'x', enabled: true } as any,
+      ]);
+      mockPcm.getConfig.mockResolvedValue(undefined);
+
+      const result = await manager.getAllIntegrations();
+
+      expect(result.social.map((s: any) => s.identifier)).toEqual(['x']);
+      expect(mockOrgPcm.getEnabledIdentifiers).not.toHaveBeenCalled();
+      expect(mockOrgPcm.getAllConfigs).not.toHaveBeenCalled();
+      expect(mockOrgPcm.getConfig).not.toHaveBeenCalled();
+    });
+
+    it('org context: no configs in either scope → all providers listed', async () => {
+      mockPcm.getEnabledIdentifiers.mockResolvedValue([]);
+      mockPcm.getAllConfigs.mockResolvedValue([]);
+      mockOrgPcm.getEnabledIdentifiers.mockResolvedValue([]);
+      mockOrgPcm.getAllConfigs.mockResolvedValue([]);
+
+      const result = await manager.getAllIntegrations('org-1');
+
+      expect(result.social.length).toBeGreaterThanOrEqual(36);
+      expect(result.social.map((s: any) => s.identifier)).toContain('x');
+      expect(result.social.map((s: any) => s.identifier)).toContain(
+        'instagramstandalone'
+      );
     });
   });
 
