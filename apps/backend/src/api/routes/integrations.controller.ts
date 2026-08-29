@@ -243,13 +243,20 @@ export class IntegrationsController {
       // externalUrl providers register a per-instance app dynamically, so
       // static org/env credentials are optional for them — requiring them
       // would make the dynamic flow unstartable on keyless deployments.
-      const clientInformation = integrationProvider.externalUrl
-        ? await this._integrationManager.getClientInformation(
+      // 'direct' channels (Bluesky & co.) connect with ACCOUNT credentials
+      // entered in the connect form — there is no developer app, so requiring
+      // org credentials would make them unconnectable (observed live: Bluesky
+      // connect 500s after generateAuthUrl returns { err: true }).
+      const needsAppCredentials =
+        !integrationProvider.externalUrl &&
+        integrationProvider.setupDescriptor?.authType !== 'direct';
+      const clientInformation = needsAppCredentials
+        ? await this._integrationManager.requireClientInformation(
             integration,
             org.id,
             config || undefined
           )
-        : await this._integrationManager.requireClientInformation(
+        : await this._integrationManager.getClientInformation(
             integration,
             org.id,
             config || undefined

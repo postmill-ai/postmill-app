@@ -1,4 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { BadRequestException } from '@nestjs/common';
 
 const {
   redisStore,
@@ -193,7 +194,7 @@ describe('NoAuthIntegrationsController — OAuth state replay (F11)', () => {
 
     await expect(
       controller.connectSocialMedia('testprovider', body('state-cf'))
-    ).rejects.toThrow('Organization not found');
+    ).rejects.toThrow('Invalid or expired state');
     expect(provider.authenticate).toHaveBeenCalledTimes(1);
   });
 
@@ -212,7 +213,7 @@ describe('NoAuthIntegrationsController — OAuth state replay (F11)', () => {
 
     await expect(
       controller.connectSocialMedia('testprovider', body('state-1'))
-    ).rejects.toThrow('Invalid state');
+    ).rejects.toThrow('Invalid or expired state');
     expect(provider.authenticate).toHaveBeenCalledTimes(1);
   });
 
@@ -236,7 +237,7 @@ describe('NoAuthIntegrationsController — OAuth state replay (F11)', () => {
     expect(ioRedis.del).not.toHaveBeenCalledWith('organization:state-2');
     await expect(
       controller.connectSocialMedia('testprovider', body('state-2'))
-    ).rejects.toThrow('Invalid state');
+    ).rejects.toThrow('Invalid or expired state');
 
     const pageBody = { state: 'state-2', page: 'p1' } as any;
     await controller.saveProviderPage('int-1', pageBody);
@@ -270,7 +271,7 @@ describe('NoAuthIntegrationsController — OAuth state replay (F11)', () => {
         'testprovider',
         body('state-3', { refresh: authDetails.id })
       )
-    ).rejects.toThrow('Invalid state');
+    ).rejects.toThrow('Invalid or expired state');
   });
 
   it('externalUrl provider: merges the stashed dynamic credentials into authenticate and persists them encrypted', async () => {
@@ -342,5 +343,26 @@ describe('NoAuthIntegrationsController — OAuth state replay (F11)', () => {
         instanceUrl: 'https://mastodon.example',
       }
     );
+  });
+
+  it('unknown/expired state: rejects with 400 "Invalid or expired state" (not a bare 500)', async () => {
+    const provider = makeProvider();
+    getSocialIntegration.mockResolvedValue(provider);
+    // nothing in redis for this state
+
+    const err = await controller
+      .connectSocialMedia('testprovider', body('state-gone'))
+      .catch((e) => e);
+    expect(err).toBeInstanceOf(BadRequestException);
+    expect(err.message).toBe('Invalid or expired state');
+
+    // customFields provider with no organization: key — same contract
+    const cfProvider = makeProvider({ customFields: true });
+    getSocialIntegration.mockResolvedValue(cfProvider);
+    const err2 = await controller
+      .connectSocialMedia('testprovider', body('state-gone'))
+      .catch((e) => e);
+    expect(err2).toBeInstanceOf(BadRequestException);
+    expect(err2.message).toBe('Invalid or expired state');
   });
 });
