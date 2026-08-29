@@ -39,6 +39,55 @@ function setupPorts(
   return { undiciFetch };
 }
 
+describe('FacebookProvider.generateAuthUrl — FBfB config_id', () => {
+  const FRONTEND = 'https://app.example.com';
+
+  beforeEach(() => {
+    process.env.FRONTEND_URL = FRONTEND;
+  });
+
+  const baseClientInfo = {
+    client_id: 'app-123',
+    client_secret: 'secret',
+    instanceUrl: '',
+  };
+
+  it('builds the classic scope= dialog URL byte-identically when no configId is present', async () => {
+    const provider = new FacebookProvider();
+    const { url, state } = await provider.generateAuthUrl(baseClientInfo);
+
+    expect(url).toBe(
+      'https://www.facebook.com/v20.0/dialog/oauth' +
+        `?client_id=app-123` +
+        `&redirect_uri=${encodeURIComponent(
+          `${FRONTEND}/integrations/social/facebook`
+        )}` +
+        `&state=${state}` +
+        `&scope=${provider.scopes.join(',')}`
+    );
+    expect(url).not.toContain('config_id');
+  });
+
+  it('uses config_id and omits scope when clientInformation carries a configId', async () => {
+    const provider = new FacebookProvider();
+    const { url, state } = await provider.generateAuthUrl({
+      ...baseClientInfo,
+      configId: 'cfg-456',
+    });
+
+    expect(url).toBe(
+      'https://www.facebook.com/v20.0/dialog/oauth' +
+        `?client_id=app-123` +
+        `&redirect_uri=${encodeURIComponent(
+          `${FRONTEND}/integrations/social/facebook`
+        )}` +
+        `&state=${state}` +
+        `&config_id=cfg-456`
+    );
+    expect(url).not.toContain('scope=');
+  });
+});
+
 describe('FacebookProvider pagination caps and fetch routing', () => {
   beforeEach(() => {
     // each test gets a fresh port setup inside the test body

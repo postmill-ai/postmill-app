@@ -413,6 +413,11 @@ export class InstagramProvider
 
   async generateAuthUrl(clientInformation?: ClientInformation) {
     const state = makeOauthState();
+    // Facebook Login for Business (FBfB) replaces the scope parameter with
+    // config_id referencing a Configuration created in the Meta dashboard
+    // (bundles token type + assets + permissions); Meta rejects scope= on
+    // FBfB-only apps. Classic Facebook Login keeps the scope= URL unchanged.
+    const configId = clientInformation?.configId;
     return {
       url:
         'https://www.facebook.com/v20.0/dialog/oauth' +
@@ -421,7 +426,9 @@ export class InstagramProvider
           `${process.env.FRONTEND_URL}/integrations/social/instagram`
         )}` +
         `&state=${state}` +
-        `&scope=${encodeURIComponent(this.scopes.join(','))}`,
+        (configId
+          ? `&config_id=${encodeURIComponent(configId)}`
+          : `&scope=${encodeURIComponent(this.scopes.join(','))}`),
       codeVerifier: makeId(10),
       state,
     };

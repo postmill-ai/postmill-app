@@ -16,6 +16,11 @@ export interface ClientInformation {
   client_secret: string;
   instanceUrl: string;
   token?: string;
+  // Meta "Facebook Login for Business" (FBfB) configuration id. When set, the
+  // Facebook/Instagram OAuth dialog is built with `config_id` instead of
+  // `scope` (FBfB bundles token type + assets + permissions in a dashboard
+  // Configuration). Sourced from the org config's additionalConfig JSON.
+  configId?: string;
 }
 
 export interface IAuthenticator {
@@ -190,17 +195,20 @@ export type FetchPageInformationResult = {
 };
 
 /**
- * One credential the per-tenant "Add channel" config form must collect, mapped
- * onto the existing saved-data DTO (`clientId` / `clientSecret`). Lets a
- * provider speak its own terminology ("API Key (Consumer Key)") instead of the
- * generic "Client ID" labels.
+ * One credential the per-tenant "Add channel" config form must collect.
+ * `clientId` / `clientSecret` map onto the existing saved-data DTO fields;
+ * any other key is persisted (only when non-empty) inside the org config's
+ * encrypted `additionalConfig` JSON under the same key (e.g. `configId`).
+ * Lets a provider speak its own terminology ("API Key (Consumer Key)")
+ * instead of the generic "Client ID" labels.
  */
 export interface ChannelCredentialField {
-  key: 'clientId' | 'clientSecret'; // maps onto the existing DTO fields
+  key: 'clientId' | 'clientSecret' | (string & {}); // see docblock above
   label: string; // provider terminology, e.g. 'API Key (Consumer Key)'
   placeholder?: string;
   help?: string; // where to find it in the provider portal
   secret?: boolean; // render as password input
+  optional?: boolean; // empty value is accepted and not persisted
 }
 
 /**

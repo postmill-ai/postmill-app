@@ -3,6 +3,8 @@ export interface SocialClientInformation {
   client_secret: string;
   instanceUrl: string;
   token?: string;
+  // Meta "Facebook Login for Business" configuration id (see ClientInformation).
+  configId?: string;
 }
 
 export interface SocialAuthTokenDetails {

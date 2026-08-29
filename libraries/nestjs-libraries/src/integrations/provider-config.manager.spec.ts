@@ -222,6 +222,40 @@ describe('ProviderConfigManager', () => {
       const result = await manager.getClientInfo('nonexistent');
       expect(result).toBeUndefined();
     });
+
+    it('populates configId from an encrypted additionalConfig.configId (FBfB)', async () => {
+      const encryptedConfigId = AuthService.fixedEncryption('fb-config-789');
+      mockProviderConfigService.getAll.mockResolvedValue([
+        makeConfig({
+          identifier: 'facebook',
+          additionalConfig: JSON.stringify({ configId: encryptedConfigId }),
+        }),
+      ]);
+
+      const result = await manager.getClientInfo('facebook');
+      expect(result).toEqual({
+        client_id: 'decrypted-id',
+        client_secret: 'decrypted-secret',
+        instanceUrl: '',
+        configId: 'fb-config-789',
+      });
+    });
+
+    it('ignores a malformed configId without dropping the config', async () => {
+      mockProviderConfigService.getAll.mockResolvedValue([
+        makeConfig({
+          identifier: 'facebook',
+          additionalConfig: JSON.stringify({ configId: 'invalid-encrypted' }),
+        }),
+      ]);
+
+      const result = await manager.getClientInfo('facebook');
+      expect(result).toEqual({
+        client_id: 'decrypted-id',
+        client_secret: 'decrypted-secret',
+        instanceUrl: '',
+      });
+    });
   });
 
   describe('ensureFresh', () => {

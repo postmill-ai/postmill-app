@@ -34,6 +34,14 @@ class InstagramChannelProvider extends InstagramProvider {
         secret: true,
         help: 'Meta for Developers → your app → App settings → Basic',
       },
+      {
+        // Extra keys (not clientId/clientSecret) persist into the org config's
+        // encrypted additionalConfig JSON; optional = empty is not persisted.
+        key: 'configId',
+        label: 'Configuration ID',
+        optional: true,
+        help: 'Meta for Developers → your app → Facebook Login for Business → Configurations (only needed when your app uses Facebook Login for Business; leave empty for classic Facebook Login)',
+      },
     ],
     portalUrl: 'https://developers.facebook.com/apps',
     portalLabel: 'Meta for Developers',
@@ -41,9 +49,10 @@ class InstagramChannelProvider extends InstagramProvider {
       'In Meta for Developers → your app, add the "Facebook Login" product, then open Facebook Login → Settings and paste this URL into "Valid OAuth Redirect URIs".',
     setupSteps: [
       'Open Meta for Developers and create an app (type "Business"), or pick an existing one.',
-      'Add the "Facebook Login" product to the app.',
+      'Add the "Facebook Login" product to the app (or "Facebook Login for Business" — the only option on new apps).',
       'Under Facebook Login → Settings, add the callback URL shown below to "Valid OAuth Redirect URIs".',
       'Copy the App ID and App Secret from App settings → Basic into the fields below.',
+      'Facebook Login for Business only: create a Configuration under Facebook Login for Business → Configurations and paste its ID into "Configuration ID" below (replaces the permission scopes).',
       'Connect an Instagram professional (Business or Creator) account that is linked to a Facebook Page.',
     ],
   };

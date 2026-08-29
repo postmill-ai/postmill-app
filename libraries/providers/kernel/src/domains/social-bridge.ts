@@ -34,6 +34,7 @@ function contextToClientInformation(
   const instanceUrl = (credentials.instanceUrl ||
     credentials.instance_url || '') as string;
   const token = credentials.token as string | undefined;
+  const configId = credentials.configId as string | undefined;
 
   // An empty / no-client-key credentials object means "no explicit creds" —
   // treat it as absent so the resolved per-call clientInformation wins.
@@ -46,6 +47,7 @@ function contextToClientInformation(
     client_secret,
     instanceUrl,
     token,
+    configId,
   };
 }
 
