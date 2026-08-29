@@ -473,29 +473,6 @@ paths:
           description: ""
       tags:
         - Enterprise
-  /integrations:
-    get:
-      operationId: NoAuthIntegrationsController_getIntegrations
-      parameters: []
-      responses:
-        "200":
-          description: ""
-      tags:
-        - Integrations
-    delete:
-      operationId: IntegrationsController_deleteChannel
-      parameters: []
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: "#/components/schemas/ChannelIdBodyDto"
-      responses:
-        "200":
-          description: ""
-      tags:
-        - Integrations
   /integrations/social-connect/{integration}:
     post:
       operationId: NoAuthIntegrationsController_connectSocialMedia
@@ -908,6 +885,29 @@ paths:
           description: ""
       tags:
         - User
+  /integrations:
+    get:
+      operationId: IntegrationsController_getIntegrations
+      parameters: []
+      responses:
+        "200":
+          description: ""
+      tags:
+        - Integrations
+    delete:
+      operationId: IntegrationsController_deleteChannel
+      parameters: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ChannelIdBodyDto"
+      responses:
+        "200":
+          description: ""
+      tags:
+        - Integrations
   /integrations/provider/{id}/connect:
     post:
       operationId: IntegrationsController_saveProviderPage
