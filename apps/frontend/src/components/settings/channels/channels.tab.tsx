@@ -52,6 +52,7 @@ interface ChannelConfigItem {
   name: string;
   enabled: boolean;
   isConfigured: boolean;
+  displayValues?: Record<string, string>;
   version: string;
   scopes: string | null;
   redirectUri: string | null;
@@ -367,6 +368,7 @@ export const ChannelsTab: FC = () => {
                     redirectUri: config.redirectUri || '',
                     setupNotes: config.setupNotes || '',
                     isConfigured: config.isConfigured,
+                    displayValues: config.displayValues,
                     version: config.version,
                     vpnSelection: config.vpnSelection,
                   }
