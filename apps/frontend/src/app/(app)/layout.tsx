@@ -33,6 +33,7 @@ import { HtmlComponent } from '@postmill-ai/frontend/components/layout/html.comp
 import SetTimezone from '@postmill-ai/frontend/components/layout/set.timezone';
 import Script from 'next/script';
 import { ChangeDirClient } from '@postmill-ai/frontend/components/new-layout/change.dir.client';
+import { ChunkErrorRecovery } from '@postmill-ai/frontend/components/layout/chunk-error-recovery';
 
 const jakartaSans = Plus_Jakarta_Sans({
   weight: ['600', '500'],
@@ -116,6 +117,7 @@ export default async function AppLayout({ children }: { children: ReactNode }) {
         >
           <SentryComponent>
             <SetTimezone />
+            <ChunkErrorRecovery />
             <HtmlComponent />
             <DubAnalytics />
             <FacebookComponent />
