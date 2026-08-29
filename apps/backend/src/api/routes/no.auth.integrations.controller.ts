@@ -1,4 +1,5 @@
 import {
+  BadRequestException,
   Body,
   Controller,
   HttpException,
@@ -65,12 +66,15 @@ export class NoAuthIntegrationsController {
       ? 'none'
       : await ioRedis.get(`login:${body.state}`);
     if (!getCodeVerifier) {
-      throw new Error('Invalid state');
+      // 400, not a bare Error (500): the frontend keys its retry-or-report
+      // behavior on this message, and an expired/unknown state is a client
+      // problem, not a server fault.
+      throw new BadRequestException('Invalid or expired state');
     }
 
     const organization = await ioRedis.get(`organization:${body.state}`);
     if (!organization) {
-      throw new Error('Organization not found');
+      throw new BadRequestException('Invalid or expired state');
     }
 
     const org = await this._organizationService.getOrgById(organization);
