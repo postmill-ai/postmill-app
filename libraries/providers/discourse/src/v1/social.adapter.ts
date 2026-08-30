@@ -94,7 +94,9 @@ function parseDiscourseCallback(token: string) {
 // get a date suffix instead of failing server-side validation.
 function deriveTitle(message: string): string {
   const plain = (message || '')
-    .replace(/\[([^\]]*)\]\([^)]*\)/g, '$1') // [text](url) → text
+    // [text](url) → text; the negated classes exclude the opening delimiters
+    // themselves so the pattern cannot backtrack polynomially (CodeQL js/polynomial-redos).
+    .replace(/\[([^\][]*)\]\(([^()]*)\)/g, '$1')
     .replace(/[#*_`>~]/g, '')
     .replace(/\s+/g, ' ')
     .trim();
