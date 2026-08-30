@@ -87,7 +87,6 @@ const ADMIN_CONTROLLERS = new Set<string>([
   'AiSettingsController',
   'AdminDefaultsController',
   'AdminNotificationsController',
-  'ChannelConfigController',
   'AdminProvidersController',
   'AdminOrgsController',
 ]);

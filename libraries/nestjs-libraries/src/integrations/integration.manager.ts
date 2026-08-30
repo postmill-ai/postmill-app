@@ -355,29 +355,31 @@ export class IntegrationManager {
   }
 
   // INTERNAL USE ONLY - returns decrypted client credentials.
-  // When configId is provided the credentials of that specific named config are used
-  // (each named credential set has its own auth); otherwise resolution falls back to
-  // the org's primary config for the provider identifier.
+  // Org credentials resolve ONLY through an explicit configId (each named
+  // credential set has its own auth) — the by-identifier "primary config"
+  // fallback for unbound integrations is gone. Without a configId the order is:
+  // platform env app, then undefined.
   async getClientInformation(integration: string, orgId?: string, configId?: string | null) {
-    // Resolve the pinned version from the org's channel config (or the global default
-    // when no org context). This version is returned with the credentials so callers
-    // can resolve the exact provider adapter that matches the pinned config.
+    // Resolve the pinned version from the org's bound channel config (the global
+    // default when there is no org context or no bound config). This version is
+    // returned with the credentials so callers can resolve the exact provider
+    // adapter that matches the pinned config.
     const configVersion =
-      orgId && this._orgProviderConfigManager
-        ? await (async () => {
-            const config = configId
-              ? await this._orgProviderConfigManager.getConfigById(orgId, configId)
-              : await this._orgProviderConfigManager.getConfig(orgId, integration);
-            return config?.version ?? 'v1';
-          })()
+      orgId && configId
+        ? (await this._orgProviderConfigManager.getConfigById(orgId, configId))
+            ?.version ?? 'v1'
         : 'v1';
 
     if (orgId) {
-      // A specific named credential set, or the org's own app for this provider,
-      // always wins over the platform default (BYO-app override).
+      // ensureFresh runs even without a configId: it warms the per-org
+      // credential cache that plug methods read via getOrgCredential. It does
+      // NOT participate in credential resolution below.
+      await this._orgProviderConfigManager.ensureFresh(orgId);
+      // A specific named credential set always wins over the platform default
+      // (BYO-app override). No configId → no org-credential resolution.
       const orgInfo = configId
         ? await this._orgProviderConfigManager.getClientInfoById(orgId, configId)
-        : await this._orgProviderConfigManager.getClientInfo(orgId, integration);
+        : undefined;
       if (orgInfo?.client_id || orgInfo?.token) {
         return { ...orgInfo, version: configVersion };
       }
