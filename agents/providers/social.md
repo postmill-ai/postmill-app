@@ -169,7 +169,7 @@ To let the deployment operator ship a platform OAuth app via env vars, add a row
 { identifier: '<id>', clientIdEnv: '<ID>_CLIENT_ID', clientSecretEnv: '<ID>_CLIENT_SECRET' },
 ```
 
-`isTokenOnly: true` for token-only providers (telegram pattern); `clientSecretEnv` may be omitted (vk/whop pattern). Resolution order per connect call is org config → env → global (`IntegrationManager.getClientInformation`, `libraries/nestjs-libraries/src/integrations/integration.manager.ts:345`). This mapping is channels-only — never add env fallbacks for AI/shortlink providers.
+`isTokenOnly: true` for token-only providers (telegram pattern); `clientSecretEnv` may be omitted (vk/whop pattern). Resolution order per connect call is org BYO config → platform env app (`IntegrationManager.getClientInformation`, `libraries/nestjs-libraries/src/integrations/integration.manager.ts:345`) — two scopes only; the legacy global `ProviderConfiguration` DB table and its super-admin `/admin/channel-configs` endpoints are deprecated (still present, unused in live paths, removal in a future release). This mapping is channels-only — never add env fallbacks for AI/shortlink providers.
 
 ## 7. Optional: comments surface
 
