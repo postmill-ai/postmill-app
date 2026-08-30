@@ -81,7 +81,6 @@ Coverage is measured per controller file with **ratchet floors** at measured lev
 
 | File | Statements | Branches | Functions | Lines |
 |---|---|---|---|---|
-| `channel.config.controller.ts` | 90 | 90 | 90 | 90 |
 | `analytics.v2.controller.ts` | 90 | 90 | 75 | 90 |
 | `ai-settings.controller.ts` | 45 | 40 | 45 | 50 |
 | `ai-user.controller.ts` | 70 | 50 | 75 | 70 |

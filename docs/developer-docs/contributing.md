@@ -56,12 +56,6 @@ There is **no `OPENAI_API_KEY` env-var fallback**. A deployment's env key must n
 used as a tenant's AI provider. The frontend does not mount CopilotKit when AI is off and routes
 the user to Settings → AI.
 
-### Analytics Compatibility Route Shape
-
-The analytics compatibility route at `GET /analytics/:integration` in the public integrations controller
-is kept as-is for n8n/Zapier compatibility. Do not change its response shape. The v2 analytics
-route is a parallel, separate endpoint at `/analytics/v2`.
-
 ### Provider Enablement Safety
 
 Channel provider credentials live exclusively in `OrgProviderConfiguration`, encrypted at rest

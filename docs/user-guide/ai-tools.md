@@ -174,8 +174,6 @@ API endpoints:
 - `DELETE /settings/ai/defaults/:category` — reset to Auto.
 - `GET /settings/ai/defaults/catalog?category=` — selectable models for that category.
 
-Operators can disable the new resolution with `AI_MODEL_DEFAULTS_ENABLED=false` (default `true`), which falls back to the scope-based `orgActive` / surface-defaults chain.
-
 ## Image and media generation
 
 `POST /ai/media` supports 7 media operations. Each operation routes through the per-organisation **media providers** configured in **Settings → Media** — an operation is available when a configured, enabled provider supports that capability:

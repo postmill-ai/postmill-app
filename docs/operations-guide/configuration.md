@@ -113,14 +113,6 @@ Browser and mobile push notifications are sent via Firebase Cloud Messaging (FCM
 | `SOCIAL_COMMENT_RETENTION_DAYS` | `90` | Days before social comments are soft-deleted |
 | `AGENT_DIGEST_ENABLED` | — | Set to `true` to enable the Monday 07:00 ET headless AI digest |
 
-## AI Model Defaults
-
-Model defaults re-point AI model resolution from the scope/model chain to category-driven defaults (`low-reasoning`, `high-reasoning`, `vision`, `workflow`) and the corresponding Media Defaults categories.
-
-| Variable | Default | Purpose |
-|----------|---------|---------|
-| `AI_MODEL_DEFAULTS_ENABLED` | `true` (unset = on) | Kill switch for the model-category re-point and Model/Media Defaults feature. Set to `false` to use scope-based resolution instead |
-
 ## AI Budget Enforcement
 
 Per-provider AI budgets are configured per-organization in **Settings → AI**. The deployment-level kill switch below controls whether provider caps are actually enforced.
@@ -134,7 +126,6 @@ Per-provider AI budgets are configured per-organization in **Settings → AI**. 
 | Variable | Default | Purpose |
 |----------|---------|---------|
 | `API_LIMIT` | `600` | Public API rate limit per hour |
-| `AGENT_API_KEY` | — | API key for the `/public/agent` endpoint |
 | `OPENAI_APP_CHALLENGE` | — | Challenge string for OpenAI apps, served at `/.well-known/openai-apps-challenge` |
 | `MOBILE_APP_SCHEME` | `postmill://auth/callback` | Deep-link scheme the mobile OAuth callback (`GET /auth/oauth-mobile-callback`) redirects to |
 | `NEXT_PUBLIC_OVERRIDE_BACKEND_URL` | — | Overrides the token endpoint advertised in the MCP OAuth discovery document (`/.well-known/oauth-authorization-server`); falls back to the backend URL |

@@ -1,6 +1,6 @@
 # Data Model
 
-89 Prisma models and 8 enums in a single schema at `libraries/nestjs-libraries/src/database/prisma/schema.prisma`. This page lists every model grouped by domain with a one-line purpose and key relationships.
+85 Prisma models and 8 enums in a single schema at `libraries/nestjs-libraries/src/database/prisma/schema.prisma`. This page lists every model grouped by domain with a one-line purpose and key relationships.
 
 ---
 
@@ -69,16 +69,15 @@
 
 ---
 
-## Provider Configuration (4)
+## Provider Configuration (3)
 
 | Model | Purpose | Key Relationships |
 |---|---|---|
-| `OrgProviderConfiguration` | Per-org channel provider OAuth credentials (encrypted). **Many named sets per provider** — unique on `(organizationId, identifier, name, version)`; resolved by row `id`. Replaces `ProviderConfiguration`. | FK → `Organization`; back-ref → `Integration[]` |
+| `OrgProviderConfiguration` | Per-org channel provider OAuth credentials (encrypted). **Many named sets per provider** — unique on `(organizationId, identifier, name, version)`; resolved by row `id`. | FK → `Organization`; back-ref → `Integration[]` |
 | `OrgVpnConfig` | Per-org VPN/proxy provider config (Settings → VPN) — encrypted credentials, enabled `regions` JSON; SOCKS5/HTTP-CONNECT proxies power per-channel VPN egress | FK → `Organization` |
-| `ProviderConfiguration` | **Deprecated** — global provider config, no longer read anywhere; superseded by per-tenant `OrgProviderConfiguration`. Scheduled for removal. | Standalone |
 | `FeaturedProvider` | Platform-wide curated featured-provider list surfaced at the top of each domain's provider configuration UI | Unique on `(domain, providerId)` |
 
-A connected `Integration` carries a nullable `providerConfigId` FK (`onDelete: SetNull`) binding it to the named credential set it was connected through, so OAuth handshake, token refresh, and API calls use that set's own auth. When `providerConfigId` is `NULL` (unbound connections), credential resolution falls back to the org's primary set for the provider identifier (enabled-first).
+A connected `Integration` carries a nullable `providerConfigId` FK (`onDelete: SetNull`) binding it to the named credential set it was connected through, so OAuth handshake, token refresh, and API calls use that set's own auth. Connect flows always bind a named config; API-key connect flows without one resolve the platform env OAuth-app credentials only.
 
 ---
 
@@ -115,7 +114,7 @@ A connected `Integration` carries a nullable `providerConfigId` FK (`onDelete: S
 
 ---
 
-## AI (11)
+## AI (10)
 
 | Model | Purpose | Key Relationships |
 |---|---|---|
@@ -127,8 +126,7 @@ A connected `Integration` carries a nullable `providerConfigId` FK (`onDelete: S
 | `AIMediaJob` | Media pipeline job — operation, status, artifact URL, provenance, cost. Tracks async media generation (video/audio/avatar/stt) in the media-provider system. | FK → `Organization`, `User` (nullable) |
 | `AIPromptLibraryItem` | User-created reusable prompt library entries | FK → `Organization` |
 | `AIContentIndex` | RAG index — chunk metadata + BM25 text; embeddings in side table | FK → `Organization` |
-| `AIProviderConfig` | **Deprecated** — replaced by `AIOrgProviderConfig`; carries `reasoningModel` for parity | Standalone |
-| `AISystemSettings` | **Deprecated** — active provider moved to per-tenant; kept for scope models and governance | Standalone |
+| `AISystemSettings` | Live instance-wide AI governance store — fallback providers, guardrails, budget, observability, MCP, RAG, cache, routing, and secret settings | Standalone |
 | `OrgDefaultModel` | Per-org per-domain/category default model/media settings (`domain`, `category`, `providerId`, `version`, `model`, `settings`) | Unique on `(organizationId, domain, category)` |
 
 ---
@@ -185,14 +183,12 @@ A connected `Integration` carries a nullable `providerConfigId` FK (`onDelete: S
 
 ---
 
-## Mastra Telemetry (8)
+## Mastra Telemetry (6)
 
-All 8 models have `@@ignore` or are managed by the Mastra framework. They are **not** accessed through Prisma repositories — Mastra manages its own tables.
+All 6 models are managed by the Mastra framework. They are **not** accessed through Prisma repositories — Mastra manages its own tables.
 
 | Model | Purpose |
 |---|---|
-| `mastra_ai_spans` | AI span telemetry (ignored) |
-| `mastra_evals` | Evaluation results (ignored) |
 | `mastra_messages` | Agent messages |
 | `mastra_resources` | Agent resources/working memory |
 | `mastra_scorers` | Scoring/evaluation runs |

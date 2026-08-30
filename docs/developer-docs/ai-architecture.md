@@ -16,12 +16,11 @@ Postmill ships a pluggable, multi-provider AI layer. Every AI surface resolves i
 |---|---|---|
 | 1 | Per-org category default | `OrgDefaultModel` row for domain `ai` and the category mapped from the scope (or `high-reasoning` when `reasoning: true`) |
 | 2 | Per-org active provider | `AIOrgProviderConfig` with `isActive: true` for the org |
-| 3 | Per-scope override | `scopeModels[scope]` in `AISystemSettings` (consulted only when category defaults are kill-switched) |
-| 4 | Surface default | Hardcoded `SURFACE_DEFAULTS` map |
+| 3 | Surface default | Hardcoded `SURFACE_DEFAULTS` map |
 
 There is **no env-key fallback**. When resolution fails, `resolveConfigForScope` returns `null`, the caller surfaces "AI not configured," and the frontend routes the user to **Settings → AI**.
 
-Category defaults can be disabled with `AI_MODEL_DEFAULTS_ENABLED=false`; the system then falls back to scope-based resolution (the org-active / scoped-models chain). `AISystemSettings.activeProvider` no longer participates in runtime resolution.
+Category defaults are unconditional — there is no kill switch.
 
 ---
 
@@ -110,7 +109,7 @@ Per-org provider configuration is a two-step flow:
 
 Image, video, audio, and avatar generation belong to the **Media provider system**, not the AI-provider config. Embeddings remain an internal capability for RAG only.
 
-Tenants may configure multiple providers (`enabled` per row); one row per org is `isActive`. Category defaults (`OrgDefaultModel`) override the active row's `defaultModel` when `AI_MODEL_DEFAULTS_ENABLED` is true.
+Tenants may configure multiple providers (`enabled` per row); one row per org is `isActive`. Category defaults (`OrgDefaultModel`) override the active row's `defaultModel`.
 
 ---
 
@@ -139,12 +138,11 @@ Input and output guardrails via `@reaatech/guardrail-chain` and `GuardrailSettin
 
 ### BudgetService
 
-Token/cost tracking with four cap levels:
+Token/cost tracking with three cap levels:
 
 - **Global** — instance-wide monthly/daily spend caps
 - **Per-org** — per-tenant caps via `perOrgCaps`
 - **Per-provider** — per-tenant, per-active-provider caps stored on `AIOrgProviderConfig`
-- **Per-scope** — per-AI-scope caps via `scopeCaps` (unified onto `agent` for MCP/chat/agent surfaces)
 
 Provider budget enforcement is controlled by `AI_PROVIDER_BUDGET_ENFORCE` (default `true`). When enabled, `checkBudget(scope, orgId, providerId)` returns 429 for the provider whose cap is exhausted while other providers remain usable. Writes to `AISpendLog` for every AI call. Uses an in-memory accumulator with a 60s TTL. Fires threshold alerts at `alertThresholdPct` (default 80%) and includes the provider in provider-scoped alerts. Returns 429 when budget is exceeded.
 
@@ -183,7 +181,7 @@ pgvector-based RAG: content chunking, embedding computation via `AIModelProvider
 
 ### AI rate limiting
 
-Per-org AI gating happens at the budget layer: `BudgetService.checkBudget(scope, orgId, providerId)` is called at each AI call site (`AIModelProvider` wrappers, media dispatch, RAG backfill, agent/copilot) and blocks only the exhausted provider. `BudgetMiddleware` remains registered as an **alert-only** compatibility shim — it never blocks requests (its `checkBudget` call carries no provider, so it always allows). No NestJS throttler guard is currently wired.
+Per-org AI gating happens at the budget layer: `BudgetService.checkBudget(scope, orgId, providerId)` is called at each AI call site (`AIModelProvider` wrappers, media dispatch, RAG backfill, agent/copilot) and blocks only the exhausted provider. No NestJS throttler guard is currently wired.
 
 ### IdempotencyFactory
 
@@ -205,10 +203,11 @@ OpenTelemetry via OTLP. Structured GenAI spans with attributes (`gen_ai.system`,
 
 `/admin/ai-settings` — super-admin-gated endpoints for:
 
-- Provider management (CRUD, test connection, set active)
-- Governance settings (guardrails, budget, rate limits, observability)
-- Spend log and audit log
-- Provider health dashboard
+- Governance settings (guardrails, budget, observability, secret settings)
+- RAG settings and index backfill
+- Per-org provider management (`/org-providers/:orgId`)
+- Audit log
+- Provider health dashboard (`GET /admin/ai-settings/health` returns `{ providerHealth }`)
 
 ---
 
@@ -224,8 +223,7 @@ OpenTelemetry via OTLP. Structured GenAI spans with attributes (`gen_ai.system`,
 | `AIMediaJob` | Media pipeline job/artifact tracking + provenance |
 | `AIPromptLibraryItem` | User-created reusable prompts |
 | `AIContentIndex` | RAG index — chunk metadata + BM25 text (embeddings in side table) |
-| `AIProviderConfig` | **Deprecated** — replaced by `AIOrgProviderConfig` |
-| `AISystemSettings` | Global scope models, fallback config, governance toggles |
+| `AISystemSettings` | Live instance-wide governance store — fallback providers, guardrails, budget, observability, MCP/RAG/cache/routing/secret settings |
 | `OrgDefaultModel` | Per-org default for AI category or media category (`domain`, `category`, `providerId`, `version`, `model`, `settings`) |
 
 Two related models live outside the AI group: `MediaProviderConfig` (per-org media provider + storage binding) and `Post.brandId` (per-post brand selection). See [Data Model](./data-model.md).

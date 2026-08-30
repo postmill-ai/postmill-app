@@ -1,6 +1,6 @@
 # Analytics API (v2)
 
-The Analytics v2 API serves persisted multi-channel analytics from daily snapshots collected by the Inngest `analytics-collection` cron function. The older single-channel live-fetch endpoints remain available as compatibility routes with a frozen response shape.
+The Analytics v2 API serves persisted multi-channel analytics from daily snapshots collected by the Inngest `analytics-collection` cron function.
 
 All cookie-authenticated endpoints are scoped to the org resolved from the session. Public share endpoints are unauthenticated and token-gated.
 
@@ -212,9 +212,6 @@ For n8n/Zapier-style integrations, parallel read-only routes are exposed under t
 | GET | `/public/v1/analytics/overview` | Org overview |
 | GET | `/public/v1/analytics/campaign/:id` | Campaign-scoped analytics |
 | GET | `/public/v1/analytics/anomalies` | Detected anomalies |
-| GET | `/public/v1/analytics/:integration` | Compatibility single-channel analytics |
-
-The single-channel response shape is frozen for backward compatibility.
 
 ## Environment variables
 

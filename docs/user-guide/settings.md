@@ -88,8 +88,9 @@ rest (AES-256-GCM). From a set's dialog you can:
 
 - **Edit** — update the name, Client ID, Client Secret, scopes, and redirect URI.
 - **Test** — validate the credentials by generating an auth URL.
-- **Remove** — delete this credential set. Accounts that were connected through it fall back to the
-  org's primary set for that provider.
+- **Remove** — delete this credential set. Accounts that were connected through it become
+  unbound: they keep working only if the platform env OAuth app is configured for that
+  provider, otherwise reconnect them through another set.
 
 ### Connection health status
 

@@ -129,7 +129,7 @@ See [Frontend Conventions](./frontend-conventions.md) for the full policy.
 3. Results are saved as daily `AnalyticsSnapshot` and `PostAnalyticsSnapshot` rows.
 4. After ~18 months, `pruneAndRollupSnapshots()` rolls daily rows into weekly: flow metrics summed, stock metrics keep the week's latest value.
 5. Per-post snapshots are pruned after 90 days. Both windows are configurable via `ANALYTICS_DAILY_RETENTION_DAYS` and `ANALYTICS_POST_RETENTION_DAYS`.
-6. The `/analytics/v2` endpoints serve persisted data. The `/public/v1/analytics/*` and `/analytics/*` compatibility routes are kept for backward compatibility (n8n/Zapier/Make integrations) — never change their response shape.
+6. The `/analytics/v2` endpoints serve persisted data; the public `/public/v1/analytics/*` routes expose the same snapshot data to API-key clients.
 
 ## Background jobs (Inngest)
 

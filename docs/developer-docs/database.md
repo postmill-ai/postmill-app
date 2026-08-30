@@ -164,7 +164,7 @@ See [Backend Conventions](./backend-conventions.md) for the full layering rules 
 | `oauth/` | OAuth app and authorization management |
 | `organizations/` | Organization and user-org relationship |
 | `posts/` | Post CRUD, state transitions, recursive queries |
-| `provider-configs/` | `OrgProviderConfiguration` and the deprecated `ProviderConfiguration` |
+| `provider-configs/` | `OrgProviderConfiguration` |
 | `roles/` | RBAC roles and permissions (`AppRole`/`Permission`) |
 | `sets/` | Content set management |
 | `short-links/` | Per-org short-link provider config |

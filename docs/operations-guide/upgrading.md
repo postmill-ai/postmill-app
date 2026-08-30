@@ -75,6 +75,26 @@ CHANGELOG carefully, take a backup, and follow the expand-contract path document
 Check the CHANGELOG for any new env vars required by the release. Add them to your `.env` file,
 Docker Compose environment, or deployment config, then redeploy if needed.
 
+## v1.0.0
+
+v1.0.0 ships with zero legacy support. Note these points when upgrading into it:
+
+- **Destructive migration** — `20260830180000_no_legacy_v1` drops the `AIProviderConfig` and
+  `ProviderConfiguration` tables, the `AISystemSettings` columns
+  `activeProvider`/`activeModel`/`scopeModels`/`rateLimitSettings`, and the `UserProfile`
+  columns `sendSuccessEmails`/`sendFailureEmails`/`sendStreakEmails`. It also removes
+  `mastra_ai_spans`/`mastra_evals` from the Prisma schema (Mastra still owns those tables at
+  runtime). Applying it requires `ALLOW_DESTRUCTIVE_SCHEMA=true` on `migrate deploy`. **Take
+  the pre-upgrade `pg_dump` first** — rollback means restoring that backup.
+- **Automatic backfills** — no manual data steps are needed. A ledger-gated boot step
+  (`backfill:legacy secret re-encryption`) re-encrypts any secrets stored under an older
+  encryption format to AES-256-GCM `v2:` — now the only accepted ciphertext — before strict
+  reads matter, and the migration backfills `Integration.providerConfigId`. Let the first
+  boot of the new image complete before putting the instance under load.
+- **Deprecated env-var warnings removed** — the boot configuration checker no longer warns
+  about deprecated environment variables (the warning lists were deleted). Fatal guards for
+  missing required secrets still apply.
+
 ## Manual schema sync
 
 If you need an in-place schema sync outside the normal migration flow, use the helper script:
