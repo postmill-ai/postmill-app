@@ -69,7 +69,8 @@ describe('MastodonProvider.externalUrl (dynamic client registration)', () => {
       client_name: 'Postmill',
       redirect_uris: 'https://app.postmill.example/integrations/social/mastodon',
       // Mastodon's /api/v1/apps takes the scope list space-separated.
-      scopes: 'read:statuses write:statuses profile write:media',
+      scopes:
+        'read:statuses read:accounts write:statuses write:favourites profile write:media',
       website: 'https://app.postmill.example',
     });
   });
