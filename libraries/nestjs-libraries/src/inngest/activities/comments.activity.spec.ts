@@ -1,10 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { Logger } from '@nestjs/common';
 
-vi.mock('@postmill-ai/nestjs-libraries/integrations/provider-config.manager', () => ({
-  ProviderConfigManager: vi.fn(),
-}));
-
 vi.mock('@postmill-ai/nestjs-libraries/database/prisma/prisma.service', () => ({
   PrismaService: vi.fn(),
 }));

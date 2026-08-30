@@ -6,10 +6,6 @@ vi.mock('@postmill-ai/nestjs-libraries/integrations/integration.manager', () => 
   IntegrationManager: vi.fn(),
 }));
 
-vi.mock('@postmill-ai/nestjs-libraries/integrations/provider-config.manager', () => ({
-  ProviderConfigManager: vi.fn(),
-}));
-
 vi.mock('@postmill-ai/nestjs-libraries/database/prisma/prisma.service', () => ({
   PrismaService: vi.fn(),
 }));

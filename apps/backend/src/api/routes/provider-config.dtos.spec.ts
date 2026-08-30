@@ -10,7 +10,6 @@ import {
   UpsertContentPackConfigDto,
 } from '@postmill-ai/nestjs-libraries/dtos/providers/provider-config.dtos';
 import {
-  SaveAiProviderDto,
   UpsertOrgProviderConfigDto,
 } from '@postmill-ai/nestjs-libraries/dtos/providers/admin-ai-settings.dtos';
 
@@ -20,28 +19,6 @@ import {
 const PIPE = { whitelist: true, forbidNonWhitelisted: true } as const;
 
 describe('promoted provider DTOs (3.4)', () => {
-  it('SaveAiProviderDto accepts the known shape', async () => {
-    const dto = plainToInstance(SaveAiProviderDto, {
-      enabled: true,
-      credentials: { apiKey: 'sk' },
-      defaultModel: 'gpt-4o',
-      reasoningModel: 'o1',
-      extraConfig: { baseURL: 'https://x' },
-    });
-    expect(await validate(dto, PIPE)).toHaveLength(0);
-  });
-
-  it('SaveAiProviderDto rejects an unknown field', async () => {
-    const dto = plainToInstance(SaveAiProviderDto, { enabled: true, evil: 'x' });
-    const errors = await validate(dto, PIPE);
-    expect(errors.some((e) => e.property === 'evil')).toBe(true);
-  });
-
-  it('SaveAiProviderDto rejects a wrong-typed credentials blob', async () => {
-    const dto = plainToInstance(SaveAiProviderDto, { credentials: 'not-an-object' });
-    expect((await validate(dto, PIPE)).length).toBeGreaterThan(0);
-  });
-
   it('SetMediaStorageDto requires storageProviderId', async () => {
     const dto = plainToInstance(SetMediaStorageDto, { storageRootFolderId: 'f' });
     const errors = await validate(dto, PIPE);

@@ -368,25 +368,6 @@ paths:
           description: ""
       tags:
         - Auth
-  /public/agent:
-    post:
-      operationId: PublicController_createAgent
-      parameters: []
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: "#/components/schemas/CreateAgentDto"
-      responses:
-        "201":
-          description: ""
-          content:
-            application/json:
-              schema:
-                type: object
-      tags:
-        - Public
   /public/t:
     post:
       operationId: PublicController_trackEvent
@@ -4520,83 +4501,6 @@ paths:
           description: ""
       tags:
         - Announcements
-  /admin/channel-configs:
-    get:
-      deprecated: true
-      operationId: ChannelConfigController_listConfigs
-      parameters: []
-      responses:
-        "200":
-          description: ""
-          content:
-            application/json:
-              schema:
-                type: array
-                items:
-                  type: object
-      summary: ""
-      tags:
-        - Channel Config
-  /admin/channel-configs/{identifier}:
-    get:
-      deprecated: true
-      operationId: ChannelConfigController_getConfig
-      parameters:
-        - name: identifier
-          required: true
-          in: path
-          schema:
-            type: string
-      responses:
-        "200":
-          description: ""
-          content:
-            application/json:
-              schema:
-                type: object
-      summary: ""
-      tags:
-        - Channel Config
-    put:
-      deprecated: true
-      operationId: ChannelConfigController_saveConfig
-      parameters:
-        - name: identifier
-          required: true
-          in: path
-          schema:
-            type: string
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: "#/components/schemas/SaveChannelConfigDto"
-      responses:
-        "200":
-          description: ""
-      summary: ""
-      tags:
-        - Channel Config
-    delete:
-      deprecated: true
-      operationId: ChannelConfigController_deleteConfig
-      parameters:
-        - name: identifier
-          required: true
-          in: path
-          schema:
-            type: string
-      responses:
-        "200":
-          description: ""
-          content:
-            application/json:
-              schema:
-                type: object
-      summary: ""
-      tags:
-        - Channel Config
   /analytics/v2/overview:
     get:
       operationId: AnalyticsV2Controller_getOverview
@@ -5311,92 +5215,6 @@ paths:
           description: ""
       tags:
         - Analytics V2
-  /admin/ai-settings/providers:
-    get:
-      operationId: AiSettingsController_listProviders
-      parameters: []
-      responses:
-        "200":
-          description: ""
-      tags:
-        - AI Settings
-  /admin/ai-settings/providers/{identifier}:
-    get:
-      operationId: AiSettingsController_getProvider
-      parameters:
-        - name: identifier
-          required: true
-          in: path
-          schema:
-            type: string
-        - name: version
-          required: false
-          in: query
-          schema:
-            type: string
-      responses:
-        "200":
-          description: ""
-      tags:
-        - AI Settings
-    put:
-      operationId: AiSettingsController_saveProvider
-      parameters:
-        - name: identifier
-          required: true
-          in: path
-          schema:
-            type: string
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: "#/components/schemas/SaveAiProviderDto"
-      responses:
-        "200":
-          description: ""
-      tags:
-        - AI Settings
-  /admin/ai-settings/providers/{identifier}/test:
-    post:
-      operationId: AiSettingsController_testProvider
-      parameters:
-        - name: identifier
-          required: true
-          in: path
-          schema:
-            type: string
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: "#/components/schemas/TestAiProviderDto"
-      responses:
-        "201":
-          description: ""
-          content:
-            application/json:
-              schema:
-                type: object
-      tags:
-        - AI Settings
-  /admin/ai-settings/active:
-    put:
-      operationId: AiSettingsController_setActive
-      parameters: []
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: "#/components/schemas/SetActiveAiProviderDto"
-      responses:
-        "200":
-          description: ""
-      tags:
-        - AI Settings
   /admin/ai-settings/governance:
     get:
       operationId: AiSettingsController_getGovernance
@@ -5442,26 +5260,6 @@ paths:
           description: ""
       tags:
         - AI Settings
-  /admin/ai-settings/providers/{id}/preview:
-    post:
-      operationId: AiSettingsController_previewProvider
-      parameters:
-        - name: id
-          required: true
-          in: path
-          schema:
-            type: string
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: "#/components/schemas/PreviewAiProviderDto"
-      responses:
-        "201":
-          description: ""
-      tags:
-        - AI Settings
   /admin/ai-settings/rag:
     get:
       operationId: AiSettingsController_getRagSettings
@@ -5484,15 +5282,6 @@ paths:
           application/json:
             schema:
               $ref: "#/components/schemas/SaveRagSettingsDto"
-      responses:
-        "200":
-          description: ""
-      tags:
-        - AI Settings
-  /admin/ai-settings/media-providers:
-    get:
-      operationId: AiSettingsController_listMediaProviders
-      parameters: []
       responses:
         "200":
           description: ""
@@ -5938,8 +5727,7 @@ paths:
 
         It is on by default in the composer, so the spend controls matter: the
         minimum prefix below, the client's 1.2s debounce and prefix cache, and
-        `generateText`'s semantic cache. Note `BudgetMiddleware` does NOT block —
-        it logs and calls next() — so enforcement is `checkBudget` inside
+        `generateText`'s semantic cache. Budget enforcement is `checkBudget` inside
         `generateText`, whose throw the catch below turns into an empty suggestion.
 
         1. It is fired by *typing*, not by a click, so it must NEVER surface an
@@ -8823,7 +8611,7 @@ paths:
         - name: version
           required: false
           in: query
-          description: Optional provider version (e.g. "v1"). The provider id may also be passed qualified as "providerId@version" in the path. A bare id resolves the latest active version.
+          description: Provider version (e.g. "v1"). Required — either pass the provider id qualified as "providerId@version" in the path, or send this query param. A bare, unversioned id 404s.
           schema:
             type: string
       responses:
@@ -8869,6 +8657,10 @@ paths:
       responses:
         "201":
           description: ""
+          content:
+            application/json:
+              schema:
+                type: object
       security:
         - bearer: []
         - api-key: []
@@ -8886,6 +8678,10 @@ paths:
       responses:
         "200":
           description: ""
+          content:
+            application/json:
+              schema:
+                type: object
       security:
         - bearer: []
         - api-key: []
@@ -9101,60 +8897,6 @@ paths:
         - api-key: []
       tags:
         - Public API
-  /public/v1/analytics/{integration}:
-    get:
-      operationId: PublicIntegrationsController_getAnalytics
-      parameters:
-        - name: integration
-          required: true
-          in: path
-          schema:
-            type: string
-        - name: date
-          required: true
-          in: query
-          schema:
-            type: string
-      responses:
-        "200":
-          description: ""
-          content:
-            application/json:
-              schema:
-                type: array
-                items:
-                  type: object
-      security:
-        - bearer: []
-        - api-key: []
-      tags:
-        - Public API
-  /public/v1/analytics/post/{postId}:
-    get:
-      operationId: PublicIntegrationsController_getPostAnalytics
-      parameters:
-        - name: postId
-          required: true
-          in: path
-          schema:
-            type: string
-        - name: date
-          required: true
-          in: query
-          schema:
-            type: string
-      responses:
-        "200":
-          description: ""
-          content:
-            application/json:
-              schema:
-                type: object
-      security:
-        - bearer: []
-        - api-key: []
-      tags:
-        - Public API
   /public/v1/integration-trigger/{id}:
     post:
       operationId: PublicIntegrationsController_triggerIntegrationTool
@@ -9339,17 +9081,6 @@ components:
           type: string
       required:
         - refreshToken
-    CreateAgentDto:
-      type: object
-      properties:
-        text:
-          type: string
-          minLength: 1
-        apiKey:
-          type: string
-      required:
-        - text
-        - apiKey
     ConnectIntegrationDto:
       type: object
       properties:
@@ -10903,9 +10634,6 @@ components:
       required:
         - title
         - description
-    SaveChannelConfigDto:
-      type: object
-      properties: {}
     CreateAlertRuleDto:
       type: object
       properties:
@@ -11070,15 +10798,6 @@ components:
           maxLength: 100
         enabled:
           type: boolean
-    SaveAiProviderDto:
-      type: object
-      properties: {}
-    TestAiProviderDto:
-      type: object
-      properties: {}
-    SetActiveAiProviderDto:
-      type: object
-      properties: {}
     SaveGovernanceDto:
       type: object
       properties:
@@ -11086,23 +10805,16 @@ components:
           type: object
         budgetSettings:
           type: object
-        rateLimitSettings:
-          type: object
         observability:
           type: object
         mcpSettings:
           type: object
         ragSettings:
           type: object
-        scopeModels:
-          type: object
         fallbackProvider:
           type: string
         fallbackImageProvider:
           type: string
-    PreviewAiProviderDto:
-      type: object
-      properties: {}
     SaveRagSettingsDto:
       type: object
       properties: {}
