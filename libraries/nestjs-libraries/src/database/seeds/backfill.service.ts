@@ -131,13 +131,15 @@ export class BackfillService {
     plaintextFallback: boolean,
   ) {
     const delegate = (tx as any)[model];
+    // NOTE: no `{ [column]: { not: null } }` clause — Prisma rejects `not: null`
+    // on NON-nullable String fields (Integration.token, UsedCodes.code), and the
+    // typeof guard below already skips null values for the nullable columns.
     const rows: Array<{ id: string; [key: string]: unknown }> =
       await delegate.findMany({
         where: {
           AND: [
-            { [column]: { not: null } },
             { [column]: { not: '' } },
-            { [column]: { not: { startsWith: 'v2:' } } },
+            { NOT: { [column]: { startsWith: 'v2:' } } },
           ],
         },
         select: { id: true, [column]: true },
