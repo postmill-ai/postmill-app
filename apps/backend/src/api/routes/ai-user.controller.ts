@@ -957,8 +957,7 @@ Choose ${count} distinct tones from options like: professional, casual, humorous
    *
    * It is on by default in the composer, so the spend controls matter: the
    * minimum prefix below, the client's 1.2s debounce and prefix cache, and
-   * `generateText`'s semantic cache. Note `BudgetMiddleware` does NOT block —
-   * it logs and calls next() — so enforcement is `checkBudget` inside
+   * `generateText`'s semantic cache. Budget enforcement is `checkBudget` inside
    * `generateText`, whose throw the catch below turns into an empty suggestion.
    *
    * 1. It is fired by *typing*, not by a click, so it must NEVER surface an

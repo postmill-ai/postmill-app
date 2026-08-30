@@ -108,7 +108,7 @@ pnpm run prisma-migrate-deploy
 1. **Migration drift check** — applies the committed migrations to an empty CI Postgres with `prisma-migrate-deploy`, then runs `prisma migrate diff --from-url "$DATABASE_URL" --to-schema-datamodel [schema] --exit-code`. It exits 0 only when the deployed migrations fully represent the schema; a schema edit committed **without** a matching migration makes it exit 2 and fails the job.
 2. **Destructive schema guard** — diffs the PR schema against `origin/main`'s schema and runs `schema-destructive-guard.mjs --file` on the result, so a destructive change cannot merge without the `ALLOW_DESTRUCTIVE_SCHEMA` override.
 
-> **Destructive pushes are exceptional.** Before v1.0.0 (pre-release internal development), a single reviewed destructive push dropped the dead marketplace/stars models, the legacy `UserOrganization.role` enum column, the migrated `User` profile columns, and the `imageModel` columns — only after every reader/writer had been cut over, a grep proved zero source references, and a **DB snapshot was taken immediately before the push**. Follow that procedure for any future drop; see [Upgrading → Migrating from a pre-release build](../operations-guide/upgrading.md#migrating-from-a-pre-release-build).
+> **Destructive pushes are exceptional** — they require the expand-contract procedure plus a DB snapshot taken immediately before the push.
 
 ---
 
@@ -164,7 +164,7 @@ See [Backend Conventions](./backend-conventions.md) for the full layering rules 
 | `oauth/` | OAuth app and authorization management |
 | `organizations/` | Organization and user-org relationship |
 | `posts/` | Post CRUD, state transitions, recursive queries |
-| `provider-configs/` | `OrgProviderConfiguration` and legacy `ProviderConfiguration` |
+| `provider-configs/` | `OrgProviderConfiguration` |
 | `roles/` | RBAC roles and permissions (`AppRole`/`Permission`) |
 | `sets/` | Content set management |
 | `short-links/` | Per-org short-link provider config |

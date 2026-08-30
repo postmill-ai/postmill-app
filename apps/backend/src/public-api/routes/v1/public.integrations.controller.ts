@@ -56,6 +56,18 @@ const { fromBuffer } = require('file-type');
 // J2 — hard cap for the public `/posts` list (default page size == max).
 const PUBLIC_POSTS_MAX_LIMIT = 100;
 
+// Public v1 contract for POST /generate-video and GET /generate-video/:id —
+// the media-job-native shape (aligned with the authenticated GET /media/jobs/:id
+// surface). `artifactUrl` is the finished media URL only when status is
+// 'completed'; `error` carries the failure reason only on a 'failed' job.
+interface GenerateVideoJobResponse {
+  id: string | null;
+  status: 'pending' | 'completed' | 'failed';
+  artifactUrl: string | null;
+  provider: string | null;
+  error: string | null;
+}
+
 const PUBLIC_API_ALLOWED_MIME = new Set<string>([
   'image/jpeg',
   'image/png',
@@ -193,18 +205,11 @@ export class PublicIntegrationsController {
     Sentry.metrics.count('public_api-request', 1);
     const all = await this._postsService.getPosts(org.id, query);
 
-    // J2 — bound the previously-unbounded array. Back-compat: when no paging
-    // param is sent we still return `{ posts }`, just capped at the hard max
-    // rather than the whole window.
+    // J2 — bound the previously-unbounded array: always the paged shape, capped
+    // at the hard max when no paging params are sent.
     const offset = query.cursor ?? 0;
     const limit = query.limit ?? PUBLIC_POSTS_MAX_LIMIT;
     const posts = all.slice(offset, offset + limit);
-
-    // J2 back-compat: legacy n8n/Zapier clients expect `{ posts }`. Only include
-    // the paging cursor when the caller explicitly requested pagination.
-    if (query.cursor === undefined && query.limit === undefined) {
-      return { posts };
-    }
 
     const nextOffset = offset + limit;
     const cursor = nextOffset < all.length ? nextOffset : null;
@@ -350,7 +355,7 @@ export class PublicIntegrationsController {
     name: 'version',
     required: false,
     description:
-      'Optional provider version (e.g. "v1"). The provider id may also be passed qualified as "providerId@version" in the path. A bare id resolves the latest active version.',
+      'Provider version (e.g. "v1"). Required — either pass the provider id qualified as "providerId@version" in the path, or send this query param. A bare, unversioned id 404s.',
   })
   @ApiResponse({
     status: 410,
@@ -364,9 +369,10 @@ export class PublicIntegrationsController {
     @Query('version') version?: string
   ) {
     Sentry.metrics.count('public_api-request', 1);
-    // Accept either a qualified id ("providerId@version") in the path or an
-    // optional ?version= query param. A bare id keeps the original behaviour
-    // (resolve the latest active version) for n8n/Zapier backward compatibility.
+    // The provider must be addressed with an explicit version — either a
+    // qualified id ("providerId@version") in the path or the ?version= query
+    // param. A bare, unversioned id is not resolved to a latest version; like
+    // an unknown version, it 404s.
     const { providerId, version: qualifiedVersion } = parseQualified(integration);
     const requestedVersion = qualifiedVersion ?? version;
 
@@ -378,23 +384,25 @@ export class PublicIntegrationsController {
       throw new HttpException({ msg: 'Integration not allowed' }, 400);
     }
 
-    let integrationProvider =
-      await this._integrationManager.getSocialIntegration(providerId);
+    if (!requestedVersion) {
+      throw new HttpException(
+        { msg: 'Integration version not available' },
+        404
+      );
+    }
 
-    // When a specific version is requested, pin to that version through the
-    // kernel resolution path; an unknown version resolves to undefined → 404.
-    if (requestedVersion) {
-      const pinned = this._integrationManager.getSocialIntegrationUnchecked(
+    // Pin to the requested version through the kernel resolution path; an
+    // unknown version resolves to undefined → 404.
+    const integrationProvider =
+      this._integrationManager.getSocialIntegrationUnchecked(
         providerId,
         requestedVersion
       );
-      if (!pinned) {
-        throw new HttpException(
-          { msg: 'Integration version not available' },
-          404
-        );
-      }
-      integrationProvider = pinned;
+    if (!integrationProvider) {
+      throw new HttpException(
+        { msg: 'Integration version not available' },
+        404
+      );
     }
 
     if (integrationProvider.externalUrl) {
@@ -444,7 +452,7 @@ export class PublicIntegrationsController {
   async generateVideo(
     @GetOrgFromRequest() org: Organization,
     @Body() body: VideoDto
-  ) {
+  ): Promise<GenerateVideoJobResponse> {
     Sentry.metrics.count('public_api-request', 1);
 
     const params = body.customParams || {};
@@ -477,56 +485,52 @@ export class PublicIntegrationsController {
       throw err;
     }
 
-    // FROZEN PUBLIC CONTRACT — do not change field names/semantics without a new
-    // versioned route. Legacy n8n/Zapier clients read `response.path` as the finished
-    // video URL. This endpoint used to be synchronous (always a URL); it is now async,
-    // so the response is self-describing and back-compatible:
-    //   - `id`     : back-compat — '' when completed, the AIMediaJob id when pending
-    //                (matches the historical { id, path, name } File-like shape).
-    //   - `status` : 'completed' when a finished URL is available synchronously
-    //                (image / data: / url fallback), 'pending' when a job was queued.
-    //   - `jobId`  : the AIMediaJob id when pending, '' otherwise.
-    //   - `path`   : the finished media URL when completed; '' when pending (poll instead).
-    //   - `name`   : preserved from the historical shape (always '').
-    //   - `pollUrl`: when pending, the public route to GET (with the same API key) to poll
-    //                job completion — `GET /public/v1/generate-video/:id` below; '' when completed.
+    // Public contract (v1): the media-job-native shape, aligned with the
+    // authenticated `GET /media/jobs/:id` surface.
+    //   - `id`         : the AIMediaJob id when a job was queued; null on a
+    //                    synchronous completion (no job row exists).
+    //   - `status`     : 'completed' when a finished URL is available
+    //                    synchronously (image / data: / url fallback), 'pending'
+    //                    when a job was queued — poll
+    //                    `GET /public/v1/generate-video/:id` until terminal.
+    //   - `artifactUrl`: the finished media URL when completed; null while pending.
+    //   - `provider`   : the media provider that ran the job; null here (only
+    //                    known on the job row, exposed by the poll route).
+    //   - `error`      : failure reason on a failed job; null here.
     const looksLikeUrl =
       typeof artifact === 'string' &&
       (artifact.startsWith('http') || artifact.startsWith('data:'));
 
     if (looksLikeUrl) {
       return {
-        id: '',
+        id: null,
         status: 'completed',
-        jobId: '',
-        path: artifact,
-        name: '',
-        pollUrl: '',
+        artifactUrl: artifact,
+        provider: null,
+        error: null,
       };
     }
 
     return {
       id: artifact,
       status: 'pending',
-      jobId: artifact,
-      path: '',
-      name: '',
-      pollUrl: `/public/v1/generate-video/${artifact}`,
+      artifactUrl: null,
+      provider: null,
+      error: null,
     };
   }
 
   // Public, API-key-reachable poll route for the async /generate-video job above.
-  // FROZEN PUBLIC CONTRACT — mirrors the generate-video response keys so a legacy client
-  // can GET this with the same API key until it reaches a terminal state and read `path`.
-  // `status` is one of 'pending' | 'completed' | 'failed'. `completed` and `failed` are
-  // BOTH terminal — `pollUrl` is '' for either so a client looping `while (pollUrl)` (or
-  // `while (status === 'pending')`) stops on failure instead of polling a dead job forever.
-  // `error` carries the failure reason on a failed job ('' otherwise).
+  // Same media-job-native contract as the POST response. `status` is one of
+  // 'pending' | 'completed' | 'failed' — 'completed' and 'failed' are BOTH
+  // terminal, so a client looping `while (status === 'pending')` stops on failure
+  // instead of polling a dead job forever. `artifactUrl` carries the finished
+  // media URL on completion, `error` the failure reason on a failed job.
   @Get('/generate-video/:id')
   async getGenerateVideoJob(
     @GetOrgFromRequest() org: Organization,
     @Param('id') id: string
-  ) {
+  ): Promise<GenerateVideoJobResponse> {
     Sentry.metrics.count('public_api-request', 1);
 
     const job = await this._aiMediaService.getJob(id, org.id);
@@ -536,15 +540,12 @@ export class PublicIntegrationsController {
 
     const completed = job.status === 'completed';
     const failed = job.status === 'failed';
-    const terminal = completed || failed;
     return {
       id: job.id,
       status: completed ? 'completed' : failed ? 'failed' : 'pending',
-      jobId: job.id,
-      path: completed ? job.artifactUrl || '' : '',
-      name: '',
-      pollUrl: terminal ? '' : `/public/v1/generate-video/${job.id}`,
-      error: job.error || '',
+      artifactUrl: completed ? job.artifactUrl || null : null,
+      provider: job.provider,
+      error: failed ? job.error || null : null,
     };
   }
 
@@ -673,11 +674,10 @@ export class PublicIntegrationsController {
     return this._postsService.updateReleaseId(org.id, id, body.releaseId);
   }
 
-  // 6.8: public v2 campaign analytics. Registered BEFORE the single-segment
-  // `/analytics/:integration` legacy route so the static two-segment path isn't
-  // captured by the param route. Gated like `/analytics/overview` — the public
-  // per-minute @Throttle, no @CheckPolicies (API-key read parity with the legacy
-  // siblings). Org-ownership is enforced by CampaignsService.get (→ 404).
+  // 6.8: public v2 campaign analytics. Gated like `/analytics/overview` — the
+  // public per-minute @Throttle, no @CheckPolicies (API-key read parity across
+  // the public analytics routes). Org-ownership is enforced by
+  // CampaignsService.get (→ 404).
   @Get('/analytics/campaign/:id')
   @Throttle({ default: { limit: 60, ttl: 60000 } })
   async getCampaignAnalytics(
@@ -713,9 +713,8 @@ export class PublicIntegrationsController {
     return { ...overview, window: { from, to } };
   }
 
-  // 6.8: public v2 anomaly feed. Static single-segment path — registered before
-  // `/analytics/:integration` so it resolves to this route, not the param one.
-  // Same gating as `/analytics/overview` (@Throttle, no @CheckPolicies).
+  // 6.8: public v2 anomaly feed. Same gating as `/analytics/overview`
+  // (@Throttle, no @CheckPolicies).
   @Get('/analytics/anomalies')
   @Throttle({ default: { limit: 60, ttl: 60000 } })
   async getAnomalies(
@@ -730,16 +729,11 @@ export class PublicIntegrationsController {
     });
   }
 
-  // R2.7 (M9): the static `/analytics/overview` route MUST be registered BEFORE
-  // the single-segment `/analytics/:integration` param route — Express resolves by
-  // registration order, so declared after it `overview` was captured as
-  // integration='overview' and 500'd (its @Throttle + docs were dead). Same
-  // pattern the branch already applied to `/analytics/anomalies` above.
   @Get('/analytics/overview')
-  // 0.8: kept ungated by @CheckPolicies to match its legacy siblings (:636/:646,
-  // n8n/Zapier compat) — API-key read routes carry no entitlement gate. Instead it
-  // carries the documented public per-minute @Throttle (org-scoped via the guard's
-  // getTracker on req.org.id) since the overview can fan out to live provider analytics.
+  // 0.8: ungated by @CheckPolicies — API-key read routes carry no entitlement
+  // gate. Instead it carries the documented public per-minute @Throttle
+  // (org-scoped via the guard's getTracker on req.org.id) since the overview can
+  // fan out to live provider analytics.
   @Throttle({ default: { limit: 60, ttl: 60000 } })
   async getAnalyticsOverview(
     @GetOrgFromRequest() org: Organization,
@@ -762,26 +756,6 @@ export class PublicIntegrationsController {
       integrations ? integrations.split(',') : [],
       compare === 'true'
     );
-  }
-
-  @Get('/analytics/:integration')
-  async getAnalytics(
-    @GetOrgFromRequest() org: Organization,
-    @Param('integration') integration: string,
-    @Query('date') date: string
-  ) {
-    Sentry.metrics.count('public_api-request', 1);
-    return this._integrationService.checkAnalytics(org, integration, date);
-  }
-
-  @Get('/analytics/post/:postId')
-  async getPostAnalytics(
-    @GetOrgFromRequest() org: Organization,
-    @Param('postId') postId: string,
-    @Query('date') date: string
-  ) {
-    Sentry.metrics.count('public_api-request', 1);
-    return this._postsService.checkPostAnalytics(org.id, postId, +date);
   }
 
   @Post('/integration-trigger/:id')

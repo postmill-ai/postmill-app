@@ -13,14 +13,13 @@ import { useT } from '@postmill-ai/react/translation/get.transation.service.clie
 /**
  * The Shadow section on the image and shape inspectors.
  *
- * It used to write `element.boxShadow`, which **no renderer read** — four
- * controls that changed a stored field and nothing on screen, sitting directly
- * above an Effects panel whose drop shadow works. It now writes that same
- * drop-shadow effect, so the two are one feature with two front doors: this
- * simple x/y/blur one, and the full Photoshop-style controls in Effects.
+ * It writes a drop-shadow layer style — the same effect the full
+ * Photoshop-style controls in the Effects panel edit — so the two are one
+ * feature with two front doors: this simple x/y/blur one, and Effects.
  *
- * Legacy `boxShadow` on an existing document still renders (`elementStyles`
- * translates it) and is shown here; the first edit migrates it to an effect.
+ * A stored `boxShadow` field (the pre-Effects section no renderer ever read)
+ * is NOT shown or translated: v1 ships zero legacy support, so such a
+ * document simply renders without the shadow.
  */
 const DEFAULT_SHADOW = { color: '#000000', blur: 4, offsetX: 2, offsetY: 2 };
 
@@ -103,10 +102,7 @@ export const ShadowSection: FC<{
   const t = useT();
   const styles = (element.styles ?? []) as DesignerLayerStyle[];
   const index = styles.findIndex((s) => s.type === 'drop-shadow');
-  const legacy = element.boxShadow;
-  // An explicit effect wins over a legacy field, matching `elementStyles`.
-  const style: DesignerLayerStyle | undefined =
-    index >= 0 ? styles[index] : legacy ? styleFromBoxShadow(legacy) : undefined;
+  const style: DesignerLayerStyle | undefined = index >= 0 ? styles[index] : undefined;
   const on = !!style && style.enabled !== false;
 
   const offset = style ? styleOffset(style) : { x: 0, y: 0 };
@@ -119,12 +115,11 @@ export const ShadowSection: FC<{
     offsetY: Math.round(offset.y),
   };
 
-  /** Write the effect and retire the legacy field in the same patch. */
+  /** Write (or clear) the drop-shadow effect. */
   const write = (next: DesignerLayerStyle | undefined) => {
     const rest = styles.filter((s) => s.type !== 'drop-shadow');
     set({
       styles: next ? [...rest, next] : rest,
-      boxShadow: undefined,
     } as Partial<DesignerElement>);
   };
 

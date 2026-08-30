@@ -1087,7 +1087,7 @@ describe('IntegrationManager', () => {
     });
   });
 
-  // ---- Credential resolution (org BYO > platform env app) ----
+  // ---- Credential resolution (explicit configId BYO > platform env app) ----
 
   describe('getClientInformation', () => {
     it('returns env app credentials without an orgId (env-only resolution)', async () => {
@@ -1111,7 +1111,7 @@ describe('IntegrationManager', () => {
       expect(result).toBeUndefined();
     });
 
-    it('org credentials win over the env app (BYO override)', async () => {
+    it('does NOT resolve org credentials without an explicit configId (no primary-config fallback)', async () => {
       stubEnvApp('x');
       mockOrgPcm.getClientInfo.mockResolvedValue({
         client_id: 'org-id',
@@ -1121,20 +1121,36 @@ describe('IntegrationManager', () => {
 
       const result = await manager.getClientInformation('x', 'org-1');
 
-      expect(mockOrgPcm.getClientInfo).toHaveBeenCalledWith('org-1', 'x');
+      // The by-identifier fallback is gone: the env app wins, the org's
+      // primary config is never even queried.
+      expect(mockOrgPcm.getClientInfo).not.toHaveBeenCalled();
+      expect(mockOrgPcm.getClientInfoById).not.toHaveBeenCalled();
       expect(result).toEqual({
-        client_id: 'org-id',
-        client_secret: 'org-secret',
+        client_id: 'x-id',
+        client_secret: 'x-secret',
         instanceUrl: '',
         version: 'v1',
       });
     });
 
-    it('falls back to the env app when the org has no credentials', async () => {
-      stubEnvApp('x');
-      mockOrgPcm.getClientInfo.mockResolvedValue(undefined);
-
+    it('returns undefined with an orgId, no configId and no env app', async () => {
       const result = await manager.getClientInformation('x', 'org-1');
+
+      expect(mockOrgPcm.getClientInfo).not.toHaveBeenCalled();
+      expect(result).toBeUndefined();
+    });
+
+    it('still warms the org credential cache without a configId (plug warm path)', async () => {
+      await manager.getClientInformation('x', 'org-1');
+
+      expect(mockOrgPcm.ensureFresh).toHaveBeenCalledWith('org-1');
+    });
+
+    it('falls back to the env app when the named config resolves no credentials', async () => {
+      stubEnvApp('x');
+      mockOrgPcm.getClientInfoById.mockResolvedValue(undefined);
+
+      const result = await manager.getClientInformation('x', 'org-1', 'cfg-1');
 
       expect(result).toEqual({
         client_id: 'x-id',

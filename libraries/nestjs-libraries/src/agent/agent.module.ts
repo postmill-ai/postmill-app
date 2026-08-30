@@ -1,10 +1,9 @@
 import { Global, Module } from '@nestjs/common';
 import { AgentGraphService } from '@postmill-ai/nestjs-libraries/agent/agent.graph.service';
-import { AgentGraphInsertService } from '@postmill-ai/nestjs-libraries/agent/agent.graph.insert.service';
 
 @Global()
 @Module({
-  providers: [AgentGraphService, AgentGraphInsertService],
+  providers: [AgentGraphService],
   get exports() {
     return this.providers;
   },

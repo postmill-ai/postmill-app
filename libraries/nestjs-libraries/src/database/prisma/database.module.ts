@@ -64,9 +64,6 @@ import { OAuthRepository } from '@postmill-ai/nestjs-libraries/database/prisma/o
 import { OAuthService } from '@postmill-ai/nestjs-libraries/database/prisma/oauth/oauth.service';
 import { AnnouncementsRepository } from '@postmill-ai/nestjs-libraries/database/prisma/announcements/announcements.repository';
 import { AnnouncementsService } from '@postmill-ai/nestjs-libraries/database/prisma/announcements/announcements.service';
-import { ProviderConfigService } from '@postmill-ai/nestjs-libraries/database/prisma/provider-configs/provider-config.service';
-import { ProviderConfigRepository } from '@postmill-ai/nestjs-libraries/database/prisma/provider-configs/provider-config.repository';
-import { ProviderConfigManager } from '@postmill-ai/nestjs-libraries/integrations/provider-config.manager';
 import { OrgProviderConfigService } from '@postmill-ai/nestjs-libraries/database/prisma/provider-configs/org-provider-config.service';
 import { OrgProviderConfigRepository } from '@postmill-ai/nestjs-libraries/database/prisma/provider-configs/org-provider-config.repository';
 import { FeaturedProviderRepository } from '@postmill-ai/nestjs-libraries/database/prisma/featured-providers/featured-provider.repository';
@@ -184,9 +181,6 @@ import { AnalyticsShareService } from '@postmill-ai/nestjs-libraries/analytics/a
     OAuthService,
     AnnouncementsRepository,
     AnnouncementsService,
-    ProviderConfigManager,
-    ProviderConfigService,
-    ProviderConfigRepository,
     FeaturedProviderRepository,
     FeaturedProviderService,
     SocialCommentsService,

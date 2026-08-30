@@ -1,19 +1,4 @@
-import { IsOptional, IsString, IsObject, ValidateNested } from 'class-validator';
-import { Type } from 'class-transformer';
-
-export class ScopeModelEntryDto {
-  @IsOptional()
-  @IsString()
-  provider?: string;
-
-  @IsOptional()
-  @IsString()
-  model?: string;
-
-  @IsOptional()
-  @IsString()
-  version?: string;
-}
+import { IsOptional, IsString, IsObject } from 'class-validator';
 
 export class SaveGovernanceDto {
   @IsOptional()
@@ -26,10 +11,6 @@ export class SaveGovernanceDto {
 
   @IsOptional()
   @IsObject()
-  rateLimitSettings?: Record<string, any>;
-
-  @IsOptional()
-  @IsObject()
   observability?: Record<string, any>;
 
   @IsOptional()
@@ -39,12 +20,6 @@ export class SaveGovernanceDto {
   @IsOptional()
   @IsObject()
   ragSettings?: Record<string, any>;
-
-  @IsOptional()
-  @IsObject()
-  @ValidateNested({ each: true })
-  @Type(() => ScopeModelEntryDto)
-  scopeModels?: Record<string, ScopeModelEntryDto>;
 
   @IsOptional()
   @IsString()

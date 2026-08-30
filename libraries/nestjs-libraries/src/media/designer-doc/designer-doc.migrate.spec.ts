@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { migrateDoc } from './designer-doc.migrate';
+import { DESIGNER_DOC_VERSION, migrateDoc } from './designer-doc.migrate';
 
 /**
  * Loading a saved document. Anything `migrateDoc` forgets to copy across is
@@ -35,5 +35,19 @@ describe('doc-level symbols (v6)', () => {
 
   it('ignores a symbols value that is not a list', () => {
     expect('symbols' in (migrateDoc(doc({ symbols: 'nope' })) as object)).toBe(false);
+  });
+
+  it('stamps a current-shape doc missing a version', () => {
+    const { version, ...rest } = doc();
+    expect(migrateDoc(rest).version).toBe(DESIGNER_DOC_VERSION);
+  });
+});
+
+describe('zero legacy support', () => {
+  it('does not rewrite a legacy root shape — it passes through for the schema to reject', () => {
+    const legacy = { version: 1, width: 1080, height: 1080, pages: [] };
+    expect(migrateDoc(legacy)).toBe(legacy);
+    expect(migrateDoc(undefined)).toBeUndefined();
+    expect(migrateDoc(null)).toBeNull();
   });
 });

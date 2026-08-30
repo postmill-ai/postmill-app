@@ -318,38 +318,6 @@ describe('rename requests', () => {
 });
 
 describe('migrateDoc', () => {
-  it('migrates a legacy page-based doc to the new outputs shape', () => {
-    const legacy = {
-      version: 1,
-      width: 1080,
-      height: 1080,
-      pages: [
-        {
-          id: 'page-1',
-          background: '#000000',
-          children: [
-            { id: 'el-1', type: 'text', x: 10, y: 20, width: 100, height: 30, rotation: 0, opacity: 1, locked: false, hidden: false, text: 'Hello' },
-          ],
-        },
-      ],
-    };
-
-    const doc = migrateDoc(legacy);
-
-    expect(doc.mode).toBe('image');
-    // A legacy doc is stamped with whatever the current schema version is;
-    // asserting the constant keeps this from going stale on every bump.
-    expect(doc.version).toBe(DESIGNER_DOC_VERSION);
-    expect(doc.outputs).toHaveLength(1);
-    expect(doc.outputs[0].width).toBe(1080);
-    expect(doc.outputs[0].height).toBe(1080);
-    expect(doc.outputs[0].background).toBe('#000000');
-    expect(doc.outputs[0].children).toHaveLength(1);
-    expect(doc.outputs[0].children[0].text).toBe('Hello');
-    expect(doc.outputs[0].formatId).toBe('ig-post');
-    expect(doc.outputs[0].name).toBeTruthy();
-  });
-
   it('leaves a new outputs-based doc unchanged', () => {
     const newDoc = {
       version: DESIGNER_DOC_VERSION,
@@ -366,7 +334,7 @@ describe('migrateDoc', () => {
 });
 
 describe('Designer smoke: multi-format linked editing', () => {
-  it('adds text and image across two tabs, undo removes from both, and legacy loads intact', () => {
+  it('adds text and image across two tabs, undo removes from both', () => {
     const store = createDesignerStore(1080, 1080);
     const { result } = renderHook(() => store());
 
@@ -402,22 +370,6 @@ describe('Designer smoke: multi-format linked editing', () => {
 
     expect(result.current.doc.outputs[0].children).toHaveLength(1);
     expect(result.current.doc.outputs[1].children).toHaveLength(1);
-
-    act(() => {
-      result.current.loadDesign(
-        {
-          version: 1,
-          width: 1080,
-          height: 1080,
-          pages: [{ id: 'legacy-page', background: '#eeeeee', children: [{ id: 'legacy-el', type: 'shape', x: 0, y: 0, width: 100, height: 100, rotation: 0, opacity: 1, locked: false, hidden: false, shape: 'rect' }] }],
-        },
-        'design-legacy',
-        'Legacy Design'
-      );
-    });
-
-    expect(result.current.doc.outputs).toHaveLength(1);
-    expect(result.current.doc.outputs[0].children[0].type).toBe('shape');
   });
 });
 

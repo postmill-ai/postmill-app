@@ -10,7 +10,7 @@ Postmill integrates with external services across AI, media generation, social c
 - First-class versioning: a provider's adapter for a given API era is a discrete, immutable **version** (`v1`, `v2`, …). Multiple versions can run side-by-side.
 - Pin-on-write: every stored config, ledger, and integration row records the exact provider version it was created against.
 - Graceful lifecycle: each version has a status (`preview → active → deprecated → retired`) with optional sunset dates surfaced to admins and the catalog API.
-- Operational simplicity: a single resolution path — the kernel — for every domain, with no parallel legacy registries to keep in sync.
+- Operational simplicity: a single resolution path — the kernel — for every domain, with no parallel registries to keep in sync.
 
 ## Architecture
 
@@ -107,7 +107,7 @@ Usage:
 
 ## Resolution path
 
-The kernel is the **sole** resolution path for every domain. The `PROVIDER_KERNEL=legacy` kill switch and the legacy in-memory registries that backed it have been removed — there is no fallback registry.
+The kernel is the **sole** resolution path for every domain — there is no fallback registry.
 
 `ProviderResolutionService` exposes typed helpers for each domain (`resolveAI`, `resolveMedia`, `resolveShortLink`, `resolveVpn`, `resolveEmail`, `resolveStorage`, `resolveSocial`, `resolveContentPack`). Each call returns a telemetry-wrapped capability instance cached by `(domain/providerId@version, orgId, credentials/extras fingerprint)`. Config-mutation services must call `invalidate()` or `invalidateOrg()` after credential changes so the next resolve rebuilds the capability with fresh credentials.
 

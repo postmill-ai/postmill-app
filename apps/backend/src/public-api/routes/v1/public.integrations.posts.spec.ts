@@ -34,11 +34,11 @@ describe('PublicIntegrationsController.getPosts — J2 pagination cap', () => {
   const query = (extra: Record<string, any> = {}) =>
     ({ startDate: 'x', endDate: 'y', ...extra }) as any;
 
-  it('caps the default response at max without a cursor (legacy back-compat)', async () => {
+  it('caps the default response at the hard max and returns a next cursor', async () => {
     const { ctrl } = make(250);
     const res = await ctrl.getPosts(org, query());
     expect(res.posts).toHaveLength(100);
-    expect(res).not.toHaveProperty('cursor');
+    expect(res.cursor).toBe(100);
   });
 
   it('returns a next cursor when paging is explicitly requested', async () => {
@@ -56,11 +56,11 @@ describe('PublicIntegrationsController.getPosts — J2 pagination cap', () => {
     expect(res.cursor).toBeNull();
   });
 
-  it('returns all posts with no cursor when under the cap and no paging params', async () => {
+  it('always returns the paged { posts, cursor } shape, even with no paging params', async () => {
     const { ctrl, all } = make(12);
     const res = await ctrl.getPosts(org, query());
     expect(res.posts).toEqual(all);
-    expect(res).not.toHaveProperty('cursor');
+    expect(res.cursor).toBeNull();
   });
 });
 
@@ -192,7 +192,7 @@ describe('PublicIntegrationsController.integration-trigger — 4.2c bounded refr
   });
 });
 
-describe('PublicIntegrationsController.generate-video — legacy public API re-point', () => {
+describe('PublicIntegrationsController.generate-video — media-job-native public contract', () => {
   const org = { id: 'org-1' } as any;
 
   const make = (overrides: {
@@ -213,56 +213,43 @@ describe('PublicIntegrationsController.generate-video — legacy public API re-p
     return { ctrl, aiDefaults };
   };
 
-  // FROZEN PUBLIC CONTRACT — these assertions guard the documented self-describing,
-  // back-compatible response shape that legacy n8n/Zapier clients depend on. The
-  // response is { id, status, jobId, path, name, pollUrl }. `path` is the finished
-  // video URL ONLY when status === 'completed'; when 'pending' the client must poll
-  // `pollUrl`. Do NOT relax these to mirror the implementation — if the shape changes,
-  // that is a breaking change to the public API and requires a new versioned route.
+  // Public contract (v1): the media-job-native shape { id, status, artifactUrl,
+  // provider, error } — aligned with the authenticated GET /media/jobs/:id
+  // surface. `artifactUrl` is the finished video URL ONLY when
+  // status === 'completed'; when 'pending' the client polls
+  // GET /public/v1/generate-video/:id until a terminal state.
 
-  it('PENDING: queued async job returns the documented self-describing shape with a pollUrl', async () => {
+  it('PENDING: queued async job returns the job id with a pending status', async () => {
     const { ctrl, aiDefaults } = make({ textToVideo: 'job-123' });
     const res = await ctrl.generateVideo(org, {
       type: 'text-to-video',
       output: 'vertical',
       customParams: { prompt: 'a cat' },
     });
-    // Full frozen contract for the queued case.
     expect(res).toEqual({
       id: 'job-123',
       status: 'pending',
-      jobId: 'job-123',
-      path: '',
-      name: '',
-      pollUrl: '/public/v1/generate-video/job-123',
+      artifactUrl: null, // never a URL while pending
+      provider: null,
+      error: null,
     });
-    // Guard the load-bearing invariants explicitly (not just deep-equality).
-    expect(res.status).toBe('pending');
-    expect(res.path).toBe(''); // never a URL while pending
-    expect(res.pollUrl).toBe(`/public/v1/generate-video/${res.jobId}`); // poll target is set
     expect(aiDefaults.textToVideo).toHaveBeenCalledWith('org-1', 'a cat');
   });
 
-  it('COMPLETED: synchronous URL fallback returns path=URL, status=completed, empty pollUrl', async () => {
+  it('COMPLETED: synchronous URL fallback returns artifactUrl=URL, status=completed, null id', async () => {
     const { ctrl } = make({ textToVideo: 'https://cdn/fallback.png' });
     const res = await ctrl.generateVideo(org, {
       type: 'text-to-video',
       output: 'vertical',
       customParams: { prompt: 'a cat' },
     });
-    // Full frozen contract for the synchronous/completed case.
     expect(res).toEqual({
-      id: '',
+      id: null, // no job row exists for a synchronous completion
       status: 'completed',
-      jobId: '',
-      path: 'https://cdn/fallback.png',
-      name: '',
-      pollUrl: '',
+      artifactUrl: 'https://cdn/fallback.png',
+      provider: null,
+      error: null,
     });
-    // Legacy clients read `response.path` as the finished URL — this MUST hold.
-    expect(res.status).toBe('completed');
-    expect(res.path).toBe('https://cdn/fallback.png');
-    expect(res.pollUrl).toBe(''); // nothing to poll when already complete
   });
 
   it('routes imageUrl to image-to-video (pending contract)', async () => {
@@ -275,10 +262,9 @@ describe('PublicIntegrationsController.generate-video — legacy public API re-p
     expect(res).toEqual({
       id: 'job-i2v',
       status: 'pending',
-      jobId: 'job-i2v',
-      path: '',
-      name: '',
-      pollUrl: '/public/v1/generate-video/job-i2v',
+      artifactUrl: null,
+      provider: null,
+      error: null,
     });
     expect(aiDefaults.imageToVideo).toHaveBeenCalledWith(
       'org-1',
@@ -297,10 +283,9 @@ describe('PublicIntegrationsController.generate-video — legacy public API re-p
     expect(res).toEqual({
       id: 'job-v2v',
       status: 'pending',
-      jobId: 'job-v2v',
-      path: '',
-      name: '',
-      pollUrl: '/public/v1/generate-video/job-v2v',
+      artifactUrl: null,
+      provider: null,
+      error: null,
     });
     expect(aiDefaults.videoToVideo).toHaveBeenCalledWith(
       'org-1',
@@ -309,7 +294,7 @@ describe('PublicIntegrationsController.generate-video — legacy public API re-p
     );
   });
 
-  // FROZEN PUBLIC CONTRACT — the API-key-reachable poll route for the async job above.
+  // The API-key-reachable poll route for the async job above — same contract.
   const makePoll = (job: any) => {
     const aiMediaService = { getJob: vi.fn().mockResolvedValue(job) };
     const ctrl = new (PublicIntegrationsController as any)(
@@ -318,50 +303,70 @@ describe('PublicIntegrationsController.generate-video — legacy public API re-p
     return { ctrl, aiMediaService };
   };
 
-  it('POLL pending: GET /generate-video/:id returns pending + a pollUrl back to itself', async () => {
+  it('POLL pending: GET /generate-video/:id reports pending with a null artifactUrl', async () => {
     const { ctrl } = makePoll({
       id: 'job-123',
       status: 'pending',
-      artifactUrl: '',
+      artifactUrl: 'pending://provider-ref',
+      provider: 'mock-video',
+      error: null,
       organizationId: 'org-1',
     });
     const res = await ctrl.getGenerateVideoJob(org, 'job-123');
     expect(res).toEqual({
       id: 'job-123',
       status: 'pending',
-      jobId: 'job-123',
-      path: '',
-      name: '',
-      pollUrl: '/public/v1/generate-video/job-123',
-      error: '',
+      artifactUrl: null,
+      provider: 'mock-video',
+      error: null,
     });
   });
 
-  it('POLL completed: GET /generate-video/:id returns the finished path and empty pollUrl', async () => {
+  it('POLL normalizes non-terminal provider states (processing/landing) to pending', async () => {
+    const { ctrl } = makePoll({
+      id: 'job-123',
+      status: 'processing',
+      artifactUrl: 'pending://provider-ref',
+      provider: 'mock-video',
+      error: null,
+      organizationId: 'org-1',
+    });
+    const res = await ctrl.getGenerateVideoJob(org, 'job-123');
+    expect(res.status).toBe('pending');
+    expect(res.artifactUrl).toBeNull();
+  });
+
+  it('POLL completed: GET /generate-video/:id returns the finished artifactUrl', async () => {
     const { ctrl } = makePoll({
       id: 'job-123',
       status: 'completed',
       artifactUrl: 'https://cdn/out.mp4',
+      provider: 'mock-video',
+      error: null,
       organizationId: 'org-1',
     });
     const res = await ctrl.getGenerateVideoJob(org, 'job-123');
-    expect(res.status).toBe('completed');
-    expect(res.path).toBe('https://cdn/out.mp4'); // legacy clients read .path
-    expect(res.pollUrl).toBe('');
+    expect(res).toEqual({
+      id: 'job-123',
+      status: 'completed',
+      artifactUrl: 'https://cdn/out.mp4',
+      provider: 'mock-video',
+      error: null,
+    });
   });
 
-  it('POLL failed: GET /generate-video/:id is terminal — empty pollUrl + error, so a poll loop stops', async () => {
+  it('POLL failed: GET /generate-video/:id is terminal — null artifactUrl + error', async () => {
     const { ctrl } = makePoll({
       id: 'job-123',
       status: 'failed',
-      artifactUrl: '',
-      organizationId: 'org-1',
+      artifactUrl: null,
+      provider: 'mock-video',
       error: 'provider rejected the prompt',
+      organizationId: 'org-1',
     });
     const res = await ctrl.getGenerateVideoJob(org, 'job-123');
     expect(res.status).toBe('failed');
-    expect(res.path).toBe('');
-    expect(res.pollUrl).toBe(''); // terminal — never keep a client polling a dead job
+    expect(res.artifactUrl).toBeNull();
     expect(res.error).toBe('provider rejected the prompt');
   });
 
@@ -370,6 +375,8 @@ describe('PublicIntegrationsController.generate-video — legacy public API re-p
       id: 'job-x',
       status: 'completed',
       artifactUrl: 'https://cdn/out.mp4',
+      provider: 'mock-video',
+      error: null,
       organizationId: 'org-OTHER',
     });
     await expect(ctrl.getGenerateVideoJob(org, 'job-x')).rejects.toThrow();
@@ -429,5 +436,65 @@ describe('PublicIntegrationsController.video/function — loadVoices compat', ()
     await expect(
       ctrl.videoFunction(org, { identifier: 'x', functionName: 'other' }),
     ).rejects.toThrow(expect.objectContaining({ status: 400 }));
+  });
+});
+
+
+describe('PublicIntegrationsController.getIntegrationUrl — explicit version required', () => {
+  const org = { id: 'org-1' } as any;
+
+  const make = (unchecked: any = undefined) => {
+    const integrationManager = {
+      getAllowedSocialsIntegrations: vi.fn().mockReturnValue(['x']),
+      getSocialIntegrationUnchecked: vi.fn().mockReturnValue(unchecked),
+    };
+    const ctrl = new (PublicIntegrationsController as any)(
+      {}, {}, {}, {}, integrationManager, {}, {}, {}, {}, {}, {}
+    );
+    return { ctrl, integrationManager };
+  };
+
+  it('rejects a bare provider id with 404 (no latest-active resolution)', async () => {
+    const { ctrl, integrationManager } = make();
+    await expect(
+      ctrl.getIntegrationUrl('x', '', org, undefined),
+    ).rejects.toThrow(expect.objectContaining({ status: 404 }));
+    // Never falls back to resolving an unversioned provider.
+    expect(integrationManager.getSocialIntegrationUnchecked).not.toHaveBeenCalled();
+  });
+
+  it('rejects an unknown provider with 400', async () => {
+    const { ctrl } = make();
+    await expect(
+      ctrl.getIntegrationUrl('nope@v1', '', org, undefined),
+    ).rejects.toThrow(expect.objectContaining({ status: 400 }));
+  });
+
+  it('rejects an unknown qualified version with 404', async () => {
+    const { ctrl, integrationManager } = make(undefined);
+    await expect(
+      ctrl.getIntegrationUrl('x@v9', '', org, undefined),
+    ).rejects.toThrow(expect.objectContaining({ status: 404 }));
+    expect(integrationManager.getSocialIntegrationUnchecked).toHaveBeenCalledWith(
+      'x',
+      'v9',
+    );
+  });
+
+  it('pins the ?version= query param when the path id is bare', async () => {
+    const provider = {
+      externalUrl: false,
+      generateAuthUrl: vi.fn().mockRejectedValue(new Error('stop-before-redis')),
+    };
+    const { ctrl, integrationManager } = make(provider);
+    // generateAuthUrl throwing proves the pinned provider was used; the version
+    // came from the query param.
+    await expect(
+      ctrl.getIntegrationUrl('x', '', org, 'v2'),
+    ).rejects.toThrow(expect.objectContaining({ status: 500 }));
+    expect(integrationManager.getSocialIntegrationUnchecked).toHaveBeenCalledWith(
+      'x',
+      'v2',
+    );
   });
 });

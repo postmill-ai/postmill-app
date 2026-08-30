@@ -6,7 +6,6 @@ import {
   Query,
   Req,
   Res,
-  UnauthorizedException,
 } from '@nestjs/common';
 import { ApiTags } from '@nestjs/swagger';
 import { Throttle } from '@nestjs/throttler';
@@ -17,10 +16,8 @@ import { TrackEnum } from '@postmill-ai/nestjs-libraries/user/track.enum';
 import { Request, Response } from 'express';
 import { makeId } from '@postmill-ai/nestjs-libraries/services/make.is';
 import { getCookieUrlFromDomain } from '@postmill-ai/helpers/subdomain/subdomain.management';
-import { AgentGraphInsertService } from '@postmill-ai/nestjs-libraries/agent/agent.graph.insert.service';
 import { SubscriptionService } from '@postmill-ai/nestjs-libraries/database/prisma/subscriptions/subscription.service';
 import { OnlyURL } from '@postmill-ai/nestjs-libraries/dtos/webhooks/webhooks.dto';
-import { CreateAgentDto } from '@postmill-ai/backend/dtos/public/create-agent.dto';
 import { MediaStreamService } from '@postmill-ai/nestjs-libraries/media/stream/media-stream.service';
 
 @ApiTags('Public')
@@ -28,23 +25,9 @@ import { MediaStreamService } from '@postmill-ai/nestjs-libraries/media/stream/m
 export class PublicController {
   constructor(
     private _trackService: TrackService,
-    private _agentGraphInsertService: AgentGraphInsertService,
     private _subscriptionService: SubscriptionService,
     private _mediaStreamService: MediaStreamService
   ) {}
-  @Post('/agent')
-  @Throttle({ default: { limit: 30, ttl: 60000 } })
-  async createAgent(@Body() body: CreateAgentDto) {
-    if (
-      !body.apiKey ||
-      !process.env.AGENT_API_KEY ||
-      body.apiKey !== process.env.AGENT_API_KEY
-    ) {
-      throw new UnauthorizedException();
-    }
-    return this._agentGraphInsertService.newPost(body.text);
-  }
-
   @Post('/t')
   @Throttle({ default: { limit: 60, ttl: 60000 } })
   async trackEvent(

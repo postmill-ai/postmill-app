@@ -56,12 +56,6 @@ There is **no `OPENAI_API_KEY` env-var fallback**. A deployment's env key must n
 used as a tenant's AI provider. The frontend does not mount CopilotKit when AI is off and routes
 the user to Settings → AI.
 
-### Legacy Analytics Route Shape
-
-The legacy analytics route at `GET /analytics/:integration` in the public integrations controller
-is kept as-is for n8n/Zapier compatibility. Do not change its response shape. The v2 analytics
-route is a parallel, separate endpoint at `/analytics/v2`.
-
 ### Provider Enablement Safety
 
 Channel provider credentials live exclusively in `OrgProviderConfiguration`, encrypted at rest
@@ -133,7 +127,7 @@ When reviewing a PR, verify:
 - [ ] Schema changes follow safety rules (nullable/defaulted)
 - [ ] `pnpm run prisma-generate` succeeds if schema changed
 - [ ] Tailwind classes only; no `--color-custom*` variables; no inline styles
-- [ ] Legacy analytics route response shape preserved
+- [ ] Analytics compatibility route response shape preserved
 - [ ] Documentation updated for any new feature/endpoint/env-var/schema model
 
 ---

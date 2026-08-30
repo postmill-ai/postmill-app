@@ -415,27 +415,6 @@ model AnalyticsShare {
   updatedAt       DateTime @updatedAt
 }
 
-// DEPRECATED (v3.6.0): ProviderConfiguration is replaced by OrgProviderConfiguration (above).
-// Keep model for backward-compatible db-push; drop after migration helper runs.
-model ProviderConfiguration {
-  id                String   @id @default(cuid())
-  identifier        String
-  version           String   @default("v1")
-  name              String
-  enabled           Boolean  @default(false)
-  clientId          String?
-  clientSecret      String?
-  redirectUri       String?
-  scopes            String?
-  additionalConfig  String?
-  setupInstructions String?
-  createdAt         DateTime @default(now())
-  updatedAt         DateTime @updatedAt
-
-  @@unique([identifier, version])
-  @@index([enabled])
-}
-
 // Platform-wide (super-admin curated) list of "featured" providers. A provider
 // present here is surfaced at the top of its domain's provider-configuration
 // list (below the tenant's configured providers, above the alphabetized rest),
@@ -870,7 +849,7 @@ model StorageProviderConfig {
   @@index([defaultFolderId])
 }
 
-// ── v3.6.0: Per-tenant channel provider OAuth credentials (replaces ProviderConfiguration) ──
+// ── v3.6.0: Per-tenant channel provider OAuth credentials ──
 model OrgProviderConfiguration {
   id               String       @id @default(cuid())
   organizationId   String
@@ -912,57 +891,6 @@ model AuditLog {
   @@index([organizationId])
   @@index([organizationId, createdAt(sort: Desc)])
   @@index([organizationId, entity])
-}
-
-/// The underlying table does not contain a valid unique identifier and can therefore currently not be handled by Prisma Client.
-model mastra_ai_spans {
-  traceId      String
-  spanId       String
-  parentSpanId String?
-  name         String
-  scope        Json?
-  spanType     String
-  attributes   Json?
-  metadata     Json?
-  links        Json?
-  input        Json?
-  output       Json?
-  error        Json?
-  startedAt    DateTime  @db.Timestamp(6)
-  endedAt      DateTime? @db.Timestamp(6)
-  createdAt    DateTime  @db.Timestamp(6)
-  updatedAt    DateTime? @db.Timestamp(6)
-  isEvent      Boolean
-  startedAtZ   DateTime? @default(now()) @db.Timestamptz(6)
-  endedAtZ     DateTime? @default(now()) @db.Timestamptz(6)
-  createdAtZ   DateTime? @default(now()) @db.Timestamptz(6)
-  updatedAtZ   DateTime? @default(now()) @db.Timestamptz(6)
-
-  @@index([name], map: "public_mastra_ai_spans_name_idx")
-  @@index([parentSpanId, startedAt(sort: Desc)], map: "public_mastra_ai_spans_parentspanid_startedat_idx")
-  @@index([spanType, startedAt(sort: Desc)], map: "public_mastra_ai_spans_spantype_startedat_idx")
-  @@index([traceId, startedAt(sort: Desc)], map: "public_mastra_ai_spans_traceid_startedat_idx")
-  @@ignore
-}
-
-/// The underlying table does not contain a valid unique identifier and can therefore currently not be handled by Prisma Client.
-model mastra_evals {
-  input         String
-  output        String
-  result        Json
-  agent_name    String
-  metric_name   String
-  instructions  String
-  test_info     Json?
-  global_run_id String
-  run_id        String
-  created_at    DateTime  @db.Timestamp(6)
-  createdAt     DateTime? @db.Timestamp(6)
-  created_atZ   DateTime? @default(now()) @db.Timestamptz(6)
-  createdAtZ    DateTime? @default(now()) @db.Timestamptz(6)
-
-  @@index([agent_name, created_at(sort: Desc)], map: "public_mastra_evals_agent_name_created_at_idx")
-  @@ignore
 }
 
 model mastra_messages {
@@ -1124,36 +1052,16 @@ model OAuthAuthorization {
   @@index([revokedAt])
 }
 
-// DEPRECATED (v3.6.0): AIProviderConfig is replaced by AIOrgProviderConfig (per-tenant, see below).
-// Keep model for backward-compatible db-push; drop after migration helper runs.
-model AIProviderConfig {
-  id            String   @id @default(cuid())
-  identifier    String
-  version       String   @default("v1")
-  enabled       Boolean  @default(false)
-  credentials   String?
-  defaultModel  String?
-  reasoningModel String?
-  extraConfig   String?
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
-
-  @@unique([identifier, version])
-  @@index([enabled])
-}
-
-// DEPRECATED (v3.6.0): Active provider selection is now per-tenant via AIOrgProviderConfig.
-// Kept for scope models, fallback config, telemetry, and governance toggles.
+// Platform-wide AI governance store (single row). Live settings: guardrails,
+// budget alerts, MCP/RAG/cache/routing settings, observability config, secret
+// handling, and fallback provider selection. Per-tenant active provider/model
+// selection lives on AIOrgProviderConfig.
 model AISystemSettings {
   id                   String   @id
-  activeProvider       String?
-  activeModel          String?
-  scopeModels          String?
   fallbackProvider     String?
   fallbackImageProvider String?
   guardrailSettings    String?
   budgetSettings       String?
-  rateLimitSettings    String?
   observability        String?
   mcpSettings          String?
   ragSettings          String?
@@ -1161,8 +1069,6 @@ model AISystemSettings {
   routingSettings      String?
   secretSettings       String?
   updatedAt            DateTime @updatedAt
-
-  @@index([activeProvider])
 }
 
 // Cost-control spend ledger
@@ -1359,14 +1265,6 @@ model UserProfile {
   avatarUrl         String?
   pictureId         String?
   timezone          String?  // IANA tz
-  // DEPRECATED (Notifications V2): superseded by NotificationPreference.categories
-  // (post_published / post_failed / streak email toggles). Retained for one release
-  // as an expand-contract step so BackfillService can copy any opt-OUT into the new
-  // preference rows before these columns are dropped in the follow-up release.
-  // No runtime code reads these — do NOT add new readers.
-  sendSuccessEmails Boolean  @default(true)
-  sendFailureEmails Boolean  @default(true)
-  sendStreakEmails  Boolean  @default(true)
   createdAt         DateTime @default(now())
   updatedAt         DateTime @updatedAt
   user              User     @relation(fields: [userId], references: [id], onDelete: Cascade)

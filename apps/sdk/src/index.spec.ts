@@ -61,11 +61,11 @@ describe('Postmill SDK HTTP calls', () => {
     expect(JSON.parse(init?.body as string)).toMatchObject({ type: 'schedule' });
   });
 
-  it('lists posts with query string', async () => {
-    mockJsonResponse({ posts: [] });
+  it('lists posts with query string, always paged as { posts, cursor }', async () => {
+    mockJsonResponse({ posts: [], cursor: null });
 
     const client = new Postmill('pm_live_123');
-    await client.postList({
+    const result = await client.postList({
       startDate: '2026-01-01T00:00:00.000Z',
       endDate: '2026-01-31T23:59:59.000Z',
     });
@@ -74,6 +74,8 @@ describe('Postmill SDK HTTP calls', () => {
     expect(url).toMatch(/\/public\/v1\/posts\?/);
     expect(url).toContain('startDate=');
     expect(url).toContain('endDate=');
+    expect(result.posts).toEqual([]);
+    expect(result.cursor).toBeNull();
   });
 
   it('uploads from a URL', async () => {
@@ -112,14 +114,31 @@ describe('Postmill SDK HTTP calls', () => {
     );
   });
 
+  it('connects a channel addressed by a version-qualified id', async () => {
+    mockJsonResponse({ url: 'https://provider.example.com/oauth' });
+
+    const client = new Postmill('pm_live_123');
+    await client.connectChannel('provider-x@v2');
+
+    const [url] = fetchMock.mock.calls[0];
+    expect(url).toBe('https://api.postmill.ai/public/v1/social/provider-x@v2');
+  });
+
+  it('refuses an unversioned connectChannel before hitting the network', async () => {
+    const client = new Postmill('pm_live_123');
+    await expect(client.connectChannel('provider-x')).rejects.toThrow(
+      /explicit provider version/
+    );
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
   it('starts a video generation job', async () => {
     mockJsonResponse({
       id: 'job-1',
       status: 'pending',
-      jobId: 'job-1',
-      path: '',
-      name: '',
-      pollUrl: '/public/v1/generate-video/job-1',
+      artifactUrl: null,
+      provider: null,
+      error: null,
     });
 
     const client = new Postmill('pm_live_123');
@@ -128,8 +147,9 @@ describe('Postmill SDK HTTP calls', () => {
       output: 'vertical',
     });
 
+    expect(result.id).toBe('job-1');
     expect(result.status).toBe('pending');
-    expect(result.pollUrl).toBe('/public/v1/generate-video/job-1');
+    expect(result.artifactUrl).toBeNull();
   });
 
   it('polls generateVideoAndWait until completed', async () => {
@@ -138,20 +158,18 @@ describe('Postmill SDK HTTP calls', () => {
         json: vi.fn().mockResolvedValueOnce({
           id: 'job-1',
           status: 'pending',
-          jobId: 'job-1',
-          path: '',
-          name: '',
-          pollUrl: '/public/v1/generate-video/job-1',
+          artifactUrl: null,
+          provider: null,
+          error: null,
         }),
       } as unknown as Response)
       .mockResolvedValueOnce({
         json: vi.fn().mockResolvedValueOnce({
           id: 'job-1',
           status: 'completed',
-          jobId: '',
-          path: 'https://cdn.example.com/video.mp4',
-          name: '',
-          pollUrl: '',
+          artifactUrl: 'https://cdn.example.com/video.mp4',
+          provider: 'mock-provider',
+          error: null,
         }),
       } as unknown as Response);
 
@@ -162,8 +180,50 @@ describe('Postmill SDK HTTP calls', () => {
     );
 
     expect(fetchMock).toHaveBeenCalledTimes(2);
+    const [pollUrl] = fetchMock.mock.calls[1];
+    expect(pollUrl).toBe('https://api.postmill.ai/public/v1/generate-video/job-1');
     expect(result.status).toBe('completed');
-    expect(result.path).toBe('https://cdn.example.com/video.mp4');
+    expect(result.artifactUrl).toBe('https://cdn.example.com/video.mp4');
+  });
+
+  it('keeps polling generateVideoAndWait through non-terminal states', async () => {
+    fetchMock
+      .mockResolvedValueOnce({
+        json: vi.fn().mockResolvedValueOnce({
+          id: 'job-1',
+          status: 'pending',
+          artifactUrl: null,
+          provider: null,
+          error: null,
+        }),
+      } as unknown as Response)
+      .mockResolvedValueOnce({
+        json: vi.fn().mockResolvedValueOnce({
+          id: 'job-1',
+          status: 'pending',
+          artifactUrl: null,
+          provider: 'mock-provider',
+          error: null,
+        }),
+      } as unknown as Response)
+      .mockResolvedValueOnce({
+        json: vi.fn().mockResolvedValueOnce({
+          id: 'job-1',
+          status: 'completed',
+          artifactUrl: 'https://cdn.example.com/video.mp4',
+          provider: 'mock-provider',
+          error: null,
+        }),
+      } as unknown as Response);
+
+    const client = new Postmill('pm_live_123');
+    const result = await client.generateVideoAndWait(
+      { type: 'text-to-video', output: 'vertical' },
+      { pollIntervalMs: 10, timeoutMs: 1000 }
+    );
+
+    expect(fetchMock).toHaveBeenCalledTimes(3);
+    expect(result.status).toBe('completed');
   });
 
   it('stops polling generateVideoAndWait on failure', async () => {
@@ -172,20 +232,17 @@ describe('Postmill SDK HTTP calls', () => {
         json: vi.fn().mockResolvedValueOnce({
           id: 'job-1',
           status: 'pending',
-          jobId: 'job-1',
-          path: '',
-          name: '',
-          pollUrl: '/public/v1/generate-video/job-1',
+          artifactUrl: null,
+          provider: null,
+          error: null,
         }),
       } as unknown as Response)
       .mockResolvedValueOnce({
         json: vi.fn().mockResolvedValueOnce({
           id: 'job-1',
           status: 'failed',
-          jobId: '',
-          path: '',
-          name: '',
-          pollUrl: '',
+          artifactUrl: null,
+          provider: 'mock-provider',
           error: 'provider error',
         }),
       } as unknown as Response);
@@ -200,15 +257,14 @@ describe('Postmill SDK HTTP calls', () => {
     expect(result.error).toBe('provider error');
   });
 
-  it('returns immediately from generateVideoAndWait when already completed', async () => {
+  it('returns immediately from generateVideoAndWait on a synchronous completion (id: null)', async () => {
     fetchMock.mockResolvedValueOnce({
       json: vi.fn().mockResolvedValueOnce({
-        id: '',
+        id: null,
         status: 'completed',
-        jobId: '',
-        path: 'https://cdn.example.com/video.mp4',
-        name: '',
-        pollUrl: '',
+        artifactUrl: 'https://cdn.example.com/video.mp4',
+        provider: null,
+        error: null,
       }),
     } as unknown as Response);
 
@@ -220,6 +276,7 @@ describe('Postmill SDK HTTP calls', () => {
 
     expect(fetchMock).toHaveBeenCalledOnce();
     expect(result.status).toBe('completed');
+    expect(result.artifactUrl).toBe('https://cdn.example.com/video.mp4');
   });
 
   it('deletes a post by ID', async () => {

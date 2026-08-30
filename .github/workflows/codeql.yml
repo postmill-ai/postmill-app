@@ -46,6 +46,10 @@ jobs:
               - '**/*.spec.tsx'
               - '**/*.int-spec.ts'
               - '**/*.int-spec.tsx'
+              # Migration-only AES-CBC reader for the one-time legacy-secret
+              # re-encryption backfill — intentionally weak crypto (it exists
+              # solely to read old-format values), deleted after rollout.
+              - libraries/nestjs-libraries/src/database/seeds/legacy-cbc.crypto.ts
 
       - name: Perform CodeQL Analysis
         uses: github/codeql-action/analyze@v4

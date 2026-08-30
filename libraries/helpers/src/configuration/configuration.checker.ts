@@ -37,9 +37,6 @@ export class ConfigurationChecker {
     this.checkIsValidUrl('BACKEND_INTERNAL_URL');
     this.checkInngest();
     this.checkInngestUrl();
-    this.checkDeprecatedStorageVars();
-    this.checkDeprecatedChannelVars();
-    this.checkDeprecatedAiVars();
     this.checkEncryptionKey();
     this.checkFatal();
   }
@@ -138,49 +135,6 @@ export class ConfigurationChecker {
     const path = this.get('INNGEST_SERVE_PATH');
     if (path && !path.startsWith('/')) {
       this.issues.push('INNGEST_SERVE_PATH must start with /');
-    }
-  }
-
-  checkDeprecatedStorageVars() {
-    const deprecatedStorageVars = [
-      'STORAGE_PROVIDER',
-      'CLOUDFLARE_ACCOUNT_ID',
-      'CLOUDFLARE_ACCESS_KEY',
-      'CLOUDFLARE_SECRET_ACCESS_KEY',
-      'CLOUDFLARE_BUCKETNAME',
-      'CLOUDFLARE_BUCKET_URL',
-      'CLOUDFLARE_REGION',
-    ];
-
-    for (const key of deprecatedStorageVars) {
-      if (this.get(key)) {
-        this.issues.push(key + ' is deprecated. Use per-tenant storage config instead (Settings → Storage tab).');
-      }
-    }
-  }
-
-  checkDeprecatedChannelVars() {
-    // The CHANNEL_ENV_MAPPINGS vars (X_API_KEY, LINKEDIN_CLIENT_ID, …) are
-    // SUPPORTED — they configure the platform channel apps (click-connect) and
-    // must NOT warn. Only truly dead legacy vars with no live reads warn here.
-    const deadChannelVars = [
-      'DISCORD_BOT_TOKEN_ID',
-      'MASTODON_URL',
-      'X_URL',
-      'MEWE_HOST',
-      'SLACK_SIGNING_SECRET',
-    ];
-
-    for (const key of deadChannelVars) {
-      if (this.get(key)) {
-        this.issues.push(key + ' is no longer read anywhere and can be removed from your environment.');
-      }
-    }
-  }
-
-  checkDeprecatedAiVars() {
-    if (this.get('OPENAI_API_KEY')) {
-      this.issues.push('OPENAI_API_KEY is deprecated. Use per-tenant AI config instead (Settings → AI tab).');
     }
   }
 

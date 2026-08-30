@@ -18,7 +18,6 @@ export interface BudgetSettings {
     string,
     { monthly?: number; daily?: number; alertThresholdPct?: number }
   >;
-  scopeCaps?: Record<string, { monthly?: number; daily?: number }>;
   alertThresholdPct?: number;
 }
 

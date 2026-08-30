@@ -1,13 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
 const mockRepo = {
-  // AIProviderConfig
-  getProviderConfigs: vi.fn(),
-  listProviderConfigs: vi.fn(),
-  getProviderConfigByIdentifier: vi.fn(),
-  upsertProviderConfig: vi.fn(),
-  deleteProviderConfig: vi.fn(),
-  getEnabledProviderConfigs: vi.fn(),
   // AISystemSettings
   getSystemSettings: vi.fn(),
   upsertSystemSettings: vi.fn(),
@@ -88,168 +81,6 @@ describe('AiSettingsService', () => {
     );
   });
 
-  // ── AIProviderConfig ──
-
-  describe('getProviderConfigs', () => {
-    it('delegates to repository', () => {
-      const configs = [{ identifier: 'openai' }];
-      mockRepo.getProviderConfigs.mockReturnValue(configs);
-
-      expect(service.getProviderConfigs()).toBe(configs);
-      expect(mockRepo.getProviderConfigs).toHaveBeenCalledOnce();
-    });
-  });
-
-  describe('listProviderConfigs', () => {
-    it('delegates to repository', () => {
-      const configs = [{ id: '1', identifier: 'openai' }];
-      mockRepo.listProviderConfigs.mockReturnValue(configs);
-
-      expect(service.listProviderConfigs()).toBe(configs);
-      expect(mockRepo.listProviderConfigs).toHaveBeenCalledOnce();
-    });
-  });
-
-  describe('getProviderConfigByIdentifier', () => {
-    it('delegates to repository', () => {
-      const config = { identifier: 'openai' };
-      mockRepo.getProviderConfigByIdentifier.mockReturnValue(config);
-
-      expect(service.getProviderConfigByIdentifier('openai')).toBe(config);
-      expect(mockRepo.getProviderConfigByIdentifier).toHaveBeenCalledWith('openai');
-    });
-  });
-
-  describe('upsertProviderConfig', () => {
-    it('encrypts credentials before storage', async () => {
-      const data = {
-        credentials: { apiKey: 'sk-secret', baseUrl: 'https://api.openai.com' },
-        defaultModel: 'gpt-4',
-      };
-      const encryptedCreds = AuthService.fixedEncryption(JSON.stringify(data.credentials));
-      const upserted = { identifier: 'openai', credentials: encryptedCreds };
-      mockRepo.upsertProviderConfig.mockResolvedValue(upserted);
-
-      const result = await service.upsertProviderConfig('openai', data);
-
-      expect(AuthService.fixedEncryption).toHaveBeenCalledWith(JSON.stringify(data.credentials));
-      expect(mockRepo.upsertProviderConfig).toHaveBeenCalledWith('openai', {
-        ...data,
-        credentials: encryptedCreds,
-        extraConfig: undefined,
-      });
-      expect(result).toEqual(upserted);
-    });
-
-    it('skips encryption when credentials is undefined', async () => {
-      const data = { defaultModel: 'gpt-4' };
-      mockRepo.upsertProviderConfig.mockResolvedValue({ identifier: 'openai', ...data });
-
-      await service.upsertProviderConfig('openai', data);
-
-      expect(mockRepo.upsertProviderConfig).toHaveBeenCalledWith('openai', {
-        ...data,
-        credentials: undefined,
-        extraConfig: undefined,
-      });
-      expect(AuthService.fixedEncryption).not.toHaveBeenCalled();
-    });
-
-    it('stringifies extraConfig object', async () => {
-      const data = { extraConfig: { region: 'us-west', maxTokens: 4096 } };
-      const extraConfigStr = JSON.stringify(data.extraConfig);
-      mockRepo.upsertProviderConfig.mockResolvedValue({ identifier: 'openai' });
-
-      await service.upsertProviderConfig('openai', data);
-
-      expect(mockRepo.upsertProviderConfig).toHaveBeenCalledWith('openai', {
-        ...data,
-        extraConfig: extraConfigStr,
-        credentials: undefined,
-      });
-    });
-
-    it('accepts valid JSON string for extraConfig', async () => {
-      const data = {
-        extraConfig: '{"region":"us-west"}' as unknown as Record<string, string>,
-      };
-      mockRepo.upsertProviderConfig.mockResolvedValue({ identifier: 'openai' });
-
-      await service.upsertProviderConfig('openai', data);
-
-      expect(mockRepo.upsertProviderConfig).toHaveBeenCalledWith('openai', {
-        ...data,
-        extraConfig: '{"region":"us-west"}',
-        credentials: undefined,
-      });
-    });
-
-    it('throws when extraConfig is an invalid JSON string', async () => {
-      const data = {
-        extraConfig: '{invalid json' as unknown as Record<string, string>,
-      };
-
-      await expect(
-        service.upsertProviderConfig('openai', data),
-      ).rejects.toThrow('extraConfig must be a valid JSON string');
-
-      expect(mockRepo.upsertProviderConfig).not.toHaveBeenCalled();
-    });
-  });
-
-  describe('decryptProviderConfig', () => {
-    it('decrypts credentials JSON back to plain object', () => {
-      const creds = { apiKey: 'sk-secret' };
-      const encrypted = AuthService.fixedEncryption(JSON.stringify(creds));
-
-      const result = service.decryptProviderConfig({ credentials: encrypted });
-
-      expect(AuthService.fixedDecryption).toHaveBeenCalledWith(encrypted);
-      expect(result).toEqual({ credentials: creds });
-    });
-
-    it('returns undefined credentials when input is null', () => {
-      const result = service.decryptProviderConfig({ credentials: null });
-      expect(result).toEqual({ credentials: undefined });
-    });
-
-    it('returns undefined credentials when input is undefined', () => {
-      const result = service.decryptProviderConfig({} as any);
-      expect(result).toEqual({ credentials: undefined });
-    });
-
-    it('returns undefined on decryption failure', () => {
-      const result = service.decryptProviderConfig({ credentials: 'garbage' });
-
-      // The mock stores undoes replace, so garbage stays garbage — JSON.parse fails
-      // Our mock's fixedDecryption just strips ENC: prefix; for garbage without prefix
-      // it returns the string as-is, and JSON.parse of garbage throws
-      expect(result).toEqual({ credentials: undefined });
-    });
-  });
-
-  describe('deleteProviderConfig', () => {
-    it('delegates to repository', async () => {
-      const deleted = { identifier: 'openai' };
-      mockRepo.deleteProviderConfig.mockResolvedValue(deleted);
-
-      const result = await service.deleteProviderConfig('openai');
-
-      expect(mockRepo.deleteProviderConfig).toHaveBeenCalledWith('openai');
-      expect(result).toEqual(deleted);
-    });
-  });
-
-  describe('getEnabledProviderConfigs', () => {
-    it('delegates to repository', () => {
-      const configs = [{ identifier: 'openai', enabled: true }];
-      mockRepo.getEnabledProviderConfigs.mockReturnValue(configs);
-
-      expect(service.getEnabledProviderConfigs()).toBe(configs);
-      expect(mockRepo.getEnabledProviderConfigs).toHaveBeenCalledOnce();
-    });
-  });
-
   // ── Provider catalog helpers (A-07) ──
 
   describe('getProviderVersionMeta', () => {
@@ -277,52 +108,6 @@ describe('AiSettingsService', () => {
       const result = service.getProviderVersionMeta('openai');
 
       expect(result.version).toBe('v1');
-    });
-  });
-
-  describe('isProviderConfigured', () => {
-    it('returns true when all required credential fields are present', () => {
-      const adapter = {
-        identifier: 'bedrock',
-        credentialFields: [
-          { key: 'accessKeyId', required: true },
-          { key: 'secretAccessKey', required: true },
-          { key: 'region', required: true },
-        ],
-      } as any;
-      const encryptedCreds = AuthService.fixedEncryption(
-        JSON.stringify({
-          accessKeyId: 'AKIA...',
-          secretAccessKey: 'secret',
-          region: 'us-east-1',
-        }),
-      );
-
-      const result = service.isProviderConfigured(adapter, {
-        credentials: encryptedCreds,
-      });
-
-      expect(result).toBe(true);
-    });
-
-    it('returns false when a required credential field is missing', () => {
-      const adapter = {
-        identifier: 'bedrock',
-        credentialFields: [
-          { key: 'accessKeyId', required: true },
-          { key: 'secretAccessKey', required: true },
-          { key: 'region', required: true },
-        ],
-      } as any;
-      const encryptedCreds = AuthService.fixedEncryption(
-        JSON.stringify({ accessKeyId: 'AKIA...', secretAccessKey: 'secret' }),
-      );
-
-      const result = service.isProviderConfigured(adapter, {
-        credentials: encryptedCreds,
-      });
-
-      expect(result).toBe(false);
     });
   });
 
@@ -365,7 +150,7 @@ describe('AiSettingsService', () => {
   });
 
   describe('listProviderCatalog', () => {
-    it('returns mapped provider entries from the kernel', async () => {
+    it('returns kernel-only provider entries (no AIProviderConfig sourcing)', async () => {
       const adapter = {
         identifier: 'openai',
         name: 'OpenAI',
@@ -376,13 +161,6 @@ describe('AiSettingsService', () => {
       } as any;
       mockKernel.listManifests.mockReturnValue([{ providerId: 'openai', version: 'v1' }]);
       mockResolution.resolveAI.mockReturnValue(adapter);
-      mockRepo.getProviderConfigs.mockResolvedValue([
-        {
-          identifier: 'openai',
-          enabled: true,
-          credentials: AuthService.fixedEncryption(JSON.stringify({ apiKey: 'sk-test' })),
-        },
-      ]);
       mockKernel.versions.mockReturnValue([
         { version: 'v1', status: 'active', credentialFields: [{ key: 'apiKey' }] },
       ]);
@@ -396,9 +174,10 @@ describe('AiSettingsService', () => {
       expect(result[0]).toMatchObject({
         identifier: 'openai',
         name: 'OpenAI',
-        enabled: true,
-        isConfigured: true,
+        version: 'v1',
       });
+      expect(result[0]).not.toHaveProperty('enabled');
+      expect(result[0]).not.toHaveProperty('isConfigured');
     });
   });
 
@@ -406,7 +185,7 @@ describe('AiSettingsService', () => {
 
   describe('getSystemSettings', () => {
     it('delegates to repository (raw settings)', async () => {
-      const settings = { id: 'singleton', activeProvider: null };
+      const settings = { id: 'singleton', fallbackProvider: null };
       mockRepo.getSystemSettings.mockResolvedValue(settings);
 
       const result = await service.getSystemSettings();
@@ -428,12 +207,10 @@ describe('AiSettingsService', () => {
     it('decrypts secretSettings and parses JSON fields', async () => {
       const rawSettings = {
         id: 'singleton',
-        activeProvider: 'openai',
+        fallbackProvider: 'openai@v1',
         secretSettings: AuthService.fixedEncryption(JSON.stringify({ openai_key: 'sk-abc' })),
-        scopeModels: JSON.stringify({ chat: 'gpt-4' }),
         guardrailSettings: JSON.stringify({ enabled: true }),
         budgetSettings: null,
-        rateLimitSettings: JSON.stringify({ rpm: 60 }),
         observability: JSON.stringify({ logLevel: 'debug' }),
         mcpSettings: JSON.stringify({ endpoint: '/mcp' }),
         ragSettings: undefined,
@@ -445,10 +222,8 @@ describe('AiSettingsService', () => {
       expect(result).toEqual({
         ...rawSettings,
         secretSettings: { openai_key: 'sk-abc' },
-        scopeModels: { chat: 'gpt-4' },
         guardrailSettings: { enabled: true },
         budgetSettings: undefined,
-        rateLimitSettings: { rpm: 60 },
         observability: { logLevel: 'debug' },
         mcpSettings: { endpoint: '/mcp' },
         ragSettings: undefined,
@@ -469,19 +244,19 @@ describe('AiSettingsService', () => {
     it('handles empty string JSON fields gracefully', async () => {
       mockRepo.getSystemSettings.mockResolvedValue({
         id: 'singleton',
-        scopeModels: '',
+        guardrailSettings: '',
       });
 
       const result = await service.getDecryptedSystemSettings();
 
-      expect(result!.scopeModels).toBeUndefined();
+      expect(result!.guardrailSettings).toBeUndefined();
     });
   });
 
   describe('upsertSystemSettings', () => {
     it('encrypts secretSettings before storage', async () => {
       const data = {
-        activeProvider: 'openai',
+        fallbackProvider: 'openai@v1',
         secretSettings: { openai_key: 'sk-abc', gemini_key: 'g-xyz' },
       };
       const encryptedSecret = AuthService.fixedEncryption(JSON.stringify(data.secretSettings));
@@ -499,7 +274,7 @@ describe('AiSettingsService', () => {
 
     it('stringifies JSON object fields', async () => {
       const data = {
-        scopeModels: { chat: 'gpt-4' },
+        mcpSettings: { endpoint: '/mcp' },
         guardrailSettings: { enabled: true },
       };
       mockRepo.upsertSystemSettings.mockResolvedValue({ id: 'singleton' });
@@ -507,13 +282,13 @@ describe('AiSettingsService', () => {
       await service.upsertSystemSettings(data);
 
       const callArgs = mockRepo.upsertSystemSettings.mock.calls[0][0];
-      expect(callArgs.scopeModels).toBe(JSON.stringify(data.scopeModels));
+      expect(callArgs.mcpSettings).toBe(JSON.stringify(data.mcpSettings));
       expect(callArgs.guardrailSettings).toBe(JSON.stringify(data.guardrailSettings));
     });
 
     it('passes through valid JSON string fields', async () => {
       const data = {
-        scopeModels: '{"chat":"gpt-4"}',
+        ragSettings: '{"enabled":true}',
         budgetSettings: '{"limit":100}',
       };
       mockRepo.upsertSystemSettings.mockResolvedValue({ id: 'singleton' });
@@ -521,28 +296,28 @@ describe('AiSettingsService', () => {
       await service.upsertSystemSettings(data);
 
       const callArgs = mockRepo.upsertSystemSettings.mock.calls[0][0];
-      expect(callArgs.scopeModels).toBe('{"chat":"gpt-4"}');
+      expect(callArgs.ragSettings).toBe('{"enabled":true}');
       expect(callArgs.budgetSettings).toBe('{"limit":100}');
     });
 
     it('throws when a JSON field is an invalid string', async () => {
-      const data = { scopeModels: '{invalid' };
+      const data = { guardrailSettings: '{invalid' };
 
       await expect(
         service.upsertSystemSettings(data),
-      ).rejects.toThrow('Invalid JSON in scopeModels');
+      ).rejects.toThrow('Invalid JSON in guardrailSettings');
 
       expect(mockRepo.upsertSystemSettings).not.toHaveBeenCalled();
     });
 
     it('skips null JSON fields', async () => {
-      const data = { scopeModels: null, activeProvider: 'openai' };
+      const data = { mcpSettings: null, fallbackProvider: 'openai@v1' };
       mockRepo.upsertSystemSettings.mockResolvedValue({ id: 'singleton' });
 
       await service.upsertSystemSettings(data);
 
       const callArgs = mockRepo.upsertSystemSettings.mock.calls[0][0];
-      expect(callArgs.scopeModels).toBeNull();
+      expect(callArgs.mcpSettings).toBeNull();
     });
   });
 
@@ -1080,19 +855,6 @@ describe('AiSettingsService', () => {
   // ── Encryption round-trip ──
 
   describe('encryption round-trip', () => {
-    it('encrypt then decrypt returns original plaintext for provider config', () => {
-      const originalCredentials = { apiKey: 'sk-test-key-123', baseUrl: 'https://api.example.com' };
-      const encrypted = AuthService.fixedEncryption(JSON.stringify(originalCredentials));
-
-      // Simulate what happens in upsertProviderConfig: encrypted is stored
-      const storedConfig = { credentials: encrypted };
-
-      // Simulate what happens in decryptProviderConfig: decrypt from storage
-      const result = service.decryptProviderConfig(storedConfig);
-
-      expect(result.credentials).toEqual(originalCredentials);
-    });
-
     it('encrypt then decrypt returns original plaintext for system settings secretSettings', async () => {
       const secretSettings = { openai_key: 'sk-abc', admin_secret: 'supersecret' };
       const encrypted = AuthService.fixedEncryption(JSON.stringify(secretSettings));
@@ -1109,22 +871,6 @@ describe('AiSettingsService', () => {
   });
 
   // ── Security invariants ──
-
-  describe('secrets never returned in list', () => {
-    it('getProviderConfigs returns raw configs (credentials are encrypted at DB layer, not decrypted by service)', () => {
-      const configs = [
-        { identifier: 'openai', credentials: 'ENC:...', enabled: true },
-      ];
-      mockRepo.getProviderConfigs.mockReturnValue(configs);
-
-      // The service does NOT decrypt these — it's a raw repository pass-through.
-      // Credentials are only decrypted on-demand via decryptProviderConfig().
-      const result = service.getProviderConfigs();
-
-      expect(result[0].credentials).not.toBe('{"apiKey":"real"}');
-      // They stay encrypted — only decryptProviderConfig would expose them
-    });
-  });
 
   describe('audit never contains secrets', () => {
     it('createAuditLog redacts all sensitive keys from the detail blob', () => {

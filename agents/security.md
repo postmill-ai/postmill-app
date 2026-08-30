@@ -56,12 +56,14 @@ enforcement point (exact file/symbol). Cross-refs: `agents/backend.md`,
   over `AuthService.fixedEncryption`/`fixedDecryption`
   (`libraries/helpers/src/auth/auth.service.ts:100-113`).
 - Algorithm: AES-256-GCM, random 12-byte IV, stored value prefixed `v2:`
-  (`V2_PREFIX`, `auth.service.ts:36-39`). `fixedDecryption` routes `v2:` to GCM and
-  anything else to the legacy AES-256-CBC path (`decrypt_legacy_using_IV`);
-  `encryptDeterministic` writes the legacy deterministic format — only for
-  equality-lookup columns, never for new secrets.
+  (`V2_PREFIX`, `auth.service.ts:5-8`). `fixedDecryption` is **GCM-only** (v1.0.0):
+  it throws on any non-`v2:` value — the legacy AES-256-CBC read path and the
+  deterministic CBC writer (`encryptDeterministic`) were removed. Pre-v1 stored
+  values are rewritten to `v2:` at boot by the ledger-gated **"legacy secret
+  re-encryption"** backfill step (`backfill.service.ts`, CBC reader:
+  `database/seeds/legacy-cbc.crypto.ts`).
 - Key: `ENCRYPTION_KEY` (base64/hex/raw, normalized to 32 bytes) if set, else derived
-  as `sha256(JWT_SECRET)` (`getEncryptionKey`, `auth.service.ts:41-63`).
+  as `sha256(JWT_SECRET)` (`getEncryptionKey`, `auth.service.ts:10-33`).
 - **Single-key model:** one deployment-wide key encrypts every secret — there is NO
   per-org crypto key. "Org-scoped" means DB-column-scoped; cross-org isolation is
   enforced by query scoping (repositories filtering by `organizationId`), not by
@@ -91,8 +93,11 @@ enforcement point (exact file/symbol). Cross-refs: `agents/backend.md`,
 
 - Verification pins `algorithms: ['HS256']` — no `alg: none` / algorithm confusion.
   Enforcement: `AuthService.verifyJWT`, `libraries/helpers/src/auth/auth.service.ts:97`.
-- New tokens carry `exp` (`signJWT` → `expiresIn: '30d'`, :93-94) with sliding renewal;
-  legacy exp-less tokens still verify (jsonwebtoken does not require `exp`).
+- New tokens carry `exp` (`signJWT` → `expiresIn: '30d'`, :93-94) with sliding renewal.
+  v1.0.0: session-auth verify sites **require** `exp` (`auth-context.resolver.ts`, the
+  collaboration socket in `apps/backend/src/main.ts`) — legacy exp-less session tokens
+  are rejected. Non-session flows (invite/reset/activation/webhook/extension) verify
+  only tokens they minted via `signJWT`, which always embeds `exp`.
 - IDs/secrets use CSPRNG (`crypto.randomBytes`, `crypto.randomUUID`) — never
   `Math.random` for tokens.
 

@@ -216,7 +216,8 @@ Condensed "don't break this" set. Full detail with enforcement points: [`agents/
 - **Never run blocking Redis (BRPOP/BLPOP/BRPOPLPUSH) on the shared `ioRedis` client.** Use
   `ioRedis.duplicate()`.
 - **Inngest idempotency ids must be event-unique** — a constant id black-holes reschedules.
-- **JWT** verification pins `algorithms: ['HS256']`; new tokens carry `exp` with sliding renewal.
+- **JWT** verification pins `algorithms: ['HS256']`; new tokens carry `exp` with sliding renewal;
+  session-auth verify sites require `exp` (legacy exp-less session tokens rejected).
   IDs/secrets use CSPRNG.
 - **CSRF is required on cookie-authenticated mutating routes** (controllers in the
   `authenticatedController` array get it automatically). The **global validation pipe rejects unknown
@@ -255,4 +256,9 @@ branding). Removed: `SocialMediaAgency`, `MessagesGroup`, `Orders`, `OrderItems`
 superseded by `AppRole`-based RBAC (`UserOrganization.roleId`). The legacy `/third-party` integration
 subsystem (the `@ThirdParty` decorator, `ThirdPartyManager`, the `ThirdParty` Prisma model) was
 deleted — AI avatar video now lives only in the modern HeyGen Studio. The previous workflow
-orchestrator was replaced by Inngest.
+orchestrator was replaced by Inngest. The legacy global provider-config tables `AIProviderConfig`
+and `ProviderConfiguration` were dropped in v1.0.0 (migration `20260830180000_no_legacy_v1`) along
+with the global `AISystemSettings` selection columns (`activeProvider`/`activeModel`/`scopeModels`/
+`rateLimitSettings`) and the deprecated `UserProfile.send*Emails` toggles — per-tenant
+`AIOrgProviderConfig` / `OrgProviderConfiguration` and `NotificationPreference.categories` are the
+only stores.

@@ -176,6 +176,6 @@ In the MCP server, token resolution works as follows:
 - Client secrets are stored as SHA-256 hashes; the plaintext is shown only at creation and rotation.
 - Authorization codes, access tokens, and refresh tokens are all stored as SHA-256 hashes.
 - Redirect URIs are matched exactly.
-- PKCE is required for new authorizations; legacy authorizations without a code challenge still work for token exchange but cannot verify a verifier.
+- PKCE is required for authorizations.
 
 > Verified against v1.0.0

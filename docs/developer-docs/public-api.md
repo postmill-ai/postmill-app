@@ -3,7 +3,7 @@
 The Public API provides programmatic access for third-party integrations and automation. It is split into two groups:
 
 - **Public API v1** — `/public/v1/*`, authenticated with an API key or OAuth token.
-- **Legacy public routes** — `/public/*` outside `/public/v1`, kept for n8n/Zapier/Make compatibility where noted.
+- **Compatibility public routes** — `/public/*` outside `/public/v1`, kept for n8n/Zapier/Make compatibility where noted.
 
 All v1 routes are org-scoped. Mutating routes support idempotency keys, and reads are rate-limited per org.
 
@@ -53,19 +53,16 @@ Public v1 routes are rate-limited by `API_LIMIT` (default **600 requests/hour** 
 
 - `POST /oauth/token` — 20/min
 - `GET /public/v1/analytics/overview` — 60/min
-- `POST /public/agent` — 30/min
 - `POST /public/t` — 60/min
 
 ## Pagination
 
-`GET /public/v1/posts` returns at most **100** posts per call (also the default page size). Use the `cursor` offset for paging:
+`GET /public/v1/posts` returns at most **100** posts per call (also the default page size). The response is always the paged shape `{ posts, cursor }`; use the `cursor` offset for paging. `cursor` is `null` on the last page.
 
 | Param | Description |
 |-------|-------------|
 | `?limit=` | 1–100; defaults to 100, hard-capped at 100. |
 | `?cursor=` | Opaque offset returned by the previous page. |
-
-If neither `limit` nor `cursor` is sent, the response is `{ posts }` for backward compatibility (still capped at 100). When paging is requested, the response is `{ posts, cursor }`; `cursor` is `null` on the last page.
 
 ## Idempotency
 
@@ -111,12 +108,11 @@ Base: `/public/v1`
 | GET | `/public/v1/generate-video/:id` | Poll an async video generation job |
 | POST | `/public/v1/video/function` | Call a provider tool, currently only `loadVoices` |
 
-`POST /public/v1/generate-video` accepts `type` (`text-to-video`, `image-to-video`, `video-to-video`) and provider params in `customParams`. The response is backward-compatible with the legacy `{ id, status, jobId, path, name, pollUrl }` shape:
+`POST /public/v1/generate-video` accepts `type` (`text-to-video`, `image-to-video`, `video-to-video`) and provider params in `customParams`. Both the POST and the polling GET return the same shape: `{ id, status, artifactUrl, provider, error }`.
 
-- If the artifact is returned synchronously, `status` is `completed` and `path` is the URL.
-- If a job is queued, `status` is `pending` and `pollUrl` points to `GET /public/v1/generate-video/:id`.
-
-A terminal `failed` status sets `pollUrl` to `''` and `error` to the failure reason.
+- If the artifact is returned synchronously, `id` is `null`, `status` is `completed`, and `artifactUrl` is the URL.
+- If a job is queued, `id` is the job id and `status` is `pending`; poll `GET /public/v1/generate-video/:id` with it. The poll normalizes any non-terminal provider status to `pending`.
+- Terminal statuses are `completed` (with `artifactUrl`) and `failed` (with `error` set to the failure reason).
 
 ## Integrations
 
@@ -132,26 +128,22 @@ Base: `/public/v1`
 | GET | `/public/v1/groups` | List customer groups |
 | GET | `/public/v1/is-connected` | Check whether the org has any active integration |
 
-`GET /public/v1/social/:integration` supports pinning a provider version:
+`GET /public/v1/social/:integration` requires an explicit provider version:
 
 - Pass `providerId@version` as the path param (e.g. `x@v1`).
 - Or pass `?version=v1` with a bare provider id.
-- A bare id resolves the latest active version.
+- A bare id without a version is rejected.
 - An unknown or retired version returns `404` or `410`.
 
 ## Analytics
 
-Base: `/public/v1` and `/public`
+Base: `/public/v1`
 
 | Method | Path | Purpose |
 |--------|------|---------|
 | GET | `/public/v1/analytics/overview` | Org overview with optional date range |
 | GET | `/public/v1/analytics/campaign/:id` | Campaign-scoped analytics |
 | GET | `/public/v1/analytics/anomalies` | Detected anomalies for the org |
-| GET | `/public/v1/analytics/:integration` | Legacy single-channel analytics |
-| GET | `/public/v1/analytics/post/:postId` | Legacy single-post analytics |
-
-The static routes `/overview`, `/campaign/:id`, and `/anomalies` are registered before the catch-all `/:integration` route so they resolve correctly. The legacy `/analytics/:integration` response shape is preserved for n8n/Zapier/Make compatibility.
 
 `GET /public/v1/analytics/overview` validates `from`/`to`, requires `to >= from`, and caps the window at 400 days.
 
@@ -163,13 +155,12 @@ Base: `/public/v1`
 |--------|------|---------|
 | GET | `/public/v1/notifications` | Get paginated org notifications |
 
-## Legacy public routes
+## Compatibility public routes
 
 Base: `/public`
 
 | Method | Path | Auth | Purpose |
 |--------|------|------|---------|
-| POST | `/public/agent` | `AGENT_API_KEY` env var | Create an agent post |
 | POST | `/public/t` | None | Track analytics/behaviour event |
 | POST | `/public/modify-subscription` | JWT | Modify subscription billing |
 | GET | `/public/stream` | None | Proxy-stream an external MP4 (SSRF-safe) |
@@ -242,4 +233,4 @@ Common status codes:
 - `410` — Requested provider version has been retired.
 - `429` — Rate limit exceeded.
 
-> Verified against v1.1.0 (2026-07-22)
+> Verified against v1.0.0

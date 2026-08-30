@@ -21,9 +21,6 @@ A single connected channel instance — credentials and settings for one account
 **Inngest**
 The durable job engine that schedules and executes background work. Postmill uses Inngest Cloud (or the local Inngest dev server) for event-driven and cron-triggered functions: post publishing, analytics collection, comment syncing, email delivery, autopost processing, and token refresh. Functions are served by the backend at `/api/inngest`.
 
-**Orchestrator** (legacy)
-The former Temporal worker application (`apps/orchestrator`) that hosted workflow and activity implementations. Removed before v1.0.0 (pre-release internal development); all background jobs now run through Inngest inside the backend.
-
 **Durable Execution**
 An execution model where job state is persisted on every step. Inngest provides retries, concurrency controls, and idempotency so that background work resumes reliably after restarts or failures.
 
@@ -89,7 +86,7 @@ Competitor account monitoring. `WatchedAccount` rows track public metrics for co
 The central AI facade. A single injection point that resolves models per scope/category and organization. Precedence: per-org stub → per-scope → global active → provider default. Provides `generateText`, `generateObject`, and `imageModel` wrappers.
 
 **Model category**
-The AI model classification used by defaults resolution: `low-reasoning`, `high-reasoning`, `vision`, `workflow`. The legacy scopes `utility`, `generator`, `agent`, `mcp` map to these categories.
+The AI model classification used by defaults resolution: `low-reasoning`, `high-reasoning`, `vision`, `workflow`. The scopes `utility`, `generator`, `agent`, `mcp` map to these categories.
 
 **Media category**
 The Content / Media Defaults classification, e.g. `text-to-image`, `text-to-video`, `image-upscale`, `video-caption`, `text-to-speech`.
@@ -136,7 +133,7 @@ An automation hook attached to a social provider. Auto plugs run on a schedule; 
 The SSRF-safe HTTP client. All outbound HTTP on user-influenced URLs goes through `safeFetch`, which performs `isSafePublicHttpsUrl` validation followed by an `ssrfSafeDispatcher` that re-validates every hop on a redirect chain. Covers webhook dispatch, provider fetches, and watchlist probes. No bare `fetch(userUrl)` in the codebase.
 
 **EncryptionService**
-AES-256-GCM at-rest encryption for secrets (OAuth tokens, Nostr keys, integration credentials). Uses versioned `v2:` prefix with an expand-contract read fallback for legacy plaintext data. Uses `ENCRYPTION_KEY` env var, falling back to derivation from `JWT_SECRET`.
+AES-256-GCM at-rest encryption for secrets (OAuth tokens, Nostr keys, integration credentials). Uses a versioned `v2:` prefix. Uses `ENCRYPTION_KEY` env var, falling back to derivation from `JWT_SECRET`.
 
 **CSRF**
 Cross-Site Request Forgery protection via a cookie + header token pair. Required on all cookie-authenticated mutating routes. Header/API-key clients are unaffected. Bypassed under `NOT_SECURED` (dev-only).

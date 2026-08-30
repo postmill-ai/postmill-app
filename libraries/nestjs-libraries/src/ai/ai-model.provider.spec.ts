@@ -78,10 +78,7 @@ vi.mock('@postmill-ai/nestjs-libraries/ai/defaults/defaults-resolution.service',
 const mockSpendLogData: any[] = [];
 vi.mock('@postmill-ai/nestjs-libraries/database/prisma/ai-settings/ai-settings.service', () => ({
   AiSettingsService: class MockAiSettings {
-    getProviderConfigs = vi.fn().mockResolvedValue([]);
-    getProviderConfigByIdentifier = vi.fn().mockResolvedValue(null);
     getOrgProviderConfigs = vi.fn().mockResolvedValue([]);
-    decryptProviderConfig = vi.fn().mockReturnValue({ credentials: undefined });
     getSystemSettings = vi.fn().mockResolvedValue(null);
     getBrandProfile = vi.fn().mockResolvedValue(null);
     getPromptTemplates = vi.fn().mockResolvedValue([]);
@@ -92,15 +89,11 @@ vi.mock('@postmill-ai/nestjs-libraries/database/prisma/ai-settings/ai-settings.s
 
 const mockSettings = {
   id: 'singleton',
-  activeProvider: 'openai',
-  activeModel: 'gpt-4.1',
   secretSettings: null,
-  scopeModels: null,
   fallbackProvider: null,
   fallbackImageProvider: null,
   guardrailSettings: null,
   budgetSettings: null,
-  rateLimitSettings: null,
   observability: null,
   mcpSettings: null,
   ragSettings: null,
@@ -448,8 +441,6 @@ describe('AIModelProvider', () => {
       });
       (settingsManager.getSettings as any).mockResolvedValue({
         ...mockSettings,
-        activeProvider: 'anthropic',
-        activeModel: 'claude-sonnet-4-20250514',
         fallbackImageProvider: 'openai',
       });
       mockGetActiveProvider.mockResolvedValue({
@@ -602,7 +593,7 @@ describe('AIModelProvider', () => {
       warn.mockRestore();
     });
 
-    it('uses the fallback provider default model when scoped primary model belongs to another provider', async () => {
+    it('uses the fallback provider default model when the primary model belongs to another provider', async () => {
       const primaryModel = {
         doGenerate: vi.fn().mockRejectedValue(new Error('primary provider failed')),
       };
@@ -639,15 +630,7 @@ describe('AIModelProvider', () => {
       });
       (settingsManager.getSettings as any).mockResolvedValue({
         ...mockSettings,
-        activeProvider: 'anthropic',
-        activeModel: 'claude-sonnet-4-20250514',
         fallbackProvider: 'openai',
-        scopeModels: {
-          utility: {
-            provider: 'anthropic',
-            model: 'claude-sonnet-4-20250514',
-          },
-        },
       });
       mockGetActiveProvider.mockResolvedValue({
         identifier: 'anthropic',
@@ -999,7 +982,7 @@ describe('AIModelProvider', () => {
     });
   });
 
-  describe('category defaults (AI_MODEL_DEFAULTS_ENABLED)', () => {
+  describe('category defaults (unconditional)', () => {
     it('uses a stored high-reasoning default for generator/agent/mcp scopes and reasoning:true', async () => {
       (defaultsResolution.resolve as any).mockImplementation(
         (_domain: string, category: string) => {
@@ -1028,7 +1011,7 @@ describe('AIModelProvider', () => {
       expect(reasoningResolved?.modelId).toBe('gpt-5');
     });
 
-    it('falls back to SURFACE_DEFAULTS when no candidate is resolved and flag is on', async () => {
+    it('falls back to SURFACE_DEFAULTS when no candidate is resolved', async () => {
       (defaultsResolution.resolve as any).mockResolvedValue(null);
       mockGetActiveProvider.mockResolvedValue({
         identifier: 'openai',
@@ -1040,57 +1023,25 @@ describe('AIModelProvider', () => {
       expect(resolved?.modelId).toBe('gpt-5.2');
     });
 
-    it('does not read scopeModels when the flag is on', async () => {
-      (settingsManager.getSettings as any).mockResolvedValue({
-        ...mockSettings,
-        scopeModels: { utility: { model: 'scope-ignored-model' } },
-      });
-      mockGetActiveProvider.mockResolvedValue({
-        identifier: 'openai',
-        defaultModel: 'gpt-4.1',
-        credentials: { apiKey: 'sk-test' },
-      });
-
-      const resolved = await provider.resolveConfigForScope('utility', 'org-123');
-      expect(resolved?.modelId).toBe('gpt-4.1');
-    });
-
-    it('uses the legacy scopeModels path when the kill switch is off', async () => {
+    it('consults category defaults even when AI_MODEL_DEFAULTS_ENABLED=false is set (no kill switch)', async () => {
+      // v1.0.0 removed the kill switch — the env var must be inert and the
+      // category-defaults path always taken.
       vi.stubEnv('AI_MODEL_DEFAULTS_ENABLED', 'false');
-      vi.resetModules();
+      try {
+        (defaultsResolution.resolve as any).mockResolvedValue({
+          providerId: 'openai',
+          version: 'v1',
+          model: 'gpt-5',
+          source: 'stored',
+        });
 
-      // Re-import the provider module so the module-level kill-switch constant
-      // is re-evaluated with the env var set to false.
-      const { AIModelProvider: KillSwitchedProvider } = await import('./ai-model.provider');
+        const resolved = await provider.resolveConfigForScope('utility', 'org-123');
 
-      (settingsManager.getSettings as any).mockResolvedValue({
-        ...mockSettings,
-        scopeModels: { utility: { model: 'legacy-scoped-model' } },
-      });
-      mockGetActiveProvider.mockResolvedValue({
-        identifier: 'openai',
-        defaultModel: 'gpt-4.1',
-        credentials: { apiKey: 'sk-test' },
-      });
-
-      const ksProvider = new (KillSwitchedProvider as any)(
-        aiSettings as any,
-        orgAiSettings as any,
-        settingsManager as any,
-        telemetry as any,
-        health as any,
-        budget as any,
-        guardrails as any,
-        brandsService,
-        resolution as any,
-        defaultsResolution as any,
-        mockKernel as any,
-      );
-
-      const resolved = await ksProvider.resolveConfigForScope('utility', 'org-123');
-      expect(resolved?.modelId).toBe('legacy-scoped-model');
-
-      vi.unstubAllEnvs();
+        expect(defaultsResolution.resolve).toHaveBeenCalledWith('ai', 'low-reasoning', 'org-123');
+        expect(resolved?.modelId).toBe('gpt-5');
+      } finally {
+        vi.unstubAllEnvs();
+      }
     });
   });
 

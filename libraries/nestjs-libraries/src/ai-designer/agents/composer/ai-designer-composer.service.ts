@@ -206,10 +206,8 @@ type LayoutId =
   | 'editorial-sidebar'
   | 'minimal-centered';
 
-// Legacy template ids from stored/v1 plans map into the gallery so older
-// plans still compose.
 /**
- * Legacy layouts the engine has taken over.
+ * Layouts the engine has taken over.
  *
  * Ported one at a time, each behind its own reviewed snapshot diff, because
  * these six encode about eight rounds of live remediation. A layout leaves this
@@ -227,27 +225,6 @@ const ENGINE_OWNED_LEGACY = new Set<string>([
   'split-panel',
   'editorial-sidebar',
 ]);
-
-const LAYOUT_ALIASES: Record<string, LayoutId> = {
-  'top-bottom-text': 'top-bottom',
-  'two-panel': 'split-panel',
-  'image-macro': 'hero-fullbleed',
-
-  // The composition gallery names arrangements this file does not implement
-  // yet — the layout engine exists but the composer still runs the six
-  // templates. Mapping each new id to its nearest built-in means a plan (or a
-  // skill's art direction) naming one gets the closest thing rather than
-  // silently falling through to the default hero, which would make every genre
-  // that prefers a type-led arrangement look identical.
-  //
-  // These go away when `_buildElements` is switched to the engine.
-  'type-dominant': 'minimal-centered',
-  'centred-emblem': 'minimal-centered',
-  'poster-frame': 'minimal-centered',
-  'stacked-thirds': 'top-bottom',
-  'overlap-card': 'hero-fullbleed',
-  'banner-strip': 'hero-fullbleed',
-};
 
 // Per-channel layout intent (plan.channelLayouts) → gallery template.
 const CHANNEL_LAYOUT_TEMPLATES: Record<string, LayoutId> = {
@@ -4552,9 +4529,8 @@ export class AiDesignerComposerService implements OnModuleInit {
 
   private _resolveTemplate(plan: DesignPlan): LayoutId {
     const raw = plan.formatTemplate?.trim();
-    const mapped = raw ? LAYOUT_ALIASES[raw] ?? raw : undefined;
-    if (mapped && (LAYOUT_TYPE_SCALE as Record<string, number>)[mapped] !== undefined) {
-      return mapped as LayoutId;
+    if (raw && (LAYOUT_TYPE_SCALE as Record<string, number>)[raw] !== undefined) {
+      return raw as LayoutId;
     }
     if (raw) {
       this._logger.warn(

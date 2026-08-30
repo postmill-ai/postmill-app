@@ -145,7 +145,6 @@ Use NestJS `Logger.warn(message)` / `Logger.error(message)` — never `console.l
 
 - Algorithm pinned to `HS256`.
 - New tokens carry `exp` with sliding renewal.
-- Legacy exp-less tokens still verify (no forced re-auth).
 - IDs and secrets generated with CSPRNG.
 
 ### NOT_SECURED bypass
@@ -223,7 +222,7 @@ Each repository typically has a companion service file in the same directory (e.
 
 ## Module wiring
 
-All provider domains (AI, Media, Storage, Short-link, Social, VPN, Content Packs, Email, Auth) register through the shared **`ProviderKernel`** at module init. `apps/backend/src/providers.generated.ts` (hand-maintained despite the name) imports every provider package's modules into a single `providerModules` array; `ProvidersBootstrap.onModuleInit` (`apps/backend/src/providers.bootstrap.ts`) walks that array and calls `kernel.register(mod)` for each, honoring the `DEV_DISABLE_*` feature flags. Malformed manifests or duplicate registrations are fatal to boot. (The legacy `AIProviderRegistry`/`MediaProviderRegistry` in-memory registries and the `PROVIDER_KERNEL=legacy` kill switch were removed.)
+All provider domains (AI, Media, Storage, Short-link, Social, VPN, Content Packs, Email, Auth) register through the shared **`ProviderKernel`** at module init. `apps/backend/src/providers.generated.ts` (hand-maintained despite the name) imports every provider package's modules into a single `providerModules` array; `ProvidersBootstrap.onModuleInit` (`apps/backend/src/providers.bootstrap.ts`) walks that array and calls `kernel.register(mod)` for each, honoring the `DEV_DISABLE_*` feature flags. Malformed manifests or duplicate registrations are fatal to boot. The kernel is the only registry — there is no fallback.
 
 Resolution is through `ProviderResolutionService` — the kernel is the sole resolution path. Channel provider integrations resolve the same way: social adapters are wrapped in `SocialProviderKernelAdapter` and registered like every other domain; `IntegrationManager` resolves them by identifier.
 

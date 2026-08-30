@@ -3,6 +3,7 @@ import type {
   CreatePostDto,
   GetNotificationsDto,
   GetPostsDto,
+  PostListResponse,
   TriggerIntegrationToolDto,
   UpdateReleaseIdDto,
   UploadDto,
@@ -10,7 +11,7 @@ import type {
   VideoFunctionDto,
   VideoJobResponse,
 } from './types';
-export type { VideoJobResponse } from './types';
+export type { PostListResponse, VideoJobResponse } from './types';
 
 function toQueryString(obj: Record<string, unknown>): string {
   const params = new URLSearchParams();
@@ -62,8 +63,8 @@ export default class Postmill {
     return this._request('POST', '/posts', { body: posts });
   }
 
-  async postList(filters: GetPostsDto): Promise<unknown> {
-    return this._request('GET', '/posts', { query: { ...filters } });
+  async postList(filters: GetPostsDto): Promise<PostListResponse> {
+    return this._request('GET', '/posts', { query: { ...filters } }) as Promise<PostListResponse>;
   }
 
   async upload(file: BlobPart | Buffer, extension: string): Promise<unknown> {
@@ -120,7 +121,16 @@ export default class Postmill {
     integration: string,
     opts?: { refresh?: string; version?: string }
   ): Promise<unknown> {
-    return this._request('GET', `/social/${integration}`, { query: { ...opts } });
+    // The v1 route requires an explicit provider version: a bare, unversioned
+    // id 404s. Address the provider as "providerId@version" in the path or
+    // pass `opts.version`.
+    if (!integration.includes('@') && !opts?.version) {
+      throw new Error(
+        'connectChannel requires an explicit provider version — pass the integration as "providerId@version" (e.g. "x@v1") or set opts.version'
+      );
+    }
+    const query = opts && Object.keys(opts).length > 0 ? { ...opts } : undefined;
+    return this._request('GET', `/social/${integration}`, { query });
   }
 
   async notifications(page?: number): Promise<unknown> {
@@ -188,14 +198,6 @@ export default class Postmill {
     return this._request('GET', '/analytics/anomalies', { query: { ...query } });
   }
 
-  async channelAnalytics(integration: string, date: string): Promise<unknown> {
-    return this._request('GET', `/analytics/${integration}`, { query: { date } });
-  }
-
-  async postAnalytics(postId: string, date: string): Promise<unknown> {
-    return this._request('GET', `/analytics/post/${postId}`, { query: { date } });
-  }
-
   async triggerIntegrationTool(
     id: string,
     body: TriggerIntegrationToolDto
@@ -208,16 +210,19 @@ export default class Postmill {
     { pollIntervalMs = 3000, timeoutMs = 300000 }: { pollIntervalMs?: number; timeoutMs?: number } = {}
   ): Promise<VideoJobResponse> {
     const started = await this.generateVideo(body);
-    if (!started.pollUrl) {
+    // Terminal right away, or a synchronous completion (`id: null`) with no
+    // job row to poll — `artifactUrl` is already set.
+    if (started.status !== 'pending' || !started.id) {
       return started;
     }
 
-    const jobId = started.jobId || started.id;
+    const jobId = started.id;
     const deadline = Date.now() + timeoutMs;
 
     while (Date.now() < deadline) {
       const job = await this.getVideoJob(jobId);
-      if (job.status === 'completed' || job.status === 'failed' || !job.pollUrl) {
+      // 'completed' and 'failed' are both terminal.
+      if (job.status !== 'pending') {
         return job;
       }
       await delay(pollIntervalMs);

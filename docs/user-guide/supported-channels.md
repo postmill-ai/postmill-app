@@ -13,7 +13,7 @@ The canonical source is `PROVIDER_CAPABILITIES` in
 |--------|-------------|
 | `analytics` | Provider supports fetching analytics data (profile/follower metrics, post engagement) |
 | `comments` | Provider supports fetching and replying to platform comments via `ISocialMediaComments` |
-| `firstComment` | Supports auto-posting a first comment immediately after a successful publish (workflow v1.0.6) |
+| `firstComment` | Supports auto-posting a first comment immediately after a successful publish |
 | `poll` | Supports poll-style posts with options and duration |
 | `video` | Supports video media attachments |
 | `carousel` | Supports multi-image carousel posts |

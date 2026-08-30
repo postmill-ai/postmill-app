@@ -169,11 +169,12 @@ export class NostrProvider extends SocialAbstract implements SocialProvider {
 
       const user = await this.findRelayInformation(pubkey);
 
-      const encryptedKey = AuthService.fixedEncryption(body.password);
       return {
         id: pubkey,
         name: user.display_name || user.displayName || user.name || 'No Name',
-        accessToken: AuthService.signJWT({ password: encryptedKey }),
+        // Credentials are stored as a v2:-encrypted value (at-rest AES-GCM,
+        // same path as every other provider) — not as a signed JWT.
+        accessToken: AuthService.fixedEncryption(body.password),
         refreshToken: '',
         expiresIn: dayjs().add(200, 'year').unix() - dayjs().unix(),
         picture: user?.picture || '',
@@ -197,8 +198,7 @@ export class NostrProvider extends SocialAbstract implements SocialProvider {
     accessToken: string,
     postDetails: PostDetails[]
   ): Promise<PostResponse[]> {
-    const { password: encryptedPassword } = AuthService.verifyJWT(accessToken) as any;
-    const password = AuthService.fixedDecryption(encryptedPassword) as any;
+    const password = AuthService.fixedDecryption(accessToken) as any;
     const [firstPost] = postDetails;
 
     const textEvent = finalizeEvent(
@@ -231,8 +231,7 @@ export class NostrProvider extends SocialAbstract implements SocialProvider {
     postDetails: PostDetails[],
     integration: Integration
   ): Promise<PostResponse[]> {
-    const { password: encryptedPassword } = AuthService.verifyJWT(accessToken) as any;
-    const password = AuthService.fixedDecryption(encryptedPassword) as any;
+    const password = AuthService.fixedDecryption(accessToken) as any;
     const [commentPost] = postDetails;
     const replyToId = lastCommentId || postId;
 

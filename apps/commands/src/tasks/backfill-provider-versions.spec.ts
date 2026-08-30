@@ -3,7 +3,6 @@ import { BackfillProviderVersions } from './backfill-provider-versions';
 
 function createMockPrismaService() {
   const store: Record<string, any[]> = {
-    AIProviderConfig: [{ id: 'ai-1', version: null }],
     AIOrgProviderConfig: [{ id: 'aiorg-1', version: '' }],
     MediaProviderConfig: [{ id: 'media-1', version: null }],
     AIMediaJob: [{ id: 'job-1', version: '' }],
@@ -18,12 +17,11 @@ function createMockPrismaService() {
         vpnSelection: JSON.stringify({ enabled: true, identifier: 'nordvpn' }),
       },
     ],
-    ProviderConfiguration: [{ id: 'providercfg-1', version: '' }],
     OrgVpnConfig: [{ id: 'vpn-1', version: null }],
     ContentPackConfig: [{ id: 'contentpack-1', version: '' }],
     AuthProviderConfig: [{ id: 'auth-1', version: null }],
     AISystemSettings: [
-      { id: 'settings-1', activeProvider: 'openai', fallbackProvider: '', fallbackImageProvider: null, scopeModels: null },
+      { id: 'settings-1', fallbackProvider: '', fallbackImageProvider: null },
     ],
     Organization: [
       { id: 'org-1', activeContentPackIdentifier: 'adobe-stock' },
@@ -69,7 +67,6 @@ function createMockPrismaService() {
   });
 
   const prisma = {
-    aIProviderConfig: modelProxy('AIProviderConfig'),
     aIOrgProviderConfig: modelProxy('AIOrgProviderConfig'),
     mediaProviderConfig: modelProxy('MediaProviderConfig'),
     aIMediaJob: modelProxy('AIMediaJob'),
@@ -78,7 +75,6 @@ function createMockPrismaService() {
     shortLink: modelProxy('ShortLink'),
     integration: modelProxy('Integration'),
     orgProviderConfiguration: modelProxy('OrgProviderConfiguration'),
-    providerConfiguration: modelProxy('ProviderConfiguration'),
     orgVpnConfig: modelProxy('OrgVpnConfig'),
     contentPackConfig: modelProxy('ContentPackConfig'),
     authProviderConfig: modelProxy('AuthProviderConfig'),
@@ -97,7 +93,6 @@ describe('BackfillProviderVersions', () => {
 
     await command.run();
 
-    expect(store.AIProviderConfig[0].version).toBe('v1');
     expect(store.AIOrgProviderConfig[0].version).toBe('v1');
     expect(store.MediaProviderConfig[0].version).toBe('v1');
     expect(store.AIMediaJob[0].version).toBe('v1');
@@ -106,12 +101,10 @@ describe('BackfillProviderVersions', () => {
     expect(store.ShortLink[0].providerVersion).toBe('v1');
     expect(store.Integration[0].providerVersion).toBe('v1');
     expect(store.OrgProviderConfiguration[0].version).toBe('v1');
-    expect(store.ProviderConfiguration[0].version).toBe('v1');
     expect(store.OrgVpnConfig[0].version).toBe('v1');
     expect(store.ContentPackConfig[0].version).toBe('v1');
     expect(store.AuthProviderConfig[0].version).toBe('v1');
 
-    expect(store.AISystemSettings[0].activeProvider).toBe('openai@v1');
     expect(store.Organization[0].activeContentPackIdentifier).toBe('adobe-stock@v1');
     expect(store.Organization[1].activeContentPackIdentifier).toBe('vecteezy@v2');
 

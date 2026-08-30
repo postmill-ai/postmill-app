@@ -77,4 +77,4 @@ A small set of single-recipient emails is sent regardless of notification prefer
 
 > See also [Team & Roles](./team-and-roles.md) for broadcast permissions, [Settings](./settings.md) for the settings layout, and [Operations Guide → Configuration](../operations-guide/configuration.md) for email and FCM environment variables.
 
-> Verified against v1.1.0 (2026-07-22)
+> Verified against v1.0.0

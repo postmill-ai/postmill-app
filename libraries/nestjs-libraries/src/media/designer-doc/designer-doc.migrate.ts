@@ -61,70 +61,28 @@ export const createBlankDoc = (
   };
 };
 
-// Load-time migration: legacy { width, height, pages[] } → { mode, outputs[] }
+/**
+ * Load-time normalisation for the CURRENT document shape. This is input
+ * hygiene, not a migration: a doc missing `version` is stamped with
+ * `DESIGNER_DOC_VERSION`, `mode` defaults to image, and doc-level symbol
+ * definitions are carried across so a re-normalise cannot drop every symbol
+ * instance on the next load.
+ *
+ * Anything that is not the outputs-based shape is NOT rewritten — v1 ships
+ * with zero legacy support, so a malformed doc passes through unchanged and
+ * the zod schema downstream rejects it.
+ */
 export const migrateDoc = (raw: any): DesignerDoc => {
-  if (raw && Array.isArray(raw.outputs)) {
-    return {
-      version: raw.version || DESIGNER_DOC_VERSION,
-      mode: raw.mode || 'image',
-      outputs: raw.outputs,
-      attribution: raw.attribution,
-      // Symbol definitions live on the doc; omitting them here would drop every
-      // symbol instance in the document on the next load.
-      ...(Array.isArray(raw.symbols) ? { symbols: raw.symbols } : {}),
-    } as DesignerDoc;
+  if (!raw || !Array.isArray(raw.outputs)) {
+    return raw as DesignerDoc;
   }
-  const w = raw?.width || 1080;
-  const h = raw?.height || 1080;
-  const m = matchPreset(w, h);
-  if (raw?.mode === 'video') {
-    const preset = CHANNEL_PRESETS.find((p) => p.id === m.formatId);
-    // Preserve any existing video tracks/clips from the legacy shape.
-    const existingTracks = Array.isArray(raw?.tracks)
-      ? raw.tracks.map((t: any) => ({
-          id: t.id || genId(),
-          type: t.type || 'video',
-          clips: Array.isArray(t.clips) ? t.clips : [],
-        }))
-      : [];
-    const tracks =
-      existingTracks.length > 0
-        ? existingTracks
-        : [{ id: genId(), type: 'video' as const, clips: [] }];
-    return {
-      version: DESIGNER_DOC_VERSION,
-      mode: 'video',
-      outputs: [
-        {
-          id: genId(),
-          formatId: m.formatId,
-          name: m.name,
-          width: w,
-          height: h,
-          fps: preset?.fps ?? 30,
-          durationMs: preset?.maxDurationMs ?? 10000,
-          tracks,
-        },
-      ],
-      attribution: raw?.attribution,
-    } as DesignerDoc;
-  }
-  const outputs = (raw?.pages || [
-    { id: genId(), background: '#ffffff', children: [] },
-  ]).map((p: any, i: number) => ({
-    id: p.id || genId(),
-    formatId: m.formatId,
-    name: (raw?.pages?.length || 1) > 1 ? `${m.name} ${i + 1}` : m.name,
-    width: w,
-    height: h,
-    background: p.background || '#ffffff',
-    bg: p.bg,
-    children: p.children || [],
-  }));
   return {
-    version: DESIGNER_DOC_VERSION,
-    mode: 'image',
-    outputs,
-    attribution: raw?.attribution,
+    version: raw.version || DESIGNER_DOC_VERSION,
+    mode: raw.mode || 'image',
+    outputs: raw.outputs,
+    attribution: raw.attribution,
+    // Symbol definitions live on the doc; omitting them here would drop every
+    // symbol instance in the document on the next load.
+    ...(Array.isArray(raw.symbols) ? { symbols: raw.symbols } : {}),
   } as DesignerDoc;
 };

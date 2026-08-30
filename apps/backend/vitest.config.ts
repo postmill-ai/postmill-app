@@ -32,7 +32,6 @@ export default defineConfig({
       provider: 'v8',
       reporter: ['text', 'lcov', 'html'],
       include: [
-        'src/api/routes/channel.config.controller.ts',
         'src/api/routes/analytics.v2.controller.ts',
         'src/api/routes/ai-settings.controller.ts',
         'src/api/routes/ai-user.controller.ts',
@@ -59,11 +58,8 @@ export default defineConfig({
       // `include` — each file is gated at its CURRENT honest floor so (a) the gate is
       // green today and (b) any regression below today fails CI. TODO(tracked debt):
       // raise these toward 90 as behavioural specs are added (ai-settings/copilot are
-      // the worst). Files that genuinely meet 90 (channel.config, stripe) stay at 90.
+      // the worst). Files that genuinely meet 90 (stripe) stay at 90.
       thresholds: {
-        'src/api/routes/channel.config.controller.ts': {
-          statements: 90, branches: 90, functions: 90, lines: 90,
-        },
         'src/api/routes/analytics.v2.controller.ts': {
           statements: 90, branches: 90, functions: 75, lines: 90,
         },

@@ -49,7 +49,6 @@ import { OAuthAppController } from '@postmill-ai/backend/api/routes/oauth-app.co
 import { ApprovedAppsController } from '@postmill-ai/backend/api/routes/approved-apps.controller';
 import { OAuthController, OAuthAuthorizedController } from '@postmill-ai/backend/api/routes/oauth.controller';
 import { AnnouncementsController } from '@postmill-ai/backend/api/routes/announcements.controller';
-import { ChannelConfigController } from '@postmill-ai/backend/api/routes/channel.config.controller';
 import { ChannelConfigPerTenantController } from '@postmill-ai/backend/api/routes/channel-config.per-tenant.controller';
 import { SocialCommentsController } from '@postmill-ai/backend/api/routes/social-comments.controller';
 import { AiSettingsController } from '@postmill-ai/backend/api/routes/ai-settings.controller';
@@ -75,7 +74,6 @@ import { DesignController, DesignRenderFrameController, DesignTemplateController
 import { EmailWebhooksController } from '@postmill-ai/backend/api/routes/email-webhooks.controller';
 import { MediaJobsWebhookController } from '@postmill-ai/backend/api/routes/media-jobs-webhook.controller';
 import { AiGuardMiddleware } from '@postmill-ai/backend/services/ai/ai-guard.middleware';
-import { BudgetMiddleware } from '@postmill-ai/nestjs-libraries/ai/governance/budget.middleware';
 import { AuthProviderManager } from '@postmill-ai/backend/services/auth/providers/auth-provider.manager';
 import { ProvidersManager } from '@postmill-ai/backend/services/auth/providers/providers.manager';
 import { OrgRbacGuard } from '@postmill-ai/backend/services/auth/rbac/org-rbac.guard';
@@ -125,7 +123,6 @@ export const authenticatedController = [
   ApprovedAppsController,
   OAuthAuthorizedController,
   AnnouncementsController,
-  ChannelConfigController,
   AnalyticsV2Controller,
   AiSettingsController,
   AdminDefaultsController,
@@ -219,15 +216,6 @@ export class ApiModule implements NestModule {
     // path-to-regexp v8 (Express 5 / Nest 11) requires named wildcards; bare `*`
     // throws "Missing parameter name". `{/*splat}` matches both the bare path and
     // everything under it (e.g. /agents and /agents/list).
-    consumer
-      .apply(BudgetMiddleware)
-      .forRoutes({ path: '/agents{/*splat}', method: RequestMethod.ALL });
-    consumer
-      .apply(BudgetMiddleware)
-      .forRoutes({ path: '/copilot{/*splat}', method: RequestMethod.ALL });
-    consumer
-      .apply(BudgetMiddleware)
-      .forRoutes({ path: '/ai{/*splat}', method: RequestMethod.ALL });
     consumer
       .apply(AiGuardMiddleware)
       .forRoutes({ path: '/copilot/chat', method: RequestMethod.POST });

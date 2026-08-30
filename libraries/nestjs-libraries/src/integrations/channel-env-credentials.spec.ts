@@ -14,6 +14,10 @@ describe('channel-env-credentials', () => {
     'VK_ID',
     'X_API_KEY',
     'X_API_SECRET',
+    // No channel mapping consumes these (generic OIDC login does); they must
+    // never platform-enable a channel.
+    'POSTMILL_OAUTH_CLIENT_ID',
+    'POSTMILL_OAUTH_CLIENT_SECRET',
   ];
 
   beforeEach(() => {
@@ -79,6 +83,14 @@ describe('channel-env-credentials', () => {
 
   it('returns undefined for unmapped providers', () => {
     expect(getEnvClientInfo('bluesky')).toBeUndefined();
+  });
+
+  it('oauth_custom is not a channel mapping (POSTMILL_OAUTH_* belongs to generic OIDC login)', () => {
+    process.env.POSTMILL_OAUTH_CLIENT_ID = 'oidc-id';
+    process.env.POSTMILL_OAUTH_CLIENT_SECRET = 'oidc-secret';
+    expect(getEnvClientInfo('oauth_custom')).toBeUndefined();
+    expect(isEnvEnabled('oauth_custom')).toBe(false);
+    expect(getEnvEnabledIdentifiers()).not.toContain('oauth_custom');
   });
 
   it('lists only env-enabled identifiers', () => {

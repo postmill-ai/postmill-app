@@ -34,7 +34,7 @@ Register a new `ai`-domain provider package under `libraries/providers/<id>` and
 
 ## Invariants (do not break)
 - **No env-key fallback, ever.** Credentials live only in `AIOrgProviderConfig` (per-org, `@@unique([organizationId, identifier, version])`, encrypted at rest via `EncryptionService`). No active provider ⇒ AI is off for that org on all four surfaces (`utility`, `generator`, `agent`, `mcp`).
-- `AIProviderConfig` is deprecated-global — do not read it.
+- The legacy global `AIProviderConfig` table was dropped in v1.0.0 — do not reference it.
 
 ## Verify
 - `vitest run --root libraries/providers/<id>` — package specs.

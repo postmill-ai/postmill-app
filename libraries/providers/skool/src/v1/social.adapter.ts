@@ -47,22 +47,14 @@ export class SkoolProvider extends SocialAbstract implements SocialProvider {
     client_id: string;
     auth_token: string;
   } {
-    const stored = integration.customInstanceDetails!;
-    try {
-      // Current format: credentials stored as at-rest AES-encrypted JSON.
-      return JSON.parse(AuthService.fixedDecryption(stored)) as {
-        client_id: string;
-        auth_token: string;
-      };
-    } catch {
-      // Legacy format: Skool accounts connected before the storage format was
-      // changed kept their credentials as a signed JWT. Read those as-is so
-      // already-connected accounts keep working without a reconnect.
-      return AuthService.verifyJWT(stored) as {
-        client_id: string;
-        auth_token: string;
-      };
-    }
+    // Credentials are stored as a v2:-encrypted JSON blob (at-rest AES-GCM).
+    // The legacy signed-JWT storage format was removed in v1.0.0.
+    return JSON.parse(
+      AuthService.fixedDecryption(integration.customInstanceDetails!)
+    ) as {
+      client_id: string;
+      auth_token: string;
+    };
   }
 
   override handleErrors(

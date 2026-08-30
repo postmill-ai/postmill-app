@@ -113,14 +113,6 @@ Browser and mobile push notifications are sent via Firebase Cloud Messaging (FCM
 | `SOCIAL_COMMENT_RETENTION_DAYS` | `90` | Days before social comments are soft-deleted |
 | `AGENT_DIGEST_ENABLED` | — | Set to `true` to enable the Monday 07:00 ET headless AI digest |
 
-## AI Model Defaults
-
-Model defaults re-point AI model resolution from the legacy scope/model chain to category-driven defaults (`low-reasoning`, `high-reasoning`, `vision`, `workflow`) and the corresponding Media Defaults categories.
-
-| Variable | Default | Purpose |
-|----------|---------|---------|
-| `AI_MODEL_DEFAULTS_ENABLED` | `true` (unset = on) | Kill switch for the model-category re-point and Model/Media Defaults feature. Set to `false` to revert AI model resolution to the legacy chain |
-
 ## AI Budget Enforcement
 
 Per-provider AI budgets are configured per-organization in **Settings → AI**. The deployment-level kill switch below controls whether provider caps are actually enforced.
@@ -134,7 +126,6 @@ Per-provider AI budgets are configured per-organization in **Settings → AI**. 
 | Variable | Default | Purpose |
 |----------|---------|---------|
 | `API_LIMIT` | `600` | Public API rate limit per hour |
-| `AGENT_API_KEY` | — | API key for legacy `/public/agent` endpoint |
 | `OPENAI_APP_CHALLENGE` | — | Challenge string for OpenAI apps, served at `/.well-known/openai-apps-challenge` |
 | `MOBILE_APP_SCHEME` | `postmill://auth/callback` | Deep-link scheme the mobile OAuth callback (`GET /auth/oauth-mobile-callback`) redirects to |
 | `NEXT_PUBLIC_OVERRIDE_BACKEND_URL` | — | Overrides the token endpoint advertised in the MCP OAuth discovery document (`/.well-known/oauth-authorization-server`); falls back to the backend URL |
@@ -234,6 +225,8 @@ These env vars are used only when no enabled DB config exists for the provider.
 ## Channel OAuth apps (platform click-connect)
 
 Setting a provider's platform OAuth app credentials here gives every organization one-click **Connect** without per-org key entry. Leaving a provider unset requires each org to add its own app via Settings → Channels. A per-org config always takes precedence. Step-by-step portal setup for each provider: [Platform Channel Apps](./platform-channel-apps.md).
+
+These channel variables are the only provider credentials read from the environment. AI provider keys, short-link, and storage credentials are configured per-org in-app and have no env fallback; login-provider variables must never be used as AI credentials.
 
 | Variable | Provider |
 |----------|----------|
@@ -389,19 +382,5 @@ See [Video Rendering](./video-rendering.md) for the full list of `VIDEO_RENDER_*
 |----------|---------|---------|
 | `PUPPETEER_EXECUTABLE_PATH` | (bundled Chromium) | Path to a system/distro Chromium binary for design frame capture (used by the render-worker container). Unset = Puppeteer's bundled Chromium |
 | `PUPPETEER_DISABLE_SANDBOX` | `false` | Set to `true` to launch the campaign-report PDF Chromium with `--no-sandbox` (for CI/containers without user namespaces; also disabled automatically when `CI=true`). Production defaults to sandboxed mode |
-
-## Variables no longer read
-
-The following patterns are no longer supported as environment variables. Configure them in-app instead:
-
-- `OPENAI_API_KEY` and other AI provider keys
-- Short-link provider vars (`DUB_TOKEN`, `SHORT_IO_SECRET_KEY`, `KUTT_API_KEY`, etc.)
-- Storage env vars (`STORAGE_PROVIDER`, `CLOUDFLARE_*`, etc.)
-- Legacy email vars (`RESEND_API_KEY`, `EMAIL_HOST`, `EMAIL_PORT`, `EMAIL_SECURE`, `EMAIL_USER`, `EMAIL_PASS`)
-- `KIEAI_API_KEY` (legacy Veo3 provider deleted)
-- `TRANSLOADIT_AUTH` / `TRANSLOADIT_SECRET` (legacy video assembly deleted)
-- `ELEVENLABS_API_KEY` / `ELEVENLABS_*` (legacy direct ElevenLabs calls deleted; configure ElevenLabs as an AI Media provider instead)
-
-Channel provider vars (`*_CLIENT_ID` / `*_CLIENT_SECRET` / `*_APP_ID` / `*_APP_SECRET` / `TELEGRAM_TOKEN`) **are** read — as the platform click-connect app covered in [Channel OAuth apps](#channel-oauth-apps-platform-click-connect); a per-org Settings → Channels config always wins. The `GITHUB_CLIENT_*` and `POSTMILL_OAUTH_*` vars remain login-provider configuration only (bootstrap fallback for auth providers managed by the separate administration app) and must never be used for AI credentials. `YOUTUBE_CLIENT_*` is dual-use: Google login **and** the YouTube platform channel app. `POSTMILL_OAUTH_CLIENT_ID` / `POSTMILL_OAUTH_CLIENT_SECRET` also back the custom OAuth channel.
 
 > Verified against v1.0.0

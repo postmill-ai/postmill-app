@@ -10,7 +10,6 @@ import { AiSettingsRepository } from './ai-settings.repository';
 describe('AiSettingsRepository', () => {
   let repository: AiSettingsRepository;
 
-  let mockProviderConfig: Record<string, ReturnType<typeof vi.fn>>;
   let mockSystemSettings: Record<string, ReturnType<typeof vi.fn>>;
   let mockSpendLog: Record<string, ReturnType<typeof vi.fn>>;
   let mockAudit: Record<string, ReturnType<typeof vi.fn>>;
@@ -30,12 +29,6 @@ describe('AiSettingsRepository', () => {
   beforeEach(() => {
     vi.clearAllMocks();
 
-    mockProviderConfig = {
-      findMany: vi.fn().mockResolvedValue([]),
-      findUnique: vi.fn().mockResolvedValue(null),
-      upsert: vi.fn().mockResolvedValue({}),
-      delete: vi.fn().mockResolvedValue({}),
-    };
     mockSystemSettings = {
       findUnique: vi.fn().mockResolvedValue(null),
       upsert: vi.fn().mockResolvedValue({}),
@@ -96,7 +89,6 @@ describe('AiSettingsRepository', () => {
     };
 
     repository = new AiSettingsRepository(
-      makeRepoMock('aIProviderConfig', mockProviderConfig),
       makeRepoMock('aISystemSettings', mockSystemSettings),
       makeRepoMock('aISpendLog', mockSpendLog),
       makeRepoMock('aISettingsAudit', mockAudit),
@@ -113,7 +105,7 @@ describe('AiSettingsRepository', () => {
 
   describe('getSystemSettings', () => {
     it('fetches the singleton row by id', async () => {
-      const settings = { id: 'singleton', activeProvider: null };
+      const settings = { id: 'singleton', fallbackProvider: null };
       mockSystemSettings.findUnique.mockResolvedValue(settings);
 
       const result = await repository.getSystemSettings();
@@ -133,7 +125,7 @@ describe('AiSettingsRepository', () => {
 
   describe('upsertSystemSettings', () => {
     it('upserts with id=singleton, merging create and update', async () => {
-      const data = { activeProvider: 'openai', scopeModels: '{}' };
+      const data = { fallbackProvider: 'openai@v1', budgetSettings: '{}' };
       const upserted = { id: 'singleton', ...data };
       mockSystemSettings.upsert.mockResolvedValue(upserted);
 
@@ -145,136 +137,6 @@ describe('AiSettingsRepository', () => {
         update: data,
       });
       expect(result).toEqual(upserted);
-    });
-  });
-
-  // ── AIProviderConfig ──
-
-  describe('getProviderConfigs', () => {
-    it('returns all provider configs', async () => {
-      const configs = [
-        { identifier: 'openai', enabled: true },
-        { identifier: 'anthropic', enabled: false },
-      ];
-      mockProviderConfig.findMany.mockResolvedValue(configs);
-
-      const result = await repository.getProviderConfigs();
-
-      expect(mockProviderConfig.findMany).toHaveBeenCalledWith();
-      expect(result).toEqual(configs);
-    });
-
-    it('returns empty array when no configs exist', async () => {
-      mockProviderConfig.findMany.mockResolvedValue([]);
-      const result = await repository.getProviderConfigs();
-      expect(result).toEqual([]);
-    });
-  });
-
-  describe('listProviderConfigs', () => {
-    it('returns configs with limited fields ordered by createdAt desc', async () => {
-      const configs = [{ id: '1', identifier: 'openai', enabled: true }];
-      mockProviderConfig.findMany.mockResolvedValue(configs);
-
-      const result = await repository.listProviderConfigs();
-
-      expect(mockProviderConfig.findMany).toHaveBeenCalledWith({
-        select: {
-          id: true,
-          identifier: true,
-          enabled: true,
-          defaultModel: true,
-          reasoningModel: true,
-          extraConfig: true,
-          createdAt: true,
-          updatedAt: true,
-        },
-        orderBy: { createdAt: 'desc' },
-      });
-      expect(result).toEqual(configs);
-    });
-  });
-
-  describe('getProviderConfigByIdentifier', () => {
-    it('returns a single config by identifier', async () => {
-      const config = { identifier: 'openai', enabled: true };
-      mockProviderConfig.findUnique.mockResolvedValue(config);
-
-      const result = await repository.getProviderConfigByIdentifier('openai');
-
-      expect(mockProviderConfig.findUnique).toHaveBeenCalledWith({
-        where: { identifier_version: { identifier: 'openai', version: 'v1' } },
-      });
-      expect(result).toEqual(config);
-    });
-
-    it('returns null when identifier not found', async () => {
-      mockProviderConfig.findUnique.mockResolvedValue(null);
-      const result = await repository.getProviderConfigByIdentifier('unknown');
-      expect(result).toBeNull();
-    });
-  });
-
-  describe('upsertProviderConfig', () => {
-    it('upserts with create having identifier + data and update with data only', async () => {
-      const data = { enabled: true, credentials: 'enc', defaultModel: 'gpt-4' };
-      const upserted = { identifier: 'openai', ...data };
-      mockProviderConfig.upsert.mockResolvedValue(upserted);
-
-      const result = await repository.upsertProviderConfig('openai', data);
-
-      expect(mockProviderConfig.upsert).toHaveBeenCalledWith({
-        where: { identifier_version: { identifier: 'openai', version: 'v1' } },
-        create: { identifier: 'openai', version: 'v1', ...data },
-        update: data,
-      });
-      expect(result).toEqual(upserted);
-    });
-
-    it('upserts with optional fields omitted', async () => {
-      const data = { enabled: false };
-      mockProviderConfig.upsert.mockResolvedValue({ identifier: 'mini', ...data });
-
-      await repository.upsertProviderConfig('mini', data);
-
-      expect(mockProviderConfig.upsert).toHaveBeenCalledWith({
-        where: { identifier_version: { identifier: 'mini', version: 'v1' } },
-        create: { identifier: 'mini', version: 'v1', enabled: false },
-        update: { enabled: false },
-      });
-    });
-  });
-
-  describe('deleteProviderConfig', () => {
-    it('deletes by identifier', async () => {
-      const deleted = { identifier: 'openai' };
-      mockProviderConfig.delete.mockResolvedValue(deleted);
-
-      const result = await repository.deleteProviderConfig('openai');
-
-      expect(mockProviderConfig.delete).toHaveBeenCalledWith({
-        where: { identifier_version: { identifier: 'openai', version: 'v1' } },
-      });
-      expect(result).toEqual(deleted);
-    });
-
-    it('throws when identifier does not exist', async () => {
-      mockProviderConfig.delete.mockRejectedValue(new Error('RecordNotFound'));
-      await expect(repository.deleteProviderConfig('ghost')).rejects.toThrow('RecordNotFound');
-    });
-  });
-
-  describe('getEnabledProviderConfigs', () => {
-    it('fetches only enabled configs', async () => {
-      const enabled = [{ identifier: 'openai', enabled: true }];
-      mockProviderConfig.findMany.mockResolvedValue(enabled);
-
-      const result = await repository.getEnabledProviderConfigs();
-
-      expect(mockProviderConfig.findMany).toHaveBeenCalledWith({
-        where: { enabled: true },
-      });
-      expect(result).toEqual(enabled);
     });
   });
 

@@ -157,10 +157,8 @@ Secrets stored in the database are encrypted with AES-256-GCM.
 
 ### Algorithm
 
-- **Primary**: AES-256-GCM with the `v2:` prefix
-- **Legacy fallback**: AES-256-CBC (decryption only — new values are always GCM)
-- **Legacy deterministic**: AES-256-CBC (used for API keys and OAuth state parameters that must
-  be compared without decryption)
+- **Only**: AES-256-GCM with the `v2:` prefix. It is the sole accepted ciphertext format —
+  older formats are not decrypted at read time.
 
 ```typescript
 // libraries/helpers/src/auth/auth.service.ts:36-39
@@ -169,6 +167,16 @@ const GCM_IV_LENGTH = 12;
 const GCM_TAG_LENGTH = 16;
 const V2_PREFIX = 'v2:';
 ```
+
+### One-time re-encryption at boot
+
+Because `v2:` is the only accepted format, any secrets stored under an older encryption
+scheme must be rewritten once. A ledger-gated `BackfillService` step,
+`backfill:legacy secret re-encryption`, runs **automatically at boot** before strict
+reads matter, re-encrypting any old-format values to AES-256-GCM `v2:` in place. The
+migration ledger guarantees it runs exactly once — self-hosters do not need to run
+anything manually, but the first boot of an upgraded instance must complete before the
+old format is gone for good.
 
 ### Key derivation
 
@@ -238,7 +246,7 @@ secret in a controlled migration:
 | Algorithm  | `HS256` (pinned — no `alg: none` or algorithm confusion) |
 | Expiry     | 30 days (`expiresIn: '30d'`)                       |
 | Renewal    | Sliding — new `exp` on each authenticated request  |
-| Legacy     | Exp-less tokens still verify (no forced re-auth)   |
+| `exp` claim| **Required** — session-auth verification rejects tokens without `exp` |
 | IDs/secrets| CSPRNG-generated (`crypto.randomBytes`)            |
 
 ```typescript
@@ -312,16 +320,13 @@ only — it is a separate axis from the org owner role. See
 
 ### OAuth 2.0 / PKCE
 
-OAuth flows enforce redirect-URI matching, PKCE code challenges, scope validation, and token
-hashing. See [OAuth / SSO](./oauth-sso.md).
+OAuth flows enforce redirect-URI matching, scope validation, and token hashing. PKCE is
+**required** on every authorization, with `S256` as the only accepted code-challenge
+method. See [OAuth / SSO](./oauth-sso.md).
 
-> **Operator action (AI-agent remediation).** Two behavior changes ship without a schema migration:
-> (1) **expired `pos_` OAuth access tokens now return `401`** — any external MCP client presenting a
-> past-dated token must re-authenticate through the normal OAuth flow (refresh / re-issue) to get a
-> fresh token; (2) **AI budget caps unified onto `scopeCaps.agent`** — `scopeCaps.mcp` and
-> `scopeCaps.generator` are retired, so migrate any values you had set under those keys onto
-> `scopeCaps.agent`. Both the MCP entrypoints and the LangGraph generator now gate by and accrue to
-> the single `agent` scope (the generator previously recorded `$0` and enforced nothing).
+> **Operator action (AI-agent remediation).** Expired `pos_` OAuth access tokens now return `401` —
+> any external MCP client presenting a past-dated token must re-authenticate through the normal
+> OAuth flow (refresh / re-issue) to get a fresh token.
 
 ### Open-redirect allowlisting
 

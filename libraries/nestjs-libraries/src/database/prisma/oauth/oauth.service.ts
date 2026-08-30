@@ -3,7 +3,6 @@ import { OAuthRepository } from '@postmill-ai/nestjs-libraries/database/prisma/o
 import { CreateOAuthAppDto } from '@postmill-ai/nestjs-libraries/dtos/oauth/create-oauth-app.dto';
 import { UpdateOAuthAppDto } from '@postmill-ai/nestjs-libraries/dtos/oauth/update-oauth-app.dto';
 import { makeId } from '@postmill-ai/nestjs-libraries/services/make.is';
-import { AuthService } from '@postmill-ai/helpers/auth/auth.service';
 import crypto from 'crypto';
 
 @Injectable()
@@ -14,23 +13,10 @@ export class OAuthService {
     return `sha256:${crypto.createHash('sha256').update(value).digest('hex')}`;
   }
 
-  private lookupCandidates(value: string) {
-    return [
-      this.lookupHash(value),
-      AuthService.fixedEncryptionDeterministic(value),
-    ];
-  }
-
   private matchesStoredSecret(stored: string, plain: string) {
-    if (stored === this.lookupHash(plain)) {
-      return true;
-    }
-
-    try {
-      return AuthService.fixedDecryption(stored) === plain;
-    } catch {
-      return stored === AuthService.fixedEncryptionDeterministic(plain);
-    }
+    // sha256 lookup-hash only — the legacy deterministic-CBC comparison legs
+    // were removed in v1.0.0.
+    return stored === this.lookupHash(plain);
   }
 
   async getApp(orgId: string) {
@@ -131,10 +117,11 @@ export class OAuthService {
     const encryptedCode = this.lookupHash(code);
     const codeExpiresAt = new Date(Date.now() + 10 * 60 * 1000);
 
-    // Validate PKCE: require S256 if code_challenge is provided
-    if (options?.codeChallenge && options?.codeChallengeMethod !== 'S256') {
+    // PKCE is mandatory (v1.0.0): reject authorization requests without an
+    // S256 code challenge — the legacy challenge-less grant was removed.
+    if (!options?.codeChallenge || options.codeChallengeMethod !== 'S256') {
       throw new HttpException(
-        { error: 'invalid_request', error_description: 'unsupported code_challenge_method' },
+        { error: 'invalid_request', error_description: 'code_challenge with code_challenge_method=S256 is required' },
         HttpStatus.BAD_REQUEST,
       );
     }
@@ -179,7 +166,7 @@ export class OAuthService {
       );
     }
 
-    const encryptedCode = this.lookupCandidates(code);
+    const encryptedCode = this.lookupHash(code);
     const auth = await this._oauthRepository.findByCode(encryptedCode);
     if (!auth || auth.oauthAppId !== app.id) {
       throw new HttpException(
@@ -203,25 +190,31 @@ export class OAuthService {
       );
     }
 
-    // Validate PKCE code_verifier
-    if (auth.codeChallenge && auth.codeChallengeMethod === 'S256') {
-      if (!options?.codeVerifier) {
-        throw new HttpException(
-          { error: 'invalid_grant', error_description: 'code_verifier required' },
-          HttpStatus.BAD_REQUEST,
-        );
-      }
-      const verifierHash = crypto
-        .createHash('sha256')
-        .update(options.codeVerifier)
-        .digest('base64url')
-        .replace(/=+$/, '');
-      if (verifierHash !== auth.codeChallenge) {
-        throw new HttpException(
-          { error: 'invalid_grant', error_description: 'code_verifier mismatch' },
-          HttpStatus.BAD_REQUEST,
-        );
-      }
+    // Validate the PKCE code_verifier — mandatory: every code is created with
+    // an S256 challenge, so a stored row without one is a pre-v1.0.0 leftover
+    // and is rejected rather than exchanged.
+    if (!auth.codeChallenge || auth.codeChallengeMethod !== 'S256') {
+      throw new HttpException(
+        { error: 'invalid_grant', error_description: 'Authorization code predates mandatory PKCE — restart the flow' },
+        HttpStatus.BAD_REQUEST,
+      );
+    }
+    if (!options?.codeVerifier) {
+      throw new HttpException(
+        { error: 'invalid_grant', error_description: 'code_verifier required' },
+        HttpStatus.BAD_REQUEST,
+      );
+    }
+    const verifierHash = crypto
+      .createHash('sha256')
+      .update(options.codeVerifier)
+      .digest('base64url')
+      .replace(/=+$/, '');
+    if (verifierHash !== auth.codeChallenge) {
+      throw new HttpException(
+        { error: 'invalid_grant', error_description: 'code_verifier mismatch' },
+        HttpStatus.BAD_REQUEST,
+      );
     }
 
     const token = 'pos_' + makeId(40);
@@ -274,7 +267,7 @@ export class OAuthService {
       );
     }
 
-    const encryptedRefresh = this.lookupCandidates(refreshToken);
+    const encryptedRefresh = this.lookupHash(refreshToken);
     const auth = await this._oauthRepository.findByRefreshToken(encryptedRefresh);
     if (!auth || auth.oauthAppId !== app.id) {
       throw new HttpException(
@@ -314,7 +307,7 @@ export class OAuthService {
   }
 
   async getOrgByOAuthToken(token: string) {
-    const encrypted = this.lookupCandidates(token);
+    const encrypted = this.lookupHash(token);
     return this._oauthRepository.findByAccessToken(encrypted);
   }
 

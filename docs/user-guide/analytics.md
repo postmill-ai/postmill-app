@@ -1,8 +1,7 @@
 # Analytics
 
 The Analytics dashboard (`/analytics`) provides multi-channel performance metrics, powered by daily
-snapshots collected from all connected channels. It replaces the legacy single-channel analytics
-with a unified, filterable dashboard.
+snapshots collected from all connected channels and presented in a unified, filterable dashboard.
 
 ## Data Population
 
@@ -148,7 +147,7 @@ Download analytics data for external reporting via the **Export** button on the 
 The export returns a downloadable file with the appropriate content type and filename
 (`analytics-export.csv` or `analytics-export.json`).
 
-## Legacy Fallback
+## Live Fallback
 
 Analytics are primarily sourced from `AnalyticsSnapshot` and `PostAnalyticsSnapshot` tables.
 However, for posts or channels that do not yet have snapshots, Postmill falls back to live

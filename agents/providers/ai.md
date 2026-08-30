@@ -136,7 +136,7 @@ Adding a scope means updating `SURFACE_DEFAULTS` and every exhaustive `AiScope` 
 ## Credentials & security invariants
 
 - **Per-org storage only:** `AIOrgProviderConfig` (schema `libraries/nestjs-libraries/src/database/prisma/schema.prisma`, `@@unique([organizationId, identifier, version])`, `isActive` singleton per org). `credentials` is encrypted at rest via `EncryptionService` (AES-GCM, `v2:` prefix); the adapter receives decrypted creds through the runtime context and must never persist or log them.
-- **`AIProviderConfig` is deprecated-global** (schema comment line 1116: "DEPRECATED (v3.6.0): replaced by AIOrgProviderConfig"). Do not write new reads of it. `OrgDefaultModel` stores per-org per-category default models (non-secret).
+- **No global AI config table.** The legacy global `AIProviderConfig` table was dropped in v1.0.0 — per-org `AIOrgProviderConfig` is the only store. `OrgDefaultModel` stores per-org per-category default models (non-secret).
 - **No env-key fallback.** The env `OPENAI_API_KEY` fallback was removed (`ai-model.provider.ts` line ~242). No active provider for an org ⇒ AI is off for that org on all four surfaces. Never reintroduce one; AI providers are BYOK.
 - All credential validation and tenant-URL traffic goes through the injected `SafeFetchPort`; never call the global `fetch` against a tenant-supplied URL (see `agents/security.md`).
 

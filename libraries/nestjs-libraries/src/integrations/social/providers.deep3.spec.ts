@@ -19,12 +19,6 @@ vi.mock('@postmill-ai/helpers/utils/read.or.fetch', () => ({ readOrFetch: vi.fn(
 vi.mock('@postmill-ai/nestjs-libraries/dtos/webhooks/safe.fetch', () => ({ safeFetch: vi.fn((url: string, options?: RequestInit) => (globalThis.fetch as any)(url, options)) }));
 vi.mock('@prisma/client', () => ({ PrismaClient: vi.fn(), ProviderConfiguration: class {}, Integration: class {} }));
 vi.mock('@postmill-ai/helpers/auth/auth.service', () => ({ AuthService: { fixedEncryption: vi.fn((s: string) => s), fixedDecryption: vi.fn((s: string) => s), signJWT: vi.fn(() => 'signed-jwt'), verifyJWT: vi.fn(() => ({ password: 'deadbeef' })) } }));
-vi.mock('@postmill-ai/nestjs-libraries/database/prisma/provider-configs/provider-config.service', () => ({
-  ProviderConfigService: vi.fn(() => ({ getAll: vi.fn().mockResolvedValue([]), getByIdentifier: vi.fn(), decryptConfig: vi.fn(function() { return {}; }), upsert: vi.fn(), delete: vi.fn() })),
-}));
-vi.mock('@postmill-ai/nestjs-libraries/database/prisma/provider-configs/provider-config.repository', () => ({
-  ProviderConfigRepository: vi.fn(() => ({ getAll: vi.fn(), getByIdentifier: vi.fn(), upsert: vi.fn(), delete: vi.fn(), setEnabled: vi.fn() })),
-}));
 vi.mock('@postmill-ai/nestjs-libraries/database/prisma/prisma.service', () => ({
   PrismaRepository: vi.fn(() => ({ model: {} })),
   PrismaService: class {},
@@ -491,7 +485,8 @@ describe('nostr deep', () => {
     expect(r.id).toBe('pubkey-123');
     expect(r.name).toBe('Test User');
     expect(r.picture).toBe('https://ex.com/pic.jpg');
-    expect(r.accessToken).toBe('signed-jwt');
+    // v1.0.0: credentials are stored v2:-encrypted (mock crypto is identity), not JWT-wrapped.
+    expect(r.accessToken).toBe('deadbeefdeadbeefdeadbeefdeadbeef');
   });
 
   it('authenticate returns invalid on error', async () => {

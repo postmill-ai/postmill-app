@@ -955,21 +955,6 @@ describe('AiDesignerComposerService.compose (style-aware)', () => {
     expect(headline.textStroke).toBeUndefined();
   });
 
-  it('aliases legacy template ids into the gallery', async () => {
-    const macro = await composeWith(makePlan({ formatTemplate: 'image-macro' }));
-    expect(byOrigin(macro, 'img').height).toBe(1080);
-    expect(byOrigin(macro, 'headline').y).toBeGreaterThanOrEqual(1080 * 0.4);
-
-    const twoPanel = await composeWith(makePlan({ formatTemplate: 'two-panel' }));
-    expect(byOrigin(twoPanel, 'split-panel-bg')).toBeDefined();
-
-    const topBottom = await composeWith(
-      makePlan({ formatTemplate: 'top-bottom-text' })
-    );
-    // Top caption pinned to the safe margin at the top.
-    expect(byOrigin(topBottom, 'headline').y).toBe(54);
-  });
-
   it('composes a channelLayouts output with the mapped layout instead of the reflow', async () => {
     const plan = makePlan({
       channelLayouts: { 'x-post': 'side-by-side' },

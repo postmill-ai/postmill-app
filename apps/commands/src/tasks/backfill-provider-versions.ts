@@ -17,11 +17,9 @@ export class BackfillProviderVersions {
     const p = this._prisma;
 
     // Scalar version columns — any null/empty rows become v1.
+    // (AIProviderConfig and ProviderConfiguration were dropped in v1.0.0 — their
+    // stamp steps are gone with them.)
     const scalarUpdates = [
-      p.aIProviderConfig.updateMany({
-        where: { OR: [{ version: null }, { version: '' }] },
-        data: { version: 'v1' },
-      }),
       p.aIOrgProviderConfig.updateMany({
         where: { OR: [{ version: null }, { version: '' }] },
         data: { version: 'v1' },
@@ -54,10 +52,6 @@ export class BackfillProviderVersions {
         where: { OR: [{ version: null }, { version: '' }] },
         data: { version: 'v1' },
       }),
-      p.providerConfiguration.updateMany({
-        where: { OR: [{ version: null }, { version: '' }] },
-        data: { version: 'v1' },
-      }),
       p.orgVpnConfig.updateMany({
         where: { OR: [{ version: null }, { version: '' }] },
         data: { version: 'v1' },
@@ -75,13 +69,12 @@ export class BackfillProviderVersions {
     await this._prisma.$transaction(scalarUpdates);
 
     // Qualified-id string columns — rewrite bare ids to id@v1.
-    await this._ensureQualified(p.aISystemSettings, 'activeProvider');
+    // (AISystemSettings.activeProvider was retired in v1.0.0 — no longer stamped.)
     await this._ensureQualified(p.aISystemSettings, 'fallbackProvider');
     await this._ensureQualified(p.aISystemSettings, 'fallbackImageProvider');
     await this._ensureQualified(p.organization, 'activeContentPackIdentifier');
 
     // JSON columns that embed provider ids.
-    await this._backfillScopeModels();
     await this._backfillVpnSelection();
 
     this._logger.log('Provider version backfill complete.');
@@ -103,37 +96,6 @@ export class BackfillProviderVersions {
         where: { id: row.id },
         data: { [field]: `${value}@v1` },
       });
-    }
-  }
-
-  private async _backfillScopeModels() {
-    const rows = await this._prisma.aISystemSettings.findMany({
-      where: { scopeModels: { not: null } },
-      select: { id: true, scopeModels: true },
-    });
-    for (const row of rows) {
-      let parsed: any;
-      try {
-        parsed = JSON.parse(row.scopeModels || '{}');
-      } catch {
-        continue;
-      }
-      let changed = false;
-      for (const scope of Object.keys(parsed)) {
-        const entry = parsed[scope];
-        if (entry && typeof entry === 'object') {
-          if (!entry.version) {
-            entry.version = 'v1';
-            changed = true;
-          }
-        }
-      }
-      if (changed) {
-        await this._prisma.aISystemSettings.update({
-          where: { id: row.id },
-          data: { scopeModels: JSON.stringify(parsed) },
-        });
-      }
     }
   }
 

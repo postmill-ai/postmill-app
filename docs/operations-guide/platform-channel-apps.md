@@ -11,9 +11,8 @@ Postmill resolves channel (social posting) credentials at **two scopes**:
    exists.
 
 When neither exists, the connect dialog falls back to the per-org key form
-("alternatively use keys"). The pre-v3.7.1 global `ProviderConfiguration`
-database scope is deprecated — nothing is seeded into the database; env values
-are resolved live, per request, and never persisted to a tenant row.
+("alternatively use keys"). Env values are resolved live, per request, and
+never persisted to a tenant row.
 
 `GET /integrations` exposes `platformConfigured: true` for providers with a
 working env app. Tenants see those providers as one-click **Connect** with the

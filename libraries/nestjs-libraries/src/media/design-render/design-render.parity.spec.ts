@@ -485,18 +485,15 @@ describe('parity: type', () => {
 // 4. Effects
 // ---------------------------------------------------------------------------
 describe('parity: effects', () => {
-  it('renders a legacy boxShadow, which no renderer ever read', async () => {
-    // A whole inspector section — colour, blur, two offsets — that changed a
-    // stored field and nothing on screen.
+  it('ignores a stored boxShadow field — v1 ships no legacy shadow translation', async () => {
+    // A whole pre-Effects inspector section — colour, blur, two offsets — that
+    // changed a stored field and nothing on screen. It stays stored and is
+    // simply not rendered.
     const plain = await render(doc([rect()]));
     const shadowed = await render(
       doc([rect({ boxShadow: { color: '#000000', blur: 6, offsetX: 10, offsetY: 10 } })])
     );
-    const a = plain.inkBox()!;
-    const b = shadowed.inkBox()!;
-    // The shadow extends the ink down and to the right of the layer.
-    expect(b.maxX).toBeGreaterThan(a.maxX);
-    expect(b.maxY).toBeGreaterThan(a.maxY);
+    expect(shadowed.inkBox()).toEqual(plain.inkBox());
   });
 
   it('does not clip a warped layer at its element box', async () => {

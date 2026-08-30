@@ -1809,11 +1809,6 @@ export class DemoSeeder {
     if (integrationIds.length) {
       await this._prisma.integration.deleteMany({ where: { id: { in: integrationIds } } });
     }
-    // Platform provider configs the seeder created (demo-prov-* ids only — an
-    // admin-curated row has a cuid id and is never touched). No inbound FKs.
-    await this._prisma.providerConfiguration.deleteMany({
-      where: { id: { startsWith: `${DEMO_ID_PREFIX}prov-` } },
-    });
     await this._prisma.analyticsAlertRule.deleteMany({
       where: { organizationId: orgId, id: { startsWith: DEMO_ID_PREFIX } },
     });

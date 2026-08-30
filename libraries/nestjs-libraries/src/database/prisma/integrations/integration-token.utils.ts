@@ -6,7 +6,10 @@ type TokenBearing = {
 };
 
 function decryptTokenValue(value?: string | null): string | null | undefined {
-  if (!value || !value.startsWith('v2:')) {
+  // v1.0.0: no plaintext pass-through. Non-empty values are always v2:-encrypted
+  // (the "legacy secret re-encryption" backfill step rewrites older rows at
+  // boot); AuthService.fixedDecryption throws on anything else.
+  if (!value) {
     return value;
   }
   return AuthService.fixedDecryption(value);

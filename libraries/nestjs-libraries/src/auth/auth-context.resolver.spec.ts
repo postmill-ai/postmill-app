@@ -275,14 +275,14 @@ describe('AuthContextResolver', () => {
     expect((result as any).context.roleKey).toBe('member');
   });
 
-  it('omits expiresAt when the JWT has no exp claim', async () => {
+  it('rejects a session JWT without an exp claim (v1.0.0: exp is required)', async () => {
     const { resolver, users, orgs } = makeServices();
     users.getUserById.mockResolvedValue(makeUser());
     orgs.getOrgsByUserId.mockResolvedValue([makeOrg('org-1')]);
 
     const result = await resolver.resolve({ jwt: 'valid-no-exp' });
 
-    expect(result.ok).toBe(true);
-    expect((result as any).context.expiresAt).toBeUndefined();
+    expect(result).toEqual({ ok: false, reason: 'invalid_jwt' });
+    expect(users.getUserById).not.toHaveBeenCalled();
   });
 });

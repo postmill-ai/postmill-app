@@ -1,6 +1,6 @@
 # Analytics API (v2)
 
-The Analytics v2 API serves persisted multi-channel analytics from daily snapshots collected by the Inngest `analytics-collection` cron function. It replaces the legacy single-channel live-fetch endpoints.
+The Analytics v2 API serves persisted multi-channel analytics from daily snapshots collected by the Inngest `analytics-collection` cron function.
 
 All cookie-authenticated endpoints are scoped to the org resolved from the session. Public share endpoints are unauthenticated and token-gated.
 
@@ -53,7 +53,7 @@ Params (`posts`): `from`, `to`, `integrations?`, `campaigns?`, `sort?`, `dir?`, 
 Params (`post`): `date?`
 
 - **Posts list**: paginated list of posts with aggregated metrics. Sort by engagement, views, date, etc. Max 100 per page.
-- **Post detail**: returns post KPI header plus daily metric breakdown. Has a **live fallback** — if no `PostAnalyticsSnapshot` exists for the post, it fetches from the live provider using the legacy `checkPostAnalytics()` path.
+- **Post detail**: returns post KPI header plus daily metric breakdown. Has a **live fallback** — if no `PostAnalyticsSnapshot` exists for the post, it fetches from the live provider using the `checkPostAnalytics()` path.
 
 ## Metric and day detail
 
@@ -212,9 +212,6 @@ For n8n/Zapier-style integrations, parallel read-only routes are exposed under t
 | GET | `/public/v1/analytics/overview` | Org overview |
 | GET | `/public/v1/analytics/campaign/:id` | Campaign-scoped analytics |
 | GET | `/public/v1/analytics/anomalies` | Detected anomalies |
-| GET | `/public/v1/analytics/:integration` | Legacy single-channel analytics |
-
-The legacy single-channel response shape is preserved for backward compatibility.
 
 ## Environment variables
 

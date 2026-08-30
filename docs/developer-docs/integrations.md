@@ -21,10 +21,8 @@ Channel credentials resolve along two paths, in strict precedence:
 
 The funnel is `IntegrationManager.getClientInformation(integration, orgId, configId?)`:
 
-- Explicit `configId` → named org config by id.
-- No `configId` → org's primary config for that provider.
-- No org config → env platform app (`getEnvClientInfo`).
-- No org context → global `ProviderConfiguration` → env.
+- Explicit `configId` → named org config by id. Connect flows always bind a named config.
+- No `configId` → platform env app (`getEnvClientInfo`) — the only fallback; API-key connect flows without a named config resolve env credentials only.
 
 If neither path yields credentials, `requireClientInformation` throws `ProviderNotConfiguredError` and the channel cannot be connected.
 

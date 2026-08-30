@@ -134,7 +134,6 @@ HTTP → RequestIdMiddleware ('*', AppModule.configure)
      → OrgRbacGuard                (APP_GUARD #3; @RequirePermission → HTTP 403)
      → AuthMiddleware              (per-controller, via ApiModule — see below)
      → CsrfMiddleware              (per-controller, same list)
-     → BudgetMiddleware            (/agents/*, /copilot/*, /ai/*)
      → AiGuardMiddleware           (POST /copilot/chat, POST /copilot/agent)
      → Controller → Service → Repository → Prisma
 ```
@@ -332,7 +331,8 @@ Function table and per-function detail: `agents/jobs.md`.
   hash revokes the live session (reuse detection); logout sets `revokedAt`.
   Access token: JWT HS256, verification pins `algorithms: ['HS256']`
   (`libraries/helpers/src/auth/auth.service.ts`), new tokens carry `exp` with sliding
-  renewal (legacy exp-less tokens still verify). `/user/sessions` lists active devices.
+  renewal and session-auth verify sites require `exp` (exp-less session tokens are
+  rejected). `/user/sessions` lists active devices.
 - **Platform auth providers:** `AuthProviderConfig` stores platform-wide login-provider
   configs (encrypted at rest), managed by a **separate administration app** (distinct repo).
   This repo only reads them: `AuthProviderManager`
@@ -361,11 +361,6 @@ Function table and per-function detail: `agents/jobs.md`.
 
 ## 10. Stability commitments
 
-- **Frozen legacy analytics route:** `GET /public/v1/analytics/:integration`
-  (`apps/backend/src/public-api/routes/v1/public.integrations.controller.ts:767` →
-  `IntegrationService.checkAnalytics`) — response shape is frozen for legacy n8n/Zapier
-  clients. Several other `/public/v1` response shapes carry explicit `FROZEN PUBLIC
-  CONTRACT` / back-compat comments; treat them as immutable.
 - **Schema changes are additive-only** without an expand-contract plan: new columns nullable
   or defaulted; renames/drops need a backfill + a later contract migration and must pass the
   destructive guard (`ALLOW_DESTRUCTIVE_SCHEMA=true`). Committed Prisma migrations applied via
