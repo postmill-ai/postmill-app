@@ -55,7 +55,6 @@ describe('IntegrationManager — getIntegrationListResponse cache', () => {
 
     manager = new IntegrationManager(
       {} as any,
-      {} as any,
       fakeKernel,
       fakeResolutionService(),
       {

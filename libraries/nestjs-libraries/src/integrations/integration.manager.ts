@@ -17,7 +17,6 @@ import {
 } from '@postmill-ai/provider-kernel';
 import { PROVIDER_KERNEL } from '@postmill-ai/nestjs-libraries/providers/providers.module';
 import { ProviderResolutionService } from '@postmill-ai/nestjs-libraries/providers/provider-resolution.service';
-import { ProviderConfigManager } from '@postmill-ai/nestjs-libraries/integrations/provider-config.manager';
 import { OrgProviderConfigManager } from '@postmill-ai/nestjs-libraries/integrations/org-provider-config.manager';
 import { ProviderNotConfiguredError } from '@postmill-ai/nestjs-libraries/integrations/provider-not-configured.error';
 import {
@@ -41,7 +40,6 @@ export class IntegrationManager {
   private readonly _logger = new Logger(IntegrationManager.name);
 
   constructor(
-    private _providerConfigManager: ProviderConfigManager,
     private _orgProviderConfigManager: OrgProviderConfigManager,
     @Inject(PROVIDER_KERNEL) private _kernel: ProviderKernel,
     private _providerResolutionService: ProviderResolutionService,
@@ -88,42 +86,35 @@ export class IntegrationManager {
   }
 
   async getAllIntegrations(orgId?: string) {
-    // Merge scopes: in an org context the enabled set and the config list are
-    // the UNION of the platform-global scope and the org's own (BYO per-tenant
-    // channel app) scope — the previous either/or hid org-only providers
-    // whenever any global config existed, and vice versa. Both managers'
-    // getters run ensureFresh internally.
-    const globalEnabled = await this._providerConfigManager.getEnabledIdentifiers();
-    const globalConfigs = await this._providerConfigManager.getAllConfigs();
+    // Channel credentials are two-scope now: the org's own (BYO per-tenant
+    // channel app) configs plus the platform app credentials in the deployment
+    // env. The deprecated platform-global DB scope is read nowhere here.
     const enabledIdentifiers = orgId
-      ? [
-          ...globalEnabled,
-          ...(await this._orgProviderConfigManager.getEnabledIdentifiers(orgId)),
-        ]
-      : globalEnabled;
+      ? await this._orgProviderConfigManager.getEnabledIdentifiers(orgId)
+      : [];
     const allConfigs = orgId
-      ? [...globalConfigs, ...(await this._orgProviderConfigManager.getAllConfigs(orgId))]
-      : globalConfigs;
+      ? await this._orgProviderConfigManager.getAllConfigs(orgId)
+      : [];
     // Providers the deployment env supplies a platform OAuth app for always stay
     // connectable (click-connect), even after the org has added its own configs.
     const envEnabled = getEnvEnabledIdentifiers();
     const enabledSet = new Set([...enabledIdentifiers, ...envEnabled]);
-    const hasAnyConfigs = allConfigs.length > 0;
+    // With zero configs anywhere (no org configs AND no env app) every provider
+    // lists, so a fresh deployment can browse the full catalog.
+    const hasAnyConfigs = allConfigs.length > 0 || envEnabled.length > 0;
 
     return {
       social: await Promise.all(
         this.getSocialProviders()
           .filter((p) => !hasAnyConfigs || enabledSet.has(p.identifier))
           .map(async (p) => {
-            // Org config wins for display metadata (setupNotes); fall back to
-            // the platform-global config (setupInstructions) so a global-only
-            // enabled provider keeps its instructions in an org context.
+            // The org config (setupNotes) owns the display copy when present.
             const config = orgId
-              ? (await this._orgProviderConfigManager.getConfig(
+              ? await this._orgProviderConfigManager.getConfig(
                   orgId,
                   p.identifier
-                )) ?? (await this._providerConfigManager.getConfig(p.identifier))
-              : await this._providerConfigManager.getConfig(p.identifier);
+                )
+              : undefined;
             return {
               name: p.name,
               identifier: p.identifier,
@@ -132,6 +123,9 @@ export class IntegrationManager {
               isExternal: !!p.externalUrl,
               isWeb3: !!p.isWeb3,
               isChromeExtension: !!p.isChromeExtension,
+              // True when the deployment env provides a platform app for this
+              // provider — the frontend renders it as one-click Connect.
+              platformConfigured: isEnvEnabled(p.identifier),
               ...(p.extensionCookies
                 ? { extensionCookies: p.extensionCookies }
                 : {}),
@@ -216,9 +210,7 @@ export class IntegrationManager {
     const enabled =
       (orgId
         ? await this._orgProviderConfigManager.isEnabled(orgId, providerName)
-        : false) ||
-      (await this._providerConfigManager.isEnabled(providerName)) ||
-      isEnvEnabled(providerName);
+        : false) || isEnvEnabled(providerName);
     if (!enabled) {
       throw new NotFoundException(`Integration not available: ${providerName}`);
     }
@@ -268,6 +260,7 @@ export class IntegrationManager {
       isExternal: boolean;
       isWeb3: boolean;
       isChromeExtension: boolean;
+      platformConfigured: boolean;
       customFields: boolean | any[];
       scopes: string;
       capabilities: ProviderCapability | null;
@@ -288,6 +281,9 @@ export class IntegrationManager {
         isExternal: !!p.externalUrl,
         isWeb3: !!p.isWeb3,
         isChromeExtension: !!p.isChromeExtension,
+        // True when the deployment env provides a platform app for this provider
+        // — a per-org BYO app is then an advanced option, not a requirement.
+        platformConfigured: isEnvEnabled(p.identifier),
         customFields: p.customFields ? await p.customFields() : false,
         scopes: p.scopes?.join(', ') || '',
         capabilities: this._capabilitiesFor(p.identifier),
@@ -310,9 +306,7 @@ export class IntegrationManager {
     const enabled =
       (orgId
         ? await this._orgProviderConfigManager.isEnabled(orgId, integration)
-        : false) ||
-      (await this._providerConfigManager.isEnabled(integration)) ||
-      isEnvEnabled(integration);
+        : false) || isEnvEnabled(integration);
     if (!enabled) {
       throw new NotFoundException(`Integration not available: ${integration}`);
     }
@@ -388,17 +382,17 @@ export class IntegrationManager {
         return { ...orgInfo, version: configVersion };
       }
       // Platform-owned OAuth app (deployment env) — powers click-connect when the
-      // org hasn't brought its own keys. Falls through to the global config below.
+      // org hasn't brought its own keys.
       const envInfo = getEnvClientInfo(integration);
       if (envInfo) {
         return { ...envInfo, version: configVersion };
       }
       return orgInfo ? { ...orgInfo, version: configVersion } : undefined;
     }
-    const globalInfo =
-      (await this._providerConfigManager.getClientInfo(integration)) ||
-      getEnvClientInfo(integration);
-    return globalInfo ? { ...globalInfo, version: configVersion } : undefined;
+    // No org context: the platform env app is the only live credential source
+    // (the deprecated global DB scope is read nowhere).
+    const envInfo = getEnvClientInfo(integration);
+    return envInfo ? { ...envInfo, version: configVersion } : undefined;
   }
 
   /**
@@ -438,7 +432,6 @@ export class IntegrationManager {
     if (
       (orgId &&
         (await this._orgProviderConfigManager.isEnabled(orgId, integration))) ||
-      (await this._providerConfigManager.isEnabled(integration)) ||
       isEnvEnabled(integration)
     ) {
       return true;

@@ -434,6 +434,7 @@ export const AddProviderComponent: FC<{
       type: 'text' | 'password';
     }>;
     setupInstructions?: string;
+    platformConfigured?: boolean;
   }>;
   article: Array<{
     identifier: string;
@@ -872,7 +873,7 @@ export const AddProviderComponent: FC<{
                 className={clsx(
                   isMobile
                     ? 'flex-row h-[72px] p-[16px]'
-                    : 'flex-col p-[10px] h-[100px] justify-center',
+                    : 'flex-col p-[10px] min-h-[100px] justify-center',
                   'w-full text-[14px] rounded-[8px] bg-newTableHeader text-textColor relative items-center flex gap-[10px] cursor-pointer'
                 )}
               >
@@ -935,6 +936,48 @@ export const AddProviderComponent: FC<{
                     </div>
                   )}
                 </div>
+                {/* Zero-config surfacing: plain OAuth providers backed by a
+                    platform app (env credentials) connect in one click; when the
+                    platform has no app for the network, say so and point at the
+                    setup instructions. */}
+                {!isMobile &&
+                  !item.customFields &&
+                  !item.isExternal &&
+                  !item.isWeb3 &&
+                  !item.isChromeExtension &&
+                  (item.platformConfigured ? (
+                    <div className="text-center">
+                      <div className="text-[10px] leading-tight text-newTableText">
+                        {t(
+                          'uses_postmill_app_no_setup',
+                          'Uses the Postmill app — no setup needed'
+                        )}
+                      </div>
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          modal.closeAll();
+                          router.push('/settings/channels');
+                        }}
+                        className="text-[10px] leading-tight text-textColor/70 hover:underline"
+                      >
+                        {t(
+                          'advanced_use_your_own_app',
+                          'Advanced: use your own app'
+                        )}
+                      </button>
+                    </div>
+                  ) : (
+                    !configsByIdentifier[item.identifier]?.length && (
+                      <div className="text-[10px] leading-tight text-newTableText text-center">
+                        {t(
+                          'platform_app_not_available',
+                          'Postmill does not provide an app for this network — connect with your own app (see setup instructions)'
+                        )}
+                      </div>
+                    )
+                  ))}
               </div>
             ))}
         </div>

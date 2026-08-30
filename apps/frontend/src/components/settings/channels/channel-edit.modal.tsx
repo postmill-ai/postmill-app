@@ -90,6 +90,7 @@ interface ChannelConfigFormProps {
   defaultScopes?: string;
   setup?: ChannelSetupDescriptor | null;
   callbackUrl?: string;
+  platformConfigured?: boolean; // env supplies a platform app for this provider
   config?: ChannelConfigInstance; // present => edit mode
   onClose: () => void;
   onSaved: () => void;
@@ -101,6 +102,7 @@ export const ChannelConfigForm: FC<ChannelConfigFormProps> = ({
   defaultScopes = '',
   setup = null,
   callbackUrl = '',
+  platformConfigured = false,
   config,
   onClose,
   onSaved,
@@ -131,6 +133,9 @@ export const ChannelConfigForm: FC<ChannelConfigFormProps> = ({
   const [enabled, setEnabled] = useState(config?.enabled || false);
   const [saving, setSaving] = useState(false);
   const [callbackCopied, setCallbackCopied] = useState(false);
+  // With a platform app configured, BYO credentials are the advanced path —
+  // collapsed unless this config already has stored credentials.
+  const [showOwnApp, setShowOwnApp] = useState(isConfigured);
 
   const {
     versions,
@@ -294,6 +299,48 @@ export const ChannelConfigForm: FC<ChannelConfigFormProps> = ({
     }
   }, [callbackUrl, toaster, t]);
 
+  const credentialFieldsBlock = setup?.authType !== 'direct' && credentialFields.map((field) => {
+    const isExtra = field.key !== 'clientId' && field.key !== 'clientSecret';
+    const value = field.key === 'clientId'
+      ? clientId
+      : field.key === 'clientSecret'
+        ? clientSecret
+        : (extraFields[field.key] || '');
+    const setValue = field.key === 'clientId'
+      ? setClientId
+      : field.key === 'clientSecret'
+        ? setClientSecret
+        : (v: string) => setExtraFields((prev) => ({ ...prev, [field.key]: v }));
+    return (
+      <div key={field.key} className="flex flex-col gap-[6px]">
+        <label className="text-[14px] font-[500]">
+          {field.label}
+          {field.optional && (
+            <span className="text-[12px] text-newTableText font-[400]"> ({t('optional', 'optional')})</span>
+          )}
+        </label>
+        <div className="bg-newBgColorInner h-[42px] border-newTableBorder border rounded-[8px] text-textColor flex items-center justify-center">
+          <input
+            type={field.secret ? 'password' : 'text'}
+            // Keep browser password managers out of credential fields —
+            // without this the App ID input autofills with the account
+            // email and saving would silently overwrite the stored ID
+            // (observed live: test@test.com sitting in the App ID box).
+            autoComplete="off"
+            name={`cred_${field.key}_${identifier}`}
+            className="h-full bg-transparent outline-hidden flex-1 text-[14px] text-textColor placeholder-textColor px-[16px]"
+            placeholder={(isExtra ? '' : credentialPlaceholder) || field.placeholder || ''}
+            value={value}
+            onChange={(e) => setValue(e.target.value)}
+          />
+        </div>
+        {field.help && (
+          <div className="text-[12px] text-newTableText">{field.help}</div>
+        )}
+      </div>
+    );
+  });
+
   return (
     <div className="flex flex-col gap-[12px] min-w-[460px] mobile:min-w-0">
       {appLink?.url && (
@@ -362,47 +409,43 @@ export const ChannelConfigForm: FC<ChannelConfigFormProps> = ({
         />
       </div>
 
-      {setup?.authType !== 'direct' && credentialFields.map((field) => {
-        const isExtra = field.key !== 'clientId' && field.key !== 'clientSecret';
-        const value = field.key === 'clientId'
-          ? clientId
-          : field.key === 'clientSecret'
-            ? clientSecret
-            : (extraFields[field.key] || '');
-        const setValue = field.key === 'clientId'
-          ? setClientId
-          : field.key === 'clientSecret'
-            ? setClientSecret
-            : (v: string) => setExtraFields((prev) => ({ ...prev, [field.key]: v }));
-        return (
-          <div key={field.key} className="flex flex-col gap-[6px]">
-            <label className="text-[14px] font-[500]">
-              {field.label}
-              {field.optional && (
-                <span className="text-[12px] text-newTableText font-[400]"> ({t('optional', 'optional')})</span>
-              )}
-            </label>
-            <div className="bg-newBgColorInner h-[42px] border-newTableBorder border rounded-[8px] text-textColor flex items-center justify-center">
-              <input
-                type={field.secret ? 'password' : 'text'}
-                // Keep browser password managers out of credential fields —
-                // without this the App ID input autofills with the account
-                // email and saving would silently overwrite the stored ID
-                // (observed live: test@test.com sitting in the App ID box).
-                autoComplete="off"
-                name={`cred_${field.key}_${identifier}`}
-                className="h-full bg-transparent outline-hidden flex-1 text-[14px] text-textColor placeholder-textColor px-[16px]"
-                placeholder={(isExtra ? '' : credentialPlaceholder) || field.placeholder || ''}
-                value={value}
-                onChange={(e) => setValue(e.target.value)}
-              />
-            </div>
-            {field.help && (
-              <div className="text-[12px] text-newTableText">{field.help}</div>
-            )}
-          </div>
-        );
-      })}
+      {setup?.authType !== 'direct' && platformConfigured && (
+        <div className="text-[13px] text-newTableText bg-newBgColorInner border border-newTableBorder rounded-[8px] p-[12px]">
+          {t(
+            'platform_app_configured_advanced_only',
+            'A platform app is configured — you only need your own app for advanced use cases.'
+          )}
+        </div>
+      )}
+
+      {setup?.authType !== 'direct' && platformConfigured ? (
+        <div className="flex flex-col gap-[6px]">
+          <button
+            type="button"
+            aria-expanded={showOwnApp}
+            onClick={() => setShowOwnApp((v) => !v)}
+            className="flex items-center gap-[8px] self-start text-[13px] text-textColor hover:underline"
+          >
+            {t('advanced_use_your_own_app', 'Advanced: use your own app')}
+            <svg
+              width="12"
+              height="12"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2.5"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              className={showOwnApp ? 'rotate-180 transition-transform' : 'transition-transform'}
+            >
+              <path d="m6 9 6 6 6-6" />
+            </svg>
+          </button>
+          {showOwnApp && credentialFieldsBlock}
+        </div>
+      ) : (
+        credentialFieldsBlock
+      )}
 
       {/* Callback registration is an OAuth-app concern only; token and direct
           channels never register a callback. */}

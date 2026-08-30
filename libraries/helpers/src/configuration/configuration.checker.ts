@@ -160,27 +160,20 @@ export class ConfigurationChecker {
   }
 
   checkDeprecatedChannelVars() {
-    const deprecatedChannelVars = [
-      'LINKEDIN_CLIENT_ID', 'LINKEDIN_CLIENT_SECRET',
-      'REDDIT_CLIENT_ID', 'REDDIT_CLIENT_SECRET',
-      'GITHUB_CLIENT_ID', 'GITHUB_CLIENT_SECRET',
-      'THREADS_APP_ID', 'THREADS_APP_SECRET',
-      'FACEBOOK_APP_ID', 'FACEBOOK_APP_SECRET',
-      'YOUTUBE_CLIENT_ID', 'YOUTUBE_CLIENT_SECRET',
-      'TIKTOK_CLIENT_ID', 'TIKTOK_CLIENT_SECRET',
-      'PINTEREST_CLIENT_ID', 'PINTEREST_CLIENT_SECRET',
-      'DRIBBBLE_CLIENT_ID', 'DRIBBBLE_CLIENT_SECRET',
-      'DISCORD_CLIENT_ID', 'DISCORD_CLIENT_SECRET', 'DISCORD_BOT_TOKEN_ID',
-      'SLACK_ID', 'SLACK_SECRET', 'SLACK_SIGNING_SECRET',
-      'MASTODON_CLIENT_ID', 'MASTODON_CLIENT_SECRET',
-      'INSTAGRAM_APP_ID', 'INSTAGRAM_APP_SECRET',
-      'BEEHIIVE_API_KEY', 'BEEHIIVE_PUBLICATION_ID',
-      'X_API_KEY', 'X_API_SECRET',
+    // The CHANNEL_ENV_MAPPINGS vars (X_API_KEY, LINKEDIN_CLIENT_ID, …) are
+    // SUPPORTED — they configure the platform channel apps (click-connect) and
+    // must NOT warn. Only truly dead legacy vars with no live reads warn here.
+    const deadChannelVars = [
+      'DISCORD_BOT_TOKEN_ID',
+      'MASTODON_URL',
+      'X_URL',
+      'MEWE_HOST',
+      'SLACK_SIGNING_SECRET',
     ];
 
-    for (const key of deprecatedChannelVars) {
+    for (const key of deadChannelVars) {
       if (this.get(key)) {
-        this.issues.push(key + ' is deprecated. Use per-tenant channel config instead (Settings → Channels tab).');
+        this.issues.push(key + ' is no longer read anywhere and can be removed from your environment.');
       }
     }
   }

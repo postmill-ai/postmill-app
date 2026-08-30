@@ -1,3 +1,7 @@
+// DEPRECATED: platform channel apps now live in env vars (see
+// channel-env-credentials.ts); this global DB scope is read nowhere in live
+// paths and will be removed in a future release.
+
 import { Injectable, Logger, OnModuleInit, OnModuleDestroy } from '@nestjs/common';
 import { randomUUID } from 'crypto';
 import type { Redis } from 'ioredis';

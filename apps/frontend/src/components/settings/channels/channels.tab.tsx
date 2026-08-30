@@ -44,6 +44,7 @@ interface ProviderCatalogItem {
   capabilities: ProviderCapability | null;
   setup: ChannelSetupDescriptor | null;
   callbackUrl: string;
+  platformConfigured?: boolean;
 }
 
 interface ChannelConfigItem {
@@ -358,6 +359,7 @@ export const ChannelsTab: FC = () => {
             defaultScopes={provider?.scopes || ''}
             setup={provider?.setup || null}
             callbackUrl={provider?.callbackUrl || ''}
+            platformConfigured={!!provider?.platformConfigured}
             config={
               config
                 ? {
