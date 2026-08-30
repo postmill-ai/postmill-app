@@ -1580,7 +1580,7 @@ export class AiDesignerArtDirectorService implements OnModuleInit {
       variantId: randomUUID(),
       skill: skillId,
       concept: brief.intent || 'A clean, on-brand design',
-      formatTemplate: isMeme ? 'top-bottom-text' : 'image-macro',
+      formatTemplate: isMeme ? 'top-bottom' : 'hero-fullbleed',
       styleId: brief.styleId ?? DEFAULT_STYLE_ID,
       palette: defaultPalette,
       typeScale: { headline: 48, body: 24, cta: 18 },

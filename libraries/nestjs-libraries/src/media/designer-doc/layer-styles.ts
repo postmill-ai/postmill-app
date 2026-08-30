@@ -102,34 +102,25 @@ export const stylePadding = (styles: DesignerLayerStyle[] | undefined): number =
 };
 
 /**
- * A layer's effects, including the legacy `boxShadow` that predates them.
+ * A layer's effects.
  *
- * `boxShadow` was a full inspector section on images and shapes — colour, blur,
- * two offsets — that NO renderer ever read, sitting directly above an Effects
- * panel whose drop shadow works. Rather than teach a second shadow model to
- * four renderers, an old `boxShadow` is translated into the drop-shadow style
- * it always meant, so existing documents render what their inspector promised.
- *
- * An explicit drop-shadow effect wins: if a document has both, the one the user
- * can still see and edit is the effect.
- *
- * `offsetX/offsetY` are cartesian, while a style stores angle + distance and
- * casts the shadow AWAY from the light — hence the inverted vector (see
- * `styleOffset`, which this is the exact inverse of).
+ * Kept as a function (rather than inline `el.styles` reads) so every renderer
+ * resolves effects through one chokepoint. A stored `boxShadow` field — the
+ * pre-Effects inspector section no renderer ever read — is NOT translated:
+ * v1 ships zero legacy support, so such a document simply renders without the
+ * shadow.
  */
 export const elementStyles = (el: {
   styles?: DesignerLayerStyle[];
-  boxShadow?: { color?: string; blur?: number; offsetX?: number; offsetY?: number };
-}): DesignerLayerStyle[] | undefined => {
-  const shadow = el.boxShadow;
-  if (!shadow) return el.styles;
-  if (el.styles?.some((s) => s.type === 'drop-shadow' && isStyleEnabled(s))) {
-    return el.styles;
-  }
-  return [...(el.styles ?? []), styleFromBoxShadow(shadow)];
-};
+}): DesignerLayerStyle[] | undefined => el.styles;
 
-/** The exact inverse of `styleOffset`: cartesian offsets → angle + distance. */
+/**
+ * The exact inverse of `styleOffset`: cartesian offsets → angle + distance.
+ *
+ * This is the write path for the simple x/y/blur shadow control in the
+ * inspector (`shadow-section.tsx`), which stores its shadow as a drop-shadow
+ * layer style — it is not legacy handling.
+ */
 export const styleFromBoxShadow = (shadow: {
   color?: string;
   blur?: number;
