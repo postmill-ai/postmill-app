@@ -202,6 +202,30 @@ the message up from the bot's updates, links that chat to the tenant's channel,
 and — when the bot has admin rights with message-delete permission — deletes
 the `/connect` message and its own confirmation.
 
+## LINE
+
+LINE is token-only (same pattern as Telegram): the platform's Messaging API
+channel access token is the entire credential.
+
+1. Open the [LINE Developers console](https://developers.line.biz/console/) and
+   create a provider (or pick an existing one).
+2. Create a **Messaging API** channel on it — this also creates the LINE
+   Official Account users will connect to.
+3. On the channel's **Messaging API** tab, issue a **channel access token
+   (long-lived)**:
+
+```yaml
+LINE_CHANNEL_ACCESS_TOKEN: '<your-long-lived-channel-access-token>'
+```
+
+4. Restart the backend.
+
+**Tenant flow:** the tenant pastes no keys — they add your LINE Official
+Account as a friend (or to a group) and connect with one click. Posts are sent
+as bot **broadcast** messages to every friend of the account. Note that LINE
+broadcast responses carry no message id, so post permalinks point at the LINE
+Official Account Manager.
+
 ## Google — YouTube
 
 1. Open the [Google Cloud Console](https://console.cloud.google.com/apis/credentials)
@@ -264,12 +288,17 @@ provider's adapter; env vars from `CHANNEL_ENV_MAPPINGS`.
 | MeWe (`mewe`) | [dev.mewe.com](https://dev.mewe.com) | `MEWE_APP_ID` / `MEWE_API_KEY` | `/integrations/social/mewe` |
 | Mastodon (`mastodon`) | per-instance (see below) | `MASTODON_CLIENT_ID` / `MASTODON_CLIENT_SECRET` | `/integrations/social/mastodon` |
 | Wrapcast / Farcaster (`wrapcast`) | [dev.neynar.com](https://dev.neynar.com) | `NEYNAR_CLIENT_ID` / `NEYNAR_SECRET_KEY` | none — client-side "Sign in with Farcaster" (Neynar) |
+| LINE (`line`) | [developers.line.biz/console](https://developers.line.biz/console/) | `LINE_CHANNEL_ACCESS_TOKEN` (token only) | none — token-only (see the LINE section above) |
 | Custom OAuth (`oauth_custom`) | your own OIDC provider | `POSTMILL_OAUTH_CLIENT_ID` / `POSTMILL_OAUTH_CLIENT_SECRET` | see note below |
 
 - **Mastodon** normally needs no app at all: tenants type their instance
   hostname in the connect dialog and Postmill registers itself on that server
   automatically (dynamic client registration). The env pair exists for
-  operators who want a fixed pre-registered app.
+  operators who want a fixed pre-registered app. The same per-instance flow
+  powers the **GoToSocial**, **Akkoma**, and **Friendica** channels
+  (Mastodon-API servers) and, with Misskey's MiAuth instead of client
+  registration, the **Misskey** and **Sharkey** channels — none of them need
+  env vars.
 - **Custom OAuth** channels reuse the generic-OIDC variables; there is no
   dedicated provider adapter in this repo — check the provider's current docs
   for the callback to register.
@@ -311,9 +340,12 @@ Full walkthrough: [OAuth / SSO](./oauth-sso.md).
 
 These channels need no developer app at either scope — tenants enter account
 credentials (or an instance hostname) directly in the connect dialog:
-**Bluesky** (app password), **Mastodon** (instance hostname), **PeerTube**,
-**Skool**, **Hashnode**, **Medium**, **WordPress**, **Nostr**, **Lemmy**,
-**Pixelfed**, **dev.to**, **Listmonk**, and **Moltbook**.
+**Bluesky** (app password), **Mastodon** (instance hostname), **GoToSocial**,
+**Akkoma**, **Friendica**, **Misskey**, **Sharkey** (instance hostname),
+**Matrix** (homeserver + access token + room ID), **Discourse** (API key),
+**Odysee** (self-hosted lbrynet daemon — advanced, see the channel's setup
+steps), **PeerTube**, **Skool**, **Hashnode**, **Medium**, **WordPress**,
+**Nostr**, **Lemmy**, **Pixelfed**, **dev.to**, **Listmonk**, and **Moltbook**.
 
 ## Related
 

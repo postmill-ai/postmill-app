@@ -80,6 +80,17 @@ export const ContinueIntegration: FC<{
       };
     }
 
+    // Misskey-family MiAuth: the callback carries only `?session=<uuid>` (no
+    // state/code). The session UUID IS the OAuth state (generated as a UUID in
+    // the family base's generateAuthUrl), so map it onto both.
+    if (provider === 'misskey' || provider === 'sharkey') {
+      return {
+        state: searchParams.session || '',
+        code: searchParams.session || '',
+        refresh: searchParams.refresh || '',
+      };
+    }
+
     if (provider === 'mewe') {
       const hash =
         typeof window !== 'undefined' ? window.location.hash.substring(1) : '';

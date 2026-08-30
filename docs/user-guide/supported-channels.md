@@ -5,7 +5,7 @@ matrix. This matrix is the single source of truth for what each provider can do 
 admin settings, preflight validation, and workflow logic all gate on these values.
 
 The canonical source is `PROVIDER_CAPABILITIES` in
-`libraries/nestjs-libraries/src/integrations/social/provider-capabilities.ts`.
+`libraries/providers/kernel/src/domains/social-capabilities.ts`.
 
 ## Capability Column Descriptions
 
@@ -63,6 +63,15 @@ The canonical source is `PROVIDER_CAPABILITIES` in
 | Tumblr | false | false | false | false | true | false | true | 10 | false | true | false |
 | Pixelfed | false | false | true | false | false | false | true | 10 | false | false | false |
 | PeerTube | false | false | true | false | true | false | false | 1 | false | false | false |
+| GoToSocial | true | true | true | false | true | false | true | 4 | false | false | false |
+| Akkoma | true | true | true | false | true | false | true | 4 | false | false | false |
+| Friendica | true | true | true | false | true | false | true | 4 | false | false | false |
+| Misskey | true | true | true | false | true | false | true | 16 | false | false | false |
+| Sharkey | true | true | true | false | true | false | true | 16 | false | false | false |
+| LINE | true | false | false | false | true | false | false | 4 | false | false | false |
+| Matrix | false | false | false | false | true | false | true | 10 | false | false | false |
+| Discourse | false | true | true | false | true | false | true | 10 | false | false | false |
+| Odysee | false | false | false | false | true | false | false | 1 | false | false | false |
 
 ## Summary
 
@@ -70,19 +79,37 @@ The canonical source is `PROVIDER_CAPABILITIES` in
 
 **carousel** — 5 providers support carousel posts: LinkedIn, LinkedIn Page, Instagram, Instagram Standalone, and Threads.
 
-**altText** — 5 providers support alt text on images: Slack, Mastodon, Bluesky, Tumblr, and Pixelfed.
+**altText** — 13 providers support alt text on images: Slack, Mastodon, Bluesky, Tumblr, Pixelfed, GoToSocial, Akkoma, Friendica, Misskey, Sharkey, Matrix, and Discourse.
 
-**analytics** — 17 providers support analytics data collection: X, LinkedIn, LinkedIn Page, Instagram, Instagram Standalone, Facebook, Threads, YouTube, Google My Business, TikTok, Pinterest, Dribbble, Reddit, Discord, Mastodon, Bluesky, and Telegram.
+**analytics** — 23 providers support analytics data collection: X, LinkedIn, LinkedIn Page, Instagram, Instagram Standalone, Facebook, Threads, YouTube, Google My Business, TikTok, Pinterest, Dribbble, Reddit, Discord, Mastodon, Bluesky, Telegram, GoToSocial, Akkoma, Friendica, Misskey, Sharkey, and LINE.
 
 **watchlist** — 5 providers support competitor account probing: X, Instagram, Instagram Standalone, YouTube, and TikTok.
 
 **linkPreview** — Only X supports link preview / link-card rendering.
 
-**comments** — 19 providers support fetching and replying to platform comments.
+**comments** — 25 providers support fetching and replying to platform comments.
 
-**firstComment** — 24 providers support auto-posting a first comment after publish.
+**firstComment** — 30 providers support auto-posting a first comment after publish.
 
 **refreshToken** — 16 providers support OAuth refresh token rotation.
+
+## Channels Postmill cannot support
+
+Some platforms are requested often but have **no usable publishing API** — for Postmill or for any
+competitor. This list is kept current so the absence is a documented decision, not an oversight:
+
+- **Minds** — no third-party OAuth app registration or documented publishing API; the OAuth server
+  is first-party-only (hardcoded clients), and posting exists only through an unofficial,
+  undocumented session API.
+- **Trovo** — the API reads data, sends chat messages, and edits live-stream settings
+  (title/category); there is no endpoint to publish posts, clips, or videos.
+- **DLive** — the GraphQL API exposes only chat, stream-settings, and moderation writes, and
+  developer-app registration is a manual, application-only process.
+- **Viber** — broadcast requires an explicit recipient list (max 300 IDs) and Viber provides no API
+  to enumerate a bot's subscribers, so a bot channel cannot reach its own audience.
+- **Gab, Truth Social, Gettr, Parler, Rumble, Locals, BeReal, Lemon8** — no public write API at all.
+- **Firefish** — the project was discontinued; use the Sharkey channel (same Misskey API lineage)
+  for Firefish-lineage instances.
 
 ## Short-link providers
 

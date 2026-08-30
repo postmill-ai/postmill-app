@@ -53,6 +53,15 @@ export type AllProvidersSettings =
   | ProviderExtension<'wrapcast', FarcasterDto>
   | ProviderExtension<'threads', ThreadsSettingsDto>
   | ProviderExtension<'mastodon', None>
+  | ProviderExtension<'gotosocial', None>
+  | ProviderExtension<'akkoma', None>
+  | ProviderExtension<'friendica', None>
+  | ProviderExtension<'odysee', None>
+  | ProviderExtension<'misskey', None>
+  | ProviderExtension<'sharkey', None>
+  | ProviderExtension<'line', None>
+  | ProviderExtension<'matrix', None>
+  | ProviderExtension<'discourse', None>
   | ProviderExtension<'bluesky', None>
   | ProviderExtension<'telegram', None>
   | ProviderExtension<'nostr', None>
@@ -94,6 +103,15 @@ export const allProviders = (setEmpty?: any) => {
     { value: FacebookDto, name: 'facebook' },
     { value: ThreadsSettingsDto, name: 'threads' },
     { value: setEmpty, name: 'mastodon' },
+    { value: setEmpty, name: 'gotosocial' },
+    { value: setEmpty, name: 'akkoma' },
+    { value: setEmpty, name: 'friendica' },
+    { value: setEmpty, name: 'odysee' },
+    { value: setEmpty, name: 'misskey' },
+    { value: setEmpty, name: 'sharkey' },
+    { value: setEmpty, name: 'line' },
+    { value: setEmpty, name: 'matrix' },
+    { value: setEmpty, name: 'discourse' },
     { value: setEmpty, name: 'bluesky' },
     { value: setEmpty, name: 'telegram' },
     { value: setEmpty, name: 'nostr' },

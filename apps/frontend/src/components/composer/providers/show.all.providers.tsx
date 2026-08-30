@@ -18,6 +18,15 @@ import SlackProvider from '@postmill-ai/frontend/components/composer/providers/s
 import KickProvider from '@postmill-ai/frontend/components/composer/providers/kick/kick.provider';
 import TwitchProvider from '@postmill-ai/frontend/components/composer/providers/twitch/twitch.provider';
 import MastodonProvider from '@postmill-ai/frontend/components/composer/providers/mastodon/mastodon.provider';
+import GoToSocialProvider from '@postmill-ai/frontend/components/composer/providers/gotosocial/gotosocial.provider';
+import AkkomaProvider from '@postmill-ai/frontend/components/composer/providers/akkoma/akkoma.provider';
+import FriendicaProvider from '@postmill-ai/frontend/components/composer/providers/friendica/friendica.provider';
+import OdyseeProvider from '@postmill-ai/frontend/components/composer/providers/odysee/odysee.provider';
+import MisskeyProvider from '@postmill-ai/frontend/components/composer/providers/misskey/misskey.provider';
+import SharkeyProvider from '@postmill-ai/frontend/components/composer/providers/sharkey/sharkey.provider';
+import LineProvider from '@postmill-ai/frontend/components/composer/providers/line/line.provider';
+import MatrixProvider from '@postmill-ai/frontend/components/composer/providers/matrix/matrix.provider';
+import DiscourseProvider from '@postmill-ai/frontend/components/composer/providers/discourse/discourse.provider';
 import BlueskyProvider from '@postmill-ai/frontend/components/composer/providers/bluesky/bluesky.provider';
 import LemmyProvider from '@postmill-ai/frontend/components/composer/providers/lemmy/lemmy.provider';
 import WarpcastProvider from '@postmill-ai/frontend/components/composer/providers/warpcast/warpcast.provider';
@@ -123,6 +132,42 @@ export const Providers = [
   {
     identifier: 'mastodon',
     component: MastodonProvider,
+  },
+  {
+    identifier: 'gotosocial',
+    component: GoToSocialProvider,
+  },
+  {
+    identifier: 'akkoma',
+    component: AkkomaProvider,
+  },
+  {
+    identifier: 'friendica',
+    component: FriendicaProvider,
+  },
+  {
+    identifier: 'odysee',
+    component: OdyseeProvider,
+  },
+  {
+    identifier: 'misskey',
+    component: MisskeyProvider,
+  },
+  {
+    identifier: 'sharkey',
+    component: SharkeyProvider,
+  },
+  {
+    identifier: 'line',
+    component: LineProvider,
+  },
+  {
+    identifier: 'matrix',
+    component: MatrixProvider,
+  },
+  {
+    identifier: 'discourse',
+    component: DiscourseProvider,
   },
   {
     identifier: 'bluesky',

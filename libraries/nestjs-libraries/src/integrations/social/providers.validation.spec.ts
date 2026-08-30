@@ -58,6 +58,15 @@ import __m32 from '@postmill-ai/provider-wordpress';
 import __m33 from '@postmill-ai/provider-wrapcast';
 import __m34 from '@postmill-ai/provider-x';
 import __m35 from '@postmill-ai/provider-youtube';
+import __m36 from '@postmill-ai/provider-akkoma';
+import __m37 from '@postmill-ai/provider-friendica';
+import __m38 from '@postmill-ai/provider-gotosocial';
+import __m39 from '@postmill-ai/provider-odysee';
+import __m40 from '@postmill-ai/provider-misskey';
+import __m41 from '@postmill-ai/provider-sharkey';
+import __m42 from '@postmill-ai/provider-discourse';
+import __m43 from '@postmill-ai/provider-line';
+import __m44 from '@postmill-ai/provider-matrix';
 
 // Minimal runtime context for creating the social bridge; only metadata getters
 // (`identifier`, `name`, `maxConcurrentJob`, etc.) are exercised here.
@@ -73,7 +82,8 @@ const socialProviders = [
   __m0, __m1, __m2, __m3, __m4, __m5, __m6, __m7, __m8, __m9,
   __m10, __m11, __m12, __m13, __m14, __m15, __m16, __m17, __m18, __m19,
   __m20, __m21, __m22, __m23, __m24, __m25, __m26, __m27, __m28, __m29,
-  __m30, __m31, __m32, __m33, __m34, __m35,
+  __m30, __m31, __m32, __m33, __m34, __m35, __m36, __m37, __m38, __m39,
+  __m40, __m41, __m42, __m43, __m44,
 ]
   .flat()
   .filter(

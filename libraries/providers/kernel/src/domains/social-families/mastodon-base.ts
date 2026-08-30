@@ -24,7 +24,18 @@ export class MastodonProvider extends SocialAbstract implements SocialProvider {
   identifier = 'mastodon';
   name = 'Mastodon';
   isBetweenSteps = false;
-  scopes = ['read:statuses', 'write:statuses', 'profile', 'write:media'];
+  // Granular scopes: strict-scope servers (GoToSocial) enforce these
+  // per-endpoint — read:accounts for follower analytics, write:favourites for
+  // likeComment. Mastodon itself accepts the umbrella scopes, but the granular
+  // set is the portable one.
+  scopes = [
+    'read:statuses',
+    'read:accounts',
+    'write:statuses',
+    'write:favourites',
+    'profile',
+    'write:media',
+  ];
   editor = 'normal' as const;
 
   override get commentsCapabilities() {
@@ -68,7 +79,7 @@ export class MastodonProvider extends SocialAbstract implements SocialProvider {
     url: string
   ) {
     return `${customUrl}/oauth/authorize?client_id=${clientId}&response_type=code&redirect_uri=${encodeURIComponent(
-      `${url}/integrations/social/mastodon`
+      `${url}/integrations/social/${this.identifier}`
     )}&scope=${this.scopes.join('+')}&state=${state}`;
   }
 
@@ -173,7 +184,7 @@ export class MastodonProvider extends SocialAbstract implements SocialProvider {
     form.append('grant_type', 'authorization_code');
     form.append(
       'redirect_uri',
-      `${process.env.FRONTEND_URL}/integrations/social/mastodon`
+      `${process.env.FRONTEND_URL}/integrations/social/${this.identifier}`
     );
     form.append('scope', this.scopes.join(' '));
 

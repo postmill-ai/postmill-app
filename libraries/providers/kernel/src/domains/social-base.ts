@@ -1,5 +1,6 @@
 import { Integration } from '@prisma/client';
 import { ChannelSetupDescriptor } from './social-provider';
+import { randomBytes } from 'node:crypto';
 
 /**
  * SocialAbstract — the base class every social provider extends. Relocated into
@@ -53,6 +54,68 @@ export function setSocialFetchPorts(p: SocialFetchPorts): void {
  */
 export function safeFetch(url: string, init?: any): Promise<Response> {
   return _ports!.safeFetch(url, init);
+}
+
+/**
+ * True for any spec-compliant FormData (the web-global class, an undici copy,
+ * a test double) without depending on a specific implementation's identity.
+ */
+function isFormDataLike(body: unknown): body is FormData {
+  return (
+    !!body &&
+    typeof (body as any).entries === 'function' &&
+    ((body as any)[Symbol.toStringTag] === 'FormData' || body instanceof FormData)
+  );
+}
+
+const escapeMultipartName = (name: string) =>
+  name.replace(/["\r\n]/g, (c) => (c === '"' ? '%22' : ''));
+
+/**
+ * Serialize any FormData implementation to a multipart body manually.
+ *
+ * The injected `undiciFetch` port (node_modules undici) only serializes ITS
+ * OWN FormData class — a web-global FormData instance goes out as the literal
+ * string "[object FormData]" with content-type text/plain, and strict servers
+ * (GoToSocial et al.) reject the request as unparseable. Normalizing here, at
+ * the single egress point, fixes every provider's multipart POSTs regardless
+ * of which FormData class constructed them.
+ */
+async function formDataToMultipart(
+  form: FormData
+): Promise<{ body: Buffer; contentType: string }> {
+  const boundary = `----postmillform${randomBytes(12).toString('hex')}`;
+  const CRLF = '\r\n';
+  const chunks: Buffer[] = [];
+
+  for (const [name, value] of (form as any).entries()) {
+    chunks.push(Buffer.from(`--${boundary}${CRLF}`));
+    if (typeof value === 'string') {
+      chunks.push(
+        Buffer.from(
+          `Content-Disposition: form-data; name="${escapeMultipartName(name)}"${CRLF}${CRLF}${value}${CRLF}`
+        )
+      );
+    } else {
+      const blob = value as Blob;
+      const fileName = (value as any).name
+        ? `; filename="${escapeMultipartName(String((value as any).name))}"`
+        : '';
+      chunks.push(
+        Buffer.from(
+          `Content-Disposition: form-data; name="${escapeMultipartName(name)}"${fileName}${CRLF}Content-Type: ${blob.type || 'application/octet-stream'}${CRLF}${CRLF}`
+        )
+      );
+      chunks.push(Buffer.from(await blob.arrayBuffer()));
+      chunks.push(Buffer.from(CRLF));
+    }
+  }
+  chunks.push(Buffer.from(`--${boundary}--${CRLF}`));
+
+  return {
+    body: Buffer.concat(chunks),
+    contentType: `multipart/form-data; boundary=${boundary}`,
+  };
 }
 
 /**
@@ -231,8 +294,23 @@ export abstract class SocialAbstract {
       : timeoutSignal;
     let request: Response;
     try {
+      // Multipart normalization — see formDataToMultipart. Converted BEFORE
+      // the port call so any FormData implementation reaches the wire as a
+      // real multipart body.
+      let body = options.body;
+      let headers = options.headers;
+      if (isFormDataLike(body)) {
+        const multipart = await formDataToMultipart(body);
+        body = multipart.body as any;
+        headers = {
+          ...((headers as Record<string, string>) || {}),
+          'content-type': multipart.contentType,
+        } as any;
+      }
       request = (await _ports!.undiciFetch(url, {
         ...(options as any),
+        body,
+        headers,
         signal,
         // dispatcher is an undici-only RequestInit option, absorbed by the cast below
         dispatcher: (options as any).dispatcher ?? vpnDispatcher ?? _ports!.ssrfSafeDispatcher,

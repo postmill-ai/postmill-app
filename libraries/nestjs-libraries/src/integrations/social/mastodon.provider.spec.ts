@@ -128,13 +128,19 @@ describe('Mastodon - comment capabilities', () => {
     it('sends POST to statuses endpoint with in_reply_to_id', async () => {
       globalThis.fetch = vi.fn().mockResolvedValue(resp({ id: 'reply-456' }));
       await provider.replyToComment('user-123', 'tok', 'status-1', 'parent-1', 'Nice!', mockIntegration);
-      expect(globalThis.fetch).toHaveBeenCalledWith(
-        'https://mastodon.social/api/v1/statuses',
-        expect.objectContaining({
-          method: 'POST',
-          headers: { Authorization: 'Bearer tok' },
-        })
+      const [, init] = (globalThis.fetch as any).mock.calls[0];
+      expect((globalThis.fetch as any).mock.calls[0][0]).toBe(
+        'https://mastodon.social/api/v1/statuses'
       );
+      expect(init.method).toBe('POST');
+      expect(init.headers.Authorization).toBe('Bearer tok');
+      // FormData bodies are serialized to a real multipart buffer at the
+      // egress (see formDataToMultipart in kernel social-base).
+      expect(init.headers['content-type']).toMatch(/^multipart\/form-data; boundary=/);
+      const body = Buffer.isBuffer(init.body) ? init.body.toString('utf8') : String(init.body);
+      expect(body).toContain('name="in_reply_to_id"');
+      expect(body).toContain('parent-1');
+      expect(body).toContain('Nice!');
     });
   });
 

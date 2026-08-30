@@ -45,6 +45,7 @@ export const CHANNEL_ENV_MAPPINGS: ProviderEnvMapping[] = [
   { identifier: 'vk', clientIdEnv: 'VK_ID' },
   { identifier: 'whop', clientIdEnv: 'WHOP_CLIENT_ID' },
   { identifier: 'telegram', clientIdEnv: 'TELEGRAM_TOKEN', isTokenOnly: true },
+  { identifier: 'line', clientIdEnv: 'LINE_CHANNEL_ACCESS_TOKEN', isTokenOnly: true },
 ];
 
 const MAP_BY_IDENTIFIER: Record<string, ProviderEnvMapping> = Object.fromEntries(

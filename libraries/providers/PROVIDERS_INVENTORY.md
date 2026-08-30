@@ -6,12 +6,12 @@ kernel vitest alias. One row per **module** (multi-module packages — e.g. `ope
 get multiple rows). The `has-spec?` column reflects whether the **package** contains any
 `*.spec.ts` / `*.int-spec.ts` under `src/**`.
 
-- **Modules:** 168  (== `providerModules.length`)
-- **Packages:** 150  (== real package dirs under `libraries/providers/`, excluding `kernel` and `node_modules`)
-  - Note: `ls -d libraries/providers/*/ | grep -v kernel | wc -l` = **151** on a clean checkout because it also counts the `node_modules/` dir; **150** are real packages. (After a local `--coverage` run a gitignored `coverage/` dir also appears, making the raw count **152** — both `node_modules/` and `coverage/` are non-package artifacts.)
-- **Packages with at least one spec:** 96 / 150  (media adapters + the magnific content pack gained recorded-fixture `*.int-spec.ts` behavioral tests via the shared `kernel/src/testing/media-int-helpers.ts`)
+- **Modules:** 177  (== `providerModules.length`)
+- **Packages:** 159  (== real package dirs under `libraries/providers/`, excluding `kernel` and `node_modules`)
+  - Note: `ls -d libraries/providers/*/ | grep -v kernel | wc -l` = **160** on a clean checkout because it also counts the `node_modules/` dir; **159** are real packages. (After a local `--coverage` run a gitignored `coverage/` dir also appears, making the raw count **161** — both `node_modules/` and `coverage/` are non-package artifacts.)
+- **Packages with at least one spec:** 105 / 159  (media adapters + the magnific content pack gained recorded-fixture `*.int-spec.ts` behavioral tests via the shared `kernel/src/testing/media-int-helpers.ts`)
 
-Modules per domain: ai=30, auth=6, contentpack=4, email=7, media=35, shortlink=20, social=36, storage=14, vpn=16
+Modules per domain: ai=30, auth=6, contentpack=4, email=7, media=35, shortlink=20, social=45, storage=14, vpn=16
 
 | package | domain | providerId | version | status | has-spec? |
 |---|---|---|---|---|---|
@@ -117,29 +117,38 @@ Modules per domain: ai=30, auth=6, contentpack=4, email=7, media=35, shortlink=2
 | tinyurl | shortlink | tinyurl | v1 | active | yes |
 | tly | shortlink | tly | v1 | active | yes |
 | vgd | shortlink | vgd | v1 | active | yes |
+| akkoma | social | akkoma | v1 | active | yes |
 | bluesky | social | bluesky | v1 | active | no |
 | devto | social | devto | v1 | active | no |
 | discord | social | discord | v1 | active | no |
+| discourse | social | discourse | v1 | active | yes |
 | dribbble | social | dribbble | v1 | active | no |
 | facebook | social | facebook | v1 | active | no |
+| friendica | social | friendica | v1 | active | yes |
 | gmb | social | gmb | v1 | active | no |
+| gotosocial | social | gotosocial | v1 | active | yes |
 | hashnode | social | hashnode | v1 | active | no |
 | instagram | social | instagram | v1 | active | no |
 | instagram-standalone | social | instagram-standalone | v1 | active | no |
 | kick | social | kick | v1 | active | no |
 | lemmy | social | lemmy | v1 | active | no |
+| line | social | line | v1 | active | yes |
 | linkedin | social | linkedin | v1 | active | no |
 | linkedin-page | social | linkedin-page | v1 | active | no |
 | listmonk | social | listmonk | v1 | active | no |
 | mastodon | social | mastodon | v1 | active | no |
+| matrix | social | matrix | v1 | active | yes |
 | medium | social | medium | v1 | active | no |
 | mewe | social | mewe | v1 | active | no |
+| misskey | social | misskey | v1 | active | yes |
 | moltbook | social | moltbook | v1 | active | no |
 | nostr | social | nostr | v1 | active | no |
+| odysee | social | odysee | v1 | active | yes |
 | peertube | social | peertube | v1 | active | no |
 | pinterest | social | pinterest | v1 | active | no |
 | pixelfed | social | pixelfed | v1 | active | no |
 | reddit | social | reddit | v1 | active | no |
+| sharkey | social | sharkey | v1 | active | yes |
 | skool | social | skool | v1 | active | no |
 | slack | social | slack | v1 | active | no |
 | telegram | social | telegram | v1 | active | no |
