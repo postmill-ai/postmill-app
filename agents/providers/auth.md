@@ -51,9 +51,15 @@ The adapter must define a local `AuthProviderRepoLike` structural interface (as 
 
 `AuthProviderManager.getProviders()` also **advertises** providers on the login page: DB-enabled rows take precedence; with no enabled DB rows it falls back to a hardcoded env-presence check per provider (`auth-provider.manager.ts:83-131`). A new provider needs a new env-gate block there, or the login page will never offer it. Note: the `WALLET` gate keys on `STRIPE_PUBLISHABLE_KEY` — a known misalignment flagged in a code comment; do not copy that pattern.
 
+## Dual-use platform channel apps: FACEBOOK / X / LINKEDIN
+
+Facebook, X, and LinkedIn login reuse the **platform channel app** — the operator's `FACEBOOK_APP_ID`/`FACEBOOK_APP_SECRET`, `X_API_KEY`/`X_API_SECRET`, and `LINKEDIN_CLIENT_ID`/`LINKEDIN_CLIENT_SECRET` from the `.env.example` "Channel OAuth apps" block (`CHANNEL_ENV_MAPPINGS` in `libraries/nestjs-libraries/src/integrations/channel-env-credentials.ts`). There is no separate login credential set; each adapter reads the same channel env vars.
+
+Each is gated by an opt-in flag: `FACEBOOK_SSO_ENABLED`, `X_SSO_ENABLED`, `LINKEDIN_SSO_ENABLED`. The env gate in `AuthProviderManager.getProviders()` requires **both** the flag `=== 'true'` **and** the full channel credential set, so the login page never advertises a provider whose channel app is unconfigured.
+
 ## Prisma enum quirk (required)
 
-The `provider` column is the Prisma `Provider` enum (`libraries/nestjs-libraries/src/database/prisma/schema.prisma:1621`): `LOCAL`, `GITHUB`, `GOOGLE`, `FARCASTER`, `WALLET`, `GENERIC`. A new login provider **must** add a new uppercase value to this enum via a **committed migration** (enum alteration — follow the migration workflow in `agents/database.md`). The kernel `providerId` is the lowercase form; `AuthProviderManager.getProvider` normalizes callers' uppercase enum values with `provider.toLowerCase()` before kernel lookup (`auth-provider.manager.ts:147`). `AuthProviderRepository.findByProvider` takes the Prisma `Provider` enum (`libraries/nestjs-libraries/src/database/prisma/auth-providers/auth-provider.repository.ts:17`).
+The `provider` column is the Prisma `Provider` enum (`libraries/nestjs-libraries/src/database/prisma/schema.prisma:1621`): `LOCAL`, `GITHUB`, `GOOGLE`, `FARCASTER`, `WALLET`, `GENERIC` (the FACEBOOK/X/LINKEDIN dual-use providers add their own uppercase values via migration). A new login provider **must** add a new uppercase value to this enum via a **committed migration** (enum alteration — follow the migration workflow in `agents/database.md`). The kernel `providerId` is the lowercase form; `AuthProviderManager.getProvider` normalizes callers' uppercase enum values with `provider.toLowerCase()` before kernel lookup (`auth-provider.manager.ts:147`). `AuthProviderRepository.findByProvider` takes the Prisma `Provider` enum (`libraries/nestjs-libraries/src/database/prisma/auth-providers/auth-provider.repository.ts:17`).
 
 ## Database: `AuthProviderConfig`
 
@@ -70,9 +76,12 @@ The `provider` column is the Prisma `Provider` enum (`libraries/nestjs-libraries
 
 Repository: `AuthProviderRepository` (`libraries/nestjs-libraries/src/database/prisma/auth-providers/auth-provider.repository.ts`) with `list()`, `findByProvider(provider, version)`, `upsert(...)`, `delete(...)`. Rows are written by the external administration app, not by this repo.
 
-## No frontend work in this repo
+## Frontend registration (required)
 
-The login page consumes `GET /auth/providers` and renders whatever the backend advertises. Adding an auth provider requires **no** `apps/frontend` change (unlike social providers — see `agents/providers/social.md`).
+The login page consumes `GET /auth/providers` and renders only providers it has a button for — adding an auth provider **does** require `apps/frontend` work (unlike the earlier revision of this doc claimed). Two touchpoints; without both, the provider never appears even when the backend advertises it:
+
+- `providerComponents` (`apps/frontend/src/components/auth/login.tsx:42`) maps each advertised `provider` enum value to its button component (`GithubProvider`, `GoogleProvider`, …). Add an entry for the new provider — advertised providers without an entry are filtered out of the "Continue With" row (`login.tsx:64-66`).
+- The OAuth-callback redirect map in `apps/frontend/src/proxy.ts:94` (`const providers = ['google', 'settings']`) rewrites an unauthenticated callback URL to `/auth?...&provider=<NAME>` by matching a substring of the URL (with the `settings` fragment resolving to `generic` or `github`). Add the new provider's callback-path fragment (e.g. `'facebook'`) so the OAuth callback lands on the login flow carrying the right `provider` param.
 
 ## Universal steps (compressed)
 
@@ -96,5 +105,6 @@ The full universal provider-package procedure (workspace package scaffold, `meta
 4. [ ] Implement `src/v1/auth.adapter.ts`: a class implementing `AuthCapability` + an exported `ProviderModule` with manifest `domain: 'auth'`, lowercase `providerId`, `version: 'v1'`, `authType: 'oauth2'`.
 5. [ ] Implement `resolveConfig`: DB-first via `ctx.extras.authProviderRepo.findByProvider('<PROVIDER>')`, decrypt with `ctx.encryption.decrypt`, env fallback, throw when unconfigured; all HTTP via `ctx.fetch`.
 6. [ ] Export the module array from `src/index.ts` and register it (alphabetically) in `apps/backend/src/providers.generated.ts`.
-7. [ ] Add the env-presence gate for the new provider in `AuthProviderManager.getProviders()` (`apps/backend/src/services/auth/providers/auth-provider.manager.ts`) so the login page can advertise it.
-8. [ ] Add/extend tests (`auth.adapter.spec.ts`, `auth-provider.manager.spec.ts`) and run `vitest run --root libraries/providers/kernel` + `vitest run --root apps/backend` — the conformance spec must pass with the new module registered.
+7. [ ] Add the env-presence gate for the new provider in `AuthProviderManager.getProviders()` (`apps/backend/src/services/auth/providers/auth-provider.manager.ts`) so the login page can advertise it. For a dual-use channel-app provider (FACEBOOK/X/LINKEDIN pattern) the gate is the `<P>_SSO_ENABLED` flag AND the channel app env vars — not a separate login credential set.
+8. [ ] Frontend: add the provider's button component to `providerComponents` (`apps/frontend/src/components/auth/login.tsx`) and its callback-path fragment to the redirect map in `apps/frontend/src/proxy.ts`.
+9. [ ] Add/extend tests (`auth.adapter.spec.ts`, `auth-provider.manager.spec.ts`) and run `vitest run --root libraries/providers/kernel` + `vitest run --root apps/backend` — the conformance spec must pass with the new module registered.

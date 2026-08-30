@@ -10,15 +10,16 @@ import { Input } from '@postmill-ai/react/form/input';
 import { Button } from '@postmill-ai/react/form/button';
 import copy from 'copy-to-clipboard';
 import { useToaster } from '@postmill-ai/react/toaster/toaster';
-import { useVariables } from '@postmill-ai/react/helpers/variable.context';
 import { useT } from '@postmill-ai/react/translation/get.transation.service.client';
 export const TelegramProvider: FC<Web3ProviderInterface> = (props) => {
   const { onComplete, nonce } = props;
-  const { telegramBotName } = useVariables();
   const fetch = useFetch();
   const word = useRef(makeId(4));
   const stop = useRef(false);
   const [step, setStep] = useState(false);
+  // The connected bot's username, returned by the updates endpoint (Telegram
+  // getMe via the resolved org/env bot token) — names the bot in the copy.
+  const [botUsername, setBotUsername] = useState('');
   const toaster = useToaster();
   async function* load() {
     let id = '';
@@ -30,6 +31,9 @@ export const TelegramProvider: FC<Web3ProviderInterface> = (props) => {
           }`
         )
       ).json();
+      if (data?.bot?.username) {
+        setBotUsername(data.bot.username);
+      }
       if (data.lastChatId) {
         id = data.lastChatId;
       }
@@ -58,6 +62,16 @@ export const TelegramProvider: FC<Web3ProviderInterface> = (props) => {
     toaster.show(t('copied_to_clipboard', 'Copied to clipboard'), 'success');
   }, [t, toaster]);
   useEffect(() => {
+    // One-shot fetch on mount so the first screen can already name the bot;
+    // the polling loop (after the click) keeps it refreshed.
+    fetch(`/integrations/telegram/updates?word=${word.current}`)
+      .then((r) => r.json())
+      .then((data) => {
+        if (data?.bot?.username) {
+          setBotUsername(data.bot.username);
+        }
+      })
+      .catch(() => {});
     return () => {
       stop.current = true;
     };
@@ -66,10 +80,19 @@ export const TelegramProvider: FC<Web3ProviderInterface> = (props) => {
     <>
       <div className="justify-center items-center flex flex-col pt-[16px]">
         <div>
-          {t('please_add', 'Please add')} <strong>@{telegramBotName}</strong>{' '}
-          {t(
-            'to_your_telegram_group_channel_and_click_here',
-            'to your\n          telegram group / channel and click here:'
+          {botUsername ? (
+            <>
+              {t('please_add', 'Please add')} <strong>@{botUsername}</strong>{' '}
+              {t(
+                'to_your_telegram_group_channel_and_click_here',
+                'to your\n          telegram group / channel and click here:'
+              )}
+            </>
+          ) : (
+            t(
+              'add_the_bot_to_your_telegram_group_channel_and_click_here',
+              'Add the bot to your telegram group / channel and click here:'
+            )
           )}
         </div>
         {!step ? (
@@ -102,10 +125,16 @@ export const TelegramProvider: FC<Web3ProviderInterface> = (props) => {
           </div>
         ) : (
           <div className="w-full text-center" onClick={copyText}>
-            {t(
-              'please_add_the_following_command_in_your_chat',
-              'Please add the following command in your chat:'
-            )}
+            {botUsername
+              ? t(
+                  'post_connect_word_in_your_channel_as_message_to_bot',
+                  'Post /connect {{word}} in your channel, as a message to @{{bot}}:',
+                  { word: word.current, bot: botUsername }
+                )
+              : t(
+                  'please_add_the_following_command_in_your_chat',
+                  'Please add the following command in your chat:'
+                )}
             <div className="mt-[16px] flex">
               <div className="flex-1">
                 <Input

@@ -57,24 +57,6 @@ const CHANNELS: ChannelSpec[] = [
   { identifier: 'telegram', name: 'Solstice Supply', profile: 'solsticesupply' },
 ];
 
-// Display names for the platform ProviderConfiguration rows (B2) — the composer
-// resolves channel availability through these; without them every seeded
-// channel toasts "Integration not available: <provider>".
-const PROVIDER_DISPLAY_NAMES: Record<string, string> = {
-  x: 'X',
-  linkedin: 'LinkedIn',
-  instagram: 'Instagram',
-  facebook: 'Facebook',
-  threads: 'Threads',
-  youtube: 'YouTube',
-  tiktok: 'TikTok',
-  pinterest: 'Pinterest',
-  mastodon: 'Mastodon',
-  discord: 'Discord',
-  bluesky: 'Bluesky',
-  telegram: 'Telegram',
-};
-
 // Channels the inbox can realistically show comments for (subset of the seeded
 // set that has comments capability in PROVIDER_CAPABILITIES).
 const COMMENT_CHANNELS = new Set([
@@ -226,7 +208,6 @@ export class DemoSeeder {
 
     const cast = await this._seedCast(orgId, userId);
     const integrations = await this._seedChannels(orgId);
-    await this._seedPlatformProviderConfigs();
     const { files, videoFiles, folderIds } = await this._seedMediaLibrary(orgId);
     const brandProfileId = await this._seedBrandProfiles(orgId, files);
     const campaigns = await this._seedCampaigns(orgId, userId);
@@ -412,42 +393,6 @@ export class DemoSeeder {
       out.push({ id: row.id, identifier: row.providerIdentifier, name: row.name });
     }
     return out;
-  }
-
-  // ── platform channel provider configs (B2) ─────────────────────────────────
-  //
-  // Channel availability funnels through ProviderConfigManager (platform
-  // ProviderConfiguration rows) — IntegrationManager throws
-  // `Integration not available: <provider>` when no enabled row exists. Seed an
-  // enabled row per demo channel so the composer/preflight work out of the box.
-  // Create-only: an existing row (admin-curated, real OAuth app creds) is never
-  // touched. Seeded rows carry `demo-prov-*` ids so _resetDemoData can drop
-  // exactly them (ProviderConfiguration has no inbound FKs).
-  private async _seedPlatformProviderConfigs(): Promise<void> {
-    for (const ch of CHANNELS) {
-      const existing = await this._prisma.providerConfiguration.findUnique({
-        where: {
-          identifier_version: { identifier: ch.identifier, version: 'v1' },
-        },
-        select: { id: true },
-      });
-      if (existing) continue;
-      await this._prisma.providerConfiguration.create({
-        data: {
-          id: `${DEMO_ID_PREFIX}prov-${ch.identifier}`,
-          identifier: ch.identifier,
-          version: 'v1',
-          name: PROVIDER_DISPLAY_NAMES[ch.identifier] ?? ch.identifier,
-          enabled: true,
-          clientId: null,
-          clientSecret: null,
-          redirectUri: null,
-          scopes: null,
-          additionalConfig: null,
-          setupInstructions: null,
-        },
-      });
-    }
   }
 
   // ── media library (folders + tagged files) ──────────────────────────────────

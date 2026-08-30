@@ -12,7 +12,7 @@ import {
 } from '@nestjs/common';
 import { GetUserFromRequest } from '@postmill-ai/nestjs-libraries/user/user.from.request';
 import { User } from '@prisma/client';
-import { ApiTags } from '@nestjs/swagger';
+import { ApiOperation, ApiTags } from '@nestjs/swagger';
 import { ProviderConfigService } from '@postmill-ai/nestjs-libraries/database/prisma/provider-configs/provider-config.service';
 import { ProviderConfigManager } from '@postmill-ai/nestjs-libraries/integrations/provider-config.manager';
 import { IntegrationManager } from '@postmill-ai/nestjs-libraries/integrations/integration.manager';
@@ -22,6 +22,10 @@ import { OrgRbacGuard } from '@postmill-ai/backend/services/auth/rbac/org-rbac.g
 import { SuperAdminGuard } from '@postmill-ai/backend/services/auth/rbac/super-admin.guard';
 import { SaveChannelConfigDto } from '@postmill-ai/nestjs-libraries/dtos/providers/provider-config.dtos';
 
+// DEPRECATED: platform channel apps now live in env vars (see
+// channel-env-credentials.ts); this global DB scope is read nowhere in live
+// paths and will be removed in a future release.
+//
 // PROVIDER_REMEDIATION 0.2 + 3.2: `ProviderConfiguration` is the platform-global
 // social OAuth-app store (no organizationId). It was gated only by
 // `@RequirePermission('channels','manage')`, which the RBAC seeder grants to owner,
@@ -49,6 +53,7 @@ export class ChannelConfigController {
   }
 
   @Get('/')
+  @ApiOperation({ deprecated: true })
   @RequirePermission('channels', 'manage')
   async listConfigs(@GetUserFromRequest() user: User) {
     this._assertSuperAdmin(user);
@@ -57,6 +62,7 @@ export class ChannelConfigController {
   }
 
   @Get('/:identifier')
+  @ApiOperation({ deprecated: true })
   @RequirePermission('channels', 'manage')
   async getConfig(
     @GetUserFromRequest() user: User,
@@ -68,6 +74,7 @@ export class ChannelConfigController {
   }
 
   @Put('/:identifier')
+  @ApiOperation({ deprecated: true })
   @RequirePermission('channels', 'manage')
   async saveConfig(
     @GetUserFromRequest() user: User,
@@ -145,6 +152,7 @@ export class ChannelConfigController {
   }
 
   @Delete('/:identifier')
+  @ApiOperation({ deprecated: true })
   @RequirePermission('channels', 'manage')
   async deleteConfig(
     @GetUserFromRequest() user: User,

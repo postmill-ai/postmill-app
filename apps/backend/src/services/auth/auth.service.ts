@@ -238,7 +238,12 @@ export class AuthService {
       (err) => {}
     );
 
-    await NewsletterService.register(providerUser.email);
+    // Synthetic addresses (e.g. x_<id>@x.login.postmill.local) are minted by
+    // providers that return no email — never enroll them in the newsletter or
+    // send them any email.
+    if (!providerUser.email.endsWith('.login.postmill.local')) {
+      await NewsletterService.register(providerUser.email);
+    }
 
     try {
       if (providerInstance?.postRegistration) {

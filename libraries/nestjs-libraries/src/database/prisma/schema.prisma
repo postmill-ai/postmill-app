@@ -1636,6 +1636,9 @@ enum Provider {
   FARCASTER
   WALLET
   GENERIC
+  FACEBOOK
+  X
+  LINKEDIN
 }
 
 enum CreationMethod {

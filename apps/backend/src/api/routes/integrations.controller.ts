@@ -18,7 +18,7 @@ import { IntegrationService } from '@postmill-ai/nestjs-libraries/database/prism
 import { GetOrgFromRequest } from '@postmill-ai/nestjs-libraries/user/org.from.request';
 import { isAllowedReturnUrl } from '@postmill-ai/nestjs-libraries/security/return-url.validator';
 import { InvalidExternalUrlError } from '@postmill-ai/provider-kernel';
-import { Organization, User } from '@prisma/client';
+import { Organization, User, Integration } from '@prisma/client';
 import { IntegrationFunctionDto } from '@postmill-ai/nestjs-libraries/dtos/integrations/integration.function.dto';
 import { CheckPolicies } from '@postmill-ai/backend/services/auth/permissions/permissions.ability';
 import { pricing } from '@postmill-ai/nestjs-libraries/database/prisma/subscriptions/pricing';
@@ -47,6 +47,7 @@ import { MoltbookStatusQueryDto } from '@postmill-ai/nestjs-libraries/dtos/integ
 
 import { TelegramProvider } from '@postmill-ai/provider-telegram';
 import { MoltbookProvider } from '@postmill-ai/provider-moltbook';
+import { setCredentials } from '@postmill-ai/nestjs-libraries/integrations/credentials';
 import {
   AuthorizationActions,
   Sections,
@@ -426,14 +427,38 @@ export class IntegrationsController {
 
   @Get('/telegram/updates')
   @Throttle({ default: { limit: 60, ttl: 60000 } })
-  async getUpdates(@Query() query: TelegramUpdatesQueryDto) {
+  async getUpdates(
+    @Query() query: TelegramUpdatesQueryDto,
+    @GetOrgFromRequest() org: Organization
+  ) {
     try {
-      return await new TelegramProvider().getBotId(query);
+      // Resolve the bot token through the standard channel-credential path (org
+      // BYO token wins, the platform env app is the fallback) and warm the
+      // per-org credential cache the provider reads from. Telegram is
+      // token-only: the bot token arrives as `token` (env app) or `client_id`
+      // (org config).
+      const info = await this._integrationManager.getClientInformation(
+        'telegram',
+        org.id
+      );
+      const botToken = info?.token || info?.client_id;
+      if (botToken) {
+        setCredentials(org.id, 'telegram', { clientId: botToken });
+      }
+      const provider = new TelegramProvider();
+      const boundOrg = { organizationId: org.id } as Integration;
+      const [updates, me] = await Promise.all([
+        provider.getBotId(query, boundOrg),
+        // Bot identity is best-effort display copy for the connect dialog.
+        provider.getBotMe(org.id).catch(() => undefined),
+      ]);
+      return { ...updates, ...(me ? { bot: me } : {}) };
     } catch (err) {
-      // Telegram bot not configured (no TELEGRAM_TOKEN) or a transient getUpdates error.
-      // The frontend polls this while waiting for the user's /connect message, so a 500
-      // here just spams errors — return empty so the connect flow degrades gracefully (#10).
-      Logger.warn('telegram getUpdates failed; returning empty');
+      // Telegram bot not configured for this org (no org token and no platform
+      // env app) or a transient getUpdates error. The frontend polls this while
+      // waiting for the user's /connect message, so a 500 here just spams
+      // errors — return empty so the connect flow degrades gracefully (#10).
+      this._logger.warn('telegram getUpdates failed; returning empty');
       return {};
     }
   }

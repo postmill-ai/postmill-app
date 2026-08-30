@@ -112,11 +112,26 @@ export class TelegramProvider extends SocialAbstract implements SocialProvider {
     };
   }
 
+  // Bot-token resolution shared by getBotId / getBotMe / botIsAdmin: the warmed
+  // per-org credential cache (clientId holds the bot token for this token-only
+  // channel). Callers warm the cache via IntegrationManager.getClientInformation,
+  // which resolves org BYO credentials first, then the platform env app.
+  private resolveBotToken(orgId?: string): string {
+    return (orgId && getOrgCredential(orgId, this.identifier, 'clientId')) || '';
+  }
+
+  // Bot identity (getMe) for the connect dialog — the frontend renders the
+  // returned username so the user knows which bot to add to their channel.
+  async getBotMe(
+    orgId?: string
+  ): Promise<{ username?: string; first_name?: string }> {
+    const me = await this.createBot(this.resolveBotToken(orgId)).getMe();
+    return { username: me.username, first_name: me.first_name };
+  }
+
   async getBotId(query: { id?: number; word: string }, integration?: Integration) {
     const orgId = integration?.organizationId || '';
-    const bot = this.createBot(
-      (orgId ? (getOrgCredential(orgId, this.identifier, 'clientId') || '') : '')
-    );
+    const bot = this.createBot(this.resolveBotToken(orgId));
     // Added allowed_updates Ensure only necessary updates are fetched
     const res = await bot.getUpdates({
       ...(query.id ? { offset: query.id } : {}),
@@ -495,9 +510,7 @@ export class TelegramProvider extends SocialAbstract implements SocialProvider {
   }
 
   async botIsAdmin(chatId: number, botId: number, orgId?: string): Promise<boolean> {
-    const bot = this.createBot(
-      (orgId ? (getOrgCredential(orgId, this.identifier, 'clientId') || '') : '')
-    );
+    const bot = this.createBot(this.resolveBotToken(orgId));
     try {
       const chatMember = await bot.getChatMember(chatId, botId);
 

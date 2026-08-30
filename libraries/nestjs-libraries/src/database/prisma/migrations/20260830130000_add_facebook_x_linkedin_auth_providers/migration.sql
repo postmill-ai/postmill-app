@@ -1,0 +1,4 @@
+-- AlterEnum
+ALTER TYPE "Provider" ADD VALUE 'FACEBOOK';
+ALTER TYPE "Provider" ADD VALUE 'X';
+ALTER TYPE "Provider" ADD VALUE 'LINKEDIN';
