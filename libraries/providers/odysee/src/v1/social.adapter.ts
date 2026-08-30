@@ -314,16 +314,16 @@ export class OdyseeProvider extends SocialAbstract implements SocialProvider {
   }
 
   private claimName(title: string) {
-    // Claim names allow only a-z A-Z 0-9 and dashes. The dash trims are two
-    // anchored single-direction replaces — the /^-+|-+$/ alternation with /g
-    // is a polynomial-backtracking pattern (CodeQL js/polynomial-redos).
+    // Claim names allow only a-z A-Z 0-9 and dashes. Built from positive
+    // alnum runs (match + join) instead of negated-class replaces — CodeQL
+    // flags /[^a-z0-9]+/ on library input as polynomial-backtracking-prone.
     const base =
-      title
+      (title
         .toLowerCase()
-        .replace(/[^a-z0-9]+/g, '-')
-        .replace(/^-+/, '')
-        .replace(/-+$/, '')
-        .slice(0, 40) || 'post';
+        .match(/[a-z0-9]+/g)
+        ?.join('-')
+        .slice(0, 40) || 'post'
+      ).replace(/-+$/, '');
     return `${base}-${makeId(6)}`;
   }
 
