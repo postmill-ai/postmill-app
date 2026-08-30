@@ -2,8 +2,6 @@
 
 89 Prisma models and 8 enums in a single schema at `libraries/nestjs-libraries/src/database/prisma/schema.prisma`. This page lists every model grouped by domain with a one-line purpose and key relationships.
 
-> **Pre-release restructure (before v1.0.0):** the `User` god-table was split (profile fields moved to `UserProfile`), the flat `Role` enum was replaced by a full RBAC layer (`AppRole`/`Permission`/`AppRolePermission`), and the dead marketplace/GitHub-stars models were dropped. See [Dropped before v1.0.0](#dropped-before-v1-0-0) below.
-
 ---
 
 ## Core Identity, RBAC & Sessions (9)
@@ -14,7 +12,7 @@
 | `User` | Identity/auth only — email, password, `providerName`/`providerId`, `isSuperAdmin`, `activated`, last-online telemetry | Unique on `(email, providerName)`; has one `UserProfile`, many `Session`, `UserOrganization` |
 | `UserProfile` | 1:1 profile split off from `User` — name, lastName, bio, `avatarUrl` (provider/Gravatar), `pictureId` (uploaded), IANA `timezone`, notification prefs | FK → `User` (unique, cascade), `File` (picture) |
 | `Session` | Login session backing refresh-token rotation — `tokenHash` (sha256 of the refresh token, rotated on every use), `previousTokenHash` (last rotated-out hash; reusing it revokes the session), userAgent/ip, `expiresAt`, `revokedAt` | FK → `User` (cascade) |
-| `UserOrganization` | Many-to-many join between users and orgs. The legacy `role` enum column was dropped before v1.0.0 (pre-release internal development) — `roleId` → `AppRole` is the role pointer. | FK → `Organization`, `User`, `AppRole` (nullable `roleId`) |
+| `UserOrganization` | Many-to-many join between users and orgs. `roleId` → `AppRole` is the role pointer. | FK → `Organization`, `User`, `AppRole` (nullable `roleId`) |
 | `AppRole` | RBAC role. Org-scoped when `organizationId` is set; NULL org = seeded system role (`owner`/`admin`/`editor`/`member`/`viewer`, `isSystem: true`) | FK → `Organization` (nullable); has many `AppRolePermission`, `UserOrganization` |
 | `Permission` | Fine-grained `(resource, action)` capability — 18 resources × 5 actions = 90 seeded | Unique on `(resource, action)`; has many `AppRolePermission` |
 | `AppRolePermission` | Join table linking roles to permissions | Composite PK `(roleId, permissionId)`; cascade on both |
@@ -231,17 +229,5 @@ All 8 models have `@@ignore` or are managed by the Mastra framework. They are **
 `MEDIALOCKER` was added to `StorageProviderType` additively by migration
 `20260714150606_add_medialocker_storage_type` (`ALTER TYPE ... ADD VALUE` — backward-compatible, no
 data rewrite).
-
----
-
-## Dropped before v1.0.0
-
-The dead marketplace/GitHub-stars subsystems were removed pre-release in a single destructive push (preceded by a DB snapshot):
-
-- **Models:** `SocialMediaAgency`, `SocialMediaAgencyNiche`, `MessagesGroup`, `Messages`, `Orders`, `OrderItems`, `PayoutProblems`, `ItemUser`, `GitHub`, `Star`, `Trending`, `TrendingLog`
-- **Enums:** `Role` (`SUPERADMIN`/`ADMIN`/`USER` — superseded by `AppRole`-based RBAC), `OrderStatus`, `From`
-- **Columns:** `User` profile/notification/marketplace columns (moved to `UserProfile` or dropped), `UserOrganization.role`, `Post` marketplace fields (`submittedForOrderId`, `submittedForOrganizationId`, `approvedSubmitForOrder`), `AIOrgProviderConfig.imageModel` / `AIProviderConfig.imageModel`, and the old `OrgShortLinkConfig` per-provider unique constraint
-
-See [Upgrading → Migrating from a pre-release build](../operations-guide/upgrading.md#migrating-from-a-pre-release-build) for the operational procedure.
 
 > Verified against v1.0.0

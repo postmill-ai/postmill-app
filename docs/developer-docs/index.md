@@ -18,7 +18,7 @@ Technical documentation for developers working on the Postmill codebase. This di
 
 ## Stability commitments
 
-- **Legacy analytics route** (`GET /analytics/:integration`) — response shape is frozen for n8n/Zapier compatibility. A parallel v2 route provides the new shape.
+- **Analytics compatibility route** (`GET /analytics/:integration`) — response shape is frozen for n8n/Zapier compatibility. A parallel v2 route provides the new shape.
 - **Schema** — `prisma migrate deploy` is the migration method. Additive changes (nullable columns, defaulted columns) are safe. Renames and drops require an expand-contract plan.
 - **AI provider resolution** — no env-var fallback. Per-tenant configuration through `AIOrgProviderConfig`.
 - **Provider framework** — the kernel is the sole resolution path; there are no parallel registries or kill switches.

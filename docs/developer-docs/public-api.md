@@ -3,7 +3,7 @@
 The Public API provides programmatic access for third-party integrations and automation. It is split into two groups:
 
 - **Public API v1** — `/public/v1/*`, authenticated with an API key or OAuth token.
-- **Legacy public routes** — `/public/*` outside `/public/v1`, kept for n8n/Zapier/Make compatibility where noted.
+- **Compatibility public routes** — `/public/*` outside `/public/v1`, kept for n8n/Zapier/Make compatibility where noted.
 
 All v1 routes are org-scoped. Mutating routes support idempotency keys, and reads are rate-limited per org.
 
@@ -111,7 +111,7 @@ Base: `/public/v1`
 | GET | `/public/v1/generate-video/:id` | Poll an async video generation job |
 | POST | `/public/v1/video/function` | Call a provider tool, currently only `loadVoices` |
 
-`POST /public/v1/generate-video` accepts `type` (`text-to-video`, `image-to-video`, `video-to-video`) and provider params in `customParams`. The response is backward-compatible with the legacy `{ id, status, jobId, path, name, pollUrl }` shape:
+`POST /public/v1/generate-video` accepts `type` (`text-to-video`, `image-to-video`, `video-to-video`) and provider params in `customParams`. The response keeps the frozen `{ id, status, jobId, path, name, pollUrl }` compatibility shape:
 
 - If the artifact is returned synchronously, `status` is `completed` and `path` is the URL.
 - If a job is queued, `status` is `pending` and `pollUrl` points to `GET /public/v1/generate-video/:id`.
@@ -148,10 +148,10 @@ Base: `/public/v1` and `/public`
 | GET | `/public/v1/analytics/overview` | Org overview with optional date range |
 | GET | `/public/v1/analytics/campaign/:id` | Campaign-scoped analytics |
 | GET | `/public/v1/analytics/anomalies` | Detected anomalies for the org |
-| GET | `/public/v1/analytics/:integration` | Legacy single-channel analytics |
-| GET | `/public/v1/analytics/post/:postId` | Legacy single-post analytics |
+| GET | `/public/v1/analytics/:integration` | Compatibility single-channel analytics |
+| GET | `/public/v1/analytics/post/:postId` | Compatibility single-post analytics |
 
-The static routes `/overview`, `/campaign/:id`, and `/anomalies` are registered before the catch-all `/:integration` route so they resolve correctly. The legacy `/analytics/:integration` response shape is preserved for n8n/Zapier/Make compatibility.
+The static routes `/overview`, `/campaign/:id`, and `/anomalies` are registered before the catch-all `/:integration` route so they resolve correctly. The `/analytics/:integration` response shape is frozen for n8n/Zapier/Make compatibility.
 
 `GET /public/v1/analytics/overview` validates `from`/`to`, requires `to >= from`, and caps the window at 400 days.
 
@@ -163,7 +163,7 @@ Base: `/public/v1`
 |--------|------|---------|
 | GET | `/public/v1/notifications` | Get paginated org notifications |
 
-## Legacy public routes
+## Compatibility public routes
 
 Base: `/public`
 

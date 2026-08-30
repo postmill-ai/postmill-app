@@ -126,7 +126,7 @@ The response includes a `passed` boolean, an array of `violations` (type, severi
 
 The `AIBrandProfile` model stores brand writing instructions. An organisation can have **multiple brands** with one default; manage them in **Settings → AI → Brands** (`GET/POST /brands`, `PUT/DELETE /brands/:id`, `POST /brands/:id/default`) and pick a brand per post in the composer.
 
-The legacy single-profile endpoints remain as an alias for the **default** brand:
+The single-profile endpoints remain as an alias for the **default** brand:
 
 `PUT /ai/brand-profile` upserts the default brand profile:
 
@@ -165,7 +165,7 @@ The RAG system supports both `pgvector` (PostgreSQL ANN index via HNSW) and Qdra
 - **Vision** — image understanding and focal-point detection.
 - **Workflow** — reserved for future agentic workflow steps.
 
-For each category you can pick a provider/version/model from the live catalog, or leave it on **Auto** to let Postmill pick from your enabled providers. The legacy AI scopes (`utility`, `generator`, `agent`, `mcp`) map to these categories: `utility` → low-reasoning, the rest → high-reasoning.
+For each category you can pick a provider/version/model from the live catalog, or leave it on **Auto** to let Postmill pick from your enabled providers. The AI scopes (`utility`, `generator`, `agent`, `mcp`) map to these categories: `utility` → low-reasoning, the rest → high-reasoning.
 
 API endpoints:
 
@@ -174,7 +174,7 @@ API endpoints:
 - `DELETE /settings/ai/defaults/:category` — reset to Auto.
 - `GET /settings/ai/defaults/catalog?category=` — selectable models for that category.
 
-Operators can disable the new resolution with `AI_MODEL_DEFAULTS_ENABLED=false` (default `true`), which falls back to the legacy `orgActive` / surface-defaults chain.
+Operators can disable the new resolution with `AI_MODEL_DEFAULTS_ENABLED=false` (default `true`), which falls back to the scope-based `orgActive` / surface-defaults chain.
 
 ## Image and media generation
 
@@ -257,7 +257,7 @@ The spend tab in **Settings → AI** provides a visual dashboard of this data, i
 All AI operations are subject to three governance layers:
 
 1. **Guardrails** — input and output content filtering (toxicity, PII, prompt injection detection). Violations block the operation and return a `CapabilityNotAvailable` error.
-2. **Budgets** — per-provider spending caps (monthly and daily) plus legacy per-scope caps. Exceeding a provider cap returns HTTP 429 for calls against that provider while other providers remain usable. Configure provider caps in **Settings → AI → Provider** when configuring a provider.
+2. **Budgets** — per-provider spending caps (monthly and daily) plus per-scope caps. Exceeding a provider cap returns HTTP 429 for calls against that provider while other providers remain usable. Configure provider caps in **Settings → AI → Provider** when configuring a provider.
 3. **Rate limits** — throttle limits apply per endpoint (typically 30 requests per 60 seconds for most AI endpoints, lower for intensive operations like brand memory indexing).
 
 All AI operations log to the spend ledger (`AISpendLog`) for audit and cost tracking.

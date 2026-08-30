@@ -1,6 +1,6 @@
 # AI Architecture
 
-Postmill ships a pluggable, multi-provider AI layer. Every AI surface resolves its provider through a single injection point (`AIModelProvider`) — there are no hardcoded provider calls, and **no `OPENAI_API_KEY` env-var fallback** (removed before v1.0.0, during pre-release internal development). If an organization has no active provider, AI is off.
+Postmill ships a pluggable, multi-provider AI layer. Every AI surface resolves its provider through a single injection point (`AIModelProvider`) — there are no hardcoded provider calls, and **no `OPENAI_API_KEY` env-var fallback**. If an organization has no active provider, AI is off.
 
 > For the end-user view, see [AI Tools](../user-guide/ai-tools.md).
 
@@ -16,20 +16,20 @@ Postmill ships a pluggable, multi-provider AI layer. Every AI surface resolves i
 |---|---|---|
 | 1 | Per-org category default | `OrgDefaultModel` row for domain `ai` and the category mapped from the scope (or `high-reasoning` when `reasoning: true`) |
 | 2 | Per-org active provider | `AIOrgProviderConfig` with `isActive: true` for the org |
-| 3 | Per-scope override | `scopeModels[scope]` in `AISystemSettings` (legacy, consulted only when category defaults are kill-switched) |
+| 3 | Per-scope override | `scopeModels[scope]` in `AISystemSettings` (consulted only when category defaults are kill-switched) |
 | 4 | Surface default | Hardcoded `SURFACE_DEFAULTS` map |
 
-There is **no env-key fallback** — the old `OPENAI_API_KEY` env fallback was removed before v1.0.0 (pre-release internal development). When resolution fails, `resolveConfigForScope` returns `null`, the caller surfaces "AI not configured," and the frontend routes the user to **Settings → AI**.
+There is **no env-key fallback**. When resolution fails, `resolveConfigForScope` returns `null`, the caller surfaces "AI not configured," and the frontend routes the user to **Settings → AI**.
 
-Category defaults can be disabled with `AI_MODEL_DEFAULTS_ENABLED=false`; the system then falls back to the legacy org-active / scoped-models chain. `AISystemSettings.activeProvider` is deprecated and no longer participates in runtime resolution.
+Category defaults can be disabled with `AI_MODEL_DEFAULTS_ENABLED=false`; the system then falls back to scope-based resolution (the org-active / scoped-models chain). `AISystemSettings.activeProvider` no longer participates in runtime resolution.
 
 ---
 
 ## Model Categories
 
-The legacy AI scopes are re-pointed onto four model categories:
+The AI scopes map onto four model categories:
 
-| Category | Legacy scopes | Typical use |
+| Category | Scopes | Typical use |
 |---|---|---|
 | `low-reasoning` | `utility` | Text generation, prompt help, slide content, daily brief |
 | `high-reasoning` | `generator`, `agent`, `mcp` | LangGraph generator, Mastra chat agent, CopilotKit runtime |
@@ -108,7 +108,7 @@ Per-org provider configuration is a two-step flow:
 1. **Auth** — API credentials (encrypted at rest; OAuth where a provider offers it).
 2. **Model defaults** — the tenant picks a standard default (`defaultModel`) and an optional reasoning default (`reasoningModel`).
 
-`imageModel` columns were dropped before v1.0.0 (pre-release internal development). Image, video, audio, and avatar generation belong to the **Media provider system**, not the AI-provider config. Embeddings remain an internal capability for RAG only.
+Image, video, audio, and avatar generation belong to the **Media provider system**, not the AI-provider config. Embeddings remain an internal capability for RAG only.
 
 Tenants may configure multiple providers (`enabled` per row); one row per org is `isActive`. Category defaults (`OrgDefaultModel`) override the active row's `defaultModel` when `AI_MODEL_DEFAULTS_ENABLED` is true.
 
@@ -144,7 +144,7 @@ Token/cost tracking with four cap levels:
 - **Global** — instance-wide monthly/daily spend caps
 - **Per-org** — per-tenant caps via `perOrgCaps`
 - **Per-provider** — per-tenant, per-active-provider caps stored on `AIOrgProviderConfig`
-- **Per-scope** — per-AI-scope caps via `scopeCaps` (legacy; unified onto `agent` for MCP/chat/agent surfaces)
+- **Per-scope** — per-AI-scope caps via `scopeCaps` (unified onto `agent` for MCP/chat/agent surfaces)
 
 Provider budget enforcement is controlled by `AI_PROVIDER_BUDGET_ENFORCE` (default `true`). When enabled, `checkBudget(scope, orgId, providerId)` returns 429 for the provider whose cap is exhausted while other providers remain usable. Writes to `AISpendLog` for every AI call. Uses an in-memory accumulator with a 60s TTL. Fires threshold alerts at `alertThresholdPct` (default 80%) and includes the provider in provider-scoped alerts. Returns 429 when budget is exceeded.
 
@@ -183,7 +183,7 @@ pgvector-based RAG: content chunking, embedding computation via `AIModelProvider
 
 ### AI rate limiting
 
-Per-org AI gating happens at the budget layer: `BudgetService.checkBudget(scope, orgId, providerId)` is called at each AI call site (`AIModelProvider` wrappers, media dispatch, RAG backfill, agent/copilot) and blocks only the exhausted provider. `BudgetMiddleware` remains registered for legacy routes as an **alert-only** compatibility shim — it never blocks requests (its `checkBudget` call carries no provider, so it always allows). No NestJS throttler guard is currently wired.
+Per-org AI gating happens at the budget layer: `BudgetService.checkBudget(scope, orgId, providerId)` is called at each AI call site (`AIModelProvider` wrappers, media dispatch, RAG backfill, agent/copilot) and blocks only the exhausted provider. `BudgetMiddleware` remains registered as an **alert-only** compatibility shim — it never blocks requests (its `checkBudget` call carries no provider, so it always allows). No NestJS throttler guard is currently wired.
 
 ### IdempotencyFactory
 

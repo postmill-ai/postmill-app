@@ -131,7 +131,7 @@ broken traffic. Fatal (boot-blocking) issues:
 The exit fires when `NODE_ENV=production` (and `NOT_SECURED` is unset), or anywhere
 `CONFIG_CHECK_STRICT` is set. In local development without `CONFIG_CHECK_STRICT`, these are
 warnings and the backend still starts. All other configuration problems
-(deprecated env vars, missing `ENCRYPTION_KEY`, etc.) remain non-fatal warnings.
+(unrecognized env vars, missing `ENCRYPTION_KEY`, etc.) remain non-fatal warnings.
 
 | Variable | Default | Meaning |
 |---|---|---|

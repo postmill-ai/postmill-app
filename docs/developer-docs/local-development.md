@@ -104,7 +104,7 @@ pnpm run dev:webpack      # webpack fallback if Turbopack exhausts memory
 pnpm run analyze          # webpack bundle analyzer; reports in .next/analyze/
 ```
 
-> The webpack dev build has a pre-existing failure on `/p/[id]` related to legacy CSS, so Turbopack remains the default.
+> The webpack dev build has a pre-existing failure on `/p/[id]` related to old CSS, so Turbopack remains the default.
 
 ---
 
@@ -199,7 +199,7 @@ There is no per-package `lint` script.
 |---|---|---|
 | Backend crashes with OOM | Heap cap or AI/media modules loaded | Add feature flags; lower heap further |
 | Frontend dev is slow / fans spin | Turbopack memory pressure or Sentry plugin | Use `pnpm run dev:webpack` or set `DEV_DISABLE_SENTRY=true` |
-| `/p/[id]` fails under webpack | Legacy CSS import | Use Turbopack (`pnpm run dev:frontend`) |
+| `/p/[id]` fails under webpack | Old CSS import | Use Turbopack (`pnpm run dev:frontend`) |
 | Redis connection error | No Redis running | Start `docker compose -f ./docker/docker-compose.dev.yaml up -d` |
 | Inngest functions not running | Inngest dev server not started | Start with `--profile jobs` and set `USE_INNGEST=true` / `INNGEST_DEV=1` |
 | Replicate async jobs never complete locally | Inngest poll sweep not running or unreachable webhook | Async Replicate jobs complete via the Inngest poll sweep (`media-jobs-poll` function). Start jobs with `--profile jobs`, set `USE_INNGEST=true` and `INNGEST_DEV=1`. Webhook completion requires a public `NEXT_PUBLIC_BACKEND_URL` (tunnel such as ngrok/cloudflared) reachable from Replicate's servers. |

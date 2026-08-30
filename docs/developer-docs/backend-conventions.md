@@ -145,7 +145,6 @@ Use NestJS `Logger.warn(message)` / `Logger.error(message)` — never `console.l
 
 - Algorithm pinned to `HS256`.
 - New tokens carry `exp` with sliding renewal.
-- Legacy exp-less tokens still verify (no forced re-auth).
 - IDs and secrets generated with CSPRNG.
 
 ### NOT_SECURED bypass

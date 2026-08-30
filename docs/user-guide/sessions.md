@@ -49,7 +49,7 @@ In a multi-replica deployment the job grabs a distributed lock so only one insta
 ## Security notes
 
 - Refresh tokens are stored as SHA-256 hashes; the plaintext token only exists in the cookie.
-- JWT verification pins `HS256`; legacy tokens without an `exp` claim are still accepted.
+- JWT verification pins `HS256`.
 - Cross-origin cookie behaviour is controlled by the `FRONTEND_URL` domain and the `NOT_SECURED` development flag.
 
 > See also [Settings](./settings.md) for the settings layout, [Operations Guide → Security](../operations-guide/security.md) for the full security model, and [Operations Guide → Configuration](../operations-guide/configuration.md) for authentication environment variables.

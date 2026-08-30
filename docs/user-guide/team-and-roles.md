@@ -11,7 +11,7 @@ The Team page is available when your subscription tier includes team members. Fr
 - **Remove a member** (`DELETE /settings/team/:id`) — disables the membership; bulk remove is available from the data table selection.
 - **Change a member's role** via the per-row selector or `PUT /settings/roles/team/:userId/role`.
 
-Managing members requires `members:manage` (or `settings:update` for some legacy paths). Only an **Owner** can change or remove another Owner.
+Managing members requires `members:manage` (or `settings:update` for some paths). Only an **Owner** can change or remove another Owner.
 
 ## System roles
 

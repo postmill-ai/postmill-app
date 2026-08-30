@@ -129,7 +129,7 @@ See [Frontend Conventions](./frontend-conventions.md) for the full policy.
 3. Results are saved as daily `AnalyticsSnapshot` and `PostAnalyticsSnapshot` rows.
 4. After ~18 months, `pruneAndRollupSnapshots()` rolls daily rows into weekly: flow metrics summed, stock metrics keep the week's latest value.
 5. Per-post snapshots are pruned after 90 days. Both windows are configurable via `ANALYTICS_DAILY_RETENTION_DAYS` and `ANALYTICS_POST_RETENTION_DAYS`.
-6. The `/analytics/v2` endpoints serve persisted data. Legacy `/public/v1/analytics/*` and `/analytics/*` routes are kept for backward compatibility (n8n/Zapier/Make integrations) — never change their response shape.
+6. The `/analytics/v2` endpoints serve persisted data. The `/public/v1/analytics/*` and `/analytics/*` compatibility routes are kept for backward compatibility (n8n/Zapier/Make integrations) — never change their response shape.
 
 ## Background jobs (Inngest)
 
@@ -169,7 +169,7 @@ Events are only sent when `USE_INNGEST=true`. Locally, run the Inngest dev serve
 | **Helmet** | HSTS (1 year, includeSubDomains, preload), `noSniff`, `referrerPolicy`, `frameguard: deny`, conservative CSP. Gated by `NOT_SECURED`. |
 | **Throttling** | `ThrottlerBehindProxyGuard` applies default per-route limits. Global default: `API_LIMIT` env var (600/hour). |
 | **Sentry** | `beforeSend`/`beforeBreadcrumb` scrubs auth headers, tokens, PII. OpenAI capture disabled (`recordInputs: false`). |
-| **JWT** | Algorithm pinned to `HS256`. New tokens carry `exp` with sliding renewal. Legacy exp-less tokens still verify. |
+| **JWT** | Algorithm pinned to `HS256`. New tokens carry `exp` with sliding renewal. |
 | **Validation** | Global `ValidationPipe` rejects unknown fields (`whitelist` + `forbidNonWhitelisted`). |
 
 ## Email adapter system
@@ -194,7 +194,7 @@ See [Data Model](./data-model.md) for the full schema breakdown.
 
 ## RBAC
 
-Full role-based access control replaces the dropped legacy `Role` enum:
+Full role-based access control:
 
 - **`AppRole`** — org-scoped roles; `organizationId = NULL` rows are seeded system roles (`owner`, `admin`, `editor`, `member`, `viewer`, `isSystem: true`). Orgs can create custom roles via `/settings/roles` or the Settings → Workspace → Roles tab.
 - **`Permission`** — seeded `(resource, action)` catalog: 18 resources × 5 actions = 90 permissions. The seeder is idempotent.

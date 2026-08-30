@@ -1,6 +1,6 @@
 # API Keys
 
-Postmill uses per-user, per-organization API keys for programmatic access. The old single org-level key (`Organization.apiKey`) was retired before v1.0.0 (pre-release internal development); all integrations and MCP clients must use the new keys.
+Postmill uses per-user, per-organization API keys for programmatic access. All integrations and MCP clients authenticate with these keys.
 
 ## Key format
 
@@ -125,9 +125,5 @@ When an API key is used with the MCP server, the resolved scopes depend on the u
 - `editor`, `member`, `viewer`: `mcp:read`
 
 These scopes are intersected with `mcpsettings.allowedScopes` if configured.
-
-## Migration from legacy org-level keys
-
-If you have integrations still using the old `Organization.apiKey`, generate a new per-user key from **Settings → Developers** and update the `Authorization` header. The old key type is no longer accepted by the Public API or MCP.
 
 > Verified against v1.0.0

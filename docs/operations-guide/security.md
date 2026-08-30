@@ -158,9 +158,6 @@ Secrets stored in the database are encrypted with AES-256-GCM.
 ### Algorithm
 
 - **Primary**: AES-256-GCM with the `v2:` prefix
-- **Legacy fallback**: AES-256-CBC (decryption only — new values are always GCM)
-- **Legacy deterministic**: AES-256-CBC (used for API keys and OAuth state parameters that must
-  be compared without decryption)
 
 ```typescript
 // libraries/helpers/src/auth/auth.service.ts:36-39
@@ -238,7 +235,6 @@ secret in a controlled migration:
 | Algorithm  | `HS256` (pinned — no `alg: none` or algorithm confusion) |
 | Expiry     | 30 days (`expiresIn: '30d'`)                       |
 | Renewal    | Sliding — new `exp` on each authenticated request  |
-| Legacy     | Exp-less tokens still verify (no forced re-auth)   |
 | IDs/secrets| CSPRNG-generated (`crypto.randomBytes`)            |
 
 ```typescript
