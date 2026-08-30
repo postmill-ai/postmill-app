@@ -91,7 +91,7 @@ Farcaster, Nostr, VK, ListMonk, Moltbook, Whop, Skool, MeWe, Tumblr, Pixelfed, P
 ## First-Comment Auto-Post
 
 When you include a first comment in the composer, Postmill automatically posts it after the main
-post publishes successfully. This behavior is defined in the publish function v1.0.6:
+post publishes successfully. This behavior is part of the publish workflow:
 
 1. The main post is published to the selected channels.
 2. If a first comment is configured and the channel supports it (`firstComment: true`), the
@@ -130,4 +130,4 @@ the post detail modal with the comments section.
 
 See [Schedule](./calendar.md) for details on post cards and the post detail modal.
 
-> Verified against v1.1.0 (2026-07-22)
+> Verified against v1.0.0

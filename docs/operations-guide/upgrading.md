@@ -217,7 +217,7 @@ Migrate by moving the data across:
 
 ## Migrating from a pre-release build
 
-Versions 3.x/4.x were pre-release internal development; **v1.0.0 is the first public release.** If
+Pre-release builds were internal development and never publicly versioned; **v1.0.0 is the first public release.** If
 you run a pre-release build, upgrade straight to v1.0.0 — the notes below condense every breaking
 change from the pre-release line.
 
