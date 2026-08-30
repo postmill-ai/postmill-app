@@ -208,6 +208,12 @@
       "@postmill-ai/provider-discord/*": [
         "libraries/providers/discord/src/*"
       ],
+      "@postmill-ai/provider-discourse": [
+        "libraries/providers/discourse/src"
+      ],
+      "@postmill-ai/provider-discourse/*": [
+        "libraries/providers/discourse/src/*"
+      ],
       "@postmill-ai/provider-dribbble": [
         "libraries/providers/dribbble/src"
       ],
@@ -436,6 +442,12 @@
       "@postmill-ai/provider-lightning/*": [
         "libraries/providers/lightning/src/*"
       ],
+      "@postmill-ai/provider-line": [
+        "libraries/providers/line/src"
+      ],
+      "@postmill-ai/provider-line/*": [
+        "libraries/providers/line/src/*"
+      ],
       "@postmill-ai/provider-linkedin": [
         "libraries/providers/linkedin/src"
       ],
@@ -508,6 +520,12 @@
       "@postmill-ai/provider-mastodon/*": [
         "libraries/providers/mastodon/src/*"
       ],
+      "@postmill-ai/provider-matrix": [
+        "libraries/providers/matrix/src"
+      ],
+      "@postmill-ai/provider-matrix/*": [
+        "libraries/providers/matrix/src/*"
+      ],
       "@postmill-ai/provider-medialocker": [
         "libraries/providers/medialocker/src"
       ],
@@ -537,6 +555,12 @@
       ],
       "@postmill-ai/provider-minimax/*": [
         "libraries/providers/minimax/src/*"
+      ],
+      "@postmill-ai/provider-misskey": [
+        "libraries/providers/misskey/src"
+      ],
+      "@postmill-ai/provider-misskey/*": [
+        "libraries/providers/misskey/src/*"
       ],
       "@postmill-ai/provider-mistral": [
         "libraries/providers/mistral/src"
@@ -597,6 +621,12 @@
       ],
       "@postmill-ai/provider-openrouter/*": [
         "libraries/providers/openrouter/src/*"
+      ],
+      "@postmill-ai/provider-odysee": [
+        "libraries/providers/odysee/src"
+      ],
+      "@postmill-ai/provider-odysee/*": [
+        "libraries/providers/odysee/src/*"
       ],
       "@postmill-ai/provider-owly": [
         "libraries/providers/owly/src"
@@ -741,6 +771,12 @@
       ],
       "@postmill-ai/provider-ses/*": [
         "libraries/providers/ses/src/*"
+      ],
+      "@postmill-ai/provider-sharkey": [
+        "libraries/providers/sharkey/src"
+      ],
+      "@postmill-ai/provider-sharkey/*": [
+        "libraries/providers/sharkey/src/*"
       ],
       "@postmill-ai/provider-shortio": [
         "libraries/providers/shortio/src"

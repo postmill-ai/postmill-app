@@ -251,6 +251,7 @@ These channel variables are the only provider credentials read from the environm
 | `VK_ID` | VK (id only, no secret) |
 | `WHOP_CLIENT_ID` | Whop (id only, PKCE) |
 | `TELEGRAM_TOKEN` | Telegram bot token (token-only) |
+| `LINE_CHANNEL_ACCESS_TOKEN` | LINE Messaging API channel access token (token-only) |
 | `POSTMILL_OAUTH_CLIENT_ID` / `POSTMILL_OAUTH_CLIENT_SECRET` | Custom OAuth channel (shared with generic OIDC login) |
 
 Three opt-in flags make a channel app dual-use as a **login provider** (the matching channel creds above are required; the login page never advertises a provider whose channel app is unconfigured). See [Platform Channel Apps → SSO dual-use](./platform-channel-apps.md#sso-dual-use-login-with-the-same-app).

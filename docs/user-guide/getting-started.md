@@ -19,7 +19,7 @@ also be able to sign in with Google, GitHub, or your company's OIDC identity pro
 
 ## 2. Connect Your First Channel
 
-Navigate to **Settings** (`/settings`) and open the **Channels** tab. Postmill supports 36
+Navigate to **Settings** (`/settings`) and open the **Channels** tab. Postmill supports 45
 channels across social media, chat platforms, blogging platforms, and email:
 
 | # | Channel            | Identifier           | Auth Method               |
@@ -60,6 +60,15 @@ channels across social media, chat platforms, blogging platforms, and email:
 |34 | Tumblr             | `tumblr`             | OAuth 1.0a                |
 |35 | Pixelfed           | `pixelfed`           | OAuth 2.0                 |
 |36 | PeerTube           | `peertube`           | OAuth 2.0                 |
+|37 | GoToSocial         | `gotosocial`         | Instance OAuth (per-server)|
+|38 | Akkoma             | `akkoma`             | Instance OAuth (per-server)|
+|39 | Friendica          | `friendica`          | Instance OAuth (per-server)|
+|40 | Misskey            | `misskey`            | Instance OAuth (MiAuth)    |
+|41 | Sharkey            | `sharkey`            | Instance OAuth (MiAuth)    |
+|42 | LINE               | `line`               | Channel Access Token       |
+|43 | Matrix             | `matrix`             | Access Token + Homeserver  |
+|44 | Discourse          | `discourse`          | API Key                    |
+|45 | Odysee             | `odysee`             | lbrynet daemon (self-hosted)|
 
 See [Supported Channels](./supported-channels.md) for the full capability matrix (analytics,
 comments, polls, video, carousel, alt text, and more).

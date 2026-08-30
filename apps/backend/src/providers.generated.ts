@@ -23,6 +23,7 @@ import devtoModules from '@postmill-ai/provider-devto';
 import didModules from '@postmill-ai/provider-did';
 import digitaloceanspacesModules from '@postmill-ai/provider-digitalocean-spaces';
 import discordModules from '@postmill-ai/provider-discord';
+import discourseModules from '@postmill-ai/provider-discourse';
 import dribbbleModules from '@postmill-ai/provider-dribbble';
 import dubModules from '@postmill-ai/provider-dub';
 import elevenlabsModules from '@postmill-ai/provider-elevenlabs';
@@ -61,6 +62,7 @@ import kimiModules from '@postmill-ai/provider-kimi';
 import lemmyModules from '@postmill-ai/provider-lemmy';
 import leonardoModules from '@postmill-ai/provider-leonardo';
 import lightningModules from '@postmill-ai/provider-lightning';
+import lineModules from '@postmill-ai/provider-line';
 import linkedinModules from '@postmill-ai/provider-linkedin';
 import linkedinpageModules from '@postmill-ai/provider-linkedin-page';
 import linklyModules from '@postmill-ai/provider-linkly';
@@ -73,11 +75,13 @@ import lumaModules from '@postmill-ai/provider-luma';
 import magnificModules from '@postmill-ai/provider-magnific';
 import mailgunModules from '@postmill-ai/provider-mailgun';
 import mastodonModules from '@postmill-ai/provider-mastodon';
+import matrixModules from '@postmill-ai/provider-matrix';
 import medialockerModules from '@postmill-ai/provider-medialocker';
 import mediumModules from '@postmill-ai/provider-medium';
 import metallamaModules from '@postmill-ai/provider-meta-llama';
 import meweModules from '@postmill-ai/provider-mewe';
 import minimaxModules from '@postmill-ai/provider-minimax';
+import misskeyModules from '@postmill-ai/provider-misskey';
 import mistralModules from '@postmill-ai/provider-mistral';
 import moltbookModules from '@postmill-ai/provider-moltbook';
 import mozillavpnModules from '@postmill-ai/provider-mozillavpn';
@@ -88,6 +92,7 @@ import nvidiaModules from '@postmill-ai/provider-nvidia';
 import openaiModules from '@postmill-ai/provider-openai';
 import openaicompatibleModules from '@postmill-ai/provider-openai-compatible';
 import openrouterModules from '@postmill-ai/provider-openrouter';
+import odyseeModules from '@postmill-ai/provider-odysee';
 import owlyModules from '@postmill-ai/provider-owly';
 import peertubeModules from '@postmill-ai/provider-peertube';
 import perplexityModules from '@postmill-ai/provider-perplexity';
@@ -112,6 +117,7 @@ import s3compatibleModules from '@postmill-ai/provider-s3-compatible';
 import scalewayModules from '@postmill-ai/provider-scaleway';
 import sendgridModules from '@postmill-ai/provider-sendgrid';
 import sesModules from '@postmill-ai/provider-ses';
+import sharkeyModules from '@postmill-ai/provider-sharkey';
 import shortioModules from '@postmill-ai/provider-shortio';
 import siliconflowModules from '@postmill-ai/provider-siliconflow';
 import skoolModules from '@postmill-ai/provider-skool';
@@ -180,6 +186,7 @@ export const providerModules: ProviderModule<any, any>[] = [
   ...didModules,
   ...digitaloceanspacesModules,
   ...discordModules,
+  ...discourseModules,
   ...dribbbleModules,
   ...dubModules,
   ...elevenlabsModules,
@@ -218,6 +225,7 @@ export const providerModules: ProviderModule<any, any>[] = [
   ...lemmyModules,
   ...leonardoModules,
   ...lightningModules,
+  ...lineModules,
   ...linkedinModules,
   ...linkedinpageModules,
   ...linklyModules,
@@ -230,11 +238,13 @@ export const providerModules: ProviderModule<any, any>[] = [
   ...magnificModules,
   ...mailgunModules,
   ...mastodonModules,
+  ...matrixModules,
   ...medialockerModules,
   ...mediumModules,
   ...metallamaModules,
   ...meweModules,
   ...minimaxModules,
+  ...misskeyModules,
   ...mistralModules,
   ...moltbookModules,
   ...mozillavpnModules,
@@ -245,6 +255,7 @@ export const providerModules: ProviderModule<any, any>[] = [
   ...openaiModules,
   ...openaicompatibleModules,
   ...openrouterModules,
+  ...odyseeModules,
   ...owlyModules,
   ...peertubeModules,
   ...perplexityModules,
@@ -269,6 +280,7 @@ export const providerModules: ProviderModule<any, any>[] = [
   ...scalewayModules,
   ...sendgridModules,
   ...sesModules,
+  ...sharkeyModules,
   ...shortioModules,
   ...siliconflowModules,
   ...skoolModules,

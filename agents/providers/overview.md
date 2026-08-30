@@ -208,7 +208,7 @@ generator script exists in-repo — maintain it by hand:
   within its domain section).
 - Update the header counts: **Modules** (`providerModules.length`), **Packages**, **Packages
   with at least one spec**, and the per-domain module counts
-  (currently: ai=30, auth=6, contentpack=4, email=7, media=35, shortlink=20, social=36,
+  (currently: ai=30, auth=6, contentpack=4, email=7, media=35, shortlink=20, social=45,
   storage=14, vpn=16 — verify against the file, they drift).
 
 ## Resolution & APIs

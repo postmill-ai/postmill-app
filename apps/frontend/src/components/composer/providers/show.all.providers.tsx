@@ -21,6 +21,12 @@ import MastodonProvider from '@postmill-ai/frontend/components/composer/provider
 import GoToSocialProvider from '@postmill-ai/frontend/components/composer/providers/gotosocial/gotosocial.provider';
 import AkkomaProvider from '@postmill-ai/frontend/components/composer/providers/akkoma/akkoma.provider';
 import FriendicaProvider from '@postmill-ai/frontend/components/composer/providers/friendica/friendica.provider';
+import OdyseeProvider from '@postmill-ai/frontend/components/composer/providers/odysee/odysee.provider';
+import MisskeyProvider from '@postmill-ai/frontend/components/composer/providers/misskey/misskey.provider';
+import SharkeyProvider from '@postmill-ai/frontend/components/composer/providers/sharkey/sharkey.provider';
+import LineProvider from '@postmill-ai/frontend/components/composer/providers/line/line.provider';
+import MatrixProvider from '@postmill-ai/frontend/components/composer/providers/matrix/matrix.provider';
+import DiscourseProvider from '@postmill-ai/frontend/components/composer/providers/discourse/discourse.provider';
 import BlueskyProvider from '@postmill-ai/frontend/components/composer/providers/bluesky/bluesky.provider';
 import LemmyProvider from '@postmill-ai/frontend/components/composer/providers/lemmy/lemmy.provider';
 import WarpcastProvider from '@postmill-ai/frontend/components/composer/providers/warpcast/warpcast.provider';
@@ -138,6 +144,30 @@ export const Providers = [
   {
     identifier: 'friendica',
     component: FriendicaProvider,
+  },
+  {
+    identifier: 'odysee',
+    component: OdyseeProvider,
+  },
+  {
+    identifier: 'misskey',
+    component: MisskeyProvider,
+  },
+  {
+    identifier: 'sharkey',
+    component: SharkeyProvider,
+  },
+  {
+    identifier: 'line',
+    component: LineProvider,
+  },
+  {
+    identifier: 'matrix',
+    component: MatrixProvider,
+  },
+  {
+    identifier: 'discourse',
+    component: DiscourseProvider,
   },
   {
     identifier: 'bluesky',

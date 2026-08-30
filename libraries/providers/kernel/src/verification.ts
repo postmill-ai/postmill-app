@@ -44,6 +44,15 @@ export const BETA_PROVIDER_KEYS: ReadonlySet<string> = new Set<string>([
   'contentpack/envato',
   'contentpack/adobe-stock',
   'contentpack/magnific',
+  // Social — self-hosted lbrynet daemon channel, built without a live daemon
+  'social/odysee',
+  // Social — unit-tested only; live-instance/key validation pending.
+  // (gotosocial + matrix earned their badge-off via containerized live e2e;
+  // akkoma/friendica ride the same live-proven Mastodon family base.)
+  'social/misskey',
+  'social/sharkey',
+  'social/line',
+  'social/discourse',
 ]);
 
 /**
