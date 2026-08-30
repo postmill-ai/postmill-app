@@ -217,9 +217,8 @@ describe('BackfillService — legacy secret re-encryption (v1.0.0 guard)', () =>
 
     const where = delegate.findMany.mock.calls[0][0].where;
     expect(where.AND).toEqual([
-      { token: { not: null } },
       { token: { not: '' } },
-      { token: { not: { startsWith: 'v2:' } } },
+      { NOT: { token: { startsWith: 'v2:' } } },
     ]);
     expect(delegate.update).not.toHaveBeenCalled();
   });
