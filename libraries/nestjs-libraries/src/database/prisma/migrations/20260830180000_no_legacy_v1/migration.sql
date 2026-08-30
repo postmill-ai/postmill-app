@@ -44,3 +44,12 @@ DROP TABLE "AIProviderConfig";
 
 -- DropTable
 DROP TABLE "ProviderConfiguration";
+
+-- DropTable: runtime-only Mastra telemetry tables, created by 0_init but no
+-- longer in the Prisma schema (the migration drift check requires the deployed
+-- DB to match the datamodel exactly). Empty in prod; Mastra recreates them on
+-- demand if a future version writes telemetry.
+DROP TABLE "mastra_ai_spans";
+
+-- DropTable
+DROP TABLE "mastra_evals";
