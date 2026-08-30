@@ -67,8 +67,7 @@ describe('BudgetService', () => {
   describe('checkBudget', () => {
     it('returns allowed:true when no caps are configured', async () => {
       mockGetSettings.mockResolvedValue({
-        activeProvider: 'openai',
-        activeModel: 'gpt-4.1',
+        fallbackProvider: 'openai',
       });
       service = freshService();
       const result = await service.checkBudget('utility', 'org-1');

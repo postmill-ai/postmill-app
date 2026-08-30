@@ -72,8 +72,6 @@ export interface ResolvedConfig {
 
 const MAX_RETRIES = 3;
 
-const AI_MODEL_DEFAULTS_ENABLED = process.env.AI_MODEL_DEFAULTS_ENABLED !== 'false';
-
 const CONTEXT_WINDOW_LIMITS: Record<string, number> = {
   'gpt-4.1': 32000,
   'gpt-5.2': 32000,
@@ -195,20 +193,6 @@ export class AIModelProvider {
     };
   }
 
-  private _isValidScopedModels(value: unknown): value is Record<string, { provider?: string; model?: string }> {
-    if (typeof value !== 'object' || value === null || Array.isArray(value)) {
-      return false;
-    }
-    for (const entry of Object.values(value as Record<string, unknown>)) {
-      if (typeof entry !== 'object' || entry === null || Array.isArray(entry)) {
-        return false;
-      }
-      if ('provider' in entry && typeof (entry as any).provider !== 'string') return false;
-      if ('model' in entry && typeof (entry as any).model !== 'string') return false;
-    }
-    return true;
-  }
-
   private _hasRequiredCredentials(config: ResolvedConfig): boolean {
     const requiredFields = config.adapter.credentialFields.filter((field: any) => field.required);
     return requiredFields.every((field: any) => {
@@ -223,8 +207,9 @@ export class AIModelProvider {
 
     const orgId = _orgId;
 
-    // Try the new per-org category default first (kill-switchable).
-    if (AI_MODEL_DEFAULTS_ENABLED && orgId) {
+    // The per-org category default is the primary resolution path (no kill switch —
+    // v1.0.0 removed the legacy scopeModels chain).
+    if (orgId) {
       const category = options?.reasoning ? 'high-reasoning' : SCOPE_TO_CATEGORY[scope];
       const defaultModel = await this._defaultsResolution.resolve('ai', category, orgId);
       if (defaultModel) {
@@ -284,15 +269,9 @@ export class AIModelProvider {
       );
     }
 
-    // Legacy scoped-models read: only used when the new category defaults are
-    // kill-switched off, preserving the exact pre-defaults resolution behaviour.
-    const rawScopedModels = !AI_MODEL_DEFAULTS_ENABLED ? settings?.scopeModels : undefined;
-    const scopedModels = this._isValidScopedModels(rawScopedModels) ? rawScopedModels : undefined;
-    const scopeConfig = scopedModels?.[scope];
-
     const baseModel = options?.reasoning
       ? (orgActive.reasoningModel || orgActive.defaultModel || SURFACE_DEFAULTS[scope].textModel)
-      : (scopeConfig?.model || orgActive.defaultModel || SURFACE_DEFAULTS[scope].textModel);
+      : (orgActive.defaultModel || SURFACE_DEFAULTS[scope].textModel);
     const selectedModel = await this._routeModel(scope, orgId, baseModel);
 
     const resolvedConfig = {
@@ -405,16 +384,7 @@ export class AIModelProvider {
           }
           attemptedFallbackProvider = globalSettings.fallbackProvider;
 
-          // Legacy scoped-models read: only consulted for the fallback provider when
-          // the new category defaults are kill-switched off.
-          const fallbackRawModels = !AI_MODEL_DEFAULTS_ENABLED ? globalSettings.scopeModels : undefined;
-          const fallbackScopedModels = this._isValidScopedModels(fallbackRawModels) ? fallbackRawModels : undefined;
-          const fallbackScopeConfig = fallbackScopedModels?.[scope];
-          const fallbackScopedModel =
-            fallbackScopeConfig?.provider === globalSettings.fallbackProvider
-              ? fallbackScopeConfig.model
-              : undefined;
-          const fallbackModel = fallbackScopedModel || fallbackOrgConfig?.defaultModel || SURFACE_DEFAULTS[scope].textModel;
+          const fallbackModel = fallbackOrgConfig?.defaultModel || SURFACE_DEFAULTS[scope].textModel;
           const fallbackConfig: ResolvedConfig = {
             adapter: fallbackAdapter,
             modelId: fallbackModel,
@@ -456,7 +426,7 @@ export class AIModelProvider {
   // OpenAI model ID). Only same-provider defaults apply: a media default owned
   // by another provider carries a model ID foreign to this adapter.
   private async _resolveImageModelId(config: ResolvedConfig, orgId?: string): Promise<string> {
-    if (orgId && AI_MODEL_DEFAULTS_ENABLED) {
+    if (orgId) {
       try {
         const mediaDefault = await this._defaultsResolution.resolve('media', 'text-to-image', orgId);
         if (mediaDefault?.model && mediaDefault.providerId === config.providerId) {

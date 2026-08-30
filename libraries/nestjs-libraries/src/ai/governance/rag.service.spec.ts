@@ -95,6 +95,10 @@ const mockAiSettingsManager = {
   getSettings: vi.fn().mockResolvedValue(null),
 };
 
+const mockOrgDefaultModels = {
+  get: vi.fn().mockResolvedValue(null),
+};
+
 // Default replaceSourceChunks behaviour: mirror the real transaction's return —
 // one chunk row per input chunk, with a deterministic id. Also exercises the
 // pgvectorAvailable branch by invoking the supplied formatVector callback so the
@@ -122,6 +126,7 @@ function createService() {
     mockAiSettingsManager as any,
     {} as any,
     mockBudgetService as any,
+    mockOrgDefaultModels as any,
   );
 }
 

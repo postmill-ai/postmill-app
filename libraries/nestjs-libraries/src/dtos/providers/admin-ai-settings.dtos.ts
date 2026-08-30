@@ -4,7 +4,6 @@ import {
   IsObject,
   IsOptional,
   IsString,
-  ValidateIf,
 } from 'class-validator';
 
 /**
@@ -13,53 +12,6 @@ import {
  * `Object`-typed bodies bypass the global whitelist pipe. Shapes mirror exactly
  * what AiSettingsService consumes.
  */
-
-export class SaveAiProviderDto {
-  @IsOptional()
-  @IsBoolean()
-  enabled?: boolean;
-
-  @IsOptional()
-  @IsObject()
-  credentials?: Record<string, string>;
-
-  @IsOptional()
-  @IsString()
-  defaultModel?: string;
-
-  @IsOptional()
-  @IsString()
-  reasoningModel?: string;
-
-  @IsOptional()
-  @IsObject()
-  extraConfig?: Record<string, any>;
-}
-
-export class TestAiProviderDto {
-  @IsOptional()
-  @IsObject()
-  credentials?: Record<string, string>;
-}
-
-export class SetActiveAiProviderDto {
-  // Nullable to clear the active provider (restores no-provider mode).
-  @ValidateIf((o) => o.provider !== null)
-  @IsOptional()
-  @IsString()
-  provider?: string | null;
-
-  @ValidateIf((o) => o.model !== null)
-  @IsOptional()
-  @IsString()
-  model?: string | null;
-}
-
-export class PreviewAiProviderDto {
-  @IsOptional()
-  @IsString()
-  prompt?: string;
-}
 
 export class SaveRagSettingsDto {
   @IsObject()

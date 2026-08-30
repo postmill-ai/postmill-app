@@ -8,7 +8,6 @@ dayjs.extend(utc);
 @Injectable()
 export class AiSettingsRepository {
   constructor(
-    private _aiProviderConfig: PrismaRepository<'aIProviderConfig'>,
     private _aiSystemSettings: PrismaRepository<'aISystemSettings'>,
     private _aiSpendLog: PrismaRepository<'aISpendLog'>,
     private _aiSettingsAudit: PrismaRepository<'aISettingsAudit'>,
@@ -19,63 +18,6 @@ export class AiSettingsRepository {
     private _aiContentIndex: PrismaRepository<'aIContentIndex'>,
     private _aiOrgProviderConfig: PrismaRepository<'aIOrgProviderConfig'>,
   ) {}
-
-  // ── AIProviderConfig ──
-  getProviderConfigs() {
-    return this._aiProviderConfig.model.aIProviderConfig.findMany();
-  }
-
-  listProviderConfigs() {
-    return this._aiProviderConfig.model.aIProviderConfig.findMany({
-      select: {
-        id: true,
-        identifier: true,
-        enabled: true,
-        defaultModel: true,
-        reasoningModel: true,
-        extraConfig: true,
-        createdAt: true,
-        updatedAt: true,
-      },
-      orderBy: { createdAt: 'desc' },
-    });
-  }
-
-  getProviderConfigByIdentifier(identifier: string, version = 'v1') {
-    return this._aiProviderConfig.model.aIProviderConfig.findUnique({
-      where: { identifier_version: { identifier, version } },
-    });
-  }
-
-  upsertProviderConfig(
-    identifier: string,
-    data: {
-      enabled?: boolean;
-      credentials?: string;
-      defaultModel?: string;
-      reasoningModel?: string;
-      extraConfig?: string;
-    },
-    version = 'v1',
-  ) {
-    return this._aiProviderConfig.model.aIProviderConfig.upsert({
-      where: { identifier_version: { identifier, version } },
-      create: { identifier, version, ...data },
-      update: data,
-    });
-  }
-
-  deleteProviderConfig(identifier: string, version = 'v1') {
-    return this._aiProviderConfig.model.aIProviderConfig.delete({
-      where: { identifier_version: { identifier, version } },
-    });
-  }
-
-  getEnabledProviderConfigs() {
-    return this._aiProviderConfig.model.aIProviderConfig.findMany({
-      where: { enabled: true },
-    });
-  }
 
   // ── AISystemSettings (singleton) ──
   getSystemSettings() {

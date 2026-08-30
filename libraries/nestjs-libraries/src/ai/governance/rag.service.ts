@@ -2,8 +2,10 @@ import { Injectable, Logger, OnModuleDestroy, OnModuleInit } from '@nestjs/commo
 import { createHash } from 'crypto';
 import { AiSettingsService } from '@postmill-ai/nestjs-libraries/database/prisma/ai-settings/ai-settings.service';
 import { AiRagRepository } from '@postmill-ai/nestjs-libraries/database/prisma/ai-rag/ai-rag.repository';
+import { OrgDefaultModelRepository } from '@postmill-ai/nestjs-libraries/database/prisma/ai-settings/org-default-model.repository';
 import { AIModelProvider } from '../ai-model.provider';
 import { AiSettingsManager } from '../ai-settings.manager';
+import { SCOPE_TO_CATEGORY } from '../defaults/default-categories';
 import { BudgetService } from './budget.service';
 import { BudgetExceeded } from './errors';
 import { ioRedis } from '@postmill-ai/nestjs-libraries/redis/redis.service';
@@ -69,6 +71,7 @@ export class RagService implements OnModuleInit, OnModuleDestroy {
     private _aiSettingsManager: AiSettingsManager,
     private _pgVectorAdapter: PgVectorStoreAdapter,
     private _budget: BudgetService,
+    private _orgDefaultModels: OrgDefaultModelRepository,
   ) {}
 
   private _ragSettingsCache: { value: RagSettings; expiry: number } | null = null;
@@ -884,13 +887,17 @@ export class RagService implements OnModuleInit, OnModuleDestroy {
 
     const settings = await this._aiSettingsManager.getSettings();
     const rag = settings?.ragSettings as any;
-    const scopeModels = settings?.scopeModels as any;
-    const utilityModel = scopeModels?.utility;
-    const activeProvider = settings?.activeProvider || 'openai';
+    // Display the org's OrgDefaultModel category default (utility → low-reasoning)
+    // instead of the removed legacy scopeModels/activeProvider settings fields.
+    const utilityDefault = await this._orgDefaultModels.get(
+      organizationId,
+      'ai',
+      SCOPE_TO_CATEGORY.utility,
+    );
+    const activeProvider = utilityDefault?.providerId || 'openai';
     const activeModel =
       rag?.embeddingModel ||
-      utilityModel?.model ||
-      settings?.activeModel ||
+      utilityDefault?.model ||
       'text-embedding-3-small';
 
     return {

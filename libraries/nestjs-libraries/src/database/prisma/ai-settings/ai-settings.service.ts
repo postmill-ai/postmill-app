@@ -20,76 +20,6 @@ export class AiSettingsService {
     private _resolution: ProviderResolutionService,
   ) {}
 
-  // ── AIProviderConfig ──
-
-  getProviderConfigs() {
-    return this._repository.getProviderConfigs();
-  }
-
-  listProviderConfigs() {
-    return this._repository.listProviderConfigs();
-  }
-
-  getProviderConfigByIdentifier(identifier: string) {
-    return this._repository.getProviderConfigByIdentifier(identifier);
-  }
-
-  async upsertProviderConfig(
-    identifier: string,
-    data: {
-      enabled?: boolean;
-      credentials?: Record<string, string>;
-      defaultModel?: string;
-      reasoningModel?: string;
-      extraConfig?: Record<string, any>;
-    },
-  ) {
-    let extraConfig: string | undefined;
-    if (data.extraConfig !== undefined) {
-      if (typeof data.extraConfig === 'string') {
-        try {
-          JSON.parse(data.extraConfig);
-          extraConfig = data.extraConfig;
-        } catch {
-          throw new Error('extraConfig must be a valid JSON string');
-        }
-      } else if (typeof data.extraConfig === 'object') {
-        extraConfig = JSON.stringify(data.extraConfig);
-      }
-    }
-
-    const encryptedCredentials = data.credentials
-      ? AuthService.fixedEncryption(JSON.stringify(data.credentials))
-      : undefined;
-
-    return this._repository.upsertProviderConfig(identifier, {
-      ...data,
-      credentials: encryptedCredentials,
-      extraConfig,
-    });
-  }
-
-  decryptProviderConfig(config: { credentials?: string | null }) {
-    if (!config.credentials) return { credentials: undefined };
-    try {
-      return {
-        credentials: JSON.parse(
-          AuthService.fixedDecryption(config.credentials),
-        ) as Record<string, string>,
-      };
-    } catch {
-      return { credentials: undefined };
-    }
-  }
-
-  async deleteProviderConfig(identifier: string) {
-    return this._repository.deleteProviderConfig(identifier);
-  }
-
-  getEnabledProviderConfigs() {
-    return this._repository.getEnabledProviderConfigs();
-  }
-
   // ── Provider catalog helpers (A-07) ──
 
   private _resolveAdapter(identifier: string, version?: string): AIProviderAdapter | undefined {
@@ -130,26 +60,6 @@ export class AiSettingsService {
       })),
       credentialFields: target?.credentialFields,
     };
-  }
-
-  isProviderConfigured(
-    adapter: AIProviderAdapter | undefined,
-    config: { credentials?: string | null } | null | undefined,
-  ): boolean {
-    if (!adapter || !config) return false;
-
-    try {
-      const decrypted = this.decryptProviderConfig(config);
-      const credentials = decrypted.credentials || {};
-      return adapter.credentialFields
-        .filter((field) => field.required)
-        .every((field) => {
-          const value = credentials[field.key];
-          return typeof value === 'string' && value.trim().length > 0;
-        });
-    } catch {
-      return false;
-    }
   }
 
   private _isSensitiveKey(key: string): boolean {
@@ -197,14 +107,13 @@ export class AiSettingsService {
     }
   }
 
+  // Kernel-only catalog — the deployment-wide AIProviderConfig table was dropped
+  // (v1.0.0); provider enabled/configured state is per-org (AIOrgProviderConfig)
+  // and surfaced by the org-level settings services.
   async listProviderCatalog() {
     const adapters = this._listAdapters();
-    const dbConfigs = await this.getProviderConfigs();
-    const dbConfigMap = new Map(dbConfigs.map((c) => [c.identifier, c]));
 
     return adapters.map((adapter) => {
-      const dbConfig = dbConfigMap.get(adapter.identifier);
-      const isConfigured = this.isProviderConfigured(adapter, dbConfig);
       const meta = this.getProviderVersionMeta(adapter.identifier);
 
       return {
@@ -213,8 +122,6 @@ export class AiSettingsService {
         type: adapter.type,
         capabilities: adapter.capabilities,
         privacy: adapter.privacy,
-        enabled: dbConfig?.enabled || false,
-        isConfigured,
         credentialFields: meta.credentialFields ?? adapter.credentialFields,
         ...meta,
       };
@@ -254,10 +161,8 @@ export class AiSettingsService {
     return {
       ...settings,
       secretSettings,
-      scopeModels: this._tryParseJson(settings.scopeModels),
       guardrailSettings: this._tryParseJson(settings.guardrailSettings),
       budgetSettings: this._tryParseJson(settings.budgetSettings),
-      rateLimitSettings: this._tryParseJson(settings.rateLimitSettings),
       observability: this._tryParseJson(settings.observability),
       mcpSettings: this._tryParseJson(settings.mcpSettings),
       ragSettings: this._tryParseJson(settings.ragSettings),
@@ -267,7 +172,7 @@ export class AiSettingsService {
   async upsertSystemSettings(data: Record<string, any>) {
     const processed = { ...data };
 
-    const jsonFields = ['scopeModels', 'guardrailSettings', 'budgetSettings', 'rateLimitSettings', 'observability', 'mcpSettings', 'ragSettings'];
+    const jsonFields = ['guardrailSettings', 'budgetSettings', 'observability', 'mcpSettings', 'ragSettings'];
     for (const field of jsonFields) {
       if (processed[field] === undefined || processed[field] === null) continue;
       if (typeof processed[field] === 'object') {
@@ -519,11 +424,10 @@ export class AiSettingsService {
     // OrgAiSettingsService / OrgMediaProviderSettingsService via EncryptionService,
     // so the admin write goes through the same service for symmetry. Note this is a
     // no-op in crypto terms: EncryptionService.encrypt delegates to
-    // AuthService.fixedEncryption (encryption.service.ts), the same routine used for
-    // the deployment-wide AIProviderConfig — both share one getEncryptionKey(), so
-    // the two routes do NOT diverge even when a dedicated ENCRYPTION_KEY is set. It
-    // is "same key behind two routes"; keeping this call on EncryptionService is
-    // convention, not correctness.
+    // AuthService.fixedEncryption (encryption.service.ts) — both share one
+    // getEncryptionKey(), so the two routes do NOT diverge even when a dedicated
+    // ENCRYPTION_KEY is set. It is "same key behind two routes"; keeping this call
+    // on EncryptionService is convention, not correctness.
     const encryptedCredentials = data.credentials
       ? this._encryption.encrypt(JSON.stringify(data.credentials))
       : undefined;

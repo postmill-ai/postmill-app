@@ -20,14 +20,10 @@ import { AuthService } from '@postmill-ai/helpers/auth/auth.service';
 
 const baseSettings = {
   id: 'singleton',
-  activeProvider: 'openai',
-  activeModel: 'gpt-4.1',
-  scopeModels: null,
   fallbackProvider: null,
   fallbackImageProvider: null,
   guardrailSettings: null,
   budgetSettings: null,
-  rateLimitSettings: null,
   observability: null,
   mcpSettings: null,
   ragSettings: null,
@@ -58,10 +54,11 @@ describe('AiSettingsManager', () => {
 
   describe('getSettings', () => {
     it('returns parsed settings from the repository', async () => {
+      mockGetSystemSettings.mockResolvedValue({ ...baseSettings, fallbackProvider: 'openai@v1' });
+      manager = new AiSettingsManager(new (AiSettingsService as any)());
       const result = await manager.getSettings();
       expect(result).toBeDefined();
-      expect(result?.activeProvider).toBe('openai');
-      expect(result?.activeModel).toBe('gpt-4.1');
+      expect(result?.fallbackProvider).toBe('openai');
       expect(result?.id).toBe('singleton');
     });
 
@@ -77,8 +74,6 @@ describe('AiSettingsManager', () => {
         ...baseSettings,
         budgetSettings: JSON.stringify({ monthlyCap: 100, dailyCap: 10 }),
         guardrailSettings: JSON.stringify({ enabled: true }),
-        scopeModels: JSON.stringify({ utility: 'gpt-4.1' }),
-        rateLimitSettings: JSON.stringify({ rpm: 60 }),
         observability: JSON.stringify({ endpoint: 'https://otel.example.com' }),
         mcpSettings: JSON.stringify({ tools: ['tool1'] }),
         ragSettings: JSON.stringify({ enabled: true }),
@@ -88,8 +83,6 @@ describe('AiSettingsManager', () => {
       const result = await manager.getSettings();
       expect(result?.budgetSettings).toEqual({ monthlyCap: 100, dailyCap: 10 });
       expect(result?.guardrailSettings).toEqual({ enabled: true });
-      expect(result?.scopeModels).toEqual({ utility: 'gpt-4.1' });
-      expect(result?.rateLimitSettings).toEqual({ rpm: 60 });
       expect(result?.observability).toEqual({ endpoint: 'https://otel.example.com' });
       expect(result?.mcpSettings).toEqual({ tools: ['tool1'] });
       expect(result?.ragSettings).toEqual({ enabled: true });
@@ -142,17 +135,17 @@ describe('AiSettingsManager', () => {
 
   describe('refreshCache', () => {
     it('invalidates and reloads the cache', async () => {
-      mockGetSystemSettings.mockResolvedValue({ ...baseSettings, activeProvider: 'openai' });
+      mockGetSystemSettings.mockResolvedValue({ ...baseSettings, fallbackProvider: 'openai@v1' });
       manager = new AiSettingsManager(new (AiSettingsService as any)());
 
       let result = await manager.getSettings();
-      expect(result?.activeProvider).toBe('openai');
+      expect(result?.fallbackProvider).toBe('openai');
 
-      mockGetSystemSettings.mockResolvedValue({ ...baseSettings, activeProvider: 'anthropic' });
+      mockGetSystemSettings.mockResolvedValue({ ...baseSettings, fallbackProvider: 'anthropic@v1' });
       await manager.refreshCache();
 
       result = await manager.getSettings();
-      expect(result?.activeProvider).toBe('anthropic');
+      expect(result?.fallbackProvider).toBe('anthropic');
       expect(mockGetSystemSettings).toHaveBeenCalledTimes(2);
     });
 
@@ -162,65 +155,6 @@ describe('AiSettingsManager', () => {
 
       await Promise.all([manager.refreshCache(), manager.refreshCache(), manager.refreshCache()]);
       expect(mockGetSystemSettings).toHaveBeenCalledTimes(1);
-    });
-  });
-
-  describe('hasActiveConfig', () => {
-    it('returns false when cache is not loaded', () => {
-      expect(manager.hasActiveConfig()).toBe(false);
-    });
-
-    it('returns false when only env var is set (no env fallback)', async () => {
-      process.env.OPENAI_API_KEY = 'sk-test-key';
-      mockGetSystemSettings.mockResolvedValue({ ...baseSettings, activeProvider: null });
-      manager = new AiSettingsManager(new (AiSettingsService as any)());
-      await manager.getSettings();
-      expect(manager.hasActiveConfig()).toBe(false);
-    });
-
-    it('returns false when no active provider and no env key', async () => {
-      mockGetSystemSettings.mockResolvedValue({ ...baseSettings, activeProvider: null });
-      manager = new AiSettingsManager(new (AiSettingsService as any)());
-      await manager.getSettings();
-      expect(manager.hasActiveConfig()).toBe(false);
-    });
-
-    it('returns true when activeProvider is set', async () => {
-      mockGetSystemSettings.mockResolvedValue({ ...baseSettings, activeProvider: 'openai' });
-      manager = new AiSettingsManager(new (AiSettingsService as any)());
-      await manager.getSettings();
-      expect(manager.hasActiveConfig()).toBe(true);
-    });
-  });
-
-  describe('hasActiveConfigAsync', () => {
-    it('returns true when active provider is set', async () => {
-      mockGetSystemSettings.mockResolvedValue({ ...baseSettings, activeProvider: 'openai' });
-      manager = new AiSettingsManager(new (AiSettingsService as any)());
-      const result = await manager.hasActiveConfigAsync();
-      expect(result).toBe(true);
-    });
-
-    it('returns false when only env var is set (no env fallback)', async () => {
-      process.env.OPENAI_API_KEY = 'sk-test-key';
-      mockGetSystemSettings.mockResolvedValue({ ...baseSettings, activeProvider: null });
-      manager = new AiSettingsManager(new (AiSettingsService as any)());
-      const result = await manager.hasActiveConfigAsync();
-      expect(result).toBe(false);
-    });
-
-    it('returns false when no active provider and no env key', async () => {
-      mockGetSystemSettings.mockResolvedValue({ ...baseSettings, activeProvider: null });
-      manager = new AiSettingsManager(new (AiSettingsService as any)());
-      const result = await manager.hasActiveConfigAsync();
-      expect(result).toBe(false);
-    });
-
-    it('triggers a cache refresh when stale', async () => {
-      mockGetSystemSettings.mockResolvedValue({ ...baseSettings });
-      manager = new AiSettingsManager(new (AiSettingsService as any)());
-      await manager.hasActiveConfigAsync();
-      expect(mockGetSystemSettings).toHaveBeenCalled();
     });
   });
 

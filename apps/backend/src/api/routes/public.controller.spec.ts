@@ -3,7 +3,6 @@ import { Response, Request } from 'express';
 import { PublicController } from './public.controller';
 import { SubscriptionService } from '@postmill-ai/nestjs-libraries/database/prisma/subscriptions/subscription.service';
 import { MediaStreamService } from '@postmill-ai/nestjs-libraries/media/stream/media-stream.service';
-import { AgentGraphInsertService } from '@postmill-ai/nestjs-libraries/agent/agent.graph.insert.service';
 import { TrackService } from '@postmill-ai/nestjs-libraries/track/track.service';
 import { TrackEnum } from '@postmill-ai/nestjs-libraries/user/track.enum';
 
@@ -11,7 +10,6 @@ describe('PublicController', () => {
   let controller: PublicController;
   let subscriptionService: Partial<SubscriptionService>;
   let mediaStreamService: Partial<MediaStreamService>;
-  let agentGraphInsertService: Partial<AgentGraphInsertService>;
   let trackService: Partial<TrackService>;
 
   const makeRes = (): Partial<Response> => ({
@@ -39,41 +37,15 @@ describe('PublicController', () => {
       streamExternalUrl: vi.fn().mockResolvedValue(undefined),
     };
 
-    agentGraphInsertService = {
-      newPost: vi.fn().mockResolvedValue({ id: 'agent-post-1' }),
-    };
-
     trackService = {
       track: vi.fn().mockResolvedValue(undefined),
     };
 
     controller = new PublicController(
       trackService as TrackService,
-      agentGraphInsertService as AgentGraphInsertService,
       subscriptionService as SubscriptionService,
       mediaStreamService as MediaStreamService
     );
-  });
-
-  describe('createAgent', () => {
-    it('returns the created agent post when the API key matches', async () => {
-      process.env.AGENT_API_KEY = 'secret-agent-key';
-      const body = { apiKey: 'secret-agent-key', text: 'hello world' };
-
-      const result = await controller.createAgent(body as any);
-
-      expect(agentGraphInsertService.newPost).toHaveBeenCalledWith('hello world');
-      expect(result).toEqual({ id: 'agent-post-1' });
-    });
-
-    it('throws UnauthorizedException when the API key is missing', async () => {
-      process.env.AGENT_API_KEY = 'secret-agent-key';
-      const body = { apiKey: 'wrong-key', text: 'hello world' };
-
-      await expect(controller.createAgent(body as any)).rejects.toThrow(
-        'Unauthorized'
-      );
-    });
   });
 
   describe('modifySubscription', () => {
