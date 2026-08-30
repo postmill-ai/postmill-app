@@ -81,25 +81,22 @@ describe('PublicIntegrationsController.getCampaignAnalytics — R2.4 date valida
   });
 });
 
-describe('PublicIntegrationsController — R2.7 analytics route registration order', () => {
+describe('PublicIntegrationsController — v1 analytics routes (legacy removed)', () => {
   const proto = PublicIntegrationsController.prototype as any;
 
   const path = (m: string) => Reflect.getMetadata(PATH_METADATA, proto[m]);
 
-  it('the overview handler is bound to the static /analytics/overview path', () => {
+  it('keeps the live static analytics routes', () => {
     expect(path('getAnalyticsOverview')).toBe('/analytics/overview');
-    expect(path('getAnalytics')).toBe('/analytics/:integration');
+    expect(path('getCampaignAnalytics')).toBe('/analytics/campaign/:id');
+    expect(path('getAnomalies')).toBe('/analytics/anomalies');
   });
 
-  it('registers /analytics/overview BEFORE the /analytics/:integration param route', () => {
-    // Express matches by registration order = method declaration order on the
-    // prototype. The static overview route must be declared first, else it is
-    // captured as integration="overview".
-    const names = Object.getOwnPropertyNames(proto);
-    const overviewIdx = names.indexOf('getAnalyticsOverview');
-    const paramIdx = names.indexOf('getAnalytics');
-    expect(overviewIdx).toBeGreaterThanOrEqual(0);
-    expect(paramIdx).toBeGreaterThanOrEqual(0);
-    expect(overviewIdx).toBeLessThan(paramIdx);
+  it('no longer exposes the legacy n8n/Zapier analytics routes (404)', () => {
+    // The handlers are gone, so Express has no binding for
+    // GET /public/v1/analytics/:integration or
+    // GET /public/v1/analytics/post/:postId — both 404.
+    expect(proto.getAnalytics).toBeUndefined();
+    expect(proto.getPostAnalytics).toBeUndefined();
   });
 });
