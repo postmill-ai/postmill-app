@@ -4522,6 +4522,7 @@ paths:
         - Announcements
   /admin/channel-configs:
     get:
+      deprecated: true
       operationId: ChannelConfigController_listConfigs
       parameters: []
       responses:
@@ -4533,10 +4534,12 @@ paths:
                 type: array
                 items:
                   type: object
+      summary: ""
       tags:
         - Channel Config
   /admin/channel-configs/{identifier}:
     get:
+      deprecated: true
       operationId: ChannelConfigController_getConfig
       parameters:
         - name: identifier
@@ -4551,9 +4554,11 @@ paths:
             application/json:
               schema:
                 type: object
+      summary: ""
       tags:
         - Channel Config
     put:
+      deprecated: true
       operationId: ChannelConfigController_saveConfig
       parameters:
         - name: identifier
@@ -4570,9 +4575,11 @@ paths:
       responses:
         "200":
           description: ""
+      summary: ""
       tags:
         - Channel Config
     delete:
+      deprecated: true
       operationId: ChannelConfigController_deleteConfig
       parameters:
         - name: identifier
@@ -4587,6 +4594,7 @@ paths:
             application/json:
               schema:
                 type: object
+      summary: ""
       tags:
         - Channel Config
   /analytics/v2/overview:
@@ -9226,12 +9234,15 @@ components:
         provider:
           type: string
           enum:
+            - X
             - LOCAL
             - GITHUB
             - GOOGLE
             - FARCASTER
             - WALLET
             - GENERIC
+            - FACEBOOK
+            - LINKEDIN
         providerToken:
           type: string
         email:
@@ -9268,12 +9279,15 @@ components:
         provider:
           type: string
           enum:
+            - X
             - LOCAL
             - GITHUB
             - GOOGLE
             - FARCASTER
             - WALLET
             - GENERIC
+            - FACEBOOK
+            - LINKEDIN
         providerToken:
           type: string
         email:
