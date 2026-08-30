@@ -8,13 +8,6 @@ vi.mock('@postmill-ai/nestjs-libraries/integrations/integration.manager', () => 
 }));
 
 vi.mock(
-  '@postmill-ai/nestjs-libraries/integrations/provider-config.manager',
-  () => ({
-    ProviderConfigManager: vi.fn(),
-  })
-);
-
-vi.mock(
   '@postmill-ai/nestjs-libraries/database/prisma/prisma.service',
   () => ({
     PrismaService: vi.fn(),
@@ -67,9 +60,22 @@ vi.mock('@postmill-ai/helpers/utils/timer', () => ({
   timer: vi.fn().mockResolvedValue(undefined),
 }));
 
+// Fixtures carry plain token strings; decryption is a pass-through in this spec
+// (crypto strictness is covered by integration-token.utils.spec.ts).
+vi.mock('@postmill-ai/helpers/auth/auth.service', async (importOriginal) => {
+  const actual = await importOriginal<any>();
+  return {
+    ...actual,
+    AuthService: {
+      ...actual.AuthService,
+      fixedEncryption: (value: string) => value,
+      fixedDecryption: (value: string) => value,
+    },
+  };
+});
+
 import { AnalyticsActivity } from '@postmill-ai/nestjs-libraries/inngest/activities/analytics.activity';
 import { IntegrationManager } from '@postmill-ai/nestjs-libraries/integrations/integration.manager';
-import { ProviderConfigManager } from '@postmill-ai/nestjs-libraries/integrations/provider-config.manager';
 import { OrganizationService } from '@postmill-ai/nestjs-libraries/database/prisma/organizations/organization.service';
 import { IntegrationService } from '@postmill-ai/nestjs-libraries/database/prisma/integrations/integration.service';
 import { RefreshIntegrationService } from '@postmill-ai/nestjs-libraries/integrations/refresh.integration.service';
@@ -86,7 +92,7 @@ describe('AnalyticsActivity', () => {
   let activity: AnalyticsActivity;
   let analyticsRepository: any;
   let integrationManager: Mocked<IntegrationManager>;
-  let providerConfigManager: Mocked<ProviderConfigManager>;
+  let providerConfigManager: { ensureFresh: ReturnType<typeof vi.fn> };
   let organizationService: Mocked<OrganizationService>;
   let integrationService: Mocked<IntegrationService>;
   let refreshIntegrationService: Mocked<RefreshIntegrationService>;
@@ -261,7 +267,7 @@ describe('AnalyticsActivity', () => {
       ...overrides,
     });
 
-    it('calls ensureFresh on ProviderConfigManager', async () => {
+    it('calls ensureFresh on OrgProviderConfigManager', async () => {
       (integrationService.getIntegrationsList as any).mockResolvedValue([]);
 
       await activity.collectChannelSnapshots(orgId, daysBack);
@@ -712,7 +718,7 @@ describe('AnalyticsActivity', () => {
       ...overrides,
     });
 
-    it('calls ensureFresh on ProviderConfigManager', async () => {
+    it('calls ensureFresh on OrgProviderConfigManager', async () => {
       (analyticsRepository.findPostsForSnapshots as any).mockResolvedValue([]);
 
       await activity.collectPostSnapshots(orgId, daysBack);
@@ -1107,7 +1113,7 @@ describe('AnalyticsActivity', () => {
       ...overrides,
     });
 
-    it('calls ensureFresh on ProviderConfigManager for the integration org', async () => {
+    it('calls ensureFresh on OrgProviderConfigManager for the integration org', async () => {
       (analyticsRepository.findIntegrationByIdRaw as any).mockResolvedValue(buildIntegration());
 
       await activity.backfillIntegration({ integrationId, organizationId });

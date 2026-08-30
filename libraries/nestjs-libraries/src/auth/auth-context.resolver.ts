@@ -78,7 +78,11 @@ export class AuthContextResolver {
       return { ok: false, reason: 'invalid_jwt' };
     }
 
-    if (!payload?.id) {
+    // Session tokens must carry an `exp` claim (v1.0.0): legacy exp-less
+    // session JWTs are no longer accepted — the sliding-renewal middleware
+    // re-issues tokens well before expiry, so a missing exp means a pre-v1
+    // or foreign token.
+    if (!payload?.id || typeof payload.exp !== 'number') {
       return { ok: false, reason: 'invalid_jwt' };
     }
 

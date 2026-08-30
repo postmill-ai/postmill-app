@@ -1,7 +1,8 @@
 import { EncryptionService } from './encryption.service';
 
 // Pins current encrypt/decrypt behaviour so the C2–C4 encryption-hygiene changes can't
-// silently break existing ciphertext (v2 GCM envelope + legacy CBC read-fallback).
+// silently break existing ciphertext. v1.0.0: v2 GCM envelope only — the legacy CBC
+// read-fallback and the deterministic CBC writer were removed.
 describe('EncryptionService', () => {
   let svc: EncryptionService;
 
@@ -27,10 +28,8 @@ describe('EncryptionService', () => {
     expect(svc.decrypt(enc)).toBe('api-key-xyz');
   });
 
-  it('still decrypts a legacy (non-v2) ciphertext via the CBC fallback', () => {
-    const legacy = svc.encryptDeterministic('legacy-value');
-    expect(legacy.startsWith('v2:')).toBe(false);
-    expect(svc.decrypt(legacy)).toBe('legacy-value');
+  it('refuses to decrypt a non-v2: value (legacy CBC support removed)', () => {
+    expect(() => svc.decrypt('deadbeefciphertext')).toThrow(/v2:/);
   });
 
   it('round-trips a JSON credentials blob', () => {

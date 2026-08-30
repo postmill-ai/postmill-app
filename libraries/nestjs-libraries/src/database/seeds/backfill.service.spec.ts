@@ -1,14 +1,9 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
+import crypto from 'crypto';
 import { BackfillService } from './backfill.service';
+import { AuthService } from '@postmill-ai/helpers/auth/auth.service';
 
 type Tx = {
-  user: { findMany: ReturnType<typeof vi.fn> };
-  userProfile: { create: ReturnType<typeof vi.fn>; findMany: ReturnType<typeof vi.fn> };
-  notificationPreference: {
-    findUnique: ReturnType<typeof vi.fn>;
-    create: ReturnType<typeof vi.fn>;
-    update: ReturnType<typeof vi.fn>;
-  };
   appRole: { findMany: ReturnType<typeof vi.fn> };
   userOrganization: {
     groupBy: ReturnType<typeof vi.fn>;
@@ -20,22 +15,22 @@ type Tx = {
   orgShortLinkConfig: { findMany: ReturnType<typeof vi.fn>; update: ReturnType<typeof vi.fn> };
   aISystemSettings: {
     findFirst: ReturnType<typeof vi.fn>;
-    findUnique: ReturnType<typeof vi.fn>;
+    findMany: ReturnType<typeof vi.fn>;
     update: ReturnType<typeof vi.fn>;
   };
   aIOrgProviderConfig: { findMany: ReturnType<typeof vi.fn> };
-  mediaProviderConfig: { upsert: ReturnType<typeof vi.fn> };
-  $executeRaw: ReturnType<typeof vi.fn>;
+  mediaProviderConfig: { upsert: ReturnType<typeof vi.fn>; findMany: ReturnType<typeof vi.fn> };
+  // legacy secret re-encryption targets not already listed above
+  // (findMany returns [] = nothing to rewrite)
+  integration: { findMany: ReturnType<typeof vi.fn> };
+  orgProviderConfiguration: { findMany: ReturnType<typeof vi.fn> };
+  contentPackConfig: { findMany: ReturnType<typeof vi.fn> };
+  orgVpnConfig: { findMany: ReturnType<typeof vi.fn> };
+  authProviderConfig: { findMany: ReturnType<typeof vi.fn> };
+  usedCodes: { findMany: ReturnType<typeof vi.fn> };
 };
 
 const makeTx = (): Tx => ({
-  user: { findMany: vi.fn().mockResolvedValue([]) },
-  userProfile: { create: vi.fn(), findMany: vi.fn().mockResolvedValue([]) },
-  notificationPreference: {
-    findUnique: vi.fn().mockResolvedValue(null),
-    create: vi.fn(),
-    update: vi.fn(),
-  },
   appRole: { findMany: vi.fn().mockResolvedValue([]) },
   userOrganization: {
     groupBy: vi.fn().mockResolvedValue([]),
@@ -47,13 +42,17 @@ const makeTx = (): Tx => ({
   orgShortLinkConfig: { findMany: vi.fn().mockResolvedValue([]), update: vi.fn() },
   aISystemSettings: {
     findFirst: vi.fn().mockResolvedValue(null),
-    findUnique: vi.fn().mockResolvedValue(null),
+    findMany: vi.fn().mockResolvedValue([]),
     update: vi.fn(),
   },
   aIOrgProviderConfig: { findMany: vi.fn().mockResolvedValue([]) },
-  mediaProviderConfig: { upsert: vi.fn() },
-  // the budget cleanup takes a SELECT … FOR UPDATE row lock
-  $executeRaw: vi.fn().mockResolvedValue(0),
+  mediaProviderConfig: { upsert: vi.fn(), findMany: vi.fn().mockResolvedValue([]) },
+  integration: { findMany: vi.fn().mockResolvedValue([]) },
+  orgProviderConfiguration: { findMany: vi.fn().mockResolvedValue([]) },
+  contentPackConfig: { findMany: vi.fn().mockResolvedValue([]) },
+  orgVpnConfig: { findMany: vi.fn().mockResolvedValue([]) },
+  authProviderConfig: { findMany: vi.fn().mockResolvedValue([]) },
+  usedCodes: { findMany: vi.fn().mockResolvedValue([]) },
 });
 
 const makeService = (tx: Tx) => {
@@ -141,118 +140,144 @@ describe('BackfillService — ragSettings.mediaProviders migration', () => {
   });
 });
 
-describe('BackfillService — budget global-cap cleanup (0.4)', () => {
-  let tx: Tx;
-  beforeEach(() => {
-    tx = makeTx();
-  });
+describe('BackfillService — legacy secret re-encryption (v1.0.0 guard)', () => {
+  // Real crypto on both sides: the fixture encrypts with the legacy CBC scheme
+  // (EVP_BytesToKey md5/no-salt derivation, mirroring legacy-cbc.crypto.ts),
+  // the step rewrites with the real AuthService.fixedEncryption (v2: GCM).
+  const JWT_SECRET = 'test-jwt-secret-for-legacy-reencryption';
 
-  const runCleanup = (service: BackfillService) =>
-    (service as any).cleanupLeakedGlobalBudgetCaps(tx);
-
-  it('strips leaked top-level caps while preserving perOrgCaps', async () => {
-    tx.aISystemSettings.findUnique.mockResolvedValue({
-      budgetSettings: JSON.stringify({
-        monthlyCap: 1000,
-        dailyCap: 50,
-        alertThresholdPct: 0.8,
-        perOrgCaps: { orgA: { monthly: 5 }, orgB: { daily: 2 } },
-        scopeCaps: { agent: { monthly: 3 } },
-      }),
-    });
-
-    await runCleanup(makeService(tx));
-
-    expect(tx.aISystemSettings.update).toHaveBeenCalledTimes(1);
-    const written = JSON.parse(
-      tx.aISystemSettings.update.mock.calls[0][0].data.budgetSettings,
+  function encryptLegacyCbc(plaintext: string): string {
+    const pass = Buffer.from(JWT_SECRET, 'utf8');
+    const blocks: Buffer[] = [];
+    let prev = Buffer.alloc(0);
+    let derived = 0;
+    while (derived < 48) {
+      const hash = crypto.createHash('md5');
+      hash.update(prev);
+      hash.update(pass);
+      prev = hash.digest();
+      blocks.push(prev);
+      derived += prev.length;
+    }
+    const material = Buffer.concat(blocks);
+    const cipher = crypto.createCipheriv(
+      'aes-256-cbc',
+      material.subarray(0, 32),
+      material.subarray(32, 48),
     );
-    // top-level org-slice keys that leaked upward are gone…
-    expect(written).not.toHaveProperty('monthlyCap');
-    expect(written).not.toHaveProperty('dailyCap');
-    expect(written).not.toHaveProperty('alertThresholdPct');
-    // …perOrgCaps (and other keys) intact.
-    expect(written.perOrgCaps).toEqual({ orgA: { monthly: 5 }, orgB: { daily: 2 } });
-    expect(written.scopeCaps).toEqual({ agent: { monthly: 3 } });
-    // …and the stripped values are preserved (an intentional super-admin global
-    // cap is indistinguishable from a leak — never destroy silently).
-    expect(written._strippedLegacyGlobalCaps).toEqual({
-      monthlyCap: 1000,
-      dailyCap: 50,
-      alertThresholdPct: 0.8,
-    });
+    return Buffer.concat([
+      cipher.update(plaintext, 'utf8'),
+      cipher.final(),
+    ]).toString('hex');
+  }
+
+  const makeDelegate = (rows: Array<{ id: string; [k: string]: unknown }>) => ({
+    findMany: vi.fn().mockResolvedValue(rows),
+    update: vi.fn().mockResolvedValue({}),
   });
 
-  it('is a no-op when there are no leaked top-level caps', async () => {
-    tx.aISystemSettings.findUnique.mockResolvedValue({
-      budgetSettings: JSON.stringify({ perOrgCaps: { orgA: { monthly: 5 } } }),
-    });
-    await runCleanup(makeService(tx));
-    expect(tx.aISystemSettings.update).not.toHaveBeenCalled();
+  // A tx carrying every delegate the step touches (all empty), overridable per test.
+  const makeReencryptTx = (
+    overrides: Record<string, ReturnType<typeof makeDelegate>> = {},
+  ) => ({
+    integration: makeDelegate([]),
+    orgProviderConfiguration: makeDelegate([]),
+    aIOrgProviderConfig: makeDelegate([]),
+    aISystemSettings: makeDelegate([]),
+    storageProviderConfig: makeDelegate([]),
+    orgShortLinkConfig: makeDelegate([]),
+    mediaProviderConfig: makeDelegate([]),
+    contentPackConfig: makeDelegate([]),
+    orgVpnConfig: makeDelegate([]),
+    authProviderConfig: makeDelegate([]),
+    usedCodes: makeDelegate([]),
+    ...overrides,
   });
-
-  it('is a no-op when there is no settings row / no budgetSettings', async () => {
-    tx.aISystemSettings.findUnique.mockResolvedValue(null);
-    await runCleanup(makeService(tx));
-    expect(tx.aISystemSettings.update).not.toHaveBeenCalled();
-  });
-});
-
-describe('BackfillService — notifications V2 email opt-out carry-forward', () => {
-  let tx: Tx;
 
   beforeEach(() => {
-    tx = makeTx();
+    process.env.JWT_SECRET = JWT_SECRET;
+    delete process.env.ENCRYPTION_KEY;
   });
 
-  it('copies each UserProfile email opt-OUT into a new NotificationPreference', async () => {
-    tx.userProfile.findMany.mockResolvedValue([
-      {
-        userId: 'user-1',
-        sendSuccessEmails: false,
-        sendFailureEmails: true,
-        sendStreakEmails: false,
-      },
+  const runStep = (tx: Record<string, unknown>) => {
+    const prisma = {
+      $transaction: vi.fn(async (fn: (t: unknown) => Promise<void>) => fn(tx)),
+    };
+    const service = new BackfillService(prisma as never);
+    return (service as any).reencryptLegacySecrets(tx);
+  };
+
+  it('scans only non-v2:, non-empty values (v2: rows are filtered out in the query)', async () => {
+    const delegate = makeDelegate([]);
+    const tx = { integration: delegate };
+    // Only the models present on the tx are exercised here; call the column
+    // helper directly to assert the filter shape for one column.
+    const service = new BackfillService({} as never);
+    await (service as any)._reencryptColumn(tx, 'integration', 'token', true);
+
+    const where = delegate.findMany.mock.calls[0][0].where;
+    expect(where.AND).toEqual([
+      { token: { not: null } },
+      { token: { not: '' } },
+      { token: { not: { startsWith: 'v2:' } } },
     ]);
-
-    await makeService(tx).backfill();
-
-    expect(tx.notificationPreference.create).toHaveBeenCalledWith({
-      data: {
-        userId: 'user-1',
-        categories: {
-          post_published: { email: false },
-          streak: { email: false },
-        },
-      },
-    });
-    // opted-in category (failure) is not carried — defaults are opt-in already.
-    const created = tx.notificationPreference.create.mock.calls[0][0];
-    expect(created.data.categories.post_failed).toBeUndefined();
+    expect(delegate.update).not.toHaveBeenCalled();
   });
 
-  it('does not clobber a value already set under the new key (post-deploy save wins)', async () => {
-    tx.userProfile.findMany.mockResolvedValue([
-      { userId: 'user-1', sendSuccessEmails: false, sendFailureEmails: true, sendStreakEmails: true },
+  it('rewrites a legacy CBC ciphertext to v2: GCM', async () => {
+    const delegate = makeDelegate([
+      { id: 'int-1', token: encryptLegacyCbc('secret-token') },
     ]);
-    tx.notificationPreference.findUnique.mockResolvedValue({
-      userId: 'user-1',
-      categories: { post_published: { email: true, inApp: true } },
-    });
+    await runStep(makeReencryptTx({ integration: delegate }));
 
-    await makeService(tx).backfill();
-
-    expect(tx.notificationPreference.create).not.toHaveBeenCalled();
-    expect(tx.notificationPreference.update).not.toHaveBeenCalled();
+    expect(delegate.update).toHaveBeenCalledTimes(1);
+    const update = delegate.update.mock.calls[0][0];
+    expect(update.where).toEqual({ id: 'int-1' });
+    expect(update.data.token.startsWith('v2:')).toBe(true);
+    expect(AuthService.fixedDecryption(update.data.token)).toBe('secret-token');
   });
 
-  it('is a no-op when no profile has an opt-out', async () => {
-    tx.userProfile.findMany.mockResolvedValue([]);
+  it('treats an undecryptable Integration.token as legacy plaintext and encrypts it as-is', async () => {
+    const delegate = makeDelegate([{ id: 'int-2', token: 'plain-raw-token' }]);
+    await runStep(makeReencryptTx({ integration: delegate }));
 
-    await makeService(tx).backfill();
+    expect(delegate.update).toHaveBeenCalledTimes(1);
+    const update = delegate.update.mock.calls[0][0];
+    expect(AuthService.fixedDecryption(update.data.token)).toBe('plain-raw-token');
+  });
 
-    expect(tx.notificationPreference.create).not.toHaveBeenCalled();
-    expect(tx.notificationPreference.update).not.toHaveBeenCalled();
+  it('treats an undecryptable additionalConfig blob as legacy plaintext JSON', async () => {
+    const blob = JSON.stringify({ botToken: 'discord-bot-token' });
+    const delegate = makeDelegate([{ id: 'cfg-1', additionalConfig: blob }]);
+    await runStep(makeReencryptTx({ orgProviderConfiguration: delegate }));
+
+    expect(delegate.update).toHaveBeenCalledTimes(1);
+    const update = delegate.update.mock.calls[0][0];
+    expect(AuthService.fixedDecryption(update.data.additionalConfig)).toBe(blob);
+  });
+
+  it('leaves undecryptable values untouched on columns without a plaintext fallback', async () => {
+    const delegate = makeDelegate([
+      { id: 'spc-1', credentials: 'not-cbc-not-plaintext!!' },
+    ]);
+    await runStep(makeReencryptTx({ storageProviderConfig: delegate }));
+
+    expect(delegate.update).not.toHaveBeenCalled();
+  });
+
+  it('is ledger-gated under the "backfill:legacy secret re-encryption" key', async () => {
+    const tx = makeTx();
+    const prisma = {
+      $transaction: vi.fn(async (fn: (t: Tx) => Promise<void>) => fn(tx)),
+    };
+    const ledger = {
+      wasApplied: vi.fn().mockResolvedValue(false),
+      markApplied: vi.fn().mockResolvedValue(undefined),
+    };
+    await new BackfillService(prisma as never, ledger as never).backfill();
+    expect(ledger.markApplied).toHaveBeenCalledWith(
+      'backfill:legacy secret re-encryption',
+    );
   });
 });
 

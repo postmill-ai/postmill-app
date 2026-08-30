@@ -4,37 +4,10 @@ import { Prisma } from '@prisma/client';
 import { PrismaService } from '@postmill-ai/nestjs-libraries/database/prisma/prisma.service';
 import { MigrationLedgerRepository } from '@postmill-ai/nestjs-libraries/database/prisma/migration-ledger/migration-ledger.repository';
 import { DefaultsSeedService } from '@postmill-ai/nestjs-libraries/ai/defaults/defaults-seed.service';
+import { AuthService } from '@postmill-ai/helpers/auth/auth.service';
+import { decryptLegacyCbc } from '@postmill-ai/nestjs-libraries/database/seeds/legacy-cbc.crypto';
 import { stat } from 'node:fs/promises';
 import { safeFetch } from '@postmill-ai/nestjs-libraries/dtos/webhooks/safe.fetch';
-
-// Pre-drop User rows still carry the profile columns that moved to UserProfile;
-// the current Prisma client no longer types them, so model the legacy shape here.
-type LegacyUserRow = {
-  id: string;
-  name?: string | null;
-  lastName?: string | null;
-  bio?: string | null;
-  pictureId?: string | null;
-  sendSuccessEmails?: boolean;
-  sendFailureEmails?: boolean;
-  sendStreakEmails?: boolean;
-};
-
-// UserProfile email opt-out column -> Notifications V2 category key.
-const EMAIL_PREF_COLUMN_TO_CATEGORY: Array<
-  [keyof ProfileEmailFlags, string]
-> = [
-  ['sendSuccessEmails', 'post_published'],
-  ['sendFailureEmails', 'post_failed'],
-  ['sendStreakEmails', 'streak'],
-];
-
-type ProfileEmailFlags = {
-  userId: string;
-  sendSuccessEmails: boolean;
-  sendFailureEmails: boolean;
-  sendStreakEmails: boolean;
-};
 
 function deriveFingerprint(data: (string | null | undefined)[]): string {
   const hash = createHash('sha1');
@@ -58,14 +31,13 @@ export class BackfillService {
     // Each step runs in its OWN transaction. Backfill steps are phase-dependent and
     // idempotent — a column/table a step touches may not exist yet (pre-expand) or
     // anymore (post-contract). Postgres aborts the ENTIRE transaction on any errored
-    // statement, so a single shared $transaction let one expected failure (e.g. the
-    // deprecated UserProfile.send*Emails columns not yet present) cascade 25P02 into
+    // statement, so a single shared $transaction let one expected failure (e.g. a
+    // column that is not present yet in the current deploy phase) cascade 25P02 into
     // every later step — silently skipping the RBAC role backfill and the rest.
     // Per-step isolation keeps an expected/edge failure in one from poisoning the others.
     // Reconciliation scans (oneTime = false, default): they re-scan `where: { …: null }`
     // every boot because new rows with null values can be created later (e.g. a new
     // membership with roleId: null). Marking them "applied" would permanently break self-heal.
-    await this._runStep('user profiles', (tx) => this.backfillUserProfiles(tx));
     await this._runStep('user-organization roles', (tx) =>
       this.backfillUserOrganizationRoles(tx),
     );
@@ -80,14 +52,8 @@ export class BackfillService {
     );
 
     // One-time data migrations (oneTime = true): ledger-gated so they run once.
-    // - notification email prefs reads soon-to-be-dropped UserProfile.send*Emails columns.
-    // - RAG media providers self-disables by stripping its blob, but ledger-gate it too so a
-    //   re-add of the blob doesn't silently re-run the migration.
-    await this._runStep(
-      'notification email prefs',
-      (tx) => this.backfillNotificationEmailPrefs(tx),
-      true,
-    );
+    // RAG media providers self-disables by stripping its blob, but ledger-gate it too so a
+    // re-add of the blob doesn't silently re-run the migration.
     await this._runStep(
       'RAG media providers',
       (tx) => this.migrateRagSettingsMediaProviders(tx),
@@ -96,11 +62,6 @@ export class BackfillService {
     await this._runStep(
       'AI/media default models',
       () => this.backfillDefaultModels(),
-      true,
-    );
-    await this._runStep(
-      'budget global-cap cleanup',
-      (tx) => this.cleanupLeakedGlobalBudgetCaps(tx),
       true,
     );
     await this._runStep(
@@ -113,72 +74,107 @@ export class BackfillService {
       (tx) => this.backfillFileSize(tx),
       true,
     );
+    // v1.0.0 cut-over guard: must be the LAST one-time step so every other
+    // migration has run before values are rewritten to their final format.
+    await this._runStep(
+      'legacy secret re-encryption',
+      (tx) => this.reencryptLegacySecrets(tx),
+      true,
+    );
   }
 
-  // PROVIDER_REMEDIATION_02 §0.4: pre-fix org budget writes leaked their org-slice
-  // keys (monthlyCap / dailyCap / alertThresholdPct) to the TOP LEVEL of the
-  // AISystemSettings.budgetSettings singleton, where BudgetService.checkBudget
-  // enforces them as a PLATFORM-GLOBAL cap. Once platform spend passed a leaked
-  // value, EVERY tenant 429'd ("Global … cap exceeded") on all four AI surfaces,
-  // and the org that set it could no longer see/clear it (getBudget returns only
-  // its own perOrgCaps slice). Strip those top-level keys ONCE, preserving
-  // perOrgCaps and every other key. Ledger-gated one-time (a super-admin may later
-  // set an *intentional* global cap via the whole-blob governance route — this
-  // never re-runs to clobber that). Idempotent within the run.
-  private async cleanupLeakedGlobalBudgetCaps(tx: Prisma.TransactionClient) {
-    // Take the same row lock upsertBudget uses — during a rolling deploy a live
-    // replica's budget write racing this read-modify-write would otherwise be
-    // clobbered with the stale blob.
-    await tx.$executeRaw`SELECT id FROM "AISystemSettings" WHERE id = 'singleton' FOR UPDATE`;
-    const settings = await tx.aISystemSettings.findUnique({
-      where: { id: 'singleton' },
-      select: { budgetSettings: true },
-    });
-    if (!settings?.budgetSettings) return;
+  // v1.0.0 cut-over guard: AuthService.fixedDecryption is GCM-only now — any
+  // value still stored as legacy AES-CBC (or as a plaintext pass-through, for
+  // the columns whose old read path passed non-v2: values through raw) becomes
+  // unreadable. Rewrite every encrypted column to `v2:` GCM once, per row, only
+  // where the value does not already start with 'v2:'. Prod was audited clean
+  // (zero non-v2: values); this protects other/self-hosted deployments.
+  // Ledger-gated one-time: post-cut-over writes are always v2:, so a re-run
+  // would find nothing. Delete this step (and legacy-cbc.crypto.ts) once every
+  // supported deployment has booted v1.0.0.
+  private async reencryptLegacySecrets(tx: Prisma.TransactionClient) {
+    // [tx delegate, column, plaintextFallback]
+    // plaintextFallback: a value that fails CBC decryption is legacy PLAINTEXT
+    // (the old read path passed it through raw) — encrypt it as-is. For every
+    // other column an undecryptable value is logged and left untouched.
+    const targets: Array<[string, string, boolean]> = [
+      ['integration', 'token', true],
+      ['integration', 'refreshToken', true],
+      ['integration', 'customInstanceDetails', false],
+      ['orgProviderConfiguration', 'clientId', false],
+      ['orgProviderConfiguration', 'clientSecret', false],
+      // Whole-blob: a non-decryptable value is legacy plaintext JSON.
+      ['orgProviderConfiguration', 'additionalConfig', true],
+      ['aIOrgProviderConfig', 'credentials', false],
+      ['aISystemSettings', 'secretSettings', false],
+      ['storageProviderConfig', 'credentials', false],
+      ['orgShortLinkConfig', 'credentials', false],
+      ['orgShortLinkConfig', 'extraConfig', false],
+      ['mediaProviderConfig', 'credentials', false],
+      ['contentPackConfig', 'credentials', false],
+      ['orgVpnConfig', 'credentials', false],
+      ['authProviderConfig', 'clientId', false],
+      ['authProviderConfig', 'clientSecret', false],
+      // Stripe lifetime-deal codes (CodesService / StripeService.lifetimeDeal).
+      ['usedCodes', 'code', false],
+    ];
 
-    let parsed: Record<string, unknown>;
-    try {
-      parsed = JSON.parse(settings.budgetSettings);
-    } catch {
-      return;
+    for (const [model, column, plaintextFallback] of targets) {
+      await this._reencryptColumn(tx, model, column, plaintextFallback);
     }
-    if (!parsed || typeof parsed !== 'object') return;
+  }
 
-    const hasLeaked =
-      'monthlyCap' in parsed ||
-      'dailyCap' in parsed ||
-      'alertThresholdPct' in parsed;
-    if (!hasLeaked) return;
+  private async _reencryptColumn(
+    tx: Prisma.TransactionClient,
+    model: string,
+    column: string,
+    plaintextFallback: boolean,
+  ) {
+    const delegate = (tx as any)[model];
+    const rows: Array<{ id: string; [key: string]: unknown }> =
+      await delegate.findMany({
+        where: {
+          AND: [
+            { [column]: { not: null } },
+            { [column]: { not: '' } },
+            { [column]: { not: { startsWith: 'v2:' } } },
+          ],
+        },
+        select: { id: true, [column]: true },
+      });
 
-    const {
-      monthlyCap,
-      dailyCap,
-      alertThresholdPct,
-      ...cleaned
-    } = parsed as Record<string, unknown>;
-    // The stripped keys are INDISTINGUISHABLE from an intentional super-admin
-    // global cap set via the governance whole-blob route — so never destroy them
-    // silently: log the removed values and park them under a backup key
-    // (BudgetService reads only its known keys, so the extra key is inert) for an
-    // operator to restore via the governance route if the cap was intentional.
-    const stripped = {
-      ...(monthlyCap !== undefined ? { monthlyCap } : {}),
-      ...(dailyCap !== undefined ? { dailyCap } : {}),
-      ...(alertThresholdPct !== undefined ? { alertThresholdPct } : {}),
-    };
-    this._logger.warn(
-      `Budget cleanup: stripped top-level global caps from AISystemSettings.budgetSettings ` +
-        `(kept under _strippedLegacyGlobalCaps for operator review): ${JSON.stringify(stripped)}`,
+    let rewritten = 0;
+    let undecryptable = 0;
+    for (const row of rows) {
+      const value = row[column];
+      if (typeof value !== 'string' || !value) continue;
+      let plaintext: string | null = null;
+      try {
+        plaintext = decryptLegacyCbc(value);
+      } catch {
+        if (plaintextFallback) {
+          plaintext = value;
+        }
+      }
+      if (plaintext == null) {
+        undecryptable++;
+        this._logger.warn(
+          `legacy secret re-encryption: ${model}.${column} row ${row.id} is not ` +
+            `CBC-decryptable — left untouched (manual fix required)`,
+        );
+        continue;
+      }
+      await delegate.update({
+        where: { id: row.id },
+        data: { [column]: AuthService.fixedEncryption(plaintext) },
+      });
+      rewritten++;
+    }
+
+    this._logger.log(
+      `legacy secret re-encryption: ${model}.${column} — ${rewritten} rewritten, ` +
+        `${undecryptable} undecryptable (${rows.length} non-v2: rows scanned)`,
     );
-    await tx.aISystemSettings.update({
-      where: { id: 'singleton' },
-      data: {
-        budgetSettings: JSON.stringify({
-          ...cleaned,
-          _strippedLegacyGlobalCaps: stripped,
-        }),
-      },
-    });
   }
 
   private async _runStep(
@@ -215,102 +211,6 @@ export class BackfillService {
           (e as Error).message.split('\n')[0]
         }`,
       );
-    }
-  }
-
-  private async backfillUserProfiles(tx: Prisma.TransactionClient) {
-    try {
-      const users: LegacyUserRow[] = await tx.user.findMany({
-        where: { profile: null },
-      });
-
-      for (const user of users) {
-        await tx.userProfile.create({
-          data: {
-            userId: user.id,
-            name: user.name,
-            lastName: user.lastName,
-            bio: user.bio,
-            pictureId: user.pictureId,
-            timezone: null,
-            sendSuccessEmails: user.sendSuccessEmails,
-            sendFailureEmails: user.sendFailureEmails,
-            sendStreakEmails: user.sendStreakEmails,
-          },
-        });
-      }
-    } catch {
-      // Profile fields on User may already be dropped after the destructive push —
-      // this backfill is only needed pre-drop.
-    }
-  }
-
-  // Notifications V2 expand-contract: copy any email opt-OUT still stored on the
-  // (deprecated) UserProfile.send*Emails columns into NotificationPreference.categories
-  // BEFORE those columns are dropped in the follow-up release. Without this, every
-  // user who disabled success/failure/streak emails would silently revert to the
-  // opt-in defaults (NotificationPreferenceService self-heals missing categories to
-  // email:true on read) and start receiving unwanted mail on deploy.
-  // Only opt-outs need carrying — opt-ins already match the defaults. Idempotent:
-  // never clobbers a value already written under the new key (a post-deploy save wins).
-  private async backfillNotificationEmailPrefs(tx: Prisma.TransactionClient) {
-    let profiles: ProfileEmailFlags[];
-    try {
-      profiles = (await tx.userProfile.findMany({
-        where: {
-          OR: [
-            { sendSuccessEmails: false },
-            { sendFailureEmails: false },
-            { sendStreakEmails: false },
-          ],
-        },
-        select: {
-          userId: true,
-          sendSuccessEmails: true,
-          sendFailureEmails: true,
-          sendStreakEmails: true,
-        },
-      })) as ProfileEmailFlags[];
-    } catch {
-      // Columns already dropped (post-contract release) — nothing left to carry.
-      return;
-    }
-
-    for (const profile of profiles) {
-      const optOuts: Record<string, { email: boolean }> = {};
-      for (const [column, category] of EMAIL_PREF_COLUMN_TO_CATEGORY) {
-        if (profile[column] === false) optOuts[category] = { email: false };
-      }
-      if (Object.keys(optOuts).length === 0) continue;
-
-      const existing = await tx.notificationPreference.findUnique({
-        where: { userId: profile.userId },
-      });
-
-      if (!existing) {
-        await tx.notificationPreference.create({
-          data: { userId: profile.userId, categories: optOuts },
-        });
-        continue;
-      }
-
-      const categories = {
-        ...((existing.categories as Record<string, any>) ?? {}),
-      };
-      let dirty = false;
-      for (const [category, value] of Object.entries(optOuts)) {
-        // Don't overwrite a value the user already set under the new key.
-        if (categories[category]?.email === undefined) {
-          categories[category] = { ...(categories[category] ?? {}), ...value };
-          dirty = true;
-        }
-      }
-      if (dirty) {
-        await tx.notificationPreference.update({
-          where: { userId: profile.userId },
-          data: { categories },
-        });
-      }
     }
   }
 

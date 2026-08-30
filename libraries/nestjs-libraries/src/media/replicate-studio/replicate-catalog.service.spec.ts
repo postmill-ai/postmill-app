@@ -30,7 +30,7 @@ describe('ReplicateCatalogService', () => {
 
     mockOrgMediaProviderSettings = {
       getConfigForProvider: vi.fn().mockResolvedValue({
-        credentials: { apiKey: 'plain-test-key' },
+        credentials: { apiKey: 'v2:test-key' },
       }),
     };
 
@@ -156,6 +156,13 @@ describe('ReplicateCatalogService', () => {
       const result = await service.listModels('meme', 'org1');
       expect(result).toEqual([]);
       expect(mockSafeFetch).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('getReplicateKey', () => {
+    it('decrypts the stored v2: key unconditionally (no plaintext pass-through)', async () => {
+      await expect(service.getReplicateKey('org1')).resolves.toBe('decrypted-key');
+      expect(mockEncryption.decrypt).toHaveBeenCalledWith('v2:test-key');
     });
   });
 });

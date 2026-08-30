@@ -1,37 +1,6 @@
 import { sign, verify } from 'jsonwebtoken';
 import { hashSync, compareSync } from 'bcrypt';
 import crypto from 'crypto';
-// @ts-ignore
-import EVP_BytesToKey from 'evp_bytestokey';
-const algorithm = 'aes-256-cbc';
-const { keyLength, ivLength } = crypto.getCipherInfo(algorithm);
-
-function deriveLegacyKeyIv(secret: string) {
-  const { keyLength, ivLength } = crypto.getCipherInfo(algorithm); // 32, 16
-  const pass = Buffer.isBuffer(secret) ? secret : Buffer.from(secret ?? '', 'utf8');
-
-  // evp_bytestokey: key length in **bits**, IV length in **bytes**
-  const { key, iv } = EVP_BytesToKey(pass, null, keyLength * 8, ivLength, 'md5');
-
-  if (key.length !== keyLength || iv.length !== ivLength) {
-    throw new Error(`Derived wrong sizes (key=${key.length}, iv=${iv.length})`);
-  }
-  return { key, iv };
-}
-
-export function decrypt_legacy_using_IV(hexCiphertext: string) {
-  const { key, iv } = deriveLegacyKeyIv(process.env.JWT_SECRET);
-  const decipher = crypto.createDecipheriv(algorithm, key, iv);
-  const out = Buffer.concat([decipher.update(hexCiphertext, 'hex'), decipher.final()]);
-  return out.toString('utf8');
-}
-
-export function encrypt_legacy_using_IV(utf8Plaintext: string) {
-  const { key, iv } = deriveLegacyKeyIv(process.env.JWT_SECRET);
-  const cipher = crypto.createCipheriv(algorithm, key, iv);
-  const out = Buffer.concat([cipher.update(utf8Plaintext, 'utf8'), cipher.final()]);
-  return out.toString('hex');
-}
 
 const GCM_ALGORITHM = 'aes-256-gcm';
 const GCM_IV_LENGTH = 12;
@@ -101,14 +70,19 @@ export class AuthService {
     return encryptGcm(value);
   }
 
+  // GCM-only as of v1.0.0 — the legacy AES-CBC read fallback and the
+  // deterministic CBC writer are gone. Pre-v1 values are rewritten to `v2:`
+  // by the ledger-gated "legacy secret re-encryption" backfill step
+  // (libraries/nestjs-libraries/src/database/seeds/backfill.service.ts).
   static fixedDecryption(hash: string) {
-    if (hash?.startsWith(V2_PREFIX)) {
-      return decryptGcm(hash);
+    if (!hash?.startsWith(V2_PREFIX)) {
+      throw new Error(
+        'AuthService.fixedDecryption: refusing to decrypt a value that is not ' +
+          '`v2:`-encrypted. Legacy CBC/plaintext secrets are no longer readable — ' +
+          'the "legacy secret re-encryption" backfill step rewrites them at boot; ' +
+          'investigate why it has not run (or could not rewrite) this row.'
+      );
     }
-    return decrypt_legacy_using_IV(hash);
-  }
-
-  static fixedEncryptionDeterministic(value: string) {
-    return encrypt_legacy_using_IV(value);
+    return decryptGcm(hash);
   }
 }

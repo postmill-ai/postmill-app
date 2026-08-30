@@ -175,12 +175,10 @@ export class OAuthRepository {
     });
   }
 
-  findByCode(encryptedCode: string | string[]) {
+  findByCode(encryptedCode: string) {
     return this._oauthAuth.model.oAuthAuthorization.findFirst({
       where: {
-        authorizationCode: Array.isArray(encryptedCode)
-          ? { in: encryptedCode }
-          : encryptedCode,
+        authorizationCode: encryptedCode,
         revokedAt: null,
       },
     });
@@ -220,17 +218,15 @@ export class OAuthRepository {
     });
   }
 
-  findByAccessToken(encryptedToken: string | string[]) {
+  findByAccessToken(encryptedToken: string) {
     return this._oauthAuth.model.oAuthAuthorization.findFirst({
       where: {
-        accessToken: Array.isArray(encryptedToken)
-          ? { in: encryptedToken }
-          : encryptedToken,
+        accessToken: encryptedToken,
         revokedAt: null,
-        // Fail closed on expiry. tokenExpiresAt is nullable and only set
-        // conditionally, so allow null (legacy rows) but reject past-dated ones —
-        // an expired-but-unrevoked pos_ token must not authenticate forever.
-        OR: [{ tokenExpiresAt: null }, { tokenExpiresAt: { gt: new Date() } }],
+        // Fail closed on expiry: a null tokenExpiresAt is a pre-v1.0.0 legacy
+        // row and is treated as expired — an expired-or-undated-but-unrevoked
+        // pos_ token must not authenticate forever.
+        tokenExpiresAt: { gt: new Date() },
       },
       include: {
         organization: {
@@ -261,12 +257,10 @@ export class OAuthRepository {
     });
   }
 
-  findByRefreshToken(encryptedRefreshToken: string | string[]) {
+  findByRefreshToken(encryptedRefreshToken: string) {
     return this._oauthAuth.model.oAuthAuthorization.findFirst({
       where: {
-        refreshToken: Array.isArray(encryptedRefreshToken)
-          ? { in: encryptedRefreshToken }
-          : encryptedRefreshToken,
+        refreshToken: encryptedRefreshToken,
         revokedAt: null,
       },
     });

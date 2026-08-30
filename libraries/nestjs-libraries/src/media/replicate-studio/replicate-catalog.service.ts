@@ -70,11 +70,10 @@ export class ReplicateCatalogService {
     if (!apiKey) {
       throw new NotFoundException('Replicate API key is not configured');
     }
-    // Support both v2: encryption and plain storage by trying decrypt first
-    if (apiKey.startsWith('v2:')) {
-      return this._encryption.decrypt(apiKey);
-    }
-    return apiKey;
+    // Credentials are always v2:-encrypted at rest (the "legacy secret
+    // re-encryption" backfill step rewrites older rows at boot) — decrypt
+    // unconditionally; a non-v2: value throws from EncryptionService.decrypt.
+    return this._encryption.decrypt(apiKey);
   }
 
   private async _fetchModel(owner: string, name: string, apiKey: string): Promise<ReplicateModelApi> {

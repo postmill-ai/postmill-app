@@ -214,8 +214,9 @@ async function start() {
     const organizationService = app.get(OrganizationService);
     collabGateway.initialize(server, async (token: string) => {
       try {
-        const payload = AuthService.verifyJWT(token) as { id: string } | null;
-        if (!payload?.id) return null;
+        const payload = AuthService.verifyJWT(token) as { id: string; exp?: number } | null;
+        // Session tokens must carry `exp` (v1.0.0) — legacy exp-less JWTs are rejected.
+        if (!payload?.id || typeof payload.exp !== 'number') return null;
         const user = await usersService.getUserById(payload.id);
         if (!user) return null;
         const orgs = await organizationService.getOrgsByUserId(user.id);

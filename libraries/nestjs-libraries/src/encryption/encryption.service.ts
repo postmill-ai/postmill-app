@@ -10,8 +10,4 @@ export class EncryptionService {
   decrypt(stored: string): string {
     return AuthService.fixedDecryption(stored);
   }
-
-  encryptDeterministic(value: string): string {
-    return AuthService.fixedEncryptionDeterministic(value);
-  }
 }

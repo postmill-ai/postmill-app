@@ -7,7 +7,6 @@ vi.mock('@postmill-ai/helpers/auth/auth.service', () => ({
     fixedDecryption: vi.fn((value: string) =>
       value.startsWith('encrypted:') ? value.slice('encrypted:'.length) : value
     ),
-    verifyJWT: vi.fn(),
   },
 }));
 

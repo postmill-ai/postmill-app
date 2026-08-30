@@ -10,8 +10,6 @@ vi.mock('@postmill-ai/helpers/auth/auth.service', () => ({
     fixedEncryption: (value: string) => `encrypted:${value}`,
     fixedDecryption: (value: string) =>
       value.startsWith('encrypted:') ? value.slice('encrypted:'.length) : value,
-    signJWT: (payload: any) => `jwt:${JSON.stringify(payload)}`,
-    verifyJWT: (token: string) => JSON.parse(token.slice('jwt:'.length)),
   },
 }));
 
@@ -49,10 +47,11 @@ beforeEach(() => {
 });
 
 describe('NostrProvider.authenticate (S-19)', () => {
-  it('accepts a valid hex private key callback', async () => {
+  it('accepts a valid hex private key callback and stores the key v2:-encrypted (no JWT wrapping)', async () => {
     const provider = new NostrProvider();
+    const hexKey = 'aabbccdd00112233aabbccdd00112233aabbccdd00112233aabbccdd00112233';
     const result = await provider.authenticate({
-      code: encodeCallback({ password: 'aabbccdd00112233aabbccdd00112233aabbccdd00112233aabbccdd00112233' }),
+      code: encodeCallback({ password: hexKey }),
       codeVerifier: 'x',
     });
 
@@ -60,6 +59,7 @@ describe('NostrProvider.authenticate (S-19)', () => {
       throw new Error(`Expected object, got: ${result}`);
     }
     expect(result.name).toBe('Nostr User');
+    expect(result.accessToken).toBe(`encrypted:${hexKey}`);
   });
 
   it('rejects malformed base64/JSON', async () => {
