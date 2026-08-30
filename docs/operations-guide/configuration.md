@@ -227,13 +227,13 @@ These env vars are used only when no enabled DB config exists for the provider.
 |----------|---------|---------|
 | `GITHUB_CLIENT_ID` | — | GitHub OAuth app client ID |
 | `GITHUB_CLIENT_SECRET` | — | GitHub OAuth app client secret |
-| `YOUTUBE_CLIENT_ID` | — | Google OAuth login client ID (channel credentials are configured in Settings → Channels) |
-| `YOUTUBE_CLIENT_SECRET` | — | Google OAuth login client secret |
+| `YOUTUBE_CLIENT_ID` | — | Google OAuth login client ID. Also the platform channel app for YouTube posting (see below); Settings → Channels remains the per-org BYO override |
+| `YOUTUBE_CLIENT_SECRET` | — | Google OAuth login client secret (dual-use, same as above) |
 | `NEYNAR_SECRET_KEY` | — | Farcaster (Neynar) login only |
 
 ## Channel OAuth apps (platform click-connect)
 
-Setting a provider's platform OAuth app credentials here gives every organization one-click **Connect** without per-org key entry. Leaving a provider unset requires each org to add its own app via Settings → Channels. A per-org config always takes precedence.
+Setting a provider's platform OAuth app credentials here gives every organization one-click **Connect** without per-org key entry. Leaving a provider unset requires each org to add its own app via Settings → Channels. A per-org config always takes precedence. Step-by-step portal setup for each provider: [Platform Channel Apps](./platform-channel-apps.md).
 
 | Variable | Provider |
 |----------|----------|
@@ -244,22 +244,29 @@ Setting a provider's platform OAuth app credentials here gives every organizatio
 | `DISCORD_CLIENT_ID` / `DISCORD_CLIENT_SECRET` | Discord |
 | `SLACK_ID` / `SLACK_SECRET` | Slack |
 | `TIKTOK_CLIENT_ID` / `TIKTOK_CLIENT_SECRET` | TikTok |
+| `YOUTUBE_CLIENT_ID` / `YOUTUBE_CLIENT_SECRET` | YouTube channel posting (shared with Google login) |
 | `PINTEREST_CLIENT_ID` / `PINTEREST_CLIENT_SECRET` | Pinterest |
 | `REDDIT_CLIENT_ID` / `REDDIT_CLIENT_SECRET` | Reddit |
 | `TWITCH_CLIENT_ID` / `TWITCH_CLIENT_SECRET` | Twitch |
 | `THREADS_APP_ID` / `THREADS_APP_SECRET` | Threads |
 | `DRIBBBLE_CLIENT_ID` / `DRIBBBLE_CLIENT_SECRET` | Dribbble |
-| `MASTODON_CLIENT_ID` / `MASTODON_CLIENT_SECRET` | Mastodon |
+| `MASTODON_CLIENT_ID` / `MASTODON_CLIENT_SECRET` | Mastodon (optional — tenants can also just enter their instance hostname) |
 | `MEWE_APP_ID` / `MEWE_API_KEY` | Mewe |
 | `KICK_CLIENT_ID` / `KICK_SECRET` | Kick |
 | `GOOGLE_GMB_CLIENT_ID` / `GOOGLE_GMB_CLIENT_SECRET` | Google Business Profile |
-| `NEYNAR_CLIENT_ID` | Farcaster (Wrapcast) channel posting |
-| `VK_ID` | VK |
-| `WHOP_CLIENT_ID` | Whop |
-| `TELEGRAM_TOKEN` | Telegram bot token |
-| `YOUTUBE_CLIENT_ID` / `YOUTUBE_CLIENT_SECRET` | YouTube channel posting |
+| `NEYNAR_CLIENT_ID` / `NEYNAR_SECRET_KEY` | Farcaster (Wrapcast) channel posting |
+| `VK_ID` | VK (id only, no secret) |
+| `WHOP_CLIENT_ID` | Whop (id only, PKCE) |
+| `TELEGRAM_TOKEN` | Telegram bot token (token-only) |
+| `POSTMILL_OAUTH_CLIENT_ID` / `POSTMILL_OAUTH_CLIENT_SECRET` | Custom OAuth channel (shared with generic OIDC login) |
 
-Custom OAuth channels reuse `POSTMILL_OAUTH_CLIENT_ID` / `POSTMILL_OAUTH_CLIENT_SECRET`.
+Three opt-in flags make a channel app dual-use as a **login provider** (the matching channel creds above are required; the login page never advertises a provider whose channel app is unconfigured). See [Platform Channel Apps → SSO dual-use](./platform-channel-apps.md#sso-dual-use-login-with-the-same-app).
+
+| Variable | Default | Purpose |
+|----------|---------|---------|
+| `FACEBOOK_SSO_ENABLED` | `false` | Set to `true` to add a "Continue with Facebook" login button (requires `FACEBOOK_APP_ID` / `FACEBOOK_APP_SECRET`) |
+| `X_SSO_ENABLED` | `false` | Set to `true` to add a "Continue with X" login button (requires `X_API_KEY` / `X_API_SECRET`) |
+| `LINKEDIN_SSO_ENABLED` | `false` | Set to `true` to add a "Continue with LinkedIn" login button (requires `LINKEDIN_CLIENT_ID` / `LINKEDIN_CLIENT_SECRET`) |
 
 ## X channel behaviour
 
@@ -387,7 +394,6 @@ See [Video Rendering](./video-rendering.md) for the full list of `VIDEO_RENDER_*
 
 The following patterns are no longer supported as environment variables. Configure them in-app instead:
 
-- Channel provider `*_CLIENT_ID` / `*_CLIENT_SECRET` / `*_APP_ID` / `*_APP_SECRET` / `TELEGRAM_TOKEN`
 - `OPENAI_API_KEY` and other AI provider keys
 - Short-link provider vars (`DUB_TOKEN`, `SHORT_IO_SECRET_KEY`, `KUTT_API_KEY`, etc.)
 - Storage env vars (`STORAGE_PROVIDER`, `CLOUDFLARE_*`, etc.)
@@ -396,6 +402,6 @@ The following patterns are no longer supported as environment variables. Configu
 - `TRANSLOADIT_AUTH` / `TRANSLOADIT_SECRET` (legacy video assembly deleted)
 - `ELEVENLABS_API_KEY` / `ELEVENLABS_*` (legacy direct ElevenLabs calls deleted; configure ElevenLabs as an AI Media provider instead)
 
-The **login** provider env vars (`GITHUB_CLIENT_*`, `YOUTUBE_CLIENT_*`, `POSTMILL_OAUTH_*`) remain readable as the bootstrap fallback for auth providers managed by the separate administration app and must never be used for channel or AI credentials.
+Channel provider vars (`*_CLIENT_ID` / `*_CLIENT_SECRET` / `*_APP_ID` / `*_APP_SECRET` / `TELEGRAM_TOKEN`) **are** read — as the platform click-connect app covered in [Channel OAuth apps](#channel-oauth-apps-platform-click-connect); a per-org Settings → Channels config always wins. The `GITHUB_CLIENT_*` and `POSTMILL_OAUTH_*` vars remain login-provider configuration only (bootstrap fallback for auth providers managed by the separate administration app) and must never be used for AI credentials. `YOUTUBE_CLIENT_*` is dual-use: Google login **and** the YouTube platform channel app. `POSTMILL_OAUTH_CLIENT_ID` / `POSTMILL_OAUTH_CLIENT_SECRET` also back the custom OAuth channel.
 
-> Verified against v1.1.0 (2026-07-22)
+> Verified against v1.0.0

@@ -195,6 +195,7 @@ export default defineConfig({
             { text: 'Requirements', link: '/operations-guide/requirements' },
             { text: 'Docker Deployment', link: '/operations-guide/docker' },
             { text: 'Configuration', link: '/operations-guide/configuration' },
+            { text: 'Platform Channel Apps', link: '/operations-guide/platform-channel-apps' },
             { text: 'Inngest & Cron', link: '/operations-guide/inngest-and-cron' },
             { text: 'Video Rendering', link: '/operations-guide/video-rendering' },
             { text: 'Storage Setup', link: '/operations-guide/storage' },
