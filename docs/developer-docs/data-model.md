@@ -77,10 +77,10 @@
 |---|---|---|
 | `OrgProviderConfiguration` | Per-org channel provider OAuth credentials (encrypted). **Many named sets per provider** — unique on `(organizationId, identifier, name, version)`; resolved by row `id`. Replaces `ProviderConfiguration`. | FK → `Organization`; back-ref → `Integration[]` |
 | `OrgVpnConfig` | Per-org VPN/proxy provider config (Settings → VPN) — encrypted credentials, enabled `regions` JSON; SOCKS5/HTTP-CONNECT proxies power per-channel VPN egress | FK → `Organization` |
-| `ProviderConfiguration` | **DEPRECATED (pre-release)** — global provider config; replaced by per-tenant `OrgProviderConfiguration` | Standalone |
+| `ProviderConfiguration` | **Deprecated** — global provider config, no longer read anywhere; superseded by per-tenant `OrgProviderConfiguration`. Scheduled for removal. | Standalone |
 | `FeaturedProvider` | Platform-wide curated featured-provider list surfaced at the top of each domain's provider configuration UI | Unique on `(domain, providerId)` |
 
-A connected `Integration` carries a nullable `providerConfigId` FK (`onDelete: SetNull`) binding it to the named credential set it was connected through, so OAuth handshake, token refresh, and API calls use that set's own auth. When `providerConfigId` is `NULL` (legacy / unbound connections), credential resolution falls back to the org's primary set for the provider identifier (enabled-first).
+A connected `Integration` carries a nullable `providerConfigId` FK (`onDelete: SetNull`) binding it to the named credential set it was connected through, so OAuth handshake, token refresh, and API calls use that set's own auth. When `providerConfigId` is `NULL` (unbound connections), credential resolution falls back to the org's primary set for the provider identifier (enabled-first).
 
 ---
 
@@ -129,8 +129,8 @@ A connected `Integration` carries a nullable `providerConfigId` FK (`onDelete: S
 | `AIMediaJob` | Media pipeline job — operation, status, artifact URL, provenance, cost. Tracks async media generation (video/audio/avatar/stt) in the media-provider system. | FK → `Organization`, `User` (nullable) |
 | `AIPromptLibraryItem` | User-created reusable prompt library entries | FK → `Organization` |
 | `AIContentIndex` | RAG index — chunk metadata + BM25 text; embeddings in side table | FK → `Organization` |
-| `AIProviderConfig` | **DEPRECATED (pre-release)** — replaced by `AIOrgProviderConfig`; carries `reasoningModel` for parity | Standalone |
-| `AISystemSettings` | **DEPRECATED (pre-release)** — active provider moved to per-tenant; kept for scope models and governance | Standalone |
+| `AIProviderConfig` | **Deprecated** — replaced by `AIOrgProviderConfig`; carries `reasoningModel` for parity | Standalone |
+| `AISystemSettings` | **Deprecated** — active provider moved to per-tenant; kept for scope models and governance | Standalone |
 | `OrgDefaultModel` | Per-org per-domain/category default model/media settings (`domain`, `category`, `providerId`, `version`, `model`, `settings`) | Unique on `(organizationId, domain, category)` |
 
 ---

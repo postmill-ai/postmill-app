@@ -21,9 +21,6 @@ A single connected channel instance — credentials and settings for one account
 **Inngest**
 The durable job engine that schedules and executes background work. Postmill uses Inngest Cloud (or the local Inngest dev server) for event-driven and cron-triggered functions: post publishing, analytics collection, comment syncing, email delivery, autopost processing, and token refresh. Functions are served by the backend at `/api/inngest`.
 
-**Orchestrator** (legacy)
-The former Temporal worker application (`apps/orchestrator`) that hosted workflow and activity implementations. Removed before v1.0.0 (pre-release internal development); all background jobs now run through Inngest inside the backend.
-
 **Durable Execution**
 An execution model where job state is persisted on every step. Inngest provides retries, concurrency controls, and idempotency so that background work resumes reliably after restarts or failures.
 
