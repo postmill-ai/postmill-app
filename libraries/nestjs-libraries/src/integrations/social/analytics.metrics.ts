@@ -236,6 +236,25 @@ export const PROVIDER_METRIC_MAP: Record<string, Record<string, string>> = {
     Reblogs: 'reposts',
     Replies: 'replies',
   },
+  // Mastodon-API family subclasses expose the same metric surface.
+  gotosocial: {
+    Followers: 'followers',
+    Favourites: 'favorites',
+    Reblogs: 'reposts',
+    Replies: 'replies',
+  },
+  akkoma: {
+    Followers: 'followers',
+    Favourites: 'favorites',
+    Reblogs: 'reposts',
+    Replies: 'replies',
+  },
+  friendica: {
+    Followers: 'followers',
+    Favourites: 'favorites',
+    Reblogs: 'reposts',
+    Replies: 'replies',
+  },
   reddit: {
     // Post-level only (postAnalytics) — Reddit exposes no per-account channel
     // analytics; subreddit-agnostic per-post metrics via /api/info.

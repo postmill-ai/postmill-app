@@ -1,4 +1,5 @@
 import adobestockModules from '@postmill-ai/provider-adobe-stock';
+import akkomaModules from '@postmill-ai/provider-akkoma';
 import anthropicModules from '@postmill-ai/provider-anthropic';
 import apertusModules from '@postmill-ai/provider-apertus';
 import azureModules from '@postmill-ai/provider-azure';
@@ -31,6 +32,7 @@ import expressvpnModules from '@postmill-ai/provider-expressvpn';
 import facebookModules from '@postmill-ai/provider-facebook';
 import falModules from '@postmill-ai/provider-fal';
 import fireworksModules from '@postmill-ai/provider-fireworks';
+import friendicaModules from '@postmill-ai/provider-friendica';
 import gatewayModules from '@postmill-ai/provider-gateway';
 import genericModules from '@postmill-ai/provider-generic';
 import genviralModules from '@postmill-ai/provider-genviral';
@@ -39,6 +41,7 @@ import gmbModules from '@postmill-ai/provider-gmb';
 import gmihubModules from '@postmill-ai/provider-gmihub';
 import googleModules from '@postmill-ai/provider-google';
 import googleaiModules from '@postmill-ai/provider-google-ai';
+import gotosocialModules from '@postmill-ai/provider-gotosocial';
 import groqModules from '@postmill-ai/provider-groq';
 import hashnodeModules from '@postmill-ai/provider-hashnode';
 import hedraModules from '@postmill-ai/provider-hedra';
@@ -153,6 +156,7 @@ import { ProviderModule } from '@postmill-ai/provider-kernel';
 
 export const providerModules: ProviderModule<any, any>[] = [
   ...adobestockModules,
+  ...akkomaModules,
   ...anthropicModules,
   ...apertusModules,
   ...azureModules,
@@ -185,6 +189,7 @@ export const providerModules: ProviderModule<any, any>[] = [
   ...facebookModules,
   ...falModules,
   ...fireworksModules,
+  ...friendicaModules,
   ...gatewayModules,
   ...genericModules,
   ...genviralModules,
@@ -193,6 +198,7 @@ export const providerModules: ProviderModule<any, any>[] = [
   ...gmihubModules,
   ...googleModules,
   ...googleaiModules,
+  ...gotosocialModules,
   ...groqModules,
   ...hashnodeModules,
   ...hedraModules,

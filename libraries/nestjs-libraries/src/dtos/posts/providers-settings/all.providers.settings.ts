@@ -53,6 +53,9 @@ export type AllProvidersSettings =
   | ProviderExtension<'wrapcast', FarcasterDto>
   | ProviderExtension<'threads', ThreadsSettingsDto>
   | ProviderExtension<'mastodon', None>
+  | ProviderExtension<'gotosocial', None>
+  | ProviderExtension<'akkoma', None>
+  | ProviderExtension<'friendica', None>
   | ProviderExtension<'bluesky', None>
   | ProviderExtension<'telegram', None>
   | ProviderExtension<'nostr', None>
@@ -94,6 +97,9 @@ export const allProviders = (setEmpty?: any) => {
     { value: FacebookDto, name: 'facebook' },
     { value: ThreadsSettingsDto, name: 'threads' },
     { value: setEmpty, name: 'mastodon' },
+    { value: setEmpty, name: 'gotosocial' },
+    { value: setEmpty, name: 'akkoma' },
+    { value: setEmpty, name: 'friendica' },
     { value: setEmpty, name: 'bluesky' },
     { value: setEmpty, name: 'telegram' },
     { value: setEmpty, name: 'nostr' },

@@ -74,6 +74,9 @@ const EXPECTED_AUTH_TYPES: Record<string, string> = {
   peertube: 'direct', // customFields: instance/username/password
   pixelfed: 'direct', // customFields: instance/access token
   skool: 'direct', // isChromeExtension session-cookie capture
+  akkoma: 'direct', // externalUrl dynamic app registration (Mastodon-API family)
+  friendica: 'direct', // externalUrl dynamic app registration (Mastodon-API family)
+  gotosocial: 'direct', // externalUrl dynamic app registration (Mastodon-API family)
 };
 
 describe('channel setup descriptors — completeness and authType consistency', () => {

@@ -68,7 +68,7 @@ export class MastodonProvider extends SocialAbstract implements SocialProvider {
     url: string
   ) {
     return `${customUrl}/oauth/authorize?client_id=${clientId}&response_type=code&redirect_uri=${encodeURIComponent(
-      `${url}/integrations/social/mastodon`
+      `${url}/integrations/social/${this.identifier}`
     )}&scope=${this.scopes.join('+')}&state=${state}`;
   }
 
@@ -173,7 +173,7 @@ export class MastodonProvider extends SocialAbstract implements SocialProvider {
     form.append('grant_type', 'authorization_code');
     form.append(
       'redirect_uri',
-      `${process.env.FRONTEND_URL}/integrations/social/mastodon`
+      `${process.env.FRONTEND_URL}/integrations/social/${this.identifier}`
     );
     form.append('scope', this.scopes.join(' '));
 

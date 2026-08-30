@@ -64,6 +64,12 @@
       "@postmill-ai/provider-adobe-stock/*": [
         "libraries/providers/adobe-stock/src/*"
       ],
+      "@postmill-ai/provider-akkoma": [
+        "libraries/providers/akkoma/src"
+      ],
+      "@postmill-ai/provider-akkoma/*": [
+        "libraries/providers/akkoma/src/*"
+      ],
       "@postmill-ai/provider-anthropic": [
         "libraries/providers/anthropic/src"
       ],
@@ -256,6 +262,12 @@
       "@postmill-ai/provider-fireworks/*": [
         "libraries/providers/fireworks/src/*"
       ],
+      "@postmill-ai/provider-friendica": [
+        "libraries/providers/friendica/src"
+      ],
+      "@postmill-ai/provider-friendica/*": [
+        "libraries/providers/friendica/src/*"
+      ],
       "@postmill-ai/provider-gateway": [
         "libraries/providers/gateway/src"
       ],
@@ -303,6 +315,12 @@
       ],
       "@postmill-ai/provider-google-ai/*": [
         "libraries/providers/google-ai/src/*"
+      ],
+      "@postmill-ai/provider-gotosocial": [
+        "libraries/providers/gotosocial/src"
+      ],
+      "@postmill-ai/provider-gotosocial/*": [
+        "libraries/providers/gotosocial/src/*"
       ],
       "@postmill-ai/provider-groq": [
         "libraries/providers/groq/src"

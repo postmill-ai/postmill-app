@@ -18,6 +18,9 @@ import SlackProvider from '@postmill-ai/frontend/components/composer/providers/s
 import KickProvider from '@postmill-ai/frontend/components/composer/providers/kick/kick.provider';
 import TwitchProvider from '@postmill-ai/frontend/components/composer/providers/twitch/twitch.provider';
 import MastodonProvider from '@postmill-ai/frontend/components/composer/providers/mastodon/mastodon.provider';
+import GoToSocialProvider from '@postmill-ai/frontend/components/composer/providers/gotosocial/gotosocial.provider';
+import AkkomaProvider from '@postmill-ai/frontend/components/composer/providers/akkoma/akkoma.provider';
+import FriendicaProvider from '@postmill-ai/frontend/components/composer/providers/friendica/friendica.provider';
 import BlueskyProvider from '@postmill-ai/frontend/components/composer/providers/bluesky/bluesky.provider';
 import LemmyProvider from '@postmill-ai/frontend/components/composer/providers/lemmy/lemmy.provider';
 import WarpcastProvider from '@postmill-ai/frontend/components/composer/providers/warpcast/warpcast.provider';
@@ -123,6 +126,18 @@ export const Providers = [
   {
     identifier: 'mastodon',
     component: MastodonProvider,
+  },
+  {
+    identifier: 'gotosocial',
+    component: GoToSocialProvider,
+  },
+  {
+    identifier: 'akkoma',
+    component: AkkomaProvider,
+  },
+  {
+    identifier: 'friendica',
+    component: FriendicaProvider,
   },
   {
     identifier: 'bluesky',
