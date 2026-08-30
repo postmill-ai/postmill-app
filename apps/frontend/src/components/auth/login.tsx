@@ -11,6 +11,9 @@ import { LoginUserDto } from '@postmill-ai/nestjs-libraries/dtos/auth/login.user
 import { GithubProvider } from '@postmill-ai/frontend/components/auth/providers/github.provider';
 import { OauthProvider } from '@postmill-ai/frontend/components/auth/providers/oauth.provider';
 import { GoogleProvider } from '@postmill-ai/frontend/components/auth/providers/google.provider';
+import { FacebookProvider } from '@postmill-ai/frontend/components/auth/providers/facebook.provider';
+import { XProvider } from '@postmill-ai/frontend/components/auth/providers/x.provider';
+import { LinkedinProvider } from '@postmill-ai/frontend/components/auth/providers/linkedin.provider';
 import { FarcasterProvider } from '@postmill-ai/frontend/components/auth/providers/farcaster.provider';
 import { useT } from '@postmill-ai/react/translation/get.transation.service.client';
 import useSWR from 'swr';
@@ -43,6 +46,9 @@ export const providerComponents: Record<string, React.ComponentType> = {
   LOCAL: () => null,
   GITHUB: GithubProvider,
   GOOGLE: GoogleProvider,
+  FACEBOOK: FacebookProvider,
+  X: XProvider,
+  LINKEDIN: LinkedinProvider,
   FARCASTER: FarcasterProvider,
   GENERIC: OauthProvider,
   WALLET: WalletProvider,

@@ -43,28 +43,16 @@ export class AuthProviderManager {
   /**
    * Compose the public list of enabled login providers.
    *
-   * DB-backed provider configs (AuthProviderConfig) take precedence. When no
-   * enabled DB config exists, we fall back to the deployment env keys — but
-   * only for providers whose full env credential set is actually present, so
-   * the login page never advertises a provider whose adapter cannot resolve.
+   * LOCAL is always present. The env-derived list advertises a provider only
+   * when its full env credential set is actually present, so the login page
+   * never advertises a provider whose adapter cannot resolve. Enabled
+   * DB-backed configs (AuthProviderConfig) are then overlaid: DB wins per
+   * provider key (DB displayName preferred), while env-only providers stay
+   * listed.
    */
   async getProviders() {
     const dbProviders = await this._authProviderRepo.list();
     const enabledFromDb = dbProviders.filter((p) => p.enabled);
-
-    if (enabledFromDb.length > 0) {
-      return {
-        providers: enabledFromDb.map((p) => ({
-          provider: p.provider,
-          displayName:
-            p.displayName ||
-            (p.provider === 'GENERIC'
-              ? process.env.NEXT_PUBLIC_POSTMILL_OAUTH_DISPLAY_NAME || 'OIDC'
-              : p.provider.charAt(0) + p.provider.slice(1).toLowerCase()),
-          ...this._versionInfo(p.provider),
-        })),
-      };
-    }
 
     const providers: {
       provider: string;
@@ -128,6 +116,64 @@ export class AuthProviderManager {
         displayName: 'Wallet',
         ...this._versionInfo('WALLET'),
       });
+    }
+
+    // Dual-use channel OAuth apps: a platform's social-channel env credentials
+    // double as SSO login when its <CHANNEL>_SSO_ENABLED flag is set.
+    if (
+      process.env.FACEBOOK_SSO_ENABLED === 'true' &&
+      process.env.FACEBOOK_APP_ID &&
+      process.env.FACEBOOK_APP_SECRET
+    ) {
+      providers.push({
+        provider: 'FACEBOOK',
+        displayName: 'Facebook',
+        ...this._versionInfo('FACEBOOK'),
+      });
+    }
+
+    if (
+      process.env.X_SSO_ENABLED === 'true' &&
+      process.env.X_API_KEY &&
+      process.env.X_API_SECRET
+    ) {
+      providers.push({
+        provider: 'X',
+        displayName: 'X',
+        ...this._versionInfo('X'),
+      });
+    }
+
+    if (
+      process.env.LINKEDIN_SSO_ENABLED === 'true' &&
+      process.env.LINKEDIN_CLIENT_ID &&
+      process.env.LINKEDIN_CLIENT_SECRET
+    ) {
+      providers.push({
+        provider: 'LINKEDIN',
+        displayName: 'LinkedIn',
+        ...this._versionInfo('LINKEDIN'),
+      });
+    }
+
+    // Overlay enabled DB-backed configs: DB wins per provider key (DB
+    // displayName preferred), env-only providers stay listed.
+    for (const p of enabledFromDb) {
+      const entry = {
+        provider: p.provider,
+        displayName:
+          p.displayName ||
+          (p.provider === 'GENERIC'
+            ? process.env.NEXT_PUBLIC_POSTMILL_OAUTH_DISPLAY_NAME || 'OIDC'
+            : p.provider.charAt(0) + p.provider.slice(1).toLowerCase()),
+        ...this._versionInfo(p.provider),
+      };
+      const existing = providers.findIndex((e) => e.provider === p.provider);
+      if (existing > -1) {
+        providers[existing] = entry;
+      } else {
+        providers.push(entry);
+      }
     }
 
     return { providers };

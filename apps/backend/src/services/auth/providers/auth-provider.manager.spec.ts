@@ -23,6 +23,15 @@ const PROVIDER_ENV_VARS = [
   'GITHUB_CLIENT_SECRET',
   'NEYNAR_CLIENT_ID',
   'STRIPE_PUBLISHABLE_KEY',
+  'FACEBOOK_SSO_ENABLED',
+  'FACEBOOK_APP_ID',
+  'FACEBOOK_APP_SECRET',
+  'X_SSO_ENABLED',
+  'X_API_KEY',
+  'X_API_SECRET',
+  'LINKEDIN_SSO_ENABLED',
+  'LINKEDIN_CLIENT_ID',
+  'LINKEDIN_CLIENT_SECRET',
 ];
 
 function clearProviderEnv() {
@@ -86,7 +95,8 @@ afterEach(() => {
 
 describe('AuthProviderManager', () => {
   describe('getProviders', () => {
-    it('returns enabled DB providers when at least one is configured', async () => {
+    it('overlays enabled DB providers onto the env list (LOCAL always present)', async () => {
+      clearProviderEnv();
       const { manager, kernel, repo } = makeManager({
         repo: {
           list: vi.fn().mockResolvedValue([
@@ -110,8 +120,42 @@ describe('AuthProviderManager', () => {
 
       expect(repo.list).toHaveBeenCalled();
       expect(result.providers).toEqual([
+        { provider: 'LOCAL', displayName: 'Email', version: 'v2', status: 'active' },
         { provider: 'GOOGLE', displayName: 'Workspace SSO', version: 'v2', status: 'active' },
         { provider: 'GENERIC', displayName: 'OIDC', version: 'v2', status: 'active' },
+      ]);
+    });
+
+    it('merges DB rows with env providers: DB wins per provider, env-only providers stay listed', async () => {
+      clearProviderEnv();
+      process.env.YOUTUBE_CLIENT_ID = 'yt-id';
+      process.env.YOUTUBE_CLIENT_SECRET = 'yt-secret';
+      process.env.FACEBOOK_SSO_ENABLED = 'true';
+      process.env.FACEBOOK_APP_ID = 'fb-app-id';
+      process.env.FACEBOOK_APP_SECRET = 'fb-app-secret';
+      const { manager } = makeManager({
+        repo: {
+          list: vi.fn().mockResolvedValue([
+            {
+              provider: 'GOOGLE',
+              enabled: true,
+              displayName: 'Workspace SSO',
+            },
+            { provider: 'X', enabled: true, displayName: null },
+          ]),
+        },
+      });
+
+      const result = await manager.getProviders();
+
+      expect(result.providers).toEqual([
+        { provider: 'LOCAL', displayName: 'Email', version: 'v1', status: 'active' },
+        // DB row wins over the env-derived GOOGLE entry (DB displayName preferred)
+        { provider: 'GOOGLE', displayName: 'Workspace SSO', version: 'v1', status: 'active' },
+        // env-only provider stays listed
+        { provider: 'FACEBOOK', displayName: 'Facebook', version: 'v1', status: 'active' },
+        // DB-only provider is appended
+        { provider: 'X', displayName: 'X', version: 'v1', status: 'active' },
       ]);
     });
 
@@ -235,6 +279,55 @@ describe('AuthProviderManager', () => {
         'LOCAL',
         'FARCASTER',
         'WALLET',
+      ]);
+    });
+
+    it('does not advertise FACEBOOK/X/LINKEDIN when the SSO flags are off, even with channel creds set', async () => {
+      clearProviderEnv();
+      process.env.FACEBOOK_APP_ID = 'fb-app-id';
+      process.env.FACEBOOK_APP_SECRET = 'fb-app-secret';
+      process.env.X_API_KEY = 'x-key';
+      process.env.X_API_SECRET = 'x-secret';
+      process.env.LINKEDIN_CLIENT_ID = 'li-id';
+      process.env.LINKEDIN_CLIENT_SECRET = 'li-secret';
+      const { manager } = makeManager({});
+
+      const result = await manager.getProviders();
+
+      expect(result.providers.map((p: any) => p.provider)).toEqual(['LOCAL']);
+    });
+
+    it('does not advertise FACEBOOK when the flag is on but the secret is missing (half-config)', async () => {
+      clearProviderEnv();
+      process.env.FACEBOOK_SSO_ENABLED = 'true';
+      process.env.FACEBOOK_APP_ID = 'fb-app-id';
+      const { manager } = makeManager({});
+
+      const result = await manager.getProviders();
+
+      expect(result.providers.map((p: any) => p.provider)).toEqual(['LOCAL']);
+    });
+
+    it('advertises FACEBOOK, X and LINKEDIN when each SSO flag is on and its channel creds are present', async () => {
+      clearProviderEnv();
+      process.env.FACEBOOK_SSO_ENABLED = 'true';
+      process.env.FACEBOOK_APP_ID = 'fb-app-id';
+      process.env.FACEBOOK_APP_SECRET = 'fb-app-secret';
+      process.env.X_SSO_ENABLED = 'true';
+      process.env.X_API_KEY = 'x-key';
+      process.env.X_API_SECRET = 'x-secret';
+      process.env.LINKEDIN_SSO_ENABLED = 'true';
+      process.env.LINKEDIN_CLIENT_ID = 'li-id';
+      process.env.LINKEDIN_CLIENT_SECRET = 'li-secret';
+      const { manager } = makeManager({});
+
+      const result = await manager.getProviders();
+
+      expect(result.providers.map((p: any) => p.provider)).toEqual([
+        'LOCAL',
+        'FACEBOOK',
+        'X',
+        'LINKEDIN',
       ]);
     });
 

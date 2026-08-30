@@ -91,17 +91,24 @@ export async function proxy(request: NextRequest) {
   const org = nextUrl.searchParams.get('org');
   const url = new URL(nextUrl).search;
   if (!nextUrl.pathname.startsWith('/auth') && !authCookie) {
-    const providers = ['google', 'settings'];
-    const findIndex = providers.find((p) => nextUrl.href.indexOf(p) > -1);
-    const additional = !findIndex
+    // Explicit pathname → login-provider map for OAuth callbacks carrying
+    // state=login (channel-connect callbacks without state=login returned
+    // above and never reach this branch). /settings is the GitHub/Generic
+    // login callback; /integrations/social/* are the dual-use channel apps.
+    const callbackProvider: Record<string, string> = {
+      '/integrations/social/youtube': 'GOOGLE',
+      '/integrations/social/facebook': 'FACEBOOK',
+      '/integrations/social/x': 'X',
+      '/integrations/social/linkedin': 'LINKEDIN',
+    };
+    const provider = nextUrl.pathname.startsWith('/settings')
+      ? process.env.POSTMILL_GENERIC_OAUTH === 'true'
+        ? 'GENERIC'
+        : 'GITHUB'
+      : callbackProvider[nextUrl.pathname];
+    const additional = !provider
       ? ''
-      : (url.indexOf('?') > -1 ? '&' : '?') +
-        `provider=${(findIndex === 'settings'
-          ? process.env.POSTMILL_GENERIC_OAUTH === 'true'
-            ? 'generic'
-            : 'github'
-          : findIndex
-        ).toUpperCase()}`;
+      : (url.indexOf('?') > -1 ? '&' : '?') + `provider=${provider}`;
     return NextResponse.redirect(
       new URL(`/auth${url}${additional}`, nextUrl.href)
     );

@@ -1,3 +1,7 @@
+// DEPRECATED: platform channel apps now live in env vars (see
+// channel-env-credentials.ts); this global DB scope is read nowhere in live
+// paths and will be removed in a future release.
+
 import { Injectable, Logger } from '@nestjs/common';
 import { ProviderConfigRepository } from './provider-config.repository';
 import { AuthService } from '@postmill-ai/helpers/auth/auth.service';
