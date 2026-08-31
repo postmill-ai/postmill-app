@@ -117,8 +117,8 @@ Rules:
   - stable `id` prop (`data-section-id`), `title`, optional `icon`, `badge`, `viewAllHref`;
   - optional `permission?: [resource, action]` — hidden when `usePermissions()` resolves false;
   - visibility toggle via `useDashboardPrefs().hidden` (returns `null` when hidden);
-  - internally wraps children in `ErrorBoundary` (`components/analytics-v2/error.boundary`) +
-    `ErrorState` (`components/analytics-v2/kit/states`).
+  - internally wraps children in `ErrorBoundary` (`components/analytics/error.boundary`) +
+    `ErrorState` (`components/analytics/kit/states`).
 
 ## Capability-aware UI (social channels)
 

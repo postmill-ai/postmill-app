@@ -3,10 +3,10 @@
 import React, { useMemo, useState } from 'react';
 import dayjs from 'dayjs';
 import { useIntegrationList } from '@postmill-ai/frontend/components/launches/helpers/use.integration.list';
-import { useOverview } from '@postmill-ai/frontend/components/analytics-v2/hooks/useOverview';
+import { useOverview } from '@postmill-ai/frontend/components/analytics/hooks/useOverview';
 import { useDashboardSummary } from './hooks/useDashboardSummary';
-import { LineChart } from '@postmill-ai/frontend/components/analytics-v2/charts/line.chart';
-import { EmptyState } from '@postmill-ai/frontend/components/analytics-v2/kit/states';
+import { LineChart } from '@postmill-ai/frontend/components/analytics/charts/line.chart';
+import { EmptyState } from '@postmill-ai/frontend/components/analytics/kit/states';
 import { DashboardSetup } from './dashboard.setup';
 import { SectionCard } from './kit/section-card';
 import { DashboardHeader } from './dashboard.header';

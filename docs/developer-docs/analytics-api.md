@@ -1,14 +1,23 @@
-# Analytics API (v2)
+# Analytics API
 
-The Analytics v2 API serves persisted multi-channel analytics from daily snapshots collected by the Inngest `analytics-collection` cron function.
+The Analytics API serves persisted multi-channel analytics from daily snapshots collected by the Inngest `analytics-collection` cron function.
 
-All cookie-authenticated endpoints are scoped to the org resolved from the session. Public share endpoints are unauthenticated and token-gated.
+There is one analytics surface: every route lives under `/public/v1/analytics/*` and is consumed by the dashboard (session cookie), integrators (API key), and MCP/OAuth clients (`pos_` tokens) alike, through the dual-auth public middleware. All endpoints are scoped to the org resolved from the credential or session. Public share report endpoints are unauthenticated and token-gated.
 
 ## Authorization
 
-- **Reads** (`GET /analytics/v2/*`) are cookie-authenticated org routes. `/narrate` additionally requires the `analytics:read` RBAC permission.
-- **Mutating routes** (`POST /analytics/v2/share`, `DELETE /analytics/v2/share`, `POST /analytics/v2/alert-rules`, `PUT/DELETE /analytics/v2/alert-rules/:id`, `POST /analytics/v2/anomalies/:id/dismiss`, `POST /analytics/v2/refresh/:integrationId`, and all `/analytics/v2/watchlist*` writes) require the `analytics:update` RBAC permission.
-- **Public read routes** (`/public/analytics-report/:token`, `/public/v1/analytics/*`) are API-key or token authenticated.
+Three credential types reach the same routes:
+
+| Credential | Presented as | Gates | Throttle |
+|------------|--------------|-------|----------|
+| API key (`pm_live_`) | `Authorization` header | No entitlement/RBAC gate — throttled read parity | 60/min per route |
+| OAuth token (`pos_`) | `Authorization` header | No entitlement/RBAC gate — throttled read parity | 60/min per route |
+| Dashboard session cookie | Cookie | RBAC + entitlement enforced; `x-csrf-token` required on mutations | App-route limits |
+
+- **Cookie-authenticated reads** are org routes. `/narrate` additionally requires the `analytics:read` RBAC permission.
+- **Cookie-authenticated mutating routes** (`POST /public/v1/analytics/share`, `DELETE /public/v1/analytics/share`, `POST /public/v1/analytics/alert-rules`, `PUT/DELETE /public/v1/analytics/alert-rules/:id`, `POST /public/v1/analytics/anomalies/:id/dismiss`, `POST /public/v1/analytics/refresh/:integrationId`, and all `/public/v1/analytics/watchlist*` writes) require the `analytics:update` RBAC permission and the `x-csrf-token` header.
+- **API-key/OAuth callers** get throttled, ungated read parity (the pre-existing public posture). The RBAC permissions listed in the tables below apply to cookie-authenticated callers only.
+- **Public read route** (`/public/analytics-report/:token`) is unauthenticated and token-gated.
 
 ## Date validation
 
@@ -25,7 +34,7 @@ All date-range endpoints validate:
 
 | Method | Path | Purpose |
 |--------|------|---------|
-| GET | `/analytics/v2/overview` | Dashboard overview |
+| GET | `/public/v1/analytics/overview` | Dashboard overview |
 
 Params: `from`, `to`, `integrations?`, `compare?`, `campaigns?`
 
@@ -35,8 +44,8 @@ Returns aggregated metrics across all or filtered integrations for a date range 
 
 | Method | Path | Purpose |
 |--------|------|---------|
-| GET | `/analytics/v2/channel/:integrationId` | Single channel analytics |
-| GET | `/analytics/v2/channel/:integrationId/metric/:metric` | Specific metric for a channel |
+| GET | `/public/v1/analytics/channel/:integrationId` | Single channel analytics |
+| GET | `/public/v1/analytics/channel/:integrationId/metric/:metric` | Specific metric for a channel |
 
 Params: `from`, `to`, `compare?`
 
@@ -46,8 +55,8 @@ Returns channel-level analytics with daily breakdowns. The metric detail variant
 
 | Method | Path | Purpose |
 |--------|------|---------|
-| GET | `/analytics/v2/posts` | Paginated post list with metrics |
-| GET | `/analytics/v2/post/:postId` | Single post detail |
+| GET | `/public/v1/analytics/posts` | Paginated post list with metrics |
+| GET | `/public/v1/analytics/post/:postId` | Single post detail |
 
 Params (`posts`): `from`, `to`, `integrations?`, `campaigns?`, `sort?`, `dir?`, `page?`, `limit?`  
 Params (`post`): `date?`
@@ -59,8 +68,8 @@ Params (`post`): `date?`
 
 | Method | Path | Purpose |
 |--------|------|---------|
-| GET | `/analytics/v2/metric/:metric` | Metric detail across date range |
-| GET | `/analytics/v2/day` | Day-level detail |
+| GET | `/public/v1/analytics/metric/:metric` | Metric detail across date range |
+| GET | `/public/v1/analytics/day` | Day-level detail |
 
 Params (`metric`): `from`, `to`, `integrations?`, `compare?`, `campaigns?`  
 Params (`day`): `date`, `metric`, `integrations`, `campaigns?`
@@ -71,28 +80,28 @@ The metric endpoint provides cross-channel detail for a single metric. The day e
 
 | Method | Path | Purpose |
 |--------|------|---------|
-| GET | `/analytics/v2/best-time` | Best-time-to-post heatmap |
-| GET | `/analytics/v2/recommendations` | AI-powered recommendations |
-| GET | `/analytics/v2/content-insights` | Content-attribute intelligence |
-| POST | `/analytics/v2/narrate` | LLM-narrated summary |
+| GET | `/public/v1/analytics/best-time` | Best-time-to-post heatmap |
+| GET | `/public/v1/analytics/recommendations` | AI-powered recommendations |
+| GET | `/public/v1/analytics/content-insights` | Content-attribute intelligence |
+| POST | `/public/v1/analytics/narrate` | LLM-narrated summary |
 
 - **Best time**: `?integrations=&integration=&tz=` returns a structured day × hour engagement heatmap plus a list of `bestSlots`. Pass `tz` as an IANA timezone; without it, post dates are interpreted as UTC.
 - **Recommendations**: returns prioritized actions (underperforming channels, top patterns, best-time opportunities, missing coverage, comment backlog), each deep-linking to the relevant view.
 - **Content insights**: surfaces which post attributes are correlated with performance.
-- **Narrate**: budget-gated (returns 429 if AI budget exceeded). Requires `analytics:read`. The no-provider rule is enforced in the service.
+- **Narrate**: budget-gated (returns 429 if AI budget exceeded). Requires `analytics:read` for cookie callers. The no-provider rule is enforced in the service.
 
 ## Health and refresh
 
 | Method | Path | Permission | Purpose |
 |--------|------|------------|---------|
-| GET | `/analytics/v2/health` | — | Data-health panel |
-| POST | `/analytics/v2/refresh/:integrationId` | `analytics:update` | On-demand live channel refresh (~6/hour) |
+| GET | `/public/v1/analytics/health` | — | Data-health panel |
+| POST | `/public/v1/analytics/refresh/:integrationId` | `analytics:update` | On-demand live channel refresh (~6/hour) |
 
 ## Export
 
 | Method | Path | Purpose |
 |--------|------|---------|
-| GET | `/analytics/v2/export` | CSV/JSON export |
+| GET | `/public/v1/analytics/export` | CSV/JSON export |
 
 Params: `from`, `to`, `integrations?`, `format?` (`csv` or `json`), `compare?`, `campaigns?`
 
@@ -102,8 +111,8 @@ Returns a file download with `Content-Disposition: attachment`.
 
 | Method | Path | Purpose |
 |--------|------|---------|
-| GET | `/analytics/v2/shortlinks` | Short-link aggregate stats |
-| GET | `/analytics/v2/shortlinks/timeseries` | Short-link click time series |
+| GET | `/public/v1/analytics/shortlinks` | Short-link aggregate stats |
+| GET | `/public/v1/analytics/shortlinks/timeseries` | Short-link click time series |
 
 Both accept `from?` and `to?` and default to the last 30 days.
 
@@ -111,19 +120,19 @@ Both accept `from?` and `to?` and default to the last 30 days.
 
 | Method | Path | Permission | Purpose |
 |--------|------|------------|---------|
-| GET | `/analytics/v2/anomalies` | — | List detected anomalies |
-| POST | `/analytics/v2/anomalies/:id/dismiss` | `analytics:update` | Dismiss an anomaly |
+| GET | `/public/v1/analytics/anomalies` | — | List detected anomalies |
+| POST | `/public/v1/analytics/anomalies/:id/dismiss` | `analytics:update` | Dismiss an anomaly |
 
-`GET /analytics/v2/anomalies` returns stored `AnalyticsAnomaly` rows with `integrationId`, `metric`, `date`, `value`, `baseline`, signed `deviation`, `direction` (`spike` | `drop`), and optional `topPostId`. `includeDismissed=true` includes already-dismissed rows.
+`GET /public/v1/analytics/anomalies` returns stored `AnalyticsAnomaly` rows with `integrationId`, `metric`, `date`, `value`, `baseline`, signed `deviation`, `direction` (`spike` | `drop`), and optional `topPostId`. `includeDismissed=true` includes already-dismissed rows.
 
 ## Alert rules
 
 | Method | Path | Permission | Purpose |
 |--------|------|------------|---------|
-| GET | `/analytics/v2/alert-rules` | — | List user-defined alert rules |
-| POST | `/analytics/v2/alert-rules` | `analytics:update` | Create a rule |
-| PUT | `/analytics/v2/alert-rules/:id` | `analytics:update` | Update a rule |
-| DELETE | `/analytics/v2/alert-rules/:id` | `analytics:update` | Delete a rule |
+| GET | `/public/v1/analytics/alert-rules` | — | List user-defined alert rules |
+| POST | `/public/v1/analytics/alert-rules` | `analytics:update` | Create a rule |
+| PUT | `/public/v1/analytics/alert-rules/:id` | `analytics:update` | Update a rule |
+| DELETE | `/public/v1/analytics/alert-rules/:id` | `analytics:update` | Delete a rule |
 
 Rule body:
 
@@ -142,11 +151,11 @@ Rule body:
 
 | Method | Path | Permission | Purpose |
 |--------|------|------------|---------|
-| GET | `/analytics/v2/watchlist` | — | List watched accounts |
-| POST | `/analytics/v2/watchlist` | `analytics:update` + competitors | Add account |
-| GET | `/analytics/v2/watchlist/:id/series` | — | Watched-account series + own follower series |
-| PUT | `/analytics/v2/watchlist/:id` | `analytics:update` | Update account |
-| DELETE | `/analytics/v2/watchlist/:id` | `analytics:update` | Remove account |
+| GET | `/public/v1/analytics/watchlist` | — | List watched accounts |
+| POST | `/public/v1/analytics/watchlist` | `analytics:update` + competitors | Add account |
+| GET | `/public/v1/analytics/watchlist/:id/series` | — | Watched-account series + own follower series |
+| PUT | `/public/v1/analytics/watchlist/:id` | `analytics:update` | Update account |
+| DELETE | `/public/v1/analytics/watchlist/:id` | `analytics:update` | Remove account |
 
 Body (`POST`): `{ provider, handle, displayName? }` where `provider` is one of `twitter`, `linkedin`, `instagram`, `facebook`, `youtube`, `tiktok`.
 
@@ -158,12 +167,12 @@ Watched accounts have their public metrics probed during the analytics collectio
 
 | Method | Path | Auth | Purpose |
 |--------|------|------|---------|
-| GET | `/analytics/v2/share` | cookie + `analytics:update` | Get current share token |
-| POST | `/analytics/v2/share` | cookie + `analytics:update` | Mint or rotate share token |
-| DELETE | `/analytics/v2/share` | cookie + `analytics:update` | Disable sharing |
+| GET | `/public/v1/analytics/share` | cookie + `analytics:update` | Get current share token |
+| POST | `/public/v1/analytics/share` | cookie + `analytics:update` | Mint or rotate share token |
+| DELETE | `/public/v1/analytics/share` | cookie + `analytics:update` | Disable sharing |
 | GET | `/public/analytics-report/:token` | none | Read-only public share report |
 
-`POST /analytics/v2/share` body: `{ integrations?: string[], rangePreset?: '7d' | '30d' | '90d' }`.
+`POST /public/v1/analytics/share` body: `{ integrations?: string[], rangePreset?: '7d' | '30d' | '90d' }`.
 
 `GET /public/analytics-report/:token` returns the org's public analytics report if sharing is enabled and the token is valid; otherwise `404`.
 
@@ -171,10 +180,10 @@ Watched accounts have their public metrics probed during the analytics collectio
 
 | Method | Path | Purpose |
 |--------|------|---------|
-| GET | `/campaigns/:id/analytics` | Campaign-scoped analytics (authed) |
-| GET | `/public/v1/analytics/campaign/:id` | Campaign-scoped analytics (public API key) |
+| GET | `/campaigns/:id/analytics` | Campaign-scoped analytics (cookie-authed campaign hub) |
+| GET | `/public/v1/analytics/campaign/:id` | Campaign-scoped analytics (unified surface) |
 
-Params: `from?`, `to?` (default to the campaign's `startDate`→`endDate`, clamped to snapshot retention).
+Params: `from?`, `to?` (default to the last 90 days, clamped to snapshot retention).
 
 Campaign scoping runs only over `PostAnalyticsSnapshot` rows for posts belonging to the campaign. The live provider fallback is skipped, so a campaign view never fans out to live platform queries. Channel-level metrics (e.g. `followers`) are omitted.
 
@@ -202,16 +211,6 @@ Connecting a new social channel emits an `analytics/backfill` Inngest event, gat
 
 - Daily `AnalyticsSnapshot` rows older than `ANALYTICS_DAILY_RETENTION_DAYS` (default 548) are rolled into one weekly row per `(integration, metric, ISO week)`. Flow metrics are summed; stock metrics keep the week's latest.
 - Daily `PostAnalyticsSnapshot` rows older than `ANALYTICS_POST_RETENTION_DAYS` (default 90) are pruned after weekly rollup. Because post-snapshot values are cumulative levels, weekly rows keep the week's latest level so read-time level-differencing works unchanged across the daily→weekly seam.
-
-### Public API (v2)
-
-For n8n/Zapier-style integrations, parallel read-only routes are exposed under the public API:
-
-| Method | Path | Purpose |
-|--------|------|---------|
-| GET | `/public/v1/analytics/overview` | Org overview |
-| GET | `/public/v1/analytics/campaign/:id` | Campaign-scoped analytics |
-| GET | `/public/v1/analytics/anomalies` | Detected anomalies |
 
 ## Environment variables
 

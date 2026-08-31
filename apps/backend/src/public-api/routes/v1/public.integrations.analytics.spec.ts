@@ -73,6 +73,64 @@ describe('PublicAnalyticsV1Controller.getCampaignAnalytics — R2.4 date validat
     );
     expect(res.window).toEqual({ from: '2024-01-01', to: '2024-01-31' });
   });
+
+  it('404s when the campaign does not belong to the org', async () => {
+    const { ctrl, campaignsService, analyticsService } = make();
+    campaignsService.get.mockResolvedValue(null);
+
+    await expect(
+      ctrl.getCampaignAnalytics(org, 'c-x', '2024-01-01', '2024-01-31'),
+    ).rejects.toThrow(expect.objectContaining({ status: 404 }));
+    expect(analyticsService.getOverview).not.toHaveBeenCalled();
+  });
+
+  it('defaults the window to the last 90 days when no dates are given', async () => {
+    const { ctrl, campaignsService, analyticsService } = make();
+    campaignsService.get.mockResolvedValue({ id: 'c-1', organizationId: 'org-1' });
+    analyticsService.getOverview.mockResolvedValue({ kpis: [] });
+
+    const res = await ctrl.getCampaignAnalytics(org, 'c-1');
+    expect(analyticsService.getOverview).toHaveBeenCalledWith(
+      org,
+      expect.any(String),
+      expect.any(String),
+      [],
+      false,
+      { campaignIds: ['c-1'] },
+    );
+    expect(res.window.from < res.window.to).toBe(true);
+  });
+
+  it('clamps the anomalies limit to 100 and ignores invalid values', async () => {
+    const listAnomalies = vi.fn().mockResolvedValue([]);
+    const ctrl = new (PublicAnalyticsV1Controller as any)(
+      { listAnomalies },
+      {},
+      {},
+      {},
+    );
+
+    await ctrl.listAnomalies(org, '500', 'true');
+    expect(listAnomalies).toHaveBeenCalledWith('org-1', {
+      limit: 100,
+      includeDismissed: true,
+    });
+
+    listAnomalies.mockClear();
+    // Absent limit → unbounded (undefined); garbage → clamped to the floor of 1.
+    await ctrl.listAnomalies(org, undefined, undefined);
+    expect(listAnomalies).toHaveBeenCalledWith('org-1', {
+      limit: undefined,
+      includeDismissed: false,
+    });
+
+    listAnomalies.mockClear();
+    await ctrl.listAnomalies(org, 'not-a-number', undefined);
+    expect(listAnomalies).toHaveBeenCalledWith('org-1', {
+      limit: 1,
+      includeDismissed: false,
+    });
+  });
 });
 
 describe('Analytics unification — the ONE analytics home', () => {

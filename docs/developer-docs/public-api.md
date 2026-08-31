@@ -137,13 +137,34 @@ Base: `/public/v1`
 
 ## Analytics
 
-Base: `/public/v1`
+Base: `/public/v1/analytics`
+
+The **full** analytics surface is public — the same routes serve API-key/OAuth clients (throttled 60/min per route, no RBAC/entitlement gate) and the dashboard (session cookie, RBAC + entitlement enforced, `x-csrf-token` required on mutations). See [Analytics API](./analytics-api.md) for parameters and response details.
 
 | Method | Path | Purpose |
 |--------|------|---------|
 | GET | `/public/v1/analytics/overview` | Org overview with optional date range |
+| GET | `/public/v1/analytics/channel/:integrationId` | Single channel analytics |
+| GET | `/public/v1/analytics/channel/:integrationId/metric/:metric` | Specific metric for a channel |
 | GET | `/public/v1/analytics/campaign/:id` | Campaign-scoped analytics |
+| GET | `/public/v1/analytics/posts` | Paginated post list with metrics |
+| GET | `/public/v1/analytics/post/:postId` | Single post detail |
+| GET | `/public/v1/analytics/metric/:metric` | Metric detail across date range |
+| GET | `/public/v1/analytics/day` | Day-level detail |
+| GET | `/public/v1/analytics/best-time` | Best-time-to-post heatmap |
+| GET | `/public/v1/analytics/recommendations` | AI-powered recommendations |
+| GET | `/public/v1/analytics/health` | Data-health panel |
+| POST | `/public/v1/analytics/refresh/:integrationId` | On-demand live channel refresh (6/hour) |
+| GET | `/public/v1/analytics/content-insights` | Content-attribute intelligence |
+| POST | `/public/v1/analytics/narrate` | LLM-narrated summary |
+| GET | `/public/v1/analytics/export` | CSV/JSON export |
 | GET | `/public/v1/analytics/anomalies` | Detected anomalies for the org |
+| POST | `/public/v1/analytics/anomalies/:id/dismiss` | Dismiss an anomaly |
+| GET/POST/PUT/DELETE | `/public/v1/analytics/alert-rules*` | User-defined alert rules CRUD |
+| GET/POST/DELETE | `/public/v1/analytics/share` | Org public share-link management |
+| GET/POST/PUT/DELETE | `/public/v1/analytics/watchlist*` | Watched accounts CRUD + `/:id/series` |
+| GET | `/public/v1/analytics/shortlinks` | Short-link aggregate stats |
+| GET | `/public/v1/analytics/shortlinks/timeseries` | Short-link click time series |
 
 `GET /public/v1/analytics/overview` validates `from`/`to`, requires `to >= from`, and caps the window at 400 days.
 

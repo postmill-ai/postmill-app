@@ -17,7 +17,7 @@ vi.mock('@postmill-ai/helpers/utils/custom.fetch', () => ({
   useFetch: () => vi.fn(),
 }));
 
-vi.mock('@postmill-ai/frontend/components/analytics-v2/kit/states', () => ({
+vi.mock('@postmill-ai/frontend/components/analytics/kit/states', () => ({
   TabSkeleton: ({ variant }: { variant?: string }) => (
     <div data-testid="tab-skeleton" data-variant={variant} />
   ),

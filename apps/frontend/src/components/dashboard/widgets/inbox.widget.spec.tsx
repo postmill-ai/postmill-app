@@ -32,13 +32,13 @@ vi.mock('../hooks/useInboxPreview', () => ({
   useInboxPreview: vi.fn(),
 }));
 
-vi.mock('@postmill-ai/frontend/components/analytics-v2/kit/channel-avatar', () => ({
+vi.mock('@postmill-ai/frontend/components/analytics/kit/channel-avatar', () => ({
   ChannelAvatar: ({ name, identifier }: { name?: string; identifier?: string }) => (
     <div data-testid="channel-avatar" data-name={name} data-identifier={identifier} />
   ),
 }));
 
-vi.mock('@postmill-ai/frontend/components/analytics-v2/kit/states', () => ({
+vi.mock('@postmill-ai/frontend/components/analytics/kit/states', () => ({
   TabSkeleton: () => <div data-testid="tab-skeleton">Loading</div>,
   EmptyState: () => <div data-testid="empty-state">Empty</div>,
 }));

@@ -95,7 +95,7 @@ Two unrelated "utm" codepaths — do not conflate:
   (`campaign-tag-purge`, `TZ=UTC 0 3 * * *`) → `CampaignActivity.purgeExpiredItems` →
   `CampaignTagService.purgeExpiredItems`. Window: `CAMPAIGN_PURGE_DAYS` env (default 30).
   Reaps `CampaignItem` rows whose source entity was deleted/expired.
-- **Analytics v2:** `apps/backend/src/api/routes/analytics.v2.controller.ts` accepts a
+- **Analytics:** `apps/backend/src/public-api/routes/v1/public.analytics.v1.controller.ts` accepts a
   `?campaigns=` comma-separated uuid list (`parseCampaigns` — invalid uuids → 400) and
   passes `campaignIds` into `AnalyticsService` scopes.
 - **Dashboard widget:** `apps/frontend/src/components/dashboard/widgets/campaigns.widget.tsx`

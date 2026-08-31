@@ -66,13 +66,13 @@ const DATE_RANGES = [7, 30, 90];
 const usePostAnalytics = (postId: string, date: number) => {
   const fetch = useFetch();
   const loadAnalytics = useCallback(async () => {
-    const res = await fetch(`/analytics/v2/post/${postId}?date=${date}`);
+    const res = await fetch(`/public/v1/analytics/post/${postId}?date=${date}`);
     if (!res.ok) {
       return null;
     }
     return res.json();
   }, [postId, date, fetch]);
-  return useSWR(`/analytics/v2/post/${postId}?date=${date}`, loadAnalytics, {
+  return useSWR(`/public/v1/analytics/post/${postId}?date=${date}`, loadAnalytics, {
     revalidateOnFocus: false,
     revalidateOnReconnect: false,
     revalidateIfStale: false,

@@ -114,7 +114,7 @@ export const FEATURE_EXPECTATIONS: FeatureExpectation[] = [
   // ---- Analytics tabs exist ----
   {
     area: 'Analytics tabs',
-    route: '/analytics/v2',
+    route: '/analytics',
     controls: [
       { what: 'Overview tab', name: /overview/i },
       { what: 'Channels tab', name: /channels/i, soft: true },

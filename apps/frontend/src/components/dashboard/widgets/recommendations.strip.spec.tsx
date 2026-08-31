@@ -19,7 +19,7 @@ vi.mock('@postmill-ai/react/translation/get.transation.service.client', () => ({
 
 const mockUseRecommendations = vi.fn();
 
-vi.mock('@postmill-ai/frontend/components/analytics-v2/hooks/useRecommendations', () => ({
+vi.mock('@postmill-ai/frontend/components/analytics/hooks/useRecommendations', () => ({
   useRecommendations: () => mockUseRecommendations(),
 }));
 

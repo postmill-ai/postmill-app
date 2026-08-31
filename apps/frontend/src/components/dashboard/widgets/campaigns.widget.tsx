@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation';
 import dayjs from 'dayjs';
 import { useDashboardCampaigns, CampaignSummary } from '../hooks/useDashboardCampaigns';
 import { Button } from '@postmill-ai/react/form/button';
-import { EmptyState, TabSkeleton } from '@postmill-ai/frontend/components/analytics-v2/kit/states';
+import { EmptyState, TabSkeleton } from '@postmill-ai/frontend/components/analytics/kit/states';
 import { useT } from '@postmill-ai/react/translation/get.transation.service.client';
 
 const BAR_COLORS: Record<string, string> = {

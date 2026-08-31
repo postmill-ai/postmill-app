@@ -46,8 +46,8 @@ export const ROUTES: RouteDef[] = [
     "memberGated": false
   },
   {
-    "name": "analytics › v2",
-    "path": "/analytics/v2",
+    "name": "analytics",
+    "path": "/analytics",
     "area": "analytics",
     "publicRoute": false,
     "expectsContent": true,

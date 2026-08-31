@@ -15,7 +15,7 @@ import { Post } from '@prisma/client';
 import { Composer } from '@postmill-ai/frontend/components/composer/composer';
 import { Button } from '@postmill-ai/react/form/button';
 import { ColorPicker } from '@postmill-ai/frontend/components/ui/color-picker';
-import { PostAnalyticsDrawer } from '@postmill-ai/frontend/components/analytics-v2/post-analytics.drawer';
+import { PostAnalyticsDrawer } from '@postmill-ai/frontend/components/analytics/post-analytics.drawer';
 import { MissingReleaseModal } from '@postmill-ai/frontend/components/launches/missing-release.modal';
 import { PostDetailModal } from '@postmill-ai/frontend/components/launches/post-detail/post.detail.modal';
 import { deleteDialog } from '@postmill-ai/react/helpers/delete.dialog';
@@ -35,7 +35,7 @@ export const hours = Array.from({ length: 24 }, (_, i) => i);
 // Re-exported from the analytics kit rather than duplicated: this copy had no
 // B tier and used toString() instead of locale grouping, so a calendar card and
 // an analytics tile could render the same count differently.
-export { formatCompactNumber } from '@postmill-ai/frontend/components/analytics-v2/utils';
+export { formatCompactNumber } from '@postmill-ai/frontend/components/analytics/utils';
 
 export const ViewsIcon = () => (
   <svg width="15" height="15" viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg">

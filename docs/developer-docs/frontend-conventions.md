@@ -11,7 +11,7 @@ Source: `apps/frontend/src/app/`
 | Route group | Path | Purpose |
 |---|---|---|
 | `(app)/(site)/` | `/posts`, `/agents`, `/comments`, `/analytics`, `/media`, `/campaigns`, `/billing`, `/settings` | Main application pages |
-| `(app)/(site)/analytics/v2/` | `/analytics/v2` | Multi-channel analytics dashboard |
+| `(app)/(site)/analytics/v2/` | `/analytics/v2` | Legacy redirect to `/analytics` (bookmark back-compat) |
 | `(app)/(site)/agents/[id]/` | `/agents/[id]` | Individual agent detail |
 | `(app)/auth/` | `/auth/login`, `/auth/forgot`, `/auth/activate` | Authentication flows |
 | `(app)/integrations/social/` | `/integrations/social/[provider]` | OAuth redirect handler for social providers |
@@ -125,7 +125,7 @@ Feature-specific components live in `apps/frontend/src/components/`:
 
 | Directory | Purpose |
 |---|---|
-| `analytics-v2/` | Multi-channel analytics dashboard components |
+| `analytics/` | Multi-channel analytics dashboard components |
 | `ai/` | AI-related components (CopilotKit runtime, generators) |
 | `launches/` | Calendar, post detail modal, post editor |
 | `layout/` | App shell — sidebar, top menu, user context, modals |

@@ -23,7 +23,7 @@ export default defineConfig({
       },
     },
     include: [
-      'src/components/analytics-v2/**/*.spec.{ts,tsx}',
+      'src/components/analytics/**/*.spec.{ts,tsx}',
       'src/components/files/**/*.spec.{ts,tsx}',
       'src/components/ui/**/*.spec.{ts,tsx}',
       'src/components/launches/post-detail/*.spec.{ts,tsx}',
@@ -76,15 +76,15 @@ export default defineConfig({
       provider: 'v8',
       reporter: ['text'],
       include: [
-        'src/components/analytics-v2/**/*.{ts,tsx}',
+        'src/components/analytics/**/*.{ts,tsx}',
       ],
       exclude: [
-        'src/components/analytics-v2/charts/*.tsx',
+        'src/components/analytics/charts/*.tsx',
       ],
-      // RATCHET FLOORS at measured coverage (analytics-v2 surface only). The prior
+      // RATCHET FLOORS at measured coverage (analytics surface only). The prior
       // 95/80/65/95 gate was never CI-enforced (no `--coverage` in `pnpm run test`);
       // real coverage is ~70%. Floors lock in today's level so regressions fail CI;
-      // TODO(tracked debt): raise toward 90+ as analytics-v2 specs are backfilled.
+      // TODO(tracked debt): raise toward 90+ as analytics specs are backfilled.
       thresholds: {
         statements: 69,
         branches: 62,

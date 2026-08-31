@@ -7,8 +7,8 @@ import { useT } from '@postmill-ai/react/translation/get.transation.service.clie
 import { Button } from '@postmill-ai/react/form/button';
 import dayjs from 'dayjs';
 import clsx from 'clsx';
-import { LineChart } from '@postmill-ai/frontend/components/analytics-v2/charts/line.chart';
-import { BarChart } from '@postmill-ai/frontend/components/analytics-v2/charts/bar.chart';
+import { LineChart } from '@postmill-ai/frontend/components/analytics/charts/line.chart';
+import { BarChart } from '@postmill-ai/frontend/components/analytics/charts/bar.chart';
 import { metricLabelT } from '@postmill-ai/frontend/components/campaigns/metric-labels';
 import { readableTextColor } from '@postmill-ai/frontend/components/shared/readable-text-color';
 

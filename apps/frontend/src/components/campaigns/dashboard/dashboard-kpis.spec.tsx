@@ -12,7 +12,7 @@ vi.mock('chart.js/auto', () => ({
     destroy() {}
   },
 }));
-vi.mock('@postmill-ai/frontend/components/analytics-v2/hooks/useCountUp', () => ({
+vi.mock('@postmill-ai/frontend/components/analytics/hooks/useCountUp', () => ({
   useCountUp: (target: number) => target,
 }));
 

@@ -106,7 +106,7 @@ describe('useAttention', () => {
     await expect(result.current.retryPost('post-123')).rejects.toThrow('Not in ERROR state');
   });
 
-  it('dismissAnomaly POSTs /analytics/v2/anomalies/:id/dismiss and revalidates', async () => {
+  it('dismissAnomaly POSTs /public/v1/analytics/anomalies/:id/dismiss and revalidates', async () => {
     mockFetch.mockResolvedValueOnce({ ok: true });
     const mutate = vi.fn();
     mockUseSWR.mockReturnValue({ data: { items: [] }, isLoading: false, mutate } as any);
@@ -117,7 +117,7 @@ describe('useAttention', () => {
       await result.current.dismissAnomaly('anomaly-1');
     });
 
-    expect(mockFetch).toHaveBeenCalledWith('/analytics/v2/anomalies/anomaly-1/dismiss', {
+    expect(mockFetch).toHaveBeenCalledWith('/public/v1/analytics/anomalies/anomaly-1/dismiss', {
       method: 'POST',
     });
     expect(mutate).toHaveBeenCalled();

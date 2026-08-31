@@ -7,7 +7,7 @@ import { useRouter } from 'next/navigation';
 import { useMediaJobs, MediaJob } from '../hooks/useMediaJobs';
 import { MEDIA_QUEUE_HREF } from '../destinations';
 import ProviderIcon from '@postmill-ai/frontend/components/shared/provider-icon';
-import { EmptyState, TabSkeleton } from '@postmill-ai/frontend/components/analytics-v2/kit/states';
+import { EmptyState, TabSkeleton } from '@postmill-ai/frontend/components/analytics/kit/states';
 import { useT } from '@postmill-ai/react/translation/get.transation.service.client';
 
 dayjs.extend(relativeTime);

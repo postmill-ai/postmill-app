@@ -22,7 +22,7 @@ interface State {
  * Shared error boundary for the /media/* canvas studios (Designer, HeyGen,
  * Replicate, Deepgram and every Studio Kit `StudioShell`). A crash in a studio
  * renders a friendly, studio-themed fallback with a reset action instead of a
- * blank screen. Mirrors the analytics-v2 `ErrorBoundary` pattern.
+ * blank screen. Mirrors the analytics `ErrorBoundary` pattern.
  */
 class StudioErrorBoundaryInner extends Component<InnerProps, State> {
   constructor(props: InnerProps) {
