@@ -269,13 +269,16 @@ GOOGLE_GMB_CLIENT_SECRET: '<your-gmb-client-secret>'
 
 ## Other env-mapped providers
 
-One row per provider. Portal URLs and callback paths are taken from each
-provider's adapter; env vars from `CHANNEL_ENV_MAPPINGS`. The per-provider
-blocks below the table list the **exact scopes Postmill requests at connect
-time** — request precisely these in the app review. Postmill validates the
-granted scope set when a tenant connects and **refuses the connection if any
-scope is missing** (e.g. TikTok's `scope_not_authorized`), so an app approved
-for fewer scopes than listed will connect for no one.
+Index of every env-mapped provider — each has a full setup section further
+down this page (same format as Meta / X / LinkedIn / Google above). Portal
+URLs, callback paths, and the scopes each section lists are taken from the
+provider's adapter; env vars from `CHANNEL_ENV_MAPPINGS`.
+
+One rule covers all of them: each provider's section lists the **exact scopes
+Postmill requests at connect time** — request precisely these in the app review.
+Postmill validates the granted scope set when a tenant connects and **refuses the
+connection if any scope is missing** (e.g. TikTok's `scope_not_authorized`), so an app
+approved for fewer scopes than its section lists will connect for no one.
 
 | Identifier | Developer portal | Env vars | Callback path |
 |------------|------------------|----------|---------------|
@@ -296,56 +299,286 @@ for fewer scopes than listed will connect for no one.
 | LINE (`line`) | [developers.line.biz/console](https://developers.line.biz/console/) | `LINE_CHANNEL_ACCESS_TOKEN` (token only) | none — token-only (see the LINE section above) |
 | Custom OAuth (`oauth_custom`) | your own OIDC provider | `POSTMILL_OAUTH_CLIENT_ID` / `POSTMILL_OAUTH_CLIENT_SECRET` | see note below |
 
-### Products and scopes per provider
+## TikTok
 
-Everything below is read from the channel adapters themselves — treat it as
-the checklist for each platform's app review.
+TikTok needs two products added to the app, and the connect flow requests a
+six-scope set that must be approved in full — Postmill validates the granted
+scopes when a tenant connects and refuses the connection if any is missing
+(`scope_not_authorized`).
 
-- **TikTok** — products to add in the TikTok app: **Login Kit** and
-  **Content Posting API**. Required scopes (all six — anything less fails the
-  tenant connect): `video.list`, `user.info.basic`, `video.publish`,
-  `video.upload`, `user.info.profile`, `user.info.stats`. `video.upload` /
-  `video.publish` cover the scheduled-posting flows (upload-to-drafts and
-  direct publish); `user.info.basic` identifies the connected account;
-  `user.info.profile` / `user.info.stats` feed channel analytics;
-  `video.list` feeds post analytics.
-- **Threads** — Meta app with the Threads use case. Scopes: `threads_basic`,
-  `threads_content_publish`, `threads_manage_replies`,
-  `threads_manage_insights`.
-- **Discord** — OAuth scopes `identify` + `guilds` are for identity only.
-  **Posting runs on the app's bot token** (the org credential
-  `discord.token`): enable the bot user on the application and invite it to
-  the guild with permission to post in the target channel.
-- **Slack** — bot scopes: `channels:read`, `chat:write`, `users:read`,
-  `groups:read`, `channels:join`, `chat:write.customize`.
-- **Pinterest** — `boards:read`, `boards:write`, `pins:read`, `pins:write`,
-  `user_accounts:read`.
-- **Reddit** — `read`, `identity`, `submit`, `flair`.
-- **Twitch** — `user:write:chat`, `user:read:chat`,
-  `moderator:manage:announcements`.
-- **Dribbble** — `public`, `upload`.
-- **Kick** — `chat:write`, `user:read`, `channel:read`.
-- **VK** — VK ID app (Client ID only, PKCE — no secret). Scopes:
-  `vkid.personal_info`, `email`, `wall`, `status`, `docs`, `photos`, `video`.
-- **Whop** — Client ID only, PKCE. Scopes: `openid`, `profile`, `email`,
-  `forum:post:create`, `forum:read`, `company:basic:read`.
-- **MeWe** — no OAuth scopes; MeWe hands out API access per developer
-  application (App ID + API Key) and the connect flow redirects to the MeWe
-  login with the registered `redirect_uri`.
-- **Wrapcast / Farcaster** — Neynar app; sign-in happens client-side in the
-  composer ("Sign in with Farcaster"), publishing uses the app's API key
-  server-side. No callback to register.
-- **Mastodon** — normally needs no app at all: tenants type their instance
-  hostname in the connect dialog and Postmill registers itself on that server
-  automatically (dynamic client registration). The env pair exists for
-  operators who want a fixed pre-registered app. The same per-instance flow
-  powers the **GoToSocial**, **Akkoma**, and **Friendica** channels
-  (Mastodon-API servers) and, with Misskey's MiAuth instead of client
-  registration, the **Misskey** and **Sharkey** channels — none of them need
-  env vars.
-- **Custom OAuth** channels reuse the generic-OIDC variables; there is no
-  dedicated provider adapter in this repo — check the provider's current docs
-  for the callback to register.
+1. Open [TikTok for Developers → My Apps](https://developers.tiktok.com/apps)
+   and click **Create an app**.
+2. On the app's page, add the products **Login Kit** and
+   **Content Posting API**.
+3. Under **Login Kit** settings, add the redirect URI
+   `https://<your-domain>/integrations/social/tiktok`.
+4. In the app review, request all six scopes: `video.list`,
+   `user.info.basic`, `video.publish`, `video.upload`, `user.info.profile`,
+   `user.info.stats`. `video.upload` / `video.publish` are the
+   scheduled-posting flows (upload-to-drafts and direct publish);
+   `user.info.basic` identifies the connected account; `user.info.profile` /
+   `user.info.stats` feed channel analytics; `video.list` feeds post
+   analytics.
+5. Copy the Client Key and Client Secret:
+
+```yaml
+TIKTOK_CLIENT_ID: '<your-client-key>'
+TIKTOK_CLIENT_SECRET: '<your-client-secret>'
+```
+
+6. Restart the backend.
+
+**Before the app passes review** it runs in development mode — every TikTok
+account that will connect must be listed as a tester in the app's sandbox
+settings, or their authorization is rejected.
+
+## Discord
+
+Discord OAuth identifies the user; **posting runs on a bot token**, so both
+pieces live on the same Discord application.
+
+1. Open the [Discord Developer Portal](https://discord.com/developers/applications)
+   and click **New Application**.
+2. Under **OAuth2 → General**, add the redirect URL
+   `https://<your-domain>/integrations/social/discord` and copy the Client ID and Client
+   Secret:
+
+```yaml
+DISCORD_CLIENT_ID: '<your-client-id>'
+DISCORD_CLIENT_SECRET: '<your-client-secret>'
+```
+
+3. Under **Bot**, create the bot user. Tenants copy their own bot token from
+   here when they connect (org credential `discord.token`).
+4. Restart the backend.
+
+**Tenant flow:** the tenant invites the bot to their guild (OAuth2 → URL
+Generator, `bot` scope + Send Messages) with write access to the target
+channel, then pastes the bot token in the channel's settings in Postmill.
+
+## Dribbble
+
+1. Open [Dribbble Applications](https://dribbble.com/account/applications/new)
+   and register a new application with the callback URL
+   `https://<your-domain>/integrations/social/dribbble`. The app requests the
+   `public` and `upload` scopes.
+2. Copy the Client ID and Client Secret:
+
+```yaml
+DRIBBBLE_CLIENT_ID: '<your-client-id>'
+DRIBBBLE_CLIENT_SECRET: '<your-client-secret>'
+```
+
+3. Restart the backend.
+
+## Kick
+
+1. Open [Kick Developer Settings](https://kick.com/settings/developer) and
+   create a new application.
+2. Add the redirect URL `https://<your-domain>/integrations/social/kick`.
+   The app requests the scopes `chat:write`, `user:read`, `channel:read`.
+3. Copy the Client ID and Client Secret:
+
+```yaml
+KICK_CLIENT_ID: '<your-client-id>'
+KICK_SECRET: '<your-client-secret>'
+```
+
+4. Restart the backend.
+
+## Mastodon
+
+Mastodon normally needs **no app at all**: tenants type their instance
+hostname in the connect dialog and Postmill registers itself on that server
+automatically (dynamic client registration). The same per-instance flow
+powers the **GoToSocial**, **Akkoma**, and **Friendica** channels
+(Mastodon-API servers) and, with Misskey's MiAuth instead of client
+registration, the **Misskey** and **Sharkey** channels — none of them need
+env vars.
+
+Operators who prefer a fixed pre-registered app can set:
+
+```yaml
+MASTODON_CLIENT_ID: '<your-client-id>'
+MASTODON_CLIENT_SECRET: '<your-client-secret>'
+```
+
+## MeWe
+
+MeWe hands out API access per developer application (App ID + API Key); the
+connect flow redirects to the MeWe login with the registered `redirect_uri`.
+
+1. Open [MeWe Developers](https://dev.mewe.com) and create an application.
+2. Register the redirect URL
+   `https://<your-domain>/integrations/social/mewe`.
+3. Copy the App ID and API Key:
+
+```yaml
+MEWE_APP_ID: '<your-app-id>'
+MEWE_API_KEY: '<your-api-key>'
+```
+
+4. Restart the backend.
+
+## Pinterest
+
+1. Open [Pinterest Developers → My Apps](https://developers.pinterest.com/apps)
+   and **Create app**.
+2. Add the redirect URI
+   `https://<your-domain>/integrations/social/pinterest`. The app requests
+   the scopes `boards:read`, `boards:write`, `pins:read`, `pins:write`,
+   `user_accounts:read`.
+3. Trial access covers development; apply for standard access before serving
+   the general public.
+4. Copy the App ID and App Secret:
+
+```yaml
+PINTEREST_CLIENT_ID: '<your-app-id>'
+PINTEREST_CLIENT_SECRET: '<your-app-secret>'
+```
+
+5. Restart the backend.
+
+## Reddit
+
+1. Open [Reddit Apps](https://www.reddit.com/prefs/apps) and click
+   **create app** — choose type **web app**.
+2. Set the redirect URI to
+   `https://<your-domain>/integrations/social/reddit`. The app requests the
+   scopes `read`, `identity`, `submit`, `flair`.
+3. Copy the client ID (shown under the app name) and the secret:
+
+```yaml
+REDDIT_CLIENT_ID: '<your-client-id>'
+REDDIT_CLIENT_SECRET: '<your-client-secret>'
+```
+
+4. Restart the backend.
+
+## Slack
+
+1. Open [Slack API: Your Apps](https://api.slack.com/apps) and **Create New
+   App → From scratch**.
+2. Under **OAuth & Permissions**, add the redirect URL
+   `https://<your-domain>/integrations/social/slack` and the bot token
+   scopes `channels:read`, `chat:write`, `users:read`, `groups:read`,
+   `channels:join`, `chat:write.customize`.
+3. Under **Basic Information**, copy the Client ID and Client Secret:
+
+```yaml
+SLACK_ID: '<your-client-id>'
+SLACK_SECRET: '<your-client-secret>'
+```
+
+4. Restart the backend.
+
+**Tenant flow:** the tenant installs the app into their workspace from the
+connect button. For workspaces other than the app's own, enable **Manage
+Distribution → Activate Public Distribution** in the Slack app, or installs
+are limited to the creating workspace.
+
+## Threads
+
+Threads lives on a Meta app with the Threads use case — separate env vars
+from the Facebook Pages credentials.
+
+1. Open [Meta for Developers → My Apps](https://developers.facebook.com/apps)
+   and create an app (or reuse an existing one).
+2. Add the **Threads API** use case and the permissions `threads_basic`,
+   `threads_content_publish`, `threads_manage_replies`,
+   `threads_manage_insights`.
+3. Add the OAuth redirect URI
+   `https://<your-domain>/integrations/social/threads`.
+4. Copy the Threads App ID and App Secret:
+
+```yaml
+THREADS_APP_ID: '<your-threads-app-id>'
+THREADS_APP_SECRET: '<your-threads-app-secret>'
+```
+
+5. Restart the backend. Advanced access (beyond tester accounts) requires
+   Meta App Review like the other Meta products.
+
+## Twitch
+
+1. Open the [Twitch Developer Console](https://dev.twitch.tv/console/apps)
+   and **Register Your Application**.
+2. Add the OAuth redirect URL
+   `https://<your-domain>/integrations/social/twitch`. The app requests the
+   scopes `user:write:chat`, `user:read:chat`,
+   `moderator:manage:announcements`.
+3. Copy the Client ID and Client Secret (under **Manage**):
+
+```yaml
+TWITCH_CLIENT_ID: '<your-client-id>'
+TWITCH_CLIENT_SECRET: '<your-client-secret>'
+```
+
+4. Restart the backend.
+
+## VK
+
+VK uses a VK ID application with PKCE — only the Client ID, no secret.
+
+1. Open the [VK ID Console](https://id.vk.com/about/business/go) and create
+   an application (Web).
+2. Add the authorized redirect URI
+   `https://<your-domain>/integrations/social/vk`. The app requests the
+   scopes `vkid.personal_info`, `email`, `wall`, `status`, `docs`, `photos`,
+   `video`.
+3. Copy the Application ID:
+
+```yaml
+VK_ID: '<your-app-id>'
+```
+
+4. Restart the backend.
+
+## Whop
+
+Whop OAuth uses PKCE with only the Client ID (no client secret).
+
+1. Open the [Whop Developer Dashboard](https://whop.com/dashboard/developer)
+   and create an app.
+2. Add the redirect URI `https://<your-domain>/integrations/social/whop`.
+   The app requests the scopes `openid`, `profile`, `email`,
+   `forum:post:create`, `forum:read`, `company:basic:read`.
+3. Copy the Client ID:
+
+```yaml
+WHOP_CLIENT_ID: '<your-client-id>'
+```
+
+4. Restart the backend.
+
+## Wrapcast (Farcaster)
+
+Wrapcast uses a Neynar app: sign-in happens client-side in the composer
+("Sign in with Farcaster") — no callback to register.
+
+1. Open [Neynar](https://dev.neynar.com) and create an app.
+2. Copy the Client ID and API Key:
+
+```yaml
+NEYNAR_CLIENT_ID: '<your-neynar-client-id>'
+NEYNAR_SECRET_KEY: '<your-neynar-api-key>'
+```
+
+3. Restart the backend.
+
+**Tenant flow:** the tenant clicks "Sign in with Farcaster" in the composer
+connect flow; publishing uses the app's API key server-side.
+
+## Custom OAuth
+
+Custom OAuth channels reuse the generic-OIDC variables; there is no
+dedicated provider adapter in this repo — check the provider's current docs
+for the callback to register.
+
+```yaml
+POSTMILL_OAUTH_CLIENT_ID: '<your-oidc-client-id>'
+POSTMILL_OAUTH_CLIENT_SECRET: '<your-oidc-client-secret>'
+```
 
 ## SSO dual-use (login with the same app)
 
