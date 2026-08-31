@@ -9,6 +9,7 @@ import { DigestActivity } from '@postmill-ai/nestjs-libraries/inngest/activities
 import { CampaignActivity } from '@postmill-ai/nestjs-libraries/inngest/activities/campaign.activity';
 import { RetentionActivity } from '@postmill-ai/nestjs-libraries/inngest/activities/retention.activity';
 import { AgentDigestActivity } from '@postmill-ai/nestjs-libraries/inngest/activities/agent-digest.activity';
+import { CommsInboundService } from '@postmill-ai/nestjs-libraries/comms/comms-inbound.service';
 import { InngestRunService } from '@postmill-ai/nestjs-libraries/inngest/inngest-run.service';
 import { OrganizationService } from '@postmill-ai/nestjs-libraries/database/prisma/organizations/organization.service';
 import {
@@ -35,6 +36,11 @@ import { createRefreshToken } from './refresh-token';
 import { createStreakTracker } from './streak-tracker';
 import { createAnalyticsBackfill } from './analytics-backfill';
 import { createPostPublishFunctions } from './post-publish';
+import { createCommsInbound } from './comms-inbound';
+import {
+  createCommsMatrixSync,
+  createCommsMatrixSyncOne,
+} from './comms-matrix-sync';
 
 export interface InngestActivities {
   postActivity: PostActivity;
@@ -48,6 +54,7 @@ export interface InngestActivities {
   campaignActivity: CampaignActivity;
   retentionActivity: RetentionActivity;
   agentDigestActivity: AgentDigestActivity;
+  commsInboundService: CommsInboundService;
   inngestRunService: InngestRunService;
   organizationService: OrganizationService;
 }
@@ -74,5 +81,8 @@ export const createFunctions = (activities: InngestActivities) => [
   createRefreshToken(activities.integrationsActivity),
   createStreakTracker(activities.emailActivity, activities.postActivity),
   createAnalyticsBackfill(activities.analyticsActivity),
+  createCommsInbound(activities.commsInboundService),
+  createCommsMatrixSync(activities.commsInboundService),
+  createCommsMatrixSyncOne(activities.commsInboundService),
   ...createPostPublishFunctions(activities.postActivity),
 ];

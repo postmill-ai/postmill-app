@@ -4480,5 +4480,7 @@
   "sentiment_negative": "Negative",
   "filter_sentiment": "Filter by sentiment",
   "filter_priority": "Filter by priority",
-  "comment_inbox.sort_priority_first": "High priority first"
+  "comment_inbox.sort_priority_first": "High priority first",
+  "comms": "Liên lạc",
+  "comms_settings_description": "Trò chuyện với trợ lý Postmill của bạn và nhận thông báo qua Slack, Telegram, Discord, Matrix hoặc LINE."
 }

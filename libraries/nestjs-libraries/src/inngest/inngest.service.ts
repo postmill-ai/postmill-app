@@ -11,6 +11,7 @@ import { DigestActivity } from './activities/digest.activity';
 import { CampaignActivity } from './activities/campaign.activity';
 import { RetentionActivity } from './activities/retention.activity';
 import { AgentDigestActivity } from './activities/agent-digest.activity';
+import { CommsInboundService } from '@postmill-ai/nestjs-libraries/comms/comms-inbound.service';
 import { InngestRunService } from './inngest-run.service';
 import { OrganizationService } from '@postmill-ai/nestjs-libraries/database/prisma/organizations/organization.service';
 import { createFunctions } from '@postmill-ai/backend/inngest/functions';
@@ -32,6 +33,8 @@ export class InngestService {
     campaignActivity: CampaignActivity,
     retentionActivity: RetentionActivity,
     agentDigestActivity: AgentDigestActivity,
+    // Provided by the @Global() CommsModule.
+    commsInboundService: CommsInboundService,
     inngestRunService: InngestRunService,
     organizationService: OrganizationService
   ) {
@@ -51,6 +54,7 @@ export class InngestService {
       campaignActivity,
       retentionActivity,
       agentDigestActivity,
+      commsInboundService,
       inngestRunService,
       organizationService,
     });

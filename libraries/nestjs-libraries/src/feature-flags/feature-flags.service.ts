@@ -18,7 +18,8 @@ export type DevFeatureFlag =
   | 'agent'
   | 'sentry'
   | 'opentelemetry'
-  | 'cron';
+  | 'cron'
+  | 'comms';
 
 const ENV_MAP: Record<DevFeatureFlag, string> = {
   ai: 'DEV_DISABLE_AI',
@@ -31,6 +32,7 @@ const ENV_MAP: Record<DevFeatureFlag, string> = {
   sentry: 'DEV_DISABLE_SENTRY',
   opentelemetry: 'DEV_DISABLE_OPENTELEMETRY',
   cron: 'DEV_DISABLE_CRON',
+  comms: 'DEV_DISABLE_COMMS',
 };
 
 @Injectable()

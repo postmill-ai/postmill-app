@@ -85,6 +85,9 @@ import { NotificationPreferenceService } from '@postmill-ai/nestjs-libraries/dat
 import { PushNotificationService } from '@postmill-ai/nestjs-libraries/database/prisma/notifications/push-notification.service';
 import { NotificationDigestService } from '@postmill-ai/nestjs-libraries/database/prisma/notifications/notification-digest.service';
 
+const mockCommsSendToUsers = vi.fn().mockResolvedValue(undefined);
+const commsDelivery = { sendToUsers: mockCommsSendToUsers };
+
 describe('NotificationService', () => {
   let service: NotificationService;
   let emailService: EmailService;
@@ -103,7 +106,8 @@ describe('NotificationService', () => {
       new OrganizationRepository(),
       new NotificationPreferenceService(),
       new PushNotificationService(),
-      new NotificationDigestService()
+      new NotificationDigestService(),
+      commsDelivery as never
     );
   });
 
@@ -480,6 +484,89 @@ describe('NotificationService', () => {
         expect.objectContaining({
           targetUserIds: ['user-2'],
         })
+      );
+    });
+  });
+
+  describe('comms delivery bucket', () => {
+    it('fans out to the comms delivery service for active members', async () => {
+      mockGetTeam.mockResolvedValue({
+        users: [
+          { user: { id: 'user-1', email: 'a@b.com' } },
+          { user: { id: 'user-2', email: 'b@b.com' } },
+        ],
+      });
+
+      await service.notify({
+        orgId: 'org-1',
+        category: 'post_failed',
+        title: 'T',
+        message: 'M',
+        link: '/x',
+      });
+
+      expect(mockCommsSendToUsers).toHaveBeenCalledWith(
+        'org-1',
+        ['user-1', 'user-2'],
+        'post_failed',
+        { title: 'T', message: 'M', link: '/x' },
+        false
+      );
+    });
+
+    it('respects targetUserIds and channels.comms=false', async () => {
+      mockGetTeam.mockResolvedValue({
+        users: [
+          { user: { id: 'user-1', email: 'a@b.com' } },
+          { user: { id: 'user-2', email: 'b@b.com' } },
+        ],
+      });
+
+      await service.notify({
+        orgId: 'org-1',
+        category: 'post_failed',
+        title: 'T',
+        message: 'M',
+        targetUserIds: ['user-2'],
+      });
+      expect(mockCommsSendToUsers).toHaveBeenCalledWith(
+        'org-1',
+        ['user-2'],
+        'post_failed',
+        expect.anything(),
+        false
+      );
+
+      mockCommsSendToUsers.mockClear();
+      await service.notify({
+        orgId: 'org-1',
+        category: 'post_failed',
+        title: 'T',
+        message: 'M',
+        channels: { comms: false },
+      });
+      expect(mockCommsSendToUsers).not.toHaveBeenCalled();
+    });
+
+    it('passes override through so broadcasts bypass link checkboxes', async () => {
+      mockGetTeam.mockResolvedValue({
+        users: [{ user: { id: 'user-1', email: 'a@b.com' } }],
+      });
+
+      await service.notify({
+        orgId: 'org-1',
+        category: 'announcements',
+        title: 'T',
+        message: 'M',
+        override: true,
+      });
+
+      expect(mockCommsSendToUsers).toHaveBeenCalledWith(
+        'org-1',
+        ['user-1'],
+        'announcements',
+        expect.anything(),
+        true
       );
     });
   });

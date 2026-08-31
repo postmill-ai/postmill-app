@@ -193,6 +193,26 @@ enforcement point (exact file/symbol). Cross-refs: `agents/backend.md`,
   row — and **channels only**. AI, short-link, and other provider domains get NO env
   fallback (their creds come from encrypted org config rows via the kernel).
 
+## Inbound comms webhooks — signed, token-routed, uniform 404
+
+- `POST /webhooks/comms/:identifier/:token`
+  (`apps/backend/src/api/routes/comms-webhooks.controller.ts`) is deliberately
+  unauthenticated (registered in `controllers:` but NOT `authenticatedController`).
+  Routing is the per-config CSPRNG `webhookToken` URL segment; any token/identifier/
+  disabled mismatch returns a **uniform 404** (no oracle distinguishing "unknown token"
+  from "disabled config").
+- Every provider's own signature scheme is verified against the raw body BEFORE
+  parsing: Slack HMAC (`v0:{ts}:{body}`, 5-min skew guard), Telegram secret-token
+  header, Discord ed25519, LINE base64 HMAC — all via constant-time compares
+  (`timingSafeStringEqual`, `kernel/src/domains/comms-verify.ts`). Bad signature → 401.
+- The handler only verifies + enqueues Inngest events and responds immediately
+  (Slack/Discord 3-second ack) — never run AI or DB-heavy work in-request. Connect
+  codes are single-use, 15-min-TTL, claimed via an atomic guarded `updateMany`; the
+  claim notifies the linked Postmill user in-app so a mis-delivered code is noticed.
+- Comms credentials live encrypted on `CommsProviderConfig.credentials`; settings GETs
+  mask them to per-field booleans; connect codes are returned only from link
+  create/regenerate responses. Never log tokens, secrets, codes, or raw webhook bodies.
+
 ## Checklist
 
 - [ ] No env AI-key read added anywhere; AI-off path still throws `AI_NOT_CONFIGURED_MESSAGE`.

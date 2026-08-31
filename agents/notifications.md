@@ -31,7 +31,7 @@ LLM-facing ruleset for user-facing notifications in the Postmill monorepo. Cross
 | `message` | `string` | yes | In-app content, email body, push body. |
 | `link` | `string` | no | Stored on the in-app row (deep link). |
 | `metadata` | `Record<string, any>` | no | Stored on the in-app row; stringified into push `data`. |
-| `channels` | `Partial<ChannelToggles>` | no | Caller cap per channel; merged over `{ email: true, push: true, inApp: true }` (:88-90, :122). |
+| `channels` | `Partial<ChannelToggles> & { comms?: boolean }` | no | Caller cap per channel; merged over `{ email: true, push: true, inApp: true, comms: true }`. |
 | `digest` | `boolean` | no | `true` ⇒ email obeys per-user `digestFrequency` (see Digest). Default `false`. |
 | `override` | `boolean` | no | `true` ⇒ skip all preference gates (used by `broadcast`). Default `false`. |
 | `targetUserIds` | `string[]` | no | Restrict fan-out to these members. |
@@ -47,6 +47,13 @@ Fan-out mechanics (`notify`, :105-194):
    circuits to enabled; an unknown/legacy category gates on the master only.
 4. In-app: ONE shared `Notification` row created only if ≥1 in-app recipient
    (:160-171). Email: immediate or digest-routed. Push: per-user FCM send.
+5. **Comms (4th bucket)**: when `channels.comms`, the active-member ids are handed to
+   `CommsDeliveryService.sendToUsers` (`libraries/nestjs-libraries/src/comms/`), which DMs
+   linked chat apps (Slack/Telegram/Discord/Matrix/LINE). Gating is **only** each
+   `CommsUserLink` row's `categories` JSON (admin-set checkboxes in settings → comms) —
+   `NotificationPreference` masters/categories deliberately play NO part; `override` bypasses
+   the checkboxes (broadcasts). Delivery failures are logged redacted and swallowed — a dead
+   bot never fails `notify()`. See `agents/providers/comms.md`.
 
 Convenience senders already on the service — use them when they fit instead of raw
 `notify`: `notifyPostPublishFailure`, `notifyPostPublished` (digest),

@@ -4480,5 +4480,7 @@
   "sentiment_negative": "Negative",
   "filter_sentiment": "Filter by sentiment",
   "filter_priority": "Filter by priority",
-  "comment_inbox.sort_priority_first": "High priority first"
+  "comment_inbox.sort_priority_first": "High priority first",
+  "comms": "الاتصالات",
+  "comms_settings_description": "تحدث مع وكيل Postmill الخاص بك واستقبل الإشعارات عبر Slack أو Telegram أو Discord أو Matrix أو LINE."
 }

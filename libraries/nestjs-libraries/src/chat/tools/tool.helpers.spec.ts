@@ -53,6 +53,10 @@ describe('tool.helpers', () => {
       expect(() => requireWrite(makeContext({ mode: 'user' }))).not.toThrow();
     });
 
+    it('allows comms mode (connect-code-verified real user)', () => {
+      expect(() => requireWrite(makeContext({ mode: 'comms' }))).not.toThrow();
+    });
+
     it('allows mcp mode with mcp:posts:write scope', () => {
       expect(() =>
         requireWrite(makeContext({ mode: 'mcp', scopes: ['mcp:read', 'mcp:posts:write'] }))
@@ -91,6 +95,10 @@ describe('tool.helpers', () => {
 
     it('allows headless mode', () => {
       expect(() => requireRead(makeContext({ mode: 'headless' }))).not.toThrow();
+    });
+
+    it('allows comms mode', () => {
+      expect(() => requireRead(makeContext({ mode: 'comms' }))).not.toThrow();
     });
 
     it('allows mcp mode with mcp:read scope', () => {

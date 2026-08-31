@@ -50,6 +50,7 @@ All ids below are copied verbatim from `inngest.createFunction({ id: ... })` cal
 | `digest-email-daily` | `TZ=America/New_York 0 9 * * *` | — | Fans out `digest/send-one` per opted-in user (id `digest:daily:{userId}:{orgId}:{today}`). |
 | `digest-email-weekly` | `TZ=America/New_York 0 9 * * 1` | — | Same, weekly (id `digest:weekly:...`). |
 | `agent-digest` | `TZ=America/New_York 0 7 * * 1` | 1 | Weekly agent digest fan-out (`agent/digest-org` per org). Skips unless `AGENT_DIGEST_ENABLED === 'true'`. |
+| `comms-matrix-sync` | `TZ=UTC * * * * *` (minutely) | 1 | Fans out `comms/matrix.sync-one` per enabled Matrix comms config (Matrix has no webhooks). |
 | `campaign-tag-purge` | `TZ=UTC 0 3 * * *` | — | Purges expired campaign tags. |
 | `retention-purge` | `TZ=UTC 30 3 * * *` | — | Data-retention purge. |
 
@@ -66,6 +67,8 @@ All ids below are copied verbatim from `inngest.createFunction({ id: ... })` cal
 | `send-email` | `email/send` | `rateLimit: { limit: 1, period: '1s' }` (no `key` — one global bucket; a literal key fails CEL registration) | Send one email via `EmailActivity.sendEmail`. |
 | `digest-send-one` | `digest/send-one` | — | Send one digest email. |
 | `agent-digest-org` | `agent/digest-org` | concurrency 2 | Generate + notify one org's agent digest (two `step.run`s so an ack-loss retry never re-spends on the LLM). |
+| `comms-inbound` | `comms/inbound.message` | `concurrency: { limit: 1, key: 'event.data.configId' }` | One inbound chat-app message: connect-code claim or agent turn + DM reply (`CommsInboundService.process`). Senders stamp event ids `comms-inbound:{configId}:{messageId}` so provider retries dedupe. |
+| `comms-matrix-sync-one` | `comms/matrix.sync-one` | `concurrency: { limit: 1, key: 'event.data.configId' }` | One `/sync` round for one Matrix config; persists the cursor and emits `comms/inbound.message` per event (Matrix `event_id` as the dedupe id). Per-config concurrency 1 protects the cursor. |
 | `autopost-process` | `autopost/process` | `cancelOn: [{ event: 'autopost/cancel', if: 'async.data.id == event.data.id' }]` | Process autopost, `step.sleep('wait-1h','1h')`, re-emit `autopost/process` (self-loop, **no event id** — a constant id would kill recurrence). |
 | `refresh-token` | `integration/refresh-token` | `cancelOn: [{ event: 'integration/refresh-token/cancel', ... }]` | Refresh one integration token; self-chains with `retries` counter in event data, capped at `MAX_REFRESH_RETRIES = 5`; next cycle id `` `refresh_${integrationId}_${randomUUID()}` `` (unique per cycle — a constant id lands in the dedupe store and black-holes the chain). |
 | `streak-tracker` | `streak/start` | `cancelOn: [{ event: 'streak/cancel', if: 'async.data.organizationId == event.data.organizationId' }]` | 22h sleep → streak reminder via `postActivity.notifyStreakReminder` (NotificationService, category `streak`) → 2h sleep → streak end. |

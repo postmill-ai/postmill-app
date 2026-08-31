@@ -24,6 +24,7 @@ import { ThrottlerStorageRedisService } from '@nest-lab/throttler-storage-redis'
 import { ioRedis } from '@postmill-ai/nestjs-libraries/redis/redis.service';
 import { AiModule } from '@postmill-ai/nestjs-libraries/ai/ai.module';
 import { VpnModule } from '@postmill-ai/nestjs-libraries/vpn/vpn.module';
+import { CommsModule } from '@postmill-ai/nestjs-libraries/comms/comms.module';
 import { InngestController } from '@postmill-ai/backend/api/controllers/inngest.controller';
 import { ScheduleModule } from '@nestjs/schedule';
 import { FeatureFlagsModule, FeatureFlagsService } from '@postmill-ai/nestjs-libraries/feature-flags';
@@ -53,6 +54,7 @@ const scheduleModule = featureFlags.isEnabled('cron')
     InngestModule,
     AiModule,
     VpnModule,
+    CommsModule,
     ProvidersModule,
     CollaborationModule,
     ThrottlerModule.forRoot({

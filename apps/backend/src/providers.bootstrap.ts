@@ -28,6 +28,8 @@ export class ProvidersBootstrap implements OnModuleInit {
           // register regardless of DEV_DISABLE_EMAIL; everything else honours
           // the flag.
           return providerId === 'empty' || this._featureFlags.isEnabled('email');
+        case 'comms':
+          return this._featureFlags.isEnabled('comms');
         case 'social':
         case 'storage':
         case 'vpn':
