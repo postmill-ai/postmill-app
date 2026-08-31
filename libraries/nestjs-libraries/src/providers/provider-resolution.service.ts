@@ -14,6 +14,7 @@ import {
   DEFAULT_VERSION,
   ProviderDomain,
   ContentPackCapability,
+  CommsCapability,
   ProviderManifest,
   ProviderNotFoundError,
   ProviderVersionRetiredError,
@@ -375,6 +376,14 @@ export class ProviderResolutionService {
       providerId,
       options,
     ).capability;
+  }
+
+  resolveComms(
+    providerId: string,
+    options: ResolutionOptions = {},
+  ): CommsCapability {
+    return this._resolveKernel<CommsCapability>('comms', providerId, options)
+      .capability;
   }
 
   /**

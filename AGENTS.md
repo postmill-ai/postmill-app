@@ -10,7 +10,7 @@ agent development docs live next to it:
 
 - **[`ARCHITECTURE.md`](./ARCHITECTURE.md)** — system architecture: layout, request lifecycle,
   provider kernel, data flows, identity/RBAC/sessions.
-- **[`agents/`](./agents/README.md)** — the agent development docs: provider how-tos for all 9
+- **[`agents/`](./agents/README.md)** — the agent development docs: provider how-tos for all 10
   domains, UI standards, libraries map, backend/frontend recipes, database, testing, security, jobs,
   and subsystem deep-dives. **Read the doc for your task before writing code** — the index in
   [`agents/README.md`](./agents/README.md) maps tasks to docs.
@@ -84,7 +84,7 @@ Full directory tour, import aliases, and "where does new code go": [`agents/libr
 
 ## Unified provider framework
 
-All provider domains (AI, Media, Storage, Short-link, Social, VPN, Content Packs, Email, Auth) resolve
+All provider domains (AI, Media, Storage, Short-link, Social, VPN, Content Packs, Email, Auth, Comms) resolve
 through a single **`ProviderKernel`** (`libraries/providers/kernel`), one workspace package per
 provider (`libraries/providers/<id>`), each version an internal module (`src/v1`, `src/v2`, …).
 
@@ -159,7 +159,7 @@ DEV_DISABLE_SHORTLINKS=true DEV_DISABLE_EMAIL=true pnpm run dev:minimal
 
 Flags: `DEV_DISABLE_AI`, `DEV_DISABLE_MCP`, `DEV_DISABLE_MEDIA`, `DEV_DISABLE_SHORTLINKS`,
 `DEV_DISABLE_EMAIL`, `DEV_DISABLE_VIDEO`, `DEV_DISABLE_AGENT`, `DEV_DISABLE_CRON`,
-`DEV_DISABLE_SENTRY`, `DEV_DISABLE_OPENTELEMETRY`.
+`DEV_DISABLE_SENTRY`, `DEV_DISABLE_OPENTELEMETRY`, `DEV_DISABLE_COMMS`.
 
 The backend dev script sets `--max-old-space-size=2048`. Frontend dev variants: `pnpm run
 dev:frontend` (Turbopack), `pnpm run dev:webpack` (fallback), `pnpm run analyze` (bundle report).

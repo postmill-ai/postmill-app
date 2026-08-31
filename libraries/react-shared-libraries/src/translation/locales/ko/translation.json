@@ -4480,5 +4480,7 @@
   "sentiment_negative": "Negative",
   "filter_sentiment": "Filter by sentiment",
   "filter_priority": "Filter by priority",
-  "comment_inbox.sort_priority_first": "High priority first"
+  "comment_inbox.sort_priority_first": "High priority first",
+  "comms": "커뮤니케이션",
+  "comms_settings_description": "Slack, Telegram, Discord, Matrix 또는 LINE에서 Postmill 에이전트와 대화하고 알림을 받아보세요."
 }

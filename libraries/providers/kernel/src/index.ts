@@ -33,6 +33,8 @@ export * from './domains/vpn';
 export * from './domains/contentpack';
 export * from './domains/email';
 export * from './domains/auth';
+export * from './domains/comms';
+export * from './domains/comms-verify';
 
 export * as AiDomain from './domains/ai';
 export * as MediaDomain from './domains/media';
@@ -43,3 +45,4 @@ export * as VpnDomain from './domains/vpn';
 export * as ContentPackDomain from './domains/contentpack';
 export * as EmailDomain from './domains/email';
 export * as AuthDomain from './domains/auth';
+export * as CommsDomain from './domains/comms';

@@ -1,4 +1,4 @@
 export * from './v1';
-import { telegramSocialModule } from './v1';
-const telegramProviderModules = [telegramSocialModule];
+import { telegramSocialModule, telegramCommsModule } from './v1';
+const telegramProviderModules = [telegramSocialModule, telegramCommsModule];
 export default telegramProviderModules;

@@ -4480,5 +4480,7 @@
   "sentiment_negative": "Negative",
   "filter_sentiment": "Filter by sentiment",
   "filter_priority": "Filter by priority",
-  "comment_inbox.sort_priority_first": "High priority first"
+  "comment_inbox.sort_priority_first": "High priority first",
+  "comms": "Коммуникации",
+  "comms_settings_description": "Общайтесь со своим агентом Postmill и получайте уведомления в Slack, Telegram, Discord, Matrix или LINE."
 }

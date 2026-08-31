@@ -70,6 +70,8 @@ model Organization {
   designs              Design[]
   designTemplates      DesignTemplate[]
   aiDesignerSessions   AiDesignerSession[]
+  commsProviderConfigs CommsProviderConfig[]
+  commsUserLinks       CommsUserLink[]
 
   @@index([apiKey])
   @@index([streakSince])
@@ -137,6 +139,7 @@ model User {
   notificationDigestQueues NotificationDigestQueue[]
   pushTokens            PushToken[]
   aiDesignerSessions    AiDesignerSession[]
+  commsUserLinks        CommsUserLink[]
 
   @@unique([email, providerName])
   @@index([lastReadNotifications])
@@ -1353,6 +1356,56 @@ model OrgVpnConfig {
 
   @@unique([organizationId, identifier, version])
   @@index([organizationId])
+}
+
+// ── Comms domain: org-level chat-app credentials + per-user links ──
+// One config per org per comms provider (Slack, Telegram, Discord, Matrix,
+// LINE). Bot/app credentials are org-level; per-user rows (CommsUserLink) bind
+// an org member to their external chat identity for agent chat + notifications.
+model CommsProviderConfig {
+  id             String   @id @default(cuid())
+  organizationId String
+  identifier     String   // comms providerId: 'slack' | 'telegram' | ...
+  version        String   @default("v1")
+  credentials    String?  // encrypted JSON (EncryptionService AES-GCM)
+  extraConfig    Json?    // non-secret metadata: slack team_id, webhookRegistered flag, ...
+  webhookToken   String   @unique // CSPRNG routing segment of the inbound webhook URL
+  syncCursor     String?  // matrix /sync since-token (poll-inbound providers only)
+  enabled        Boolean  @default(true)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  organization Organization    @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  userLinks    CommsUserLink[]
+
+  @@unique([organizationId, identifier, version])
+  @@index([organizationId])
+}
+
+model CommsUserLink {
+  id                   String    @id @default(cuid())
+  organizationId       String
+  configId             String
+  userId               String
+  status               String    @default("pending") // 'pending' | 'linked' | 'revoked'
+  connectCode          String?   @unique // one-time claim code; nulled once linked
+  connectCodeExpiresAt DateTime?
+  externalUserId       String?   // chat identity claimed via the connect code
+  externalDisplayName  String?
+  externalChannelId    String?   // DM channel/room id (Matrix room, Slack/Discord DM channel)
+  agentChatEnabled     Boolean   @default(true)
+  categories           Json      // Record<NotificationCategory, boolean> — sole source of truth for comms delivery
+  linkedAt             DateTime?
+  createdAt            DateTime  @default(now())
+  updatedAt            DateTime  @updatedAt
+
+  organization Organization        @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  config       CommsProviderConfig @relation(fields: [configId], references: [id], onDelete: Cascade)
+  user         User                @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([configId, userId])
+  @@index([configId, externalUserId])
+  @@index([organizationId, userId])
 }
 
 // ── v3.x: Per-organization premium content pack (BYOK) ──

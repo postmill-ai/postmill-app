@@ -1,4 +1,4 @@
 export * from './v1';
-import { matrixSocialModule } from './v1';
-const matrixProviderModules = [matrixSocialModule];
+import { matrixSocialModule, matrixCommsModule } from './v1';
+const matrixProviderModules = [matrixSocialModule, matrixCommsModule];
 export default matrixProviderModules;

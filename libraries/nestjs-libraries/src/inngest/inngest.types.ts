@@ -104,6 +104,23 @@ export type InngestEvents = {
       organizationId: string;
     };
   };
+  'comms/inbound.message': {
+    data: {
+      configId: string;
+      organizationId: string;
+      identifier: string;
+      externalUserId: string;
+      externalChannelId?: string;
+      text: string;
+      messageId?: string;
+    };
+  };
+  'comms/matrix.sync-one': {
+    data: {
+      configId: string;
+      organizationId: string;
+    };
+  };
 
 };
 
@@ -133,6 +150,12 @@ export const analyticsBackfillEvent = eventType('analytics/backfill', {
 });
 export const commentsSyncOrgEvent = eventType('comments/sync-org', {
   schema: staticSchema<InngestEvents['comments/sync-org']['data']>(),
+});
+export const commsInboundMessageEvent = eventType('comms/inbound.message', {
+  schema: staticSchema<InngestEvents['comms/inbound.message']['data']>(),
+});
+export const commsMatrixSyncOneEvent = eventType('comms/matrix.sync-one', {
+  schema: staticSchema<InngestEvents['comms/matrix.sync-one']['data']>(),
 });
 export const analyticsSyncOrgEvent = eventType('analytics/sync-org', {
   schema: staticSchema<InngestEvents['analytics/sync-org']['data']>(),

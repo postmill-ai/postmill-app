@@ -1,4 +1,4 @@
 export * from './v1';
-import { lineSocialModule } from './v1';
-const lineProviderModules = [lineSocialModule];
+import { lineSocialModule, lineCommsModule } from './v1';
+const lineProviderModules = [lineSocialModule, lineCommsModule];
 export default lineProviderModules;

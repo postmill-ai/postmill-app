@@ -4480,5 +4480,7 @@
   "sentiment_negative": "Negative",
   "filter_sentiment": "Filter by sentiment",
   "filter_priority": "Filter by priority",
-  "comment_inbox.sort_priority_first": "High priority first"
+  "comment_inbox.sort_priority_first": "High priority first",
+  "comms": "通讯应用",
+  "comms_settings_description": "在 Slack、Telegram、Discord、Matrix 或 LINE 中与您的 Postmill 智能体聊天并接收通知。"
 }

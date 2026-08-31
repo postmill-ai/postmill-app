@@ -60,7 +60,9 @@ export function requireWrite(context?: any): void {
   if (!access) {
     throw new Error('Write access denied: no access context');
   }
-  if (access.mode === 'user') {
+  // 'comms' = an inbound chat-app turn on behalf of a real, connect-code-verified
+  // org user (CommsUserLink) — same trust level as an interactive 'user' session.
+  if (access.mode === 'user' || access.mode === 'comms') {
     return;
   }
   if (access.mode === 'mcp') {
@@ -80,7 +82,7 @@ export function requireRead(context?: any): void {
   if (!access) {
     throw new Error('Read access denied: no access context');
   }
-  if (access.mode === 'user' || access.mode === 'headless') {
+  if (access.mode === 'user' || access.mode === 'headless' || access.mode === 'comms') {
     return;
   }
   if (access.mode === 'mcp') {

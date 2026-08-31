@@ -6,12 +6,12 @@ kernel vitest alias. One row per **module** (multi-module packages — e.g. `ope
 get multiple rows). The `has-spec?` column reflects whether the **package** contains any
 `*.spec.ts` / `*.int-spec.ts` under `src/**`.
 
-- **Modules:** 177  (== `providerModules.length`)
+- **Modules:** 182  (== `providerModules.length`)
 - **Packages:** 159  (== real package dirs under `libraries/providers/`, excluding `kernel` and `node_modules`)
   - Note: `ls -d libraries/providers/*/ | grep -v kernel | wc -l` = **160** on a clean checkout because it also counts the `node_modules/` dir; **159** are real packages. (After a local `--coverage` run a gitignored `coverage/` dir also appears, making the raw count **161** — both `node_modules/` and `coverage/` are non-package artifacts.)
-- **Packages with at least one spec:** 105 / 159  (media adapters + the magnific content pack gained recorded-fixture `*.int-spec.ts` behavioral tests via the shared `kernel/src/testing/media-int-helpers.ts`)
+- **Packages with at least one spec:** 108 / 159  (media adapters + the magnific content pack gained recorded-fixture `*.int-spec.ts` behavioral tests via the shared `kernel/src/testing/media-int-helpers.ts`)
 
-Modules per domain: ai=30, auth=6, contentpack=4, email=7, media=35, shortlink=20, social=45, storage=14, vpn=16
+Modules per domain: ai=30, auth=6, comms=5, contentpack=4, email=7, media=35, shortlink=20, social=45, storage=14, vpn=16
 
 | package | domain | providerId | version | status | has-spec? |
 |---|---|---|---|---|---|
@@ -51,6 +51,11 @@ Modules per domain: ai=30, auth=6, contentpack=4, email=7, media=35, shortlink=2
 | local | auth | local | v1 | active | yes |
 | wallet | auth | wallet | v1 | active | no |
 | wrapcast | auth | farcaster | v1 | active | no |
+| discord | comms | discord | v1 | active | yes |
+| line | comms | line | v1 | active | yes |
+| matrix | comms | matrix | v1 | active | yes |
+| slack | comms | slack | v1 | active | yes |
+| telegram | comms | telegram | v1 | active | yes |
 | adobe-stock | contentpack | adobe-stock | v1 | active | yes |
 | envato | contentpack | envato | v1 | active | yes |
 | magnific | contentpack | magnific | v1 | active | no |
@@ -120,7 +125,7 @@ Modules per domain: ai=30, auth=6, contentpack=4, email=7, media=35, shortlink=2
 | akkoma | social | akkoma | v1 | active | yes |
 | bluesky | social | bluesky | v1 | active | no |
 | devto | social | devto | v1 | active | no |
-| discord | social | discord | v1 | active | no |
+| discord | social | discord | v1 | active | yes |
 | discourse | social | discourse | v1 | active | yes |
 | dribbble | social | dribbble | v1 | active | no |
 | facebook | social | facebook | v1 | active | no |
@@ -150,8 +155,8 @@ Modules per domain: ai=30, auth=6, contentpack=4, email=7, media=35, shortlink=2
 | reddit | social | reddit | v1 | active | no |
 | sharkey | social | sharkey | v1 | active | yes |
 | skool | social | skool | v1 | active | no |
-| slack | social | slack | v1 | active | no |
-| telegram | social | telegram | v1 | active | no |
+| slack | social | slack | v1 | active | yes |
+| telegram | social | telegram | v1 | active | yes |
 | threads | social | threads | v1 | active | no |
 | tiktok | social | tiktok | v1 | active | no |
 | tumblr | social | tumblr | v1 | active | no |

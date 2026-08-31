@@ -1,19 +1,19 @@
 # Provider framework: kernel essentials + add-a-provider recipe
 
-Every provider domain (AI, media, storage, short-link, social, VPN, content pack, email, auth)
-resolves through a single `ProviderKernel`; one workspace package per provider lives under
+Every provider domain (AI, media, storage, short-link, social, VPN, content pack, email, auth,
+comms) resolves through a single `ProviderKernel`; one workspace package per provider lives under
 `libraries/providers/<id>`. This doc covers the kernel contracts and the universal recipe for
 adding a provider; per-domain specifics are in the sibling docs linked at the end.
 
 ## Domains and identity
 
-The 9 domains are the `ProviderDomain` union and `PROVIDER_DOMAINS` const in
+The 10 domains are the `ProviderDomain` union and `PROVIDER_DOMAINS` const in
 `libraries/providers/kernel/src/identity.ts` (kept in lockstep via `satisfies`):
 
 ```ts
 export type ProviderDomain =
   | 'ai' | 'media' | 'storage' | 'shortlink' | 'social'
-  | 'vpn' | 'contentpack' | 'email' | 'auth';
+  | 'vpn' | 'contentpack' | 'email' | 'auth' | 'comms';
 ```
 
 - A provider version is addressed as the identity triple `domain/providerId@version`
@@ -160,6 +160,7 @@ export default bitlyProviderModules;
 | `media` | `DEV_DISABLE_MEDIA` |
 | `shortlink` | `DEV_DISABLE_SHORTLINKS` |
 | `email` | `DEV_DISABLE_EMAIL`, **except** providerId `empty` (always-on fallback) |
+| `comms` | `DEV_DISABLE_COMMS` |
 | `social`, `storage`, `vpn`, `contentpack`, `auth` | always on |
 
 A `ProviderManifestError` (malformed manifest / duplicate registration) is **fatal at boot** —
@@ -237,6 +238,7 @@ generator script exists in-repo — maintain it by hand:
 | `agents/providers/contentpack.md` | Adding a premium stock/content-pack source. |
 | `agents/providers/email.md` | Adding an email sender; env-only credentials. |
 | `agents/providers/auth.md` | Touching platform login providers (separate admin app owns writes). |
+| `agents/providers/comms.md` | Adding a bi-directional chat app (agent chat + notification delivery to Slack/Telegram/…). |
 
 ### Frontend work required?
 
@@ -244,6 +246,7 @@ generator script exists in-repo — maintain it by hand:
 |---|---|---|
 | social | **Yes** | Composer component under `apps/frontend/src/components/composer/providers/<id>/` (wired via `high.order.provider.tsx` + `show.all.providers.tsx`) and icon at `apps/frontend/public/icons/platforms/<id>.png`. |
 | media (studio) | **Yes** | Descriptor `apps/frontend/src/components/media-tools/<id>/descriptor.ts`, studio page under `apps/frontend/src/app/(app)/(site)/media/<id>/`, nav entry in `apps/frontend/src/app/(app)/(site)/media/layout.tsx`; then re-run `node tools/codegen/generate-studio-descriptor-registry.mjs` (merges descriptor data into the package's `metadata.ts`; CI gate `--check` in `.github/workflows/test.yml`). |
+| comms | **No** (usually) | The bespoke `settings → comms` tab (`apps/frontend/src/components/settings/comms/comms.tab.tsx`) renders providers from the kernel manifest (`credentialFields`, `setupNotes`) — a new comms adapter appears automatically. |
 | ai | Minor | Optional icon in `apps/frontend/src/components/shared/provider-icon.tsx`; `BASE_URL_PROVIDERS` in `apps/frontend/src/components/settings/shared/kit/descriptors/ai.descriptor.ts` only for endpoint-bringing providers (currently just `openai-compatible`). |
 | shortlink, vpn, contentpack, storage | No | Catalog-driven settings kits render from manifest `credentialFields`. |
 | email | No | Env-only credentials (e.g. `resend` reads `process.env.EMAIL_API_KEY`); no per-org config UI. |

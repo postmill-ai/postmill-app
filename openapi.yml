@@ -623,6 +623,29 @@ paths:
           description: ""
       tags:
         - Media Jobs
+  /webhooks/comms/{identifier}/{token}:
+    post:
+      operationId: CommsWebhooksController_handle
+      parameters:
+        - name: identifier
+          required: true
+          in: path
+          schema:
+            type: string
+        - name: token
+          required: true
+          in: path
+          schema:
+            type: string
+      responses:
+        "201":
+          description: ""
+          content:
+            application/json:
+              schema:
+                type: object
+      tags:
+        - Comms Webhooks
   /media/designs/render-frame/{jobId}:
     get:
       operationId: DesignRenderFrameController_renderFrame
@@ -5888,6 +5911,124 @@ paths:
                 type: object
       tags:
         - Org VPN Settings
+  /settings/comms/config:
+    get:
+      operationId: CommsSettingsController_getConfig
+      parameters: []
+      responses:
+        "200":
+          description: ""
+      tags:
+        - Comms Settings
+  /settings/comms/config/{identifier}:
+    put:
+      operationId: CommsSettingsController_upsertConfig
+      parameters:
+        - name: identifier
+          required: true
+          in: path
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpsertCommsConfigDto"
+      responses:
+        "200":
+          description: ""
+      tags:
+        - Comms Settings
+    delete:
+      operationId: CommsSettingsController_deleteConfig
+      parameters:
+        - name: identifier
+          required: true
+          in: path
+          schema:
+            type: string
+      responses:
+        "200":
+          description: ""
+      tags:
+        - Comms Settings
+  /settings/comms/config/{identifier}/test:
+    post:
+      operationId: CommsSettingsController_testConfig
+      parameters:
+        - name: identifier
+          required: true
+          in: path
+          schema:
+            type: string
+      responses:
+        "201":
+          description: ""
+      tags:
+        - Comms Settings
+  /settings/comms/links:
+    post:
+      operationId: CommsSettingsController_createLink
+      parameters: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateCommsLinkDto"
+      responses:
+        "201":
+          description: ""
+      tags:
+        - Comms Settings
+  /settings/comms/links/{id}:
+    put:
+      operationId: CommsSettingsController_updateLink
+      parameters:
+        - name: id
+          required: true
+          in: path
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateCommsLinkDto"
+      responses:
+        "200":
+          description: ""
+      tags:
+        - Comms Settings
+    delete:
+      operationId: CommsSettingsController_deleteLink
+      parameters:
+        - name: id
+          required: true
+          in: path
+          schema:
+            type: string
+      responses:
+        "200":
+          description: ""
+      tags:
+        - Comms Settings
+  /settings/comms/links/{id}/regenerate-code:
+    post:
+      operationId: CommsSettingsController_regenerateCode
+      parameters:
+        - name: id
+          required: true
+          in: path
+          schema:
+            type: string
+      responses:
+        "201":
+          description: ""
+      tags:
+        - Comms Settings
   /settings/content-packs/providers:
     get:
       operationId: ContentPackController_listProviders
@@ -10842,6 +10983,61 @@ components:
     UpsertVpnConfigDto:
       type: object
       properties: {}
+    UpsertCommsConfigDto:
+      type: object
+      properties:
+        credentials:
+          type: object
+        enabled:
+          type: boolean
+    CommsCategoriesDto:
+      type: object
+      properties:
+        post_published:
+          type: boolean
+        post_failed:
+          type: boolean
+        channels:
+          type: boolean
+        comments:
+          type: boolean
+        budget:
+          type: boolean
+        media:
+          type: boolean
+        announcements:
+          type: boolean
+        streak:
+          type: boolean
+        agent:
+          type: boolean
+        analytics:
+          type: boolean
+    CreateCommsLinkDto:
+      type: object
+      properties:
+        identifier:
+          type: string
+          maxLength: 64
+        userId:
+          type: string
+          maxLength: 64
+        agentChatEnabled:
+          type: boolean
+        categories:
+          $ref: "#/components/schemas/CommsCategoriesDto"
+      required:
+        - identifier
+        - userId
+        - agentChatEnabled
+        - categories
+    UpdateCommsLinkDto:
+      type: object
+      properties:
+        agentChatEnabled:
+          type: boolean
+        categories:
+          $ref: "#/components/schemas/CommsCategoriesDto"
     UpsertContentPackConfigDto:
       type: object
       properties: {}

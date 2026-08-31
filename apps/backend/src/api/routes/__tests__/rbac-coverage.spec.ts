@@ -39,6 +39,7 @@ import { MediaStudioController } from '../media-studio.controller';
 import { OrgAiSettingsController } from '../org-ai-settings.controller';
 import { OrgShortLinkSettingsController } from '../org-shortlink-settings.controller';
 import { OrgVpnSettingsController } from '../org-vpn-settings.controller';
+import { CommsSettingsController } from '../comms-settings.controller';
 import { OrganizationsController } from '../organizations.controller';
 import { PostsController } from '../posts.controller';
 import { ProvidersController } from '../providers.controller';
@@ -99,6 +100,7 @@ const PUBLIC_CONTROLLERS = new Set<string>([
   'StripeController',
   'EmailWebhooksController',
   'MediaJobsWebhookController',
+  'CommsWebhooksController',
   'OAuthController',
   'OAuthAuthorizedController',
 ]);
@@ -141,6 +143,7 @@ const ORG_RESOURCE_CONTROLLERS: Array<{ name: string; ctor: any }> = [
   { name: 'OrgAiSettingsController', ctor: OrgAiSettingsController },
   { name: 'OrgShortLinkSettingsController', ctor: OrgShortLinkSettingsController },
   { name: 'OrgVpnSettingsController', ctor: OrgVpnSettingsController },
+  { name: 'CommsSettingsController', ctor: CommsSettingsController },
   { name: 'OrganizationsController', ctor: OrganizationsController },
   { name: 'PostsController', ctor: PostsController },
   { name: 'ProvidersController', ctor: ProvidersController },
@@ -374,6 +377,7 @@ describe('RBAC coverage — every org-resource mutation is gated or explicitly a
       'OrgAiSettingsController',
       'OrgShortLinkSettingsController',
       'OrgVpnSettingsController',
+      'CommsSettingsController',
       'OrganizationsController',
       'RagController',
       'ReplicateStudioController',

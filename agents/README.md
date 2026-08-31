@@ -28,6 +28,7 @@ Root companions:
 | [`providers/contentpack.md`](./providers/contentpack.md) | Adding a premium content pack (BYOK stock media). |
 | [`providers/email.md`](./providers/email.md) | Adding an email provider (env-selected, not per-org). |
 | [`providers/auth.md`](./providers/auth.md) | Adding a login/auth provider (platform-level, rare). |
+| [`providers/comms.md`](./providers/comms.md) | Adding a bi-directional chat app (agent chat + notifications to Slack/Telegram/…). |
 | [`ui-standards.md`](./ui-standards.md) | Writing **any** frontend UI — tokens, primitives, modals, toasts, icons, states. |
 | [`frontend.md`](./frontend.md) | Frontend structure: routing, SWR/`useFetch`, contexts, error boundaries, dashboard widgets. |
 | [`backend.md`](./backend.md) | Any server-side change — layering rules + recipes (controller, DTO, repository, Inngest function). |

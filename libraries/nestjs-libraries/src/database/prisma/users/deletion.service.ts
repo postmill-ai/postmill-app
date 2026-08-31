@@ -100,7 +100,8 @@ export class DeletionService {
       await tx.userOrganization.deleteMany({ where: { userId } });
 
       // Cascade-marked children (Session, UserProfile, NotificationPreference,
-      // NotificationDigestQueue, PushToken, NotificationRead) drop with the user.
+      // NotificationDigestQueue, PushToken, NotificationRead, CommsUserLink)
+      // drop with the user.
       // Optional FKs (AISpendLog/AISettingsAudit/AIMediaJob.userId,
       // SocialComment.assigneeId, Post.approvedById, Campaign/CampaignItem.createdById)
       // null out via their relation's default SetNull.

@@ -96,6 +96,8 @@ import { DeepgramController } from './routes/deepgram.controller';
 import { AiDesignerModule } from '@postmill-ai/nestjs-libraries/ai-designer/ai-designer.module';
 import { AiDesignerController } from './routes/ai-designer.controller';
 import { AiDesignerGateway } from './gateways/ai-designer.gateway';
+import { CommsSettingsController } from './routes/comms-settings.controller';
+import { CommsWebhooksController } from './routes/comms-webhooks.controller';
 
 // Exported so tests can prove a controller is registered for
 // AuthMiddleware/CsrfMiddleware (an unregistered controller serves unauthenticated).
@@ -132,6 +134,7 @@ export const authenticatedController = [
   RagController,
   OrgShortLinkSettingsController,
   OrgVpnSettingsController,
+  CommsSettingsController,
   ContentPackController,
   MediaProviderController,
   MediaDefaultsController,
@@ -170,6 +173,7 @@ export const authenticatedController = [
     OAuthController,
     EmailWebhooksController,
     MediaJobsWebhookController,
+    CommsWebhooksController,
     DesignRenderFrameController,
     ...authenticatedController,
   ],

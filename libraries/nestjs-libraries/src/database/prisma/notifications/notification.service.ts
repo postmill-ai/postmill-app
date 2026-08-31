@@ -9,6 +9,7 @@ import { OrganizationRepository } from '@postmill-ai/nestjs-libraries/database/p
 import { NotificationPreferenceService } from '@postmill-ai/nestjs-libraries/database/prisma/notifications/notification-preference.service';
 import { PushNotificationService } from '@postmill-ai/nestjs-libraries/database/prisma/notifications/push-notification.service';
 import { NotificationDigestService } from '@postmill-ai/nestjs-libraries/database/prisma/notifications/notification-digest.service';
+import { CommsDeliveryService } from '@postmill-ai/nestjs-libraries/comms/comms-delivery.service';
 import {
   BroadcastNotificationDto,
   ChannelToggles,
@@ -23,7 +24,10 @@ export interface NotifyOptions {
   message: string;
   link?: string;
   metadata?: Record<string, any>;
-  channels?: Partial<ChannelToggles>;
+  // `comms` is the 4th delivery bucket (linked chat apps). Unlike the three
+  // preference-gated channels it is gated ONLY by each CommsUserLink row's
+  // per-category checkboxes — not by NotificationPreference.
+  channels?: Partial<ChannelToggles> & { comms?: boolean };
   digest?: boolean;
   override?: boolean;
   targetUserIds?: string[];
@@ -38,7 +42,10 @@ export class NotificationService {
     private _organizationRepository: OrganizationRepository,
     private _preferenceService: NotificationPreferenceService,
     private _pushService: PushNotificationService,
-    private _digestService: NotificationDigestService
+    private _digestService: NotificationDigestService,
+    // Provided by the @Global() CommsModule; depends only on comms
+    // repositories/services (never on NotificationService) — no DI cycle.
+    private _commsDelivery: CommsDeliveryService
   ) {}
 
   getMainPageCount(organizationId: string, userId: string) {
@@ -119,7 +126,7 @@ export class NotificationService {
 
     const allowedUserIds = targetUserIds ? new Set(targetUserIds) : null;
 
-    const channels = { ...this._defaultChannels(), ...requestedChannels };
+    const channels = { ...this._defaultChannels(), comms: true, ...requestedChannels };
 
     const team = await this._organizationRepository.getTeam(orgId);
     const members = team?.users ?? [];
@@ -189,6 +196,24 @@ export class NotificationService {
           body: message,
           data: metadata ? this._stringifyData(metadata) : undefined,
         });
+      }
+    }
+
+    // Comms channel (linked chat apps). Per-user gating happens inside the
+    // delivery service against each link row's category checkboxes —
+    // NotificationPreference deliberately plays no part. Never throws.
+    if (channels.comms) {
+      const commsUserIds = activeMembers
+        .map((m) => m.user.id)
+        .filter((id) => !allowedUserIds || allowedUserIds.has(id));
+      if (commsUserIds.length > 0) {
+        await this._commsDelivery.sendToUsers(
+          orgId,
+          commsUserIds,
+          category,
+          { title, message, link },
+          override
+        );
       }
     }
   }
