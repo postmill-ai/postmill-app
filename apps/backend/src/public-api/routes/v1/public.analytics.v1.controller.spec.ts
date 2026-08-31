@@ -37,7 +37,7 @@ vi.mock('@postmill-ai/nestjs-libraries/analytics/analytics.service', () => ({
 }));
 
 import {
-  AnalyticsV2Controller,
+  PublicAnalyticsV1Controller,
   parseIntegrations,
   parseCampaigns,
   parsePage,
@@ -45,7 +45,7 @@ import {
   parseCompare,
   validateDateRange,
   validateToGteFrom,
-} from './analytics.v2.controller';
+} from './public.analytics.v1.controller';
 import { AnalyticsService } from '@postmill-ai/nestjs-libraries/analytics/analytics.service';
 import type {
   AnalyticsDateRangeDto,
@@ -74,8 +74,8 @@ function dq(overrides: Partial<AnalyticsDateRangeDto & AnalyticsPostsQueryDto & 
   };
 }
 
-describe('AnalyticsV2Controller', () => {
-  let controller: AnalyticsV2Controller;
+describe('PublicAnalyticsV1Controller', () => {
+  let controller: PublicAnalyticsV1Controller;
   let service: AnalyticsService;
   let watchlistService: any;
   let shareService: any;
@@ -95,10 +95,11 @@ describe('AnalyticsV2Controller', () => {
       mintShare: vi.fn(),
       disableShare: vi.fn(),
     } as any;
-    controller = new AnalyticsV2Controller(
+    controller = new PublicAnalyticsV1Controller(
       service as unknown as AnalyticsService,
       watchlistService,
       shareService,
+      { get: vi.fn() } as any,
     );
   });
 
@@ -604,7 +605,7 @@ describe('AnalyticsV2Controller', () => {
 });
 
 describe('AuthZ decorator metadata (R2.1 / R2.2)', () => {
-  const proto = AnalyticsV2Controller.prototype as any;
+  const proto = PublicAnalyticsV1Controller.prototype as any;
   const requirePerm = (m: string) =>
     Reflect.getMetadata(REQUIRE_PERMISSION_KEY, proto[m]);
   const checkPolicies = (m: string) =>

@@ -8,29 +8,23 @@ vi.mock('file-type', () => ({ fromBuffer: vi.fn() }));
 import { HttpException } from '@nestjs/common';
 import { PATH_METADATA } from '@nestjs/common/constants';
 import { PublicIntegrationsController } from './public.integrations.controller';
+import { PublicAnalyticsV1Controller } from './public.analytics.v1.controller';
 
-// Positional constructor args (see controller): analyticsService is index 6,
-// campaignsService is index 11.
+// Positional constructor args (PublicAnalyticsV1Controller): analyticsService,
+// watchlistService, shareService, campaignsService.
 const make = () => {
   const campaignsService = { get: vi.fn() };
   const analyticsService = { getOverview: vi.fn() };
-  const ctrl = new (PublicIntegrationsController as any)(
-    {}, // integrationService
-    {}, // postsService
-    {}, // fileService
-    {}, // notificationService
-    {}, // integrationManager
-    {}, // refreshIntegrationService
+  const ctrl = new (PublicAnalyticsV1Controller as any)(
     analyticsService,
-    {}, // storageService
-    {}, // aiDefaults
-    {}, // aiMediaService
+    {}, // watchlistService
+    {}, // shareService
     campaignsService,
   );
   return { ctrl, campaignsService, analyticsService };
 };
 
-describe('PublicIntegrationsController.getCampaignAnalytics — R2.4 date validation', () => {
+describe('PublicAnalyticsV1Controller.getCampaignAnalytics — R2.4 date validation', () => {
   const org = { id: 'org-1' } as any;
 
   it('rejects a garbage from date with 400 (never calls analytics)', async () => {
@@ -81,22 +75,33 @@ describe('PublicIntegrationsController.getCampaignAnalytics — R2.4 date valida
   });
 });
 
-describe('PublicIntegrationsController — v1 analytics routes (legacy removed)', () => {
-  const proto = PublicIntegrationsController.prototype as any;
+describe('Analytics unification — the ONE analytics home', () => {
+  const analyticsProto = PublicAnalyticsV1Controller.prototype as any;
+  const integrationsProto = PublicIntegrationsController.prototype as any;
 
-  const path = (m: string) => Reflect.getMetadata(PATH_METADATA, proto[m]);
+  const path = (proto: any, m: string) => Reflect.getMetadata(PATH_METADATA, proto[m]);
 
-  it('keeps the live static analytics routes', () => {
-    expect(path('getAnalyticsOverview')).toBe('/analytics/overview');
-    expect(path('getCampaignAnalytics')).toBe('/analytics/campaign/:id');
-    expect(path('getAnomalies')).toBe('/analytics/anomalies');
+  it('the full surface lives on PublicAnalyticsV1Controller at /public/v1/analytics/*', () => {
+    expect(path(analyticsProto, 'getOverview')).toBe('/overview');
+    expect(path(analyticsProto, 'getCampaignAnalytics')).toBe('/campaign/:id');
+    expect(path(analyticsProto, 'listAnomalies')).toBe('/anomalies');
   });
 
-  it('no longer exposes the legacy n8n/Zapier analytics routes (404)', () => {
-    // The handlers are gone, so Express has no binding for
-    // GET /public/v1/analytics/:integration or
-    // GET /public/v1/analytics/post/:postId — both 404.
-    expect(proto.getAnalytics).toBeUndefined();
-    expect(proto.getPostAnalytics).toBeUndefined();
+  it('public.integrations.controller no longer hosts analytics routes', () => {
+    // All analytics moved to PublicAnalyticsV1Controller — no duplicate
+    // bindings for overview / campaign / anomalies on the integrations
+    // controller.
+    expect(integrationsProto.getAnalyticsOverview).toBeUndefined();
+    expect(integrationsProto.getCampaignAnalytics).toBeUndefined();
+    expect(integrationsProto.getAnomalies).toBeUndefined();
+  });
+
+  it('no legacy n8n/Zapier or /analytics/v2 shapes remain', () => {
+    expect(integrationsProto.getAnalytics).toBeUndefined();
+    expect(integrationsProto.getPostAnalytics).toBeUndefined();
+    // The class-level controller path is the unified public one.
+    expect(
+      Reflect.getMetadata(PATH_METADATA, PublicAnalyticsV1Controller),
+    ).toBe('/public/v1/analytics');
   });
 });

@@ -34,6 +34,7 @@ import { isKnownMetric } from '@postmill-ai/nestjs-libraries/integrations/social
 import { Response } from 'express';
 import dayjs from 'dayjs';
 import { WatchlistService } from '@postmill-ai/nestjs-libraries/database/prisma/watchlist/watchlist.service';
+import { CampaignsService } from '@postmill-ai/nestjs-libraries/database/prisma/campaigns/campaigns.service';
 import { CheckPolicies } from '@postmill-ai/backend/services/auth/permissions/permissions.ability';
 import { AuthorizationActions, Sections } from '@postmill-ai/backend/services/auth/permissions/permission.exception.class';
 import { RequirePermission } from '@postmill-ai/backend/services/auth/rbac/require-permission.decorator';
@@ -100,13 +101,25 @@ class AddWatchlistDto {
   displayName?: string;
 }
 
-@ApiTags('Analytics V2')
-@Controller('/analytics/v2')
-export class AnalyticsV2Controller {
+// The ONE analytics API. Relocated from `/analytics/v2` (a fork-era misnomer —
+// this surface is Postmill's v1 analytics) onto the unified public API:
+// `/public/v1/analytics/*` is consumed by the dashboard (session cookie),
+// integrators (API key), and MCP clients (pos_ OAuth token) via the dual-auth
+// PublicAuthMiddleware. Cookie callers keep the app-route posture (RBAC +
+// entitlement + CSRF); API-key/OAuth callers get throttled, ungated read
+// parity (see the guards' authSource handling).
+@ApiTags('Analytics')
+@Controller('/public/v1/analytics')
+// Public-surface default: 60 reads/min per route per org (the pre-unification
+// public analytics routes carried the same). The refresh route below overrides
+// with a tighter 6/hour since it triggers live provider fetches.
+@Throttle({ default: { limit: 60, ttl: 60000 } })
+export class PublicAnalyticsV1Controller {
   constructor(
     private _analyticsService: AnalyticsService,
     private _watchlistService: WatchlistService,
     private _shareService: AnalyticsShareService,
+    private _campaignsService: CampaignsService,
   ) {}
 
   @Get('/overview')
@@ -125,6 +138,39 @@ export class AnalyticsV2Controller {
       parseCompare(query.compare),
       { campaignIds: parseCampaigns(query.campaigns) }
     );
+  }
+
+  // Campaign-scoped analytics (moved from public.integrations.controller —
+  // one analytics home). Org-ownership enforced by CampaignsService.get → 404.
+  @Get('/campaign/:id')
+  async getCampaignAnalytics(
+    @GetOrgFromRequest() org: Organization,
+    @Param('id') id: string,
+    @Query('from') fromStr?: string,
+    @Query('to') toStr?: string
+  ) {
+    const campaign = await this._campaignsService.get(id, org.id);
+    if (!campaign) {
+      throw new HttpException({ msg: 'Campaign not found' }, 404);
+    }
+
+    const to = toStr || dayjs().format('YYYY-MM-DD');
+    const from = fromStr || dayjs().subtract(90, 'day').format('YYYY-MM-DD');
+
+    validateDateRange(from, to);
+    validateToGteFrom(from, to);
+    validateWindowCap(from, to);
+
+    const overview = await this._analyticsService.getOverview(
+      org,
+      from,
+      to,
+      [],
+      false,
+      { campaignIds: [id] }
+    );
+
+    return { ...overview, window: { from, to } };
   }
 
   @Get('/channel/:integrationId')
@@ -342,9 +388,11 @@ export class AnalyticsV2Controller {
   @Get('/anomalies')
   async listAnomalies(
     @GetOrgFromRequest() org: Organization,
+    @Query('limit') limit?: string,
     @Query('includeDismissed') includeDismissed?: string,
   ) {
     return this._analyticsService.listAnomalies(org.id, {
+      limit: limit ? Math.min(Math.max(+limit || 0, 1), 100) : undefined,
       includeDismissed: includeDismissed === 'true',
     });
   }

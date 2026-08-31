@@ -27,14 +27,6 @@ import { Organization } from '@prisma/client';
 import { IntegrationService } from '@postmill-ai/nestjs-libraries/database/prisma/integrations/integration.service';
 import { CheckPolicies } from '@postmill-ai/backend/services/auth/permissions/permissions.ability';
 import { PostsService } from '@postmill-ai/nestjs-libraries/database/prisma/posts/posts.service';
-import { AnalyticsService } from '@postmill-ai/nestjs-libraries/analytics/analytics.service';
-import { CampaignsService } from '@postmill-ai/nestjs-libraries/database/prisma/campaigns/campaigns.service';
-import {
-  validateDateRange,
-  validateToGteFrom,
-  validateWindowCap,
-} from '@postmill-ai/nestjs-libraries/analytics/date-range.validation';
-import dayjs from 'dayjs';
 import { CreatePostDto } from '@postmill-ai/nestjs-libraries/dtos/posts/create.post.dto';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { StorageService } from '@postmill-ai/nestjs-libraries/database/prisma/storage/storage.service';
@@ -107,11 +99,9 @@ export class PublicIntegrationsController {
     private _notificationService: NotificationService,
     private _integrationManager: IntegrationManager,
     private _refreshIntegrationService: RefreshIntegrationService,
-    private _analyticsService: AnalyticsService,
     private _storageService: StorageService,
     private _aiDefaults: AiDefaultsService,
     private _aiMediaService: AiMediaService,
-    private _campaignsService: CampaignsService
   ) {}
 
   @Post('/upload')
@@ -674,89 +664,9 @@ export class PublicIntegrationsController {
     return this._postsService.updateReleaseId(org.id, id, body.releaseId);
   }
 
-  // 6.8: public v2 campaign analytics. Gated like `/analytics/overview` — the
-  // public per-minute @Throttle, no @CheckPolicies (API-key read parity across
-  // the public analytics routes). Org-ownership is enforced by
-  // CampaignsService.get (→ 404).
-  @Get('/analytics/campaign/:id')
-  @Throttle({ default: { limit: 60, ttl: 60000 } })
-  async getCampaignAnalytics(
-    @GetOrgFromRequest() org: Organization,
-    @Param('id') id: string,
-    @Query('from') fromStr?: string,
-    @Query('to') toStr?: string
-  ) {
-    Sentry.metrics.count('public_api-request', 1);
-    const campaign = await this._campaignsService.get(id, org.id);
-    if (!campaign) {
-      throw new HttpException({ msg: 'Campaign not found' }, 404);
-    }
-
-    const to = toStr || dayjs().format('YYYY-MM-DD');
-    const from = fromStr || dayjs().subtract(90, 'day').format('YYYY-MM-DD');
-
-    // R2.4 — validate the resolved window before any downstream dayjs use, and
-    // cap it (public route) so a large range can't blow up query cost.
-    validateDateRange(from, to);
-    validateToGteFrom(from, to);
-    validateWindowCap(from, to);
-
-    const overview = await this._analyticsService.getOverview(
-      org,
-      from,
-      to,
-      [],
-      false,
-      { campaignIds: [id] }
-    );
-
-    return { ...overview, window: { from, to } };
-  }
-
-  // 6.8: public v2 anomaly feed. Same gating as `/analytics/overview`
-  // (@Throttle, no @CheckPolicies).
-  @Get('/analytics/anomalies')
-  @Throttle({ default: { limit: 60, ttl: 60000 } })
-  async getAnomalies(
-    @GetOrgFromRequest() org: Organization,
-    @Query('limit') limit?: string,
-    @Query('includeDismissed') includeDismissed?: string
-  ) {
-    Sentry.metrics.count('public_api-request', 1);
-    return this._analyticsService.listAnomalies(org.id, {
-      limit: limit ? Math.min(Math.max(+limit || 0, 1), 100) : undefined,
-      includeDismissed: includeDismissed === 'true',
-    });
-  }
-
-  @Get('/analytics/overview')
-  // 0.8: ungated by @CheckPolicies — API-key read routes carry no entitlement
-  // gate. Instead it carries the documented public per-minute @Throttle
-  // (org-scoped via the guard's getTracker on req.org.id) since the overview can
-  // fan out to live provider analytics.
-  @Throttle({ default: { limit: 60, ttl: 60000 } })
-  async getAnalyticsOverview(
-    @GetOrgFromRequest() org: Organization,
-    @Query('from') from: string,
-    @Query('to') to: string,
-    @Query('integrations') integrations: string,
-    @Query('compare') compare: string
-  ) {
-    Sentry.metrics.count('public_api-request', 1);
-    // Same validation + window cap as the authed v2 date routes: garbage dates
-    // must 400 (not reach Prisma), and an unbounded range must not drive the
-    // day-by-day aggregation loops on an API-key request.
-    validateDateRange(from, to);
-    validateToGteFrom(from, to);
-    validateWindowCap(from, to);
-    return this._analyticsService.getOverview(
-      org,
-      from,
-      to,
-      integrations ? integrations.split(',') : [],
-      compare === 'true'
-    );
-  }
+  // The /public/v1/analytics/* routes (overview, campaign/:id, anomalies, and
+  // the full analytics surface) live in PublicAnalyticsV1Controller — the ONE
+  // analytics home after the /analytics/v2 unification.
 
   @Post('/integration-trigger/:id')
   async triggerIntegrationTool(

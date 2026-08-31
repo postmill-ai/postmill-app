@@ -22,11 +22,9 @@ describe('PublicIntegrationsController.getPosts — J2 pagination cap', () => {
       {}, // notificationService
       {}, // integrationManager
       {}, // refreshIntegrationService
-      {}, // analyticsService
       {}, // storageService
       {}, // aiDefaults
       {}, // aiMediaService
-      {} // campaignsService
     );
     return { ctrl, all };
   };
@@ -73,7 +71,7 @@ describe('PublicIntegrationsController.deletePost — 4.2b unknown-id guard', ()
       deletePost: vi.fn().mockResolvedValue({ deleted: true }),
     };
     const ctrl = new (PublicIntegrationsController as any)(
-      {}, postsService, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}
+      {}, postsService, {}, {}, {}, {}, {}, {}, {}
     );
     return { ctrl, postsService };
   };
@@ -104,7 +102,7 @@ describe('PublicIntegrationsController.createPost — 4.2d disabled-channel guar
       validateAndCreatePost: vi.fn().mockResolvedValue({ id: 'grp' }),
     };
     const ctrl = new (PublicIntegrationsController as any)(
-      integrationService, postsService, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}
+      integrationService, postsService, {}, {}, {}, {}, {}, {}, {}
     );
     return { ctrl, integrationService, postsService };
   };
@@ -179,7 +177,7 @@ describe('PublicIntegrationsController.integration-trigger — 4.2c bounded refr
       {}, // notificationService
       integrationManager,
       refreshIntegrationService,
-      {}, {}, {}, {}, {}, {}
+      {}, {}, {}
     );
 
     await expect(
@@ -208,7 +206,7 @@ describe('PublicIntegrationsController.generate-video — media-job-native publi
     const aiMediaService = {};
     const campaignsService = {};
     const ctrl = new (PublicIntegrationsController as any)(
-      {}, {}, {}, {}, {}, {}, {}, {}, aiDefaults, aiMediaService, campaignsService
+      {}, {}, {}, {}, {}, {}, {}, aiDefaults, aiMediaService
     );
     return { ctrl, aiDefaults };
   };
@@ -298,7 +296,7 @@ describe('PublicIntegrationsController.generate-video — media-job-native publi
   const makePoll = (job: any) => {
     const aiMediaService = { getJob: vi.fn().mockResolvedValue(job) };
     const ctrl = new (PublicIntegrationsController as any)(
-      {}, {}, {}, {}, {}, {}, {}, {}, {}, aiMediaService, {}
+      {}, {}, {}, {}, {}, {}, {}, {}, aiMediaService
     );
     return { ctrl, aiMediaService };
   };
@@ -409,7 +407,7 @@ describe('PublicIntegrationsController.video/function — loadVoices compat', ()
       ]),
     };
     const ctrl = new (PublicIntegrationsController as any)(
-      {}, {}, {}, {}, {}, {}, {}, {}, {}, aiMediaService, {}
+      {}, {}, {}, {}, {}, {}, {}, {}, aiMediaService
     );
     return { ctrl, aiMediaService };
   };

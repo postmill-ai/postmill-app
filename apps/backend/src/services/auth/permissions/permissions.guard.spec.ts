@@ -58,6 +58,42 @@ describe('PoliciesGuard', () => {
     expect(permissionsService.check).not.toHaveBeenCalled();
   });
 
+  it.each(['api-key', 'oauth'])(
+    'bypasses entitlement policies for public-API integrator auth (%s)',
+    async (authSource) => {
+      // Stamped by PublicAuthMiddleware — documented API-key parity carries no
+      // entitlement gate, even with @CheckPolicies metadata present.
+      (reflector.get as ReturnType<typeof vi.fn>).mockReturnValue([
+        [AuthorizationActions.Read, Sections.ADMIN],
+      ]);
+
+      const result = await guard.canActivate(
+        buildContext({ path: '/public/v1/analytics/share', authSource }),
+      );
+
+      expect(result).toBe(true);
+      expect(permissionsService.check).not.toHaveBeenCalled();
+    }
+  );
+
+  it('still enforces entitlement policies for dashboard cookie sessions', async () => {
+    (reflector.get as ReturnType<typeof vi.fn>).mockReturnValue([
+      [AuthorizationActions.Read, Sections.ADMIN],
+    ]);
+    permissionsService.check.mockResolvedValue(buildAbility([]));
+
+    await expect(
+      guard.canActivate(
+        buildContext({
+          path: '/public/v1/analytics/share',
+          authSource: 'cookie',
+          org: { id: 'o1', createdAt: new Date() },
+        })
+      )
+    ).rejects.toThrow();
+    expect(permissionsService.check).toHaveBeenCalled();
+  });
+
   it('allows when the ability grants the requested policy', async () => {
     (reflector.get as ReturnType<typeof vi.fn>).mockReturnValue([
       [AuthorizationActions.Read, Sections.ADMIN],

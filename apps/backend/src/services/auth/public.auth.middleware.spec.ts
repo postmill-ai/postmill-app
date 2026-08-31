@@ -44,10 +44,11 @@ function mockRes() {
   } as unknown as MockResponse;
 }
 
-function mockReq(authorization?: string, method = 'GET') {
+function mockReq(authorization?: string, method = 'GET', cookies?: Record<string, string>) {
   return {
     method,
     headers: authorization ? { authorization } : {},
+    cookies: cookies || {},
   } as unknown as PublicRequest;
 }
 
@@ -83,6 +84,7 @@ describe('PublicAuthMiddleware', () => {
     findActiveByHash: ReturnType<typeof vi.fn>;
     touchLastUsed: ReturnType<typeof vi.fn>;
   };
+  let authContextResolver: { resolve: ReturnType<typeof vi.fn> };
   let middleware: PublicAuthMiddleware;
   let next: Mock<(err?: unknown) => void>;
   const originalStripeKey = process.env.STRIPE_SECRET_KEY;
@@ -94,10 +96,12 @@ describe('PublicAuthMiddleware', () => {
       findActiveByHash: vi.fn(),
       touchLastUsed: vi.fn().mockResolvedValue({ count: 1 }),
     };
+    authContextResolver = { resolve: vi.fn() };
     next = vi.fn<(err?: unknown) => void>();
     middleware = new PublicAuthMiddleware(
       oauthService as unknown as ConstructorParameters<typeof PublicAuthMiddleware>[0],
       apiKeysService as unknown as ConstructorParameters<typeof PublicAuthMiddleware>[1],
+      authContextResolver as unknown as ConstructorParameters<typeof PublicAuthMiddleware>[2],
     );
   });
 
@@ -109,16 +113,86 @@ describe('PublicAuthMiddleware', () => {
     }
   });
 
-  it('returns 401 when no Authorization header is present', async () => {
+  it('returns 401 when neither an Authorization header nor a session cookie is present', async () => {
     const req = mockReq();
     const res = mockRes();
 
     await middleware.use(req, res, next);
 
     expect(res.status).toHaveBeenCalledWith(HttpStatus.UNAUTHORIZED);
-    expect(res.json).toHaveBeenCalledWith({ msg: 'No API Key found' });
+    expect(res.json).toHaveBeenCalledWith({ msg: 'No credentials found' });
     expect(next).not.toHaveBeenCalled();
     expect(apiKeysService.findActiveByHash).not.toHaveBeenCalled();
+    expect(authContextResolver.resolve).not.toHaveBeenCalled();
+  });
+
+  describe('dual auth — dashboard session cookie', () => {
+    it('resolves a valid session cookie and stamps authSource=cookie', async () => {
+      const user = { id: 'user-1', email: 'u@example.com' };
+      const org = { id: 'org-1', users: [{ roleRef: { key: 'owner' } }] };
+      authContextResolver.resolve.mockResolvedValue({
+        ok: true,
+        context: { user, org, impersonated: false },
+      });
+      const req = mockReq(undefined, 'GET', { auth: 'session-jwt', showorg: 'org-1' });
+      const res = mockRes();
+
+      await middleware.use(req, res, next);
+
+      expect(authContextResolver.resolve).toHaveBeenCalledWith({
+        jwt: 'session-jwt',
+        showOrgId: 'org-1',
+        impersonateOrgUserId: undefined,
+      });
+      expect((req as any).user).toBe(user);
+      expect((req as any).org).toBe(org);
+      expect((req as any).authSource).toBe('cookie');
+      expect(next).toHaveBeenCalledTimes(1);
+    });
+
+    it('honors the impersonate cookie like the app AuthMiddleware', async () => {
+      authContextResolver.resolve.mockResolvedValue({
+        ok: true,
+        context: { user: { id: 'u2' }, org: { id: 'org-2' }, impersonated: true },
+      });
+      const req = mockReq(undefined, 'GET', { auth: 'session-jwt', impersonate: 'u2' });
+      const res = mockRes();
+
+      await middleware.use(req, res, next);
+
+      expect(authContextResolver.resolve).toHaveBeenCalledWith(
+        expect.objectContaining({ impersonateOrgUserId: 'u2' }),
+      );
+      expect(next).toHaveBeenCalledTimes(1);
+    });
+
+    it('returns 401 on an invalid session without touching the API-key path', async () => {
+      authContextResolver.resolve.mockResolvedValue({
+        ok: false,
+        reason: 'invalid_jwt',
+      });
+      const req = mockReq(undefined, 'GET', { auth: 'bad-jwt' });
+      const res = mockRes();
+
+      await middleware.use(req, res, next);
+
+      expect(res.status).toHaveBeenCalledWith(HttpStatus.UNAUTHORIZED);
+      expect(res.json).toHaveBeenCalledWith({ msg: 'Invalid session' });
+      expect(next).not.toHaveBeenCalled();
+      expect(apiKeysService.findActiveByHash).not.toHaveBeenCalled();
+    });
+
+    it('an explicit Authorization header always wins over the cookie', async () => {
+      apiKeysService.findActiveByHash.mockResolvedValue(makeApiKey());
+      const req = mockReq('pm_live_validkey', 'GET', { auth: 'session-jwt' });
+      const res = mockRes();
+
+      await middleware.use(req, res, next);
+
+      expect(authContextResolver.resolve).not.toHaveBeenCalled();
+      expect((req as any).authSource).toBe('api-key');
+      expect(next).toHaveBeenCalledTimes(1);
+    });
   });
 
   it('returns 401 "Invalid API key" when findActiveByHash returns null (revoked/expired/unknown)', async () => {

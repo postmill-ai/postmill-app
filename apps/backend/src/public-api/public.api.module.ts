@@ -15,9 +15,12 @@ import { OpenaiService } from '@postmill-ai/nestjs-libraries/openai/openai.servi
 import { ExtractContentService } from '@postmill-ai/nestjs-libraries/openai/extract.content.service';
 import { CodesService } from '@postmill-ai/nestjs-libraries/services/codes.service';
 import { PublicIntegrationsController } from '@postmill-ai/backend/public-api/routes/v1/public.integrations.controller';
+import { PublicAnalyticsV1Controller } from '@postmill-ai/backend/public-api/routes/v1/public.analytics.v1.controller';
 import { PublicCampaignController } from '@postmill-ai/backend/public-api/routes/public.campaign.controller';
 import { PublicAnalyticsController } from '@postmill-ai/backend/public-api/routes/public.analytics.controller';
 import { PublicAuthMiddleware } from '@postmill-ai/backend/services/auth/public.auth.middleware';
+import { CsrfMiddleware } from '@postmill-ai/backend/services/auth/csrf.middleware';
+import { AuthContextResolver } from '@postmill-ai/nestjs-libraries/auth/auth-context.resolver';
 import { AnalyticsService } from '@postmill-ai/nestjs-libraries/analytics/analytics.service';
 import { AnalyticsShareService } from '@postmill-ai/nestjs-libraries/analytics/analytics-share.service';
 import { AnalyticsLiveFallbackService } from '@postmill-ai/nestjs-libraries/analytics/analytics-live-fallback';
@@ -27,7 +30,10 @@ import { AnalyticsInsightsService } from '@postmill-ai/nestjs-libraries/analytic
 import { AnalyticsExportService } from '@postmill-ai/nestjs-libraries/analytics/analytics-export.service';
 import { IdempotencyFactory } from '@postmill-ai/nestjs-libraries/ai/governance/idempotency.factory';
 
-const authenticatedController = [PublicIntegrationsController];
+const authenticatedController = [
+  PublicIntegrationsController,
+  PublicAnalyticsV1Controller,
+];
 const publicController = [PublicCampaignController, PublicAnalyticsController];
 @Module({
   imports: [UploadModule],
@@ -41,6 +47,8 @@ const publicController = [PublicCampaignController, PublicAnalyticsController];
     PermissionsService,
     CodesService,
     IntegrationManager,
+    AuthContextResolver,
+    CsrfMiddleware,
     AnalyticsService,
     AnalyticsLiveFallbackService,
     AnalyticsOverviewService,
@@ -92,6 +100,10 @@ export class PublicApiModule implements NestModule {
 
   configure(consumer: MiddlewareConsumer) {
     consumer.apply(PublicAuthMiddleware).forRoutes(...authenticatedController);
+
+    // Dashboard (cookie) callers on the public API get the same CSRF defense
+    // as the app routes — no-op for API-key/OAuth (header) auth.
+    consumer.apply(CsrfMiddleware).forRoutes(...authenticatedController);
 
     // Auth is applied first (above) so the org is resolved before idempotency
     // keys are namespaced. Scope to the mutating public routes only.
