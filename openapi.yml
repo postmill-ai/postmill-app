@@ -4501,720 +4501,6 @@ paths:
           description: ""
       tags:
         - Announcements
-  /analytics/v2/overview:
-    get:
-      operationId: AnalyticsV2Controller_getOverview
-      parameters:
-        - name: from
-          required: true
-          in: query
-          schema:
-            type: string
-        - name: to
-          required: true
-          in: query
-          schema:
-            type: string
-        - name: integrations
-          required: false
-          in: query
-          schema:
-            type: string
-        - name: compare
-          required: false
-          in: query
-          schema:
-            type: string
-        - name: campaigns
-          required: false
-          in: query
-          schema:
-            type: string
-      responses:
-        "200":
-          description: ""
-          content:
-            application/json:
-              schema:
-                type: object
-      tags:
-        - Analytics V2
-  /analytics/v2/channel/{integrationId}:
-    get:
-      operationId: AnalyticsV2Controller_getChannel
-      parameters:
-        - name: integrationId
-          required: true
-          in: path
-          schema:
-            type: string
-        - name: from
-          required: true
-          in: query
-          schema:
-            type: string
-        - name: to
-          required: true
-          in: query
-          schema:
-            type: string
-        - name: integrations
-          required: false
-          in: query
-          schema:
-            type: string
-        - name: compare
-          required: false
-          in: query
-          schema:
-            type: string
-        - name: campaigns
-          required: false
-          in: query
-          schema:
-            type: string
-      responses:
-        "200":
-          description: ""
-      tags:
-        - Analytics V2
-  /analytics/v2/posts:
-    get:
-      operationId: AnalyticsV2Controller_getPosts
-      parameters:
-        - name: from
-          required: true
-          in: query
-          schema:
-            type: string
-        - name: to
-          required: true
-          in: query
-          schema:
-            type: string
-        - name: integrations
-          required: false
-          in: query
-          schema:
-            type: string
-        - name: compare
-          required: false
-          in: query
-          schema:
-            type: string
-        - name: campaigns
-          required: false
-          in: query
-          schema:
-            type: string
-        - name: sort
-          required: false
-          in: query
-          schema:
-            type: string
-            enum:
-              - impressions
-              - unique_impressions
-              - reach
-              - engagement
-              - likes
-              - comments
-              - shares
-              - saves
-              - replies
-              - retweets
-              - quotes
-              - bookmarks
-              - views
-              - clicks
-              - followers
-              - page_views
-              - video_views
-              - minutes_watched
-              - avg_view_duration
-              - avg_view_percentage
-              - subscribers_gained
-              - subscribers_lost
-              - pin_clicks
-              - pin_click_rate
-              - website_clicks
-              - phone_calls
-              - direction_requests
-              - desktop_map_views
-              - mobile_map_views
-              - organic_followers
-              - paid_followers
-              - reposts
-              - post_impressions
-              - total_likes
-              - reactions
-              - outbound_clicks
-              - favorites
-              - score
-              - upvote_ratio
-              - publishedAt
-        - name: dir
-          required: false
-          in: query
-          schema:
-            type: string
-            enum:
-              - asc
-              - desc
-        - name: page
-          required: false
-          in: query
-          schema:
-            minimum: 1
-            type: number
-        - name: limit
-          required: false
-          in: query
-          schema:
-            minimum: 1
-            maximum: 100
-            type: number
-      responses:
-        "200":
-          description: ""
-      tags:
-        - Analytics V2
-  /analytics/v2/post/{postId}:
-    get:
-      operationId: AnalyticsV2Controller_getPostDetail
-      parameters:
-        - name: postId
-          required: true
-          in: path
-          schema:
-            type: string
-        - name: date
-          required: false
-          in: query
-          schema:
-            type: string
-      responses:
-        "200":
-          description: ""
-      tags:
-        - Analytics V2
-  /analytics/v2/metric/{metric}:
-    get:
-      operationId: AnalyticsV2Controller_getMetric
-      parameters:
-        - name: metric
-          required: true
-          in: path
-          schema:
-            type: string
-        - name: from
-          required: true
-          in: query
-          schema:
-            type: string
-        - name: to
-          required: true
-          in: query
-          schema:
-            type: string
-        - name: integrations
-          required: false
-          in: query
-          schema:
-            type: string
-        - name: compare
-          required: false
-          in: query
-          schema:
-            type: string
-        - name: campaigns
-          required: false
-          in: query
-          schema:
-            type: string
-      responses:
-        "200":
-          description: ""
-          content:
-            application/json:
-              schema:
-                type: object
-      tags:
-        - Analytics V2
-  /analytics/v2/day:
-    get:
-      operationId: AnalyticsV2Controller_getDay
-      parameters:
-        - name: date
-          required: true
-          in: query
-          schema:
-            type: string
-        - name: metric
-          required: true
-          in: query
-          schema:
-            type: string
-        - name: integrations
-          required: true
-          in: query
-          schema:
-            type: string
-        - name: campaigns
-          required: false
-          in: query
-          schema:
-            type: string
-      responses:
-        "200":
-          description: ""
-      tags:
-        - Analytics V2
-  /analytics/v2/channel/{integrationId}/metric/{metric}:
-    get:
-      operationId: AnalyticsV2Controller_getChannelMetric
-      parameters:
-        - name: integrationId
-          required: true
-          in: path
-          schema:
-            type: string
-        - name: metric
-          required: true
-          in: path
-          schema:
-            type: string
-        - name: from
-          required: true
-          in: query
-          schema:
-            type: string
-        - name: to
-          required: true
-          in: query
-          schema:
-            type: string
-        - name: integrations
-          required: false
-          in: query
-          schema:
-            type: string
-        - name: compare
-          required: false
-          in: query
-          schema:
-            type: string
-        - name: campaigns
-          required: false
-          in: query
-          schema:
-            type: string
-      responses:
-        "200":
-          description: ""
-      tags:
-        - Analytics V2
-  /analytics/v2/best-time:
-    get:
-      operationId: AnalyticsV2Controller_getBestTime
-      parameters:
-        - name: integrations
-          required: true
-          in: query
-          schema:
-            type: string
-        - name: integration
-          required: false
-          in: query
-          schema:
-            type: string
-        - name: tz
-          required: false
-          in: query
-          schema:
-            type: string
-      responses:
-        "200":
-          description: ""
-      tags:
-        - Analytics V2
-  /analytics/v2/recommendations:
-    get:
-      operationId: AnalyticsV2Controller_getRecommendations
-      parameters: []
-      responses:
-        "200":
-          description: ""
-      tags:
-        - Analytics V2
-  /analytics/v2/health:
-    get:
-      operationId: AnalyticsV2Controller_getHealth
-      parameters: []
-      responses:
-        "200":
-          description: ""
-          content:
-            application/json:
-              schema:
-                type: array
-                items:
-                  type: object
-      tags:
-        - Analytics V2
-  /analytics/v2/refresh/{integrationId}:
-    post:
-      operationId: AnalyticsV2Controller_refreshChannel
-      parameters:
-        - name: integrationId
-          required: true
-          in: path
-          schema:
-            type: string
-      responses:
-        "201":
-          description: ""
-      tags:
-        - Analytics V2
-  /analytics/v2/content-insights:
-    get:
-      operationId: AnalyticsV2Controller_getContentInsights
-      parameters: []
-      responses:
-        "200":
-          description: ""
-      tags:
-        - Analytics V2
-  /analytics/v2/narrate:
-    post:
-      operationId: AnalyticsV2Controller_narrate
-      parameters:
-        - name: from
-          required: true
-          in: query
-          schema:
-            type: string
-        - name: to
-          required: true
-          in: query
-          schema:
-            type: string
-        - name: integrations
-          required: false
-          in: query
-          schema:
-            type: string
-        - name: compare
-          required: false
-          in: query
-          schema:
-            type: string
-        - name: campaigns
-          required: false
-          in: query
-          schema:
-            type: string
-      responses:
-        "201":
-          description: ""
-      tags:
-        - Analytics V2
-  /analytics/v2/export:
-    get:
-      operationId: AnalyticsV2Controller_exportData
-      parameters:
-        - name: from
-          required: true
-          in: query
-          schema:
-            type: string
-        - name: to
-          required: true
-          in: query
-          schema:
-            type: string
-        - name: integrations
-          required: false
-          in: query
-          schema:
-            type: string
-        - name: compare
-          required: false
-          in: query
-          schema:
-            type: string
-        - name: campaigns
-          required: false
-          in: query
-          schema:
-            type: string
-        - name: format
-          required: false
-          in: query
-          schema:
-            type: string
-            enum:
-              - csv
-              - json
-      responses:
-        "200":
-          description: ""
-          content:
-            application/json:
-              schema:
-                type: string
-      tags:
-        - Analytics V2
-  /analytics/v2/anomalies:
-    get:
-      operationId: AnalyticsV2Controller_listAnomalies
-      parameters:
-        - name: includeDismissed
-          required: false
-          in: query
-          schema:
-            type: string
-      responses:
-        "200":
-          description: ""
-          content:
-            application/json:
-              schema:
-                type: array
-                items:
-                  type: object
-      tags:
-        - Analytics V2
-  /analytics/v2/anomalies/{id}/dismiss:
-    post:
-      operationId: AnalyticsV2Controller_dismissAnomaly
-      parameters:
-        - name: id
-          required: true
-          in: path
-          schema:
-            type: string
-      responses:
-        "201":
-          description: ""
-      tags:
-        - Analytics V2
-  /analytics/v2/alert-rules:
-    get:
-      operationId: AnalyticsV2Controller_listAlertRules
-      parameters: []
-      responses:
-        "200":
-          description: ""
-      tags:
-        - Analytics V2
-    post:
-      operationId: AnalyticsV2Controller_createAlertRule
-      parameters: []
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: "#/components/schemas/CreateAlertRuleDto"
-      responses:
-        "201":
-          description: ""
-      tags:
-        - Analytics V2
-  /analytics/v2/alert-rules/{id}:
-    put:
-      operationId: AnalyticsV2Controller_updateAlertRule
-      parameters:
-        - name: id
-          required: true
-          in: path
-          schema:
-            type: string
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: "#/components/schemas/UpdateAlertRuleDto"
-      responses:
-        "200":
-          description: ""
-      tags:
-        - Analytics V2
-    delete:
-      operationId: AnalyticsV2Controller_deleteAlertRule
-      parameters:
-        - name: id
-          required: true
-          in: path
-          schema:
-            type: string
-      responses:
-        "200":
-          description: ""
-      tags:
-        - Analytics V2
-  /analytics/v2/share:
-    get:
-      operationId: AnalyticsV2Controller_getShare
-      parameters: []
-      responses:
-        "200":
-          description: ""
-      tags:
-        - Analytics V2
-    post:
-      operationId: AnalyticsV2Controller_mintShare
-      parameters: []
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: "#/components/schemas/AnalyticsShareDto"
-      responses:
-        "201":
-          description: ""
-      tags:
-        - Analytics V2
-    delete:
-      operationId: AnalyticsV2Controller_disableShare
-      parameters: []
-      responses:
-        "200":
-          description: ""
-      tags:
-        - Analytics V2
-  /analytics/v2/watchlist:
-    get:
-      operationId: AnalyticsV2Controller_listWatchlist
-      parameters: []
-      responses:
-        "200":
-          description: ""
-          content:
-            application/json:
-              schema:
-                type: array
-                items:
-                  type: object
-      tags:
-        - Analytics V2
-    post:
-      operationId: AnalyticsV2Controller_addWatchlistEntry
-      parameters: []
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: "#/components/schemas/AddWatchlistDto"
-      responses:
-        "201":
-          description: ""
-      tags:
-        - Analytics V2
-  /analytics/v2/watchlist/{id}/series:
-    get:
-      operationId: AnalyticsV2Controller_getWatchlistSeries
-      parameters:
-        - name: id
-          required: true
-          in: path
-          schema:
-            type: string
-        - name: metric
-          required: false
-          in: query
-          schema:
-            type: string
-        - name: from
-          required: false
-          in: query
-          schema:
-            type: string
-        - name: to
-          required: false
-          in: query
-          schema:
-            type: string
-      responses:
-        "200":
-          description: ""
-      tags:
-        - Analytics V2
-  /analytics/v2/watchlist/{id}:
-    put:
-      operationId: AnalyticsV2Controller_updateWatchlistEntry
-      parameters:
-        - name: id
-          required: true
-          in: path
-          schema:
-            type: string
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: "#/components/schemas/UpdateWatchlistDto"
-      responses:
-        "200":
-          description: ""
-      tags:
-        - Analytics V2
-    delete:
-      operationId: AnalyticsV2Controller_deleteWatchlistEntry
-      parameters:
-        - name: id
-          required: true
-          in: path
-          schema:
-            type: string
-      responses:
-        "200":
-          description: ""
-      tags:
-        - Analytics V2
-  /analytics/v2/shortlinks:
-    get:
-      operationId: AnalyticsV2Controller_getShortLinks
-      parameters:
-        - name: from
-          required: false
-          in: query
-          schema:
-            type: string
-        - name: to
-          required: false
-          in: query
-          schema:
-            type: string
-      responses:
-        "200":
-          description: ""
-      tags:
-        - Analytics V2
-  /analytics/v2/shortlinks/timeseries:
-    get:
-      operationId: AnalyticsV2Controller_getShortLinkTimeseries
-      parameters:
-        - name: from
-          required: false
-          in: query
-          schema:
-            type: string
-        - name: to
-          required: false
-          in: query
-          schema:
-            type: string
-      responses:
-        "200":
-          description: ""
-      tags:
-        - Analytics V2
   /admin/ai-settings/governance:
     get:
       operationId: AiSettingsController_getGovernance
@@ -8806,97 +8092,6 @@ paths:
         - api-key: []
       tags:
         - Public API
-  /public/v1/analytics/campaign/{id}:
-    get:
-      operationId: PublicIntegrationsController_getCampaignAnalytics
-      parameters:
-        - name: id
-          required: true
-          in: path
-          schema:
-            type: string
-        - name: from
-          required: false
-          in: query
-          schema:
-            type: string
-        - name: to
-          required: false
-          in: query
-          schema:
-            type: string
-      responses:
-        "200":
-          description: ""
-      security:
-        - bearer: []
-        - api-key: []
-      tags:
-        - Public API
-  /public/v1/analytics/anomalies:
-    get:
-      operationId: PublicIntegrationsController_getAnomalies
-      parameters:
-        - name: limit
-          required: false
-          in: query
-          schema:
-            type: string
-        - name: includeDismissed
-          required: false
-          in: query
-          schema:
-            type: string
-      responses:
-        "200":
-          description: ""
-          content:
-            application/json:
-              schema:
-                type: array
-                items:
-                  type: object
-      security:
-        - bearer: []
-        - api-key: []
-      tags:
-        - Public API
-  /public/v1/analytics/overview:
-    get:
-      operationId: PublicIntegrationsController_getAnalyticsOverview
-      parameters:
-        - name: from
-          required: true
-          in: query
-          schema:
-            type: string
-        - name: to
-          required: true
-          in: query
-          schema:
-            type: string
-        - name: integrations
-          required: true
-          in: query
-          schema:
-            type: string
-        - name: compare
-          required: true
-          in: query
-          schema:
-            type: string
-      responses:
-        "200":
-          description: ""
-          content:
-            application/json:
-              schema:
-                type: object
-      security:
-        - bearer: []
-        - api-key: []
-      tags:
-        - Public API
   /public/v1/integration-trigger/{id}:
     post:
       operationId: PublicIntegrationsController_triggerIntegrationTool
@@ -8920,6 +8115,749 @@ paths:
         - api-key: []
       tags:
         - Public API
+  /public/v1/analytics/overview:
+    get:
+      operationId: PublicAnalyticsV1Controller_getOverview
+      parameters:
+        - name: from
+          required: true
+          in: query
+          schema:
+            type: string
+        - name: to
+          required: true
+          in: query
+          schema:
+            type: string
+        - name: integrations
+          required: false
+          in: query
+          schema:
+            type: string
+        - name: compare
+          required: false
+          in: query
+          schema:
+            type: string
+        - name: campaigns
+          required: false
+          in: query
+          schema:
+            type: string
+      responses:
+        "200":
+          description: ""
+          content:
+            application/json:
+              schema:
+                type: object
+      tags:
+        - Analytics
+  /public/v1/analytics/campaign/{id}:
+    get:
+      operationId: PublicAnalyticsV1Controller_getCampaignAnalytics
+      parameters:
+        - name: id
+          required: true
+          in: path
+          schema:
+            type: string
+        - name: from
+          required: false
+          in: query
+          schema:
+            type: string
+        - name: to
+          required: false
+          in: query
+          schema:
+            type: string
+      responses:
+        "200":
+          description: ""
+      tags:
+        - Analytics
+  /public/v1/analytics/channel/{integrationId}:
+    get:
+      operationId: PublicAnalyticsV1Controller_getChannel
+      parameters:
+        - name: integrationId
+          required: true
+          in: path
+          schema:
+            type: string
+        - name: from
+          required: true
+          in: query
+          schema:
+            type: string
+        - name: to
+          required: true
+          in: query
+          schema:
+            type: string
+        - name: integrations
+          required: false
+          in: query
+          schema:
+            type: string
+        - name: compare
+          required: false
+          in: query
+          schema:
+            type: string
+        - name: campaigns
+          required: false
+          in: query
+          schema:
+            type: string
+      responses:
+        "200":
+          description: ""
+      tags:
+        - Analytics
+  /public/v1/analytics/posts:
+    get:
+      operationId: PublicAnalyticsV1Controller_getPosts
+      parameters:
+        - name: from
+          required: true
+          in: query
+          schema:
+            type: string
+        - name: to
+          required: true
+          in: query
+          schema:
+            type: string
+        - name: integrations
+          required: false
+          in: query
+          schema:
+            type: string
+        - name: compare
+          required: false
+          in: query
+          schema:
+            type: string
+        - name: campaigns
+          required: false
+          in: query
+          schema:
+            type: string
+        - name: sort
+          required: false
+          in: query
+          schema:
+            type: string
+            enum:
+              - impressions
+              - unique_impressions
+              - reach
+              - engagement
+              - likes
+              - comments
+              - shares
+              - saves
+              - replies
+              - retweets
+              - quotes
+              - bookmarks
+              - views
+              - clicks
+              - followers
+              - page_views
+              - video_views
+              - minutes_watched
+              - avg_view_duration
+              - avg_view_percentage
+              - subscribers_gained
+              - subscribers_lost
+              - pin_clicks
+              - pin_click_rate
+              - website_clicks
+              - phone_calls
+              - direction_requests
+              - desktop_map_views
+              - mobile_map_views
+              - organic_followers
+              - paid_followers
+              - reposts
+              - post_impressions
+              - total_likes
+              - reactions
+              - outbound_clicks
+              - favorites
+              - score
+              - upvote_ratio
+              - publishedAt
+        - name: dir
+          required: false
+          in: query
+          schema:
+            type: string
+            enum:
+              - asc
+              - desc
+        - name: page
+          required: false
+          in: query
+          schema:
+            minimum: 1
+            type: number
+        - name: limit
+          required: false
+          in: query
+          schema:
+            minimum: 1
+            maximum: 100
+            type: number
+      responses:
+        "200":
+          description: ""
+      tags:
+        - Analytics
+  /public/v1/analytics/post/{postId}:
+    get:
+      operationId: PublicAnalyticsV1Controller_getPostDetail
+      parameters:
+        - name: postId
+          required: true
+          in: path
+          schema:
+            type: string
+        - name: date
+          required: false
+          in: query
+          schema:
+            type: string
+      responses:
+        "200":
+          description: ""
+      tags:
+        - Analytics
+  /public/v1/analytics/metric/{metric}:
+    get:
+      operationId: PublicAnalyticsV1Controller_getMetric
+      parameters:
+        - name: metric
+          required: true
+          in: path
+          schema:
+            type: string
+        - name: from
+          required: true
+          in: query
+          schema:
+            type: string
+        - name: to
+          required: true
+          in: query
+          schema:
+            type: string
+        - name: integrations
+          required: false
+          in: query
+          schema:
+            type: string
+        - name: compare
+          required: false
+          in: query
+          schema:
+            type: string
+        - name: campaigns
+          required: false
+          in: query
+          schema:
+            type: string
+      responses:
+        "200":
+          description: ""
+          content:
+            application/json:
+              schema:
+                type: object
+      tags:
+        - Analytics
+  /public/v1/analytics/day:
+    get:
+      operationId: PublicAnalyticsV1Controller_getDay
+      parameters:
+        - name: date
+          required: true
+          in: query
+          schema:
+            type: string
+        - name: metric
+          required: true
+          in: query
+          schema:
+            type: string
+        - name: integrations
+          required: true
+          in: query
+          schema:
+            type: string
+        - name: campaigns
+          required: false
+          in: query
+          schema:
+            type: string
+      responses:
+        "200":
+          description: ""
+      tags:
+        - Analytics
+  /public/v1/analytics/channel/{integrationId}/metric/{metric}:
+    get:
+      operationId: PublicAnalyticsV1Controller_getChannelMetric
+      parameters:
+        - name: integrationId
+          required: true
+          in: path
+          schema:
+            type: string
+        - name: metric
+          required: true
+          in: path
+          schema:
+            type: string
+        - name: from
+          required: true
+          in: query
+          schema:
+            type: string
+        - name: to
+          required: true
+          in: query
+          schema:
+            type: string
+        - name: integrations
+          required: false
+          in: query
+          schema:
+            type: string
+        - name: compare
+          required: false
+          in: query
+          schema:
+            type: string
+        - name: campaigns
+          required: false
+          in: query
+          schema:
+            type: string
+      responses:
+        "200":
+          description: ""
+      tags:
+        - Analytics
+  /public/v1/analytics/best-time:
+    get:
+      operationId: PublicAnalyticsV1Controller_getBestTime
+      parameters:
+        - name: integrations
+          required: true
+          in: query
+          schema:
+            type: string
+        - name: integration
+          required: false
+          in: query
+          schema:
+            type: string
+        - name: tz
+          required: false
+          in: query
+          schema:
+            type: string
+      responses:
+        "200":
+          description: ""
+      tags:
+        - Analytics
+  /public/v1/analytics/recommendations:
+    get:
+      operationId: PublicAnalyticsV1Controller_getRecommendations
+      parameters: []
+      responses:
+        "200":
+          description: ""
+      tags:
+        - Analytics
+  /public/v1/analytics/health:
+    get:
+      operationId: PublicAnalyticsV1Controller_getHealth
+      parameters: []
+      responses:
+        "200":
+          description: ""
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: object
+      tags:
+        - Analytics
+  /public/v1/analytics/refresh/{integrationId}:
+    post:
+      operationId: PublicAnalyticsV1Controller_refreshChannel
+      parameters:
+        - name: integrationId
+          required: true
+          in: path
+          schema:
+            type: string
+      responses:
+        "201":
+          description: ""
+      tags:
+        - Analytics
+  /public/v1/analytics/content-insights:
+    get:
+      operationId: PublicAnalyticsV1Controller_getContentInsights
+      parameters: []
+      responses:
+        "200":
+          description: ""
+      tags:
+        - Analytics
+  /public/v1/analytics/narrate:
+    post:
+      operationId: PublicAnalyticsV1Controller_narrate
+      parameters:
+        - name: from
+          required: true
+          in: query
+          schema:
+            type: string
+        - name: to
+          required: true
+          in: query
+          schema:
+            type: string
+        - name: integrations
+          required: false
+          in: query
+          schema:
+            type: string
+        - name: compare
+          required: false
+          in: query
+          schema:
+            type: string
+        - name: campaigns
+          required: false
+          in: query
+          schema:
+            type: string
+      responses:
+        "201":
+          description: ""
+      tags:
+        - Analytics
+  /public/v1/analytics/export:
+    get:
+      operationId: PublicAnalyticsV1Controller_exportData
+      parameters:
+        - name: from
+          required: true
+          in: query
+          schema:
+            type: string
+        - name: to
+          required: true
+          in: query
+          schema:
+            type: string
+        - name: integrations
+          required: false
+          in: query
+          schema:
+            type: string
+        - name: compare
+          required: false
+          in: query
+          schema:
+            type: string
+        - name: campaigns
+          required: false
+          in: query
+          schema:
+            type: string
+        - name: format
+          required: false
+          in: query
+          schema:
+            type: string
+            enum:
+              - csv
+              - json
+      responses:
+        "200":
+          description: ""
+          content:
+            application/json:
+              schema:
+                type: string
+      tags:
+        - Analytics
+  /public/v1/analytics/anomalies:
+    get:
+      operationId: PublicAnalyticsV1Controller_listAnomalies
+      parameters:
+        - name: limit
+          required: false
+          in: query
+          schema:
+            type: string
+        - name: includeDismissed
+          required: false
+          in: query
+          schema:
+            type: string
+      responses:
+        "200":
+          description: ""
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: object
+      tags:
+        - Analytics
+  /public/v1/analytics/anomalies/{id}/dismiss:
+    post:
+      operationId: PublicAnalyticsV1Controller_dismissAnomaly
+      parameters:
+        - name: id
+          required: true
+          in: path
+          schema:
+            type: string
+      responses:
+        "201":
+          description: ""
+      tags:
+        - Analytics
+  /public/v1/analytics/alert-rules:
+    get:
+      operationId: PublicAnalyticsV1Controller_listAlertRules
+      parameters: []
+      responses:
+        "200":
+          description: ""
+      tags:
+        - Analytics
+    post:
+      operationId: PublicAnalyticsV1Controller_createAlertRule
+      parameters: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateAlertRuleDto"
+      responses:
+        "201":
+          description: ""
+      tags:
+        - Analytics
+  /public/v1/analytics/alert-rules/{id}:
+    put:
+      operationId: PublicAnalyticsV1Controller_updateAlertRule
+      parameters:
+        - name: id
+          required: true
+          in: path
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateAlertRuleDto"
+      responses:
+        "200":
+          description: ""
+      tags:
+        - Analytics
+    delete:
+      operationId: PublicAnalyticsV1Controller_deleteAlertRule
+      parameters:
+        - name: id
+          required: true
+          in: path
+          schema:
+            type: string
+      responses:
+        "200":
+          description: ""
+      tags:
+        - Analytics
+  /public/v1/analytics/share:
+    get:
+      operationId: PublicAnalyticsV1Controller_getShare
+      parameters: []
+      responses:
+        "200":
+          description: ""
+      tags:
+        - Analytics
+    post:
+      operationId: PublicAnalyticsV1Controller_mintShare
+      parameters: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AnalyticsShareDto"
+      responses:
+        "201":
+          description: ""
+      tags:
+        - Analytics
+    delete:
+      operationId: PublicAnalyticsV1Controller_disableShare
+      parameters: []
+      responses:
+        "200":
+          description: ""
+      tags:
+        - Analytics
+  /public/v1/analytics/watchlist:
+    get:
+      operationId: PublicAnalyticsV1Controller_listWatchlist
+      parameters: []
+      responses:
+        "200":
+          description: ""
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: object
+      tags:
+        - Analytics
+    post:
+      operationId: PublicAnalyticsV1Controller_addWatchlistEntry
+      parameters: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AddWatchlistDto"
+      responses:
+        "201":
+          description: ""
+      tags:
+        - Analytics
+  /public/v1/analytics/watchlist/{id}/series:
+    get:
+      operationId: PublicAnalyticsV1Controller_getWatchlistSeries
+      parameters:
+        - name: id
+          required: true
+          in: path
+          schema:
+            type: string
+        - name: metric
+          required: false
+          in: query
+          schema:
+            type: string
+        - name: from
+          required: false
+          in: query
+          schema:
+            type: string
+        - name: to
+          required: false
+          in: query
+          schema:
+            type: string
+      responses:
+        "200":
+          description: ""
+      tags:
+        - Analytics
+  /public/v1/analytics/watchlist/{id}:
+    put:
+      operationId: PublicAnalyticsV1Controller_updateWatchlistEntry
+      parameters:
+        - name: id
+          required: true
+          in: path
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateWatchlistDto"
+      responses:
+        "200":
+          description: ""
+      tags:
+        - Analytics
+    delete:
+      operationId: PublicAnalyticsV1Controller_deleteWatchlistEntry
+      parameters:
+        - name: id
+          required: true
+          in: path
+          schema:
+            type: string
+      responses:
+        "200":
+          description: ""
+      tags:
+        - Analytics
+  /public/v1/analytics/shortlinks:
+    get:
+      operationId: PublicAnalyticsV1Controller_getShortLinks
+      parameters:
+        - name: from
+          required: false
+          in: query
+          schema:
+            type: string
+        - name: to
+          required: false
+          in: query
+          schema:
+            type: string
+      responses:
+        "200":
+          description: ""
+      tags:
+        - Analytics
+  /public/v1/analytics/shortlinks/timeseries:
+    get:
+      operationId: PublicAnalyticsV1Controller_getShortLinkTimeseries
+      parameters:
+        - name: from
+          required: false
+          in: query
+          schema:
+            type: string
+        - name: to
+          required: false
+          in: query
+          schema:
+            type: string
+      responses:
+        "200":
+          description: ""
+      tags:
+        - Analytics
   /public/campaign-report/{token}:
     get:
       operationId: PublicCampaignController_getSharedReport
@@ -10634,170 +10572,6 @@ components:
       required:
         - title
         - description
-    CreateAlertRuleDto:
-      type: object
-      properties:
-        integrationId:
-          type: string
-          minLength: 1
-          maxLength: 64
-        metric:
-          type: string
-          enum:
-            - impressions
-            - unique_impressions
-            - reach
-            - engagement
-            - likes
-            - comments
-            - shares
-            - saves
-            - replies
-            - retweets
-            - quotes
-            - bookmarks
-            - views
-            - clicks
-            - followers
-            - page_views
-            - video_views
-            - minutes_watched
-            - avg_view_duration
-            - avg_view_percentage
-            - subscribers_gained
-            - subscribers_lost
-            - pin_clicks
-            - pin_click_rate
-            - website_clicks
-            - phone_calls
-            - direction_requests
-            - desktop_map_views
-            - mobile_map_views
-            - organic_followers
-            - paid_followers
-            - reposts
-            - post_impressions
-            - total_likes
-            - reactions
-            - outbound_clicks
-            - favorites
-            - score
-            - upvote_ratio
-        comparator:
-          type: string
-          enum:
-            - gte
-            - lte
-            - change_pct
-        threshold:
-          type: number
-          minimum: 0
-          maximum: 1000000000
-        direction:
-          type: string
-          enum:
-            - up
-            - down
-        enabled:
-          type: boolean
-      required:
-        - metric
-        - comparator
-        - threshold
-    UpdateAlertRuleDto:
-      type: object
-      properties:
-        integrationId:
-          type: string
-          minLength: 1
-          maxLength: 64
-        metric:
-          type: string
-          enum:
-            - impressions
-            - unique_impressions
-            - reach
-            - engagement
-            - likes
-            - comments
-            - shares
-            - saves
-            - replies
-            - retweets
-            - quotes
-            - bookmarks
-            - views
-            - clicks
-            - followers
-            - page_views
-            - video_views
-            - minutes_watched
-            - avg_view_duration
-            - avg_view_percentage
-            - subscribers_gained
-            - subscribers_lost
-            - pin_clicks
-            - pin_click_rate
-            - website_clicks
-            - phone_calls
-            - direction_requests
-            - desktop_map_views
-            - mobile_map_views
-            - organic_followers
-            - paid_followers
-            - reposts
-            - post_impressions
-            - total_likes
-            - reactions
-            - outbound_clicks
-            - favorites
-            - score
-            - upvote_ratio
-        comparator:
-          type: string
-          enum:
-            - gte
-            - lte
-            - change_pct
-        threshold:
-          type: number
-          minimum: 0
-          maximum: 1000000000
-        direction:
-          type: string
-          enum:
-            - up
-            - down
-        enabled:
-          type: boolean
-    AnalyticsShareDto:
-      type: object
-      properties:
-        integrations:
-          maxItems: 50
-          type: array
-          items:
-            type: string
-            maxLength: 64
-            minLength: 1
-        rangePreset:
-          type: string
-          enum:
-            - 7d
-            - 30d
-            - 90d
-    AddWatchlistDto:
-      type: object
-      properties: {}
-    UpdateWatchlistDto:
-      type: object
-      properties:
-        displayName:
-          type: string
-          minLength: 1
-          maxLength: 100
-        enabled:
-          type: boolean
     SaveGovernanceDto:
       type: object
       properties:
@@ -11664,3 +11438,167 @@ components:
       required:
         - methodName
         - data
+    CreateAlertRuleDto:
+      type: object
+      properties:
+        integrationId:
+          type: string
+          minLength: 1
+          maxLength: 64
+        metric:
+          type: string
+          enum:
+            - impressions
+            - unique_impressions
+            - reach
+            - engagement
+            - likes
+            - comments
+            - shares
+            - saves
+            - replies
+            - retweets
+            - quotes
+            - bookmarks
+            - views
+            - clicks
+            - followers
+            - page_views
+            - video_views
+            - minutes_watched
+            - avg_view_duration
+            - avg_view_percentage
+            - subscribers_gained
+            - subscribers_lost
+            - pin_clicks
+            - pin_click_rate
+            - website_clicks
+            - phone_calls
+            - direction_requests
+            - desktop_map_views
+            - mobile_map_views
+            - organic_followers
+            - paid_followers
+            - reposts
+            - post_impressions
+            - total_likes
+            - reactions
+            - outbound_clicks
+            - favorites
+            - score
+            - upvote_ratio
+        comparator:
+          type: string
+          enum:
+            - gte
+            - lte
+            - change_pct
+        threshold:
+          type: number
+          minimum: 0
+          maximum: 1000000000
+        direction:
+          type: string
+          enum:
+            - up
+            - down
+        enabled:
+          type: boolean
+      required:
+        - metric
+        - comparator
+        - threshold
+    UpdateAlertRuleDto:
+      type: object
+      properties:
+        integrationId:
+          type: string
+          minLength: 1
+          maxLength: 64
+        metric:
+          type: string
+          enum:
+            - impressions
+            - unique_impressions
+            - reach
+            - engagement
+            - likes
+            - comments
+            - shares
+            - saves
+            - replies
+            - retweets
+            - quotes
+            - bookmarks
+            - views
+            - clicks
+            - followers
+            - page_views
+            - video_views
+            - minutes_watched
+            - avg_view_duration
+            - avg_view_percentage
+            - subscribers_gained
+            - subscribers_lost
+            - pin_clicks
+            - pin_click_rate
+            - website_clicks
+            - phone_calls
+            - direction_requests
+            - desktop_map_views
+            - mobile_map_views
+            - organic_followers
+            - paid_followers
+            - reposts
+            - post_impressions
+            - total_likes
+            - reactions
+            - outbound_clicks
+            - favorites
+            - score
+            - upvote_ratio
+        comparator:
+          type: string
+          enum:
+            - gte
+            - lte
+            - change_pct
+        threshold:
+          type: number
+          minimum: 0
+          maximum: 1000000000
+        direction:
+          type: string
+          enum:
+            - up
+            - down
+        enabled:
+          type: boolean
+    AnalyticsShareDto:
+      type: object
+      properties:
+        integrations:
+          maxItems: 50
+          type: array
+          items:
+            type: string
+            maxLength: 64
+            minLength: 1
+        rangePreset:
+          type: string
+          enum:
+            - 7d
+            - 30d
+            - 90d
+    AddWatchlistDto:
+      type: object
+      properties: {}
+    UpdateWatchlistDto:
+      type: object
+      properties:
+        displayName:
+          type: string
+          minLength: 1
+          maxLength: 100
+        enabled:
+          type: boolean

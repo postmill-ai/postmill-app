@@ -23,7 +23,7 @@ watchlist tracking.
 
 1. Navigate to the **Analytics** dashboard (`/analytics`).
 2. Open the **Watchlist** section (accessible from the Analytics page or via the
-   `/analytics/v2/watchlist` API).
+   `/public/v1/analytics/watchlist` API).
 3. Click **Add Account** and provide:
    - **Provider**: Select from the five supported platforms.
    - **Handle**: Enter the account's public handle (with or without the `@` prefix).
@@ -82,6 +82,6 @@ Watched account metrics appear in the Analytics dashboard:
 
 You can manage your watched accounts (edit display name, enable/disable, delete) through the
 watchlist section of the Analytics page or via the watchlist API endpoints under
-`/analytics/v2/watchlist`.
+`/public/v1/analytics/watchlist`.
 
 > Verified against v1.0.0

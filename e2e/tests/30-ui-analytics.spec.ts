@@ -23,8 +23,8 @@ test('analytics page full coverage', async ({ page }) => {
   const apiErrors: string[] = [];
   page.on('response', (r) => {
     const u = r.url();
-    if (u.includes('/api/analytics/v2/')) {
-      const endpoint = u.replace('https://app.postmill.ai/api/analytics/v2/', '').split('?')[0];
+    if (u.includes('/api/public/v1/analytics/')) {
+      const endpoint = u.replace('https://app.postmill.ai/api/public/v1/analytics/', '').split('?')[0];
       findings.apiCalls.push({
         endpoint,
         status: r.status(),
@@ -43,10 +43,10 @@ test('analytics page full coverage', async ({ page }) => {
     }
   });
 
-  // 1. Load analytics page (/analytics client-redirects to /analytics/v2; go direct to avoid redirect flake)
+  // 1. Load the unified analytics page at /analytics
   let navStatus = 0;
   try {
-    const r = await page.goto('/analytics/v2', { timeout: 25000 });
+    const r = await page.goto('/analytics', { timeout: 25000 });
     navStatus = r?.status() ?? 0;
     findings.pageLoad.status = navStatus;
     findings.pageLoad.url = page.url();

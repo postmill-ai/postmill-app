@@ -5,8 +5,8 @@ import dayjs from 'dayjs';
 import relativeTime from 'dayjs/plugin/relativeTime';
 import { useRouter } from 'next/navigation';
 import { useInboxPreview } from '../hooks/useInboxPreview';
-import { ChannelAvatar } from '@postmill-ai/frontend/components/analytics-v2/kit/channel-avatar';
-import { EmptyState, TabSkeleton } from '@postmill-ai/frontend/components/analytics-v2/kit/states';
+import { ChannelAvatar } from '@postmill-ai/frontend/components/analytics/kit/channel-avatar';
+import { EmptyState, TabSkeleton } from '@postmill-ai/frontend/components/analytics/kit/states';
 import { useT } from '@postmill-ai/react/translation/get.transation.service.client';
 
 dayjs.extend(relativeTime);

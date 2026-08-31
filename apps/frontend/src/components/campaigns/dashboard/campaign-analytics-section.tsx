@@ -3,9 +3,9 @@
 import { FC, useMemo } from 'react';
 import dayjs from 'dayjs';
 import { useT } from '@postmill-ai/react/translation/get.transation.service.client';
-import { LineChart } from '@postmill-ai/frontend/components/analytics-v2/charts/line.chart';
-import { BarChart } from '@postmill-ai/frontend/components/analytics-v2/charts/bar.chart';
-import { TabSkeleton, EmptyState, ErrorState } from '@postmill-ai/frontend/components/analytics-v2/kit/states';
+import { LineChart } from '@postmill-ai/frontend/components/analytics/charts/line.chart';
+import { BarChart } from '@postmill-ai/frontend/components/analytics/charts/bar.chart';
+import { TabSkeleton, EmptyState, ErrorState } from '@postmill-ai/frontend/components/analytics/kit/states';
 import { metricLabelT } from '@postmill-ai/frontend/components/campaigns/metric-labels';
 import {
   useCampaignAnalytics,

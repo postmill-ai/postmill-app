@@ -7,7 +7,6 @@ import { AuthGuard } from '@postmill-ai/backend/services/auth/auth.guard';
 import { CsrfMiddleware } from '@postmill-ai/backend/services/auth/csrf.middleware';
 import { StripeController } from '@postmill-ai/backend/api/routes/stripe.controller';
 import { StripeService } from '@postmill-ai/nestjs-libraries/services/stripe.service';
-import { AnalyticsV2Controller } from '@postmill-ai/backend/api/routes/analytics.v2.controller';
 import { AnalyticsService } from '@postmill-ai/nestjs-libraries/analytics/analytics.service';
 import { AnalyticsLiveFallbackService } from '@postmill-ai/nestjs-libraries/analytics/analytics-live-fallback';
 import { AnalyticsOverviewService } from '@postmill-ai/nestjs-libraries/analytics/analytics-overview.service';
@@ -123,7 +122,6 @@ export const authenticatedController = [
   ApprovedAppsController,
   OAuthAuthorizedController,
   AnnouncementsController,
-  AnalyticsV2Controller,
   AiSettingsController,
   AdminDefaultsController,
   AiModerateController,

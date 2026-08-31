@@ -154,7 +154,7 @@ export default defineConfig({
           text: 'APIs',
           items: [
             { text: 'Public API v1', link: '/developer-docs/public-api' },
-            { text: 'Analytics API v2', link: '/developer-docs/analytics-api' },
+            { text: 'Analytics API', link: '/developer-docs/analytics-api' },
             { text: 'Webhooks', link: '/developer-docs/webhooks' },
             { text: 'API Keys', link: '/developer-docs/api-keys' },
             { text: 'SDK', link: '/developer-docs/sdk' },

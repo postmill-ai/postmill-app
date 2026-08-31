@@ -162,7 +162,7 @@ function stubData({
     if (key === '/posts/post-1') {
       return { ...base, data: postData, error: postError, isLoading: postLoading } as any;
     }
-    if (typeof key === 'string' && key.startsWith('/analytics/')) {
+    if (typeof key === 'string' && key.startsWith('/public/v1/analytics/')) {
       return { ...base, data: analyticsData, error: undefined, isLoading: analyticsLoading } as any;
     }
     if (typeof key === 'string' && key.endsWith('/statistics')) {

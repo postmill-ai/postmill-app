@@ -60,6 +60,16 @@ export class OrgRbacGuard implements CanActivate {
     if (!metadata) {
       return true;
     }
+
+    // Public-API integrators (API key / pos_ OAuth token) carry no RBAC gate —
+    // the credential IS the authorization (documented public posture; the key
+    // owner's role already scoped key creation). RBAC binds to dashboard
+    // cookie sessions. Stamped by PublicAuthMiddleware.
+    const authSource = (request as any).authSource;
+    if (authSource && authSource !== 'cookie') {
+      return true;
+    }
+
     const userId = request?.user?.id;
     // AuthMiddleware sets `req.org` (the Organization), matching PoliciesGuard's
     // source; other auth paths may set `req.orgId` directly. Accept either.

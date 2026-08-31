@@ -35,8 +35,8 @@ Procedure for adding a new section to `/dashboard` (`apps/frontend/src/app/(app)
    assert SWR key/options, loading state, parsed-JSON success, and throw-on-`!ok`.
 4. **Widget component.** Create `apps/frontend/src/components/dashboard/widgets/<name>.widget.tsx`
    (+ colocated `.spec.tsx`, like the existing `*.widget.spec.tsx`). Cover loading
-   (`TabSkeleton` from `components/analytics-v2/kit/states`, or an `animate-pulse` block)
-   and empty (`EmptyState` from the same analytics-v2 kit — not `ui/empty-state.tsx`).
+   (`TabSkeleton` from `components/analytics/kit/states`, or an `animate-pulse` block)
+   and empty (`EmptyState` from the same analytics kit — not `ui/empty-state.tsx`).
 5. **Wrap in SectionCard.** In `apps/frontend/src/components/dashboard/dashboard.component.tsx`,
    wrap the widget in `SectionCard` (`./kit/section-card`) with a **stable lowercase `id`**
    (never rename it — it keys `data-section-id` and the user's hide/show prefs),

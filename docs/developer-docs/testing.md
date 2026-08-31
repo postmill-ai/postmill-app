@@ -81,7 +81,7 @@ Coverage is measured per controller file with **ratchet floors** at measured lev
 
 | File | Statements | Branches | Functions | Lines |
 |---|---|---|---|---|
-| `analytics.v2.controller.ts` | 90 | 90 | 75 | 90 |
+| `public.analytics.v1.controller.ts` | 90 | 90 | 75 | 90 |
 | `ai-settings.controller.ts` | 45 | 40 | 45 | 50 |
 | `ai-user.controller.ts` | 70 | 50 | 75 | 70 |
 | `ai-moderate.controller.ts` | 85 | 70 | 65 | 88 |
@@ -116,7 +116,7 @@ Coverage is measured across integrations, analytics, AI, RAG, governance, and ag
 ```ts
 {
   include: [
-    'src/components/analytics-v2/**/*.spec.{ts,tsx}',
+    'src/components/analytics/**/*.spec.{ts,tsx}',
     'src/components/launches/**/*.spec.{ts,tsx}',
     'src/components/dashboard/**/*.spec.{ts,tsx}',
     'src/components/settings/**/*.spec.{ts,tsx}',
@@ -139,7 +139,7 @@ Coverage is measured across integrations, analytics, AI, RAG, governance, and ag
 }
 ```
 
-Coverage is measured on `src/components/analytics-v2/**/*.{ts,tsx}` (charts excluded) with ratchet floors:
+Coverage is measured on `src/components/analytics/**/*.{ts,tsx}` (charts excluded) with ratchet floors:
 
 | Metric | Floor |
 |---|---|

@@ -32,7 +32,7 @@ export default defineConfig({
       provider: 'v8',
       reporter: ['text', 'lcov', 'html'],
       include: [
-        'src/api/routes/analytics.v2.controller.ts',
+        'src/public-api/routes/v1/public.analytics.v1.controller.ts',
         'src/api/routes/ai-settings.controller.ts',
         'src/api/routes/ai-user.controller.ts',
         'src/api/routes/ai-moderate.controller.ts',
@@ -60,7 +60,7 @@ export default defineConfig({
       // raise these toward 90 as behavioural specs are added (ai-settings/copilot are
       // the worst). Files that genuinely meet 90 (stripe) stay at 90.
       thresholds: {
-        'src/api/routes/analytics.v2.controller.ts': {
+        'src/public-api/routes/v1/public.analytics.v1.controller.ts': {
           statements: 90, branches: 90, functions: 75, lines: 90,
         },
         'src/api/routes/ai-settings.controller.ts': {

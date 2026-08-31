@@ -40,6 +40,15 @@ export class PoliciesGuard implements CanActivate {
       return true;
     }
 
+    // Public-API integrators (API key / pos_ OAuth token) carry no entitlement
+    // gate (documented API-key parity on the public routes). Entitlement
+    // policies bind to dashboard cookie sessions. Stamped by
+    // PublicAuthMiddleware.
+    const authSource = (request as any).authSource;
+    if (authSource && authSource !== 'cookie') {
+      return true;
+    }
+
      
     // @ts-expect-error
     const { org }: { org: Organization } = request;

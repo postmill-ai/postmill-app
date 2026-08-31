@@ -2,7 +2,7 @@
 
 import React, { useState } from 'react';
 import clsx from 'clsx';
-import { Drawer } from '@postmill-ai/frontend/components/analytics-v2/kit/drawer';
+import { Drawer } from '@postmill-ai/frontend/components/analytics/kit/drawer';
 import { useT } from '@postmill-ai/react/translation/get.transation.service.client';
 import { useToaster } from '@postmill-ai/react/toaster/toaster';
 import { LoadingRows } from '@postmill-ai/frontend/components/ui/loading-rows';

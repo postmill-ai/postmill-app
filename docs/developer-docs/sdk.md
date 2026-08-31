@@ -132,6 +132,6 @@ deletePost(id: string): Promise<Response>
 
 ## Analytics access
 
-The SDK does not currently expose analytics methods. For analytics data (overview, per-post, per-channel, best-time recommendations), use the [Analytics API v2](./analytics-api.md) endpoints directly via HTTP.
+The SDK's analytics methods — `analyticsOverview(query)`, `campaignAnalytics(id, query?)`, and `anomalies(query?)` — target the unified analytics surface (`/public/v1/analytics/*`). Routes without a dedicated SDK method (best-time, export, watchlist, alert rules, etc.) can be called directly over HTTP against the same surface; see the [Analytics API](./analytics-api.md) reference.
 
 See [Public API v1](./public-api.md) for the full REST reference.

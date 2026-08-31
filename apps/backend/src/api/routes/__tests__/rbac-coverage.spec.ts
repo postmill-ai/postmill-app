@@ -15,7 +15,7 @@ import { CampaignsController } from '../campaigns.controller';
 import { SocialCommentsController } from '../social-comments.controller';
 import { AiUserController } from '../ai-user.controller';
 import { RolesController } from '../roles.controller';
-import { AnalyticsV2Controller } from '../analytics.v2.controller';
+import { PublicAnalyticsV1Controller } from '../../../public-api/routes/v1/public.analytics.v1.controller';
 import { AnnouncementsController } from '../announcements.controller';
 import { AutopostController } from '../autopost.controller';
 import { BillingController } from '../billing.controller';
@@ -117,7 +117,7 @@ const ORG_RESOURCE_CONTROLLERS: Array<{ name: string; ctor: any }> = [
   { name: 'SocialCommentsController', ctor: SocialCommentsController },
   { name: 'AiUserController', ctor: AiUserController },
   { name: 'RolesController', ctor: RolesController },
-  { name: 'AnalyticsV2Controller', ctor: AnalyticsV2Controller },
+  { name: 'PublicAnalyticsV1Controller', ctor: PublicAnalyticsV1Controller },
   { name: 'AnnouncementsController', ctor: AnnouncementsController },
   { name: 'AutopostController', ctor: AutopostController },
   { name: 'BillingController', ctor: BillingController },
@@ -356,7 +356,7 @@ describe('RBAC coverage — every org-resource mutation is gated or explicitly a
   it('the named org-resource controllers have every mutation RBAC-gated (no allowlist leakage)', () => {
     // Controllers that must not rely on INTENTIONALLY_UNGATED for any mutating route.
     const gatedControllers = [
-      'AnalyticsV2Controller',
+      'PublicAnalyticsV1Controller',
       'CampaignsController',
       'ChannelConfigPerTenantController',
       'ContentPackController',

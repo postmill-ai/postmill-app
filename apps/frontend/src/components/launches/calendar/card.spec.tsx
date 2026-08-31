@@ -52,7 +52,7 @@ vi.mock('@postmill-ai/frontend/components/launches/helpers/use.existing.data', (
 vi.mock('@postmill-ai/frontend/components/composer/composer', () => ({
   Composer: () => <div data-testid="add-edit-modal" />,
 }));
-vi.mock('@postmill-ai/frontend/components/analytics-v2/post-analytics.drawer', () => ({
+vi.mock('@postmill-ai/frontend/components/analytics/post-analytics.drawer', () => ({
   PostAnalyticsDrawer: () => <div data-testid="post-analytics-drawer" />,
   PostDetailBody: () => <div data-testid="post-detail-body" />,
 }));

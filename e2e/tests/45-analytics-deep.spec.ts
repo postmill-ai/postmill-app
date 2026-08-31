@@ -9,16 +9,16 @@ import { brokenImages, mainTextLength } from './lib/crawl';
  *
  * Single test, robust + non-fatal: every probe is wrapped in try/catch and the test
  * always PASSES while recording findings. We exercise the six tabs of the
- * /analytics/v2 dashboard, the date-range control, and per-post drill-down, and we
+ * /analytics dashboard, the date-range control, and per-post drill-down, and we
  * flag tabs that are not clickable, return 4xx/5xx, or render silently blank (no
  * charts/tables AND no empty-state message). 429s are recorded as throttle.
  *
  * UI facts sourced from analytics-v2/analytics.dashboard.tsx + filters/date.range.picker.tsx:
- *  - Route /analytics/v2 (/analytics redirects here — we navigate directly).
+ *  - Route /analytics (the unified analytics page; /analytics/v2 is only a redirect shim).
  *  - Six <button> tabs: Overview, Channels, Posts, Best time, Recommendations, Watchlist.
  *  - Top controls: DateRangePicker (preset buttons "7 days"/"30 days"/"90 days"/...),
  *    a channel multiselect, and an Export button.
- *  - API: GET /api/analytics/v2/{overview,channels,posts,best-time,recommendations,watchlist}
+ *  - API: GET /public/v1/analytics/{overview,channels,posts,best-time,recommendations,watchlist}
  *    each taking from/to query params.
  */
 
@@ -41,7 +41,7 @@ test('analytics v2 deep audit', async ({ page }) => {
   const auditor = new PageAuditor(page).attach();
 
   const findings: any = {
-    route: '/analytics/v2',
+    route: '/analytics',
     load: {},
     perTab: [],
     dateRange: { found: false, refetched: false, note: '' },
@@ -122,7 +122,7 @@ test('analytics v2 deep audit', async ({ page }) => {
 
   // ===== 1. Load the dashboard directly =====
   try {
-    const resp = await page.goto('/analytics/v2', { timeout: 25000 });
+    const resp = await page.goto('/analytics', { timeout: 25000 });
     findings.load.status = resp?.status() ?? 0;
     await settle();
     findings.load.url = page.url();
@@ -164,12 +164,12 @@ test('analytics v2 deep audit', async ({ page }) => {
 
       // analytics API call(s) that fired for this tab
       const snap = auditor.snapshot();
-      const analyticsCalls = snap.apiCalls.filter((c) => c.url.includes('/analytics/v2/'));
+      const analyticsCalls = snap.apiCalls.filter((c) => c.url.includes('/public/v1/analytics/'));
       tab.apiCalls = analyticsCalls.map((c) => ({ url: c.url, status: c.status, query: c.query }));
 
       // status for *this* tab's own endpoint (best-effort; else any analytics call)
       const slugEp = TAB_ENDPOINT[name];
-      const own = analyticsCalls.find((c) => c.url.includes(`/analytics/v2/${slugEp}`));
+      const own = analyticsCalls.find((c) => c.url.includes(`/public/v1/analytics/${slugEp}`));
       tab.apiStatus = own ? own.status : analyticsCalls.length ? analyticsCalls[0].status : null;
 
       const heur = await dataHeuristic();
@@ -235,7 +235,7 @@ test('analytics v2 deep audit', async ({ page }) => {
     } else {
       await settle();
       const snap = auditor.snapshot();
-      const refetch = snap.apiCalls.filter((c) => c.url.includes('/analytics/v2/'));
+      const refetch = snap.apiCalls.filter((c) => c.url.includes('/public/v1/analytics/'));
       findings.dateRange.refetched = refetch.length > 0;
       findings.dateRange.refetchCalls = refetch.map((c) => ({ url: c.url, status: c.status, query: c.query }));
       findings.dateRangeWorks = refetch.length > 0;
@@ -279,9 +279,9 @@ test('analytics v2 deep audit', async ({ page }) => {
       } else {
         await settle();
         const snap = auditor.snapshot();
-        // A drill is a /analytics/v2/post/:id call OR a dialog/detail view opening.
+        // A drill is a /public/v1/analytics/post/:id call OR a dialog/detail view opening.
         const drillCall = snap.apiCalls.find(
-          (c) => c.url.includes('/analytics/v2/post/') || /post/i.test(c.query || '')
+          (c) => c.url.includes('/public/v1/analytics/post/') || /post/i.test(c.query || '')
         );
         let dialogOpened = false;
         try {

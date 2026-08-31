@@ -98,7 +98,7 @@ comprehensive view of a single post:
 
 ### KPI Header
 
-The header displays key performance indicators sourced from `/analytics/v2/post/:postId`:
+The header displays key performance indicators sourced from `/public/v1/analytics/post/:postId`:
 
 - Total views, likes, and comments across all channels
 - Per-channel breakdown

@@ -5,8 +5,8 @@ import { useRouter } from 'next/navigation';
 import {
   useRecommendations,
   RecommendationItem,
-} from '@postmill-ai/frontend/components/analytics-v2/hooks/useRecommendations';
-import { EmptyState, TabSkeleton } from '@postmill-ai/frontend/components/analytics-v2/kit/states';
+} from '@postmill-ai/frontend/components/analytics/hooks/useRecommendations';
+import { EmptyState, TabSkeleton } from '@postmill-ai/frontend/components/analytics/kit/states';
 import { useT } from '@postmill-ai/react/translation/get.transation.service.client';
 
 const priorityClass = (priority: number) => {

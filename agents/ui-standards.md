@@ -149,7 +149,7 @@ Notes on the v9 line (very different from the old v5 behavior):
 | `RouteError` / `RouteNotFound` | `components/errors/route-error.tsx`, `route-not-found.tsx` | Rendered by App Router `error.tsx` / `not-found.tsx` segment boundaries. `RouteNotFound` is async (server-safe, uses backend `getT`). |
 | `TranslatedLabel` | `translated-label.tsx` | Duplicate of the one in react-shared-libraries — prefer the shared import in library code. |
 
-There is a **second `EmptyState`** in `components/analytics-v2/kit/states.tsx` (analytics-flavored: default chart icon, no `className`, centered-panel rather than card styling) alongside `TabSkeleton` (`variant: 'cards'|'list'|'chart'`) and `ErrorState` (`title?`, `message?`, `onRetry?`). Use the analytics-v2 kit inside analytics-v2/dashboard surfaces (it is what `SectionCard` consumes); use `ui/empty-state.tsx` everywhere else.
+There is a **second `EmptyState`** in `components/analytics/kit/states.tsx` (analytics-flavored: default chart icon, no `className`, centered-panel rather than card styling) alongside `TabSkeleton` (`variant: 'cards'|'list'|'chart'`) and `ErrorState` (`title?`, `message?`, `onRetry?`). Use the analytics kit inside analytics/dashboard surfaces (it is what `SectionCard` consumes); use `ui/empty-state.tsx` everywhere else.
 
 ## Modals
 
@@ -184,8 +184,8 @@ openModal({
 |---|---|
 | Full-page loading | `LoadingComponent` (or default-export `Spinner`) from `components/layout/loading.tsx` |
 | In-section skeleton | `LoadingRows` (generic) or `TabSkeleton` (analytics/dashboard) |
-| Empty | `EmptyState` (`ui/empty-state.tsx`; analytics variant in the analytics-v2 kit) |
-| Recoverable error | `ErrorState` with `onRetry` (analytics-v2 kit), or pass `error`+`onRetry` to `DataTable` |
+| Empty | `EmptyState` (`ui/empty-state.tsx`; analytics variant in the analytics kit) |
+| Recoverable error | `ErrorState` with `onRetry` (analytics kit), or pass `error`+`onRetry` to `DataTable` |
 | Route crash | App Router `error.tsx` / `not-found.tsx` rendering `RouteError` / `RouteNotFound` |
 | Canvas-studio crash | Wrap `/media/*` canvas tools in `StudioErrorBoundary` (`components/media-tools/studio-error-boundary.tsx`, optional `fallback` prop). Reuse for new canvas tools — no ad-hoc try/catch. |
 

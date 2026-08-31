@@ -50,7 +50,7 @@ No new Prisma models were added; every widget reads existing tables through the 
 | `GET` | `/dashboard/brief` | `analytics:read` | Returns cached brief or `{ cached: false }`. |
 | `POST` | `/dashboard/brief` | `analytics:read` | Generates and caches the daily brief. Single-flighted. |
 
-Dismiss anomaly uses the existing analytics endpoint: `POST /analytics/v2/anomalies/:id/dismiss`.
+Dismiss anomaly uses the unified analytics endpoint: `POST /public/v1/analytics/anomalies/:id/dismiss`.
 
 ## Attention probes
 

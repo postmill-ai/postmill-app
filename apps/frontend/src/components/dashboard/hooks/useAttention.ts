@@ -55,7 +55,7 @@ export const useAttention = () => {
 
   const dismissAnomaly = useCallback(
     async (anomalyId: string): Promise<void> => {
-      const res = await fetch(`/analytics/v2/anomalies/${anomalyId}/dismiss`, {
+      const res = await fetch(`/public/v1/analytics/anomalies/${anomalyId}/dismiss`, {
         method: 'POST',
       });
       if (!res.ok) {

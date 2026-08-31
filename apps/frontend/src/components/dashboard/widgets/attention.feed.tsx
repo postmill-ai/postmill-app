@@ -4,7 +4,7 @@ import { FC, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAttention, AttentionItemDto } from '../hooks/useAttention';
 import { useToaster } from '@postmill-ai/react/toaster/toaster';
-import { EmptyState, TabSkeleton } from '@postmill-ai/frontend/components/analytics-v2/kit/states';
+import { EmptyState, TabSkeleton } from '@postmill-ai/frontend/components/analytics/kit/states';
 import { Button } from '@postmill-ai/react/form/button';
 import { useT } from '@postmill-ai/react/translation/get.transation.service.client';
 import {

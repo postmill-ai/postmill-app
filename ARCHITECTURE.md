@@ -258,7 +258,7 @@ Inngest cron analytics-collection (TZ=UTC 0 2 * * *; apps/backend/src/inngest/fu
   → AnalyticsActivity                              (libraries/nestjs-libraries/src/inngest/activities/analytics.activity.ts;
                                                     daily snapshots, webhook analytics.snapshot_complete)
   → rollup/retention                               (RetentionActivity; ANALYTICS_POST_RETENTION_DAYS default 90)
-  → read API: /analytics/v2/*                      (apps/backend/src/api/routes/analytics.v2.controller.ts;
+  → read API: /public/v1/analytics/*            (apps/backend/src/public-api/routes/v1/public.analytics.v1.controller.ts;
                                                     AnalyticsService + Overview/Detail/Insights/Export/Share services)
 ```
 

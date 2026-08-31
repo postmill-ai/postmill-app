@@ -78,6 +78,30 @@ describe('OrgRbacGuard', () => {
     expect(rolesService.getEffectivePermissions).not.toHaveBeenCalled();
   });
 
+  it.each(['api-key', 'oauth'])(
+    'bypasses RBAC for public-API integrator auth (%s)',
+    async (authSource) => {
+      // Stamped by PublicAuthMiddleware — the credential IS the authorization,
+      // no role lookup even with @RequirePermission metadata and no req.user.
+      const result = await guard.canActivate(
+        buildContext({ authSource, org: { id: 'o1' } })
+      );
+      expect(result).toBe(true);
+      expect(rolesService.getEffectivePermissions).not.toHaveBeenCalled();
+    }
+  );
+
+  it('still enforces RBAC for dashboard cookie sessions', async () => {
+    rolesService.getEffectivePermissions.mockResolvedValue({
+      permissions: ['posts:read'],
+    });
+    await expect(
+      guard.canActivate(
+        buildContext({ authSource: 'cookie', user: { id: 'u1' }, orgId: 'o1' })
+      )
+    ).rejects.toThrow(ForbiddenException);
+  });
+
   // Regression: AuthMiddleware sets `req.org` (the Organization object), NOT
   // `req.orgId`. The guard must resolve the org id from either shape. Before the
   // fix it only read `req.orgId`, so `req.org`-only requests (i.e. every real

@@ -89,15 +89,15 @@ vi.mock('@postmill-ai/frontend/components/layout/use-ai-active', () => ({
   useAiActive: () => false,
 }));
 
-vi.mock('@postmill-ai/frontend/components/analytics-v2/hooks/useOverview', () => ({
+vi.mock('@postmill-ai/frontend/components/analytics/hooks/useOverview', () => ({
   useOverview: () => ({ data: undefined, isLoading: false }),
 }));
 
-vi.mock('@postmill-ai/frontend/components/analytics-v2/hooks/useRecommendations', () => ({
+vi.mock('@postmill-ai/frontend/components/analytics/hooks/useRecommendations', () => ({
   useRecommendations: () => ({ data: { recommendations: [] }, isLoading: false }),
 }));
 
-vi.mock('@postmill-ai/frontend/components/analytics-v2/charts/line.chart', () => ({
+vi.mock('@postmill-ai/frontend/components/analytics/charts/line.chart', () => ({
   LineChart: () => <div data-testid="line-chart">LineChart</div>,
 }));
 

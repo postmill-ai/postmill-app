@@ -119,7 +119,7 @@ vi.mock('@postmill-ai/frontend/components/launches/helpers/use.existing.data', (
   ExistingDataContextProvider: ({ children }: any) => children,
 }));
 
-vi.mock('@postmill-ai/frontend/components/analytics-v2/post-analytics.drawer', () => ({
+vi.mock('@postmill-ai/frontend/components/analytics/post-analytics.drawer', () => ({
   PostAnalyticsDrawer: () => <div data-testid="post-analytics-drawer" />,
   PostDetailBody: () => <div data-testid="post-detail-body" />,
 }));

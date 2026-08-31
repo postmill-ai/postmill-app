@@ -10,8 +10,7 @@ Technical documentation for developers working on the Postmill codebase. This di
 
 | Surface | Base path | Description |
 |---|---|---|
-| Public API v1 | `/public/v1` | REST API for integrations, posts, media, analytics — used by n8n, Zapier, and the SDK. |
-| Analytics v2 | `/analytics/v2` | Multi-channel analytics dashboard API with snapshot-based data. |
+| Public API v1 | `/public/v1` | REST API for integrations, posts, media, and the full analytics surface (`/public/v1/analytics/*`) — used by the dashboard, n8n, Zapier, and the SDK. |
 | MCP Server | MCP protocol | AI agent tools exposed via Model Context Protocol. |
 
 ---
@@ -39,7 +38,7 @@ Technical documentation for developers working on the Postmill codebase. This di
 | [Provider Versions](./provider-versions.md) | Live provider catalog grouped by domain. |
 | [Integrations](./integrations.md) | The channel-integration model: `IntegrationManager`, credential resolution, capability matrix, per-channel VPN egress. |
 | [Public API v1](./public-api.md) | Public REST API endpoints for third-party integrations and automation. |
-| [Analytics API v2](./analytics-api.md) | Multi-channel analytics dashboard API with snapshot-based data. |
+| [Analytics API](./analytics-api.md) | Unified multi-channel analytics API under `/public/v1/analytics/*` with snapshot-based data. |
 | [MCP](./mcp.md) | Model Context Protocol server entrypoints, auth, rate limiting. |
 | [OAuth Apps](./oauth-apps.md) | OAuth application registration and management. |
 | [Plugs](./plugs.md) | Automation hooks (auto plugs and post plugs) for social channel providers. |

@@ -22,7 +22,7 @@ vi.mock('swr', () => ({
   default: vi.fn(),
 }));
 
-vi.mock('@postmill-ai/frontend/components/analytics-v2/kit/states', () => ({
+vi.mock('@postmill-ai/frontend/components/analytics/kit/states', () => ({
   EmptyState: ({ title, description }: { title: string; description: string }) => (
     <div data-testid="empty-state">
       <span data-testid="empty-title">{title}</span>
@@ -34,7 +34,7 @@ vi.mock('@postmill-ai/frontend/components/analytics-v2/kit/states', () => ({
   ),
 }));
 
-vi.mock('@postmill-ai/frontend/components/analytics-v2/kit/channel-avatar', () => ({
+vi.mock('@postmill-ai/frontend/components/analytics/kit/channel-avatar', () => ({
   ChannelAvatar: (props: { identifier?: string; name?: string; size?: number }) => (
     <div
       data-testid="channel-avatar"
