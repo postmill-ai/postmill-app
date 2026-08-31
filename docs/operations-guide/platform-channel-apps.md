@@ -270,7 +270,12 @@ GOOGLE_GMB_CLIENT_SECRET: '<your-gmb-client-secret>'
 ## Other env-mapped providers
 
 One row per provider. Portal URLs and callback paths are taken from each
-provider's adapter; env vars from `CHANNEL_ENV_MAPPINGS`.
+provider's adapter; env vars from `CHANNEL_ENV_MAPPINGS`. The per-provider
+blocks below the table list the **exact scopes Postmill requests at connect
+time** — request precisely these in the app review. Postmill validates the
+granted scope set when a tenant connects and **refuses the connection if any
+scope is missing** (e.g. TikTok's `scope_not_authorized`), so an app approved
+for fewer scopes than listed will connect for no one.
 
 | Identifier | Developer portal | Env vars | Callback path |
 |------------|------------------|----------|---------------|
@@ -291,7 +296,46 @@ provider's adapter; env vars from `CHANNEL_ENV_MAPPINGS`.
 | LINE (`line`) | [developers.line.biz/console](https://developers.line.biz/console/) | `LINE_CHANNEL_ACCESS_TOKEN` (token only) | none — token-only (see the LINE section above) |
 | Custom OAuth (`oauth_custom`) | your own OIDC provider | `POSTMILL_OAUTH_CLIENT_ID` / `POSTMILL_OAUTH_CLIENT_SECRET` | see note below |
 
-- **Mastodon** normally needs no app at all: tenants type their instance
+### Products and scopes per provider
+
+Everything below is read from the channel adapters themselves — treat it as
+the checklist for each platform's app review.
+
+- **TikTok** — products to add in the TikTok app: **Login Kit** and
+  **Content Posting API**. Required scopes (all six — anything less fails the
+  tenant connect): `video.list`, `user.info.basic`, `video.publish`,
+  `video.upload`, `user.info.profile`, `user.info.stats`. `video.upload` /
+  `video.publish` cover the scheduled-posting flows (upload-to-drafts and
+  direct publish); `user.info.basic` identifies the connected account;
+  `user.info.profile` / `user.info.stats` feed channel analytics;
+  `video.list` feeds post analytics.
+- **Threads** — Meta app with the Threads use case. Scopes: `threads_basic`,
+  `threads_content_publish`, `threads_manage_replies`,
+  `threads_manage_insights`.
+- **Discord** — OAuth scopes `identify` + `guilds` are for identity only.
+  **Posting runs on the app's bot token** (the org credential
+  `discord.token`): enable the bot user on the application and invite it to
+  the guild with permission to post in the target channel.
+- **Slack** — bot scopes: `channels:read`, `chat:write`, `users:read`,
+  `groups:read`, `channels:join`, `chat:write.customize`.
+- **Pinterest** — `boards:read`, `boards:write`, `pins:read`, `pins:write`,
+  `user_accounts:read`.
+- **Reddit** — `read`, `identity`, `submit`, `flair`.
+- **Twitch** — `user:write:chat`, `user:read:chat`,
+  `moderator:manage:announcements`.
+- **Dribbble** — `public`, `upload`.
+- **Kick** — `chat:write`, `user:read`, `channel:read`.
+- **VK** — VK ID app (Client ID only, PKCE — no secret). Scopes:
+  `vkid.personal_info`, `email`, `wall`, `status`, `docs`, `photos`, `video`.
+- **Whop** — Client ID only, PKCE. Scopes: `openid`, `profile`, `email`,
+  `forum:post:create`, `forum:read`, `company:basic:read`.
+- **MeWe** — no OAuth scopes; MeWe hands out API access per developer
+  application (App ID + API Key) and the connect flow redirects to the MeWe
+  login with the registered `redirect_uri`.
+- **Wrapcast / Farcaster** — Neynar app; sign-in happens client-side in the
+  composer ("Sign in with Farcaster"), publishing uses the app's API key
+  server-side. No callback to register.
+- **Mastodon** — normally needs no app at all: tenants type their instance
   hostname in the connect dialog and Postmill registers itself on that server
   automatically (dynamic client registration). The env pair exists for
   operators who want a fixed pre-registered app. The same per-instance flow
