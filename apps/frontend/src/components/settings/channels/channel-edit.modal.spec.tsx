@@ -1,6 +1,7 @@
 import React from 'react';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
+import { SWRConfig } from 'swr';
 
 vi.mock('@postmill-ai/react/translation/get.transation.service.client', () => ({
   useT:
@@ -73,17 +74,21 @@ function renderForm(
   const onClose = vi.fn();
   const onSaved = vi.fn();
   const utils = render(
-    <ChannelConfigForm
-      identifier="instagram-standalone"
-      providerName="Instagram (Standalone)"
-      platformConfigured={platformConfigured}
-      setup={opts.withSetup ? OAUTH_SETUP : null}
-      callbackUrl="https://app.postmill.ai/integrations/social/instagram-standalone"
-      defaultScopes="instagram_business_basic, instagram_business_content_publish"
-      config={opts.edit ? EDIT_CONFIG : undefined}
-      onClose={onClose}
-      onSaved={onSaved}
-    />
+    // Isolated SWR cache per render — the modal's /integrations/list fetch
+    // must not see another test's cached response.
+    <SWRConfig value={{ provider: () => new Map() }}>
+      <ChannelConfigForm
+        identifier="instagram-standalone"
+        providerName="Instagram (Standalone)"
+        platformConfigured={platformConfigured}
+        setup={opts.withSetup ? OAUTH_SETUP : null}
+        callbackUrl="https://app.postmill.ai/integrations/social/instagram-standalone"
+        defaultScopes="instagram_business_basic, instagram_business_content_publish"
+        config={opts.edit ? EDIT_CONFIG : undefined}
+        onClose={onClose}
+        onSaved={onSaved}
+      />
+    </SWRConfig>
   );
   return { ...utils, onClose, onSaved };
 }
@@ -119,10 +124,13 @@ describe('ChannelConfigForm enable switch', () => {
     renderForm(true, { edit: true });
     fireEvent.click(screen.getByRole('switch'));
     fireEvent.click(screen.getByText('Save'));
-    await waitFor(() => expect(mockFetch).toHaveBeenCalled());
-    const [url, init] = mockFetch.mock.calls[0];
-    expect(url).toBe('/channels/config/cfg-1');
-    const body = JSON.parse((init as RequestInit).body as string);
+    await waitFor(() =>
+      expect(
+        mockFetch.mock.calls.some(([u]) => u === '/channels/config/cfg-1')
+      ).toBe(true)
+    );
+    const saveCall = mockFetch.mock.calls.find(([u]) => u === '/channels/config/cfg-1');
+    const body = JSON.parse((saveCall![1] as RequestInit).body as string);
     expect(body).toMatchObject({ name: 'My IG set', enabled: true });
     expect(body.clientId).toBeUndefined();
     expect(mockToast).toHaveBeenCalledWith('Channel saved', 'success');
@@ -162,9 +170,37 @@ describe('ChannelConfigForm layout modes', () => {
 describe('ChannelConfigForm platform-app connect', () => {
   const openSpy = vi.fn();
 
+  // The modal SWR-fetches /integrations/list on mount — key all mocks on URL
+  // so the list call never consumes a sequenced mock.
+  const mockConnectSequence = (
+    social: { url?: string; err?: boolean },
+    integrations: any[] = []
+  ) =>
+    mockFetch.mockImplementation((url: string) => {
+      if (url === '/integrations/list') {
+        return Promise.resolve({ ok: true, json: async () => ({ integrations }) });
+      }
+      if (url === '/channels/config') {
+        return Promise.resolve({ ok: true, json: async () => ({ id: 'cfg-1' }) });
+      }
+      if (url.startsWith('/integrations/social/')) {
+        return Promise.resolve({
+          ok: true,
+          json: async () => (social.err ? { err: true } : { url: social.url }),
+        });
+      }
+      return Promise.resolve({ ok: true, json: async () => ({}) });
+    });
+
   beforeEach(() => {
     vi.clearAllMocks();
     window.open = openSpy;
+    mockFetch.mockImplementation((url: string) => {
+      if (url === '/integrations/list') {
+        return Promise.resolve({ ok: true, json: async () => ({ integrations: [] }) });
+      }
+      return Promise.resolve({ ok: true, json: async () => ({}) });
+    });
   });
 
   afterEach(() => {
@@ -186,15 +222,24 @@ describe('ChannelConfigForm platform-app connect', () => {
     ).toBeNull();
   });
 
+  it('shows the connected channel and offers Connect another account', async () => {
+    mockConnectSequence({}, [
+      {
+        identifier: 'instagram-standalone',
+        name: 'Postmill',
+        disabled: false,
+        inBetweenSteps: false,
+      },
+    ]);
+    renderForm(true, { withSetup: true, edit: true });
+    expect(await screen.findByText('Connected as Postmill')).toBeTruthy();
+    expect(
+      screen.getByRole('button', { name: 'Connect another account' })
+    ).toBeTruthy();
+  });
+
   it('saves the set, then opens the OAuth url in a popup bound to that set', async () => {
-    mockFetch
-      // POST /channels/config → created set
-      .mockResolvedValueOnce({ ok: true, json: async () => ({ id: 'cfg-1' }) })
-      // GET /integrations/social/:identifier?config=cfg-1 → OAuth url
-      .mockResolvedValueOnce({
-        ok: true,
-        json: async () => ({ url: 'https://oauth.example/auth' }),
-      });
+    mockConnectSequence({ url: 'https://oauth.example/auth' });
     openSpy.mockReturnValue({ closed: false });
 
     renderForm(true, { withSetup: true });
@@ -206,30 +251,32 @@ describe('ChannelConfigForm platform-app connect', () => {
       screen.getByRole('button', { name: 'Connect with Instagram (Standalone)' })
     );
 
-    await waitFor(() => expect(mockFetch).toHaveBeenCalledTimes(2));
-    const [createUrl, createInit] = mockFetch.mock.calls[0];
-    expect(createUrl).toBe('/channels/config');
-    expect(JSON.parse((createInit as RequestInit).body as string)).toMatchObject({
+    await waitFor(() =>
+      expect(
+        mockFetch.mock.calls.some(([u]) => u === '/channels/config')
+      ).toBe(true)
+    );
+    const createCall = mockFetch.mock.calls.find(([u]) => u === '/channels/config');
+    expect(JSON.parse((createCall![1] as RequestInit).body as string)).toMatchObject({
       identifier: 'instagram-standalone',
       name: 'My IG set',
     });
-    expect(mockFetch.mock.calls[1][0]).toBe(
-      '/integrations/social/instagram-standalone?config=cfg-1'
+    await waitFor(() =>
+      expect(openSpy).toHaveBeenCalledWith(
+        'https://oauth.example/auth',
+        'postmill-oauth',
+        'width=640,height=720,popup'
+      )
     );
-    expect(openSpy).toHaveBeenCalledWith(
-      'https://oauth.example/auth',
-      'postmill-oauth',
-      'width=640,height=720,popup'
-    );
+    expect(
+      mockFetch.mock.calls.some(
+        ([u]) => u === '/integrations/social/instagram-standalone?config=cfg-1'
+      )
+    ).toBe(true);
   });
 
   it('closes and refreshes when the popup posts postmill:channel-connected', async () => {
-    mockFetch
-      .mockResolvedValueOnce({ ok: true, json: async () => ({ id: 'cfg-1' }) })
-      .mockResolvedValueOnce({
-        ok: true,
-        json: async () => ({ url: 'https://oauth.example/auth' }),
-      });
+    mockConnectSequence({ url: 'https://oauth.example/auth' });
     openSpy.mockReturnValue({ closed: false });
 
     const { onClose, onSaved } = renderForm(true, { withSetup: true });
@@ -256,12 +303,7 @@ describe('ChannelConfigForm platform-app connect', () => {
   });
 
   it('ignores completion messages from a foreign origin', async () => {
-    mockFetch
-      .mockResolvedValueOnce({ ok: true, json: async () => ({ id: 'cfg-1' }) })
-      .mockResolvedValueOnce({
-        ok: true,
-        json: async () => ({ url: 'https://oauth.example/auth' }),
-      });
+    mockConnectSequence({ url: 'https://oauth.example/auth' });
     openSpy.mockReturnValue({ closed: false });
 
     const { onClose } = renderForm(true, { withSetup: true });
@@ -286,9 +328,7 @@ describe('ChannelConfigForm platform-app connect', () => {
   });
 
   it('warns instead of opening a popup when the initiation returns err', async () => {
-    mockFetch
-      .mockResolvedValueOnce({ ok: true, json: async () => ({ id: 'cfg-1' }) })
-      .mockResolvedValueOnce({ ok: true, json: async () => ({ err: true }) });
+    mockConnectSequence({ err: true });
 
     renderForm(true, { withSetup: true });
     fireEvent.change(

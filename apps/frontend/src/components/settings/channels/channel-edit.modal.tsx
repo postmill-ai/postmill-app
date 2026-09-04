@@ -1,6 +1,7 @@
 'use client';
 
 import React, { FC, useCallback, useMemo, useState } from 'react';
+import useSWR from 'swr';
 import { Button } from '@postmill-ai/react/form/button';
 import { Input } from '@postmill-ai/react/form/input';
 import { useFetch } from '@postmill-ai/helpers/utils/custom.fetch';
@@ -119,6 +120,28 @@ export const ChannelConfigForm: FC<ChannelConfigFormProps> = ({
   // Mode A of this form: a platform app in the deployment env can drive the
   // OAuth flow, so name + Connect is the primary content.
   const hasPlatformApp = platformConfigured && isOAuth;
+
+  // Connected channels for this provider (the composer list) — after a
+  // successful Connect the modal must SAY so, not silently offer Connect again.
+  const { data: integrationList } = useSWR<{ integrations?: Array<{
+    identifier: string;
+    name: string;
+    disabled: boolean;
+    inBetweenSteps?: boolean;
+  }> }>(
+    '/integrations/list',
+    (url: string) =>
+      fetch(url)
+        .then((r) => (r.ok ? r.json() : { integrations: [] }))
+        .catch(() => ({ integrations: [] }))
+  );
+  const connectedChannels = useMemo(
+    () =>
+      (integrationList?.integrations || []).filter(
+        (ch) => ch.identifier === identifier && !ch.disabled && !ch.inBetweenSteps
+      ),
+    [integrationList, identifier]
+  );
 
   const [name, setName] = useState(config?.name || '');
   // Non-secret stored values prefill in edit mode (they're identifiers, not
@@ -514,6 +537,28 @@ export const ChannelConfigForm: FC<ChannelConfigFormProps> = ({
   // needed) and opens the provider's OAuth consent in a small popup.
   const connectBlock = hasPlatformApp && (
     <div className="flex flex-col gap-[6px]">
+      {connectedChannels.length > 0 && (
+        <div className="flex items-center gap-[8px] rounded-[8px] border border-newTableBorder bg-newBgColorInner px-[12px] py-[10px]">
+          <svg
+            width="16"
+            height="16"
+            viewBox="0 0 20 20"
+            fill="currentColor"
+            className="text-green-500 shrink-0"
+          >
+            <path
+              fillRule="evenodd"
+              d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z"
+              clipRule="evenodd"
+            />
+          </svg>
+          <span className="text-[13px] text-textColor">
+            {t('connected_as', 'Connected as {{name}}', {
+              name: connectedChannels.map((ch) => ch.name).join(', '),
+            })}
+          </span>
+        </div>
+      )}
       <button
         type="button"
         onClick={handleConnect}
@@ -522,7 +567,9 @@ export const ChannelConfigForm: FC<ChannelConfigFormProps> = ({
       >
         {connecting
           ? t('connecting', 'Connecting...')
-          : t('connect_with_provider', 'Connect with {{provider}}', { provider: providerName })}
+          : connectedChannels.length > 0
+            ? t('connect_another_account', 'Connect another account')
+            : t('connect_with_provider', 'Connect with {{provider}}', { provider: providerName })}
       </button>
       <div className="text-[12px] text-newTableText text-center">
         {t('uses_postmill_app_no_setup', 'Uses the Postmill app — no setup needed')}
