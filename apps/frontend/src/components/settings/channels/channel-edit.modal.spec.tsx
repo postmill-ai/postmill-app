@@ -257,9 +257,12 @@ describe('ChannelConfigForm platform-app connect', () => {
       ).toBe(true)
     );
     const createCall = mockFetch.mock.calls.find(([u]) => u === '/channels/config');
+    // Platform-app sets are created already enabled — the env app supplies
+    // the credentials, so there is nothing left to set up.
     expect(JSON.parse((createCall![1] as RequestInit).body as string)).toMatchObject({
       identifier: 'instagram-standalone',
       name: 'My IG set',
+      enabled: true,
     });
     await waitFor(() =>
       expect(openSpy).toHaveBeenCalledWith(

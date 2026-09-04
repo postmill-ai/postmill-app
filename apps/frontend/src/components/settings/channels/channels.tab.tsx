@@ -125,6 +125,24 @@ const useProviders = () => {
   );
 };
 
+// The composer's connected channels — each credential-set row shows which
+// accounts are connected through its provider.
+const useConnectedChannels = () => {
+  const fetch = useFetch();
+  return useSWR<{
+    integrations?: Array<{
+      identifier: string;
+      name: string;
+      disabled: boolean;
+      inBetweenSteps?: boolean;
+    }>;
+  }>('/integrations/list', (url: string) =>
+    fetch(url)
+      .then((r) => (r.ok ? r.json() : { integrations: [] }))
+      .catch(() => ({ integrations: [] }))
+  );
+};
+
 // Channel rows show the platform mark circular; PlatformIcon defaults to square
 // because format cards and catalog tiles look wrong cropped.
 const ChannelProviderIcon: FC<{ identifier: string; name: string; size?: number }> = ({
@@ -326,6 +344,7 @@ export const ChannelsTab: FC = () => {
   const { data: configs, isLoading, error } = useConfigs();
   const { data: providers } = useProviders();
   const { data: catalog } = useProviderCatalog('social');
+  const { data: connectedList } = useConnectedChannels();
   const modals = useModals();
   const toaster = useToaster();
   const permissions = usePermissions();
@@ -340,6 +359,16 @@ export const ChannelsTab: FC = () => {
       providers?.find((p) => p.identifier === identifier)?.name || identifier,
     [providers]
   );
+
+  // Connected account names per provider (skips disabled / half-connected rows).
+  const connectedByIdentifier = useMemo(() => {
+    const map: Record<string, string[]> = {};
+    for (const ch of connectedList?.integrations || []) {
+      if (ch.disabled || ch.inBetweenSteps) continue;
+      (map[ch.identifier] ||= []).push(ch.name);
+    }
+    return map;
+  }, [connectedList]);
 
   const refresh = useCallback(() => globalMutate('/channels/config'), [globalMutate]);
 
@@ -494,25 +523,34 @@ export const ChannelsTab: FC = () => {
           }
         />
       }
-      renderBadges={(provider) => (
-        <div className="flex gap-[6px] mt-[4px] items-center">
-          <span className="text-[11px] text-newTableText">
-            {providerName(provider.identifier)}
-          </span>
-        </div>
-      )}
-      renderActions={(provider) => {
+      renderBadges={(provider) => {
         const config = filteredConfigs.find((c) => c.id === provider.id);
-        if (!config) return null;
+        const connected = connectedByIdentifier[provider.identifier] || [];
         return (
-          <button
-            className="text-[12px] text-textColor hover:underline"
-            onClick={() => openConfig(config.identifier, config)}
-          >
-            {t('edit', 'Edit')}
-          </button>
+          <div className="flex gap-[6px] mt-[4px] items-center flex-wrap">
+            <span className="text-[11px] text-newTableText">
+              {providerName(provider.identifier)}
+            </span>
+            {connected.length > 0 && (
+              <span className="text-[11px] text-newTableText">
+                · {t('connected_as', 'Connected as {{name}}', { name: connected.join(', ') })}
+              </span>
+            )}
+            <span
+              className={`text-[11px] rounded-[4px] px-[6px] py-px ${
+                config?.enabled
+                  ? 'bg-green-900/20 text-green-900 dark:text-green-400'
+                  : 'bg-newTableHeader text-newTableText'
+              }`}
+            >
+              {config?.enabled ? t('enabled', 'Enabled') : t('disabled', 'Disabled')}
+            </span>
+          </div>
         );
       }}
+      // The whole row opens the config modal — no separate Edit button.
+      renderActions={() => null}
+      onRowClick={(provider) => openConfigByIdentifier(provider.identifier)}
     />
   );
 };

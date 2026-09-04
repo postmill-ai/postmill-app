@@ -157,7 +157,10 @@ export const ChannelConfigForm: FC<ChannelConfigFormProps> = ({
     return out;
   });
   const [editSetupNotes, setEditSetupNotes] = useState(config?.setupNotes || '');
-  const [enabled, setEnabled] = useState(config?.enabled || false);
+  // Platform-app sets start enabled — the env app supplies credentials, so
+  // there is nothing left to set up. BYO sets stay off until keys are entered
+  // (the backend enforces the same rule).
+  const [enabled, setEnabled] = useState(config?.enabled ?? hasPlatformApp);
   const [saving, setSaving] = useState(false);
   const [connecting, setConnecting] = useState(false);
   const [callbackCopied, setCallbackCopied] = useState(false);
@@ -495,7 +498,7 @@ export const ChannelConfigForm: FC<ChannelConfigFormProps> = ({
   );
 
   // Enabling only makes sense once the set exists — the switch is edit-mode
-  // only. Styled like the VPN toggle.
+  // only. Styled like the VPN toggle; position alone carries the state.
   const enabledBlock = isEdit && (
     <div className="flex items-center gap-[8px]">
       <label className="text-[13px] font-[500]">{t('enabled', 'Enabled')}</label>
@@ -527,9 +530,6 @@ export const ChannelConfigForm: FC<ChannelConfigFormProps> = ({
           />
         </span>
       </button>
-      <span className="text-[13px] text-newTableText">
-        {enabled ? t('enabled', 'Enabled') : t('disabled', 'Disabled')}
-      </span>
     </div>
   );
 
