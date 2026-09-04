@@ -459,59 +459,60 @@ describe('IntegrationManager', () => {
   // ---- getAllIntegrations ----
 
   describe('getAllIntegrations', () => {
-    it('returns all providers when no org configs and no env apps exist (hasAnyConfigs = false)', async () => {
+    it('always returns the full provider catalog (no config-based filtering)', async () => {
       const result = await manager.getAllIntegrations();
 
       expect(result.article).toEqual([]);
-      // all 33 social providers should be returned
+      // all social providers are returned, regardless of configs
       expect(result.social.length).toBeGreaterThanOrEqual(36);
       expect(result.social.map((s: any) => s.identifier)).toContain('x');
       expect(result.social.map((s: any) => s.identifier)).toContain('telegram');
     });
 
-    it('without orgId: lists env-enabled providers and marks them platformConfigured', async () => {
+    it('without orgId: lists every provider and marks env-backed ones platformConfigured', async () => {
       stubEnvApp('x');
       stubEnvApp('linkedin');
 
       const result = await manager.getAllIntegrations();
 
-      expect(result.social).toHaveLength(2);
-      expect(result.social[0].identifier).toBe('x');
-      expect(result.social[1].identifier).toBe('linkedin');
-      expect(result.social[0].platformConfigured).toBe(true);
+      // Env apps no longer filter the list — they only flip platformConfigured.
+      expect(result.social.length).toBeGreaterThanOrEqual(36);
+      expect(
+        result.social.find((s: any) => s.identifier === 'x').platformConfigured
+      ).toBe(true);
+      expect(
+        result.social.find((s: any) => s.identifier === 'linkedin')
+          .platformConfigured
+      ).toBe(true);
+      expect(
+        result.social.find((s: any) => s.identifier === 'telegram')
+          .platformConfigured
+      ).toBe(false);
       // org scope is never consulted without an orgId
       expect(mockOrgPcm.getEnabledIdentifiers).not.toHaveBeenCalled();
       expect(mockOrgPcm.getAllConfigs).not.toHaveBeenCalled();
       expect(mockOrgPcm.getConfig).not.toHaveBeenCalled();
     });
 
-    it('marks providers without an env app as platformConfigured: false', async () => {
-      mockOrgPcm.getEnabledIdentifiers.mockResolvedValue(['linkedin']);
-      mockOrgPcm.getAllConfigs.mockResolvedValue([
-        { identifier: 'linkedin', enabled: true } as any,
-      ]);
+    it('org configs do not hide providers; non-env providers stay platformConfigured: false', async () => {
       mockOrgPcm.getConfig.mockResolvedValue(undefined);
 
       const result = await manager.getAllIntegrations('org-1');
 
-      expect(result.social).toHaveLength(1);
-      expect(result.social[0].platformConfigured).toBe(false);
+      expect(result.social.length).toBeGreaterThanOrEqual(36);
+      expect(
+        result.social.find((s: any) => s.identifier === 'linkedin')
+          .platformConfigured
+      ).toBe(false);
     });
 
-    it('org context: org-enabled and env-enabled providers list together', async () => {
+    it('org context: org configs never filter; only env-backed providers are platformConfigured', async () => {
       stubEnvApp('x');
-      mockOrgPcm.getEnabledIdentifiers.mockResolvedValue(['instagramstandalone']);
-      mockOrgPcm.getAllConfigs.mockResolvedValue([
-        { identifier: 'instagramstandalone', enabled: true } as any,
-      ]);
       mockOrgPcm.getConfig.mockResolvedValue(undefined);
 
       const result = await manager.getAllIntegrations('org-1');
 
-      expect(result.social.map((s: any) => s.identifier)).toEqual([
-        'x',
-        'instagramstandalone',
-      ]);
+      expect(result.social.length).toBeGreaterThanOrEqual(36);
       expect(
         result.social.find((s: any) => s.identifier === 'x').platformConfigured
       ).toBe(true);
@@ -522,70 +523,68 @@ describe('IntegrationManager', () => {
     });
 
     it('includes setupInstructions from the org config setupNotes', async () => {
-      mockOrgPcm.getEnabledIdentifiers.mockResolvedValue(['x']);
-      mockOrgPcm.getAllConfigs.mockResolvedValue([
-        { identifier: 'x', enabled: true } as any,
-      ]);
-      mockOrgPcm.getConfig.mockResolvedValue({
-        identifier: 'x',
-        setupNotes: 'Follow these steps...',
-      } as any);
+      mockOrgPcm.getConfig.mockImplementation(
+        async (_orgId: string, identifier: string) =>
+          identifier === 'x'
+            ? ({ identifier: 'x', setupNotes: 'Follow these steps...' } as any)
+            : undefined
+      );
 
       const result = await manager.getAllIntegrations('org-1');
 
-      expect(result.social[0].setupInstructions).toBe('Follow these steps...');
+      expect(
+        result.social.find((s: any) => s.identifier === 'x').setupInstructions
+      ).toBe('Follow these steps...');
+      expect(
+        result.social.find((s: any) => s.identifier === 'linkedin')
+          .setupInstructions
+      ).toBeUndefined();
     });
 
     it('omits setupInstructions when the org config has none', async () => {
-      mockOrgPcm.getEnabledIdentifiers.mockResolvedValue(['linkedin']);
-      mockOrgPcm.getAllConfigs.mockResolvedValue([
-        { identifier: 'linkedin', enabled: true } as any,
-      ]);
-      mockOrgPcm.getConfig.mockResolvedValue({
-        identifier: 'linkedin',
-      } as any);
+      mockOrgPcm.getConfig.mockImplementation(
+        async (_orgId: string, identifier: string) =>
+          identifier === 'linkedin'
+            ? ({ identifier: 'linkedin' } as any)
+            : undefined
+      );
 
       const result = await manager.getAllIntegrations('org-1');
 
-      expect(result.social[0].setupInstructions).toBeUndefined();
+      expect(
+        result.social.find((s: any) => s.identifier === 'linkedin')
+          .setupInstructions
+      ).toBeUndefined();
     });
 
     it('omits setupInstructions when the org config is undefined', async () => {
-      mockOrgPcm.getEnabledIdentifiers.mockResolvedValue(['x']);
-      mockOrgPcm.getAllConfigs.mockResolvedValue([
-        { identifier: 'x', enabled: true } as any,
-      ]);
       mockOrgPcm.getConfig.mockResolvedValue(undefined);
 
       const result = await manager.getAllIntegrations('org-1');
 
-      expect(result.social[0].setupInstructions).toBeUndefined();
+      expect(
+        result.social.find((s: any) => s.identifier === 'x').setupInstructions
+      ).toBeUndefined();
     });
 
     it('includes extensionCookies when provider has them', async () => {
-      mockOrgPcm.getEnabledIdentifiers.mockResolvedValue(['x']);
-      mockOrgPcm.getAllConfigs.mockResolvedValue([
-        { identifier: 'x', enabled: true } as any,
-      ]);
       mockOrgPcm.getConfig.mockResolvedValue(undefined);
 
       const result = await manager.getAllIntegrations('org-1');
 
-      expect(result.social[0].extensionCookies).toEqual([
-        { name: 'auth_token', domain: 'x.com' },
-      ]);
+      expect(
+        result.social.find((s: any) => s.identifier === 'x').extensionCookies
+      ).toEqual([{ name: 'auth_token', domain: 'x.com' }]);
     });
 
     it('includes customFields when provider has them', async () => {
-      mockOrgPcm.getEnabledIdentifiers.mockResolvedValue(['telegram']);
-      mockOrgPcm.getAllConfigs.mockResolvedValue([
-        { identifier: 'telegram', enabled: true } as any,
-      ]);
       mockOrgPcm.getConfig.mockResolvedValue(undefined);
 
       const result = await manager.getAllIntegrations('org-1');
 
-      expect(result.social[0].customFields).toEqual([
+      expect(
+        result.social.find((s: any) => s.identifier === 'telegram').customFields
+      ).toEqual([
         {
           key: 'bot_token',
           label: 'Bot Token',
@@ -597,14 +596,6 @@ describe('IntegrationManager', () => {
     });
 
     it('maps isExternal, isWeb3 and isChromeExtension correctly', async () => {
-      mockOrgPcm.getEnabledIdentifiers.mockResolvedValue([
-        'discord',
-        'telegram',
-      ]);
-      mockOrgPcm.getAllConfigs.mockResolvedValue([
-        { identifier: 'discord', enabled: true } as any,
-        { identifier: 'telegram', enabled: true } as any,
-      ]);
       mockOrgPcm.getConfig.mockResolvedValue(undefined);
 
       const result = await manager.getAllIntegrations('org-1');
@@ -621,8 +612,7 @@ describe('IntegrationManager', () => {
     });
 
     it('org context: no org configs and no env apps → all providers listed', async () => {
-      mockOrgPcm.getEnabledIdentifiers.mockResolvedValue([]);
-      mockOrgPcm.getAllConfigs.mockResolvedValue([]);
+      mockOrgPcm.getConfig.mockResolvedValue(undefined);
 
       const result = await manager.getAllIntegrations('org-1');
 

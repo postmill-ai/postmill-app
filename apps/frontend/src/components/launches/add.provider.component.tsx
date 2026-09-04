@@ -2,7 +2,7 @@
 
 import { useModals } from '@postmill-ai/frontend/components/layout/new-modal';
 import { usePermissions } from '@postmill-ai/frontend/components/layout/use-permissions';
-import React, { FC, useCallback, useMemo } from 'react';
+import React, { FC, useCallback, useEffect, useMemo, useState } from 'react';
 import { useFetch } from '@postmill-ai/helpers/utils/custom.fetch';
 import useSWR from 'swr';
 import { Input } from '@postmill-ai/react/form/input';
@@ -415,6 +415,170 @@ const ConfigPicker: FC<{
   );
 };
 
+// Per-channel connect modal for platform-configured (one-click OAuth) providers.
+// The OAuth dance runs in a small popup window; the callback page postMessages
+// the result back to this window, which closes the modal and refreshes the list.
+export const ConnectChannelModal: FC<{
+  identifier: string;
+  name: string;
+  close: () => void;
+  update?: () => void;
+  configId?: string;
+  onboarding?: boolean;
+  campaignId?: string;
+}> = (props) => {
+  const { identifier, name, close, update, configId, onboarding, campaignId } =
+    props;
+  const t = useT();
+  const fetch = useFetch();
+  const toaster = useToaster();
+  const router = useRouter();
+  const modals = useModals();
+  const [displayName, setDisplayName] = useState('');
+  const [advanced, setAdvanced] = useState(false);
+  const [connecting, setConnecting] = useState(false);
+
+  // Listen for the popup's completion message. Same-origin + typed payload
+  // only; cleaned up when the modal unmounts (manual close included).
+  useEffect(() => {
+    const onMessage = (event: MessageEvent) => {
+      if (event.origin !== window.location.origin) {
+        return;
+      }
+      const data = event.data;
+      if (
+        data?.type === 'postmill:channel-connected' &&
+        data?.provider === identifier
+      ) {
+        void (async () => {
+          // Optional display name — applied through the existing set-nickname
+          // endpoint once the new integration id is known. Best-effort: the
+          // channel is connected either way.
+          const nick = displayName.trim();
+          if (nick && data.integrationId) {
+            try {
+              await fetch(`/integrations/${data.integrationId}/nickname`, {
+                method: 'POST',
+                body: JSON.stringify({ name: nick, picture: '' }),
+              });
+            } catch {
+              // Skip silently — nickname is a bonus on top of the connect.
+            }
+          }
+          toaster.show(t('channel_connected', 'Channel connected'), 'success');
+          update?.();
+          close();
+        })();
+      }
+      if (
+        data?.type === 'postmill:channel-connect-error' &&
+        data?.provider === identifier
+      ) {
+        toaster.show(
+          data.message ||
+            t('failed_to_connect_to_provider', 'Failed to connect to provider'),
+          'warning'
+        );
+        setConnecting(false);
+      }
+    };
+    window.addEventListener('message', onMessage);
+    return () => window.removeEventListener('message', onMessage);
+  }, [identifier, displayName, fetch, toaster, t, update, close]);
+
+  const startConnect = useCallback(async () => {
+    setConnecting(true);
+    const query = [
+      onboarding ? 'onboarding=true' : '',
+      configId ? `config=${configId}` : '',
+      campaignId ? `campaign=${campaignId}` : '',
+    ]
+      .filter(Boolean)
+      .join('&');
+    let url: string;
+    try {
+      const data = await (
+        await fetch(
+          `/integrations/social/${identifier}${query ? `?${query}` : ''}`
+        )
+      ).json();
+      if (data.err || !data.url) {
+        throw new Error(data.err || 'missing url');
+      }
+      url = data.url;
+    } catch {
+      toaster.show(
+        t('could_not_connect_to_platform', 'Could not connect to the platform'),
+        'warning'
+      );
+      setConnecting(false);
+      return;
+    }
+    const popup = window.open(
+      url,
+      'postmill-oauth',
+      'width=640,height=720,popup'
+    );
+    if (!popup) {
+      // Popup blocked — fall back to the classic full-page redirect.
+      window.location.href = url;
+    }
+  }, [identifier, onboarding, configId, campaignId, fetch, toaster, t]);
+
+  return (
+    <div className="flex flex-col gap-[16px] pt-[8px]">
+      <Input
+        disableForm
+        removeError
+        label={t('channel_display_name', 'Channel name (optional)')}
+        name="displayName"
+        value={displayName}
+        onChange={(e: React.ChangeEvent<HTMLInputElement>) =>
+          setDisplayName(e.target.value)
+        }
+      />
+      <div>
+        <Button loading={connecting} onClick={startConnect}>
+          {t('connect_with_provider', 'Connect with {{provider}}', {
+            provider: name,
+          })}
+        </Button>
+      </div>
+      <div className="border-t border-newTableBorder pt-[8px]">
+        <button
+          type="button"
+          aria-expanded={advanced}
+          onClick={() => setAdvanced((a) => !a)}
+          className="text-[12px] text-newTableText hover:underline"
+        >
+          {t('advanced_use_your_own_app', 'Advanced: use your own app')}
+        </button>
+        {advanced && (
+          <div className="flex flex-col gap-[10px] pt-[10px]">
+            <p className="text-[13px] text-newTableText">
+              {t(
+                'advanced_own_app_desc',
+                'Connect this channel through your own OAuth app by creating a credential set in Settings.'
+              )}
+            </p>
+            <div>
+              <Button
+                secondary
+                onClick={() => {
+                  modals.closeAll();
+                  router.push('/settings/channels');
+                }}
+              >
+                {t('create_credential_set', 'Create a credential set')}
+              </Button>
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+};
+
 export const AddProviderComponent: FC<{
   social: Array<{
     identifier: string;
@@ -478,6 +642,7 @@ export const AddProviderComponent: FC<{
     (
         invite: boolean,
         identifier: string,
+        name: string,
         isExternal: boolean,
         isWeb3: boolean,
         isChromeExtension?: boolean,
@@ -487,7 +652,8 @@ export const AddProviderComponent: FC<{
           validation: string;
           defaultValue?: string;
           type: 'text' | 'password';
-        }>
+        }>,
+        platformConfigured?: boolean
       ) =>
       async () => {
         // Resolve which named credential set to connect through. >1 set ⇒ prompt;
@@ -653,6 +819,37 @@ export const AddProviderComponent: FC<{
 
           window.location.href = url;
         };
+        // Platform-configured plain-OAuth providers get the per-channel connect
+        // modal (optional name + popup OAuth). Every other flow — customFields
+        // key form, external URL, web3, extension, invite, mobile — is unchanged.
+        if (
+          !invite &&
+          platformConfigured &&
+          !isExternal &&
+          !isWeb3 &&
+          !isChromeExtension &&
+          !customFields &&
+          !isMobile
+        ) {
+          modal.openModal({
+            title: t('connect_provider_title', 'Connect {{provider}}', {
+              provider: name,
+            }),
+            withCloseButton: true,
+            children: (close) => (
+              <ConnectChannelModal
+                identifier={identifier}
+                name={name}
+                close={close}
+                update={update}
+                configId={configId}
+                onboarding={onboarding}
+                campaignId={campaignId}
+              />
+            ),
+          });
+          return;
+        }
         if (isWeb3) {
           openWeb3();
           return;
@@ -801,7 +998,7 @@ export const AddProviderComponent: FC<{
         }
         await gotoIntegration();
       },
-    [onboarding, t, isMobile, fetch, toaster, modal, router, extensionId, configsByIdentifier, campaignId]
+    [onboarding, t, isMobile, fetch, toaster, modal, router, extensionId, configsByIdentifier, campaignId, update]
   );
 
   const showSetupInstructions = useCallback(
@@ -859,10 +1056,12 @@ export const AddProviderComponent: FC<{
                 onClick={getSocialLink(
                   props.invite,
                   item.identifier,
+                  item.name,
                   item.isExternal,
                   item.isWeb3,
                   item.isChromeExtension,
-                  item.customFields
+                  item.customFields,
+                  item.platformConfigured
                 )}
                 {...(!!item.toolTip
                   ? {
