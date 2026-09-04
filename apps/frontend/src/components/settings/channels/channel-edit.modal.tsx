@@ -132,6 +132,7 @@ export const ChannelConfigForm: FC<ChannelConfigFormProps> = ({
   const [editSetupNotes, setEditSetupNotes] = useState(config?.setupNotes || '');
   const [enabled, setEnabled] = useState(config?.enabled || false);
   const [saving, setSaving] = useState(false);
+  const [connecting, setConnecting] = useState(false);
   const [callbackCopied, setCallbackCopied] = useState(false);
   // With a platform app configured, BYO credentials are the advanced path —
   // collapsed unless this config already has stored credentials.
@@ -165,17 +166,23 @@ export const ChannelConfigForm: FC<ChannelConfigFormProps> = ({
       : ''
   );
 
-  const handleSave = useCallback(async () => {
+  // Saves the config set (creating it first when needed). Returns the saved
+  // set's id on success, or null when validation/save failed (the toast is
+  // already shown). Shared by "Save" and by the platform-app "Connect" button,
+  // which needs the set's id to bind the OAuth flow to it.
+  const saveConfig = useCallback(async (): Promise<{ id: string | null } | null> => {
     if (!name.trim()) {
       toaster.show(t('channel_name_required', 'Please enter a name for this channel.'), 'warning');
-      return;
+      return null;
     }
-    if (enabled && !isDirect && !clientId.trim() && !isConfigured) {
+    // A platform app supplies the OAuth credentials, so no Client ID is
+    // required to enable the set when one is configured for this provider.
+    if (enabled && !isDirect && !clientId.trim() && !isConfigured && !platformConfigured) {
       toaster.show(
         t('credentials_required', 'Please enter a Client ID / API Key before enabling this provider.'),
         'warning'
       );
-      return;
+      return null;
     }
 
     setSaving(true);
@@ -227,19 +234,84 @@ export const ChannelConfigForm: FC<ChannelConfigFormProps> = ({
           });
 
       if (res.ok) {
-        toaster.show(t('channel_saved', 'Channel saved'), 'success');
-        onSaved();
-        onClose();
-        return;
+        const body = await res.json().catch(() => ({}));
+        return { id: (isEdit ? config!.id : body?.id) || null };
       }
       const errBody = await res.json().catch(() => ({}));
       toaster.show(errBody.message || t('channel_save_failed', 'Failed to save channel'), 'warning');
+      return null;
     } catch {
       toaster.show(t('network_error_saving', 'Network error while saving'), 'warning');
+      return null;
     } finally {
       setSaving(false);
     }
-  }, [name, enabled, clientId, clientSecret, extraFields, setup, selectedVersion, editSetupNotes, isDirect, vpnOptions, vpnEnabled, vpnValue, isConfigured, isEdit, config, identifier, fetch, toaster, t, onSaved, onClose]);
+  }, [name, enabled, clientId, clientSecret, extraFields, setup, selectedVersion, editSetupNotes, isDirect, platformConfigured, vpnOptions, vpnEnabled, vpnValue, isConfigured, isEdit, config, identifier, fetch, toaster, t]);
+
+  const handleSave = useCallback(async () => {
+    const saved = await saveConfig();
+    if (!saved) return;
+    toaster.show(t('channel_saved', 'Channel saved'), 'success');
+    onSaved();
+    onClose();
+  }, [saveConfig, toaster, t, onSaved, onClose]);
+
+  // Platform-app connect: save the set, then start the standard OAuth flow
+  // (the same /integrations/social/:identifier?config=<id> initiation the
+  // composer tile uses) in a small popup window. The completion page
+  // (continue.integration) detects the popup, notifies this opener, and closes
+  // itself; the poll is the fallback for a missed message / manual close.
+  const handleConnect = useCallback(async () => {
+    const saved = await saveConfig();
+    if (!saved) return;
+    const id = saved.id;
+    if (!id) {
+      // Should not happen — the API returns the created row — but the OAuth
+      // flow cannot start without a set to bind to.
+      toaster.show(t('channel_save_failed', 'Failed to save channel'), 'warning');
+      return;
+    }
+    setConnecting(true);
+    try {
+      const response = await fetch(`/integrations/social/${identifier}?config=${id}`);
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok || data.err || !data.url) {
+        toaster.show(
+          t('could_not_connect_to_platform', 'Could not connect to the platform'),
+          'warning'
+        );
+        return;
+      }
+      const popup = window.open(data.url, 'postmill-oauth', 'width=640,height=720,popup');
+      if (!popup) {
+        // Popup blocked — fall back to the standard full-page OAuth redirect.
+        window.location.href = data.url;
+        return;
+      }
+      const poll = window.setInterval(() => {
+        if (popup.closed) {
+          cleanup();
+          // Refresh without closing: the connect may have completed.
+          onSaved();
+        }
+      }, 1000);
+      const onMessage = (event: MessageEvent) => {
+        if (event.origin !== window.location.origin) return;
+        if ((event.data as { type?: string })?.type !== 'postmill:channel-connected') return;
+        cleanup();
+        toaster.show(t('channel_connected', 'Channel Connected!'), 'success');
+        onSaved();
+        onClose();
+      };
+      const cleanup = () => {
+        window.removeEventListener('message', onMessage);
+        window.clearInterval(poll);
+      };
+      window.addEventListener('message', onMessage);
+    } finally {
+      setConnecting(false);
+    }
+  }, [saveConfig, fetch, identifier, toaster, t, onSaved, onClose]);
 
   const handleDelete = useCallback(async () => {
     if (!config) return;
@@ -396,7 +468,7 @@ export const ChannelConfigForm: FC<ChannelConfigFormProps> = ({
           type="checkbox"
           checked={enabled}
           onChange={(e) => {
-            if (e.target.checked && !isDirect && !clientId.trim() && !isConfigured) {
+            if (e.target.checked && !isDirect && !clientId.trim() && !isConfigured && !platformConfigured) {
               toaster.show(
                 t('credentials_required', 'Please enter a Client ID / API Key before enabling this provider.'),
                 'warning'
@@ -417,6 +489,17 @@ export const ChannelConfigForm: FC<ChannelConfigFormProps> = ({
           )}
         </div>
       )}
+
+      {/* Platform-app OAuth: the default path. Saves the set (no credentials
+          needed) and opens the provider's OAuth consent in a small popup. */}
+      {platformConfigured &&
+        (setup?.authType === 'oauth1' || setup?.authType === 'oauth2') && (
+          <Button type="button" onClick={handleConnect} disabled={saving || connecting}>
+            {connecting
+              ? t('connecting', 'Connecting...')
+              : t('connect_with_provider', 'Connect with {{provider}}', { provider: providerName })}
+          </Button>
+        )}
 
       {setup?.authType !== 'direct' && platformConfigured ? (
         <div className="flex flex-col gap-[6px]">

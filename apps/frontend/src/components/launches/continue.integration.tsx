@@ -42,6 +42,29 @@ export const ContinueIntegration: FC<{
   // Helper to handle navigation - redirects if logged or returnURL exists, otherwise shows inline
   const navigateOrShow = useCallback(
     (path: string, returnURL: string | undefined, successMessage: string) => {
+      // OAuth completing inside a connect popup (window.open from the channel
+      // config modal): hand the result to the opener and close the popup
+      // instead of navigating it. Full-page flows are untouched.
+      if (
+        typeof window !== 'undefined' &&
+        window.opener &&
+        window.opener !== window
+      ) {
+        try {
+          window.opener.postMessage(
+            {
+              type: 'postmill:channel-connected',
+              provider,
+              message: successMessage,
+            },
+            window.location.origin
+          );
+          window.close();
+          return;
+        } catch {
+          // Opener unreachable — fall through to normal in-window navigation.
+        }
+      }
       if (returnURL) {
         // If returnURL exists, always redirect to it with the path params
         const params = path.includes('?') ? path.split('?')[1] : '';
@@ -54,7 +77,7 @@ export const ContinueIntegration: FC<{
         setSuccessState({ message: successMessage });
       }
     },
-    [logged, push]
+    [logged, push, provider]
   );
   const modifiedParams = useMemo(() => {
     if (provider === 'mewe') {

@@ -4,6 +4,7 @@ import { EncryptionService } from '@postmill-ai/nestjs-libraries/encryption/encr
 import { OrgVpnConfigService } from '@postmill-ai/nestjs-libraries/vpn/org-vpn-config.service';
 import { ProviderResolutionService } from '@postmill-ai/nestjs-libraries/providers/provider-resolution.service';
 import { AuditService } from '@postmill-ai/nestjs-libraries/database/prisma/audit/audit.service';
+import { getEnvClientInfo } from '@postmill-ai/nestjs-libraries/integrations/channel-env-credentials';
 
 // Optional VPN egress selection stored (as JSON) on the channel config. Not a
 // secret — just which enabled org VPN provider×region the channel routes through.
@@ -174,7 +175,9 @@ export class OrgProviderConfigService {
       throw new BadRequestException('A channel name is required.');
     }
 
-    if (data.enabled && !data.clientId?.trim()) {
+    // A platform app in the deployment env supplies the OAuth credentials for
+    // this provider, so an org config set may be enabled without its own keys.
+    if (data.enabled && !data.clientId?.trim() && !getEnvClientInfo(data.identifier)) {
       throw new BadRequestException(
         'A provider must be configured with credentials before it can be enabled.'
       );
@@ -217,7 +220,12 @@ export class OrgProviderConfigService {
     const willBeEnabled = data.enabled ?? existing.enabled;
     if (willBeEnabled) {
       const hasNewClientId = !!data.clientId?.trim();
-      if (!hasNewClientId && !existing.clientId?.trim()) {
+      // Env platform app counts as credentials for this provider (see create).
+      if (
+        !hasNewClientId &&
+        !existing.clientId?.trim() &&
+        !getEnvClientInfo(existing.identifier)
+      ) {
         throw new BadRequestException(
           'A provider must be configured with credentials before it can be enabled.'
         );
