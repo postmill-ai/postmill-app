@@ -53,9 +53,23 @@ const OAUTH_SETUP = {
     { key: 'clientId', label: 'App ID' },
     { key: 'clientSecret', label: 'App Secret', secret: true },
   ],
+  setupSteps: ['Create an app', 'Paste the keys'],
 };
 
-function renderForm(platformConfigured: boolean, withSetup = false) {
+const EDIT_CONFIG = {
+  id: 'cfg-1',
+  name: 'My IG set',
+  enabled: false,
+  scopes: '',
+  redirectUri: '',
+  setupNotes: '',
+  isConfigured: false,
+};
+
+function renderForm(
+  platformConfigured: boolean,
+  opts: { withSetup?: boolean; edit?: boolean } = {}
+) {
   const onClose = vi.fn();
   const onSaved = vi.fn();
   const utils = render(
@@ -63,7 +77,10 @@ function renderForm(platformConfigured: boolean, withSetup = false) {
       identifier="instagram-standalone"
       providerName="Instagram (Standalone)"
       platformConfigured={platformConfigured}
-      setup={withSetup ? OAUTH_SETUP : null}
+      setup={opts.withSetup ? OAUTH_SETUP : null}
+      callbackUrl="https://app.postmill.ai/integrations/social/instagram-standalone"
+      defaultScopes="instagram_business_basic, instagram_business_content_publish"
+      config={opts.edit ? EDIT_CONFIG : undefined}
       onClose={onClose}
       onSaved={onSaved}
     />
@@ -71,47 +88,74 @@ function renderForm(platformConfigured: boolean, withSetup = false) {
   return { ...utils, onClose, onSaved };
 }
 
-describe('ChannelConfigForm enable guard', () => {
+describe('ChannelConfigForm enable switch', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mockFetch.mockResolvedValue({ ok: true, json: async () => ({}) });
   });
 
+  it('is hidden before setup (create mode)', () => {
+    renderForm(true, { withSetup: true });
+    expect(screen.queryByRole('switch')).toBeNull();
+  });
+
   it('allows enabling without a Client ID when a platform app is configured', () => {
-    renderForm(true);
-    const checkbox = screen.getByRole('checkbox');
-    fireEvent.click(checkbox);
-    expect((checkbox as HTMLInputElement).checked).toBe(true);
+    renderForm(true, { edit: true });
+    const toggle = screen.getByRole('switch');
+    fireEvent.click(toggle);
+    expect(toggle.getAttribute('aria-checked')).toBe('true');
     expect(mockToast).not.toHaveBeenCalledWith(CREDENTIALS_WARNING, 'warning');
   });
 
   it('blocks enabling without a Client ID when no platform app is configured', () => {
-    renderForm(false);
-    const checkbox = screen.getByRole('checkbox');
-    fireEvent.click(checkbox);
+    renderForm(false, { edit: true });
+    const toggle = screen.getByRole('switch');
+    fireEvent.click(toggle);
     expect(mockToast).toHaveBeenCalledWith(CREDENTIALS_WARNING, 'warning');
-    expect((checkbox as HTMLInputElement).checked).toBe(false);
+    expect(toggle.getAttribute('aria-checked')).toBe('false');
   });
 
   it('saves an enabled credential set without clientId when a platform app is configured', async () => {
-    renderForm(true);
-    fireEvent.change(
-      screen.getByPlaceholderText('e.g. Marketing LinkedIn'),
-      { target: { value: 'My IG set' } }
-    );
-    fireEvent.click(screen.getByRole('checkbox'));
+    renderForm(true, { edit: true });
+    fireEvent.click(screen.getByRole('switch'));
     fireEvent.click(screen.getByText('Save'));
     await waitFor(() => expect(mockFetch).toHaveBeenCalled());
     const [url, init] = mockFetch.mock.calls[0];
-    expect(url).toBe('/channels/config');
+    expect(url).toBe('/channels/config/cfg-1');
     const body = JSON.parse((init as RequestInit).body as string);
-    expect(body).toMatchObject({
-      identifier: 'instagram-standalone',
-      name: 'My IG set',
-      enabled: true,
-    });
+    expect(body).toMatchObject({ name: 'My IG set', enabled: true });
     expect(body.clientId).toBeUndefined();
     expect(mockToast).toHaveBeenCalledWith('Channel saved', 'success');
+  });
+});
+
+describe('ChannelConfigForm layout modes', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockFetch.mockResolvedValue({ ok: true, json: async () => ({}) });
+  });
+
+  it('platform-app mode collapses setup steps, callback and scopes under Advanced', () => {
+    renderForm(true, { withSetup: true });
+    expect(screen.queryByText('How to set this up')).toBeNull();
+    expect(screen.queryByText('Callback URL')).toBeNull();
+    expect(screen.queryByText("Permissions we'll request")).toBeNull();
+    expect(screen.queryByText('App ID')).toBeNull();
+
+    fireEvent.click(screen.getByRole('button', { name: /Advanced/ }));
+    expect(screen.getByText('How to set this up')).toBeTruthy();
+    expect(screen.getByText('Callback URL')).toBeTruthy();
+    expect(screen.getByText("Permissions we'll request")).toBeTruthy();
+    expect(screen.getByText('App ID')).toBeTruthy();
+  });
+
+  it('BYO mode shows setup steps, callback, scopes and credentials as primary content', () => {
+    renderForm(false, { withSetup: true });
+    expect(screen.getByText('How to set this up')).toBeTruthy();
+    expect(screen.getByText('Callback URL')).toBeTruthy();
+    expect(screen.getByText("Permissions we'll request")).toBeTruthy();
+    expect(screen.getByText('App ID')).toBeTruthy();
+    expect(screen.queryByRole('button', { name: /Advanced/ })).toBeNull();
   });
 });
 
@@ -128,13 +172,15 @@ describe('ChannelConfigForm platform-app connect', () => {
   });
 
   it('shows the Connect button only for OAuth providers with a platform app', () => {
-    const { unmount } = renderForm(true, true);
-    expect(
-      screen.getByRole('button', { name: 'Connect with Instagram (Standalone)' })
-    ).toBeTruthy();
+    const { unmount } = renderForm(true, { withSetup: true });
+    const button = screen.getByRole('button', {
+      name: 'Connect with Instagram (Standalone)',
+    });
+    expect(button.className).toContain('w-full');
+    expect(button.className).toContain('whitespace-nowrap');
     unmount();
 
-    renderForm(false, true);
+    renderForm(false, { withSetup: true });
     expect(
       screen.queryByRole('button', { name: 'Connect with Instagram (Standalone)' })
     ).toBeNull();
@@ -151,7 +197,7 @@ describe('ChannelConfigForm platform-app connect', () => {
       });
     openSpy.mockReturnValue({ closed: false });
 
-    renderForm(true, true);
+    renderForm(true, { withSetup: true });
     fireEvent.change(
       screen.getByPlaceholderText('e.g. Marketing LinkedIn'),
       { target: { value: 'My IG set' } }
@@ -186,7 +232,7 @@ describe('ChannelConfigForm platform-app connect', () => {
       });
     openSpy.mockReturnValue({ closed: false });
 
-    const { onClose, onSaved } = renderForm(true, true);
+    const { onClose, onSaved } = renderForm(true, { withSetup: true });
     fireEvent.change(
       screen.getByPlaceholderText('e.g. Marketing LinkedIn'),
       { target: { value: 'My IG set' } }
@@ -218,7 +264,7 @@ describe('ChannelConfigForm platform-app connect', () => {
       });
     openSpy.mockReturnValue({ closed: false });
 
-    const { onClose } = renderForm(true, true);
+    const { onClose } = renderForm(true, { withSetup: true });
     fireEvent.change(
       screen.getByPlaceholderText('e.g. Marketing LinkedIn'),
       { target: { value: 'My IG set' } }
@@ -244,7 +290,7 @@ describe('ChannelConfigForm platform-app connect', () => {
       .mockResolvedValueOnce({ ok: true, json: async () => ({ id: 'cfg-1' }) })
       .mockResolvedValueOnce({ ok: true, json: async () => ({ err: true }) });
 
-    renderForm(true, true);
+    renderForm(true, { withSetup: true });
     fireEvent.change(
       screen.getByPlaceholderText('e.g. Marketing LinkedIn'),
       { target: { value: 'My IG set' } }
