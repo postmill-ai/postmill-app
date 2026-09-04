@@ -119,7 +119,7 @@ overrides:
   'brace-expansion@1': '~1.1.18'
   'brace-expansion@2': '~2.1.4'
   'brace-expansion@>=3.0.0 <5.0.9': '^5.0.9'
-  'fast-uri@>=3.0.0 <3.1.5': '^3.1.5'
+  'fast-uri@>=3.0.0 <3.1.6': '^3.1.6'
   'immutable@5': '^5.1.8'
   'js-yaml@>=4.0.0 <4.3.1': '^4.3.1'
   'sharp@<0.35.0': '^0.35.0'
@@ -132,6 +132,10 @@ overrides:
   # apps/backend suite) fail at import time ("does not provide an export"). CJS prod
   # is unaffected (property access + try/catch), but pin the graph to 0.0.59.
   '@ag-ui/core': '0.0.59'
+  # browserslist <=4.28.6: high — unbounded memory growth (no cache eviction) via
+  # distinct query results, leading to eventual OOM. Pulled by @babel/helper-
+  # compilation-targets and friends. Bump to patched 4.28.7 (same major).
+  'browserslist@<=4.28.6': '>=4.28.7 <5'
 
 onlyBuiltDependencies:
   - bcrypt
