@@ -233,6 +233,7 @@ These channel variables are the only provider credentials read from the environm
 | `X_API_KEY` / `X_API_SECRET` | X |
 | `LINKEDIN_CLIENT_ID` / `LINKEDIN_CLIENT_SECRET` | LinkedIn (also LinkedIn Page) |
 | `FACEBOOK_APP_ID` / `FACEBOOK_APP_SECRET` | Facebook (also Instagram via Facebook login) |
+| `FACEBOOK_CONFIG_ID` | Facebook Login for Business Configuration ID (optional; required for FBfB-only Meta apps) |
 | `INSTAGRAM_APP_ID` / `INSTAGRAM_APP_SECRET` | Instagram standalone |
 | `DISCORD_CLIENT_ID` / `DISCORD_CLIENT_SECRET` | Discord |
 | `SLACK_ID` / `SLACK_SECRET` | Slack |

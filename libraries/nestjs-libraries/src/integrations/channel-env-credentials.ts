@@ -19,14 +19,18 @@ interface ProviderEnvMapping {
   // Token-only providers (e.g. Telegram bots) carry a single token instead of a
   // client id/secret pair.
   isTokenOnly?: boolean;
+  // Meta Facebook Login for Business (FBfB) apps replace the OAuth scope list
+  // with a dashboard-created Configuration ID. FBfB-only apps (all new Meta
+  // apps) reject scope= URLs, so the platform app must carry it here.
+  configIdEnv?: string;
 }
 
 export const CHANNEL_ENV_MAPPINGS: ProviderEnvMapping[] = [
   { identifier: 'x', clientIdEnv: 'X_API_KEY', clientSecretEnv: 'X_API_SECRET' },
   { identifier: 'linkedin', clientIdEnv: 'LINKEDIN_CLIENT_ID', clientSecretEnv: 'LINKEDIN_CLIENT_SECRET' },
   { identifier: 'linkedin-page', clientIdEnv: 'LINKEDIN_CLIENT_ID', clientSecretEnv: 'LINKEDIN_CLIENT_SECRET' },
-  { identifier: 'facebook', clientIdEnv: 'FACEBOOK_APP_ID', clientSecretEnv: 'FACEBOOK_APP_SECRET' },
-  { identifier: 'instagram', clientIdEnv: 'FACEBOOK_APP_ID', clientSecretEnv: 'FACEBOOK_APP_SECRET' },
+  { identifier: 'facebook', clientIdEnv: 'FACEBOOK_APP_ID', clientSecretEnv: 'FACEBOOK_APP_SECRET', configIdEnv: 'FACEBOOK_CONFIG_ID' },
+  { identifier: 'instagram', clientIdEnv: 'FACEBOOK_APP_ID', clientSecretEnv: 'FACEBOOK_APP_SECRET', configIdEnv: 'FACEBOOK_CONFIG_ID' },
   { identifier: 'instagram-standalone', clientIdEnv: 'INSTAGRAM_APP_ID', clientSecretEnv: 'INSTAGRAM_APP_SECRET' },
   { identifier: 'discord', clientIdEnv: 'DISCORD_CLIENT_ID', clientSecretEnv: 'DISCORD_CLIENT_SECRET' },
   { identifier: 'slack', clientIdEnv: 'SLACK_ID', clientSecretEnv: 'SLACK_SECRET' },
@@ -57,6 +61,7 @@ export interface EnvClientInfo {
   client_secret: string;
   instanceUrl: string;
   token?: string;
+  configId?: string;
 }
 
 // Resolve a provider's platform OAuth-app credentials from the environment.
@@ -76,10 +81,13 @@ export function getEnvClientInfo(identifier: string): EnvClientInfo | undefined 
   // A few providers (vk, whop) are id-only; otherwise require both halves.
   if (mapping.clientSecretEnv && !secret) return undefined;
 
+  const configId = mapping.configIdEnv ? process.env[mapping.configIdEnv] : undefined;
+
   return {
     client_id: primary,
     client_secret: secret || '',
     instanceUrl: '',
+    ...(configId ? { configId } : {}),
   };
 }
 
