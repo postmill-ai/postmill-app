@@ -19,7 +19,8 @@ export interface ClientInformation {
   // Meta "Facebook Login for Business" (FBfB) configuration id. When set, the
   // Facebook/Instagram OAuth dialog is built with `config_id` instead of
   // `scope` (FBfB bundles token type + assets + permissions in a dashboard
-  // Configuration). Sourced from the org config's additionalConfig JSON.
+  // Configuration). Sourced from the org config's additionalConfig JSON, or
+  // from the platform env app (FACEBOOK_CONFIG_ID).
   configId?: string;
 }
 

@@ -14,6 +14,9 @@ describe('channel-env-credentials', () => {
     'VK_ID',
     'X_API_KEY',
     'X_API_SECRET',
+    'FACEBOOK_APP_ID',
+    'FACEBOOK_APP_SECRET',
+    'FACEBOOK_CONFIG_ID',
     // No channel mapping consumes these (generic OIDC login does); they must
     // never platform-enable a channel.
     'POSTMILL_OAUTH_CLIENT_ID',
@@ -100,5 +103,26 @@ describe('channel-env-credentials', () => {
     expect(ids).toContain('telegram');
     expect(ids).toContain('vk');
     expect(ids).not.toContain('linkedin');
+  });
+
+  it('surfaces FACEBOOK_CONFIG_ID as configId for facebook and instagram (FBfB)', () => {
+    process.env.FACEBOOK_APP_ID = 'fb-app';
+    process.env.FACEBOOK_APP_SECRET = 'fb-secret';
+    process.env.FACEBOOK_CONFIG_ID = 'fb-config-123';
+    expect(getEnvClientInfo('facebook')).toEqual({
+      client_id: 'fb-app',
+      client_secret: 'fb-secret',
+      instanceUrl: '',
+      configId: 'fb-config-123',
+    });
+    expect(getEnvClientInfo('instagram')?.configId).toBe('fb-config-123');
+  });
+
+  it('omits configId when FACEBOOK_CONFIG_ID is unset (classic Facebook Login)', () => {
+    process.env.FACEBOOK_APP_ID = 'fb-app';
+    process.env.FACEBOOK_APP_SECRET = 'fb-secret';
+    const info = getEnvClientInfo('facebook');
+    expect(info?.client_id).toBe('fb-app');
+    expect(info).not.toHaveProperty('configId');
   });
 });

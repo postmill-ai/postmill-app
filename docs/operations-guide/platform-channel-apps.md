@@ -61,6 +61,7 @@ accounts connected via Facebook login** (`instagram`) — both identifiers read
 ```yaml
 FACEBOOK_APP_ID: '1234567890123456'
 FACEBOOK_APP_SECRET: '<your-app-secret>'
+FACEBOOK_CONFIG_ID: '<configuration-id>'   # FBfB-only apps: see below
 ```
 
 6. Restart the backend.
@@ -77,8 +78,9 @@ FACEBOOK_APP_SECRET: '<your-app-secret>'
 - *Facebook Login for Business* — Meta rejects the `scope` parameter on
   FBfB-only apps. Instead, create a **Configuration** under Facebook Login for
   Business → Configurations (it bundles the token type, assets, and
-  permissions) and paste its **Configuration ID** into the org's channel form
-  (`additionalConfig.configId` in Settings → Channels; the connect flow offers
+  permissions) and set its **Configuration ID** as `FACEBOOK_CONFIG_ID` for the
+  platform app (or paste it into the org's channel form for a BYO app —
+  `additionalConfig.configId` in Settings → Channels; the connect flow offers
   the field). When a Configuration ID is present it **replaces** the scope list
   in the OAuth URL.
 

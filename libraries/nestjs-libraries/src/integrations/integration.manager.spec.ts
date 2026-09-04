@@ -258,7 +258,7 @@ import { CHANNEL_ENV_MAPPINGS } from '@postmill-ai/nestjs-libraries/integrations
 const CHANNEL_ENV_VARS = [
   ...new Set(
     CHANNEL_ENV_MAPPINGS.flatMap((m) =>
-      [m.clientIdEnv, m.clientSecretEnv].filter(Boolean) as string[]
+      [m.clientIdEnv, m.clientSecretEnv, m.configIdEnv].filter(Boolean) as string[]
     )
   ),
 ];
@@ -1190,6 +1190,21 @@ describe('IntegrationManager', () => {
         client_secret: '',
         instanceUrl: '',
         token: 'telegram-id',
+        version: 'v1',
+      });
+    });
+
+    it('carries the env FACEBOOK_CONFIG_ID through to client information (FBfB)', async () => {
+      stubEnvApp('facebook');
+      vi.stubEnv('FACEBOOK_CONFIG_ID', 'fb-config-123');
+
+      const result = await manager.getClientInformation('facebook', 'org-1');
+
+      expect(result).toEqual({
+        client_id: 'facebook-id',
+        client_secret: 'facebook-secret',
+        instanceUrl: '',
+        configId: 'fb-config-123',
         version: 'v1',
       });
     });
