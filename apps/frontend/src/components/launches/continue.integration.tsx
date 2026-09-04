@@ -2,6 +2,7 @@
 
 import { FC, useCallback, useEffect, useMemo, useState } from 'react';
 import { HttpStatusCode } from 'axios';
+import * as Sentry from '@sentry/nextjs';
 import { useRouter } from 'next/navigation';
 import { Redirect } from '@postmill-ai/frontend/components/layout/redirect';
 import { useT } from '@postmill-ai/react/translation/get.transation.service.client';
@@ -250,6 +251,7 @@ export const ContinueIntegration: FC<{
       if (!twoStepState) return;
 
       setIsSaving(true);
+      setErrorMessage(null);
 
       try {
         // Use public or authenticated endpoint based on the flow
@@ -267,10 +269,19 @@ export const ContinueIntegration: FC<{
           response.status !== HttpStatusCode.Created
         ) {
           const errorData = await response.json().catch(() => ({}));
-          setErrorMessage(
-            errorData.message || 'Failed to save channel configuration'
+          const message =
+            errorData.message || 'Failed to save channel configuration';
+          // Two-step (Select Page) keeps its UI on failure — surface the reason
+          // inline instead of swapping to the full-page error (which the
+          // two-step branch's render order would swallow anyway). Report it so
+          // silent save failures stay visible in Sentry.
+          Sentry.captureException(
+            new Error(`Two-step provider save failed: ${message}`),
+            { extra: { provider, status: response.status } }
           );
-          setError(true);
+          // twoStepState is guaranteed here (early return above) — the two-step
+          // UI stays up and shows the reason inline.
+          setErrorMessage(message);
           return;
         }
 
@@ -281,6 +292,9 @@ export const ContinueIntegration: FC<{
           twoStepState.returnURL,
           'Channel Added'
         );
+      } catch (err) {
+        Sentry.captureException(err);
+        setErrorMessage('Failed to save channel configuration');
       } finally {
         setIsSaving(false);
       }
@@ -368,6 +382,14 @@ export const ContinueIntegration: FC<{
                   `Select the ${providerDisplayName} page or account you want to connect.`
                 )}
               </p>
+              {!!errorMessage && (
+                <div
+                  role="alert"
+                  className="rounded-[8px] border border-red-500/30 bg-red-500/10 px-[12px] py-[10px] text-[13px] text-dangerText"
+                >
+                  {errorMessage}
+                </div>
+              )}
             </div>
 
             <IntegrationContext.Provider

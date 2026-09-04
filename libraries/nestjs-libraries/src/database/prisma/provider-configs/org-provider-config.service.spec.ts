@@ -305,4 +305,36 @@ describe('OrgProviderConfigService audit (F2c)', () => {
       );
     });
   });
+
+  // The (org, identifier, name, version) unique index must surface as a
+  // readable 400, not an opaque 500.
+  describe('duplicate-name guard', () => {
+    const p2002 = () =>
+      Object.assign(new Error('Unique constraint failed'), {
+        code: 'P2002',
+        meta: { target: ['organizationId', 'identifier', 'name', 'version'] },
+      });
+
+    it('translates P2002 on create into a friendly BadRequest', async () => {
+      repository.create.mockRejectedValue(p2002());
+      await expect(
+        service.createConfig('o1', { identifier: 'x', name: 'Dup', enabled: false }, 'u1')
+      ).rejects.toThrow('A channel with this name already exists for this provider');
+    });
+
+    it('rethrows non-duplicate create errors unchanged', async () => {
+      repository.create.mockRejectedValue(new Error('db down'));
+      await expect(
+        service.createConfig('o1', { identifier: 'x', name: 'App', enabled: false }, 'u1')
+      ).rejects.toThrow('db down');
+    });
+
+    it('translates P2002 on rename into a friendly BadRequest', async () => {
+      repository.getById.mockResolvedValue(baseRow());
+      repository.updateById.mockRejectedValue(p2002());
+      await expect(
+        service.updateConfig('o1', 'cfg1', { name: 'Dup' }, 'u1')
+      ).rejects.toThrow('A channel with this name already exists for this provider');
+    });
+  });
 });

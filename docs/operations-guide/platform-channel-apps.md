@@ -119,9 +119,14 @@ Postmill requests the scopes `instagram_business_basic`,
 professional (Business or Creator) account.
 
 While the app is in development mode, each Instagram account that will connect
-must be added as an **Instagram tester** in the Meta app **and must accept the
-invite** (Instagram → Settings → Apps and Websites → Tester invites) —
-otherwise OAuth fails with "Invalid platform app".
+must be added as an **Instagram tester** *on this app*: Meta App Dashboard →
+your app → **App roles → Roles → Instagram Testers** → Add People — and the
+account **must accept the invite** (Instagram app → Settings → Apps and
+Websites → Tester Invites). The tester must be added on the app whose ID is in
+`INSTAGRAM_APP_ID` — an accepted invite on a *different* Meta app does not
+count. Without this, OAuth fails with **"Insufficient Developer Role"** (or
+"Invalid platform app"). To remove the requirement entirely, switch the app to
+**Live** mode (App Review → go live).
 
 Note: this adapter enforces that `FRONTEND_URL` is a public HTTPS origin —
 private/loopback origins are rejected for OAuth redirects.

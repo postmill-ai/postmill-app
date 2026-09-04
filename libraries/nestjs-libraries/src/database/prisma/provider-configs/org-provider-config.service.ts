@@ -183,7 +183,7 @@ export class OrgProviderConfigService {
       );
     }
 
-    const result = await this._repository.create(orgId, {
+    const result = await this.#createWithDuplicateGuard(orgId, {
       identifier: data.identifier,
       name,
       version: this.#resolveVersion(data.identifier, data.version),
@@ -200,6 +200,29 @@ export class OrgProviderConfigService {
     // 1.3a: evict the cached kernel capability so a resolve rebuilds with fresh creds.
     this._resolution.invalidate('social', data.identifier, orgId);
     return this.#maskSensitive(result);
+  }
+
+  // The (organizationId, identifier, name, version) unique index turns a
+  // duplicate set name into a Prisma P2002 — translate it into a readable 400
+  // instead of an opaque 500 (observed live: retrying the Connect flow with
+  // the same set name 500'd with no actionable message).
+  async #createWithDuplicateGuard(
+    orgId: string,
+    data: Parameters<OrgProviderConfigRepository['create']>[1]
+  ) {
+    try {
+      return await this._repository.create(orgId, data);
+    } catch (err) {
+      if (
+        (err as { code?: string })?.code === 'P2002' &&
+        (err as { meta?: { target?: string[] } })?.meta?.target?.includes('name')
+      ) {
+        throw new BadRequestException(
+          'A channel with this name already exists for this provider — choose a different name.'
+        );
+      }
+      throw err;
+    }
   }
 
   async updateConfig(
@@ -243,7 +266,22 @@ export class OrgProviderConfigService {
       (update as any).vpnSelection = await this.#serializeVpn(orgId, data.vpnSelection);
     }
 
-    const result = await this._repository.updateById(orgId, id, update as any);
+    let result;
+    try {
+      result = await this._repository.updateById(orgId, id, update as any);
+    } catch (err) {
+      // Same (org, identifier, name, version) unique index as create — a rename
+      // colliding with a sibling set must be a readable 400, not a 500.
+      if (
+        (err as { code?: string })?.code === 'P2002' &&
+        (err as { meta?: { target?: string[] } })?.meta?.target?.includes('name')
+      ) {
+        throw new BadRequestException(
+          'A channel with this name already exists for this provider — choose a different name.'
+        );
+      }
+      throw err;
+    }
     this.#audit('update', orgId, existing.identifier, userId);
     this.#recordCredentialRotated(orgId, existing.identifier, id, userId);
     // 1.3a: evict the cached kernel capability so a resolve rebuilds with fresh creds.

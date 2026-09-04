@@ -1,6 +1,6 @@
 import React from 'react';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { render, waitFor } from '@testing-library/react';
+import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 
 vi.mock('@postmill-ai/react/translation/get.transation.service.client', () => ({
   useT:
@@ -43,10 +43,23 @@ vi.mock('@postmill-ai/frontend/components/launches/helpers/use.integration', () 
   IntegrationContext: React.createContext({}),
 }));
 
+const mockCaptureException = vi.fn();
+vi.mock('@sentry/nextjs', () => ({
+  captureException: (...args: any[]) => mockCaptureException(...args),
+}));
+
+// A minimal two-step provider: a button that saves a fixed selection. Defined
+// inside the factory — vi.mock factories are hoisted above module-level consts.
 vi.mock(
   '@postmill-ai/frontend/components/composer/providers/continue-provider/list',
   () => ({
-    continueProviderList: {},
+    continueProviderList: {
+      facebook: (props: { onSave: (data: any) => Promise<void> }) => (
+        <button type="button" onClick={() => props.onSave({ page: 'page-1' })}>
+          Save
+        </button>
+      ),
+    },
   })
 );
 
@@ -142,5 +155,44 @@ describe('ContinueIntegration popup completion', () => {
     // Two-step means the user still has to pick a page — no completion yet.
     expect(postMessage).not.toHaveBeenCalled();
     expect(closeSpy).not.toHaveBeenCalled();
+  });
+
+  it('shows a failed page save inline, reports it, and keeps the two-step UI', async () => {
+    setOpener({ postMessage });
+    mockFetch
+      // social-connect → two-step with pages
+      .mockResolvedValueOnce(
+        okResponse({ id: 'int-1', inBetweenSteps: true, pages: [{ id: 'p1' }] })
+      )
+      // page save → rejected by the backend
+      .mockResolvedValueOnce({
+        status: 400,
+        json: async () => ({ message: 'Invalid request' }),
+      });
+
+    render(
+      <ContinueIntegration
+        provider="facebook"
+        searchParams={{ state: 's', code: 'c' }}
+        logged={true}
+      />
+    );
+
+    fireEvent.click(await screen.findByText('Save'));
+
+    // The failure reason renders inside the two-step UI — previously the error
+    // state was set but never displayed, so Save appeared to do nothing.
+    const alert = await screen.findByRole('alert');
+    expect(alert.textContent).toContain('Invalid request');
+    expect(mockCaptureException).toHaveBeenCalled();
+    expect(postMessage).not.toHaveBeenCalled();
+    expect(closeSpy).not.toHaveBeenCalled();
+
+    // A retry clears the previous message while in flight.
+    mockFetch.mockResolvedValueOnce(okResponse({}));
+    fireEvent.click(screen.getByText('Save'));
+    await waitFor(() =>
+      expect(screen.queryByRole('alert')).toBeNull()
+    );
   });
 });
