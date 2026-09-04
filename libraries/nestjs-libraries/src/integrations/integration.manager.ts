@@ -21,7 +21,6 @@ import { OrgProviderConfigManager } from '@postmill-ai/nestjs-libraries/integrat
 import { ProviderNotConfiguredError } from '@postmill-ai/nestjs-libraries/integrations/provider-not-configured.error';
 import {
   getEnvClientInfo,
-  getEnvEnabledIdentifiers,
   isEnvEnabled,
 } from '@postmill-ai/nestjs-libraries/integrations/channel-env-credentials';
 import { IntegrationRepository } from '@postmill-ai/nestjs-libraries/database/prisma/integrations/integration.repository';
@@ -86,27 +85,15 @@ export class IntegrationManager {
   }
 
   async getAllIntegrations(orgId?: string) {
-    // Channel credentials are two-scope now: the org's own (BYO per-tenant
-    // channel app) configs plus the platform app credentials in the deployment
-    // env. The deprecated platform-global DB scope is read nowhere here.
-    const enabledIdentifiers = orgId
-      ? await this._orgProviderConfigManager.getEnabledIdentifiers(orgId)
-      : [];
-    const allConfigs = orgId
-      ? await this._orgProviderConfigManager.getAllConfigs(orgId)
-      : [];
-    // Providers the deployment env supplies a platform OAuth app for always stay
-    // connectable (click-connect), even after the org has added its own configs.
-    const envEnabled = getEnvEnabledIdentifiers();
-    const enabledSet = new Set([...enabledIdentifiers, ...envEnabled]);
-    // With zero configs anywhere (no org configs AND no env app) every provider
-    // lists, so a fresh deployment can browse the full catalog.
-    const hasAnyConfigs = allConfigs.length > 0 || envEnabled.length > 0;
-
+    // The channel picker always lists the full catalog: every registered
+    // social provider shows up, whether or not any credentials exist yet.
+    // `platformConfigured` tells the frontend which tiles offer one-click
+    // Connect (platform OAuth app in the deployment env) vs. the BYO-app
+    // credential form. The org's own configs only own the display copy
+    // (setupNotes) — they never hide a provider.
     return {
       social: await Promise.all(
         this.getSocialProviders()
-          .filter((p) => !hasAnyConfigs || enabledSet.has(p.identifier))
           .map(async (p) => {
             // The org config (setupNotes) owns the display copy when present.
             const config = orgId

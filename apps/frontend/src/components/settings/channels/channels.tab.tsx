@@ -13,9 +13,10 @@ import {
   ProviderCatalogEntry,
   latestActiveVersion,
 } from '@postmill-ai/frontend/components/settings/shared/use-provider-catalog';
-import { useModals } from '@postmill-ai/frontend/components/layout/new-modal';
+import { useModals, useDecisionModal } from '@postmill-ai/frontend/components/layout/new-modal';
 import { usePermissions } from '@postmill-ai/frontend/components/layout/use-permissions';
 import { PlatformIcon } from '@postmill-ai/frontend/components/shared/platform-icon';
+import { StatusPill } from '@postmill-ai/frontend/components/ui/data-table';
 import { useT } from '@postmill-ai/react/translation/get.transation.service.client';
 import { CapabilityBadges as KitCapabilityBadges } from '@postmill-ai/frontend/components/settings/shared/kit/capabilities';
 import { ProviderSearchToolbar } from '@postmill-ai/frontend/components/settings/shared/kit/provider-search-toolbar';
@@ -323,6 +324,228 @@ const ProviderPicker: FC<{
   );
 };
 
+interface ConnectedChannelItem {
+  id: string;
+  name: string;
+  identifier: string;
+  display?: string;
+  picture?: string;
+  disabled: boolean;
+  inBetweenSteps?: boolean;
+  refreshNeeded?: boolean;
+}
+
+const useConnectedChannels = () => {
+  const fetch = useFetch();
+  return useSWR<{ integrations: ConnectedChannelItem[] }>(
+    '/integrations/list',
+    (url: string) =>
+      fetch(url)
+        .then((r) => (r.ok ? r.json() : { integrations: [] }))
+        .catch(() => ({ integrations: [] }))
+  );
+};
+
+// Unified channel manager: OAuth-connected channels live here too, above the
+// credential sets. Mutations reuse the exact calls the composer's channel menu
+// makes (launches/menu/menu.tsx) so both surfaces stay in lockstep.
+const ConnectedChannelsSection: FC<{
+  onRefresh: () => void;
+  onConnect: () => void;
+}> = ({ onRefresh, onConnect }) => {
+  const t = useT();
+  const fetch = useFetch();
+  const toaster = useToaster();
+  const decision = useDecisionModal();
+  const permissions = usePermissions();
+  const { data } = useConnectedChannels();
+  const channels = useMemo(() => data?.integrations || [], [data]);
+
+  // Optimistic-render RBAC gating: render actions until permissions resolve
+  // negative (the backend OrgRbacGuard is the real gate).
+  const canUpdate = !(
+    permissions.isResolved && !permissions.hasPermission('channels', 'update')
+  );
+  const canDelete = !(
+    permissions.isResolved && !permissions.hasPermission('channels', 'delete')
+  );
+
+  const toggleDisabled = useCallback(
+    async (channel: ConnectedChannelItem) => {
+      const ok = await decision.open({
+        title: channel.disabled
+          ? t('enable_channel_title', 'Enable Channel')
+          : t('disable_channel_title', 'Disable Channel'),
+        description: channel.disabled
+          ? t(
+              'are_you_sure_enable_channel',
+              'Are you sure you want to enable this channel?'
+            )
+          : t(
+              'are_you_sure_disable_channel',
+              'Are you sure you want to disable this channel?'
+            ),
+      });
+      if (!ok) return;
+      const res = await fetch(
+        `/integrations/${channel.disabled ? 'enable' : 'disable'}`,
+        {
+          method: 'POST',
+          body: JSON.stringify({ id: channel.id }),
+        }
+      );
+      if (!res.ok) {
+        toaster.show(
+          t('channel_update_failed', 'Failed to update channel'),
+          'warning'
+        );
+        return;
+      }
+      toaster.show(
+        channel.disabled
+          ? t('channel_enabled', 'Channel Enabled')
+          : t('channel_disabled', 'Channel Disabled'),
+        'success'
+      );
+      onRefresh();
+    },
+    [decision, t, fetch, toaster, onRefresh]
+  );
+
+  const deleteChannel = useCallback(
+    async (channel: ConnectedChannelItem) => {
+      const ok = await decision.open({
+        title: t('delete_channel_title', 'Delete Channel'),
+        description: t(
+          'are_you_sure_delete_channel',
+          'Are you sure you want to delete this channel?'
+        ),
+      });
+      if (!ok) return;
+      const res = await fetch('/integrations', {
+        method: 'DELETE',
+        body: JSON.stringify({ id: channel.id }),
+      });
+      if (res.status === 406) {
+        toaster.show(
+          t(
+            'delete_posts_before_channel',
+            'You have to delete all the posts associated with this channel before deleting it'
+          ),
+          'warning'
+        );
+        return;
+      }
+      if (!res.ok) {
+        toaster.show(
+          t('channel_delete_failed', 'Failed to delete channel'),
+          'warning'
+        );
+        return;
+      }
+      toaster.show(t('channel_deleted', 'Channel Deleted'), 'success');
+      onRefresh();
+    },
+    [decision, t, fetch, toaster, onRefresh]
+  );
+
+  return (
+    <div className="flex flex-col gap-[10px]">
+      <h2 className="text-[16px] font-[500] text-textColor">
+        {t('connected_channels', 'Connected channels')}
+      </h2>
+      <div className="bg-newBgColorInner border border-newTableBorder rounded-[12px]">
+        {channels.length === 0 ? (
+          <div className="px-[16px] py-[20px] text-[13px] text-newTableText">
+            {t('no_channels_connected', 'No channels connected yet.')}
+          </div>
+        ) : (
+          channels.map((channel, index) => (
+            <div
+              key={channel.id}
+              className={`flex items-center gap-[12px] px-[16px] py-[12px] flex-wrap${
+                index > 0 ? ' border-t border-newTableBorder' : ''
+              }`}
+            >
+              <ChannelProviderIcon
+                identifier={channel.identifier}
+                name={channel.name}
+                size={32}
+              />
+              <div className="flex flex-col min-w-0 flex-1">
+                <span className="text-[14px] font-[500] text-textColor truncate">
+                  {channel.name}
+                </span>
+                {!!channel.display && (
+                  <span className="text-[12px] text-newTableText truncate">
+                    {channel.display}
+                  </span>
+                )}
+              </div>
+              <StatusPill
+                status={
+                  channel.inBetweenSteps
+                    ? 'amber'
+                    : channel.disabled
+                      ? 'red'
+                      : 'green'
+                }
+                label={
+                  channel.inBetweenSteps
+                    ? t('setup_incomplete', 'Setup incomplete')
+                    : channel.disabled
+                      ? t('disabled', 'Disabled')
+                      : t('active', 'Active')
+                }
+              />
+              <div className="flex items-center gap-[12px]">
+                {channel.inBetweenSteps && canUpdate && (
+                  <button
+                    type="button"
+                    className="text-[12px] text-textColor hover:underline"
+                    onClick={onConnect}
+                  >
+                    {t('finish_setup', 'Finish setup')}
+                  </button>
+                )}
+                {!channel.inBetweenSteps && canUpdate && (
+                  <>
+                    <button
+                      type="button"
+                      className="text-[12px] text-textColor hover:underline"
+                      onClick={() => toggleDisabled(channel)}
+                    >
+                      {channel.disabled
+                        ? t('enable', 'Enable')
+                        : t('disable', 'Disable')}
+                    </button>
+                    <button
+                      type="button"
+                      className="text-[12px] text-textColor hover:underline"
+                      onClick={onConnect}
+                    >
+                      {t('reconnect', 'Reconnect')}
+                    </button>
+                  </>
+                )}
+                {canDelete && (
+                  <button
+                    type="button"
+                    className="text-[12px] text-dangerText hover:underline"
+                    onClick={() => deleteChannel(channel)}
+                  >
+                    {t('delete', 'Delete')}
+                  </button>
+                )}
+              </div>
+            </div>
+          ))
+        )}
+      </div>
+    </div>
+  );
+};
+
 export const ChannelsTab: FC = () => {
   const t = useT();
   const { mutate: globalMutate } = useSWRConfig();
@@ -345,11 +568,17 @@ export const ChannelsTab: FC = () => {
   );
 
   const refresh = useCallback(() => globalMutate('/channels/config'), [globalMutate]);
+  // Connected-channel mutations and completed connects must refresh both the
+  // credential sets and the connected-channels list.
+  const refreshAll = useCallback(() => {
+    globalMutate('/channels/config');
+    globalMutate('/integrations/list');
+  }, [globalMutate]);
 
   // Primary "Add Channel" = the standard OAuth connect flow (same modal as the
   // composer and sidebar): platform tiles, one-click "Uses the Postmill app"
   // connect, BYO-app tiles where no platform app exists.
-  const connectChannel = useAddProvider(refresh);
+  const connectChannel = useAddProvider(refreshAll);
 
   const openConfig = useCallback(
     (identifier: string, config?: ChannelConfigItem) => {
@@ -479,7 +708,12 @@ export const ChannelsTab: FC = () => {
   }
 
   return (
-    <ProviderListShell
+    <div className="flex flex-col gap-[24px]">
+      <ConnectedChannelsSection
+        onRefresh={refreshAll}
+        onConnect={connectChannel}
+      />
+      <ProviderListShell
       title=""
       providers={shellProviders}
       onConfigure={openConfigByIdentifier}
@@ -533,5 +767,6 @@ export const ChannelsTab: FC = () => {
         );
       }}
     />
+    </div>
   );
 };

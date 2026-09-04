@@ -287,6 +287,21 @@ Three opt-in flags make a channel app dual-use as a **login provider** (the matc
 | `FACEBOOK_PIXEL_ACCESS_TOKEN` | — | Meta Conversions API access token for server-side pixel events |
 | `NEXT_PUBLIC_FACEBOOK_PIXEL` | — | Meta pixel ID (browser-visible). Server-side pixel events fire only when both this and `FACEBOOK_PIXEL_ACCESS_TOKEN` are set |
 
+### Sentry error tracking
+
+Sentry is fully wired but off until a DSN is provided. The browser client, the
+Next.js server/edge runtimes, and the NestJS backend all read the same
+`NEXT_PUBLIC_SENTRY_DSN`. Events are scrubbed of secrets/PII at source before
+capture.
+
+| Variable | Default | Purpose |
+|----------|---------|---------|
+| `NEXT_PUBLIC_SENTRY_DSN` | — | Sentry DSN shared by the frontend (browser + server) and the backend. Baked into the frontend bundle at build time — rebuild and restart the frontend after changing it; the backend picks it up on its next restart |
+| `SENTRY_AUTH_TOKEN` | — | Auth token used by `withSentryConfig` to upload source maps at frontend build time (optional) |
+| `SENTRY_ORG` | — | Sentry organization slug for source-map upload (required with `SENTRY_AUTH_TOKEN`) |
+| `SENTRY_PROJECT` | — | Sentry project slug for source-map upload (required with `SENTRY_AUTH_TOKEN`) |
+| `SENTRY_PROFILING` | — | Set to `1` to enable browser profiling (development) |
+
 ## AI Designer chatbot
 
 | Variable | Default | Purpose |
