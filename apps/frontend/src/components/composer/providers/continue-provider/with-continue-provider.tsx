@@ -131,8 +131,8 @@ export function withContinueProvider<TItem, TSelection>(
             <div
               key={getItemId(item)}
               className={clsx(
-                'flex flex-col w-full text-center gap-[10px] border border-newTableBorder p-[10px] hover:bg-boxHover rounded-[8px]',
-                isSelected(item, selection) && 'bg-boxHover border-btnPrimary'
+                'flex flex-col w-full text-center gap-[10px] border border-input p-[10px] hover:bg-seventh rounded-[8px]',
+                isSelected(item, selection) && 'bg-seventh border-primary'
               )}
               onClick={handleSelect(item)}
             >

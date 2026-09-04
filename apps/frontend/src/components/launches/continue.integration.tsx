@@ -2,7 +2,6 @@
 
 import { FC, useCallback, useEffect, useMemo, useState } from 'react';
 import { HttpStatusCode } from 'axios';
-import * as Sentry from '@sentry/nextjs';
 import { useRouter } from 'next/navigation';
 import { Redirect } from '@postmill-ai/frontend/components/layout/redirect';
 import { useT } from '@postmill-ai/react/translation/get.transation.service.client';
@@ -56,51 +55,6 @@ export const ContinueIntegration: FC<{
       }
     },
     [logged, push]
-  );
-
-  // Popup OAuth completion: when this page runs inside the 'postmill-oauth'
-  // popup, report the outcome to the opener window and close instead of
-  // navigating. If the browser refuses window.close(), fall back to the
-  // regular in-popup navigation shortly after.
-  const completeViaPopup = useCallback(
-    (payload: Record<string, unknown>, fallback: () => void) => {
-      if (typeof window === 'undefined' || !window.opener) {
-        fallback();
-        return;
-      }
-      try {
-        window.opener.postMessage(payload, window.location.origin);
-      } catch {
-        fallback();
-        return;
-      }
-      window.close();
-      window.setTimeout(() => {
-        if (!window.closed) {
-          fallback();
-        }
-      }, 500);
-    },
-    []
-  );
-
-  // Error path counterpart: let the opener toast the failure while this page
-  // still renders its local error UI as the fallback.
-  const notifyOpenerError = useCallback(
-    (message: string) => {
-      if (typeof window === 'undefined' || !window.opener) {
-        return;
-      }
-      try {
-        window.opener.postMessage(
-          { type: 'postmill:channel-connect-error', provider, message },
-          window.location.origin
-        );
-      } catch {
-        // opener gone — the local error UI still covers it
-      }
-    },
-    [provider]
   );
   const modifiedParams = useMemo(() => {
     if (provider === 'mewe') {
@@ -188,10 +142,7 @@ export const ContinueIntegration: FC<{
 
       if (data.status === HttpStatusCode.NotAcceptable) {
         const { msg, returnURL } = await data.json();
-        completeViaPopup(
-          { type: 'postmill:channel-connected', provider },
-          () => navigateOrShow(`/posts?msg=${msg}`, returnURL, msg)
-        );
+        navigateOrShow(`/posts?msg=${msg}`, returnURL, msg);
         return;
       }
 
@@ -200,11 +151,10 @@ export const ContinueIntegration: FC<{
         data.status !== HttpStatusCode.Created
       ) {
         const errorData = await data.json().catch(() => ({}));
-        const message =
-          errorData.message || errorData.msg || 'Could not add provider';
-        setErrorMessage(message);
+        setErrorMessage(
+          errorData.message || errorData.msg || 'Could not add provider'
+        );
         setError(true);
-        notifyOpenerError(message);
         return;
       }
 
@@ -253,16 +203,12 @@ export const ContinueIntegration: FC<{
         return;
       }
 
-      completeViaPopup(
-        { type: 'postmill:channel-connected', provider, integrationId: id },
-        () =>
-          navigateOrShow(
-            `/posts?added=${provider}&msg=Channel Updated${
-              onboarding ? '&onboarding=true' : ''
-            }`,
-            returnURL,
-            'Channel Updated'
-          )
+      navigateOrShow(
+        `/posts?added=${provider}&msg=Channel Updated${
+          onboarding ? '&onboarding=true' : ''
+        }`,
+        returnURL,
+        'Channel Updated'
       );
     })();
   }, [
@@ -270,8 +216,6 @@ export const ContinueIntegration: FC<{
     modifiedParams,
     provider,
     navigateOrShow,
-    completeViaPopup,
-    notifyOpenerError,
     extensionId,
     backendUrl,
     searchParams.onboarding,
@@ -283,9 +227,6 @@ export const ContinueIntegration: FC<{
       if (!twoStepState) return;
 
       setIsSaving(true);
-      // Clear any previous inline save error on retry.
-      setError(false);
-      setErrorMessage(null);
 
       try {
         // Use public or authenticated endpoint based on the flow
@@ -303,47 +244,25 @@ export const ContinueIntegration: FC<{
           response.status !== HttpStatusCode.Created
         ) {
           const errorData = await response.json().catch(() => ({}));
-          const message =
-            errorData.message || 'Failed to save channel configuration';
-          // Inline (two-step) error — the two-step branch renders above the
-          // top-level error branch, so this message must surface there.
-          setErrorMessage(message);
+          setErrorMessage(
+            errorData.message || 'Failed to save channel configuration'
+          );
           setError(true);
-          notifyOpenerError(message);
           return;
         }
 
-        completeViaPopup(
-          {
-            type: 'postmill:channel-connected',
-            provider,
-            integrationId: twoStepState.integrationId,
-          },
-          () =>
-            navigateOrShow(
-              `/posts?added=${provider}&msg=Channel Added${
-                twoStepState.onboarding ? '&onboarding=true' : ''
-              }`,
-              twoStepState.returnURL,
-              'Channel Added'
-            )
+        navigateOrShow(
+          `/posts?added=${provider}&msg=Channel Added${
+            twoStepState.onboarding ? '&onboarding=true' : ''
+          }`,
+          twoStepState.returnURL,
+          'Channel Added'
         );
-      } catch (err) {
-        Sentry.captureException(err, {
-          extra: { provider, integrationId: twoStepState?.integrationId },
-        });
-        const message = t(
-          'failed_to_save_channel_configuration',
-          'Failed to save channel configuration'
-        );
-        setErrorMessage(message);
-        setError(true);
-        notifyOpenerError(message);
       } finally {
         setIsSaving(false);
       }
     },
-    [twoStepState, fetch, modifiedParams, provider, navigateOrShow, completeViaPopup, notifyOpenerError, logged, t]
+    [twoStepState, fetch, modifiedParams, provider, navigateOrShow, logged]
   );
 
   const Provider = useMemo(() => {
@@ -449,21 +368,6 @@ export const ContinueIntegration: FC<{
                 },
               }}
             >
-              {/* Save errors render inline here — the two-step branch precedes
-                  the top-level error branch, so without this banner a failed
-                  Save used to look like a dead button. */}
-              {error && (
-                <div
-                  role="alert"
-                  className="text-dangerText text-[14px] text-center bg-red-500/10 rounded-[8px] px-[12px] py-[10px]"
-                >
-                  {errorMessage ||
-                    t(
-                      'failed_to_save_channel_configuration',
-                      'Failed to save channel configuration'
-                    )}
-                </div>
-              )}
               <Provider
                 onSave={onSave}
                 existingId={[]}

@@ -34,7 +34,6 @@ export default defineConfig({
       'src/components/launches/merge.post.spec.{ts,tsx}',
       'src/components/launches/import-debug-post.modal.spec.{ts,tsx}',
       'src/components/launches/time.table.spec.{ts,tsx}',
-      'src/components/launches/continue.integration.spec.{ts,tsx}',
       'src/components/launches/helpers/*.spec.{ts,tsx}',
       'src/components/launches/calendar/**/*.spec.{ts,tsx}',
       'src/components/launches/generator/**/*.spec.{ts,tsx}',
