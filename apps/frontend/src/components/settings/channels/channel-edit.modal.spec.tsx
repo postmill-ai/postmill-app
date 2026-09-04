@@ -257,12 +257,12 @@ describe('ChannelConfigForm platform-app connect', () => {
       ).toBe(true)
     );
     const createCall = mockFetch.mock.calls.find(([u]) => u === '/channels/config');
-    // Platform-app sets are created already enabled — the env app supplies
-    // the credentials, so there is nothing left to set up.
+    // A set must not be enabled before it is set up — Connect creates it
+    // disabled and enables it after a successful connect.
     expect(JSON.parse((createCall![1] as RequestInit).body as string)).toMatchObject({
       identifier: 'instagram-standalone',
       name: 'My IG set',
-      enabled: true,
+      enabled: false,
     });
     await waitFor(() =>
       expect(openSpy).toHaveBeenCalledWith(
@@ -303,6 +303,16 @@ describe('ChannelConfigForm platform-app connect', () => {
     await waitFor(() => expect(onClose).toHaveBeenCalled());
     expect(onSaved).toHaveBeenCalled();
     expect(mockToast).toHaveBeenCalledWith('Channel Connected!', 'success');
+
+    // A successful connect enables the now-set-up credential set.
+    const enableCall = mockFetch.mock.calls.find(
+      ([u, init]) =>
+        u === '/channels/config/cfg-1' && (init as RequestInit)?.method === 'PUT'
+    );
+    expect(enableCall).toBeTruthy();
+    expect(JSON.parse((enableCall![1] as RequestInit).body as string)).toEqual({
+      enabled: true,
+    });
   });
 
   it('ignores completion messages from a foreign origin', async () => {

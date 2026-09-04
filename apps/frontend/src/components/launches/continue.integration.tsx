@@ -261,7 +261,11 @@ export const ContinueIntegration: FC<{
 
         const response = await fetch(endpoint, {
           method: 'POST',
-          body: JSON.stringify({ ...modifiedParams, ...data }),
+          // Only the selection fields + state. Spreading the OAuth callback
+          // params (code & co.) trips the global forbidNonWhitelisted pipe —
+          // "property code should not exist" (observed live on Facebook page
+          // save). `state` stays: the public endpoint resolves the org by it.
+          body: JSON.stringify({ state: modifiedParams.state, ...data }),
         });
 
         if (

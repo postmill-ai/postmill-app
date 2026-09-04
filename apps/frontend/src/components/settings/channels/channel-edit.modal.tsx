@@ -157,10 +157,9 @@ export const ChannelConfigForm: FC<ChannelConfigFormProps> = ({
     return out;
   });
   const [editSetupNotes, setEditSetupNotes] = useState(config?.setupNotes || '');
-  // Platform-app sets start enabled — the env app supplies credentials, so
-  // there is nothing left to set up. BYO sets stay off until keys are entered
-  // (the backend enforces the same rule).
-  const [enabled, setEnabled] = useState(config?.enabled ?? hasPlatformApp);
+  // A set must not be enabled before it is set up — BYO sets need their keys,
+  // platform-app sets become enabled after a successful Connect.
+  const [enabled, setEnabled] = useState(config?.enabled || false);
   const [saving, setSaving] = useState(false);
   const [connecting, setConnecting] = useState(false);
   const [callbackCopied, setCallbackCopied] = useState(false);
@@ -330,9 +329,20 @@ export const ChannelConfigForm: FC<ChannelConfigFormProps> = ({
         if (event.origin !== window.location.origin) return;
         if ((event.data as { type?: string })?.type !== 'postmill:channel-connected') return;
         cleanup();
-        toaster.show(t('channel_connected', 'Channel Connected!'), 'success');
-        onSaved();
-        onClose();
+        // The connect completed — the set is fully set up now, so enable it
+        // (a set must not be enabled before it is set up).
+        void (async () => {
+          if (!enabled) {
+            await fetch(`/channels/config/${id}`, {
+              method: 'PUT',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ enabled: true }),
+            }).catch(() => undefined);
+          }
+          toaster.show(t('channel_connected', 'Channel Connected!'), 'success');
+          onSaved();
+          onClose();
+        })();
       };
       const cleanup = () => {
         window.removeEventListener('message', onMessage);
@@ -342,7 +352,7 @@ export const ChannelConfigForm: FC<ChannelConfigFormProps> = ({
     } finally {
       setConnecting(false);
     }
-  }, [saveConfig, fetch, identifier, toaster, t, onSaved, onClose]);
+  }, [saveConfig, fetch, identifier, enabled, toaster, t, onSaved, onClose]);
 
   const handleDelete = useCallback(async () => {
     if (!config) return;

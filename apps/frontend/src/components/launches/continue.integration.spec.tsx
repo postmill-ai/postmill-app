@@ -180,6 +180,23 @@ describe('ContinueIntegration popup completion', () => {
 
     fireEvent.click(await screen.findByText('Save'));
 
+    // The save body carries only the selection + state — never the OAuth
+    // callback params (the global pipe 400s on `code`).
+    await waitFor(() =>
+      expect(
+        mockFetch.mock.calls.some(
+          ([u]) => u === '/integrations/provider/int-1/connect'
+        )
+      ).toBe(true)
+    );
+    const saveCall = mockFetch.mock.calls.find(
+      ([u]) => u === '/integrations/provider/int-1/connect'
+    );
+    expect(JSON.parse((saveCall![1] as RequestInit).body as string)).toEqual({
+      state: 's',
+      page: 'page-1',
+    });
+
     // The failure reason renders inside the two-step UI — previously the error
     // state was set but never displayed, so Save appeared to do nothing.
     const alert = await screen.findByRole('alert');
