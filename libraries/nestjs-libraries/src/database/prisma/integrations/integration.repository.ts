@@ -198,6 +198,16 @@ export class IntegrationRepository {
       },
       data: {
         ...params,
+        // Token-bearing writes must match the create path (v2: via
+        // fixedEncryption) — a plaintext token bricks every reader through
+        // fixedDecryption (observed live: /integrations/list 500'd after a
+        // page save wrote the raw provider token here).
+        ...(params.token
+          ? { token: AuthService.fixedEncryption(params.token) }
+          : {}),
+        ...(params.refreshToken
+          ? { refreshToken: AuthService.fixedEncryption(params.refreshToken) }
+          : {}),
         disabled: false,
         deletedAt: null,
       },

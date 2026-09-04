@@ -138,6 +138,35 @@ describe('IntegrationRepository', () => {
         })
       );
     });
+
+    // Regression: a page save wrote the raw provider token here and every
+    // reader (fixedDecryption) 500'd on the plaintext row.
+    it('encrypts token and refreshToken before writing (v2: at rest)', async () => {
+      await repository.updateIntegration('int-1', {
+        organizationId: 'org-1',
+        internalId: 'internal-1',
+        token: 'plain-access-token',
+        refreshToken: 'plain-refresh-token',
+      } as any);
+
+      const data = mockIntegration.update.mock.calls[0][0].data;
+      expect(data.token).toMatch(/^v2:/);
+      expect(data.token).not.toContain('plain-access-token');
+      expect(data.refreshToken).toMatch(/^v2:/);
+      expect(data.refreshToken).not.toContain('plain-refresh-token');
+    });
+
+    it('leaves token fields untouched when not provided', async () => {
+      await repository.updateIntegration('int-1', {
+        organizationId: 'org-1',
+        internalId: 'internal-1',
+        name: 'Updated',
+      });
+
+      const data = mockIntegration.update.mock.calls[0][0].data;
+      expect(data.token).toBeUndefined();
+      expect(data.refreshToken).toBeUndefined();
+    });
   });
 
   describe('setBetweenRefreshSteps', () => {
