@@ -170,7 +170,7 @@ export const ChannelConfigForm: FC<ChannelConfigFormProps> = ({
       toaster.show(t('channel_name_required', 'Please enter a name for this channel.'), 'warning');
       return;
     }
-    if (enabled && !isDirect && !clientId.trim() && !isConfigured) {
+    if (enabled && !isDirect && !clientId.trim() && !isConfigured && !platformConfigured) {
       toaster.show(
         t('credentials_required', 'Please enter a Client ID / API Key before enabling this provider.'),
         'warning'
@@ -239,7 +239,7 @@ export const ChannelConfigForm: FC<ChannelConfigFormProps> = ({
     } finally {
       setSaving(false);
     }
-  }, [name, enabled, clientId, clientSecret, extraFields, setup, selectedVersion, editSetupNotes, isDirect, vpnOptions, vpnEnabled, vpnValue, isConfigured, isEdit, config, identifier, fetch, toaster, t, onSaved, onClose]);
+  }, [name, enabled, clientId, clientSecret, extraFields, setup, selectedVersion, editSetupNotes, isDirect, platformConfigured, vpnOptions, vpnEnabled, vpnValue, isConfigured, isEdit, config, identifier, fetch, toaster, t, onSaved, onClose]);
 
   const handleDelete = useCallback(async () => {
     if (!config) return;
@@ -396,7 +396,9 @@ export const ChannelConfigForm: FC<ChannelConfigFormProps> = ({
           type="checkbox"
           checked={enabled}
           onChange={(e) => {
-            if (e.target.checked && !isDirect && !clientId.trim() && !isConfigured) {
+            // With a platform app configured, env supplies the app credentials —
+            // no Client ID is required to enable the credential set.
+            if (e.target.checked && !isDirect && !clientId.trim() && !isConfigured && !platformConfigured) {
               toaster.show(
                 t('credentials_required', 'Please enter a Client ID / API Key before enabling this provider.'),
                 'warning'

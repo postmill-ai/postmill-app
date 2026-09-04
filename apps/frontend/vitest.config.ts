@@ -52,6 +52,7 @@ export default defineConfig({
       'src/components/layout/prompt-modal.spec.{ts,tsx}',
       'src/components/notifications/*.spec.{ts,tsx}',
       'src/components/settings/roles/**/*.spec.{ts,tsx}',
+      'src/components/settings/channels/**/*.spec.{ts,tsx}',
       'src/components/new-layout/layout.component.spec.{ts,tsx}',
       'src/components/new-layout/user-avatar-menu.spec.{ts,tsx}',
       'src/components/new-layout/bottom-tab-bar.spec.{ts,tsx}',

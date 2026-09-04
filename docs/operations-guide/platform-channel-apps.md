@@ -6,9 +6,9 @@ Postmill resolves channel (social posting) credentials at **two scopes**:
    provider in the deployment environment (`.env` / Docker Compose). Every
    organization then connects that channel with one click — no per-org key entry.
 2. **Per-org BYO credentials** — an organization adds its own app via
-   **Settings → Channels** (advanced). A per-org config always **wins** over the
-   platform env app, so a tenant can bring its own app even when a platform app
-   exists.
+   **Settings → Channels → New credential set (advanced)**. A per-org config
+   always **wins** over the platform env app, so a tenant can bring its own app
+   even when a platform app exists.
 
 When neither exists, the connect dialog falls back to the per-org key form
 ("alternatively use keys"). Env values are resolved live, per request, and
@@ -16,8 +16,11 @@ never persisted to a tenant row.
 
 `GET /integrations` exposes `platformConfigured: true` for providers with a
 working env app. Tenants see those providers as one-click **Connect** with the
-note *"Uses the Postmill app — no setup needed"*; providers without a platform
-app require the tenant's own app via Settings → Channels.
+note *"Uses the Postmill app — no setup needed"*. The connect dialog is the
+same everywhere it appears: the composer's **Create new → New Channel**, the
+sidebar's **Add Channel**, and **Settings → Channels → Add Channel** all open
+it. Providers without a platform app require the tenant's own app (a
+credential set, via the advanced path above).
 
 ## Callback URLs and restarts
 

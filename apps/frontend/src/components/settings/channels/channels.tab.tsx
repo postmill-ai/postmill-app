@@ -6,6 +6,7 @@ import { useFetch } from '@postmill-ai/helpers/utils/custom.fetch';
 import { createFetchError } from '@postmill-ai/frontend/components/settings/shared/fetch-error';
 import { useToaster } from '@postmill-ai/react/toaster/toaster';
 import { ChannelConfigForm, ChannelSetupDescriptor } from './channel-edit.modal';
+import { useAddProvider } from '@postmill-ai/frontend/components/launches/add.provider.component';
 import ProviderListShell from '@postmill-ai/frontend/components/settings/shared/provider-list-shell';
 import {
   useProviderCatalog,
@@ -213,8 +214,10 @@ const CapabilityFilter: FC<{
   );
 };
 
-// Provider picker used by "Add channel" — browse providers with their capability
-// tags and a capability filter, then configure the chosen one.
+// Provider picker used by "New credential set (advanced)" — browse providers
+// with their capability tags and a capability filter, then configure the chosen
+// one. The primary "Add Channel" action is the OAuth connect flow
+// (useAddProvider), not this picker.
 const ProviderPicker: FC<{
   providers: ProviderCatalogItem[];
   catalog?: ProviderCatalogEntry[];
@@ -343,6 +346,11 @@ export const ChannelsTab: FC = () => {
 
   const refresh = useCallback(() => globalMutate('/channels/config'), [globalMutate]);
 
+  // Primary "Add Channel" = the standard OAuth connect flow (same modal as the
+  // composer and sidebar): platform tiles, one-click "Uses the Postmill app"
+  // connect, BYO-app tiles where no platform app exists.
+  const connectChannel = useAddProvider(refresh);
+
   const openConfig = useCallback(
     (identifier: string, config?: ChannelConfigItem) => {
       const provider = providers?.find((p) => p.identifier === identifier);
@@ -385,13 +393,15 @@ export const ChannelsTab: FC = () => {
     [providers, modals, t, providerName, refresh]
   );
 
-  const openPicker = useCallback(() => {
+  // Advanced path: create a named credential set (BYO OAuth app). Not the
+  // primary action — most users connect straight through OAuth.
+  const openConfigSetPicker = useCallback(() => {
     if (!providers?.length) {
       toaster.show(t('providers_loading', 'Providers are still loading'), 'warning');
       return;
     }
     modals.openModal({
-      title: t('add_channel', 'Add Channel'),
+      title: t('new_credential_set', 'New credential set'),
       children: (close) => (
         <ProviderPicker
           providers={providers}
@@ -483,13 +493,22 @@ export const ChannelsTab: FC = () => {
           placeholder={t('search_channels', 'Search channels...')}
           trailing={
             canAddChannel ? (
-              <button
-                type="button"
-                onClick={openPicker}
-                className="text-[13px] px-[16px] py-[8px] rounded-[8px] bg-btnPrimary text-white hover:opacity-90 transition-opacity whitespace-nowrap"
-              >
-                + {t('add_channel', 'Add Channel')}
-              </button>
+              <div className="flex items-center gap-[12px]">
+                <button
+                  type="button"
+                  onClick={openConfigSetPicker}
+                  className="text-[13px] text-textColor hover:underline whitespace-nowrap"
+                >
+                  {t('new_credential_set_advanced', 'New credential set (advanced)')}
+                </button>
+                <button
+                  type="button"
+                  onClick={connectChannel}
+                  className="text-[13px] px-[16px] py-[8px] rounded-[8px] bg-btnPrimary text-white hover:opacity-90 transition-opacity whitespace-nowrap"
+                >
+                  + {t('add_channel', 'Add Channel')}
+                </button>
+              </div>
             ) : undefined
           }
         />
