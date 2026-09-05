@@ -41,6 +41,22 @@ describe('useLaunchStore', () => {
         store.getState().internal.some((i) => i.integration.id === 'a')
       ).toBe(false);
     });
+
+    // Regression: the composer editor returns null when `loaded` is false and
+    // nothing ever re-set it — removing a channel made the editor invisible
+    // until a full reload.
+    it('keeps loaded=true and resets current to global when the current channel is removed', () => {
+      const store = useLaunchStore;
+      const int = integration('a');
+
+      store.getState().addOrRemoveSelectedIntegration(int, {});
+      store.getState().setCurrent('a');
+      expect(store.getState().current).toBe('a');
+
+      store.getState().addOrRemoveSelectedIntegration(int, {});
+      expect(store.getState().current).toBe('global');
+      expect(store.getState().loaded).toBe(true);
+    });
   });
 
   describe('addRemoveInternal (4.5d guard)', () => {
