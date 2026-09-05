@@ -237,7 +237,7 @@ export const NotificationOpenComponent: FC<{
 
       <div className="p-[12px] border-t border-newTableBorder text-center">
         <a
-          href="/user/me"
+          href="/user/me/notifications"
           onClick={onClose}
           className="text-[12px] text-btnPrimaryAccent hover:underline"
         >
