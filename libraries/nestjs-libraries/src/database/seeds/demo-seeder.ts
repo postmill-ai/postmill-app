@@ -382,12 +382,15 @@ export class DemoSeeder {
           type: 'social',
           profile: ch.profile,
           picture: `https://picsum.photos/seed/solstice-${ch.identifier}/128/128`,
-          disabled: false,
+          // Demo channels carry fake credentials — seed them DISABLED so the
+          // comment/analytics syncs never poll them (same B6 philosophy as the
+          // disabled provider configs: grid richness stays, fake-key calls die).
+          disabled: true,
           token: AuthService.fixedEncryption(`demo-token-${ch.identifier}`),
           refreshToken: AuthService.fixedEncryption(`demo-refresh-${ch.identifier}`),
           providerVersion: 'v1',
         },
-        update: { name: ch.name, profile: ch.profile, disabled: false },
+        update: { name: ch.name, profile: ch.profile, disabled: true },
         select: { id: true, providerIdentifier: true, name: true },
       });
       out.push({ id: row.id, identifier: row.providerIdentifier, name: row.name });

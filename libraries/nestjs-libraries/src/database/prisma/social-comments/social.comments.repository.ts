@@ -237,6 +237,10 @@ export class SocialCommentsRepository {
         organizationId: orgId,
         releaseId: { not: null },
         publishDate: { gte: since },
+        // Never sync disabled or removed channels: their credentials are
+        // unreachable by design (demo channels carry fake ones, and a
+        // user-disabled channel must not be polled).
+        integration: { is: { disabled: false, deletedAt: null } },
       },
       include: { integration: true },
       take: 50,
