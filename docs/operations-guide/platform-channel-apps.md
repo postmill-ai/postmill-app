@@ -120,9 +120,11 @@ professional (Business or Creator) account.
 
 While the app is in development mode, each Instagram account that will connect
 must be added as an **Instagram tester** *on this app*: Meta App Dashboard →
-your app → **App roles → Roles → Instagram Testers** → Add People — and the
-account **must accept the invite** (Instagram app → Settings → Apps and
-Websites → Tester Invites). The tester must be added on the app whose ID is in
+your app → **App roles → Roles** → **Add People**, choose **Instagram Tester**,
+and enter the account's Instagram handle. The invited user must then **accept
+the invitation**: Instagram app → **Settings → Apps and Websites → Tester
+Invites** (on the web: <https://www.instagram.com/accounts/manage_access/> →
+Tester Invites). The tester must be added on the app whose ID is in
 `INSTAGRAM_APP_ID` — an accepted invite on a *different* Meta app does not
 count. Without this, OAuth fails with **"Insufficient Developer Role"** (or
 "Invalid platform app"). To remove the requirement entirely, switch the app to
@@ -505,6 +507,16 @@ THREADS_APP_SECRET: '<your-threads-app-secret>'
 
 5. Restart the backend. Advanced access (beyond tester accounts) requires
    Meta App Review like the other Meta products.
+
+While the app is in development mode, each Threads account that will connect
+must be added as a **Threads tester** *on this app*: Meta App Dashboard →
+your app → **App roles → Roles** → **Add People**, choose **Threads Tester**,
+and enter the account's Threads handle. The invited user must then **accept
+the invitation** in the Threads app: **Settings → Account → Website
+permissions → Invites**. The tester must be added on the app whose ID is in
+`THREADS_APP_ID` — an accepted invite on a *different* Meta app does not
+count. Without this, OAuth fails at authorize or token exchange. To remove the
+requirement entirely, switch the app to **Live** mode (App Review → go live).
 
 ## Twitch
 
