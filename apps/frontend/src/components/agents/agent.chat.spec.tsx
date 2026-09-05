@@ -9,6 +9,8 @@ import { render, act } from '@testing-library/react';
 // module-eval time need to resolve. ----
 
 const setMessages = vi.fn();
+const toastShow = vi.fn();
+const routerReplace = vi.fn();
 
 vi.mock('@copilotkit/react-core', () => ({
   CopilotKit: ({ children }: any) => <>{children}</>,
@@ -64,7 +66,7 @@ vi.mock('@postmill-ai/react/helpers/variable.context', () => ({
 }));
 
 vi.mock('@postmill-ai/react/toaster/toaster', () => ({
-  useToaster: () => ({ show: vi.fn() }),
+  useToaster: () => ({ show: toastShow }),
 }));
 
 vi.mock('@postmill-ai/react/translation/get.transation.service.client', () => ({
@@ -73,7 +75,7 @@ vi.mock('@postmill-ai/react/translation/get.transation.service.client', () => ({
 
 vi.mock('next/navigation', () => ({
   useParams: () => ({ id: 'new' }),
-  useRouter: () => ({ push: vi.fn() }),
+  useRouter: () => ({ push: vi.fn(), replace: routerReplace }),
 }));
 
 vi.mock('swr', () => ({
@@ -83,11 +85,11 @@ vi.mock('swr', () => ({
 
 // A controllable fetch: each call parks a resolver keyed by url so the test can
 // resolve responses in an arbitrary (racing) order.
-const resolvers = new Map<string, (messages: any[]) => void>();
+const resolvers = new Map<string, (messages: any[], status?: number) => void>();
 const fetchMock = vi.fn((url: string) => {
   return new Promise((resolveResponse) => {
-    resolvers.set(url, (messages: any[]) =>
-      resolveResponse({ json: () => Promise.resolve({ messages }) })
+    resolvers.set(url, (messages: any[], status = 200) =>
+      resolveResponse({ status, json: () => Promise.resolve({ messages }) })
     );
   });
 });
@@ -105,7 +107,36 @@ describe('LoadMessages thread-switch race (7.1)', () => {
   beforeEach(() => {
     setMessages.mockClear();
     fetchMock.mockClear();
+    toastShow.mockClear();
+    routerReplace.mockClear();
     resolvers.clear();
+  });
+
+  it('redirects to a fresh chat with a toast when the thread is unknown to the org (404)', async () => {
+    render(<LoadMessages id="GONE" />);
+    await act(async () => {
+      resolvers.get('/copilot/GONE/list')!([], 404);
+    });
+
+    // Never setMessages([]) — that would render the welcome screen and look
+    // like lost history. Say what happened and go to a new chat instead.
+    expect(setMessages).not.toHaveBeenCalled();
+    expect(toastShow).toHaveBeenCalledWith('Conversation not found', 'warning');
+    expect(routerReplace).toHaveBeenCalledWith('/agents');
+  });
+
+  it('fetches once per thread — unstable t/toaster/router identities must not re-fire the effect', async () => {
+    // The spec's useT mock returns a NEW function every render (like the real
+    // one). Depending on it made the effect re-fire per render: a fetch storm
+    // that tripped the API throttle (429s) in prod.
+    const view = render(<LoadMessages id="R" />);
+    await act(async () => {
+      resolvers.get('/copilot/R/list')!([msg('x')]);
+    });
+    view.rerender(<LoadMessages id="R" />);
+    view.rerender(<LoadMessages id="R" />);
+
+    expect(fetchMock).toHaveBeenCalledTimes(1);
   });
 
   it("a slow response for a previous thread never overwrites the current one", async () => {

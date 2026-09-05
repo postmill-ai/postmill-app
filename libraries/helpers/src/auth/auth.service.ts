@@ -75,7 +75,12 @@ export class AuthService {
   // by the ledger-gated "legacy secret re-encryption" backfill step
   // (libraries/nestjs-libraries/src/database/seeds/backfill.service.ts).
   static fixedDecryption(hash: string) {
-    if (!hash?.startsWith(V2_PREFIX)) {
+    if (!hash) {
+      throw new Error(
+        'AuthService.fixedDecryption: cannot decrypt an empty value'
+      );
+    }
+    if (!hash.startsWith(V2_PREFIX)) {
       throw new Error(
         'AuthService.fixedDecryption: refusing to decrypt a value that is not ' +
           '`v2:`-encrypted. Legacy CBC/plaintext secrets are no longer readable — ' +

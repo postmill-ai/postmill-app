@@ -358,8 +358,16 @@ export class BlueskyProvider extends SocialAbstract implements SocialProvider {
   }
 
   private async getAgent(integration: Integration) {
+    // Empty customInstanceDetails means the channel was never properly
+    // connected (e.g. demo-fixture rows) — fail with an actionable message
+    // instead of the misleading fixedDecryption "not v2:-encrypted" throw.
+    if (!integration.customInstanceDetails) {
+      throw new Error(
+        'Bluesky channel has no stored credentials — reconnect the channel'
+      );
+    }
     const body = JSON.parse(
-      AuthService.fixedDecryption(integration.customInstanceDetails!)
+      AuthService.fixedDecryption(integration.customInstanceDetails)
     );
     // Known proxy gap: this is the shared chokepoint for the BskyAgent used by
     // every posting path. @atproto/api cannot accept a custom undici dispatcher,

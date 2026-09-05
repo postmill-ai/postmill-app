@@ -166,6 +166,16 @@ export const LoadMessages: FC<{ id: string }> = ({ id }) => {
   // the legacy useCopilotMessagesContext is a dead store nothing reads anymore.
   const { setMessages } = useCopilotChatInternal();
   const fetch = useFetch();
+  const router = useRouter();
+  const toaster = useToaster();
+  const t = useT();
+  // t/toaster/router are NOT referentially stable — depending on them re-fires
+  // the effect every render (a fetch storm that trips the API throttle). Keep
+  // the effect deps to the stable trio and read the rest through a ref.
+  const helpersRef = useRef({ router, toaster, t });
+  useEffect(() => {
+    helpersRef.current = { router, toaster, t };
+  });
 
   useEffect(() => {
     if (id === 'new') {
@@ -178,7 +188,23 @@ export const LoadMessages: FC<{ id: string }> = ({ id }) => {
     // sign-out / navigation) so a stale load can't clobber a fresh thread.
     let cancelled = false;
     (async () => {
-      const data = await (await fetch(`/copilot/${id}/list`)).json();
+      const res = await fetch(`/copilot/${id}/list`);
+      if (cancelled) {
+        return;
+      }
+      // 404 = the thread is unknown to this org (cross-org link, stale
+      // bookmark). Rendering the empty store would show the new-chat welcome
+      // screen and look like lost history — say so and go to a fresh chat.
+      if (res.status === 404) {
+        const { router, toaster, t } = helpersRef.current;
+        toaster.show(
+          t('conversation_not_found', 'Conversation not found'),
+          'warning'
+        );
+        router.replace('/agents');
+        return;
+      }
+      const data = await res.json();
       if (cancelled) {
         return;
       }

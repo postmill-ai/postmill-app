@@ -217,6 +217,27 @@ describe('BlueskyProvider.authenticate (S-19)', () => {
 });
 
 describe('BlueskyProvider remediation', () => {
+  it('fails with an actionable error when the channel has no stored credentials', async () => {
+    // Demo-fixture / never-connected rows have an empty customInstanceDetails.
+    // The guard must fire BEFORE fixedDecryption so the log says "reconnect the
+    // channel" instead of the misleading "not v2:-encrypted" throw.
+    const provider = new BlueskyProvider();
+    const err = await provider
+      .post(
+        'me.bsky.social',
+        'unused-access-token',
+        [{ id: 'p1', message: 'hi', media: [], settings: {} } as any],
+        { customInstanceDetails: '' } as any
+      )
+      .then(
+        () => null,
+        (e) => e
+      );
+
+    expect(err).toBeInstanceOf(Error);
+    expect((err as Error).message).toContain('no stored credentials');
+  });
+
   it('FETCH-05: routes image downloads through safeFetch', async () => {
     const imageUrl = 'https://cdn.example.com/image.png';
     (safeFetch as any).mockImplementation(async (url: string) => {

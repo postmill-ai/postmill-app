@@ -12,6 +12,7 @@ describe('SocialCommentsRepository', () => {
   let mockSocialComment: Record<string, ReturnType<typeof vi.fn>>;
   let mockPostCommentRead: Record<string, ReturnType<typeof vi.fn>>;
   let mockUserOrganization: Record<string, ReturnType<typeof vi.fn>>;
+  let mockPost: Record<string, ReturnType<typeof vi.fn>>;
 
   beforeEach(() => {
     vi.clearAllMocks();
@@ -35,6 +36,10 @@ describe('SocialCommentsRepository', () => {
       findFirst: vi.fn().mockResolvedValue(null),
     };
 
+    mockPost = {
+      findMany: vi.fn().mockResolvedValue([]),
+    };
+
     const socialCommentRepo = new (PrismaRepository as any)();
     socialCommentRepo.model = { socialComment: mockSocialComment };
 
@@ -44,10 +49,14 @@ describe('SocialCommentsRepository', () => {
     const userOrganizationRepo = new (PrismaRepository as any)();
     userOrganizationRepo.model = { userOrganization: mockUserOrganization };
 
+    const postRepo = new (PrismaRepository as any)();
+    postRepo.model = { post: mockPost };
+
     repository = new SocialCommentsRepository(
       socialCommentRepo,
       postCommentReadRepo,
       userOrganizationRepo,
+      postRepo,
     );
   });
 
@@ -574,6 +583,34 @@ describe('SocialCommentsRepository', () => {
         },
       });
       expect(result).toBe(2);
+    });
+  });
+
+  describe('getPublishedPostsForSync', () => {
+    it('excludes posts on disabled or deleted channels', async () => {
+      await repository.getPublishedPostsForSync('org1', new Date('2024-01-01'));
+
+      expect(mockPost.findMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: expect.objectContaining({
+            organizationId: 'org1',
+            integration: { is: { disabled: false, deletedAt: null } },
+          }),
+        })
+      );
+    });
+
+    it('pages with skip+ cursor when a cursor is given', async () => {
+      await repository.getPublishedPostsForSync('org1', new Date('2024-01-01'), 'p50');
+
+      expect(mockPost.findMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          skip: 1,
+          cursor: { id: 'p50' },
+          take: 50,
+          orderBy: { id: 'asc' },
+        })
+      );
     });
   });
 });

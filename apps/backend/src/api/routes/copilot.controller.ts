@@ -452,6 +452,19 @@ export class CopilotController {
     }
     const mastra = await this._mastraService.mastra();
     const memory = await mastra.getAgent('postmill').getMemory();
+    // Distinguish "thread unknown to this org" (404) from a genuinely empty
+    // history — otherwise the UI renders the new-chat welcome screen for a
+    // conversation that is simply not visible to this org (cross-org link,
+    // stale bookmark), which looks like data loss.
+    // getThreadById's runtime honors resourceId (verified: wrong-org → null)
+    // but the @mastra/memory 1.28 type stub only declares { threadId } — cast.
+    const thread = await memory.getThreadById({
+      threadId,
+      resourceId: organization.id,
+    } as { threadId: string });
+    if (!thread) {
+      throw new HttpException('Conversation not found', HttpStatus.NOT_FOUND);
+    }
     try {
       return await memory.recall({
         resourceId: organization.id,
@@ -462,7 +475,15 @@ export class CopilotController {
         page: 0,
       });
     } catch (err) {
-      return { messages: [] };
+      // Never swallow recall failures into an empty list (same welcome-screen
+      // illusion) — log and surface a real error instead.
+      Logger.error(
+        `Failed to recall thread ${threadId}: ${(err as Error)?.message}`
+      );
+      throw new HttpException(
+        'Failed to load conversation',
+        HttpStatus.INTERNAL_SERVER_ERROR
+      );
     }
   }
 

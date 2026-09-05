@@ -141,6 +141,7 @@ vi.mock('@postmill-ai/nestjs-libraries/chat/mastra.service', () => ({
         getMemory: vi.fn().mockResolvedValue({
           listThreads: vi.fn().mockResolvedValue({ threads: [] }),
           recall: vi.fn().mockResolvedValue({ messages: [] }),
+          getThreadById: vi.fn().mockResolvedValue(null),
         }),
       }),
     });
@@ -615,6 +616,50 @@ describe('CopilotController', () => {
       // The controller must not set ag-ui from properties.agUiContext anymore.
       expect(agUiCall).toBeUndefined();
       setSpy.mockRestore();
+    });
+  });
+
+  describe('/:thread/list endpoint', () => {
+    const getMemory = async () => {
+      const mastra = await (mastraService as any).mastra();
+      return mastra.getAgent('postmill').getMemory();
+    };
+    const org = { id: 'org-1' } as any;
+
+    it('404s when the thread is unknown to the org (never fakes an empty history)', async () => {
+      const memory = await getMemory();
+      memory.getThreadById.mockResolvedValue(null);
+
+      await expect(
+        controller.getMessagesList(org, 'thread-x'),
+      ).rejects.toMatchObject({ status: HttpStatus.NOT_FOUND });
+      expect(memory.recall).not.toHaveBeenCalled();
+    });
+
+    it('returns recalled messages for a thread the org owns', async () => {
+      const memory = await getMemory();
+      memory.getThreadById.mockResolvedValue({ id: 'thread-x' });
+      memory.recall.mockResolvedValue({ messages: [{ id: 'm1' }] });
+
+      const result = await controller.getMessagesList(org, 'thread-x');
+
+      expect(memory.getThreadById).toHaveBeenCalledWith({
+        threadId: 'thread-x',
+        resourceId: 'org-1',
+      });
+      expect(result).toEqual({ messages: [{ id: 'm1' }] });
+    });
+
+    it('surfaces a recall failure as a 500 instead of swallowing it into []', async () => {
+      const memory = await getMemory();
+      memory.getThreadById.mockResolvedValue({ id: 'thread-x' });
+      memory.recall.mockRejectedValue(new Error('storage down'));
+
+      await expect(
+        controller.getMessagesList(org, 'thread-x'),
+      ).rejects.toMatchObject({
+        status: HttpStatus.INTERNAL_SERVER_ERROR,
+      });
     });
   });
 
