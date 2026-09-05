@@ -56,6 +56,9 @@ export interface ProviderListShellProps {
   onProviderNameClick?: (provider: ProviderConfigItem) => void;
   renderBadges?: (provider: ProviderConfigItem) => ReactNode;
   renderActions?: (provider: ProviderConfigItem) => ReactNode;
+  /** Opt-in whole-row click (e.g. open the config modal). Clicks on nested
+   *  buttons/links are ignored so row actions keep working. */
+  onRowClick?: (provider: ProviderConfigItem) => void;
   addProviderButton?: ReactNode;
   toolbar?: ReactNode;
 }
@@ -96,6 +99,7 @@ const ProviderListShell: React.FC<ProviderListShellProps> = ({
   onProviderNameClick,
   renderBadges,
   renderActions,
+  onRowClick,
   addProviderButton,
   toolbar,
 }) => {
@@ -134,7 +138,21 @@ const ProviderListShell: React.FC<ProviderListShellProps> = ({
               {provider.separatorBefore && (
                 <hr className="my-[8px] border-0 border-t border-newTableBorder" />
               )}
-              <div className="bg-newBgColorInner border border-newTableBorder rounded-[12px] p-[16px] flex items-center gap-[12px]">
+              <div
+                className={`bg-newBgColorInner border border-newTableBorder rounded-[12px] p-[16px] flex items-center gap-[12px]${
+                  onRowClick ? ' cursor-pointer hover:bg-boxHover transition-colors' : ''
+                }`}
+                {...(onRowClick
+                  ? {
+                      onClick: (e: React.MouseEvent) => {
+                        // Nested buttons/links (row actions, banners) keep their
+                        // own behavior — only "empty" row clicks open the row.
+                        if ((e.target as HTMLElement).closest('button, a')) return;
+                        onRowClick(provider);
+                      },
+                    }
+                  : {})}
+              >
                 <ProviderIconComponent
                 identifier={provider.identifier}
                 name={provider.name}

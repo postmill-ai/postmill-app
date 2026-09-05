@@ -1,6 +1,7 @@
 'use client';
 
 import React, { FC, useCallback, useMemo, useState } from 'react';
+import useSWR from 'swr';
 import { Button } from '@postmill-ai/react/form/button';
 import { Input } from '@postmill-ai/react/form/input';
 import { useFetch } from '@postmill-ai/helpers/utils/custom.fetch';
@@ -115,6 +116,32 @@ export const ChannelConfigForm: FC<ChannelConfigFormProps> = ({
   // Direct channels connect with account credentials in the composer flow —
   // the config form collects no credentials for them.
   const isDirect = setup?.authType === 'direct';
+  const isOAuth = setup?.authType === 'oauth1' || setup?.authType === 'oauth2';
+  // Mode A of this form: a platform app in the deployment env can drive the
+  // OAuth flow, so name + Connect is the primary content.
+  const hasPlatformApp = platformConfigured && isOAuth;
+
+  // Connected channels for this provider (the composer list) — after a
+  // successful Connect the modal must SAY so, not silently offer Connect again.
+  const { data: integrationList } = useSWR<{ integrations?: Array<{
+    identifier: string;
+    name: string;
+    disabled: boolean;
+    inBetweenSteps?: boolean;
+  }> }>(
+    '/integrations/list',
+    (url: string) =>
+      fetch(url)
+        .then((r) => (r.ok ? r.json() : { integrations: [] }))
+        .catch(() => ({ integrations: [] }))
+  );
+  const connectedChannels = useMemo(
+    () =>
+      (integrationList?.integrations || []).filter(
+        (ch) => ch.identifier === identifier && !ch.disabled && !ch.inBetweenSteps
+      ),
+    [integrationList, identifier]
+  );
 
   const [name, setName] = useState(config?.name || '');
   // Non-secret stored values prefill in edit mode (they're identifiers, not
@@ -130,12 +157,16 @@ export const ChannelConfigForm: FC<ChannelConfigFormProps> = ({
     return out;
   });
   const [editSetupNotes, setEditSetupNotes] = useState(config?.setupNotes || '');
+  // A set must not be enabled before it is set up — BYO sets need their keys,
+  // platform-app sets become enabled after a successful Connect.
   const [enabled, setEnabled] = useState(config?.enabled || false);
   const [saving, setSaving] = useState(false);
+  const [connecting, setConnecting] = useState(false);
   const [callbackCopied, setCallbackCopied] = useState(false);
-  // With a platform app configured, BYO credentials are the advanced path —
-  // collapsed unless this config already has stored credentials.
-  const [showOwnApp, setShowOwnApp] = useState(isConfigured);
+  // With a platform app configured, everything but name + Connect lives under
+  // the Advanced section — expanded only when this set already has stored
+  // credentials (a BYO-app set being edited).
+  const [showAdvanced, setShowAdvanced] = useState(isConfigured);
 
   const {
     versions,
@@ -165,17 +196,23 @@ export const ChannelConfigForm: FC<ChannelConfigFormProps> = ({
       : ''
   );
 
-  const handleSave = useCallback(async () => {
+  // Saves the config set (creating it first when needed). Returns the saved
+  // set's id on success, or null when validation/save failed (the toast is
+  // already shown). Shared by "Save" and by the platform-app "Connect" button,
+  // which needs the set's id to bind the OAuth flow to it.
+  const saveConfig = useCallback(async (): Promise<{ id: string | null } | null> => {
     if (!name.trim()) {
       toaster.show(t('channel_name_required', 'Please enter a name for this channel.'), 'warning');
-      return;
+      return null;
     }
+    // A platform app supplies the OAuth credentials, so no Client ID is
+    // required to enable the set when one is configured for this provider.
     if (enabled && !isDirect && !clientId.trim() && !isConfigured && !platformConfigured) {
       toaster.show(
         t('credentials_required', 'Please enter a Client ID / API Key before enabling this provider.'),
         'warning'
       );
-      return;
+      return null;
     }
 
     setSaving(true);
@@ -227,19 +264,95 @@ export const ChannelConfigForm: FC<ChannelConfigFormProps> = ({
           });
 
       if (res.ok) {
-        toaster.show(t('channel_saved', 'Channel saved'), 'success');
-        onSaved();
-        onClose();
-        return;
+        const body = await res.json().catch(() => ({}));
+        return { id: (isEdit ? config!.id : body?.id) || null };
       }
       const errBody = await res.json().catch(() => ({}));
       toaster.show(errBody.message || t('channel_save_failed', 'Failed to save channel'), 'warning');
+      return null;
     } catch {
       toaster.show(t('network_error_saving', 'Network error while saving'), 'warning');
+      return null;
     } finally {
       setSaving(false);
     }
-  }, [name, enabled, clientId, clientSecret, extraFields, setup, selectedVersion, editSetupNotes, isDirect, platformConfigured, vpnOptions, vpnEnabled, vpnValue, isConfigured, isEdit, config, identifier, fetch, toaster, t, onSaved, onClose]);
+  }, [name, enabled, clientId, clientSecret, extraFields, setup, selectedVersion, editSetupNotes, isDirect, platformConfigured, vpnOptions, vpnEnabled, vpnValue, isConfigured, isEdit, config, identifier, fetch, toaster, t]);
+
+  const handleSave = useCallback(async () => {
+    const saved = await saveConfig();
+    if (!saved) return;
+    toaster.show(t('channel_saved', 'Channel saved'), 'success');
+    onSaved();
+    onClose();
+  }, [saveConfig, toaster, t, onSaved, onClose]);
+
+  // Platform-app connect: save the set, then start the standard OAuth flow
+  // (the same /integrations/social/:identifier?config=<id> initiation the
+  // composer tile uses) in a small popup window. The completion page
+  // (continue.integration) detects the popup, notifies this opener, and closes
+  // itself; the poll is the fallback for a missed message / manual close.
+  const handleConnect = useCallback(async () => {
+    const saved = await saveConfig();
+    if (!saved) return;
+    const id = saved.id;
+    if (!id) {
+      // Should not happen — the API returns the created row — but the OAuth
+      // flow cannot start without a set to bind to.
+      toaster.show(t('channel_save_failed', 'Failed to save channel'), 'warning');
+      return;
+    }
+    setConnecting(true);
+    try {
+      const response = await fetch(`/integrations/social/${identifier}?config=${id}`);
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok || data.err || !data.url) {
+        toaster.show(
+          t('could_not_connect_to_platform', 'Could not connect to the platform'),
+          'warning'
+        );
+        return;
+      }
+      const popup = window.open(data.url, 'postmill-oauth', 'width=640,height=720,popup');
+      if (!popup) {
+        // Popup blocked — fall back to the standard full-page OAuth redirect.
+        window.location.href = data.url;
+        return;
+      }
+      const poll = window.setInterval(() => {
+        if (popup.closed) {
+          cleanup();
+          // Refresh without closing: the connect may have completed.
+          onSaved();
+        }
+      }, 1000);
+      const onMessage = (event: MessageEvent) => {
+        if (event.origin !== window.location.origin) return;
+        if ((event.data as { type?: string })?.type !== 'postmill:channel-connected') return;
+        cleanup();
+        // The connect completed — the set is fully set up now, so enable it
+        // (a set must not be enabled before it is set up).
+        void (async () => {
+          if (!enabled) {
+            await fetch(`/channels/config/${id}`, {
+              method: 'PUT',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ enabled: true }),
+            }).catch(() => undefined);
+          }
+          toaster.show(t('channel_connected', 'Channel Connected!'), 'success');
+          onSaved();
+          onClose();
+        })();
+      };
+      const cleanup = () => {
+        window.removeEventListener('message', onMessage);
+        window.clearInterval(poll);
+      };
+      window.addEventListener('message', onMessage);
+    } finally {
+      setConnecting(false);
+    }
+  }, [saveConfig, fetch, identifier, enabled, toaster, t, onSaved, onClose]);
 
   const handleDelete = useCallback(async () => {
     if (!config) return;
@@ -341,94 +454,289 @@ export const ChannelConfigForm: FC<ChannelConfigFormProps> = ({
     );
   });
 
-  return (
-    <div className="flex flex-col gap-[12px] min-w-[460px] mobile:min-w-0">
-      {appLink?.url && (
-        <div className="flex justify-end">
-          <a
-            href={appLink.url}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="text-[12px] text-textColor underline hover:opacity-80"
-          >
-            {appLink.label}
-          </a>
-        </div>
-      )}
+  // ── Layout blocks (shared by both modes) ────────────────────────────────
 
-      {!!setup?.setupSteps?.length && (
-        <div className="flex flex-col gap-[6px] bg-newBgColorInner border border-newTableBorder rounded-[8px] p-[12px]">
-          <label className="text-[14px] font-[500]">{t('setup_steps', 'How to set this up')}</label>
-          <ol className="flex flex-col gap-[4px] list-decimal ps-[18px]">
-            {setup.setupSteps!.map((step, idx) => (
-              <li key={idx} className="text-[13px] text-newTableText">
-                {step}
-              </li>
-            ))}
-          </ol>
-        </div>
-      )}
+  const portalLinkBlock = appLink?.url && (
+    <div className="flex justify-end">
+      <a
+        href={appLink.url}
+        target="_blank"
+        rel="noopener noreferrer"
+        className="text-[12px] text-textColor underline hover:opacity-80"
+      >
+        {appLink.label}
+      </a>
+    </div>
+  );
 
-      <div className="flex flex-col gap-[6px]">
-        <label className="text-[14px] font-[500]">
-          {t('channel_name', 'Channel name')} <span className="text-red-500">*</span>
-        </label>
-        <Input
-          label=""
-          name={`name_${identifier}`}
-          disableForm={true}
-          value={name}
-          onChange={(e) => setName(e.target.value)}
-          placeholder={t('channel_name_placeholder', 'e.g. Marketing LinkedIn')}
-        />
-      </div>
+  const setupStepsBlock = !!setup?.setupSteps?.length && (
+    <div className="flex flex-col gap-[6px] bg-newBgColorInner border border-newTableBorder rounded-[8px] p-[12px]">
+      <label className="text-[13px] font-[500]">{t('setup_steps', 'How to set this up')}</label>
+      <ol className="flex flex-col gap-[4px] list-decimal ps-[18px]">
+        {setup.setupSteps!.map((step, idx) => (
+          <li key={idx} className="text-[13px] text-newTableText">
+            {step}
+          </li>
+        ))}
+      </ol>
+    </div>
+  );
 
-      <ProviderVersionSelect
-        versions={versions}
-        value={selectedVersion}
-        onChange={selectVersion}
-        label={t('provider_version', 'Provider version')}
+  const nameBlock = (
+    <div className="flex flex-col gap-[6px]">
+      <label className="text-[13px] font-[500]">
+        {t('channel_name', 'Channel name')} <span className="text-red-500">*</span>
+      </label>
+      <Input
+        label=""
+        name={`name_${identifier}`}
+        disableForm={true}
+        value={name}
+        onChange={(e) => setName(e.target.value)}
+        placeholder={t('channel_name_placeholder', 'e.g. Marketing LinkedIn')}
       />
+    </div>
+  );
 
-      <div className="flex items-center gap-[8px]">
-        <label className="text-[14px] font-[500]">{t('enabled', 'Enabled')}</label>
-        <input
-          type="checkbox"
-          checked={enabled}
-          onChange={(e) => {
-            // With a platform app configured, env supplies the app credentials —
-            // no Client ID is required to enable the credential set.
-            if (e.target.checked && !isDirect && !clientId.trim() && !isConfigured && !platformConfigured) {
-              toaster.show(
-                t('credentials_required', 'Please enter a Client ID / API Key before enabling this provider.'),
-                'warning'
-              );
-              return;
-            }
-            setEnabled(e.target.checked);
-          }}
-          className="w-[18px] h-[18px]"
-        />
-      </div>
+  const versionBlock = (
+    <ProviderVersionSelect
+      versions={versions}
+      value={selectedVersion}
+      onChange={selectVersion}
+      label={t('provider_version', 'Provider version')}
+    />
+  );
 
-      {setup?.authType !== 'direct' && platformConfigured && (
-        <div className="text-[13px] text-newTableText bg-newBgColorInner border border-newTableBorder rounded-[8px] p-[12px]">
-          {t(
-            'platform_app_configured_advanced_only',
-            'A platform app is configured — you only need your own app for advanced use cases.'
-          )}
+  // Enabling only makes sense once the set exists — the switch is edit-mode
+  // only. Styled like the VPN toggle; position alone carries the state.
+  const enabledBlock = isEdit && (
+    <div className="flex items-center gap-[8px]">
+      <label className="text-[13px] font-[500]">{t('enabled', 'Enabled')}</label>
+      <button
+        type="button"
+        role="switch"
+        aria-checked={enabled}
+        onClick={() => {
+          if (!enabled && !isDirect && !clientId.trim() && !isConfigured && !platformConfigured) {
+            toaster.show(
+              t('credentials_required', 'Please enter a Client ID / API Key before enabling this provider.'),
+              'warning'
+            );
+            return;
+          }
+          setEnabled(!enabled);
+        }}
+        className="flex items-center gap-[8px]"
+      >
+        <span
+          className={`relative w-[40px] h-[22px] rounded-full transition-colors ${
+            enabled ? 'bg-btnPrimary' : 'bg-newTableBorder'
+          }`}
+        >
+          <span
+            className={`absolute top-[2px] left-[2px] w-[18px] h-[18px] rounded-full bg-white transition-transform ${
+              enabled ? 'translate-x-[18px]' : 'translate-x-0'
+            }`}
+          />
+        </span>
+      </button>
+    </div>
+  );
+
+  // Platform-app OAuth: the default path. Saves the set (no credentials
+  // needed) and opens the provider's OAuth consent in a small popup.
+  const connectBlock = hasPlatformApp && (
+    <div className="flex flex-col gap-[6px]">
+      {connectedChannels.length > 0 && (
+        <div className="flex items-center gap-[8px] rounded-[8px] border border-newTableBorder bg-newBgColorInner px-[12px] py-[10px]">
+          <svg
+            width="16"
+            height="16"
+            viewBox="0 0 20 20"
+            fill="currentColor"
+            className="text-green-500 shrink-0"
+          >
+            <path
+              fillRule="evenodd"
+              d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z"
+              clipRule="evenodd"
+            />
+          </svg>
+          <span className="text-[13px] text-textColor">
+            {t('connected_as', 'Connected as {{name}}', {
+              name: connectedChannels.map((ch) => ch.name).join(', '),
+            })}
+          </span>
         </div>
       )}
+      <button
+        type="button"
+        onClick={handleConnect}
+        disabled={saving || connecting}
+        className="w-full h-[44px] rounded-[8px] bg-btnPrimary text-white text-[14px] font-[500] whitespace-nowrap truncate hover:opacity-90 transition-opacity disabled:opacity-50"
+      >
+        {connecting
+          ? t('connecting', 'Connecting...')
+          : connectedChannels.length > 0
+            ? t('connect_another_account', 'Connect another account')
+            : t('connect_with_provider', 'Connect with {{provider}}', { provider: providerName })}
+      </button>
+      <div className="text-[12px] text-newTableText text-center">
+        {t('uses_postmill_app_no_setup', 'Uses the Postmill app — no setup needed')}
+      </div>
+    </div>
+  );
 
-      {setup?.authType !== 'direct' && platformConfigured ? (
-        <div className="flex flex-col gap-[6px]">
+  {/* Callback registration is an OAuth-app concern only; token and direct
+      channels never register a callback. */}
+  const callbackBlock = !!callbackUrl && setup?.authType !== 'token' && setup?.authType !== 'direct' && (
+    <div className="flex flex-col gap-[6px]">
+      <label className="text-[13px] font-[500]">{t('callback_url', 'Callback URL')}</label>
+      <div className="flex gap-[8px] items-center">
+        <div className="bg-newBgColorInner h-[42px] border-newTableBorder border rounded-[8px] text-textColor flex items-center justify-center flex-1 min-w-0">
+          <input
+            readOnly
+            className="h-full bg-transparent outline-hidden flex-1 min-w-0 text-[14px] text-textColor placeholder-textColor px-[16px]"
+            value={callbackUrl}
+          />
+        </div>
+        <Button
+          type="button"
+          className="bg-transparent! border border-newTableBorder text-textColor text-[12px] whitespace-nowrap"
+          onClick={handleCopyCallback}
+        >
+          {callbackCopied ? t('copied', 'Copied') : t('copy', 'Copy')}
+        </Button>
+      </div>
+      {setup?.callbackInstructions && (
+        <div className="text-[12px] text-newTableText">{setup.callbackInstructions}</div>
+      )}
+    </div>
+  );
+
+  const scopesBlock = !!defaultScopes && (
+    <div className="flex flex-col gap-[4px]">
+      <label className="text-[13px] font-[500]">{t('default_scopes', "Permissions we'll request")}</label>
+      <div className="text-[12px] text-newTableText break-words">{defaultScopes}</div>
+    </div>
+  );
+
+  {/* No Redirect-URI / scopes overrides here: those are platform wiring, not
+      user settings. The default callback is displayed read-only above; the
+      adapter-declared scopes always apply. */}
+  const notesBlock = (config?.setupNotes || editSetupNotes) && (
+    <div className="flex flex-col gap-[4px]">
+      <label className="text-[13px] font-[500]">{t('setup_instructions', 'Setup Instructions')}</label>
+      <textarea
+        value={editSetupNotes}
+        onChange={(e) => setEditSetupNotes(e.target.value)}
+        className="p-[8px] rounded-[8px] border border-newTableBorder bg-bgInput text-textColor min-h-[80px] text-[14px]"
+        rows={3}
+      />
+    </div>
+  );
+
+  const campaignBlock = isEdit && config?.id && (
+    <CampaignSelector entityType="channel" entityId={config.id} />
+  );
+
+  const vpnBlock = vpnOptions.length > 0 && (
+    <div className="flex gap-[12px] items-end">
+      <div className="flex flex-col gap-[6px]">
+        <label className="text-[13px] font-[500]">{t('vpn_connection', 'VPN connection')}</label>
+        <button
+          type="button"
+          role="switch"
+          aria-checked={vpnEnabled}
+          onClick={() => setVpnEnabled((v) => !v)}
+          className="flex items-center gap-[8px]"
+        >
+          <span
+            className={`relative w-[40px] h-[22px] rounded-full transition-colors ${
+              vpnEnabled ? 'bg-btnPrimary' : 'bg-newTableBorder'
+            }`}
+          >
+            <span
+              className={`absolute top-[2px] left-[2px] w-[18px] h-[18px] rounded-full bg-white transition-transform ${
+                vpnEnabled ? 'translate-x-[18px]' : 'translate-x-0'
+              }`}
+            />
+          </span>
+          <span className="text-[14px] text-textColor">
+            {vpnEnabled ? t('enabled', 'Enabled') : t('disabled', 'Disabled')}
+          </span>
+        </button>
+      </div>
+      <div className="flex-1 flex flex-col gap-[6px]">
+        <label className="text-[13px] font-[500]">{t('vpn_region', 'Provider & region')}</label>
+        <ChannelVpnRegionSelect
+          value={vpnValue}
+          options={vpnOptions}
+          disabled={!vpnEnabled}
+          placeholder={t('vpn_region_placeholder', 'Search provider: region…')}
+          onChange={setVpnValue}
+        />
+      </div>
+    </div>
+  );
+
+  const footerBlock = (
+    <div className="flex gap-[8px] justify-between items-center mt-[8px]">
+      <div className="flex gap-[8px]">
+        <Button
+          type="button"
+          className="bg-transparent! border border-newTableBorder text-textColor"
+          onClick={onClose}
+        >
+          {t('cancel', 'Cancel')}
+        </Button>
+      </div>
+      <div className="flex gap-[8px]">
+        {isEdit && (
+          <>
+            <Button
+              type="button"
+              className="bg-transparent! border border-red-500/30 text-dangerText text-[12px]"
+              onClick={handleDelete}
+              disabled={saving}
+            >
+              {t('remove', 'Remove')}
+            </Button>
+            {isConfigured && (
+              <Button
+                type="button"
+                className="bg-transparent! border border-newTableBorder text-textColor text-[12px]"
+                onClick={handleTest}
+              >
+                {t('test', 'Test')}
+              </Button>
+            )}
+          </>
+        )}
+        <Button type="button" onClick={handleSave} disabled={saving}>
+          {saving ? t('saving', 'Saving...') : t('save', 'Save')}
+        </Button>
+      </div>
+    </div>
+  );
+
+  // ── Mode A: platform app — name + Connect are the whole story; everything
+  // else is collapsed under Advanced. ────────────────────────────────────────
+  if (hasPlatformApp) {
+    return (
+      <div className="flex flex-col gap-[16px] min-w-[460px] mobile:min-w-0">
+        {portalLinkBlock}
+        {nameBlock}
+        {connectBlock}
+        {enabledBlock}
+        <div className="rounded-[8px] border border-newTableBorder">
           <button
             type="button"
-            aria-expanded={showOwnApp}
-            onClick={() => setShowOwnApp((v) => !v)}
-            className="flex items-center gap-[8px] self-start text-[13px] text-textColor hover:underline"
+            aria-expanded={showAdvanced}
+            onClick={() => setShowAdvanced((v) => !v)}
+            className="flex w-full items-center justify-between px-[12px] py-[10px] text-[13px] font-[500] text-textColor"
           >
-            {t('advanced_use_your_own_app', 'Advanced: use your own app')}
+            {t('advanced', 'Advanced')}
             <svg
               width="12"
               height="12"
@@ -438,148 +746,44 @@ export const ChannelConfigForm: FC<ChannelConfigFormProps> = ({
               strokeWidth="2.5"
               strokeLinecap="round"
               strokeLinejoin="round"
-              className={showOwnApp ? 'rotate-180 transition-transform' : 'transition-transform'}
+              className={showAdvanced ? 'rotate-180 transition-transform' : 'transition-transform'}
             >
               <path d="m6 9 6 6 6-6" />
             </svg>
           </button>
-          {showOwnApp && credentialFieldsBlock}
-        </div>
-      ) : (
-        credentialFieldsBlock
-      )}
-
-      {/* Callback registration is an OAuth-app concern only; token and direct
-          channels never register a callback. */}
-      {!!callbackUrl && setup?.authType !== 'token' && setup?.authType !== 'direct' && (
-        <div className="flex flex-col gap-[6px]">
-          <label className="text-[14px] font-[500]">{t('callback_url', 'Callback URL')}</label>
-          <div className="flex gap-[8px] items-center">
-            <div className="bg-newBgColorInner h-[42px] border-newTableBorder border rounded-[8px] text-textColor flex items-center justify-center flex-1 min-w-0">
-              <input
-                readOnly
-                className="h-full bg-transparent outline-hidden flex-1 min-w-0 text-[14px] text-textColor placeholder-textColor px-[16px]"
-                value={callbackUrl}
-              />
+          {showAdvanced && (
+            <div className="flex flex-col gap-[12px] border-t border-newTableBorder p-[12px]">
+              {setupStepsBlock}
+              {versionBlock}
+              {credentialFieldsBlock}
+              {callbackBlock}
+              {scopesBlock}
+              {notesBlock}
+              {vpnBlock}
             </div>
-            <Button
-              type="button"
-              className="bg-transparent! border border-newTableBorder text-textColor text-[12px] whitespace-nowrap"
-              onClick={handleCopyCallback}
-            >
-              {callbackCopied ? t('copied', 'Copied') : t('copy', 'Copy')}
-            </Button>
-          </div>
-          {setup?.callbackInstructions && (
-            <div className="text-[12px] text-newTableText">{setup.callbackInstructions}</div>
           )}
         </div>
-      )}
-
-      {!!defaultScopes && (
-        <div className="flex flex-col gap-[4px]">
-          <label className="text-[14px] font-[500]">{t('default_scopes', "Permissions we'll request")}</label>
-          <div className="text-[12px] text-newTableText break-words">{defaultScopes}</div>
-        </div>
-      )}
-
-      {/* No Redirect-URI / scopes overrides here: those are platform wiring, not
-          user settings. The default callback is displayed read-only above; the
-          adapter-declared scopes always apply. */}
-
-      {(config?.setupNotes || editSetupNotes) && (
-        <div className="flex flex-col gap-[4px]">
-          <label className="text-[14px] font-[500]">{t('setup_instructions', 'Setup Instructions')}</label>
-          <textarea
-            value={editSetupNotes}
-            onChange={(e) => setEditSetupNotes(e.target.value)}
-            className="p-[8px] rounded-[8px] border border-newTableBorder bg-bgInput text-textColor min-h-[80px] text-[14px]"
-            rows={3}
-          />
-        </div>
-      )}
-
-      {isEdit && config?.id && (
-        <CampaignSelector entityType="channel" entityId={config.id} />
-      )}
-
-      {vpnOptions.length > 0 && (
-        <div className="flex gap-[12px] items-end">
-          <div className="flex flex-col gap-[6px]">
-            <label className="text-[14px] font-[500]">{t('vpn_connection', 'VPN connection')}</label>
-            <button
-              type="button"
-              role="switch"
-              aria-checked={vpnEnabled}
-              onClick={() => setVpnEnabled((v) => !v)}
-              className="flex items-center gap-[8px]"
-            >
-              <span
-                className={`relative w-[40px] h-[22px] rounded-full transition-colors ${
-                  vpnEnabled ? 'bg-btnPrimary' : 'bg-newTableBorder'
-                }`}
-              >
-                <span
-                  className={`absolute top-[2px] left-[2px] w-[18px] h-[18px] rounded-full bg-white transition-transform ${
-                    vpnEnabled ? 'translate-x-[18px]' : 'translate-x-0'
-                  }`}
-                />
-              </span>
-              <span className="text-[14px] text-textColor">
-                {vpnEnabled ? t('enabled', 'Enabled') : t('disabled', 'Disabled')}
-              </span>
-            </button>
-          </div>
-          <div className="flex-1 flex flex-col gap-[6px]">
-            <label className="text-[14px] font-[500]">{t('vpn_region', 'Provider & region')}</label>
-            <ChannelVpnRegionSelect
-              value={vpnValue}
-              options={vpnOptions}
-              disabled={!vpnEnabled}
-              placeholder={t('vpn_region_placeholder', 'Search provider: region…')}
-              onChange={setVpnValue}
-            />
-          </div>
-        </div>
-      )}
-
-      <div className="flex gap-[8px] justify-between items-center mt-[8px]">
-        <div className="flex gap-[8px]">
-          <Button
-            type="button"
-            className="bg-transparent! border border-newTableBorder text-textColor"
-            onClick={onClose}
-          >
-            {t('cancel', 'Cancel')}
-          </Button>
-        </div>
-        <div className="flex gap-[8px]">
-          {isEdit && (
-            <>
-              <Button
-                type="button"
-                className="bg-transparent! border border-red-500/30 text-dangerText text-[12px]"
-                onClick={handleDelete}
-                disabled={saving}
-              >
-                {t('remove', 'Remove')}
-              </Button>
-              {isConfigured && (
-                <Button
-                  type="button"
-                  className="bg-transparent! border border-newTableBorder text-textColor text-[12px]"
-                  onClick={handleTest}
-                >
-                  {t('test', 'Test')}
-                </Button>
-              )}
-            </>
-          )}
-          <Button type="button" onClick={handleSave} disabled={saving}>
-            {saving ? t('saving', 'Saving...') : t('save', 'Save')}
-          </Button>
-        </div>
+        {campaignBlock}
+        {footerBlock}
       </div>
+    );
+  }
+
+  // ── Mode B: no platform app — everything is the primary content. ─────────
+  return (
+    <div className="flex flex-col gap-[16px] min-w-[460px] mobile:min-w-0">
+      {portalLinkBlock}
+      {setupStepsBlock}
+      {nameBlock}
+      {versionBlock}
+      {enabledBlock}
+      {credentialFieldsBlock}
+      {callbackBlock}
+      {scopesBlock}
+      {notesBlock}
+      {campaignBlock}
+      {vpnBlock}
+      {footerBlock}
     </div>
   );
 };

@@ -6,9 +6,9 @@ Postmill resolves channel (social posting) credentials at **two scopes**:
    provider in the deployment environment (`.env` / Docker Compose). Every
    organization then connects that channel with one click — no per-org key entry.
 2. **Per-org BYO credentials** — an organization adds its own app via
-   **Settings → Channels → New credential set (advanced)**. A per-org config
-   always **wins** over the platform env app, so a tenant can bring its own app
-   even when a platform app exists.
+   **Settings → Channels** (advanced). A per-org config always **wins** over the
+   platform env app, so a tenant can bring its own app even when a platform app
+   exists.
 
 When neither exists, the connect dialog falls back to the per-org key form
 ("alternatively use keys"). Env values are resolved live, per request, and
@@ -16,11 +16,8 @@ never persisted to a tenant row.
 
 `GET /integrations` exposes `platformConfigured: true` for providers with a
 working env app. Tenants see those providers as one-click **Connect** with the
-note *"Uses the Postmill app — no setup needed"*. The connect dialog is the
-same everywhere it appears: the composer's **Create new → New Channel**, the
-sidebar's **Add Channel**, and **Settings → Channels → Add Channel** all open
-it. Providers without a platform app require the tenant's own app (a
-credential set, via the advanced path above).
+note *"Uses the Postmill app — no setup needed"*; providers without a platform
+app require the tenant's own app via Settings → Channels.
 
 ## Callback URLs and restarts
 
@@ -122,9 +119,14 @@ Postmill requests the scopes `instagram_business_basic`,
 professional (Business or Creator) account.
 
 While the app is in development mode, each Instagram account that will connect
-must be added as an **Instagram tester** in the Meta app **and must accept the
-invite** (Instagram → Settings → Apps and Websites → Tester invites) —
-otherwise OAuth fails with "Invalid platform app".
+must be added as an **Instagram tester** *on this app*: Meta App Dashboard →
+your app → **App roles → Roles → Instagram Testers** → Add People — and the
+account **must accept the invite** (Instagram app → Settings → Apps and
+Websites → Tester Invites). The tester must be added on the app whose ID is in
+`INSTAGRAM_APP_ID` — an accepted invite on a *different* Meta app does not
+count. Without this, OAuth fails with **"Insufficient Developer Role"** (or
+"Invalid platform app"). To remove the requirement entirely, switch the app to
+**Live** mode (App Review → go live).
 
 Note: this adapter enforces that `FRONTEND_URL` is a public HTTPS origin —
 private/loopback origins are rejected for OAuth redirects.

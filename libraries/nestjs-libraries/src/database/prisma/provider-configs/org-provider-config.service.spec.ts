@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { OrgProviderConfigService } from './org-provider-config.service';
 
 // F2(c): a channel credential create/rotate must emit a non-fatal `credential.rotated`
@@ -234,6 +234,107 @@ describe('OrgProviderConfigService audit (F2c)', () => {
       expect(second.scopes).toBeUndefined();
       expect(second.setupNotes).toBeUndefined();
       expect(second.vpnSelection).toBeNull();
+    });
+  });
+
+  // A platform app in the deployment env supplies the OAuth credentials, so an
+  // org config set may be enabled without its own keys — the enable guard must
+  // consult the env mapping before rejecting.
+  describe('platform-app enable guard', () => {
+    const ENABLED_ERROR =
+      'A provider must be configured with credentials before it can be enabled.';
+
+    afterEach(() => {
+      vi.unstubAllEnvs();
+    });
+
+    it('rejects enabling without credentials when no platform app exists (create)', async () => {
+      await expect(
+        service.createConfig(
+          'o1',
+          { identifier: 'no-env-provider', name: 'App', enabled: true },
+          'u1'
+        )
+      ).rejects.toThrow(ENABLED_ERROR);
+      expect(repository.create).not.toHaveBeenCalled();
+    });
+
+    it('allows enabling without credentials when a platform app exists (create)', async () => {
+      vi.stubEnv('X_API_KEY', 'env-key');
+      vi.stubEnv('X_API_SECRET', 'env-secret');
+      repository.create.mockResolvedValue(
+        baseRow({ identifier: 'x', clientId: null, clientSecret: null })
+      );
+
+      await service.createConfig(
+        'o1',
+        { identifier: 'x', name: 'Platform X', enabled: true },
+        'u1'
+      );
+
+      expect(repository.create).toHaveBeenCalledWith(
+        'o1',
+        expect.objectContaining({ identifier: 'x', enabled: true })
+      );
+    });
+
+    it('rejects enabling a credential-less set when no platform app exists (update)', async () => {
+      repository.getById.mockResolvedValue(
+        baseRow({ identifier: 'no-env-provider', enabled: false, clientId: null, clientSecret: null })
+      );
+      await expect(
+        service.updateConfig('o1', 'cfg1', { enabled: true }, 'u1')
+      ).rejects.toThrow(ENABLED_ERROR);
+      expect(repository.updateById).not.toHaveBeenCalled();
+    });
+
+    it('allows enabling a credential-less set when a platform app exists (update)', async () => {
+      vi.stubEnv('X_API_KEY', 'env-key');
+      vi.stubEnv('X_API_SECRET', 'env-secret');
+      repository.getById.mockResolvedValue(
+        baseRow({ identifier: 'x', enabled: false, clientId: null, clientSecret: null })
+      );
+      repository.updateById.mockResolvedValue(baseRow({ identifier: 'x' }));
+
+      await service.updateConfig('o1', 'cfg1', { enabled: true }, 'u1');
+
+      expect(repository.updateById).toHaveBeenCalledWith(
+        'o1',
+        'cfg1',
+        expect.objectContaining({ enabled: true })
+      );
+    });
+  });
+
+  // The (org, identifier, name, version) unique index must surface as a
+  // readable 400, not an opaque 500.
+  describe('duplicate-name guard', () => {
+    const p2002 = () =>
+      Object.assign(new Error('Unique constraint failed'), {
+        code: 'P2002',
+        meta: { target: ['organizationId', 'identifier', 'name', 'version'] },
+      });
+
+    it('translates P2002 on create into a friendly BadRequest', async () => {
+      repository.create.mockRejectedValue(p2002());
+      await expect(
+        service.createConfig('o1', { identifier: 'x', name: 'Dup', enabled: false }, 'u1')
+      ).rejects.toThrow('A channel with this name already exists for this provider');
+    });
+
+    it('rethrows non-duplicate create errors unchanged', async () => {
+      repository.create.mockRejectedValue(new Error('db down'));
+      await expect(
+        service.createConfig('o1', { identifier: 'x', name: 'App', enabled: false }, 'u1')
+      ).rejects.toThrow('db down');
+    });
+
+    it('translates P2002 on rename into a friendly BadRequest', async () => {
+      repository.getById.mockResolvedValue(baseRow());
+      repository.updateById.mockRejectedValue(p2002());
+      await expect(
+        service.updateConfig('o1', 'cfg1', { name: 'Dup' }, 'u1')
+      ).rejects.toThrow('A channel with this name already exists for this provider');
     });
   });
 });

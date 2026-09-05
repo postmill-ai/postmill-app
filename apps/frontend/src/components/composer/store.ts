@@ -190,7 +190,10 @@ export const useLaunchStore = create<StoreState>()((set) => ({
           ...(existing.integration.id === state.current
             ? { current: 'global' }
             : {}),
-          loaded: false,
+          // NOTE: do NOT touch `loaded` here — it is only read by the composer
+          // editor (returns null when false) and nothing ever re-sets it, so
+          // clearing it made the editor vanish permanently after removing a
+          // channel (observed live; only a full reload recovered).
           selectedIntegrations: selectedList,
           // Drop any per-channel customizations for the deselected channel so a
           // later re-select doesn't resurrect stale `internal` content.

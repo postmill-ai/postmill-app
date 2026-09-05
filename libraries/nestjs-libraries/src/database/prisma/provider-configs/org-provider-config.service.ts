@@ -4,6 +4,7 @@ import { EncryptionService } from '@postmill-ai/nestjs-libraries/encryption/encr
 import { OrgVpnConfigService } from '@postmill-ai/nestjs-libraries/vpn/org-vpn-config.service';
 import { ProviderResolutionService } from '@postmill-ai/nestjs-libraries/providers/provider-resolution.service';
 import { AuditService } from '@postmill-ai/nestjs-libraries/database/prisma/audit/audit.service';
+import { getEnvClientInfo } from '@postmill-ai/nestjs-libraries/integrations/channel-env-credentials';
 
 // Optional VPN egress selection stored (as JSON) on the channel config. Not a
 // secret — just which enabled org VPN provider×region the channel routes through.
@@ -174,13 +175,15 @@ export class OrgProviderConfigService {
       throw new BadRequestException('A channel name is required.');
     }
 
-    if (data.enabled && !data.clientId?.trim()) {
+    // A platform app in the deployment env supplies the OAuth credentials for
+    // this provider, so an org config set may be enabled without its own keys.
+    if (data.enabled && !data.clientId?.trim() && !getEnvClientInfo(data.identifier)) {
       throw new BadRequestException(
         'A provider must be configured with credentials before it can be enabled.'
       );
     }
 
-    const result = await this._repository.create(orgId, {
+    const result = await this.#createWithDuplicateGuard(orgId, {
       identifier: data.identifier,
       name,
       version: this.#resolveVersion(data.identifier, data.version),
@@ -197,6 +200,29 @@ export class OrgProviderConfigService {
     // 1.3a: evict the cached kernel capability so a resolve rebuilds with fresh creds.
     this._resolution.invalidate('social', data.identifier, orgId);
     return this.#maskSensitive(result);
+  }
+
+  // The (organizationId, identifier, name, version) unique index turns a
+  // duplicate set name into a Prisma P2002 — translate it into a readable 400
+  // instead of an opaque 500 (observed live: retrying the Connect flow with
+  // the same set name 500'd with no actionable message).
+  async #createWithDuplicateGuard(
+    orgId: string,
+    data: Parameters<OrgProviderConfigRepository['create']>[1]
+  ) {
+    try {
+      return await this._repository.create(orgId, data);
+    } catch (err) {
+      if (
+        (err as { code?: string })?.code === 'P2002' &&
+        (err as { meta?: { target?: string[] } })?.meta?.target?.includes('name')
+      ) {
+        throw new BadRequestException(
+          'A channel with this name already exists for this provider — choose a different name.'
+        );
+      }
+      throw err;
+    }
   }
 
   async updateConfig(
@@ -217,7 +243,12 @@ export class OrgProviderConfigService {
     const willBeEnabled = data.enabled ?? existing.enabled;
     if (willBeEnabled) {
       const hasNewClientId = !!data.clientId?.trim();
-      if (!hasNewClientId && !existing.clientId?.trim()) {
+      // Env platform app counts as credentials for this provider (see create).
+      if (
+        !hasNewClientId &&
+        !existing.clientId?.trim() &&
+        !getEnvClientInfo(existing.identifier)
+      ) {
         throw new BadRequestException(
           'A provider must be configured with credentials before it can be enabled.'
         );
@@ -235,7 +266,22 @@ export class OrgProviderConfigService {
       (update as any).vpnSelection = await this.#serializeVpn(orgId, data.vpnSelection);
     }
 
-    const result = await this._repository.updateById(orgId, id, update as any);
+    let result;
+    try {
+      result = await this._repository.updateById(orgId, id, update as any);
+    } catch (err) {
+      // Same (org, identifier, name, version) unique index as create — a rename
+      // colliding with a sibling set must be a readable 400, not a 500.
+      if (
+        (err as { code?: string })?.code === 'P2002' &&
+        (err as { meta?: { target?: string[] } })?.meta?.target?.includes('name')
+      ) {
+        throw new BadRequestException(
+          'A channel with this name already exists for this provider — choose a different name.'
+        );
+      }
+      throw err;
+    }
     this.#audit('update', orgId, existing.identifier, userId);
     this.#recordCredentialRotated(orgId, existing.identifier, id, userId);
     // 1.3a: evict the cached kernel capability so a resolve rebuilds with fresh creds.
