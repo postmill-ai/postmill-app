@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useCallback, useEffect, useMemo, useState, type FC } from 'react';
+import React, { useCallback, useEffect, useMemo, type FC } from 'react';
 import { FormProvider, useForm } from 'react-hook-form';
 import useSWR from 'swr';
 import { useFetch } from '@postmill-ai/helpers/utils/custom.fetch';
@@ -15,6 +15,7 @@ import MetricComponent from '@postmill-ai/frontend/components/settings/metric.co
 import ChangePasswordComponent from '@postmill-ai/frontend/components/settings/change-password.component';
 import { NotificationPreferencesPanel } from '@postmill-ai/frontend/components/settings/notifications/notification-preferences.panel';
 import { OverflowTabs } from '@postmill-ai/frontend/components/ui/overflow-tabs';
+import { useParams, useRouter } from 'next/navigation';
 
 const tabs = [
   { key: 'profile', label: 'Profile' },
@@ -24,11 +25,28 @@ const tabs = [
 // Keys profile/notifications already exist in translation.json; security is added
 // in the same i18n backfill so all three tabs translate consistently.
 
+type TabKey = (typeof tabs)[number]['key'];
+
 export default function ProfilePage() {
   const t = useT();
   const fetch = useFetch();
   const toast = useToaster();
-  const [tab, setTab] = useState('profile');
+  const router = useRouter();
+  // Tabs are real paths (/user/me, /user/me/security, /user/me/notifications)
+  // so they're linkable — e.g. the "account settings" footer in system emails
+  // goes straight to /user/me/notifications. `/user/me` (and `/user/me/profile`)
+  // is the default profile view; anything unknown falls back to it.
+  const params = useParams<{ tab?: string[] }>();
+  const rawTab = params.tab?.[0];
+  const tab: TabKey = tabs.some(({ key }) => key === rawTab)
+    ? (rawTab as TabKey)
+    : 'profile';
+
+  useEffect(() => {
+    if (rawTab && rawTab !== tab) {
+      router.replace('/user/me');
+    }
+  }, [rawTab, tab, router]);
 
   const resolver = useMemo(() => classValidatorResolver(UserDetailDto), []);
   const form = useForm<UserDetailDto>({ resolver });
@@ -59,7 +77,9 @@ export default function ProfilePage() {
       <OverflowTabs
         items={tabs.map(({ key, label }) => ({ key, label: t(key, label) }))}
         activeKey={tab}
-        onSelect={(key) => setTab(key as (typeof tabs)[number]['key'])}
+        onSelect={(key) =>
+          router.push(key === 'profile' ? '/user/me' : `/user/me/${key}`)
+        }
         ariaLabel={t('more_tabs', 'More tabs')}
         listAriaLabel={t('settings', 'Settings')}
         className="mb-[24px]"
