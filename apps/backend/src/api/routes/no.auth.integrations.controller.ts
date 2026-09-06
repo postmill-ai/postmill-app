@@ -207,6 +207,16 @@ export class NoAuthIntegrationsController {
           });
         }
 
+        // Never swallow the provider's real error — an opaque "Authentication
+        // failed" makes OAuth regressions undiagnosable (first seen 2026-09-05
+        // with a Discord connect that failed invisibly). Log it, then map to
+        // the generic client-facing message.
+        this._logger.warn(
+          `social-connect authenticate failed for ${integration}: ${
+            (err as Error)?.message || String(err)
+          }`
+        );
+
         return res({
           error: 'Authentication failed',
           accessToken: '',
@@ -284,6 +294,11 @@ export class NoAuthIntegrationsController {
         providerConfigId || undefined,
         (clientInformation as any)?.version ?? 'v1'
       );
+
+    // A new (or re-connected) channel must show up in the composer/calendar
+    // immediately — otherwise the 60s list cache serves a stale list and the
+    // user thinks the connect failed.
+    await this._integrationManager.invalidateIntegrationListCache(org.id);
 
     this._refreshIntegrationService
       .startRefreshWorkflow(org.id, createUpdate.id, integrationProvider)

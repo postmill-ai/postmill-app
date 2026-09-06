@@ -139,6 +139,17 @@ function respError(body: string, status: number) {
   };
 }
 
+// TikTok video posts download the media bytes first (FILE_UPLOAD flow).
+function respVideoDownload() {
+  return {
+    status: 200, ok: true,
+    arrayBuffer: vi.fn().mockResolvedValue(new Uint8Array([1, 2, 3, 4]).buffer),
+    json: vi.fn().mockResolvedValue({}),
+    text: vi.fn().mockResolvedValue(''),
+    headers: new Map(),
+  };
+}
+
 // ─────────────────────────────────────────────────────────────
 // 1. X PROVIDER
 // ─────────────────────────────────────────────────────────────
@@ -1005,12 +1016,16 @@ describe('tiktok deep', () => {
   });
 
   it('throws RefreshTokenError on access_token_invalid', async () => {
-    globalThis.fetch = vi.fn().mockResolvedValue(respError('access_token_invalid', 400));
+    globalThis.fetch = vi.fn()
+      .mockImplementationOnce(() => Promise.resolve(respVideoDownload()))
+      .mockImplementationOnce(() => Promise.resolve(respError('access_token_invalid', 400)));
     await expect(provider.post('user123', 'tok', [{ id: 'p1', message: 'Test video', media: [{ path: 'https://ex.com/vid.mp4' }], settings: { content_posting_method: 'DIRECT_POST', privacy_level: 'PUBLIC_TO_EVERYONE', duet: true, comment: true, stitch: true, brand_content_toggle: false, brand_organic_toggle: false } }], { profile: 'user123' } as any)).rejects.toThrow(RefreshTokenError);
   });
 
   it('throws BadBodyError on invalid_params', async () => {
-    globalThis.fetch = vi.fn().mockResolvedValue(respError('invalid_params', 400));
+    globalThis.fetch = vi.fn()
+      .mockImplementationOnce(() => Promise.resolve(respVideoDownload()))
+      .mockImplementationOnce(() => Promise.resolve(respError('invalid_params', 400)));
     await expect(provider.post('user123', 'tok', [{ id: 'p1', message: 'Test video', media: [{ path: 'https://ex.com/vid.mp4' }], settings: { content_posting_method: 'DIRECT_POST', privacy_level: 'PUBLIC_TO_EVERYONE', duet: true, comment: true, stitch: true, brand_content_toggle: false, brand_organic_toggle: false } }], { profile: 'user123' } as any)).rejects.toThrow(BadBodyError);
   });
 
@@ -1048,7 +1063,9 @@ describe('tiktok deep', () => {
 
   it('post uploads video', async () => {
     globalThis.fetch = vi.fn()
-      .mockImplementationOnce(() => Promise.resolve(resp({ data: { publish_id: 'pub-123' } })))
+      .mockImplementationOnce(() => Promise.resolve(respVideoDownload()))
+      .mockImplementationOnce(() => Promise.resolve(resp({ data: { publish_id: 'pub-123', upload_url: 'https://upload.tiktokapis.com/abc' } })))
+      .mockImplementationOnce(() => Promise.resolve(resp({})))
       .mockImplementationOnce(() => Promise.resolve(resp({ data: { status: 'PUBLISH_COMPLETE', publicaly_available_post_id: ['vid-123'] } })));
     const r = await provider.post('user123', 'tok', [{ id: 'p1', message: 'Test video', media: [{ path: 'https://ex.com/vid.mp4' }], settings: { content_posting_method: 'DIRECT_POST', privacy_level: 'PUBLIC_TO_EVERYONE', duet: true, comment: true, stitch: true, brand_content_toggle: false, brand_organic_toggle: false } }], { profile: 'user123' } as any);
     expect(r).toHaveLength(1);
@@ -1057,7 +1074,9 @@ describe('tiktok deep', () => {
 
   it('post sends to inbox when status is SEND_TO_USER_INBOX', async () => {
     globalThis.fetch = vi.fn()
-      .mockImplementationOnce(() => Promise.resolve(resp({ data: { publish_id: 'pub-456' } })))
+      .mockImplementationOnce(() => Promise.resolve(respVideoDownload()))
+      .mockImplementationOnce(() => Promise.resolve(resp({ data: { publish_id: 'pub-456', upload_url: 'https://upload.tiktokapis.com/abc' } })))
+      .mockImplementationOnce(() => Promise.resolve(resp({})))
       .mockImplementationOnce(() => Promise.resolve(resp({ data: { status: 'SEND_TO_USER_INBOX' } })));
     const r = await provider.post('user123', 'tok', [{ id: 'p1', message: 'Test', media: [{ path: 'https://ex.com/vid.mp4' }], settings: { content_posting_method: 'DIRECT_POST', privacy_level: 'PUBLIC_TO_EVERYONE', duet: true, comment: true, stitch: true, brand_content_toggle: false, brand_organic_toggle: false } }], { profile: 'user123' } as any);
     expect(r[0].postId).toBe('missing');
@@ -1065,7 +1084,9 @@ describe('tiktok deep', () => {
 
   it('post uses UPLOAD method for video', async () => {
     globalThis.fetch = vi.fn()
-      .mockImplementationOnce(() => Promise.resolve(resp({ data: { publish_id: 'pub-789' } })))
+      .mockImplementationOnce(() => Promise.resolve(respVideoDownload()))
+      .mockImplementationOnce(() => Promise.resolve(resp({ data: { publish_id: 'pub-789', upload_url: 'https://upload.tiktokapis.com/abc' } })))
+      .mockImplementationOnce(() => Promise.resolve(resp({})))
       .mockImplementationOnce(() => Promise.resolve(resp({ data: { status: 'PUBLISH_COMPLETE', publicaly_available_post_id: ['vid-789'] } })));
     const r = await provider.post('user123', 'tok', [{ id: 'p1', message: 'Test', media: [{ path: 'https://ex.com/vid.mp4' }], settings: { content_posting_method: 'UPLOAD', privacy_level: 'PUBLIC_TO_EVERYONE', duet: true, comment: true, stitch: true, brand_content_toggle: false, brand_organic_toggle: false } }], { profile: 'user123' } as any);
     expect(r[0].postId).toBe('vid-789');

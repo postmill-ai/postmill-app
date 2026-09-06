@@ -1,6 +1,6 @@
 'use client';
 
-import { FC, useCallback, useEffect, useMemo, useState } from 'react';
+import { FC, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { HttpStatusCode } from 'axios';
 import * as Sentry from '@sentry/nextjs';
 import { useRouter } from 'next/navigation';
@@ -40,17 +40,26 @@ export const ContinueIntegration: FC<{
   const [successState, setSuccessState] = useState<SuccessState | null>(null);
   const [isSaving, setIsSaving] = useState(false);
 
+  // OAuth completing inside a connect popup (window.open from the channel
+  // config modal). A popup gets postMessage+close on success and must NEVER
+  // be redirected — a redirect in the tiny window hides errors and results.
+  const isPopup =
+    typeof window !== 'undefined' && !!window.opener && window.opener !== window;
+
+  // t is NOT referentially stable — depending on it would re-fire the connect
+  // effect per render (and the OAuth state is single-use). Read it via a ref.
+  const tRef = useRef(t);
+  useEffect(() => {
+    tRef.current = t;
+  });
+
   // Helper to handle navigation - redirects if logged or returnURL exists, otherwise shows inline
   const navigateOrShow = useCallback(
     (path: string, returnURL: string | undefined, successMessage: string) => {
       // OAuth completing inside a connect popup (window.open from the channel
       // config modal): hand the result to the opener and close the popup
       // instead of navigating it. Full-page flows are untouched.
-      if (
-        typeof window !== 'undefined' &&
-        window.opener &&
-        window.opener !== window
-      ) {
+      if (isPopup) {
         try {
           window.opener.postMessage(
             {
@@ -78,7 +87,7 @@ export const ContinueIntegration: FC<{
         setSuccessState({ message: successMessage });
       }
     },
-    [logged, push, provider]
+    [logged, push, provider, isPopup]
   );
   const modifiedParams = useMemo(() => {
     if (provider === 'mewe') {
@@ -133,15 +142,32 @@ export const ContinueIntegration: FC<{
     (async () => {
       const timezone = String(dayjs.tz().utcOffset());
 
+      // The POST body must stay within ConnectIntegrationDto's whitelist
+      // (state/code/refresh/timezone): the global forbidNonWhitelisted pipe
+      // rejects any other callback param — Discord sends guild_id/permissions,
+      // Google sends scope (same disease as the two-step save, PR #65).
+      const connectBody = () =>
+        JSON.stringify({
+          state: modifiedParams.state,
+          code: modifiedParams.code,
+          refresh: modifiedParams.refresh,
+          timezone,
+        });
+
       // Try public endpoint first (handles both public and fallback scenarios)
       let data = await fetch(`/integrations/social-connect/${provider}`, {
         method: 'POST',
-        body: JSON.stringify({ ...modifiedParams, timezone }),
+        body: connectBody(),
       });
+
+      // Parse the 400 body ONCE — Response bodies are single-read; a second
+      // .json() throws and the real reason is lost (this hid the Discord
+      // guild_id 400 behind a message-less "Could not add provider").
+      let errorData: any = null;
 
       // If public endpoint fails with specific errors, try authenticated endpoint
       if (data.status === HttpStatusCode.BadRequest) {
-        const errorData = await data.json().catch(() => ({}));
+        errorData = await data.json().catch(() => ({}));
         // "Invalid connection type" means this wasn't started as a public flow
         if (
           errorData.message?.includes('Invalid connection type') ||
@@ -149,8 +175,9 @@ export const ContinueIntegration: FC<{
         ) {
           data = await fetch(`/integrations/social-connect/${provider}`, {
             method: 'POST',
-            body: JSON.stringify({ ...modifiedParams, timezone }),
+            body: connectBody(),
           });
+          errorData = null; // new response — body not yet read
         }
       }
 
@@ -174,9 +201,31 @@ export const ContinueIntegration: FC<{
         data.status !== HttpStatusCode.Ok &&
         data.status !== HttpStatusCode.Created
       ) {
-        const errorData = await data.json().catch(() => ({}));
+        const body = errorData ?? (await data.json().catch(() => ({})));
+        const rawMessage = body.message || body.msg;
+        // ValidationPipe messages arrive as an array — join for display.
+        const message = Array.isArray(rawMessage)
+          ? rawMessage.join(', ')
+          : rawMessage;
+        // Connect failures must never be silent: the backend maps provider
+        // errors to generic messages (or returns no body at all), so capture
+        // the full context — without this a failing OAuth callback is
+        // undiagnosable (first seen 2026-09-05, Discord connect).
+        Sentry.captureException(
+          new Error(
+            `Channel connect failed for ${provider}: ${
+              message || `HTTP ${data.status}`
+            }`
+          ),
+          { extra: { provider, status: data.status, body } }
+        );
         setErrorMessage(
-          errorData.message || errorData.msg || 'Could not add provider'
+          message ||
+            tRef.current(
+              'could_not_add_provider_with_status',
+              'Could not add provider (error {{status}})',
+              { status: String(data.status) }
+            )
         );
         setError(true);
         return;
@@ -234,7 +283,15 @@ export const ContinueIntegration: FC<{
         returnURL,
         'Channel Updated'
       );
-    })();
+    })().catch((err) => {
+      // Network-level failure (fetch threw) — without this the page hangs on
+      // "Adding Channel" forever with nothing logged anywhere.
+      Sentry.captureException(err, { extra: { provider } });
+      setErrorMessage(
+        tRef.current('network_error_adding_channel', 'Network error while connecting the channel')
+      );
+      setError(true);
+    });
   }, [
     fetch,
     modifiedParams,
@@ -458,12 +515,19 @@ export const ContinueIntegration: FC<{
           </div>
           <div className="text-[16px] text-newTableText max-w-[400px]">
             {errorMessage ||
-              t(
-                'you_are_being_redirected_back',
-                'You are being redirected back'
-              )}
+              (isPopup
+                ? t(
+                    'you_can_close_this_window',
+                    'You can close this window and try again.'
+                  )
+                : t(
+                    'you_are_being_redirected_back',
+                    'You are being redirected back'
+                  ))}
           </div>
-          {logged && <Redirect url="/posts" delay={3000} />}
+          {/* A popup must never redirect — it is a tiny OAuth window, and a
+              redirect hides the error before it can be read. */}
+          {logged && !isPopup && <Redirect url="/posts" delay={3000} />}
         </div>
       </div>
     );

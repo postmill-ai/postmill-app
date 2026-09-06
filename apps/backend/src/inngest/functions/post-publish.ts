@@ -350,7 +350,8 @@ const runPostPublish = (postActivity: PostActivity) =>
           const firstCommentResult = await postActivity.postFirstComment(
             postsResults[0].postId,
             post.integration,
-            firstComment
+            firstComment,
+            JSON.parse(post.settings || '{}')
           );
           const postedComment = Array.isArray(firstCommentResult)
             ? firstCommentResult[0]

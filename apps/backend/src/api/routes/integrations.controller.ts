@@ -458,7 +458,11 @@ export class IntegrationsController {
       // env app) or a transient getUpdates error. The frontend polls this while
       // waiting for the user's /connect message, so a 500 here just spams
       // errors — return empty so the connect flow degrades gracefully (#10).
-      this._logger.warn('telegram getUpdates failed; returning empty');
+      // The message stays in the log: an empty response is invisible
+      // otherwise (observed live: repeated polls failing with zero detail).
+      this._logger.warn(
+        `telegram getUpdates failed; returning empty: ${(err as Error)?.message || err}`
+      );
       return {};
     }
   }

@@ -22,3 +22,39 @@ describe('DiscordProvider.analytics', () => {
     expect(msg).not.toContain('bot-token');
   });
 });
+
+describe('DiscordProvider.authenticate', () => {
+  const client = { client_id: 'id', client_secret: 'secret' } as any;
+
+  it('throws the provider reason when the token exchange fails', async () => {
+    const provider = new DiscordProvider();
+    (provider as any).fetch = vi.fn(async () => ({
+      json: async () => ({
+        error: 'invalid_grant',
+        error_description: 'Invalid "redirect_uri" in request.',
+      }),
+    }));
+
+    await expect(
+      provider.authenticate({ code: 'x', codeVerifier: 'y' }, client)
+    ).rejects.toThrow(
+      'Discord token exchange failed: Invalid "redirect_uri" in request.'
+    );
+  });
+
+  it('throws an actionable error when no server was selected (no guild in token response)', async () => {
+    const provider = new DiscordProvider();
+    (provider as any).fetch = vi.fn(async () => ({
+      json: async () => ({
+        access_token: 'at',
+        expires_in: 3600,
+        refresh_token: 'rt',
+        scope: 'identify guilds',
+      }),
+    }));
+
+    await expect(
+      provider.authenticate({ code: 'x', codeVerifier: 'y' }, client)
+    ).rejects.toThrow('No Discord server was selected');
+  });
+});

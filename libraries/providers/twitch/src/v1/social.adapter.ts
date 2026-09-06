@@ -133,10 +133,26 @@ export class TwitchProvider extends SocialAbstract implements SocialProvider {
       }),
     });
 
-    const { access_token, refresh_token, expires_in, scope } =
-      await tokenResponse.json();
+    const tokenBody = await tokenResponse.json();
+    const { access_token, refresh_token, expires_in, scope } = tokenBody;
 
-    this.checkScopes(this.scopes, (scope || '').split(' '));
+    if (!access_token) {
+      throw new Error(
+        `Twitch token exchange failed: ${
+          tokenBody.message ||
+          tokenBody.error_description ||
+          tokenBody.error ||
+          JSON.stringify(tokenBody)
+        }`
+      );
+    }
+
+    // Twitch returns `scope` as an array of strings, not a space-delimited
+    // string like most OAuth2 providers.
+    this.checkScopes(
+      this.scopes,
+      Array.isArray(scope) ? scope : (scope || '').split(' ')
+    );
 
     // Get user info
     const userInfo = await this.getUserInfo(access_token, clientId);

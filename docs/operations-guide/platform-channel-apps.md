@@ -120,9 +120,11 @@ professional (Business or Creator) account.
 
 While the app is in development mode, each Instagram account that will connect
 must be added as an **Instagram tester** *on this app*: Meta App Dashboard →
-your app → **App roles → Roles → Instagram Testers** → Add People — and the
-account **must accept the invite** (Instagram app → Settings → Apps and
-Websites → Tester Invites). The tester must be added on the app whose ID is in
+your app → **App roles → Roles** → **Add People**, choose **Instagram Tester**,
+and enter the account's Instagram handle. The invited user must then **accept
+the invitation**: Instagram app → **Settings → Apps and Websites → Tester
+Invites** (on the web: <https://www.instagram.com/accounts/manage_access/> →
+Tester Invites). The tester must be added on the app whose ID is in
 `INSTAGRAM_APP_ID` — an accepted invite on a *different* Meta app does not
 count. Without this, OAuth fails with **"Insufficient Developer Role"** (or
 "Invalid platform app"). To remove the requirement entirely, switch the app to
@@ -335,9 +337,26 @@ TIKTOK_CLIENT_SECRET: '<your-client-secret>'
 
 6. Restart the backend.
 
-**Before the app passes review** it runs in development mode — every TikTok
-account that will connect must be listed as a tester in the app's sandbox
-settings, or their authorization is rejected.
+**Before the app passes review** the production credentials are dead — while
+the app sits in Draft or in review, the OAuth login fails on TikTok's side
+with a generic *"client_key — we couldn't log you in"* error. To test before
+approval:
+
+1. On the app's page open the **Sandbox** section and use the **sandbox**
+   Client Key / Client Secret as `TIKTOK_CLIENT_ID` / `TIKTOK_CLIENT_SECRET`
+   (swap the production pair back in once the app is approved).
+2. Under **Sandbox → Target Users**, click **Add Account** and log in with
+   each TikTok account that will connect. If the TikTok account is registered
+   to a phone number rather than an email, invite by scanning the QR code
+   shown there with the TikTok mobile app.
+3. An unaudited (unapproved) app may only **direct-post to private TikTok
+   accounts** (`unaudited_client_can_only_post_to_private_accounts`). Flip the
+   test account to private in the TikTok app (Settings → Privacy) while
+   testing; approved apps have no such restriction. Sandbox posts land as
+   `SELF_ONLY` videos visible only to the account owner.
+
+The redirect URI always goes under **Login Kit** settings (step 3), for both
+the production and sandbox apps.
 
 ## Discord
 
@@ -355,13 +374,22 @@ DISCORD_CLIENT_ID: '<your-client-id>'
 DISCORD_CLIENT_SECRET: '<your-client-secret>'
 ```
 
-3. Under **Bot**, create the bot user. Tenants copy their own bot token from
-   here when they connect (org credential `discord.token`).
+3. Under **Bot**, create the bot user and copy its token (click **Reset
+   Token**). The platform app carries it in the environment — every channel
+   list and post on every org authenticates with it:
+
+```yaml
+DISCORD_BOT_TOKEN: '<your-bot-token>'
+```
+
+   (Tenants who bring their own Discord app instead paste the bot token in the
+   channel's settings in Postmill — org credential `discord.token`.)
 4. Restart the backend.
 
-**Tenant flow:** the tenant invites the bot to their guild (OAuth2 → URL
-Generator, `bot` scope + Send Messages) with write access to the target
-channel, then pastes the bot token in the channel's settings in Postmill.
+**Tenant flow:** the tenant authorizes the platform bot into their guild
+during channel connect (the OAuth screen asks for a server) — the bot needs
+write access to the target channel. No manual URL-generator step is needed
+with the platform app.
 
 ## Dribbble
 
@@ -505,6 +533,16 @@ THREADS_APP_SECRET: '<your-threads-app-secret>'
 
 5. Restart the backend. Advanced access (beyond tester accounts) requires
    Meta App Review like the other Meta products.
+
+While the app is in development mode, each Threads account that will connect
+must be added as a **Threads tester** *on this app*: Meta App Dashboard →
+your app → **App roles → Roles** → **Add People**, choose **Threads Tester**,
+and enter the account's Threads handle. The invited user must then **accept
+the invitation** in the Threads app: **Settings → Account → Website
+permissions → Invites**. The tester must be added on the app whose ID is in
+`THREADS_APP_ID` — an accepted invite on a *different* Meta app does not
+count. Without this, OAuth fails at authorize or token exchange. To remove the
+requirement entirely, switch the app to **Live** mode (App Review → go live).
 
 ## Twitch
 

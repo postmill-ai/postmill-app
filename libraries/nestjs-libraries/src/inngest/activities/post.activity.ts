@@ -376,6 +376,7 @@ export class PostActivity {
     postId: string,
     integration: Integration,
     firstComment: string,
+    originalSettings?: Record<string, unknown>
   ) {
     // 2.5: re-read the decrypted token (slimmed out of step state).
     integration = await this._withDecryptedIntegration(integration);
@@ -408,7 +409,10 @@ export class PostActivity {
             !/<\/?[a-z][\s\S]*>/i.test(firstComment),
             getIntegration.mentionFormat
           ),
-          settings: {},
+          // Providers whose comments need the original post's targeting (e.g.
+          // Discord's settings.channel for the thread's parent channel) must
+          // see it — an empty settings object 404s the thread creation.
+          settings: originalSettings || {},
           media: [],
         },
       ],

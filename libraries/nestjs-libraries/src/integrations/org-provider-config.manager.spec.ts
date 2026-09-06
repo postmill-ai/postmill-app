@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { clearCredentials } from './credentials';
+import { clearCredentials, getOrgCredential } from './credentials';
 
 const mockOrgProviderConfigService = {
   getDecryptedConfigs: vi.fn(),
@@ -132,6 +132,72 @@ describe('OrgProviderConfigManager', () => {
       const info = await manager.getClientInfoById('org-1', 'cfg-9');
       expect(info?.configId).toBe('fb-config-789');
       expect(info?.client_id).toBe('app-123');
+    });
+  });
+
+  describe('getOrgCredential cache population', () => {
+    const ENV_KEYS = ['DISCORD_CLIENT_ID', 'DISCORD_CLIENT_SECRET', 'DISCORD_BOT_TOKEN'];
+    const savedEnv: Record<string, string | undefined> = {};
+
+    beforeEach(() => {
+      for (const k of ENV_KEYS) {
+        savedEnv[k] = process.env[k];
+        delete process.env[k];
+      }
+    });
+
+    afterEach(() => {
+      for (const k of ENV_KEYS) {
+        if (savedEnv[k] === undefined) delete process.env[k];
+        else process.env[k] = savedEnv[k];
+      }
+    });
+
+    it('maps additionalConfig.botToken into the credential cache', async () => {
+      mockOrgProviderConfigService.getDecryptedConfigs.mockResolvedValue([
+        makeConfig({
+          identifier: 'discord',
+          additionalConfig: JSON.stringify({ botToken: 'org-bot-token' }),
+        }),
+      ]);
+
+      await manager.ensureFresh('org-1');
+
+      expect(getOrgCredential('org-1', 'discord', 'token')).toBe('org-bot-token');
+    });
+
+    it('fills the credential cache from the platform env app when the org has no config', async () => {
+      process.env.DISCORD_CLIENT_ID = 'env-id';
+      process.env.DISCORD_CLIENT_SECRET = 'env-secret';
+      process.env.DISCORD_BOT_TOKEN = 'env-bot-token';
+
+      await manager.ensureFresh('org-1');
+
+      expect(getOrgCredential('org-1', 'discord', 'token')).toBe('env-bot-token');
+      expect(getOrgCredential('org-1', 'discord', 'clientId')).toBe('env-id');
+    });
+
+    it('org config wins over the env app for the same identifier', async () => {
+      process.env.DISCORD_CLIENT_ID = 'env-id';
+      process.env.DISCORD_CLIENT_SECRET = 'env-secret';
+      process.env.DISCORD_BOT_TOKEN = 'env-bot-token';
+      mockOrgProviderConfigService.getDecryptedConfigs.mockResolvedValue([
+        makeConfig({
+          identifier: 'discord',
+          additionalConfig: JSON.stringify({ botToken: 'org-bot-token' }),
+        }),
+      ]);
+
+      await manager.ensureFresh('org-1');
+
+      expect(getOrgCredential('org-1', 'discord', 'token')).toBe('org-bot-token');
+    });
+
+    it('does not populate env apps whose env vars are unset', async () => {
+      await manager.ensureFresh('org-1');
+
+      expect(getOrgCredential('org-1', 'discord', 'token')).toBeUndefined();
+      expect(getOrgCredential('org-1', 'discord', 'clientId')).toBeUndefined();
     });
   });
 });

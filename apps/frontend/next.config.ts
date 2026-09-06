@@ -39,6 +39,21 @@ if (!isDev && !backendOrigin) {
   );
 }
 
+// Client-side Sentry events POST to the DSN's ingest origin
+// (o<id>.ingest.<region>.sentry.io, or a self-hosted Sentry). Without it in
+// connect-src the browser blocks every envelope (observed in prod 2026-09-05:
+// Sentry enabled via NEXT_PUBLIC_SENTRY_DSN, zero events arriving). Derive it
+// from the DSN so any Sentry install works; empty when Sentry is not configured.
+const sentryOrigin = (() => {
+  try {
+    return process.env.NEXT_PUBLIC_SENTRY_DSN
+      ? new URL(process.env.NEXT_PUBLIC_SENTRY_DSN).origin
+      : '';
+  } catch {
+    return '';
+  }
+})();
+
 // Sentry adds significant build overhead (source-map upload, release creation)
 // and should not run in local dev unless the developer explicitly configures it.
 const sentryEnabled =
@@ -69,7 +84,10 @@ const nextConfig: NextConfig = {
           "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://js.stripe.com",
           "img-src 'self' data: blob: https:",
           "font-src 'self' data: https://fonts.gstatic.com",
-          `connect-src 'self' ${backendOrigin} https://plausible.io https://api.stripe.com https://m.stripe.network https://www.googletagmanager.com ws://localhost:* wss://*`,
+          `connect-src 'self' ${backendOrigin} ${sentryOrigin} https://plausible.io https://api.stripe.com https://m.stripe.network https://www.googletagmanager.com ws://localhost:* wss://*`,
+          // Sentry Replay's compression worker boots from a blob: URL — without
+          // worker-src the blob falls back to script-src and is blocked.
+          "worker-src 'self' blob:",
           "frame-src 'self' https://js.stripe.com https://hooks.stripe.com",
           "frame-ancestors 'none'",
           "media-src 'self' data: blob: https:",

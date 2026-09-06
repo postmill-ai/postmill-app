@@ -15,6 +15,7 @@ import {
   ProviderVersionSelect,
   useProviderVersionSelection,
 } from '@postmill-ai/frontend/components/settings/shared/provider-version-select';
+import { web3List } from '@postmill-ai/frontend/components/launches/web3/web3.list';
 
 const PROVIDER_APP_LINKS: Record<string, { label: string; url: string | null }> = {
   linkedin: { label: 'LinkedIn Developer Portal', url: 'https://www.linkedin.com/developers/apps' },
@@ -117,9 +118,22 @@ export const ChannelConfigForm: FC<ChannelConfigFormProps> = ({
   // the config form collects no credentials for them.
   const isDirect = setup?.authType === 'direct';
   const isOAuth = setup?.authType === 'oauth1' || setup?.authType === 'oauth2';
+  const isToken = setup?.authType === 'token';
   // Mode A of this form: a platform app in the deployment env can drive the
-  // OAuth flow, so name + Connect is the primary content.
-  const hasPlatformApp = platformConfigured && isOAuth;
+  // connect flow (OAuth consent, or a bot-token connect for token providers),
+  // so name + Connect is the primary content.
+  const hasPlatformApp = platformConfigured && (isOAuth || isToken);
+  // Interactive connect component for token providers that need one
+  // (Telegram's /connect-word discovery); token providers without one connect
+  // by token validation alone.
+  const Web3Connect = useMemo(
+    () => web3List.find((item) => item.identifier === identifier)?.component,
+    [identifier]
+  );
+  // In-progress token connect: the issued state nonce plus the saved set id
+  // (needed to flip the set enabled after a successful connect). Renders
+  // Web3Connect when the provider has an interactive connect component.
+  const [tokenNonce, setTokenNonce] = useState<{ nonce: string; id: string } | null>(null);
 
   // Connected channels for this provider (the composer list) — after a
   // successful Connect the modal must SAY so, not silently offer Connect again.
@@ -162,6 +176,9 @@ export const ChannelConfigForm: FC<ChannelConfigFormProps> = ({
   const [enabled, setEnabled] = useState(config?.enabled || false);
   const [saving, setSaving] = useState(false);
   const [connecting, setConnecting] = useState(false);
+  // Set id created by a Connect-initiated save in this modal session — lets a
+  // connect retry PUT-update the same set instead of POSTing a duplicate.
+  const [createdId, setCreatedId] = useState<string | null>(null);
   const [callbackCopied, setCallbackCopied] = useState(false);
   // With a platform app configured, everything but name + Connect lives under
   // the Advanced section — expanded only when this set already has stored
@@ -251,8 +268,12 @@ export const ChannelConfigForm: FC<ChannelConfigFormProps> = ({
         }
       }
 
-      const res = isEdit
-        ? await fetch(`/channels/config/${config!.id}`, {
+      // After a Connect-initiated create the modal still isn't in edit mode —
+      // remember the new set id so a connect RETRY updates it instead of
+      // POSTing a duplicate name (observed live: 409 on LINE connect retry).
+      const existingId = isEdit ? config!.id : createdId;
+      const res = existingId
+        ? await fetch(`/channels/config/${existingId}`, {
             method: 'PUT',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(payload),
@@ -265,7 +286,9 @@ export const ChannelConfigForm: FC<ChannelConfigFormProps> = ({
 
       if (res.ok) {
         const body = await res.json().catch(() => ({}));
-        return { id: (isEdit ? config!.id : body?.id) || null };
+        const id = existingId || body?.id || null;
+        if (id && !isEdit) setCreatedId(id);
+        return { id };
       }
       const errBody = await res.json().catch(() => ({}));
       toaster.show(errBody.message || t('channel_save_failed', 'Failed to save channel'), 'warning');
@@ -276,7 +299,7 @@ export const ChannelConfigForm: FC<ChannelConfigFormProps> = ({
     } finally {
       setSaving(false);
     }
-  }, [name, enabled, clientId, clientSecret, extraFields, setup, selectedVersion, editSetupNotes, isDirect, platformConfigured, vpnOptions, vpnEnabled, vpnValue, isConfigured, isEdit, config, identifier, fetch, toaster, t]);
+  }, [name, enabled, clientId, clientSecret, extraFields, setup, selectedVersion, editSetupNotes, isDirect, platformConfigured, vpnOptions, vpnEnabled, vpnValue, isConfigured, isEdit, config, createdId, identifier, fetch, toaster, t]);
 
   const handleSave = useCallback(async () => {
     const saved = await saveConfig();
@@ -286,12 +309,116 @@ export const ChannelConfigForm: FC<ChannelConfigFormProps> = ({
     onClose();
   }, [saveConfig, toaster, t, onSaved, onClose]);
 
+  // Token-connect completion, shared by Telegram's inline /connect-word flow
+  // and LINE's token-validation connect: POST code+state to social-connect
+  // from this modal instead of redirecting the page through
+  // continue.integration — a failure there dumped the user on /posts with the
+  // real reason invisible (observed live: the Telegram /connect word outlived
+  // the 1h OAuth-state TTL and the callback 400'd "Invalid or expired state").
+  const completeTokenConnect = useCallback(
+    async (code: string | number, state: string, id: string) => {
+      setConnecting(true);
+      try {
+        const res = await fetch(`/integrations/social-connect/${identifier}`, {
+          method: 'POST',
+          body: JSON.stringify({
+            state,
+            // Telegram's connect component hands back a NUMERIC chat id — the
+            // ConnectIntegrationDto whitelist rejects non-string codes with a
+            // 400 ("code must be a string").
+            code: String(code),
+            // Same payload as continue.integration (dayjs.tz().utcOffset()).
+            timezone: String(-new Date().getTimezoneOffset()),
+          }),
+        });
+        if (!res.ok) {
+          const errBody = await res.json().catch(() => ({}));
+          // ValidationPipe 400s return message as a string ARRAY.
+          const raw = errBody.message;
+          const msg: string = (Array.isArray(raw) ? raw.join(', ') : raw) ||
+            t('could_not_connect_to_platform', 'Could not connect to the platform');
+          // An expired/unknown state is unrecoverable — return to the form so
+          // the next Connect click mints a fresh one.
+          if (msg.includes('Invalid or expired state')) {
+            setTokenNonce(null);
+            toaster.show(
+              t('connect_session_expired', 'Connect session expired — please try again'),
+              'warning'
+            );
+            return;
+          }
+          toaster.show(msg, 'warning');
+          return;
+        }
+        // Connected — the set is fully set up now, so enable it (a set must
+        // not be enabled before it is set up).
+        if (!enabled) {
+          await fetch(`/channels/config/${id}`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ enabled: true }),
+          }).catch(() => undefined);
+        }
+        toaster.show(t('channel_connected', 'Channel Connected!'), 'success');
+        onSaved();
+        onClose();
+      } catch {
+        toaster.show(
+          t('could_not_connect_to_platform', 'Could not connect to the platform'),
+          'warning'
+        );
+      } finally {
+        setConnecting(false);
+      }
+    },
+    [fetch, identifier, enabled, toaster, t, onSaved, onClose]
+  );
+
+  // Token-provider connect (Telegram/LINE bot tokens): save the set, mint the
+  // state nonce, then either hand it to the interactive connect component
+  // (Telegram's /connect-word discovery) or complete the token-validation
+  // connect inline (LINE validates the token server-side — no user step).
+  const handleTokenConnect = useCallback(async () => {
+    const saved = await saveConfig();
+    if (!saved) return;
+    const id = saved.id;
+    if (!id) {
+      toaster.show(t('channel_save_failed', 'Failed to save channel'), 'warning');
+      return;
+    }
+    setConnecting(true);
+    try {
+      const response = await fetch(`/integrations/social/${identifier}?config=${id}`);
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok || data.err || !data.url) {
+        toaster.show(
+          t('could_not_connect_to_platform', 'Could not connect to the platform'),
+          'warning'
+        );
+        return;
+      }
+      if (Web3Connect) {
+        // Render the interactive connect (e.g. Telegram: add the bot to the
+        // channel, post /connect <word>) inside this modal.
+        setTokenNonce({ nonce: data.url, id });
+        return;
+      }
+      // LINE's authenticate ignores `code` — the bot token IS the credential.
+      await completeTokenConnect('connect', data.url, id);
+    } finally {
+      setConnecting(false);
+    }
+  }, [saveConfig, fetch, identifier, Web3Connect, toaster, t, completeTokenConnect]);
+
   // Platform-app connect: save the set, then start the standard OAuth flow
   // (the same /integrations/social/:identifier?config=<id> initiation the
   // composer tile uses) in a small popup window. The completion page
   // (continue.integration) detects the popup, notifies this opener, and closes
   // itself; the poll is the fallback for a missed message / manual close.
   const handleConnect = useCallback(async () => {
+    if (isToken) {
+      return handleTokenConnect();
+    }
     const saved = await saveConfig();
     if (!saved) return;
     const id = saved.id;
@@ -352,7 +479,7 @@ export const ChannelConfigForm: FC<ChannelConfigFormProps> = ({
     } finally {
       setConnecting(false);
     }
-  }, [saveConfig, fetch, identifier, enabled, toaster, t, onSaved, onClose]);
+  }, [saveConfig, fetch, identifier, enabled, toaster, t, onSaved, onClose, isToken, handleTokenConnect]);
 
   const handleDelete = useCallback(async () => {
     if (!config) return;
@@ -543,9 +670,11 @@ export const ChannelConfigForm: FC<ChannelConfigFormProps> = ({
     </div>
   );
 
-  // Platform-app OAuth: the default path. Saves the set (no credentials
-  // needed) and opens the provider's OAuth consent in a small popup.
-  const connectBlock = hasPlatformApp && (
+  // Connect path: the default for platform-app providers (OAuth popup or
+  // bot-token connect), and also offered on BYO token sets once credentials
+  // are stored (a token set without a token cannot connect).
+  const showConnect = hasPlatformApp || (isToken && isConfigured);
+  const connectBlock = showConnect && (
     <div className="flex flex-col gap-[6px]">
       {connectedChannels.length > 0 && (
         <div className="flex items-center gap-[8px] rounded-[8px] border border-newTableBorder bg-newBgColorInner px-[12px] py-[10px]">
@@ -581,9 +710,11 @@ export const ChannelConfigForm: FC<ChannelConfigFormProps> = ({
             ? t('connect_another_account', 'Connect another account')
             : t('connect_with_provider', 'Connect with {{provider}}', { provider: providerName })}
       </button>
-      <div className="text-[12px] text-newTableText text-center">
-        {t('uses_postmill_app_no_setup', 'Uses the Postmill app — no setup needed')}
-      </div>
+      {platformConfigured && (
+        <div className="text-[12px] text-newTableText text-center">
+          {t('uses_postmill_app_no_setup', 'Uses the Postmill app — no setup needed')}
+        </div>
+      )}
     </div>
   );
 
@@ -720,6 +851,32 @@ export const ChannelConfigForm: FC<ChannelConfigFormProps> = ({
     </div>
   );
 
+  // ── Token connect in progress: the interactive connect component (Telegram's
+  // /connect-word discovery) replaces the form until it completes inline
+  // (completeTokenConnect posts to social-connect and closes the modal) or
+  // the user goes back. ────────────────────────────────────────────────────
+  if (tokenNonce && Web3Connect) {
+    return (
+      <div className="flex flex-col gap-[16px] min-w-[460px] mobile:min-w-0">
+        <Web3Connect
+          nonce={tokenNonce.nonce}
+          onComplete={(code, newState) => {
+            void completeTokenConnect(code, newState, tokenNonce.id);
+          }}
+        />
+        <div className="flex gap-[8px]">
+          <Button
+            type="button"
+            className="bg-transparent! border border-newTableBorder text-textColor"
+            onClick={() => setTokenNonce(null)}
+          >
+            {t('back', 'Back')}
+          </Button>
+        </div>
+      </div>
+    );
+  }
+
   // ── Mode A: platform app — name + Connect are the whole story; everything
   // else is collapsed under Advanced. ────────────────────────────────────────
   if (hasPlatformApp) {
@@ -776,6 +933,7 @@ export const ChannelConfigForm: FC<ChannelConfigFormProps> = ({
       {setupStepsBlock}
       {nameBlock}
       {versionBlock}
+      {connectBlock}
       {enabledBlock}
       {credentialFieldsBlock}
       {callbackBlock}
