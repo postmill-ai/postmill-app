@@ -120,8 +120,36 @@ async function uploadVideo(
   agent: AtpAgent,
   videoPath: string
 ): Promise<AppBskyEmbedVideo.Main> {
+  // The service-auth audience must be the account's OWN PDS, not the login
+  // entryway: accounts on sharded bsky.network PDSes (e.g.
+  // discina.us-west.host.bsky.network) get "invalid token audience" when aud
+  // is did:web:bsky.social (observed live). Resolve the PDS endpoint from the
+  // DID doc; fall back to the entryway host.
+  async function pdsServiceDid(): Promise<string> {
+    try {
+      const res = await safeFetch(
+        `https://plc.directory/${agent.session!.did}`
+      );
+      if (res.ok) {
+        const doc = (await res.json()) as {
+          service?: Array<{ id?: string; type?: string; serviceEndpoint?: string }>;
+        };
+        const pds = doc?.service?.find(
+          (s) => s.id === '#atproto_pds' || s.type === 'AtprotoPersonalDataServer'
+        );
+        const host = pds?.serviceEndpoint
+          ? new URL(pds.serviceEndpoint).host
+          : undefined;
+        if (host) return `did:web:${host}`;
+      }
+    } catch {
+      // Fall through to the entryway host.
+    }
+    return `did:web:${agent.dispatchUrl.host}`;
+  }
+
   const { data: serviceAuth } = await agent.com.atproto.server.getServiceAuth({
-    aud: `did:web:${agent.dispatchUrl.host}`,
+    aud: await pdsServiceDid(),
     lxm: 'com.atproto.repo.uploadBlob',
     exp: Date.now() / 1000 + 60 * 30, // 30 minutes
   });
@@ -167,6 +195,14 @@ async function uploadVideo(
   });
 
   const jobStatus = (await uploadResponse.json()) as AppBskyVideoDefs.JobStatus;
+  // The video service answers rejections with HTTP 200 and an error payload
+  // (empty jobId) — e.g. invalid_audience, unconfirmed_email. Surface the
+  // real reason instead of a misleading downstream "missing jobId".
+  if (!uploadResponse.ok || !jobStatus.jobId) {
+    throw new Error(
+      `Bluesky video upload rejected: ${JSON.stringify(jobStatus).slice(0, 300)}`
+    );
+  }
   let blob: BlobRef | undefined = jobStatus.blob;
   const videoAgent = new AtpAgent({ service: 'https://video.bsky.app' });
 

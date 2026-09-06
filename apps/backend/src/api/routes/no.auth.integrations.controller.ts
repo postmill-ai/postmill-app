@@ -59,8 +59,21 @@ export class NoAuthIntegrationsController {
       throw new Error('Integration not allowed');
     }
 
+    // Resolve the org from the state BEFORE the provider: the enabled gate
+    // inside getSocialIntegration is per-org (an enabled credential set) or
+    // env (a platform app). Calling it org-less 404'd every non-env provider
+    // — BYO OAuth apps and 'direct' channels like Bluesky (observed live:
+    // social-connect 404 "Integration not available" with an enabled set).
+    const organization = await ioRedis.get(`organization:${body.state}`);
+    if (!organization) {
+      throw new BadRequestException('Invalid or expired state');
+    }
+
     const integrationProvider =
-      await this._integrationManager.getSocialIntegration(integration);
+      await this._integrationManager.getSocialIntegration(
+        integration,
+        organization
+      );
 
     const getCodeVerifier = integrationProvider.customFields
       ? 'none'
@@ -69,11 +82,6 @@ export class NoAuthIntegrationsController {
       // 400, not a bare Error (500): the frontend keys its retry-or-report
       // behavior on this message, and an expired/unknown state is a client
       // problem, not a server fault.
-      throw new BadRequestException('Invalid or expired state');
-    }
-
-    const organization = await ioRedis.get(`organization:${body.state}`);
-    if (!organization) {
       throw new BadRequestException('Invalid or expired state');
     }
 

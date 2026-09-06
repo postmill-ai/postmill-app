@@ -99,7 +99,8 @@ describe('ContinueIntegration popup completion', () => {
     render(
       <ContinueIntegration
         provider="x"
-        searchParams={{ state: 's', code: 'c' }}
+        // X (OAuth 1.0a) calls back with oauth_token/oauth_verifier.
+        searchParams={{ oauth_token: 't', oauth_verifier: 'v' }}
         logged={true}
       />
     );
@@ -125,7 +126,8 @@ describe('ContinueIntegration popup completion', () => {
     render(
       <ContinueIntegration
         provider="x"
-        searchParams={{ state: 's', code: 'c' }}
+        // X (OAuth 1.0a) calls back with oauth_token/oauth_verifier.
+        searchParams={{ oauth_token: 't', oauth_verifier: 'v' }}
         logged={true}
       />
     );
@@ -340,5 +342,128 @@ describe('ContinueIntegration popup completion', () => {
       expect.objectContaining({ message: 'socket hangup' }),
       { extra: { provider: 'discord' } }
     );
+  });
+
+  it('shows a clean reason on a code-less callback instead of the raw DTO validation message', async () => {
+    setOpener({ postMessage });
+
+    render(
+      <ContinueIntegration
+        provider="linkedin"
+        searchParams={{ state: 's' }}
+        logged={true}
+      />
+    );
+
+    // Never POSTs — an undefined `code` would only 400 with "code must be a
+    // string" (POSTMILL-APP-9).
+    await screen.findByText(
+      'Authorization did not complete — no authorization code was returned. Please try connecting again.'
+    );
+    expect(mockFetch).not.toHaveBeenCalled();
+    expect(mockCaptureException).toHaveBeenCalledWith(
+      expect.objectContaining({
+        message:
+          'Channel connect failed for linkedin: callback missing authorization code',
+      }),
+      expect.anything()
+    );
+  });
+
+  it('shows the provider error on an OAuth error redirect and reports it', async () => {
+    setOpener({ postMessage });
+
+    render(
+      <ContinueIntegration
+        provider="linkedin"
+        searchParams={{
+          state: 's',
+          error: 'unauthorized_scope_error',
+          error_description: 'Scope &quot;rw_organization_admin&quot; is not authorized',
+        }}
+        logged={true}
+      />
+    );
+
+    await screen.findByText(
+      'Authorization failed: unauthorized_scope_error: Scope &quot;rw_organization_admin&quot; is not authorized'
+    );
+    expect(mockFetch).not.toHaveBeenCalled();
+    expect(mockCaptureException).toHaveBeenCalled();
+  });
+
+  it('treats a user-cancelled consent as normal flow — clean message, no Sentry noise', async () => {
+    setOpener({ postMessage });
+
+    render(
+      <ContinueIntegration
+        provider="linkedin"
+        searchParams={{
+          state: 's',
+          error: 'access_denied',
+          error_description: 'The user cancelled the authorization',
+        }}
+        logged={true}
+      />
+    );
+
+    await screen.findByText(
+      'Authorization was cancelled — nothing was connected.'
+    );
+    expect(mockFetch).not.toHaveBeenCalled();
+    expect(mockCaptureException).not.toHaveBeenCalled();
+  });
+
+  it('treats an X OAuth 1.0a denial (?denied=) as a cancellation, not an error', async () => {
+    setOpener({ postMessage });
+
+    render(
+      <ContinueIntegration
+        provider="x"
+        searchParams={{ denied: 'some-oauth-token' }}
+        logged={true}
+      />
+    );
+
+    await screen.findByText(
+      'Authorization was cancelled — nothing was connected.'
+    );
+    expect(mockFetch).not.toHaveBeenCalled();
+    expect(mockCaptureException).not.toHaveBeenCalled();
+  });
+
+  it('fires the connect POST exactly once across re-renders (single-use state)', async () => {
+    setOpener({ postMessage });
+    mockFetch.mockResolvedValue(okResponse({ id: 'int-1', inBetweenSteps: false }));
+
+    const { rerender } = render(
+      <ContinueIntegration
+        provider="discord"
+        searchParams={{ state: 's', code: 'c' }}
+        logged={true}
+      />
+    );
+    await waitFor(() => expect(mockFetch).toHaveBeenCalledTimes(1));
+
+    // Re-renders with fresh prop identities (Next.js re-serializing
+    // searchParams, parent updates) must not re-fire the effect — the OAuth
+    // state+code are spent by the first POST, and a second one surfaces a
+    // false "Could not add provider" error in the popup after a SUCCESS.
+    rerender(
+      <ContinueIntegration
+        provider="discord"
+        searchParams={{ state: 's', code: 'c' }}
+        logged={true}
+      />
+    );
+    rerender(
+      <ContinueIntegration
+        provider="discord"
+        searchParams={{ state: 's', code: 'c', refresh: '' }}
+        logged={true}
+      />
+    );
+    await new Promise((r) => setTimeout(r, 100));
+    expect(mockFetch).toHaveBeenCalledTimes(1);
   });
 });

@@ -163,8 +163,7 @@ newsletter/welcome email — see [SSO dual-use](#sso-dual-use-login-with-the-sam
 
 ## LinkedIn
 
-One LinkedIn app covers both the **LinkedIn** (`linkedin`) and **LinkedIn Page**
-(`linkedin-page`) channels — both read `LINKEDIN_CLIENT_ID` /
+The **LinkedIn** (`linkedin`) personal channel reads `LINKEDIN_CLIENT_ID` /
 `LINKEDIN_CLIENT_SECRET`.
 
 1. Open the [LinkedIn Developer Portal](https://www.linkedin.com/developers/apps)
@@ -173,8 +172,7 @@ One LinkedIn app covers both the **LinkedIn** (`linkedin`) and **LinkedIn Page**
    **Sign In with LinkedIn using OpenID Connect**. Neither product requires an
    app review.
 3. On the **Auth** tab, under OAuth 2.0 settings, add
-   `https://<your-domain>/integrations/social/linkedin` **and**
-   `https://<your-domain>/integrations/social/linkedin-page` to
+   `https://<your-domain>/integrations/social/linkedin` to
    **Authorized redirect URLs for your app**.
 4. Copy the **Client ID** and **Primary Client Secret** from the Auth tab:
 
@@ -185,8 +183,45 @@ LINKEDIN_CLIENT_SECRET: '<your-client-secret>'
 
 5. Restart the backend.
 
-The adapter requests `openid`, `profile`, `w_member_social`, `r_basicprofile`,
-`rw_organization_admin`, `w_organization_social`, and `r_organization_social`.
+The personal adapter requests `openid`, `profile`, and `w_member_social` only.
+
+**LinkedIn Page** (`linkedin-page`) cannot share the personal app: it
+requests the organization scopes (`rw_organization_admin`,
+`w_organization_social`, `r_organization_social`), which only come with the
+**Community Management API** product — and LinkedIn requires that product to
+be the ONLY product on the app. Create a second, dedicated app:
+
+1. Open the [LinkedIn Developer Portal](https://www.linkedin.com/developers/apps)
+   and create a NEW app (separate from the personal one above), linked to the
+   LinkedIn Page you want to post to.
+2. On the **Products** tab, request access to **Community Management API** —
+   and nothing else. Do NOT add Share on LinkedIn or Sign In with LinkedIn;
+   LinkedIn rejects the page-channel OAuth flow when the app carries any
+   other product.
+3. On the **Settings** tab, under **Verification**, verify the app against
+   the linked Page: generate the verification URL and open it while signed in
+   as a super admin of that Page. The organization scopes stay inert until
+   the app is verified.
+4. On the **Auth** tab, under OAuth 2.0 settings, add
+   `https://<your-domain>/integrations/social/linkedin-page` to
+   **Authorized redirect URLs for your app**.
+5. Copy the **Client ID** and **Primary Client Secret** from the Auth tab —
+   the page app reads its OWN env pair (`linkedin-page` never falls back to
+   the personal app's keys):
+
+```yaml
+LINKEDIN_PAGE_CLIENT_ID: '<dedicated-page-app-client-id>'
+LINKEDIN_PAGE_CLIENT_SECRET: '<dedicated-page-app-client-secret>'
+```
+
+6. Restart the backend.
+
+The page adapter requests `openid`, `profile`, `w_member_social`,
+`r_basicprofile`, `rw_organization_admin`, `w_organization_social`, and
+`r_organization_social`. Connecting is two steps: after OAuth, the tenant
+picks which of their administered Pages to post to. With the pair unset,
+orgs can still enter their own page app per credential set (Advanced → use
+your own app).
 
 ## Telegram
 
@@ -463,8 +498,18 @@ MEWE_API_KEY: '<your-api-key>'
    `https://<your-domain>/integrations/social/pinterest`. The app requests
    the scopes `boards:read`, `boards:write`, `pins:read`, `pins:write`,
    `user_accounts:read`.
-3. Trial access covers development; apply for standard access before serving
-   the general public.
+3. Trial access covers development; apply for Standard access (a short demo
+   video of the OAuth flow + a pin being created) before serving the general
+   public. On Trial, production pin creation is blocked (API error 29). To
+   test posting end-to-end before approval, point the data plane at
+   Pinterest's API Sandbox — the sandbox has its OWN tokens (generate one in
+   the developer portal; production OAuth tokens are rejected there), so this
+   is a testing escape hatch, not a tenant flow. OAuth and identity always
+   stay on production:
+
+```yaml
+PINTEREST_API_BASE: 'https://api-sandbox.pinterest.com'
+```
 4. Copy the App ID and App Secret:
 
 ```yaml

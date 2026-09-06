@@ -41,6 +41,17 @@ export class PinterestProvider
   ];
   override maxConcurrentJob = 3; // Pinterest has more lenient rate limits
 
+  // Pinterest Trial apps may not write to production (error 29: "Apps with
+  // Trial access may not create Pins in production — use API Sandbox"). The
+  // sandbox has its OWN tokens (portal-generated; production OAuth tokens are
+  // rejected by the sandbox and vice versa). PINTEREST_API_BASE moves the
+  // DATA plane (boards/media/pins/analytics) to the sandbox for testing the
+  // integration end-to-end before Standard approval; OAuth + identity stay on
+  // production so connect keeps working either way.
+  private get apiBase() {
+    return process.env.PINTEREST_API_BASE || 'https://api.pinterest.com';
+  }
+
   override setupDescriptor: ChannelSetupDescriptor = {
     authType: 'oauth2',
     credentialFields: [
@@ -177,6 +188,9 @@ export class PinterestProvider
     ).json();
 
     const { id, profile_image, username } = await (
+      // Identity lookups always stay on production: OAuth issues production
+      // tokens, and the sandbox rejects them. PINTEREST_API_BASE moves only
+      // the data plane (boards/media/pins/analytics).
       await this.fetch('https://api.pinterest.com/v5/user_account', {
         method: 'GET',
         headers: {
@@ -239,6 +253,7 @@ export class PinterestProvider
     this.checkScopes(this.scopes, scope);
 
     const { id, profile_image, username } = await (
+      // Identity on production — see refreshToken above.
       await this.fetch('https://api.pinterest.com/v5/user_account', {
         method: 'GET',
         headers: {
@@ -261,7 +276,7 @@ export class PinterestProvider
   @Tool({ description: 'List of boards', dataSchema: [] })
   async boards(accessToken: string) {
     const { items } = await (
-      await this.fetch('https://api.pinterest.com/v5/boards?page_size=250', {
+      await this.fetch(`${this.apiBase}/v5/boards?page_size=250`, {
         method: 'GET',
         headers: {
           Authorization: `Bearer ${accessToken}`,
@@ -343,7 +358,7 @@ export class PinterestProvider
 
     if (findMp4) {
       const { upload_url, media_id, upload_parameters } = await (
-        await this.fetch('https://api.pinterest.com/v5/media', {
+        await this.fetch(`${this.apiBase}/v5/media`, {
           method: 'POST',
           body: JSON.stringify({
             media_type: 'video',
@@ -416,7 +431,7 @@ export class PinterestProvider
       do {
         const mediafile = await (
           await this.fetch(
-            'https://api.pinterest.com/v5/media/' + media_id,
+            `${this.apiBase}/v5/media/` + media_id,
             {
               method: 'GET',
               headers: {
@@ -474,7 +489,7 @@ export class PinterestProvider
     }));
 
     const { id: pId } = await (
-      await this.fetch('https://api.pinterest.com/v5/pins', {
+      await this.fetch(`${this.apiBase}/v5/pins`, {
         method: 'POST',
         headers: {
           Authorization: `Bearer ${accessToken}`,
@@ -535,7 +550,7 @@ export class PinterestProvider
       all: { daily_metrics },
     } = await (
       await this.fetch(
-        `https://api.pinterest.com/v5/user_account/analytics?start_date=${since}&end_date=${until}`,
+        `${this.apiBase}/v5/user_account/analytics?start_date=${since}&end_date=${until}`,
         {
           method: 'GET',
           headers: {
@@ -600,7 +615,7 @@ export class PinterestProvider
     try {
       // Fetch pin analytics from Pinterest API
       const response = await this.fetch(
-        `https://api.pinterest.com/v5/pins/${postId}/analytics?start_date=${since}&end_date=${today}&metric_types=IMPRESSION,PIN_CLICK,OUTBOUND_CLICK,SAVE`,
+        `${this.apiBase}/v5/pins/${postId}/analytics?start_date=${since}&end_date=${today}&metric_types=IMPRESSION,PIN_CLICK,OUTBOUND_CLICK,SAVE`,
         {
           method: 'GET',
           headers: {

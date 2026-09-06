@@ -56,10 +56,15 @@ describe('channel-env-credentials', () => {
     expect(isEnvEnabled('linkedin')).toBe(true);
   });
 
-  it('shares LINKEDIN_* across linkedin and linkedin-page', () => {
-    process.env.LINKEDIN_CLIENT_ID = 'cid';
-    process.env.LINKEDIN_CLIENT_SECRET = 'csecret';
-    expect(getEnvClientInfo('linkedin-page')?.client_id).toBe('cid');
+  it('linkedin-page reads its OWN env pair (dedicated CMA-only app), never LINKEDIN_*', () => {
+    process.env.LINKEDIN_CLIENT_ID = 'personal-cid';
+    process.env.LINKEDIN_CLIENT_SECRET = 'personal-csecret';
+    expect(getEnvClientInfo('linkedin-page')).toBeUndefined();
+    expect(isEnvEnabled('linkedin-page')).toBe(false);
+
+    process.env.LINKEDIN_PAGE_CLIENT_ID = 'page-cid';
+    process.env.LINKEDIN_PAGE_CLIENT_SECRET = 'page-csecret';
+    expect(getEnvClientInfo('linkedin-page')?.client_id).toBe('page-cid');
   });
 
   it('requires both halves of a pair (incomplete = undefined)', () => {

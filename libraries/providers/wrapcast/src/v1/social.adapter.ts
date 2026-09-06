@@ -7,6 +7,7 @@ import {
   SocialProvider,
 } from '@postmill-ai/provider-kernel';
 import { makeId, makeOauthState } from '@postmill-ai/provider-kernel';
+import { getOrgCredential } from '@postmill-ai/provider-kernel';
 import dayjs from 'dayjs';
 import {
   SocialAbstract,
@@ -244,7 +245,13 @@ export class FarcasterProvider
     id: string,
     integration: Integration
   ) {
-    const search = await this.getClient(integration.organizationId).searchChannels({
+    // Channel search authenticates with the Neynar app's API key (env platform
+    // app: NEYNAR_SECRET_KEY, gap-filled into the org credential cache), NOT
+    // the integration token — that's the user's signer UUID.
+    const apiKey =
+      getOrgCredential(integration.organizationId, 'wrapcast', 'clientSecret') ||
+      '';
+    const search = await this.getClient(apiKey).searchChannels({
       q: data.word,
       limit: 10,
     });

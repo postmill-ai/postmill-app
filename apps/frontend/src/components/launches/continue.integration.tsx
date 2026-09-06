@@ -53,6 +53,13 @@ export const ContinueIntegration: FC<{
     tRef.current = t;
   });
 
+  // The OAuth state AND code are single-use, and several deps above can
+  // change identity on unrelated re-renders — without this guard a second
+  // effect fire re-POSTs the spent state/code, the provider rejects it, and
+  // a SUCCESSFUL connect ends on a false "Could not add provider" screen in
+  // the popup (observed live on Pinterest, 2026-09-06).
+  const firedRef = useRef(false);
+
   // Helper to handle navigation - redirects if logged or returnURL exists, otherwise shows inline
   const navigateOrShow = useCallback(
     (path: string, returnURL: string | undefined, successMessage: string) => {
@@ -139,8 +146,66 @@ export const ContinueIntegration: FC<{
   }, [provider, searchParams]);
 
   useEffect(() => {
+    if (firedRef.current) return;
+    firedRef.current = true;
     (async () => {
       const timezone = String(dayjs.tz().utcOffset());
+
+      // A callback with no authorization code can never succeed — POSTing it
+      // just 400s on the DTO with a raw "code must be a string" validation
+      // message that leaks into the UI and Sentry (POSTMILL-APP-9). This
+      // happens on OAuth error redirects (?error=...) — user denial or a
+      // misconfigured app — and on stray hits of the callback URL. Intercept
+      // before the POST and show a clean reason instead.
+      if (!modifiedParams.code) {
+        // X (OAuth 1.0a) signals denial as ?denied=<token>.
+        const denied =
+          searchParams.error === 'access_denied' || !!searchParams.denied;
+        const providerError = searchParams.error
+          ? `${searchParams.error}${
+              searchParams.error_description
+                ? `: ${searchParams.error_description}`
+                : ''
+            }`
+          : null;
+        // A user cancelling consent is normal flow — not Sentry noise. A
+        // platform error or a code-less callback signals misconfiguration.
+        if (!denied) {
+          Sentry.captureException(
+            new Error(
+              `Channel connect failed for ${provider}: ${
+                providerError || 'callback missing authorization code'
+              }`
+            ),
+            {
+              extra: {
+                provider,
+                error: searchParams.error,
+                errorDescription: searchParams.error_description,
+              },
+            }
+          );
+        }
+        setErrorMessage(
+          denied
+            ? tRef.current(
+                'channel_authorization_cancelled',
+                'Authorization was cancelled — nothing was connected.'
+              )
+            : providerError
+              ? tRef.current(
+                  'channel_authorization_failed',
+                  'Authorization failed: {{error}}',
+                  { error: providerError }
+                )
+              : tRef.current(
+                  'channel_authorization_missing_code',
+                  'Authorization did not complete — no authorization code was returned. Please try connecting again.'
+                )
+        );
+        setError(true);
+        return;
+      }
 
       // The POST body must stay within ConnectIntegrationDto's whitelist
       // (state/code/refresh/timezone): the global forbidNonWhitelisted pipe
@@ -301,6 +366,9 @@ export const ContinueIntegration: FC<{
     backendUrl,
     searchParams.onboarding,
     searchParams.refresh,
+    searchParams.error,
+    searchParams.error_description,
+    searchParams.denied,
   ]);
 
   const onSave = useCallback(

@@ -36,15 +36,13 @@ export class LinkedinProvider extends SocialAbstract implements SocialProvider {
   oneTimeToken = true;
 
   isBetweenSteps = false;
-  scopes = [
-    'openid',
-    'profile',
-    'w_member_social',
-    'r_basicprofile',
-    'rw_organization_admin',
-    'w_organization_social',
-    'r_organization_social',
-  ];
+  // Member scopes only: the personal channel posts as the member and reads
+  // /v2/userinfo (openid/profile). Organization scopes live on the LinkedIn
+  // Page provider (its own override) — requesting them here made the personal
+  // connect fail with unauthorized_scope_error on any app without the
+  // Community Management API product, and that product must be the ONLY
+  // product on an app, so a normal Postmill app can never carry it.
+  scopes = ['openid', 'profile', 'w_member_social'];
   override maxConcurrentJob = 2; // LinkedIn has professional posting limits
   refreshWait = true;
   editor = 'normal' as const;
@@ -121,14 +119,11 @@ export class LinkedinProvider extends SocialAbstract implements SocialProvider {
       })
     ).json();
 
-    const { vanityName } = await (
-      await this.fetch('https://api.linkedin.com/v2/me', {
-        headers: {
-          Authorization: `Bearer ${accessToken}`,
-        },
-      })
-    ).json();
-
+    // /v2/userinfo is the OIDC profile endpoint — the only identity endpoint
+    // open to apps on the modern (Sign In with OIDC) products. The legacy
+    // /v2/me is gated behind the retired r_liteprofile and 403s for any app
+    // created in the OIDC era (observed live: connect failed with an unmapped
+    // "Unknown Error").
     const {
       name,
       sub: id,
@@ -148,7 +143,7 @@ export class LinkedinProvider extends SocialAbstract implements SocialProvider {
       expiresIn: expires_in,
       name,
       picture: picture || '',
-      username: vanityName,
+      username: name,
     };
   }
 
@@ -204,20 +199,15 @@ export class LinkedinProvider extends SocialAbstract implements SocialProvider {
 
     this.checkScopes(this.scopes, scope);
 
+    // /v2/userinfo only — legacy /v2/me 403s for OIDC-era apps (see
+    // refreshToken). userinfo carries no vanity name; username falls back to
+    // the display name.
     const {
       name,
       sub: id,
       picture,
     } = await (
       await this.fetch('https://api.linkedin.com/v2/userinfo', {
-        headers: {
-          Authorization: `Bearer ${accessToken}`,
-        },
-      })
-    ).json();
-
-    const { vanityName } = await (
-      await this.fetch('https://api.linkedin.com/v2/me', {
         headers: {
           Authorization: `Bearer ${accessToken}`,
         },
@@ -231,7 +221,7 @@ export class LinkedinProvider extends SocialAbstract implements SocialProvider {
       expiresIn,
       name,
       picture,
-      username: vanityName,
+      username: name,
     };
   }
 
@@ -745,15 +735,8 @@ export class LinkedinProvider extends SocialAbstract implements SocialProvider {
       body: JSON.stringify(postPayload),
     });
 
-    if (response.status !== 201 && response.status !== 200) {
-      throw new BadBody(
-        this.identifier,
-        '{}',
-        JSON.stringify(postPayload),
-        'Error posting to LinkedIn'
-      );
-    }
-
+    // The kernel fetch already throws on any non-2xx; every 2xx (200/201/202…)
+    // is a success here, so no further status check is needed.
     return response.headers.get('x-restli-id') || '';
   }
 

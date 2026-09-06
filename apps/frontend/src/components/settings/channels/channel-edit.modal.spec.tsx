@@ -617,3 +617,121 @@ describe('ChannelConfigForm token connect', () => {
     expect(mockToast).toHaveBeenCalledWith('Channel Connected!', 'success');
   });
 });
+
+const DIRECT_SETUP = {
+  authType: 'direct' as const,
+  credentialFields: [],
+  setupSteps: ['Create an app password', 'Enter your handle'],
+};
+
+const DIRECT_CUSTOM_FIELDS = [
+  {
+    key: 'service',
+    label: 'Service',
+    defaultValue: 'https://bsky.social',
+    validation: '/^https?:\\/\\/.+$/',
+    type: 'text' as const,
+  },
+  { key: 'identifier', label: 'Identifier', validation: '/^.+$/', type: 'text' as const },
+  { key: 'password', label: 'Password', validation: '/^.{3,}$/', type: 'password' as const },
+];
+
+function renderDirectForm() {
+  const onClose = vi.fn();
+  const onSaved = vi.fn();
+  const utils = render(
+    <SWRConfig value={{ provider: () => new Map() }}>
+      <ChannelConfigForm
+        identifier="bluesky"
+        providerName="Bluesky"
+        platformConfigured={false}
+        setup={DIRECT_SETUP}
+        customFields={DIRECT_CUSTOM_FIELDS}
+        onClose={onClose}
+        onSaved={onSaved}
+      />
+    </SWRConfig>
+  );
+  return { ...utils, onClose, onSaved };
+}
+
+describe('ChannelConfigForm direct connect (customFields)', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockFetch.mockImplementation((url: string) => {
+      if (url === '/integrations/list') {
+        return Promise.resolve({ ok: true, json: async () => ({ integrations: [] }) });
+      }
+      if (url === '/channels/config') {
+        return Promise.resolve({ ok: true, json: async () => ({ id: 'cfg-bsky' }) });
+      }
+      if (url.startsWith('/integrations/social/')) {
+        return Promise.resolve({ ok: true, json: async () => ({ url: 'nonce-bsky' }) });
+      }
+      return Promise.resolve({ ok: true, json: async () => ({}) });
+    });
+  });
+
+  it('renders the account-credential fields and Connect button', () => {
+    renderDirectForm();
+    expect(screen.getByText('Identifier')).toBeTruthy();
+    expect(screen.getByText('Password')).toBeTruthy();
+    expect(
+      screen.getByRole('button', { name: 'Connect with Bluesky' })
+    ).toBeTruthy();
+  });
+
+  it('rejects invalid field values before saving', () => {
+    renderDirectForm();
+    fireEvent.change(screen.getByPlaceholderText('e.g. Marketing LinkedIn'), {
+      target: { value: 'Bluesky set' },
+    });
+    // Identifier empty — fails its /^.+$/ validation.
+    fireEvent.click(screen.getByRole('button', { name: 'Connect with Bluesky' }));
+    expect(mockToast).toHaveBeenCalledWith('Identifier is invalid', 'warning');
+    expect(
+      mockFetch.mock.calls.some(([u]) => u === '/channels/config')
+    ).toBe(false);
+  });
+
+  it('saves the set ENABLED, then completes the connect inline with base64(JSON) code', async () => {
+    const { onClose, onSaved } = renderDirectForm();
+    fireEvent.change(screen.getByPlaceholderText('e.g. Marketing LinkedIn'), {
+      target: { value: 'Bluesky set' },
+    });
+    fireEvent.change(screen.getByDisplayValue('https://bsky.social'), {
+      target: { value: 'https://bsky.social' },
+    });
+    const inputs = screen.getAllByDisplayValue('');
+    fireEvent.change(inputs[0], { target: { value: 'postmill.bsky.social' } });
+    fireEvent.change(inputs[1], { target: { value: 'app-password-x' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Connect with Bluesky' }));
+
+    await waitFor(() => expect(onClose).toHaveBeenCalled());
+    // Direct sets enable up front: connect initiation is gated on an enabled
+    // set, and direct sets hold no app credentials to wait for.
+    const createCall = mockFetch.mock.calls.find(([u]) => u === '/channels/config');
+    expect(JSON.parse(createCall![1].body).enabled).toBe(true);
+    // State minted against the saved set.
+    expect(
+      mockFetch.mock.calls.some(
+        ([u]) => u === '/integrations/social/bluesky?config=cfg-bsky'
+      )
+    ).toBe(true);
+    // Inline social-connect POST — code is base64(JSON) of the field values,
+    // the same payload the old composer connect flow posted.
+    const connectCall = mockFetch.mock.calls.find(
+      ([u]) => u === '/integrations/social-connect/bluesky'
+    );
+    expect(connectCall).toBeTruthy();
+    const body = JSON.parse(connectCall![1].body);
+    expect(body.state).toBe('nonce-bsky');
+    expect(JSON.parse(atob(body.code))).toEqual({
+      service: 'https://bsky.social',
+      identifier: 'postmill.bsky.social',
+      password: 'app-password-x',
+    });
+    expect(onSaved).toHaveBeenCalled();
+    expect(mockToast).toHaveBeenCalledWith('Channel Connected!', 'success');
+  });
+});

@@ -139,17 +139,6 @@ function respError(body: string, status: number) {
   };
 }
 
-// TikTok video posts download the media bytes first (FILE_UPLOAD flow).
-function respVideoDownload() {
-  return {
-    status: 200, ok: true,
-    arrayBuffer: vi.fn().mockResolvedValue(new Uint8Array([1, 2, 3, 4]).buffer),
-    json: vi.fn().mockResolvedValue({}),
-    text: vi.fn().mockResolvedValue(''),
-    headers: new Map(),
-  };
-}
-
 // ─────────────────────────────────────────────────────────────
 // 1. X PROVIDER
 // ─────────────────────────────────────────────────────────────
@@ -1017,14 +1006,12 @@ describe('tiktok deep', () => {
 
   it('throws RefreshTokenError on access_token_invalid', async () => {
     globalThis.fetch = vi.fn()
-      .mockImplementationOnce(() => Promise.resolve(respVideoDownload()))
       .mockImplementationOnce(() => Promise.resolve(respError('access_token_invalid', 400)));
     await expect(provider.post('user123', 'tok', [{ id: 'p1', message: 'Test video', media: [{ path: 'https://ex.com/vid.mp4' }], settings: { content_posting_method: 'DIRECT_POST', privacy_level: 'PUBLIC_TO_EVERYONE', duet: true, comment: true, stitch: true, brand_content_toggle: false, brand_organic_toggle: false } }], { profile: 'user123' } as any)).rejects.toThrow(RefreshTokenError);
   });
 
   it('throws BadBodyError on invalid_params', async () => {
     globalThis.fetch = vi.fn()
-      .mockImplementationOnce(() => Promise.resolve(respVideoDownload()))
       .mockImplementationOnce(() => Promise.resolve(respError('invalid_params', 400)));
     await expect(provider.post('user123', 'tok', [{ id: 'p1', message: 'Test video', media: [{ path: 'https://ex.com/vid.mp4' }], settings: { content_posting_method: 'DIRECT_POST', privacy_level: 'PUBLIC_TO_EVERYONE', duet: true, comment: true, stitch: true, brand_content_toggle: false, brand_organic_toggle: false } }], { profile: 'user123' } as any)).rejects.toThrow(BadBodyError);
   });
@@ -1063,7 +1050,6 @@ describe('tiktok deep', () => {
 
   it('post uploads video', async () => {
     globalThis.fetch = vi.fn()
-      .mockImplementationOnce(() => Promise.resolve(respVideoDownload()))
       .mockImplementationOnce(() => Promise.resolve(resp({ data: { publish_id: 'pub-123', upload_url: 'https://upload.tiktokapis.com/abc' } })))
       .mockImplementationOnce(() => Promise.resolve(resp({})))
       .mockImplementationOnce(() => Promise.resolve(resp({ data: { status: 'PUBLISH_COMPLETE', publicaly_available_post_id: ['vid-123'] } })));
@@ -1074,7 +1060,6 @@ describe('tiktok deep', () => {
 
   it('post sends to inbox when status is SEND_TO_USER_INBOX', async () => {
     globalThis.fetch = vi.fn()
-      .mockImplementationOnce(() => Promise.resolve(respVideoDownload()))
       .mockImplementationOnce(() => Promise.resolve(resp({ data: { publish_id: 'pub-456', upload_url: 'https://upload.tiktokapis.com/abc' } })))
       .mockImplementationOnce(() => Promise.resolve(resp({})))
       .mockImplementationOnce(() => Promise.resolve(resp({ data: { status: 'SEND_TO_USER_INBOX' } })));
@@ -1084,7 +1069,6 @@ describe('tiktok deep', () => {
 
   it('post uses UPLOAD method for video', async () => {
     globalThis.fetch = vi.fn()
-      .mockImplementationOnce(() => Promise.resolve(respVideoDownload()))
       .mockImplementationOnce(() => Promise.resolve(resp({ data: { publish_id: 'pub-789', upload_url: 'https://upload.tiktokapis.com/abc' } })))
       .mockImplementationOnce(() => Promise.resolve(resp({})))
       .mockImplementationOnce(() => Promise.resolve(resp({ data: { status: 'PUBLISH_COMPLETE', publicaly_available_post_id: ['vid-789'] } })));
@@ -1216,7 +1200,6 @@ describe('linkedin deep', () => {
   it('refreshToken refreshes via oauth', async () => {
     globalThis.fetch = vi.fn()
       .mockImplementationOnce(() => Promise.resolve(resp({ access_token: 'new-tok', refresh_token: 'new-rtok', expires_in: 7200 })))
-      .mockImplementationOnce(() => Promise.resolve(resp({ vanityName: 'testuser' })))
       .mockImplementationOnce(() => Promise.resolve(resp({ name: 'Test', sub: '123', picture: 'https://ex.com/pic.jpg' })));
     const r = await provider.refreshToken('old-rtok');
     expect(r.accessToken).toBe('new-tok');
@@ -1232,9 +1215,8 @@ describe('linkedin deep', () => {
 
   it('authenticate exchanges code for tokens', async () => {
     globalThis.fetch = vi.fn()
-      .mockImplementationOnce(() => Promise.resolve(resp({ access_token: 'tok', expires_in: 7200, refresh_token: 'rtok', scope: 'openid profile w_member_social r_basicprofile rw_organization_admin w_organization_social r_organization_social' })))
+      .mockImplementationOnce(() => Promise.resolve(resp({ access_token: 'tok', expires_in: 7200, refresh_token: 'rtok', scope: 'openid profile w_member_social' })))
       .mockImplementationOnce(() => Promise.resolve(resp({ name: 'Test', sub: '123', picture: 'https://ex.com/pic.jpg' })))
-      .mockImplementationOnce(() => Promise.resolve(resp({ vanityName: 'testuser' })));
     const r = await provider.authenticate({ code: 'code', codeVerifier: 'v' });
     expect(r.accessToken).toBe('tok');
     expect(r.id).toBe('123');
@@ -1311,7 +1293,6 @@ describe('linkedin-page deep', () => {
   it('refreshToken refreshes via oauth', async () => {
     globalThis.fetch = vi.fn()
       .mockImplementationOnce(() => Promise.resolve(resp({ access_token: 'new-tok', expires_in: 7200, refresh_token: 'new-rtok' })))
-      .mockImplementationOnce(() => Promise.resolve(resp({ vanityName: 'testuser' })))
       .mockImplementationOnce(() => Promise.resolve(resp({ name: 'Test', sub: '123', picture: 'https://ex.com/pic.jpg' })));
     const r = await provider.refreshToken('old-rtok');
     expect(r.accessToken).toBe('new-tok');
@@ -1327,7 +1308,6 @@ describe('linkedin-page deep', () => {
     globalThis.fetch = vi.fn()
       .mockImplementationOnce(() => Promise.resolve(resp({ access_token: 'tok', expires_in: 7200, refresh_token: 'rtok', scope: 'openid profile w_member_social r_basicprofile rw_organization_admin w_organization_social r_organization_social' })))
       .mockImplementationOnce(() => Promise.resolve(resp({ name: 'Test', sub: '123', picture: 'https://ex.com/pic.jpg' })))
-      .mockImplementationOnce(() => Promise.resolve(resp({ vanityName: 'testuser' })));
     const r = await provider.authenticate({ code: 'code', codeVerifier: 'v' });
     expect(r.accessToken).toBe('tok');
   });

@@ -23,6 +23,8 @@ describe('OrgProviderConfigService audit (F2c)', () => {
       latestActiveVersion: vi.fn().mockReturnValue('v1'),
       // 1.1: write paths validate the version through this.
       resolveWriteVersion: vi.fn((_d: string, _p: string, v?: string) => v ?? 'v1'),
+      // The direct-channel enable-guard escape reads the descriptor through this.
+      resolveProvider: vi.fn().mockReturnValue(undefined),
       // 1.3a: cache invalidation on create/update/delete.
       invalidate: vi.fn(),
     } as any;
@@ -303,6 +305,60 @@ describe('OrgProviderConfigService audit (F2c)', () => {
         'cfg1',
         expect.objectContaining({ enabled: true })
       );
+    });
+
+    // 'direct' channels (Bluesky & co.) have no developer app — the account
+    // credentials live on the Integration — so their sets enable keyless.
+    it('allows enabling a credential-less set for a direct channel (create)', async () => {
+      resolution.resolveProvider.mockReturnValue({
+        capability: { setupDescriptor: { authType: 'direct' } },
+      });
+      repository.create.mockResolvedValue(
+        baseRow({ identifier: 'bluesky', clientId: null, clientSecret: null })
+      );
+
+      await service.createConfig(
+        'o1',
+        { identifier: 'bluesky', name: 'Bluesky Test', enabled: true },
+        'u1'
+      );
+
+      expect(repository.create).toHaveBeenCalledWith(
+        'o1',
+        expect.objectContaining({ identifier: 'bluesky', enabled: true })
+      );
+    });
+
+    it('allows enabling a credential-less set for a direct channel (update)', async () => {
+      resolution.resolveProvider.mockReturnValue({
+        capability: { setupDescriptor: { authType: 'direct' } },
+      });
+      repository.getById.mockResolvedValue(
+        baseRow({ identifier: 'bluesky', enabled: false, clientId: null, clientSecret: null })
+      );
+      repository.updateById.mockResolvedValue(baseRow({ identifier: 'bluesky' }));
+
+      await service.updateConfig('o1', 'cfg1', { enabled: true }, 'u1');
+
+      expect(repository.updateById).toHaveBeenCalledWith(
+        'o1',
+        'cfg1',
+        expect.objectContaining({ enabled: true })
+      );
+    });
+
+    it('still rejects keyless enabling when resolution has no direct descriptor', async () => {
+      resolution.resolveProvider.mockImplementation(() => {
+        throw new Error('unknown provider');
+      });
+      await expect(
+        service.createConfig(
+          'o1',
+          { identifier: 'no-env-provider', name: 'App', enabled: true },
+          'u1'
+        )
+      ).rejects.toThrow(ENABLED_ERROR);
+      expect(repository.create).not.toHaveBeenCalled();
     });
   });
 

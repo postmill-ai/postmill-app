@@ -18,6 +18,7 @@ import {
 import { TikTokDto } from '@postmill-ai/provider-kernel';
 import { timer } from '@postmill-ai/helpers/utils/timer';
 import { hasExtension } from '@postmill-ai/helpers/utils/has.extension';
+import { readOrFetch } from '@postmill-ai/helpers/utils/read.or.fetch';
 import { Integration } from '@prisma/client';
 import { Rules } from '@postmill-ai/provider-kernel';
 
@@ -707,11 +708,10 @@ export class TiktokProvider extends SocialAbstract implements SocialProvider {
       if (!videoPath) {
         throw new Error('TikTok video post needs a video attachment');
       }
-      const videoRes = await fetch(videoPath);
-      if (!videoRes.ok) {
-        throw new Error(`Failed to download video media (${videoRes.status})`);
-      }
-      videoBuffer = Buffer.from(await videoRes.arrayBuffer());
+      // readOrFetch covers public URLs (safeFetch through the SSRF-safe egress)
+      // and local-storage disk paths (readFileSync) — posts.service hands
+      // adapters a disk path when UPLOAD_DIRECTORY storage is in use.
+      videoBuffer = await readOrFetch(videoPath);
       // TikTok permits one whole-file chunk up to 64MB; real chunking (5–64MB
       // chunks) is a follow-up if bigger videos become a need.
       if (videoBuffer.length > 64 * 1024 * 1024) {
