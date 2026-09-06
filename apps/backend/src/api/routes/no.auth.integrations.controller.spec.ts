@@ -224,6 +224,29 @@ describe('NoAuthIntegrationsController — OAuth state replay (F11)', () => {
     expect(provider.authenticate).toHaveBeenCalledTimes(1);
   });
 
+  it('resolves the provider WITH the org from organization:${state} (per-org enabled gate)', async () => {
+    const provider = makeProvider();
+    getSocialIntegration.mockResolvedValue(provider);
+    redisStore.set('login:state-org', 'verifier');
+    redisStore.set('organization:state-org', 'org-77');
+
+    await controller.connectSocialMedia('testprovider', body('state-org'));
+
+    // Org-less resolution 404'd every provider that is enabled only by an org
+    // credential set — BYO OAuth apps and 'direct' channels (Bluesky & co.).
+    expect(getSocialIntegration).toHaveBeenCalledWith(
+      'testprovider',
+      'org-77'
+    );
+  });
+
+  it('unknown state: rejects before resolving the provider', async () => {
+    await expect(
+      controller.connectSocialMedia('testprovider', body('state-missing'))
+    ).rejects.toThrow('Invalid or expired state');
+    expect(getSocialIntegration).not.toHaveBeenCalled();
+  });
+
   it('two-step provider: keeps organization:${state} for the page-selection save but still blocks connect replay', async () => {
     const provider = makeProvider({
       isBetweenSteps: true,

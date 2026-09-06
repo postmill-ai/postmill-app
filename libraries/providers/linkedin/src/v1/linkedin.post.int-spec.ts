@@ -85,3 +85,24 @@ describe('linkedin provider post() contract', () => {
     expect(out[0].postId).toBe('urn:li:share:999');
   });
 });
+
+describe('linkedin provider post() status tolerance', () => {
+  it('treats any 2xx (e.g. 202) as success and returns the x-restli-id', async () => {
+    const recs = recorder(() =>
+      res({}, { status: 202, headers: { 'x-restli-id': 'urn:li:share:202' } })
+    );
+    const provider = new LinkedinProvider();
+
+    const out = await provider.post(
+      'person-1',
+      'li-access-token',
+      [{ id: 'p1', message: 'accepted', media: [], settings: {} } as any],
+      {} as any,
+      undefined,
+      'personal'
+    );
+
+    expect(recs[0].method).toBe('POST');
+    expect(out[0].postId).toBe('urn:li:share:202');
+  });
+});

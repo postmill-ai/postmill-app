@@ -9,6 +9,7 @@ const h = vi.hoisted(() => ({
   postArgs: [] as any[],
   loginArgs: [] as any[],
   agentOpts: [] as any[],
+  serviceAuthArgs: [] as any[],
 }));
 
 vi.mock('@postmill-ai/provider-kernel', async (orig) => {
@@ -77,9 +78,12 @@ vi.mock('@atproto/api', () => ({
     com = {
       atproto: {
         server: {
-          getServiceAuth: async () => ({
-            data: { token: 'service-token' },
-          }),
+          getServiceAuth: async (args: any) => {
+            h.serviceAuthArgs.push(args);
+            return {
+              data: { token: 'service-token' },
+            };
+          },
         },
       },
     };
@@ -129,6 +133,7 @@ beforeEach(() => {
   h.postArgs.length = 0;
   h.loginArgs.length = 0;
   h.agentOpts.length = 0;
+  h.serviceAuthArgs.length = 0;
   h.getJobStatusMock.mockReset();
 
   setSocialFetchPorts({
@@ -312,5 +317,97 @@ describe('BlueskyProvider remediation', () => {
     );
     expect(h.getJobStatusMock).toHaveBeenCalledTimes(20);
     expect(h.getJobStatusMock).toHaveBeenLastCalledWith({ jobId: 'job-1' });
+  });
+
+  it('resolves the service-auth audience from the account PDS DID doc', async () => {
+    const videoUrl = 'https://cdn.example.com/video.mp4';
+    (safeFetch as any).mockImplementation(async (url: string) => {
+      if (url.startsWith('https://plc.directory/')) {
+        // Accounts on sharded bsky.network PDSes: the entryway host
+        // (bsky.social) is NOT the token audience (observed live:
+        // "invalid token audience ... should be the user's PDS DID").
+        return new Response(
+          JSON.stringify({
+            service: [
+              {
+                id: '#atproto_pds',
+                type: 'AtprotoPersonalDataServer',
+                serviceEndpoint: 'https://discina.us-west.host.bsky.network',
+              },
+            ],
+          }),
+          { status: 200 }
+        );
+      }
+      if (url.includes('app.bsky.video.uploadVideo')) {
+        return new Response(JSON.stringify({ jobId: 'job-1' }), { status: 200 });
+      }
+      return new Response('media-bytes', { status: 200 });
+    });
+
+    h.getJobStatusMock.mockResolvedValue({
+      data: {
+        jobStatus: { state: 'JOB_STATE_COMPLETED', blob: { $link: 'vid-blob' } },
+      },
+    });
+
+    const provider = new BlueskyProvider();
+    const result = await provider.post(
+      'me.bsky.social',
+      'unused-access-token',
+      [
+        {
+          id: 'p1',
+          message: 'video post',
+          media: [{ path: videoUrl }],
+          settings: {},
+        } as any,
+      ],
+      { customInstanceDetails: 'encrypted' } as any
+    );
+
+    expect(h.serviceAuthArgs[0].aud).toBe(
+      'did:web:discina.us-west.host.bsky.network'
+    );
+    expect(result[0].status).toBe('completed');
+  });
+
+  it('surfaces the real reason when the video service rejects the upload (200 + error payload)', async () => {
+    const videoUrl = 'https://cdn.example.com/video.mp4';
+    (safeFetch as any).mockImplementation(async (url: string) => {
+      if (url.includes('app.bsky.video.uploadVideo')) {
+        // The video service answers rejections with HTTP 200 and an error
+        // payload (observed live: unconfirmed_email surfaced downstream as a
+        // misleading XRPCError "missing jobId").
+        return new Response(
+          JSON.stringify({ did: '', error: 'unconfirmed_email', jobId: '', state: '' }),
+          { status: 200 }
+        );
+      }
+      return new Response('media-bytes', { status: 200 });
+    });
+
+    const provider = new BlueskyProvider();
+    const err = await provider
+      .post(
+        'me.bsky.social',
+        'unused-access-token',
+        [
+          {
+            id: 'p1',
+            message: 'video post',
+            media: [{ path: videoUrl }],
+            settings: {},
+          } as any,
+        ],
+        { customInstanceDetails: 'encrypted' } as any
+      )
+      .then(
+        () => null,
+        (e) => e
+      );
+
+    const text = `${(err as Error)?.message} ${(err as TestBadBody)?.reason}`;
+    expect(text).toContain('unconfirmed_email');
   });
 });

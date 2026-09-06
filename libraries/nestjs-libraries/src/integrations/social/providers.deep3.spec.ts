@@ -298,6 +298,8 @@ describe('bluesky deep', () => {
   it('post with video', async () => {
     const integration = { customInstanceDetails: JSON.stringify({ service: 'https://bsky.social', identifier: 'testuser', password: 'pass' }) } as any;
     globalThis.fetch = vi.fn()
+      // DID doc lookup for the service-auth audience (account's own PDS).
+      .mockImplementationOnce(() => Promise.resolve({ ok: true, status: 200, json: vi.fn().mockResolvedValue({ service: [{ id: '#atproto_pds', serviceEndpoint: 'https://pds.example.com' }] }), text: vi.fn(), headers: new Map() }))
       .mockImplementationOnce(() => Promise.resolve({ ok: true, status: 200, arrayBuffer: vi.fn().mockResolvedValue(Buffer.from('video-data').buffer), json: vi.fn(), text: vi.fn(), headers: new Map() }))
       .mockImplementationOnce(() => Promise.resolve({ ok: true, status: 200, json: vi.fn().mockResolvedValue({ jobId: 'job-123', blob: undefined }), text: vi.fn(), headers: new Map() }));
     const r = await provider.post('did:plc:123', 'tok', [{ id: 'p1', message: 'With video', settings: {}, media: [{ type: 'video', path: 'https://ex.com/vid.mp4' }] }], integration);

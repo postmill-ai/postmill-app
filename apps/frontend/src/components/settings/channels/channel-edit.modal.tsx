@@ -62,6 +62,18 @@ export interface ChannelSetupDescriptor {
   setupSteps?: string[];
 }
 
+// Account-credential fields declared by 'direct' providers (Bluesky & co.) —
+// served by the provider catalog's customFields and rendered by this form so
+// direct channels can connect from Settings (the composer flow that used to
+// collect them is gone).
+export interface ChannelCustomField {
+  key: string;
+  label: string;
+  defaultValue?: string;
+  validation: string;
+  type: 'text' | 'password';
+}
+
 export interface ChannelVpnSelection {
   enabled: boolean;
   identifier?: string;
@@ -93,6 +105,7 @@ interface ChannelConfigFormProps {
   setup?: ChannelSetupDescriptor | null;
   callbackUrl?: string;
   platformConfigured?: boolean; // env supplies a platform app for this provider
+  customFields?: ChannelCustomField[] | false; // 'direct' providers' account fields
   config?: ChannelConfigInstance; // present => edit mode
   onClose: () => void;
   onSaved: () => void;
@@ -105,6 +118,7 @@ export const ChannelConfigForm: FC<ChannelConfigFormProps> = ({
   setup = null,
   callbackUrl = '',
   platformConfigured = false,
+  customFields = false,
   config,
   onClose,
   onSaved,
@@ -213,18 +227,36 @@ export const ChannelConfigForm: FC<ChannelConfigFormProps> = ({
       : ''
   );
 
+  // 'direct' providers' account-credential fields (Bluesky handle + app
+  // password, …), rendered as the connect form in Mode B.
+  const directFields: ChannelCustomField[] | null =
+    isDirect && Array.isArray(customFields) && customFields.length
+      ? customFields
+      : null;
+  const [directValues, setDirectValues] = useState<Record<string, string>>(() => {
+    const out: Record<string, string> = {};
+    for (const field of customFields || []) {
+      out[field.key] = field.defaultValue || '';
+    }
+    return out;
+  });
+
   // Saves the config set (creating it first when needed). Returns the saved
   // set's id on success, or null when validation/save failed (the toast is
   // already shown). Shared by "Save" and by the platform-app "Connect" button,
-  // which needs the set's id to bind the OAuth flow to it.
-  const saveConfig = useCallback(async (): Promise<{ id: string | null } | null> => {
+  // which needs the set's id to bind the OAuth flow to it. `opts.enable`
+  // overrides the enabled flag for the save — direct-channel Connect enables
+  // the set up front because the connect initiation itself is gated on an
+  // enabled set (and direct sets hold no credentials to wait for).
+  const saveConfig = useCallback(async (opts?: { enable?: boolean }): Promise<{ id: string | null } | null> => {
+    const effEnabled = opts?.enable ?? enabled;
     if (!name.trim()) {
       toaster.show(t('channel_name_required', 'Please enter a name for this channel.'), 'warning');
       return null;
     }
     // A platform app supplies the OAuth credentials, so no Client ID is
     // required to enable the set when one is configured for this provider.
-    if (enabled && !isDirect && !clientId.trim() && !isConfigured && !platformConfigured) {
+    if (effEnabled && !isDirect && !clientId.trim() && !isConfigured && !platformConfigured) {
       toaster.show(
         t('credentials_required', 'Please enter a Client ID / API Key before enabling this provider.'),
         'warning'
@@ -236,7 +268,7 @@ export const ChannelConfigForm: FC<ChannelConfigFormProps> = ({
     try {
       const payload: Record<string, any> = {
         name: name.trim(),
-        enabled,
+        enabled: effEnabled,
       };
       if (clientId.trim()) payload.clientId = clientId.trim();
       if (clientSecret.trim()) payload.clientSecret = clientSecret.trim();
@@ -409,6 +441,50 @@ export const ChannelConfigForm: FC<ChannelConfigFormProps> = ({
       setConnecting(false);
     }
   }, [saveConfig, fetch, identifier, Web3Connect, toaster, t, completeTokenConnect]);
+
+  // Direct-channel connect (Bluesky & co.): validate the account-credential
+  // fields, save the set ENABLED (direct sets hold no app credentials, and
+  // connect initiation is gated on an enabled set), mint the state, then
+  // complete inline — code is base64(JSON) of the field values, the same
+  // payload the old composer connect flow posted.
+  const handleDirectConnect = useCallback(async () => {
+    if (!directFields) return;
+    for (const field of directFields) {
+      const value = (directValues[field.key] || '').trim();
+      const splitter = field.validation.split('/');
+      const regex = new RegExp(splitter.slice(1, -1).join('/'), splitter.pop());
+      if (!regex.test(value)) {
+        toaster.show(`${field.label} is invalid`, 'warning');
+        return;
+      }
+    }
+    const saved = await saveConfig({ enable: true });
+    if (!saved) return;
+    const id = saved.id;
+    if (!id) {
+      toaster.show(t('channel_save_failed', 'Failed to save channel'), 'warning');
+      return;
+    }
+    setConnecting(true);
+    try {
+      const response = await fetch(`/integrations/social/${identifier}?config=${id}`);
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok || data.err || !data.url) {
+        toaster.show(
+          t('could_not_connect_to_platform', 'Could not connect to the platform'),
+          'warning'
+        );
+        return;
+      }
+      const payload: Record<string, string> = {};
+      for (const field of directFields) {
+        payload[field.key] = (directValues[field.key] || '').trim();
+      }
+      await completeTokenConnect(btoa(JSON.stringify(payload)), data.url, id);
+    } finally {
+      setConnecting(false);
+    }
+  }, [directFields, directValues, saveConfig, fetch, identifier, toaster, t, completeTokenConnect]);
 
   // Platform-app connect: save the set, then start the standard OAuth flow
   // (the same /integrations/social/:identifier?config=<id> initiation the
@@ -674,6 +750,39 @@ export const ChannelConfigForm: FC<ChannelConfigFormProps> = ({
   // bot-token connect), and also offered on BYO token sets once credentials
   // are stored (a token set without a token cannot connect).
   const showConnect = hasPlatformApp || (isToken && isConfigured);
+
+  // Direct-channel account fields + Connect (Bluesky & co.) — the primary
+  // content of Mode B for these providers.
+  const directFieldsBlock = directFields?.map((field) => (
+    <div key={field.key} className="flex flex-col gap-[6px]">
+      <label className="text-[14px] font-[500]">{field.label}</label>
+      <div className="bg-newBgColorInner h-[42px] border-newTableBorder border rounded-[8px] text-textColor flex items-center justify-center">
+        <input
+          type={field.type === 'password' ? 'password' : 'text'}
+          autoComplete="off"
+          name={`direct_${field.key}_${identifier}`}
+          className="h-full bg-transparent outline-hidden flex-1 text-[14px] text-textColor placeholder-textColor px-[16px]"
+          value={directValues[field.key] || ''}
+          onChange={(e) =>
+            setDirectValues((prev) => ({ ...prev, [field.key]: e.target.value }))
+          }
+        />
+      </div>
+    </div>
+  ));
+
+  const directConnectBlock = !!directFields && (
+    <button
+      type="button"
+      onClick={handleDirectConnect}
+      disabled={saving || connecting}
+      className="w-full h-[44px] rounded-[8px] bg-btnPrimary text-white text-[14px] font-[500] whitespace-nowrap truncate hover:opacity-90 transition-opacity disabled:opacity-50"
+    >
+      {connecting
+        ? t('connecting', 'Connecting...')
+        : t('connect_with_provider', 'Connect with {{provider}}', { provider: providerName })}
+    </button>
+  );
   const connectBlock = showConnect && (
     <div className="flex flex-col gap-[6px]">
       {connectedChannels.length > 0 && (
@@ -934,6 +1043,8 @@ export const ChannelConfigForm: FC<ChannelConfigFormProps> = ({
       {nameBlock}
       {versionBlock}
       {connectBlock}
+      {directFieldsBlock}
+      {directConnectBlock}
       {enabledBlock}
       {credentialFieldsBlock}
       {callbackBlock}

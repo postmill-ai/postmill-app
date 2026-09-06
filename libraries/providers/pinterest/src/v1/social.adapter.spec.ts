@@ -283,3 +283,58 @@ describe('PinterestProvider.post — video status polling (POLL-05)', () => {
     );
   });
 });
+
+describe('PinterestProvider — PINTEREST_API_BASE sandbox override', () => {
+  let provider: PinterestProvider;
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    vi.unstubAllEnvs();
+    provider = new PinterestProvider();
+    vi.spyOn(provider as any, 'fetch').mockResolvedValue({
+      json: async () => ({}),
+    });
+  });
+
+  it('defaults data endpoints to the production API', async () => {
+    await provider.boards('token');
+    expect((provider as any).fetch).toHaveBeenCalledWith(
+      'https://api.pinterest.com/v5/boards?page_size=250',
+      expect.anything(),
+    );
+  });
+
+  it('points data endpoints at PINTEREST_API_BASE when set (Trial sandbox)', async () => {
+    vi.stubEnv('PINTEREST_API_BASE', 'https://api-sandbox.pinterest.com');
+    await provider.boards('token');
+    expect((provider as any).fetch).toHaveBeenCalledWith(
+      'https://api-sandbox.pinterest.com/v5/boards?page_size=250',
+      expect.anything(),
+    );
+  });
+
+  it('keeps OAuth + identity on production even with the override set', async () => {
+    vi.stubEnv('PINTEREST_API_BASE', 'https://api-sandbox.pinterest.com');
+    (provider as any).fetch.mockResolvedValue({
+      json: async () => ({
+        access_token: 'a',
+        refresh_token: 'r',
+        expires_in: 1,
+        scope:
+          'boards:read,boards:write,pins:read,pins:write,user_accounts:read',
+      }),
+    });
+
+    await provider.authenticate(
+      { code: 'c', codeVerifier: 'v', refresh: '' },
+      { client_id: 'id', client_secret: 'secret' } as any,
+    );
+
+    // Sandbox and production tokens are separate planes (neither crosses
+    // over) — the token exchange AND the identity lookup must stay on
+    // production or connect breaks under the override.
+    const urls = (provider as any).fetch.mock.calls.map((c: any[]) => c[0]);
+    expect(urls[0]).toBe('https://api.pinterest.com/v5/oauth/token');
+    expect(urls[1]).toBe('https://api.pinterest.com/v5/user_account');
+  });
+});

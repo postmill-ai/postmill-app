@@ -32,7 +32,10 @@ interface ProviderEnvMapping {
 export const CHANNEL_ENV_MAPPINGS: ProviderEnvMapping[] = [
   { identifier: 'x', clientIdEnv: 'X_API_KEY', clientSecretEnv: 'X_API_SECRET' },
   { identifier: 'linkedin', clientIdEnv: 'LINKEDIN_CLIENT_ID', clientSecretEnv: 'LINKEDIN_CLIENT_SECRET' },
-  { identifier: 'linkedin-page', clientIdEnv: 'LINKEDIN_CLIENT_ID', clientSecretEnv: 'LINKEDIN_CLIENT_SECRET' },
+  // The page channel needs a DEDICATED LinkedIn app (Community Management API
+  // must be an app's only product), so it reads its own env pair — never the
+  // personal app's.
+  { identifier: 'linkedin-page', clientIdEnv: 'LINKEDIN_PAGE_CLIENT_ID', clientSecretEnv: 'LINKEDIN_PAGE_CLIENT_SECRET' },
   { identifier: 'facebook', clientIdEnv: 'FACEBOOK_APP_ID', clientSecretEnv: 'FACEBOOK_APP_SECRET', configIdEnv: 'FACEBOOK_CONFIG_ID' },
   { identifier: 'instagram', clientIdEnv: 'FACEBOOK_APP_ID', clientSecretEnv: 'FACEBOOK_APP_SECRET', configIdEnv: 'FACEBOOK_CONFIG_ID' },
   { identifier: 'instagram-standalone', clientIdEnv: 'INSTAGRAM_APP_ID', clientSecretEnv: 'INSTAGRAM_APP_SECRET' },

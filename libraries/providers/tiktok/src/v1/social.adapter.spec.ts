@@ -5,6 +5,13 @@ vi.mock('@postmill-ai/helpers/utils/timer', () => ({
   timer: vi.fn(async () => undefined),
 }));
 
+// Video bytes arrive via readOrFetch (safeFetch for URLs, readFileSync for
+// local-storage disk paths) — stub it at the module boundary.
+const readOrFetchMock = vi.fn(async () => Buffer.from([1, 2, 3, 4]));
+vi.mock('@postmill-ai/helpers/utils/read.or.fetch', () => ({
+  readOrFetch: (...args: unknown[]) => readOrFetchMock(...args),
+}));
+
 // Keep the real kernel exports but turn `safeFetch` into a spy for any
 // future download assertions.
 vi.mock('@postmill-ai/provider-kernel', async (orig) => {
@@ -260,11 +267,6 @@ describe('TiktokProvider', () => {
   describe('post(): video uploads use FILE_UPLOAD bytes', () => {
     it('downloads the video, inits with FILE_UPLOAD sizes, and PUTs bytes to the upload URL', async () => {
       const provider = new TiktokProvider();
-      const videoBytes = new Uint8Array([1, 2, 3, 4]).buffer;
-      vi.stubGlobal(
-        'fetch',
-        vi.fn(async () => new Response(videoBytes, { status: 200 }))
-      );
       const fetchSpy = vi.spyOn(provider as any, 'fetch');
       fetchSpy
         // init → publish id + upload url
@@ -315,6 +317,9 @@ describe('TiktokProvider', () => {
 
       // init carries FILE_UPLOAD with whole-file single-chunk sizes — not
       // PULL_FROM_URL (needs TikTok URL-ownership verification of the domain).
+      expect(readOrFetchMock).toHaveBeenCalledWith(
+        'https://app.example.com/uploads/x/vid.mp4'
+      );
       const initBody = JSON.parse(fetchSpy.mock.calls[0][1].body);
       expect(initBody.source_info).toEqual({
         source: 'FILE_UPLOAD',

@@ -5,7 +5,7 @@ import useSWR, { useSWRConfig } from 'swr';
 import { useFetch } from '@postmill-ai/helpers/utils/custom.fetch';
 import { createFetchError } from '@postmill-ai/frontend/components/settings/shared/fetch-error';
 import { useToaster } from '@postmill-ai/react/toaster/toaster';
-import { ChannelConfigForm, ChannelSetupDescriptor } from './channel-edit.modal';
+import { ChannelConfigForm, ChannelCustomField, ChannelSetupDescriptor } from './channel-edit.modal';
 import ProviderListShell from '@postmill-ai/frontend/components/settings/shared/provider-list-shell';
 import {
   useProviderCatalog,
@@ -45,6 +45,7 @@ interface ProviderCatalogItem {
   setup: ChannelSetupDescriptor | null;
   callbackUrl: string;
   platformConfigured?: boolean;
+  customFields?: ChannelCustomField[] | false;
 }
 
 interface ChannelConfigItem {
@@ -389,6 +390,7 @@ export const ChannelsTab: FC = () => {
             setup={provider?.setup || null}
             callbackUrl={provider?.callbackUrl || ''}
             platformConfigured={!!provider?.platformConfigured}
+            customFields={provider?.customFields || false}
             config={
               config
                 ? {

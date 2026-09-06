@@ -165,6 +165,20 @@ export class OrgProviderConfigService {
     return config?.enabled === true;
   }
 
+  // 'direct' channels (Bluesky & co.) have no developer app — account
+  // credentials are collected at connect time and live on the Integration,
+  // so the enabled-without-credentials guard does not apply to them.
+  #isDirectChannel(identifier: string): boolean {
+    try {
+      const p = this._resolution.resolveProvider<{
+        setupDescriptor?: { authType?: string };
+      }>('social', identifier);
+      return p?.capability?.setupDescriptor?.authType === 'direct';
+    } catch {
+      return false;
+    }
+  }
+
   async createConfig(
     orgId: string,
     data: WritableConfig & { identifier: string; name: string },
@@ -177,7 +191,15 @@ export class OrgProviderConfigService {
 
     // A platform app in the deployment env supplies the OAuth credentials for
     // this provider, so an org config set may be enabled without its own keys.
-    if (data.enabled && !data.clientId?.trim() && !getEnvClientInfo(data.identifier)) {
+    // 'direct' channels (Bluesky & co.) have no developer app at all — the
+    // ACCOUNT credentials are entered at connect time and live on the
+    // Integration, so their sets legitimately hold no keys either.
+    if (
+      data.enabled &&
+      !data.clientId?.trim() &&
+      !getEnvClientInfo(data.identifier) &&
+      !this.#isDirectChannel(data.identifier)
+    ) {
       throw new BadRequestException(
         'A provider must be configured with credentials before it can be enabled.'
       );
@@ -243,11 +265,13 @@ export class OrgProviderConfigService {
     const willBeEnabled = data.enabled ?? existing.enabled;
     if (willBeEnabled) {
       const hasNewClientId = !!data.clientId?.trim();
-      // Env platform app counts as credentials for this provider (see create).
+      // Env platform app counts as credentials for this provider (see create);
+      // 'direct' channels hold no app credentials by design (see create).
       if (
         !hasNewClientId &&
         !existing.clientId?.trim() &&
-        !getEnvClientInfo(existing.identifier)
+        !getEnvClientInfo(existing.identifier) &&
+        !this.#isDirectChannel(existing.identifier)
       ) {
         throw new BadRequestException(
           'A provider must be configured with credentials before it can be enabled.'

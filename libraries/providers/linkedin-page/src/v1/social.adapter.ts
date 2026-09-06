@@ -96,14 +96,8 @@ export class LinkedinPageProvider
       })
     ).json();
 
-    const { vanityName } = await (
-      await this.fetch('https://api.linkedin.com/v2/me', {
-        headers: {
-          Authorization: `Bearer ${accessToken}`,
-        },
-      })
-    ).json();
-
+    // /v2/userinfo only — legacy /v2/me is retired-product gated and 403s for
+    // OIDC-era apps (see linkedin-base refreshToken).
     const {
       name,
       sub: id,
@@ -123,7 +117,7 @@ export class LinkedinPageProvider
       expiresIn: expires_in,
       name,
       picture,
-      username: vanityName,
+      username: name,
     };
   }
 
@@ -273,20 +267,14 @@ export class LinkedinPageProvider
 
     this.checkScopes(this.scopes, scope);
 
+    // /v2/userinfo only — legacy /v2/me is retired-product gated and 403s for
+    // OIDC-era apps (see linkedin-base refreshToken).
     const {
       name,
       sub: id,
       picture,
     } = await (
       await this.fetch('https://api.linkedin.com/v2/userinfo', {
-        headers: {
-          Authorization: `Bearer ${accessToken}`,
-        },
-      })
-    ).json();
-
-    const { vanityName } = await (
-      await this.fetch('https://api.linkedin.com/v2/me', {
         headers: {
           Authorization: `Bearer ${accessToken}`,
         },
@@ -300,7 +288,7 @@ export class LinkedinPageProvider
       expiresIn,
       name,
       picture,
-      username: vanityName,
+      username: name,
     };
   }
 
