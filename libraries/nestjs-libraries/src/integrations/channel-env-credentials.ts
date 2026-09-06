@@ -19,6 +19,10 @@ interface ProviderEnvMapping {
   // Token-only providers (e.g. Telegram bots) carry a single token instead of a
   // client id/secret pair.
   isTokenOnly?: boolean;
+  // Providers whose API calls authenticate with a long-lived bot/app token
+  // alongside the OAuth app (e.g. Discord's bot token, used for guild channel
+  // lists and message posting) carry it here.
+  tokenEnv?: string;
   // Meta Facebook Login for Business (FBfB) apps replace the OAuth scope list
   // with a dashboard-created Configuration ID. FBfB-only apps (all new Meta
   // apps) reject scope= URLs, so the platform app must carry it here.
@@ -32,7 +36,7 @@ export const CHANNEL_ENV_MAPPINGS: ProviderEnvMapping[] = [
   { identifier: 'facebook', clientIdEnv: 'FACEBOOK_APP_ID', clientSecretEnv: 'FACEBOOK_APP_SECRET', configIdEnv: 'FACEBOOK_CONFIG_ID' },
   { identifier: 'instagram', clientIdEnv: 'FACEBOOK_APP_ID', clientSecretEnv: 'FACEBOOK_APP_SECRET', configIdEnv: 'FACEBOOK_CONFIG_ID' },
   { identifier: 'instagram-standalone', clientIdEnv: 'INSTAGRAM_APP_ID', clientSecretEnv: 'INSTAGRAM_APP_SECRET' },
-  { identifier: 'discord', clientIdEnv: 'DISCORD_CLIENT_ID', clientSecretEnv: 'DISCORD_CLIENT_SECRET' },
+  { identifier: 'discord', clientIdEnv: 'DISCORD_CLIENT_ID', clientSecretEnv: 'DISCORD_CLIENT_SECRET', tokenEnv: 'DISCORD_BOT_TOKEN' },
   { identifier: 'slack', clientIdEnv: 'SLACK_ID', clientSecretEnv: 'SLACK_SECRET' },
   { identifier: 'tiktok', clientIdEnv: 'TIKTOK_CLIENT_ID', clientSecretEnv: 'TIKTOK_CLIENT_SECRET' },
   { identifier: 'youtube', clientIdEnv: 'YOUTUBE_CLIENT_ID', clientSecretEnv: 'YOUTUBE_CLIENT_SECRET' },
@@ -82,11 +86,13 @@ export function getEnvClientInfo(identifier: string): EnvClientInfo | undefined 
   if (mapping.clientSecretEnv && !secret) return undefined;
 
   const configId = mapping.configIdEnv ? process.env[mapping.configIdEnv] : undefined;
+  const token = mapping.tokenEnv ? process.env[mapping.tokenEnv] : undefined;
 
   return {
     client_id: primary,
     client_secret: secret || '',
     instanceUrl: '',
+    ...(token ? { token } : {}),
     ...(configId ? { configId } : {}),
   };
 }

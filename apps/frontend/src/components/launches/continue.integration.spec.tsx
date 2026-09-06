@@ -212,4 +212,133 @@ describe('ContinueIntegration popup completion', () => {
       expect(screen.queryByRole('alert')).toBeNull()
     );
   });
+
+  it('never redirects a popup on failure, reports status+body, and shows the status', async () => {
+    setOpener({ postMessage });
+    // A non-OK response with NO error message in the body (the "Could not add
+    // provider" case from the Discord failure) must still be diagnosable.
+    mockFetch.mockResolvedValue({ status: 403, json: async () => ({}) });
+
+    render(
+      <ContinueIntegration
+        provider="discord"
+        searchParams={{ state: 's', code: 'c' }}
+        logged={true}
+      />
+    );
+
+    // The status-bearing fallback is shown (not the bare generic message)…
+    await screen.findByText('Could not add provider (error 403)');
+    // …and the popup is told to close manually, NOT that it is redirecting.
+    expect(screen.queryByText('You are being redirected back')).toBeNull();
+    // The failure is reported with full context.
+    expect(mockCaptureException).toHaveBeenCalledWith(
+      expect.objectContaining({
+        message: 'Channel connect failed for discord: HTTP 403',
+      }),
+      { extra: { provider: 'discord', status: 403, body: {} } }
+    );
+    // No popup navigation, no postMessage, no close.
+    expect(mockPush).not.toHaveBeenCalled();
+    expect(postMessage).not.toHaveBeenCalled();
+    expect(closeSpy).not.toHaveBeenCalled();
+  });
+
+  it('sends only DTO-whitelisted fields in the connect body, never raw callback params', async () => {
+    setOpener({ postMessage });
+    mockFetch.mockResolvedValue(okResponse({ id: 'int-1', inBetweenSteps: false }));
+
+    render(
+      <ContinueIntegration
+        provider="discord"
+        // Discord's callback carries guild_id/permissions — the global
+        // forbidNonWhitelisted pipe 400s when they leak into the POST body.
+        searchParams={{
+          state: 's',
+          code: 'c',
+          guild_id: '1545788148620202066',
+          permissions: '377957124096',
+        }}
+        logged={true}
+      />
+    );
+
+    await waitFor(() => expect(mockFetch).toHaveBeenCalled());
+    const [url, init] = mockFetch.mock.calls[0];
+    expect(url).toBe('/integrations/social-connect/discord');
+    expect(JSON.parse((init as RequestInit).body as string)).toEqual({
+      state: 's',
+      code: 'c',
+      timezone: '0',
+    });
+  });
+
+  it('shows a ValidationPipe array message on a 400 instead of the bare fallback (single body read)', async () => {
+    setOpener({ postMessage });
+    mockFetch.mockResolvedValue({
+      status: 400,
+      json: async () => ({
+        message: ['property guild_id should not exist'],
+        error: 'Bad Request',
+        statusCode: 400,
+      }),
+    });
+
+    render(
+      <ContinueIntegration
+        provider="discord"
+        searchParams={{ state: 's', code: 'c' }}
+        logged={true}
+      />
+    );
+
+    // The real reason is displayed — previously the body was read twice and
+    // the second .json() threw, leaving a message-less fallback.
+    await screen.findByText('property guild_id should not exist');
+    expect(mockCaptureException).toHaveBeenCalledWith(
+      expect.objectContaining({
+        message:
+          'Channel connect failed for discord: property guild_id should not exist',
+      }),
+      expect.anything()
+    );
+  });
+
+  it('redirects the full-page flow on failure as before (not a popup)', async () => {
+    setOpener(null);
+    mockFetch.mockResolvedValue({ status: 500, json: async () => ({}) });
+
+    render(
+      <ContinueIntegration
+        provider="discord"
+        searchParams={{ state: 's', code: 'c' }}
+        logged={true}
+      />
+    );
+
+    await screen.findByText('Could not add provider (error 500)');
+    // The popup-only copy must not appear in the full-page flow.
+    expect(
+      screen.queryByText('You can close this window and try again.')
+    ).toBeNull();
+  });
+
+  it('surfaces a network-level fetch failure instead of hanging on Adding Channel', async () => {
+    setOpener({ postMessage });
+    mockFetch.mockRejectedValue(new Error('socket hangup'));
+
+    render(
+      <ContinueIntegration
+        provider="discord"
+        searchParams={{ state: 's', code: 'c' }}
+        logged={true}
+      />
+    );
+
+    await screen.findByText('Network error while connecting the channel');
+    expect(mockCaptureException).toHaveBeenCalledWith(
+      expect.objectContaining({ message: 'socket hangup' }),
+      { extra: { provider: 'discord' } }
+    );
+  });
 });

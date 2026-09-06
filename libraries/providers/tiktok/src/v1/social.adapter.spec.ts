@@ -256,4 +256,79 @@ describe('TiktokProvider', () => {
       expect(result.maxDurationSeconds).toBe(600);
     });
   });
+
+  describe('post(): video uploads use FILE_UPLOAD bytes', () => {
+    it('downloads the video, inits with FILE_UPLOAD sizes, and PUTs bytes to the upload URL', async () => {
+      const provider = new TiktokProvider();
+      const videoBytes = new Uint8Array([1, 2, 3, 4]).buffer;
+      vi.stubGlobal(
+        'fetch',
+        vi.fn(async () => new Response(videoBytes, { status: 200 }))
+      );
+      const fetchSpy = vi.spyOn(provider as any, 'fetch');
+      fetchSpy
+        // init → publish id + upload url
+        .mockResolvedValueOnce({
+          json: async () => ({
+            data: {
+              publish_id: 'pub-1',
+              upload_url: 'https://upload.tiktokapis.com/abc',
+            },
+          }),
+        } as any)
+        // byte upload
+        .mockResolvedValueOnce({ json: async () => ({}) } as any)
+        // status poll
+        .mockResolvedValueOnce({
+          json: async () => ({
+            data: {
+              status: 'PUBLISH_COMPLETE',
+              publicaly_available_post_id: ['vid-9'],
+            },
+          }),
+        } as any);
+
+      const result = await provider.post(
+        'myuser',
+        'token',
+        [
+          {
+            id: 'p1',
+            message: 'hello tiktok',
+            media: [
+              { id: 'm1', path: 'https://app.example.com/uploads/x/vid.mp4' },
+            ],
+            settings: {
+              content_posting_method: 'DIRECT_POST',
+              privacy_level: 'SELF_ONLY',
+              comment: true,
+              duet: false,
+              stitch: false,
+              autoAddMusic: 'no',
+              brand_content_toggle: false,
+              brand_organic_toggle: false,
+            },
+          } as any,
+        ],
+        { profile: 'myuser' } as any
+      );
+
+      // init carries FILE_UPLOAD with whole-file single-chunk sizes — not
+      // PULL_FROM_URL (needs TikTok URL-ownership verification of the domain).
+      const initBody = JSON.parse(fetchSpy.mock.calls[0][1].body);
+      expect(initBody.source_info).toEqual({
+        source: 'FILE_UPLOAD',
+        video_size: 4,
+        chunk_size: 4,
+        total_chunk_count: 1,
+      });
+      const [uploadUrl, uploadOpts] = fetchSpy.mock.calls[1];
+      expect(uploadUrl).toBe('https://upload.tiktokapis.com/abc');
+      expect(uploadOpts.method).toBe('PUT');
+      expect(uploadOpts.headers['Content-Range']).toBe('bytes 0-3/4');
+      expect(result[0].releaseURL).toBe(
+        'https://www.tiktok.com/@myuser/video/vid-9'
+      );
+    });
+  });
 });

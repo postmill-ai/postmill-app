@@ -636,7 +636,7 @@ export class TiktokProvider extends SocialAbstract implements SocialProvider {
     };
   }
 
-  private buildTikokSourceInfoBody(firstPost: PostDetails<TikTokDto>) {
+  private buildTikokSourceInfoBody(firstPost: PostDetails<TikTokDto>, videoSize?: number) {
     const isPhoto = !hasExtension(firstPost?.media?.[0]?.path, 'mp4');
 
     if (isPhoto) {
@@ -650,6 +650,26 @@ export class TiktokProvider extends SocialAbstract implements SocialProvider {
           source: 'PULL_FROM_URL',
           photo_cover_index: 0,
           photo_images: firstPost.media?.map((p) => p.path),
+        },
+      };
+    }
+
+    // FILE_UPLOAD when we hold the video bytes (see post()): PULL_FROM_URL
+    // requires TikTok URL-ownership verification of the posting domain, which
+    // a tenant/self-hosted domain can never pass.
+    if (videoSize) {
+      return {
+        source_info: {
+          source: 'FILE_UPLOAD',
+          video_size: videoSize,
+          chunk_size: videoSize,
+          total_chunk_count: 1,
+          ...(firstPost?.media?.[0]?.thumbnailTimestamp
+            ? {
+                video_cover_timestamp_ms:
+                  firstPost?.media?.[0]?.thumbnailTimestamp,
+              }
+            : {}),
         },
       };
     }
@@ -677,8 +697,30 @@ export class TiktokProvider extends SocialAbstract implements SocialProvider {
     const [firstPost] = postDetails;
     const isPhoto = !hasExtension(firstPost?.media?.[0]?.path, 'mp4');
 
+    // Videos upload as FILE_UPLOAD bytes, not PULL_FROM_URL: URL pulls require
+    // the posting domain to pass TikTok's URL-ownership verification, which a
+    // tenant/self-hosted domain will never have (observed live:
+    // url_ownership_unverified on app.postmill.ai). Photos keep PULL_FROM_URL.
+    let videoBuffer: Buffer | undefined;
+    if (!isPhoto) {
+      const videoPath = firstPost?.media?.[0]?.path;
+      if (!videoPath) {
+        throw new Error('TikTok video post needs a video attachment');
+      }
+      const videoRes = await fetch(videoPath);
+      if (!videoRes.ok) {
+        throw new Error(`Failed to download video media (${videoRes.status})`);
+      }
+      videoBuffer = Buffer.from(await videoRes.arrayBuffer());
+      // TikTok permits one whole-file chunk up to 64MB; real chunking (5–64MB
+      // chunks) is a follow-up if bigger videos become a need.
+      if (videoBuffer.length > 64 * 1024 * 1024) {
+        throw new Error('TikTok video exceeds the 64MB single-upload limit');
+      }
+    }
+
     const {
-      data: { publish_id },
+      data: { publish_id, upload_url },
     } = await (
       await this.fetch(
         `https://open.tiktokapis.com/v2/post/publish${this.postingMethod(
@@ -693,11 +735,22 @@ export class TiktokProvider extends SocialAbstract implements SocialProvider {
           },
           body: JSON.stringify({
             ...this.buildTikokPostInfoBody(firstPost),
-            ...this.buildTikokSourceInfoBody(firstPost),
+            ...this.buildTikokSourceInfoBody(firstPost, videoBuffer?.length),
           }),
         }
       )
     ).json();
+
+    if (videoBuffer && upload_url) {
+      await this.fetch(upload_url, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'video/mp4',
+          'Content-Range': `bytes 0-${videoBuffer.length - 1}/${videoBuffer.length}`,
+        },
+        body: videoBuffer,
+      });
+    }
 
     const { url, id: videoId } = await this.uploadedVideoSuccess(
       integration.profile!,

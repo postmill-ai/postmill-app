@@ -17,6 +17,9 @@ describe('channel-env-credentials', () => {
     'FACEBOOK_APP_ID',
     'FACEBOOK_APP_SECRET',
     'FACEBOOK_CONFIG_ID',
+    'DISCORD_CLIENT_ID',
+    'DISCORD_CLIENT_SECRET',
+    'DISCORD_BOT_TOKEN',
     // No channel mapping consumes these (generic OIDC login does); they must
     // never platform-enable a channel.
     'POSTMILL_OAUTH_CLIENT_ID',
@@ -124,5 +127,25 @@ describe('channel-env-credentials', () => {
     const info = getEnvClientInfo('facebook');
     expect(info?.client_id).toBe('fb-app');
     expect(info).not.toHaveProperty('configId');
+  });
+
+  it('carries DISCORD_BOT_TOKEN as token alongside the client pair', () => {
+    process.env.DISCORD_CLIENT_ID = 'dc-id';
+    process.env.DISCORD_CLIENT_SECRET = 'dc-secret';
+    process.env.DISCORD_BOT_TOKEN = 'dc-bot';
+    expect(getEnvClientInfo('discord')).toEqual({
+      client_id: 'dc-id',
+      client_secret: 'dc-secret',
+      instanceUrl: '',
+      token: 'dc-bot',
+    });
+  });
+
+  it('omits token when DISCORD_BOT_TOKEN is unset', () => {
+    process.env.DISCORD_CLIENT_ID = 'dc-id';
+    process.env.DISCORD_CLIENT_SECRET = 'dc-secret';
+    const info = getEnvClientInfo('discord');
+    expect(info?.client_id).toBe('dc-id');
+    expect(info).not.toHaveProperty('token');
   });
 });

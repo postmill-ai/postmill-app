@@ -125,7 +125,7 @@ export class DiscordProvider extends SocialAbstract implements SocialProvider {
   }, clientInformation?: ClientInformation) {
     const clientId = clientInformation?.client_id || '';
     const clientSecret = clientInformation?.client_secret || '';
-    const { access_token, expires_in, refresh_token, scope, guild } = await (
+    const tokenResponse = await (
       await this.fetch('https://discord.com/api/oauth2/token', {
         method: 'POST',
         body: new URLSearchParams({
@@ -142,7 +142,27 @@ export class DiscordProvider extends SocialAbstract implements SocialProvider {
       })
     ).json();
 
+    // Fail with the provider's real reason instead of a downstream TypeError
+    // (undefined scope.split / guild.id) that logs nothing actionable.
+    if (!tokenResponse.access_token) {
+      throw new Error(
+        `Discord token exchange failed: ${
+          tokenResponse.error_description || tokenResponse.error || 'unknown'
+        }`
+      );
+    }
+    const { access_token, expires_in, refresh_token, scope, guild } = tokenResponse;
+
     this.checkScopes(this.scopes, scope.split(' '));
+
+    if (!guild?.id) {
+      // `guild` is only present when the bot-scope grant added the bot to a
+      // server during THIS authorization. Authorizing without picking a server
+      // (or with the bot already in it) leaves the channel without a target.
+      throw new Error(
+        'No Discord server was selected — authorize again and choose the server the bot should join'
+      );
+    }
 
     const { application } = await (
       await this.fetch('https://discord.com/api/oauth2/@me', {

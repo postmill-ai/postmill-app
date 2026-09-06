@@ -43,6 +43,26 @@ vi.mock(
   })
 );
 
+vi.mock('@postmill-ai/frontend/components/launches/web3/web3.list', () => ({
+  web3List: [
+    {
+      identifier: 'telegram',
+      component: (props: {
+        nonce: string;
+        onComplete?: (code: string | number, state: string) => void;
+      }) => (
+        <div data-testid="web3-connect" data-nonce={props.nonce}>
+          {/* Telegram hands back a NUMERIC chat id — the modal must coerce. */}
+          <button
+            data-testid="web3-complete"
+            onClick={() => props.onComplete?.(8861130977, props.nonce)}
+          />
+        </div>
+      ),
+    },
+  ],
+}));
+
 import { ChannelConfigForm } from './channel-edit.modal';
 
 const CREDENTIALS_WARNING =
@@ -85,6 +105,38 @@ function renderForm(
         callbackUrl="https://app.postmill.ai/integrations/social/instagram-standalone"
         defaultScopes="instagram_business_basic, instagram_business_content_publish"
         config={opts.edit ? EDIT_CONFIG : undefined}
+        onClose={onClose}
+        onSaved={onSaved}
+      />
+    </SWRConfig>
+  );
+  return { ...utils, onClose, onSaved };
+}
+
+const TOKEN_SETUP = {
+  authType: 'token' as const,
+  credentialFields: [{ key: 'clientId', label: 'Bot Token', secret: true }],
+  setupSteps: ['Create a bot', 'Paste the token'],
+};
+
+function renderTokenForm(
+  identifier: 'telegram' | 'line',
+  opts: { platformConfigured?: boolean; edit?: boolean } = {}
+) {
+  const onClose = vi.fn();
+  const onSaved = vi.fn();
+  const utils = render(
+    <SWRConfig value={{ provider: () => new Map() }}>
+      <ChannelConfigForm
+        identifier={identifier}
+        providerName={identifier === 'telegram' ? 'Telegram' : 'LINE'}
+        platformConfigured={opts.platformConfigured ?? true}
+        setup={TOKEN_SETUP}
+        config={
+          opts.edit
+            ? { ...EDIT_CONFIG, id: 'cfg-tok', isConfigured: true }
+            : undefined
+        }
         onClose={onClose}
         onSaved={onSaved}
       />
@@ -359,5 +411,209 @@ describe('ChannelConfigForm platform-app connect', () => {
       )
     );
     expect(openSpy).not.toHaveBeenCalled();
+  });
+});
+
+describe('ChannelConfigForm token connect', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockFetch.mockImplementation((url: string) => {
+      if (url === '/integrations/list') {
+        return Promise.resolve({ ok: true, json: async () => ({ integrations: [] }) });
+      }
+      if (url === '/channels/config') {
+        return Promise.resolve({ ok: true, json: async () => ({ id: 'cfg-tok' }) });
+      }
+      if (url.startsWith('/integrations/social/')) {
+        return Promise.resolve({ ok: true, json: async () => ({ url: 'nonce-123' }) });
+      }
+      return Promise.resolve({ ok: true, json: async () => ({}) });
+    });
+  });
+
+  it('platform-app mode shows Connect and collapses the bot token under Advanced', () => {
+    renderTokenForm('telegram');
+    expect(
+      screen.getByRole('button', { name: 'Connect with Telegram' })
+    ).toBeTruthy();
+    expect(screen.queryByText('Bot Token')).toBeNull();
+
+    fireEvent.click(screen.getByRole('button', { name: /Advanced/ }));
+    expect(screen.getByText('Bot Token')).toBeTruthy();
+  });
+
+  it('telegram: Connect renders the interactive connect view with the minted nonce', async () => {
+    renderTokenForm('telegram');
+    fireEvent.change(
+      screen.getByPlaceholderText('e.g. Marketing LinkedIn'),
+      { target: { value: 'TG set' } }
+    );
+    fireEvent.click(screen.getByRole('button', { name: 'Connect with Telegram' }));
+
+    const view = await screen.findByTestId('web3-connect');
+    expect(view.getAttribute('data-nonce')).toBe('nonce-123');
+    expect(
+      mockFetch.mock.calls.some(
+        ([u]) => u === '/integrations/social/telegram?config=cfg-tok'
+      )
+    ).toBe(true);
+    // Back returns to the form.
+    fireEvent.click(screen.getByText('Back'));
+    expect(screen.queryByTestId('web3-connect')).toBeNull();
+  });
+
+  it('line (no interactive component): Connect completes the token-validation connect inline', async () => {
+    const { onClose, onSaved } = renderTokenForm('line');
+    fireEvent.change(
+      screen.getByPlaceholderText('e.g. Marketing LinkedIn'),
+      { target: { value: 'LINE set' } }
+    );
+    fireEvent.click(screen.getByRole('button', { name: 'Connect with LINE' }));
+
+    await waitFor(() => expect(onClose).toHaveBeenCalled());
+    // Inline social-connect POST — no full-page redirect through
+    // continue.integration (a failure there dumped the user on /posts).
+    const call = mockFetch.mock.calls.find(
+      ([u]) => u === '/integrations/social-connect/line'
+    );
+    expect(call).toBeTruthy();
+    expect(JSON.parse(call![1].body)).toEqual({
+      state: 'nonce-123',
+      code: 'connect',
+      timezone: expect.any(String),
+    });
+    // Success: the set is flipped enabled and the modal reports it.
+    expect(
+      mockFetch.mock.calls.some(
+        ([u, o]) =>
+          u === '/channels/config/cfg-tok' &&
+          o?.method === 'PUT' &&
+          JSON.parse(o.body).enabled === true
+      )
+    ).toBe(true);
+    expect(onSaved).toHaveBeenCalled();
+    expect(mockToast).toHaveBeenCalledWith('Channel Connected!', 'success');
+    expect(screen.queryByTestId('web3-connect')).toBeNull();
+  });
+
+  it('telegram: completing the interactive connect posts to social-connect inline', async () => {
+    const { onClose, onSaved } = renderTokenForm('telegram');
+    fireEvent.change(
+      screen.getByPlaceholderText('e.g. Marketing LinkedIn'),
+      { target: { value: 'TG set' } }
+    );
+    fireEvent.click(screen.getByRole('button', { name: 'Connect with Telegram' }));
+    fireEvent.click(await screen.findByTestId('web3-complete'));
+
+    await waitFor(() => expect(onClose).toHaveBeenCalled());
+    const call = mockFetch.mock.calls.find(
+      ([u]) => u === '/integrations/social-connect/telegram'
+    );
+    expect(call).toBeTruthy();
+    expect(JSON.parse(call![1].body)).toEqual({
+      state: 'nonce-123',
+      // Numeric chat id from the connect component is coerced to a string
+      // (ConnectIntegrationDto rejects non-string codes with a 400).
+      code: '8861130977',
+      timezone: expect.any(String),
+    });
+    expect(onSaved).toHaveBeenCalled();
+    expect(mockToast).toHaveBeenCalledWith('Channel Connected!', 'success');
+  });
+
+  it('telegram: expired state returns to the form with a retry message (no page dump)', async () => {
+    mockFetch.mockImplementation((url: string) => {
+      if (url === '/integrations/list') {
+        return Promise.resolve({ ok: true, json: async () => ({ integrations: [] }) });
+      }
+      if (url === '/channels/config') {
+        return Promise.resolve({ ok: true, json: async () => ({ id: 'cfg-tok' }) });
+      }
+      if (url.startsWith('/integrations/social-connect/')) {
+        return Promise.resolve({
+          ok: false,
+          json: async () => ({ message: 'Invalid or expired state' }),
+        });
+      }
+      if (url.startsWith('/integrations/social/')) {
+        return Promise.resolve({ ok: true, json: async () => ({ url: 'nonce-123' }) });
+      }
+      return Promise.resolve({ ok: true, json: async () => ({}) });
+    });
+
+    renderTokenForm('telegram');
+    fireEvent.change(
+      screen.getByPlaceholderText('e.g. Marketing LinkedIn'),
+      { target: { value: 'TG set' } }
+    );
+    fireEvent.click(screen.getByRole('button', { name: 'Connect with Telegram' }));
+    fireEvent.click(await screen.findByTestId('web3-complete'));
+
+    await waitFor(() =>
+      expect(mockToast).toHaveBeenCalledWith(
+        'Connect session expired — please try again',
+        'warning'
+      )
+    );
+    // Back on the form: the next Connect click mints a fresh state.
+    expect(screen.queryByTestId('web3-connect')).toBeNull();
+    expect(
+      screen.getByRole('button', { name: 'Connect with Telegram' })
+    ).toBeTruthy();
+  });
+
+  it('failed connect retry updates the same set instead of POSTing a duplicate (409)', async () => {
+    let connectCalls = 0;
+    mockFetch.mockImplementation((url: string, opts?: any) => {
+      if (url === '/integrations/list') {
+        return Promise.resolve({ ok: true, json: async () => ({ integrations: [] }) });
+      }
+      if (url === '/channels/config' && opts?.method === 'POST') {
+        return Promise.resolve({ ok: true, json: async () => ({ id: 'cfg-tok' }) });
+      }
+      if (url === '/channels/config/cfg-tok' && opts?.method === 'PUT') {
+        return Promise.resolve({ ok: true, json: async () => ({}) });
+      }
+      if (url.startsWith('/integrations/social-connect/')) {
+        connectCalls += 1;
+        return connectCalls === 1
+          ? Promise.resolve({ ok: false, json: async () => ({ message: 'LINE channel access token was rejected' }) })
+          : Promise.resolve({ ok: true, json: async () => ({ id: 'int-1' }) });
+      }
+      if (url.startsWith('/integrations/social/')) {
+        return Promise.resolve({ ok: true, json: async () => ({ url: 'nonce-123' }) });
+      }
+      return Promise.resolve({ ok: true, json: async () => ({}) });
+    });
+
+    const { onClose } = renderTokenForm('line');
+    fireEvent.change(
+      screen.getByPlaceholderText('e.g. Marketing LinkedIn'),
+      { target: { value: 'LINE set' } }
+    );
+    fireEvent.click(screen.getByRole('button', { name: 'Connect with LINE' }));
+    // First connect fails — the modal stays open on the form.
+    await waitFor(() =>
+      expect(mockToast).toHaveBeenCalledWith(
+        'LINE channel access token was rejected',
+        'warning'
+      )
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: 'Connect with LINE' }));
+    await waitFor(() => expect(onClose).toHaveBeenCalled());
+
+    // Retry saved via PUT on the created set — no duplicate POST.
+    expect(
+      mockFetch.mock.calls.some(
+        ([u, o]) => u === '/channels/config/cfg-tok' && o?.method === 'PUT'
+      )
+    ).toBe(true);
+    expect(
+      mockFetch.mock.calls.filter(
+        ([u, o]) => u === '/channels/config' && o?.method === 'POST'
+      )
+    ).toHaveLength(1);
+    expect(mockToast).toHaveBeenCalledWith('Channel Connected!', 'success');
   });
 });

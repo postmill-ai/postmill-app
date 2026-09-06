@@ -381,6 +381,14 @@ describe('runPostPublish handler', () => {
     expect(merged.laterEdit).toBe('yes'); // merged against fresh, not snapshot
     expect(merged.firstCommentId).toBe('FC');
     expect(merged.firstCommentPostedAt).toBeDefined();
+    // The comment call must carry the post's settings — providers like Discord
+    // need settings.channel to target the comment's parent channel.
+    expect(activity.postFirstComment).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.anything(),
+      'hi',
+      expect.objectContaining({ firstComment: 'hi' })
+    );
   });
 
   it('4.4d — a failed marker write is surfaced (not swallowed) but the post stays published', async () => {

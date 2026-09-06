@@ -12,6 +12,7 @@ const {
   getOrgById,
   startRefreshWorkflow,
   tagItem,
+  invalidateIntegrationListCache,
 } = vi.hoisted(() => ({
   redisStore: new Map<string, string>(),
   getAllowedSocialsIntegrations: vi.fn(),
@@ -23,6 +24,7 @@ const {
   getOrgById: vi.fn(),
   startRefreshWorkflow: vi.fn(),
   tagItem: vi.fn(),
+  invalidateIntegrationListCache: vi.fn(),
 }));
 
 vi.mock('@postmill-ai/nestjs-libraries/redis/redis.service', () => ({
@@ -42,6 +44,7 @@ vi.mock('@postmill-ai/nestjs-libraries/integrations/integration.manager', () => 
     getAllowedSocialsIntegrations = getAllowedSocialsIntegrations;
     getSocialIntegration = getSocialIntegration;
     requireClientInformation = requireClientInformation;
+    invalidateIntegrationListCache = invalidateIntegrationListCache;
   },
 }));
 
@@ -210,6 +213,10 @@ describe('NoAuthIntegrationsController — OAuth state replay (F11)', () => {
     expect(ioRedis.del).toHaveBeenCalledWith('organization:state-1');
     expect(redisStore.has('login:state-1')).toBe(false);
     expect(redisStore.has('organization:state-1')).toBe(false);
+
+    // A fresh connect must invalidate the composer's channel-list cache,
+    // otherwise the new channel is invisible for up to 60s.
+    expect(invalidateIntegrationListCache).toHaveBeenCalledWith('org-1');
 
     await expect(
       controller.connectSocialMedia('testprovider', body('state-1'))

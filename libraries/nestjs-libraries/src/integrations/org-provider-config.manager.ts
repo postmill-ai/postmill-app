@@ -1,6 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { OrgProviderConfigService } from '@postmill-ai/nestjs-libraries/database/prisma/provider-configs/org-provider-config.service';
 import { replaceCredentialsMap, clearOrgCredentials, type CredentialEntry } from '@postmill-ai/nestjs-libraries/integrations/credentials';
+import { CHANNEL_ENV_MAPPINGS, getEnvClientInfo } from '@postmill-ai/nestjs-libraries/integrations/channel-env-credentials';
 
 type DecryptedConfig = {
   id: string;
@@ -95,11 +96,38 @@ export class OrgProviderConfigManager {
     // when an integration isn't bound to a specific config) — use the primary.
     for (const [identifier, entry] of newByIdentifier) {
       if (entry.enabled && (entry.clientId || entry.clientSecret)) {
+        // Discord's guild channel list/posting authenticates with the bot token
+        // stored in additionalConfig.botToken — surface it to getOrgCredential.
+        let botToken: string | undefined;
+        try {
+          botToken = entry.additionalConfig
+            ? JSON.parse(entry.additionalConfig)?.botToken
+            : undefined;
+        } catch {
+          // Tolerate unparseable additionalConfig — token stays undefined.
+        }
         newCredentials.set(identifier, {
           clientId: entry.clientId,
           clientSecret: entry.clientSecret,
           redirectUri: entry.redirectUri,
           scopes: entry.scopes?.split(',').map((s: string) => s.trim()),
+          ...(botToken ? { token: botToken } : {}),
+        });
+      }
+    }
+
+    // Fill gaps from the platform env app: plug methods (e.g. Discord's guild
+    // channel list) read this cache via getOrgCredential, and an org using the
+    // click-connect platform app has NO org config row to draw from. Org configs
+    // always win over env for the same identifier.
+    for (const mapping of CHANNEL_ENV_MAPPINGS) {
+      if (newCredentials.has(mapping.identifier)) continue;
+      const envInfo = getEnvClientInfo(mapping.identifier);
+      if (envInfo) {
+        newCredentials.set(mapping.identifier, {
+          clientId: envInfo.client_id,
+          clientSecret: envInfo.client_secret,
+          token: envInfo.token,
         });
       }
     }

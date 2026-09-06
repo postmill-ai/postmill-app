@@ -322,7 +322,9 @@ export abstract class SocialAbstract {
       throw err;
     }
 
-    if (request.status === 200 || request.status === 201) {
+    // Any 2xx is success — e.g. Dribbble's shot creation returns 202 Accepted
+    // with a Location header; Discord's message delete returns 204 No Content.
+    if (request.status >= 200 && request.status < 300) {
       return request;
     }
 
