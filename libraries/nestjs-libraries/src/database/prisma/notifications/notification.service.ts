@@ -52,6 +52,26 @@ export class NotificationService {
     return this._notificationRepository.getUnreadCount(organizationId, userId);
   }
 
+  /**
+   * Dedup probe for repeat-prone system notifications (channel refresh errors):
+   * true when this org already has a live notification of `type` for the same
+   * integration within the window. Lets callers cap alerts at one per
+   * integration per day regardless of how many code paths fire.
+   */
+  hasRecentForIntegration(
+    orgId: string,
+    type: NotificationCategory,
+    integrationId: string,
+    withinMs: number
+  ) {
+    return this._notificationRepository.hasRecentForIntegration(
+      orgId,
+      type,
+      integrationId,
+      withinMs
+    );
+  }
+
   getNotificationsPaginated(organizationId: string, userId: string, page: number) {
     return this._notificationRepository.getNotificationsPaginated(
       organizationId,

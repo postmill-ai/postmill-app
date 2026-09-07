@@ -340,6 +340,15 @@ export class IntegrationService {
     integration: Integration,
     err = ''
   ) {
+    // Dedup: a dead channel fires from several paths (refresh sweep, disconnect,
+    // between-steps — historically 3x per minute from the comments cron alone).
+    // Cap at one notification per integration per 24h; a probe failure must
+    // never suppress the alert, hence the catch.
+    const alreadyNotified = await this._notificationService
+      .hasRecentForIntegration(orgId, 'channels', integration.id, 24 * 60 * 60 * 1000)
+      .catch(() => false);
+    if (alreadyNotified) return;
+
     await this._notificationService.notify({
       orgId,
       category: 'channels',
@@ -383,7 +392,8 @@ export class IntegrationService {
           integration.organizationId,
           integration.id
         );
-        return;
+        // One dead channel must not block the rest of the sweep.
+        continue;
       }
 
       const { refreshToken, accessToken, expiresIn } = data;

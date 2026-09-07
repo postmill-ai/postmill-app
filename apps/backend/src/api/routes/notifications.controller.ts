@@ -59,7 +59,8 @@ export class NotificationsController {
     @GetOrgFromRequest() organization: Organization,
     @Query() query: GetNotificationsDto
   ) {
-    if (query.page !== undefined && query.page > 0) {
+    // page is 0-based (matches the public API); page=0 is a valid first page.
+    if (query.page !== undefined && query.page >= 0) {
       return this._notificationsService.getNotificationsPaginated(
         organization.id,
         user.id,

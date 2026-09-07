@@ -32,6 +32,31 @@ export class NotificationsRepository {
     });
   }
 
+  /**
+   * Dedup probe for repeat-prone system notifications (e.g. channel refresh
+   * errors): true when a live row already exists for this org + type +
+   * metadata.integrationId created within the window. Callers use it to cap
+   * "your channel died" notifications at one per integration per day no matter
+   * how many code paths fire (refresh sweep, disconnect, between-steps).
+   */
+  async hasRecentForIntegration(
+    organizationId: string,
+    type: NotificationCategory,
+    integrationId: string,
+    withinMs: number
+  ) {
+    const count = await this._notifications.model.notifications.count({
+      where: {
+        organizationId,
+        type,
+        deletedAt: null,
+        createdAt: { gte: new Date(Date.now() - withinMs) },
+        metadata: { path: ['integrationId'], equals: integrationId },
+      },
+    });
+    return count > 0;
+  }
+
   async createReadRecords(notificationId: string, userIds: string[]) {
     if (userIds.length === 0) return;
 

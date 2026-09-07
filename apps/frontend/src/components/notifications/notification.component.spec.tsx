@@ -137,4 +137,23 @@ describe('NotificationOpenComponent list (C4)', () => {
     // "Mark all read" is only meaningful with real data — it must stay hidden.
     expect(screen.queryByText('Mark all read')).toBeNull();
   });
+
+  it('links to the full /notifications manager page from the footer', async () => {
+    mockResponse = {
+      ok: true,
+      status: 200,
+      json: () => Promise.resolve({ notifications: [] }),
+    };
+
+    render(<NotificationOpenComponent onClose={vi.fn()} />);
+
+    await waitFor(() => {
+      const link = screen.getByText('View all notifications');
+      expect(link.getAttribute('href')).toBe('/notifications');
+    });
+    // The preferences link stays put.
+    expect(screen.getByText('Notification preferences').getAttribute('href')).toBe(
+      '/user/me/notifications'
+    );
+  });
 });
