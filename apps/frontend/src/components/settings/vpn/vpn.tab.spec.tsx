@@ -1,9 +1,10 @@
-import { render, screen, waitFor } from '@testing-library/react';
+import { render, screen, waitFor, fireEvent } from '@testing-library/react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { VpnTab } from './vpn.tab';
 
 const mockFetch = vi.fn();
 const mockMutate = vi.fn();
+const mockOpenModal = vi.fn();
 
 vi.mock('@postmill-ai/helpers/utils/custom.fetch', () => ({
   useFetch: () => mockFetch,
@@ -29,6 +30,16 @@ vi.mock('swr', () => ({
 
 vi.mock('@postmill-ai/frontend/components/settings/shared/use-provider-catalog', () => ({
   useProviderCatalog: () => ({ data: [] }),
+}));
+
+// Capture the config-modal open (no ModalManager in this suite).
+vi.mock('@postmill-ai/frontend/components/layout/new-modal', async (importOriginal) => ({
+  ...(await importOriginal<Record<string, unknown>>()),
+  useModals: () => ({
+    openModal: mockOpenModal,
+    closeAll: vi.fn(),
+    closeById: vi.fn(),
+  }),
 }));
 
 import useSWR from 'swr';
@@ -94,12 +105,25 @@ describe('VpnTab', () => {
     expect(screen.getAllByText('OpenVPN').length).toBe(2);
   });
 
-  it('shows Configure for unconfigured provider and Edit for configured provider', async () => {
+  it('renders no Edit/Configure links — row click opens the config modal', async () => {
     render(<VpnTab />);
 
     await waitFor(() => {
-      expect(screen.getByText('Configure')).toBeDefined();
-      expect(screen.getByText('Edit')).toBeDefined();
+      expect(screen.getByText('NordVPN')).toBeDefined();
+      expect(screen.getByText('Mullvad VPN')).toBeDefined();
     });
+    expect(screen.queryByText('Configure')).toBeNull();
+    expect(screen.queryByText('Edit')).toBeNull();
+
+    // Row click (on the row, not a nested button) opens the modal titled
+    // `<icon> <name> Setup|Edit` via the shared ProviderModalTitle.
+    fireEvent.click(screen.getAllByTestId('provider-icon')[0]);
+    expect(mockOpenModal).toHaveBeenCalledWith(
+      expect.objectContaining({
+        title: expect.objectContaining({
+          props: expect.objectContaining({ action: expect.stringMatching(/setup|edit/) }),
+        }),
+      }),
+    );
   });
 });

@@ -396,6 +396,19 @@ export const StorageTab: React.FC<{ activeSubTab?: SubTab }> = ({
           }}
           onRemove={(id) => handleDelete(id)}
           ProviderIconComponent={ProviderIcon}
+          // The whole row opens the config modal — no Edit/Configure buttons.
+          onRowClick={(provider) => {
+            if (localProvider && provider.id === localProvider.id) {
+              openEdit(localProvider);
+              return;
+            }
+            const p = instanceMap.get(provider.id);
+            if (p) {
+              openEdit(p);
+              return;
+            }
+            handleAdd(provider.id.replace('template-', ''));
+          }}
           renderBadges={(provider) => {
             if (localProvider && provider.id === localProvider.id) {
               return usageBar(quotaStatus?.usedBytes ?? null, quotaStatus?.quotaBytes ?? null);
@@ -423,14 +436,9 @@ export const StorageTab: React.FC<{ activeSubTab?: SubTab }> = ({
           renderActions={(provider) => {
             if (localProvider && provider.id === localProvider.id) {
               return (
-                <>
-                  <button onClick={() => openEdit(localProvider)} className="text-[11px] px-[8px] py-[4px] rounded-[6px] bg-newTableHeader text-newTableText hover:bg-[#3a3a3a] transition-colors">
-                    {t('edit', 'Edit')}
-                  </button>
-                  <button onClick={() => handleTest(localProvider.id)} className="text-[11px] px-[8px] py-[4px] rounded-[6px] bg-newTableHeader text-blue-700 dark:text-blue-400 hover:bg-[#1a2a3a] transition-colors">
-                    {t('test', 'Test')}
-                  </button>
-                </>
+                <button onClick={() => handleTest(localProvider.id)} className="text-[11px] px-[8px] py-[4px] rounded-[6px] bg-newTableHeader text-blue-700 dark:text-blue-400 hover:bg-[#1a2a3a] transition-colors">
+                  {t('test', 'Test')}
+                </button>
               );
             }
             const p = instanceMap.get(provider.id);
@@ -446,9 +454,6 @@ export const StorageTab: React.FC<{ activeSubTab?: SubTab }> = ({
                       {t('mount', 'Mount')}
                     </button>
                   )}
-                  <button onClick={() => openEdit(p)} className="text-[11px] px-[8px] py-[4px] rounded-[6px] bg-newTableHeader text-newTableText hover:bg-[#3a3a3a] transition-colors">
-                    {t('edit', 'Edit')}
-                  </button>
                   <button onClick={() => handleTest(p.id)} className="text-[11px] px-[8px] py-[4px] rounded-[6px] bg-newTableHeader text-blue-700 dark:text-blue-400 hover:bg-[#1a2a3a] transition-colors">
                     {t('test', 'Test')}
                   </button>
@@ -463,13 +468,8 @@ export const StorageTab: React.FC<{ activeSubTab?: SubTab }> = ({
                 </>
               );
             }
-            // Template row — configure another instance of this provider type.
-            const type = provider.id.replace('template-', '');
-            return (
-              <button onClick={() => handleAdd(type)} className="text-[12px] text-btnPrimaryAccent hover:underline">
-                {t('configure', 'Configure')}
-              </button>
-            );
+            // Template row — the row click opens the add-instance modal.
+            return null;
           }}
           />
         </div>

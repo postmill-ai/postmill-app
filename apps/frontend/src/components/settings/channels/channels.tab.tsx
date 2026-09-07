@@ -7,6 +7,7 @@ import { createFetchError } from '@postmill-ai/frontend/components/settings/shar
 import { useToaster } from '@postmill-ai/react/toaster/toaster';
 import { ChannelConfigForm, ChannelCustomField, ChannelSetupDescriptor } from './channel-edit.modal';
 import ProviderListShell from '@postmill-ai/frontend/components/settings/shared/provider-list-shell';
+import ProviderModalTitle from '@postmill-ai/frontend/components/settings/shared/provider-modal-title';
 import {
   useProviderCatalog,
   ProviderCatalogEntry,
@@ -101,6 +102,15 @@ const CAPABILITY_COLORS: Record<string, string> = {
   linkPreview: 'bg-indigo-500/20 text-indigo-800 dark:text-indigo-400',
   refreshToken: 'bg-teal-500/20 text-teal-800 dark:text-teal-400',
   watchlist: 'bg-orange-500/20 text-orange-800 dark:text-orange-400',
+};
+
+// Version-pill colors in the Add Channel picker — mirrors the list rows'
+// VERSION_STYLES in provider-list-shell (preview/active/deprecated/retired).
+const PICKER_VERSION_STYLES: Record<string, string> = {
+  preview: 'bg-purple-900/20 text-purple-800 dark:text-purple-400',
+  active: 'bg-green-900/20 text-green-900 dark:text-green-400',
+  deprecated: 'bg-amber-900/20 text-amber-800 dark:text-amber-400',
+  retired: 'bg-red-900/20 text-dangerText',
 };
 
 // Capability label + color, built from the existing filter labels and the
@@ -317,6 +327,17 @@ const ProviderPicker: FC<{
                 <div className="flex flex-col min-w-0">
                   <span className="flex items-center gap-[6px] flex-wrap">
                     <span className="text-[14px] font-[500] text-textColor">{p.name}</span>
+                    {vi && (
+                      // Pinned-version pill, same status colors as the list rows.
+                      <span
+                        className={`text-[10px] rounded-[4px] px-[6px] py-px ${PICKER_VERSION_STYLES[vi.status]}`}
+                        title={t('pinned_to_version', 'Pinned to version {{version}}', {
+                          version: vi.version,
+                        })}
+                      >
+                        {vi.version}
+                      </span>
+                    )}
                     {vi && vi.status === 'deprecated' && (
                       <span className="text-[10px] rounded-[4px] px-[6px] py-px bg-amber-500/15 text-amber-800 dark:text-amber-400">
                         {t('deprecated', 'Deprecated')}
@@ -377,11 +398,13 @@ export const ChannelsTab: FC = () => {
     (identifier: string, config?: ChannelConfigItem) => {
       const provider = providers?.find((p) => p.identifier === identifier);
       modals.openModal({
-        title: config
-          ? t('edit_channel', 'Edit channel')
-          : t('configure_provider_name', 'Configure {{provider}}', {
-              provider: providerName(identifier),
-            }),
+        title: (
+          <ProviderModalTitle
+            identifier={identifier}
+            name={providerName(identifier)}
+            action={config ? 'edit' : 'setup'}
+          />
+        ),
         children: (close) => (
           <ChannelConfigForm
             identifier={identifier}
@@ -413,7 +436,7 @@ export const ChannelsTab: FC = () => {
         ),
       });
     },
-    [providers, modals, t, providerName, refresh]
+    [providers, modals, providerName, refresh]
   );
 
   const openPicker = useCallback(() => {

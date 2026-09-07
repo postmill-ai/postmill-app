@@ -140,20 +140,12 @@ export function ProviderConfigForm<Meta = any>({
     if (ok) onRemoved?.();
   };
 
-  const name = (meta as any)?.name || identifier;
   const setupNotes = (meta as any)?.setupNotes as string | undefined;
 
+  // Chromeless: the shared modal frame supplies the border, padding, header
+  // (`<icon> <name> Setup|Edit` via ProviderModalTitle) and the close button.
   return (
-    <div className="bg-newBgColorInner border border-newTableBorder rounded-[12px] p-[24px] flex flex-col gap-[24px]">
-      <div className="flex items-center justify-between">
-        <div className="text-[16px] font-semibold">{name}</div>
-        <button
-          className="text-[12px] text-newTableText hover:text-textColor"
-          onClick={onClose}
-        >
-          {t('close', 'Close')}
-        </button>
-      </div>
+    <div className="flex flex-col gap-[24px] w-[520px] max-w-full">
 
       {website && (
         <div className="text-[13px] leading-[1.5] text-textColor bg-btnPrimary/10 border border-btnPrimary/30 rounded-[8px] p-[12px] flex items-start gap-[10px]">
@@ -297,6 +289,12 @@ export function ProviderConfigForm<Meta = any>({
           </button>
         )}
         <div className="flex items-center gap-[12px] ml-auto">
+          <button
+            className="text-[13px] px-[16px] py-[8px] rounded-[8px] border border-newTableBorder hover:bg-boxHover"
+            onClick={onClose}
+          >
+            {t('cancel', 'Cancel')}
+          </button>
           {descriptor.features.test !== false && (
             <button
               className="text-[13px] px-[16px] py-[8px] rounded-[8px] border border-newTableBorder hover:bg-boxHover"

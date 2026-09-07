@@ -1,9 +1,17 @@
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { SWRConfig } from 'swr';
+import type { ReactNode } from 'react';
+
+// Shape of the openModal params we capture (no ModalManager in this suite).
+type OpenModalParams = {
+  title: { props: { identifier: string; name: string; action: string } };
+  children: (close: () => void) => ReactNode;
+};
 
 const mockFetchFn = vi.fn();
 const mockToasterShow = vi.fn();
 const mockDecisionOpen = vi.fn();
+const mockOpenModal = vi.fn();
 const mockT = vi.fn((_key: string, fallback?: string, opts?: Record<string, any>) => {
   if (!fallback) return _key;
   if (opts?.count !== undefined) return fallback.replace('{{count}}', String(opts.count));
@@ -24,10 +32,17 @@ vi.mock('@postmill-ai/react/translation/get.transation.service.client', () => ({
 
 // The delete flow now confirms through the bespoke decision modal
 // (useDecisionModal) instead of window.confirm. Keep the rest of new-modal real
-// (provider-settings-panel uses useModals) and only stub the decision hook.
+// and only stub the decision hook + useModals (the config form opens through
+// openModal — no ModalManager is mounted in this suite, so we capture the call
+// and render `children` manually where the form itself is under test).
 vi.mock('@postmill-ai/frontend/components/layout/new-modal', async (importOriginal) => ({
   ...((await importOriginal()) as any),
   useDecisionModal: () => ({ open: mockDecisionOpen }),
+  useModals: () => ({
+    openModal: mockOpenModal,
+    closeAll: vi.fn(),
+    closeById: vi.fn(),
+  }),
 }));
 
 vi.mock('@postmill-ai/frontend/components/shared/provider-icon', () => ({
@@ -133,20 +148,48 @@ describe('ShortlinksTab', () => {
       expect(screen.getAllByText('Rebrandly').length).toBeGreaterThanOrEqual(1);
     });
 
-    it('shows Configure button for unconfigured providers', async () => {
+    it('renders no Edit/Configure links — the whole row opens the config modal', async () => {
       const { ShortlinksTab } = await import('./shortlinks.tab');
       render(<ShortlinksTab />, { wrapper });
 
-      const configureButtons = await screen.findAllByText('Configure');
-      expect(configureButtons.length).toBe(2);
+      expect((await screen.findAllByText('Bitly')).length).toBeGreaterThanOrEqual(1);
+      expect(screen.queryByText('Configure')).toBeNull();
+      expect(screen.queryByText('Edit')).toBeNull();
     });
 
-    it('shows Edit button for configured providers', async () => {
+    it('opens the config modal with the shared title on row click (setup vs edit)', async () => {
       const { ShortlinksTab } = await import('./shortlinks.tab');
       render(<ShortlinksTab />, { wrapper });
 
-      const editButtons = await screen.findAllByText('Edit');
-      expect(editButtons.length).toBe(2);
+      expect((await screen.findAllByText('Bitly')).length).toBeGreaterThanOrEqual(1);
+
+      // Unconfigured provider → "Setup".
+      fireEvent.click(document.querySelector('[data-identifier="bitly"]')!);
+      expect(mockOpenModal).toHaveBeenCalledWith(
+        expect.objectContaining({
+          title: expect.objectContaining({
+            props: expect.objectContaining({
+              identifier: 'bitly',
+              name: 'Bitly',
+              action: 'setup',
+            }),
+          }),
+        }),
+      );
+
+      // Configured provider → "Edit".
+      fireEvent.click(document.querySelector('[data-identifier="tinyurl"]')!);
+      expect(mockOpenModal).toHaveBeenCalledWith(
+        expect.objectContaining({
+          title: expect.objectContaining({
+            props: expect.objectContaining({
+              identifier: 'tinyurl',
+              name: 'TinyURL',
+              action: 'edit',
+            }),
+          }),
+        }),
+      );
     });
 
     it('shows Make Primary button only for configured but inactive providers', async () => {
@@ -189,15 +232,29 @@ describe('ShortlinksTab', () => {
   });
 
   describe('Delete Provider', () => {
+    // Remove lives in the config modal footer — open it through the row click
+    // (openModal is captured, so we render its children manually).
+    const openEditForm = async (identifier: string) => {
+      const { ShortlinksTab } = await import('./shortlinks.tab');
+      render(<ShortlinksTab />, { wrapper });
+      await screen.findAllByText('Rebrandly');
+
+      fireEvent.click(document.querySelector(`[data-identifier="${identifier}"]`)!);
+      const call = mockOpenModal.mock.calls.find(
+        ([params]: [OpenModalParams]) => params.title.props.identifier === identifier,
+      );
+      expect(call).toBeDefined();
+      const children = call![0].children;
+      render(<>{children(vi.fn())}</>, { wrapper });
+      return screen.findByText('Remove');
+    };
+
     it('shows confirm dialog before deleting', async () => {
       // User dismisses the decision modal → no delete request.
       mockDecisionOpen.mockResolvedValue(false);
 
-      const { ShortlinksTab } = await import('./shortlinks.tab');
-      render(<ShortlinksTab />, { wrapper });
-
-      const removeButtons = await screen.findAllByText('Remove');
-      fireEvent.click(removeButtons[0]);
+      const removeButton = await openEditForm('rebrandly');
+      fireEvent.click(removeButton);
 
       await waitFor(() => {
         expect(mockDecisionOpen).toHaveBeenCalledWith(
@@ -215,11 +272,8 @@ describe('ShortlinksTab', () => {
       // User approves the decision modal → delete request fires.
       mockDecisionOpen.mockResolvedValue(true);
 
-      const { ShortlinksTab } = await import('./shortlinks.tab');
-      render(<ShortlinksTab />, { wrapper });
-
-      const removeButtons = await screen.findAllByText('Remove');
-      fireEvent.click(removeButtons[0]);
+      const removeButton = await openEditForm('rebrandly');
+      fireEvent.click(removeButton);
 
       await waitFor(() => {
         expect(mockFetchFn).toHaveBeenCalledWith('/settings/shortlinks/config/rebrandly', {
@@ -249,16 +303,27 @@ describe('ShortlinksTab', () => {
     });
   });
 
-  describe('Provider Form Toggle', () => {
-    it('opens provider form when Configure is clicked', async () => {
+  describe('Provider Form Modal', () => {
+    it('renders the config form inside the modal on row click', async () => {
       const { ShortlinksTab } = await import('./shortlinks.tab');
       render(<ShortlinksTab />, { wrapper });
 
-      fireEvent.click((await screen.findAllByText('Configure'))[0]);
+      await screen.findAllByText('Bitly');
+      fireEvent.click(document.querySelector('[data-identifier="bitly"]')!);
 
-      await waitFor(() => {
-        expect(screen.getByText('Close')).toBeDefined();
-      });
+      const call = mockOpenModal.mock.calls.find(
+        ([params]: [OpenModalParams]) => params.title.props.identifier === 'bitly',
+      );
+      expect(call).toBeDefined();
+      const children = call![0].children;
+      render(<>{children(vi.fn())}</>, { wrapper });
+
+      // The modal frame supplies the header/close; the form footer is
+      // Cancel | Test Connection | Save (Remove only when configured).
+      await screen.findByText('Cancel');
+      expect(screen.getByText('Test Connection')).toBeDefined();
+      expect(screen.getByText('Save')).toBeDefined();
+      expect(screen.queryByText('Remove')).toBeNull();
     });
   });
 

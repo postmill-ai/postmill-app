@@ -2,6 +2,7 @@
 
 import React, { useState } from 'react';
 import ProviderIcon from '@postmill-ai/frontend/components/shared/provider-icon';
+import ProviderModalTitle from '@postmill-ai/frontend/components/settings/shared/provider-modal-title';
 import { useFetch } from '@postmill-ai/helpers/utils/custom.fetch';
 import { CampaignSelector } from '@postmill-ai/frontend/components/campaigns/selector/campaign-selector';
 import { useT } from '@postmill-ai/react/translation/get.transation.service.client';
@@ -255,9 +256,16 @@ export const ProviderFormModal: React.FC<ProviderFormModalProps> = ({
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60">
       <div className="bg-newBgColorInner border border-newTableBorder rounded-[16px] p-[24px] w-full max-w-[500px] max-h-[90vh] overflow-y-auto">
         <h3 className="text-[18px] font-medium text-textColor mb-[20px]">
-          {editProvider
-            ? translate('edit_provider', 'Edit Provider')
-            : translate('add_storage_provider', 'Add Storage Provider')}
+          <ProviderModalTitle
+            identifier={type}
+            name={
+              editProvider?.name ||
+              allProviderTypes.find((pt) => pt.value === type)?.label ||
+              type
+            }
+            action={editProvider ? 'edit' : 'setup'}
+            IconComponent={ProviderIcon}
+          />
         </h3>
 
         <div className="flex flex-col gap-[16px]">

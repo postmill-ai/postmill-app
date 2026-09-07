@@ -4481,5 +4481,5 @@
   "filter_priority": "Filter by priority",
   "comment_inbox.sort_priority_first": "High priority first",
   "comms": "Comms",
-  "comms_settings_description": "Chat with your Postmill agent and receive notifications in Slack, Telegram, Discord, Matrix, or LINE."
+  "comms_settings_description": "Chat with your Postmill agent and receive notifications in your team’s chat apps."
 }
