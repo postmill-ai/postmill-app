@@ -8,6 +8,7 @@ import ProviderListShell, {
 } from '@postmill-ai/frontend/components/settings/shared/provider-list-shell';
 import { useProviderCatalog } from '@postmill-ai/frontend/components/settings/shared/use-provider-catalog';
 import { ProviderInfoModal } from '@postmill-ai/frontend/components/settings/shared/provider-info-modal';
+import ProviderModalTitle from '@postmill-ai/frontend/components/settings/shared/provider-modal-title';
 import { useModals } from '@postmill-ai/frontend/components/layout/new-modal';
 import { ProviderSurfaceDescriptor, ProviderRow } from './provider-surface.types';
 import { useProviderSurface } from './use-provider-surface';
@@ -78,7 +79,6 @@ export function ProviderSettingsPanel<Meta = any>({
 
   const [search, setSearch] = useState(initialSearch ?? '');
   const [selectedCaps, setSelectedCaps] = useState<string[]>([]);
-  const [configuring, setConfiguring] = useState<string | null>(null);
 
   const rows = useMemo(() => data?.rows ?? [], [data]);
 
@@ -198,6 +198,50 @@ export function ProviderSettingsPanel<Meta = any>({
     [],
   );
 
+  // Row click (and any "configure" affordance) opens the shared config form in a
+  // modal titled `<icon> <name> Setup|Edit` — the same pattern as channels/comms.
+  const openConfig = useCallback(
+    (identifier: string) => {
+      const row = rowByIdentifier(identifier);
+      const configEntry = catalog?.find(
+        (e) => e.providerId === identifier && e.version === row?.version,
+      );
+      openModal({
+        title: (
+          <ProviderModalTitle
+            identifier={identifier}
+            name={row?.name || identifier}
+            action={row?.isConfigured ? 'edit' : 'setup'}
+            IconComponent={ProviderIcon}
+          />
+        ),
+        children: (close) => (
+          <ProviderConfigForm
+            descriptor={descriptor}
+            identifier={identifier}
+            isConfigured={row?.isConfigured ?? false}
+            initialVersion={row?.version}
+            meta={row?.meta}
+            website={configEntry?.website}
+            onClose={close}
+            onSaved={() => {
+              close();
+              refresh();
+            }}
+            onRemoved={() => {
+              close();
+              refresh();
+            }}
+            save={save}
+            test={test}
+            remove={remove}
+          />
+        ),
+      });
+    },
+    [rowByIdentifier, catalog, openModal, descriptor, refresh, save, test, remove],
+  );
+
   if (error) {
     return (
       <div className="bg-newBgColorInner border border-newTableBorder rounded-[12px] p-[24px] flex flex-col items-center gap-[12px]">
@@ -210,38 +254,6 @@ export function ProviderSettingsPanel<Meta = any>({
         >
           {t('try_again', 'Try again')}
         </button>
-      </div>
-    );
-  }
-
-  if (configuring) {
-    const row = rowByIdentifier(configuring);
-    const configEntry = catalog?.find(
-      (e) => e.providerId === configuring && e.version === row?.version,
-    );
-    return (
-      <div className="flex flex-col gap-[16px]">
-        {children}
-        <ProviderConfigForm
-          descriptor={descriptor}
-          identifier={configuring}
-          isConfigured={row?.isConfigured ?? false}
-          initialVersion={row?.version}
-          meta={row?.meta}
-          website={configEntry?.website}
-          onClose={() => setConfiguring(null)}
-          onSaved={() => {
-            setConfiguring(null);
-            refresh();
-          }}
-          onRemoved={() => {
-            setConfiguring(null);
-            refresh();
-          }}
-          save={save}
-          test={test}
-          remove={remove}
-        />
       </div>
     );
   }
@@ -283,7 +295,7 @@ export function ProviderSettingsPanel<Meta = any>({
           ) : undefined
         }
         providers={shellItems}
-        onConfigure={(id) => setConfiguring(id)}
+        onConfigure={openConfig}
         onRemove={(id) => remove(id).then((ok) => ok && refresh())}
         ProviderIconComponent={ProviderIcon}
         getProviderHref={
@@ -293,6 +305,8 @@ export function ProviderSettingsPanel<Meta = any>({
             : undefined
         }
         onProviderNameClick={openProviderInfo}
+        // The whole row opens the config modal — no Edit/Configure links.
+        onRowClick={(item) => openConfig(item.identifier)}
         renderBadges={(item) => {
           const row = item.meta as ProviderRow<Meta>;
           return (
@@ -313,12 +327,6 @@ export function ProviderSettingsPanel<Meta = any>({
           const row = item.meta as ProviderRow<Meta>;
           return (
             <>
-              <button
-                className="text-[12px] text-btnPrimaryAccent hover:underline"
-                onClick={() => setConfiguring(item.identifier)}
-              >
-                {row?.isConfigured ? t('edit', 'Edit') : t('configure', 'Configure')}
-              </button>
               {primaryEnabled &&
                 row?.isConfigured &&
                 row?.enabled &&
@@ -335,7 +343,7 @@ export function ProviderSettingsPanel<Meta = any>({
                   </button>
                 )}
               {descriptor.renderExtraActions?.(row, {
-                configure: (id) => setConfiguring(id),
+                configure: openConfig,
               })}
               {toggleEnabled && row?.isConfigured && (
                 <label className="flex items-center gap-[4px] cursor-pointer">
@@ -355,14 +363,6 @@ export function ProviderSettingsPanel<Meta = any>({
                     }
                   />
                 </label>
-              )}
-              {row?.isConfigured && descriptor.features.remove !== false && (
-                <button
-                  className="text-[12px] text-red-600 dark:text-red-500 hover:underline"
-                  onClick={() => remove(item.identifier).then((ok) => ok && refresh())}
-                >
-                  {t('remove', 'Remove')}
-                </button>
               )}
             </>
           );

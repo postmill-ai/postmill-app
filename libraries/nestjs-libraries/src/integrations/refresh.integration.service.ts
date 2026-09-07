@@ -29,6 +29,19 @@ export class RefreshIntegrationService {
     integration: Integration,
     cause = ''
   ): Promise<false | AuthTokenDetails> {
+    // Known-dead channel: a previous failure already flagged it refreshNeeded
+    // (or it was disconnected) and the user was notified. Autonomous pollers
+    // (comments cron every minute, analytics) hit this path on every expired
+    // token — without the gate they re-fail and re-notify forever. Reconnecting
+    // via OAuth upserts the row and clears the flag, so recovery is unaffected.
+    if (
+      integration.refreshNeeded ||
+      integration.disabled ||
+      integration.deletedAt
+    ) {
+      return false as const;
+    }
+
     const socialProvider =
       this._integrationManager.getSocialIntegrationUnchecked(
         integration.providerIdentifier,

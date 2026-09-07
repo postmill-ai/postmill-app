@@ -181,6 +181,34 @@ describe('RefreshIntegrationService', () => {
     });
   });
 
+  describe('refresh — dead-channel gate', () => {
+    it('returns false without touching the provider or notifying when refreshNeeded is set', async () => {
+      const dead = { ...mockIntegration, refreshNeeded: true };
+      const result = await service.refresh(dead as any);
+      expect(result).toBe(false);
+      expect(mockIntegrationManager.getSocialIntegrationUnchecked).not.toHaveBeenCalled();
+      expect(mockRefreshToken).not.toHaveBeenCalled();
+      expect(mockIntegrationService.informAboutRefreshError).not.toHaveBeenCalled();
+      expect(mockIntegrationService.disconnectChannel).not.toHaveBeenCalled();
+    });
+
+    it('returns false without notifying when the channel is disabled', async () => {
+      const dead = { ...mockIntegration, disabled: true };
+      const result = await service.refresh(dead as any);
+      expect(result).toBe(false);
+      expect(mockRefreshToken).not.toHaveBeenCalled();
+      expect(mockIntegrationService.informAboutRefreshError).not.toHaveBeenCalled();
+    });
+
+    it('returns false without notifying when the channel is soft-deleted', async () => {
+      const dead = { ...mockIntegration, deletedAt: new Date() };
+      const result = await service.refresh(dead as any);
+      expect(result).toBe(false);
+      expect(mockRefreshToken).not.toHaveBeenCalled();
+      expect(mockIntegrationService.informAboutRefreshError).not.toHaveBeenCalled();
+    });
+  });
+
   describe('refreshProcess (via refresh)', () => {
     it('returns refresh directly when rootInternalId equals internalId', async () => {
       const result = await service.refresh(mockIntegration as any);

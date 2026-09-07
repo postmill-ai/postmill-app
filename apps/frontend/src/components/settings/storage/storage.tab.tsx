@@ -8,6 +8,8 @@ import { createFetchError } from '@postmill-ai/frontend/components/settings/shar
 import { useToaster } from '@postmill-ai/react/toaster/toaster';
 import ProviderIcon from '@postmill-ai/frontend/components/shared/provider-icon';
 import ProviderListShell from '@postmill-ai/frontend/components/settings/shared/provider-list-shell';
+import ProviderModalTitle from '@postmill-ai/frontend/components/settings/shared/provider-modal-title';
+import { useModals } from '@postmill-ai/frontend/components/layout/new-modal';
 import { useProviderCatalog } from '@postmill-ai/frontend/components/settings/shared/use-provider-catalog';
 import { ProviderFormModal } from '@postmill-ai/frontend/components/settings/storage/provider-form.modal';
 import { MigrationModal } from '@postmill-ai/frontend/components/settings/storage/migration.modal';
@@ -147,9 +149,7 @@ export const StorageTab: React.FC<{ activeSubTab?: SubTab }> = ({
   // The sub-tab is driven by the route (/settings/storage/{providers,audit,usage}); the nav
   // strip lives in the storage layout, not here.
   const subTab = activeSubTab;
-  const [showModal, setShowModal] = useState(false);
-  const [editProvider, setEditProvider] = useState<StorageProviderRow | null>(null);
-  const [presetType, setPresetType] = useState<string | undefined>(undefined);
+  const modals = useModals();
   const [migrateSource, setMigrateSource] = useState<StorageProviderRow | null>(null);
 
   const usageMap: Record<string, number> = {};
@@ -231,29 +231,44 @@ export const StorageTab: React.FC<{ activeSubTab?: SubTab }> = ({
     }
   }, [fetch, toaster, t]);
 
-  const handleSaved = useCallback(() => {
-    setShowModal(false);
-    setEditProvider(null);
-    setPresetType(undefined);
-    refresh();
-  }, [refresh]);
-
   const otherProviders = (providers || []).filter((p) => p.type !== 'LOCAL');
   const localProvider = (providers || []).find((p) => p.type === 'LOCAL');
   const configuredInstances = [...otherProviders].sort((a, b) => a.name.localeCompare(b.name));
   const instanceMap = new Map(configuredInstances.map((p) => [p.id, p]));
 
-  const handleAdd = useCallback((type?: string) => {
-    setEditProvider(null);
-    setPresetType(type);
-    setShowModal(true);
-  }, []);
-
-  const openEdit = useCallback((p: StorageProviderRow) => {
-    setEditProvider(p);
-    setPresetType(undefined);
-    setShowModal(true);
-  }, []);
+  // One modal per provider — the clicked row determines the type (channels
+  // pattern). The shared modal frame supplies the title, X, Esc, and backdrop
+  // close; the form itself is chromeless content.
+  const openStorageModal = useCallback(
+    (editProvider?: StorageProviderRow, presetType?: string) => {
+      const type = editProvider?.type || presetType || 'S3';
+      modals.openModal({
+        title: (
+          <ProviderModalTitle
+            identifier={type}
+            name={
+              editProvider?.name ||
+              t('storage_type_' + type, PROVIDER_TYPE_LABELS[type] || type)
+            }
+            action={editProvider ? 'edit' : 'setup'}
+            IconComponent={ProviderIcon}
+          />
+        ),
+        children: (close) => (
+          <ProviderFormModal
+            editProvider={editProvider}
+            presetType={presetType}
+            onClose={close}
+            onSaved={() => {
+              close();
+              refresh();
+            }}
+          />
+        ),
+      });
+    },
+    [modals, refresh, t],
+  );
 
   const storageTypeToKernelId = (type: string) => type.toLowerCase().replace(/_/g, '');
 
@@ -392,10 +407,22 @@ export const StorageTab: React.FC<{ activeSubTab?: SubTab }> = ({
             providers={shellProviders}
           onConfigure={(id) => {
             const p = instanceMap.get(id);
-            if (p) openEdit(p);
+            if (p) openStorageModal(p);
           }}
           onRemove={(id) => handleDelete(id)}
           ProviderIconComponent={ProviderIcon}
+          // The whole row opens the config modal — no Edit/Configure buttons.
+          // Local (Postmill Storage) is the built-in store: display-only row,
+          // no settings modal and no test.
+          onRowClick={(provider) => {
+            if (localProvider && provider.id === localProvider.id) return;
+            const p = instanceMap.get(provider.id);
+            if (p) {
+              openStorageModal(p);
+              return;
+            }
+            openStorageModal(undefined, provider.id.replace('template-', ''));
+          }}
           renderBadges={(provider) => {
             if (localProvider && provider.id === localProvider.id) {
               return usageBar(quotaStatus?.usedBytes ?? null, quotaStatus?.quotaBytes ?? null);
@@ -421,17 +448,9 @@ export const StorageTab: React.FC<{ activeSubTab?: SubTab }> = ({
             );
           }}
           renderActions={(provider) => {
+            // Local (Postmill Storage): no actions — nothing to configure or test.
             if (localProvider && provider.id === localProvider.id) {
-              return (
-                <>
-                  <button onClick={() => openEdit(localProvider)} className="text-[11px] px-[8px] py-[4px] rounded-[6px] bg-newTableHeader text-newTableText hover:bg-[#3a3a3a] transition-colors">
-                    {t('edit', 'Edit')}
-                  </button>
-                  <button onClick={() => handleTest(localProvider.id)} className="text-[11px] px-[8px] py-[4px] rounded-[6px] bg-newTableHeader text-blue-700 dark:text-blue-400 hover:bg-[#1a2a3a] transition-colors">
-                    {t('test', 'Test')}
-                  </button>
-                </>
-              );
+              return null;
             }
             const p = instanceMap.get(provider.id);
             if (p) {
@@ -446,9 +465,6 @@ export const StorageTab: React.FC<{ activeSubTab?: SubTab }> = ({
                       {t('mount', 'Mount')}
                     </button>
                   )}
-                  <button onClick={() => openEdit(p)} className="text-[11px] px-[8px] py-[4px] rounded-[6px] bg-newTableHeader text-newTableText hover:bg-[#3a3a3a] transition-colors">
-                    {t('edit', 'Edit')}
-                  </button>
                   <button onClick={() => handleTest(p.id)} className="text-[11px] px-[8px] py-[4px] rounded-[6px] bg-newTableHeader text-blue-700 dark:text-blue-400 hover:bg-[#1a2a3a] transition-colors">
                     {t('test', 'Test')}
                   </button>
@@ -463,13 +479,8 @@ export const StorageTab: React.FC<{ activeSubTab?: SubTab }> = ({
                 </>
               );
             }
-            // Template row — configure another instance of this provider type.
-            const type = provider.id.replace('template-', '');
-            return (
-              <button onClick={() => handleAdd(type)} className="text-[12px] text-btnPrimaryAccent hover:underline">
-                {t('configure', 'Configure')}
-              </button>
-            );
+            // Template row — the row click opens the add-instance modal.
+            return null;
           }}
           />
         </div>
@@ -535,19 +546,6 @@ export const StorageTab: React.FC<{ activeSubTab?: SubTab }> = ({
             <div className="text-[13px] text-newTableText animate-pulse">{t('loading', 'Loading')}</div>
           )}
         </div>
-      )}
-
-      {showModal && (
-        <ProviderFormModal
-          onClose={() => {
-            setShowModal(false);
-            setEditProvider(null);
-            setPresetType(undefined);
-          }}
-          onSaved={handleSaved}
-          editProvider={editProvider}
-          presetType={presetType}
-        />
       )}
 
       {migrateSource && (

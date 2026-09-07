@@ -3,6 +3,7 @@
 import { useFetch } from '@postmill-ai/helpers/utils/custom.fetch';
 import useSWR, { useSWRConfig } from 'swr';
 import { FC, useCallback, useEffect, useState } from 'react';
+import Link from 'next/link';
 import clsx from 'clsx';
 import dayjs from 'dayjs';
 import relativeTime from 'dayjs/plugin/relativeTime';
@@ -33,7 +34,7 @@ function replaceLinks(text: string) {
   );
 }
 
-const NotificationRow: FC<{
+export const NotificationRow: FC<{
   notification: NotificationItem;
   onMarkRead: (id: string) => void;
   onDelete: (id: string) => void;
@@ -235,14 +236,21 @@ export const NotificationOpenComponent: FC<{
           ))}
       </div>
 
-      <div className="p-[12px] border-t border-newTableBorder text-center">
-        <a
+      <div className="p-[12px] border-t border-newTableBorder flex items-center justify-between">
+        <Link
+          href="/notifications"
+          onClick={onClose}
+          className="text-[12px] text-btnPrimaryAccent hover:underline"
+        >
+          {t('view_all_notifications', 'View all notifications')}
+        </Link>
+        <Link
           href="/user/me/notifications"
           onClick={onClose}
           className="text-[12px] text-btnPrimaryAccent hover:underline"
         >
           {t('notification_preferences', 'Notification preferences')}
-        </a>
+        </Link>
       </div>
     </div>
   );
