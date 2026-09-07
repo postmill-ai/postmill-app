@@ -31,6 +31,25 @@ vi.mock('@postmill-ai/frontend/components/settings/storage/provider-form.modal',
   ProviderFormModal: (props: ProviderFormModalProps) => mockProviderFormModal(props),
 }));
 
+// The config form opens through the shared modal manager (openModal) — capture
+// it (no ModalManager in this suite) and render `children` manually where the
+// form props are under test.
+type OpenModalParams = {
+  title: { props: { identifier: string; name: string; action: string } };
+  children: (close: () => void) => React.ReactNode;
+};
+
+const mockOpenModal = vi.fn();
+
+vi.mock('@postmill-ai/frontend/components/layout/new-modal', async (importOriginal) => ({
+  ...(await importOriginal<Record<string, unknown>>()),
+  useModals: () => ({
+    openModal: mockOpenModal,
+    closeAll: vi.fn(),
+    closeById: vi.fn(),
+  }),
+}));
+
 vi.mock('@postmill-ai/frontend/components/settings/storage/migration.modal', () => ({
   MigrationModal: () => null,
 }));
@@ -200,13 +219,22 @@ describe('StorageTab', () => {
       });
       fireEvent.click(screen.getByText('AWS S3 Provider'));
 
-      await waitFor(() => {
-        expect(mockProviderFormModal).toHaveBeenCalledWith(
-          expect.objectContaining({
-            editProvider: expect.objectContaining({ id: 's3-1', type: 'S3' }),
-          }),
-        );
+      const call = mockOpenModal.mock.calls.at(-1);
+      expect(call).toBeDefined();
+      const [params] = call as [OpenModalParams];
+      expect(params.title.props).toMatchObject({
+        identifier: 'S3',
+        name: 'AWS S3 Provider',
+        action: 'edit',
       });
+
+      // The modal children mount the (mocked) form with the instance to edit.
+      renderWithSWR(<>{params.children(vi.fn())}</>);
+      expect(mockProviderFormModal).toHaveBeenCalledWith(
+        expect.objectContaining({
+          editProvider: expect.objectContaining({ id: 's3-1', type: 'S3' }),
+        }),
+      );
     });
 
     it('opens the add modal preset to the template type when a template row is clicked', async () => {
@@ -220,14 +248,38 @@ describe('StorageTab', () => {
       });
       fireEvent.click(screen.getByText('Cloudflare R2'));
 
-      await waitFor(() => {
-        expect(mockProviderFormModal).toHaveBeenCalledWith(
-          expect.objectContaining({
-            editProvider: null,
-            presetType: 'CLOUDFLARE_R2',
-          }),
-        );
+      const call = mockOpenModal.mock.calls.at(-1);
+      expect(call).toBeDefined();
+      const [params] = call as [OpenModalParams];
+      expect(params.title.props).toMatchObject({
+        identifier: 'CLOUDFLARE_R2',
+        name: 'Cloudflare R2',
+        action: 'setup',
       });
+
+      renderWithSWR(<>{params.children(vi.fn())}</>);
+      expect(mockProviderFormModal).toHaveBeenCalledWith(
+        expect.objectContaining({
+          editProvider: undefined,
+          presetType: 'CLOUDFLARE_R2',
+        }),
+      );
+    });
+
+    it('local (Postmill Storage) is display-only: no modal on click, no Test action', async () => {
+      mockProviders = [localProvider];
+
+      const { StorageTab } = await import('./storage.tab');
+      renderWithSWR(<StorageTab />);
+
+      await waitFor(() => {
+        expect(screen.getByText('Postmill Storage')).toBeDefined();
+      });
+      fireEvent.click(screen.getByText('Postmill Storage'));
+
+      expect(mockOpenModal).not.toHaveBeenCalled();
+      // Built-in storage has no settings and no connection test.
+      expect(screen.queryByText('Test')).toBeNull();
     });
   });
 
