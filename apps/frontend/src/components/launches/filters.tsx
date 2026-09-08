@@ -21,6 +21,7 @@ import {
 } from '@postmill-ai/frontend/components/launches/simple-multi-select';
 import SafeImage from '@postmill-ai/react/helpers/safe.image';
 import { DatePicker } from '@mantine/dates';
+import { MantineProvider } from '@mantine/core';
 import { useT } from '@postmill-ai/react/translation/get.transation.service.client';
 import i18next from 'i18next';
 import { newDayjs } from '@postmill-ai/frontend/components/layout/set.timezone';
@@ -1006,8 +1007,12 @@ export const Filters = () => {
                   </div>
 
                   {showCustomPicker && (
+                    // Mantine components throw outside a MantineProvider, and
+                    // the app tree has none — scope one to the picker (same
+                    // pattern as launches/helpers/date.picker.tsx).
                     <div className="flex justify-center rounded-[8px] border border-newTableBorder bg-newBgColorInner p-[8px]">
-                      <DatePicker
+                      <MantineProvider>
+                        <DatePicker
                         type="range"
                         allowSingleDateInRange
                         value={rangeDraft}
@@ -1025,7 +1030,8 @@ export const Filters = () => {
                             'text-textColor hover:bg-box!Focused',
                           weekday: 'text-new!TableText',
                         }}
-                      />
+                        />
+                      </MantineProvider>
                     </div>
                   )}
                 </div>

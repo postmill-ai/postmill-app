@@ -1,13 +1,19 @@
 'use client';
 
+import * as Sentry from '@sentry/nextjs';
+import { useEffect } from 'react';
 import { useT } from '@postmill-ai/react/translation/get.transation.service.client';
 
 /**
  * Shared friendly fallback rendered by the App Router `error.tsx` segment
  * boundaries. Next.js passes `{ error, reset }`; `reset` re-renders the
  * segment subtree to retry. Themed with the app's global tokens so it works in
- * both light and dark mode. The underlying exception is still captured by
- * Sentry's global handler / `global-error.tsx`.
+ * both light and dark mode.
+ *
+ * Segment boundaries CATCH the exception, so it never reaches the global
+ * window error handler — without the captureException below, route crashes
+ * render this UI but never reach Sentry (a 2026-09-08 /analytics crash was
+ * invisible in Sentry for exactly this reason).
  */
 export function RouteError({
   error,
@@ -20,6 +26,10 @@ export function RouteError({
 }) {
   const t = useT();
   const resolvedTitle = title ?? t('something_went_wrong', 'Something went wrong');
+
+  useEffect(() => {
+    Sentry.captureException(error);
+  }, [error]);
 
   return (
     <div className="flex flex-1 min-h-[60vh] items-center justify-center p-[24px] text-center">
