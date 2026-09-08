@@ -156,6 +156,18 @@ export const lineCommsModule: ProviderModule<any, any> = {
       },
     ],
     capabilities: CAPABILITIES,
+    platformConnect: 'env',
+    docsUrl: 'https://docs.postmill.ai/operations-guide/platform-comms-apps#line',
+    portalUrl: 'https://developers.line.biz/console/',
+    portalLabel: 'LINE Developers Console',
+    webhookInstructions:
+      'Paste the webhook URL into Messaging API → Webhook URL and enable "Use webhook".',
+    setupSteps: [
+      'Open the LINE Developers Console and create a Messaging API channel (or pick an existing one).',
+      'Copy the Channel secret from Basic settings and the Channel access token from Messaging API into the fields below.',
+      'Paste the webhook URL below into Messaging API → Webhook URL and enable "Use webhook".',
+      'Users must add the LINE Official Account as a friend before it can message them.',
+    ],
     setupNotes:
       'Paste the webhook URL below into Messaging API → Webhook URL and enable "Use webhook". Users must add the bot as a friend before it can message them. One Postmill organization per channel.',
   },

@@ -6,6 +6,7 @@ import { CommsLinkService } from './comms-link.service';
 import { CommsDeliveryService } from './comms-delivery.service';
 import { CommsAgentActivity } from './comms-agent.activity';
 import { CommsInboundService } from './comms-inbound.service';
+import { CommsPlatformWebhookService } from './comms-platform-webhook.service';
 
 // Comms provider adapters live in their own workspace packages and resolve
 // through the ProviderKernel (ProviderResolutionService); they are not Nest
@@ -20,6 +21,7 @@ import { CommsInboundService } from './comms-inbound.service';
     CommsDeliveryService,
     CommsAgentActivity,
     CommsInboundService,
+    CommsPlatformWebhookService,
   ],
   exports: [
     CommsConfigRepository,
@@ -29,6 +31,7 @@ import { CommsInboundService } from './comms-inbound.service';
     CommsDeliveryService,
     CommsAgentActivity,
     CommsInboundService,
+    CommsPlatformWebhookService,
   ],
 })
 export class CommsModule {}

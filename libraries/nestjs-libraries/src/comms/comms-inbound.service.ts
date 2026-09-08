@@ -17,8 +17,9 @@ export interface CommsInboundEvent {
 }
 
 // "ABCD2345", "link ABCD2345", "/postmill link ABCD2345" — the connect-code
-// alphabet has no 0/O/1/I/L.
-const CONNECT_CODE_PATTERN =
+// alphabet has no 0/O/1/I/L. Shared with the platform webhook route, which
+// resolves the org for a code claim before enqueueing.
+export const CONNECT_CODE_PATTERN =
   /^\/?(?:postmill\s+)?(?:link\s+)?([ABCDEFGHJKMNPQRSTUVWXYZ23456789]{8})$/i;
 
 const DISABLED_REPLY =

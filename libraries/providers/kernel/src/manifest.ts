@@ -35,6 +35,16 @@ export interface ProviderManifest<Caps = unknown> {
   setupNotes?: string;
   authType?: 'none' | 'apiKey' | 'oauth2';
   defaultDomain?: string;
+  /** Numbered setup instructions, rendered as an ordered list in the UI. */
+  setupSteps?: string[];
+  /** Vendor developer console entry point (e.g. Slack API: Your Apps). */
+  portalUrl?: string;
+  portalLabel?: string;
+  /** Where the webhook URL must be pasted manually, when the provider needs it. */
+  webhookInstructions?: string;
+  /** Platform-app connect mode: 'oauth' starts an OAuth flow, 'env' pulls
+   *  deployment-env credentials. Absent = manual credential entry only. */
+  platformConnect?: 'oauth' | 'env';
 }
 
 export interface ProviderHealth {

@@ -29,6 +29,33 @@ export class CommsLinkRepository {
     });
   }
 
+  // Platform-route org resolution: the shared platform bot serves every org,
+  // so the inbound chat identity is resolved to its linked config (and org).
+  findOrgByExternalUser(provider: string, externalUserId: string) {
+    return this._prisma.commsUserLink.findFirst({
+      where: {
+        externalUserId,
+        status: 'linked',
+        config: { identifier: provider, enabled: true },
+      },
+      include: { config: true },
+    });
+  }
+
+  // Platform-route connect-code claim: a still-pending, unexpired code for
+  // this provider resolves the config (and org) the claim will land on.
+  findPendingByCode(provider: string, connectCode: string) {
+    return this._prisma.commsUserLink.findFirst({
+      where: {
+        connectCode,
+        status: 'pending',
+        connectCodeExpiresAt: { gt: new Date() },
+        config: { identifier: provider, enabled: true },
+      },
+      include: { config: true },
+    });
+  }
+
   getByConfigAndUser(configId: string, userId: string) {
     return this._prisma.commsUserLink.findFirst({
       where: { configId, userId },

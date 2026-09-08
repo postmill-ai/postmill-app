@@ -79,6 +79,36 @@ export class CommsSettingsController {
     return { identifier, success: true };
   }
 
+  // Mints the per-org webhook URL before the first save (disabled placeholder
+  // config underneath). Idempotent — safe for the UI to call on every render.
+  @Post('/config/:identifier/webhook')
+  @RequirePermission('settings', 'update')
+  async mintWebhook(
+    @GetOrgFromRequest() org: Organization,
+    @Param('identifier') identifier: string,
+  ) {
+    return this._configService.ensureWebhookUrl(org.id, identifier);
+  }
+
+  @Get('/oauth/slack/url')
+  @RequirePermission('settings', 'update')
+  async getSlackOAuthUrl(
+    @GetOrgFromRequest() org: Organization,
+    @GetUserFromRequest() user: User,
+  ) {
+    return this._configService.getSlackOAuthUrl(org.id, user.id);
+  }
+
+  @Post('/platform-connect/:identifier')
+  @RequirePermission('settings', 'update')
+  async platformConnect(
+    @GetOrgFromRequest() org: Organization,
+    @GetUserFromRequest() user: User,
+    @Param('identifier') identifier: string,
+  ) {
+    return this._configService.platformConnect(org.id, identifier, user.id);
+  }
+
   @Throttle({ default: { limit: 10, ttl: 60000 } })
   @Post('/config/:identifier/test')
   @RequirePermission('settings', 'update')

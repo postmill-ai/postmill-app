@@ -1,6 +1,6 @@
 'use client';
 
-import React, { FC, useCallback, useMemo, useState } from 'react';
+import React, { FC, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Button } from '@postmill-ai/react/form/button';
 import { useFetch } from '@postmill-ai/helpers/utils/custom.fetch';
 import { useToaster } from '@postmill-ai/react/toaster/toaster';
@@ -48,10 +48,14 @@ export const CommsConfigForm: FC<{
   );
 };
 
-// Per-provider comms config, modeled on the channels' ChannelConfigForm:
-// credential fields, enabled switch (configured sets only — a set must not be
-// enabled before it is set up), webhook block, footer Cancel | Remove/Test/
-// Save. Member links live here too — the comms analog of channels showing the
+// Per-provider comms config, mirroring the channels' ChannelConfigForm:
+// - Platform mode (platformConfigured && platformConnect): a full-width
+//   Connect button (Slack OAuth popup, or one-click "Use the Postmill app"
+//   for env-driven providers) is the whole story; setup steps, webhook,
+//   credential fields and the enabled switch collapse under Advanced.
+// - Flat mode (no platformConnect — always the case for Matrix): numbered
+//   setup steps up top, then webhook block, credential fields, enabled.
+// Member links live here too — the comms analog of channels showing the
 // connected accounts per credential set.
 const CommsConfigFormInner: FC<{
   provider: CommsProvider;
@@ -66,9 +70,15 @@ const CommsConfigFormInner: FC<{
   const { mutate } = useCommsConfig();
   const { identifier } = provider;
 
+  // Mode A of this form (mirrors channels' hasPlatformApp): the deployment
+  // env supplies a platform app that can drive the connect flow.
+  const platformMode = !!(provider.platformConfigured && provider.platformConnect);
+
   const [values, setValues] = useState<Record<string, string>>({});
   const [enabled, setEnabled] = useState(provider.enabled);
   const [busy, setBusy] = useState(false);
+  const [connecting, setConnecting] = useState(false);
+  const [connectError, setConnectError] = useState<string | null>(null);
   const [webhookCopied, setWebhookCopied] = useState(false);
   const [issuedCode, setIssuedCode] = useState<{ code: string; expiresAt: string } | null>(null);
   const [adding, setAdding] = useState(false);
@@ -76,6 +86,38 @@ const CommsConfigFormInner: FC<{
   const [newCategories, setNewCategories] = useState<Record<string, boolean>>({});
   const [newAgentChat, setNewAgentChat] = useState(true);
   const [creating, setCreating] = useState(false);
+  // With a platform app configured, everything but Connect lives under the
+  // Advanced section — expanded only when this provider already has stored
+  // credentials (a BYO-app provider being edited). Mirrors channels'
+  // showAdvanced default.
+  const [showAdvanced, setShowAdvanced] = useState(provider.isConfigured);
+
+  // The webhook URL must exist DURING setup (the portal asks for it before
+  // the provider is saved), so mint a placeholder as soon as the modal opens
+  // for an unconfigured webhook-driven provider. Idempotent on the backend.
+  const webhookMinted = useRef(false);
+  useEffect(() => {
+    if (webhookMinted.current) return;
+    if (provider.isConfigured || !provider.capabilities?.webhookInbound) return;
+    if (provider.webhookUrl || provider.platformWebhookUrl) return;
+    webhookMinted.current = true;
+    void (async () => {
+      const res = await fetch(`/settings/comms/config/${identifier}/webhook`, {
+        method: 'POST',
+        body: JSON.stringify({}),
+      }).catch(() => null);
+      if (res?.ok) {
+        // Refetch so provider.webhookUrl picks up the minted placeholder and
+        // the read-only copy field below shows it.
+        await mutate();
+      }
+    })();
+  }, [provider, fetch, identifier, mutate]);
+
+  // OAuth popup listeners/poll registered by handleConnect — removed on
+  // unmount so a modal closed mid-flow cannot refetch a dead SWR cache.
+  const connectCleanup = useRef<(() => void) | null>(null);
+  useEffect(() => () => connectCleanup.current?.(), []);
 
   const handleSave = useCallback(async () => {
     // Required credentials must be present — either newly typed or already
@@ -122,6 +164,86 @@ const CommsConfigFormInner: FC<{
     }
   }, [provider, values, enabled, fetch, identifier, toaster, t, mutate, onClose]);
 
+  // OAuth platform connect (Slack): fetch the consent URL, then run the flow
+  // in a small popup window — the same mechanics as channels' handleConnect.
+  // The callback page notifies this opener with a postMessage and closes
+  // itself; the poll is the fallback for a missed message / manual close.
+  const handleConnect = useCallback(async () => {
+    setConnectError(null);
+    setConnecting(true);
+    try {
+      const response = await fetch(`/settings/comms/oauth/${identifier}/url`);
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok || !data.url) {
+        toaster.show(
+          t('could_not_connect_to_platform', 'Could not connect to the platform'),
+          'warning'
+        );
+        return;
+      }
+      const popup = window.open(data.url, 'postmill-comms-oauth', 'width=640,height=720,popup');
+      if (!popup) {
+        // Popup blocked — fall back to the standard full-page OAuth redirect.
+        window.location.href = data.url;
+        return;
+      }
+      const poll = window.setInterval(() => {
+        if (popup.closed) {
+          cleanup();
+          // Refresh without closing: the connect may have completed.
+          void mutate();
+        }
+      }, 1000);
+      const onMessage = (event: MessageEvent) => {
+        if (event.origin !== window.location.origin) return;
+        if ((event.data as { type?: string })?.type !== 'postmill:comms-connected') return;
+        cleanup();
+        void (async () => {
+          toaster.show(t('comms_connected', 'Provider connected'), 'success');
+          await mutate();
+          onClose();
+        })();
+      };
+      const cleanup = () => {
+        window.removeEventListener('message', onMessage);
+        window.clearInterval(poll);
+        connectCleanup.current = null;
+      };
+      connectCleanup.current = cleanup;
+      window.addEventListener('message', onMessage);
+    } finally {
+      setConnecting(false);
+    }
+  }, [fetch, identifier, toaster, t, mutate, onClose]);
+
+  // Env platform connect (Discord/Telegram/LINE): the platform app in the
+  // deployment env IS the credential — one click wires the provider up.
+  const handlePlatformConnect = useCallback(async () => {
+    setConnectError(null);
+    setConnecting(true);
+    try {
+      const res = await fetch(`/settings/comms/platform-connect/${identifier}`, {
+        method: 'POST',
+        body: JSON.stringify({}),
+      });
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        // The backend's reason is the useful part — show it verbatim.
+        // ValidationPipe 400s return message as a string ARRAY.
+        const raw = body.message;
+        setConnectError(
+          (Array.isArray(raw) ? raw.join(', ') : raw) ||
+            t('could_not_connect_to_platform', 'Could not connect to the platform')
+        );
+        return;
+      }
+      toaster.show(t('comms_connected', 'Provider connected'), 'success');
+      await mutate();
+    } finally {
+      setConnecting(false);
+    }
+  }, [fetch, identifier, toaster, t, mutate]);
+
   const handleTest = useCallback(async () => {
     setBusy(true);
     try {
@@ -162,16 +284,20 @@ const CommsConfigFormInner: FC<{
     }
   }, [decision, fetch, identifier, toaster, t, mutate, onClose]);
 
+  // The displayed webhook URL: the org's registered one, else the platform
+  // app's shared endpoint.
+  const webhookUrl = provider.webhookUrl || provider.platformWebhookUrl;
+
   const copyWebhook = useCallback(async () => {
-    if (!provider.webhookUrl) return;
+    if (!webhookUrl) return;
     try {
-      await navigator.clipboard.writeText(provider.webhookUrl);
+      await navigator.clipboard.writeText(webhookUrl);
       setWebhookCopied(true);
       setTimeout(() => setWebhookCopied(false), 2000);
     } catch {
       toaster.show(t('copy_failed', 'Copy failed'), 'warning');
     }
-  }, [provider, toaster, t]);
+  }, [webhookUrl, toaster, t]);
 
   const linkAction = useCallback(
     async (path: string, init: RequestInit) => {
@@ -253,10 +379,52 @@ const CommsConfigFormInner: FC<{
     [linkAction, decision, t]
   );
 
-  const setupNotesBlock = !!provider.setupNotes && (
+  // ── Layout blocks (shared by both modes) ────────────────────────────────
+
+  // Top-right links row: the provider's app portal and the setup docs, styled
+  // like the channels portal link.
+  const portalLinkBlock = (provider.portalUrl || provider.docsUrl) && (
+    <div className="flex justify-end gap-[12px]">
+      {provider.portalUrl && (
+        <a
+          href={provider.portalUrl}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="text-[12px] text-textColor underline hover:opacity-80"
+        >
+          {provider.portalLabel || provider.portalUrl}
+        </a>
+      )}
+      {provider.docsUrl && (
+        <a
+          href={provider.docsUrl}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="text-[12px] text-textColor underline hover:opacity-80"
+        >
+          {t('comms_docs_link', 'Docs')}
+        </a>
+      )}
+    </div>
+  );
+
+  // Numbered setup steps (channels-style <ol>); a provider may additionally
+  // keep a free-form note, rendered as a small caption after the steps.
+  const setupStepsBlock = (!!provider.setupSteps?.length || !!provider.setupNotes) && (
     <div className="flex flex-col gap-[6px] bg-newBgColorInner border border-newTableBorder rounded-[8px] p-[12px]">
       <label className="text-[13px] font-[500]">{t('setup_steps', 'How to set this up')}</label>
-      <div className="text-[13px] text-newTableText">{provider.setupNotes}</div>
+      {!!provider.setupSteps?.length && (
+        <ol className="flex flex-col gap-[4px] list-decimal ps-[18px]">
+          {provider.setupSteps.map((step, idx) => (
+            <li key={idx} className="text-[13px] text-newTableText">
+              {step}
+            </li>
+          ))}
+        </ol>
+      )}
+      {!!provider.setupNotes && (
+        <div className="text-[12px] text-newTableText">{provider.setupNotes}</div>
+      )}
     </div>
   );
 
@@ -315,7 +483,31 @@ const CommsConfigFormInner: FC<{
     </div>
   );
 
-  const webhookBlock = !!provider.webhookUrl && (
+  // Platform connect: the default (and only primary) action in platform mode.
+  // OAuth providers (Slack) run a consent popup; env providers wire up the
+  // deployment's Postmill app with one click.
+  const connectBlock = platformMode && (
+    <div className="flex flex-col gap-[6px]">
+      <button
+        type="button"
+        onClick={provider.platformConnect === 'oauth' ? handleConnect : handlePlatformConnect}
+        disabled={busy || connecting}
+        className="w-full h-[44px] rounded-[8px] bg-btnPrimary text-white text-[14px] font-[500] whitespace-nowrap truncate hover:opacity-90 transition-opacity disabled:opacity-50"
+      >
+        {connecting
+          ? t('connecting', 'Connecting...')
+          : provider.platformConnect === 'oauth'
+            ? t('connect_with_provider', 'Connect with {{provider}}', { provider: provider.name })
+            : t('comms_use_postmill_app', 'Use the Postmill app')}
+      </button>
+      <div className="text-[12px] text-newTableText text-center">
+        {t('uses_postmill_app_no_setup', 'Uses the Postmill app — no setup needed')}
+      </div>
+      {connectError && <div className="text-[12px] text-red-500">{connectError}</div>}
+    </div>
+  );
+
+  const webhookBlock = !!webhookUrl && (
     <div className="flex flex-col gap-[6px]">
       <label className="text-[13px] font-[500]">{t('comms_webhook_url', 'Webhook URL')}</label>
       <div className="flex gap-[8px] items-center">
@@ -323,7 +515,7 @@ const CommsConfigFormInner: FC<{
           <input
             readOnly
             className="h-full bg-transparent outline-hidden flex-1 min-w-0 text-[14px] text-textColor px-[16px]"
-            value={provider.webhookUrl}
+            value={webhookUrl}
           />
         </div>
         <Button
@@ -339,6 +531,9 @@ const CommsConfigFormInner: FC<{
           {t('comms_webhook_pending', 'Webhook not registered')}
           {provider.webhookError ? ` — ${provider.webhookError}` : ''}
         </div>
+      )}
+      {provider.webhookInstructions && (
+        <div className="text-[12px] text-newTableText">{provider.webhookInstructions}</div>
       )}
     </div>
   );
@@ -550,12 +745,59 @@ const CommsConfigFormInner: FC<{
     </div>
   );
 
+  // ── Platform mode: Connect is the whole story; everything else is
+  // collapsed under Advanced (mirrors channels' Mode A). ────────────────────
+  if (platformMode) {
+    return (
+      <div className="flex flex-col gap-[16px] min-w-[460px] mobile:min-w-0">
+        {portalLinkBlock}
+        {connectBlock}
+        <div className="rounded-[8px] border border-newTableBorder">
+          <button
+            type="button"
+            aria-expanded={showAdvanced}
+            onClick={() => setShowAdvanced((v) => !v)}
+            className="flex w-full items-center justify-between px-[12px] py-[10px] text-[13px] font-[500] text-textColor"
+          >
+            {t('advanced', 'Advanced')}
+            <svg
+              width="12"
+              height="12"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2.5"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              className={showAdvanced ? 'rotate-180 transition-transform' : 'transition-transform'}
+            >
+              <path d="m6 9 6 6 6-6" />
+            </svg>
+          </button>
+          {showAdvanced && (
+            <div className="flex flex-col gap-[12px] border-t border-newTableBorder p-[12px]">
+              {setupStepsBlock}
+              {webhookBlock}
+              {credentialFieldsBlock}
+              {enabledBlock}
+            </div>
+          )}
+        </div>
+        {linksBlock}
+        {footerBlock}
+      </div>
+    );
+  }
+
+  // ── Flat mode: no platform app — everything is the primary content
+  // (mirrors channels' Mode B). ─────────────────────────────────────────────
   return (
     <div className="flex flex-col gap-[16px] min-w-[460px] mobile:min-w-0">
-      {setupNotesBlock}
+      {portalLinkBlock}
+      {setupStepsBlock}
+      {webhookBlock}
       {credentialFieldsBlock}
       {enabledBlock}
-      {webhookBlock}
       {linksBlock}
       {footerBlock}
     </div>

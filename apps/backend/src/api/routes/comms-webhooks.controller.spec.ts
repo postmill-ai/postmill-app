@@ -1,4 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { NotFoundException, HttpException } from '@nestjs/common';
 
 const sendMock = vi.fn();
 vi.mock('@postmill-ai/nestjs-libraries/inngest/inngest.client', () => ({
@@ -18,6 +19,7 @@ describe('CommsWebhooksController', () => {
   let controller: CommsWebhooksController;
   let configs: any;
   let configService: any;
+  let platform: any;
   let adapter: any;
 
   const config = { id: 'cfg-1', organizationId: 'org-1', enabled: true };
@@ -30,7 +32,8 @@ describe('CommsWebhooksController', () => {
     };
     configs = { getByWebhookToken: vi.fn().mockResolvedValue(config) };
     configService = { resolveAdapter: vi.fn().mockResolvedValue(adapter) };
-    controller = new CommsWebhooksController(configs, configService);
+    platform = { handle: vi.fn().mockResolvedValue({ events: [], ack: undefined }) };
+    controller = new CommsWebhooksController(configs, configService, platform);
   });
 
   it('404s uniformly for unknown tokens, disabled configs, and resolve failures', async () => {
@@ -115,5 +118,57 @@ describe('CommsWebhooksController', () => {
     const result = await controller.handle('telegram', 'tok', makeReq({}));
     expect(result).toEqual({ ok: true });
     expect(sendMock).not.toHaveBeenCalled();
+  });
+
+  describe('platform route', () => {
+    it('delegates to the platform service, enqueues its events, and returns the ack', async () => {
+      platform.handle.mockResolvedValue({
+        events: [
+          {
+            name: 'comms/inbound.message',
+            id: 'comms-inbound:cfg-9:m-1',
+            data: {
+              configId: 'cfg-9',
+              organizationId: 'org-9',
+              identifier: 'slack',
+              externalUserId: 'U1',
+              text: 'hi',
+              messageId: 'm-1',
+            },
+          },
+        ],
+        ack: undefined,
+      });
+      const req = makeReq({ team_id: 'T1' }, { 'x-slack-signature': 'v0=abc' });
+      const result = await controller.handlePlatform('slack', req);
+      expect(platform.handle).toHaveBeenCalledWith(
+        'slack',
+        req.rawBody,
+        req.headers,
+      );
+      expect(sendMock).toHaveBeenCalledTimes(1);
+      expect(result).toEqual({ ok: true });
+    });
+
+    it('returns a challenge ack without sending events', async () => {
+      platform.handle.mockResolvedValue({
+        events: [],
+        ack: { challenge: 'abc' },
+      });
+      const result = await controller.handlePlatform('slack', makeReq({}));
+      expect(result).toEqual({ challenge: 'abc' });
+      expect(sendMock).not.toHaveBeenCalled();
+    });
+
+    it('propagates the service 404/401 discipline', async () => {
+      platform.handle.mockRejectedValue(new NotFoundException());
+      await expect(
+        controller.handlePlatform('matrix', makeReq({})),
+      ).rejects.toMatchObject({ status: 404 });
+      platform.handle.mockRejectedValue(new HttpException('invalid signature', 401));
+      await expect(
+        controller.handlePlatform('slack', makeReq({})),
+      ).rejects.toMatchObject({ status: 401 });
+    });
   });
 });

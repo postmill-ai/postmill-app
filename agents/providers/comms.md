@@ -43,9 +43,41 @@ All signature/secret checks use `timingSafeStringEqual` /
 `ctx.fetch` (safeFetch port). `parseInbound` must drop the bot's own messages (Slack `bot_id`,
 Telegram `from.is_bot`, Matrix own sender) or notify→reply loops occur.
 
-> **One Postmill org per bot/app** (documented limitation): Telegram `setWebhook` and the
-> Slack/Discord/LINE endpoint URLs are global per app — a second org's config re-points inbound
-> and silently darkens the first.
+> **One webhook per app/bot**: Telegram `setWebhook` and the Slack/Discord/LINE endpoint URLs
+> are global per app. Per-org own-app (Advanced) configs therefore still mean one Postmill org
+> per bot/app. **Platform apps** (shared, env-configured) solve this with the platform route
+> below — one app/bot serves all orgs, inbound routed per org.
+
+## Platform apps (env-configured, shared across orgs)
+
+Mirrors the channels env-fallback idea but comms-scoped
+(`libraries/nestjs-libraries/src/comms/comms-platform-env.ts`): slack = OAuth
+(`SLACK_ID`/`SLACK_SECRET`/`SLACK_SIGNING_SECRET`), discord/telegram/line = one-click env
+credentials (`DISCORD_CLIENT_ID`/`DISCORD_BOT_TOKEN`/`DISCORD_PUBLIC_KEY`, `TELEGRAM_TOKEN`,
+`LINE_CHANNEL_ACCESS_TOKEN`/`LINE_CHANNEL_SECRET`). All vars present ⇒ `platformConfigured` ⇒
+the settings modal shows "Connect with Slack" / "Use the Postmill app" by default with manual
+credentials collapsed under Advanced; absent ⇒ flat manual mode. Matrix has no platform app.
+
+- **Connect**: `GET /settings/comms/oauth/slack/url` + public
+  `GET /settings/comms/oauth/slack/callback` (`comms-oauth.controller.ts`; state bound in
+  Redis `comms-oauth:{state}`, 1h, single-use; success = postMessage `postmill:comms-connected`
+  close page, else redirect `/settings/comms?connected=slack|?error=…`). Slack callback stores
+  the bot token + env signing secret + `extraConfig.teamId`.
+  `POST /settings/comms/platform-connect/:identifier` (discord/telegram/line) upserts env
+  credentials, then provisions: telegram re-registers its webhook against the **platform** URL
+  (derived secret = HMAC-SHA256 of the bot token, so registration and verification agree),
+  discord runs `provision()` + captures `extraConfig.guildIds`. Provider errors surface
+  verbatim as 400s.
+- **Platform webhook**: `POST /webhooks/comms/platform/:identifier` (declared before
+  `/:identifier/:token`; `CommsPlatformWebhookService`). Signature verified with the **env**
+  credentials, then org resolution: slack `team_id` / discord `guild_id` → config
+  `extraConfig`; telegram/line external user id → `CommsLink` lookup; unclaimed connect codes
+  resolve via `findPendingByCode`. Unresolvable ⇒ ack-ignore `{ok:true}` (no retry storms);
+  unknown identifier / platform not configured ⇒ uniform 404; bad signature ⇒ 401. Slack
+  `url_verification` and Discord PING acks work here too.
+- **Webhook pre-mint**: `POST /settings/comms/config/:identifier/webhook` creates a disabled
+  placeholder row (minted `webhookToken`) and returns the URL, so the setup modal can show a
+  real, copyable per-org URL before the first save. Idempotent.
 
 ## Request flow
 
