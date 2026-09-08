@@ -110,11 +110,13 @@ describe('CommsTab', () => {
     // Already-configured providers are not offered again.
     expect(withinPicker.queryByText('Telegram')).toBeNull();
     expect(withinPicker.queryByText('Discord')).toBeNull();
-    // The comms capability matrix renders as badges (Slack: webhook + threads).
-    expect(withinPicker.getByText('Webhook')).toBeDefined();
-    expect(withinPicker.getByText('Threads')).toBeDefined();
+    // The comms capability matrix renders as badges (Slack: webhook + threads)
+    // — scoped to the Slack row (matrix also carries Threads).
+    const slackRow = within(slackButton.closest('button') as HTMLElement);
+    expect(slackRow.getByText('Webhook')).toBeDefined();
+    expect(slackRow.getByText('Threads')).toBeDefined();
     // Pinned-version pill, like the channels picker/list rows.
-    expect(withinPicker.getByText('v1')).toBeDefined();
+    expect(slackRow.getByText('v1')).toBeDefined();
 
     fireEvent.click(slackButton);
     await waitFor(() => expect(mockOpenModal).toHaveBeenCalledTimes(2));
@@ -132,5 +134,44 @@ describe('CommsTab', () => {
 
     expect(await screen.findByText('Telegram')).toBeDefined();
     expect(screen.queryByRole('button', { name: /Add Comms Channel/ })).toBeNull();
+  });
+
+  it('toasts, refetches and scrubs the URL on a full-page ?connected landing', async () => {
+    window.history.replaceState({}, '', '/settings/comms?connected=slack');
+    try {
+      const { CommsTab } = await import('./comms.tab');
+      render(<CommsTab />, { wrapper });
+
+      await waitFor(() =>
+        expect(mockToasterShow).toHaveBeenCalledWith('Provider connected', 'success'),
+      );
+      expect(window.location.search).not.toContain('connected');
+    } finally {
+      window.history.replaceState({}, '', '/');
+    }
+  });
+
+  it('posts postmill:comms-connected to the opener and closes inside the connect popup', async () => {
+    const postMessage = vi.fn();
+    const closeSpy = vi.spyOn(window, 'close').mockImplementation(() => undefined);
+    Object.defineProperty(window, 'opener', { value: { postMessage }, writable: true });
+    window.history.replaceState({}, '', '/settings/comms?connected=slack');
+    try {
+      const { CommsTab } = await import('./comms.tab');
+      render(<CommsTab />, { wrapper });
+
+      await waitFor(() => expect(postMessage).toHaveBeenCalled());
+      expect(postMessage).toHaveBeenCalledWith(
+        { type: 'postmill:comms-connected', provider: 'slack' },
+        window.location.origin,
+      );
+      expect(closeSpy).toHaveBeenCalled();
+      // The popup branch must not toast into a window that is closing.
+      expect(mockToasterShow).not.toHaveBeenCalledWith('Provider connected', 'success');
+    } finally {
+      Object.defineProperty(window, 'opener', { value: null, writable: true });
+      window.history.replaceState({}, '', '/');
+      closeSpy.mockRestore();
+    }
   });
 });

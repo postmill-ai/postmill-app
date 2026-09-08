@@ -190,6 +190,12 @@ export const matrixCommsModule: ProviderModule<any, any> = {
       },
     ],
     capabilities: CAPABILITIES,
+    docsUrl: 'https://docs.postmill.ai/operations-guide/platform-comms-apps#matrix',
+    setupSteps: [
+      'Create a dedicated bot account on your homeserver.',
+      'Log in as the bot (e.g. in Element) and copy its access token from Settings → Help & About → Access Token.',
+      'Enter the homeserver URL and access token below and save — Postmill polls for new messages automatically.',
+    ],
     setupNotes:
       'No webhook needed — Postmill polls the homeserver for new messages about once a minute. Use a dedicated bot account.',
   },

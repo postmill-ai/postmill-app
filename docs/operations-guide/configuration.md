@@ -226,7 +226,7 @@ These env vars are used only when no enabled DB config exists for the provider.
 
 Setting a provider's platform OAuth app credentials here gives every organization one-click **Connect** without per-org key entry. Leaving a provider unset requires each org to add its own app via Settings → Channels. A per-org config always takes precedence. Step-by-step portal setup for each provider: [Platform Channel Apps](./platform-channel-apps.md).
 
-These channel variables are the only provider credentials read from the environment. AI provider keys, short-link, and storage credentials are configured per-org in-app and have no env fallback; login-provider variables must never be used as AI credentials.
+These channel and comms variables are the only provider credentials read from the environment. AI provider keys, short-link, and storage credentials are configured per-org in-app and have no env fallback; login-provider variables must never be used as AI credentials.
 
 | Variable | Provider |
 |----------|----------|
@@ -253,6 +253,9 @@ These channel variables are the only provider credentials read from the environm
 | `WHOP_CLIENT_ID` | Whop (id only, PKCE) |
 | `TELEGRAM_TOKEN` | Telegram bot token (token-only) |
 | `LINE_CHANNEL_ACCESS_TOKEN` | LINE Messaging API channel access token (token-only) |
+| `SLACK_SIGNING_SECRET` | Slack comms platform app — webhook signing secret (comms only; see [Platform Comms Apps](./platform-comms-apps.md#slack)) |
+| `DISCORD_PUBLIC_KEY` | Discord comms platform app — interaction webhook verification (comms only; see [Platform Comms Apps](./platform-comms-apps.md#discord)) |
+| `LINE_CHANNEL_SECRET` | LINE comms platform app — webhook signature verification (comms only; see [Platform Comms Apps](./platform-comms-apps.md#line)) |
 | `POSTMILL_OAUTH_CLIENT_ID` / `POSTMILL_OAUTH_CLIENT_SECRET` | Custom OAuth channel (shared with generic OIDC login) |
 
 Three opt-in flags make a channel app dual-use as a **login provider** (the matching channel creds above are required; the login page never advertises a provider whose channel app is unconfigured). See [Platform Channel Apps → SSO dual-use](./platform-channel-apps.md#sso-dual-use-login-with-the-same-app).

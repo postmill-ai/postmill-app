@@ -623,6 +623,24 @@ paths:
           description: ""
       tags:
         - Media Jobs
+  /webhooks/comms/platform/{identifier}:
+    post:
+      operationId: CommsWebhooksController_handlePlatform
+      parameters:
+        - name: identifier
+          required: true
+          in: path
+          schema:
+            type: string
+      responses:
+        "201":
+          description: ""
+          content:
+            application/json:
+              schema:
+                type: object
+      tags:
+        - Comms Webhooks
   /webhooks/comms/{identifier}/{token}:
     post:
       operationId: CommsWebhooksController_handle
@@ -646,6 +664,34 @@ paths:
                 type: object
       tags:
         - Comms Webhooks
+  /settings/comms/oauth/slack/callback:
+    get:
+      operationId: CommsOauthController_slackCallback
+      parameters:
+        - name: code
+          required: true
+          in: query
+          schema:
+            type: string
+        - name: state
+          required: true
+          in: query
+          schema:
+            type: string
+        - name: error
+          required: true
+          in: query
+          schema:
+            type: string
+      responses:
+        "200":
+          description: ""
+          content:
+            application/json:
+              schema:
+                type: object
+      tags:
+        - Comms OAuth
   /media/designs/render-frame/{jobId}:
     get:
       operationId: DesignRenderFrameController_renderFrame
@@ -5950,6 +5996,43 @@ paths:
             type: string
       responses:
         "200":
+          description: ""
+      tags:
+        - Comms Settings
+  /settings/comms/config/{identifier}/webhook:
+    post:
+      operationId: CommsSettingsController_mintWebhook
+      parameters:
+        - name: identifier
+          required: true
+          in: path
+          schema:
+            type: string
+      responses:
+        "201":
+          description: ""
+      tags:
+        - Comms Settings
+  /settings/comms/oauth/slack/url:
+    get:
+      operationId: CommsSettingsController_getSlackOAuthUrl
+      parameters: []
+      responses:
+        "200":
+          description: ""
+      tags:
+        - Comms Settings
+  /settings/comms/platform-connect/{identifier}:
+    post:
+      operationId: CommsSettingsController_platformConnect
+      parameters:
+        - name: identifier
+          required: true
+          in: path
+          schema:
+            type: string
+      responses:
+        "201":
           description: ""
       tags:
         - Comms Settings

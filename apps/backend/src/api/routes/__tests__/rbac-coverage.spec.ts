@@ -101,6 +101,7 @@ const PUBLIC_CONTROLLERS = new Set<string>([
   'EmailWebhooksController',
   'MediaJobsWebhookController',
   'CommsWebhooksController',
+  'CommsOauthController',
   'OAuthController',
   'OAuthAuthorizedController',
 ]);

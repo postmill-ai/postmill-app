@@ -171,6 +171,19 @@ export const slackCommsModule: ProviderModule<any, any> = {
       },
     ],
     capabilities: CAPABILITIES,
+    platformConnect: 'oauth',
+    docsUrl: 'https://docs.postmill.ai/operations-guide/platform-comms-apps#slack',
+    portalUrl: 'https://api.slack.com/apps',
+    portalLabel: 'Slack API: Your Apps',
+    webhookInstructions:
+      'In your Slack app → Event Subscriptions, enable events, paste the webhook URL as the Request URL, and subscribe to the message.im bot event.',
+    setupSteps: [
+      'Open the Slack API portal and create an app from scratch (or pick an existing one).',
+      'Under OAuth & Permissions → Bot Token Scopes, add: chat:write, im:write, im:history, app_mentions:read.',
+      'Install the app to your workspace and copy the Bot User OAuth Token (xoxb-…) into the field below.',
+      'Copy the Signing Secret from Basic Information → App Credentials into the field below.',
+      'Under Event Subscriptions, enable events, paste the webhook URL as the Request URL, and subscribe to the message.im bot event.',
+    ],
     setupNotes:
       'Enable Event Subscriptions with the webhook URL below and subscribe to the message.im bot event. One Postmill organization per Slack app.',
   },

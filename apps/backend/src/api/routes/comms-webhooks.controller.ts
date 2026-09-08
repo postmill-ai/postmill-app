@@ -12,6 +12,7 @@ import { ApiTags } from '@nestjs/swagger';
 import { createHash } from 'node:crypto';
 import { CommsConfigRepository } from '@postmill-ai/nestjs-libraries/comms/comms-config.repository';
 import { CommsConfigService } from '@postmill-ai/nestjs-libraries/comms/comms-config.service';
+import { CommsPlatformWebhookService } from '@postmill-ai/nestjs-libraries/comms/comms-platform-webhook.service';
 import {
   inngest,
   isInngestEnabled,
@@ -32,7 +33,25 @@ export class CommsWebhooksController {
   constructor(
     private _configs: CommsConfigRepository,
     private _configService: CommsConfigService,
+    private _platform: CommsPlatformWebhookService,
   ) {}
+
+  // Shared platform-app inbound. Declared BEFORE /:identifier/:token so the
+  // literal 'platform' segment wins over the token route pattern.
+  @Throttle({ default: { limit: 300, ttl: 60000 } })
+  @Post('/platform/:identifier')
+  async handlePlatform(
+    @Param('identifier') identifier: string,
+    @Req() req: RawBodyRequest<Request>,
+  ) {
+    const rawBody = req.rawBody ?? Buffer.from('');
+    const headers = req.headers as unknown as Record<string, string | undefined>;
+    const { events, ack } = await this._platform.handle(identifier, rawBody, headers);
+    if (events.length > 0 && isInngestEnabled()) {
+      await inngest.send(events);
+    }
+    return ack ?? { ok: true };
+  }
 
   // Per-IP throttle. Slack/Telegram egress IPs are shared across workspaces
   // and DM traffic is chatty — 60/min would drop events under normal load.

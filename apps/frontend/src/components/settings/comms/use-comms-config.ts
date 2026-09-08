@@ -29,6 +29,23 @@ export interface CommsProvider {
   webhookRegistered?: boolean;
   webhookError?: string;
   setupNotes?: string;
+  /** Numbered setup steps, rendered as the channels-style <ol> in the modal. */
+  setupSteps?: string[];
+  /** Provider app portal link (e.g. Slack API apps, BotFather). */
+  portalUrl?: string;
+  portalLabel?: string;
+  /** Setup documentation link (top-right of the modal, next to the portal). */
+  docsUrl?: string;
+  /** Caption under the webhook URL field. */
+  webhookInstructions?: string;
+  /** Platform-app connect kind: slack='oauth', discord/telegram/line='env',
+   *  matrix=absent (no platform app — always flat mode). */
+  platformConnect?: 'oauth' | 'env';
+  /** The deployment env supplies a platform app for this provider. */
+  platformConfigured?: boolean;
+  /** Platform app's shared webhook endpoint (displayed when the org has no
+   *  webhookUrl of its own yet). */
+  platformWebhookUrl?: string;
 }
 
 export interface CommsLink {

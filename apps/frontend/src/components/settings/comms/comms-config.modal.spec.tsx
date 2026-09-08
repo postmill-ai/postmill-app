@@ -30,12 +30,19 @@ const defaultFetchImpl = (url: unknown, init?: unknown) => {
   if (typeof url === 'string' && url === '/settings/comms/config' && !init) {
     return Promise.resolve({ ok: true, json: async () => configData });
   }
+  if (typeof url === 'string' && url === '/settings/comms/oauth/slack/url' && !init) {
+    return Promise.resolve({ ok: true, json: async () => ({ url: 'https://slack.example/oauth' }) });
+  }
   return Promise.resolve({
     ok: true,
     json: async () => ({ connectCode: 'ABCD2345', expiresAt: '2026-08-31T00:00:00Z', ok: true }),
     text: async () => '',
   });
 };
+
+// GET /settings/comms/config calls so far (SWR loads + refetches).
+const configLoadCount = () =>
+  mockFetchFn.mock.calls.filter(([u, i]) => u === '/settings/comms/config' && !i).length;
 
 const wrapper = ({ children }: { children: React.ReactNode }) => (
   <SWRConfig value={{ provider: () => new Map(), dedupingInterval: 0 }}>
@@ -102,7 +109,9 @@ describe('CommsConfigForm', () => {
 
   it('hides the switch, Test and Remove for unconfigured providers', async () => {
     await renderForm('slack');
-    await screen.findByText('Signing Secret');
+    // Slack is a platform provider — credentials live under Advanced.
+    fireEvent.click(await screen.findByRole('button', { name: 'Advanced' }));
+    expect(await screen.findByText('Signing Secret')).toBeDefined();
     expect(screen.queryByRole('switch')).toBeNull();
     expect(screen.queryByText('Test')).toBeNull();
     expect(screen.queryByText('Remove')).toBeNull();
@@ -226,5 +235,209 @@ describe('CommsConfigForm', () => {
         expect.objectContaining({ method: 'DELETE' }),
       );
     });
+  });
+});
+
+describe('CommsConfigForm platform vs flat mode', () => {
+  it('platform mode: Connect is primary, everything else collapsed under Advanced', async () => {
+    await renderForm('slack');
+
+    expect(await screen.findByText('Connect with Slack')).toBeDefined();
+    expect(screen.getByText('Uses the Postmill app — no setup needed')).toBeDefined();
+    const advanced = screen.getByRole('button', { name: 'Advanced' });
+    expect(advanced.getAttribute('aria-expanded')).toBe('false');
+    // Setup content is hidden until Advanced is expanded.
+    expect(screen.queryByText('Bot Token')).toBeNull();
+    expect(screen.queryByText('Webhook URL')).toBeNull();
+    expect(screen.queryByRole('listitem')).toBeNull();
+  });
+
+  it('platform mode: Advanced defaults expanded when editing a configured provider', async () => {
+    await renderForm('telegram');
+
+    const advanced = await screen.findByRole('button', { name: 'Advanced' });
+    expect(advanced.getAttribute('aria-expanded')).toBe('true');
+    expect(screen.getByText('Bot Token')).toBeDefined();
+    expect(screen.getByText('Webhook URL')).toBeDefined();
+    expect(screen.getByRole('switch').getAttribute('aria-checked')).toBe('true');
+  });
+
+  it('flat mode (matrix): steps, credentials and webhook are the primary content', async () => {
+    await renderForm('matrix');
+
+    expect(await screen.findByText('Homeserver URL')).toBeDefined();
+    expect(screen.getByText('Access Token')).toBeDefined();
+    // No platform app — no Connect button, no Advanced collapse.
+    expect(screen.queryByRole('button', { name: 'Advanced' })).toBeNull();
+    expect(screen.queryByText(/Connect with/)).toBeNull();
+  });
+
+  it('renders numbered setup steps as an ordered list, with setupNotes as a caption', async () => {
+    await renderForm('matrix');
+
+    const steps = await screen.findAllByRole('listitem');
+    expect(steps.map((li) => li.textContent)).toEqual([
+      'Create a bot account on your homeserver',
+      'Paste its access token',
+    ]);
+    expect(steps[0].closest('ol')).not.toBeNull();
+    // A provider may keep a free-form note after the steps.
+    expect(
+      screen.getByText('Self-hosted homeservers must be reachable from this instance.'),
+    ).toBeDefined();
+  });
+
+  it('renders the portal and docs links, opening in a new tab', async () => {
+    await renderForm('slack');
+
+    const portal = (await screen.findByText('Slack API')).closest('a') as HTMLAnchorElement;
+    expect(portal.getAttribute('href')).toBe('https://api.slack.com/apps');
+    expect(portal.getAttribute('target')).toBe('_blank');
+    expect(portal.getAttribute('rel')).toContain('noopener');
+
+    const docs = screen.getByText('Docs').closest('a') as HTMLAnchorElement;
+    expect(docs.getAttribute('href')).toBe('https://docs.example/comms/slack');
+    expect(docs.getAttribute('target')).toBe('_blank');
+  });
+});
+
+describe('CommsConfigForm webhook pre-mint', () => {
+  it('mints a placeholder webhook exactly once for a webhook provider in setup mode', async () => {
+    await renderForm('slack');
+
+    await waitFor(() =>
+      expect(mockFetchFn).toHaveBeenCalledWith(
+        '/settings/comms/config/slack/webhook',
+        expect.objectContaining({ method: 'POST' }),
+      ),
+    );
+    // The mint refetches the config so the copy field can show the URL.
+    await waitFor(() => expect(configLoadCount()).toBeGreaterThan(1));
+    const mintCalls = mockFetchFn.mock.calls.filter(
+      ([u]) => u === '/settings/comms/config/slack/webhook',
+    );
+    expect(mintCalls).toHaveLength(1);
+  });
+
+  it('does not mint for poll-inbound providers (matrix) or configured ones (telegram)', async () => {
+    await renderForm('matrix');
+    await screen.findByText('Homeserver URL');
+    await renderForm('telegram');
+    await screen.findByPlaceholderText(/saved — leave blank/);
+
+    expect(
+      mockFetchFn.mock.calls.some(([u]) => typeof u === 'string' && /\/webhook$/.test(u)),
+    ).toBe(false);
+  });
+});
+
+describe('CommsConfigForm platform connect', () => {
+  let openSpy: ReturnType<typeof vi.spyOn>;
+
+  beforeEach(() => {
+    openSpy = vi
+      .spyOn(window, 'open')
+      .mockReturnValue({ closed: false } as unknown as Window);
+  });
+
+  afterEach(() => {
+    openSpy.mockRestore();
+  });
+
+  it('oauth connect fetches the consent URL and opens the popup', async () => {
+    await renderForm('slack');
+
+    fireEvent.click(await screen.findByText('Connect with Slack'));
+
+    await waitFor(() =>
+      expect(mockFetchFn).toHaveBeenCalledWith('/settings/comms/oauth/slack/url'),
+    );
+    await waitFor(() =>
+      expect(openSpy).toHaveBeenCalledWith(
+        'https://slack.example/oauth',
+        'postmill-comms-oauth',
+        'width=640,height=720,popup',
+      ),
+    );
+  });
+
+  it('closes and refetches when the popup posts postmill:comms-connected', async () => {
+    const onClose = vi.fn();
+    await renderForm('slack', onClose);
+    fireEvent.click(await screen.findByText('Connect with Slack'));
+    await waitFor(() => expect(openSpy).toHaveBeenCalled());
+    // Let the webhook pre-mint refetch settle before the baseline.
+    await waitFor(() => expect(configLoadCount()).toBeGreaterThan(1));
+    const baseline = configLoadCount();
+
+    fireEvent(
+      window,
+      new MessageEvent('message', {
+        data: { type: 'postmill:comms-connected', provider: 'slack' },
+        origin: window.location.origin,
+      }),
+    );
+
+    await waitFor(() => expect(onClose).toHaveBeenCalled());
+    expect(mockToasterShow).toHaveBeenCalledWith('Provider connected', 'success');
+    expect(configLoadCount()).toBeGreaterThan(baseline);
+  });
+
+  it('ignores connected messages from a foreign origin', async () => {
+    const onClose = vi.fn();
+    await renderForm('slack', onClose);
+    fireEvent.click(await screen.findByText('Connect with Slack'));
+    await waitFor(() => expect(openSpy).toHaveBeenCalled());
+
+    fireEvent(
+      window,
+      new MessageEvent('message', {
+        data: { type: 'postmill:comms-connected', provider: 'slack' },
+        origin: 'https://evil.example',
+      }),
+    );
+
+    await new Promise((r) => setTimeout(r, 50));
+    expect(onClose).not.toHaveBeenCalled();
+  });
+
+  it('env connect POSTs platform-connect and refetches on success', async () => {
+    await renderForm('discord');
+
+    fireEvent.click(await screen.findByText('Use the Postmill app'));
+
+    await waitFor(() =>
+      expect(mockFetchFn).toHaveBeenCalledWith(
+        '/settings/comms/platform-connect/discord',
+        expect.objectContaining({ method: 'POST' }),
+      ),
+    );
+    await waitFor(() =>
+      expect(mockToasterShow).toHaveBeenCalledWith('Provider connected', 'success'),
+    );
+  });
+
+  it('env connect shows the backend error verbatim inline on failure', async () => {
+    mockFetchFn.mockImplementation((url: unknown, init?: unknown) => {
+      if (typeof url === 'string' && url === '/settings/comms/config' && !init) {
+        return Promise.resolve({ ok: true, json: async () => configData });
+      }
+      if (url === '/settings/comms/platform-connect/discord') {
+        return Promise.resolve({
+          ok: false,
+          status: 400,
+          json: async () => ({ message: 'Discord bot token rejected by the gateway' }),
+        });
+      }
+      return Promise.resolve({ ok: true, json: async () => ({}) });
+    });
+    await renderForm('discord');
+
+    fireEvent.click(await screen.findByText('Use the Postmill app'));
+
+    expect(
+      await screen.findByText('Discord bot token rejected by the gateway'),
+    ).toBeDefined();
+    expect(mockToasterShow).not.toHaveBeenCalledWith('Provider connected', 'success');
   });
 });

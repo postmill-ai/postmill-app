@@ -217,6 +217,19 @@ export const discordCommsModule: ProviderModule<any, any> = {
       },
     ],
     capabilities: CAPABILITIES,
+    platformConnect: 'env',
+    docsUrl: 'https://docs.postmill.ai/operations-guide/platform-comms-apps#discord',
+    portalUrl: 'https://discord.com/developers/applications',
+    portalLabel: 'Discord Developer Portal',
+    webhookInstructions:
+      'Paste the webhook URL into General Information → Interactions Endpoint URL.',
+    setupSteps: [
+      'Open the Discord Developer Portal and create an application.',
+      'Copy the Application ID and Public Key from General Information into the fields below.',
+      'Under Bot, copy the bot token into the field below.',
+      'Paste the webhook URL below into General Information → Interactions Endpoint URL.',
+      'Save — the /postmill command is registered automatically. Invite the bot to your server.',
+    ],
     setupNotes:
       'Paste the webhook URL below into General Information → Interactions Endpoint URL. The /postmill command is registered automatically. One Postmill organization per Discord app.',
   },

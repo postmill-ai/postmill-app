@@ -14,6 +14,12 @@ export const commsConfigFixture = {
       webhookUrl: 'https://backend.example/webhooks/comms/telegram/tok',
       webhookRegistered: true,
       capabilities: { webhookInbound: true, webhookRegistration: true },
+      platformConnect: 'env',
+      platformConfigured: true,
+      setupSteps: ['Open BotFather in Telegram', 'Create a bot and paste its token'],
+      portalUrl: 'https://t.me/botfather',
+      portalLabel: 'Telegram BotFather',
+      docsUrl: 'https://docs.example/comms/telegram',
     },
     {
       identifier: 'slack',
@@ -27,6 +33,13 @@ export const commsConfigFixture = {
       credentialsSet: { botToken: false, signingSecret: false },
       capabilities: { webhookInbound: true, threads: true },
       version: 'v1',
+      platformConnect: 'oauth',
+      platformConfigured: true,
+      setupSteps: ['Create a Slack app', 'Paste the webhook URL into Event Subscriptions'],
+      portalUrl: 'https://api.slack.com/apps',
+      portalLabel: 'Slack API',
+      docsUrl: 'https://docs.example/comms/slack',
+      webhookInstructions: 'Paste this URL into your Slack app’s Event Subscriptions.',
     },
     {
       identifier: 'discord',
@@ -40,6 +53,26 @@ export const commsConfigFixture = {
       webhookUrl: 'https://backend.example/webhooks/comms/discord/tok',
       webhookRegistered: false,
       webhookError: 'HTTP 401',
+      platformConnect: 'env',
+      platformConfigured: true,
+    },
+    {
+      // Matrix has no platform app — platformConnect absent, so the modal is
+      // always in flat mode.
+      identifier: 'matrix',
+      name: 'Matrix',
+      enabled: false,
+      isConfigured: false,
+      credentialFields: [
+        { key: 'homeserver', label: 'Homeserver URL', type: 'text', required: true },
+        { key: 'accessToken', label: 'Access Token', type: 'password', required: true },
+      ],
+      credentialsSet: { homeserver: false, accessToken: false },
+      capabilities: { pollInbound: true, threads: true },
+      platformConfigured: false,
+      setupSteps: ['Create a bot account on your homeserver', 'Paste its access token'],
+      setupNotes: 'Self-hosted homeservers must be reachable from this instance.',
+      docsUrl: 'https://docs.example/comms/matrix',
     },
   ],
   links: [
