@@ -12,6 +12,7 @@ import { createPortal } from 'react-dom';
 import clsx from 'clsx';
 import dayjs from 'dayjs';
 import { DatePicker } from '@mantine/dates';
+import { MantineProvider } from '@mantine/core';
 import { useT } from '@postmill-ai/react/translation/get.transation.service.client';
 import { newDayjs } from '@postmill-ai/frontend/components/layout/set.timezone';
 import { Integrations } from '@postmill-ai/frontend/components/launches/calendar.context';
@@ -373,8 +374,14 @@ export const AnalyticsFilterBar: FC<AnalyticsFilterBarProps> = ({
               </div>
 
               {(customOpen || win === 'custom') && (
+                // Mantine components throw outside a MantineProvider, and the
+                // app tree has none — scope one to the picker (same pattern as
+                // launches/helpers/date.picker.tsx). Without this, opening the
+                // custom range picker crashed /analytics with "MantineProvider
+                // was not found in component tree".
                 <div className="flex justify-center rounded-[8px] border border-newTableBorder bg-newBgColorInner p-[8px]">
-                  <DatePicker
+                  <MantineProvider>
+                    <DatePicker
                     type="range"
                     allowSingleDateInRange
                     value={[from, to]}
@@ -394,7 +401,8 @@ export const AnalyticsFilterBar: FC<AnalyticsFilterBarProps> = ({
                       calendarHeaderLevel: 'text-textColor hover:bg-designer!Accent/15',
                       weekday: 'text-new!TableText',
                     }}
-                  />
+                    />
+                  </MantineProvider>
                 </div>
               )}
             </div>

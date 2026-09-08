@@ -25,6 +25,7 @@ export default defineConfig({
     include: [
       'src/components/analytics/**/*.spec.{ts,tsx}',
       'src/components/files/**/*.spec.{ts,tsx}',
+      'src/components/errors/**/*.spec.{ts,tsx}',
       'src/components/ui/**/*.spec.{ts,tsx}',
       'src/components/launches/post-detail/*.spec.{ts,tsx}',
       'src/components/launches/calendar.spec.{ts,tsx}',
@@ -33,6 +34,7 @@ export default defineConfig({
       'src/components/launches/separate.post.spec.{ts,tsx}',
       'src/components/launches/merge.post.spec.{ts,tsx}',
       'src/components/launches/import-debug-post.modal.spec.{ts,tsx}',
+      'src/components/launches/customer.modal.spec.{ts,tsx}',
       'src/components/launches/time.table.spec.{ts,tsx}',
       'src/components/launches/helpers/*.spec.{ts,tsx}',
       'src/components/launches/calendar/**/*.spec.{ts,tsx}',

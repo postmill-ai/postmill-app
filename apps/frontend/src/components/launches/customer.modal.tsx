@@ -3,7 +3,7 @@
 import React, { FC, useCallback, useEffect, useState } from 'react';
 import { useModals } from '@postmill-ai/frontend/components/layout/new-modal';
 import { Integration } from '@prisma/client';
-import { Autocomplete } from '@mantine/core';
+import { Autocomplete, MantineProvider } from '@mantine/core';
 import useSWR from 'swr';
 import { useFetch } from '@postmill-ai/helpers/utils/custom.fetch';
 import { Button } from '@postmill-ai/react/form/button';
@@ -51,16 +51,21 @@ export const CustomerModal: FC<{
   return (
     <div className="relative w-full">
       <div className="mb-[80px]">
-        <Autocomplete
-          value={customer}
-          onChange={setCustomer}
-          classNames={{
-            label: 'text-white',
-          }}
-          label={t('select_customer_label', 'Select Customer')}
-          placeholder={t('start_typing', 'Start typing...')}
-          data={data?.map((p: any) => p.name) || []}
-        />
+        {/* Mantine components throw outside a MantineProvider, and the app
+            tree has none — scope one here (same pattern as
+            launches/helpers/date.picker.tsx). */}
+        <MantineProvider>
+          <Autocomplete
+            value={customer}
+            onChange={setCustomer}
+            classNames={{
+              label: 'text-white',
+            }}
+            label={t('select_customer_label', 'Select Customer')}
+            placeholder={t('start_typing', 'Start typing...')}
+            data={data?.map((p: any) => p.name) || []}
+          />
+        </MantineProvider>
       </div>
 
       <div className="my-[16px] flex gap-[10px]">
