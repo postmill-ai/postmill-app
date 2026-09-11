@@ -4,14 +4,19 @@ import useSWR from 'swr';
 import { useFetch } from '@postmill-ai/helpers/utils/custom.fetch';
 
 /**
- * Whether the current org has an active AI provider configured.
+ * Whether the current org's AI agent scope is actually usable.
  *
- * Source of truth is `/settings/ai/config` → `active` (null when no provider).
+ * Source of truth is `/settings/ai/config` → `active` (null when no provider)
+ * plus `agentReady` (false when the active provider can't resolve for the agent
+ * scope — e.g. credentials incomplete). `active != null` alone is NOT enough:
+ * mounting CopilotKit for a provider that fails agent-scope resolution makes
+ * the /copilot/chat handshake reject (the runtime has no usable agent), which
+ * cascades into "Agent 'default' not found" / `.map is not a function` crashes
+ * on every page (Sentry POSTMILL-APP-D/E/F).
  * Returns `undefined` while loading so callers can avoid flashing AI UI before
- * the answer is known. When `false`, the app must NOT mount CopilotKit (its
- * runtime handshake would 403 on the CSRF-protected /copilot routes and spam
- * the console) — route the user to the AI setup page (`/settings/ai/llm-providers`)
- * instead. See copilot-bridges.tsx and layout.component.tsx.
+ * the answer is known. When `false`, the app must NOT mount CopilotKit — route
+ * the user to the AI setup page (`/settings/ai/llm-providers`) instead. See
+ * copilot-bridges.tsx and layout.component.tsx.
  */
 export const useAiActive = (): boolean | undefined => {
   const fetch = useFetch();
@@ -26,7 +31,11 @@ export const useAiActive = (): boolean | undefined => {
     }
   );
   if (isLoading && !data) return undefined;
-  return data?.active !== null && data?.active !== undefined;
+  return (
+    data?.active !== null &&
+    data?.active !== undefined &&
+    data?.agentReady === true
+  );
 };
 
 /** Canonical deep-link to the AI provider setup page. */

@@ -51,6 +51,7 @@ export default defineConfig({
       'src/components/settings/channels/*.spec.{ts,tsx}',
       'src/components/launches/continue.integration.spec.{ts,tsx}',
       'src/components/layout/use-permissions.spec.{ts,tsx}',
+      'src/components/layout/use-ai-active.spec.{ts,tsx}',
       'src/components/layout/top.menu.spec.{ts,tsx}',
       'src/components/layout/layout.context.spec.{ts,tsx}',
       'src/components/layout/prompt-modal.spec.{ts,tsx}',
