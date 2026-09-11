@@ -6,13 +6,11 @@ export const createSendEmail = (emailActivity: EmailActivity) =>
   inngest.createFunction(
     {
       id: 'send-email',
-      rateLimit: {
-        // No `key`: Inngest compiles `key` as a CEL expression, so a literal like
-        // 'email-send' fails to register. Omitting it applies one global bucket,
-        // which is the intended 1-email/sec limit across all sends.
-        limit: 1,
-        period: '1s',
-      },
+      // No rateLimit: the inherited 1-email/sec global bucket made the
+      // self-hosted executor silently drop every second same-second email
+      // (live-proven 2026-09-11: welcome/admin pair — one run initialized,
+      // the other received but never executed, never retried). Flood control
+      // belongs at the source (24h notification dedup), not here.
       triggers: [emailSendEvent],
     },
     async ({ step, event }) => {

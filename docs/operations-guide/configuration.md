@@ -40,6 +40,7 @@ Pluggable provider system with 6 adapters: Resend, SendGrid, Mailgun, Postmark, 
 | `EMAIL_SES_ACCESS_KEY_ID` | — | SES IAM access key (falls back to `AWS_*` env vars) |
 | `EMAIL_SES_SECRET_ACCESS_KEY` | — | SES IAM secret key (falls back to `AWS_*` env vars) |
 | `EMAIL_SMTP_HOST` | — | SMTP server hostname (required for `smtp`) |
+| `ADMIN_NOTIFICATIONS_EMAIL` | — | Operator address that receives one alert per new tenant signup (the first/primary user who creates an org). Unset = no admin alerts |
 | `EMAIL_SMTP_PORT` | `587` | SMTP server port |
 | `EMAIL_SMTP_SECURE` | `false` | Use TLS for SMTP |
 | `EMAIL_SMTP_USER` | — | SMTP authentication username (optional for open relays) |

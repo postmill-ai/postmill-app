@@ -87,6 +87,7 @@ const ENV_KEYS = [
   'DISALLOW_PLUS',
   'DATAFAST_API_KEY',
   'FRONTEND_URL',
+  'ADMIN_NOTIFICATIONS_EMAIL',
 ] as const;
 const originalEnv = ENV_KEYS.map((k) => [k, process.env[k]] as const);
 
@@ -716,6 +717,79 @@ describe('AuthService (backend)', () => {
         `https://www.gravatar.com/avatar/${md5}?d=404&s=200`
       );
     });
+
+    it('sends welcome + admin emails for a new provider user (new tenant)', async () => {
+      process.env.ADMIN_NOTIFICATIONS_EMAIL = 'admin@example.com';
+      providerInstance.getUser.mockResolvedValue({
+        id: 'gh-1',
+        email: 'gh@example.com',
+      });
+      usersService.getUserByProvider.mockResolvedValue(null);
+      organizationService.createOrgAndUser.mockResolvedValue({
+        id: 'org-2',
+        users: [{ user: { id: 'user-2', email: 'gh@example.com' } }],
+      });
+
+      await service.routeAuth(
+        Provider.GITHUB,
+        makeRegisterBody({ providerToken: 'token-1', company: 'Acme' }),
+        'ip',
+        'ua'
+      );
+
+      expect(notificationService.sendEmail).toHaveBeenCalledWith(
+        'gh@example.com',
+        'Welcome to Postmill',
+        expect.stringContaining('docs.postmill.ai/user-guide'),
+        'support@postmill.ai'
+      );
+      expect(notificationService.sendEmail).toHaveBeenCalledWith(
+        'admin@example.com',
+        'New Postmill signup: gh@example.com',
+        expect.stringContaining('Acme')
+      );
+    });
+
+    it('sends neither email when the provider user already exists', async () => {
+      process.env.ADMIN_NOTIFICATIONS_EMAIL = 'admin@example.com';
+      providerInstance.getUser.mockResolvedValue({ id: 'gh-1' });
+      usersService.getUserByProvider.mockResolvedValue({ id: 'user-1' });
+
+      await service.routeAuth(
+        Provider.GITHUB,
+        makeRegisterBody({ providerToken: 'token-1' }),
+        'ip',
+        'ua'
+      );
+
+      expect(notificationService.sendEmail).not.toHaveBeenCalled();
+    });
+
+    it('skips the welcome email for synthetic addresses but still alerts the admin', async () => {
+      process.env.ADMIN_NOTIFICATIONS_EMAIL = 'admin@example.com';
+      providerInstance.getUser.mockResolvedValue({
+        id: 'x-1',
+        email: 'x_123@x.login.postmill.local',
+      });
+      usersService.getUserByProvider.mockResolvedValue(null);
+      organizationService.createOrgAndUser.mockResolvedValue({
+        id: 'org-3',
+        users: [
+          { user: { id: 'user-3', email: 'x_123@x.login.postmill.local' } },
+        ],
+      });
+
+      await service.routeAuth(
+        Provider.GENERIC,
+        makeRegisterBody({ providerToken: 'token-1' }),
+        'ip',
+        'ua'
+      );
+
+      const calls = notificationService.sendEmail.mock.calls;
+      expect(calls).toHaveLength(1);
+      expect(calls[0][0]).toBe('admin@example.com');
+    });
   });
 
   // ── Org cookie ──
@@ -832,12 +906,16 @@ describe('AuthService (backend)', () => {
         activated: false,
         email: 'x@example.com',
       });
-      usersService.getUserByEmail.mockResolvedValue({ activated: false });
+      usersService.getUserByEmail.mockResolvedValue({ id: 'user-1', activated: false });
 
       const result = await service.activate('code', 'visitor-1');
 
       expect(usersService.activateUser).toHaveBeenCalledWith('user-1');
       expect(result).toBe('jwt:user-1');
+      // The session JWT must be signed from the fresh DB row — never the
+      // verified activation payload, whose exp claim makes sign({expiresIn})
+      // throw (live-probed 500 on prod before this fix).
+      expect(authCheckerMock.signJWT.mock.calls.at(-1)[0]).not.toHaveProperty('exp');
     });
 
     it('returns false when the account was already activated meanwhile', async () => {
@@ -852,14 +930,81 @@ describe('AuthService (backend)', () => {
       expect(usersService.activateUser).not.toHaveBeenCalled();
     });
 
-    it('returns false for an already-activated token', async () => {
+    it('returns false for a malformed code instead of throwing', async () => {
+      authCheckerMock.verifyJWT.mockImplementation(() => {
+        throw new Error('jwt malformed');
+      });
+
+      expect(await service.activate('garbage', 'visitor-1')).toBe(false);
+      expect(usersService.activateUser).not.toHaveBeenCalled();
+    });
+
+    it('sends the welcome email and admin alert on first activation', async () => {
+      process.env.ADMIN_NOTIFICATIONS_EMAIL = 'admin@example.com';
+      authCheckerMock.verifyJWT.mockReturnValue({
+        id: 'user-1',
+        activated: false,
+        email: 'x@example.com',
+      });
+      usersService.getUserByEmail.mockResolvedValue({ id: 'user-1', activated: false });
+
+      await service.activate('code', 'visitor-1');
+
+      expect(notificationService.sendEmail).toHaveBeenCalledWith(
+        'x@example.com',
+        'Welcome to Postmill',
+        expect.stringContaining('docs.postmill.ai/user-guide'),
+        'support@postmill.ai'
+      );
+      expect(notificationService.sendEmail).toHaveBeenCalledWith(
+        'admin@example.com',
+        'New Postmill signup: x@example.com',
+        expect.stringContaining('LOCAL')
+      );
+    });
+
+    it('sends no admin alert when ADMIN_NOTIFICATIONS_EMAIL is unset', async () => {
+      authCheckerMock.verifyJWT.mockReturnValue({
+        id: 'user-1',
+        activated: false,
+        email: 'x@example.com',
+      });
+      usersService.getUserByEmail.mockResolvedValue({ id: 'user-1', activated: false });
+
+      await service.activate('code', 'visitor-1');
+
+      const subjects = notificationService.sendEmail.mock.calls.map(
+        (c) => c[0]
+      );
+      expect(subjects).toEqual(['x@example.com']);
+    });
+
+    it('sends no welcome/admin email on repeat activation', async () => {
+      process.env.ADMIN_NOTIFICATIONS_EMAIL = 'admin@example.com';
       authCheckerMock.verifyJWT.mockReturnValue({
         id: 'user-1',
         activated: true,
         email: 'x@example.com',
       });
 
-      expect(await service.activate('code', 'visitor-1')).toBe(false);
+      await service.activate('code', 'visitor-1');
+
+      expect(notificationService.sendEmail).not.toHaveBeenCalled();
+    });
+
+    it('a mail failure does not break activation', async () => {
+      authCheckerMock.verifyJWT.mockReturnValue({
+        id: 'user-1',
+        activated: false,
+        email: 'x@example.com',
+      });
+      usersService.getUserByEmail.mockResolvedValue({ id: 'user-1', activated: false });
+      notificationService.sendEmail.mockRejectedValue(new Error('smtp down'));
+
+      const result = await service.activate('code', 'visitor-1');
+
+      expect(result).toBe('jwt:user-1');
+      expect(usersService.activateUser).toHaveBeenCalledWith('user-1');
     });
   });
 

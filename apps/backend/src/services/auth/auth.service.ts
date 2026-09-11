@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, Logger } from '@nestjs/common';
 import { Provider, User, UserOrganization } from '@prisma/client';
 import { CreateOrgUserDto } from '@postmill-ai/nestjs-libraries/dtos/auth/create.org.user.dto';
 import { LoginUserDto } from '@postmill-ai/nestjs-libraries/dtos/auth/login.user.dto';
@@ -74,6 +74,56 @@ export class AuthService {
     }
 
     return (await this._organizationService.getCount()) === 0;
+  }
+
+  // Sent once per account, after the account is real: LOCAL on first
+  // activation, OAuth on registration. Mail failures must never break auth.
+  private async _sendWelcomeEmail(email: string) {
+    try {
+      await this._notificationService.sendEmail(
+        email,
+        'Welcome to Postmill',
+        `<p>Welcome aboard — your account is ready.</p>
+         <p>New here? The <a href="https://docs.postmill.ai/user-guide/">User Guide</a> walks you through connecting channels, scheduling your first posts, and using the AI agent.</p>
+         <p>Found a bug? <a href="https://github.com/postmill-ai/postmill-app/issues">Open an issue on GitHub</a>.</p>
+         <p>Questions? Contact <a href="mailto:support@postmill.ai">support@postmill.ai</a> or just reply to this email.</p>`,
+        'support@postmill.ai'
+      );
+    } catch (err) {
+      Logger.warn(
+        `Welcome email failed: ${(err as Error)?.message ?? String(err)}`
+      );
+    }
+  }
+
+  // Operator alert, one per NEW TENANT: this only runs in the register paths
+  // (which always createOrgAndUser), never in the invite flow (addUserToOrg),
+  // so users joining an existing org don't trigger it. Unset env = disabled.
+  private async _notifyAdminSignup(opts: {
+    email: string;
+    provider: string;
+    company?: string;
+    context: 'registered' | 'activated';
+  }) {
+    const to = process.env.ADMIN_NOTIFICATIONS_EMAIL;
+    if (!to) return;
+    try {
+      await this._notificationService.sendEmail(
+        to,
+        `New Postmill signup: ${opts.email}`,
+        `<ul>
+           <li><strong>Email:</strong> ${opts.email}</li>
+           <li><strong>Provider:</strong> ${opts.provider}</li>
+           ${opts.company ? `<li><strong>Org:</strong> ${opts.company}</li>` : ''}
+           <li><strong>Status:</strong> ${opts.context}</li>
+           <li><strong>Time:</strong> ${new Date().toISOString()}</li>
+         </ul>`
+      );
+    } catch (err) {
+      Logger.warn(
+        `Admin signup alert failed: ${(err as Error)?.message ?? String(err)}`
+      );
+    }
   }
 
   async routeAuth(
@@ -243,7 +293,14 @@ export class AuthService {
     // send them any email.
     if (!providerUser.email.endsWith('.login.postmill.local')) {
       await NewsletterService.register(providerUser.email);
+      await this._sendWelcomeEmail(providerUser.email);
     }
+    await this._notifyAdminSignup({
+      email: providerUser.email,
+      provider: String(provider),
+      company: body.company,
+      context: 'registered',
+    });
 
     try {
       if (providerInstance?.postRegistration) {
@@ -319,11 +376,15 @@ export class AuthService {
   }
 
   async activate(code: string, tracking: string) {
-    const user = AuthChecker.verifyJWT(code) as {
-      id: string;
-      activated: boolean;
-      email: string;
-    };
+    // A malformed/garbage code is a client error (truncated link, bot probe),
+    // not a 500 — verifyJWT throws JsonWebTokenError, which would otherwise
+    // surface as an unhandled 500 + Sentry event.
+    let user: { id: string; activated: boolean; email: string };
+    try {
+      user = AuthChecker.verifyJWT(code) as typeof user;
+    } catch {
+      return false;
+    }
     if (user.id && !user.activated) {
       const getUserAgain = await this._userService.getUserByEmail(user.email);
       if (getUserAgain.activated) {
@@ -333,7 +394,20 @@ export class AuthService {
       user.activated = true;
       this._track('register', user.email, tracking).catch((err) => {});
       await NewsletterService.register(user.email);
-      return this.jwt(user);
+      // First activation = the LOCAL tenant is real now — welcome + admin alert
+      // fire here (not at register), and exactly once (repeat activations
+      // return false above before reaching this).
+      await this._sendWelcomeEmail(user.email);
+      await this._notifyAdminSignup({
+        email: user.email,
+        provider: 'LOCAL',
+        context: 'activated',
+      });
+      // Sign from the fresh DB row, NOT the verified token payload: the
+      // payload carries exp/iat, and jsonwebtoken's sign({expiresIn}) hard-
+      // throws when exp is already present — re-signing the verified payload
+      // 500s every activation (found by live probe 2026-09-11).
+      return this.jwt({ ...getUserAgain, activated: true });
     }
 
     return false;
