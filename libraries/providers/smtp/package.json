@@ -6,7 +6,7 @@
   "types": "src/index.ts",
   "dependencies": {
     "@postmill-ai/provider-kernel": "workspace:*",
-    "nodemailer": "^8.0.10"
+    "nodemailer": "^9.1.0"
   },
   "license": "AGPL-3.0",
   "engines": {

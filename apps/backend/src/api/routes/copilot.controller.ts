@@ -14,7 +14,6 @@ import OpenAI from 'openai';
 import {
   AnthropicAdapter,
   CopilotRuntime,
-  EmptyAdapter,
   GoogleGenerativeAIAdapter,
   GroqAdapter,
   LangChainAdapter,
@@ -333,26 +332,6 @@ export class CopilotController {
       .join('\n');
   }
 
-  // CopilotKit fires a runtime-info handshake to /copilot/{chat,agent} as soon as
-  // its provider mounts — which is on EVERY page (the global layout) plus the agent
-  // builder. When AI isn't configured, _buildServiceAdapter throws 422, which
-  // CopilotKit surfaces as a `runtime_info_fetch_failed` console error on every
-  // navigation. Serve an EmptyAdapter in that case so the handshake succeeds (no
-  // agents, no error); actual generation is gated by the UI when AI is unavailable.
-  private async _serviceAdapterOrEmpty(orgId?: string) {
-    try {
-      return await this._buildServiceAdapter(orgId);
-    } catch (err) {
-      if (
-        err instanceof HttpException &&
-        err.getStatus() === HttpStatus.UNPROCESSABLE_ENTITY
-      ) {
-        return new EmptyAdapter();
-      }
-      throw err;
-    }
-  }
-
   @Post('/chat')
   @CheckPolicies([AuthorizationActions.Create, Sections.MCP])
   async chatAgent(
@@ -365,7 +344,7 @@ export class CopilotController {
     }
 
     try {
-      const serviceAdapter = await this._serviceAdapterOrEmpty(organization?.id);
+      const serviceAdapter = await this._buildServiceAdapter(organization?.id);
       const copilotRuntimeHandler = copilotRuntimeNodeHttpEndpoint({
         endpoint: '/copilot/chat',
         runtime: new CopilotRuntime(),
@@ -395,7 +374,7 @@ export class CopilotController {
     }
 
     try {
-      const serviceAdapter = await this._serviceAdapterOrEmpty(organization.id);
+      const serviceAdapter = await this._buildServiceAdapter(organization.id);
       const mastra = await this._mastraService.mastra();
       const requestContext = new RequestContext<ChannelsContext>();
       const properties = req?.body?.variables?.properties || {};

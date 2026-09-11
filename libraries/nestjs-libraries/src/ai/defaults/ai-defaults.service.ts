@@ -110,9 +110,16 @@ export class AiDefaultsService {
   async getProviderConfigSummary(orgId: string): Promise<{
     active: ProviderConfigSummary | null;
     providers: ProviderConfigSummary[];
+    agentReady: boolean;
   }> {
     const active = await this._orgAiSettings.getActiveProvider(orgId);
     const allConfigs = await this._orgAiSettings.getProviders(orgId);
+    // "active" only means a provider row is marked active — its credentials may
+    // still be incomplete, in which case the agent scope cannot resolve and the
+    // CopilotKit runtime handshake would fail. The frontend gates mounting
+    // CopilotKit on this flag, so it must reflect actual agent resolution
+    // (returns null on failure), not just the presence of an active row.
+    const agentReady = !!(await this._aiModelProvider.resolveConfigForScope('agent', orgId));
     // Never ship decrypted provider credentials to the client (#53). The active
     // provider's credentials stay server-side for model resolution only.
     const safeActive = active
@@ -121,6 +128,7 @@ export class AiDefaultsService {
     return {
       active: safeActive,
       providers: allConfigs.map((p: any) => ({ ...p, ...this._aiVersionMeta(p.identifier) })),
+      agentReady,
     };
   }
 

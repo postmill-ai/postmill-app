@@ -12,7 +12,9 @@ overrides:
   # ^3.23.0 || ^4.4.0). Pin it onto the workspace's zod 4 line so the whole graph
   # resolves one major.
   '@reaatech/structured-repair-core>zod': '^4.4.3'
-  next: 16.3.1
+  # next >=16.0.0 <16.3.3: critical unauthenticated RCE on Windows hosts
+  # (GHSA-p293-qw3h-jr36) and in image optimization via AVIF (GHSA-2xp9-vwfh-vxw4).
+  next: 16.3.3
   react: 19.2.7
   react-dom: 19.2.7
   '@types/react': 19.1.8
@@ -58,17 +60,28 @@ overrides:
   # (GHSA-88fw-hqm2-52qc), pulled by @copilotkit/runtime and @modelcontextprotocol/sdk.
   # Bump to patched 4.12.x (same major).
   'hono@<4.12.25': '>=4.12.25 <5'
-  # multer <2.2.0: high DoS via deeply nested field names (GHSA-72gw-mp4g-v24j), pulled by
-  # @nestjs/platform-express. Bump to patched 2.2.x (same major).
-  'multer@<2.2.0': '>=2.2.0 <3'
+  # multer <2.3.0: high DoS via deeply nested field names (GHSA-72gw-mp4g-v24j, patched
+  # 2.2.0), via crafted (GHSA-wc9g-mqfw-jrwm) and oversized (GHSA-535w-7cp7-47q4) file
+  # fields (patched 2.3.0), pulled by @nestjs/platform-express (pins 2.1.1). Bump to
+  # patched 2.3.x (same major).
+  'multer@<2.3.0': '>=2.3.0 <3'
   # postcss <=8.5.11: high arbitrary file read via attacker-controlled sourceMappingURL
   # in CSS comments (GHSA-6g55-p6wh-862q). Only vulnerable path is next's exact 8.4.31
   # pin; parent-scoped so direct postcss specifiers (^8.5.22) are untouched — an
   # unscoped selector override breaks CI's frozen-lockfile specifier comparison.
   'next>postcss': '>=8.5.12 <9'
-  # nodemailer <=9.0.0: high raw-option bypass of disableFileAccess/disableUrlAccess enabling
-  # SSRF (GHSA-p6gq-j5cr-w38f), direct dependency. Bump to patched 9.0.x (same major).
-  'nodemailer@<=9.0.0': '>=9.0.1 <10'
+  # nodemailer <9.1.0: high raw-option bypass of disableFileAccess/disableUrlAccess enabling
+  # SSRF (GHSA-p6gq-j5cr-w38f, patched 9.0.1) and high quadratic O(n²) header parsing
+  # (GHSA-2x7j-588g-ccc2, patched 9.1.0). Bump to patched 9.1.x (same major).
+  'nodemailer@<9.1.0': '>=9.1.0 <10'
+  # svgo >=3.0.0 <3.3.5: high — removeScripts allows executable links through namespace
+  # and control characters (GHSA-w27v-7q3p-w38r), pulled by @svgr/webpack ->
+  # @svgr/plugin-svgo. Bump vulnerable 3.x to patched 3.3.x (same major).
+  'svgo@>=3.0.0 <3.3.5': '>=3.3.5 <4'
+  # js-yaml >=4.0.0 <4.3.2: high — maxTotalMergeKeys does not limit CPU use for empty
+  # merge sources (GHSA-2883-xcg3-v3hh), pulled by eslint (dev tooling). Bump vulnerable
+  # 4.x to patched 4.3.x (same major; the 3.x line has its own override above).
+  'js-yaml@>=4.0.0 <4.3.2': '>=4.3.2 <5'
   # piscina <=4.9.2: high prototype-pollution gadget → RCE (GHSA-x9g3-xrwr-cwfg), pulled by
   # @swc/cli. Bump to patched 4.9.x (same major).
   'piscina@<=4.9.2': '>=4.9.3 <5'

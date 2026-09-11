@@ -25,6 +25,7 @@ describe('AiDefaultsService', () => {
 
   const mockModelProvider = {
     generateTextWithModel: vi.fn(),
+    resolveConfigForScope: vi.fn(),
   } as unknown as AIModelProvider;
 
   const mockMediaService = {
@@ -515,11 +516,34 @@ describe('AiDefaultsService', () => {
       mockOrgAiSettings.getProviders.mockResolvedValue([]);
       mockKernel.versions.mockReturnValue([]);
       mockKernel.latestActive.mockReturnValue(undefined);
+      vi.mocked(mockModelProvider.resolveConfigForScope).mockResolvedValue({} as any);
 
       const result = await service.getProviderConfigSummary('org-1');
 
       expect(result.active).not.toHaveProperty('credentials');
       expect(result.active).toHaveProperty('identifier', 'openai');
+    });
+
+    it('getProviderConfigSummary reports agentReady from agent-scope resolution', async () => {
+      mockOrgAiSettings.getActiveProvider.mockResolvedValue({
+        identifier: 'google',
+        name: 'Google',
+      });
+      mockOrgAiSettings.getProviders.mockResolvedValue([]);
+      mockKernel.versions.mockReturnValue([]);
+      mockKernel.latestActive.mockReturnValue(undefined);
+
+      // An active provider row whose credentials are incomplete (agent scope
+      // cannot resolve) must report agentReady=false — the frontend gates
+      // mounting CopilotKit on this flag (Sentry POSTMILL-APP-D/E/F).
+      vi.mocked(mockModelProvider.resolveConfigForScope).mockResolvedValue(null);
+      const notReady = await service.getProviderConfigSummary('org-1');
+      expect(notReady.agentReady).toBe(false);
+      expect(mockModelProvider.resolveConfigForScope).toHaveBeenCalledWith('agent', 'org-1');
+
+      vi.mocked(mockModelProvider.resolveConfigForScope).mockResolvedValue({ modelId: 'm' } as any);
+      const ready = await service.getProviderConfigSummary('org-1');
+      expect(ready.agentReady).toBe(true);
     });
 
     it('resolveAdapter returns undefined for unknown providers', () => {
