@@ -1,6 +1,7 @@
 import React from 'react';
 import { describe, it, expect, vi } from 'vitest';
 import { render, fireEvent } from '@testing-library/react';
+import dayjs from 'dayjs';
 
 vi.mock('@postmill-ai/react/translation/get.transation.service.client', () => ({
   useT: () => (k: string, fallback?: string) => fallback || k,
@@ -20,9 +21,12 @@ vi.mock(
 
 import { AnalyticsFilterBar } from './filter.bar';
 
+// Must track the component's defaultRange() (today-30d → today): hardcoded
+// dates make the "date" chip appear as soon as real time moves past them,
+// which changes the Filter button's aria-label and breaks the queries below.
 const props = {
-  from: '2026-08-09',
-  to: '2026-09-08',
+  from: dayjs().subtract(30, 'day').format('YYYY-MM-DD'),
+  to: dayjs().format('YYYY-MM-DD'),
   compare: false,
   onRangeChange: vi.fn(),
   integrations: [],
