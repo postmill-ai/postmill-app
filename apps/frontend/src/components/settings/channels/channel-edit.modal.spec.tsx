@@ -735,3 +735,52 @@ describe('ChannelConfigForm direct connect (customFields)', () => {
     expect(mockToast).toHaveBeenCalledWith('Channel Connected!', 'success');
   });
 });
+
+describe('ChannelConfigForm — shared /integrations/list SWR key contract', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it('populates the shared SWR cache with a BARE ARRAY, not the raw envelope', async () => {
+    // Regression (POSTMILL-APP-E/K): this fetcher used to resolve to the raw
+    // `{integrations: [...]}` envelope. `/integrations/list` is a shared SWR
+    // key — dashboard/analytics then read the envelope from the cache and
+    // crashed on `.map is not a function`.
+    const cache = new Map();
+    mockFetch.mockImplementation((url: string) => {
+      if (url === '/integrations/list') {
+        return Promise.resolve({
+          ok: true,
+          json: async () => ({
+            integrations: [
+              { identifier: 'instagram-standalone', name: 'IG', disabled: false },
+            ],
+          }),
+        });
+      }
+      return Promise.resolve({ ok: true, json: async () => ({}) });
+    });
+
+    render(
+      <SWRConfig value={{ provider: () => cache }}>
+        <ChannelConfigForm
+          identifier="instagram-standalone"
+          providerName="Instagram (Standalone)"
+          platformConfigured={true}
+          setup={OAUTH_SETUP}
+          callbackUrl="https://app.postmill.ai/integrations/social/instagram-standalone"
+          defaultScopes="instagram_business_basic"
+          onClose={vi.fn()}
+          onSaved={vi.fn()}
+        />
+      </SWRConfig>
+    );
+
+    await waitFor(() => {
+      const cached = cache.get('/integrations/list');
+      expect(cached).toBeDefined();
+      expect(Array.isArray(cached.data)).toBe(true);
+      expect(cached.data[0].name).toBe('IG');
+    });
+  });
+});

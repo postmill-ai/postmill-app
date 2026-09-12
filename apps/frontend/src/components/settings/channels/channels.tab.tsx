@@ -137,20 +137,27 @@ const useProviders = () => {
 };
 
 // The composer's connected channels — each credential-set row shows which
-// accounts are connected through its provider.
+// accounts are connected through its provider. `/integrations/list` is a
+// SHARED SWR key: every other consumer (composer, dashboard, analytics via
+// useIntegrationList) expects the fetcher to resolve to the bare array, so
+// unwrap here. Returning the raw `{integrations}` envelope poisons the
+// shared cache and crashes those pages with `.map is not a function`.
 const useConnectedChannels = () => {
   const fetch = useFetch();
-  return useSWR<{
-    integrations?: Array<{
+  return useSWR<
+    Array<{
       identifier: string;
       name: string;
       disabled: boolean;
       inBetweenSteps?: boolean;
-    }>;
-  }>('/integrations/list', (url: string) =>
+    }>
+  >('/integrations/list', (url: string) =>
     fetch(url)
-      .then((r) => (r.ok ? r.json() : { integrations: [] }))
-      .catch(() => ({ integrations: [] }))
+      .then(async (r) => {
+        const json = r.ok ? await r.json().catch(() => null) : null;
+        return Array.isArray(json?.integrations) ? json.integrations : [];
+      })
+      .catch(() => [])
   );
 };
 
@@ -385,7 +392,7 @@ export const ChannelsTab: FC = () => {
   // Connected account names per provider (skips disabled / half-connected rows).
   const connectedByIdentifier = useMemo(() => {
     const map: Record<string, string[]> = {};
-    for (const ch of connectedList?.integrations || []) {
+    for (const ch of connectedList || []) {
       if (ch.disabled || ch.inBetweenSteps) continue;
       (map[ch.identifier] ||= []).push(ch.name);
     }

@@ -151,21 +151,27 @@ export const ChannelConfigForm: FC<ChannelConfigFormProps> = ({
 
   // Connected channels for this provider (the composer list) — after a
   // successful Connect the modal must SAY so, not silently offer Connect again.
-  const { data: integrationList } = useSWR<{ integrations?: Array<{
+  // `/integrations/list` is a SHARED SWR key whose consumers expect the bare
+  // array (see useIntegrationList) — unwrap here or the raw envelope poisons
+  // the cache and crashes dashboard/analytics with `.map is not a function`.
+  const { data: integrationList } = useSWR<Array<{
     identifier: string;
     name: string;
     disabled: boolean;
     inBetweenSteps?: boolean;
-  }> }>(
+  }>>(
     '/integrations/list',
     (url: string) =>
       fetch(url)
-        .then((r) => (r.ok ? r.json() : { integrations: [] }))
-        .catch(() => ({ integrations: [] }))
+        .then(async (r) => {
+          const json = r.ok ? await r.json().catch(() => null) : null;
+          return Array.isArray(json?.integrations) ? json.integrations : [];
+        })
+        .catch(() => [])
   );
   const connectedChannels = useMemo(
     () =>
-      (integrationList?.integrations || []).filter(
+      (integrationList || []).filter(
         (ch) => ch.identifier === identifier && !ch.disabled && !ch.inBetweenSteps
       ),
     [integrationList, identifier]
