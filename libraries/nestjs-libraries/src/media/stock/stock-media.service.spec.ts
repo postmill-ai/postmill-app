@@ -277,4 +277,57 @@ describe('StockMediaService', () => {
       expect(search.mock.calls[0][3]).toMatchObject({ content_filter: 'high' });
     });
   });
+
+  describe('Iconify icons — license normalization (POSTMILL-APP-J)', () => {
+    const searchWith = (collections: Record<string, unknown>) => {
+      mockSafeFetch.mockResolvedValueOnce(
+        jsonResponse({
+          icons: ['mdi:home'],
+          total: 1,
+          collections,
+        }),
+      );
+      return makeService().service.searchIcons('org-1', 'home', 1);
+    };
+
+    it('maps the Iconify license OBJECT to a display string + URL', async () => {
+      // Iconify's collections API returns license as
+      // {title, spdx, url} — passed through raw it crashed the stock preview
+      // modal (React error #31: object as a React child).
+      const res = await searchWith({
+        mdi: {
+          name: 'Material Design Icons',
+          author: { name: 'Pictogrammers', url: 'https://example.com' },
+          license: {
+            title: 'Apache 2.0',
+            spdx: 'Apache-2.0',
+            url: 'https://example.com/LICENSE',
+          },
+        },
+      });
+
+      expect(res.results[0].license).toBe('Apache 2.0');
+      expect(res.results[0].licenseUrl).toBe('https://example.com/LICENSE');
+    });
+
+    it('falls back to spdx when title is missing, then Unknown', async () => {
+      const spdxOnly = await searchWith({
+        mdi: { license: { spdx: 'MIT' } },
+      });
+      expect(spdxOnly.results[0].license).toBe('MIT');
+
+      const missing = await searchWith({ mdi: {} });
+      expect(missing.results[0].license).toBe('Unknown');
+      expect(missing.results[0].licenseUrl).toBeUndefined();
+    });
+
+    it('keeps a plain string license as-is', async () => {
+      const res = await searchWith({
+        mdi: { license: 'CC0', licenseUrl: 'https://example.com/cc0' },
+      });
+
+      expect(res.results[0].license).toBe('CC0');
+      expect(res.results[0].licenseUrl).toBe('https://example.com/cc0');
+    });
+  });
 });

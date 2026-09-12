@@ -753,8 +753,16 @@ export class StockMediaService {
   private mapIconifyIcon(id: string, collections: Record<string, any>): StockIconItem {
     const [prefix, iconName] = id.split(':');
     const collection = prefix ? collections[prefix] : undefined;
-    const license = collection?.license || 'Unknown';
-    const licenseUrl = collection?.licenseUrl;
+    // Iconify's collections API returns license as an OBJECT
+    // ({title, spdx, url}), not a string — passed through raw it crashed the
+    // stock preview modal (React error #31, Sentry POSTMILL-APP-J).
+    const rawLicense = collection?.license;
+    const license =
+      typeof rawLicense === 'string'
+        ? rawLicense
+        : rawLicense?.title || rawLicense?.spdx || 'Unknown';
+    const licenseUrl =
+      (typeof rawLicense === 'object' && rawLicense?.url) || collection?.licenseUrl;
     return {
       id,
       url: `https://api.iconify.design/${prefix}/${iconName}.svg`,

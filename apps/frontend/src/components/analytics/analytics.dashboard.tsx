@@ -86,7 +86,9 @@ export const AnalyticsDashboard: FC = () => {
 
   const { data: integrationsData } = useIntegrationList();
   const integrations = useMemo(
-    () => (integrationsData || []) as Integrations[],
+    // Array guard: `/integrations/list` is a shared SWR key — a non-array in
+    // the cache must never crash the page (Sentry POSTMILL-APP-K).
+    () => (Array.isArray(integrationsData) ? integrationsData : []) as Integrations[],
     [integrationsData]
   );
   const allIntegrationIds = useMemo(

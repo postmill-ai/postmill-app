@@ -96,7 +96,9 @@ export const DashboardComponent = () => {
   );
 
   const activeIntegrationIds = useMemo(
-    () => (integrations ?? []).map((i: { id: string }) => i.id),
+    // Array guard: `/integrations/list` is a shared SWR key — a non-array in
+    // the cache must never crash the page (Sentry POSTMILL-APP-E).
+    () => (Array.isArray(integrations) ? integrations : []).map((i: { id: string }) => i.id),
     [integrations]
   );
 
