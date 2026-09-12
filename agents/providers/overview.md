@@ -230,7 +230,7 @@ generator script exists in-repo — maintain it by hand:
 | Doc | Read this when |
 |---|---|
 | `agents/providers/ai.md` | Adding an LLM provider (BYOK); model categories, hubs vs direct. |
-| `agents/providers/social.md` | Adding a posting channel; OAuth flow, composer UI, 36+ channels. |
+| `agents/providers/social.md` | Adding a posting channel; OAuth flow, composer UI, 45+ channels. |
 | `agents/providers/media.md` | Adding a media-generation studio; descriptors, studio page, nav. |
 | `agents/providers/storage.md` | Adding an upload/storage backend (S3-family, 10-method contract). |
 | `agents/providers/shortlink.md` | Adding a URL shortener; `BaseShortLinkAdapter`. |

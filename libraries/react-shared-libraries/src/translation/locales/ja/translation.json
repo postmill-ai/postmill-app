@@ -3949,7 +3949,7 @@
   "report_failed_to_load": "レポートの読み込みに失敗しました。",
   "report_unavailable": "レポートは利用できません。",
   "login_to_use_the_wizard_to_generate_api_code": "ウィザードでAPIコードを生成するにはログインしてください",
-  "auth_feature_channels": "36以上のソーシャル・チャットチャンネルを、ひとつのコンポーザーで",
+  "auth_feature_channels": "45以上のソーシャル・チャットチャンネルを、ひとつのコンポーザーで",
   "auth_feature_ai_content": "AIライター＆デザインスタジオ — 自分のキーで",
   "auth_feature_calendar": "ビジュアルカレンダー、タイムゾーン対応のスケジューリング",
   "auth_feature_inbox": "毎日の分析スナップショットと優先順位付きの返信受信トレイ",

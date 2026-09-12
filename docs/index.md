@@ -4,7 +4,7 @@ layout: home
 hero:
   name: "Postmill"
   text: "The AI-native social media management platform"
-  tagline: "Schedule to 36+ channels, reply from one inbox, design in-app, and run AI on your own keys."
+  tagline: "Schedule to 45+ channels, reply from one inbox, design in-app, and run AI on your own keys."
   actions:
     - theme: brand
       text: "Get Started"

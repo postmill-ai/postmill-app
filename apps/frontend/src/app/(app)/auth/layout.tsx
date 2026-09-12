@@ -11,7 +11,7 @@ const SignupPlanComponent = loadDynamic(() => import('./signup.plan.component'))
 const features = [
   {
     key: 'auth_feature_channels',
-    text: '36+ social & chat channels, one composer',
+    text: '45+ social & chat channels, one composer',
   },
   {
     key: 'auth_feature_ai_content',
