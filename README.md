@@ -43,6 +43,10 @@ Postmill is AI-native from the ground up. A single governed AI layer powers ever
 
 On top of that: brand-voice profiles, a shared prompt library, retrieval-augmented (RAG) search over your own content, compliance guardrails (prompt-injection / PII / brand-safety / NSFW), per-org spend caps with a full audit log, and an agent/MCP automation surface. Every AI entry point is scoped, rate-limited, and budget-checked — and a deployment's environment key is never silently billed to a tenant.
 
+## 🪄 The Postmill agent
+
+A natural-language assistant that operates the whole platform: schedule and reschedule posts, generate images, video, and voiceovers in any configured studio, pull analytics and best-time-to-post recommendations, manage campaigns, search your media library and stock sources, and reply to synced comments — all from one chat. Outward actions always go through an explicit confirmation card (a pre-filled composer, a draft reply, or a media job summary) so nothing publishes without your approval.
+
 ## 🎨 46 built-in media tools
 
 Create everything in-app without leaving Postmill. The media suite is **46 tools**: the **Designer** (a Konva canvas plus a full video timeline), the **AI Designer**, **38 BYOK provider studios** spanning image, video, audio, avatar, and music generation, and **6 stock browsers** for photos, videos, vectors, stickers, audio, and icons. Every generated or sourced asset lands in your media library, ready to attach to a post.
@@ -62,6 +66,10 @@ Every reply on everything you publish, synced into one inbox. Reply, like, assig
 ## 📣 Agent & notifications where you work
 
 Chat with your Postmill agent and receive notifications in Slack, Telegram, Discord, Matrix, or LINE. Ten notification categories (published, failed, comments, budget, media, and more) route to in-app, email, or your connected comms channels — manageable from a single notification center.
+
+## 🌍 Localization
+
+The full UI — composer, settings, media tools, analytics, and auth — ships in 13 languages: English, Arabic, German, Spanish, French, Italian, Japanese, Korean, Portuguese, Russian, Turkish, Vietnamese, and Chinese.
 
 ## 🗂️ Campaign Hub
 
@@ -94,7 +102,7 @@ The frontend runs on port `4200`. For the full setup, configuration reference, a
 
 ## 🔗 Automation & integrations
 
-Postmill exposes a full **Public API** for programmatic scheduling, analytics, and channel management, an **MCP** surface for AI agents, and an official Node SDK — [`@postmill-ai/postmill-sdk`](https://www.npmjs.com/package/@postmill-ai/postmill-sdk). The Public API is compatible with low-code automation platforms such as n8n, Make, and Zapier, so you can wire Postmill into your existing workflows. See the [API docs](https://docs.postmill.ai) to get started.
+Postmill exposes a full **Public API** for programmatic scheduling, analytics, and channel management, an **MCP** surface for AI agents, and an official Node SDK — [`@postmill-ai/postmill-sdk`](https://www.npmjs.com/package/@postmill-ai/postmill-sdk). Built in: **RSS auto-posting** (turn any feed into a scheduled queue per channel) and **outgoing webhooks** that push publish events to your endpoints, per channel or account-wide. The Public API is compatible with low-code automation platforms such as n8n, Make, and Zapier, so you can wire Postmill into your existing workflows. See the [API docs](https://docs.postmill.ai) to get started.
 
 ## 🛠️ Tech stack
 
