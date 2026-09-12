@@ -3949,7 +3949,7 @@
   "report_failed_to_load": "보고서를 불러오지 못했습니다.",
   "report_unavailable": "보고서를 사용할 수 없습니다.",
   "login_to_use_the_wizard_to_generate_api_code": "API 코드를 생성하는 마법사를 사용하려면 로그인하세요",
-  "auth_feature_channels": "36개 이상의 소셜·채팅 채널, 하나의 에디터로",
+  "auth_feature_channels": "45개 이상의 소셜·채팅 채널, 하나의 에디터로",
   "auth_feature_ai_content": "AI 작가 & 디자인 스튜디오 — 내 키로",
   "auth_feature_calendar": "비주얼 캘린더, 시간대 인식 스케줄링",
   "auth_feature_inbox": "매일의 애널리틱스 스냅샷과 우선순위 답장 받은편지함",

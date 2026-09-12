@@ -2,7 +2,7 @@ import { defineConfig } from 'vitepress'
 
 export default defineConfig({
   title: 'Postmill Docs',
-  description: 'Schedule to 36+ channels, reply from one inbox, design in-app, and run AI on your own keys.',
+  description: 'Schedule to 45+ channels, reply from one inbox, design in-app, and run AI on your own keys.',
   appearance: 'dark',
   head: [
     ['link', { rel: 'icon', type: 'image/svg+xml', href: '/favicon.svg' }],

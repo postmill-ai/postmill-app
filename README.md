@@ -23,7 +23,7 @@
 
 **The open-source, AI-native social media scheduling platform.**
 
-Self-hosted, bring-your-own-key AI across 30+ providers, 36+ channels, and 46 built-in media tools — an open-source alternative to Buffer, Hootsuite, and Sprout Social. Postmill is built for agencies, teams, and multi-brand operators who want to schedule everywhere, generate on-brand content with their own AI keys, and own their entire stack.
+Self-hosted, bring-your-own-key AI across 30+ providers, 45+ channels, and 46 built-in media tools — an open-source alternative to Buffer, Hootsuite, and Sprout Social. Postmill is built for agencies, teams, and multi-brand operators who want to schedule everywhere, generate on-brand content with their own AI keys, and own their entire stack.
 
 **[Website](https://postmill.ai)** · **[Docs](https://docs.postmill.ai)** · **[Quick Start](#-quick-start)** · **[Node SDK (`@postmill-ai/postmill-sdk`)](https://www.npmjs.com/package/@postmill-ai/postmill-sdk)** · **[Public API](https://docs.postmill.ai)**
 
@@ -47,9 +47,9 @@ On top of that: brand-voice profiles, a shared prompt library, retrieval-augment
 
 Create everything in-app without leaving Postmill. The media suite is **46 tools**: the **Designer** (a Konva canvas plus a full video timeline), the **AI Designer**, **38 BYOK provider studios** spanning image, video, audio, avatar, and music generation, and **6 stock browsers** for photos, videos, vectors, stickers, audio, and icons. Every generated or sourced asset lands in your media library, ready to attach to a post.
 
-## 📢 36+ channels, one composer
+## 📢 45+ channels, one composer
 
-Schedule and publish across 36+ social, chat, blogging, and email channels from a single composer. Native support for polls, first-comment automation, threads, per-channel settings, and channel-aware previews means each platform gets exactly what it expects — from a single write.
+Schedule and publish across 45+ social, chat, blogging, and email channels from a single composer. Native support for polls, first-comment automation, threads, per-channel settings, and channel-aware previews means each platform gets exactly what it expects — from a single write. Bulk-import hundreds of posts from CSV, or let an operator-configured platform app connect a channel in one click.
 
 ## 📊 Persisted multi-channel analytics
 
@@ -58,6 +58,10 @@ Metrics are snapshotted daily and persisted, so you get real period-over-period 
 ## 💬 Cross-channel comment inbox
 
 Every reply on everything you publish, synced into one inbox. Reply, like, assign to teammates, draft responses with AI, filter by unread/status/sentiment, and bulk-mark-read — without bouncing between platforms.
+
+## 📣 Agent & notifications where you work
+
+Chat with your Postmill agent and receive notifications in Slack, Telegram, Discord, Matrix, or LINE. Ten notification categories (published, failed, comments, budget, media, and more) route to in-app, email, or your connected comms channels — manageable from a single notification center.
 
 ## 🗂️ Campaign Hub
 
@@ -73,7 +77,7 @@ Own your whole stack. Secrets are encrypted at rest (AES-GCM), all user-influenc
 
 ## 🌐 Supported channels
 
-X · LinkedIn · LinkedIn Page · Reddit · Instagram Business · Instagram Standalone · Facebook Page · Threads · YouTube · Google My Business · TikTok · Pinterest · Dribbble · Discord · Slack · Kick · Twitch · Mastodon · Bluesky · Lemmy · Farcaster · Telegram · Nostr · VK · Medium · Dev.to · Hashnode · WordPress · ListMonk · Moltbook · Whop · Skool · MeWe · Tumblr · Pixelfed · PeerTube
+X · LinkedIn · LinkedIn Page · Reddit · Instagram Business · Instagram Standalone · Facebook Page · Threads · YouTube · Google My Business · TikTok · Pinterest · Dribbble · Discord · Slack · Kick · Twitch · Mastodon · Bluesky · Lemmy · Farcaster · Telegram · LINE · Matrix · Nostr · VK · Medium · Dev.to · Hashnode · WordPress · ListMonk · Moltbook · Whop · Skool · MeWe · Tumblr · Pixelfed · PeerTube · Akkoma · Discourse · Friendica · GoToSocial · Misskey · Odysee · Sharkey
 
 ## 🚀 Quick Start
 
