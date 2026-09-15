@@ -17,7 +17,7 @@ Defined in `libraries/providers/kernel/src/domains/auth.ts`:
 
 ```ts
 export interface AuthUserInfo {
-  email: string;
+  email?: string; // see "Missing-email providers" below
   id: string;
   picture?: string | null;
   name?: string | null;
@@ -26,15 +26,29 @@ export interface AuthUserInfo {
 export interface AuthCapability {
   generateLink(query?: unknown): Promise<string> | string;
   getToken(code: string, redirectUri?: string): Promise<string>;
-  getUser(providerToken: string): Promise<AuthUserInfo> | false;
+  getUser(providerToken: string): Promise<AuthUserInfo | false> | false;
   postRegistration?(providerToken: string, orgId: string): Promise<void>;
 }
 ```
 
 - `generateLink` — build the provider's authorization URL (redirect target is `${process.env.FRONTEND_URL}/settings` in the GitHub adapter).
 - `getToken` — exchange the OAuth `code` for an access token.
-- `getUser` — fetch the user's identity; must return at least `email` and `id`. May return `false`.
+- `getUser` — fetch the user's identity; must return at least `id`. May return `false`.
 - `postRegistration` — optional hook called after a new user/org is created (`AuthService` swallows its errors; a failure never fails registration, `apps/backend/src/services/auth/auth.service.ts:244`).
+
+### Missing-email providers (`emailRequired`)
+
+Most adapters must return an email (X/Facebook mint a synthetic `*.login.postmill.local`
+address when the platform withholds it). When a provider deliberately does neither — e.g.
+**Apple**, whose email claim ships only on first consent and is hidden behind the private
+relay — `getUser` may leave `email` undefined. The framework then re-prompts the user for an
+address instead:
+
+1. `AuthService.checkExists` includes `emailRequired: true` in the `{token}` response when the provider user has no email.
+2. The register page keeps that flag and shows the email input alongside Company in the provider registration form (`apps/frontend/src/components/auth/register.tsx`).
+3. `AuthService.loginOrRegisterProvider` uses `providerUser.email || dto.email` and 400s when neither exists; `CreateOrgUserDto.email` stays required for local signups and optional-but-validated when a `providerToken` is present.
+
+Do **not** use this to weaken an adapter that can always fetch an email — it exists for platforms that structurally withhold it.
 
 Call flow: `AuthController` (`apps/backend/src/api/routes/auth.controller.ts`) → `AuthService.oauthLink` / `AuthService.checkExists` (`apps/backend/src/services/auth/auth.service.ts:359`, `:364`) → `AuthProviderManager.getProvider(provider)` → kernel `create(ctx)`. Endpoints: `GET /auth/oauth/:provider` (link), `POST /auth/oauth/:provider/exists` (code exchange + login/register), `GET /auth/providers` (public provider list).
 

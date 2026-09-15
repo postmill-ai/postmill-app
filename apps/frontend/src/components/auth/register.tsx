@@ -34,6 +34,9 @@ export function Register() {
   const [provider] = useState(getQuery?.get('provider')?.toUpperCase());
   const [code, setCode] = useState(getQuery?.get('code') || '');
   const [show, setShow] = useState(false);
+  // Set when the provider returned no email (e.g. Apple with a hidden relay
+  // address) — RegisterAfter then re-prompts for one alongside Company.
+  const [emailRequired, setEmailRequired] = useState(false);
   const load = useCallback(() => {
     fetch(`/auth/oauth/${provider?.toUpperCase() || 'LOCAL'}/exists`, {
       method: 'POST',
@@ -42,9 +45,10 @@ export function Register() {
       }),
     })
       .then((response) => response.json())
-      .then(({ token }: { token: string }) => {
+      .then(({ token, emailRequired }: { token: string; emailRequired?: boolean }) => {
         if (token) {
           setCode(token);
+          setEmailRequired(!!emailRequired);
           setShow(true);
         }
       });
@@ -68,15 +72,23 @@ export function Register() {
     return <LoadingComponent />;
   }
   return (
-    <RegisterAfter token={code} provider={provider?.toUpperCase() || 'LOCAL'} />
+    <RegisterAfter
+      token={code}
+      provider={provider?.toUpperCase() || 'LOCAL'}
+      emailRequired={emailRequired}
+    />
   );
 }
 export function RegisterAfter({
   token,
   provider,
+  emailRequired = false,
 }: {
   token: string;
   provider: string;
+  // True when the OAuth provider returned no email (see AuthService.checkExists)
+  // — the email input then stays visible in the provider registration form.
+  emailRequired?: boolean;
 }) {
   const t = useT();
   const { data: providersData, error: providersError } = useAuthProviders();
@@ -192,15 +204,17 @@ export function RegisterAfter({
             )}
             <div className="flex flex-col gap-[12px]">
               <div className="text-textColor">
+                {(!isAfterProvider || emailRequired) && (
+                  <Input
+                    label="Email"
+                    translationKey="label_email"
+                    {...form.register('email')}
+                    type="email"
+                    placeholder={t('email_address', 'Email Address')}
+                  />
+                )}
                 {!isAfterProvider && (
                   <>
-                    <Input
-                      label="Email"
-                      translationKey="label_email"
-                      {...form.register('email')}
-                      type="email"
-                      placeholder={t('email_address', 'Email Address')}
-                    />
                     <Input
                       label="Password"
                       translationKey="label_password"

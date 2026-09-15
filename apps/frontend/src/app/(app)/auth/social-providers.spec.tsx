@@ -83,6 +83,9 @@ vi.mock(
 vi.mock('@postmill-ai/frontend/components/auth/providers/wallet.provider', () => ({
   default: () => <div data-testid="wallet-provider" />,
 }));
+vi.mock('@postmill-ai/frontend/components/auth/providers/apple.provider', () => ({
+  AppleProvider: () => <div data-testid="apple-provider" />,
+}));
 vi.mock(
   '@postmill-ai/frontend/components/auth/providers/placeholder/wallet.ui.provider',
   () => ({
@@ -98,12 +101,17 @@ const SOCIAL_TESTIDS = [
   'oauth-provider',
   'farcaster-provider',
   'wallet-provider',
+  'apple-provider',
 ];
 
 const LOCAL_ONLY = [{ provider: 'LOCAL', displayName: 'Email' }];
 const LOCAL_AND_GOOGLE = [
   { provider: 'LOCAL', displayName: 'Email' },
   { provider: 'GOOGLE', displayName: 'Google' },
+];
+const LOCAL_AND_APPLE = [
+  { provider: 'LOCAL', displayName: 'Email' },
+  { provider: 'APPLE', displayName: 'Apple' },
 ];
 
 function mockProviders(providers: { provider: string; displayName: string }[]) {
@@ -197,6 +205,16 @@ describe('Login social providers (F10)', () => {
     expectDivider();
   });
 
+  it('renders the Apple button when the backend advertises APPLE', async () => {
+    mockProviders(LOCAL_AND_APPLE);
+
+    renderWithFreshSWR(<Login />);
+
+    expect(await screen.findByTestId('apple-provider')).toBeTruthy();
+    expect(screen.queryByTestId('google-provider')).toBeNull();
+    expectDivider();
+  });
+
   it('renders neither label nor divider while the providers fetch is in flight', async () => {
     const fetchMock = mockProvidersPending();
 
@@ -236,6 +254,16 @@ describe('Register social providers (F10)', () => {
     expect(await screen.findByTestId('google-provider')).toBeTruthy();
     expect(screen.queryByTestId('github-provider')).toBeNull();
     expect(screen.queryByTestId('oauth-provider')).toBeNull();
+    expectDivider();
+  });
+
+  it('renders the Apple button when the backend advertises APPLE', async () => {
+    mockProviders(LOCAL_AND_APPLE);
+
+    renderWithFreshSWR(<RegisterAfter token="" provider="LOCAL" />);
+
+    expect(await screen.findByTestId('apple-provider')).toBeTruthy();
+    expect(screen.queryByTestId('google-provider')).toBeNull();
     expectDivider();
   });
 

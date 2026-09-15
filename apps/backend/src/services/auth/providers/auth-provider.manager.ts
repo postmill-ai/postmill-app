@@ -156,6 +156,23 @@ export class AuthProviderManager {
       });
     }
 
+    // Apple is a standalone login-only provider (no channel app dual-use).
+    // Apple has no static client secret — the adapter mints an ES256 JWT from
+    // the Team ID / Key ID / .p8 private key, so the gate needs all four.
+    if (
+      process.env.APPLE_SSO_ENABLED === 'true' &&
+      process.env.APPLE_CLIENT_ID &&
+      process.env.APPLE_TEAM_ID &&
+      process.env.APPLE_KEY_ID &&
+      process.env.APPLE_PRIVATE_KEY
+    ) {
+      providers.push({
+        provider: 'APPLE',
+        displayName: 'Apple',
+        ...this._versionInfo('APPLE'),
+      });
+    }
+
     // Overlay enabled DB-backed configs: DB wins per provider key (DB
     // displayName preferred), env-only providers stay listed.
     for (const p of enabledFromDb) {

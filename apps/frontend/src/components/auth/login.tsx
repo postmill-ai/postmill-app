@@ -15,6 +15,7 @@ import { FacebookProvider } from '@postmill-ai/frontend/components/auth/provider
 import { XProvider } from '@postmill-ai/frontend/components/auth/providers/x.provider';
 import { LinkedinProvider } from '@postmill-ai/frontend/components/auth/providers/linkedin.provider';
 import { FarcasterProvider } from '@postmill-ai/frontend/components/auth/providers/farcaster.provider';
+import { AppleProvider } from '@postmill-ai/frontend/components/auth/providers/apple.provider';
 import { useT } from '@postmill-ai/react/translation/get.transation.service.client';
 import useSWR from 'swr';
 import dynamic from 'next/dynamic';
@@ -52,6 +53,7 @@ export const providerComponents: Record<string, React.ComponentType> = {
   FARCASTER: FarcasterProvider,
   GENERIC: OauthProvider,
   WALLET: WalletProvider,
+  APPLE: AppleProvider,
 };
 
 type Inputs = {
