@@ -310,6 +310,9 @@ export class AuthController {
   async oauthExists(
     @Body('code') code: string,
     @Body('redirect_uri') redirect_uri: string,
+    // OAuth state echoed by the provider callback (X binds its PKCE verifier
+    // to the per-attempt nonce inside it).
+    @Body('state') state: string | undefined,
     @Param('provider') provider: string,
     @Res({ passthrough: false }) response: Response,
     @RealIP() ip: string,
@@ -318,7 +321,8 @@ export class AuthController {
     const { jwt, token, userId, emailRequired } = await this._authService.checkExists(
       provider,
       code,
-      redirect_uri
+      redirect_uri,
+      state
     );
 
     if (token) {

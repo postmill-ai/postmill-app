@@ -20,6 +20,8 @@ import { useT } from '@postmill-ai/react/translation/get.transation.service.clie
 import useSWR from 'swr';
 import dynamic from 'next/dynamic';
 import { WalletUiProvider } from '@postmill-ai/frontend/components/auth/providers/placeholder/wallet.ui.provider';
+import { SsoStatusContext, SsoStatus } from '@postmill-ai/frontend/components/auth/sso-popup';
+import { SsoStatusLine } from '@postmill-ai/frontend/components/auth/sso-status';
 
 const WalletProvider = dynamic(
   () => import('@postmill-ai/frontend/components/auth/providers/wallet.provider'),
@@ -66,6 +68,7 @@ export function Login() {
   const t = useT();
   const [loading, setLoading] = useState(false);
   const [notActivated, setNotActivated] = useState(false);
+  const [ssoStatus, setSsoStatus] = useState<SsoStatus>({ waiting: false, error: null });
   const { data: providersData, error: providersError } = useAuthProviders();
   // Providers with a real button (LOCAL maps to null) — the "Continue With"
   // label and "OR" divider render only when at least one button will.
@@ -111,12 +114,15 @@ export function Login() {
   const renderProviders = () => {
     if (visibleProviders.length > 0) {
       return (
-        <div className="gap-[8px] flex flex-wrap">
-          {visibleProviders.map((p) => {
-            const Component = providerComponents[p.provider];
-            return <Component key={p.provider} />;
-          })}
-        </div>
+        <SsoStatusContext.Provider value={{ status: ssoStatus, setStatus: setSsoStatus }}>
+          <div className="gap-[8px] flex flex-wrap">
+            {visibleProviders.map((p) => {
+              const Component = providerComponents[p.provider];
+              return <Component key={p.provider} />;
+            })}
+          </div>
+          <SsoStatusLine status={ssoStatus} />
+        </SsoStatusContext.Provider>
       );
     }
 

@@ -40,6 +40,7 @@ import { clusterApiUrl } from '@solana/web3.js';
 // Default styles that can be overridden by your app
 import '@solana/wallet-adapter-react-ui/styles.css';
 import { useFetch } from '@postmill-ai/helpers/utils/custom.fetch';
+import { markSsoFullPage } from '@postmill-ai/frontend/components/auth/sso-popup';
 import { WalletUiProvider } from '@postmill-ai/frontend/components/auth/providers/placeholder/wallet.ui.provider';
 
 const NETWORK = WalletAdapterNetwork.Mainnet;
@@ -148,6 +149,8 @@ const InnerWallet = () => {
           publicKey: wallet?.publicKey?.toString(),
         })
       ).toString('base64');
+      // In-tab flow: the callback must not treat this tab as a sign-in popup.
+      markSsoFullPage();
       window.location.href = `/auth?provider=WALLET&code=${info}`;
     } catch (err) {
       walletModal.setVisible(false);

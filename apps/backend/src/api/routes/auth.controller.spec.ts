@@ -203,6 +203,35 @@ describe('AuthController — F1 behavioural tests', () => {
     });
   });
 
+  describe('POST /oauth/:provider/exists', () => {
+    it('forwards code, redirect_uri and the callback state to AuthService.checkExists', async () => {
+      const { controller, authService } = makeController({
+        authService: {
+          checkExists: vi.fn().mockResolvedValue({ token: 'provider-token' }),
+        } as any,
+      });
+      const res = mockResponse();
+
+      await controller.oauthExists(
+        'code-1',
+        'https://app.example.com/integrations/social/x',
+        'login.nonce-123',
+        'X',
+        res,
+        '1.2.3.4',
+        'agent'
+      );
+
+      expect(authService.checkExists).toHaveBeenCalledWith(
+        'X',
+        'code-1',
+        'https://app.example.com/integrations/social/x',
+        'login.nonce-123'
+      );
+      expect(res.json).toHaveBeenCalledWith({ token: 'provider-token', emailRequired: undefined });
+    });
+  });
+
   describe('JWT verification pins HS256', () => {
     const secret = process.env.JWT_SECRET as string;
 

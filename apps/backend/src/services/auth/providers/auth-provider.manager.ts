@@ -132,10 +132,13 @@ export class AuthProviderManager {
       });
     }
 
+    // X is the exception to dual-use: OAuth 2.0 login needs the app's separate
+    // "OAuth 2.0 Client ID and Client Secret" (X_CLIENT_ID / X_CLIENT_SECRET),
+    // not the OAuth 1.0a consumer key pair the channel adapter posts with.
     if (
       process.env.X_SSO_ENABLED === 'true' &&
-      process.env.X_API_KEY &&
-      process.env.X_API_SECRET
+      process.env.X_CLIENT_ID &&
+      process.env.X_CLIENT_SECRET
     ) {
       providers.push({
         provider: 'X',

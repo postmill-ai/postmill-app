@@ -2,7 +2,11 @@ import { Injectable } from '@nestjs/common';
 
 export abstract class AuthProviderAbstract {
   abstract generateLink(query?: any): Promise<string> | string;
-  abstract getToken(code: string, redirectUri?: string): Promise<string>;
+  abstract getToken(
+    code: string,
+    redirectUri?: string,
+    state?: string
+  ): Promise<string>;
   abstract getUser(
     providerToken: string
   ): Promise<{

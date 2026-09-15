@@ -8,6 +8,12 @@ import { useToaster } from '@postmill-ai/react/toaster/toaster';
 import { useReturnUrl } from '@postmill-ai/frontend/app/(app)/auth/return.url.component';
 import { useVariables } from '@postmill-ai/react/helpers/variable.context';
 import { useT } from '@postmill-ai/react/translation/get.transation.service.client';
+import {
+  completeSsoPopup,
+  isSsoPopupCallback,
+  navigateAfterAuth,
+  SSO_CLOSE_FALLBACK_MS,
+} from '@postmill-ai/frontend/components/auth/sso-popup';
 export default function LayoutContext(params: { children: ReactNode }) {
   if (params?.children) {
     // eslint-disable-next-line react/no-children-prop
@@ -62,32 +68,25 @@ function LayoutContextInner(params: { children: ReactNode }) {
         window.location.href = '/auth/logout';
         return true;
       }
-      const reloadOrOnboarding =
-        response?.headers?.get('reload') ||
-        response?.headers?.get('onboarding');
-      if (reloadOrOnboarding) {
-        const getAndClear = getAndClearReturnUrl();
-        if (getAndClear) {
-          try {
-            const parsed = new URL(getAndClear, window.location.origin);
-            if (parsed.origin !== window.location.origin) {
-              window.location.href = '/';
-            } else {
-              window.location.href = getAndClear;
-            }
-          } catch {
-            window.location.href = '/';
-          }
+      const authAction = response?.headers?.get('onboarding')
+        ? 'onboarding'
+        : response?.headers?.get('reload')
+          ? 'reload'
+          : null;
+      if (authAction) {
+        if (isSsoPopupCallback()) {
+          // Social sign-in running inside the login popup: hand the result to
+          // the opener and close. Still here after a beat → this is the
+          // user's own tab (close() ignored), land the normal way.
+          completeSsoPopup({ action: authAction });
+          window.setTimeout(() => {
+            // close() took (window.closed flips synchronously) → nothing to do.
+            if (window.closed) return;
+            navigateAfterAuth(authAction, getAndClearReturnUrl);
+          }, SSO_CLOSE_FALLBACK_MS);
           return true;
         }
-      }
-      if (response?.headers?.get('onboarding')) {
-        window.location.href = '/dashboard';
-        return true;
-      }
-
-      if (response?.headers?.get('reload')) {
-        window.location.reload();
+        navigateAfterAuth(authAction, getAndClearReturnUrl);
         return true;
       }
 

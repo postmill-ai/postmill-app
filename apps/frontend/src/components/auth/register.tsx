@@ -20,6 +20,14 @@ import {
 } from '@postmill-ai/frontend/components/auth/login';
 import { useT } from '@postmill-ai/react/translation/get.transation.service.client';
 import useCookie from 'react-use-cookie';
+import {
+  beginSsoCallback,
+  completeSsoPopup,
+  hasCompletedSsoPopup,
+  SsoStatusContext,
+  SsoStatus,
+} from '@postmill-ai/frontend/components/auth/sso-popup';
+import { SsoStatusLine } from '@postmill-ai/frontend/components/auth/sso-status';
 type Inputs = {
   email: string;
   password: string;
@@ -31,28 +39,57 @@ type Inputs = {
 export function Register() {
   const getQuery = useSearchParams();
   const fetch = useFetch();
+  const t = useT();
   const [provider] = useState(getQuery?.get('provider')?.toUpperCase());
   const [code, setCode] = useState(getQuery?.get('code') || '');
+  // OAuth state echoed by the provider (X binds its PKCE verifier to it).
+  const [state] = useState(getQuery?.get('state') || '');
   const [show, setShow] = useState(false);
   // Set when the provider returned no email (e.g. Apple with a hidden relay
   // address) — RegisterAfter then re-prompts for one alongside Company.
   const [emailRequired, setEmailRequired] = useState(false);
+  // Exchange failure (expired code, provider rejected, PKCE slot gone…).
+  // Without this the page sat on the spinner forever.
+  const [error, setError] = useState<{ message: string; popup: boolean } | null>(null);
   const load = useCallback(() => {
+    // Decide once whether this callback runs inside the sign-in popup — the
+    // `reload` / `onboarding` response headers are then handed to the opener
+    // by LayoutContext.afterRequest instead of reloading the popup.
+    const popup = beginSsoCallback() === 'popup';
     fetch(`/auth/oauth/${provider?.toUpperCase() || 'LOCAL'}/exists`, {
       method: 'POST',
       body: JSON.stringify({
         code,
+        ...(state ? { state } : {}),
       }),
     })
-      .then((response) => response.json())
+      .then(async (response) => {
+        if (!response.ok) {
+          const text = (await response.text().catch(() => '')) || '';
+          throw new Error(text || `Sign-in failed (${response.status})`);
+        }
+        return response.json();
+      })
       .then(({ token, emailRequired }: { token: string; emailRequired?: boolean }) => {
         if (token) {
           setCode(token);
           setEmailRequired(!!emailRequired);
           setShow(true);
         }
+      })
+      .catch((e: unknown) => {
+        // A fetch aborted because the popup is already closing (success
+        // signalled by afterRequest) is not a failure to report.
+        if (hasCompletedSsoPopup()) return;
+        const message = e instanceof Error && e.message ? e.message : String(e);
+        setError({ message, popup });
+        if (popup) {
+          // Hand the failure to the opener and close; if close() is ignored
+          // this is the user's tab and the inline message below stays.
+          completeSsoPopup({ action: 'error', message });
+        }
       });
-  }, [provider, code, fetch]);
+  }, [provider, code, state, fetch]);
   // The oauth code exchange must run exactly once on mount (load() itself
   // replaces `code` with the returned token) — guard with a ref.
   const exchangedRef = useRef(false);
@@ -67,6 +104,26 @@ export function Register() {
   }, [provider, code, load]);
   if (!code && !provider) {
     return <RegisterAfter token="" provider="LOCAL" />;
+  }
+  if (error) {
+    return (
+      <div className="flex flex-col gap-[16px] flex-1" role="alert">
+        <h1 className="text-[28px] font-[500] tracking-[-0.5px]">
+          {t('sso_sign_in_failed', 'Sign-in failed')}
+        </h1>
+        <p className="text-[14px] text-red-400 break-words">{error.message}</p>
+        <p className="text-[14px]">
+          {error.popup
+            ? t('sso_close_window', 'You can close this window and try again.')
+            : null}
+          {!error.popup && (
+            <Link href="/auth/login" className="underline cursor-pointer">
+              {t('back_to_login', 'Back to login')}
+            </Link>
+          )}
+        </p>
+      </div>
+    );
   }
   if (!show) {
     return <LoadingComponent />;
@@ -98,6 +155,7 @@ export function RegisterAfter({
     (p) => p.provider !== 'LOCAL' && providerComponents[p.provider]
   );
   const [loading, setLoading] = useState(false);
+  const [ssoStatus, setSsoStatus] = useState<SsoStatus>({ waiting: false, error: null });
   const router = useRouter();
   const fireEvents = useFireEvents();
   const track = useTrack(undefined);
@@ -155,12 +213,15 @@ export function RegisterAfter({
   const renderProviders = () => {
     if (visibleProviders.length > 0) {
       return (
-        <div className="gap-[8px] flex flex-wrap">
-          {visibleProviders.map((p) => {
-            const Component = providerComponents[p.provider];
-            return <Component key={p.provider} />;
-          })}
-        </div>
+        <SsoStatusContext.Provider value={{ status: ssoStatus, setStatus: setSsoStatus }}>
+          <div className="gap-[8px] flex flex-wrap">
+            {visibleProviders.map((p) => {
+              const Component = providerComponents[p.provider];
+              return <Component key={p.provider} />;
+            })}
+          </div>
+          <SsoStatusLine status={ssoStatus} />
+        </SsoStatusContext.Provider>
       );
     }
 

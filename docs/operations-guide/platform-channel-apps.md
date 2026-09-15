@@ -189,10 +189,13 @@ Posting requires an X access tier with write access — check X's current tier
 docs for Free-tier limits. (The adapter throttles itself to one concurrent
 posting job, citing X's ~300-posts-per-3-hours rate ceiling.)
 
-**SSO caveat:** X login uses a separate OAuth 2.0 + PKCE flow with only the
-`users.read` scope, which returns **no email address**. X SSO accounts get a
-synthetic address (`x_<id>@x.login.postmill.local`) and are skipped by
-newsletter/welcome email — see [SSO dual-use](#sso-dual-use-login-with-the-same-app).
+**SSO caveat:** X login uses a separate OAuth 2.0 + PKCE flow, which X
+authenticates with the app's **OAuth 2.0 Client ID and Client Secret** — a
+different pair from the consumer keys above (`X_CLIENT_ID` / `X_CLIENT_SECRET`;
+enable OAuth 2.0 in User authentication settings to get them). It requests only
+`users.read`, which returns **no email address**: X SSO accounts get a synthetic
+address (`x_<id>@x.login.postmill.local`) and are skipped by newsletter/welcome
+email — see [SSO dual-use](#sso-dual-use-login-with-the-same-app).
 
 ## LinkedIn
 
@@ -711,13 +714,13 @@ POSTMILL_OAUTH_CLIENT_SECRET: '<your-oidc-client-secret>'
 ## SSO dual-use (login with the same app)
 
 Three channel apps can double as **login providers** on the auth page. The gate
-is an opt-in flag **plus** the matching channel credential vars — the login
-page never advertises a provider whose channel app is unconfigured:
+is an opt-in flag **plus** the matching credential vars — the login page never
+advertises a provider whose credentials are incomplete:
 
 | Flag | Requires | Login flow |
 |------|----------|------------|
 | `FACEBOOK_SSO_ENABLED: 'true'` | `FACEBOOK_APP_ID` / `FACEBOOK_APP_SECRET` | Facebook OAuth (`public_profile,email`) |
-| `X_SSO_ENABLED: 'true'` | `X_API_KEY` / `X_API_SECRET` | X OAuth 2.0 + PKCE (`users.read`) |
+| `X_SSO_ENABLED: 'true'` | `X_CLIENT_ID` / `X_CLIENT_SECRET` (the app's OAuth 2.0 pair — **not** the OAuth 1.0a `X_API_KEY` / `X_API_SECRET`) | X OAuth 2.0 + PKCE (`users.read`) |
 | `LINKEDIN_SSO_ENABLED: 'true'` | `LINKEDIN_CLIENT_ID` / `LINKEDIN_CLIENT_SECRET` | LinkedIn OIDC (`openid profile email`) |
 
 Provider-specific prerequisites:
@@ -726,7 +729,11 @@ Provider-specific prerequisites:
   on the Meta app — the FBfB Configuration-ID flow is Pages-only and cannot log
   users in. If the user denies the email permission, Postmill mints
   `fb_<id>@facebook.login.postmill.local`.
-- **X SSO** accounts always get a synthetic address
+- **X SSO** needs OAuth 2.0 enabled in the app's User authentication settings
+  (type "Web App", callback `https://<your-domain>/integrations/social/x`) and
+  the resulting OAuth 2.0 Client ID/Secret in `X_CLIENT_ID` / `X_CLIENT_SECRET`;
+  the same app keeps posting over OAuth 1.0a with `X_API_KEY` / `X_API_SECRET`.
+  X SSO accounts always get a synthetic address
   (`x_<id>@x.login.postmill.local`) — X returns no email.
 - **LinkedIn SSO** needs the **Sign In with LinkedIn using OpenID Connect**
   product enabled (same product the channel flow already requires).

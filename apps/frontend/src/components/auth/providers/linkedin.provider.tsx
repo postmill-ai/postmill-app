@@ -1,19 +1,25 @@
 'use client';
 
 import { useCallback } from 'react';
-import { useFetch } from '@postmill-ai/helpers/utils/custom.fetch';
+import { useSsoPopup } from '@postmill-ai/frontend/components/auth/sso-popup';
 import { useT } from '@postmill-ai/react/translation/get.transation.service.client';
 export const LinkedinProvider = () => {
-  const fetch = useFetch();
+  const { start, waiting } = useSsoPopup();
   const t = useT();
-  const gotoLogin = useCallback(async () => {
-    const link = await (await fetch('/auth/oauth/LINKEDIN')).text();
-    window.location.href = link;
-  }, [fetch]);
+  const gotoLogin = useCallback(() => start('/auth/oauth/LINKEDIN'), [start]);
   return (
     <div
       onClick={gotoLogin}
-      className={`cursor-pointer flex-1 bg-white h-[52px] rounded-[10px] flex justify-center items-center text-[#0E0E0E] gap-[10px]`}
+      onKeyDown={(e) => {
+        if (e.key === 'Enter' || e.key === ' ') {
+          e.preventDefault();
+          gotoLogin();
+        }
+      }}
+      role="button"
+      tabIndex={0}
+      aria-busy={waiting}
+      className={`${waiting ? 'opacity-60 ' : ''}cursor-pointer flex-1 bg-white h-[52px] rounded-[10px] flex justify-center items-center text-[#0E0E0E] gap-[10px]`}
     >
       <div>
         <svg
