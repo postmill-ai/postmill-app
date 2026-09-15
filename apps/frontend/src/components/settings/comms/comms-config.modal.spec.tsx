@@ -1,6 +1,10 @@
 import { render, screen, fireEvent, waitFor, within } from '@testing-library/react';
 import { SWRConfig } from 'swr';
 import { commsConfigFixture as configData } from './comms.test-fixture';
+import {
+  COMMS_CONNECTED_STORAGE_KEY,
+  COMMS_FULLPAGE_STORAGE_KEY,
+} from './use-comms-config';
 
 const mockFetchFn = vi.fn();
 const mockToasterShow = vi.fn();
@@ -49,6 +53,21 @@ const wrapper = ({ children }: { children: React.ReactNode }) => (
     {children}
   </SWRConfig>
 );
+
+// Serve a fixture variant where one provider's fields are overridden.
+const withProvider = (identifier: string, patch: Record<string, unknown>) => {
+  const data = {
+    ...configData,
+    providers: configData.providers.map((p: any) =>
+      p.identifier === identifier ? { ...p, ...patch } : p,
+    ),
+  };
+  mockFetchFn.mockImplementation((url: unknown, init?: unknown) =>
+    typeof url === 'string' && url === '/settings/comms/config' && !init
+      ? Promise.resolve({ ok: true, json: async () => data })
+      : defaultFetchImpl(url, init),
+  );
+};
 
 const renderForm = async (identifier: string, onClose = vi.fn()) => {
   const { CommsConfigForm } = await import('./comms-config.modal');
@@ -361,7 +380,7 @@ describe('CommsConfigForm platform connect', () => {
     );
   });
 
-  it('closes and refetches when the popup posts postmill:comms-connected', async () => {
+  it('stays open and refetches when the popup posts postmill:comms-connected', async () => {
     const onClose = vi.fn();
     await renderForm('slack', onClose);
     fireEvent.click(await screen.findByText('Connect with Slack'));
@@ -378,9 +397,10 @@ describe('CommsConfigForm platform connect', () => {
       }),
     );
 
-    await waitFor(() => expect(onClose).toHaveBeenCalled());
+    // The modal stays open (unlike channels) so the user can add links.
+    await waitFor(() => expect(configLoadCount()).toBeGreaterThan(baseline));
     expect(mockToasterShow).toHaveBeenCalledWith('Provider connected', 'success');
-    expect(configLoadCount()).toBeGreaterThan(baseline);
+    expect(onClose).not.toHaveBeenCalled();
   });
 
   it('ignores connected messages from a foreign origin', async () => {
@@ -388,6 +408,9 @@ describe('CommsConfigForm platform connect', () => {
     await renderForm('slack', onClose);
     fireEvent.click(await screen.findByText('Connect with Slack'));
     await waitFor(() => expect(openSpy).toHaveBeenCalled());
+    // Let the webhook pre-mint refetch settle before the baseline.
+    await waitFor(() => expect(configLoadCount()).toBeGreaterThan(1));
+    const baseline = configLoadCount();
 
     fireEvent(
       window,
@@ -398,7 +421,125 @@ describe('CommsConfigForm platform connect', () => {
     );
 
     await new Promise((r) => setTimeout(r, 50));
+    expect(configLoadCount()).toBe(baseline);
+    expect(mockToasterShow).not.toHaveBeenCalledWith('Provider connected', 'success');
+  });
+
+  it('completes via the localStorage signal when COOP severed the opener', async () => {
+    const onClose = vi.fn();
+    await renderForm('slack', onClose);
+    fireEvent.click(await screen.findByText('Connect with Slack'));
+    await waitFor(() => expect(openSpy).toHaveBeenCalled());
+    // Let the webhook pre-mint refetch settle before the baseline.
+    await waitFor(() => expect(configLoadCount()).toBeGreaterThan(1));
+    const baseline = configLoadCount();
+
+    // The close page writes the signal (postMessage may never arrive when the
+    // provider's consent pages carry Cross-Origin-Opener-Policy).
+    const value = JSON.stringify({ provider: 'slack', ts: Date.now() });
+    window.localStorage.setItem(COMMS_CONNECTED_STORAGE_KEY, value);
+    fireEvent(
+      window,
+      new StorageEvent('storage', { key: COMMS_CONNECTED_STORAGE_KEY, newValue: value }),
+    );
+
+    await waitFor(() =>
+      expect(mockToasterShow).toHaveBeenCalledWith('Provider connected', 'success'),
+    );
+    expect(configLoadCount()).toBeGreaterThan(baseline);
     expect(onClose).not.toHaveBeenCalled();
+    // The signal is consumed.
+    expect(window.localStorage.getItem(COMMS_CONNECTED_STORAGE_KEY)).toBeNull();
+  });
+
+  it('keeps listening after the popup handle reports closed (COOP swap) and completes on the late signal', async () => {
+    // Slack's consent pages carry COOP: the opener's handle for the popup
+    // flips to closed=true within seconds, long before the user finishes.
+    const handle = { closed: false } as { closed: boolean };
+    openSpy.mockReturnValue(handle as unknown as Window);
+    await renderForm('slack');
+    fireEvent.click(await screen.findByText('Connect with Slack'));
+    await waitFor(() => expect(openSpy).toHaveBeenCalled());
+    await waitFor(() => expect(configLoadCount()).toBeGreaterThan(1));
+    const baseline = configLoadCount();
+
+    handle.closed = true;
+    // One silent refetch on close, no toast, listeners still armed.
+    await waitFor(() => expect(configLoadCount()).toBeGreaterThan(baseline), { timeout: 3000 });
+    expect(mockToasterShow).not.toHaveBeenCalled();
+    const afterClose = configLoadCount();
+    await new Promise((r) => setTimeout(r, 1100));
+    expect(configLoadCount()).toBe(afterClose); // not refetching every tick
+
+    const value = JSON.stringify({ provider: 'slack', ts: Date.now() });
+    window.localStorage.setItem(COMMS_CONNECTED_STORAGE_KEY, value);
+    fireEvent(
+      window,
+      new StorageEvent('storage', { key: COMMS_CONNECTED_STORAGE_KEY, newValue: value }),
+    );
+    await waitFor(() =>
+      expect(mockToasterShow).toHaveBeenCalledWith('Provider connected', 'success'),
+    );
+    expect(configLoadCount()).toBeGreaterThan(afterClose);
+  }, 15000);
+
+  it('popup blocked: marks this tab as the full-page fallback before navigating', async () => {
+    openSpy.mockReturnValue(null);
+    const original = window.location;
+    const assigned: string[] = [];
+    Object.defineProperty(window, 'location', {
+      configurable: true,
+      value: { ...original, set href(v: string) { assigned.push(v); } },
+    });
+    try {
+      await renderForm('slack');
+      fireEvent.click(await screen.findByText('Connect with Slack'));
+      await waitFor(() => expect(assigned).toEqual(['https://slack.example/oauth']));
+      expect(window.sessionStorage.getItem(COMMS_FULLPAGE_STORAGE_KEY)).toBe('1');
+    } finally {
+      Object.defineProperty(window, 'location', { configurable: true, value: original });
+      window.sessionStorage.removeItem(COMMS_FULLPAGE_STORAGE_KEY);
+    }
+  });
+
+  it('ignores a stale localStorage signal from an earlier connect', async () => {
+    await renderForm('slack');
+    fireEvent.click(await screen.findByText('Connect with Slack'));
+    await waitFor(() => expect(openSpy).toHaveBeenCalled());
+    await waitFor(() => expect(configLoadCount()).toBeGreaterThan(1));
+    const baseline = configLoadCount();
+
+    const value = JSON.stringify({ provider: 'slack', ts: Date.now() - 60_000 });
+    window.localStorage.setItem(COMMS_CONNECTED_STORAGE_KEY, value);
+    fireEvent(
+      window,
+      new StorageEvent('storage', { key: COMMS_CONNECTED_STORAGE_KEY, newValue: value }),
+    );
+
+    await new Promise((r) => setTimeout(r, 50));
+    expect(configLoadCount()).toBe(baseline);
+    expect(mockToasterShow).not.toHaveBeenCalledWith('Provider connected', 'success');
+    window.localStorage.removeItem(COMMS_CONNECTED_STORAGE_KEY);
+  });
+
+  it('toasts the backend error when the signal carries one', async () => {
+    await renderForm('slack');
+    fireEvent.click(await screen.findByText('Connect with Slack'));
+    await waitFor(() => expect(openSpy).toHaveBeenCalled());
+    await waitFor(() => expect(configLoadCount()).toBeGreaterThan(1));
+
+    const value = JSON.stringify({ error: 'Invalid or expired state', ts: Date.now() });
+    window.localStorage.setItem(COMMS_CONNECTED_STORAGE_KEY, value);
+    fireEvent(
+      window,
+      new StorageEvent('storage', { key: COMMS_CONNECTED_STORAGE_KEY, newValue: value }),
+    );
+
+    await waitFor(() =>
+      expect(mockToasterShow).toHaveBeenCalledWith('Invalid or expired state', 'warning'),
+    );
+    expect(mockToasterShow).not.toHaveBeenCalledWith('Provider connected', 'success');
+    expect(window.localStorage.getItem(COMMS_CONNECTED_STORAGE_KEY)).toBeNull();
   });
 
   it('env connect POSTs platform-connect and refetches on success', async () => {
@@ -439,5 +580,43 @@ describe('CommsConfigForm platform connect', () => {
       await screen.findByText('Discord bot token rejected by the gateway'),
     ).toBeDefined();
     expect(mockToasterShow).not.toHaveBeenCalledWith('Provider connected', 'success');
+  });
+});
+
+describe('CommsConfigForm webhook URL choice', () => {
+  const PLATFORM = 'https://backend.example/webhooks/comms/platform/slack';
+  const OWN = 'https://backend.example/webhooks/comms/slack/tok';
+  const shownUrl = () =>
+    (screen.getByDisplayValue(/webhooks\/comms/) as HTMLInputElement).value;
+
+  it('platform mode, connected via the platform app → platform URL', async () => {
+    withProvider('slack', {
+      isConfigured: true, platformConnected: true, platformWebhookUrl: PLATFORM, webhookUrl: OWN,
+    });
+    await renderForm('slack');
+    expect(shownUrl()).toBe(PLATFORM);
+  });
+
+  it('platform mode, not connected yet → platform URL (what Connect will use)', async () => {
+    withProvider('slack', { platformWebhookUrl: PLATFORM, webhookUrl: OWN });
+    await renderForm('slack');
+    fireEvent.click(screen.getByText('Advanced')); // collapsed until configured
+    expect(shownUrl()).toBe(PLATFORM);
+  });
+
+  it('platform mode, org typed its own credentials → the org token URL, never the platform one', async () => {
+    withProvider('slack', {
+      isConfigured: true, platformConnected: false, platformWebhookUrl: PLATFORM, webhookUrl: OWN,
+    });
+    await renderForm('slack');
+    expect(shownUrl()).toBe(OWN);
+  });
+
+  it('flat mode (no platform app) → the org token URL', async () => {
+    withProvider('slack', {
+      isConfigured: true, platformConfigured: false, platformConnected: false, webhookUrl: OWN,
+    });
+    await renderForm('slack');
+    expect(shownUrl()).toBe(OWN);
   });
 });

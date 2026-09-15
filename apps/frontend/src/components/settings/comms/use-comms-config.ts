@@ -43,8 +43,11 @@ export interface CommsProvider {
   platformConnect?: 'oauth' | 'env';
   /** The deployment env supplies a platform app for this provider. */
   platformConfigured?: boolean;
-  /** Platform app's shared webhook endpoint (displayed when the org has no
-   *  webhookUrl of its own yet). */
+  /** This org's config was made by the platform app (Slack OAuth / env
+   *  platform-connect), not bring-your-own credentials. */
+  platformConnected?: boolean;
+  /** Platform app's shared webhook endpoint — only sent when the platform app
+   *  is configured on the deployment (the route 404s otherwise). */
   platformWebhookUrl?: string;
 }
 
@@ -73,6 +76,27 @@ export type { CommsMember };
 // either revalidates both, so link/config edits inside the modal refresh the
 // list behind it without prop threading.
 export const COMMS_CONFIG_KEY = 'comms-config';
+
+// Comms OAuth connect handshake. Provider consent pages may carry
+// Cross-Origin-Opener-Policy (Slack: same-origin-allow-popups), which severs
+// window.opener permanently — and wipes window.name — so the popup→opener
+// completion signal goes through localStorage (shared same-origin, survives
+// COOP), with postMessage as a fast path when the opener survives.
+// window.close() still works in the script-opened popup after severing, so
+// the close page always attempts it. The popup name is only a window handle
+// (reuses one popup across connects), not a signal.
+export const COMMS_CONNECTED_STORAGE_KEY = 'postmill:comms-connected';
+export const COMMS_OAUTH_POPUP_NAME = 'postmill-comms-oauth';
+// Set (sessionStorage, i.e. this tab only) right before the popup-blocked
+// full-page fallback navigates away, so the close page knows it IS the
+// user's tab and must not window.close() it. A script-opened popup never
+// carries it: it is written only after window.open() has already failed.
+export const COMMS_FULLPAGE_STORAGE_KEY = 'postmill:comms-oauth-fullpage';
+// How long the opener keeps listening for the close page's signal after the
+// popup handle reports closed. COOP swaps on the provider's consent pages
+// make `popup.closed` true within seconds of opening — long before the user
+// finishes — so a closed handle is not evidence the flow ended.
+export const COMMS_CONNECT_GRACE_MS = 10 * 60 * 1000;
 
 export const useCommsConfig = () => {
   const fetch = useFetch();

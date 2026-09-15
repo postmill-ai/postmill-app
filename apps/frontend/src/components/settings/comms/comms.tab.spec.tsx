@@ -1,6 +1,10 @@
 import { render, screen, fireEvent, waitFor, within } from '@testing-library/react';
 import { SWRConfig } from 'swr';
 import { commsConfigFixture as configData } from './comms.test-fixture';
+import {
+  COMMS_CONNECTED_STORAGE_KEY,
+  COMMS_FULLPAGE_STORAGE_KEY,
+} from './use-comms-config';
 
 const mockFetchFn = vi.fn();
 const mockToasterShow = vi.fn();
@@ -136,22 +140,35 @@ describe('CommsTab', () => {
     expect(screen.queryByRole('button', { name: /Add Comms Channel/ })).toBeNull();
   });
 
-  it('toasts, refetches and scrubs the URL on a full-page ?connected landing', async () => {
+  it('signals, then toasts/refetches/scrubs on a full-page ?connected landing (close no-ops)', async () => {
+    // jsdom windows never close, so window.close() no-ops and the 400ms
+    // fallback runs — exactly what a real full-page landing does.
+    const closeSpy = vi.spyOn(window, 'close').mockImplementation(() => undefined);
     window.history.replaceState({}, '', '/settings/comms?connected=slack');
     try {
       const { CommsTab } = await import('./comms.tab');
       render(<CommsTab />, { wrapper });
+
+      // The handshake signal is written immediately, before any fallback.
+      await waitFor(() => expect(closeSpy).toHaveBeenCalled());
+      const signal = JSON.parse(
+        window.localStorage.getItem(COMMS_CONNECTED_STORAGE_KEY) || '{}',
+      );
+      expect(signal.provider).toBe('slack');
+      expect(signal.ts).toBeGreaterThan(0);
 
       await waitFor(() =>
         expect(mockToasterShow).toHaveBeenCalledWith('Provider connected', 'success'),
       );
       expect(window.location.search).not.toContain('connected');
     } finally {
+      window.localStorage.removeItem(COMMS_CONNECTED_STORAGE_KEY);
       window.history.replaceState({}, '', '/');
+      closeSpy.mockRestore();
     }
   });
 
-  it('posts postmill:comms-connected to the opener and closes inside the connect popup', async () => {
+  it('posts postmill:comms-connected to the opener when it survives', async () => {
     const postMessage = vi.fn();
     const closeSpy = vi.spyOn(window, 'close').mockImplementation(() => undefined);
     Object.defineProperty(window, 'opener', { value: { postMessage }, writable: true });
@@ -165,11 +182,90 @@ describe('CommsTab', () => {
         { type: 'postmill:comms-connected', provider: 'slack' },
         window.location.origin,
       );
+      // The localStorage signal is written too — it is the COOP-proof path.
+      const signal = JSON.parse(
+        window.localStorage.getItem(COMMS_CONNECTED_STORAGE_KEY) || '{}',
+      );
+      expect(signal.provider).toBe('slack');
       expect(closeSpy).toHaveBeenCalled();
-      // The popup branch must not toast into a window that is closing.
-      expect(mockToasterShow).not.toHaveBeenCalledWith('Provider connected', 'success');
     } finally {
       Object.defineProperty(window, 'opener', { value: null, writable: true });
+      window.localStorage.removeItem(COMMS_CONNECTED_STORAGE_KEY);
+      window.history.replaceState({}, '', '/');
+      closeSpy.mockRestore();
+    }
+  });
+
+  it('never closes the tab that marked itself as the popup-blocked full-page fallback', async () => {
+    // A script-opened main tab (target=_blank from an email/Slack link) IS
+    // closable, so the "close, fall back if still here" heuristic would
+    // discard the user's whole app tab. The fallback path marks the tab
+    // before navigating; the landing honours the mark and lands directly.
+    const closeSpy = vi.spyOn(window, 'close').mockImplementation(() => undefined);
+    window.sessionStorage.setItem(COMMS_FULLPAGE_STORAGE_KEY, '1');
+    window.history.replaceState({}, '', '/settings/comms?connected=slack');
+    try {
+      const { CommsTab } = await import('./comms.tab');
+      render(<CommsTab />, { wrapper });
+      await waitFor(() =>
+        expect(mockToasterShow).toHaveBeenCalledWith('Provider connected', 'success'),
+      );
+      expect(closeSpy).not.toHaveBeenCalled();
+      expect(window.location.search).not.toContain('connected');
+      // Mark is single-use; no popup signal is written for a full-page landing.
+      expect(window.sessionStorage.getItem(COMMS_FULLPAGE_STORAGE_KEY)).toBeNull();
+      expect(window.localStorage.getItem(COMMS_CONNECTED_STORAGE_KEY)).toBeNull();
+    } finally {
+      window.sessionStorage.removeItem(COMMS_FULLPAGE_STORAGE_KEY);
+      window.history.replaceState({}, '', '/');
+      closeSpy.mockRestore();
+    }
+  });
+
+  it('signals and closes with a severed opener and wiped window.name (the Slack case, any provider)', async () => {
+    // Verified in Chrome: Slack's consent pages sever window.opener via COOP
+    // AND reset window.name — but window.close() still works. No popup
+    // detection: signal unconditionally, attempt close unconditionally.
+    const closeSpy = vi.spyOn(window, 'close').mockImplementation(() => undefined);
+    Object.defineProperty(window, 'opener', { value: null, writable: true });
+    window.history.replaceState({}, '', '/settings/comms?connected=matrix');
+    try {
+      const { CommsTab } = await import('./comms.tab');
+      render(<CommsTab />, { wrapper });
+
+      await waitFor(() => expect(closeSpy).toHaveBeenCalled());
+      const signal = JSON.parse(
+        window.localStorage.getItem(COMMS_CONNECTED_STORAGE_KEY) || '{}',
+      );
+      expect(signal.provider).toBe('matrix');
+      expect(signal.ts).toBeGreaterThan(0);
+    } finally {
+      window.localStorage.removeItem(COMMS_CONNECTED_STORAGE_KEY);
+      window.history.replaceState({}, '', '/');
+      closeSpy.mockRestore();
+    }
+  });
+
+  it('signals callback errors and toasts them on a full-page landing', async () => {
+    const closeSpy = vi.spyOn(window, 'close').mockImplementation(() => undefined);
+    window.history.replaceState({}, '', '/settings/comms?error=access_denied');
+    try {
+      const { CommsTab } = await import('./comms.tab');
+      render(<CommsTab />, { wrapper });
+
+      await waitFor(() => expect(closeSpy).toHaveBeenCalled());
+      const signal = JSON.parse(
+        window.localStorage.getItem(COMMS_CONNECTED_STORAGE_KEY) || '{}',
+      );
+      expect(signal.error).toBe('access_denied');
+
+      await waitFor(() =>
+        expect(mockToasterShow).toHaveBeenCalledWith('access_denied', 'warning'),
+      );
+      expect(mockToasterShow).not.toHaveBeenCalledWith('Provider connected', 'success');
+      expect(window.location.search).not.toContain('error');
+    } finally {
+      window.localStorage.removeItem(COMMS_CONNECTED_STORAGE_KEY);
       window.history.replaceState({}, '', '/');
       closeSpy.mockRestore();
     }

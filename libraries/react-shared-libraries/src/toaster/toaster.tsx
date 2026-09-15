@@ -1,6 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useState } from 'react';
+import { createPortal } from 'react-dom';
 import clsx from 'clsx';
 
 type ToasterEvent = { text: string; type?: 'success' | 'warning' };
@@ -37,10 +38,13 @@ export const Toaster = () => {
   if (!showToaster) {
     return <></>;
   }
-  return (
+  // Portal to body: mounted this deep (inside Copilot/Mantine wrappers) the
+  // fixed toast loses the stacking battle against the settings nav and the
+  // modal overlay (z 200+). Body-level + z-[1000] keeps it on top.
+  const toast = (
     <div
       className={clsx(
-        'animate-fadeDown rounded-[8px] gap-[18px] flex items-center overflow-hidden bg-btnSimple p-[16px] min-w-[319px] fixed start-[50%] text-textColor z-[900] top-[32px] -translate-x-[50%] h-[56px] before:content-[""] before:absolute before:left-0 before:top-0 before:bottom-0 before:w-[4px]',
+        'animate-fadeDown rounded-[8px] gap-[18px] flex items-center overflow-hidden bg-btnSimple p-[16px] min-w-[319px] fixed start-[50%] text-textColor z-[1000] top-[32px] -translate-x-[50%] h-[56px] before:content-[""] before:absolute before:left-0 before:top-0 before:bottom-0 before:w-[4px]',
         toasterType === 'success' ? 'shadow-greenToast before:bg-[#6CE9A6]' : toasterType === 'warning' ? 'shadow-yellowToast before:bg-[#EF4444]' : 'shadow-greenToast before:bg-[#3B82F6]'
       )}
     >
@@ -117,6 +121,9 @@ export const Toaster = () => {
       </svg>
     </div>
   );
+  return typeof document !== 'undefined'
+    ? createPortal(toast, document.body)
+    : toast;
 };
 export const useToaster = () => {
   return {

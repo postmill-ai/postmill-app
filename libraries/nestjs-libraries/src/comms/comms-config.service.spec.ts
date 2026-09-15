@@ -291,7 +291,10 @@ describe('CommsConfigService', () => {
       expect(item.platformConfigured).toBe(false);
     });
 
-    it('exposes the platform webhook URL for slack but no marker for matrix', async () => {
+    it('exposes the platform webhook URL for slack only when its platform app is configured; never for matrix', async () => {
+      process.env.SLACK_ID = 'slack-client';
+      process.env.SLACK_SECRET = 'slack-secret';
+      process.env.SLACK_SIGNING_SECRET = 'slack-signing';
       resolution.listManifests.mockReturnValue([
         {
           providerId: 'slack',
@@ -320,6 +323,67 @@ describe('CommsConfigService', () => {
       expect(matrix.platformConnect).toBeUndefined();
       expect(matrix.platformConfigured).toBe(false);
       expect(matrix.platformWebhookUrl).toBeUndefined();
+
+      // Flat mode (no platform app): the platform route would 404, so the URL
+      // must not be offered — the org's own token URL is the only valid one.
+      delete process.env.SLACK_SIGNING_SECRET;
+      const flat = (await service.getProviders(ORG)).find((i) => i.identifier === 'slack')!;
+      expect(flat.platformConfigured).toBe(false);
+      expect(flat.platformWebhookUrl).toBeUndefined();
+    });
+
+    it('reports platformConnected from the marker, falling back to env-credential equality for legacy rows', async () => {
+      process.env.SLACK_ID = 'slack-client';
+      process.env.SLACK_SECRET = 'slack-secret';
+      process.env.SLACK_SIGNING_SECRET = 'slack-signing';
+      resolution.listManifests.mockReturnValue([
+        {
+          providerId: 'slack',
+          displayName: 'Slack',
+          version: 'v1',
+          capabilities: adapter.capabilities,
+          credentialFields: [],
+        },
+      ]);
+      const row = (credentials: Record<string, string>, extraConfig: Record<string, unknown>) => ({
+        id: 'cfg-slack',
+        identifier: 'slack',
+        version: 'v1',
+        enabled: true,
+        webhookToken: 'tok',
+        credentials: JSON.stringify(credentials),
+        extraConfig,
+      });
+      const cases: Array<[Record<string, string>, Record<string, unknown>, boolean]> = [
+        [{ botToken: 'xoxb', signingSecret: 'slack-signing' }, { platformApp: true }, true],
+        [{ botToken: 'xoxb', signingSecret: 'slack-signing' }, { platformApp: false }, false],
+        // legacy rows (no marker): same secret as the platform app ⇒ platform
+        [{ botToken: 'xoxb', signingSecret: 'slack-signing' }, { teamId: 'T1' }, true],
+        [{ botToken: 'xoxb', signingSecret: 'their-own' }, { teamId: 'T1' }, false],
+        [{}, {}, false],
+      ];
+      for (const [creds, extra, expected] of cases) {
+        repository.getByOrg.mockResolvedValueOnce([row(creds, extra)]);
+        const slack = (await service.getProviders(ORG)).find((i) => i.identifier === 'slack')!;
+        expect(slack.platformConnected).toBe(expected);
+      }
+    });
+
+    it('marks platform-app configs and clears the marker on a bring-your-own credential save', async () => {
+      process.env.TELEGRAM_TOKEN = 'tg-1';
+      await service.platformConnect(ORG, 'telegram');
+      expect(repository.upsert.mock.calls.at(-1)![2].extraConfig).toMatchObject({ platformApp: true });
+
+      await service.upsert(ORG, 'telegram', { credentials: { botToken: 'my-own-bot' } });
+      expect(repository.upsert.mock.calls.at(-1)![2].extraConfig).toMatchObject({ platformApp: false });
+
+      // enabled-only toggle / blank credentials keep whatever marker exists
+      repository.getByIdentifier.mockResolvedValueOnce({
+        id: 'cfg-tg', identifier: 'telegram', version: 'v1', enabled: true, webhookToken: 'tok',
+        credentials: JSON.stringify({ botToken: 'tg-1' }), extraConfig: { platformApp: true },
+      });
+      await service.upsert(ORG, 'telegram', { credentials: { botToken: '' }, enabled: false });
+      expect(repository.upsert.mock.calls.at(-1)![2].extraConfig).toMatchObject({ platformApp: true });
     });
   });
 

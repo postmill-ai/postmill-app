@@ -1,6 +1,6 @@
 'use client';
 
-import React, { FC, useCallback, useEffect, useMemo, useState } from 'react';
+import React, { FC, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useToaster } from '@postmill-ai/react/toaster/toaster';
 import { useT } from '@postmill-ai/react/translation/get.transation.service.client';
 import { useModals } from '@postmill-ai/frontend/components/layout/new-modal';
@@ -11,7 +11,12 @@ import ProviderModalTitle from '@postmill-ai/frontend/components/settings/shared
 import { ProviderSearchToolbar } from '@postmill-ai/frontend/components/settings/shared/kit/provider-search-toolbar';
 import { CapabilityBadges } from '@postmill-ai/frontend/components/settings/shared/kit/capabilities';
 import { CapabilityMeta } from '@postmill-ai/frontend/components/settings/shared/kit/provider-surface.types';
-import { CommsProvider, useCommsConfig } from './use-comms-config';
+import {
+  COMMS_CONNECTED_STORAGE_KEY,
+  COMMS_FULLPAGE_STORAGE_KEY,
+  CommsProvider,
+  useCommsConfig,
+} from './use-comms-config';
 import { CommsConfigForm } from './comms-config.modal';
 
 // Comms capability matrix (kernel CommsAdapterCapabilities) — the transport
@@ -129,35 +134,80 @@ export const CommsTab: FC = () => {
 
   const [search, setSearch] = useState('');
 
-  // Slack OAuth return: the backend callback redirects here with
-  // ?connected=<identifier>. Inside the connect popup this page is the
-  // intermediate close-page — hand the result to the opener (the config
-  // modal listens for postmill:comms-connected, mirroring the channels
-  // flow's postmill:channel-connected) and close. A full-page landing just
-  // toasts, refetches, and scrubs the URL.
+  // Comms OAuth return: the backend callback redirects here with
+  // ?connected=<identifier> (or ?error=<message>). This page is the close
+  // page. Verified browser facts that shape it: provider consent pages may
+  // sever window.opener via Cross-Origin-Opener-Policy (Slack does) AND wipe
+  // window.name, so the connect popup is undetectable — but window.close()
+  // still works in a script-opened popup even then. So: always signal
+  // completion through localStorage (survives COOP), try postMessage as a
+  // fast path, and close — UNLESS this tab marked itself as the full-page
+  // fallback (sessionStorage, tab-local, survives the round trip), in which
+  // case it is the user's own tab: toast + refetch + URL scrub instead.
+  // A close() that didn't take (tab not script-closable) falls back to the
+  // same landing behaviour after a beat.
+  //
+  // Runs once per landing: `toaster`/`mutate`/`t` are read through a ref so
+  // re-renders (SWR revalidation etc.) can't restart the timer or re-close.
+  const landingHelpers = useRef({ t, toaster, mutate });
+  landingHelpers.current = { t, toaster, mutate };
   useEffect(() => {
     if (typeof window === 'undefined') return;
     const params = new URLSearchParams(window.location.search);
     const connected = params.get('connected');
-    if (!connected) return;
-    if (window.opener && window.opener !== window) {
-      try {
+    const error = params.get('error');
+    if (!connected && !error) return;
+
+    let fullPage = false;
+    try {
+      fullPage = window.sessionStorage.getItem(COMMS_FULLPAGE_STORAGE_KEY) === '1';
+      window.sessionStorage.removeItem(COMMS_FULLPAGE_STORAGE_KEY);
+    } catch {
+      /* no storage — treat as popup; the "still here" fallback lands anyway */
+    }
+
+    const land = () => {
+      const { t, toaster, mutate } = landingHelpers.current;
+      if (error) {
+        toaster.show(error, 'warning');
+      } else {
+        toaster.show(t('comms_connected', 'Provider connected'), 'success');
+        void mutate();
+      }
+      const url = new URL(window.location.href);
+      url.searchParams.delete('connected');
+      url.searchParams.delete('error');
+      window.history.replaceState({}, '', url.toString());
+    };
+
+    if (fullPage) {
+      land();
+      return;
+    }
+
+    try {
+      window.localStorage.setItem(
+        COMMS_CONNECTED_STORAGE_KEY,
+        JSON.stringify({
+          provider: connected ?? undefined,
+          error: error ?? undefined,
+          ts: Date.now(),
+        })
+      );
+      if (connected && window.opener && window.opener !== window) {
         window.opener.postMessage(
           { type: 'postmill:comms-connected', provider: connected },
           window.location.origin
         );
-      } catch {
-        // Opener gone — nothing to notify.
       }
-      window.close();
-      return;
+    } catch {
+      // Storage/opener unavailable — the opener's popup.closed refetch covers it.
     }
-    toaster.show(t('comms_connected', 'Provider connected'), 'success');
-    void mutate();
-    const url = new URL(window.location.href);
-    url.searchParams.delete('connected');
-    window.history.replaceState({}, '', url.toString());
-  }, [t, toaster, mutate]);
+    window.close();
+    // Still here after a beat → not script-closable: this tab IS the user's page.
+    const fallback = window.setTimeout(land, 400);
+    return () => window.clearTimeout(fallback);
+  }, []);
 
   const openConfig = useCallback(
     (identifier: string) => {
