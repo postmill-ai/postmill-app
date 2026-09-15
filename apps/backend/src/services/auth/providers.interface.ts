@@ -6,7 +6,10 @@ export abstract class AuthProviderAbstract {
   abstract getUser(
     providerToken: string
   ): Promise<{
-    email: string;
+    // Optional: providers whose identity can lack an email (e.g. Apple with a
+    // hidden relay address) leave it undefined — the registration flow then
+    // re-prompts the user for one (emailRequired).
+    email?: string;
     id: string;
     picture?: string | null;
     name?: string | null;

@@ -315,14 +315,16 @@ export class AuthController {
     @RealIP() ip: string,
     @UserAgent() userAgent: string
   ) {
-    const { jwt, token, userId } = await this._authService.checkExists(
+    const { jwt, token, userId, emailRequired } = await this._authService.checkExists(
       provider,
       code,
       redirect_uri
     );
 
     if (token) {
-      return response.json({ token });
+      // emailRequired is set when the provider returned no email (e.g. Apple
+      // with a hidden relay address); undefined keys drop out of the JSON.
+      return response.json({ token, emailRequired });
     }
 
     response.cookie('auth', jwt, {

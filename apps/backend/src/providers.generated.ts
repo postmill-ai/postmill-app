@@ -2,6 +2,7 @@ import adobestockModules from '@postmill-ai/provider-adobe-stock';
 import akkomaModules from '@postmill-ai/provider-akkoma';
 import anthropicModules from '@postmill-ai/provider-anthropic';
 import apertusModules from '@postmill-ai/provider-apertus';
+import appleModules from '@postmill-ai/provider-apple';
 import azureModules from '@postmill-ai/provider-azure';
 import backblazeb2Modules from '@postmill-ai/provider-backblaze-b2';
 import bedrockModules from '@postmill-ai/provider-bedrock';
@@ -165,6 +166,7 @@ export const providerModules: ProviderModule<any, any>[] = [
   ...akkomaModules,
   ...anthropicModules,
   ...apertusModules,
+  ...appleModules,
   ...azureModules,
   ...backblazeb2Modules,
   ...bedrockModules,

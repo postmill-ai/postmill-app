@@ -790,6 +790,55 @@ describe('AuthService (backend)', () => {
       expect(calls).toHaveLength(1);
       expect(calls[0][0]).toBe('admin@example.com');
     });
+
+    it('registers with the user-supplied email when the provider returned none (emailRequired re-prompt)', async () => {
+      providerInstance.getUser.mockResolvedValue({ id: 'apple-1' });
+      usersService.getUserByProvider.mockResolvedValue(null);
+      organizationService.createOrgAndUser.mockResolvedValue({
+        id: 'org-4',
+        users: [{ user: { id: 'user-4', email: 'prompted@example.com' } }],
+      });
+
+      const result = await service.routeAuth(
+        Provider.APPLE,
+        makeRegisterBody({
+          providerToken: 'token-1',
+          email: 'prompted@example.com',
+        }),
+        'ip',
+        'ua'
+      );
+
+      expect(organizationService.createOrgAndUser).toHaveBeenCalledWith(
+        expect.objectContaining({
+          email: 'prompted@example.com',
+          provider: Provider.APPLE,
+          providerId: 'apple-1',
+          password: '',
+        }),
+        'ip',
+        'ua'
+      );
+      expect(newsletterRegister).toHaveBeenCalledWith('prompted@example.com');
+      expect(result.jwt).toBe('jwt:user-4');
+    });
+
+    it('rejects registration when neither the provider nor the user supplies an email', async () => {
+      providerInstance.getUser.mockResolvedValue({ id: 'apple-1' });
+      usersService.getUserByProvider.mockResolvedValue(null);
+
+      await expect(
+        service.routeAuth(
+          Provider.APPLE,
+          makeRegisterBody({ providerToken: 'token-1', email: undefined }),
+          'ip',
+          'ua'
+        )
+      ).rejects.toThrow(
+        'An email address is required to complete registration'
+      );
+      expect(organizationService.createOrgAndUser).not.toHaveBeenCalled();
+    });
   });
 
   // ── Org cookie ──
@@ -1072,12 +1121,27 @@ describe('AuthService (backend)', () => {
 
     it('checkExists returns the provider token when no account exists yet', async () => {
       providerInstance.getToken.mockResolvedValue('token-1');
-      providerInstance.getUser.mockResolvedValue({ id: 'gh-1' });
+      providerInstance.getUser.mockResolvedValue({
+        id: 'gh-1',
+        email: 'gh@example.com',
+      });
       usersService.getUserByProvider.mockResolvedValue(null);
 
       expect(await service.checkExists('GITHUB', 'code')).toEqual({
         token: 'token-1',
         userId: undefined,
+      });
+    });
+
+    it('checkExists flags emailRequired when the provider user has no email', async () => {
+      providerInstance.getToken.mockResolvedValue('token-1');
+      providerInstance.getUser.mockResolvedValue({ id: 'apple-1' });
+      usersService.getUserByProvider.mockResolvedValue(null);
+
+      expect(await service.checkExists('APPLE', 'code')).toEqual({
+        token: 'token-1',
+        userId: undefined,
+        emailRequired: true,
       });
     });
   });

@@ -1,4 +1,4 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { BadRequestException, Injectable, Logger } from '@nestjs/common';
 import { Provider, User, UserOrganization } from '@prisma/client';
 import { CreateOrgUserDto } from '@postmill-ai/nestjs-libraries/dtos/auth/create.org.user.dto';
 import { LoginUserDto } from '@postmill-ai/nestjs-libraries/dtos/auth/login.user.dto';
@@ -269,10 +269,20 @@ export class AuthService {
       throw new Error('Registration is disabled');
     }
 
+    // Providers can return no email (Apple with a hidden relay address — the
+    // register form re-prompted for one via the emailRequired flag). Refuse to
+    // mint an account without any address.
+    const email = providerUser.email || body.email;
+    if (!email) {
+      throw new BadRequestException(
+        'An email address is required to complete registration'
+      );
+    }
+
     const create = await this._organizationService.createOrgAndUser(
       {
         company: body.company,
-        email: providerUser.email,
+        email,
         password: '',
         provider,
         providerId: providerUser.id,
@@ -284,19 +294,19 @@ export class AuthService {
       userAgent
     );
 
-    this._track('register', providerUser.email, body.datafast_visitor_id).catch(
+    this._track('register', email, body.datafast_visitor_id).catch(
       (err) => {}
     );
 
     // Synthetic addresses (e.g. x_<id>@x.login.postmill.local) are minted by
     // providers that return no email — never enroll them in the newsletter or
     // send them any email.
-    if (!providerUser.email.endsWith('.login.postmill.local')) {
-      await NewsletterService.register(providerUser.email);
-      await this._sendWelcomeEmail(providerUser.email);
+    if (!email.endsWith('.login.postmill.local')) {
+      await NewsletterService.register(email);
+      await this._sendWelcomeEmail(email);
     }
     await this._notifyAdminSignup({
-      email: providerUser.email,
+      email,
       provider: String(provider),
       company: body.company,
       context: 'registered',
@@ -454,6 +464,19 @@ export class AuthService {
     if (checkExists) {
       const jwt = await this.jwt(checkExists);
       return { jwt, userId: checkExists.id };
+    }
+
+    // Providers whose identity can lack an email (Apple with a hidden relay
+    // address) signal the register form to re-prompt for one; the user-supplied
+    // email then arrives on the /auth/register body. (Separate return branches —
+    // a conditional spread here defeats TS's union-member synthesis and breaks
+    // destructuring at the controller.)
+    if (!user.email) {
+      return {
+        token,
+        userId: undefined as string | undefined,
+        emailRequired: true as const,
+      };
     }
 
     return { token, userId: undefined as string | undefined };

@@ -28,7 +28,10 @@ export class CreateOrgUserDto {
 
   @IsEmail()
   @IsDefined()
-  @ValidateIf((o) => !o.providerToken)
+  // Required for local signups; optional-but-validated when a providerToken is
+  // present — provider identities can lack an email (e.g. Apple with a hidden
+  // relay address), and the re-prompted address arrives on this field.
+  @ValidateIf((o) => !o.providerToken || o.email !== undefined)
   email: string;
 
   @IsString()

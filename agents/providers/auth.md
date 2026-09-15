@@ -17,7 +17,7 @@ Defined in `libraries/providers/kernel/src/domains/auth.ts`:
 
 ```ts
 export interface AuthUserInfo {
-  email: string;
+  email?: string; // see "Missing-email providers" below
   id: string;
   picture?: string | null;
   name?: string | null;
@@ -26,15 +26,29 @@ export interface AuthUserInfo {
 export interface AuthCapability {
   generateLink(query?: unknown): Promise<string> | string;
   getToken(code: string, redirectUri?: string): Promise<string>;
-  getUser(providerToken: string): Promise<AuthUserInfo> | false;
+  getUser(providerToken: string): Promise<AuthUserInfo | false> | false;
   postRegistration?(providerToken: string, orgId: string): Promise<void>;
 }
 ```
 
 - `generateLink` — build the provider's authorization URL (redirect target is `${process.env.FRONTEND_URL}/settings` in the GitHub adapter).
 - `getToken` — exchange the OAuth `code` for an access token.
-- `getUser` — fetch the user's identity; must return at least `email` and `id`. May return `false`.
+- `getUser` — fetch the user's identity; must return at least `id`. May return `false`.
 - `postRegistration` — optional hook called after a new user/org is created (`AuthService` swallows its errors; a failure never fails registration, `apps/backend/src/services/auth/auth.service.ts:244`).
+
+### Missing-email providers (`emailRequired`)
+
+Most adapters must return an email (X/Facebook mint a synthetic `*.login.postmill.local`
+address when the platform withholds it). When a provider deliberately does neither — e.g.
+**Apple**, whose email claim ships only on first consent and is hidden behind the private
+relay — `getUser` may leave `email` undefined. The framework then re-prompts the user for an
+address instead:
+
+1. `AuthService.checkExists` includes `emailRequired: true` in the `{token}` response when the provider user has no email.
+2. The register page keeps that flag and shows the email input alongside Company in the provider registration form (`apps/frontend/src/components/auth/register.tsx`).
+3. `AuthService.loginOrRegisterProvider` uses `providerUser.email || dto.email` and 400s when neither exists; `CreateOrgUserDto.email` stays required for local signups and optional-but-validated when a `providerToken` is present.
+
+Do **not** use this to weaken an adapter that can always fetch an email — it exists for platforms that structurally withhold it.
 
 Call flow: `AuthController` (`apps/backend/src/api/routes/auth.controller.ts`) → `AuthService.oauthLink` / `AuthService.checkExists` (`apps/backend/src/services/auth/auth.service.ts:359`, `:364`) → `AuthProviderManager.getProvider(provider)` → kernel `create(ctx)`. Endpoints: `GET /auth/oauth/:provider` (link), `POST /auth/oauth/:provider/exists` (code exchange + login/register), `GET /auth/providers` (public provider list).
 
@@ -104,7 +118,7 @@ The full universal provider-package procedure (workspace package scaffold, `meta
 3. [ ] Scaffold `libraries/providers/<id>` (`@postmill-ai/provider-<id>`, deps on `@postmill-ai/provider-kernel` + `@postmill-ai/nestjs-libraries`) per `agents/providers/overview.md`.
 4. [ ] Implement `src/v1/auth.adapter.ts`: a class implementing `AuthCapability` + an exported `ProviderModule` with manifest `domain: 'auth'`, lowercase `providerId`, `version: 'v1'`, `authType: 'oauth2'`.
 5. [ ] Implement `resolveConfig`: DB-first via `ctx.extras.authProviderRepo.findByProvider('<PROVIDER>')`, decrypt with `ctx.encryption.decrypt`, env fallback, throw when unconfigured; all HTTP via `ctx.fetch`.
-6. [ ] Export the module array from `src/index.ts` and register it (alphabetically) in `apps/backend/src/providers.generated.ts`.
+6. [ ] Export the module array from `src/index.ts` and register it (alphabetically) in `apps/backend/src/providers.generated.ts`, add the two path aliases (`"@postmill-ai/provider-<id>"` + `"@postmill-ai/provider-<id>/*"`) to `tsconfig.base.json`, and add the `workspace:*` dep to `apps/backend/package.json` (+ `pnpm install`). The aliases are what pull the sources into the tsc program so `dist/libraries/providers/<id>/src/*.js` exists for the `register-provider-paths` runtime shim — skip them and the built backend crashes on the raw-TS copy in node_modules (boot-guard's OpenAPI drift gate catches this).
 7. [ ] Add the env-presence gate for the new provider in `AuthProviderManager.getProviders()` (`apps/backend/src/services/auth/providers/auth-provider.manager.ts`) so the login page can advertise it. For a dual-use channel-app provider (FACEBOOK/X/LINKEDIN pattern) the gate is the `<P>_SSO_ENABLED` flag AND the channel app env vars — not a separate login credential set.
 8. [ ] Frontend: add the provider's button component to `providerComponents` (`apps/frontend/src/components/auth/login.tsx`) and its callback-path fragment to the redirect map in `apps/frontend/src/proxy.ts`.
 9. [ ] Add/extend tests (`auth.adapter.spec.ts`, `auth-provider.manager.spec.ts`) and run `vitest run --root libraries/providers/kernel` + `vitest run --root apps/backend` — the conformance spec must pass with the new module registered.

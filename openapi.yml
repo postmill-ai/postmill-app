@@ -9122,6 +9122,7 @@ components:
             - GENERIC
             - FACEBOOK
             - LINKEDIN
+            - APPLE
         providerToken:
           type: string
         email:
@@ -9167,6 +9168,7 @@ components:
             - GENERIC
             - FACEBOOK
             - LINKEDIN
+            - APPLE
         providerToken:
           type: string
         email:

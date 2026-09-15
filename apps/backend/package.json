@@ -18,6 +18,7 @@
     "@postmill-ai/provider-akkoma": "workspace:*",
     "@postmill-ai/provider-anthropic": "workspace:*",
     "@postmill-ai/provider-apertus": "workspace:*",
+    "@postmill-ai/provider-apple": "workspace:*",
     "@postmill-ai/provider-azure": "workspace:*",
     "@postmill-ai/provider-backblaze-b2": "workspace:*",
     "@postmill-ai/provider-bedrock": "workspace:*",

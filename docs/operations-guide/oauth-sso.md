@@ -225,6 +225,69 @@ already requires it). Callback to register: `https://<your-domain>/integrations/
 only. The same person signing in via two providers — even with the same real email — gets
 **separate User + Org accounts**; identities are never merged.
 
+## Apple login
+
+Sign in with Apple is a standalone, login-only provider (it shares nothing with a channel app).
+Unlike every other provider it has **no static client secret** — Postmill mints a short-lived
+ES256 JWT from your Team ID, Key ID, and `.p8` private key on every token exchange.
+
+### 1. Create an App ID
+
+In the [Apple Developer portal](https://developer.apple.com/account/resources/identifiers/list)
+(Certificates, Identifiers & Profiles → Identifiers), create an **App ID** (e.g.
+`ai.postmill.app`) and enable the **Sign In with Apple** capability on it.
+
+### 2. Create a Services ID
+
+Create a second identifier of type **Services ID** — this is your `APPLE_CLIENT_ID` (e.g.
+`ai.postmill.app.auth`). Enable **Sign In with Apple** on it, click **Configure**, set the
+primary App ID to the one from step 1, and register the return URL:
+
+```
+https://<your-domain>/auth/callback/apple
+```
+
+### 3. Create a Sign in with Apple key
+
+Under **Keys**, create a new key with **Sign in with Apple** enabled (configure it against the
+primary App ID) and download the `.p8` file — Apple only offers the download once. Note the
+**Key ID** shown next to it, and your **Team ID** (top-right of the portal).
+
+### 4. Configure Postmill
+
+Base64-encode the `.p8` contents (so the multi-line PEM survives `.env`/Compose round-trips):
+
+```bash
+base64 -w0 AuthKey_XXXXXXXXXX.p8
+```
+
+Then set:
+
+```yaml
+APPLE_SSO_ENABLED: 'true'
+APPLE_CLIENT_ID: '<your-services-id>'      # e.g. ai.postmill.app.auth
+APPLE_TEAM_ID: '<your-team-id>'
+APPLE_KEY_ID: '<your-key-id>'
+APPLE_PRIVATE_KEY: '<base64-encoded .p8 contents>'
+```
+
+As with the other providers, an enabled `APPLE` row in the administration app's
+`AuthProviderConfig` table takes precedence (client ID = Services ID, client secret = the
+base64 `.p8` key); the Team ID and Key ID always come from env.
+
+Two Apple quirks to be aware of:
+
+- **The callback is a form POST.** Requesting the `email` scope forces
+  `response_mode=form_post`; a frontend route handler converts the POST into the standard
+  `/auth?code=…&state=login&provider=APPLE` redirect. Ensure your reverse proxy forwards
+  POSTs to `/auth/callback/apple` unchanged.
+- **The email can be missing.** Apple only sends the email claim on the user's first consent,
+  and users can hide it behind Apple's private relay. When no email arrives, Postmill does
+  **not** mint a synthetic address (unlike X/Facebook) — the registration form re-prompts the
+  user for an email address instead.
+
+Callback to register: `https://<your-domain>/auth/callback/apple`.
+
 ## Login callback routes
 
 OAuth callbacks do **not** land on a single `/auth/callback` endpoint. Each login provider
@@ -239,6 +302,7 @@ redirects back to its own path carrying `state=login`, and the frontend proxy
 | LinkedIn | `https://<your-domain>/integrations/social/linkedin` |
 | GitHub | `https://<your-domain>/settings` |
 | Generic OIDC | `https://<your-domain>/settings` |
+| Apple | `https://<your-domain>/auth/callback/apple` (Apple POSTs a form body here; a frontend route handler converts it to the `/auth?…&provider=APPLE` redirect) |
 
 The dual-use paths are shared with channel OAuth: channel-connect callbacks hit the same
 `/integrations/social/<provider>` paths **without** `state=login` and pass straight through to the
@@ -248,7 +312,7 @@ frontend without modification.
 ## Disable registration
 
 To restrict who can sign up, set `DISABLE_REGISTRATION=true`. New users cannot self-register via
-`LOCAL` (email/password) or any OAuth provider (Google, GitHub, Facebook, X, LinkedIn) — with two
+`LOCAL` (email/password) or any OAuth provider (Google, GitHub, Facebook, X, LinkedIn, Apple) — with two
 exceptions: the very first
 user of an empty instance can always register (so the operator can bootstrap), and **`GENERIC`
 OIDC sign-ins are exempt** (users authenticated by your identity provider still provision).

@@ -32,6 +32,11 @@ const PROVIDER_ENV_VARS = [
   'LINKEDIN_SSO_ENABLED',
   'LINKEDIN_CLIENT_ID',
   'LINKEDIN_CLIENT_SECRET',
+  'APPLE_SSO_ENABLED',
+  'APPLE_CLIENT_ID',
+  'APPLE_TEAM_ID',
+  'APPLE_KEY_ID',
+  'APPLE_PRIVATE_KEY',
 ];
 
 function clearProviderEnv() {
@@ -328,6 +333,49 @@ describe('AuthProviderManager', () => {
         'FACEBOOK',
         'X',
         'LINKEDIN',
+      ]);
+    });
+
+    it('does not advertise APPLE when the SSO flag is off, even with all creds set', async () => {
+      clearProviderEnv();
+      process.env.APPLE_CLIENT_ID = 'ai.postmill.app.auth';
+      process.env.APPLE_TEAM_ID = 'TEAMID1234';
+      process.env.APPLE_KEY_ID = 'KEYID5678';
+      process.env.APPLE_PRIVATE_KEY = 'cDx8LWtleS1iNjQ=';
+      const { manager } = makeManager({});
+
+      const result = await manager.getProviders();
+
+      expect(result.providers.map((p: any) => p.provider)).toEqual(['LOCAL']);
+    });
+
+    it('does not advertise APPLE when the flag is on but the credential set is incomplete', async () => {
+      clearProviderEnv();
+      process.env.APPLE_SSO_ENABLED = 'true';
+      process.env.APPLE_CLIENT_ID = 'ai.postmill.app.auth';
+      process.env.APPLE_TEAM_ID = 'TEAMID1234';
+      // missing APPLE_KEY_ID / APPLE_PRIVATE_KEY
+      const { manager } = makeManager({});
+
+      const result = await manager.getProviders();
+
+      expect(result.providers.map((p: any) => p.provider)).toEqual(['LOCAL']);
+    });
+
+    it('advertises APPLE when the SSO flag is on and the full credential set is present', async () => {
+      clearProviderEnv();
+      process.env.APPLE_SSO_ENABLED = 'true';
+      process.env.APPLE_CLIENT_ID = 'ai.postmill.app.auth';
+      process.env.APPLE_TEAM_ID = 'TEAMID1234';
+      process.env.APPLE_KEY_ID = 'KEYID5678';
+      process.env.APPLE_PRIVATE_KEY = 'cDx8LWtleS1iNjQ=';
+      const { manager } = makeManager({});
+
+      const result = await manager.getProviders();
+
+      expect(result.providers.map((p: any) => p.provider)).toEqual([
+        'LOCAL',
+        'APPLE',
       ]);
     });
 
