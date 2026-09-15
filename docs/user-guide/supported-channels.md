@@ -5,7 +5,11 @@ matrix. This matrix is the single source of truth for what each provider can do 
 admin settings, preflight validation, and workflow logic all gate on these values.
 
 The canonical source is `PROVIDER_CAPABILITIES` in
-`libraries/providers/kernel/src/domains/social-capabilities.ts`.
+`libraries/providers/kernel/src/domains/social-capabilities.ts`. A running deployment publishes the
+same matrix (plus every other integration domain) as JSON at
+`GET /public/integrations/list?domain=social` — see the
+[developer docs](../developer-docs/public-api.md#integrations-catalogue) — so the table below can
+be cross-checked against the live app.
 
 ## Capability Column Descriptions
 

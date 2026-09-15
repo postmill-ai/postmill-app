@@ -83,6 +83,7 @@ import { AnalyticsRepository } from '@postmill-ai/nestjs-libraries/database/pris
 import { RedisService } from '@postmill-ai/nestjs-libraries/redis/redis.service';
 import { EncryptionService } from '@postmill-ai/nestjs-libraries/encryption/encryption.service';
 import { ProviderCatalogService } from '@postmill-ai/nestjs-libraries/providers/provider-catalog.service';
+import { PublicCatalogService } from '@postmill-ai/nestjs-libraries/providers/public-catalog.service';
 import { ProviderHealthService } from '@postmill-ai/nestjs-libraries/providers/provider-health.service';
 import { MultipartUploadRepository } from '@postmill-ai/nestjs-libraries/database/prisma/media/multipart-upload.repository';
 import { MultipartUploadService } from '@postmill-ai/nestjs-libraries/database/prisma/media/multipart-upload.service';
@@ -265,6 +266,7 @@ import { AnalyticsShareService } from '@postmill-ai/nestjs-libraries/analytics/a
     AnalyticsLiveFallbackService,
     AnalyticsShareService,
     ProviderCatalogService,
+    PublicCatalogService,
     ProviderHealthService,
     {
       provide: 'RBAC_SEED_ON_INIT',

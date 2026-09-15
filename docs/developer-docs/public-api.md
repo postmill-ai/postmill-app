@@ -184,6 +184,71 @@ Base: `/public`
 | POST | `/public/t` | None | Track analytics/behaviour event |
 | POST | `/public/modify-subscription` | JWT | Modify subscription billing |
 | GET | `/public/stream` | None | Proxy-stream an external MP4 (SSRF-safe) |
+| GET | `/public/integrations/list` | None | Anonymous integrations catalogue (see below) |
+
+### Integrations catalogue
+
+`GET /public/integrations/list[?domain=<social|comms|ai|media|storage|shortlink|vpn>]` is the
+source of truth for "what does Postmill integrate with": every registered provider in the seven
+product-facing domains, with counts, capability flags, descriptions, website and an absolute icon
+URL. The marketing site reads it instead of hardcoding provider tables. No session, API key or
+CSRF token is involved; the response is `Cache-Control: public, max-age=300,
+stale-while-revalidate=3600` with a weak ETag and `Access-Control-Allow-Origin: *`, so it can be
+fetched from any origin (without credentials). Throttled at 120 requests/minute per IP.
+
+```json
+{
+  "generatedAt": "2026-09-15T16:28:31.012Z",
+  "total": 166,
+  "domains": [
+    {
+      "id": "social",
+      "label": "Channels",
+      "count": 45,
+      "capabilityKeys": ["analytics", "comments", "firstComment", "video", "..."],
+      "providers": [
+        {
+          "id": "x",
+          "domain": "social",
+          "name": "X",
+          "description": { "en": "X (formerly Twitter) — real-time public posting and conversation." },
+          "website": "https://x.com",
+          "icon": "https://app.postmill.ai/icons/platforms/x.png",
+          "capabilities": ["analytics", "comments", "firstComment", "poll", "video", "linkPreview", "refreshToken", "watchlist"],
+          "maxMedia": 4,
+          "beta": false,
+          "featured": false,
+          "editor": "normal",
+          "authType": "oauth1",
+          "selfHosted": false,
+          "web3": false,
+          "chromeExtension": false,
+          "comments": { "read": true, "reply": true, "like": true },
+          "mentions": true,
+          "autoPlugs": true
+        }
+      ]
+    }
+  ]
+}
+```
+
+- `capabilities` lists the keys that are `true` in the provider's manifest capability object; each
+  domain's `capabilityKeys` is the union in first-seen order (a ready-made matrix legend).
+- `id` is the kernel `providerId` (storage ids are lower-snake, e.g. `backblaze_b2`).
+- `kind` (`direct` | `hub` | `action`) is set for AI/media providers, `storageKind`
+  (`built-in` | `proprietary` | `s3-compatible`) for storage, `mediaCategories` for media; the
+  `editor` … `autoPlugs` block is channels-only.
+- `beta` mirrors the in-app Beta badge (built without live-key verification); `featured` /
+  `featuredSortOrder` are the super-admin curated flags.
+- Icons: channels and comms apps point at the frontend's `/icons/platforms/<id>.png` set (YouTube
+  is `.svg`); every other domain points at `/icons/providers/<id>.svg`, exported from the app's
+  `ProviderIcon` glyph map by `node tools/icons/export-provider-icons.mjs` (a backend spec fails
+  CI when a registered provider has no file).
+- Deliberately **not** included: provider versions, status, credential fields, setup notes and
+  sunset dates — anything that fingerprints the deployment's exact release. That detail stays on
+  the authenticated `GET /providers/catalog`. The `auth`, `email` and `contentpack` domains are
+  deployment plumbing and are not listed.
 
 ## Internal integrations API
 

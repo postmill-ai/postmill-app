@@ -115,6 +115,7 @@ The kernel is the **sole** resolution path for every domain — there is no fall
 
 - `GET /providers/catalog?domain=` returns the provider catalog for a domain. **It is authenticated** — the route sits in the authenticated group (`AuthMiddleware`/`CsrfMiddleware` apply); it is **not** an anonymous/public endpoint. An unknown or unsupported `?domain=` returns **400 Bad Request** (`resolveDomainFilter` rejects it) rather than an unfiltered or empty result.
 - `GET /admin/providers/health?domain=` (super-admin) returns per-version health counters.
+- `GET /public/integrations/list?domain=` is the **anonymous** counterpart for the seven product-facing domains (`social`, `comms`, `ai`, `media`, `storage`, `shortlink`, `vpn`): names, descriptions, capability flags, icons and the beta/featured flags — but no version, status, credential fields or sunset data. See [Public API → Integrations catalogue](./public-api.md#integrations-catalogue).
 
 Catalog entries include `domain`, `providerId`, `version`, `displayName`, `status`, `verified` (whether the provider was built with a live key), `authType`, `defaultDomain`, `setupNotes`, `credentialFields`, `capabilities`, `deprecatedAt`, `sunsetAt`, `description`, `website`, `mediaCategories`, and super-admin-curated `featured`/`featuredSortOrder` flags.
 
