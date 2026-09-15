@@ -65,7 +65,6 @@ export class PostsListTool implements AgentToolInterface {
           .enum(['all', 'scheduled', 'draft', 'published'])
           .optional()
           .describe("Filter by state: 'all' | 'scheduled' | 'draft' | 'published'"),
-        customer: z.string().optional().describe('Optional customer/group id'),
         page: z.number().optional().describe('Page number for list mode'),
         limit: z
           .number()
@@ -122,7 +121,6 @@ export class PostsListTool implements AgentToolInterface {
             {
               startDate: inputData.startDate,
               endDate: inputData.endDate,
-              customer: inputData.customer,
               display: 'list',
               limit: MAX_POSTS,
             } as any,
@@ -136,7 +134,6 @@ export class PostsListTool implements AgentToolInterface {
             {
               page: inputData.page,
               limit,
-              customer: inputData.customer,
               state: inputData.state,
             } as any,
             user.id

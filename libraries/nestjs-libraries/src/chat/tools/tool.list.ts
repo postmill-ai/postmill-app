@@ -4,7 +4,6 @@ import { IntegrationSchedulePostTool } from './integration.schedule.post';
 import { GenerateVideoTool } from '@postmill-ai/nestjs-libraries/chat/tools/generate.video.tool';
 import { GenerateImageTool } from '@postmill-ai/nestjs-libraries/chat/tools/generate.image.tool';
 import { IntegrationListTool } from '@postmill-ai/nestjs-libraries/chat/tools/integration.list.tool';
-import { GroupListTool } from '@postmill-ai/nestjs-libraries/chat/tools/group.list.tool';
 import { UploadFromUrlTool } from '@postmill-ai/nestjs-libraries/chat/tools/upload.from.url.tool';
 import { DesignerDesignTool } from '@postmill-ai/nestjs-libraries/chat/tools/designer.design.tool';
 
@@ -42,7 +41,6 @@ import { BrandMemoryReindexTool } from '@postmill-ai/nestjs-libraries/chat/tools
 export const toolList = [
   // Existing tools
   IntegrationListTool,
-  GroupListTool,
   IntegrationValidationTool,
   IntegrationTriggerTool,
   IntegrationSchedulePostTool,

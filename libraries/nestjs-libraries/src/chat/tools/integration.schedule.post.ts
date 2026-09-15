@@ -100,7 +100,7 @@ export class IntegrationSchedulePostTool implements AgentToolInterface {
         },
       },
       description: `
-This tool allows you to schedule a post to a social media platform, based on integrationSchema tool.
+Schedule (or publish now / save as draft) a post to one or more connected channels, based on the integrationSchema tool.
 So for example:
 
 If the user want to post a post to LinkedIn with one comment
@@ -235,13 +235,19 @@ If the tools return errors, you would need to rerun it with the right parameters
 
           // Same server-side validation as the dashboard / public API
           // (settings DTO + media checkValidity + empty / too-long content).
-          const settings = platform.settings.reduce(
-            (acc: AllProvidersSettings, s: { key: string; value: any }) => ({
-              ...acc,
-              [s.key]: s.value,
-            }),
-            {} as AllProvidersSettings
-          );
+          // `__type` selects the provider's settings DTO and is known from the
+          // resolved channel — never trust the model's copy of it (small models
+          // send "post"/"social" and the validation 404s on "Unknown integration").
+          const settings = {
+            ...platform.settings.reduce(
+              (acc: AllProvidersSettings, s: { key: string; value: any }) => ({
+                ...acc,
+                [s.key]: s.value,
+              }),
+              {} as AllProvidersSettings
+            ),
+            ...(resolved?.providerIdentifier ? { __type: resolved.providerIdentifier } : {}),
+          } as AllProvidersSettings;
 
           const [validation] = await this._postsService.validatePosts(
             organizationId,
@@ -270,19 +276,19 @@ If the tools return errors, you would need to rerun it with the right parameters
               return {
                 errors: `${validation.name}: ${
                   validation.settingsError || 'Please fix your settings'
-                }, please fix it, and try integrationSchedulePostTool again.`,
+                }, please fix it, and try schedulePostTool again.`,
               };
             }
 
             if (validation.errors !== true) {
               return {
-                errors: `${validation.name}: ${validation.errors}, please fix it, and try integrationSchedulePostTool again.`,
+                errors: `${validation.name}: ${validation.errors}, please fix it, and try schedulePostTool again.`,
               };
             }
 
             if (validation.tooLong) {
               return {
-                errors: `${validation.name}: The maximum characters is ${validation.maximumCharacters}, please fix it, and try integrationSchedulePostTool again.`,
+                errors: `${validation.name}: The maximum characters is ${validation.maximumCharacters}, please fix it, and try schedulePostTool again.`,
               };
             }
           }
@@ -304,15 +310,17 @@ If the tools return errors, you would need to rerun it with the right parameters
               {
                 integration,
                 group: makeId(10),
-                settings: post.settings.reduce(
-                  (acc: AllProvidersSettings, s: { key: string; value: any }) => ({
-                    ...acc,
-                    [s.key]: s.value,
-                  }),
-                  {
-                    __type: integration.providerIdentifier,
-                  } as AllProvidersSettings
-                ),
+                settings: {
+                  ...post.settings.reduce(
+                    (acc: AllProvidersSettings, s: { key: string; value: any }) => ({
+                      ...acc,
+                      [s.key]: s.value,
+                    }),
+                    {} as AllProvidersSettings
+                  ),
+                  // Server-known; overrides whatever the model put in settings.
+                  __type: integration.providerIdentifier,
+                } as AllProvidersSettings,
                 value: post.postsAndComments.map((p: any) => ({
                   content: p.content,
                   id: makeId(10),

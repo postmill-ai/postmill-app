@@ -37,6 +37,17 @@ import { OpsAgentBuilder } from '@postmill-ai/nestjs-libraries/chat/agents/ops.a
 import { IntegrationValidationTool } from '@postmill-ai/nestjs-libraries/chat/tools/integration.validation.tool';
 import { IntegrationTriggerTool } from '@postmill-ai/nestjs-libraries/chat/tools/integration.trigger.tool';
 
+import { CommsConfirmationGate } from '@postmill-ai/nestjs-libraries/chat/tools/comms-confirmation.gate';
+
+const stubRedis = () => {
+  const store = new Map<string, string>();
+  return {
+    get: async (k: string) => store.get(k) ?? null,
+    set: async (k: string, v: string) => void store.set(k, v),
+    del: async (k: string) => void store.delete(k),
+  };
+};
+
 const liveEval = process.env.LIVE_EVAL === '1';
 
 const mockIntegrationManager = {
@@ -79,11 +90,15 @@ const instantiateTool = (ToolClass: any): any => {
  */
 const buildFlatTools = async (): Promise<Record<string, any>> => {
   const firewall = new ToolFirewallService();
+  const gate = new CommsConfirmationGate(stubRedis() as any);
   const entries = await Promise.all(
     toolList.map(async (ToolClass: any) => {
       const instance = instantiateTool(ToolClass);
       const tool = await instance.run();
-      return { name: instance.name as string, tool: firewall.wrap(instance.name, tool) };
+      return {
+        name: instance.name as string,
+        tool: gate.wrap(instance.name, firewall.wrap(instance.name, tool)),
+      };
     })
   );
   return entries.reduce(
@@ -124,7 +139,8 @@ const buildLoadToolsService = async () => {
     new ContentAgentBuilder(aiModelProvider),
     new MediaAgentBuilder(aiModelProvider),
     new AnalyticsAgentBuilder(aiModelProvider),
-    new OpsAgentBuilder(aiModelProvider)
+    new OpsAgentBuilder(aiModelProvider),
+    new CommsConfirmationGate(stubRedis() as any),
   );
 };
 
@@ -143,13 +159,15 @@ const ROUTING_CASES: RoutingCase[] = [
     prompt: 'List my channels',
     expectedToolId: 'integrationList',
     expectedSpecialist: 'supervisor',
-    keywords: ['integrations', 'schedule'],
+    keywords: ['channels', 'connected'],
   },
   {
-    prompt: 'List my customer groups',
-    expectedToolId: 'groupList',
+    // The Slack regression: a 'how many channels' question must land on the
+    // channel lister, never on anything else.
+    prompt: 'How many channels are configured?',
+    expectedToolId: 'integrationList',
     expectedSpecialist: 'supervisor',
-    keywords: ['groups', 'customers'],
+    keywords: ['channels', 'configured'],
   },
 
   // Analytics

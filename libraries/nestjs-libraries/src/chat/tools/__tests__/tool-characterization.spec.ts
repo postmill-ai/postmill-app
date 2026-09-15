@@ -1,7 +1,6 @@
 import 'reflect-metadata';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { IntegrationListTool } from '../integration.list.tool';
-import { GroupListTool } from '../group.list.tool';
 import { IntegrationValidationTool } from '../integration.validation.tool';
 import { IntegrationTriggerTool } from '../integration.trigger.tool';
 import { IntegrationSchedulePostTool } from '../integration.schedule.post';
@@ -68,24 +67,6 @@ describe('agent tool characterization', () => {
       picture: 'https://example.com/x.png',
       platform: 'x',
     });
-  });
-
-  it('GroupListTool returns a list of groups', async () => {
-    const integrationService = {
-      customers: vi.fn().mockResolvedValue([{ id: 'cust-1', name: 'Acme' }]),
-    };
-    const tool = new GroupListTool(integrationService as any);
-
-    const result = await executeTool(tool, {
-      inputData: {},
-      organization: org,
-      user,
-      access: { mode: 'user' },
-    });
-
-    expect(result).toHaveProperty('output');
-    expect(Array.isArray(result.output)).toBe(true);
-    expect(result.output[0]).toEqual({ id: 'cust-1', name: 'Acme' });
   });
 
   it('IntegrationValidationTool returns a validation schema', async () => {
