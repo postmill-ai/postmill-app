@@ -10,7 +10,6 @@ import {
 import clsx from 'clsx';
 import dayjs from 'dayjs';
 import { ReactNode, useCallback, useEffect, useState } from 'react';
-import { SelectCustomer } from '@postmill-ai/frontend/components/launches/select.customer';
 import { ChannelFilterSelect } from '@postmill-ai/frontend/components/launches/channel-filter-select';
 import { CampaignFilterSelect } from '@postmill-ai/frontend/components/launches/campaign-filter-select';
 import { TagFilterSelect } from '@postmill-ai/frontend/components/launches/tag-filter-select';
@@ -134,7 +133,6 @@ export const Filters = () => {
       startDate: currentRange.startDate,
       endDate: currentRange.endDate,
       display: calendar.display as 'day' | 'week' | 'month' | 'list',
-      customer: calendar.customer,
     });
   }, [calendar, rangeMode]);
 
@@ -150,8 +148,7 @@ export const Filters = () => {
         startDate: range.startDate,
         endDate: range.endDate,
         display: isListView ? 'list' : mode,
-        customer: calendar.customer,
-      });
+        });
     },
     [calendar, isListView]
   );
@@ -172,7 +169,6 @@ export const Filters = () => {
       startDate: range.startDate,
       endDate: range.endDate,
       display: 'list',
-      customer: calendar.customer,
     });
   }, [calendar, rangeMode]);
 
@@ -187,24 +183,8 @@ export const Filters = () => {
       startDate: range.startDate,
       endDate: range.endDate,
       display: rangeMode,
-      customer: calendar.customer,
     });
   }, [calendar, rangeMode]);
-
-  const setCustomer = useCallback(
-    (customer: string) => {
-      if (calendar.customer === customer) {
-        return; // No need to set the same customer
-      }
-      calendar.setFilters({
-        startDate: calendar.startDate,
-        endDate: calendar.endDate,
-        display: calendar.display as 'day' | 'week' | 'month',
-        customer: customer,
-      });
-    },
-    [calendar]
-  );
 
   const next = useCallback(() => {
     const currentStart = newDayjs(calendar.startDate);
@@ -216,7 +196,6 @@ export const Filters = () => {
       startDate: range.startDate,
       endDate: range.endDate,
       display: calendar.display as 'day' | 'week' | 'month' | 'list',
-      customer: calendar.customer,
     });
   }, [calendar, rangeMode]);
 
@@ -230,7 +209,6 @@ export const Filters = () => {
       startDate: range.startDate,
       endDate: range.endDate,
       display: calendar.display as 'day' | 'week' | 'month' | 'list',
-      customer: calendar.customer,
     });
   }, [calendar, rangeMode]);
 
@@ -364,11 +342,6 @@ export const Filters = () => {
   );
 
   const sectionLabel = 'text-[12px] font-[600] uppercase tracking-wide text-newTableText';
-
-  // SelectCustomer renders null with ≤1 customer; mirror that so the section
-  // (and its label) only shows when there are multiple customers to pick from.
-  const hasCustomers =
-    new Set(calendar.integrations.map((i) => i?.customer?.id)).size > 1;
 
   // Toggle a value in a string[] filter.
   const toggleIn = (list: string[], value: string) =>
@@ -585,18 +558,6 @@ export const Filters = () => {
         value: calendar.contentSearch.trim(),
       }),
       onClear: () => calendar.setContentSearch(''),
-    });
-  }
-  if (calendar.customer) {
-    appliedChips.push({
-      key: 'customer',
-      label: t('filter_applied_label', '{{label}}: {{value}}', {
-        label: t('customer', 'Customer:'),
-        value:
-          calendar.integrations.find((i) => i?.customer?.id === calendar.customer)
-            ?.customer?.name || '',
-      }),
-      onClear: () => setCustomer(''),
     });
   }
 
@@ -1229,7 +1190,7 @@ export const Filters = () => {
             {group(
               'channels',
               t('channels_campaigns', 'Channels & campaigns'),
-              ['channels', 'platform', 'campaigns', 'customer'],
+              ['channels', 'platform', 'campaigns'],
               <>
                 {/* Channels — multi-select, same display as the composer picker. */}
                 <div className="flex flex-col gap-[8px]">
@@ -1284,17 +1245,6 @@ export const Filters = () => {
                   </div>
                 )}
 
-                {/* Customer / client */}
-                {hasCustomers && (
-                  <div className="flex flex-col gap-[8px]">
-                    {sectionHeader(t('customer', 'Customer:'), 'customer')}
-                    <SelectCustomer
-                      customer={calendar.customer as string}
-                      onChange={(customer: string) => setCustomer(customer)}
-                      integrations={calendar.integrations}
-                    />
-                  </div>
-                )}
               </>
             )}
           </div>

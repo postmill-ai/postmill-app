@@ -47,7 +47,6 @@ export const DEFAULT_METRIC_FILTERS: MetricFilters = {
 export const CalendarContext = createContext({
   startDate: newDayjs().startOf('isoWeek').format('YYYY-MM-DD'),
   endDate: newDayjs().endOf('isoWeek').format('YYYY-MM-DD'),
-  customer: null as string | null,
   loading: true,
   error: null as any,
   sets: [] as { name: string; id: string; content: string[] }[],
@@ -81,7 +80,6 @@ export const CalendarContext = createContext({
     startDate: string;
     endDate: string;
     display: 'week' | 'month' | 'day' | 'list';
-    customer: string | null;
   }) => {
     /** empty **/
   },
@@ -187,10 +185,6 @@ export interface Integrations {
   time: {
     time: number;
   }[];
-  customer?: {
-    name?: string;
-    id?: string;
-  };
 }
 
 // Helper function to get start and end dates based on display type
@@ -268,7 +262,6 @@ export const CalendarWeekProvider: FC<{
   // Initialize with current date range based on URL params or defaults
   const initStartDate = searchParams.get('startDate');
   const initEndDate = searchParams.get('endDate');
-  const initCustomer = searchParams.get('customer');
 
   const initialRange =
     initStartDate && initEndDate
@@ -278,7 +271,6 @@ export const CalendarWeekProvider: FC<{
   const [filters, setFilters] = useState({
     startDate: initialRange.startDate,
     endDate: initialRange.endDate,
-    customer: initCustomer || null,
     display,
   });
 
@@ -287,7 +279,6 @@ export const CalendarWeekProvider: FC<{
       display: filters.display,
       startDate: filters.startDate,
       endDate: filters.endDate,
-      customer: filters?.customer?.toString() || '',
     }).toString();
   }, [filters]);
 
@@ -295,7 +286,6 @@ export const CalendarWeekProvider: FC<{
   const loadData = useCallback(async () => {
     const modifiedParams = new URLSearchParams({
       display: filters.display,
-      customer: filters?.customer?.toString() || '',
       startDate: newDayjs(filters.startDate).startOf('day').utc().format(),
       endDate: newDayjs(filters.endDate).endOf('day').utc().format(),
     }).toString();
@@ -393,7 +383,6 @@ export const CalendarWeekProvider: FC<{
       startDate: string;
       endDate: string;
       display: 'week' | 'month' | 'day' | 'list';
-      customer: string | null;
     }) => {
       setDisplaySaved(newFilters.display);
       setFilters(newFilters);
@@ -404,7 +393,6 @@ export const CalendarWeekProvider: FC<{
         `startDate=${newFilters.startDate}`,
         `endDate=${newFilters.endDate}`,
         `display=${newFilters.display}`,
-        newFilters.customer ? `customer=${newFilters.customer}` : ``,
       ].filter((f) => f);
       window.history.replaceState(null, '', `/posts?${path.join('&')}`);
     },
@@ -423,11 +411,10 @@ export const CalendarWeekProvider: FC<{
         startDate,
         endDate,
         display,
-        customer: filters.customer,
       });
       setCustomRange(true);
     },
-    [setFiltersWrapper, filters.display, filters.customer]
+    [setFiltersWrapper, filters.display]
   );
 
   const posts = useMemo(() => calendarData?.posts || [], [calendarData?.posts]);
@@ -621,7 +608,6 @@ export const CalendarWeekProvider: FC<{
     if (mediaTypeFilter !== 'all') n++;
     if (recurringOnly) n++;
     if (unreadOnly) n++;
-    if (filters.customer) n++;
     if (
       (['views', 'likes', 'comments'] as MetricKey[]).some(
         (k) => typeof metricFilter[k].value === 'number'
@@ -643,7 +629,6 @@ export const CalendarWeekProvider: FC<{
     mediaTypeFilter,
     recurringOnly,
     unreadOnly,
-    filters.customer,
     metricFilter,
   ]);
 

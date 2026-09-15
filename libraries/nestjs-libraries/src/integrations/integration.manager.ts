@@ -495,7 +495,6 @@ export class IntegrationManager {
               time: JSON.parse(p.postingTimes),
               changeProfilePicture: !!findIntegration?.changeProfilePicture,
               changeNickName: !!findIntegration?.changeNickname,
-              customer: p.customer,
               additionalSettings: p.additionalSettings || '[]',
             };
           })

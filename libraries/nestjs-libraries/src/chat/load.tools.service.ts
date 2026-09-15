@@ -208,9 +208,6 @@ ${pendingLine}`;
       if (ctx.calendarWeek) parts.push(`calendarWeek: ${ctx.calendarWeek}`);
       if (ctx.visiblePostIds?.length) parts.push(`visiblePostIds: ${ctx.visiblePostIds.join(', ')}`);
       if (ctx.selectedCampaignId) parts.push(`selectedCampaignId: ${ctx.selectedCampaignId}`);
-      if (ctx.currentCustomerId || ctx.currentGroupId) {
-        parts.push(`customer: ${ctx.currentCustomerId || ctx.currentGroupId}`);
-      }
       if (ctx.currentPostId) parts.push(`currentPostId: ${ctx.currentPostId}`);
       if (parts.length === 0) return '';
       // Word by staleness (2.3): the producers never co-mount with the agent

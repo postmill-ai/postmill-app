@@ -24,9 +24,6 @@ export class GetPostsListDto {
   @Transform(({ value }) => parseInt(value, 10))
   limit?: number = 20;
 
-  @IsOptional()
-  @IsString()
-  customer?: string;
 
   @IsOptional()
   @IsIn(['all', 'scheduled', 'draft', 'published'])

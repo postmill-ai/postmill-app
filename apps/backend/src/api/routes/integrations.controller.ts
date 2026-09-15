@@ -37,8 +37,6 @@ import { UpdateProviderSettingsDto } from '@postmill-ai/nestjs-libraries/dtos/in
 import { ChannelIdBodyDto } from '@postmill-ai/nestjs-libraries/dtos/integrations/channel-id-body.dto';
 import { PlugActivationDto } from '@postmill-ai/nestjs-libraries/dtos/integrations/plug-activation.dto';
 import { TelegramUpdatesQueryDto } from '@postmill-ai/nestjs-libraries/dtos/integrations/telegram-updates-query.dto';
-import { UpdateIntegrationGroupDto } from '@postmill-ai/nestjs-libraries/dtos/integrations/update-integration-group.dto';
-import { UpdateOnCustomerNameDto } from '@postmill-ai/nestjs-libraries/dtos/integrations/update-on-customer-name.dto';
 import { SetNicknameDto } from '@postmill-ai/nestjs-libraries/dtos/integrations/set-nickname.dto';
 import { ParseCuidPipe } from '@postmill-ai/nestjs-libraries/pipes/parse-cuid.pipe';
 import { MoltbookRegisterDto } from '@postmill-ai/nestjs-libraries/dtos/integrations/moltbook-register.dto';
@@ -106,43 +104,6 @@ export class IntegrationsController {
   @Get('/:identifier/internal-plugs')
   async getInternalPlugs(@Param('identifier') identifier: string) {
     return this._integrationManager.getInternalPlugs(identifier);
-  }
-
-  @Get('/customers')
-  getCustomers(@GetOrgFromRequest() org: Organization) {
-    return this._integrationService.customers(org.id);
-  }
-
-  @Put('/:id/group')
-  @RequirePermission('channels', 'update')
-  async updateIntegrationGroup(
-    @GetOrgFromRequest() org: Organization,
-    @Param('id', ParseCuidPipe) id: string,
-    @Body() body: UpdateIntegrationGroupDto
-  ) {
-    const result = await this._integrationService.updateIntegrationGroup(
-      org.id,
-      id,
-      body.group
-    );
-    await this._integrationManager.invalidateIntegrationListCache(org.id);
-    return result;
-  }
-
-  @Put('/:id/customer-name')
-  @RequirePermission('channels', 'update')
-  async updateOnCustomerName(
-    @GetOrgFromRequest() org: Organization,
-    @Param('id', ParseCuidPipe) id: string,
-    @Body() body: UpdateOnCustomerNameDto
-  ) {
-    const result = await this._integrationService.updateOnCustomerName(
-      org.id,
-      id,
-      body.name
-    );
-    await this._integrationManager.invalidateIntegrationListCache(org.id);
-    return result;
   }
 
   @Get('/list')

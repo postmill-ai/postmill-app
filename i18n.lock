@@ -168,8 +168,6 @@ checksums:
     short_link: 05a77a537c93d0913ab9eaa43072e9e4
     original_link: e918facde308e65155580d076b5eaa5b
     clicks: f9e154545f87d8ede27b529e5fdf2015
-    selected_customer: 4bf461c3070b7ca8399388ac7ae08b8d
-    customer: 1d87b244054a1a29cb1727c8b1684167
     repeat_post_every: 0969cb627a580ec4afc19efd11958f4e
     use_this_media: 6aeb1e22711eafe7f3dca7e496b52931
     create_new_post: 06549e1cb8bbba2645f5ded68259684d
@@ -179,7 +177,6 @@ checksums:
     day: 47648cd60fc313bc3f05b70357a1d675
     week: 436fdd694160827dd6ea4644cdd0a8f8
     month: ae7bef950efc406ff0980affabc1a64c
-    remove_from_customer: f572c0e84941d0d2d5ec1f3a15fdcb66
     show_more: 1fe3f6f31d04d6dd29c0b1b27b991b52
     show_less: 890358798c3b1a1a2f4b2bfff366405d
     upload: 4a6c84aa16db0f4e5697f49b45257bc7
@@ -241,7 +238,6 @@ checksums:
     update_credentials: 2e508a1fe962cbf32cb4d6fc2d8a5c99
     additional_settings: 20936205a75745fba2c4047375a04db3
     change_bot: aa9e45a6ecd2f36c79609d73129ef37a
-    move_add_to_group: 9f340142483db64cbe373e2efe69607e
     edit_time_slots: a271d356d7c65f47987e297f0828b0b2
     enable_channel: 029be8cc9f406829d05d1cc44ded5162
     disable_channel: a2d862c419b9fff01f72481499431341
@@ -630,20 +626,16 @@ checksums:
     time_table_slots: ba2e44486ebe947322acc78d3bc05a3a
     channel_id_copied: 58bf6a74adf570a5daf233ce496149de
     settings_updated: 260e10a61200b581616d766f3af5ae52
-    customer_updated: ab17bcd115b14b72bb2e89f2b48883a4
     custom_url: f1e4e1c6a386d212abe94b937cf5e812
     picture: 14818ef364a0ecc8b738bdb23c46b3c3
     upgrade_required: 460dbea5061a1aba2080ffdecdf9544c
     move_to_billing: e8fe4bf664cfb029e3e5ccb14cd4f86f
     payment_required: 3acec87fe94c0bdb92b35e3081f45061
     no_content: 1d2af798c895527a7f8a4c72c2571fdd
-    select_customer_tooltip: 1cd2f6f08560b7ebcc9285e845557673
-    customers: c31a0dfd0d92496ba6f5673781db24ef
     hour: ec3113f22fc51d01f0c615c5496f8f87
     minutes: c5442938e948e2e3937fb812cf68869c
     updated: 8aa8ff2dc2977ca4b269e80a513100b4
     change_bot_picture_title: 6ff9b68f0d29f9477a300b9042be0d4d
-    select_customer_label: 1cd2f6f08560b7ebcc9285e845557673
     start_typing: b350b435f6d1cacadcaee99c862f2a19
     choose_set_or_continue: 06611847f691e5374844289a4ed61059
     continue_without_set: 96b7adb0defee5f96a9f8cd89150710c

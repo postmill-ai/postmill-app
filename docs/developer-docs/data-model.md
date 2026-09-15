@@ -61,11 +61,10 @@
 
 | Model | Purpose | Key Relationships |
 |---|---|---|
-| `Integration` | Connected social/chat channel with encrypted OAuth tokens | FK → `Organization`, `Customer`; has many `Post`, `Plugs`, `AnalyticsSnapshot` |
+| `Integration` | Connected social/chat channel with encrypted OAuth tokens | FK → `Organization`; has many `Post`, `Plugs`, `AnalyticsSnapshot` |
 | `Plugs` | Installed plug functions (analytics, comments, etc.) per integration | FK → `Organization`, `Integration` |
 | `Webhooks` | Per-org webhook URLs (outbound notifications) | FK → `Organization`; implicit many-to-many with `Integration` |
 | `AutoPost` | RSS/feed-based auto-posting configuration | FK → `Organization` |
-| `Customer` | Billing customer name per org | FK → `Organization` |
 
 ---
 
@@ -169,7 +168,6 @@ A connected `Integration` carries a nullable `providerConfigId` FK (`onDelete: S
 |---|---|---|
 | `Subscription` | Billing subscription — tier, period, channel count, lifetime flag, add-on storage/video exports | FK → `Organization` (unique) |
 | `StripeEvent` | Deduplication ledger for Stripe webhooks | Unique on `id` (the Stripe event id) |
-| `Customer` | Billing customer name per org | FK → `Organization` |
 | `Credits` | AI credit balance per org (type: `ai_images`/`ai_videos`) | FK → `Organization` |
 | `UsedCodes` | Used promo/referral codes per org | FK → `Organization` |
 

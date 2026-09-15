@@ -159,9 +159,6 @@ vi.mock('@postmill-ai/frontend/components/launches/repeat.component', () => ({
 vi.mock('@postmill-ai/frontend/components/launches/tags.component', () => ({
   TagsComponent: () => null,
 }));
-vi.mock('@postmill-ai/frontend/components/launches/select.customer', () => ({
-  SelectCustomer: () => null,
-}));
 vi.mock('@postmill-ai/frontend/components/launches/brand-picker', () => ({
   BrandPicker: () => null,
 }));
@@ -276,7 +273,7 @@ describe('ManageModal', () => {
         { integration: { id: 'int1' }, settings: {}, ref: { current: {} } },
       ],
       integrations: [
-        { id: 'int1', identifier: 'x-provider', name: 'X', customer: null },
+        { id: 'int1', identifier: 'x-provider', name: 'X' },
       ],
       setSelectedIntegrations: vi.fn(),
       locked: false,

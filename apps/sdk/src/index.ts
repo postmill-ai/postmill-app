@@ -109,12 +109,8 @@ export default class Postmill {
     return this._request('GET', '/is-connected');
   }
 
-  async groups(): Promise<unknown> {
-    return this._request('GET', '/groups');
-  }
-
-  async integrations(group?: string): Promise<unknown> {
-    return this._request('GET', '/integrations', group ? { query: { group } } : undefined);
+  async integrations(): Promise<unknown> {
+    return this._request('GET', '/integrations');
   }
 
   async connectChannel(

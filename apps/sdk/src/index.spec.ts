@@ -92,14 +92,14 @@ describe('Postmill SDK HTTP calls', () => {
     });
   });
 
-  it('extends integrations with an optional group filter', async () => {
+  it('lists integrations without any query params', async () => {
     mockJsonResponse([]);
 
     const client = new Postmill('pm_live_123');
-    await client.integrations('group-1');
+    await client.integrations();
 
     const [url] = fetchMock.mock.calls[0];
-    expect(url).toBe('https://api.postmill.ai/public/v1/integrations?group=group-1');
+    expect(url).toBe('https://api.postmill.ai/public/v1/integrations');
   });
 
   it('connects a channel with refresh and version query params', async () => {

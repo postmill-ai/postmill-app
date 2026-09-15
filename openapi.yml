@@ -988,59 +988,6 @@ paths:
           description: ""
       tags:
         - Integrations
-  /integrations/customers:
-    get:
-      operationId: IntegrationsController_getCustomers
-      parameters: []
-      responses:
-        "200":
-          description: ""
-          content:
-            application/json:
-              schema:
-                type: object
-      tags:
-        - Integrations
-  /integrations/{id}/group:
-    put:
-      operationId: IntegrationsController_updateIntegrationGroup
-      parameters:
-        - name: id
-          required: true
-          in: path
-          schema:
-            type: string
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: "#/components/schemas/UpdateIntegrationGroupDto"
-      responses:
-        "200":
-          description: ""
-      tags:
-        - Integrations
-  /integrations/{id}/customer-name:
-    put:
-      operationId: IntegrationsController_updateOnCustomerName
-      parameters:
-        - name: id
-          required: true
-          in: path
-          schema:
-            type: string
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: "#/components/schemas/UpdateOnCustomerNameDto"
-      responses:
-        "200":
-          description: ""
-      tags:
-        - Integrations
   /integrations/list:
     get:
       operationId: IntegrationsController_getIntegrationList
@@ -2507,12 +2454,6 @@ paths:
           schema:
             example: 2026-01-31T23:59:59.000Z
             type: string
-        - name: customer
-          required: false
-          in: query
-          description: Filter to a single customer/group id.
-          schema:
-            type: string
         - name: limit
           required: false
           in: query
@@ -2605,11 +2546,6 @@ paths:
             maximum: 100
             default: 20
             type: number
-        - name: customer
-          required: false
-          in: query
-          schema:
-            type: string
         - name: state
           required: false
           in: query
@@ -7961,12 +7897,6 @@ paths:
           schema:
             example: 2026-01-31T23:59:59.000Z
             type: string
-        - name: customer
-          required: false
-          in: query
-          description: Filter to a single customer/group id.
-          schema:
-            type: string
         - name: limit
           required: false
           in: query
@@ -8071,27 +8001,10 @@ paths:
         - api-key: []
       tags:
         - Public API
-  /public/v1/groups:
-    get:
-      operationId: PublicIntegrationsController_listGroups
-      parameters: []
-      responses:
-        "200":
-          description: ""
-      security:
-        - bearer: []
-        - api-key: []
-      tags:
-        - Public API
   /public/v1/integrations:
     get:
       operationId: PublicIntegrationsController_listIntegration
-      parameters:
-        - name: group
-          required: false
-          in: query
-          schema:
-            type: string
+      parameters: []
       responses:
         "200":
           description: ""
@@ -9360,20 +9273,6 @@ components:
         locationName:
           type: string
           maxLength: 2048
-    UpdateIntegrationGroupDto:
-      type: object
-      properties:
-        group:
-          type: string
-      required:
-        - group
-    UpdateOnCustomerNameDto:
-      type: object
-      properties:
-        name:
-          type: string
-      required:
-        - name
     UpdateProviderSettingsDto:
       type: object
       properties:
