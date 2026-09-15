@@ -1,5 +1,5 @@
 import { Injectable, Logger } from '@nestjs/common';
-import { createHmac, randomBytes } from 'node:crypto';
+import { createHmac, randomInt } from 'node:crypto';
 import { Provider } from '@prisma/client';
 import { timingSafeStringEqual } from '@postmill-ai/provider-kernel';
 import { PrismaService } from '@postmill-ai/nestjs-libraries/database/prisma/prisma.service';
@@ -292,9 +292,9 @@ export class MetaCallbacksService {
   }
 
   private _confirmationCode(): string {
-    const bytes = randomBytes(12);
+    // randomInt is uniform over the alphabet; a modulo over random bytes is biased.
     let code = '';
-    for (let i = 0; i < 12; i++) code += CONFIRMATION_ALPHABET[bytes[i] % CONFIRMATION_ALPHABET.length];
+    for (let i = 0; i < 12; i++) code += CONFIRMATION_ALPHABET[randomInt(CONFIRMATION_ALPHABET.length)];
     return code;
   }
 
