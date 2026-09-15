@@ -104,6 +104,8 @@ const PUBLIC_CONTROLLERS = new Set<string>([
   'CommsOauthController',
   // Meta deauthorize / data-deletion callbacks: authenticated by signed_request HMAC only.
   'MetaCallbacksController',
+  // Anonymous integrations catalogue read by the marketing site (no org data, no fingerprinting fields).
+  'PublicCatalogController',
   'OAuthController',
   'OAuthAuthorizedController',
 ]);

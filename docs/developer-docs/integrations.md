@@ -121,12 +121,14 @@ The main integration routes live in two controllers:
 
 - **`IntegrationsController`** (`apps/backend/src/api/routes/integrations.controller.ts`) — authenticated org-scoped routes for listing, connecting, disabling, deleting, updating settings, posting times, and invoking provider tools.
 - **`NoAuthIntegrationsController`** (`apps/backend/src/api/routes/no.auth.integrations.controller.ts`) — the public OAuth callback receiver and extension-refresh endpoint.
+- **`PublicCatalogController`** (`apps/backend/src/api/routes/public-catalog.controller.ts`) — the anonymous `GET /public/integrations/list` catalogue of every registered provider (counts, capabilities, icons) that the marketing site reads; see [Public API](./public-api.md#integrations-catalogue).
 
 Key routes:
 
 | Method | Route | Purpose |
 |---|---|---|
 | `GET` | `/integrations/list` | Connected channels for the org |
+| `GET` | `/public/integrations/list` | Anonymous catalogue of all providers (not org-scoped) |
 | `GET` | `/integrations/social/:integration` | Begin OAuth connect |
 | `POST` | `/integrations/social-connect/:integration` | OAuth callback / finish connect |
 | `POST` | `/integrations/provider/:id/connect` | Save selected page/profile for two-step providers |

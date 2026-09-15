@@ -25,6 +25,8 @@ export interface CatalogEntry {
   description: Partial<Record<LanguageCode, string>> | null;
   website: string | null;
   mediaCategories: unknown;
+  /** Metadata kind: direct | hub | action (null when the module ships no metadata). */
+  kind: 'direct' | 'hub' | 'action' | null;
   featured: boolean;
   featuredSortOrder: number | null;
 }
@@ -65,6 +67,7 @@ export class ProviderCatalogService {
         description: m.metadata?.description,
         website: m.metadata?.website,
         mediaCategories: m.metadata?.mediaCategories,
+        kind: m.metadata?.kind ?? null,
         // Platform-curated "featured" flag + order (super-admin managed).
         featured: featured.has(featuredKey),
         featuredSortOrder: featured.get(featuredKey) ?? null,

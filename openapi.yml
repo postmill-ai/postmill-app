@@ -712,6 +712,24 @@ paths:
                 type: object
       tags:
         - Meta Callbacks
+  /public/integrations/list:
+    get:
+      operationId: PublicCatalogController_list
+      parameters:
+        - name: domain
+          required: false
+          in: query
+          schema:
+            type: string
+      responses:
+        "200":
+          description: ""
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PublicCatalogDto"
+      tags:
+        - Public
   /settings/comms/oauth/slack/callback:
     get:
       operationId: CommsOauthController_slackCallback
@@ -9261,6 +9279,151 @@ components:
           maxLength: 8192
       required:
         - signed_request
+    PublicCatalogProviderDto:
+      type: object
+      properties:
+        description:
+          type: object
+          description: Localised descriptions keyed by language code (today `en`).
+          additionalProperties:
+            type: string
+        id:
+          type: string
+          description: Kernel providerId — stable identifier (storage ids are lower_snake, e.g. `backblaze_b2`).
+        domain:
+          type: string
+        name:
+          type: string
+          description: Display name with whitespace collapsed (`Instagram (Standalone)`).
+        website:
+          type: string
+        icon:
+          type: string
+          description: Absolute URL of the provider icon (PNG for channels/comms, SVG otherwise).
+        capabilities:
+          description: Capability keys the provider supports (domain vocabulary, `true` flags only).
+          type: array
+          items:
+            type: string
+        maxMedia:
+          type: number
+          description: "Channels only: maximum media attachments per post."
+        beta:
+          type: boolean
+          description: Built without live-key verification — shows a Beta badge in the app.
+        featured:
+          type: boolean
+          description: Platform-curated "featured" flag (super-admin managed).
+        featuredSortOrder:
+          type: number
+        kind:
+          type: string
+          description: "AI/media only: `direct` (own models) | `hub` (aggregator) | `action` (no model list)."
+          enum:
+            - direct
+            - hub
+            - action
+        storageKind:
+          type: string
+          description: Storage only.
+          enum:
+            - built-in
+            - proprietary
+            - s3-compatible
+        mediaCategories:
+          description: "Media only: generation categories the studio serves."
+          type: array
+          items:
+            type: string
+        editor:
+          type: string
+          description: Channels only.
+          enum:
+            - html
+            - none
+            - normal
+            - markdown
+        authType:
+          type: string
+          enum:
+            - token
+            - oauth1
+            - oauth2
+            - direct
+        selfHosted:
+          type: boolean
+          description: "Channels only: connects to a self-hosted instance URL."
+        web3:
+          type: boolean
+        chromeExtension:
+          type: boolean
+        comments:
+          type: object
+          properties:
+            read:
+              type: boolean
+            reply:
+              type: boolean
+            like:
+              type: boolean
+          required:
+            - read
+            - reply
+            - like
+        mentions:
+          type: boolean
+          description: "Channels only: @-mention lookup in the composer."
+        autoPlugs:
+          type: boolean
+          description: "Channels only: ships auto-plug automations."
+      required:
+        - id
+        - domain
+        - name
+        - icon
+        - capabilities
+        - beta
+        - featured
+    PublicCatalogDomainDto:
+      type: object
+      properties:
+        id:
+          type: string
+        label:
+          type: string
+          description: English label for the bucket (`Channels`, `LLM providers`, …).
+        count:
+          type: number
+        capabilityKeys:
+          description: Union of capability keys across the domain, in first-seen order (matrix legend).
+          type: array
+          items:
+            type: string
+        providers:
+          type: array
+          items:
+            $ref: "#/components/schemas/PublicCatalogProviderDto"
+      required:
+        - id
+        - label
+        - count
+        - capabilityKeys
+        - providers
+    PublicCatalogDto:
+      type: object
+      properties:
+        generatedAt:
+          type: string
+        total:
+          type: number
+        domains:
+          type: array
+          items:
+            $ref: "#/components/schemas/PublicCatalogDomainDto"
+      required:
+        - generatedAt
+        - total
+        - domains
     MediaDto:
       type: object
       properties:

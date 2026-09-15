@@ -99,6 +99,7 @@ import { AiDesignerGateway } from './gateways/ai-designer.gateway';
 import { CommsSettingsController } from './routes/comms-settings.controller';
 import { CommsWebhooksController } from './routes/comms-webhooks.controller';
 import { MetaCallbacksController } from './routes/meta-callbacks.controller';
+import { PublicCatalogController } from './routes/public-catalog.controller';
 import { CommsOauthController } from './routes/comms-oauth.controller';
 
 // Exported so tests can prove a controller is registered for
@@ -177,6 +178,7 @@ export const authenticatedController = [
     MediaJobsWebhookController,
     CommsWebhooksController,
     MetaCallbacksController,
+    PublicCatalogController,
     CommsOauthController,
     DesignRenderFrameController,
     ...authenticatedController,
