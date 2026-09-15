@@ -24,7 +24,6 @@ model Organization {
   autoPost            AutoPost[]
   Comments            Comments[]
   credits             Credits[]
-  customers           Customer[]
   errors              Errors[]
   Integration         Integration[]
   files               File[]
@@ -259,19 +258,6 @@ model StripeEvent {
   processedAt DateTime @default(now())
 }
 
-model Customer {
-  id           String        @id @default(uuid())
-  name         String
-  orgId        String
-  createdAt    DateTime      @default(now())
-  updatedAt    DateTime      @updatedAt
-  deletedAt    DateTime?
-  organization Organization  @relation(fields: [orgId], references: [id], onDelete: Cascade)
-  integrations Integration[]
-
-  @@unique([orgId, name, deletedAt])
-}
-
 model Integration {
   id                    String                 @id @default(cuid())
   internalId            String
@@ -292,12 +278,10 @@ model Integration {
   refreshNeeded         Boolean                @default(false)
   postingTimes          String                 @default("[{\"time\":120}, {\"time\":400}, {\"time\":700}]")
   customInstanceDetails String?
-  customerId            String?
   rootInternalId        String?
   additionalSettings    String?                @default("[]")
   providerConfigId      String?
   providerVersion       String                 @default("v1")
-  customer              Customer?              @relation(fields: [customerId], references: [id])
   organization          Organization           @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   providerConfig        OrgProviderConfiguration? @relation(fields: [providerConfigId], references: [id], onDelete: SetNull)
   webhooks              Webhooks[]
@@ -316,7 +300,6 @@ model Integration {
   @@index([updatedAt])
   @@index([createdAt])
   @@index([deletedAt])
-  @@index([customerId])
   @@index([inBetweenSteps])
   @@index([refreshNeeded])
   @@index([disabled])

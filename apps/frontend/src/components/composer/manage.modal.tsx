@@ -30,7 +30,6 @@ import { hasLinks } from '@postmill-ai/helpers/utils/strip.links';
 import { makeId } from '@postmill-ai/nestjs-libraries/services/make.is';
 import { useModals } from '@postmill-ai/frontend/components/layout/new-modal';
 import { capitalize } from 'lodash';
-import { SelectCustomer } from '@postmill-ai/frontend/components/launches/select.customer';
 import { CopilotChat } from '@copilotkit/react-ui';
 import { createPortal } from 'react-dom';
 import { useAiActive } from '@postmill-ai/frontend/components/layout/use-ai-active';
@@ -236,48 +235,6 @@ export const ManageModal: FC<AddEditModalProps> = (props) => {
       </div>
     );
   }, [current, integrations, t]);
-
-  const changeCustomer = useCallback(
-    (customer: string) => {
-      const apply = () => {
-        const neededIntegrations = integrations.filter(
-          (p) => p?.customer?.id === customer
-        );
-        setSelectedIntegrations(
-          neededIntegrations.map((p) => ({
-            settings: {},
-            selectedIntegrations: p,
-          }))
-        );
-      };
-
-      // Switching customer wipes the current selection and any per-channel work.
-      // Only warn when a selected channel actually carries customizations — a
-      // per-channel content override (`internal` entry) or non-empty settings —
-      // otherwise switch immediately without a prompt.
-      const hasCustomizations = selectedIntegrations.some(
-        (p) =>
-          internal.some((i) => i.integration.id === p.integration.id) ||
-          (p.settings && Object.keys(p.settings).length > 0)
-      );
-
-      if (!hasCustomizations) {
-        apply();
-        return;
-      }
-
-      deleteDialog(
-        t(
-          'switch_customer_lose_customizations',
-          'Switching customer will clear your selected channels and any per-channel customizations. Continue?'
-        ),
-        t('yes_switch', 'Yes, switch')
-      ).then((confirmed) => {
-        if (confirmed) apply();
-      });
-    },
-    [integrations, selectedIntegrations, internal, setSelectedIntegrations, t]
-  );
 
   // "Started composing" = any editor has real text or attached media. Drives both nav guards
   // below so we only warn when there's actual unsaved work — not on an empty composer.
@@ -932,14 +889,6 @@ export const ManageModal: FC<AddEditModalProps> = (props) => {
                         {t('assistant', 'Assistant')}
                       </span>
                     </button>
-                    <div>
-                      {!dummy && (
-                        <SelectCustomer
-                          onChange={changeCustomer}
-                          integrations={integrations}
-                        />
-                      )}
-                    </div>
                     </div>
                   </div>
                   <div className="flex flex-1 gap-[6px] flex-col">

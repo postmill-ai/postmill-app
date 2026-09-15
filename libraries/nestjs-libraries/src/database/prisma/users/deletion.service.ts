@@ -165,7 +165,6 @@ export class DeletionService {
     await tx.shortLink.deleteMany({ where: org });
     await tx.post.deleteMany({ where: { organizationId: orgId } });
     await tx.integration.deleteMany({ where: org });
-    await tx.customer.deleteMany({ where: { orgId } });
 
     // --- Watchlist
     await tx.watchedAccountMetric.deleteMany({

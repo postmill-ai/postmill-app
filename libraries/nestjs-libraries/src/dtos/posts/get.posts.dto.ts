@@ -74,12 +74,6 @@ export class GetPostsDto {
   @IsWithinWindowOf('startDate', MAX_WINDOW_DAYS)
   endDate: string;
 
-  @ApiPropertyOptional({
-    description: 'Filter to a single customer/group id.',
-  })
-  @IsOptional()
-  @IsString()
-  customer: string;
 
   // ── Public-API pagination (J2) ─────────────────────────────────────────────
   // The public `/posts` route otherwise returns every post in the window. These

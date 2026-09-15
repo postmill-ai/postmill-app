@@ -46,7 +46,6 @@ describe('agent tool characterization', () => {
           providerIdentifier: 'x',
           profile: 'test',
           type: 'social',
-          customer: null,
         },
       ]),
     };

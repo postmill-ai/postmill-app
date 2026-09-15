@@ -219,10 +219,6 @@ export class PostsRepository {
         integration: {
           deletedAt: null,
           organizationId: orgId,
-          // 4.3a: merge the customer filter into the existing integration relation
-          // filter instead of replacing the whole object (which dropped deletedAt/org
-          // scoping on the relation).
-          ...(query.customer ? { customerId: query.customer } : {}),
         },
         deletedAt: null,
         parentPostId: null,
@@ -422,11 +418,6 @@ export class PostsRepository {
       integration: {
         deletedAt: null as any,
         organizationId: orgId,
-        ...(query.customer
-          ? {
-              customerId: query.customer,
-            }
-          : {}),
       },
     };
 

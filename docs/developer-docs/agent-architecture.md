@@ -154,7 +154,6 @@ Supported fields:
 | `calendarWeek` | ISO week or selected range |
 | `visiblePostIds` | Post ids visible in the current calendar/list |
 | `selectedCampaignId` | Selected campaign id |
-| `currentCustomerId` / `currentGroupId` | Selected customer/group id |
 | `currentPostId` | Post id when a post detail modal is open |
 
 ---

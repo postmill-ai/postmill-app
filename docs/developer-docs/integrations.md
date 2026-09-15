@@ -138,7 +138,7 @@ Tool dispatch is whitelisted: only methods decorated with `@Tool` plus the speci
 
 ## Caching
 
-`IntegrationManager.getIntegrationListResponse` caches the rendered channel list in Redis (`integrations:list:{orgId}`) for 60 seconds. Mutations (connect, disable, delete, settings changes, nickname, group, customer name) invalidate the cache.
+`IntegrationManager.getIntegrationListResponse` caches the rendered channel list in Redis (`integrations:list:{orgId}`) for 60 seconds. Mutations (connect, disable, delete, settings changes, nickname) invalidate the cache.
 
 ## Related docs
 

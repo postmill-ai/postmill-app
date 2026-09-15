@@ -71,7 +71,6 @@ describe('IntegrationManager — getIntegrationListResponse cache', () => {
             postingTimes: '[]',
             inBetweenSteps: false,
             refreshNeeded: false,
-            customer: null,
             additionalSettings: null,
           },
         ]),

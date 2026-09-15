@@ -42,9 +42,6 @@ describe('IntegrationRepository', () => {
     const plugsRepo = new (PrismaRepository as any)();
     plugsRepo.model = { plugs: mockPlugs };
 
-    const customersRepo = new (PrismaRepository as any)();
-    customersRepo.model = { customer: {} };
-
     const mentionsRepo = new (PrismaRepository as any)();
     mentionsRepo.model = { mentions: {} };
 
@@ -52,7 +49,6 @@ describe('IntegrationRepository', () => {
       integrationRepo,
       postsRepo,
       plugsRepo,
-      customersRepo,
       mentionsRepo
     );
   });

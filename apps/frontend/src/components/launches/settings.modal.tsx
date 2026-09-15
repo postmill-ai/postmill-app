@@ -30,12 +30,7 @@ export const Element: FC<{
   );
 };
 export const SettingsModal: FC<{
-  integration: Integration & {
-    customer?: {
-      id: string;
-      name: string;
-    };
-  };
+  integration: Integration;
   onClose: () => void;
 }> = (props) => {
   const fetch = useFetch();

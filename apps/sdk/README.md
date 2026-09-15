@@ -30,12 +30,11 @@ The second constructor argument is optional and defaults to `https://api.postmil
 - `postMissingContent(id: string)` — Get missing content for a post
 
 ### Channels / integrations
-- `integrations(group?: string)` — Get a list of connected channels, optionally filtered by group
+- `integrations()` — Get a list of connected channels
 - `connectChannel(integration: string, opts?: { refresh?: string; version?: string })` — Generate an OAuth URL to connect a channel. **An explicit provider version is required**: pass the integration as `"providerId@version"` (e.g. `"x@v1"`) or set `opts.version`; the SDK throws before any request otherwise.
 - `deleteChannel(id: string)` — Delete a connected channel
 - `integrationSettings(id: string)` — Get settings and rules for a channel
 - `isConnected()` — Check whether the organization has any connected channels
-- `groups()` — List integration groups
 
 ### Media
 - `upload(file: BlobPart | Buffer, extension: string)` — Upload a file to Postmill

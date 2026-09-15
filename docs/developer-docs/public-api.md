@@ -125,7 +125,6 @@ Base: `/public/v1`
 | GET | `/public/v1/integration-settings/:id` | Get integration rules, max length, settings schema, tools |
 | GET | `/public/v1/social/:integration` | Get OAuth authorization URL for a provider |
 | POST | `/public/v1/integration-trigger/:id` | Trigger a dynamic provider tool |
-| GET | `/public/v1/groups` | List customer groups |
 | GET | `/public/v1/is-connected` | Check whether the org has any active integration |
 
 `GET /public/v1/social/:integration` requires an explicit provider version:
@@ -196,9 +195,6 @@ These routes sit under `/integrations` and are authenticated via cookie session.
 |--------|------|------------|---------|
 | POST | `/integrations/provider/:id/connect` | `channels:create` | Save a provider page after two-step auth |
 | GET | `/integrations/:identifier/internal-plugs` | — | Get internal plug definitions for a provider |
-| GET | `/integrations/customers` | — | List customer groups |
-| PUT | `/integrations/:id/group` | `channels:update` | Update integration group assignment |
-| PUT | `/integrations/:id/customer-name` | `channels:update` | Update integration customer name |
 | GET | `/integrations/list` | — | Full integration list with capabilities |
 | POST | `/integrations/:id/settings` | `channels:update` | Update provider additional settings |
 | POST | `/integrations/:id/nickname` | `channels:update` | Set nickname and/or avatar |

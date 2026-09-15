@@ -21,10 +21,6 @@ export interface AgentUiContextValue {
   visiblePostIds?: string[];
   /** Selected campaign id, if any. */
   selectedCampaignId?: string;
-  /** Selected customer/group id, if any. */
-  currentCustomerId?: string;
-  /** Alias for currentCustomerId kept for compatibility with legacy naming. */
-  currentGroupId?: string;
   /** Post id when a post detail modal is open. */
   currentPostId?: string;
   /**

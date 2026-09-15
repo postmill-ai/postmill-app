@@ -301,39 +301,19 @@ export class PublicIntegrationsController {
     return { connected: true };
   }
 
-  @Get('/groups')
-  async listGroups(@GetOrgFromRequest() org: Organization) {
-    Sentry.metrics.count('public_api-request', 1);
-    return (await this._integrationService.customers(org.id)).map(
-      (customer) => ({
-        id: customer.id,
-        name: customer.name,
-      })
-    );
-  }
-
   @Get('/integrations')
-  async listIntegration(
-    @GetOrgFromRequest() org: Organization,
-    @Query('group') group?: string
-  ) {
+  async listIntegration(@GetOrgFromRequest() org: Organization) {
     Sentry.metrics.count('public_api-request', 1);
-    return (await this._integrationService.getIntegrationsList(org.id))
-      .filter((integration) => !group || integration.customer?.id === group)
-      .map((integration) => ({
+    return (await this._integrationService.getIntegrationsList(org.id)).map(
+      (integration) => ({
         id: integration.id,
         name: integration.name,
         identifier: integration.providerIdentifier,
         picture: integration.picture,
         disabled: integration.disabled,
         profile: integration.profile,
-        customer: integration.customer
-          ? {
-              id: integration.customer.id,
-              name: integration.customer.name,
-            }
-          : undefined,
-      }));
+      })
+    );
   }
 
   @Get('/social/:integration')

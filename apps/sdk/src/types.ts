@@ -26,7 +26,6 @@ export interface CreatePostDto {
 export interface GetPostsDto {
   startDate: string;
   endDate: string;
-  customer?: string;
   limit?: number;
   cursor?: number;
   display?: string;
