@@ -1,4 +1,8 @@
 import { Injectable } from '@nestjs/common';
+import {
+  specialistCommsRules,
+  specialistPreamble,
+} from '@postmill-ai/nestjs-libraries/chat/agents/comms-surface';
 import { Agent } from '@mastra/core/agent';
 import { AIModelProvider } from '@postmill-ai/nestjs-libraries/ai/ai-model.provider';
 import { resolveOrgIdFromModelContext } from '@postmill-ai/nestjs-libraries/chat/agents/resolve-org-context';
@@ -26,8 +30,7 @@ export class MediaAgentBuilder {
       id: 'media',
       name: 'media',
       description: 'Specialist agent for media generation, stock search, and the file library.',
-      instructions: `
-You are the media specialist for Postmill.
+      instructions: ({ requestContext }: { requestContext?: any }) => `${specialistPreamble()}You are the media specialist for Postmill.
 
 Your job:
 - Generate images and videos for posts (generateImageTool / generateVideoTool for the fast path; mediaStudioGenerate for provider-specific work).
@@ -44,7 +47,7 @@ Rules:
 - For edits to an existing asset (image-to-image), mediaInputs values must be file ids — use filesSearch to find the asset's id; never pass a raw URL.
 - Return job ids and clear next steps after starting a generation.
 - Do not schedule posts; hand off to the ops specialist for publishing.
-`,
+${specialistCommsRules(requestContext)}`,
       model: (context: any) =>
         this._aiModelProvider.languageModel(
           'utility',

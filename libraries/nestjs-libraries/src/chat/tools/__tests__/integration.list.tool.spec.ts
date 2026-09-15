@@ -7,7 +7,7 @@ const org = makeOrganization();
 const user = makeUser();
 
 describe('IntegrationListTool (9.3)', () => {
-  it('emits customer/type/display/disabled and they survive the outputSchema', async () => {
+  it('emits type/display/disabled and they survive the outputSchema', async () => {
     const integrationService = {
       getIntegrationsList: vi.fn().mockResolvedValue([
         {
@@ -18,7 +18,6 @@ describe('IntegrationListTool (9.3)', () => {
           providerIdentifier: 'x',
           profile: 'test-profile',
           type: 'social',
-          customer: { id: 'cust-1', name: 'Acme' },
         },
       ]),
     };
@@ -36,50 +35,43 @@ describe('IntegrationListTool (9.3)', () => {
       type: 'social',
       display: 'test-profile',
       disabled: false,
-      customer: { id: 'cust-1', name: 'Acme' },
+      platform: 'x',
     });
+    expect(result.output[0]).not.toHaveProperty('customer');
 
     // These fields must be DECLARED on the outputSchema, else validateToolOutput
-    // strips them (the group `.filter` relies on `customer`).
+    // strips them.
     const outputSchema = (tool.run() as any).outputSchema;
     expect(outputSchema.safeParse(result).success).toBe(true);
   });
 
-  it('filters by group id via the customer relation', async () => {
+  it('lists every channel of the org (channels are org-scoped; no group filter)', async () => {
     const integrationService = {
       getIntegrationsList: vi.fn().mockResolvedValue([
-        {
-          name: 'A',
-          id: 'int-a',
-          disabled: false,
-          picture: '',
-          providerIdentifier: 'x',
-          profile: '',
-          type: 'social',
-          customer: { id: 'cust-1', name: 'Acme' },
-        },
-        {
-          name: 'B',
-          id: 'int-b',
-          disabled: false,
-          picture: '',
-          providerIdentifier: 'x',
-          profile: '',
-          type: 'social',
-          customer: { id: 'cust-2', name: 'Other' },
-        },
+        { name: 'A', id: 'int-a', disabled: false, picture: '', providerIdentifier: 'x', profile: '', type: 'social' },
+        { name: 'B', id: 'int-b', disabled: true, picture: '', providerIdentifier: 'linkedin', profile: '', type: 'social' },
       ]),
     };
     const tool = new IntegrationListTool(integrationService as any);
 
     const result = await executeTool(tool, {
-      inputData: { group: 'cust-1' },
+      inputData: {},
       organization: org,
       user,
       access: { mode: 'user' },
     });
 
-    expect(result.output).toHaveLength(1);
-    expect(result.output[0].id).toBe('int-a');
+    expect(result.output.map((o: any) => o.id)).toEqual(['int-a', 'int-b']);
+    expect(result.count).toBe(2);
+    expect(integrationService.getIntegrationsList).toHaveBeenCalledWith(org.id);
+  });
+
+  it('describes itself in product vocabulary so "how many channels" routes here', () => {
+    const description = (tool().run() as any).description as string;
+    expect(description).toMatch(/channels/i);
+    expect(description).toMatch(/how many channels/i);
+    expect(description).not.toMatch(/customer|group/i);
   });
 });
+
+const tool = () => new IntegrationListTool({ getIntegrationsList: vi.fn() } as any);

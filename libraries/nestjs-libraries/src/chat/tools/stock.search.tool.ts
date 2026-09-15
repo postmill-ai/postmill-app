@@ -16,7 +16,7 @@ export class StockSearchTool implements AgentToolInterface {
   run() {
     return createTool({
       id: 'stockSearch',
-      description: `Search free stock media (photos or videos). Returns a capped list of results with preview URL, thumbnail, source, and attribution. To attach a result, pass its URL through the uploadFromUrl tool or the FileService.importFromUrl path.`,
+      description: `Search free stock media (photos or videos). Returns a capped list of results with preview URL, thumbnail, source, and attribution. To attach a result, pass its URL to the uploadFromUrlTool.`,
       inputSchema: z.object({
         query: z.string().describe('Search keywords'),
         kind: z

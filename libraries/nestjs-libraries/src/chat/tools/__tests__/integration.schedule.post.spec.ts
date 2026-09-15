@@ -176,3 +176,39 @@ describe('IntegrationSchedulePostTool', () => {
     expect(postsService.createPost).not.toHaveBeenCalled();
   });
 });
+
+describe('IntegrationSchedulePostTool — settings.__type is server-owned', () => {
+  it('overrides a model-supplied __type with the resolved channel provider in validation AND creation', async () => {
+    const { postsService, integrationService, guardrailService, subscriptionService } = makeServices();
+    const tool = new IntegrationSchedulePostTool(
+      postsService as any,
+      integrationService as any,
+      guardrailService as any,
+      subscriptionService as any
+    );
+    // gpt-4.1-mini live: sent `__type: "post"` → validatePosts 404'd "Unknown integration: post".
+    const input = {
+      socialPost: [
+        {
+          ...baseInput.socialPost[0],
+          settings: [
+            { key: '__type', value: 'post' },
+            { key: 'channel', value: 'C123' },
+          ],
+        },
+      ],
+    };
+
+    await executeTool(tool, {
+      inputData: input,
+      organization: makeOrganization(),
+      user,
+      access: { mode: 'user' },
+    });
+
+    const validated = postsService.validatePosts.mock.calls[0][1][0];
+    expect(validated.settings).toMatchObject({ __type: 'x', channel: 'C123' });
+    const created = postsService.createPost.mock.calls[0][1];
+    expect(created.posts[0].settings).toMatchObject({ __type: 'x', channel: 'C123' });
+  });
+});

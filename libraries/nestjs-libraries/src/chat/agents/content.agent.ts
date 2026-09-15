@@ -1,4 +1,8 @@
 import { Injectable } from '@nestjs/common';
+import {
+  specialistCommsRules,
+  specialistPreamble,
+} from '@postmill-ai/nestjs-libraries/chat/agents/comms-surface';
 import { Agent } from '@mastra/core/agent';
 import { AIModelProvider } from '@postmill-ai/nestjs-libraries/ai/ai-model.provider';
 import { resolveOrgIdFromModelContext } from '@postmill-ai/nestjs-libraries/chat/agents/resolve-org-context';
@@ -23,8 +27,7 @@ export class ContentAgentBuilder {
       id: 'content',
       name: 'content',
       description: 'Specialist agent for copy, brand voice, and content generation.',
-      instructions: `
-You are the content specialist for Postmill.
+      instructions: ({ requestContext }: { requestContext?: any }) => `${specialistPreamble()}You are the content specialist for Postmill.
 
 Your job:
 - Draft, rewrite, or brainstorm social media copy.
@@ -37,7 +40,7 @@ Rules:
 - Return concise, ready-to-post copy unless the user asks for options.
 - Respect platform formats (HTML with p/li/ul/strong/h1-h3, no nested u+strong).
 - Do not schedule posts or perform outward actions; hand off to the ops specialist if the user wants to publish.
-`,
+${specialistCommsRules(requestContext)}`,
       model: (context: any) =>
         this._aiModelProvider.languageModel(
           'agent',

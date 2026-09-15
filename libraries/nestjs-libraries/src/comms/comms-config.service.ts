@@ -41,6 +41,13 @@ export interface CommsProviderListItem {
   webhookInstructions?: string;
   platformConnect?: 'oauth' | 'env';
   platformConfigured: boolean;
+  // True when this org's config was made by the platform app (Slack OAuth /
+  // env platform-connect) rather than bring-your-own credentials — decides
+  // which webhook URL (platform vs per-org token) the UI presents.
+  platformConnected: boolean;
+  // Only emitted when the platform app is actually configured on this
+  // deployment: the platform route 404s otherwise, so offering its URL in
+  // flat (BYO) mode would send every DM into a dead endpoint.
   platformWebhookUrl?: string;
 }
 
@@ -165,12 +172,36 @@ export class CommsConfigService {
         platformConfigured: platform
           ? isCommsPlatformConfigured(manifest.providerId)
           : false,
-        ...(platform?.manualWebhookUrl
+        platformConnected: this._isPlatformConnected(
+          manifest.providerId,
+          extra,
+          decrypted,
+        ),
+        ...(platform?.manualWebhookUrl &&
+        isCommsPlatformConfigured(manifest.providerId)
           ? { platformWebhookUrl: this.platformWebhookUrl(manifest.providerId) }
           : {}),
       });
     }
     return items.sort((a, b) => a.name.localeCompare(b.name));
+  }
+
+  /**
+   * Whether an org config came from the platform app. Explicit marker first
+   * (`extraConfig.platformApp`, written by the platform paths and cleared by
+   * a manual credential save); rows from before the marker fall back to
+   * comparing the stored secrets with the deployment's platform credentials.
+   */
+  private _isPlatformConnected(
+    identifier: string,
+    extra: Record<string, unknown>,
+    decrypted: Record<string, string>,
+  ): boolean {
+    if (typeof extra.platformApp === 'boolean') return extra.platformApp;
+    const platformCreds = getCommsPlatformCredentials(identifier);
+    if (!platformCreds) return false;
+    const shared = Object.keys(platformCreds).filter((k) => decrypted[k]);
+    return shared.length > 0 && shared.every((k) => decrypted[k] === platformCreds[k]);
   }
 
   async upsert(
@@ -214,6 +245,17 @@ export class CommsConfigService {
       ...(data.extraConfig ?? {}),
     };
     delete extraConfig.webhookError;
+    // Real credentials typed in by the org = bring-your-own; drop the platform
+    // marker unless the caller (the OAuth callback) set it explicitly.
+    const suppliedOwnCredentials = Object.entries(data.credentials ?? {}).some(
+      ([key, value]) =>
+        !INTERNAL_CREDENTIAL_KEYS.includes(key) &&
+        typeof value === 'string' &&
+        !!value.trim(),
+    );
+    if (suppliedOwnCredentials && data.extraConfig?.platformApp === undefined) {
+      extraConfig.platformApp = false;
+    }
 
     // Provider-side registration/provisioning is best-effort: a Telegram outage
     // must not fail the save. Failures surface on the row and are retried by
@@ -325,6 +367,7 @@ export class CommsConfigService {
     const webhookToken = existing?.webhookToken ?? randomBytes(16).toString('hex');
     const extraConfig: Record<string, unknown> = {
       ...((existing?.extraConfig as Record<string, unknown>) ?? {}),
+      platformApp: true,
     };
     delete extraConfig.webhookError;
 
@@ -482,7 +525,10 @@ export class CommsConfigService {
       {
         credentials: { botToken: json.access_token, signingSecret },
         enabled: true,
-        ...(json.team?.id ? { extraConfig: { teamId: String(json.team.id) } } : {}),
+        extraConfig: {
+          platformApp: true,
+          ...(json.team?.id ? { teamId: String(json.team.id) } : {}),
+        },
       },
       userId,
     );

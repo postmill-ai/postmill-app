@@ -6,12 +6,16 @@ import { CommsConfigService } from '@postmill-ai/nestjs-libraries/comms/comms-co
 
 /**
  * Public comms OAuth callbacks (provider → backend redirect). NOT in the
- * authenticatedController group: the browser hits this from Slack's consent
- * redirect and the state parameter (Redis-bound, single-use) is the
+ * authenticatedController group: the browser hits this from the provider's
+ * consent redirect and the state parameter (Redis-bound, single-use) is the
  * authorization — mirroring the channels `organization:${state}` binding.
- * On success it serves the channels-style close page: postMessage
- * (`postmill:comms-connected`) to the opener + close when inside a connect
- * popup, redirect to the comms settings page otherwise.
+ *
+ * Success contract for EVERY OAuth comms callback: 302 to
+ * `<frontend>/settings/comms?connected=<identifier>`. The frontend page is
+ * the close page (CommsTab signals completion via localStorage/postMessage
+ * and closes the popup). Never serve the close page from this API origin —
+ * helmet's Cross-Origin-Opener-Policy: same-origin here would sever
+ * window.opener even for providers whose own pages don't.
  */
 @ApiTags('Comms OAuth')
 @Controller('/settings/comms/oauth')
@@ -41,15 +45,6 @@ export class CommsOauthController {
       return res.redirect(settingsUrl(`?error=${encodeURIComponent(message)}`));
     }
 
-    const frontendOrigin = (process.env.FRONTEND_URL || '').replace(/\/+$/, '');
-    res.setHeader('Content-Type', 'text/html; charset=utf-8');
-    return res.send(`<!doctype html>
-<html><body><script>
-if (window.opener && window.opener !== window) {
-  window.opener.postMessage({ type: 'postmill:comms-connected', provider: 'slack' }, ${JSON.stringify(frontendOrigin)});
-  window.close();
-}
-window.location.href = ${JSON.stringify(settingsUrl('?connected=slack'))};
-</script></body></html>`);
+    return res.redirect(settingsUrl('?connected=slack'));
   }
 }

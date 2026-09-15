@@ -8,10 +8,18 @@ import { useT } from '@postmill-ai/react/translation/get.transation.service.clie
 import { useDecisionModal } from '@postmill-ai/frontend/components/layout/new-modal';
 import { CategoryChecklist } from './category-checklist';
 import { MemberPicker, CommsMember } from './member-picker';
-import { CommsLink, CommsProvider, useCommsConfig } from './use-comms-config';
+import {
+  COMMS_CONNECTED_STORAGE_KEY,
+  COMMS_CONNECT_GRACE_MS,
+  COMMS_FULLPAGE_STORAGE_KEY,
+  COMMS_OAUTH_POPUP_NAME,
+  CommsLink,
+  CommsProvider,
+  useCommsConfig,
+} from './use-comms-config';
 
 const CODE_INSTRUCTIONS: Record<string, [string, string]> = {
-  slack: ['comms_code_instructions_slack', 'Open a DM with the bot in Slack and send: link {code}'],
+  slack: ['comms_code_instructions_slack', 'In Slack, open a DM with the bot of the connected app (left sidebar → Apps) — NOT Slackbot — and send: link {code}'],
   telegram: ['comms_code_instructions_telegram', 'Open a chat with the bot in Telegram and send: link {code}'],
   discord: ['comms_code_instructions_discord', 'In Discord, run: /postmill message: link {code}'],
   matrix: ['comms_code_instructions_matrix', 'Invite the bot to a direct room in Matrix and send: link {code}'],
@@ -99,7 +107,7 @@ const CommsConfigFormInner: FC<{
   useEffect(() => {
     if (webhookMinted.current) return;
     if (provider.isConfigured || !provider.capabilities?.webhookInbound) return;
-    if (provider.webhookUrl || provider.platformWebhookUrl) return;
+    if (provider.webhookUrl) return;
     webhookMinted.current = true;
     void (async () => {
       const res = await fetch(`/settings/comms/config/${identifier}/webhook`, {
@@ -164,10 +172,15 @@ const CommsConfigFormInner: FC<{
     }
   }, [provider, values, enabled, fetch, identifier, toaster, t, mutate, onClose]);
 
-  // OAuth platform connect (Slack): fetch the consent URL, then run the flow
-  // in a small popup window — the same mechanics as channels' handleConnect.
-  // The callback page notifies this opener with a postMessage and closes
-  // itself; the poll is the fallback for a missed message / manual close.
+  // OAuth platform connect (any provider with platformConnect 'oauth'):
+  // fetch the consent URL, then run the flow in a small popup window. The
+  // provider's consent pages may sever window.opener via
+  // Cross-Origin-Opener-Policy (Slack does), so completion is signaled
+  // through a localStorage key written by the close page (survives COOP),
+  // with postMessage as a fast path when the opener survives. A COOP swap
+  // also makes our `popup` handle report closed=true almost immediately, so
+  // the poll treats "closed" as "refetch once, keep listening" for a grace
+  // window rather than as the end of the flow.
   const handleConnect = useCallback(async () => {
     setConnectError(null);
     setConnecting(true);
@@ -181,40 +194,113 @@ const CommsConfigFormInner: FC<{
         );
         return;
       }
-      const popup = window.open(data.url, 'postmill-comms-oauth', 'width=640,height=720,popup');
+      // Storage access can throw (site data blocked, some embedded contexts);
+      // the handshake degrades to the popup.closed refetch, never to a dead
+      // Connect button.
+      const storage = {
+        get: () => {
+          try {
+            return window.localStorage.getItem(COMMS_CONNECTED_STORAGE_KEY);
+          } catch {
+            return null;
+          }
+        },
+        clear: () => {
+          try {
+            window.localStorage.removeItem(COMMS_CONNECTED_STORAGE_KEY);
+          } catch {
+            /* ignore */
+          }
+        },
+      };
+      storage.clear();
+      const startedAt = Date.now();
+      const popup = window.open(data.url, COMMS_OAUTH_POPUP_NAME, 'width=640,height=720,popup');
       if (!popup) {
         // Popup blocked — fall back to the standard full-page OAuth redirect.
+        // Mark this tab so the close page lands here instead of closing it.
+        try {
+          window.sessionStorage.setItem(COMMS_FULLPAGE_STORAGE_KEY, '1');
+        } catch {
+          /* the close page's 400 ms "still here" fallback covers it */
+        }
         window.location.href = data.url;
         return;
       }
+      // Idempotent completion: toast + refetch, modal stays open so the user
+      // can add user links right away. An error signal (the callback
+      // redirected with ?error=) toasts the backend's reason instead.
+      let finished = false;
+      const finish = () => {
+        if (finished) return;
+        finished = true;
+        cleanup();
+        let signal: { error?: string } = {};
+        try {
+          signal = JSON.parse(storage.get() || '{}');
+        } catch {
+          /* treat as success — the close page signals before postMessage */
+        }
+        storage.clear();
+        void (async () => {
+          if (signal.error) {
+            toaster.show(signal.error, 'warning');
+          } else {
+            toaster.show(t('comms_connected', 'Provider connected'), 'success');
+          }
+          await mutate();
+        })();
+      };
+      // Accept the signal only if it was written after THIS connect started.
+      const readSignal = () => {
+        try {
+          const raw = storage.get();
+          if (!raw) return false;
+          const ts = (JSON.parse(raw) as { ts?: number })?.ts ?? 0;
+          return ts >= startedAt;
+        } catch {
+          return false;
+        }
+      };
+      let refetchedOnClose = false;
       const poll = window.setInterval(() => {
-        if (popup.closed) {
-          cleanup();
-          // Refresh without closing: the connect may have completed.
+        if (readSignal()) {
+          finish();
+          return;
+        }
+        if (popup.closed && !refetchedOnClose) {
+          // Either the user closed it or COOP swapped it out from under us —
+          // indistinguishable here. Refresh once (no toast) and keep the
+          // storage listener alive until the signal or the grace deadline.
+          refetchedOnClose = true;
           void mutate();
         }
+        if (Date.now() - startedAt > COMMS_CONNECT_GRACE_MS) {
+          cleanup();
+        }
       }, 1000);
+      const onStorage = (event: StorageEvent) => {
+        if (event.key !== COMMS_CONNECTED_STORAGE_KEY || !event.newValue) return;
+        if (readSignal()) finish();
+      };
       const onMessage = (event: MessageEvent) => {
         if (event.origin !== window.location.origin) return;
         if ((event.data as { type?: string })?.type !== 'postmill:comms-connected') return;
-        cleanup();
-        void (async () => {
-          toaster.show(t('comms_connected', 'Provider connected'), 'success');
-          await mutate();
-          onClose();
-        })();
+        finish();
       };
       const cleanup = () => {
         window.removeEventListener('message', onMessage);
+        window.removeEventListener('storage', onStorage);
         window.clearInterval(poll);
         connectCleanup.current = null;
       };
       connectCleanup.current = cleanup;
       window.addEventListener('message', onMessage);
+      window.addEventListener('storage', onStorage);
     } finally {
       setConnecting(false);
     }
-  }, [fetch, identifier, toaster, t, mutate, onClose]);
+  }, [fetch, identifier, toaster, t, mutate]);
 
   // Env platform connect (Discord/Telegram/LINE): the platform app in the
   // deployment env IS the credential — one click wires the provider up.
@@ -284,9 +370,16 @@ const CommsConfigFormInner: FC<{
     }
   }, [decision, fetch, identifier, toaster, t, mutate, onClose]);
 
-  // The displayed webhook URL: the org's registered one, else the platform
-  // app's shared endpoint.
-  const webhookUrl = provider.webhookUrl || provider.platformWebhookUrl;
+  // The displayed webhook URL. Platform mode + connected via the platform app
+  // (or not connected yet, i.e. about to be): the platform app's shared
+  // endpoint, verified with the deployment's secret. Anything else — flat
+  // mode, or an org that typed its own credentials on a platform deployment —
+  // the org's own token URL, verified with the org's secret. Showing the
+  // platform URL to a BYO org sends its DMs to a 401/404.
+  const webhookUrl =
+    platformMode && (provider.platformConnected || !provider.isConfigured)
+      ? provider.platformWebhookUrl || provider.webhookUrl
+      : provider.webhookUrl;
 
   const copyWebhook = useCallback(async () => {
     if (!webhookUrl) return;

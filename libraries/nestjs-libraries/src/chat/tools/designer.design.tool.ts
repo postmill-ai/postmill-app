@@ -30,7 +30,7 @@ export class DesignerDesignTool implements AgentToolInterface {
       id: 'designerDesign',
       description: `Create or update a Designer design from a template, a raw DesignerDoc, or a blank canvas.
 Use this when the user wants to generate, edit, or compose a visual design asset.
-Prefer "/media/generate-image-with-prompt" first if you only need a single image; use this tool to assemble multi-element designs, apply templates, or place assets on a canvas.`,
+Prefer the generateImageTool first if you only need a single image; use this tool to assemble multi-element designs, apply templates, or place assets on a canvas.`,
       mcp: {
         annotations: {
           title: 'Designer Design',

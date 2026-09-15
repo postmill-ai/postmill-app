@@ -633,7 +633,7 @@ paths:
           schema:
             type: string
       responses:
-        "201":
+        "200":
           description: ""
           content:
             application/json:
@@ -656,7 +656,7 @@ paths:
           schema:
             type: string
       responses:
-        "201":
+        "200":
           description: ""
           content:
             application/json:
@@ -686,10 +686,6 @@ paths:
       responses:
         "200":
           description: ""
-          content:
-            application/json:
-              schema:
-                type: object
       tags:
         - Comms OAuth
   /media/designs/render-frame/{jobId}:

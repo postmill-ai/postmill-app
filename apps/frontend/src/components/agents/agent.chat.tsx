@@ -700,7 +700,6 @@ export const SPECIALIST_BY_TOOL: Record<string, string> = {
   commentReply: 'ops',
   // supervisor-held (SUPERVISOR_TOOL_NAMES) + the frontend-only manual composer
   integrationList: 'ops',
-  groupList: 'ops',
   manualPosting: 'ops',
   // delegation tools emitted by the supervisor
   'agent-content': 'content',

@@ -20,7 +20,7 @@ vi.mock('@postmill-ai/nestjs-libraries/chat/load.tools.service', () => ({
       return {};
     }
   },
-  SUPERVISOR_TOOL_NAMES: ['integrationList', 'groupList'],
+  SUPERVISOR_TOOL_NAMES: ['integrationList'],
 }));
 
 vi.mock('@postmill-ai/nestjs-libraries/database/prisma/organizations/organization.service', () => ({

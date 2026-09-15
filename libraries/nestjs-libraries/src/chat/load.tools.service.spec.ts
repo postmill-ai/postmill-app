@@ -96,6 +96,18 @@ import { AnalyticsAgentBuilder, ANALYTICS_TOOL_NAMES } from '@postmill-ai/nestjs
 import { OpsAgentBuilder, OPS_TOOL_NAMES } from '@postmill-ai/nestjs-libraries/chat/agents/ops.agent';
 import { SUPERVISOR_TOOL_NAMES } from './load.tools.service';
 
+import { CommsConfirmationGate } from '@postmill-ai/nestjs-libraries/chat/tools/comms-confirmation.gate';
+
+// In-memory stand-in for RedisService — the gate only needs get/set/del.
+const stubRedis = () => {
+  const store = new Map<string, string>();
+  return {
+    get: async (k: string) => store.get(k) ?? null,
+    set: async (k: string, v: string) => void store.set(k, v),
+    del: async (k: string) => void store.delete(k),
+  };
+};
+
 describe('LoadToolsService', () => {
   let service: LoadToolsService;
   let aiModelProvider: AIModelProvider;
@@ -123,6 +135,7 @@ describe('LoadToolsService', () => {
       mediaBuilder,
       analyticsBuilder,
       opsBuilder,
+      new CommsConfirmationGate(stubRedis() as any),
     );
   });
 
@@ -413,6 +426,59 @@ describe('LoadToolsService', () => {
       expect(instructions).toContain('currentPostId: post-9');
     });
 
+    describe('conversation surface (comms)', () => {
+      const commsContext = (extra: Record<string, string> = {}) => {
+        const ctx = new Map<string, string>();
+        ctx.set('ui', 'false');
+        ctx.set('access', JSON.stringify({ mode: 'comms' }));
+        for (const [k, v] of Object.entries(extra)) ctx.set(k, v);
+        return ctx;
+      };
+
+      it('tells a chat-app turn there are no cards and how outward tools behave (flat + supervisor)', async () => {
+        for (const supervisor of ['false', 'true']) {
+          process.env.AGENT_SUPERVISOR_ENABLED = supervisor;
+          vi.spyOn(service, 'loadTools').mockResolvedValue(
+            Object.fromEntries(
+              [...SUPERVISOR_TOOL_NAMES, ...CONTENT_TOOL_NAMES, ...MEDIA_TOOL_NAMES, ...ANALYTICS_TOOL_NAMES, ...OPS_TOOL_NAMES].map((n) => [n, { id: n }]),
+            ) as any,
+          );
+          const agent = await service.agent();
+          const instructions = await agent.instructions({ requestContext: commsContext() });
+          expect(instructions).toContain('Conversation surface:');
+          expect(instructions).toContain('There are no UI cards');
+          expect(instructions).toContain('needsConfirmation: true');
+          expect(instructions).toContain('Reply YES to confirm or NO to cancel.');
+          expect(instructions).not.toContain('A confirmation is still pending');
+        }
+      });
+
+      it('mentions a pending confirmation when the activity put one in context', async () => {
+        vi.spyOn(service, 'loadTools').mockResolvedValue({});
+        const agent = await service.agent();
+        const instructions = await agent.instructions({
+          requestContext: commsContext({
+            pendingConfirmation: JSON.stringify({ toolId: 'schedulePostTool', summary: 'Schedule on channel int-1' }),
+          }),
+        });
+        expect(instructions).toContain('A confirmation is still pending for: "Schedule on channel int-1"');
+      });
+
+      it.each([
+        ['web UI', { ui: 'true', access: JSON.stringify({ mode: 'user' }) }],
+        ['mcp', { ui: 'false', access: JSON.stringify({ mode: 'mcp', scopes: ['mcp:read'] }) }],
+        ['headless digest', { ui: 'false', access: JSON.stringify({ mode: 'headless' }) }],
+        ['no access at all', { ui: 'false' }],
+      ])('says nothing about the surface for %s turns', async (_l, entries) => {
+        vi.spyOn(service, 'loadTools').mockResolvedValue({});
+        const agent = await service.agent();
+        const ctx = new Map<string, string>();
+        for (const [k, v] of Object.entries(entries)) ctx.set(k, v);
+        const instructions = await agent.instructions({ requestContext: ctx });
+        expect(instructions).not.toContain('Conversation surface:');
+      });
+    });
+
     it('instructions function omits current view preamble when ag-ui context is absent', async () => {
       vi.spyOn(service, 'loadTools').mockResolvedValue({});
 
@@ -494,7 +560,7 @@ describe('LoadToolsService', () => {
       expect(aiModelProvider.governedLanguageModel).toHaveBeenCalledWith('agent', undefined);
     });
 
-    it('builds supervisor with only integrationList/groupList as direct tools by default', async () => {
+    it('builds supervisor with only integrationList as its direct tool by default', async () => {
       process.env.AGENT_SUPERVISOR_ENABLED = 'true';
       // pickTools now THROWS on an unresolved name, and the real specialist builders
       // run here — so the map must contain every specialist tool name, not just three.
@@ -514,7 +580,6 @@ describe('LoadToolsService', () => {
 
       expect(agent.tools).toEqual({
         integrationList: { id: 'integrationList' },
-        groupList: { id: 'groupList' },
       });
       expect(agent.agents).toEqual({
         content: expect.any(Object),

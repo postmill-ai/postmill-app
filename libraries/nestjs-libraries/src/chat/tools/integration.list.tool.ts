@@ -16,18 +16,11 @@ export class IntegrationListTool implements AgentToolInterface {
   run() {
     return createTool({
       id: 'integrationList',
-      description: `This tool list available integrations to schedule posts to. Optionally pass a group id (from the groupList tool) to only list integrations belonging to that group`,
-      inputSchema: z.object({
-        group: z
-          .string()
-          .optional()
-          .describe(
-            'Optional group (customer) id from the groupList tool to filter the integrations'
-          ),
-      }),
+      description: `Lists the connected social channels (accounts) in this workspace with id, platform, name and disabled state, plus the total count. Use it to answer "which channels are connected", "how many channels are configured", and to get the channel id needed before scheduling a post.`,
+      inputSchema: z.object({}),
       mcp: {
         annotations: {
-          title: 'List Integrations',
+          title: 'List Channels',
           readOnlyHint: true,
           destructiveHint: false,
           idempotentHint: true,
@@ -35,6 +28,8 @@ export class IntegrationListTool implements AgentToolInterface {
         },
       },
       outputSchema: z.object({
+        // Explicit so small models answer "how many" without counting the list.
+        count: z.number(),
         output: z.array(
           z.object({
             id: z.string(),
@@ -42,13 +37,10 @@ export class IntegrationListTool implements AgentToolInterface {
             picture: z.string(),
             platform: z.string(),
             // Without these, @mastra/core `validateToolOutput` silently STRIPS the
-            // fields the `.map` emits (and the group `.filter` relies on `customer`).
+            // fields the `.map` emits.
             disabled: z.boolean().optional(),
             display: z.string().optional(),
             type: z.string().optional(),
-            customer: z
-              .object({ id: z.string(), name: z.string() })
-              .optional(),
           })
         ),
       }),
@@ -57,12 +49,9 @@ export class IntegrationListTool implements AgentToolInterface {
         requireRead(context as any);
         const organizationId = parseOrg(context as any).id;
 
-        return {
-          output: (
-            await this._integrationService.getIntegrationsList(organizationId)
-          )
-            .filter((p) => !inputData.group || p.customer?.id === inputData.group)
-            .map((p) => ({
+        const output = (
+          await this._integrationService.getIntegrationsList(organizationId)
+        ).map((p) => ({
               name: p.name,
               id: p.id,
               disabled: p.disabled,
@@ -70,14 +59,8 @@ export class IntegrationListTool implements AgentToolInterface {
               platform: p.providerIdentifier,
               display: p.profile,
               type: p.type,
-              customer: p.customer
-                ? {
-                    id: p.customer.id,
-                    name: p.customer.name,
-                  }
-                : undefined,
-            })),
-        };
+            }));
+        return { count: output.length, output };
       },
     });
   }

@@ -58,9 +58,18 @@ export class CommsPlatformWebhookService {
     rawBody: Buffer,
     headers: Record<string, string | undefined>,
   ): Promise<PlatformWebhookResult> {
+    // Log every hit BEFORE any verification: a silently-401'd signature failure
+    // or a silent 404 is otherwise indistinguishable from "the platform never
+    // called us" when diagnosing delivery from journalctl.
+    this._logger.log(
+      `${identifier} platform webhook hit: ${rawBody?.length ?? 0} bytes`,
+    );
     const credentials = getCommsPlatformCredentials(identifier);
     if (!credentials) {
       // Unknown provider or platform app not configured — no oracle.
+      this._logger.warn(
+        `${identifier} platform webhook: no platform credentials configured — 404`,
+      );
       throw new NotFoundException();
     }
     // Telegram's platform webhook is registered with the derived secret, so
@@ -77,17 +86,29 @@ export class CommsPlatformWebhookService {
         orgId: 'platform',
       });
     } catch {
+      this._logger.warn(
+        `${identifier} platform webhook: adapter resolution failed — 404`,
+      );
       throw new NotFoundException();
     }
     if (!adapter.verifyWebhook || !adapter.parseInbound) {
+      this._logger.warn(
+        `${identifier} platform webhook: adapter lacks webhook support — 404`,
+      );
       throw new NotFoundException();
     }
 
     if (!(await adapter.verifyWebhook(rawBody, headers))) {
+      this._logger.warn(
+        `${identifier} platform webhook: signature verification failed — 401 (check the signing secret in the deployment env)`,
+      );
       throw new HttpException('invalid signature', 401);
     }
 
     const messages = adapter.parseInbound(rawBody, headers);
+    this._logger.log(
+      `${identifier} platform webhook: ${messages.map((m) => m.kind).join(',') || 'empty'}`,
+    );
 
     // Slack url_verification / Discord PING happen before any org connects —
     // ack them without org resolution.
@@ -115,6 +136,9 @@ export class CommsPlatformWebhookService {
       if (!config) {
         // Unresolvable sender (no link, unknown team/guild) — ack-ignore so
         // the provider stops retrying; nothing is enqueueable anyway.
+        this._logger.warn(
+          `${identifier} platform webhook: unresolvable sender ${m.externalUserId} — no matching org config/link`,
+        );
         continue;
       }
       events.push({

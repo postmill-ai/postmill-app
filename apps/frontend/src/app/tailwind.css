@@ -9,8 +9,11 @@
 @config '../../tailwind.config.cjs';
 
 /* v4 auto source detection does not cross the workspace root, so register the
-   shared component packages (the v3 `content` glob covered them). */
-@source '../../../libraries';
+   shared component packages (the v3 `content` glob covered them). Relative to
+   THIS file: src/app → up 4 = repo root. (Was '../../../libraries' =
+   apps/libraries, a nonexistent dir — silently ignored, so library-only
+   classes like the toaster's were never generated.) */
+@source '../../../../libraries';
 
 /* darkMode: 'class' from the JS config — v4 spells it as a custom variant. */
 @custom-variant dark (&:where(.dark, .dark *));

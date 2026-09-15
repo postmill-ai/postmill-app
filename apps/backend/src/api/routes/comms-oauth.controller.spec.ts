@@ -57,14 +57,13 @@ describe('CommsOauthController', () => {
     );
   });
 
-  it('serves the postMessage close page on success', async () => {
+  it('redirects to the frontend close page on success', async () => {
     const res = makeRes();
     await controller.slackCallback('code-1', 'state-1', undefined as any, res);
     expect(configService.handleSlackOAuthCallback).toHaveBeenCalledWith('code-1', 'state-1');
-    expect(res.body).toContain('postmill:comms-connected');
-    expect(res.body).toContain('"https://app.example"');
-    expect(res.body).toContain(
-      'https://app.example/settings/comms?connected=slack',
-    );
+    // The frontend (same origin as the popup opener) is the close page — a
+    // backend-served page would carry COOP same-origin and sever window.opener.
+    expect(res.redirectedTo).toBe('https://app.example/settings/comms?connected=slack');
+    expect(res.send).not.toHaveBeenCalled();
   });
 });
