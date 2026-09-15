@@ -208,7 +208,8 @@ export class IntegrationService {
     timezone?: number,
     customInstanceDetails?: string,
     providerConfigId?: string,
-    providerVersion = 'v1'
+    providerVersion = 'v1',
+    rootInternalId?: string
   ) {
     const uploadedPicture = picture
       ? await (await this._storageService.getLocalAdapterForOrg(org, true)).uploadSimple(picture)
@@ -239,7 +240,8 @@ export class IntegrationService {
       timezone,
       customInstanceDetails,
       providerConfigId,
-      providerVersion
+      providerVersion,
+      rootInternalId
     );
 
     // Audit genuine channel connects (B4). Token-refresh / cookie-reauth callers

@@ -190,18 +190,20 @@ export class InstagramStandaloneProvider
     ).json();
 
     const {
+      id,
       user_id,
       name,
       username,
       profile_picture_url = '',
     } = await (
       await this.fetch(
-        `https://graph.instagram.com/v21.0/me?fields=user_id,username,name,profile_picture_url&access_token=${access_token}`
+        `https://graph.instagram.com/v21.0/me?fields=id,user_id,username,name,profile_picture_url&access_token=${access_token}`
       )
     ).json();
 
     return {
       id: user_id,
+      ...(id ? { rootId: String(id) } : {}),
       name,
       accessToken: access_token,
       refreshToken: access_token,
@@ -264,14 +266,18 @@ export class InstagramStandaloneProvider
 
     this.checkScopes(this.scopes, getAccessToken.permissions);
 
-    const { user_id, name, username, profile_picture_url } = await (
+    // `user_id` is the Instagram professional account id (what the content
+    // APIs address); `id` is the app-scoped id Meta uses in its deauthorize /
+    // data-deletion callbacks — keep both.
+    const { id, user_id, name, username, profile_picture_url } = await (
       await this.fetch(
-        `https://graph.instagram.com/v21.0/me?fields=user_id,username,name,profile_picture_url&access_token=${access_token}`
+        `https://graph.instagram.com/v21.0/me?fields=id,user_id,username,name,profile_picture_url&access_token=${access_token}`
       )
     ).json();
 
     return {
       id: user_id,
+      ...(id ? { rootId: String(id) } : {}),
       name,
       accessToken: access_token,
       refreshToken: access_token,

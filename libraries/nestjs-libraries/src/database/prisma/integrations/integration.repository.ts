@@ -66,6 +66,22 @@ export class IntegrationRepository {
     });
   }
 
+  /**
+   * Cross-org lookup by the identity a Meta app knows the user by: the
+   * app-scoped user id (persisted as rootInternalId at connect time for
+   * Facebook/Instagram; equal to internalId for Instagram-standalone/Threads).
+   * Used by Meta's deauthorize / data-deletion callbacks, which carry no org.
+   */
+  findByMetaUser(identifiers: string[], userId: string) {
+    return this._integration.model.integration.findMany({
+      where: {
+        providerIdentifier: { in: identifiers },
+        deletedAt: null,
+        OR: [{ rootInternalId: userId }, { internalId: userId }],
+      },
+    });
+  }
+
   async checkPreviousConnections(org: string, id: string) {
     const findIt = await this._integration.model.integration.findMany({
       where: {
@@ -251,7 +267,8 @@ export class IntegrationRepository {
     timezone?: number,
     customInstanceDetails?: string,
     providerConfigId?: string,
-    providerVersion = 'v1'
+    providerVersion = 'v1',
+    rootInternalId?: string
   ) {
     const postTimes = timezone
       ? {
@@ -292,7 +309,7 @@ export class IntegrationRepository {
         ...postTimes,
         organizationId: org,
         refreshNeeded: false,
-        rootInternalId: internalId,
+        rootInternalId: rootInternalId || internalId,
         ...(customInstanceDetails ? { customInstanceDetails } : {}),
         ...(providerConfigId ? { providerConfigId } : {}),
         providerVersion,
@@ -304,6 +321,9 @@ export class IntegrationRepository {
         ...(additionalSettings
           ? { additionalSettings: JSON.stringify(additionalSettings) }
           : {}),
+        // Backfill the platform-level id on reconnect for rows created before
+        // the provider reported it (rootInternalId defaulted to internalId).
+        ...(rootInternalId ? { rootInternalId } : {}),
         ...(customInstanceDetails ? { customInstanceDetails } : {}),
         ...(providerConfigId ? { providerConfigId } : {}),
         type: type as any,

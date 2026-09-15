@@ -664,6 +664,54 @@ paths:
                 type: object
       tags:
         - Comms Webhooks
+  /integrations/meta/deauthorize:
+    post:
+      operationId: MetaCallbacksController_deauthorize
+      parameters: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/MetaSignedRequestDto"
+      responses:
+        "200":
+          description: ""
+      tags:
+        - Meta Callbacks
+  /integrations/meta/data-deletion:
+    post:
+      operationId: MetaCallbacksController_dataDeletion
+      parameters: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/MetaSignedRequestDto"
+      responses:
+        "200":
+          description: ""
+      tags:
+        - Meta Callbacks
+  /integrations/meta/data-deletion/{code}:
+    get:
+      operationId: MetaCallbacksController_deletionStatus
+      parameters:
+        - name: code
+          required: true
+          in: path
+          schema:
+            type: string
+      responses:
+        "200":
+          description: ""
+          content:
+            application/json:
+              schema:
+                type: object
+      tags:
+        - Meta Callbacks
   /settings/comms/oauth/slack/callback:
     get:
       operationId: CommsOauthController_slackCallback
@@ -9205,6 +9253,14 @@ components:
         - code
         - client_id
         - client_secret
+    MetaSignedRequestDto:
+      type: object
+      properties:
+        signed_request:
+          type: string
+          maxLength: 8192
+      required:
+        - signed_request
     MediaDto:
       type: object
       properties:

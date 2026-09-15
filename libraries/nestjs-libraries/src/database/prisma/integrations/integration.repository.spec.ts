@@ -215,6 +215,46 @@ describe('IntegrationRepository', () => {
     });
   });
 
+  describe('createOrUpdateIntegration — rootInternalId', () => {
+    const connect = (rootInternalId?: string) =>
+      repository.createOrUpdateIntegration(
+        undefined, false, 'org-1', 'Name', undefined, 'social', 'internal-1', 'instagram-standalone',
+        'tok', '', 3600, 'user', false, undefined, undefined, undefined, undefined, 'v1', rootInternalId,
+      );
+
+    beforeEach(() => {
+      mockIntegration.upsert = vi.fn().mockResolvedValue({ id: 'int-1' });
+    });
+
+    it('defaults rootInternalId to internalId (providers with a single identity)', async () => {
+      await connect();
+      const { create, update } = mockIntegration.upsert.mock.calls[0][0];
+      expect(create.rootInternalId).toBe('internal-1');
+      expect(update).not.toHaveProperty('rootInternalId');
+    });
+
+    it('persists the provider-reported platform id and backfills it on reconnect', async () => {
+      await connect('app-scoped-9');
+      const { create, update } = mockIntegration.upsert.mock.calls[0][0];
+      expect(create.internalId).toBe('internal-1');
+      expect(create.rootInternalId).toBe('app-scoped-9');
+      expect(update.rootInternalId).toBe('app-scoped-9');
+    });
+  });
+
+  describe('findByMetaUser', () => {
+    it('matches live rows of the given providers by root or internal id, across orgs', async () => {
+      await repository.findByMetaUser(['facebook', 'instagram'], 'fb-9');
+      expect(mockIntegration.findMany).toHaveBeenCalledWith({
+        where: {
+          providerIdentifier: { in: ['facebook', 'instagram'] },
+          deletedAt: null,
+          OR: [{ rootInternalId: 'fb-9' }, { internalId: 'fb-9' }],
+        },
+      });
+    });
+  });
+
   describe('disableIntegrations', () => {
     it('includes organizationId in the bulk disable update', async () => {
       mockIntegration.findMany.mockResolvedValue([{ id: 'int-1' }, { id: 'int-2' }]);
