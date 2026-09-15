@@ -113,6 +113,12 @@ that verifies decides which channel providers the request applies to.
   automatically.
 - Delivery is logged in the backend journal (`meta deauthorize hit`,
   `verified via …`, `matched N channels`, `no channel matches user_id …`).
+- The callbacks carry Meta's **app-scoped** user id. For Facebook/Instagram
+  (Facebook Login) and Threads that is the id Postmill stores at connect. For
+  **Instagram Login** (Instagram Standalone) the content APIs use the
+  professional-account id (`/me.user_id`) while the callbacks carry `/me.id`;
+  Postmill stores both since this release — channels connected earlier are
+  matched once they are reconnected (the id is backfilled then).
 
 Organizations that connect with their **own** Meta app (bring-your-own
 credentials) must point Meta at their own pages: the deployment cannot verify

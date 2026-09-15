@@ -181,6 +181,29 @@ describe('NoAuthIntegrationsController — OAuth state replay (F11)', () => {
     );
   });
 
+  it("passes the provider's platform-level id (rootId) through as arg 19 so it lands in rootInternalId", async () => {
+    const provider = makeProvider({
+      customFields: true,
+      authenticate: vi.fn(async () => ({ ...authDetails, id: 'ig-pro-1', rootId: 'app-scoped-9' })),
+    });
+    getSocialIntegration.mockResolvedValue(provider);
+    redisStore.set('organization:state-root', 'org-1');
+
+    await controller.connectSocialMedia('testprovider', body('state-root'));
+
+    const args = createOrUpdateIntegration.mock.calls[0];
+    expect(args[6]).toBe('ig-pro-1'); // internalId stays the API-facing id
+    expect(args[18]).toBe('app-scoped-9');
+  });
+
+  it('leaves rootInternalId to default when the provider reports no rootId', async () => {
+    const provider = makeProvider({ customFields: true });
+    getSocialIntegration.mockResolvedValue(provider);
+    redisStore.set('organization:state-noroot', 'org-1');
+    await controller.connectSocialMedia('testprovider', body('state-noroot'));
+    expect(createOrUpdateIntegration.mock.calls[0][18]).toBeUndefined();
+  });
+
   it('customFields provider: consumes organization:${state} — a second POST with the same state is rejected', async () => {
     const provider = makeProvider({ customFields: true });
     getSocialIntegration.mockResolvedValue(provider);

@@ -155,7 +155,7 @@ export class NoAuthIntegrationsController {
       picture,
       username,
       additionalSettings,
-       
+      rootId,
     } = await new Promise<AuthTokenDetails>(async (res) => {
       try {
         const auth = await integrationProvider.authenticate(
@@ -300,7 +300,8 @@ export class NoAuthIntegrationsController {
             )
           : undefined,
         providerConfigId || undefined,
-        (clientInformation as any)?.version ?? 'v1'
+        (clientInformation as any)?.version ?? 'v1',
+        rootId ? String(rootId) : undefined
       );
 
     // A new (or re-connected) channel must show up in the composer/calendar

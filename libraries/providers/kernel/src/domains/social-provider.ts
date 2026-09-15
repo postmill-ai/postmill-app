@@ -85,6 +85,14 @@ export type GenerateAuthUrlResponse = {
 
 export type AuthTokenDetails = {
   id: string;
+  /**
+   * The platform-level identity the provider knows this user by when it
+   * differs from `id` — Instagram Login's app-scoped user id (`/me.id`) vs the
+   * professional account id (`/me.user_id`) that API calls need. Persisted as
+   * `Integration.rootInternalId`; Meta's deauthorize / data-deletion callbacks
+   * carry the app-scoped id, so this is what they are matched against.
+   */
+  rootId?: string;
   name: string;
   error?: string;
   accessToken: string; // The obtained access token
