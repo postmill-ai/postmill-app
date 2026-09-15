@@ -102,6 +102,8 @@ const PUBLIC_CONTROLLERS = new Set<string>([
   'MediaJobsWebhookController',
   'CommsWebhooksController',
   'CommsOauthController',
+  // Meta deauthorize / data-deletion callbacks: authenticated by signed_request HMAC only.
+  'MetaCallbacksController',
   'OAuthController',
   'OAuthAuthorizedController',
 ]);

@@ -66,6 +66,22 @@ export class IntegrationRepository {
     });
   }
 
+  /**
+   * Cross-org lookup by the identity a Meta app knows the user by: the
+   * app-scoped user id (persisted as rootInternalId at connect time for
+   * Facebook/Instagram; equal to internalId for Instagram-standalone/Threads).
+   * Used by Meta's deauthorize / data-deletion callbacks, which carry no org.
+   */
+  findByMetaUser(identifiers: string[], userId: string) {
+    return this._integration.model.integration.findMany({
+      where: {
+        providerIdentifier: { in: identifiers },
+        deletedAt: null,
+        OR: [{ rootInternalId: userId }, { internalId: userId }],
+      },
+    });
+  }
+
   async checkPreviousConnections(org: string, id: string) {
     const findIt = await this._integration.model.integration.findMany({
       where: {

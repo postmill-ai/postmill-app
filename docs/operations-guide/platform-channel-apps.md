@@ -87,9 +87,36 @@ FACEBOOK_CONFIG_ID: '<configuration-id>'   # FBfB-only apps: see below
 **App Review / going Live.** While the app is in development mode only its
 admins/developers/testers can connect. For production use the app must pass
 Meta App Review for the permissions above, and Meta requires **Deauthorize** and
-**Data Deletion** callback URLs before an app can go Live — Postmill ships no
-built-in endpoints for these, so point them at your own privacy/data-deletion
-pages; check Meta's current docs for the exact requirements.
+**Data Deletion** callback URLs before an app can go Live. Postmill serves both
+on the app domain — register them on **every** Meta app you use (Facebook,
+Instagram, Threads):
+
+| Meta console field | URL |
+|---|---|
+| Deauthorize Callback URL | `https://<frontend>/integrations/social/meta/deauthorize` |
+| Data Deletion Request Callback URL | `https://<frontend>/integrations/social/meta/data-deletion` |
+
+Both are verified with the `signed_request` HMAC against every Meta app secret
+in the deployment env (`FACEBOOK_APP_SECRET`, `INSTAGRAM_APP_SECRET`,
+`THREADS_APP_SECRET`, plus the Facebook SSO secret when enabled) — the secret
+that verifies decides which channel providers the request applies to.
+
+- **Deauthorize** (the user removed the app on Meta's side): every channel that
+  user connected is marked *reconnect needed* (badge + notification, like an
+  expired token). Nothing is deleted; scheduled posts stay until reconnected.
+- **Data deletion**: the user's scheduled posts are soft-deleted, synced
+  comments, analytics and plugs for those channels are hard-deleted, the channel
+  rows are soft-deleted with tokens/profile scrubbed, and Meta receives a
+  `confirmation_code` plus a status URL
+  (`…/integrations/social/meta/data-deletion?code=<code>`, kept 180 days).
+  Accounts created with Facebook Login are reported on that page, never deleted
+  automatically.
+- Delivery is logged in the backend journal (`meta deauthorize hit`,
+  `verified via …`, `matched N channels`, `no channel matches user_id …`).
+
+Organizations that connect with their **own** Meta app (bring-your-own
+credentials) must point Meta at their own pages: the deployment cannot verify
+signatures from secrets it does not hold.
 
 ## Instagram Standalone
 
@@ -568,7 +595,9 @@ from the Facebook Pages credentials.
    `threads_content_publish`, `threads_manage_replies`,
    `threads_manage_insights`.
 3. Add the OAuth redirect URI
-   `https://<your-domain>/integrations/social/threads`.
+   `https://<your-domain>/integrations/social/threads`, and under the Threads
+   use case settings the **Deauthorize** / **Data Deletion** callback URLs
+   (same two URLs as the Facebook app — see [App Review / going Live](#facebook)).
 4. Copy the Threads App ID and App Secret:
 
 ```yaml
@@ -588,6 +617,9 @@ permissions → Invites**. The tester must be added on the app whose ID is in
 `THREADS_APP_ID` — an accepted invite on a *different* Meta app does not
 count. Without this, OAuth fails at authorize or token exchange. To remove the
 requirement entirely, switch the app to **Live** mode (App Review → go live).
+Going Live needs the same **Deauthorize** / **Data Deletion** callback URLs as
+the Facebook app (see [App Review / going Live](#facebook) above) — register
+them on this app too.
 
 ## Twitch
 

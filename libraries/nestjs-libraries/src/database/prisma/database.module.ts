@@ -60,6 +60,7 @@ import { AutopostService } from '@postmill-ai/nestjs-libraries/database/prisma/a
 import { SetsService } from '@postmill-ai/nestjs-libraries/database/prisma/sets/sets.service';
 import { SetsRepository } from '@postmill-ai/nestjs-libraries/database/prisma/sets/sets.repository';
 import { RefreshIntegrationService } from '@postmill-ai/nestjs-libraries/integrations/refresh.integration.service';
+import { MetaCallbacksService } from '@postmill-ai/nestjs-libraries/integrations/meta-callbacks.service';
 import { OAuthRepository } from '@postmill-ai/nestjs-libraries/database/prisma/oauth/oauth.repository';
 import { OAuthService } from '@postmill-ai/nestjs-libraries/database/prisma/oauth/oauth.service';
 import { AnnouncementsRepository } from '@postmill-ai/nestjs-libraries/database/prisma/announcements/announcements.repository';
@@ -170,6 +171,7 @@ import { AnalyticsShareService } from '@postmill-ai/nestjs-libraries/analytics/a
     FileRepository,
     IntegrationManager,
     RefreshIntegrationService,
+    MetaCallbacksService,
     ExtractContentService,
     OpenaiService,
     EmailService,
