@@ -583,7 +583,7 @@ describe('CopilotController', () => {
       setSpy.mockRestore();
     });
 
-    it('sets media context from CopilotKit properties and does NOT set ag-ui from properties', async () => {
+    it('sets only identity/access context — never integrations/media/ag-ui from the request body', async () => {
       process.env.OPENAI_API_KEY = 'sk-agent-test';
       mockResolveConfigForScope.mockResolvedValue({
         adapter: mockOpenaiAdapter,
@@ -592,15 +592,14 @@ describe('CopilotController', () => {
         providerId: 'openai',
       });
       const media = [{ id: 'file-1', path: 'https://example.com/img.png' }];
-      // agUiContext in properties is a DEAD leg: `@ag-ui/mastra` overwrites the
-      // `ag-ui` request-context key from the CopilotKit readable unconditionally,
-      // so the controller no longer reads or sets it (see the controller's note).
+      // Both the GraphQL-era `variables.properties` and the single-route
+      // `forwardedProps` legs are ignored: `ag-ui` is owned by @ag-ui/mastra,
+      // and integrations/media were read by no tool.
       const agUiContext = { view: 'launches', currentPostId: 'post-1' };
       const req = {
         body: {
-          variables: {
-            properties: { integrations: [], media, agUiContext },
-          },
+          variables: { properties: { integrations: ['int-1'], media, agUiContext } },
+          forwardedProps: { integrations: ['int-1'], media },
         },
       } as any;
       const res = { status: vi.fn().mockReturnThis(), json: vi.fn() } as any;
@@ -610,11 +609,8 @@ describe('CopilotController', () => {
 
       await controller.agent(req, res, org, user);
 
-      const mediaCall = setSpy.mock.calls.find((c) => c[0] === 'media');
-      const agUiCall = setSpy.mock.calls.find((c) => c[0] === 'ag-ui');
-      expect(mediaCall?.[1]).toEqual(media);
-      // The controller must not set ag-ui from properties.agUiContext anymore.
-      expect(agUiCall).toBeUndefined();
+      const keys = setSpy.mock.calls.map((c) => c[0]).sort();
+      expect(keys).toEqual(['access', 'organization', 'ui', 'user']);
       setSpy.mockRestore();
     });
   });

@@ -56,7 +56,6 @@ const MediaAttachmentContext = createContext<{
 export const AgentChat: FC = () => {
   const { backendUrl } = useVariables();
   const params = useParams<{ id: string }>();
-  const { properties } = useContext(PropertiesContext);
   const t = useT();
   const router = useRouter();
   const aiActive = useAiActive();
@@ -100,10 +99,6 @@ export const AgentChat: FC = () => {
       showDevConsole={false}
       enableInspector={false}
       agent="postmill"
-      properties={{
-        integrations: properties,
-        media,
-      }}
     >
       <MediaAttachmentContext.Provider value={{ media, setMedia }}>
         <Hooks />
