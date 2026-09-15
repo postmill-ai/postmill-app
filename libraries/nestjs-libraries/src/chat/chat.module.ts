@@ -7,6 +7,7 @@ import { MediaAgentBuilder } from '@postmill-ai/nestjs-libraries/chat/agents/med
 import { AnalyticsAgentBuilder } from '@postmill-ai/nestjs-libraries/chat/agents/analytics.agent';
 import { OpsAgentBuilder } from '@postmill-ai/nestjs-libraries/chat/agents/ops.agent';
 import { ContentPipelineModule } from '@postmill-ai/nestjs-libraries/chat/content-pipeline/content-pipeline.module';
+import { CommsConfirmationGate } from '@postmill-ai/nestjs-libraries/chat/tools/comms-confirmation.gate';
 
 @Global()
 @Module({
@@ -18,6 +19,7 @@ import { ContentPipelineModule } from '@postmill-ai/nestjs-libraries/chat/conten
     MediaAgentBuilder,
     AnalyticsAgentBuilder,
     OpsAgentBuilder,
+    CommsConfirmationGate,
     ...toolList,
   ],
   get exports() {

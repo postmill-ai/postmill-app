@@ -3,6 +3,9 @@ import { GuardrailService } from '@postmill-ai/nestjs-libraries/ai/governance/gu
 type AccessMode = {
   mode: string;
   scopes?: string[];
+  // comms only: the confirmation id of a parked outward action the user has
+  // just approved in chat — lets CommsConfirmationGate run that one call.
+  confirmed?: string;
 };
 
 function _get(context: any, key: string): string | undefined {

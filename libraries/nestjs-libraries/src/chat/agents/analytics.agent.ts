@@ -1,5 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { Agent } from '@mastra/core/agent';
+import { specialistPreamble } from '@postmill-ai/nestjs-libraries/chat/agents/comms-surface';
 import { AIModelProvider } from '@postmill-ai/nestjs-libraries/ai/ai-model.provider';
 import { resolveOrgIdFromModelContext } from '@postmill-ai/nestjs-libraries/chat/agents/resolve-org-context';
 import { pickTools } from '@postmill-ai/nestjs-libraries/chat/agents/specialist-tool-subset';
@@ -21,8 +22,7 @@ export class AnalyticsAgentBuilder {
       id: 'analytics',
       name: 'analytics',
       description: 'Specialist agent for analytics, best-time, recommendations, and competitor watchlists.',
-      instructions: `
-You are the analytics specialist for Postmill.
+      instructions: () => `${specialistPreamble()}You are the analytics specialist for Postmill.
 
 Your job:
 - Answer "how are my channels doing" with analyticsOverview.

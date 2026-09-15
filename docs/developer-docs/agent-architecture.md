@@ -26,7 +26,7 @@ Postmill's chat agent is a Mastra/CopilotKit agent that lives at `/agents`. It u
 ┌─────────────────────────────────────────────────────────────────────┐
 │  Mastra agent ("postmill")                                          │
 │  ┌─────────────┐                                                    │
-│  │ Supervisor  │  owns integrationList + groupList                  │
+│  │ Supervisor  │  owns integrationList (channel lister)             │
 │  │   (when     │  routes intent to specialists                      │
 │  │  AGENT_     │                                                    │
 │  │ SUPERVISOR_ │                                                    │
@@ -61,7 +61,7 @@ Postmill's chat agent is a Mastra/CopilotKit agent that lives at `/agents`. It u
 | `analytics` | Analytics overviews, best-time heatmap, recommendations, per-post metrics, watchlist | `analyticsOverview`, `bestTime`, `recommendations`, `analyticsPost`, `watchlist` |
 | `ops` | Scheduling posts, campaign management, comments inbox/replies, post operations | `integrationSchema`, `triggerTool`, `schedulePostTool`, `listPosts`, `getPost`, `reschedulePost`, `deletePost`, `approveDraft`, `campaignCreate`, `campaignUpdate`, `campaignDashboard`, `campaignTag`, `commentsInbox`, `commentReply` |
 
-The supervisor only owns `integrationList` and `groupList` directly; everything else is delegated.
+The supervisor only owns `integrationList` (the connected-channel lister — it answers "which/how many channels" itself) directly; everything else is delegated. Channels are org-scoped; there is no per-client grouping tool.
 
 ---
 
@@ -72,7 +72,6 @@ All tools live under `libraries/nestjs-libraries/src/chat/tools/` and are regist
 | Tool id | Class | Kind | Requires write scope | Human-in-the-loop in UI |
 |---|---|---|---|---|
 | `integrationList` | `IntegrationListTool` | read | no | no |
-| `groupList` | `GroupListTool` | read | no | no |
 | `integrationSchema` | `IntegrationValidationTool` | read | no | no |
 | `triggerTool` | `IntegrationTriggerTool` | read | no | no |
 | `schedulePostTool` | `IntegrationSchedulePostTool` | write | yes | via composer modal |
@@ -128,6 +127,14 @@ When the request originates from the UI (`/agents`), the frontend intercepts out
 * `campaignCreate`, `campaignUpdate`, `campaignTag`, `reschedulePost`, `deletePost`, `approveDraft` — show a confirmation card with the proposed change.
 
 MCP/headless callers do not get a UI card; they rely on tool annotations (`readOnlyHint`, `destructiveHint`, etc.) and the `mcp:posts:write` scope.
+
+### Chat apps (comms): the YES gate
+
+Turns that arrive from Slack/Telegram/Discord/Matrix/LINE (`access.mode = 'comms'`, `ui = 'false'`) have no cards either, so the confirmation is enforced in code, not by the model:
+
+* `CommsConfirmationGate` (`chat/tools/comms-confirmation.gate.ts`) wraps every tool that is not `readOnlyHint: true`, **outside** the tool firewall. In comms mode the first call does not execute: the exact call (`toolId` + args) is parked in Redis under `comms:pending:<threadId>` (15 min, one per thread) and the model receives `{ needsConfirmation: true, summary, instructions }` — a one-line human summary from `comms-action-summary.ts` it must relay, ending with "Reply YES to confirm or NO to cancel." (`CommsInboundService` appends that line if the model forgets.)
+* The user's next message is inspected **before** any LLM turn: a literal yes/ok/confirm/approve/… consumes the parked record first (an Inngest retry can never run it twice) and re-invokes the same wrapped tool with `access.confirmed = <id>`, so the confirmed run still passes the firewall and schema validation. no/cancel/stop drops it. Anything else is a normal turn; the prompt is told a confirmation is still pending.
+* The prompt's "Conversation surface" block (`LoadToolsService._conversationSurface`) is emitted only for comms turns; web UI and MCP prompts are unchanged.
 
 ---
 
@@ -186,6 +193,7 @@ Every entrypoint stamps an **access mode** into the tool request context, and ea
 | `user` | CopilotKit (`/copilot/*`) | yes | yes |
 | `mcp` | `/mcp*`, `/sse` | with `mcp:read` | with `mcp:posts:write` |
 | `headless` | weekly digest | yes | **never** (hard invariant) |
+| `comms` | chat-app turn for a connect-code-verified org member (`CommsAgentActivity`) | yes | yes, but every non-read-only tool is parked by `CommsConfirmationGate` until the user replies YES in chat |
 
 - `requireRead(context)` / `requireWrite(context)` (in `tool.helpers.ts`) gate every registered tool. A test (`tools/__tests__/guard-coverage.spec.ts`) asserts the guard is present **and precedes the first `await this._`** (so a commented-out or post-spend guard fails), for every tool in `tool.list.ts`.
 - **Text generation stays on `requireRead`; only artifact-spend is `requireWrite`.** The artifact tools that create durable media (`generateImageTool`, `generateVideoTool`, `designerDesign`, `mediaStudioGenerate`) require write scope because an `mcp:read` token must not spend money on a stored artifact. The text-spend tools (`generatePostContent`, `runGenerator`, and `runContentPipeline`'s text path) deliberately stay on `requireRead`: ephemeral text is the core utility of a read-scoped chat session, it is already bounded by the org `agent` budget cap, and "write" scope means *outward / durable side effects*, which transient text is not.

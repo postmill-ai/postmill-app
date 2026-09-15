@@ -11,15 +11,17 @@ import { ToolFirewallService } from '@postmill-ai/nestjs-libraries/ai/governance
 import { BrandsService } from '@postmill-ai/nestjs-libraries/brands/brands.service';
 import { resolveOrgIdFromModelContext } from '@postmill-ai/nestjs-libraries/chat/agents/resolve-org-context';
 import { pickTools } from '@postmill-ai/nestjs-libraries/chat/agents/specialist-tool-subset';
+import { getAccess } from '@postmill-ai/nestjs-libraries/chat/tools/tool.helpers';
 import { ContentAgentBuilder } from '@postmill-ai/nestjs-libraries/chat/agents/content.agent';
 import { MediaAgentBuilder } from '@postmill-ai/nestjs-libraries/chat/agents/media.agent';
 import { AnalyticsAgentBuilder } from '@postmill-ai/nestjs-libraries/chat/agents/analytics.agent';
 import { OpsAgentBuilder } from '@postmill-ai/nestjs-libraries/chat/agents/ops.agent';
+import { CommsConfirmationGate } from '@postmill-ai/nestjs-libraries/chat/tools/comms-confirmation.gate';
 
-// The supervisor holds only these two tools directly; specialists partition the
+// The supervisor holds only this tool directly; specialists partition the
 // rest. Exported so the MCP/A2A tool-union and the parity eval can build the full
 // surface from in-repo sources instead of reflecting a private Mastra internal.
-export const SUPERVISOR_TOOL_NAMES = ['integrationList', 'groupList'];
+export const SUPERVISOR_TOOL_NAMES = ['integrationList'];
 
 export const AgentState = object({
   brandVoice: string().optional(),
@@ -52,6 +54,7 @@ export class LoadToolsService {
     private _mediaBuilder: MediaAgentBuilder,
     private _analyticsBuilder: AnalyticsAgentBuilder,
     private _opsBuilder: OpsAgentBuilder,
+    private _commsGate: CommsConfirmationGate,
   ) {}
 
   private async _getBrandVoice(orgId: string): Promise<string> {
@@ -124,7 +127,13 @@ export class LoadToolsService {
           .map(async (p) => ({
             name: p.name as string,
             // Every agent/MCP tool call is firewalled before it executes (section 5/8).
-            tool: this._toolFirewall.wrap(p.name as string, await p.run()),
+            // The comms confirmation gate sits OUTSIDE the firewall: in a chat-app
+            // turn a parked outward call never reaches the firewall span, and a
+            // confirmed re-run still traverses the whole chain.
+            tool: this._commsGate.wrap(
+              p.name as string,
+              this._toolFirewall.wrap(p.name as string, await p.run()),
+            ),
           }))
       )
     ).reduce(
@@ -134,6 +143,36 @@ export class LoadToolsService {
       }),
       {} as Record<string, any>
     );
+  }
+
+  /**
+   * Tells the model which surface it is on. Only chat-app (comms) turns get a
+   * block: no UI cards exist there, so outward tools are parked by the
+   * CommsConfirmationGate and the model must relay the summary and ask for a
+   * YES/NO. Web UI and MCP turns get nothing (unchanged behaviour).
+   */
+  private _conversationSurface(requestContext: any): string {
+    if (requestContext?.get?.('ui') === 'true') return '';
+    const access = getAccess({ requestContext });
+    if (access?.mode !== 'comms') return '';
+    let pending: { toolId?: string; summary?: string } | null = null;
+    try {
+      const raw = requestContext?.get?.('pendingConfirmation');
+      pending = raw ? JSON.parse(raw) : null;
+    } catch {
+      pending = null;
+    }
+    const pendingLine = pending?.summary
+      ? `        - A confirmation is still pending for: "${pending.summary}". If the user's message answers it, remind them to reply YES or NO. If it is a new request, handle the new request (proposing another action replaces the pending one).\n`
+      : '';
+    return `
+      Conversation surface:
+        - You are replying inside a chat app (Slack/Telegram/Discord/Matrix/LINE). There are no UI cards, buttons or modals — plain text only, keep replies short.
+        - Outward tools (scheduling, deleting, approving, replying to comments, media generation, campaign changes, uploads, reindexing) do NOT run on the first call here. They return { needsConfirmation: true, summary, instructions }. When you see that: do not call the tool again, relay the summary to the user almost verbatim, and end your reply with exactly: "Reply YES to confirm or NO to cancel."
+        - Do NOT ask the user for permission before calling or delegating an outward action — the confirmation step is enforced by the tool, and asking first makes the user confirm twice. Gather what you need (channel id, time, text) and call/delegate immediately; the "confirm when ui mode is true" rules below do not apply on this surface.
+        - Never say an action was done unless the tool returned a real result.
+        - Propose one outward action per reply. If a request needs several, do the first and ask for confirmation.
+${pendingLine}`;
   }
 
   private _currentViewPreamble(requestContext: any): string {
@@ -192,18 +231,19 @@ export class LoadToolsService {
     const orgId = resolveOrgIdFromModelContext({ requestContext });
     const brandVoice = orgId ? await this._getBrandVoice(orgId) : '';
     const currentView = this._currentViewPreamble(requestContext);
+    const surface = this._conversationSurface(requestContext);
 
     return `
       Global information:
         - Date (UTC): ${dayjs().format('YYYY-MM-DD HH:mm:ss')}
-${brandVoice}${currentView}
+${brandVoice}${currentView}${surface}
       You are an agent that helps manage and schedule social media posts for users.
 
       Available capabilities:
-        - Schedule posts to channels (integrations) now or in the future, with text, images and videos.
+        - Schedule posts to connected channels now or in the future, with text, images and videos.
         - Generate images and videos for posts.
         - Generate post content for a channel and optional image/video context.
-        - List channels (integrations) and groups (customers).
+        - List the connected channels (integrationList) — answers "which channels are connected" and "how many channels are configured".
         - Analytics: org overview, best-time heatmap, recommendations, per-post metrics, and competitor watchlist.
         - Media studios: list providers/models, start a generation with mediaStudioGenerate, then poll the returned job id with mediaJobStatus.
         - Campaigns: create, update, view dashboard, tag items.
@@ -236,12 +276,13 @@ ${brandVoice}${currentView}
     const orgId = resolveOrgIdFromModelContext({ requestContext });
     const brandVoice = orgId ? await this._getBrandVoice(orgId) : '';
     const currentView = this._currentViewPreamble(requestContext);
+    const surface = this._conversationSurface(requestContext);
 
     return `
       Global information:
         - Date (UTC): ${dayjs().format('YYYY-MM-DD HH:mm:ss')}
-${brandVoice}${currentView}
-      You are the Postmill supervisor agent. Your job is to understand the user's intent, then route to the correct specialist agent. You own only two tools directly: integrationList and groupList.
+${brandVoice}${currentView}${surface}
+      You are the Postmill supervisor agent. Your job is to understand the user's intent, then route to the correct specialist agent. You own one tool directly: integrationList — call it yourself whenever the user asks which channels are connected, how many channels are configured, or needs a channel id. "Channels" are the workspace's connected social accounts.
 
       Specialists:
         - content — drafts, rewriting, brand-voice copy, RAG/brand-memory searches, and the research-grounded generator.
@@ -256,6 +297,7 @@ ${brandVoice}${currentView}
         - For scheduling or campaign actions, always confirm with the user when ui mode is true before calling ops tools.
         - For media generation, confirm provider/model and cost with the user when ui mode is true before delegating to media.
         - Never invent channel settings; ops will call integrationSchema first.
+        - Before delegating anything channel-specific (scheduling, analytics for a channel, comments on a channel), call integrationList yourself and put the exact channel id field (not the platform name) in the specialist's prompt, together with any date already resolved to absolute ISO-8601 UTC.
         - Post content must be HTML with allowed tags: h1, h2, h3, u, strong, li, ul, p (u and strong cannot be nested).
         - When outputting a date for the user, make it human readable with time.
 
