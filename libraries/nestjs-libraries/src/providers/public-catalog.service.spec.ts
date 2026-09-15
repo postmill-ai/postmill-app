@@ -41,6 +41,7 @@ const social = (over: Record<string, unknown>) => ({
 describe('PublicCatalogService', () => {
   let catalog: { buildCatalog: ReturnType<typeof vi.fn> };
   let manager: { getSocialProviders: ReturnType<typeof vi.fn>; getAllPlugs: ReturnType<typeof vi.fn> };
+  let kernel: { get: ReturnType<typeof vi.fn> };
   let service: PublicCatalogService;
 
   beforeEach(() => {
@@ -50,7 +51,14 @@ describe('PublicCatalogService', () => {
       getSocialProviders: vi.fn().mockReturnValue([]),
       getAllPlugs: vi.fn().mockReturnValue([]),
     };
-    service = new PublicCatalogService(catalog as any, manager as any);
+    // AI adapters: openai is a direct API even though its shared metadata says hub
+    kernel = {
+      get: vi.fn((domain: string, id: string) =>
+        domain === 'ai' && id === 'openai' ? { create: () => ({ type: 'direct' }) } : undefined,
+      ),
+    };
+    const ctxFactory = { build: () => ({}) };
+    service = new PublicCatalogService(catalog as any, manager as any, kernel as any, ctxFactory as any);
   });
   afterEach(() => vi.useRealTimers());
 
@@ -75,7 +83,7 @@ describe('PublicCatalogService', () => {
   });
 
   it('strips deployment-fingerprinting fields and keeps only true capability flags', async () => {
-    catalog.buildCatalog.mockResolvedValue([entry({ featured: true, featuredSortOrder: 2 })]);
+    catalog.buildCatalog.mockResolvedValue([entry({ featured: true, featuredSortOrder: 2, kind: 'hub' })]);
     const [p] = (await service.build('ai')).domains[0].providers;
     expect(p).toEqual({
       id: 'openai',
@@ -91,6 +99,20 @@ describe('PublicCatalogService', () => {
       kind: 'direct',
     });
     expect(JSON.stringify(p)).not.toMatch(/version|status|credentialFields|setupNotes|secret/);
+  });
+
+  it('takes the AI kind from the adapter type, falling back to metadata', async () => {
+    catalog.buildCatalog.mockResolvedValue([
+      entry({ kind: 'hub' }), // openai: metadata says hub (media sense), adapter says direct
+      entry({ providerId: 'openrouter', displayName: 'OpenRouter', kind: 'hub' }), // no adapter stub → metadata
+      entry({ domain: 'media', providerId: 'openai', kind: 'hub', capabilities: { image: true } }),
+    ]);
+    const out = await service.build();
+    const ai = out.domains.find((d) => d.id === 'ai')!.providers;
+    expect(ai.find((p) => p.id === 'openai')!.kind).toBe('direct');
+    expect(ai.find((p) => p.id === 'openrouter')!.kind).toBe('hub');
+    expect(out.domains.find((d) => d.id === 'media')!.providers[0].kind).toBe('hub');
+    expect(kernel.get).toHaveBeenCalledWith('ai', 'openai', 'v1');
   });
 
   it('skips retired versions and keeps the healthiest status per provider', async () => {

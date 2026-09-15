@@ -1,5 +1,5 @@
-import { Injectable } from '@nestjs/common';
-import { ProviderDomain } from '@postmill-ai/provider-kernel';
+import { Inject, Injectable, Logger } from '@nestjs/common';
+import { ProviderDomain, ProviderKernel } from '@postmill-ai/provider-kernel';
 import {
   PublicCatalogDomainDto,
   PublicCatalogDto,
@@ -10,6 +10,8 @@ import {
   CatalogEntry,
   ProviderCatalogService,
 } from './provider-catalog.service';
+import { PROVIDER_KERNEL } from './provider-kernel.token';
+import { RuntimeContextFactory } from './runtime-context.factory';
 
 /**
  * Domains exposed on the anonymous catalogue. `auth`, `email` and
@@ -70,11 +72,14 @@ export function publicProviderIconPath(domain: string, id: string): string {
 
 @Injectable()
 export class PublicCatalogService {
+  private readonly _logger = new Logger(PublicCatalogService.name);
   private readonly _memo = new Map<string, { at: number; value: PublicCatalogDto }>();
 
   constructor(
     private readonly _catalog: ProviderCatalogService,
     private readonly _integrationManager: IntegrationManager,
+    @Inject(PROVIDER_KERNEL) private readonly _kernel: ProviderKernel,
+    private readonly _runtimeContextFactory: RuntimeContextFactory,
   ) {}
 
   async build(domain?: PublicCatalogDomain): Promise<PublicCatalogDto> {
@@ -147,7 +152,16 @@ export class PublicCatalogService {
       dto.featuredSortOrder = e.featuredSortOrder;
     }
     if (typeof caps.maxMedia === 'number') dto.maxMedia = caps.maxMedia;
-    if ((e.domain === 'ai' || e.domain === 'media') && e.kind) dto.kind = e.kind;
+    // `metadata.kind` is shared by a package's AI and media modules and is
+    // reconciled by the media-studio generator (OpenAI is a multi-model "hub"
+    // for media but a direct API for text). For the AI bucket the adapter's
+    // own `type` is the truth; media keeps the metadata kind.
+    if (e.domain === 'ai') {
+      const kind = this._aiAdapterType(e) ?? e.kind;
+      if (kind) dto.kind = kind;
+    } else if (e.domain === 'media' && e.kind) {
+      dto.kind = e.kind;
+    }
     if (e.domain === 'storage') {
       dto.storageKind = STORAGE_KIND[e.providerId] ?? 's3-compatible';
     }
@@ -156,6 +170,21 @@ export class PublicCatalogService {
     }
     if (social) Object.assign(dto, social);
     return dto;
+  }
+
+  private _aiAdapterType(e: CatalogEntry): 'hub' | 'direct' | undefined {
+    try {
+      const mod = this._kernel.get('ai', e.providerId, e.version);
+      // create() is pure by contract (all-providers.conformance.spec) and
+      // only wires the injected safe fetch; no credentials are involved.
+      const adapter = mod?.create(this._runtimeContextFactory.build({})) as
+        | { type?: 'hub' | 'direct' }
+        | undefined;
+      return adapter?.type === 'hub' || adapter?.type === 'direct' ? adapter.type : undefined;
+    } catch (err) {
+      this._logger.debug(`ai/${e.providerId}: adapter type unavailable — ${(err as Error).message}`);
+      return undefined;
+    }
   }
 
   // Adapter-level facts the manifest doesn't carry (editor, auth flow,

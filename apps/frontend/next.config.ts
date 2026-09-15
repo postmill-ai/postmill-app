@@ -103,11 +103,21 @@ const nextConfig: NextConfig = {
       });
     }
 
+    // Provider brand icons under public/icons + public/ai-icons are static
+    // assets referenced by the public integrations catalogue (and hot-linked
+    // by the marketing site); Next serves `public/` with max-age=0 by default,
+    // which turns every icon into a conditional request per page view.
+    const iconCache = {
+      key: 'Cache-Control',
+      value: 'public, max-age=86400, stale-while-revalidate=604800',
+    };
     return [
       {
         source: '/:path*',
         headers,
       },
+      { source: '/icons/:path*', headers: [iconCache] },
+      { source: '/ai-icons/:path*', headers: [iconCache] },
     ];
   },
   reactStrictMode: false,
