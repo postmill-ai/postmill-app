@@ -39,9 +39,8 @@ import { BudgetService } from '@postmill-ai/nestjs-libraries/ai/governance/budge
 import { BudgetExceeded } from '@postmill-ai/nestjs-libraries/ai/governance/errors';
 import { FeatureFlagsService } from '@postmill-ai/nestjs-libraries/feature-flags';
 
-export type ChannelsContext = {
-  integrations: unknown[];
-  media?: unknown[];
+export type AgentRequestContext = {
+  // Set by @ag-ui/mastra from the CopilotKit readables, never by this controller.
   'ag-ui'?: string;
   organization: string;
   user: string;
@@ -376,19 +375,12 @@ export class CopilotController {
     try {
       const serviceAdapter = await this._buildServiceAdapter(organization.id);
       const mastra = await this._mastraService.mastra();
-      const requestContext = new RequestContext<ChannelsContext>();
-      const properties = req?.body?.variables?.properties || {};
-      requestContext.set('integrations', properties.integrations || []);
-      requestContext.set(
-        'media',
-        Array.isArray(properties.media) ? properties.media : []
-      );
-      // NOTE: the `ag-ui` view context is set exclusively by `@ag-ui/mastra`
-      // (`getLocalAgents` forwards the CopilotKit readable as `{ context }` and
-      // overwrites `requestContext.set('ag-ui', …)` unconditionally). A manual set
-      // here from `properties.agUiContext` was dead — the readable always won — so
-      // the frontend transport leg and this set were both removed.
-
+      const requestContext = new RequestContext<AgentRequestContext>();
+      // Only the identity/access keys are set here. Page context (`ag-ui`) is
+      // set exclusively by `@ag-ui/mastra` from the CopilotKit readables. The
+      // former `integrations`/`media` keys came from the GraphQL-era
+      // `body.variables.properties` envelope (gone since CopilotKit 1.69's
+      // single-route transport) and were read by no tool — removed.
       requestContext.set('organization', JSON.stringify(organization));
       requestContext.set('user', JSON.stringify({ id: user.id }));
       requestContext.set('ui', 'true');
