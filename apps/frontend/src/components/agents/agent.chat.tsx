@@ -94,6 +94,9 @@ export const AgentChat: FC = () => {
       credentials="include"
       runtimeUrl={backendUrl + '/copilot/agent'}
       headers={csrfHeader()}
+      // Backend serves the single-route (POST-only) transport; skip the
+      // `GET …/info` auto-detect probe that 404s. See copilot.provider.tsx.
+      useSingleEndpoint
       showDevConsole={false}
       enableInspector={false}
       agent="postmill"

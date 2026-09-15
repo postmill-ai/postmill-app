@@ -138,6 +138,11 @@ HTTP → RequestIdMiddleware ('*', AppModule.configure)
      → Controller → Service → Repository → Prisma
 ```
 
+CopilotKit is mounted through its **single-route** adapter — `POST /copilot/chat` and
+`POST /copilot/agent` carry a `{ method, params, body }` envelope (`info`, `agent/run`, …); no
+`GET …/info` or `/agent/:id/run` sub-routes exist. The two frontend providers set
+`useSingleEndpoint` so the client skips its multi-route auto-detect probe (which would 404).
+
 Guard registration order in `apps/backend/src/app.module.ts` is exactly throttle → policies →
 RBAC. `User.isSuperAdmin` bypasses RBAC, **not** the billing gate. Throttler default:
 600 req/hour, override via `API_LIMIT`. The bucket is **per (controller, handler, org)** —
