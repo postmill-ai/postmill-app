@@ -82,6 +82,12 @@
       "@postmill-ai/provider-apertus/*": [
         "libraries/providers/apertus/src/*"
       ],
+      "@postmill-ai/provider-apple": [
+        "libraries/providers/apple/src"
+      ],
+      "@postmill-ai/provider-apple/*": [
+        "libraries/providers/apple/src/*"
+      ],
       "@postmill-ai/provider-azure": [
         "libraries/providers/azure/src"
       ],
