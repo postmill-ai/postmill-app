@@ -1,6 +1,6 @@
 import { createHash } from 'crypto';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { xAuthModule } from './auth.adapter';
+import { xAuthModule, xSsoNonceFromState, xSsoPkceKey } from './auth.adapter';
 
 const ORIGINAL_ENV = { ...process.env };
 
@@ -39,6 +39,9 @@ function makeCtx(overrides?: { fetch?: any; extras?: any }) {
 
 function setEnv() {
   process.env.FRONTEND_URL = 'https://app.example.com';
+  process.env.X_CLIENT_ID = 'x-oauth2-client-id';
+  process.env.X_CLIENT_SECRET = 'x-oauth2-client-secret';
+  // Channel (OAuth 1.0a) keys must never be picked up by the login adapter.
   process.env.X_API_KEY = 'x-api-key';
   process.env.X_API_SECRET = 'x-api-secret';
 }
@@ -64,14 +67,14 @@ describe('xAuthModule', () => {
   });
 
   describe('generateLink', () => {
-    it('builds the X OAuth2 authorize URL with PKCE S256 and state=login', async () => {
+    it('builds the X OAuth2 authorize URL with PKCE S256 and a per-attempt state=login.<nonce>', async () => {
       const redis = makeRedis();
       const { ctx } = makeCtx({ extras: { redis } });
 
       const link = await xAuthModule.create(ctx).generateLink();
 
       const [key, verifier, ex, ttl] = redis.set.mock.calls[0];
-      expect(key).toBe('login:x:sso:pkce');
+      expect(key).toMatch(/^login:x:sso:pkce:[A-Za-z0-9_-]{16,}$/);
       expect(typeof verifier).toBe('string');
       expect(verifier.length).toBeGreaterThan(40);
       expect(ex).toBe('EX');
@@ -83,14 +86,20 @@ describe('xAuthModule', () => {
 
       const url = new URL(link);
       expect(url.origin + url.pathname).toBe(
-        'https://twitter.com/i/oauth2/authorize'
+        'https://x.com/i/oauth2/authorize'
       );
       expect(url.searchParams.get('response_type')).toBe('code');
-      expect(url.searchParams.get('client_id')).toBe('x-api-key');
+      // OAuth 2.0 client id — never the OAuth 1.0a consumer key
+      expect(url.searchParams.get('client_id')).toBe('x-oauth2-client-id');
       expect(url.searchParams.get('redirect_uri')).toBe(
         'https://app.example.com/integrations/social/x'
       );
-      expect(url.searchParams.get('state')).toBe('login');
+      const state = url.searchParams.get('state')!;
+      // the frontend proxy gates login callbacks on the substring state=login
+      expect(state.startsWith('login')).toBe(true);
+      const nonce = xSsoNonceFromState(state)!;
+      expect(nonce).toBeTruthy();
+      expect(key).toBe(xSsoPkceKey(nonce));
       expect(url.searchParams.get('scope')).toBe('users.read');
       expect(url.searchParams.get('code_challenge')).toBe(challenge);
       expect(url.searchParams.get('code_challenge_method')).toBe('S256');
@@ -104,9 +113,21 @@ describe('xAuthModule', () => {
       );
     });
 
-    it('throws when neither DB config nor env creds are present', async () => {
-      delete process.env.X_API_KEY;
-      delete process.env.X_API_SECRET;
+    it('issues a fresh nonce + verifier slot per login attempt (no shared slot)', async () => {
+      const redis = makeRedis();
+      const { ctx } = makeCtx({ extras: { redis } });
+      const auth = xAuthModule.create(ctx);
+
+      const a = new URL(await auth.generateLink()).searchParams.get('state');
+      const b = new URL(await auth.generateLink()).searchParams.get('state');
+
+      expect(a).not.toBe(b);
+      expect(redis.set.mock.calls[0][0]).not.toBe(redis.set.mock.calls[1][0]);
+    });
+
+    it('throws when neither DB config nor env creds are present — the channel keys alone do not count', async () => {
+      delete process.env.X_CLIENT_ID;
+      delete process.env.X_CLIENT_SECRET;
       const { ctx } = makeCtx();
 
       await expect(xAuthModule.create(ctx).generateLink()).rejects.toThrow(
@@ -139,12 +160,14 @@ describe('xAuthModule', () => {
         .mockResolvedValue(mockResponse({ access_token: 'x-token' }));
       const { ctx } = makeCtx({ fetch: fetchMock, extras: { redis } });
 
-      const token = await xAuthModule.create(ctx).getToken('code-123');
+      const token = await xAuthModule
+        .create(ctx)
+        .getToken('code-123', undefined, 'login.abcdefghijklmnop');
 
       expect(token).toBe('x-token');
-      expect(redis.get).toHaveBeenCalledWith('login:x:sso:pkce');
+      expect(redis.get).toHaveBeenCalledWith('login:x:sso:pkce:abcdefghijklmnop');
       // one-time use: verifier deleted after the exchange
-      expect(redis.del).toHaveBeenCalledWith('login:x:sso:pkce');
+      expect(redis.del).toHaveBeenCalledWith('login:x:sso:pkce:abcdefghijklmnop');
 
       const [url, init] = fetchMock.mock.calls[0];
       expect(url).toBe('https://api.twitter.com/2/oauth2/token');
@@ -153,7 +176,9 @@ describe('xAuthModule', () => {
         'application/x-www-form-urlencoded'
       );
       expect(init.headers.Authorization).toBe(
-        `Basic ${Buffer.from('x-api-key:x-api-secret').toString('base64')}`
+        `Basic ${Buffer.from(
+          'x-oauth2-client-id:x-oauth2-client-secret'
+        ).toString('base64')}`
       );
       expect(init.body).toContain('grant_type=authorization_code');
       expect(init.body).toContain('code=code-123');
@@ -169,10 +194,25 @@ describe('xAuthModule', () => {
       const redis = makeRedis({ get: vi.fn().mockResolvedValue(null) });
       const { ctx } = makeCtx({ extras: { redis } });
 
-      await expect(xAuthModule.create(ctx).getToken('code-123')).rejects.toThrow(
-        'PKCE verifier missing or expired'
-      );
+      await expect(
+        xAuthModule
+          .create(ctx)
+          .getToken('code-123', undefined, 'login.abcdefghijklmnop')
+      ).rejects.toThrow('PKCE verifier missing or expired');
     });
+
+    it.each([undefined, '', 'login', 'login.', 'login.short', 'evil.abcdefghijklmnop'])(
+      'rejects a callback without a state this module issued (%s)',
+      async (state) => {
+        const redis = makeRedis();
+        const { ctx } = makeCtx({ extras: { redis } });
+
+        await expect(
+          xAuthModule.create(ctx).getToken('code-123', undefined, state as any)
+        ).rejects.toThrow('X login state missing');
+        expect(redis.get).not.toHaveBeenCalled();
+      }
+    );
   });
 
   describe('getUser', () => {

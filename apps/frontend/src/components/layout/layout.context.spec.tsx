@@ -135,3 +135,84 @@ describe('LayoutContext afterRequest 429 handling (C4)', () => {
     expect(result).toBe(true);
   });
 });
+
+// Social sign-in popup: a `reload` / `onboarding` header arriving inside the
+// popup must be handed to the opener (sso-popup handshake) instead of
+// reloading / navigating the popup itself. window.location is not writable
+// in jsdom, so the handshake module is mocked and only the routing asserted.
+const ssoMock = vi.hoisted(() => ({
+  isPopup: false,
+  completeSsoPopup: vi.fn(),
+  navigateAfterAuth: vi.fn(),
+}));
+vi.mock('@postmill-ai/frontend/components/auth/sso-popup', () => ({
+  SSO_CLOSE_FALLBACK_MS: 400,
+  isSsoPopupCallback: () => ssoMock.isPopup,
+  completeSsoPopup: ssoMock.completeSsoPopup,
+  navigateAfterAuth: ssoMock.navigateAfterAuth,
+}));
+
+describe('LayoutContext afterRequest — auth headers vs the sign-in popup', () => {
+  beforeEach(() => {
+    ssoMock.isPopup = false;
+    ssoMock.completeSsoPopup.mockClear();
+    ssoMock.navigateAfterAuth.mockClear();
+    vi.useFakeTimers();
+    render(
+      <LayoutContext>
+        <div>child</div>
+      </LayoutContext>
+    );
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+    vi.restoreAllMocks();
+  });
+
+  it('navigates in place on `reload` outside a popup', async () => {
+    const result = await capturedAfterRequest(
+      '/auth/oauth/FACEBOOK/exists',
+      {},
+      makeResponse(200, { reload: 'true' })
+    );
+
+    expect(result).toBe(true);
+    expect(ssoMock.completeSsoPopup).not.toHaveBeenCalled();
+    expect(ssoMock.navigateAfterAuth).toHaveBeenCalledWith('reload', expect.any(Function));
+  });
+
+  it('prefers onboarding over reload when both headers are present', async () => {
+    await capturedAfterRequest(
+      '/auth/register',
+      {},
+      makeResponse(200, { reload: 'true', onboarding: 'true' })
+    );
+
+    expect(ssoMock.navigateAfterAuth).toHaveBeenCalledWith('onboarding', expect.any(Function));
+  });
+
+  it('inside the sign-in popup hands `reload` to the opener and only navigates as the "still here" fallback', async () => {
+    ssoMock.isPopup = true;
+
+    const result = await capturedAfterRequest(
+      '/auth/oauth/FACEBOOK/exists',
+      {},
+      makeResponse(200, { reload: 'true' })
+    );
+
+    expect(result).toBe(true);
+    expect(ssoMock.completeSsoPopup).toHaveBeenCalledWith({ action: 'reload' });
+    expect(ssoMock.navigateAfterAuth).not.toHaveBeenCalled();
+    vi.advanceTimersByTime(400);
+    expect(ssoMock.navigateAfterAuth).toHaveBeenCalledWith('reload', expect.any(Function));
+  });
+
+  it('inside the sign-in popup hands `onboarding` (fresh registration) to the opener', async () => {
+    ssoMock.isPopup = true;
+
+    await capturedAfterRequest('/auth/register', {}, makeResponse(200, { onboarding: 'true' }));
+
+    expect(ssoMock.completeSsoPopup).toHaveBeenCalledWith({ action: 'onboarding' });
+  });
+});

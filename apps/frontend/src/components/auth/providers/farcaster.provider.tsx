@@ -5,8 +5,12 @@ import { useVariables } from '@postmill-ai/react/helpers/variable.context';
 import { NeynarContextProvider, Theme, useNeynarContext } from '@neynar/react';
 import { NeynarAuthButton } from '@postmill-ai/frontend/components/auth/nayner.auth.button';
 import { useT } from '@postmill-ai/react/translation/get.transation.service.client';
+import { markSsoFullPage } from '@postmill-ai/frontend/components/auth/sso-popup';
 export const FarcasterProvider = () => {
   const gotoLogin = useCallback(async (code: string) => {
+    // In-tab flow (Neynar runs its own popup): tell the callback it is the
+    // user's tab, not a Postmill sign-in popup.
+    markSsoFullPage();
     window.location.href = `/auth?provider=FARCASTER&code=${code}`;
   }, []);
   return <ButtonCaster login={gotoLogin} />;

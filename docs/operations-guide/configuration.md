@@ -259,12 +259,13 @@ These channel and comms variables are the only provider credentials read from th
 | `LINE_CHANNEL_SECRET` | LINE comms platform app — webhook signature verification (comms only; see [Platform Comms Apps](./platform-comms-apps.md#line)) |
 | `POSTMILL_OAUTH_CLIENT_ID` / `POSTMILL_OAUTH_CLIENT_SECRET` | Custom OAuth channel (shared with generic OIDC login) |
 
-Three opt-in flags make a channel app dual-use as a **login provider** (the matching channel creds above are required; the login page never advertises a provider whose channel app is unconfigured). See [Platform Channel Apps → SSO dual-use](./platform-channel-apps.md#sso-dual-use-login-with-the-same-app).
+Three opt-in flags add the platform channel apps as **login providers** (the login page never advertises a provider whose credentials are incomplete). Facebook and LinkedIn reuse the channel creds above; X login needs its own OAuth 2.0 client pair — the OAuth 1.0a `X_API_KEY` / `X_API_SECRET` are channel-only. See [Platform Channel Apps → SSO dual-use](./platform-channel-apps.md#sso-dual-use-login-with-the-same-app).
 
 | Variable | Default | Purpose |
 |----------|---------|---------|
 | `FACEBOOK_SSO_ENABLED` | `false` | Set to `true` to add a "Continue with Facebook" login button (requires `FACEBOOK_APP_ID` / `FACEBOOK_APP_SECRET`) |
-| `X_SSO_ENABLED` | `false` | Set to `true` to add a "Continue with X" login button (requires `X_API_KEY` / `X_API_SECRET`) |
+| `X_SSO_ENABLED` | `false` | Set to `true` to add a "Continue with X" login button (requires `X_CLIENT_ID` / `X_CLIENT_SECRET`) |
+| `X_CLIENT_ID` / `X_CLIENT_SECRET` | — | The X app's **OAuth 2.0 Client ID and Client Secret** (Keys and tokens; issued once OAuth 2.0 is enabled under User authentication settings). Login only — never used for posting |
 | `LINKEDIN_SSO_ENABLED` | `false` | Set to `true` to add a "Continue with LinkedIn" login button (requires `LINKEDIN_CLIENT_ID` / `LINKEDIN_CLIENT_SECRET`) |
 
 ## X channel behaviour

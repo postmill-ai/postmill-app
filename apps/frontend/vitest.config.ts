@@ -78,6 +78,7 @@ export default defineConfig({
       'src/components/comments/**/*.spec.{ts,tsx}',
       'src/redirects.config.spec.ts',
       'src/app/**/*.spec.{ts,tsx}',
+      'src/components/auth/**/*.spec.{ts,tsx}',
     ],
     coverage: {
       provider: 'v8',

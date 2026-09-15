@@ -1,19 +1,25 @@
 'use client';
 
 import { useCallback } from 'react';
-import { useFetch } from '@postmill-ai/helpers/utils/custom.fetch';
+import { useSsoPopup } from '@postmill-ai/frontend/components/auth/sso-popup';
 import { useT } from '@postmill-ai/react/translation/get.transation.service.client';
 export const AppleProvider = () => {
-  const fetch = useFetch();
+  const { start, waiting } = useSsoPopup();
   const t = useT();
-  const gotoLogin = useCallback(async () => {
-    const link = await (await fetch('/auth/oauth/APPLE')).text();
-    window.location.href = link;
-  }, [fetch]);
+  const gotoLogin = useCallback(() => start('/auth/oauth/APPLE'), [start]);
   return (
     <div
       onClick={gotoLogin}
-      className={`cursor-pointer bg-white h-[44px] rounded-[4px] flex justify-center items-center text-textColor gap-[4px]`}
+      onKeyDown={(e) => {
+        if (e.key === 'Enter' || e.key === ' ') {
+          e.preventDefault();
+          gotoLogin();
+        }
+      }}
+      role="button"
+      tabIndex={0}
+      aria-busy={waiting}
+      className={`${waiting ? 'opacity-60 ' : ''}cursor-pointer bg-white h-[44px] rounded-[4px] flex justify-center items-center text-textColor gap-[4px]`}
     >
       <div>
         <svg

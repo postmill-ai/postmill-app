@@ -9,13 +9,16 @@ import {
 
 // Self-contained kernel auth module for X (Twitter) OAuth login (SSO).
 //
-// Dual-use of the platform channel OAuth app: the same X_API_KEY /
-// X_API_SECRET env vars that power X channel connections also log users into
-// Postmill when X_SSO_ENABLED=true. The login flow is a separate
-// implementation from the social adapter (which uses OAuth 1.0a) — login uses
-// OAuth 2.0 with PKCE (S256) against api.twitter.com/2. Only the env var
-// names are shared. DB-config precedence is preserved by reading the
-// AuthProviderRepository the AuthProviderManager passes through ctx.extras.
+// Login uses OAuth 2.0 Authorization Code + PKCE (S256) against
+// api.twitter.com/2, which is a DIFFERENT credential set from the OAuth 1.0a
+// consumer key/secret (X_API_KEY / X_API_SECRET) the social adapter uses for
+// channel posting: X issues a separate "OAuth 2.0 Client ID and Client
+// Secret" once OAuth 2.0 is enabled in the app's User authentication
+// settings, and the consumer key is not accepted as an OAuth 2.0 client_id.
+// So this module reads X_CLIENT_ID / X_CLIENT_SECRET (gated by
+// X_SSO_ENABLED in AuthProviderManager) and never touches the channel keys.
+// DB-config precedence is preserved by reading the AuthProviderRepository
+// the AuthProviderManager passes through ctx.extras.
 
 interface AuthProviderConfigRow {
   enabled?: boolean | null;
@@ -36,15 +39,26 @@ interface RedisLike {
   del(key: string): Promise<unknown>;
 }
 
-// PKCE verifier storage. The login `state` must be the literal "login" (the
-// frontend proxy gates OAuth callbacks on `state=login`), and only the `code`
-// query param flows back into getToken — so the verifier cannot be correlated
-// per request and is stashed under one fixed key with a short TTL, read
-// once (get + del) at token exchange. Trade-off: two simultaneous X logins
-// race on the single slot; the loser simply retries. Matches the repo's
-// `login:` Redis key convention (enterprise.controller.ts).
-const X_SSO_PKCE_KEY = 'login:x:sso:pkce';
+// PKCE verifier storage, one slot per login attempt. The frontend proxy
+// gates login callbacks on the substring `state=login`, so the per-attempt
+// nonce rides along as `state=login.<nonce>`; the callback page posts the
+// state back to /auth/oauth/X/exists and getToken reads the verifier once
+// (get + del) under that nonce. Matches the repo's `login:` Redis key
+// convention (enterprise.controller.ts).
+const X_SSO_PKCE_KEY_PREFIX = 'login:x:sso:pkce:';
 const X_SSO_PKCE_TTL_SECONDS = 600;
+const X_SSO_STATE_PREFIX = 'login.';
+
+export function xSsoPkceKey(nonce: string): string {
+  return `${X_SSO_PKCE_KEY_PREFIX}${nonce}`;
+}
+
+// `state` → nonce, or null when the state is not one this module issued.
+export function xSsoNonceFromState(state?: string | null): string | null {
+  if (!state || !state.startsWith(X_SSO_STATE_PREFIX)) return null;
+  const nonce = state.slice(X_SSO_STATE_PREFIX.length);
+  return /^[A-Za-z0-9_-]{16,}$/.test(nonce) ? nonce : null;
+}
 
 const defaultRedirect = () =>
   `${process.env.FRONTEND_URL}/integrations/social/x`;
@@ -77,10 +91,12 @@ async function resolveConfig(ctx: ProviderRuntimeContext): Promise<{
     }
   }
 
-  const clientId = process.env.X_API_KEY || '';
-  const clientSecret = process.env.X_API_SECRET || '';
+  const clientId = process.env.X_CLIENT_ID || '';
+  const clientSecret = process.env.X_CLIENT_SECRET || '';
   if (!clientId || !clientSecret) {
-    throw new Error('X auth provider is not configured');
+    throw new Error(
+      'X auth provider is not configured (X_CLIENT_ID / X_CLIENT_SECRET)'
+    );
   }
   return { clientId, clientSecret };
 }
@@ -96,37 +112,47 @@ class XAuthCapability implements AuthCapability {
     const challenge = createHash('sha256')
       .update(codeVerifier)
       .digest('base64url');
+    const nonce = randomBytes(16).toString('base64url');
 
     await redisFrom(this.ctx).set(
-      X_SSO_PKCE_KEY,
+      xSsoPkceKey(nonce),
       codeVerifier,
       'EX',
       X_SSO_PKCE_TTL_SECONDS
     );
 
     return (
-      'https://twitter.com/i/oauth2/authorize' +
+      'https://x.com/i/oauth2/authorize' +
       `?response_type=code` +
-      `&client_id=${clientId}` +
+      `&client_id=${encodeURIComponent(clientId)}` +
       `&redirect_uri=${encodeURIComponent(defaultRedirect())}` +
-      `&state=login` +
+      `&state=${X_SSO_STATE_PREFIX}${nonce}` +
       `&scope=${encodeURIComponent('users.read')}` +
       `&code_challenge=${challenge}` +
       `&code_challenge_method=S256`
     );
   }
 
-  async getToken(code: string): Promise<string> {
+  async getToken(
+    code: string,
+    _redirectUri?: string,
+    state?: string
+  ): Promise<string> {
     const { clientId, clientSecret } = await resolveConfig(this.ctx);
+    const nonce = xSsoNonceFromState(state);
+    if (!nonce) {
+      throw new Error('X login state missing — restart the login');
+    }
     const redis = redisFrom(this.ctx);
-    const codeVerifier = await redis.get(X_SSO_PKCE_KEY);
+    const key = xSsoPkceKey(nonce);
+    const codeVerifier = await redis.get(key);
     if (!codeVerifier) {
       throw new Error(
         'X login PKCE verifier missing or expired — restart the login'
       );
     }
     // One-time use: a verifier must never be replayed for a second exchange.
-    await redis.del(X_SSO_PKCE_KEY);
+    await redis.del(key);
 
     const { access_token } = await (
       await this.ctx.fetch('https://api.twitter.com/2/oauth2/token', {

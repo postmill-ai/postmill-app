@@ -194,18 +194,31 @@ emails. Callback to register: `https://<your-domain>/integrations/social/faceboo
 
 ## X login
 
-X OAuth login also reuses the platform channel app, but over a **separate OAuth 2.0 + PKCE flow**
-(channel posting is OAuth 1.0a — enable both in the app's User authentication settings):
+X OAuth login runs on the same X developer app as channel posting, but over a **separate
+OAuth 2.0 + PKCE flow** with its own credentials. Channel posting is OAuth 1.0a and uses the
+consumer **API Key / API Secret** (`X_API_KEY` / `X_API_SECRET`); X does **not** accept that
+consumer key as an OAuth 2.0 `client_id`. For login:
+
+1. In the X developer portal open the app → **User authentication settings** and enable
+   **OAuth 2.0** (keep OAuth 1.0a on for posting). Type of App: **Web App**. Add
+   `https://<your-domain>/integrations/social/x` to the Callback URIs.
+2. Copy the **OAuth 2.0 Client ID and Client Secret** from **Keys and tokens** (they look like
+   `xxxxxxxx:1:ci` / a long secret — generated only once OAuth 2.0 is enabled).
+3. Set:
 
 ```yaml
 X_SSO_ENABLED: 'true'
-X_API_KEY: '<your-api-key>'
-X_API_SECRET: '<your-api-secret>'
+X_CLIENT_ID: '<oauth-2.0-client-id>'
+X_CLIENT_SECRET: '<oauth-2.0-client-secret>'
 ```
 
-Login requests only the `users.read` scope, which returns **no email address** — every X SSO
-account gets a synthetic address (`x_<id>@x.login.postmill.local`), skipped by newsletter/welcome
-emails. Callback to register: `https://<your-domain>/integrations/social/x`.
+`X_API_KEY` / `X_API_SECRET` stay as they are — channel connections and posting are unaffected
+by the login flow.
+
+Each login attempt gets its own PKCE verifier, bound to a nonce inside the OAuth `state`
+(`state=login.<nonce>`, Redis-backed, 10-minute TTL), so concurrent logins never collide. Login
+requests only the `users.read` scope, which returns **no email address** — every X SSO account
+gets a synthetic address (`x_<id>@x.login.postmill.local`), skipped by newsletter/welcome emails.
 
 ## LinkedIn login
 
@@ -291,8 +304,8 @@ Callback to register: `https://<your-domain>/auth/callback/apple`.
 ## Login callback routes
 
 OAuth callbacks do **not** land on a single `/auth/callback` endpoint. Each login provider
-redirects back to its own path carrying `state=login`, and the frontend proxy
-(`apps/frontend/src/proxy.ts`) forwards it to `/auth?…&provider=<NAME>`:
+redirects back to its own path carrying `state=login` (X: `state=login.<nonce>`), and the
+frontend proxy (`apps/frontend/src/proxy.ts`) forwards it to `/auth?…&provider=<NAME>`:
 
 | Provider | Callback path to register |
 |----------|---------------------------|
@@ -308,6 +321,23 @@ The dual-use paths are shared with channel OAuth: channel-connect callbacks hit 
 `/integrations/social/<provider>` paths **without** `state=login` and pass straight through to the
 channel flow. Ensure your reverse proxy passes these paths (and `/settings`) through to the
 frontend without modification.
+
+## Popup flow
+
+The login and register pages open every OAuth provider in a **popup window** (640×720, named
+`postmill-sso`), the same way Settings → Channels connects a channel: the page behind it waits,
+the popup runs the provider's consent screen and the `/auth?…&provider=` callback, and once the
+backend has set the `auth` cookie the popup signals the opener and closes itself; the opener then
+reloads (existing user) or moves to `/dashboard` (new user, after the Company form — which also
+renders inside the popup). Operational notes:
+
+- The completion signal is written to `localStorage` (`postmill:sso-complete`) with a
+  `postMessage` fast path. Some consent pages send `Cross-Origin-Opener-Policy` (x.com:
+  `same-origin-allow-popups`), which severs `window.opener` — the storage signal survives that,
+  so the opener keeps listening for up to 10 minutes rather than treating a "closed" handle as
+  the end of the flow.
+- If the browser blocks the popup, the button falls back to the classic full-page redirect.
+- Nothing changes on the provider side: register the same callback paths listed below.
 
 ## Disable registration
 

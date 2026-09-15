@@ -29,6 +29,8 @@ const PROVIDER_ENV_VARS = [
   'X_SSO_ENABLED',
   'X_API_KEY',
   'X_API_SECRET',
+  'X_CLIENT_ID',
+  'X_CLIENT_SECRET',
   'LINKEDIN_SSO_ENABLED',
   'LINKEDIN_CLIENT_ID',
   'LINKEDIN_CLIENT_SECRET',
@@ -302,6 +304,18 @@ describe('AuthProviderManager', () => {
       expect(result.providers.map((p: any) => p.provider)).toEqual(['LOCAL']);
     });
 
+    it('does not advertise X on the flag + OAuth 1.0a channel keys alone — login needs the OAuth 2.0 client pair', async () => {
+      clearProviderEnv();
+      process.env.X_SSO_ENABLED = 'true';
+      process.env.X_API_KEY = 'x-key';
+      process.env.X_API_SECRET = 'x-secret';
+      const { manager } = makeManager({});
+
+      const result = await manager.getProviders();
+
+      expect(result.providers.map((p: any) => p.provider)).toEqual(['LOCAL']);
+    });
+
     it('does not advertise FACEBOOK when the flag is on but the secret is missing (half-config)', async () => {
       clearProviderEnv();
       process.env.FACEBOOK_SSO_ENABLED = 'true';
@@ -319,8 +333,8 @@ describe('AuthProviderManager', () => {
       process.env.FACEBOOK_APP_ID = 'fb-app-id';
       process.env.FACEBOOK_APP_SECRET = 'fb-app-secret';
       process.env.X_SSO_ENABLED = 'true';
-      process.env.X_API_KEY = 'x-key';
-      process.env.X_API_SECRET = 'x-secret';
+      process.env.X_CLIENT_ID = 'x-oauth2-id';
+      process.env.X_CLIENT_SECRET = 'x-oauth2-secret';
       process.env.LINKEDIN_SSO_ENABLED = 'true';
       process.env.LINKEDIN_CLIENT_ID = 'li-id';
       process.env.LINKEDIN_CLIENT_SECRET = 'li-secret';

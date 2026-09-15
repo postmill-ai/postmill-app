@@ -1133,6 +1133,20 @@ describe('AuthService (backend)', () => {
       });
     });
 
+    it('checkExists passes the callback state through to getToken (X binds its PKCE verifier to it)', async () => {
+      providerInstance.getToken.mockResolvedValue('token-1');
+      providerInstance.getUser.mockResolvedValue({ id: 'x-1' });
+      usersService.getUserByProvider.mockResolvedValue({ id: 'user-1' });
+
+      await service.checkExists('X', 'code', undefined, 'login.nonce-123');
+
+      expect(providerInstance.getToken).toHaveBeenCalledWith(
+        'code',
+        undefined,
+        'login.nonce-123'
+      );
+    });
+
     it('checkExists flags emailRequired when the provider user has no email', async () => {
       providerInstance.getToken.mockResolvedValue('token-1');
       providerInstance.getUser.mockResolvedValue({ id: 'apple-1' });

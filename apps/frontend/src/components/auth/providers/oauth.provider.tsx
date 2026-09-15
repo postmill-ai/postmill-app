@@ -2,31 +2,27 @@
 
 import { useCallback } from 'react';
 import SafeImage from '@postmill-ai/react/helpers/safe.image';
-import { useFetch } from '@postmill-ai/helpers/utils/custom.fetch';
+import { useSsoPopup } from '@postmill-ai/frontend/components/auth/sso-popup';
 import { useVariables } from '@postmill-ai/react/helpers/variable.context';
 import { useT } from '@postmill-ai/react/translation/get.transation.service.client';
 export const OauthProvider = () => {
-  const fetch = useFetch();
+  const { start, waiting } = useSsoPopup();
   const { oauthLogoUrl, oauthDisplayName } = useVariables();
   const t = useT();
-  const gotoLogin = useCallback(async () => {
-    try {
-      const response = await fetch('/auth/oauth/GENERIC');
-      if (!response.ok) {
-        throw new Error(
-          `Login link request failed with status ${response.status}`
-        );
-      }
-      const link = await response.text();
-      window.location.href = link;
-    } catch (error) {
-      console.error('Failed to get generic oauth login link:', error);
-    }
-  }, []);
+  const gotoLogin = useCallback(() => start('/auth/oauth/GENERIC'), [start]);
   return (
     <div
       onClick={gotoLogin}
-      className={`cursor-pointer flex-1 bg-white h-[44px] rounded-[4px] flex justify-center items-center text-textColor gap-[4px]`}
+      onKeyDown={(e) => {
+        if (e.key === 'Enter' || e.key === ' ') {
+          e.preventDefault();
+          gotoLogin();
+        }
+      }}
+      role="button"
+      tabIndex={0}
+      aria-busy={waiting}
+      className={`${waiting ? 'opacity-60 ' : ''}cursor-pointer flex-1 bg-white h-[44px] rounded-[4px] flex justify-center items-center text-textColor gap-[4px]`}
     >
       <div>
         <SafeImage
