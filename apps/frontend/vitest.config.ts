@@ -54,6 +54,7 @@ export default defineConfig({
       'src/components/layout/top.menu.spec.{ts,tsx}',
       'src/components/layout/layout.context.spec.{ts,tsx}',
       'src/components/layout/prompt-modal.spec.{ts,tsx}',
+      'src/components/layout/copilot.provider.spec.{ts,tsx}',
       'src/components/notifications/*.spec.{ts,tsx}',
       'src/components/settings/roles/**/*.spec.{ts,tsx}',
       'src/components/new-layout/layout.component.spec.{ts,tsx}',

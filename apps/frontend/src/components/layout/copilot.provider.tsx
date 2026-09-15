@@ -17,6 +17,13 @@ import { useAiActive } from '@postmill-ai/frontend/components/layout/use-ai-acti
  * Consumers of CopilotKit hooks on always-rendered pages (the composer's
  * editor + platform picker) are gated behind the same `useAiActive()` signal so
  * they never call the hooks without a provider — see copilot-bridges.tsx.
+ *
+ * `useSingleEndpoint`: the backend mounts CopilotKit through the single-route
+ * adapter (POST-only on /copilot/chat). Without this prop the client's
+ * transport auto-detection first probes `GET /copilot/chat/info` — a 404 on
+ * every page load — before falling back to the POST handshake it ends up
+ * using anyway. (Serving that GET would be wrong: a 2xx switches the client to
+ * multi-route URLs the backend does not mount.)
  */
 export const CopilotProvider: FC<{ children: ReactNode }> = ({ children }) => {
   const { backendUrl } = useVariables();
@@ -31,6 +38,7 @@ export const CopilotProvider: FC<{ children: ReactNode }> = ({ children }) => {
       credentials="include"
       runtimeUrl={backendUrl + '/copilot/chat'}
       headers={csrfHeader()}
+      useSingleEndpoint
       showDevConsole={false}
       enableInspector={false}
     >

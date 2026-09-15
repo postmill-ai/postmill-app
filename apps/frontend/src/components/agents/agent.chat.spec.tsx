@@ -12,8 +12,12 @@ const setMessages = vi.fn();
 const toastShow = vi.fn();
 const routerReplace = vi.fn();
 
+const copilotKitProps = vi.fn();
 vi.mock('@copilotkit/react-core', () => ({
-  CopilotKit: ({ children }: any) => <>{children}</>,
+  CopilotKit: ({ children, ...props }: any) => {
+    copilotKitProps(props);
+    return <>{children}</>;
+  },
   useCopilotAction: () => undefined,
   useDefaultTool: () => undefined,
   useCopilotChatInternal: () => ({ setMessages, messages: [] }),
@@ -98,7 +102,7 @@ vi.mock('@postmill-ai/helpers/utils/custom.fetch', () => ({
   useFetch: () => fetchMock,
 }));
 
-import { LoadMessages, SPECIALIST_BY_TOOL, PendingApprovalCard } from './agent.chat';
+import { AgentChat, LoadMessages, SPECIALIST_BY_TOOL, PendingApprovalCard } from './agent.chat';
 import { fireEvent, waitFor } from '@testing-library/react';
 
 const msg = (content: string) => ({ role: 'user', content: { content } });
@@ -283,5 +287,20 @@ describe('PendingApprovalCard idempotency (3.2)', () => {
     expect(key2).toBe(key1);
     // Same outward route both times.
     expect(fetchMock.mock.calls[0][0]).toBe('/posts/p1/social-comments');
+  });
+});
+
+describe('AgentChat CopilotKit transport', () => {
+  it('mounts the provider in single-endpoint mode (backend serves POST-only /copilot/agent; no GET /info probe)', () => {
+    copilotKitProps.mockClear();
+    render(<AgentChat />);
+    expect(copilotKitProps).toHaveBeenCalledWith(
+      expect.objectContaining({
+        runtimeUrl: 'http://x/copilot/agent',
+        useSingleEndpoint: true,
+        credentials: 'include',
+        agent: 'postmill',
+      })
+    );
   });
 });
