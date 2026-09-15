@@ -182,7 +182,9 @@ export const slackCommsModule: ProviderModule<any, any> = {
       'Under OAuth & Permissions → Bot Token Scopes, add: chat:write, im:write, im:history, app_mentions:read.',
       'Install the app to your workspace and copy the Bot User OAuth Token (xoxb-…) into the field below.',
       'Copy the Signing Secret from Basic Information → App Credentials into the field below.',
-      'Under Event Subscriptions, enable events, paste the webhook URL as the Request URL, and subscribe to the message.im bot event.',
+      'Under App Home → Show Tabs, enable the Messages tab and tick "Allow users to send Slash commands and messages from the messages tab" — otherwise Slack shows "Sending messages to this app has been turned off" and nobody can DM the bot.',
+      'Under Settings → Socket Mode, make sure it is OFF — with Socket Mode on, Slack never calls the Request URL and every DM is silently dropped.',
+      'Under Event Subscriptions, enable events, paste the webhook URL as the Request URL (it must show Verified), and subscribe to the message.im bot event.',
     ],
     setupNotes:
       'Enable Event Subscriptions with the webhook URL below and subscribe to the message.im bot event. One Postmill organization per Slack app.',

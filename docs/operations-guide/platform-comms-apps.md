@@ -49,19 +49,44 @@ app's Signing Secret.
 
 1. Open [Slack API: Your Apps](https://api.slack.com/apps) and pick the
    Postmill app.
-2. Under **OAuth & Permissions → Bot Token Scopes**, add `chat:write`,
+2. Under **OAuth & Permissions → Redirect URLs**, add
+   `https://<backend>/settings/comms/oauth/slack/callback` (the comms
+   callback is separate from the posting channel's
+   `/integrations/social/slack` redirect).
+3. Under **OAuth & Permissions → Bot Token Scopes**, add `chat:write`,
    `im:write`, `im:history`, `app_mentions:read` (keep the existing posting
-   scopes).
-3. Under **Event Subscriptions**, enable events, set the **Request URL** to
-   `https://<backend>/webhooks/comms/platform/slack`, and under **Subscribe to
-   bot events** add `message.im`.
-4. Under **Basic Information**, copy the **Signing Secret**:
+   scopes), and reinstall the app to the workspace when prompted.
+4. Under **App Home → Show Tabs**, enable the **Messages tab** and tick
+   **"Allow users to send Slash commands and messages from the messages tab"**
+   — without it Slack shows "Sending messages to this app has been turned
+   off" and users cannot DM the bot.
+5. Under **Settings → Socket Mode**, make sure it is **OFF**. Postmill
+   receives Slack events over HTTP at the Request URL below; with Socket Mode
+   on, Slack delivers events only over its websocket and **never calls the
+   Request URL** — every DM is silently dropped, nothing reaches the backend,
+   and the Event Subscriptions page hides the Request URL field entirely.
+6. Under **Event Subscriptions**, enable events, set the **Request URL** to
+   `https://<backend>/webhooks/comms/platform/slack` — it must show
+   **Verified** (Slack sends a signed `url_verification` challenge; a red
+   error here means the Signing Secret below is not yet set or is from a
+   different app) — and under **Subscribe to bot events** add `message.im`.
+   Save, and reinstall the app if Slack prompts for it.
+7. Under **Basic Information**, copy the **Signing Secret**:
 
 ```yaml
 SLACK_SIGNING_SECRET: '<your-signing-secret>'   # NEW for comms
 ```
 
-5. Restart the backend.
+8. Restart the backend.
+
+::: tip Verifying delivery
+The backend logs every hit on the webhook before signature verification
+(`slack platform webhook hit: <n> bytes`, then `challenge` / `message` /
+`signature verification failed — 401`), so `journalctl` tells you within one
+DM whether Slack is calling at all, whether the secret matches, and how the
+message was handled (`comms inbound slack … → claimed` /
+`agent_reply`).
+:::
 
 **Org flow:** the org clicks **Connect with Slack** and installs the app into
 their workspace via OAuth — one Slack workspace per org. Inbound messages are
