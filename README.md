@@ -31,9 +31,34 @@ Self-hosted, bring-your-own-key AI across 30+ providers, 45+ channels, and 46 bu
 
 ## 📸 Screenshots
 
-<!-- TODO(media follow-up): product screenshots + demo video. Do NOT reuse upstream images. -->
+<!-- TODO(media follow-up): product demo video. -->
 
-Screenshots and a product demo video are coming soon. In the meantime, explore the full feature tour in the [documentation](https://docs.postmill.ai).
+Postmill is built around four things you do every day — **design**, **post**, **track**, **engage**. Click any screenshot for the full-size view.
+
+<table>
+  <tr>
+    <td width="50%" align="center" valign="top">
+      <a href="https://postmill.ai/ss/postmill-ss-design.jpg"><img src="https://postmill.ai/ss/postmill-ss-design-thumb.jpg" width="100%" alt="Design — the Postmill designer: canvas with a multi-track video timeline"></a><br>
+      <sub><b>Design</b> — designer canvas + video timeline, 46 media tools</sub>
+    </td>
+    <td width="50%" align="center" valign="top">
+      <a href="https://postmill.ai/ss/postmill-ss-post.jpg"><img src="https://postmill.ai/ss/postmill-ss-post-thumb.jpg" width="100%" alt="Post — the posts calendar with scheduled posts across channels"></a><br>
+      <sub><b>Post</b> — calendar, 45+ channels, one composer</sub>
+    </td>
+  </tr>
+  <tr>
+    <td width="50%" align="center" valign="top">
+      <a href="https://postmill.ai/ss/postmill-ss-track.jpg"><img src="https://postmill.ai/ss/postmill-ss-track-thumb.jpg" width="100%" alt="Track — the analytics overview with cross-channel metrics and trends"></a><br>
+      <sub><b>Track</b> — persisted multi-channel analytics</sub>
+    </td>
+    <td width="50%" align="center" valign="top">
+      <a href="https://postmill.ai/ss/postmill-ss-engage.jpg"><img src="https://postmill.ai/ss/postmill-ss-engage-thumb.jpg" width="100%" alt="Engage — the reply inbox with comments from every channel in one place"></a><br>
+      <sub><b>Engage</b> — cross-channel reply inbox</sub>
+    </td>
+  </tr>
+</table>
+
+That's the 30-second tour — the full feature tour, with every screen, lives in the [documentation](https://docs.postmill.ai).
 
 ---
 
