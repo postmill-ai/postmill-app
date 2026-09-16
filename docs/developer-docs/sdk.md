@@ -125,7 +125,7 @@ deletePost(id: string): Promise<Response>
 ## Package details
 
 - **Package name**: `@postmill-ai/postmill-sdk`
-- **Version**: 1.1.0
+- **Version**: 2.0.0
 - **License**: AGPL-3.0
 - **Build**: Uses `tsup` for bundling.
 - **Workspace dependency**: `@postmill-ai/nestjs-libraries`

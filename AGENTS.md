@@ -26,13 +26,16 @@ convention, contract, or invariant, update the matching `agents/` doc in the sam
 
 The current release version is tracked in [`version.txt`](./version.txt) (now `v1.0.0`). **Bump it on
 every release.** Root docs speak only of `v1.0.0` as the first public release; the inherited 3.x/4.x
-numbering was pre-release internal development. The release workflow refuses to publish a container
-image whose git tag does not match `version.txt`.
+numbering was pre-release internal development. An app release is a `vX.Y.Z` tag: `build-containers.yml`
+refuses to publish a container image whose tag does not match `version.txt`, then creates the GitHub
+Release (notes + image digest + `docker save` tarball).
 
 Two artifacts version **independently** of the product release: `apps/sdk` (the published
 `@postmill-ai/postmill-sdk` npm package) and `apps/extension` (the browser extension, published to
 the Chrome Web Store). Do not "align" them to `version.txt`; bump each per its own semver when that
-artifact changes.
+artifact changes. An SDK release is an `sdk-vX.Y.Z` tag: `publish-sdk.yml` refuses a tag that does
+not match `apps/sdk/package.json`, publishes to npm (OIDC trusted publishing — no token secret) and
+GitHub Packages, and creates its own GitHub Release. Maintainer runbook: `CONTRIBUTING.md` § Releasing.
 
 > **This system is in production with many users.** Before changing anything, be sure you are not
 > breaking existing users — a data/schema change may need a migration story. Prefer

@@ -5,7 +5,9 @@ on:
   workflow_dispatch:
   push:
     tags:
-      - '*'
+      # App releases only. SDK releases use `sdk-vX.Y.Z` (publish-sdk.yml) and must not
+      # trigger an image build.
+      - 'v[0-9]*.[0-9]*.[0-9]*'
 
 # NOTE (postmill-ai): repointed to postmill-ai, added packages:write,
 # and simplified to a single amd64 build (the target host is amd64-only) that pushes
@@ -16,7 +18,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 60
     permissions:
-      contents: read
+      contents: write   # gh release create / upload
       packages: write
     steps:
       - name: Checkout
@@ -57,6 +59,9 @@ jobs:
             -t ghcr.io/postmill-ai/postmill-app:${CONTAINERVER} \
             -t ghcr.io/postmill-ai/postmill-app:latest \
             --build-arg NEXT_PUBLIC_VERSION=${NEXT_PUBLIC_VERSION} \
+            --label org.opencontainers.image.source=https://github.com/${GITHUB_REPOSITORY} \
+            --label org.opencontainers.image.version=${CONTAINERVER} \
+            --label org.opencontainers.image.revision=${GITHUB_SHA} \
             --pull \
             --no-cache \
             --provenance=false --sbom=false \
@@ -84,3 +89,68 @@ jobs:
             }
             console.log('OK: ' + p + ' exists.');
           "
+
+      # The release is the user-facing contract: notes + the exact image digest, plus the
+      # image itself as a `docker save` tarball for air-gapped installs. GitHub caps a
+      # release asset at 2 GB — refuse loudly rather than upload a truncated file. The
+      # image is already in GHCR by this point, so a failure here leaves nothing half-done.
+      - name: Export image tarball
+        env:
+          TAG: ${{ github.ref_name }}
+        run: |
+          IMAGE=ghcr.io/postmill-ai/postmill-app:${TAG}
+          TARBALL=postmill-app-${TAG}-linux-amd64.tar.gz
+          docker save "$IMAGE" | gzip -1 > "$TARBALL"
+          sha256sum "$TARBALL" > "${TARBALL}.sha256"
+          SIZE=$(stat -c %s "$TARBALL")
+          echo "Tarball: $TARBALL ($SIZE bytes)"
+          cat "${TARBALL}.sha256"
+          if [ "$SIZE" -ge 2147483648 ]; then
+            echo "::error::$TARBALL is $SIZE bytes, over GitHub's 2 GB release-asset cap. The image is in GHCR; the release was not created."
+            exit 1
+          fi
+          echo "TARBALL=$TARBALL" >> "$GITHUB_ENV"
+          echo "DIGEST=$(docker buildx imagetools inspect --format '{{.Manifest.Digest}}' "$IMAGE")" >> "$GITHUB_ENV"
+
+      - name: Write release notes
+        env:
+          TAG: ${{ github.ref_name }}
+        run: |
+          SHA256=$(cut -d' ' -f1 "${TARBALL}.sha256")
+          cat > release-notes.md <<EOF
+          ## Postmill ${TAG}
+
+          Container image (linux/amd64):
+
+          \`\`\`
+          docker pull ghcr.io/postmill-ai/postmill-app:${TAG}
+          \`\`\`
+
+          Digest: \`${DIGEST}\`
+
+          Deploy with the root [\`docker-compose.yaml\`](https://github.com/${GITHUB_REPOSITORY}/blob/${TAG}/docker-compose.yaml), pinning \`image:\` to this tag. Setup and upgrade guides: https://docs.postmill.ai
+
+          ### Offline install
+
+          \`${TARBALL}\` is the same image as a \`docker save\` archive (sha256 \`${SHA256}\`):
+
+          \`\`\`
+          sha256sum -c ${TARBALL}.sha256
+          docker load < ${TARBALL}
+          \`\`\`
+
+          Changes: see [CHANGELOG.md](https://github.com/${GITHUB_REPOSITORY}/blob/${TAG}/CHANGELOG.md).
+          EOF
+          cat release-notes.md
+
+      # Idempotent: a re-run after a partial failure updates the existing release instead
+      # of 422-ing on "already exists".
+      - name: Create GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ github.ref_name }}
+        run: |
+          gh release view "$TAG" >/dev/null 2>&1 \
+            || gh release create "$TAG" --verify-tag --title "Postmill ${TAG}" --notes-file release-notes.md
+          gh release upload "$TAG" "$TARBALL" "${TARBALL}.sha256" --clobber
+          gh release view "$TAG"

@@ -1,0 +1,119 @@
+name: Publish SDK
+
+# Publishes apps/sdk (@postmill-ai/postmill-sdk) to npm and GitHub Packages and creates an
+# `sdk-vX.Y.Z` GitHub Release with the tarball attached. The SDK versions independently of
+# version.txt (see AGENTS.md § Version), so it has its own tag format.
+#
+# npm auth is OIDC trusted publishing — no NPM_TOKEN secret. The package's Trusted Publisher
+# on npmjs.com must name this repo and this workflow filename. Publishing uses the npm CLI
+# (not pnpm) because trusted publishing is an npm-CLI feature.
+on:
+  push:
+    tags:
+      - 'sdk-v[0-9]*.[0-9]*.[0-9]*'
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: 'Run everything with `npm publish --dry-run` and skip the release'
+        type: boolean
+        default: true
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: write   # gh release create / upload
+      id-token: write   # npm OIDC trusted publishing + provenance
+      packages: write   # GitHub Packages mirror
+    env:
+      PKG: '@postmill-ai/postmill-sdk'
+      DRY_RUN: ${{ github.event_name == 'workflow_dispatch' && inputs.dry_run && '--dry-run' || '' }}
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: pnpm/action-setup@v6
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '24.19.0'
+          cache: 'pnpm'
+
+      # The tag is the release contract; apps/sdk/package.json is the canonical version.
+      # Refuse when they disagree. A version npm already has is an error on a fresh run
+      # (forgot to bump) but expected on a re-run after a partial failure — then the npm
+      # step is skipped so the remaining steps can finish.
+      - name: Resolve and gate the version
+        run: |
+          VER=$(node -p "require('./apps/sdk/package.json').version")
+          if [ "${GITHUB_EVENT_NAME}" = "push" ]; then
+            TAG="${GITHUB_REF_NAME#sdk-v}"
+            if [ "$TAG" != "$VER" ]; then
+              echo "::error::Tag '${GITHUB_REF_NAME}' does not match apps/sdk/package.json ('$VER'). Bump the package version before tagging, or fix the tag."
+              exit 1
+            fi
+          fi
+          if [ -n "$(npm view "${PKG}@${VER}" version 2>/dev/null)" ]; then
+            if [ "${{ github.run_attempt }}" -gt 1 ]; then
+              echo "::warning::${PKG}@${VER} is already on npm (re-run); skipping the npm publish."
+              echo "SKIP_NPM=1" >> "$GITHUB_ENV"
+            else
+              echo "::error::${PKG}@${VER} is already on npm. Bump apps/sdk/package.json."
+              exit 1
+            fi
+          fi
+          echo "VER=$VER" >> "$GITHUB_ENV"
+          echo "OK: publishing ${PKG}@${VER} ${DRY_RUN:+(dry run)}"
+
+      # The SDK has no native deps; --filter keeps the install to apps/sdk and its devDeps,
+      # --ignore-scripts skips the root postinstall (prisma-generate) and every native build.
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile --filter "${PKG}" --ignore-scripts
+
+      - name: Test
+        run: pnpm --filter "${PKG}" test
+
+      - name: Build
+        run: pnpm --filter "${PKG}" build
+
+      - name: Publish to npm (OIDC, with provenance)
+        if: env.SKIP_NPM != '1'
+        working-directory: apps/sdk
+        run: |
+          npm install -g npm@latest   # trusted publishing needs npm >= 11.5.1
+          npm --version
+          npm publish --access public --provenance ${DRY_RUN}
+
+      - name: Publish to GitHub Packages
+        working-directory: apps/sdk
+        env:
+          NPM_CONFIG_USERCONFIG: ${{ runner.temp }}/gh-packages.npmrc
+        run: |
+          echo "//npm.pkg.github.com/:_authToken=${{ github.token }}" > "$NPM_CONFIG_USERCONFIG"
+          npm publish --registry https://npm.pkg.github.com ${DRY_RUN}
+
+      - name: Pack tarball
+        working-directory: apps/sdk
+        run: |
+          npm pack
+          ls -la ./*.tgz
+
+      - name: Create GitHub Release
+        if: env.DRY_RUN == ''
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          TAG="sdk-v${VER}"
+          gh release view "$TAG" >/dev/null 2>&1 \
+            || gh release create "$TAG" --verify-tag --title "SDK v${VER}" --notes "$(cat <<EOF
+          \`@postmill-ai/postmill-sdk\` v${VER} — https://www.npmjs.com/package/@postmill-ai/postmill-sdk/v/${VER}
+
+          \`\`\`
+          npm install @postmill-ai/postmill-sdk@${VER}
+          \`\`\`
+
+          Also on GitHub Packages (\`npm.pkg.github.com\`). Docs: https://docs.postmill.ai/developer-docs/sdk.html
+          EOF
+          )"
+          gh release upload "$TAG" apps/sdk/*.tgz --clobber
+          gh release view "$TAG"

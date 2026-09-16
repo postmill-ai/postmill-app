@@ -65,6 +65,33 @@ This project follows a Fork/Feature Branch/Pull Request model. If you're not fam
    ```
 6. **Create a pull request**: Propose your changes **to the main branch**.
 
+# Releasing
+
+Releases are tag-driven; nothing is published from a laptop. Never `git push --tags` — push tags by
+name so stale local tags can't fire a workflow.
+
+**App release** (container image + GitHub Release):
+
+1. Add a `## [X.Y.Z] - YYYY-MM-DD` section to `CHANGELOG.md` and set `version.txt` to `vX.Y.Z`; merge.
+2. `git tag vX.Y.Z && git push origin vX.Y.Z`. `build-containers.yml` refuses a tag that doesn't
+   match `version.txt`, pushes `ghcr.io/postmill-ai/postmill-app:vX.Y.Z` and `:latest`, smoke-tests
+   the image, and creates the release with the digest and a `docker save` tarball attached.
+3. Verify: `gh release view vX.Y.Z` and `docker pull ghcr.io/postmill-ai/postmill-app:vX.Y.Z`.
+
+**SDK release** (`@postmill-ai/postmill-sdk`, versioned independently):
+
+1. Bump `version` in `apps/sdk/package.json` and the version line in `docs/developer-docs/sdk.md`; merge.
+2. Optional rehearsal: Actions → *Publish SDK* → *Run workflow* with `dry_run` on.
+3. `git tag sdk-vX.Y.Z && git push origin sdk-vX.Y.Z`. `publish-sdk.yml` gates the tag against
+   `package.json`, publishes to npm with provenance and to GitHub Packages, and creates the release.
+
+**One-time setup** (must be in place before the first run of each workflow):
+
+- npm auth is OIDC trusted publishing, so there is no `NPM_TOKEN` secret: on npmjs.com the package's
+  *Trusted Publisher* names this repository and the workflow file `publish-sdk.yml`.
+- A GHCR package first pushed by Actions is private; make it public once under the package's
+  settings so self-hosters can pull anonymously.
+
 # Need Help?
 
 Again, do check the [developer guide](https://docs.postmill.ai/developer-docs/). Much of what you probably need to know is in there.
