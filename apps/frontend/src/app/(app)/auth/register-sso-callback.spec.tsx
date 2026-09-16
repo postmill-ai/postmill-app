@@ -162,6 +162,25 @@ describe('Register — OAuth callback inside the sign-in popup', () => {
     expect(close).toHaveBeenCalled();
   });
 
+  it('unwraps a Nest JSON error body so the opener sees the message, not the JSON', async () => {
+    mockFetch({
+      ok: false,
+      status: 500,
+      text: async () =>
+        JSON.stringify({ statusCode: 500, message: 'X profile lookup failed: Forbidden' }),
+    });
+
+    renderRegister();
+    await act(async () => {});
+
+    await waitFor(() => expect(screen.getByRole('alert')).toBeTruthy());
+    expect(screen.getByText('X profile lookup failed: Forbidden')).toBeTruthy();
+    expect(JSON.parse(window.localStorage.getItem(SSO_COMPLETE_STORAGE_KEY)!)).toMatchObject({
+      action: 'error',
+      message: 'X profile lookup failed: Forbidden',
+    });
+  });
+
   it('on a failed exchange in the user\'s own tab: shows the error with a way back, no close', async () => {
     markSsoFullPage();
     mockFetch({ ok: false, status: 500, text: async () => 'Invalid user' });

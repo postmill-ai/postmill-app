@@ -19,6 +19,12 @@ import {
 // X_SSO_ENABLED in AuthProviderManager) and never touches the channel keys.
 // DB-config precedence is preserved by reading the AuthProviderRepository
 // the AuthProviderManager passes through ctx.extras.
+//
+// Scopes: GET /2/users/me requires BOTH `tweet.read` and `users.read` (X's
+// OpenAPI: `OAuth2UserToken: users.read, tweet.read`) — with users.read alone
+// the profile lookup 403s and the login dies. `users.email` (OAuth 2.0 email
+// support, 2025) adds `confirmed_email` to the response when the X app has
+// "Request email from users" enabled in its User authentication settings.
 
 interface AuthProviderConfigRow {
   enabled?: boolean | null;
@@ -48,6 +54,9 @@ interface RedisLike {
 const X_SSO_PKCE_KEY_PREFIX = 'login:x:sso:pkce:';
 const X_SSO_PKCE_TTL_SECONDS = 600;
 const X_SSO_STATE_PREFIX = 'login.';
+// See the header: users/me needs tweet.read + users.read; users.email opts
+// into confirmed_email.
+export const X_SSO_SCOPES = ['tweet.read', 'users.read', 'users.email'];
 
 export function xSsoPkceKey(nonce: string): string {
   return `${X_SSO_PKCE_KEY_PREFIX}${nonce}`;
@@ -62,6 +71,15 @@ export function xSsoNonceFromState(state?: string | null): string | null {
 
 const defaultRedirect = () =>
   `${process.env.FRONTEND_URL}/integrations/social/x`;
+
+// X error bodies are JSON too, but never let a non-JSON body mask the status.
+async function readJson(response: Response): Promise<any> {
+  try {
+    return await response.json();
+  } catch {
+    return null;
+  }
+}
 
 function redisFrom(ctx: ProviderRuntimeContext): RedisLike {
   const redis = (ctx.extras as { redis?: RedisLike })?.redis;
@@ -127,7 +145,7 @@ class XAuthCapability implements AuthCapability {
       `&client_id=${encodeURIComponent(clientId)}` +
       `&redirect_uri=${encodeURIComponent(defaultRedirect())}` +
       `&state=${X_SSO_STATE_PREFIX}${nonce}` +
-      `&scope=${encodeURIComponent('users.read')}` +
+      `&scope=${encodeURIComponent(X_SSO_SCOPES.join(' '))}` +
       `&code_challenge=${challenge}` +
       `&code_challenge_method=S256`
     );
@@ -154,8 +172,9 @@ class XAuthCapability implements AuthCapability {
     // One-time use: a verifier must never be replayed for a second exchange.
     await redis.del(key);
 
-    const { access_token } = await (
-      await this.ctx.fetch('https://api.twitter.com/2/oauth2/token', {
+    const response = await this.ctx.fetch(
+      'https://api.twitter.com/2/oauth2/token',
+      {
         method: 'POST',
         headers: {
           'Content-Type': 'application/x-www-form-urlencoded',
@@ -169,28 +188,53 @@ class XAuthCapability implements AuthCapability {
           redirect_uri: defaultRedirect(),
           code_verifier: codeVerifier,
         }).toString(),
-      })
-    ).json();
+      }
+    );
+    const body = await readJson(response);
+    // X answers failures with { error, error_description } — surface them
+    // instead of letting an undefined token 500 further down.
+    if (!response.ok || !body?.access_token) {
+      throw new Error(
+        `X token exchange failed: ${
+          body?.error_description || body?.error || `HTTP ${response.status}`
+        }`
+      );
+    }
 
-    return access_token;
+    return body.access_token as string;
   }
 
   async getUser(access_token: string): Promise<AuthUserInfo> {
-    const { data } = await (
-      await this.ctx.fetch(
-        'https://api.twitter.com/2/users/me?user.fields=profile_image_url,name,username',
-        {
-          headers: { Authorization: `Bearer ${access_token}` },
-        }
-      )
-    ).json();
+    const response = await this.ctx.fetch(
+      'https://api.twitter.com/2/users/me?user.fields=profile_image_url,name,username,confirmed_email',
+      {
+        headers: { Authorization: `Bearer ${access_token}` },
+      }
+    );
+    const body = await readJson(response);
+    // Errors come back as { title, detail, status } (or an `errors` array);
+    // a missing `data` is the same failure (e.g. insufficient scopes).
+    const data = body?.data;
+    if (!response.ok || !data?.id) {
+      const first = body?.errors?.[0];
+      throw new Error(
+        `X profile lookup failed: ${
+          body?.detail ||
+          body?.title ||
+          first?.message ||
+          first?.title ||
+          `HTTP ${response.status}`
+        }`
+      );
+    }
 
-    // X's users.read scope returns NO email address — synthesize a stable one
-    // from the user id so the account remains identifiable. The
+    // `confirmed_email` arrives only with the users.email scope AND the app's
+    // "Request email from users" permission; otherwise synthesize a stable
+    // address from the user id so the account remains identifiable. The
     // `.login.postmill.local` suffix tells downstream flows
     // (newsletter/welcome email) to skip sending.
     return {
-      email: `x_${data.id}@x.login.postmill.local`,
+      email: data.confirmed_email || `x_${data.id}@x.login.postmill.local`,
       id: String(data.id),
       picture: data.profile_image_url || null,
       name: data.name || data.username || null,

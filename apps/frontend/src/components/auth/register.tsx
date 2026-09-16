@@ -28,6 +28,24 @@ import {
   SsoStatus,
 } from '@postmill-ai/frontend/components/auth/sso-popup';
 import { SsoStatusLine } from '@postmill-ai/frontend/components/auth/sso-status';
+// Nest wraps thrown errors as {statusCode, message} (uncaught ones as
+// "Internal server error") — show the message, not the JSON, since it ends
+// up verbatim on the opener's status line.
+function errorMessageFromBody(text: string): string {
+  try {
+    const parsed = JSON.parse(text);
+    if (parsed && typeof parsed === 'object') {
+      const message = Array.isArray(parsed.message)
+        ? parsed.message.join(', ')
+        : parsed.message;
+      if (typeof message === 'string' && message) return message;
+    }
+  } catch {
+    /* plain text body */
+  }
+  return text;
+}
+
 type Inputs = {
   email: string;
   password: string;
@@ -66,7 +84,9 @@ export function Register() {
       .then(async (response) => {
         if (!response.ok) {
           const text = (await response.text().catch(() => '')) || '';
-          throw new Error(text || `Sign-in failed (${response.status})`);
+          throw new Error(
+            errorMessageFromBody(text) || `Sign-in failed (${response.status})`
+          );
         }
         return response.json();
       })

@@ -719,22 +719,35 @@ advertises a provider whose credentials are incomplete:
 
 | Flag | Requires | Login flow |
 |------|----------|------------|
-| `FACEBOOK_SSO_ENABLED: 'true'` | `FACEBOOK_APP_ID` / `FACEBOOK_APP_SECRET` | Facebook OAuth (`public_profile,email`) |
-| `X_SSO_ENABLED: 'true'` | `X_CLIENT_ID` / `X_CLIENT_SECRET` (the app's OAuth 2.0 pair — **not** the OAuth 1.0a `X_API_KEY` / `X_API_SECRET`) | X OAuth 2.0 + PKCE (`users.read`) |
+| `FACEBOOK_SSO_ENABLED: 'true'` | `FACEBOOK_APP_ID` / `FACEBOOK_APP_SECRET` (+ `FACEBOOK_SSO_CONFIG_ID` on Business-type apps) | Facebook OAuth (`config_id` on Facebook Login for Business, else `public_profile,email`) |
+| `X_SSO_ENABLED: 'true'` | `X_CLIENT_ID` / `X_CLIENT_SECRET` (the app's OAuth 2.0 pair — **not** the OAuth 1.0a `X_API_KEY` / `X_API_SECRET`) | X OAuth 2.0 + PKCE (`tweet.read users.read users.email`) |
 | `LINKEDIN_SSO_ENABLED: 'true'` | `LINKEDIN_CLIENT_ID` / `LINKEDIN_CLIENT_SECRET` | LinkedIn OIDC (`openid profile email`) |
 
 Provider-specific prerequisites:
 
-- **Facebook SSO** additionally needs the consumer **Facebook Login** product
-  on the Meta app — the FBfB Configuration-ID flow is Pages-only and cannot log
-  users in. If the user denies the email permission, Postmill mints
-  `fb_<id>@facebook.login.postmill.local`.
+- **Facebook SSO** on a **Business-type** Meta app (Facebook Login for
+  Business — every app created since 2023 with the Pages use case) cannot use
+  a plain `public_profile,email` dialog: Meta answers *"This app needs at least
+  one supported permission"*. Login must reference a **Configuration**
+  (`config_id`); `email`/`public_profile` are auto-granted on top of it. Create
+  a login-only Configuration (Facebook Login for Business → Configurations →
+  Create → login variation **User access token**, plus the smallest business
+  permission the app already holds, e.g. `pages_show_list`) and set its ID as
+  `FACEBOOK_SSO_CONFIG_ID`. Without it Postmill reuses the channel
+  `FACEBOOK_CONFIG_ID`, which works but makes the consent screen ask for Pages
+  access on every sign-in. Consumer-type apps with classic **Facebook Login**
+  need neither — the `public_profile,email` dialog is used. If the user denies
+  the email permission, Postmill mints `fb_<id>@facebook.login.postmill.local`.
 - **X SSO** needs OAuth 2.0 enabled in the app's User authentication settings
   (type "Web App", callback `https://<your-domain>/integrations/social/x`) and
   the resulting OAuth 2.0 Client ID/Secret in `X_CLIENT_ID` / `X_CLIENT_SECRET`;
   the same app keeps posting over OAuth 1.0a with `X_API_KEY` / `X_API_SECRET`.
-  X SSO accounts always get a synthetic address
-  (`x_<id>@x.login.postmill.local`) — X returns no email.
+  Login requests `tweet.read users.read users.email` (`/2/users/me` needs the
+  first two; the third returns `confirmed_email` once **Request email from
+  users** is enabled under User authentication settings → App permissions,
+  which in turn needs Terms of Service and Privacy Policy URLs on the app).
+  Without that permission the account gets a synthetic address
+  (`x_<id>@x.login.postmill.local`).
 - **LinkedIn SSO** needs the **Sign In with LinkedIn using OpenID Connect**
   product enabled (same product the channel flow already requires).
 

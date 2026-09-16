@@ -186,11 +186,31 @@ FACEBOOK_APP_ID: '<your-meta-app-id>'
 FACEBOOK_APP_SECRET: '<your-meta-app-secret>'
 ```
 
-The Meta app needs the consumer **Facebook Login** product for the login button to work — the
-"Facebook Login for Business" Configuration-ID flow is Pages-only and cannot log users in. Login
-requests only `public_profile,email`; if the user denies the email permission, Postmill mints a
-synthetic address (`fb_<id>@facebook.login.postmill.local`) that is skipped by newsletter/welcome
-emails. Callback to register: `https://<your-domain>/integrations/social/facebook`.
+Callback to register: `https://<your-domain>/integrations/social/facebook`. Which dialog Postmill
+opens depends on the Meta app type:
+
+- **Consumer-type app with classic Facebook Login** — the login requests `public_profile,email`;
+  nothing else to configure.
+- **Business-type app on Facebook Login for Business** (the kind the channel setup in
+  [Platform Channel Apps](./platform-channel-apps.md#meta--facebook-pages) produces) —
+  Meta rejects a plain permission list for these apps (*"It looks like this app isn't available.
+  This app needs at least one supported permission."*); the dialog must reference a
+  **Configuration** instead, and `email`/`public_profile` are granted automatically on top of it.
+  Create a login-only Configuration: **Facebook Login for Business → Configurations → Create**,
+  login variation **User access token**, add the smallest business permission the app already
+  holds (for example `pages_show_list`), save, copy its ID:
+
+  ```yaml
+  FACEBOOK_SSO_CONFIG_ID: '<login-configuration-id>'
+  ```
+
+  If `FACEBOOK_SSO_CONFIG_ID` is unset Postmill falls back to the channel `FACEBOOK_CONFIG_ID`
+  — sign-in then works, but the consent screen also asks the user to grant Pages access. A
+  Configuration belongs to one Meta app, so it is only applied to the env app (admin-app
+  credentials keep the classic dialog).
+
+If the user denies the email permission, Postmill mints a synthetic address
+(`fb_<id>@facebook.login.postmill.local`) that is skipped by newsletter/welcome emails.
 
 ## X login
 
@@ -201,7 +221,9 @@ consumer key as an OAuth 2.0 `client_id`. For login:
 
 1. In the X developer portal open the app → **User authentication settings** and enable
    **OAuth 2.0** (keep OAuth 1.0a on for posting). Type of App: **Web App**. Add
-   `https://<your-domain>/integrations/social/x` to the Callback URIs.
+   `https://<your-domain>/integrations/social/x` to the Callback URIs. Under **App
+   permissions** tick **Request email from users** (X requires a Terms of Service URL and a
+   Privacy Policy URL on the app for that) so logins can carry the real address.
 2. Copy the **OAuth 2.0 Client ID and Client Secret** from **Keys and tokens** (they look like
    `xxxxxxxx:1:ci` / a long secret — generated only once OAuth 2.0 is enabled).
 3. Set:
@@ -217,8 +239,11 @@ by the login flow.
 
 Each login attempt gets its own PKCE verifier, bound to a nonce inside the OAuth `state`
 (`state=login.<nonce>`, Redis-backed, 10-minute TTL), so concurrent logins never collide. Login
-requests only the `users.read` scope, which returns **no email address** — every X SSO account
+requests the `tweet.read users.read users.email` scopes: X's `/2/users/me` needs the first two
+(with `users.read` alone the profile lookup is refused), and `users.email` returns the user's
+`confirmed_email` when the app has **Request email from users** enabled. Without it the account
 gets a synthetic address (`x_<id>@x.login.postmill.local`), skipped by newsletter/welcome emails.
+A failed exchange or profile lookup surfaces X's own error text on the login page.
 
 ## LinkedIn login
 

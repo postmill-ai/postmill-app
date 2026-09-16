@@ -4,8 +4,8 @@ import { xAuthModule, xSsoNonceFromState, xSsoPkceKey } from './auth.adapter';
 
 const ORIGINAL_ENV = { ...process.env };
 
-function mockResponse(body: any) {
-  return { json: async () => body } as any;
+function mockResponse(body: any, status = 200) {
+  return { ok: status >= 200 && status < 300, status, json: async () => body } as any;
 }
 
 function makeRedis(overrides?: Partial<{
@@ -100,7 +100,10 @@ describe('xAuthModule', () => {
       const nonce = xSsoNonceFromState(state)!;
       expect(nonce).toBeTruthy();
       expect(key).toBe(xSsoPkceKey(nonce));
-      expect(url.searchParams.get('scope')).toBe('users.read');
+      // users/me needs tweet.read + users.read; users.email → confirmed_email
+      expect(url.searchParams.get('scope')).toBe(
+        'tweet.read users.read users.email'
+      );
       expect(url.searchParams.get('code_challenge')).toBe(challenge);
       expect(url.searchParams.get('code_challenge_method')).toBe('S256');
     });
@@ -190,6 +193,35 @@ describe('xAuthModule', () => {
       );
     });
 
+    it('surfaces the X error body when the exchange is rejected', async () => {
+      const redis = makeRedis();
+      const fetchMock = vi.fn().mockResolvedValue(
+        mockResponse(
+          { error: 'invalid_client', error_description: 'Client not found' },
+          400
+        )
+      );
+      const { ctx } = makeCtx({ fetch: fetchMock, extras: { redis } });
+
+      await expect(
+        xAuthModule
+          .create(ctx)
+          .getToken('code-123', undefined, 'login.abcdefghijklmnop')
+      ).rejects.toThrow('X token exchange failed: Client not found');
+    });
+
+    it('throws when a 200 carries no access_token', async () => {
+      const redis = makeRedis();
+      const fetchMock = vi.fn().mockResolvedValue(mockResponse({}));
+      const { ctx } = makeCtx({ fetch: fetchMock, extras: { redis } });
+
+      await expect(
+        xAuthModule
+          .create(ctx)
+          .getToken('code-123', undefined, 'login.abcdefghijklmnop')
+      ).rejects.toThrow('X token exchange failed: HTTP 200');
+    });
+
     it('throws when the PKCE verifier is missing or expired', async () => {
       const redis = makeRedis({ get: vi.fn().mockResolvedValue(null) });
       const { ctx } = makeCtx({ extras: { redis } });
@@ -233,6 +265,7 @@ describe('xAuthModule', () => {
 
       const [url, init] = fetchMock.mock.calls[0];
       expect(url).toContain('https://api.twitter.com/2/users/me');
+      expect(url).toContain('confirmed_email');
       expect(init.headers.Authorization).toBe('Bearer x-token');
       expect(user).toEqual({
         email: 'x_456@x.login.postmill.local',
@@ -240,6 +273,56 @@ describe('xAuthModule', () => {
         picture: 'https://pic.example.com/ann.jpg',
         name: 'Ann Example',
       });
+    });
+
+    it('uses confirmed_email when the users.email scope returns one', async () => {
+      const fetchMock = vi.fn().mockResolvedValue(
+        mockResponse({
+          data: {
+            id: '456',
+            name: 'Ann Example',
+            username: 'annexample',
+            confirmed_email: 'ann@example.com',
+          },
+        })
+      );
+      const { ctx } = makeCtx({ fetch: fetchMock });
+
+      const user = await xAuthModule.create(ctx).getUser('x-token');
+
+      expect(user.email).toBe('ann@example.com');
+      expect(user.picture).toBeNull();
+    });
+
+    it('surfaces the X error when users/me is rejected (e.g. missing tweet.read)', async () => {
+      const fetchMock = vi.fn().mockResolvedValue(
+        mockResponse(
+          {
+            title: 'Forbidden',
+            detail: 'Your client app is not configured with the appropriate scopes',
+            status: 403,
+          },
+          403
+        )
+      );
+      const { ctx } = makeCtx({ fetch: fetchMock });
+
+      await expect(
+        xAuthModule.create(ctx).getUser('x-token')
+      ).rejects.toThrow(
+        'X profile lookup failed: Your client app is not configured with the appropriate scopes'
+      );
+    });
+
+    it('treats a 200 without data as a failure instead of crashing on data.id', async () => {
+      const fetchMock = vi
+        .fn()
+        .mockResolvedValue(mockResponse({ errors: [{ message: 'Unknown user' }] }));
+      const { ctx } = makeCtx({ fetch: fetchMock });
+
+      await expect(
+        xAuthModule.create(ctx).getUser('x-token')
+      ).rejects.toThrow('X profile lookup failed: Unknown user');
     });
   });
 });
