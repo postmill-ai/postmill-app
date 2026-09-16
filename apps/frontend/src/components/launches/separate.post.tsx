@@ -1,4 +1,5 @@
 'use client';
+import { readApiError, providerErrorToastText } from '@postmill-ai/frontend/components/ai/provider-error';
 import { Button } from '@postmill-ai/react/form/button';
 import { deleteDialog } from '@postmill-ai/react/helpers/delete.dialog';
 import { FC, useCallback } from 'react';
@@ -39,13 +40,19 @@ export const SeparatePost: FC<{
           }),
         });
         if (!res.ok) {
-          throw new Error('separate_posts_failed');
+          const apiError = await readApiError(res);
+          throw Object.assign(new Error('separate_posts_failed'), {
+            providerError: apiError.providerError,
+          });
         }
         const { posts } = await res.json();
         props.merge(posts);
-      } catch {
+      } catch (err: any) {
+        // The org's AI provider failed → say so; otherwise the generic line.
         toaster.show(
-          t('separate_posts_failed', 'Failed to separate posts'),
+          err?.providerError
+            ? providerErrorToastText(t, err.providerError)
+            : t('separate_posts_failed', 'Failed to separate posts'),
           'warning'
         );
       } finally {

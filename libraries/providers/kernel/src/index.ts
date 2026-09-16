@@ -4,6 +4,7 @@ export * from './verification';
 export * from './module';
 export * from './ports';
 export * from './errors';
+export * from './upstream-error';
 export { ProviderKernel } from './kernel';
 export * from './testing/conformance';
 

@@ -15,6 +15,9 @@ import {
   isTransientStatus,
   SafeFetchPort,
   ProviderModule,
+  mediaUpstreamError,
+  mediaUpstreamFailure,
+  mediaUpstreamFromBody,
 } from '@postmill-ai/provider-kernel';
 
 // Genviral Partner API (https://docs.genviral.io) — own-key Bearer provider configured at
@@ -102,12 +105,12 @@ export class GenviralAdapter implements MediaProviderAdapter {
       headers,
       body: JSON.stringify(body),
     });
-    if (!res.ok) throw new Error(`Genviral video generation failed: ${redactError(await res.text())}`);
+    if (!res.ok) throw await mediaUpstreamError(this, res, 'video');
     const envelope = (await res.json()) as GenviralEnvelope<GenviralVideoData>;
     // 6.1g — a 200 with `ok:false` is a terminal application error; surface it rather than
     // throwing "no video id" (which reads as a generic failure).
     if (envelope.ok === false) {
-      throw new Error(`Genviral video generation failed: ${redactError(envelope.message || 'unknown error')}`);
+      throw mediaUpstreamFromBody(this, undefined, envelope.message || 'unknown error', 'video');
     }
     const id = envelope.data?.video_id;
     if (!id) throw new Error('Genviral returned no video id');
@@ -132,11 +135,11 @@ export class GenviralAdapter implements MediaProviderAdapter {
       if (isTransientStatus(res.status)) {
         throw new Error(`Genviral poll transient error ${res.status}: ${redactError(body, 200)}`);
       }
-      return { status: 'failed', error: redactError(body) };
+      return { status: 'failed', error: mediaUpstreamFailure(this, res.status, body) };
     }
     const envelope = (await res.json()) as GenviralEnvelope<GenviralVideoData>;
     if (envelope.ok === false) {
-      return { status: 'failed', error: redactError(envelope.message || 'Genviral video generation failed') };
+      return { status: 'failed', error: mediaUpstreamFailure(this, undefined, envelope.message || 'Genviral video generation failed') };
     }
     const data = envelope.data;
 

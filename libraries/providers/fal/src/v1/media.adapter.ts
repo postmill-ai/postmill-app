@@ -13,6 +13,8 @@ import {
   isTransientStatus,
   SafeFetchPort,
   ProviderModule,
+  mediaUpstreamError,
+  mediaUpstreamFailure,
 } from '@postmill-ai/provider-kernel';
 
 interface FalQueueSubmitResponse {
@@ -91,7 +93,7 @@ export class FalAdapter implements MediaProviderAdapter {
         ...options?.input,
       }),
     });
-    if (!res.ok) throw new Error(`fal.ai image generation failed: ${redactError(await res.text())}`);
+    if (!res.ok) throw await mediaUpstreamError(this, res, 'image');
     const data = (await res.json()) as FalResultResponse;
     const urls = (data.images || [])
       .map((i) => i.url)
@@ -124,7 +126,7 @@ export class FalAdapter implements MediaProviderAdapter {
       headers: this._headers(options),
       body: JSON.stringify({ prompt, ...options?.input }),
     });
-    if (!res.ok) throw new Error(`fal.ai job submission failed: ${redactError(await res.text())}`);
+    if (!res.ok) throw await mediaUpstreamError(this, res);
     const data = (await res.json()) as FalQueueSubmitResponse;
     if (!data.request_id) throw new Error('fal.ai returned no request id');
     return { jobId: encodeJobId(model, data.request_id) };
@@ -159,7 +161,7 @@ export class FalAdapter implements MediaProviderAdapter {
     if (!statusRes.ok) {
       const body = await statusRes.text();
       if (isTransientStatus(statusRes.status)) throw new Error(`fal.ai status poll transient error ${statusRes.status}: ${redactError(body, 200)}`);
-      return { status: 'failed', error: redactError(body) };
+      return { status: 'failed', error: mediaUpstreamFailure(this, statusRes.status, body) };
     }
     const status = (await statusRes.json()) as FalQueueStatusResponse;
 
@@ -172,7 +174,7 @@ export class FalAdapter implements MediaProviderAdapter {
       if (!resultRes.ok) {
         const body = await resultRes.text();
         if (isTransientStatus(resultRes.status)) throw new Error(`fal.ai result fetch transient error ${resultRes.status}: ${redactError(body, 200)}`);
-        return { status: 'failed', error: redactError(body) };
+        return { status: 'failed', error: mediaUpstreamFailure(this, resultRes.status, body) };
       }
       const result = (await resultRes.json()) as FalResultResponse;
       const artifactUrl =
@@ -188,7 +190,7 @@ export class FalAdapter implements MediaProviderAdapter {
       };
     }
     if (status.status === 'FAILED' || status.status === 'CANCELLED') {
-      return { status: 'failed', error: redactError(status.error || `fal.ai job ${status.status}`) };
+      return { status: 'failed', error: mediaUpstreamFailure(this, undefined, status.error || `fal.ai job ${status.status}`) };
     }
     return { status: 'pending' };
   }

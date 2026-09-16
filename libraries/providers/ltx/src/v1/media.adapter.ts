@@ -9,6 +9,9 @@ import {
   MediaPollResult,
   SafeFetchPort,
   ProviderModule,
+  mediaUpstreamError,
+  mediaUpstreamFailure,
+  isTransientStatus,
 } from '@postmill-ai/provider-kernel';
 
 // LTX Studio (Lightricks) official developer API — own-key Bearer provider configured at
@@ -23,7 +26,6 @@ const BASE = 'https://api.ltx.video';
 
 // 2.1 — a 429/5xx on a status poll is transient: THROW so the lifecycle retries the render
 // rather than permanently failing a job whose generation may still be fine.
-const isTransientStatus = (s: number): boolean => s === 429 || s >= 500;
 
 // 5.11 — the poll id is namespaced `<op>:<id>`; an unrecognized prefix must be treated as a
 // BARE text-to-video id (never silently routed with the prefix stripped).
@@ -87,7 +89,7 @@ export class LtxAdapter extends BearerTokenMediaAdapter {
       headers,
       body: JSON.stringify(body),
     });
-    if (!res.ok) throw new Error(`LTX Studio video generation failed: ${await res.text()}`);
+    if (!res.ok) throw await mediaUpstreamError(this, res, 'video');
     const id = ((await res.json()) as LtxSubmitResponse).id;
     if (!id) throw new Error('LTX Studio returned no job id');
     return { jobId: `${op}:${id}` };
@@ -123,7 +125,7 @@ export class LtxAdapter extends BearerTokenMediaAdapter {
     if (!res.ok) {
       const body = await res.text();
       if (isTransientStatus(res.status)) throw new Error(`LTX Studio poll transient error ${res.status}: ${body.slice(0, 200)}`);
-      return { status: 'failed', error: body };
+      return { status: 'failed', error: mediaUpstreamFailure(this, res.status, body) };
     }
     const data = (await res.json()) as LtxStatusResponse;
 
@@ -133,7 +135,7 @@ export class LtxAdapter extends BearerTokenMediaAdapter {
       return { status: 'completed', artifactUrl, metadata: { provider: this.identifier } };
     }
     if (data.status === 'failed' || data.status === 'error' || data.status === 'canceled') {
-      return { status: 'failed', error: data.error || 'LTX Studio generation failed' };
+      return { status: 'failed', error: mediaUpstreamFailure(this, undefined, data.error || 'LTX Studio generation failed') };
     }
     return { status: 'pending' };
   }

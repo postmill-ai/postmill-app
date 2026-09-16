@@ -1,4 +1,5 @@
 'use client';
+import { providerErrorToastText } from '@postmill-ai/frontend/components/ai/provider-error';
 
 import { FC, useState } from 'react';
 import { useRouter } from 'next/navigation';
@@ -96,6 +97,9 @@ export const DailyBrief: FC<DailyBriefProps> = ({ open, onOpenChange }) => {
           t('ai_budget_exceeded_upgrade', 'AI budget exceeded. Upgrade or wait for reset.'),
           'warning'
         );
+      } else if (err?.providerError) {
+        // The org's own AI provider said no — name it, don't imply Postmill broke.
+        toaster.show(providerErrorToastText(t, err.providerError), 'warning');
       } else {
         toaster.show(
           err?.messageKey ? t(err.messageKey, err.message) : err?.message || t('could_not_generate_brief', 'Could not generate brief'),
@@ -170,9 +174,11 @@ export const DailyBrief: FC<DailyBriefProps> = ({ open, onOpenChange }) => {
                       await generate();
                     } catch (err: any) {
                       toaster.show(
-                        err?.messageKey
-                          ? t(err.messageKey, err.message)
-                          : err?.message ||
+                        err?.providerError
+                          ? providerErrorToastText(t, err.providerError)
+                          : err?.messageKey
+                            ? t(err.messageKey, err.message)
+                            : err?.message ||
                               t('could_not_regenerate_brief', 'Could not regenerate brief'),
                         'warning'
                       );

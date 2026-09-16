@@ -293,6 +293,18 @@ Three opt-in flags add the platform channel apps as **login providers** (the log
 | `FACEBOOK_PIXEL_ACCESS_TOKEN` | — | Meta Conversions API access token for server-side pixel events |
 | `NEXT_PUBLIC_FACEBOOK_PIXEL` | — | Meta pixel ID (browser-visible). Server-side pixel events fire only when both this and `FACEBOOK_PIXEL_ACCESS_TOKEN` are set |
 
+**Provider errors vs. Postmill errors.** When an organization's own AI / media provider
+(OpenAI, Gemini, Runway, …) rejects a request — bad key, quota or billing limit, rate limit,
+invalid request, outage — the API answers **502** with
+`{ error: "ProviderUpstreamError", provider, providerName, kind, upstreamStatus, message, settingsUrl }`
+and the UI shows the provider's name and message ("Google AI Studio reports the account's quota or
+billing limit was reached (HTTP 429): …"). `kind` is one of `auth`, `quota`, `rate_limit`,
+`invalid_request`, `timeout`, `unavailable`, `unknown`. The backend logs one `provider upstream error
+<domain>/<provider> <kind> HTTP <status>` warning per occurrence. Sentry receives **only**
+`unavailable` / `timeout` / `unknown` kinds, as warnings tagged `provider` + `kind` (provider outages
+are worth seeing; a user's expired key or exhausted plan is not an application error). A 500 from
+the API therefore always means a Postmill-side failure.
+
 ## AI Designer chatbot
 
 | Variable | Default | Purpose |

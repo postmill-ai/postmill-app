@@ -71,7 +71,8 @@ describe('heygen media adapter (async avatar-video submit-and-poll)', () => {
     const adapter: any = heygenMediaModule.create(ctx as any);
     const r = await adapter.pollJob('vid-123', { apiKey: 'k' });
     expect(r.status).toBe('failed');
-    expect(r.error).toBe('render error');
+    // provider-reported failures are attributed to the provider
+    expect(r.error).toBe('HeyGen returned an error: render error');
   });
 
   it('2.1: a 4xx on poll → returned { status: failed } (permanent, not thrown)', async () => {

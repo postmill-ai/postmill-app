@@ -14,6 +14,8 @@ import {
   isTransientStatus,
   SafeFetchPort,
   ProviderModule,
+  mediaUpstreamError,
+  mediaUpstreamFailure,
 } from '@postmill-ai/provider-kernel';
 
 // Together AI — same key as the Together LLM provider (registry id `togetherai`), reused
@@ -61,7 +63,7 @@ export class TogetherAiMediaAdapter extends OpenAiCompatibleMediaAdapter {
       headers: this._headers(options),
       body: JSON.stringify({ model, prompt, ...this._videoBody(options?.input) }),
     });
-    if (!res.ok) throw new Error(`Together video generation failed: ${redactError(await res.text())}`);
+    if (!res.ok) throw await mediaUpstreamError(this, res, 'video');
     const id = ((await res.json()) as TogetherVideoCreate).id;
     if (!id) throw new Error('Together returned no video id');
     return { jobId: id };
@@ -92,7 +94,7 @@ export class TogetherAiMediaAdapter extends OpenAiCompatibleMediaAdapter {
       if (isTransientStatus(res.status)) {
         throw new Error(`Together poll transient error ${res.status}: ${redactError(body, 200)}`);
       }
-      return { status: 'failed', error: redactError(body) };
+      return { status: 'failed', error: mediaUpstreamFailure(this, res.status, body) };
     }
     const data = (await res.json()) as TogetherVideoStatus;
     const status = data.status;
@@ -103,7 +105,7 @@ export class TogetherAiMediaAdapter extends OpenAiCompatibleMediaAdapter {
       return { status: 'completed', artifactUrl: url, metadata: { provider: this.identifier } };
     }
     if (status === 'failed' || status === 'error' || status === 'canceled') {
-      return { status: 'failed', error: redactError(data.error?.message || 'Together video generation failed') };
+      return { status: 'failed', error: mediaUpstreamFailure(this, undefined, data.error?.message || 'Together video generation failed') };
     }
     return { status: 'pending' };
   }

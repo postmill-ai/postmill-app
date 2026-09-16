@@ -12,6 +12,8 @@ import {
   isTransientStatus,
   SafeFetchPort,
   ProviderModule,
+  mediaUpstreamError,
+  mediaUpstreamFailure,
 } from '@postmill-ai/provider-kernel';
 
 const BASE = 'https://api.minimax.io/v1';
@@ -80,7 +82,7 @@ export class MiniMaxMediaAdapter implements MediaProviderAdapter {
         ...(options?.aspectRatio ? { aspect_ratio: options.aspectRatio } : {}),
       }),
     });
-    if (!res.ok) throw new Error(`MiniMax image generation failed: ${redactError(await res.text())}`);
+    if (!res.ok) throw await mediaUpstreamError(this, res, 'image');
     const data = (await res.json()) as MiniMaxImageResponse;
     const urls = (data.data?.image_urls || []).filter((u) => typeof u === 'string' && u.length > 0);
     if (urls.length === 0) {
@@ -114,7 +116,7 @@ export class MiniMaxMediaAdapter implements MediaProviderAdapter {
         ...(options?.webhookUrl ? { callback_url: options.webhookUrl } : {}),
       }),
     });
-    if (!res.ok) throw new Error(`MiniMax video generation failed: ${redactError(await res.text())}`);
+    if (!res.ok) throw await mediaUpstreamError(this, res, 'video');
     const data = (await res.json()) as MiniMaxVideoSubmitResponse;
     if (!data.task_id) {
       throw new Error(`MiniMax returned no task id: ${data.base_resp?.status_msg || 'unknown error'}`);
@@ -136,7 +138,7 @@ export class MiniMaxMediaAdapter implements MediaProviderAdapter {
         audio_setting: { format: 'mp3' },
       }),
     });
-    if (!res.ok) throw new Error(`MiniMax audio generation failed: ${redactError(await res.text())}`);
+    if (!res.ok) throw await mediaUpstreamError(this, res, 'audio');
     const data = (await res.json()) as MiniMaxAudioResponse;
     if (!data.data?.audio) {
       throw new Error(`MiniMax returned no audio: ${data.base_resp?.status_msg || 'unknown error'}`);
@@ -174,7 +176,7 @@ export class MiniMaxMediaAdapter implements MediaProviderAdapter {
       if (isTransientStatus(res.status)) {
         throw new Error(`MiniMax query poll transient error ${res.status}: ${redactError(body, 200)}`);
       }
-      return { status: 'failed', error: redactError(body) };
+      return { status: 'failed', error: mediaUpstreamFailure(this, res.status, body) };
     }
     const data = (await res.json()) as MiniMaxVideoQueryResponse;
 
@@ -189,7 +191,7 @@ export class MiniMaxMediaAdapter implements MediaProviderAdapter {
         if (isTransientStatus(fileRes.status)) {
           throw new Error(`MiniMax file retrieve transient error ${fileRes.status}: ${redactError(body, 200)}`);
         }
-        return { status: 'failed', error: redactError(body) };
+        return { status: 'failed', error: mediaUpstreamFailure(this, fileRes.status, body) };
       }
       const file = (await fileRes.json()) as MiniMaxFileResponse;
       if (!file.file?.download_url) {
@@ -202,7 +204,7 @@ export class MiniMaxMediaAdapter implements MediaProviderAdapter {
       };
     }
     if (data.status === 'Fail') {
-      return { status: 'failed', error: redactError(data.base_resp?.status_msg || 'MiniMax video generation failed') };
+      return { status: 'failed', error: mediaUpstreamFailure(this, undefined, data.base_resp?.status_msg || 'MiniMax video generation failed') };
     }
     return { status: 'pending' };
   }

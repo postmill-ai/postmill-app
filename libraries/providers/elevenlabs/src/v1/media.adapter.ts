@@ -9,6 +9,7 @@ import {
   resolveApiKey,
   SafeFetchPort,
   ProviderModule,
+  mediaUpstreamError,
 } from '@postmill-ai/provider-kernel';
 
 export class ElevenLabsAdapter implements MediaProviderAdapter {
@@ -56,7 +57,7 @@ export class ElevenLabsAdapter implements MediaProviderAdapter {
     const res = await this._fetch('https://api.elevenlabs.io/v1/voices', {
       headers: { 'xi-api-key': apiKey },
     });
-    if (!res.ok) throw new Error(`ElevenLabs voices failed: ${await res.text()}`);
+    if (!res.ok) throw await mediaUpstreamError(this, res, 'audio');
     const data = (await res.json()) as {
       voices?: Array<{ voice_id?: string; name?: string; preview_url?: string }>;
     };
@@ -109,7 +110,7 @@ export class ElevenLabsAdapter implements MediaProviderAdapter {
       }),
     });
 
-    if (!res.ok) throw new Error(`ElevenLabs TTS failed: ${await res.text()}`);
+    if (!res.ok) throw await mediaUpstreamError(this, res, 'audio');
     return Buffer.from(await res.arrayBuffer());
   }
 }

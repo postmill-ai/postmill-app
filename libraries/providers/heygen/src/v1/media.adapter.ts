@@ -12,6 +12,9 @@ import {
   resolveApiKey,
   SafeFetchPort,
   ProviderModule,
+  mediaUpstreamError,
+  mediaUpstreamFailure,
+  isTransientStatus,
 } from '@postmill-ai/provider-kernel';
 
 interface HeyGenGenerateResponse {
@@ -48,7 +51,6 @@ interface HeyGenAudioStatusResponse {
 // 2.1 — a 429/5xx on a status poll is transient: THROW so the lifecycle retries the render
 // rather than permanently failing a job whose generation may still be fine. 4xx / a
 // provider-reported terminal state stays a returned { status: 'failed' }.
-const isTransientStatus = (s: number): boolean => s === 429 || s >= 500;
 
 // 5.11 — the poll id is namespaced `<op>:<id>`; an unrecognized prefix must be treated as a
 // BARE avatar-video id (never silently routed with the prefix stripped).
@@ -140,7 +142,7 @@ export class HeyGenAdapter implements MediaProviderAdapter {
       }),
     });
 
-    if (!res.ok) throw new Error(`HeyGen video generation failed: ${await res.text()}`);
+    if (!res.ok) throw await mediaUpstreamError(this, res, 'video');
     const { data } = (await res.json()) as HeyGenGenerateResponse;
     if (!data?.video_id) throw new Error('HeyGen returned no video id');
     return { jobId: data.video_id };
@@ -188,7 +190,7 @@ export class HeyGenAdapter implements MediaProviderAdapter {
     if (!res.ok) {
       const body = await res.text();
       if (isTransientStatus(res.status)) throw new Error(`HeyGen video poll transient error ${res.status}: ${body.slice(0, 200)}`);
-      return { status: 'failed', error: body };
+      return { status: 'failed', error: mediaUpstreamFailure(this, res.status, body) };
     }
     const { data } = (await res.json()) as HeyGenStatusResponse;
 
@@ -200,7 +202,7 @@ export class HeyGenAdapter implements MediaProviderAdapter {
         metadata: { provider: this.identifier, mime: 'video/mp4', durationSeconds: data.duration },
       };
     }
-    if (data?.status === 'failed') return { status: 'failed', error: data.error?.message };
+    if (data?.status === 'failed') return { status: 'failed', error: mediaUpstreamFailure(this, undefined, data.error?.message) };
     return { status: 'pending' };
   }
 
@@ -214,7 +216,7 @@ export class HeyGenAdapter implements MediaProviderAdapter {
     if (!res.ok) {
       const body = await res.text();
       if (isTransientStatus(res.status)) throw new Error(`HeyGen translate poll transient error ${res.status}: ${body.slice(0, 200)}`);
-      return { status: 'failed', error: body };
+      return { status: 'failed', error: mediaUpstreamFailure(this, res.status, body) };
     }
     const { data } = (await res.json()) as HeyGenTranslateStatusResponse;
     const status = data?.status;
@@ -227,7 +229,7 @@ export class HeyGenAdapter implements MediaProviderAdapter {
         metadata: { provider: this.identifier, mime: 'video/mp4' },
       };
     }
-    if (status === 'failed') return { status: 'failed', error: data?.message || 'Translation failed' };
+    if (status === 'failed') return { status: 'failed', error: mediaUpstreamFailure(this, undefined, data?.message || 'Translation failed') };
     return { status: 'pending' };
   }
 
@@ -242,7 +244,7 @@ export class HeyGenAdapter implements MediaProviderAdapter {
     if (!res.ok) {
       const body = await res.text();
       if (isTransientStatus(res.status)) throw new Error(`HeyGen tts poll transient error ${res.status}: ${body.slice(0, 200)}`);
-      return { status: 'failed', error: body };
+      return { status: 'failed', error: mediaUpstreamFailure(this, res.status, body) };
     }
     const { data } = (await res.json()) as HeyGenAudioStatusResponse;
 
@@ -255,7 +257,7 @@ export class HeyGenAdapter implements MediaProviderAdapter {
         metadata: { provider: this.identifier, mime: 'audio/mpeg', durationSeconds: data.duration },
       };
     }
-    if (data?.status === 'failed') return { status: 'failed', error: data.error?.message };
+    if (data?.status === 'failed') return { status: 'failed', error: mediaUpstreamFailure(this, undefined, data.error?.message) };
     return { status: 'pending' };
   }
 }

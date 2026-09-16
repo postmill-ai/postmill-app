@@ -2,6 +2,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { AIModelProvider } from './ai-model.provider';
 import { BadRequestException } from '@nestjs/common';
 import { BudgetExceeded, GuardrailViolation } from './governance/errors';
+import { ProviderUpstreamError } from '@postmill-ai/provider-kernel';
 import { createChaosEngine, createStandardInjectors, TimeoutInjector } from '@reaatech/agent-chaos-core';
 
 // AI SDK V2 result shape: text lives in a `content` array of parts, and usage uses
@@ -541,6 +542,102 @@ describe('AIModelProvider', () => {
         { apiKey: 'gw-key' },
         'chatgpt-image-latest',
       );
+    });
+  });
+
+  // Upstream provider failures must reach callers as ProviderUpstreamError:
+  // the SDK's APICallError carries {statusCode, message}, which Nest's default
+  // handler replays as OUR status (a provider 401 logged the user out).
+  describe('upstream provider errors', () => {
+    const apiCallError = (statusCode: number, body: string) => {
+      const err: any = new Error(`Upstream ${statusCode}`);
+      err[Symbol.for('vercel.ai.error.AI_APICallError')] = true;
+      err.statusCode = statusCode;
+      err.responseBody = body;
+      err.isRetryable = statusCode === 429 || statusCode >= 500;
+      return err;
+    };
+    const OPENAI_401 = '{"error":{"message":"Incorrect API key provided: sk-abc***","type":"invalid_request_error"}}';
+
+    it('generateText: a 401 from the model becomes ProviderUpstreamError{kind:auth} naming the provider', async () => {
+      mockDoGenerate.mockRejectedValueOnce(apiCallError(401, OPENAI_401));
+      let caught: any;
+      await provider.generateText('utility', 'Hello', { orgId: 'org-123' }).catch((e) => (caught = e));
+      expect(caught).toBeInstanceOf(ProviderUpstreamError);
+      expect(caught.kind).toBe('auth');
+      expect(caught.upstreamStatus).toBe(401);
+      expect(caught.ctx).toMatchObject({ domain: 'ai', providerId: 'openai', providerName: 'OpenAI' });
+      expect(caught.message).toBe('OpenAI rejected the API key (HTTP 401): Incorrect API key provided: sk-abc***');
+      expect('statusCode' in caught).toBe(false);
+    });
+
+    it('generateObject: a 429 quota body becomes kind quota', async () => {
+      mockDoGenerate.mockRejectedValueOnce(
+        apiCallError(429, '{"error":{"message":"You exceeded your current quota, please check your plan and billing details."}}'),
+      );
+      let caught: any;
+      await provider
+        .generateObject<any>('utility', 'Extract', { title: 'x' }, { orgId: 'org-123' })
+        .catch((e) => (caught = e));
+      expect(caught).toBeInstanceOf(ProviderUpstreamError);
+      expect(caught.kind).toBe('quota');
+    });
+
+    it('generateTextWithModel / generateObjectWithModel: convert too and record the health error', async () => {
+      mockGetByIdentifier.mockResolvedValue({ credentials: { apiKey: 'sk-test' } });
+      (health.recordError as any).mockClear();
+      mockDoGenerate.mockRejectedValueOnce(apiCallError(503, 'upstream overloaded'));
+      let a: any;
+      await provider
+        .generateTextWithModel('org-123', 'openai', 'v1', 'gpt-4.1', { prompt: 'Hello' })
+        .catch((e) => (a = e));
+      expect(a).toBeInstanceOf(ProviderUpstreamError);
+      expect(a.kind).toBe('unavailable');
+      expect(a.retryable).toBe(true);
+      expect(health.recordError).toHaveBeenCalledWith('openai');
+
+      mockDoGenerate.mockRejectedValueOnce(apiCallError(400, '{"error":"invalid model"}'));
+      let b: any;
+      await provider
+        .generateObjectWithModel('org-123', 'openai', 'v1', 'gpt-4.1', { prompt: 'JSON' })
+        .catch((e) => (b = e));
+      expect(b).toBeInstanceOf(ProviderUpstreamError);
+      expect(b.kind).toBe('invalid_request');
+      expect(b.message).toBe('OpenAI rejected the request (HTTP 400): invalid model');
+    });
+
+    it('languageModel proxy: doGenerate failures surface as ProviderUpstreamError for agent callers', async () => {
+      mockDoGenerate.mockRejectedValueOnce(apiCallError(401, OPENAI_401));
+      const model: any = await provider.languageModel('utility', 'org-123');
+      let caught: any;
+      await model
+        .doGenerate({ prompt: [{ role: 'user', content: [{ type: 'text', text: 'hi' }] }] })
+        .catch((e: unknown) => (caught = e));
+      expect(caught).toBeInstanceOf(ProviderUpstreamError);
+      expect(caught.ctx.providerName).toBe('OpenAI');
+    });
+
+    it('an open circuit breaker surfaces as a retryable ProviderUpstreamError, not a bare Error', async () => {
+      const breaker = (provider as any)._circuitBreaker;
+      const spy = vi.spyOn(breaker, 'canAttempt').mockReturnValue(false);
+      let caught: any;
+      await provider.generateText('utility', 'Hello', { orgId: 'org-123' }).catch((e) => (caught = e));
+      spy.mockRestore();
+      expect(caught).toBeInstanceOf(ProviderUpstreamError);
+      expect(caught.kind).toBe('unavailable');
+      expect(caught.retryable).toBe(true);
+      expect(caught.message).toBe(
+        'OpenAI is unavailable right now: paused after repeated failures (circuit breaker open) — retry in a moment',
+      );
+    });
+
+    it('leaves governance and configuration errors untouched', async () => {
+      mockDoGenerate.mockRejectedValueOnce(new Error('AI budget exceeded'));
+      await expect(provider.generateText('utility', 'Hello', { orgId: 'org-123' })).rejects.toThrow(
+        'AI budget exceeded',
+      );
+      budgetAllowed = false;
+      await expect(provider.generateText('utility', 'Hello', { orgId: 'org-123' })).rejects.toThrow(BudgetExceeded);
     });
   });
 

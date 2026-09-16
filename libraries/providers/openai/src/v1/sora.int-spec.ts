@@ -155,7 +155,7 @@ describe('openai media adapter — Sora Videos API', () => {
     const a1: any = openaiMediaModule.create(f.ctx as any);
     const r = await a1.pollJob('video_abc', { apiKey: 'sk-test' });
     expect(r.status).toBe('failed');
-    expect(r.error).toBe('bad prompt');
+    expect(r.error).toBe('OpenAI returned an error: bad prompt');
 
     const four = makeCtx(() => json('bad', false, 404));
     const a2: any = openaiMediaModule.create(four.ctx as any);

@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { MediaStudioService, StudioGenerateParams } from './media-studio.service';
+import { ProviderUpstreamError } from '@postmill-ai/provider-kernel';
 
 function makeService() {
   const orgSettings = {
@@ -19,6 +20,7 @@ function makeService() {
     createPendingJob: vi.fn().mockResolvedValue({ id: 'job-1' }),
     completeJob: vi.fn().mockResolvedValue(true),
     attachProviderJob: vi.fn().mockResolvedValue(undefined),
+    failJob: vi.fn().mockResolvedValue(undefined),
     webhookUrlFor: vi.fn().mockReturnValue('https://api.example.com/webhook/job-1'),
     processJob: vi.fn().mockResolvedValue('completed'),
   };
@@ -243,6 +245,33 @@ describe('MediaStudioService', () => {
         credentials: { apiKey: 'test-key' },
         orgId: 'org-1',
       });
+    });
+
+    // Sentry POSTMILL-APP-P: the provider's failure must (a) be stored on the
+    // job in its attributed form for the render queue and (b) propagate as the
+    // same typed error so the HTTP layer answers 502, not a Postmill 500.
+    it('marks the job failed with the attributed provider message and rethrows the typed error', async () => {
+      const { service, adapter, lifecycle } = makeService();
+      const upstream = new ProviderUpstreamError(
+        { domain: 'media', providerId: 'test-provider', providerName: 'Test Provider', operation: 'image' },
+        'quota',
+        'You exceeded your current quota',
+        429,
+      );
+      adapter.generateImage.mockRejectedValue(upstream);
+
+      await expect(
+        service.generate('org-1', 'user-1', 'test-provider', {
+          operation: 'image',
+          input: { prompt: 'a cat' },
+        }),
+      ).rejects.toBe(upstream);
+
+      expect(lifecycle.failJob).toHaveBeenCalledWith(
+        { id: 'job-1' },
+        "Test Provider reports the account's quota or billing limit was reached (HTTP 429): You exceeded your current quota",
+        { notify: false },
+      );
     });
 
     it('rejects when the provider is not configured', async () => {

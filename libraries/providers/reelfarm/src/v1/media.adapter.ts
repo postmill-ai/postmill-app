@@ -13,6 +13,8 @@ import {
   isTransientStatus,
   SafeFetchPort,
   ProviderModule,
+  mediaUpstreamError,
+  mediaUpstreamFailure,
 } from '@postmill-ai/provider-kernel';
 
 // Reel.Farm official developer API (https://reel.farm/api-docs) — own-key Bearer provider
@@ -106,7 +108,7 @@ export class ReelFarmAdapter implements MediaProviderAdapter {
       headers,
       body: JSON.stringify(body),
     });
-    if (!res.ok) throw new Error(`Reel.Farm slideshow generation failed: ${redactError(await res.text())}`);
+    if (!res.ok) throw await mediaUpstreamError(this, res, 'video');
     const id = ((await res.json()) as ReelFarmGenerateResponse).slideshow_id;
     if (id === undefined || id === null) throw new Error('Reel.Farm returned no slideshow id');
     return { jobId: String(id) };
@@ -131,7 +133,7 @@ export class ReelFarmAdapter implements MediaProviderAdapter {
       if (isTransientStatus(statusRes.status)) {
         throw new Error(`Reel.Farm status poll transient error ${statusRes.status}: ${redactError(body, 200)}`);
       }
-      return { status: 'failed', error: redactError(body) };
+      return { status: 'failed', error: mediaUpstreamFailure(this, statusRes.status, body) };
     }
     const status = (await statusRes.json()) as ReelFarmStatusResponse;
 

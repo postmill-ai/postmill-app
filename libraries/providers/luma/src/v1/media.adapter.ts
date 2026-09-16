@@ -12,6 +12,8 @@ import {
   isTransientStatus,
   SafeFetchPort,
   ProviderModule,
+  mediaUpstreamError,
+  mediaUpstreamFailure,
 } from '@postmill-ai/provider-kernel';
 
 const BASE = 'https://api.lumalabs.ai/dream-machine/v1';
@@ -78,7 +80,7 @@ export class LumaAdapter implements MediaProviderAdapter {
       }),
     });
 
-    if (!res.ok) throw new Error(`Luma video generation failed: ${redactError(await res.text())}`);
+    if (!res.ok) throw await mediaUpstreamError(this, res, 'video');
     const data = (await res.json()) as LumaGenerationResponse;
     if (!data.id) throw new Error('Luma returned no generation id');
     return { jobId: data.id };
@@ -108,7 +110,7 @@ export class LumaAdapter implements MediaProviderAdapter {
       if (isTransientStatus(res.status)) {
         throw new Error(`Luma poll transient error ${res.status}: ${redactError(body, 200)}`);
       }
-      return { status: 'failed', error: redactError(body) };
+      return { status: 'failed', error: mediaUpstreamFailure(this, res.status, body) };
     }
     const data = (await res.json()) as LumaGenerationResponse;
 
@@ -121,7 +123,7 @@ export class LumaAdapter implements MediaProviderAdapter {
           metadata: { provider: this.identifier, mime: 'video/mp4' },
         };
       case 'failed':
-        return { status: 'failed', error: redactError(data.failure_reason || 'Unknown error') };
+        return { status: 'failed', error: mediaUpstreamFailure(this, undefined, data.failure_reason || 'Unknown error') };
       default:
         return { status: 'pending' };
     }

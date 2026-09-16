@@ -11,6 +11,10 @@ import {
   resolveApiKey,
   SafeFetchPort,
   ProviderModule,
+  mediaUpstreamError,
+  mediaUpstreamFailure,
+  isTransientStatus,
+  mediaUpstreamFromPoll,
 } from '@postmill-ai/provider-kernel';
 
 // Wan (Tongyi Wanxiang) on Alibaba Cloud Model Studio. Clicking "API" on wan.video lands on
@@ -32,7 +36,6 @@ const INPUT_KEYS = new Set(['negative_prompt', 'img_url', 'audio_url']);
 
 // 2.1 — a 429/5xx on a status poll is transient: THROW so the lifecycle retries the render
 // rather than permanently failing a job whose generation may still be fine.
-const isTransientStatus = (s: number): boolean => s === 429 || s >= 500;
 
 interface DashScopeTaskCreate {
   output?: { task_id?: string; task_status?: string };
@@ -100,7 +103,7 @@ export class WanAdapter implements MediaProviderAdapter {
       headers: this._headers(options, true),
       body: JSON.stringify(this._body(model, prompt, options?.input || {})),
     });
-    if (!res.ok) throw new Error(`Wan image generation failed: ${await res.text()}`);
+    if (!res.ok) throw await mediaUpstreamError(this, res, 'image');
     const taskId = ((await res.json()) as DashScopeTaskCreate).output?.task_id;
     if (!taskId) throw new Error('Wan returned no task id');
 
@@ -116,7 +119,7 @@ export class WanAdapter implements MediaProviderAdapter {
         };
       }
       if (poll.status === 'failed') {
-        throw new Error(`Wan image generation failed: ${poll.error || 'unknown error'}`);
+        throw mediaUpstreamFromPoll(this, poll.error || 'unknown error', 'image');
       }
     }
     throw new Error('Wan image generation timed out');
@@ -132,7 +135,7 @@ export class WanAdapter implements MediaProviderAdapter {
       headers: this._headers(options, true),
       body: JSON.stringify(this._body(model, prompt, options?.input || {})),
     });
-    if (!res.ok) throw new Error(`Wan video generation failed: ${await res.text()}`);
+    if (!res.ok) throw await mediaUpstreamError(this, res, 'video');
     const taskId = ((await res.json()) as DashScopeTaskCreate).output?.task_id;
     if (!taskId) throw new Error('Wan returned no task id');
     return { jobId: taskId };
@@ -154,7 +157,7 @@ export class WanAdapter implements MediaProviderAdapter {
     if (!res.ok) {
       const body = await res.text();
       if (isTransientStatus(res.status)) throw new Error(`Wan poll transient error ${res.status}: ${body.slice(0, 200)}`);
-      return { status: 'failed', error: body };
+      return { status: 'failed', error: mediaUpstreamFailure(this, res.status, body) };
     }
     const data = (await res.json()) as DashScopeTaskStatus;
     const status = data.output?.task_status;
@@ -166,7 +169,7 @@ export class WanAdapter implements MediaProviderAdapter {
       return { status: 'completed', artifactUrl, metadata: { provider: this.identifier } };
     }
     if (status === 'FAILED' || status === 'CANCELED' || status === 'UNKNOWN') {
-      return { status: 'failed', error: data.output?.message || data.message || 'Wan task failed' };
+      return { status: 'failed', error: mediaUpstreamFailure(this, undefined, data.output?.message || data.message || 'Wan task failed') };
     }
     return { status: 'pending' };
   }

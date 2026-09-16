@@ -1,4 +1,5 @@
 'use client';
+import { ProviderError, providerErrorToastText } from '@postmill-ai/frontend/components/ai/provider-error';
 
 import React, { useMemo, useState } from 'react';
 import { Logo } from '@postmill-ai/frontend/components/new-layout/logo';
@@ -108,8 +109,11 @@ export function StudioShell({ descriptor }: { descriptor: StudioDescriptor }) {
       toaster.show(translate('studio_render_started', 'Render started'), 'success');
       mutateJobs();
     } catch (err) {
+      const providerError = (err as { providerError?: ProviderError }).providerError;
       toaster.show(
-        (err as Error).message || translate('studio_render_start_failed', 'Failed to start the render'),
+        providerError
+          ? providerErrorToastText(translate, providerError)
+          : (err as Error).message || translate('studio_render_start_failed', 'Failed to start the render'),
         'warning'
       );
     } finally {

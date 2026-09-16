@@ -3,6 +3,7 @@
 import { useCallback } from 'react';
 import useSWR from 'swr';
 import { useFetch } from '@postmill-ai/helpers/utils/custom.fetch';
+import { readApiError } from '@postmill-ai/frontend/components/ai/provider-error';
 import { useT } from '@postmill-ai/react/translation/get.transation.service.client';
 import { createFetchError } from '../dashboard.utils';
 
@@ -41,14 +42,14 @@ export const useDailyBrief = () => {
   const generate = useCallback(async (): Promise<DailyBriefResponse> => {
     const res = await fetch('/dashboard/brief', { method: 'POST' });
     if (!res.ok) {
-      const body = await res.json().catch(() => ({}));
-      const err = new Error(
-        body.message ||
-          t('brief_generation_failed_with_status', 'Brief generation failed ({{status}})', {
-            status: res.status,
-          })
-      ) as any;
+      // 502 = the org's AI provider failed (attributed envelope), never Postmill.
+      const apiError = await readApiError(
+        res,
+        t('brief_generation_failed', 'Brief generation failed')
+      );
+      const err = new Error(apiError.message) as any;
       err.status = res.status;
+      err.providerError = apiError.providerError;
       throw err;
     }
     const result: DailyBriefResponse = await res.json();

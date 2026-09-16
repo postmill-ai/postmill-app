@@ -9,6 +9,9 @@ import {
   MediaPollResult,
   SafeFetchPort,
   ProviderModule,
+  mediaUpstreamError,
+  mediaUpstreamFailure,
+  isTransientStatus,
 } from '@postmill-ai/provider-kernel';
 
 // Suno AI music generation via the sunoapi.org hosted gateway — own-key Bearer provider
@@ -23,7 +26,6 @@ const BASE = 'https://api.sunoapi.org';
 
 // 2.1 — a 429/5xx on a status poll is transient: THROW so the lifecycle retries the render
 // rather than permanently failing a job whose generation may still be fine.
-const isTransientStatus = (s: number): boolean => s === 429 || s >= 500;
 
 interface SunoGenerateResponse {
   code?: number;
@@ -125,7 +127,7 @@ export class SunoAdapter extends BearerTokenMediaAdapter {
       headers,
       body: JSON.stringify(body),
     });
-    if (!res.ok) throw new Error(`Suno generation failed: ${await res.text()}`);
+    if (!res.ok) throw await mediaUpstreamError(this, res);
     const data = (await res.json()) as SunoGenerateResponse;
     const taskId = data.data?.taskId;
     if (!taskId) throw new Error(`Suno returned no taskId: ${JSON.stringify(data)}`);
@@ -162,7 +164,7 @@ export class SunoAdapter extends BearerTokenMediaAdapter {
     if (!res.ok) {
       const body = await res.text();
       if (isTransientStatus(res.status)) throw new Error(`Suno poll transient error ${res.status}: ${body.slice(0, 200)}`);
-      return { status: 'failed', error: body };
+      return { status: 'failed', error: mediaUpstreamFailure(this, res.status, body) };
     }
     const data = (await res.json()) as SunoRecordResponse;
     const status = (data.data?.status || '').toUpperCase();
@@ -184,7 +186,7 @@ export class SunoAdapter extends BearerTokenMediaAdapter {
       };
     }
     if (/FAILED|ERROR|EXCEPTION|SENSITIVE/.test(status)) {
-      return { status: 'failed', error: data.data?.status || data.msg || 'Suno generation failed' };
+      return { status: 'failed', error: mediaUpstreamFailure(this, undefined, data.data?.status || data.msg || 'Suno generation failed') };
     }
     return { status: 'pending' };
   }

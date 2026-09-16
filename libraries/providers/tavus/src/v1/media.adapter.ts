@@ -13,6 +13,8 @@ import {
   isTransientStatus,
   SafeFetchPort,
   ProviderModule,
+  mediaUpstreamError,
+  mediaUpstreamFailure,
 } from '@postmill-ai/provider-kernel';
 
 const BASE = 'https://tavusapi.com/v2';
@@ -71,7 +73,7 @@ export class TavusAdapter implements MediaProviderAdapter {
         ...(options?.webhookUrl ? { callback_url: options.webhookUrl } : {}),
       }),
     });
-    if (!res.ok) throw new Error(`Tavus video generation failed: ${redactError(await res.text())}`);
+    if (!res.ok) throw await mediaUpstreamError(this, res, 'video');
     const data = (await res.json()) as TavusVideoResponse;
     if (!data.video_id) throw new Error('Tavus returned no video id');
     return { jobId: data.video_id };
@@ -97,7 +99,7 @@ export class TavusAdapter implements MediaProviderAdapter {
       if (isTransientStatus(res.status)) {
         throw new Error(`Tavus poll transient error ${res.status}: ${redactError(body, 200)}`);
       }
-      return { status: 'failed', error: redactError(body) };
+      return { status: 'failed', error: mediaUpstreamFailure(this, res.status, body) };
     }
     const data = (await res.json()) as TavusVideoResponse;
 
@@ -109,7 +111,7 @@ export class TavusAdapter implements MediaProviderAdapter {
       return { status: 'completed', artifactUrl: data.download_url, metadata: { provider: this.identifier, mime: 'video/mp4' } };
     }
     if (data.status === 'error' || data.status === 'deleted') {
-      return { status: 'failed', error: redactError(data.error || `Tavus video status: ${data.status}`) };
+      return { status: 'failed', error: mediaUpstreamFailure(this, undefined, data.error || `Tavus video status: ${data.status}`) };
     }
     return { status: 'pending' };
   }

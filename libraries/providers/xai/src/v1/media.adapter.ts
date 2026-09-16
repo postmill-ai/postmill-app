@@ -11,6 +11,7 @@ import {
   resolveApiKey,
   SafeFetchPort,
   ProviderModule,
+  mediaUpstreamError,
 } from '@postmill-ai/provider-kernel';
 
 // xAI (Grok) — same key as the xAI LLM provider (registry id `xai`), reused via the
@@ -63,7 +64,7 @@ export class XaiMediaAdapter implements MediaProviderAdapter {
       headers: this._headers(options),
       body: JSON.stringify({ model, prompt, response_format: 'url', ...input }),
     });
-    if (!res.ok) throw new Error(`xAI image generation failed: ${await res.text()}`);
+    if (!res.ok) throw await mediaUpstreamError(this, res, 'image');
     const data = (await res.json()) as XaiImageResponse;
     const urls = (data.data || [])
       .map((d) => d.url || (d.b64_json ? `data:image/png;base64,${d.b64_json}` : undefined))

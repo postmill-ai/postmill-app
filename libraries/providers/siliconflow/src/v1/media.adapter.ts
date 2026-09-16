@@ -15,6 +15,8 @@ import {
   readCappedArrayBuffer,
   SafeFetchPort,
   ProviderModule,
+  mediaUpstreamError,
+  mediaUpstreamFailure,
 } from '@postmill-ai/provider-kernel';
 
 // Cap a fetched source frame before base64-inlining it into the i2v request body (6.1j).
@@ -73,7 +75,7 @@ export class SiliconFlowMediaAdapter extends OpenAiCompatibleMediaAdapter {
       headers: this._headers(options),
       body: JSON.stringify(body),
     });
-    if (!res.ok) throw new Error(`SiliconFlow video generation failed: ${redactError(await res.text())}`);
+    if (!res.ok) throw await mediaUpstreamError(this, res, 'video');
     const requestId = ((await res.json()) as SiliconFlowSubmit).requestId;
     if (!requestId) throw new Error('SiliconFlow returned no requestId');
     return { jobId: requestId };
@@ -93,7 +95,7 @@ export class SiliconFlowMediaAdapter extends OpenAiCompatibleMediaAdapter {
       if (isTransientStatus(res.status)) {
         throw new Error(`SiliconFlow poll transient error ${res.status}: ${redactError(body, 200)}`);
       }
-      return { status: 'failed', error: redactError(body) };
+      return { status: 'failed', error: mediaUpstreamFailure(this, res.status, body) };
     }
     const data = (await res.json()) as SiliconFlowStatus;
     const status = (data.status || '').toLowerCase();
@@ -103,7 +105,7 @@ export class SiliconFlowMediaAdapter extends OpenAiCompatibleMediaAdapter {
       return { status: 'completed', artifactUrl: url, metadata: { provider: this.identifier } };
     }
     if (status === 'failed' || status === 'error') {
-      return { status: 'failed', error: redactError(data.reason || 'SiliconFlow video generation failed') };
+      return { status: 'failed', error: mediaUpstreamFailure(this, undefined, data.reason || 'SiliconFlow video generation failed') };
     }
     return { status: 'pending' };
   }

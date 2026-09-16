@@ -8,6 +8,7 @@ import {
   MediaJobSubmission,
   SafeFetchPort,
   ProviderModule,
+  mediaUpstreamError,
 } from '@postmill-ai/provider-kernel';
 
 // Leonardo.ai — own-key (Bearer) image generation. Its API is async (create returns a
@@ -60,7 +61,7 @@ export class LeonardoMediaAdapter extends BearerTokenMediaAdapter {
         ...input,
       }),
     });
-    if (!res.ok) throw new Error(`Leonardo.ai image generation failed: ${await res.text()}`);
+    if (!res.ok) throw await mediaUpstreamError(this, res, 'image');
     const created = (await res.json()) as LeonardoCreateResponse;
     const generationId = created.sdGenerationJob?.generationId;
     if (!generationId) throw new Error('Leonardo.ai returned no generation id');

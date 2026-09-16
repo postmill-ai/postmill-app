@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { googleaiMediaModule } from './media.adapter';
+import { ProviderUpstreamError } from '@postmill-ai/provider-kernel';
 
 interface Rec {
   url: string;
@@ -121,6 +122,43 @@ describe('google-ai media adapter (Gemini Developer API)', () => {
     expect(body.instances).toEqual([{ prompt: 'a meadow' }]);
     expect(body.parameters.aspectRatio).toBe('1:1');
     expect(out.image).toBe('data:image/png;base64,SU1H');
+  });
+
+  // Sentry POSTMILL-APP-P: a user's free-tier key hit this exact 429. It must
+  // surface as the PROVIDER's quota problem (typed, attributed), never as a
+  // Postmill 500.
+  it('upstream 429 quota on image generation → ProviderUpstreamError{kind:quota} naming Google AI Studio', async () => {
+    const body = {
+      error: {
+        code: 429,
+        message:
+          'You exceeded your current quota, please check your plan and billing details. For more information on this error, head to: https://ai.google.dev/gemini-api/docs/rate-limits.\n* Quota exceeded for metric: generativelanguage.googleapis.com/generate_content_free_tier_input_token_count, limit: 0, model: gemini-2.5-flash-preview-image',
+        status: 'RESOURCE_EXHAUSTED',
+      },
+    };
+    const { ctx } = makeCtx(() => json(body, false, 429));
+    const adapter: any = googleaiMediaModule.create(ctx as any);
+    let caught: any;
+    try {
+      await adapter.generateImage('бодрое утро', { model: 'gemini-2.5-flash-image', credentials: { apiKey: 'AIza-test' }, input: {} });
+    } catch (e) {
+      caught = e;
+    }
+    expect(caught).toBeInstanceOf(ProviderUpstreamError);
+    expect(caught.kind).toBe('quota');
+    expect(caught.upstreamStatus).toBe(429);
+    expect(caught.ctx).toMatchObject({ domain: 'media', providerId: 'google', providerName: 'Google AI Studio', operation: 'image' });
+    expect(caught.message).toBe(
+      "Google AI Studio reports the account's quota or billing limit was reached (HTTP 429): You exceeded your current quota, please check your plan and billing details. For more information on this error, head to: https://ai.google.dev/gemini-api/docs/rate-limits.",
+    );
+    expect('statusCode' in caught).toBe(false);
+  });
+
+  it('upstream 400 API_KEY_INVALID on a Veo poll → returned failed, attributed as a key problem', async () => {
+    const { ctx } = makeCtx(() => json({ error: { message: 'API key not valid. Please pass a valid API key.' } }, false, 400));
+    const adapter: any = googleaiMediaModule.create(ctx as any);
+    const r = await adapter.pollJob('models/veo/operations/op-1', { apiKey: 'AIza-bad' });
+    expect(r).toEqual({ status: 'failed', error: 'Google AI Studio rejected the API key (HTTP 400): API key not valid. Please pass a valid API key.' });
   });
 
   it('2.1: a 503 on the Veo operation poll THROWS (transient) — render not permanently failed', async () => {
