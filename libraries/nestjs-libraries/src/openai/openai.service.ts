@@ -204,11 +204,13 @@ export class OpenaiService {
       if (hasVision) {
         const model = await this._aiModelProvider.languageModel('utility', orgId);
         const result = await (model as any).doGenerate({
+          // LanguageModelV2 shapes: string system content, `file` image part
+          // (the SDK v1 `{type:'image'}` part is rejected by the providers).
           prompt: [
-            { role: 'system', content: [{ type: 'text', text: PROMPT_CONSTANTS.generateAltText }] },
+            { role: 'system', content: PROMPT_CONSTANTS.generateAltText },
             { role: 'user', content: [
               { type: 'text', text: PROMPT_CONSTANTS.generateAltTextVisionPrompt },
-              { type: 'image', image: imageUrlOrB64 },
+              this._aiModelProvider.imageFilePart(imageUrlOrB64),
             ]},
           ],
         });

@@ -1086,9 +1086,13 @@ export class AIModelProvider {
       ? this._enforceContextWindow(systemPrompt, config.modelId)
       : '';
 
+    // LanguageModelV2: a system message's content is a plain string (only
+    // user/assistant/tool carry part arrays). OpenAI tolerates a parts array
+    // here, Gemini does not — it 400s with `Unknown name "text" at
+    // 'system_instruction.parts[0]'`.
     const messages: any[] = [];
     if (truncatedSystem) {
-      messages.push({ role: 'system', content: [{ type: 'text', text: truncatedSystem }] });
+      messages.push({ role: 'system', content: truncatedSystem });
     }
     messages.push({ role: 'user', content: [{ type: 'text', text: truncatedPrompt }] });
 
@@ -1204,12 +1208,12 @@ export class AIModelProvider {
             const { messages } = await this._buildMessages(config, checkedPrompt, systemPrompt);
 
             const structuredSystem = [
-              messages.find((m: any) => m.role === 'system')?.content?.[0]?.text || '',
+              messages.find((m: any) => m.role === 'system')?.content || '',
               'Return only valid JSON that matches the requested schema. Do not include markdown, prose, or code fences.',
             ].filter(Boolean).join('\n\n');
 
             const finalMessages: any[] = [
-              { role: 'system', content: [{ type: 'text', text: structuredSystem }] },
+              { role: 'system', content: structuredSystem },
               { role: 'user', content: messages.find((m: any) => m.role === 'user')?.content || [] },
             ];
 
@@ -1327,9 +1331,12 @@ export class AIModelProvider {
               ? [args.imageUrl]
               : [];
           for (const url of imageUrls) {
-            content.push(this._imageFilePart(url));
+            content.push(this.imageFilePart(url));
           }
-          promptPayload = [{ role: 'user', content }];
+          promptPayload = [
+            ...(args.system ? [{ role: 'system', content: args.system }] : []),
+            { role: 'user', content },
+          ];
         }
         const result = await (model as any).doGenerate({ prompt: promptPayload, abortSignal: args.signal });
         const outputText = this._extractText(result);
@@ -1361,7 +1368,7 @@ export class AIModelProvider {
    * instances so the adapter forwards the link instead of base64-wrapping
    * the URL text.
    */
-  private _imageFilePart(imageUrl: string): {
+  imageFilePart(imageUrl: string): {
     type: 'file';
     mediaType: string;
     data: string | URL;
@@ -1427,7 +1434,13 @@ export class AIModelProvider {
           temperature: args.temperature,
         });
 
-        const promptPayload = args.messages || [{ role: 'user', content: checkedInput }];
+        // Same LanguageModelV2 shapes as generateTextWithModel: system is a
+        // string, user content is a parts array (a bare string used to be
+        // iterated character-by-character by the providers).
+        const promptPayload = args.messages || [
+          ...(args.system ? [{ role: 'system', content: args.system }] : []),
+          { role: 'user', content: [{ type: 'text', text: checkedInput }] },
+        ];
         const result = await (model as any).doGenerate({
           prompt: promptPayload,
           responseFormat: { type: 'json' },
