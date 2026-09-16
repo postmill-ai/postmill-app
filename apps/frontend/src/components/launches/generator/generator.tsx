@@ -1,4 +1,5 @@
 'use client';
+import { readApiError, providerErrorToastText } from '@postmill-ai/frontend/components/ai/provider-error';
 
 import React, { FC, useCallback, useMemo, useState } from 'react';
 import { useUser } from '@postmill-ai/frontend/components/layout/user.context';
@@ -153,8 +154,14 @@ const FirstStep: FC = (props) => {
         // The controller now returns pre-flight 429/500 JSON {error} (e.g. an org
         // over its AI budget). Surface it instead of streaming a null body.
         if (!response.ok) {
-          const err = await response.json().catch(() => null);
-          throw new Error(err?.error || t('generation_failed', 'Generation failed'));
+          // {error} from the pre-flight catch, or the 502 provider envelope
+          // ({message} naming the org's AI provider).
+          const apiError = await readApiError(response, t('generation_failed', 'Generation failed'));
+          throw new Error(
+            apiError.providerError
+              ? providerErrorToastText(t, apiError.providerError)
+              : apiError.message
+          );
         }
         if (!response.body) {
           throw new Error(t('generation_failed', 'Generation failed'));

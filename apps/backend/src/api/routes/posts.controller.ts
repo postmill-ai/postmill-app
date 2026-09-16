@@ -27,6 +27,7 @@ import { GeneratorDto } from '@postmill-ai/nestjs-libraries/dtos/generator/gener
 import { CreateGeneratedPostsDto } from '@postmill-ai/nestjs-libraries/dtos/generator/create.generated.posts.dto';
 import { AgentGraphService } from '@postmill-ai/nestjs-libraries/agent/agent.graph.service';
 import { BudgetExceeded } from '@postmill-ai/nestjs-libraries/ai/governance/errors';
+import { rethrowProviderError } from '@postmill-ai/nestjs-libraries/ai/governance/rethrow-provider-error';
 import { Request, Response } from 'express';
 import { GetUserFromRequest } from '@postmill-ai/nestjs-libraries/user/user.from.request';
 import { ShortLinkService } from '@postmill-ai/nestjs-libraries/short-linking/short.link.service';
@@ -291,6 +292,9 @@ export class PostsController {
     try {
       stream = await this._agentGraphService.start(org.id, body);
     } catch (err: any) {
+      // The org's own AI provider said no → the global filter answers 502
+      // with the provider named, not a Postmill 500.
+      rethrowProviderError(err);
       const status = err instanceof BudgetExceeded ? 429 : 500;
       res
         .status(status)

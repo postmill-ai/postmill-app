@@ -10,6 +10,9 @@ import {
   MediaPollResult,
   SafeFetchPort,
   ProviderModule,
+  mediaUpstreamError,
+  mediaUpstreamFailure,
+  isTransientStatus,
 } from '@postmill-ai/provider-kernel';
 import { GoogleAuth } from 'google-auth-library';
 
@@ -39,7 +42,6 @@ const VERTEX_SCOPE = 'https://www.googleapis.com/auth/cloud-platform';
 
 // 2.1 — a 429/5xx on a status poll is transient: THROW so the lifecycle retries the render
 // rather than permanently failing a job whose generation may still be fine.
-const isTransientStatus = (s: number): boolean => s === 429 || s >= 500;
 
 // 5.7/5.14 — the GCS object is downloaded with the minted token then base64-inflated; reject
 // oversize via content-length before buffering. Matches the lifecycle's MAX_ARTIFACT_BYTES.
@@ -172,7 +174,7 @@ export class VertexMediaAdapter implements MediaProviderAdapter {
         parameters,
       }),
     });
-    if (!res.ok) throw new Error(`Vertex AI image generation failed: ${await res.text()}`);
+    if (!res.ok) throw await mediaUpstreamError(this, res, 'image');
     const data = (await res.json()) as VertexPredictResponse;
     const images = (data.predictions || [])
       .filter((p) => !!p.bytesBase64Encoded)
@@ -209,7 +211,7 @@ export class VertexMediaAdapter implements MediaProviderAdapter {
         },
       }),
     });
-    if (!res.ok) throw new Error(`Vertex AI video generation failed: ${await res.text()}`);
+    if (!res.ok) throw await mediaUpstreamError(this, res, 'video');
     const data = (await res.json()) as VertexOperationResponse;
     if (!data.name) throw new Error('Vertex AI returned no operation name');
     // The operation name embeds the model path needed by fetchPredictOperation.
@@ -265,12 +267,12 @@ export class VertexMediaAdapter implements MediaProviderAdapter {
     if (!res.ok) {
       const body = await res.text();
       if (isTransientStatus(res.status)) throw new Error(`Vertex AI poll transient error ${res.status}: ${body.slice(0, 200)}`);
-      return { status: 'failed', error: body };
+      return { status: 'failed', error: mediaUpstreamFailure(this, res.status, body) };
     }
     const data = (await res.json()) as VertexOperationResponse;
 
     if (!data.done) return { status: 'pending' };
-    if (data.error) return { status: 'failed', error: data.error.message || 'Vertex AI operation failed' };
+    if (data.error) return { status: 'failed', error: mediaUpstreamFailure(this, undefined, data.error.message || 'Vertex AI operation failed') };
 
     const video = data.response?.videos?.[0];
     const mime = video?.mimeType || 'video/mp4';

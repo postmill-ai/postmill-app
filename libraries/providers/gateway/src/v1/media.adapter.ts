@@ -16,6 +16,7 @@ import {
   MediaCredentialField,
   resolveApiKey,
   ProviderModule,
+  mediaUpstreamFromUnknown,
 } from '@postmill-ai/provider-kernel';
 
 // Vercel AI Gateway — image is delegated to the AI-SDK gateway provider (base class); video
@@ -84,13 +85,19 @@ export class GatewayMediaAdapter extends AiSdkMediaAdapter {
     const input = options?.input || {};
     // Image-to-video: the resolved source image rides as the structured prompt.
     const image = typeof input.image === 'string' ? input.image : undefined;
-    const result = await generateVideo({
-      model: gw.video(model),
-      prompt: image ? { image, text: prompt } : prompt,
-      ...(input.seconds !== undefined ? { duration: Number(input.seconds) } : {}),
-      ...(typeof input.aspect_ratio === 'string' ? { aspectRatio: input.aspect_ratio } : {}),
-      ...(typeof input.resolution === 'string' ? { resolution: input.resolution } : {}),
-    } as Parameters<typeof generateVideo>[0]);
+    let result: Awaited<ReturnType<typeof generateVideo>>;
+    try {
+      result = await generateVideo({
+        model: gw.video(model),
+        prompt: image ? { image, text: prompt } : prompt,
+        ...(input.seconds !== undefined ? { duration: Number(input.seconds) } : {}),
+        ...(typeof input.aspect_ratio === 'string' ? { aspectRatio: input.aspect_ratio } : {}),
+        ...(typeof input.resolution === 'string' ? { resolution: input.resolution } : {}),
+      } as Parameters<typeof generateVideo>[0]);
+    } catch (err) {
+      // SDK APICallError / GatewayError → attributed upstream failure.
+      throw mediaUpstreamFromUnknown(this, err, 'video');
+    }
 
     const video = result.videos?.[0];
     if (!video) throw new Error('Gateway returned no video');

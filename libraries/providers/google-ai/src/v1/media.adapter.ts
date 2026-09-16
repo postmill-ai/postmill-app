@@ -9,10 +9,12 @@ import {
   MediaJobSubmission,
   MediaPollResult,
   resolveApiKey,
-  redactError,
   validateModelId,
   SafeFetchPort,
   ProviderModule,
+  mediaUpstreamError,
+  mediaUpstreamFailure,
+  isTransientStatus,
 } from '@postmill-ai/provider-kernel';
 
 // Google AI Studio — the Gemini Developer API (generativelanguage.googleapis.com), keyed by a
@@ -34,7 +36,6 @@ const DEFAULT_VIDEO_MODEL = 'veo-3.0-generate-001';
 
 // 2.1 — a 429/5xx on a status poll is transient: THROW so the lifecycle retries the render
 // rather than permanently failing a job whose generation may still be fine.
-const isTransientStatus = (s: number): boolean => s === 429 || s >= 500;
 
 // 5.7 — the auth-only MP4 is buffered then base64-inflated; reject via content-length BEFORE
 // buffering. Matches the lifecycle's MAX_ARTIFACT_BYTES.
@@ -141,7 +142,7 @@ export class GoogleAiMediaAdapter implements MediaProviderAdapter {
         headers: this._headers(key),
         body: JSON.stringify({ instances: [{ prompt }], parameters }),
       });
-      if (!res.ok) throw new Error(`Google AI Studio image generation failed: ${redactError(await res.text())}`);
+      if (!res.ok) throw await mediaUpstreamError(this, res, 'image');
       const data = (await res.json()) as PredictResponse;
       const images = (data.predictions || [])
         .filter((p) => !!p.bytesBase64Encoded)
@@ -162,7 +163,7 @@ export class GoogleAiMediaAdapter implements MediaProviderAdapter {
       headers: this._headers(key),
       body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }], generationConfig }),
     });
-    if (!res.ok) throw new Error(`Google AI Studio image generation failed: ${redactError(await res.text())}`);
+    if (!res.ok) throw await mediaUpstreamError(this, res, 'image');
     const data = (await res.json()) as GenerateContentResponse;
     const parts = data.candidates?.[0]?.content?.parts || [];
     const images = parts
@@ -194,7 +195,7 @@ export class GoogleAiMediaAdapter implements MediaProviderAdapter {
       headers: this._headers(key),
       body: JSON.stringify({ instances: [{ prompt }], parameters }),
     });
-    if (!res.ok) throw new Error(`Google AI Studio video generation failed: ${redactError(await res.text())}`);
+    if (!res.ok) throw await mediaUpstreamError(this, res, 'video');
     const data = (await res.json()) as VeoOperation;
     if (!data.name) throw new Error('Google AI Studio returned no operation name');
     // The operation name is a full resource path (models/{model}/operations/{id}) polled at
@@ -220,12 +221,12 @@ export class GoogleAiMediaAdapter implements MediaProviderAdapter {
     if (!res.ok) {
       const body = await res.text();
       if (isTransientStatus(res.status)) throw new Error(`Veo poll transient error ${res.status}: ${body.slice(0, 200)}`);
-      return { status: 'failed', error: body };
+      return { status: 'failed', error: mediaUpstreamFailure(this, res.status, body) };
     }
     const data = (await res.json()) as VeoOperation;
 
     if (!data.done) return { status: 'pending' };
-    if (data.error) return { status: 'failed', error: data.error.message || 'Veo generation failed' };
+    if (data.error) return { status: 'failed', error: mediaUpstreamFailure(this, undefined, data.error.message || 'Veo generation failed') };
 
     const video = data.response?.generateVideoResponse?.generatedSamples?.[0]?.video;
     const mime = video?.mimeType || 'video/mp4';

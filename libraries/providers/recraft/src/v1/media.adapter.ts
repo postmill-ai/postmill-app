@@ -7,6 +7,7 @@ import {
   MediaJobSubmission,
   SafeFetchPort,
   ProviderModule,
+  mediaUpstreamError,
 } from '@postmill-ai/provider-kernel';
 
 // Recraft — own-key (Bearer) image generation, strong on vector/SVG, brand styles, and icons.
@@ -40,7 +41,7 @@ export class RecraftMediaAdapter extends BearerTokenMediaAdapter {
       headers: this._headers(options),
       body: JSON.stringify({ prompt, model, ...(options?.input || {}) }),
     });
-    if (!res.ok) throw new Error(`Recraft image generation failed: ${await res.text()}`);
+    if (!res.ok) throw await mediaUpstreamError(this, res, 'image');
     const data = (await res.json()) as RecraftResponse;
     const images = (data.data || []).map((d) => d.url).filter((u): u is string => !!u);
     if (images.length === 0) throw new Error('Recraft returned no images');

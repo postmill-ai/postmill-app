@@ -4,7 +4,8 @@ import { render, screen, fireEvent } from '@testing-library/react';
 
 vi.mock('react-i18next', () => ({
   useTranslation: () => ({
-    t: (key: string, fallback?: string) => fallback || key,
+    t: (key: string, fallback?: string, params?: Record<string, unknown>) =>
+      (fallback || key).replace(/\{\{(\w+)\}\}/g, (_m, k) => String(params?.[k] ?? `{{${k}}}`)),
   }),
 }));
 
@@ -90,5 +91,51 @@ describe('AiErrorDisplay', () => {
   it('renders nothing when error is falsy (empty string)', () => {
     const { container } = render(<AiErrorDisplay error="" />);
     expect(container.firstChild).toBeNull();
+  });
+
+  // 502 ProviderUpstreamError envelope: attribute the failure to the org's
+  // provider, explain the kind, link to settings.
+  it('renders an upstream provider error attributed to the provider, not Postmill', () => {
+    render(
+      <AiErrorDisplay
+        error={{
+          statusCode: 502,
+          error: 'ProviderUpstreamError',
+          provider: 'google',
+          providerName: 'Google AI Studio',
+          domain: 'media',
+          kind: 'quota',
+          upstreamStatus: 429,
+          message:
+            "Google AI Studio reports the account's quota or billing limit was reached (HTTP 429): You exceeded your current quota",
+          settingsUrl: '/settings/content/ai-media',
+        }}
+      />
+    );
+    expect(
+      screen.getByText(
+        'Google AI Studio returned an error — this comes from your Google AI Studio account, not Postmill.'
+      )
+    ).toBeTruthy();
+    expect(screen.getByText(/You exceeded your current quota/)).toBeTruthy();
+    expect(screen.getByText(/quota or billing limit was reached\. Check the plan/)).toBeTruthy();
+    expect(screen.getByRole('link', { name: 'Open settings' }).getAttribute('href')).toBe(
+      '/settings/content/ai-media'
+    );
+  });
+
+  it('explains a rejected key for kind auth', () => {
+    render(
+      <AiErrorDisplay
+        error={{
+          error: 'ProviderUpstreamError',
+          provider: 'openai',
+          providerName: 'OpenAI',
+          kind: 'auth',
+          message: 'OpenAI rejected the API key (HTTP 401): Incorrect API key provided',
+        }}
+      />
+    );
+    expect(screen.getByText('The API key was rejected. Check the key in Settings.')).toBeTruthy();
   });
 });

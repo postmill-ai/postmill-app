@@ -3,6 +3,7 @@
 import { useCallback } from 'react';
 import useSWR from 'swr';
 import { useFetch } from '@postmill-ai/helpers/utils/custom.fetch';
+import { readApiError } from '@postmill-ai/frontend/components/ai/provider-error';
 import type { StudioJob, StudioGenerateBody } from './types';
 
 // One hook per resource (react-hooks/rules-of-hooks). No hooks inside returned objects.
@@ -53,8 +54,10 @@ export function useStudioGenerate(provider: string) {
         body: JSON.stringify(body),
       });
       if (!res.ok) {
-        const text = await res.text().catch(() => '');
-        throw new Error(text || 'Generation failed');
+        // Never toss the raw JSON body into a toast: a 502 envelope names the
+        // org's provider; anything else yields its `message`.
+        const apiError = await readApiError(res, 'Generation failed');
+        throw Object.assign(new Error(apiError.message), { providerError: apiError.providerError });
       }
       return (await res.json()) as { jobId: string };
     },

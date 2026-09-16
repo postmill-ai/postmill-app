@@ -13,6 +13,9 @@ import {
   validateModelId,
   SafeFetchPort,
   ProviderModule,
+  mediaUpstreamError,
+  mediaUpstreamFailure,
+  mediaUpstreamFromBody,
 } from '@postmill-ai/provider-kernel';
 
 const BASE = 'https://api.replicate.com/v1';
@@ -100,7 +103,7 @@ export class ReplicateMediaAdapter implements MediaProviderAdapter {
       headers,
       body: JSON.stringify(isVersionHash(model) ? { version: model, ...body } : body),
     });
-    if (!res.ok) throw new Error(`Replicate request failed: ${redactError(await res.text())}`);
+    if (!res.ok) throw await mediaUpstreamError(this, res);
     return (await res.json()) as ReplicatePredictionResponse;
   }
 
@@ -126,7 +129,7 @@ export class ReplicateMediaAdapter implements MediaProviderAdapter {
         if (isTransientStatus(res.status)) {
           throw new Error(`Replicate poll transient error ${res.status}: ${redactError(body, 200)}`);
         }
-        throw new Error(`Replicate poll failed: ${redactError(body)}`);
+        throw mediaUpstreamFromBody(this, res.status, body, 'image');
       }
       const polled = (await res.json()) as ReplicatePredictionResponse;
       if (polled.status === 'succeeded' || polled.status === 'failed' || polled.status === 'canceled') {
@@ -160,7 +163,7 @@ export class ReplicateMediaAdapter implements MediaProviderAdapter {
     );
     const data = await this._resolvePrediction(created, options);
     if (data.status === 'failed' || data.status === 'canceled') {
-      throw new Error(`Replicate image generation failed: ${data.error || 'unknown error'}`);
+      throw mediaUpstreamFromBody(this, undefined, String(data.error || 'unknown error'), 'image');
     }
     const output = data.output;
     if (!output) throw new Error('Replicate returned no output');
@@ -223,7 +226,7 @@ export class ReplicateMediaAdapter implements MediaProviderAdapter {
       if (isTransientStatus(res.status)) {
         throw new Error(`Replicate poll transient error ${res.status}: ${redactError(body, 200)}`);
       }
-      return { status: 'failed', error: redactError(body) };
+      return { status: 'failed', error: mediaUpstreamFailure(this, res.status, body) };
     }
     const data = (await res.json()) as ReplicatePredictionResponse;
 
@@ -235,7 +238,7 @@ export class ReplicateMediaAdapter implements MediaProviderAdapter {
       }
       case 'failed':
       case 'canceled':
-        return { status: 'failed', error: redactError(data.error || 'Unknown error') };
+        return { status: 'failed', error: mediaUpstreamFailure(this, undefined, data.error || 'Unknown error') };
       default:
         return { status: 'pending' };
     }
@@ -250,7 +253,7 @@ export class ReplicateMediaAdapter implements MediaProviderAdapter {
     const created = await this._createPrediction(options, input, PREFER_WAIT_SECONDS);
     const data = await this._resolvePrediction(created, options);
     if (data.status === 'failed' || data.status === 'canceled') {
-      throw new Error(`Replicate operation failed: ${data.error || 'unknown error'}`);
+      throw mediaUpstreamFromBody(this, undefined, String(data.error || 'unknown error'));
     }
     const url = firstOutputUrl(data.output);
     if (!url) throw new Error('Replicate prediction succeeded without output');

@@ -9,9 +9,11 @@ import {
   MediaPollResult,
   MediaInputValue,
   resolveApiKey,
-  redactError,
   SafeFetchPort,
   ProviderModule,
+  mediaUpstreamError,
+  mediaUpstreamFailure,
+  isTransientStatus,
 } from '@postmill-ai/provider-kernel';
 
 // Sora video models (sora-2 / sora-2-pro) on the async Videos API. The finished MP4 is auth-only
@@ -21,7 +23,6 @@ const SORA_BASE = 'https://api.openai.com/v1/videos';
 
 // 2.1 — a 429/5xx on a status poll is transient: THROW so the lifecycle retries the render
 // rather than permanently failing a job whose generation may still be fine.
-const isTransientStatus = (s: number): boolean => s === 429 || s >= 500;
 
 // 5.7 — the auth-only MP4 is buffered then base64-inflated (~2.3× resident); reject via the
 // content-length header BEFORE buffering so a huge render can't blow the 2 GB heap. Matches the
@@ -149,7 +150,7 @@ export class OpenaiMediaAdapter implements MediaProviderAdapter {
       }),
     });
 
-    if (!res.ok) throw new Error(`OpenAI image generation failed: ${redactError(await res.text())}`);
+    if (!res.ok) throw await mediaUpstreamError(this, res, 'image');
     const data = (await res.json()) as OpenAIImageResponse;
     const fmt = String(options?.input?.output_format || 'png');
     const dataMime = fmt === 'jpeg' ? 'image/jpeg' : fmt === 'webp' ? 'image/webp' : 'image/png';
@@ -217,7 +218,7 @@ export class OpenaiMediaAdapter implements MediaProviderAdapter {
       });
     }
 
-    if (!res.ok) throw new Error(`Sora video generation failed: ${redactError(await res.text())}`);
+    if (!res.ok) throw await mediaUpstreamError(this, res, 'video');
     const data = (await res.json()) as SoraJob;
     if (!data.id) throw new Error('Sora returned no job id');
     return { jobId: data.id, metadata: { provider: this.identifier, model } };
@@ -232,7 +233,7 @@ export class OpenaiMediaAdapter implements MediaProviderAdapter {
     if (!res.ok) {
       const body = await res.text();
       if (isTransientStatus(res.status)) throw new Error(`Sora poll transient error ${res.status}: ${body.slice(0, 200)}`);
-      return { status: 'failed', error: body };
+      return { status: 'failed', error: mediaUpstreamFailure(this, res.status, body) };
     }
     const data = (await res.json()) as SoraJob;
 
@@ -264,7 +265,7 @@ export class OpenaiMediaAdapter implements MediaProviderAdapter {
       };
     }
     if (data.status === 'failed') {
-      return { status: 'failed', error: data.error?.message || 'Sora generation failed' };
+      return { status: 'failed', error: mediaUpstreamFailure(this, undefined, data.error?.message || 'Sora generation failed') };
     }
     return { status: 'pending' };
   }
@@ -326,7 +327,7 @@ export class OpenaiMediaAdapter implements MediaProviderAdapter {
       }),
     });
 
-    if (!res.ok) throw new Error(`OpenAI TTS failed: ${redactError(await res.text())}`);
+    if (!res.ok) throw await mediaUpstreamError(this, res, 'audio');
     return Buffer.from(await res.arrayBuffer());
   }
 
@@ -343,7 +344,7 @@ export class OpenaiMediaAdapter implements MediaProviderAdapter {
       body: formData,
     });
 
-    if (!res.ok) throw new Error(`OpenAI STT failed: ${redactError(await res.text())}`);
+    if (!res.ok) throw await mediaUpstreamError(this, res, 'stt');
     const data = (await res.json()) as OpenAITranscriptionResponse;
     return data.text || '';
   }

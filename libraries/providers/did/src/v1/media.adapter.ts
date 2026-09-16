@@ -13,6 +13,8 @@ import {
   isTransientStatus,
   SafeFetchPort,
   ProviderModule,
+  mediaUpstreamError,
+  mediaUpstreamFailure,
 } from '@postmill-ai/provider-kernel';
 
 const BASE = 'https://api.d-id.com';
@@ -79,7 +81,7 @@ export class DIDAdapter implements MediaProviderAdapter {
         ...(options?.webhookUrl ? { webhook: options.webhookUrl } : {}),
       }),
     });
-    if (!res.ok) throw new Error(`D-ID video generation failed: ${redactError(await res.text())}`);
+    if (!res.ok) throw await mediaUpstreamError(this, res, 'video');
     const data = (await res.json()) as DIDTalkResponse;
     if (!data.id) throw new Error('D-ID returned no talk id');
     return { jobId: data.id };
@@ -105,7 +107,7 @@ export class DIDAdapter implements MediaProviderAdapter {
       if (isTransientStatus(res.status)) {
         throw new Error(`D-ID poll transient error ${res.status}: ${redactError(body, 200)}`);
       }
-      return { status: 'failed', error: redactError(body) };
+      return { status: 'failed', error: mediaUpstreamFailure(this, res.status, body) };
     }
     const data = (await res.json()) as DIDTalkResponse;
 
@@ -118,7 +120,7 @@ export class DIDAdapter implements MediaProviderAdapter {
       };
     }
     if (data.status === 'error' || data.status === 'rejected') {
-      return { status: 'failed', error: redactError(data.error?.description || `D-ID talk status: ${data.status}`) };
+      return { status: 'failed', error: mediaUpstreamFailure(this, undefined, data.error?.description || `D-ID talk status: ${data.status}`) };
     }
     return { status: 'pending' };
   }

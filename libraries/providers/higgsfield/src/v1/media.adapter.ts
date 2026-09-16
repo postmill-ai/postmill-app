@@ -13,6 +13,8 @@ import {
   isTransientStatus,
   SafeFetchPort,
   ProviderModule,
+  mediaUpstreamError,
+  mediaUpstreamFailure,
 } from '@postmill-ai/provider-kernel';
 
 // Higgsfield (platform.higgsfield.ai) — own-key media provider. Auth is a TWO-part credential
@@ -91,7 +93,7 @@ export class HiggsfieldAdapter extends BearerTokenMediaAdapter {
       headers: this._headers(options),
       body: JSON.stringify(body),
     });
-    if (!res.ok) throw new Error(`Higgsfield request failed: ${redactError(await res.text())}`);
+    if (!res.ok) throw await mediaUpstreamError(this, res);
     const data = (await res.json()) as HiggsfieldResponse;
     if (!data.request_id) throw new Error('Higgsfield returned no request id');
     return data.request_id;
@@ -123,7 +125,7 @@ export class HiggsfieldAdapter extends BearerTokenMediaAdapter {
           return { status: 'completed', result: imgs.length ? imgs : [artifactUrl] };
         }
         if (data.status === 'failed' || data.status === 'nsfw') {
-          return { status: 'failed', error: data.status === 'nsfw' ? 'Blocked by NSFW filter' : 'Higgsfield generation failed' };
+          return { status: 'failed', error: mediaUpstreamFailure(this, undefined, data.status === 'nsfw' ? 'Blocked by NSFW filter' : 'Higgsfield generation failed') };
         }
         return { status: 'pending' };
       },
@@ -191,7 +193,7 @@ export class HiggsfieldAdapter extends BearerTokenMediaAdapter {
     if (!res.ok) {
       const body = await res.text();
       if (isTransientStatus(res.status)) throw new Error(`Higgsfield poll transient error ${res.status}: ${redactError(body, 200)}`);
-      return { status: 'failed', error: redactError(body) };
+      return { status: 'failed', error: mediaUpstreamFailure(this, res.status, body) };
     }
     const data = (await res.json()) as HiggsfieldResponse;
 
@@ -211,7 +213,7 @@ export class HiggsfieldAdapter extends BearerTokenMediaAdapter {
       };
     }
     if (data.status === 'failed' || data.status === 'nsfw') {
-      return { status: 'failed', error: data.status === 'nsfw' ? 'Blocked by NSFW filter' : 'Higgsfield generation failed' };
+      return { status: 'failed', error: mediaUpstreamFailure(this, undefined, data.status === 'nsfw' ? 'Blocked by NSFW filter' : 'Higgsfield generation failed') };
     }
     return { status: 'pending' };
   }

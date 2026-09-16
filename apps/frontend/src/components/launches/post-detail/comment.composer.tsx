@@ -1,4 +1,5 @@
 'use client';
+import { providerErrorFromBody, providerErrorToastText } from '@postmill-ai/frontend/components/ai/provider-error';
 
 import React, { FC, useCallback, useState } from 'react';
 import { useFetch } from '@postmill-ai/helpers/utils/custom.fetch';
@@ -18,6 +19,11 @@ const humanizeAiError = (
   status: number,
   body: any
 ): React.ReactNode => {
+  // 502 + envelope: the org's AI provider failed — attribute it to them.
+  const providerError = providerErrorFromBody(body);
+  if (providerError) {
+    return providerErrorToastText(t, providerError);
+  }
   if (status === 429) {
     const message = body?.message || body?.error;
     return t('ai_rate_limited', 'Rate limited: {{message}}', {

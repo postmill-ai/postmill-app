@@ -6,9 +6,9 @@ import {
   MediaGenerateOptions,
   MediaJobSubmission,
   resolveApiKey,
-  redactError,
   SafeFetchPort,
   ProviderModule,
+  mediaUpstreamError,
 } from '@postmill-ai/provider-kernel';
 
 interface DeepgramListenResponse {
@@ -70,7 +70,7 @@ export class DeepgramAdapter implements MediaProviderAdapter {
       body: new Uint8Array(audio),
     });
 
-    if (!res.ok) throw new Error(`Deepgram STT failed: ${redactError(await res.text())}`);
+    if (!res.ok) throw await mediaUpstreamError(this, res, 'stt');
     const data = (await res.json()) as DeepgramListenResponse;
     const transcript = data.results?.channels?.[0]?.alternatives?.[0]?.transcript;
     if (!transcript) throw new Error('Deepgram returned no transcript');
@@ -100,7 +100,7 @@ export class DeepgramAdapter implements MediaProviderAdapter {
       body: new Uint8Array(audio),
     });
 
-    if (!res.ok) throw new Error(`Deepgram STT failed: ${redactError(await res.text())}`);
+    if (!res.ok) throw await mediaUpstreamError(this, res, 'stt');
     const data = (await res.json()) as DeepgramListenResponse;
     const alt = data.results?.channels?.[0]?.alternatives?.[0];
     if (!alt?.transcript) throw new Error('Deepgram returned no transcript');

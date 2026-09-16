@@ -8,10 +8,10 @@ import {
   MediaJobSubmission,
   MediaModelOption,
   resolveApiKey,
-  redactError,
   validateModelId,
   SafeFetchPort,
   ProviderModule,
+  mediaUpstreamError,
 } from '@postmill-ai/provider-kernel';
 
 // Fireworks AI — same key as the Fireworks LLM provider (registry id `fireworks`), reused via
@@ -47,7 +47,7 @@ export class FireworksMediaAdapter extends BearerTokenMediaAdapter {
       headers: { ...this._headers(options), Accept: 'application/json' },
       body: JSON.stringify({ prompt, ...this._clean(options?.input) }),
     });
-    if (!res.ok) throw new Error(`Fireworks image generation failed: ${redactError(await res.text())}`);
+    if (!res.ok) throw await mediaUpstreamError(this, res, 'image');
     const data = (await res.json()) as FireworksImageResponse;
     const urls = (data.base64 || [])
       .filter(Boolean)

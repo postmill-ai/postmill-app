@@ -10,6 +10,7 @@ import {
   resolveApiKey,
   SafeFetchPort,
   ProviderModule,
+  mediaUpstreamError,
 } from '@postmill-ai/provider-kernel';
 
 // Ideogram — own-key image generation, strong at accurate in-image text. The v3 generate endpoint
@@ -59,7 +60,7 @@ export class IdeogramMediaAdapter implements MediaProviderAdapter {
       headers: { 'Api-Key': key },
       body: form,
     });
-    if (!res.ok) throw new Error(`Ideogram image generation failed: ${await res.text()}`);
+    if (!res.ok) throw await mediaUpstreamError(this, res, 'image');
     const data = (await res.json()) as IdeogramResponse;
     const images = (data.data || []).map((d) => d.url).filter((u): u is string => !!u);
     if (images.length === 0) throw new Error('Ideogram returned no images');

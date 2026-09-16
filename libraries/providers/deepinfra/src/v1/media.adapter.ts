@@ -9,10 +9,10 @@ import {
   MediaModelOption,
   MediaOperation,
   resolveApiKey,
-  redactError,
   validateModelId,
   SafeFetchPort,
   ProviderModule,
+  mediaUpstreamError,
 } from '@postmill-ai/provider-kernel';
 
 // DeepInfra — same key as the DeepInfra LLM provider (registry id `deepinfra`), reused via
@@ -48,7 +48,7 @@ export class DeepInfraMediaAdapter extends BearerTokenMediaAdapter {
       headers: this._headers(options),
       body: JSON.stringify(body),
     });
-    if (!res.ok) throw new Error(`DeepInfra request failed: ${redactError(await res.text())}`);
+    if (!res.ok) throw await mediaUpstreamError(this, res);
     return (await res.json()) as InferenceResponse;
   }
 

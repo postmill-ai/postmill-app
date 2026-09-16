@@ -26,6 +26,7 @@ import { z } from 'zod';
 import { GetOrgFromRequest } from '@postmill-ai/nestjs-libraries/user/org.from.request';
 import { GetUserFromRequest } from '@postmill-ai/nestjs-libraries/user/user.from.request';
 import { CapabilityNotAvailable } from '@postmill-ai/nestjs-libraries/ai/governance/errors';
+import { rethrowProviderError } from '@postmill-ai/nestjs-libraries/ai/governance/rethrow-provider-error';
 import { RequirePermission } from '@postmill-ai/backend/services/auth/rbac/require-permission.decorator';
 import { AiSettingsService } from '@postmill-ai/nestjs-libraries/database/prisma/ai-settings/ai-settings.service';
 import { AiSettingsManager } from '@postmill-ai/nestjs-libraries/ai/ai-settings.manager';
@@ -441,6 +442,7 @@ export class AiUserController {
       }
     } catch (err) {
       if (err instanceof HttpException) throw err;
+      rethrowProviderError(err);
       if (err instanceof CapabilityNotAvailable) {
         throw new HttpException(err.message, HttpStatus.SERVICE_UNAVAILABLE);
       }
@@ -514,6 +516,7 @@ Include a mix of popular and niche hashtags. Return only the hashtags array.`;
 
       return result;
     } catch (err) {
+      rethrowProviderError(err);
       this._logger.error(
         `hashtags failed for org ${org.id}: ${(err as Error).message}`,
       );
@@ -559,6 +562,7 @@ For each comment, determine if the sentiment is positive, negative, or neutral, 
 
         return result;
       } catch (err) {
+        rethrowProviderError(err);
         this._logger.error(
           `comment sentiment failed for org ${org.id}: ${(err as Error).message}`,
         );
@@ -593,6 +597,7 @@ Provide a concise summary, key points raised, and suggested action items.`;
 
         return result;
       } catch (err) {
+        rethrowProviderError(err);
         this._logger.error(
           `comment summary failed for org ${org.id}: ${(err as Error).message}`,
         );
@@ -684,6 +689,7 @@ Draft a friendly, professional reply from the social media manager's perspective
 
       return { suggestion, hasAnalyticsData: hasData };
     } catch (err) {
+      rethrowProviderError(err);
       this._logger.error(
         `best-time failed for org ${org.id}: ${(err as Error).message}`,
       );
@@ -755,6 +761,7 @@ Return exactly ${body.platforms.length} results, one per requested platform.`;
 
       return result;
     } catch (err) {
+      rethrowProviderError(err);
       this._logger.error(
         `repurpose failed for org ${org.id}: ${(err as Error).message}`,
       );
@@ -796,6 +803,7 @@ Return exactly ${body.platforms.length} results, one per requested platform.`;
 
       return result;
     } catch (err) {
+      rethrowProviderError(err);
       this._logger.error(
         `compliance check failed for org ${org.id}: ${(err as Error).message}`,
       );
@@ -843,6 +851,7 @@ For each locale, provide an accurate translation that preserves the meaning, ton
 
       return result;
     } catch (err) {
+      rethrowProviderError(err);
       this._logger.error(
         `translate failed for org ${org.id}: ${(err as Error).message}`,
       );
@@ -868,6 +877,7 @@ For each locale, provide an accurate translation that preserves the meaning, ton
       );
       return result;
     } catch (err) {
+      rethrowProviderError(err);
       this._logger.error(
         `brand-memory index failed for org ${org.id}: ${(err as Error).message}`,
       );
@@ -891,6 +901,7 @@ For each locale, provide an accurate translation that preserves the meaning, ton
       );
       return { hits };
     } catch (err) {
+      rethrowProviderError(err);
       this._logger.error(
         `brand-memory search failed for org ${org.id}: ${(err as Error).message}`,
       );
@@ -940,6 +951,7 @@ Choose ${count} distinct tones from options like: professional, casual, humorous
 
       return result;
     } catch (err) {
+      rethrowProviderError(err);
       this._logger.error(
         `variants failed for org ${org.id}: ${(err as Error).message}`,
       );

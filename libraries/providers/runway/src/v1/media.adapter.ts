@@ -12,6 +12,9 @@ import {
   isTransientStatus,
   SafeFetchPort,
   ProviderModule,
+  mediaUpstreamError,
+  mediaUpstreamFailure,
+  mediaUpstreamFromPoll,
 } from '@postmill-ai/provider-kernel';
 
 const BASE = 'https://api.dev.runwayml.com/v1';
@@ -72,7 +75,7 @@ export class RunwayAdapter implements MediaProviderAdapter {
         ...input,
       }),
     });
-    if (!res.ok) throw new Error(`Runway image generation failed: ${redactError(await res.text())}`);
+    if (!res.ok) throw await mediaUpstreamError(this, res, 'image');
     const { id } = (await res.json()) as RunwayTaskCreateResponse;
     if (!id) throw new Error('Runway returned no task id');
 
@@ -88,7 +91,7 @@ export class RunwayAdapter implements MediaProviderAdapter {
         };
       }
       if (poll.status === 'failed') {
-        throw new Error(`Runway image generation failed: ${poll.error || 'unknown error'}`);
+        throw mediaUpstreamFromPoll(this, poll.error || 'unknown error', 'image');
       }
     }
     throw new Error('Runway image generation timed out');
@@ -119,7 +122,7 @@ export class RunwayAdapter implements MediaProviderAdapter {
         ...rest,
       }),
     });
-    if (!res.ok) throw new Error(`Runway video generation failed: ${redactError(await res.text())}`);
+    if (!res.ok) throw await mediaUpstreamError(this, res, 'video');
     const { id } = (await res.json()) as RunwayTaskCreateResponse;
     if (!id) throw new Error('Runway returned no task id');
     return { jobId: id };
@@ -146,7 +149,7 @@ export class RunwayAdapter implements MediaProviderAdapter {
       if (isTransientStatus(res.status)) {
         throw new Error(`Runway poll transient error ${res.status}: ${redactError(body, 200)}`);
       }
-      return { status: 'failed', error: redactError(body) };
+      return { status: 'failed', error: mediaUpstreamFailure(this, res.status, body) };
     }
     const data = (await res.json()) as RunwayTaskStatusResponse;
 
@@ -156,7 +159,7 @@ export class RunwayAdapter implements MediaProviderAdapter {
       return { status: 'completed', artifactUrl, metadata: { provider: this.identifier } };
     }
     if (data.status === 'FAILED' || data.status === 'CANCELLED') {
-      return { status: 'failed', error: redactError(data.failure || data.failureCode || 'Runway task failed') };
+      return { status: 'failed', error: mediaUpstreamFailure(this, undefined, data.failure || data.failureCode || 'Runway task failed') };
     }
     return { status: 'pending' };
   }

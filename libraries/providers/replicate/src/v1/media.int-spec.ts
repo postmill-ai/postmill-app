@@ -49,7 +49,7 @@ describe('replicate media adapter (async predictions)', () => {
     const adapter: any = replicateMediaModule.create(ctx as any);
     const out = await adapter.pollJob('pred-123', { apiKey: 'replicate-key' });
     expect(out.status).toBe('failed');
-    expect(out.error).toBe('boom');
+    expect(out.error).toBe('Replicate returned an error: boom');
   });
 
   it('rejects a missing key', async () => {

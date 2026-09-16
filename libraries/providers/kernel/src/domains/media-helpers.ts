@@ -14,6 +14,11 @@ import {
   MediaPollResult,
   resolveApiKey,
 } from './media';
+import {
+  mediaUpstreamError,
+  mediaUpstreamFromBody,
+  upstreamErrorFromUnknown,
+} from '../upstream-error';
 
 // ── AI-SDK media bridge ──────────────────────────────────────────────────────
 // Bridges hub media adapters to the existing AI-SDK provider adapters so the hard auth
@@ -63,11 +68,13 @@ export interface AiSdkImageParams {
   size?: string;
   n?: number;
   aspectRatio?: string;
+  // Display name for attributed upstream errors (defaults to the identifier).
+  providerName?: string;
 }
 
 // Generate an image through the AI-SDK image model of the matching AI provider.
 export async function generateImageViaAiSdk(params: AiSdkImageParams): Promise<MediaGenerationResult> {
-  const { identifier, credentials, prompt, model, size, n, aspectRatio } = params;
+  const { identifier, credentials, prompt, model, size, n, aspectRatio, providerName } = params;
   const adapter = reg().getAdapter(identifier);
   if (!adapter?.createImageModel) {
     throw new Error(`${identifier} does not support image generation`);
@@ -79,21 +86,33 @@ export async function generateImageViaAiSdk(params: AiSdkImageParams): Promise<M
 
   // Call the low-level model protocol directly (as ai-model.provider does) to sidestep the
   // provider-v5/v6 type seam; result.images are base64 strings.
-  const result = await (imageModel as unknown as {
-    doGenerate(opts: {
-      prompt: string;
-      n: number;
-      size?: string;
-      aspectRatio?: string;
-      providerOptions: Record<string, unknown>;
-    }): Promise<{ images?: string[] }>;
-  }).doGenerate({
-    prompt,
-    n: n ?? 1,
-    size,
-    aspectRatio,
-    providerOptions: {},
-  });
+  let result: { images?: string[] };
+  try {
+    result = await (imageModel as unknown as {
+      doGenerate(opts: {
+        prompt: string;
+        n: number;
+        size?: string;
+        aspectRatio?: string;
+        providerOptions: Record<string, unknown>;
+      }): Promise<{ images?: string[] }>;
+    }).doGenerate({
+      prompt,
+      n: n ?? 1,
+      size,
+      aspectRatio,
+      providerOptions: {},
+    });
+  } catch (err) {
+    // The SDK's APICallError carries the upstream status — surface it as the
+    // provider's failure, not ours.
+    throw (
+      upstreamErrorFromUnknown(
+        { domain: 'media', providerId: identifier, providerName: providerName || identifier, operation: 'image' },
+        err,
+      ) ?? err
+    );
+  }
 
   const images = (result.images ?? []).filter(Boolean);
   if (!images.length) throw new Error(`${identifier} returned no image`);
@@ -157,6 +176,7 @@ export abstract class AiSdkMediaAdapter implements MediaProviderAdapter {
     const input = options?.input || {};
     return generateImageViaAiSdk({
       identifier: this.identifier,
+      providerName: this.name,
       credentials: options?.credentials || {},
       prompt,
       model,
@@ -253,7 +273,7 @@ export abstract class OpenAiCompatibleMediaAdapter implements MediaProviderAdapt
       headers: this._headers(options),
       body: JSON.stringify({ model, prompt, ...this._clean(options?.input) }),
     });
-    if (!res.ok) throw new Error(`${this.name} image generation failed: ${await res.text()}`);
+    if (!res.ok) throw await mediaUpstreamError(this, res, 'image');
     const data = (await res.json()) as { data?: { url?: string; b64_json?: string }[] };
     const urls = (data.data || [])
       .map((d) => d.url || (d.b64_json ? `data:image/png;base64,${d.b64_json}` : undefined))
@@ -281,7 +301,7 @@ export abstract class OpenAiCompatibleMediaAdapter implements MediaProviderAdapt
       headers: this._headers(options),
       body: JSON.stringify({ model, input: prompt, voice, response_format: format, ...input }),
     });
-    if (!res.ok) throw new Error(`${this.name} speech generation failed: ${await res.text()}`);
+    if (!res.ok) throw await mediaUpstreamError(this, res, 'audio');
     const buffer = Buffer.from(await res.arrayBuffer());
     const mime = AUDIO_MIME[format] || 'audio/mpeg';
     return {
@@ -398,10 +418,14 @@ export interface PollMediaJobOptions<T> {
   attempts: number;
   intervalMs: number;
   parse: (body: unknown) => PollMediaJobParse<T>;
+  // When given, non-OK polls and provider-reported failures throw an
+  // attributed ProviderUpstreamError instead of a bare Error.
+  adapter?: { identifier: string; name: string };
+  operation?: string;
 }
 
 export async function pollMediaJob<T>(options: PollMediaJobOptions<T>): Promise<T> {
-  const { fetch, url, headers, attempts, intervalMs, parse } = options;
+  const { fetch, url, headers, attempts, intervalMs, parse, adapter, operation } = options;
 
   for (let attempt = 0; attempt < attempts; attempt++) {
     if (attempt > 0) {
@@ -410,6 +434,7 @@ export async function pollMediaJob<T>(options: PollMediaJobOptions<T>): Promise<
 
     const res = await fetch(url, { headers });
     if (!res.ok) {
+      if (adapter) throw await mediaUpstreamError(adapter, res, operation);
       throw new Error(`Media job poll failed (${res.status}): ${await res.text()}`);
     }
 
@@ -421,6 +446,7 @@ export async function pollMediaJob<T>(options: PollMediaJobOptions<T>): Promise<
       return decoded.result;
     }
     if (decoded.status === 'failed') {
+      if (adapter) throw mediaUpstreamFromBody(adapter, undefined, decoded.error || 'Media job failed', operation);
       throw new Error(decoded.error || 'Media job failed');
     }
   }

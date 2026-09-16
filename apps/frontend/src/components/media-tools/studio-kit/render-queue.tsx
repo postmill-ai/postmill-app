@@ -207,7 +207,7 @@ export const RenderQueue: FC<RenderQueueProps> = ({
                     : job.operation}
                 </div>
                 {job.status === 'failed' && job.error && (
-                  <div className="text-[11px] text-red-600 dark:text-red-400 truncate" title={job.error}>{job.error}</div>
+                  <div className="text-[11px] text-red-600 dark:text-red-400 line-clamp-2 break-words" title={job.error}>{job.error}</div>
                 )}
               </div>
               <span className={`shrink-0 text-[10px] font-[600] px-[7px] py-[3px] rounded-full ${meta.className}`}>

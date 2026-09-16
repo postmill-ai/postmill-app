@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { HttpException, HttpStatus } from '@nestjs/common';
+import { ProviderUpstreamError } from '@postmill-ai/provider-kernel';
 
 vi.mock('@postmill-ai/nestjs-libraries/database/prisma/ai-settings/ai-settings.service', () => ({
   AiSettingsService: class {
@@ -389,6 +390,34 @@ describe('AiUserController', () => {
         content: 'Content',
       });
       expect(result).toBeDefined();
+    });
+
+    // An upstream provider failure must escape the "temporarily unavailable"
+    // catch-all so the global filter answers 502 with the provider named.
+    it('generateHashtags rethrows ProviderUpstreamError instead of a generic 500', async () => {
+      const upstream = new ProviderUpstreamError(
+        { domain: 'ai', providerId: 'openai', providerName: 'OpenAI' },
+        'auth',
+        'Incorrect API key',
+        401,
+      );
+      (aiModelProvider as any).generateObject = vi.fn().mockRejectedValueOnce(upstream);
+      await expect(
+        controller.generateHashtags(mockOrg, { content: 'Hello world', platform: 'twitter' }),
+      ).rejects.toBe(upstream);
+    });
+
+    it('createMediaJob rethrows ProviderUpstreamError (not a 500 with the raw message)', async () => {
+      const upstream = new ProviderUpstreamError(
+        { domain: 'media', providerId: 'google', providerName: 'Google AI Studio' },
+        'quota',
+        'quota exceeded',
+        429,
+      );
+      (mediaService.generateVideo as any).mockRejectedValueOnce(upstream);
+      await expect(
+        controller.createMediaJob(mockOrg, mockUser, { operation: 'video', prompt: 'x' }),
+      ).rejects.toBe(upstream);
     });
 
     it('generateHashtags returns hashtags from the model', async () => {

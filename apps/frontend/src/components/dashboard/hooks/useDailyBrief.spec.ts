@@ -86,4 +86,31 @@ describe('useDailyBrief', () => {
 
     await expect(result.current.generate()).rejects.toThrow('AI not configured');
   });
+
+  it('generate surfaces the 502 provider envelope as an attributed error with providerError', async () => {
+    mockUseSWR.mockReturnValue({ data: { cached: false }, isLoading: false, mutate: vi.fn() } as any);
+    mockFetch.mockResolvedValueOnce({
+      ok: false,
+      status: 502,
+      text: vi.fn().mockResolvedValueOnce(
+        JSON.stringify({
+          statusCode: 502,
+          error: 'ProviderUpstreamError',
+          provider: 'openrouter',
+          providerName: 'OpenRouter',
+          kind: 'auth',
+          upstreamStatus: 401,
+          message: 'OpenRouter rejected the API key (HTTP 401): User not found.',
+        })
+      ),
+    });
+
+    const { result } = renderHook(() => useDailyBrief());
+
+    let caught: any;
+    await result.current.generate().catch((e) => (caught = e));
+    expect(caught.message).toBe('OpenRouter rejected the API key (HTTP 401): User not found.');
+    expect(caught.status).toBe(502);
+    expect(caught.providerError).toMatchObject({ providerName: 'OpenRouter', kind: 'auth' });
+  });
 });

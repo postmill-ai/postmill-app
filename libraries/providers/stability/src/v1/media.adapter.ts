@@ -14,6 +14,8 @@ import {
   readCappedArrayBuffer,
   SafeFetchPort,
   ProviderModule,
+  mediaUpstreamError,
+  mediaUpstreamFailure,
 } from '@postmill-ai/provider-kernel';
 
 const BASE = 'https://api.stability.ai';
@@ -90,7 +92,7 @@ export class StabilityAdapter implements MediaProviderAdapter {
       headers: { Authorization: this._auth(options), Accept: 'application/json' },
       body: form,
     });
-    if (!res.ok) throw new Error(`Stability AI image generation failed: ${redactError(await res.text())}`);
+    if (!res.ok) throw await mediaUpstreamError(this, res, 'image');
     const data = (await res.json()) as StabilityImageResponse;
     if (!data.image) throw new Error('Stability AI returned no image');
     const fmt = String(fields.output_format || 'png');
@@ -121,7 +123,7 @@ export class StabilityAdapter implements MediaProviderAdapter {
       headers: { Authorization: this._auth(options) },
       body: form,
     });
-    if (!res.ok) throw new Error(`Stability AI video generation failed: ${redactError(await res.text())}`);
+    if (!res.ok) throw await mediaUpstreamError(this, res, 'video');
     const data = (await res.json()) as StabilityVideoSubmitResponse;
     if (!data.id) throw new Error('Stability AI returned no job id');
     return { jobId: data.id };
@@ -139,7 +141,7 @@ export class StabilityAdapter implements MediaProviderAdapter {
       headers: { Authorization: this._auth(options), Accept: 'application/json' },
       body: form,
     });
-    if (!res.ok) throw new Error(`Stability AI audio generation failed: ${redactError(await res.text())}`);
+    if (!res.ok) throw await mediaUpstreamError(this, res, 'audio');
     const data = (await res.json()) as StabilityAudioResponse;
     if (!data.audio) throw new Error('Stability AI returned no audio');
     return {
@@ -166,11 +168,11 @@ export class StabilityAdapter implements MediaProviderAdapter {
       if (isTransientStatus(res.status)) {
         throw new Error(`Stability AI poll transient error ${res.status}: ${redactError(body, 200)}`);
       }
-      return { status: 'failed', error: redactError(body) };
+      return { status: 'failed', error: mediaUpstreamFailure(this, res.status, body) };
     }
     const data = (await res.json()) as StabilityVideoResultResponse;
     if (!data.video) {
-      return { status: 'failed', error: redactError(data.errors?.join('; ') || 'Stability AI job returned no video') };
+      return { status: 'failed', error: mediaUpstreamFailure(this, undefined, data.errors?.join('; ') || 'Stability AI job returned no video') };
     }
     return {
       status: 'completed',

@@ -5,7 +5,7 @@ import {
   type AICapabilities,
   type AIScope,
 } from './ai-provider.interface';
-import { ProviderKernel } from '@postmill-ai/provider-kernel';
+import { ProviderKernel, ProviderUpstreamError, upstreamErrorFromUnknown } from '@postmill-ai/provider-kernel';
 import { PROVIDER_KERNEL } from '@postmill-ai/nestjs-libraries/providers/providers.module';
 import { OrgAiSettingsService } from '@postmill-ai/nestjs-libraries/database/prisma/ai-settings/org-ai-settings.service';
 import { AiSettingsService } from '@postmill-ai/nestjs-libraries/database/prisma/ai-settings/ai-settings.service';
@@ -71,6 +71,31 @@ export interface ResolvedConfig {
 }
 
 const MAX_RETRIES = 3;
+
+// Upstream (the org's OpenAI / Gemini / … account) failures must reach the
+// HTTP layer as a typed ProviderUpstreamError, never as the SDK's raw
+// APICallError: that one carries `statusCode` + `message`, which Nest's
+// default handler replays as OUR status — a provider 401 logged the user out,
+// a provider 429 showed Postmill's own "too many requests" toast. Anything
+// that is not an upstream failure (budget, guardrails, config) passes through.
+function toProviderError(
+  err: unknown,
+  providerId: string,
+  adapter: { name?: string } | undefined,
+  version?: string,
+): unknown {
+  return (
+    upstreamErrorFromUnknown(
+      {
+        domain: 'ai',
+        providerId,
+        providerName: adapter?.name || providerId,
+        ...(version ? { version } : {}),
+      },
+      err,
+    ) ?? err
+  );
+}
 
 const CONTEXT_WINDOW_LIMITS: Record<string, number> = {
   'gpt-4.1': 32000,
@@ -356,15 +381,24 @@ export class AIModelProvider {
           this._circuitBreaker.recordSuccess(config.providerId);
           return result;
         } catch (err) {
-          primaryErr = err;
+          primaryErr = toProviderError(err, config.providerId, config.adapter, config.version);
           this._health.recordError(config.providerId);
           if (!isGovernanceError(err)) {
             this._circuitBreaker.recordFailure(config.providerId);
           }
         }
       } else {
-        primaryErr = new Error(
-          `Circuit breaker open for provider "${config.providerId}" — routing to fallback`,
+        // The breaker opened because the provider kept failing — still the
+        // provider's problem (retryable), never a Postmill 500.
+        primaryErr = new ProviderUpstreamError(
+          {
+            domain: 'ai',
+            providerId: config.providerId,
+            providerName: config.adapter?.name || config.providerId,
+            ...(config.version ? { version: config.version } : {}),
+          },
+          'unavailable',
+          'paused after repeated failures (circuit breaker open) — retry in a moment',
         );
       }
 
@@ -396,18 +430,29 @@ export class AIModelProvider {
             const result = await fn(fallbackConfig);
             this._circuitBreaker.recordSuccess(globalSettings.fallbackProvider);
             return result;
-          } catch (fallbackErr) {
+          } catch (fallbackErrRaw) {
+            const fallbackErr = toProviderError(
+              fallbackErrRaw,
+              globalSettings.fallbackProvider,
+              fallbackAdapter,
+              fallbackRef.version,
+            );
             if (!isGovernanceError(fallbackErr)) {
               this._circuitBreaker.recordFailure(globalSettings.fallbackProvider);
             }
             if (isGovernanceError(primaryErr)) {
               throw primaryErr;
             }
-            throw new Error(
+            const combined =
               `AI provider call failed for scope "${scope}" ` +
               `(primary: ${(primaryErr as Error).message}; ` +
-              `fallback: ${(fallbackErr as Error).message})`,
-            );
+              `fallback: ${(fallbackErr as Error).message})`;
+            // Keep the primary's classification so the response is still the
+            // provider's failure (502 + kind), with both attempts in the text.
+            if (primaryErr instanceof ProviderUpstreamError) {
+              throw ProviderUpstreamError.fromAttributedText(primaryErr.ctx, combined, primaryErr.kind);
+            }
+            throw new Error(combined);
           }
         }
       }
@@ -459,7 +504,7 @@ export class AIModelProvider {
             const model = config.adapter.createLanguageModel(config.creds, config.modelId, {
               temperature: config.defaultSurface?.temperature,
             });
-            return this._wrapLanguageModelWithBudget(model, span, scope, orgId, config.providerId, config.modelId);
+            return this._wrapLanguageModelWithBudget(model, span, scope, orgId, config.providerId, config.modelId, config.adapter?.name);
           },
           { 'ai.scope': scope },
         );
@@ -653,16 +698,22 @@ export class AIModelProvider {
     orgId: string | undefined,
     providerId: string,
     modelId: string,
+    providerName?: string,
   ): LanguageModel {
     const generate = async (opts: any) => {
       const budgetCheck = await this._budget.checkBudget(scope, orgId, providerId);
       if (!budgetCheck.allowed) {
         throw new BudgetExceeded(budgetCheck.reason || 'Budget exceeded', scope, orgId);
       }
-      const result = await (raw as any).doGenerate({
-        ...opts,
-        prompt: this._sanitizePromptToolOutputs(opts?.prompt, providerId, modelId),
-      });
+      let result: any;
+      try {
+        result = await (raw as any).doGenerate({
+          ...opts,
+          prompt: this._sanitizePromptToolOutputs(opts?.prompt, providerId, modelId),
+        });
+      } catch (err) {
+        throw toProviderError(err, providerId, { name: providerName }, undefined);
+      }
       await this._recordUsage({
         usage: result?.usage,
         span,
@@ -679,10 +730,15 @@ export class AIModelProvider {
       if (!budgetCheck.allowed) {
         throw new BudgetExceeded(budgetCheck.reason || 'Budget exceeded', scope, orgId);
       }
-      const response = await (raw as any).doStream({
-        ...opts,
-        prompt: this._sanitizePromptToolOutputs(opts?.prompt, providerId, modelId),
-      });
+      let response: any;
+      try {
+        response = await (raw as any).doStream({
+          ...opts,
+          prompt: this._sanitizePromptToolOutputs(opts?.prompt, providerId, modelId),
+        });
+      } catch (err) {
+        throw toProviderError(err, providerId, { name: providerName }, undefined);
+      }
       const originalConsume = response?.consumeStream?.bind(response);
       if (originalConsume) {
         response.consumeStream = async () => {
@@ -1338,7 +1394,13 @@ export class AIModelProvider {
             { role: 'user', content },
           ];
         }
-        const result = await (model as any).doGenerate({ prompt: promptPayload, abortSignal: args.signal });
+        let result: any;
+        try {
+          result = await (model as any).doGenerate({ prompt: promptPayload, abortSignal: args.signal });
+        } catch (err) {
+          this._health.recordError(providerId);
+          throw toProviderError(err, providerId, adapter, version);
+        }
         const outputText = this._extractText(result);
         const checkedOutput = await this._guardrails.checkOutput(outputText, { orgId });
 
@@ -1441,11 +1503,17 @@ export class AIModelProvider {
           ...(args.system ? [{ role: 'system', content: args.system }] : []),
           { role: 'user', content: [{ type: 'text', text: checkedInput }] },
         ];
-        const result = await (model as any).doGenerate({
-          prompt: promptPayload,
-          responseFormat: { type: 'json' },
-          abortSignal: args.signal,
-        });
+        let result: any;
+        try {
+          result = await (model as any).doGenerate({
+            prompt: promptPayload,
+            responseFormat: { type: 'json' },
+            abortSignal: args.signal,
+          });
+        } catch (err) {
+          this._health.recordError(providerId);
+          throw toProviderError(err, providerId, adapter, version);
+        }
         const outputText = this._extractText(result);
         const checkedOutput = await this._guardrails.checkOutput(outputText, { orgId });
 

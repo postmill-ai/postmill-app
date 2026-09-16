@@ -7,10 +7,11 @@ import {
   MediaCredentialOptions,
   MediaJobSubmission,
   resolveApiKey,
-  redactError,
   validateModelId,
   SafeFetchPort,
   ProviderModule,
+  mediaUpstreamError,
+  mediaUpstreamFromBody,
 } from '@postmill-ai/provider-kernel';
 
 const BASE = 'https://api.bfl.ai/v1';
@@ -69,7 +70,7 @@ export class BlackForestLabsAdapter implements MediaProviderAdapter {
         ...(options?.input || {}),
       }),
     });
-    if (!res.ok) throw new Error(`Black Forest Labs image generation failed: ${redactError(await res.text())}`);
+    if (!res.ok) throw await mediaUpstreamError(this, res, 'image');
     const { id } = (await res.json()) as BFLSubmitResponse;
     if (!id) throw new Error('Black Forest Labs returned no request id');
 
@@ -78,7 +79,7 @@ export class BlackForestLabsAdapter implements MediaProviderAdapter {
       const pollRes = await this._fetch(`${BASE}/get_result?id=${encodeURIComponent(id)}`, {
         headers: this._headers(options),
       });
-      if (!pollRes.ok) throw new Error(`Black Forest Labs polling failed: ${redactError(await pollRes.text())}`);
+      if (!pollRes.ok) throw await mediaUpstreamError(this, pollRes);
       const data = (await pollRes.json()) as BFLResultResponse;
       if (data.status === 'Ready') {
         const url = data.result?.sample;
@@ -91,7 +92,7 @@ export class BlackForestLabsAdapter implements MediaProviderAdapter {
         };
       }
       if (data.status === 'Error' || data.status === 'Content Moderated' || data.status === 'Request Moderated') {
-        throw new Error(`Black Forest Labs image generation failed: ${data.details || data.status}`);
+        throw mediaUpstreamFromBody(this, undefined, data.details || data.status || '', 'image');
       }
     }
     throw new Error('Black Forest Labs image generation timed out');

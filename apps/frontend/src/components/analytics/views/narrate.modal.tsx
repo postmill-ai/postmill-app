@@ -4,6 +4,7 @@ import { FC, useEffect, useState } from 'react';
 import Link from 'next/link';
 import { useT } from '@postmill-ai/react/translation/get.transation.service.client';
 import { useNarrate, NarrateError } from '../hooks/useNarrate';
+import { ProviderError, providerErrorToastText } from '@postmill-ai/frontend/components/ai/provider-error';
 import { AI_SETUP_HREF } from '@postmill-ai/frontend/components/layout/use-ai-active';
 
 // Actual narration UI. A fresh instance is mounted (via key on the public
@@ -15,6 +16,7 @@ const NarrateModalInner: FC<{ from: string; to: string }> = ({ from, to }) => {
   const [text, setText] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [errorCode, setErrorCode] = useState<number | null>(null);
+  const [providerError, setProviderError] = useState<ProviderError | null>(null);
 
   useEffect(() => {
     let active = true;
@@ -25,6 +27,7 @@ const NarrateModalInner: FC<{ from: string; to: string }> = ({ from, to }) => {
       .catch((e: unknown) => {
         if (!active) return;
         setErrorCode(e instanceof NarrateError ? e.code : -1);
+        setProviderError(e instanceof NarrateError ? e.providerError ?? null : null);
       })
       .finally(() => {
         if (active) setLoading(false);
@@ -80,7 +83,13 @@ const NarrateModalInner: FC<{ from: string; to: string }> = ({ from, to }) => {
         </div>
       )}
 
-      {!loading && errorCode != null && errorCode !== 503 && errorCode !== 429 && (
+      {!loading && providerError && (
+        <div className="text-[13px] text-amber-600" role="alert">
+          {providerErrorToastText(t, providerError)}
+        </div>
+      )}
+
+      {!loading && !providerError && errorCode != null && errorCode !== 503 && errorCode !== 429 && (
         <div className="text-[13px] text-amber-600">
           {t('analytics_narrate_failed', 'Could not generate a summary right now. Please try again.')}
         </div>
