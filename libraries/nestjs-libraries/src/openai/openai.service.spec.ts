@@ -25,6 +25,7 @@ function mockAIModelProvider() {
     languageModel: vi.fn().mockResolvedValue(mockLanguageModel),
     resolveProviderRef: vi.fn().mockResolvedValue({ providerId: 'openai', version: 'v1' }),
     hasCapability: vi.fn().mockReturnValue(true),
+    imageFilePart: vi.fn((url: string) => ({ type: 'file', mediaType: 'image/png', data: url })),
   };
 
   return { provider, mockLanguageModel, mockImageGenerator };
@@ -335,6 +336,11 @@ describe('OpenaiService', () => {
       expect(aiModelProvider.hasCapability).toHaveBeenCalledWith('openai', 'vision', 'v1');
       expect(aiModelProvider.languageModel).toHaveBeenCalledWith('utility', 'org-5');
       expect(result).toBe('Alt-text description of the image');
+      // LanguageModelV2 shapes: string system, `file` image part (Gemini 400s on
+      // a parts-array system; every provider rejects the v1 {type:'image'} part).
+      const { prompt } = mocks.mockLanguageModel.doGenerate.mock.calls[0][0];
+      expect(prompt[0]).toEqual({ role: 'system', content: PROMPT_CONSTANTS.generateAltText });
+      expect(prompt[1].content[1]).toEqual({ type: 'file', mediaType: 'image/png', data: imageUrl });
     });
 
     it('falls back to generateText when vision is not supported', async () => {

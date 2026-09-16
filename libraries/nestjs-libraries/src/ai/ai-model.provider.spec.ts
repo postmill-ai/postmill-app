@@ -237,8 +237,8 @@ describe('AIModelProvider', () => {
     });
   });
 
-  describe('_imageFilePart', () => {
-    const part = (url: string) => (provider as any)._imageFilePart(url);
+  describe('imageFilePart', () => {
+    const part = (url: string) => provider.imageFilePart(url);
 
     it('derives the media type from a recognizable URL extension', () => {
       expect(part('https://cdn.example.com/hero.jpg').mediaType).toBe('image/jpeg');
@@ -550,6 +550,27 @@ describe('AIModelProvider', () => {
       expect(result).toBeDefined();
     });
 
+    // LanguageModelV2 prompt shapes. A system message's content is a plain
+    // string — OpenAI tolerated a parts array, Gemini 400s (`Unknown name
+    // "text" at 'system_instruction.parts[0]'`, Sentry POSTMILL-APP-Q).
+    it('sends the system prompt as a string and the user prompt as text parts', async () => {
+      mockDoGenerate.mockClear();
+      await provider.generateText('utility', 'Hello world', {
+        orgId: 'org-123',
+        system: 'You are terse.',
+      });
+      const { prompt } = mockDoGenerate.mock.calls.at(-1)![0];
+      expect(prompt[0]).toEqual({ role: 'system', content: 'You are terse.' });
+      expect(prompt[1]).toEqual({ role: 'user', content: [{ type: 'text', text: 'Hello world' }] });
+    });
+
+    it('omits the system message entirely when no system prompt is given', async () => {
+      mockDoGenerate.mockClear();
+      await provider.generateText('utility', 'Hello world', { orgId: 'org-123' });
+      const { prompt } = mockDoGenerate.mock.calls.at(-1)![0];
+      expect(prompt.map((m: any) => m.role)).toEqual(['user']);
+    });
+
     it('extracts text from the V2 content[] array (not a top-level result.text)', async () => {
       const result = await provider.generateText('utility', 'Hello world', { orgId: 'org-123' });
       expect(result).toBe('Generated response');
@@ -770,6 +791,22 @@ describe('AIModelProvider', () => {
       expect(result).toBeDefined();
     });
 
+    it('folds the JSON instruction into a string system message (LanguageModelV2 shape)', async () => {
+      mockDoGenerate.mockClear();
+      await provider.generateObject<any>(
+        'utility',
+        'Extract data',
+        { title: 'test' },
+        { orgId: 'org-123', system: 'You extract fields.' },
+      );
+      const { prompt } = mockDoGenerate.mock.calls.at(-1)![0];
+      expect(prompt[0].role).toBe('system');
+      expect(typeof prompt[0].content).toBe('string');
+      expect(prompt[0].content).toContain('You extract fields.');
+      expect(prompt[0].content).toContain('Return only valid JSON');
+      expect(prompt[1]).toEqual({ role: 'user', content: [{ type: 'text', text: 'Extract data' }] });
+    });
+
     it('parses JSON extracted from the V2 content[] array', async () => {
       const result = await provider.generateObject<any>(
         'utility',
@@ -822,6 +859,47 @@ describe('AIModelProvider', () => {
       });
 
       expect(mockDoGenerate.mock.calls.at(-1)![0].abortSignal).toBe(controller.signal);
+    });
+
+    it('generateTextWithModel sends args.system as a string system message ahead of the user parts', async () => {
+      mockDoGenerate.mockClear();
+      mockGetByIdentifier.mockResolvedValue({
+        credentials: { apiKey: 'sk-test' },
+      });
+
+      await provider.generateTextWithModel('org-123', 'openai', 'v1', 'gpt-4.1', {
+        prompt: 'Hello',
+        system: 'Be brief.',
+      });
+
+      const { prompt } = mockDoGenerate.mock.calls.at(-1)![0];
+      expect(prompt).toEqual([
+        { role: 'system', content: 'Be brief.' },
+        { role: 'user', content: [{ type: 'text', text: 'Hello' }] },
+      ]);
+    });
+
+    it('generateObjectWithModel sends args.system and wraps the prompt in text parts (never a bare string)', async () => {
+      mockDoGenerate.mockClear();
+      mockGetByIdentifier.mockResolvedValue({
+        credentials: { apiKey: 'sk-test' },
+      });
+      mockDoGenerate.mockResolvedValueOnce({
+        content: [{ type: 'text', text: '{"title": "test"}' }],
+        usage: { inputTokens: 10, outputTokens: 20 },
+        finishReason: 'stop',
+      });
+
+      await provider.generateObjectWithModel('org-123', 'openai', 'v1', 'gpt-4.1', {
+        prompt: 'Extract data',
+        system: 'Classify comments.',
+      });
+
+      const { prompt } = mockDoGenerate.mock.calls.at(-1)![0];
+      expect(prompt).toEqual([
+        { role: 'system', content: 'Classify comments.' },
+        { role: 'user', content: [{ type: 'text', text: 'Extract data' }] },
+      ]);
     });
 
     it('generateObjectWithModel passes args.signal as abortSignal to doGenerate', async () => {
@@ -1475,7 +1553,7 @@ describe('AIModelProvider', () => {
 
     it('passes spec-valid prompts through by reference', () => {
       const prompt = [
-        { role: 'system', content: [{ type: 'text', text: 'sys' }] },
+        { role: 'system', content: 'sys' },
         { role: 'user', content: [{ type: 'text', text: 'hi' }] },
         {
           role: 'assistant',
