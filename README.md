@@ -21,11 +21,13 @@
 
 ---
 
-**The open-source, AI-native social media scheduling platform.**
+# Postmill
 
-Self-hosted, bring-your-own-key AI across 30+ providers, 45+ channels, and 46 built-in media tools — an open-source alternative to Buffer, Hootsuite, and Sprout Social. Postmill is built for agencies, teams, and multi-brand operators who want to schedule everywhere, generate on-brand content with their own AI keys, and own their entire stack.
+**Open-source, AI-native social media management and scheduling.**
 
-**[Website](https://postmill.ai)** · **[Docs](https://docs.postmill.ai)** · **[Quick Start](#-quick-start)** · **[Node SDK (`@postmill-ai/postmill-sdk`)](https://www.npmjs.com/package/@postmill-ai/postmill-sdk)** · **[Public API](https://docs.postmill.ai)**
+Postmill is a self-hostable social media scheduler for agencies and multi-brand teams: a visual publishing calendar, 45+ channels, 46 built-in media tools, and bring-your-own-key AI across 30 providers. Run it on infrastructure you control, and let every organization manage its own channels, brands, and AI keys. An open-source alternative to Buffer, Hootsuite, and Sprout Social.
+
+**[Website](https://postmill.ai)** · **[Docs](https://docs.postmill.ai)** · **[Quick Start](#-quick-start)** · **[Node SDK (`@postmill-ai/postmill-sdk`)](https://www.npmjs.com/package/@postmill-ai/postmill-sdk)** · **[Public API](https://docs.postmill.ai/developer-docs/public-api.html)**
 
 ---
 
@@ -33,7 +35,7 @@ Self-hosted, bring-your-own-key AI across 30+ providers, 45+ channels, and 46 bu
 
 <!-- TODO(media follow-up): product demo video. -->
 
-Postmill is built around four things you do every day — **design**, **post**, **track**, **engage**. Click any screenshot for the full-size view.
+Postmill brings **design**, **publishing**, **analytics**, and **engagement** into one workspace. Click any screenshot for the full-size view.
 
 <table>
   <tr>
@@ -62,56 +64,6 @@ That's the 30-second tour — the full feature tour, with every screen, lives in
 
 ---
 
-## 🤖 AI at the core — BYOK, governed, multi-provider
-
-Postmill is AI-native from the ground up. A single governed AI layer powers every surface, and you bring your own keys: **30 providers** — 17 direct model providers plus 13 multi-model hubs and gateways — configured per organization, with no bundled credits, quotas, or metering. Pick the exact model from an admin screen and switch providers everywhere without a redeploy.
-
-On top of that: brand-voice profiles, a shared prompt library, retrieval-augmented (RAG) search over your own content, compliance guardrails (prompt-injection / PII / brand-safety / NSFW), per-org spend caps with a full audit log, and an agent/MCP automation surface. Every AI entry point is scoped, rate-limited, and budget-checked — and a deployment's environment key is never silently billed to a tenant.
-
-## 🪄 The Postmill agent
-
-A natural-language assistant that operates the whole platform: schedule and reschedule posts, generate images, video, and voiceovers in any configured studio, pull analytics and best-time-to-post recommendations, manage campaigns, search your media library and stock sources, and reply to synced comments — all from one chat. Outward actions always go through an explicit confirmation card (a pre-filled composer, a draft reply, or a media job summary) so nothing publishes without your approval.
-
-## 🎨 46 built-in media tools
-
-Create everything in-app without leaving Postmill. The media suite is **46 tools**: the **Designer** (a Konva canvas plus a full video timeline), the **AI Designer**, **38 BYOK provider studios** spanning image, video, audio, avatar, and music generation, and **6 stock browsers** for photos, videos, vectors, stickers, audio, and icons. Every generated or sourced asset lands in your media library, ready to attach to a post.
-
-## 📢 45+ channels, one composer
-
-Schedule and publish across 45+ social, chat, blogging, and email channels from a single composer. Native support for polls, first-comment automation, threads, per-channel settings, and channel-aware previews means each platform gets exactly what it expects — from a single write. Bulk-import hundreds of posts from CSV, or let an operator-configured platform app connect a channel in one click.
-
-## 📊 Persisted multi-channel analytics
-
-Metrics are snapshotted daily and persisted, so you get real period-over-period trends instead of one-off live fetches. Drill into any channel, metric, or date range; see best-time-to-post heatmaps, prioritized recommendations, anomaly alerts, and a competitor watchlist — all normalized into a consistent cross-provider metric set.
-
-## 💬 Cross-channel comment inbox
-
-Every reply on everything you publish, synced into one inbox. Reply, like, assign to teammates, draft responses with AI, filter by unread/status/sentiment, and bulk-mark-read — without bouncing between platforms.
-
-## 📣 Agent & notifications where you work
-
-Chat with your Postmill agent and receive notifications in Slack, Telegram, Discord, Matrix, or LINE. Ten notification categories (published, failed, comments, budget, media, and more) route to in-app, email, or your connected comms channels — manageable from a single notification center.
-
-## 🌍 Localization
-
-The full UI — composer, settings, media tools, analytics, and auth — ships in 13 languages: English, Arabic, German, Spanish, French, Italian, Japanese, Korean, Portuguese, Russian, Turkish, Vietnamese, and Chinese.
-
-## 🗂️ Campaign Hub
-
-Group posts, media, and channels into campaigns with automatic UTM tagging, draft approvals, goals, and KPIs. Share a read-only client report via a public link, and keep the team aligned with an internal discussion thread on each campaign.
-
-## 👥 Teams, RBAC & multi-brand
-
-Fine-grained role-based access control with **5 seeded roles** (Owner / Admin / Editor / Member / Viewer) plus custom roles drawn from a **90-permission catalog (18 resources × 5 actions)**. Manage multiple brands per organization with per-post brand selection, session and refresh-token rotation with per-device revoke, and SSO via Google, GitHub, or generic OIDC.
-
-## 🔒 Self-hosted & security-hardened
-
-Own your whole stack. Secrets are encrypted at rest (AES-GCM), all user-influenced outbound HTTP is SSRF-safe, and the app ships CSRF protection, Helmet, a strict CSP, and effective rate-limiting. Connect channels with your own per-tenant OAuth apps, bring your own object storage (S3 / R2 / Backblaze B2 / IDrive), swap in pluggable email and short-link providers, and optionally route outbound posting through per-channel VPN egress.
-
-## 🌐 Supported channels
-
-X · LinkedIn · LinkedIn Page · Reddit · Instagram Business · Instagram Standalone · Facebook Page · Threads · YouTube · Google My Business · TikTok · Pinterest · Dribbble · Discord · Slack · Kick · Twitch · Mastodon · Bluesky · Lemmy · Farcaster · Telegram · LINE · Matrix · Nostr · VK · Medium · Dev.to · Hashnode · WordPress · ListMonk · Moltbook · Whop · Skool · MeWe · Tumblr · Pixelfed · PeerTube · Akkoma · Discourse · Friendica · GoToSocial · Misskey · Odysee · Sharkey
-
 ## 🚀 Quick Start
 
 ```bash
@@ -123,11 +75,91 @@ docker compose -f docker/docker-compose.dev.yaml up -d        # postgres + redis
 pnpm run dev:minimal                                   # backend + frontend
 ```
 
-The frontend runs on port `4200`. For the full setup, configuration reference, and production deployment guide, see the [documentation](https://docs.postmill.ai).
+The frontend runs on port `4200`. That's the development stack; for production, use the published Docker image with the root [`docker-compose.yaml`](./docker-compose.yaml). Full setup, configuration reference, and deployment guide: [documentation](https://docs.postmill.ai).
+
+## 🔌 Channel setup
+
+Channels connect through OAuth apps registered with each platform. To offer one-click connections on your installation, configure [platform channel apps](https://docs.postmill.ai/operations-guide/platform-channel-apps.html) for the providers you want to support: register an app in the provider's developer portal, add the issued credentials to `.env`, and test with an authorized account. Some providers require app review before broader access and may ask for app details, screenshots, or a demo video.
+
+Organizations can also connect channels with their own app keys, and direct-auth channels (API tokens, self-hosted instances) need no platform app at all. On Postmill's hosted service, platform apps are already configured, so one-click OAuth is available by default for supported channels.
+
+---
+
+## 📅 Visual publishing calendar
+
+Month, week, and day views of scheduled, published, draft, and failed posts across every channel. Filter by channel, open a post to review its content and performance, or drag it within the week view to reschedule. Times follow each user's timezone.
+
+## 📢 45+ channels, one composer
+
+Schedule and publish across 45+ social, chat, blogging, and email channels from a single composer. Native support for polls, first-comment automation, threads, per-channel settings, and channel-aware previews means each platform gets exactly what it expects — from a single write. Attach media from your library or create it in-app, pick a brand per post, and toggle link shortening per post with your organization's own short-link provider.
+
+## 🌐 Supported channels
+
+X · LinkedIn · LinkedIn Page · Reddit · Instagram Business · Instagram Standalone · Facebook Page · Threads · YouTube · Google My Business · TikTok · Pinterest · Dribbble · Discord · Slack · Kick · Twitch · Mastodon · Bluesky · Lemmy · Farcaster · Telegram · LINE · Matrix · Nostr · VK · Medium · Dev.to · Hashnode · WordPress · ListMonk · Moltbook · Whop · Skool · MeWe · Tumblr · Pixelfed · PeerTube · Akkoma · Discourse · Friendica · GoToSocial · Misskey · Odysee · Sharkey
+
+Per-channel VPN routing is available for outbound publishing — each channel can optionally egress through its own configured VPN region.
+
+## 🤖 AI at the core — BYOK, governed, multi-provider
+
+Postmill is AI-native from the ground up. A single governed AI layer powers every surface, and you bring your own keys: **30 providers** — 17 direct model providers plus 13 multi-model hubs and gateways — configured per organization, with no bundled credits, quotas, or metering.
+
+Configure as many LLM and media providers as you like, then pick separate default models for text, vision, workflows, and media tasks — a specific LLM, or a model from a media provider such as Replicate, HeyGen, or Runway. Media tasks span image, video, audio, avatars, captions, and music, including editing and upscaling.
+
+On top of that: brand-voice profiles, a shared prompt library, retrieval-augmented (RAG) search over your own content, guardrails for prompt injection, PII, brand safety, and NSFW content, and per-org spend caps with a full audit log. Every AI entry point is scoped, rate-limited, and budget-checked — a tenant's AI calls never fall back to a deployment-level key.
+
+## 🪄 The Postmill agent
+
+A natural-language assistant that operates the whole platform: schedule and reschedule posts, generate images, video, and voiceovers in any configured studio, pull analytics and best-time-to-post recommendations, manage campaigns, search your media library and stock sources, and reply to synced comments — all from one chat. Outward actions always go through an explicit confirmation card (a pre-filled composer, a draft reply, or a media job summary), so nothing publishes without your approval.
+
+Use the agent in-app or from **Slack, Telegram, Discord, Matrix, or LINE** — the same connections deliver notifications for published and failed posts, comments, budgets, media jobs, and more, routed centrally across in-app, email, and chat.
+
+## 🎨 46 built-in media tools
+
+Create, edit, generate, and source media without leaving Postmill. The media suite is **46 tools**: two designers, **38 BYOK provider studios** spanning image, video, audio, avatar, and music generation, and **6 stock browsers** for photos, videos, vectors, stickers, audio, and icons.
+
+The **Designer** is a layered image and video editor — a Konva canvas plus a full timeline — for people at home in Photoshop, Illustrator, or After Effects. The **AI Designer** drives the same production workflow through a conversational creative agent, for people who would rather describe the design than draw it.
+
+Both are built for cross-channel publishing: one editable source file holds multiple channel-specific variants, each with its own aspect ratio, sizing, and layout. From a single design you can create a multi-channel scheduled post, save individual exports to your media library, or both. Every generated, uploaded, or sourced asset lands in the media library for reuse, on local or S3-compatible storage of your choosing.
+
+## 📊 Persisted multi-channel analytics
+
+Metrics are snapshotted daily and persisted, so you get real period-over-period trends instead of one-off live fetches. Drill into any channel, metric, or date range; see best-time-to-post heatmaps, prioritized recommendations, anomaly alerts, and a competitor watchlist — all normalized into a consistent cross-provider metric set.
+
+## 💬 Cross-channel comment inbox
+
+Every reply on everything you publish, synced into one inbox. Reply directly, like or acknowledge, assign conversations to teammates, and draft responses with AI in the selected brand voice. Filter by unread, workflow state, sentiment, channel, or assignee, and bulk-mark-read — without bouncing between platform dashboards.
+
+## 🗂️ Campaign Hub
+
+Take a campaign from first draft to client report in one workspace. Define a client or project, dates, tags, and measurable goals, then group posts, channels, media, and post templates under it. Create cross-channel drafts, approve or reject them, and move approved posts into the publishing queue; optional UTM tagging adds campaign, source, and medium parameters at publish time.
+
+The hub tracks draft, scheduled, and published posts alongside views, likes, replies, clicks, per-channel performance, and progress toward goals, with campaign-scoped replies, an activity history, and a threaded team discussion. Share a read-only client report — KPIs, trends, channel breakdowns, goal progress — via a revocable link, or export it as PDF or CSV.
+
+## 🏷️ Multi-brand publishing
+
+Manage distinct voices and visual identities for clients, products, or publications. Set a default brand, choose a brand per post in the composer, and give each one language- and channel-specific writing instructions so AI-assisted content stays in voice.
+
+Each brand carries a reusable kit of colors, logos, fonts, reference images, and optional video intros and outros. The Designer surfaces the default brand's kit and flags off-brand colors and fonts; the AI Designer works from the selected brand's instructions, palette, and fonts.
+
+## 👥 Teams & access control
+
+Invite teammates by email or shareable link, or create accounts directly. Role-based access control starts with **5 built-in roles** (Owner / Admin / Editor / Member / Viewer); build custom roles from a **90-permission catalog (18 resources × 5 actions)** covering posts, media, channels, analytics, brands, billing, and more. Permissions are enforced server-side on every protected action.
+
+Sign in with Google, GitHub, Apple, Facebook, X, LinkedIn, or any generic OIDC provider. Members can review their active sessions and revoke individual devices.
+
+## 🌍 Localization
+
+The full UI — composer, settings, media tools, analytics, and auth — ships in 13 languages: English, Arabic, German, Spanish, French, Italian, Japanese, Korean, Portuguese, Russian, Turkish, Vietnamese, and Chinese.
+
+## 🔒 Self-hosted & security-hardened
+
+Own your whole stack — posts, analytics, media, and provider credentials stay on infrastructure you control, deployed from the published Docker image and Compose setup.
+
+Security runs through the application: secrets are encrypted at rest with AES-256-GCM, data access is scoped to each organization, and requests to user-supplied URLs are SSRF-checked across DNS lookups and redirects. Cookie-authenticated changes require CSRF protection, and production security headers, a Content Security Policy, API rate limits, and strict request validation add further safeguards. Bring your own object storage (S3 / R2 / Backblaze B2 / IDrive), swap in pluggable email and short-link providers, and optionally route outbound posting through per-channel VPN egress.
 
 ## 🔗 Automation & integrations
 
-Postmill exposes a full **Public API** for programmatic scheduling, analytics, and channel management, an **MCP** surface for AI agents, and an official Node SDK — [`@postmill-ai/postmill-sdk`](https://www.npmjs.com/package/@postmill-ai/postmill-sdk). Built in: **RSS auto-posting** (turn any feed into a scheduled queue per channel) and **outgoing webhooks** that push publish events to your endpoints, per channel or account-wide. The Public API is compatible with low-code automation platforms such as n8n, Make, and Zapier, so you can wire Postmill into your existing workflows. See the [API docs](https://docs.postmill.ai) to get started.
+Postmill exposes a **Public API** for programmatic scheduling, analytics, and channel management, an **MCP** surface for AI agents, and an official Node SDK — [`@postmill-ai/postmill-sdk`](https://www.npmjs.com/package/@postmill-ai/postmill-sdk). Built in: **RSS auto-posting** (turn any feed into a scheduled queue per channel) and **outgoing webhooks** that push publish events to your endpoints, per channel or account-wide. The Public API also connects Postmill to automation platforms such as n8n, Make, and Zapier. See the [API docs](https://docs.postmill.ai/developer-docs/public-api.html) to get started.
 
 ## 🛠️ Tech stack
 
@@ -139,12 +171,13 @@ Postmill exposes a full **Public API** for programmatic scheduling, analytics, a
 - Redis
 - Pluggable email, storage, short-link, and AI providers
 
-## ✅ Compliance
+## Platform requirements
 
-- Postmill is an open-source, self-hosted social media scheduling tool that supports platforms like X (formerly Twitter), Bluesky, Mastodon, Discord, and others.
-- The Postmill hosted service uses official, platform-approved OAuth flows.
-- Postmill does not automate or scrape content from social media platforms.
-- Postmill users always authenticate directly with the social platform (e.g., X, Discord, etc.), ensuring platform compliance and data privacy.
+Postmill publishes — and, where a platform supports it, retrieves comments and analytics — through each platform's official API, using OAuth flows the user completes directly with that platform. Available actions, permissions, and app-review requirements vary by provider; if you operate a deployment, you are responsible for meeting each provider's terms and securing the access it requires.
+
+## Contributing & support
+
+See [Contributing](CONTRIBUTING.md) for development and pull requests, and the [Security Policy](SECURITY.md) for private vulnerability reports. For setup and product questions, use the [documentation](https://docs.postmill.ai) or [GitHub Discussions](https://github.com/postmill-ai/postmill-app/discussions).
 
 ## 🙏 Acknowledgements
 
