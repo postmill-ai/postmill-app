@@ -27,6 +27,8 @@ function setEnv() {
   process.env.FRONTEND_URL = 'https://app.example.com';
   process.env.FACEBOOK_APP_ID = 'fb-app-id';
   process.env.FACEBOOK_APP_SECRET = 'fb-app-secret';
+  delete process.env.FACEBOOK_SSO_CONFIG_ID;
+  delete process.env.FACEBOOK_CONFIG_ID;
 }
 
 beforeEach(() => {
@@ -105,6 +107,61 @@ describe('facebookAuthModule', () => {
       const link = await facebookAuthModule.create(ctx).generateLink();
 
       expect(link).toContain('client_id=fb-app-id');
+    });
+
+    // Facebook Login for Business: Meta rejects scope= on Business-type apps;
+    // the dialog must carry a Configuration id instead.
+    it('replaces the scope with config_id from FACEBOOK_SSO_CONFIG_ID', async () => {
+      process.env.FACEBOOK_SSO_CONFIG_ID = 'login cfg 1';
+      const { ctx } = makeCtx();
+
+      const link = await facebookAuthModule.create(ctx).generateLink();
+
+      expect(link).toContain('&config_id=login%20cfg%201');
+      expect(link).not.toContain('scope=');
+      expect(link).toContain('client_id=fb-app-id');
+      expect(link).toContain('&state=login');
+    });
+
+    it('falls back to the channel FACEBOOK_CONFIG_ID when no login Configuration is set', async () => {
+      process.env.FACEBOOK_CONFIG_ID = 'channel-cfg';
+      const { ctx } = makeCtx();
+
+      const link = await facebookAuthModule.create(ctx).generateLink();
+
+      expect(link).toContain('&config_id=channel-cfg');
+      expect(link).not.toContain('scope=');
+    });
+
+    it('prefers the login Configuration over the channel one', async () => {
+      process.env.FACEBOOK_SSO_CONFIG_ID = 'login-cfg';
+      process.env.FACEBOOK_CONFIG_ID = 'channel-cfg';
+      const { ctx } = makeCtx();
+
+      const link = await facebookAuthModule.create(ctx).generateLink();
+
+      expect(link).toContain('&config_id=login-cfg');
+      expect(link).not.toContain('channel-cfg');
+    });
+
+    it('keeps the scope URL for DB-configured creds even when an env config id exists', async () => {
+      // A Configuration belongs to one Meta app — never attach the env app's
+      // id to a different app's client_id.
+      process.env.FACEBOOK_SSO_CONFIG_ID = 'login-cfg';
+      const findByProvider = vi.fn().mockResolvedValue({
+        enabled: true,
+        clientId: 'enc:db-app-id',
+        clientSecret: 'enc:db-app-secret',
+      });
+      const { ctx } = makeCtx({
+        extras: { authProviderRepo: { findByProvider } },
+      });
+
+      const link = await facebookAuthModule.create(ctx).generateLink();
+
+      expect(link).toContain('client_id=db-app-id');
+      expect(link).toContain('&scope=public_profile,email');
+      expect(link).not.toContain('config_id');
     });
   });
 

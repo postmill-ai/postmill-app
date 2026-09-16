@@ -264,8 +264,9 @@ Three opt-in flags add the platform channel apps as **login providers** (the log
 | Variable | Default | Purpose |
 |----------|---------|---------|
 | `FACEBOOK_SSO_ENABLED` | `false` | Set to `true` to add a "Continue with Facebook" login button (requires `FACEBOOK_APP_ID` / `FACEBOOK_APP_SECRET`) |
+| `FACEBOOK_SSO_CONFIG_ID` | — | Facebook Login for Business Configuration ID used for **login** on Business-type Meta apps (login-only Configuration, "User access token" variation). Unset = falls back to the channel `FACEBOOK_CONFIG_ID`; with neither, the classic `scope=public_profile,email` dialog is used (Consumer-type apps) |
 | `X_SSO_ENABLED` | `false` | Set to `true` to add a "Continue with X" login button (requires `X_CLIENT_ID` / `X_CLIENT_SECRET`) |
-| `X_CLIENT_ID` / `X_CLIENT_SECRET` | — | The X app's **OAuth 2.0 Client ID and Client Secret** (Keys and tokens; issued once OAuth 2.0 is enabled under User authentication settings). Login only — never used for posting |
+| `X_CLIENT_ID` / `X_CLIENT_SECRET` | — | The X app's **OAuth 2.0 Client ID and Client Secret** (Keys and tokens; issued once OAuth 2.0 is enabled under User authentication settings). Login only — never used for posting. Login requests `tweet.read users.read users.email`; enable "Request email from users" on the app for the real address |
 | `LINKEDIN_SSO_ENABLED` | `false` | Set to `true` to add a "Continue with LinkedIn" login button (requires `LINKEDIN_CLIENT_ID` / `LINKEDIN_CLIENT_SECRET`) |
 
 ## X channel behaviour

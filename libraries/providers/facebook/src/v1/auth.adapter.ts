@@ -15,6 +15,17 @@ import {
 // only the env var names are shared. DB-config precedence is preserved by
 // reading the AuthProviderRepository the AuthProviderManager passes through
 // ctx.extras. Graph API version matches the social adapter (v20.0).
+//
+// Two Meta login modes, same as social.adapter.ts:
+// - Classic Facebook Login (Consumer-type apps): `scope=public_profile,email`.
+// - Facebook Login for Business (Business-type apps): Meta rejects a bare
+//   scope= ("This app needs at least one supported permission") — the dialog
+//   must reference a Configuration via `config_id`; email/public_profile are
+//   auto-granted on top of whatever business permission it bundles. The
+//   Configuration id comes from FACEBOOK_SSO_CONFIG_ID (a login-only
+//   Configuration, "User access token" variation) or, failing that, the
+//   channel's FACEBOOK_CONFIG_ID. A Configuration belongs to one app, so it
+//   is only applied to the env app — DB-configured creds keep the scope URL.
 
 interface AuthProviderConfigRow {
   enabled?: boolean | null;
@@ -35,6 +46,8 @@ const defaultRedirect = () =>
 async function resolveConfig(ctx: ProviderRuntimeContext): Promise<{
   clientId: string;
   clientSecret: string;
+  // Facebook Login for Business Configuration id (env app only, see header).
+  configId: string;
 }> {
   const repo = (ctx.extras as { authProviderRepo?: AuthProviderRepoLike })
     ?.authProviderRepo;
@@ -45,6 +58,7 @@ async function resolveConfig(ctx: ProviderRuntimeContext): Promise<{
         return {
           clientId: await ctx.encryption.decrypt(db.clientId),
           clientSecret: await ctx.encryption.decrypt(db.clientSecret),
+          configId: '',
         };
       }
     } catch {
@@ -57,20 +71,24 @@ async function resolveConfig(ctx: ProviderRuntimeContext): Promise<{
   if (!clientId || !clientSecret) {
     throw new Error('Facebook auth provider is not configured');
   }
-  return { clientId, clientSecret };
+  const configId =
+    process.env.FACEBOOK_SSO_CONFIG_ID || process.env.FACEBOOK_CONFIG_ID || '';
+  return { clientId, clientSecret, configId };
 }
 
 class FacebookAuthCapability implements AuthCapability {
   constructor(private readonly ctx: ProviderRuntimeContext) {}
 
   async generateLink(): Promise<string> {
-    const { clientId } = await resolveConfig(this.ctx);
+    const { clientId, configId } = await resolveConfig(this.ctx);
     return (
       'https://www.facebook.com/v20.0/dialog/oauth' +
       `?client_id=${clientId}` +
       `&redirect_uri=${encodeURIComponent(defaultRedirect())}` +
       `&state=login` +
-      `&scope=public_profile,email`
+      (configId
+        ? `&config_id=${encodeURIComponent(configId)}`
+        : `&scope=public_profile,email`)
     );
   }
 
