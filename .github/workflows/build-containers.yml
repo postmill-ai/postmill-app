@@ -72,23 +72,22 @@ jobs:
           docker buildx imagetools inspect ghcr.io/postmill-ai/postmill-app:${{ github.ref_name }}
 
       # imagetools inspect only reads registry metadata — it never starts the image, so a
-      # container that cannot boot (e.g. a CMD pointing at a path the build never produced)
-      # would publish green. Assert the entrypoint file actually exists in the image.
+      # container that cannot boot would publish green. The image has no CMD: its
+      # ENTRYPOINT is docker/entrypoint.sh, which launches the backend main.js and
+      # `next start`. Assert those files actually exist in the image.
       - name: Smoke-test the image entrypoint
         run: |
           IMAGE=ghcr.io/postmill-ai/postmill-app:${{ github.ref_name }}
           docker pull "$IMAGE"
-          ENTRY=$(docker inspect -f '{{join .Config.Cmd " "}}' "$IMAGE" | tr ' ' '\n' | grep '\.js$')
-          echo "Image CMD entrypoint: $ENTRY"
-          docker run --rm --entrypoint node "$IMAGE" -e "
-            const fs = require('fs');
-            const p = '$ENTRY';
-            if (!fs.existsSync(p)) {
-              console.error('FAIL: image CMD points at ' + p + ', which does not exist in the image.');
-              process.exit(1);
-            }
-            console.log('OK: ' + p + ' exists.');
-          "
+          docker run --rm --entrypoint bash "$IMAGE" -c '
+            set -e
+            test -f /app/docker/entrypoint.sh || { echo "FAIL: /app/docker/entrypoint.sh missing"; exit 1; }
+            MAIN=$(grep -o "/app/[^ ]*\.js" /app/docker/entrypoint.sh | head -1)
+            echo "Backend entry from entrypoint.sh: $MAIN"
+            test -f "$MAIN" || { echo "FAIL: $MAIN does not exist in the image"; exit 1; }
+            test -x /app/node_modules/.bin/next || { echo "FAIL: /app/node_modules/.bin/next missing"; exit 1; }
+            echo "OK: entrypoint, backend main.js and next binary present."
+          '
 
       # The release is the user-facing contract: notes + the exact image digest, plus the
       # image itself as a `docker save` tarball for air-gapped installs. GitHub caps a
