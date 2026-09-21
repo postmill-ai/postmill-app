@@ -4,75 +4,25 @@ import { HttpException, HttpStatus } from '@nestjs/common';
 import { CHECK_POLICIES_KEY } from '@postmill-ai/backend/services/auth/permissions/permissions.ability';
 import { AuthorizationActions, Sections } from '@postmill-ai/backend/services/auth/permissions/permission.exception.class';
 
-const OLD_ENV = { ...process.env };
 
-const mockOpenAIAdapterInstance = { mock: 'OpenAIAdapter', process: vi.fn().mockResolvedValue({ threadId: 't1' }) };
-const mockAnthropicAdapterInstance = { mock: 'AnthropicAdapter', process: vi.fn().mockResolvedValue({ threadId: 't1' }) };
-const mockGoogleAdapterInstance = { mock: 'GoogleGenerativeAIAdapter', process: vi.fn().mockResolvedValue({ threadId: 't1' }) };
-const mockGroqAdapterInstance = { mock: 'GroqAdapter', process: vi.fn().mockResolvedValue({ threadId: 't1' }) };
-const mockLangChainAdapterInstance = { mock: 'LangChainAdapter', process: vi.fn().mockResolvedValue({ threadId: 't1' }) };
+const mockRuntimeCtor = vi.fn();
 vi.mock('@copilotkit/runtime', () => ({
-  AnthropicAdapter: class {
+  CopilotRuntime: class {
     constructor(opts: any) {
+      mockRuntimeCtor(opts);
       Object.assign(this, opts);
-      return mockAnthropicAdapterInstance;
-    }
-  },
-  CopilotRuntime: class {},
-  GoogleGenerativeAIAdapter: class {
-    constructor(opts: any) {
-      Object.assign(this, opts);
-      return mockGoogleAdapterInstance;
-    }
-  },
-  GroqAdapter: class {
-    constructor(opts: any) {
-      Object.assign(this, opts);
-      return mockGroqAdapterInstance;
-    }
-  },
-  LangChainAdapter: class {
-    constructor(opts: any) {
-      Object.assign(this, opts);
-      return mockLangChainAdapterInstance;
-    }
-  },
-  OpenAIAdapter: class {
-    constructor(opts: any) {
-      Object.assign(this, opts);
-      return mockOpenAIAdapterInstance;
     }
   },
   copilotRuntimeNodeHttpEndpoint: vi.fn().mockReturnValue(vi.fn()),
   copilotRuntimeNestEndpoint: vi.fn().mockReturnValue(vi.fn()),
-  copilotRuntimeNextJSAppRouterEndpoint: vi.fn().mockReturnValue({
-    handleRequest: vi.fn(),
-  }),
 }));
 
-const mockOpenAIClass = vi.fn();
-vi.mock('openai', () => ({
-  default: class {
+const mockBuiltInAgentCtor = vi.fn();
+vi.mock('@copilotkit/runtime/v2', () => ({
+  BuiltInAgent: class {
     constructor(opts: any) {
-      mockOpenAIClass(opts);
-    }
-  },
-}));
-
-const mockAnthropicClass = vi.fn();
-vi.mock('@anthropic-ai/sdk', () => ({
-  default: class {
-    constructor(opts: any) {
-      mockAnthropicClass(opts);
-    }
-  },
-}));
-
-const mockGroqClass = vi.fn();
-vi.mock('groq-sdk', () => ({
-  Groq: class {
-    constructor(opts: any) {
-      mockGroqClass(opts);
+      mockBuiltInAgentCtor(opts);
+      Object.assign(this, opts);
     }
   },
 }));
@@ -92,31 +42,13 @@ const mockOpenaiAdapter = {
   createLanguageModel: vi.fn().mockReturnValue(mockLanguageModel),
 };
 
-const mockAnthropicAdapter = {
-  identifier: 'anthropic',
-  name: 'Anthropic',
-  type: 'direct',
-  credentialFields: [{ key: 'apiKey', label: 'API Key', type: 'password', required: true }],
-  capabilities: { text: true, image: false, vision: false, embeddings: false, speech: false, tools: true },
-  listModels: vi.fn().mockResolvedValue([]),
-  createLanguageModel: vi.fn().mockReturnValue({ modelId: 'claude-sonnet', doGenerate: vi.fn() }),
-};
-
-const mockGatewayAdapter = {
-  identifier: 'gateway',
-  name: 'API Gateway',
-  type: 'hub',
-  credentialFields: [{ key: 'baseURL', label: 'Base URL', type: 'string', required: true }],
-  capabilities: { text: true, image: false, vision: false, embeddings: false, speech: false, tools: true },
-  listModels: vi.fn().mockResolvedValue([]),
-  createLanguageModel: vi.fn().mockReturnValue({}),
-};
-
 const mockResolveConfigForScope = vi.fn().mockResolvedValue(null);
+const mockGovernedLanguageModel = vi.fn().mockResolvedValue(mockLanguageModel);
 
 vi.mock('@postmill-ai/nestjs-libraries/ai/ai-model.provider', () => ({
   AIModelProvider: class {
     resolveConfigForScope = mockResolveConfigForScope;
+    governedLanguageModel = mockGovernedLanguageModel;
     getSurfaceDefaults = vi.fn().mockReturnValue({
       textModel: 'gpt-5.2',
       imageModel: 'chatgpt-image-latest',
@@ -139,27 +71,6 @@ vi.mock('@postmill-ai/nestjs-libraries/chat/mastra.service', () => ({
         }),
       }),
     });
-  },
-}));
-
-const mockCheckInput = vi.fn().mockResolvedValue('guarded input');
-vi.mock('@postmill-ai/nestjs-libraries/ai/governance/guardrail.service', () => ({
-  GuardrailService: class {
-    checkInput = mockCheckInput;
-  },
-}));
-
-const mockStartSpan = vi.fn().mockImplementation(async (_name, fn) => fn({ setAttribute: vi.fn() }));
-vi.mock('@postmill-ai/nestjs-libraries/ai/governance/telemetry.service', () => ({
-  TelemetryService: class {
-    startSpan = mockStartSpan;
-  },
-}));
-
-vi.mock('@postmill-ai/nestjs-libraries/ai/governance/budget.service', () => ({
-  BudgetService: class {
-    checkBudget = vi.fn().mockResolvedValue({ allowed: true });
-    recordSpend = vi.fn().mockResolvedValue(undefined);
   },
 }));
 
@@ -190,16 +101,9 @@ import {
 } from '@copilotkit/runtime';
 import { MastraService } from '@postmill-ai/nestjs-libraries/chat/mastra.service';
 import { AIModelProvider } from '@postmill-ai/nestjs-libraries/ai/ai-model.provider';
-import { GuardrailService } from '@postmill-ai/nestjs-libraries/ai/governance/guardrail.service';
-import { TelemetryService } from '@postmill-ai/nestjs-libraries/ai/governance/telemetry.service';
-import { BudgetService } from '@postmill-ai/nestjs-libraries/ai/governance/budget.service';
 import { FeatureFlagsService } from '@postmill-ai/nestjs-libraries/feature-flags';
 import { RequestContext } from '@mastra/core/di';
-
-function expectWrappedAdapter(result: any, rawInstance: any) {
-  expect(result).not.toBe(rawInstance);
-  expect(typeof result.process).toBe('function');
-}
+import { BudgetExceeded, GuardrailViolation } from '@postmill-ai/nestjs-libraries/ai/governance/errors';
 
 describe('CopilotController', () => {
   let controller: CopilotController;
@@ -207,268 +111,15 @@ describe('CopilotController', () => {
   let aiModelProvider: AIModelProvider;
 
   beforeEach(() => {
-    process.env.OPENAI_API_KEY = '';
     vi.clearAllMocks();
-    mockOpenAIClass.mockClear();
-    mockAnthropicClass.mockClear();
-    mockGroqClass.mockClear();
-    mockCheckInput.mockClear();
-    mockStartSpan.mockClear();
     mockResolveConfigForScope.mockResolvedValue(null);
+    mockGovernedLanguageModel.mockResolvedValue(mockLanguageModel);
 
     mastraService = new (MastraService as any)();
     aiModelProvider = new (AIModelProvider as any)();
 
-    const guardrailService = new (GuardrailService as any)();
-    const telemetryService = new (TelemetryService as any)();
-    const budgetService = new (BudgetService as any)();
     const featureFlagsService = new (FeatureFlagsService as any)();
-    controller = new CopilotController(
-      mastraService,
-      aiModelProvider,
-      guardrailService,
-      telemetryService,
-      budgetService,
-      featureFlagsService,
-    );
-  });
-
-  describe('_buildServiceAdapter', () => {
-    describe('no admin config', () => {
-      it('creates OpenAIAdapter with resolved credentials via resolveConfigForScope', async () => {
-        mockResolveConfigForScope.mockResolvedValue({
-          adapter: mockOpenaiAdapter,
-          modelId: 'gpt-5.2',
-          creds: { apiKey: 'sk-resolved-key' },
-          providerId: 'openai',
-        });
-
-        const result = await (controller as any)._buildServiceAdapter(undefined);
-
-        expect(mockOpenAIClass).toHaveBeenCalledWith({ apiKey: 'sk-resolved-key' });
-        expectWrappedAdapter(result, mockOpenAIAdapterInstance);
-        expect(mockResolveConfigForScope).toHaveBeenCalledWith('agent', undefined);
-      });
-
-      it('throws 422 "AI is not configured" when resolveConfigForScope returns null', async () => {
-        mockResolveConfigForScope.mockResolvedValue(null);
-
-        await expect((controller as any)._buildServiceAdapter(undefined)).rejects.toThrow(
-          expect.objectContaining({
-            message: 'AI is not configured for this organization. Go to Settings → AI to configure a provider.',
-            status: HttpStatus.UNPROCESSABLE_ENTITY,
-          }),
-        );
-      });
-    });
-
-    describe('admin config present with OpenAI provider', () => {
-      it('creates OpenAIAdapter with resolved credentials from facade', async () => {
-        process.env.OPENAI_API_KEY = 'sk-should-not-be-used';
-        mockResolveConfigForScope.mockResolvedValue({
-          adapter: mockOpenaiAdapter,
-          modelId: 'gpt-5.2',
-          creds: { apiKey: 'sk-decrypted-key' },
-          providerId: 'openai',
-        });
-
-        const result = await (controller as any)._buildServiceAdapter('org-1');
-
-        expect(mockResolveConfigForScope).toHaveBeenCalledWith('agent', 'org-1');
-        expect(mockOpenAIClass).toHaveBeenCalledWith(
-          expect.objectContaining({ apiKey: 'sk-decrypted-key' }),
-        );
-        expectWrappedAdapter(result, mockOpenAIAdapterInstance);
-      });
-
-      it('uses scoped model from facade-resolved config', async () => {
-        mockResolveConfigForScope.mockResolvedValue({
-          adapter: mockOpenaiAdapter,
-          modelId: 'gpt-5.2',
-          creds: { apiKey: 'sk-scoped-key' },
-          providerId: 'openai',
-        });
-
-        const result = await (controller as any)._buildServiceAdapter('org-1');
-
-        expect(mockResolveConfigForScope).toHaveBeenCalledWith('agent', 'org-1');
-        expectWrappedAdapter(result, mockOpenAIAdapterInstance);
-      });
-    });
-
-    describe('admin config present with native CopilotKit provider', () => {
-      it('creates AnthropicAdapter for Anthropic', async () => {
-        mockResolveConfigForScope.mockResolvedValue({
-          adapter: mockAnthropicAdapter,
-          modelId: 'claude-sonnet',
-          creds: { apiKey: 'sk-anthropic' },
-          providerId: 'anthropic',
-        });
-
-        const result = await (controller as any)._buildServiceAdapter('org-1');
-
-        expect(mockAnthropicClass).toHaveBeenCalledWith({ apiKey: 'sk-anthropic' });
-        expectWrappedAdapter(result, mockAnthropicAdapterInstance);
-      });
-    });
-
-    describe('admin config present, no OPENAI_API_KEY, provider="anthropic"', () => {
-      it('does NOT short-circuit to env fallback — uses configured Anthropic credentials', async () => {
-        process.env.OPENAI_API_KEY = '';
-        mockResolveConfigForScope.mockResolvedValue({
-          adapter: mockAnthropicAdapter,
-          modelId: 'claude-sonnet',
-          creds: { apiKey: 'sk-anthropic' },
-          providerId: 'anthropic',
-        });
-
-        const result = await (controller as any)._buildServiceAdapter('org-1');
-
-        expectWrappedAdapter(result, mockAnthropicAdapterInstance);
-      });
-    });
-
-    describe('admin config with gateway adapter', () => {
-      it('treats gateway as OpenAI-compatible (has baseURL field)', async () => {
-        mockResolveConfigForScope.mockResolvedValue({
-          adapter: mockGatewayAdapter,
-          modelId: 'gpt-4.1',
-          creds: { apiKey: 'sk-gw-key', baseURL: 'https://my-gateway.example.com/v1' },
-          providerId: 'gateway',
-        });
-
-        const result = await (controller as any)._buildServiceAdapter('org-1');
-
-        expect(mockOpenAIClass).toHaveBeenCalledWith(
-          expect.objectContaining({
-            apiKey: 'sk-gw-key',
-            baseURL: 'https://my-gateway.example.com/v1',
-          }),
-        );
-        expectWrappedAdapter(result, mockOpenAIAdapterInstance);
-      });
-
-      it('does not borrow OPENAI_API_KEY when active admin credentials are missing', async () => {
-        process.env.OPENAI_API_KEY = 'sk-env-key';
-        mockResolveConfigForScope.mockResolvedValue({
-          adapter: mockGatewayAdapter,
-          modelId: 'gpt-4.1',
-          creds: { baseURL: 'https://my-gateway.example.com/v1' },
-          providerId: 'gateway',
-        });
-
-        await expect((controller as any)._buildServiceAdapter('org-1')).rejects.toThrow(
-          expect.objectContaining({
-            message: 'AI provider credentials not configured',
-            status: HttpStatus.UNPROCESSABLE_ENTITY,
-          }),
-        );
-        expect(mockOpenAIClass).not.toHaveBeenCalled();
-      });
-    });
-
-    describe('resolveConfigForScope returns null (facade could not resolve)', () => {
-      it('throws 422 when no config resolved (no env fallback)', async () => {
-        mockResolveConfigForScope.mockResolvedValue(null);
-
-        await expect((controller as any)._buildServiceAdapter('org-1')).rejects.toThrow(
-          expect.objectContaining({
-            message: 'AI is not configured for this organization. Go to Settings → AI to configure a provider.',
-            status: HttpStatus.UNPROCESSABLE_ENTITY,
-          }),
-        );
-      });
-    });
-
-    describe('per-org BYOK overrides', () => {
-      it('uses credentials from per-org BYOK resolved by the facade', async () => {
-        mockResolveConfigForScope.mockResolvedValue({
-          adapter: mockOpenaiAdapter,
-          modelId: 'gpt-5.2',
-          creds: { apiKey: 'sk-byok-org-key' },
-          providerId: 'openai',
-        });
-
-        const result = await (controller as any)._buildServiceAdapter('org-byok');
-
-        expect(mockResolveConfigForScope).toHaveBeenCalledWith('agent', 'org-byok');
-        expect(mockOpenAIClass).toHaveBeenCalledWith(
-          expect.objectContaining({ apiKey: 'sk-byok-org-key' }),
-        );
-        expectWrappedAdapter(result, mockOpenAIAdapterInstance);
-      });
-    });
-
-    describe('orgId threading', () => {
-      it('passes orgId to resolveConfigForScope', async () => {
-        mockResolveConfigForScope.mockResolvedValue({
-          adapter: mockOpenaiAdapter,
-          modelId: 'gpt-5.2',
-          creds: { apiKey: 'sk-org-test' },
-          providerId: 'openai',
-        });
-
-        await (controller as any)._buildServiceAdapter('org-42');
-
-        expect(mockResolveConfigForScope).toHaveBeenCalledWith('agent', 'org-42');
-      });
-
-      it('passes undefined orgId when not provided', async () => {
-        mockResolveConfigForScope.mockResolvedValue({
-          adapter: mockOpenaiAdapter,
-          modelId: 'gpt-5.2',
-          creds: { apiKey: 'sk-no-org' },
-          providerId: 'openai',
-        });
-
-        await (controller as any)._buildServiceAdapter(undefined);
-
-        expect(mockResolveConfigForScope).toHaveBeenCalledWith('agent', undefined);
-      });
-
-      it('wraps the adapter so process() runs input guardrails and telemetry', async () => {
-        mockResolveConfigForScope.mockResolvedValue({
-          adapter: mockOpenaiAdapter,
-          modelId: 'gpt-5.2',
-          creds: { apiKey: 'sk-guard-test' },
-          providerId: 'openai',
-        });
-
-        const result = await (controller as any)._buildServiceAdapter('org-guard');
-        const textMessage = {
-          type: 'TextMessage',
-          isTextMessage: () => true,
-          content: 'Hello agent',
-        };
-        await result.process({ messages: [textMessage] });
-
-        expect(mockCheckInput).toHaveBeenCalledWith('Hello agent', { orgId: 'org-guard' });
-        expect(mockStartSpan).toHaveBeenCalledWith(
-          'copilot.generate',
-          expect.any(Function),
-          { 'ai.scope': 'agent' },
-        );
-      });
-
-      it('does not run guardrails when there are no text messages', async () => {
-        mockResolveConfigForScope.mockResolvedValue({
-          adapter: mockOpenaiAdapter,
-          modelId: 'gpt-5.2',
-          creds: { apiKey: 'sk-no-text' },
-          providerId: 'openai',
-        });
-
-        const result = await (controller as any)._buildServiceAdapter('org-notext');
-        await result.process({ messages: [] });
-
-        expect(mockCheckInput).not.toHaveBeenCalled();
-        expect(mockStartSpan).toHaveBeenCalledWith(
-          'copilot.generate',
-          expect.any(Function),
-          { 'ai.scope': 'agent' },
-        );
-      });
-    });
+    controller = new CopilotController(mastraService, aiModelProvider, featureFlagsService);
   });
 
   describe('/chat endpoint', () => {
@@ -482,47 +133,81 @@ describe('CopilotController', () => {
       expect(policies).toEqual([[AuthorizationActions.Create, Sections.MCP]]);
     });
 
-    it('calls service adapter builder with organization.id', async () => {
-      process.env.OPENAI_API_KEY = 'sk-chat-test';
+    const configured = () =>
       mockResolveConfigForScope.mockResolvedValue({
         adapter: mockOpenaiAdapter,
         modelId: 'gpt-5.2',
         creds: { apiKey: 'sk-chat-test' },
         providerId: 'openai',
       });
-      const req = { body: {} } as any;
-      const res = {
-        status: vi.fn().mockReturnThis(),
-        json: vi.fn(),
-      } as any;
+    const mkRes = () => ({ status: vi.fn().mockReturnThis(), json: vi.fn() }) as any;
+
+    // Sentry POSTMILL-APP-D: @copilotkit/runtime ≥1.69 never calls a service
+    // adapter's process(); an agents-less runtime auto-builds a BuiltInAgent from
+    // the adapter and throws CopilotApiDiscoveryError (unhandled) when the adapter
+    // can't name its model — every LangChainAdapter provider. The route must pass
+    // an explicit default agent on the org's governed model and no adapter at all.
+    it('builds the runtime with a BuiltInAgent on the governed agent model and no service adapter', async () => {
+      configured();
       const org = { id: 'org-chat-1' } as any;
 
-      await controller.chatAgent(req, res, org);
+      await controller.chatAgent({ body: {}, headers: {} } as any, mkRes(), org);
 
       expect(mockResolveConfigForScope).toHaveBeenCalledWith('agent', 'org-chat-1');
+      expect(mockGovernedLanguageModel).toHaveBeenCalledWith('agent', 'org-chat-1');
+      expect(mockBuiltInAgentCtor).toHaveBeenCalledWith({ model: mockLanguageModel });
+      const runtimeOpts = mockRuntimeCtor.mock.calls[0][0];
+      expect(Object.keys(runtimeOpts.agents)).toEqual(['default']);
+      expect(runtimeOpts.agents.default).toMatchObject({ model: mockLanguageModel });
+      const endpointOpts = (copilotRuntimeNodeHttpEndpoint as any).mock.calls[0][0];
+      expect(endpointOpts).not.toHaveProperty('serviceAdapter');
+      expect(endpointOpts.endpoint).toBe('/copilot/chat');
     });
 
     it('rejects 422 without constructing a runtime when AI is unconfigured', async () => {
-      process.env.OPENAI_API_KEY = '';
       mockResolveConfigForScope.mockResolvedValue(null);
-      const req = { body: {} } as any;
-      const res = { status: vi.fn().mockReturnThis(), json: vi.fn() } as any;
 
-      // No EmptyAdapter fallback: the current @copilotkit/runtime throws
-      // "No default agent provided" (unhandled rejection) for an agents-less
-      // runtime with EmptyAdapter — Sentry POSTMILL-APP-D. The endpoint must
-      // surface the 422 instead; the UI never mounts CopilotKit in this state.
       const callsBefore = (copilotRuntimeNodeHttpEndpoint as any).mock.calls.length;
-      await expect(controller.chatAgent(req, res)).rejects.toMatchObject({
+      await expect(controller.chatAgent({ body: {}, headers: {} } as any, mkRes())).rejects.toMatchObject({
         status: HttpStatus.UNPROCESSABLE_ENTITY,
       });
       expect((copilotRuntimeNodeHttpEndpoint as any).mock.calls.length).toBe(callsBefore);
+      expect(mockGovernedLanguageModel).not.toHaveBeenCalled();
+    });
+
+    it('maps a budget refusal from the governed model to 429', async () => {
+      configured();
+      mockGovernedLanguageModel.mockRejectedValue(new BudgetExceeded('Budget exceeded', 'agent', 'org-chat-1'));
+
+      await expect(controller.chatAgent({ body: {}, headers: {} } as any, mkRes(), { id: 'org-chat-1' } as any)).rejects.toMatchObject({
+        status: HttpStatus.TOO_MANY_REQUESTS,
+      });
+      expect(copilotRuntimeNodeHttpEndpoint).not.toHaveBeenCalled();
+    });
+
+    it('maps a guardrail violation to 422', async () => {
+      configured();
+      mockGovernedLanguageModel.mockRejectedValue(new GuardrailViolation('blocked', 'pii', 'block'));
+
+      await expect(controller.chatAgent({ body: {}, headers: {} } as any, mkRes(), { id: 'org-chat-1' } as any)).rejects.toMatchObject({
+        status: HttpStatus.UNPROCESSABLE_ENTITY,
+      });
+    });
+
+    it('answers 500 (no throw) for an unexpected provider failure', async () => {
+      configured();
+      mockGovernedLanguageModel.mockRejectedValue(new Error('boom'));
+      const res = mkRes();
+
+      await controller.chatAgent({ body: {}, headers: {} } as any, res, { id: 'org-chat-1' } as any);
+
+      expect(res.status).toHaveBeenCalledWith(HttpStatus.INTERNAL_SERVER_ERROR);
+      expect(res.json).toHaveBeenCalledWith({ error: 'AI configuration not available' });
     });
   });
 
   describe('/agent endpoint', () => {
-    it('calls service adapter builder with organization.id', async () => {
-      process.env.OPENAI_API_KEY = 'sk-agent-test';
+    it('checks agent config for the org and mounts the Mastra agents with no service adapter', async () => {
       mockResolveConfigForScope.mockResolvedValue({
         adapter: mockOpenaiAdapter,
         modelId: 'gpt-5.2',
@@ -540,10 +225,16 @@ describe('CopilotController', () => {
       await controller.agent(req, res, org, user);
 
       expect(mockResolveConfigForScope).toHaveBeenCalledWith('agent', 'org-agent-1');
+      // The Mastra agent owns its model; the runtime ignores a service adapter
+      // once agents are given, and building one 500'd azure/bedrock/vertex.
+      expect(mockGovernedLanguageModel).not.toHaveBeenCalled();
+      expect(mockBuiltInAgentCtor).not.toHaveBeenCalled();
+      const endpointOpts = (copilotRuntimeNestEndpoint as any).mock.calls[0][0];
+      expect(endpointOpts).not.toHaveProperty('serviceAdapter');
+      expect(endpointOpts.endpoint).toBe('/copilot/agent');
     });
 
     it('rejects 422 without constructing a runtime when AI is unconfigured', async () => {
-      process.env.OPENAI_API_KEY = '';
       mockResolveConfigForScope.mockResolvedValue(null);
       const req = { body: { variables: { properties: { integrations: [] } } } } as any;
       const res = {
@@ -561,7 +252,6 @@ describe('CopilotController', () => {
     });
 
     it('sets organization and user in the Mastra requestContext', async () => {
-      process.env.OPENAI_API_KEY = 'sk-agent-test';
       mockResolveConfigForScope.mockResolvedValue({
         adapter: mockOpenaiAdapter,
         modelId: 'gpt-5.2',
@@ -584,7 +274,6 @@ describe('CopilotController', () => {
     });
 
     it('sets only identity/access context — never integrations/media/ag-ui from the request body', async () => {
-      process.env.OPENAI_API_KEY = 'sk-agent-test';
       mockResolveConfigForScope.mockResolvedValue({
         adapter: mockOpenaiAdapter,
         modelId: 'gpt-5.2',

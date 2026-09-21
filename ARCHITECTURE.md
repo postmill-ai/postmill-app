@@ -142,6 +142,10 @@ CopilotKit is mounted through its **single-route** adapter — `POST /copilot/ch
 `POST /copilot/agent` carry a `{ method, params, body }` envelope (`info`, `agent/run`, …); no
 `GET …/info` or `/agent/:id/run` sub-routes exist. The two frontend providers set
 `useSingleEndpoint` so the client skips its multi-route auto-detect probe (which would 404).
+Both routes pass an explicit `agents` map and **no service adapter**: `/copilot/chat` runs a
+`BuiltInAgent` on the org's governed model (`AIModelProvider.governedLanguageModel('agent')`),
+`/copilot/agent` runs the Mastra agents. An agents-less runtime makes CopilotKit derive an agent
+from the adapter and throw when it can't (Sentry POSTMILL-APP-D).
 
 Guard registration order in `apps/backend/src/app.module.ts` is exactly throttle → policies →
 RBAC. `User.isSuperAdmin` bypasses RBAC, **not** the billing gate. Throttler default:

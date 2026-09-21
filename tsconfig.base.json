@@ -28,6 +28,9 @@
     "noFallthroughCasesInSwitch": true,
     "strict": true,
     "paths": {
+      "@copilotkit/runtime/v2": [
+        "node_modules/@copilotkit/runtime/dist/v2/index.d.cts"
+      ],
       "@langchain/langgraph/prebuilt": [
         "node_modules/@langchain/langgraph/dist/prebuilt/index.d.ts"
       ],
