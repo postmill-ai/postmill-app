@@ -8,9 +8,7 @@ export const metadata: ProviderMetadata = {
   "id": "adobe-stock",
   "displayName": "adobe-stock",
   "kind": "action",
-  "domains": [
-    "media"
-  ],
+  "domains": [],
   "hasModelList": false,
   "mediaCategories": []
 };

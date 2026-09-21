@@ -8,9 +8,7 @@ export const metadata: ProviderMetadata = {
   "id": "hotspotshield",
   "displayName": "hotspotshield",
   "kind": "action",
-  "domains": [
-    "media"
-  ],
+  "domains": [],
   "hasModelList": false,
   "mediaCategories": []
 };

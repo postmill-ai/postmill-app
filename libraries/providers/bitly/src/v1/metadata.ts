@@ -8,9 +8,7 @@ export const metadata: ProviderMetadata = {
   "id": "bitly",
   "displayName": "bitly",
   "kind": "action",
-  "domains": [
-    "media"
-  ],
+  "domains": [],
   "hasModelList": false,
   "mediaCategories": []
 };

@@ -8,9 +8,7 @@ export const metadata: ProviderMetadata = {
   "id": "twitch",
   "displayName": "twitch",
   "kind": "action",
-  "domains": [
-    "media"
-  ],
+  "domains": [],
   "hasModelList": false,
   "mediaCategories": []
 };

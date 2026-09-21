@@ -8,9 +8,7 @@ export const metadata: ProviderMetadata = {
   "id": "pia",
   "displayName": "pia",
   "kind": "action",
-  "domains": [
-    "media"
-  ],
+  "domains": [],
   "hasModelList": false,
   "mediaCategories": []
 };

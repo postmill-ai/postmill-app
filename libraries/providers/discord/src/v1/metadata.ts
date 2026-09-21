@@ -8,9 +8,7 @@ export const metadata: ProviderMetadata = {
   "id": "discord",
   "displayName": "discord",
   "kind": "action",
-  "domains": [
-    "media"
-  ],
+  "domains": [],
   "hasModelList": false,
   "mediaCategories": []
 };

@@ -6,7 +6,7 @@ export const socialMetadata: ProviderMetadata = {
   id: 'wrapcast',
   displayName: 'wrapcast',
   kind: 'action',
-  domains: ['media'],
+  domains: [],
   hasModelList: false,
 };
 
@@ -14,9 +14,7 @@ export const metadata: ProviderMetadata = {
   "id": "farcaster",
   "displayName": "farcaster",
   "kind": "action",
-  "domains": [
-    "media"
-  ],
+  "domains": [],
   "hasModelList": false,
   "mediaCategories": []
 };

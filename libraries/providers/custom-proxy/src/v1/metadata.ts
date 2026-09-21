@@ -7,9 +7,7 @@ export const metadata: ProviderMetadata = {
   "id": "custom",
   "displayName": "custom-proxy",
   "kind": "action",
-  "domains": [
-    "media"
-  ],
+  "domains": [],
   "hasModelList": false,
   "mediaCategories": []
 };

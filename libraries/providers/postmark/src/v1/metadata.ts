@@ -8,9 +8,7 @@ export const metadata: ProviderMetadata = {
   "id": "postmark",
   "displayName": "postmark",
   "kind": "action",
-  "domains": [
-    "media"
-  ],
+  "domains": [],
   "hasModelList": false,
   "mediaCategories": []
 };

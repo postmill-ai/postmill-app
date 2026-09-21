@@ -8,9 +8,7 @@ export const metadata: ProviderMetadata = {
   "id": "linode",
   "displayName": "linode",
   "kind": "action",
-  "domains": [
-    "media"
-  ],
+  "domains": [],
   "hasModelList": false,
   "mediaCategories": []
 };

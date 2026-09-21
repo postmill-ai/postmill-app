@@ -8,9 +8,7 @@ export const metadata: ProviderMetadata = {
   "id": "instagram-standalone",
   "displayName": "instagram-standalone",
   "kind": "action",
-  "domains": [
-    "media"
-  ],
+  "domains": [],
   "hasModelList": false,
   "mediaCategories": []
 };

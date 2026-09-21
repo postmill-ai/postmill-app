@@ -8,9 +8,7 @@ export const metadata: ProviderMetadata = {
   "id": "expressvpn",
   "displayName": "expressvpn",
   "kind": "action",
-  "domains": [
-    "media"
-  ],
+  "domains": [],
   "hasModelList": false,
   "mediaCategories": []
 };

@@ -8,9 +8,7 @@ export const metadata: ProviderMetadata = {
   "id": "surfshark",
   "displayName": "surfshark",
   "kind": "action",
-  "domains": [
-    "media"
-  ],
+  "domains": [],
   "hasModelList": false,
   "mediaCategories": []
 };

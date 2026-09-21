@@ -8,9 +8,7 @@ export const metadata: ProviderMetadata = {
   "id": "storj",
   "displayName": "storj",
   "kind": "action",
-  "domains": [
-    "media"
-  ],
+  "domains": [],
   "hasModelList": false,
   "mediaCategories": []
 };

@@ -8,9 +8,7 @@ export const metadata: ProviderMetadata = {
   "id": "reddit",
   "displayName": "reddit",
   "kind": "action",
-  "domains": [
-    "media"
-  ],
+  "domains": [],
   "hasModelList": false,
   "mediaCategories": []
 };

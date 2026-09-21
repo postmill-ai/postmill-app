@@ -8,9 +8,7 @@ export const metadata: ProviderMetadata = {
   "id": "nordvpn",
   "displayName": "nordvpn",
   "kind": "action",
-  "domains": [
-    "media"
-  ],
+  "domains": [],
   "hasModelList": false,
   "mediaCategories": []
 };

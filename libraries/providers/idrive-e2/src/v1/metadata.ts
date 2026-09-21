@@ -8,9 +8,7 @@ export const metadata: ProviderMetadata = {
   "id": "idrive_e2",
   "displayName": "idrive-e2",
   "kind": "action",
-  "domains": [
-    "media"
-  ],
+  "domains": [],
   "hasModelList": false,
   "mediaCategories": []
 };

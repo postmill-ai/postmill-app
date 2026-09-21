@@ -8,9 +8,7 @@ export const metadata: ProviderMetadata = {
   "id": "sendgrid",
   "displayName": "sendgrid",
   "kind": "action",
-  "domains": [
-    "media"
-  ],
+  "domains": [],
   "hasModelList": false,
   "mediaCategories": []
 };

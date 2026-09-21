@@ -8,9 +8,7 @@ export const metadata: ProviderMetadata = {
   "id": "tiktok",
   "displayName": "tiktok",
   "kind": "action",
-  "domains": [
-    "media"
-  ],
+  "domains": [],
   "hasModelList": false,
   "mediaCategories": []
 };

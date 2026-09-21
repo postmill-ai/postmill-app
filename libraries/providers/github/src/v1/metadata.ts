@@ -8,9 +8,7 @@ export const metadata: ProviderMetadata = {
   "id": "github",
   "displayName": "github",
   "kind": "action",
-  "domains": [
-    "media"
-  ],
+  "domains": [],
   "hasModelList": false,
   "mediaCategories": []
 };

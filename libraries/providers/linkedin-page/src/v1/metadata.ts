@@ -8,9 +8,7 @@ export const metadata: ProviderMetadata = {
   "id": "linkedin-page",
   "displayName": "linkedin-page",
   "kind": "action",
-  "domains": [
-    "media"
-  ],
+  "domains": [],
   "hasModelList": false,
   "mediaCategories": []
 };

@@ -8,9 +8,7 @@ export const metadata: ProviderMetadata = {
   "id": "moltbook",
   "displayName": "moltbook",
   "kind": "action",
-  "domains": [
-    "media"
-  ],
+  "domains": [],
   "hasModelList": false,
   "mediaCategories": []
 };

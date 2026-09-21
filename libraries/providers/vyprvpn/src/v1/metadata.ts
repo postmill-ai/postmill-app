@@ -8,9 +8,7 @@ export const metadata: ProviderMetadata = {
   "id": "vyprvpn",
   "displayName": "vyprvpn",
   "kind": "action",
-  "domains": [
-    "media"
-  ],
+  "domains": [],
   "hasModelList": false,
   "mediaCategories": []
 };

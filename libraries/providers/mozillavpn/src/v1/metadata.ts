@@ -8,9 +8,7 @@ export const metadata: ProviderMetadata = {
   "id": "mozillavpn",
   "displayName": "mozillavpn",
   "kind": "action",
-  "domains": [
-    "media"
-  ],
+  "domains": [],
   "hasModelList": false,
   "mediaCategories": []
 };

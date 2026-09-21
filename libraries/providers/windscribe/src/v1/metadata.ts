@@ -8,9 +8,7 @@ export const metadata: ProviderMetadata = {
   "id": "windscribe",
   "displayName": "windscribe",
   "kind": "action",
-  "domains": [
-    "media"
-  ],
+  "domains": [],
   "hasModelList": false,
   "mediaCategories": []
 };

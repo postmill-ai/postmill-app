@@ -7,9 +7,7 @@ export const metadata: ProviderMetadata = {
   "id": "wallet",
   "displayName": "wallet",
   "kind": "action",
-  "domains": [
-    "media"
-  ],
+  "domains": [],
   "hasModelList": false,
   "mediaCategories": []
 };

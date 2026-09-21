@@ -1,4 +1,4 @@
-import { metadata as providerMetadata } from './metadata';
+import { metadata as providerMetadata } from './storage.metadata';
 import { makeS3StorageModule } from '@postmill-ai/provider-kernel';
 
 export const vultrStorageModule = makeS3StorageModule({

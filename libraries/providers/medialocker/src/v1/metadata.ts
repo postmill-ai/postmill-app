@@ -8,9 +8,7 @@ export const metadata: ProviderMetadata = {
   "id": "medialocker",
   "displayName": "MediaLocker",
   "kind": "action",
-  "domains": [
-    "media"
-  ],
+  "domains": [],
   "hasModelList": false,
   "mediaCategories": []
 };
