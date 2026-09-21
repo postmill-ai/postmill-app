@@ -20,7 +20,7 @@ import { TrackEnum } from '@postmill-ai/nestjs-libraries/user/track.enum';
 // layering: sanctioned leaf-read — StripeEventRepository lives in the subscriptions
 // domain, but SubscriptionService does not depend on StripeService, and these are
 // narrow Stripe-webhook idempotency/grace reads with no service-level cycle.
-import { StripeEventRepository } from '@postmill-ai/nestjs-libraries/database/prisma/subscriptions/stripe-event.repository';
+import { PaymentEventRepository } from '@postmill-ai/nestjs-libraries/database/prisma/subscriptions/payment-event.repository';
 import { NotificationService } from '@postmill-ai/nestjs-libraries/database/prisma/notifications/notification.service';
 import { AuditService } from '@postmill-ai/nestjs-libraries/database/prisma/audit/audit.service';
 
@@ -43,7 +43,7 @@ export class StripeService {
     private _userService: UsersService,
     private _trackService: TrackService,
     // layering: sanctioned leaf-read — see import comment above.
-    private _stripeEventRepository: StripeEventRepository,
+    private _stripeEventRepository: PaymentEventRepository,
     private _notificationService: NotificationService,
     private _audit: AuditService
   ) {}
@@ -59,7 +59,7 @@ export class StripeService {
 
   // Record a successfully processed Stripe event so redeliveries are ignored.
   async recordEvent(id: string, type: string): Promise<void> {
-    return this._stripeEventRepository.record(id, type);
+    return this._stripeEventRepository.record(id, type, 'stripe');
   }
 
   // F2(b): record a subscription state transition as a non-fatal audit event. Resolves
@@ -223,7 +223,7 @@ export class StripeService {
     }
 
     const now = new Date();
-    const existing = await this._stripeEventRepository.getGracePeriod(customerId);
+    const existing = await this._stripeEventRepository.getGracePeriod(customerId, 'stripe');
     // Already inside an unexpired grace window — keep it; don't re-notify or tear down.
     if (existing && existing.getTime() > now.getTime()) {
       return { ok: true, grace: true };
@@ -232,7 +232,7 @@ export class StripeService {
     const until = new Date(
       now.getTime() + this.GRACE_PERIOD_DAYS * 24 * 60 * 60 * 1000
     );
-    await this._stripeEventRepository.setGracePeriod(customerId, until);
+    await this._stripeEventRepository.setGracePeriod(customerId, 'stripe', until);
 
     const org = await this._organizationService.getOrgByCustomerId(customerId);
     if (org?.id) {
@@ -301,6 +301,7 @@ export class StripeService {
     ) {
       await this._stripeEventRepository.setGracePeriod(
         event.data.object.customer as string,
+        'stripe',
         null
       );
     }
@@ -344,7 +345,8 @@ export class StripeService {
     });
     await this._subscriptionService.updateCustomerId(
       organization.id,
-      customer.id
+      customer.id,
+      'stripe'
     );
     return customer.id;
   }
@@ -1294,6 +1296,7 @@ export class StripeService {
       ) {
         await this._stripeEventRepository.setGracePeriod(
           subscription.customer as string,
+          'stripe',
           null
         );
       }
@@ -1463,7 +1466,8 @@ export class StripeService {
         'MONTHLY',
         null,
         testCode,
-        organizationId
+        organizationId,
+        'manual'
       );
       return {
         success: true,

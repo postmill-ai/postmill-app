@@ -15,6 +15,7 @@ import {
   ProviderDomain,
   ContentPackCapability,
   CommsCapability,
+  PaymentsCapability,
   ProviderManifest,
   ProviderNotFoundError,
   ProviderVersionRetiredError,
@@ -384,6 +385,17 @@ export class ProviderResolutionService {
   ): CommsCapability {
     return this._resolveKernel<CommsCapability>('comms', providerId, options)
       .capability;
+  }
+
+  resolvePayments(
+    providerId: string,
+    options: ResolutionOptions = {},
+  ): PaymentsCapability {
+    return this._resolveKernel<PaymentsCapability>(
+      'payments',
+      providerId,
+      options,
+    ).capability;
   }
 
   /**

@@ -21,7 +21,7 @@ import { DataExportService } from '@postmill-ai/nestjs-libraries/database/prisma
 import { UsersRepository } from '@postmill-ai/nestjs-libraries/database/prisma/users/users.repository';
 import { SubscriptionService } from '@postmill-ai/nestjs-libraries/database/prisma/subscriptions/subscription.service';
 import { SubscriptionRepository } from '@postmill-ai/nestjs-libraries/database/prisma/subscriptions/subscription.repository';
-import { StripeEventRepository } from '@postmill-ai/nestjs-libraries/database/prisma/subscriptions/stripe-event.repository';
+import { PaymentEventRepository } from '@postmill-ai/nestjs-libraries/database/prisma/subscriptions/payment-event.repository';
 import { NotificationService } from '@postmill-ai/nestjs-libraries/database/prisma/notifications/notification.service';
 import { IntegrationService } from '@postmill-ai/nestjs-libraries/database/prisma/integrations/integration.service';
 import { IntegrationRepository } from '@postmill-ai/nestjs-libraries/database/prisma/integrations/integration.repository';
@@ -151,7 +151,7 @@ import { AnalyticsShareService } from '@postmill-ai/nestjs-libraries/analytics/a
     OrganizationRepository,
     SubscriptionService,
     SubscriptionRepository,
-    StripeEventRepository,
+    PaymentEventRepository,
     NotificationService,
     NotificationsRepository,
     NotificationPreferenceService,

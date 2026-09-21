@@ -120,7 +120,7 @@ describe('StripeService — dunning grace (F5)', () => {
 
         expect(
           stripeEventRepository.setGracePeriod
-        ).toHaveBeenCalledWith('cus_1', null);
+        ).toHaveBeenCalledWith('cus_1', 'stripe', null);
         expect(
           subscriptionService.createOrUpdateSubscription
         ).toHaveBeenCalled();
@@ -155,6 +155,7 @@ describe('StripeService — dunning grace (F5)', () => {
       expect(result).toEqual({ ok: true });
       expect(stripeEventRepository.setGracePeriod).toHaveBeenCalledWith(
         'cus_1',
+        'stripe',
         null
       );
     });
@@ -200,7 +201,7 @@ describe('StripeService — dunning grace (F5)', () => {
 
       expect(mockStripe.subscriptions.retrieve).toHaveBeenCalledWith('sub_1');
       expect(stripeEventRepository.setGracePeriod).toHaveBeenCalledTimes(1);
-      const [, until] = stripeEventRepository.setGracePeriod.mock.calls[0];
+      const [, , until] = stripeEventRepository.setGracePeriod.mock.calls[0];
       expect(until).toBeInstanceOf(Date);
       expect(until.getTime()).toBeGreaterThan(Date.now());
       expect(notificationService.notify).toHaveBeenCalledWith(
@@ -254,7 +255,7 @@ describe('StripeService — dunning grace (F5)', () => {
 
       expect(mockStripe.subscriptions.retrieve).toHaveBeenCalledWith('sub_1');
       expect(stripeEventRepository.setGracePeriod).toHaveBeenCalledTimes(1);
-      const [, until] = stripeEventRepository.setGracePeriod.mock.calls[0];
+      const [, , until] = stripeEventRepository.setGracePeriod.mock.calls[0];
       expect(until.getTime()).toBeGreaterThan(Date.now());
     });
 

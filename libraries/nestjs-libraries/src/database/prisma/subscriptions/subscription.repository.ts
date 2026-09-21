@@ -67,13 +67,14 @@ export class SubscriptionRepository {
     });
   }
 
-  updateCustomerId(organizationId: string, customerId: string) {
+  updateCustomerId(organizationId: string, customerId: string, provider: string) {
     return this._organization.model.organization.update({
       where: {
         id: organizationId,
       },
       data: {
         paymentId: customerId,
+        paymentProvider: provider,
       },
     });
   }
@@ -113,7 +114,8 @@ export class SubscriptionRepository {
     period: 'MONTHLY' | 'YEARLY',
     cancelAt: number | null,
     code?: string,
-    org?: { id: string }
+    org?: { id: string },
+    provider = 'stripe'
   ) {
     const findOrg =
       org || (await this.getOrganizationByCustomerId(customerId))!;
@@ -141,6 +143,7 @@ export class SubscriptionRepository {
         isLifetime: !!code,
         cancelAt: cancelAt ? new Date(cancelAt * 1000) : null,
         deletedAt: null,
+        provider,
       },
       create: {
         organizationId: findOrg.id,
@@ -151,6 +154,7 @@ export class SubscriptionRepository {
         cancelAt: cancelAt ? new Date(cancelAt * 1000) : null,
         identifier,
         deletedAt: null,
+        provider,
       },
     });
 
@@ -244,13 +248,14 @@ export class SubscriptionRepository {
     });
   }
 
-  setCustomerId(orgId: string, customerId: string) {
+  setCustomerId(orgId: string, customerId: string, provider: string) {
     return this._organization.model.organization.update({
       where: {
         id: orgId,
       },
       data: {
         paymentId: customerId,
+        paymentProvider: provider,
       },
     });
   }

@@ -39,6 +39,7 @@ const REQUIRED_METHODS: Record<string, string[]> = {
   email: ['send', 'isConfigured'],
   auth: ['generateLink', 'getToken', 'getUser'],
   comms: ['sendDirectMessage'],
+  payments: ['isConfigured', 'publicConfig', 'receiveWebhook'],
 };
 
 // H5 — lock the base-class consolidation. The migrated adapters MUST extend the shared

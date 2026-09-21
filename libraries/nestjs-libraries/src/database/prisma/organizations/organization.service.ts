@@ -101,8 +101,8 @@ export class OrganizationService {
     return this._organizationRepository.setStreak(organizationId, type);
   }
 
-  getOrgByCustomerId(customerId: string) {
-    return this._organizationRepository.getOrgByCustomerId(customerId);
+  getOrgByCustomerId(customerId: string, provider?: string) {
+    return this._organizationRepository.getOrgByCustomerId(customerId, provider);
   }
 
   async inviteTeamMember(orgId: string, actor: User, body: AddTeamMemberDto) {

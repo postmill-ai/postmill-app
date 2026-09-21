@@ -8,7 +8,8 @@ export type ProviderDomain =
   | 'contentpack'
   | 'email'
   | 'auth'
-  | 'comms';
+  | 'comms'
+  | 'payments';
 
 /**
  * Single source of truth for the provider-domain set (3.3/4.5). Kept in lockstep
@@ -27,6 +28,7 @@ export const PROVIDER_DOMAINS = [
   'email',
   'auth',
   'comms',
+  'payments',
 ] as const satisfies readonly ProviderDomain[];
 
 export function isProviderDomain(value: string): value is ProviderDomain {

@@ -336,10 +336,11 @@ export class OrganizationRepository {
     });
   }
 
-  getOrgByCustomerId(customerId: string) {
+  getOrgByCustomerId(customerId: string, provider?: string) {
     return this._organization.model.organization.findFirst({
       where: {
         paymentId: customerId,
+        ...(provider ? { paymentProvider: provider } : {}),
       },
     });
   }
