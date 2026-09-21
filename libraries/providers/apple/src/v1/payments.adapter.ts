@@ -11,7 +11,7 @@ import type {
   JWSTransactionDecodedPayload,
   ResponseBodyV2DecodedPayload,
 } from '@apple/app-store-server-library';
-import { metadata as providerMetadata } from './metadata';
+import { metadata as providerMetadata } from './payments.metadata';
 import { appleRootCertificates } from './apple-root-cas';
 import {
   NormalizedPaymentEvent,

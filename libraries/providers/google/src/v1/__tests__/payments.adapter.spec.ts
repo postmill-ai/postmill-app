@@ -166,11 +166,25 @@ describe('receiveWebhook (Pub/Sub push)', () => {
     expect((await adapter.receiveWebhook(rtdn(subNotification(13), 'm13'))).events).toEqual([{ type: 'subscription.canceled', customerRef: 'tok_1' }]);
   });
 
-  it('acknowledges + ledgers an RTDN whose token Play now rejects, but still surfaces a Play outage as retryable', async () => {
+  it('acknowledges + ledgers a non-activation RTDN whose token Play rejects, but still surfaces a Play outage as retryable', async () => {
     api.get.mockRejectedValue(Object.assign(new Error('gone'), { code: 410 }));
-    expect(await adapter.receiveWebhook(rtdn(subNotification(4), 'mr'))).toEqual({ eventId: 'mr', eventType: 'rtdn.subscription.4.token-rejected', events: [] });
+    expect(await adapter.receiveWebhook(rtdn(subNotification(3), 'mr'))).toEqual({ eventId: 'mr', eventType: 'rtdn.subscription.3.token-rejected', events: [] });
     api.get.mockRejectedValue(Object.assign(new Error('backend error'), { code: 503 }));
     await expect(adapter.receiveWebhook(rtdn(subNotification(4), 'mo'))).rejects.toThrow(/backend error/);
+  });
+
+  it('an activation RTDN on a token Play does not know yet is retried once, then acked WITHOUT a ledger row', async () => {
+    adapter._activationRetryDelayMs = 0;
+    // Propagation lag: first read 404s, the retry succeeds.
+    api.get
+      .mockRejectedValueOnce(Object.assign(new Error('not found'), { code: 404 }))
+      .mockResolvedValue({ data: purchase() });
+    const r = await adapter.receiveWebhook(rtdn(subNotification(4), 'fresh'));
+    expect(r.events[0]).toMatchObject({ type: 'subscription.activated', customerRef: 'tok_1' });
+    expect(api.get).toHaveBeenCalledTimes(2);
+    // Still rejected after the retry: acknowledged, not ledgered, so a redelivery looks again.
+    api.get.mockRejectedValue(Object.assign(new Error('not found'), { code: 404 }));
+    expect(await adapter.receiveWebhook(rtdn(subNotification(4), 'dead'))).toEqual({ eventId: 'dead', eventType: 'rtdn.subscription.4.token-rejected', events: [], skipRecord: true });
   });
 
   it('falls back to a deterministic event id when the push carries no message id', async () => {

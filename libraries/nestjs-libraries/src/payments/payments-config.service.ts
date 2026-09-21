@@ -45,6 +45,9 @@ export class PaymentsConfigService implements OnModuleInit {
       this._logger.error(resolved.detail!);
     }
     const native = resolveDefaultNativePaymentProvider();
+    if (native.reason === 'ambiguous') {
+      this._logger.warn(native.detail!);
+    }
     this._logger.log(
       `Payment providers: ${configured.join(', ')}; web checkout default: ${resolved.providerId ?? 'none'} (${resolved.reason}); app-store fallback: ${native.providerId ?? 'none'}.`,
     );

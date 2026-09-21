@@ -10,7 +10,8 @@ import {
 
 const stripe = { STRIPE_PUBLISHABLE_KEY: 'pk_test', STRIPE_SECRET_KEY: 'sk_test', STRIPE_SIGNING_KEY: 'whsec' };
 const paypal = { PAYPAL_CLIENT_ID: 'cid', PAYPAL_CLIENT_SECRET: 'sec', PAYPAL_WEBHOOK_ID: 'wh' };
-const apple = { APPLE_IAP_BUNDLE_ID: 'ai.postmill.app' };
+const apple = { APPLE_IAP_BUNDLE_ID: 'ai.postmill.app', APPLE_IAP_PRIVATE_KEY: 'APPLE_SECRET_P8' };
+const google = { GOOGLE_PLAY_PACKAGE_NAME: 'ai.postmill.app', GOOGLE_PLAY_SERVICE_ACCOUNT_JSON: 'GOOGLE_SECRET_SA' };
 
 describe('payments env', () => {
   it('billing is off with no keys and on with any enabling key', () => {
@@ -78,23 +79,28 @@ describe('payments env', () => {
     it('none / single / ambiguous (apple first), ignoring web providers', () => {
       expect(resolveDefaultNativePaymentProvider(stripe)).toEqual({ providerId: null, reason: 'none' });
       expect(resolveDefaultNativePaymentProvider({ ...stripe, ...apple })).toEqual({ providerId: 'apple', reason: 'single' });
-      const both = resolveDefaultNativePaymentProvider({ ...apple, GOOGLE_PLAY_PACKAGE_NAME: 'pkg' });
+      expect(resolveDefaultNativePaymentProvider(google)).toEqual({ providerId: 'google', reason: 'single' });
+      const both = resolveDefaultNativePaymentProvider({ ...apple, ...google });
       expect(both).toMatchObject({ providerId: 'apple', reason: 'ambiguous' });
       expect(both.detail).toContain('google');
     });
   });
 
   it('publicPaymentsConfig never leaks secrets', () => {
-    const cfg = publicPaymentsConfig({ ...stripe, ...apple });
+    const cfg = publicPaymentsConfig({ ...stripe, ...apple, ...google });
     expect(cfg).toEqual({
       enabled: true,
       defaultProvider: 'stripe',
       providers: [
         { providerId: 'stripe', displayName: 'Stripe', checkoutMode: 'embedded', publicKey: 'pk_test' },
         { providerId: 'apple', displayName: 'App Store', checkoutMode: 'native' },
+        { providerId: 'google', displayName: 'Google Play', checkoutMode: 'native' },
       ],
     });
-    expect(JSON.stringify(cfg)).not.toContain('sk_test');
+    // Every secret-bearing key in the fixtures must stay out of the browser-safe view.
+    for (const secret of ['sk_test', 'whsec', 'APPLE_SECRET_P8', 'GOOGLE_SECRET_SA']) {
+      expect(JSON.stringify(cfg)).not.toContain(secret);
+    }
     expect(publicPaymentsConfig({})).toEqual({ enabled: false, defaultProvider: null, providers: [] });
   });
 });

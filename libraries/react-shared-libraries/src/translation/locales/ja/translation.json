@@ -538,6 +538,8 @@
   "billing_still_processing": "お支払いはまだ処理中です",
   "billing_still_processing_description": "決済プロバイダーからの確認をまだ受け取っていません。確認が届き次第サブスクリプションが表示されます。数分後にもう一度ご確認ください。",
   "billing_subscribe_in_app": "このデプロイではプランはモバイルアプリで購入します。アプリを開いて登録してください。",
+  "no_subscription_yet": "このワークスペースにはまだサブスクリプションがありません。",
+  "billing_view_plans": "プランを見る",
   "billing_your_7_day_trial_is": "7日間の無料トライアルは",
   "billing_100_percent_free": "完全に無料",
   "billing_ending": "終了します",

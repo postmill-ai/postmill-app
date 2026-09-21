@@ -538,6 +538,8 @@
   "billing_still_processing": "لا تزال عملية الدفع قيد المعالجة",
   "billing_still_processing_description": "لم نتلقَّ تأكيدًا من مزوّد الدفع بعد. سيظهر اشتراكك فور وصوله — يرجى التحقق مرة أخرى بعد بضع دقائق.",
   "billing_subscribe_in_app": "في هذا النشر تُشترى الخطط من تطبيق الهاتف. افتح التطبيق للاشتراك.",
+  "no_subscription_yet": "لا يوجد اشتراك لمساحة العمل هذه بعد.",
+  "billing_view_plans": "عرض الخطط",
   "billing_your_7_day_trial_is": "فترة التجربة المجانية لمدة 7 أيام الخاصة بك هي",
   "billing_100_percent_free": "مجانية 100%",
   "billing_ending": "تنتهي",

@@ -461,6 +461,24 @@ export const SubscriptionPanel: React.FC = () => {
     );
   }
 
+  if (!error && !subscription && usage?.billingEnabled !== false) {
+    // A workspace that has never subscribed is not an error state.
+    return (
+      <div className="bg-newBgColorInner border border-newTableBorder rounded-[4px] p-[24px] flex flex-col items-center gap-[12px]">
+        <span className="text-[14px] text-newTableText">
+          {managedByStore
+            ? t('billing_subscribe_in_app', 'Plans on this deployment are purchased in the mobile app. Open the app to subscribe.')
+            : t('no_subscription_yet', 'This workspace has no subscription yet.')}
+        </span>
+        {!managedByStore && (
+          <Link href="/billing">
+            <Button>{t('billing_view_plans', 'View plans')}</Button>
+          </Link>
+        )}
+      </div>
+    );
+  }
+
   if (error || !subscription || usage?.billingEnabled === false) {
     return (
       <div className="bg-newBgColorInner border border-newTableBorder rounded-[4px] p-[24px] flex flex-col items-center gap-[12px]">

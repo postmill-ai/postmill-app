@@ -728,7 +728,9 @@ export class PaymentsService {
         if (paid && (event.type === 'subscription.updated' || rebound)) {
           await this._paymentEventRepository.setGracePeriod(event.customerRef, providerId, null);
         }
-        if (rebound && paid && !state.pendingTier) {
+        // An adapter echoing pendingTier === tier is "no downgrade pending"; a
+        // re-bound zombie row must not keep its old deferred downgrade either way.
+        if (rebound && paid && (!state.pendingTier || state.pendingTier === state.tier)) {
           await this._subscriptionService.clearPendingTier(org.id);
         }
         await this._auditSubscriptionChanged(org.id, state.status);
