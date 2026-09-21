@@ -4,6 +4,7 @@ import {
   configuredPaymentProviders,
   missingPaymentProviderKeys,
   publicPaymentsConfig,
+  resolveDefaultNativePaymentProvider,
   resolveDefaultWebPaymentProvider,
 } from './payments.env';
 
@@ -70,6 +71,16 @@ describe('payments env', () => {
         reason: 'invalid',
         detail: expect.stringContaining('PAYPAL_CLIENT_ID'),
       });
+    });
+  });
+
+  describe('resolveDefaultNativePaymentProvider', () => {
+    it('none / single / ambiguous (apple first), ignoring web providers', () => {
+      expect(resolveDefaultNativePaymentProvider(stripe)).toEqual({ providerId: null, reason: 'none' });
+      expect(resolveDefaultNativePaymentProvider({ ...stripe, ...apple })).toEqual({ providerId: 'apple', reason: 'single' });
+      const both = resolveDefaultNativePaymentProvider({ ...apple, GOOGLE_PLAY_PACKAGE_NAME: 'pkg' });
+      expect(both).toMatchObject({ providerId: 'apple', reason: 'ambiguous' });
+      expect(both.detail).toContain('google');
     });
   });
 

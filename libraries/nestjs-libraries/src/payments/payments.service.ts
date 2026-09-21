@@ -42,6 +42,10 @@ import { PaymentEventRepository } from '@postmill-ai/nestjs-libraries/database/p
 import { NotificationService } from '@postmill-ai/nestjs-libraries/database/prisma/notifications/notification.service';
 import { AuditService } from '@postmill-ai/nestjs-libraries/database/prisma/audit/audit.service';
 import { PaymentsConfigService } from './payments-config.service';
+import {
+  CANCEL_AT_SLACK_MS,
+  isSubscriptionLive,
+} from '@postmill-ai/nestjs-libraries/database/prisma/subscriptions/subscription.liveness';
 import { isWebhookVerificationError } from './payments.errors';
 
 /** A `Subscription.provider` value that no kernel module answers to (lifetime codes, admin grants). */
@@ -97,7 +101,14 @@ export class PaymentsService {
    */
   async resolveOrgProvider(org: Organization): Promise<Binding | null> {
     const subscription = await this._subscriptionService.getSubscription(org.id);
-    const candidates = [subscription?.provider, org.paymentProvider, this._config.defaultWebProvider()];
+    // Web default wins; the store fallback only exists so a never-subscribed org on
+    // a native-only deployment sees the store copy instead of web purchase buttons.
+    const candidates = [
+      subscription?.provider,
+      org.paymentProvider,
+      this._config.defaultWebProvider(),
+      this._config.defaultNativeProvider(),
+    ];
     for (const id of candidates) {
       if (!id || id === MANUAL_PROVIDER) continue;
       const capability = this._config.tryResolve(id);
@@ -220,6 +231,10 @@ export class PaymentsService {
             checkoutMode: binding.capability.capabilities.checkoutMode,
             capabilities: binding.capability.capabilities,
             manageUrl,
+            // From the org row, not the binding: an org stays locked to the provider
+            // it first subscribed through even after lapsing (see _resolveEventOrg).
+            lockedTo:
+              org.paymentProvider && org.paymentProvider !== MANUAL_PROVIDER ? org.paymentProvider : null,
           }
         : null,
     };
@@ -673,7 +688,7 @@ export class PaymentsService {
   /** The single sink for vendor state. Returns the historical `{ ok }` shapes. */
   async applyEvent(providerId: string, event: NormalizedPaymentEvent, capability?: PaymentsCapability) {
     const cap = capability ?? this._config.resolve(providerId);
-    const org = await this._resolveEventOrg(providerId, event);
+    const { org, rebound } = await this._resolveEventOrg(providerId, event);
 
     switch (event.type) {
       case 'subscription.activated':
@@ -706,11 +721,15 @@ export class PaymentsService {
         }
         // Dunning recovery (F5/I1): clear the grace marker ONLY on a genuine
         // recovery — never on unpaid/canceled, which would grant permanent access.
-        if (
-          event.type === 'subscription.updated' &&
-          (state.status === 'active' || state.status === 'trialing')
-        ) {
+        // A re-bind (a lapsed org's fresh purchase) upserts the SAME row, whose
+        // lapsed grace marker and deferred downgrade would otherwise survive and
+        // keep the newly paying org downgraded.
+        const paid = state.status === 'active' || state.status === 'trialing';
+        if (paid && (event.type === 'subscription.updated' || rebound)) {
           await this._paymentEventRepository.setGracePeriod(event.customerRef, providerId, null);
+        }
+        if (rebound && paid && !state.pendingTier) {
+          await this._subscriptionService.clearPendingTier(org.id);
         }
         await this._auditSubscriptionChanged(org.id, state.status);
         const result = await this._subscriptionService.createOrUpdateSubscription(
@@ -783,21 +802,31 @@ export class PaymentsService {
   /**
    * Which org a vendor event belongs to. By customer ref (scoped to the
    * provider) first. Otherwise, and only for `subscription.activated`, by the
-   * org id the vendor echoed back — which binds the org to this ref. A hint can
-   * never re-point an org that is already bound (to any provider, with or
-   * without a subscription row yet), except when the vendor itself asserts the
-   * rotation (`previousCustomerRef` = the org's current ref). Org ids are not
-   * secret, so anything looser lets a stranger's cheap purchase re-bind and
-   * downgrade a paying org.
+   * org id the vendor echoed back — which binds the org to this ref.
+   *
+   * Rules (documented in agents/providers/payments.md):
+   * - An org is LOCKED to the provider it first subscribed through, even after
+   *   lapsing; a hint from another provider is refused (an operator clears
+   *   `Organization.paymentProvider`/`paymentId` to let it switch).
+   * - A same-provider re-bind is refused only while the org has a LIVE row on
+   *   that provider (`isSubscriptionLive`) with a different ref, unless the
+   *   vendor asserts the rotation (`previousCustomerRef`). A lapsed org (torn
+   *   down, lapsed grace, or a missed teardown past `cancelAt`) re-binds freely —
+   *   a fresh Google token or a new Apple ID is the ordinary resubscribe.
+   * Org ids are not secret, so anything looser lets a stranger's cheap purchase
+   * re-bind and downgrade an actively billed org.
    */
-  private async _resolveEventOrg(providerId: string, event: NormalizedPaymentEvent) {
+  private async _resolveEventOrg(
+    providerId: string,
+    event: NormalizedPaymentEvent
+  ): Promise<{ org: Organization | null; rebound: boolean }> {
     const byRef = await this._organizationService.getOrgByCustomerId(event.customerRef, providerId);
     if (byRef || !event.orgIdHint || event.type !== 'subscription.activated') {
-      return byRef;
+      return { org: byRef, rebound: false };
     }
     const hinted = await this._organizationService.getOrgById(event.orgIdHint);
     if (!hinted) {
-      return null;
+      return { org: null, rebound: false };
     }
     const boundElsewhere =
       hinted.paymentProvider &&
@@ -807,12 +836,11 @@ export class PaymentsService {
     const billedElsewhere =
       subscription && subscription.provider !== providerId && subscription.provider !== MANUAL_PROVIDER;
     if (boundElsewhere || billedElsewhere) {
+      const lockedTo = subscription?.provider ?? hinted.paymentProvider;
       this._logger.warn(
-        `Ignoring ${providerId} activation for org ${hinted.id}: it is bound to ${
-          subscription?.provider ?? hinted.paymentProvider
-        }`
+        `Ignoring ${providerId} activation (ref ${event.customerRef}) for org ${hinted.id}: the organization is locked to ${lockedTo} — it first subscribed there and stays with that provider even after lapsing. To let it buy through ${providerId}, an operator clears Organization.paymentProvider and Organization.paymentId for this org (and removes any ${lockedTo} subscription row).`
       );
-      return null;
+      return { org: null, rebound: false };
     }
     // A same-provider re-bind is refused only while the org has a LIVE
     // subscription on this provider (the theft this guards against needs an
@@ -820,15 +848,21 @@ export class PaymentsService {
     // teardown, and its ordinary resubscribe (a fresh Google token with no
     // linkedPurchaseToken, a new Apple ID) must re-bind freely.
     const livelyBoundHere =
-      subscription?.provider === providerId && !!hinted.paymentId && hinted.paymentId !== event.customerRef;
+      subscription?.provider === providerId &&
+      isSubscriptionLive(subscription) &&
+      !!hinted.paymentId &&
+      hinted.paymentId !== event.customerRef;
     if (livelyBoundHere && hinted.paymentId !== event.previousCustomerRef) {
       this._logger.warn(
         `Ignoring ${providerId} activation for org ${hinted.id}: it has a live ${providerId} subscription on another ref and the event does not supersede it`
       );
-      return null;
+      return { org: null, rebound: false };
     }
     await this._subscriptionService.updateCustomerId(hinted.id, event.customerRef, providerId);
-    return { ...hinted, paymentId: event.customerRef, paymentProvider: providerId } as Organization;
+    return {
+      org: { ...hinted, paymentId: event.customerRef, paymentProvider: providerId } as Organization,
+      rebound: true,
+    };
   }
 
   // Dunning (C2): a past-due subscription enters a grace window + notifies the org
@@ -924,7 +958,7 @@ export class PaymentsService {
    * the authoritative teardown.
    */
   async expireCanceledSubscriptions(now = new Date()) {
-    const cutoff = new Date(now.getTime() - 24 * 60 * 60 * 1000);
+    const cutoff = new Date(now.getTime() - CANCEL_AT_SLACK_MS);
     const expired = await this._subscriptionService.findExpiredCancellations(cutoff);
     let torn = 0;
     let failed = 0;
@@ -953,6 +987,24 @@ export class PaymentsService {
         );
       }
     }
-    return { checked: expired.length, tornDown: torn, failed };
+    // Stripe rows are excluded from the sweep (its own webhook tears them down),
+    // so this is the only signal that a Stripe teardown webhook went missing.
+    let staleStripe = 0;
+    try {
+      const stale = await this._subscriptionService.findStaleStripeCancellations(cutoff);
+      staleStripe = stale.count;
+      if (stale.count > 0) {
+        this._logger.warn(
+          `${stale.count} Stripe subscription(s) passed cancelAt more than a day ago with no customer.subscription.deleted webhook — check the Stripe webhook endpoint and redeliver. Sample: ${stale.sample
+            .map((s) => `${s.id} (org ${s.organizationId}, cancelAt ${s.cancelAt?.toISOString()})`)
+            .join('; ')}`
+        );
+      }
+    } catch (err) {
+      this._logger.warn(
+        `Stale Stripe cancellation check failed (non-fatal): ${(err as Error)?.message ?? err}`
+      );
+    }
+    return { checked: expired.length, tornDown: torn, failed, staleStripe };
   }
 }

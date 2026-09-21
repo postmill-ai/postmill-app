@@ -8,6 +8,12 @@ import { PrismaRepository } from '@postmill-ai/nestjs-libraries/database/prisma/
  *  - the Subscription.gracePeriodEnd marker backs dunning/grace (C2).
  * Rows are addressed by the vendor customer ref (`Organization.paymentId`) scoped
  * to the provider that issued it.
+ *
+ * `id` stays the sole primary key on purpose: vendor event ids are disjoint by
+ * construction (Stripe `evt_…`, PayPal `WH-…`, Apple notification UUIDs, numeric
+ * Pub/Sub message ids, and our own `expiry:` / `apple:` / `google:` synthetic
+ * prefixes), so a `(id, provider)` key would be a destructive rewrite of the
+ * table for nothing. Adapters must never fall back to wall-clock ids.
  */
 @Injectable()
 export class PaymentEventRepository {

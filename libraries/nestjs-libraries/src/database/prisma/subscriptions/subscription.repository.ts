@@ -287,6 +287,22 @@ export class SubscriptionRepository {
   // Only providers without period-end cancel keep a row past `cancelAt`; Stripe
   // (its own teardown webhook) and manual grants are excluded so they can never
   // crowd out rows that genuinely need the cron.
+  // Stripe rows whose scheduled end passed without the `customer.subscription.deleted`
+  // webhook that is supposed to tear them down. Observability only — never mutated here.
+  async findStaleStripeCancellations(before: Date, sampleLimit = 10) {
+    const where = { provider: 'stripe', cancelAt: { lt: before }, deletedAt: null, isLifetime: false };
+    const [count, sample] = await Promise.all([
+      this._subscription.model.subscription.count({ where }),
+      this._subscription.model.subscription.findMany({
+        where,
+        select: { id: true, organizationId: true, cancelAt: true },
+        orderBy: { cancelAt: 'asc' },
+        take: sampleLimit,
+      }),
+    ]);
+    return { count, sample };
+  }
+
   findExpiredCancellations(before: Date, limit = 200) {
     return this._subscription.model.subscription.findMany({
       where: {

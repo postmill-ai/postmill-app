@@ -35,6 +35,8 @@ export interface BillingConfig {
     checkoutMode: BillingCheckoutMode;
     capabilities: BillingProviderCapabilities;
     manageUrl: string | null;
+    /** The provider this org first subscribed through; it stays locked to it even after lapsing (null = never bound). */
+    lockedTo: string | null;
   } | null;
 }
 

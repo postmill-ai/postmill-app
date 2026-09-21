@@ -9,6 +9,7 @@ import {
   isPaymentProviderId,
   missingPaymentProviderKeys,
   publicPaymentsConfig,
+  resolveDefaultNativePaymentProvider,
   resolveDefaultWebPaymentProvider,
 } from '@postmill-ai/helpers/billing/payments.env';
 import { ProviderResolutionService } from '@postmill-ai/nestjs-libraries/providers/provider-resolution.service';
@@ -43,8 +44,9 @@ export class PaymentsConfigService implements OnModuleInit {
     if (resolved.reason === 'ambiguous' || resolved.reason === 'invalid') {
       this._logger.error(resolved.detail!);
     }
+    const native = resolveDefaultNativePaymentProvider();
     this._logger.log(
-      `Payment providers: ${configured.join(', ')}; web checkout default: ${resolved.providerId ?? 'none'} (${resolved.reason}).`,
+      `Payment providers: ${configured.join(', ')}; web checkout default: ${resolved.providerId ?? 'none'} (${resolved.reason}); app-store fallback: ${native.providerId ?? 'none'}.`,
     );
   }
 
@@ -54,6 +56,11 @@ export class PaymentsConfigService implements OnModuleInit {
 
   defaultWebProvider(): PaymentProviderId | null {
     return resolveDefaultWebPaymentProvider().providerId;
+  }
+
+  /** The store provider never-subscribed orgs are bound to when no web provider exists. */
+  defaultNativeProvider(): PaymentProviderId | null {
+    return resolveDefaultNativePaymentProvider().providerId;
   }
 
   publicConfig() {
