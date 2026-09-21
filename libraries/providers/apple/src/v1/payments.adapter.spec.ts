@@ -13,6 +13,12 @@ const lib = vi.hoisted(() => ({
 vi.mock('@apple/app-store-server-library', () => ({
   Environment: { SANDBOX: 'Sandbox', PRODUCTION: 'Production' },
   Status: { ACTIVE: 1, EXPIRED: 2, BILLING_RETRY: 3, BILLING_GRACE_PERIOD: 4, REVOKED: 5 },
+  VerificationStatus: { OK: 0, VERIFICATION_FAILURE: 1, RETRYABLE_VERIFICATION_FAILURE: 2, INVALID_APP_IDENTIFIER: 3, INVALID_ENVIRONMENT: 4, INVALID_CHAIN_LENGTH: 5, INVALID_CERTIFICATE: 6, FAILURE: 7 },
+  VerificationException: class extends Error {
+    constructor(public status: number) {
+      super(`verification status ${status}`);
+    }
+  },
   SignedDataVerifier: class {
     env: string;
     constructor(_certs: Buffer[], _online: boolean, env: string) {
@@ -242,6 +248,66 @@ describe('receiveWebhook (App Store Server Notifications V2)', () => {
     lib.decodeRenewal.mockResolvedValue({ autoRenewStatus: 1, autoRenewProductId: 'postmill.starter.monthly' });
     const down = await deliver({ notificationType: 'DID_CHANGE_RENEWAL_PREF', subtype: 'DOWNGRADE', notificationUUID: 'n8', data: data() });
     expect(down.events[0]).toMatchObject({ type: 'subscription.updated', state: { tier: 'PRO', pendingTier: 'STARTER' } });
+  });
+});
+
+describe('verification status handling', () => {
+  const vex = (status: number) => Object.assign(new Error(`status ${status}`), { status });
+  const perEnv = (byEnv: Record<string, number>) =>
+    lib.decodeNotification.mockImplementation(async (_jws: string, env: string) => {
+      throw vex(byEnv[env]);
+    });
+  const deliver = () => adapter.receiveWebhook({ rawBody: Buffer.from(JSON.stringify({ signedPayload: 'n-jws' })), headers: {}, query: {} });
+
+  beforeEach(() => {
+    process.env.APPLE_IAP_ALLOW_SANDBOX = 'true';
+    adapter = new ApplePaymentsAdapter();
+  });
+
+  it('a foreign-app / other-environment notification is acknowledged without a ledger row', async () => {
+    perEnv({ Production: 3, Sandbox: 3 });
+    expect(await deliver()).toEqual({ eventId: expect.stringMatching(/^apple:foreign:[0-9a-f]{64}$/), eventType: 'apple.foreign.app', events: [], skipRecord: true });
+    perEnv({ Production: 4, Sandbox: 4 });
+    expect((await deliver()).eventType).toBe('apple.foreign.environment');
+  });
+
+  it('a transient failure on the matching environment is a plain (retryable) error, even when the other says "wrong environment"', async () => {
+    perEnv({ Production: 4, Sandbox: 2 });
+    await expect(deliver()).rejects.toSatisfy((e: Error) => !(e instanceof PaymentsWebhookVerificationError) && /temporarily unavailable/.test(e.message));
+  });
+
+  it('a definitive signature failure anywhere is a verification failure', async () => {
+    perEnv({ Production: 1, Sandbox: 4 });
+    await expect(deliver()).rejects.toBeInstanceOf(PaymentsWebhookVerificationError);
+    lib.decodeNotification.mockRejectedValue(new Error('no status at all'));
+    await expect(deliver()).rejects.toBeInstanceOf(PaymentsWebhookVerificationError);
+  });
+
+  it('a foreign receipt handed over by the app is rejected (strict path)', async () => {
+    lib.decodeTransaction.mockImplementation(async () => {
+      throw vex(3);
+    });
+    await expect(adapter.verifyPurchase({ orgId: ORG, payload: { jws: 'x' } })).rejects.toBeInstanceOf(PaymentsWebhookVerificationError);
+  });
+
+  it('reports intro-offer trials only when they are free', async () => {
+    for (const [fields, expected] of [
+      [{ offerType: 1, offerDiscountType: 'FREE_TRIAL' }, true],
+      [{ offerType: 1 }, true],
+      [{ offerType: 1, offerDiscountType: 'PAY_AS_YOU_GO' }, false],
+      [{}, false],
+    ] as const) {
+      lib.decodeTransaction.mockImplementation(async () => tx(fields));
+      expect((await adapter.verifyPurchase({ orgId: ORG, payload: { jws: 'x' } }))[0]).toMatchObject({ state: { isTrialing: expected } });
+    }
+  });
+
+  it('falls back to a deterministic event id when the notification has no UUID', async () => {
+    lib.decodeNotification.mockResolvedValue({ notificationType: 'TEST' });
+    const a = await deliver();
+    const b = await deliver();
+    expect(a.eventId).toMatch(/^apple:[0-9a-f]{64}$/);
+    expect(a.eventId).toBe(b.eventId);
   });
 });
 

@@ -15,6 +15,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- Payment providers: an organization stays locked to the provider it first subscribed through, even after lapsing (documented; refused cross-provider activations log the operator escape hatch; `GET /billing/config` exposes `org.lockedTo`). Native-only deployments now show never-subscribed workspaces the "purchase in the mobile app" copy instead of web purchase buttons. The nightly expiry job warns about Stripe subscriptions past their scheduled end with no teardown webhook. Payments provider modules declare `domains: ['payments']` in the catalog.
 - The billing master switch is "at least one payment provider is configured" (`billingEnabled()`) instead of `STRIPE_PUBLISHABLE_KEY` presence. For a Stripe-only deployment nothing changes: the same three `STRIPE_*` variables enable it. Deliberate normalisation: the public-API "no subscription" check and publish-time subscription checks previously keyed on `STRIPE_SECRET_KEY`; they now follow the same switch, so a deployment that set only the secret key loses those checks and one that set only the publishable key gains them — set both, as documented.
 - A Stripe webhook with a bad signature now answers **401** (was 500) on both `POST /stripe` and `POST /payments/webhooks/stripe`; Stripe retries any non-2xx, so delivery behaviour is unchanged — adjust alerting keyed on 5xx.
 - Purchase conversion tracking no longer substitutes the plan list price when the provider does not report the charged amount; those payments are simply not tracked.
@@ -26,6 +27,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- Payment providers: a lapsed app-store subscriber whose expiry webhook was missed (a zombie row with lapsed dunning grace or a scheduled end in the past) can resubscribe again, and the re-bind resets the stale grace marker and deferred downgrade so the new purchase is honoured. Apple: transient verification failures now answer 500 (Apple retries) instead of 401, notifications for another app or the other store environment are acknowledged without action, free introductory offers are reported as trials, and a notification without a UUID gets a deterministic id. Google: a native purchase is verified with one Play read, a push whose token Play now rejects is acknowledged instead of retried for a week, and a push without a message id gets a deterministic id.
 - `POST /billing/apply-discount` applied the coupon without waiting for the eligibility check (the check was never awaited); it now honours it.
 - Budget-exceeded responses from `/copilot/chat` and the post generator now carry `{ error: 'BudgetExceeded', message }` so the UI shows a friendly message instead of the raw reason string; the message no longer claims the cap is monthly and resets on the 1st.
 

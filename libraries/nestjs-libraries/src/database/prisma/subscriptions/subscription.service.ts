@@ -291,6 +291,10 @@ export class SubscriptionService {
     return this._subscriptionRepository.findExpiredCancellations(before, limit);
   }
 
+  findStaleStripeCancellations(before: Date, sampleLimit?: number) {
+    return this._subscriptionRepository.findStaleStripeCancellations(before, sampleLimit);
+  }
+
   async updateAddonQuantities(
     organizationId: string,
     quantities: Partial<Record<AddonExtraColumn, number>>

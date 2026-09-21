@@ -1,4 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { Logger } from '@nestjs/common';
 import { PaymentsService } from './payments.service';
 import { pricing, ADDONS } from '@postmill-ai/nestjs-libraries/database/prisma/subscriptions/pricing';
 import { PaymentsUnsupportedOperationError, PaymentsWebhookVerificationError } from '@postmill-ai/provider-kernel';
@@ -62,6 +63,7 @@ function build(capability = fakeCapability(), orgOverrides: Record<string, any> 
     updateAddonQuantities: vi.fn().mockResolvedValue(undefined),
     setCancelAt: vi.fn().mockResolvedValue(undefined),
     findExpiredCancellations: vi.fn().mockResolvedValue([]),
+    findStaleStripeCancellations: vi.fn().mockResolvedValue({ count: 0, sample: [] }),
     getCode: vi.fn().mockResolvedValue(null),
   };
   const organizationService = {
@@ -91,6 +93,7 @@ function build(capability = fakeCapability(), orgOverrides: Record<string, any> 
       return capability;
     }),
     defaultWebProvider: vi.fn().mockReturnValue(capability.name),
+    defaultNativeProvider: vi.fn().mockReturnValue(null),
     billingEnabled: vi.fn().mockReturnValue(true),
     publicConfig: vi.fn().mockReturnValue({ enabled: true, defaultProvider: capability.name, providers: [] }),
   };
@@ -302,6 +305,37 @@ describe('applyEvent — org resolution by hint', () => {
     expect(live.subscriptionService.updateCustomerId).not.toHaveBeenCalled();
   });
 
+  it('a zombie row (lapsed grace, or a missed teardown past cancelAt) no longer blocks a fresh purchase — and the re-bind resets the stale grace/downgrade', async () => {
+    const DAY = 24 * 3600 * 1000;
+    const graceLapsed = build(fakeCapability({ name: 'google' }), { paymentId: 'tok_zombie', paymentProvider: 'google' });
+    graceLapsed.subscriptionService.getSubscription.mockResolvedValue({ provider: 'google', gracePeriodEnd: new Date(Date.now() - DAY) });
+    await graceLapsed.service.applyEvent('google', activated({ customerRef: 'tok_fresh', orgIdHint: 'org-1' }));
+    expect(graceLapsed.subscriptionService.updateCustomerId).toHaveBeenCalledWith('org-1', 'tok_fresh', 'google');
+    expect(graceLapsed.paymentEventRepository.setGracePeriod).toHaveBeenCalledWith('tok_fresh', 'google', null);
+    expect(graceLapsed.subscriptionService.clearPendingTier).toHaveBeenCalledWith('org-1');
+    expect(graceLapsed.subscriptionService.createOrUpdateSubscription).toHaveBeenCalled();
+
+    const cancelPassed = build(fakeCapability({ name: 'google' }), { paymentId: 'tok_zombie', paymentProvider: 'google' });
+    cancelPassed.subscriptionService.getSubscription.mockResolvedValue({ provider: 'google', cancelAt: new Date(Date.now() - 2 * DAY) });
+    await cancelPassed.service.applyEvent('google', activated({ customerRef: 'tok_fresh', orgIdHint: 'org-1' }));
+    expect(cancelPassed.subscriptionService.updateCustomerId).toHaveBeenCalledWith('org-1', 'tok_fresh', 'google');
+
+    // …while a genuinely live row (grace or scheduled end still ahead) keeps the guard.
+    for (const live of [{ gracePeriodEnd: new Date(Date.now() + DAY) }, { cancelAt: new Date(Date.now() + DAY) }]) {
+      const b = build(fakeCapability({ name: 'google' }), { paymentId: 'tok_live', paymentProvider: 'google' });
+      b.subscriptionService.getSubscription.mockResolvedValue({ provider: 'google', ...live });
+      expect(await b.service.applyEvent('google', activated({ customerRef: 'tok_attacker', orgIdHint: 'org-1' }))).toEqual({ ok: false });
+      expect(b.subscriptionService.updateCustomerId).not.toHaveBeenCalled();
+    }
+
+    // An unpaid (incomplete) activation re-binds the ref but never revives the zombie's entitlement.
+    const incomplete = build(fakeCapability({ name: 'google' }), { paymentId: 'tok_zombie', paymentProvider: 'google' });
+    incomplete.subscriptionService.getSubscription.mockResolvedValue({ provider: 'google', gracePeriodEnd: new Date(Date.now() - DAY) });
+    expect(await incomplete.service.applyEvent('google', activated({ customerRef: 'tok_fresh', orgIdHint: 'org-1' }, { status: 'incomplete' }))).toEqual({ ok: false });
+    expect(incomplete.paymentEventRepository.setGracePeriod).not.toHaveBeenCalled();
+    expect(incomplete.subscriptionService.clearPendingTier).not.toHaveBeenCalled();
+  });
+
   it('a hint never re-binds an org already bound to another provider, even before its first subscription row', async () => {
     const { service, subscriptionService } = build(fakeCapability({ name: 'paypal' }), { paymentId: 'cus_1', paymentProvider: 'stripe' });
     subscriptionService.getSubscription.mockResolvedValue(null);
@@ -322,9 +356,13 @@ describe('applyEvent — org resolution by hint', () => {
   it('never lets a hint steal an org billed by another provider', async () => {
     const { service, subscriptionService } = build(fakeCapability({ name: 'apple' }), { paymentId: 'cus_1', paymentProvider: 'stripe' });
     subscriptionService.getSubscription.mockResolvedValue({ provider: 'stripe' });
+    const warn = vi.spyOn(Logger.prototype, 'warn').mockImplementation(() => undefined);
     expect(await service.applyEvent('apple', activated({ customerRef: 'otx_1', orgIdHint: 'org-1' }))).toEqual({ ok: false });
     expect(subscriptionService.updateCustomerId).not.toHaveBeenCalled();
     expect(subscriptionService.createOrUpdateSubscription).not.toHaveBeenCalled();
+    // The locked rule is a deliberate product decision: the log names both providers and the operator escape hatch.
+    expect(warn).toHaveBeenCalledWith(expect.stringMatching(/locked to stripe[\s\S]*through apple[\s\S]*Organization\.paymentProvider/));
+    warn.mockRestore();
   });
 
   it('ignores a hint for an unknown org', async () => {
@@ -508,6 +546,34 @@ describe('web checkout + plan changes', () => {
   });
 });
 
+describe('native-only deployment fallback', () => {
+  const nativeCap = () => fakeCapability({ name: 'apple', capabilities: { ...fakeCapability().capabilities, checkoutMode: 'native', portal: true }, manageUrl: vi.fn().mockResolvedValue('https://apps.apple.com/account/subscriptions'), createCheckout: undefined, ensureCustomer: undefined });
+
+  it('a never-subscribed org binds to the store provider when no web provider exists', async () => {
+    const { service, config, org } = build(nativeCap(), { paymentId: null, paymentProvider: null });
+    config.defaultWebProvider.mockReturnValue(null);
+    config.defaultNativeProvider.mockReturnValue('apple');
+    const cfg = await service.getConfig(org as any);
+    expect(cfg.org).toEqual({
+      provider: 'apple',
+      checkoutMode: 'native',
+      capabilities: expect.objectContaining({ checkoutMode: 'native' }),
+      manageUrl: 'https://apps.apple.com/account/subscriptions',
+      lockedTo: null,
+    });
+    await expect(
+      service.startCheckout('hosted', undefined, 'org-1', 'user-1', { billing: 'PRO', period: 'MONTHLY' } as any, false),
+    ).rejects.toMatchObject({ operation: 'createCheckout' });
+  });
+
+  it('the web default still wins over the store fallback, and lockedTo reflects the org row', async () => {
+    const { service, config, org } = build(fakeCapability(), { paymentId: 'cus_1', paymentProvider: 'stripe' });
+    config.defaultNativeProvider.mockReturnValue('apple');
+    const cfg = await service.getConfig(org as any);
+    expect(cfg.org).toMatchObject({ provider: 'stripe', checkoutMode: 'embedded', lockedTo: 'stripe' });
+  });
+});
+
 describe('cancel + expiry', () => {
   it('toggle cancel passes the vendor cancelAt through; an immediate teardown drops the row', async () => {
     const { service, capability, subscriptionService } = build();
@@ -539,11 +605,34 @@ describe('cancel + expiry', () => {
     subscriptionService.findExpiredCancellations.mockResolvedValue([
       { id: 's1', provider: 'paypal', cancelAt: past, organization: { id: 'org-1', paymentId: 'I-1', paymentProvider: 'paypal' } },
     ]);
-    expect(await service.expireCanceledSubscriptions()).toEqual({ checked: 1, tornDown: 1, failed: 0 });
+    expect(await service.expireCanceledSubscriptions()).toEqual({ checked: 1, tornDown: 1, failed: 0, staleStripe: 0 });
     expect(subscriptionService.deleteSubscription).toHaveBeenCalledTimes(1);
     expect(subscriptionService.deleteSubscription).toHaveBeenCalledWith('I-1', 'paypal');
     expect(paymentEventRepository.record).toHaveBeenCalledWith(`expiry:s1:${past.getTime()}`, 'subscription.expired', 'paypal');
-    expect(await service.expireCanceledSubscriptions()).toEqual({ checked: 1, tornDown: 0, failed: 0 });
+    expect(await service.expireCanceledSubscriptions()).toEqual({ checked: 1, tornDown: 0, failed: 0, staleStripe: 0 });
+  });
+
+  it('counts and warns about Stripe rows past cancelAt with no teardown webhook, without touching them', async () => {
+    const { service, subscriptionService } = build();
+    const past = new Date('2020-01-01');
+    subscriptionService.findStaleStripeCancellations.mockResolvedValue({
+      count: 2,
+      sample: [
+        { id: 's7', organizationId: 'org-7', cancelAt: past },
+        { id: 's8', organizationId: 'org-8', cancelAt: past },
+      ],
+    });
+    const warn = vi.spyOn(Logger.prototype, 'warn').mockImplementation(() => undefined);
+    expect(await service.expireCanceledSubscriptions()).toEqual({ checked: 0, tornDown: 0, failed: 0, staleStripe: 2 });
+    expect(warn).toHaveBeenCalledWith(expect.stringMatching(/2 Stripe subscription[\s\S]*s7[\s\S]*s8/));
+    expect(subscriptionService.deleteSubscription).not.toHaveBeenCalled();
+    warn.mockRestore();
+  });
+
+  it('a failing stale-Stripe read is non-fatal', async () => {
+    const { service, subscriptionService } = build();
+    subscriptionService.findStaleStripeCancellations.mockRejectedValue(new Error('db hiccup'));
+    expect(await service.expireCanceledSubscriptions()).toEqual({ checked: 0, tornDown: 0, failed: 0, staleStripe: 0 });
   });
 
   it('expireCanceledSubscriptions survives one bad row and still tears down the rest', async () => {
@@ -557,7 +646,7 @@ describe('cancel + expiry', () => {
       if (id !== 'paypal') throw new Error(`not configured: ${id}`);
       return fakeCapability({ name: 'paypal' });
     });
-    expect(await service.expireCanceledSubscriptions()).toEqual({ checked: 2, tornDown: 1, failed: 1 });
+    expect(await service.expireCanceledSubscriptions()).toEqual({ checked: 2, tornDown: 1, failed: 1, staleStripe: 0 });
     expect(subscriptionService.deleteSubscription).toHaveBeenCalledWith('I-2', 'paypal');
   });
 });

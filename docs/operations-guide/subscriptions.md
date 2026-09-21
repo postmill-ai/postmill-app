@@ -24,8 +24,20 @@ it when more than one web provider is enabled:
 - an id whose keys are not set, or an app-store provider, is rejected (logged) and the rules
   above apply.
 
-An organization stays with the provider it subscribed through until it cancels; changing
-providers is cancel + resubscribe.
+An organization is **locked to the provider it first subscribed through**, even after its
+subscription lapses — a workspace that once paid with Stripe cannot later buy through the App Store,
+and vice-versa. To let a workspace switch, an operator clears `Organization.paymentProvider` and
+`Organization.paymentId` for it (and removes any subscription row from the old provider); the next
+purchase then binds to the new provider. Refused cross-provider activations are logged at `warn`
+with that instruction.
+
+On a deployment with only app-store providers configured, workspaces that have never subscribed
+see "plans are purchased in the mobile app" on `/billing` rather than web purchase buttons.
+
+The nightly `payments-expire-canceled` job also warns when Stripe subscriptions passed their
+scheduled end more than a day ago without Stripe's `customer.subscription.deleted` webhook —
+that means the webhook endpoint is misconfigured or deliveries failed; fix the endpoint and
+redeliver from the Stripe dashboard.
 
 ## Stripe
 
@@ -65,7 +77,7 @@ REST app (a sandbox app for testing, a live app for production) → copy the cli
 testing create a business and a personal sandbox account under **Sandbox → Accounts** and set
 `PAYPAL_ENV=sandbox`.
 
-What differs from Stripe: PayPal has no customer portal (the buyer manages the agreement at
+What differs from Stripe: refund amounts are not reported per transaction by PayPal's subscription API, so the invoice list marks refunded transactions without an amount. PayPal has no customer portal (the buyer manages the agreement at
 paypal.com), no proration preview (PayPal prorates plan revisions itself), no coupons, and no
 add-on packs. Cancelling is immediate at PayPal, so Postmill keeps the subscription active until
 the paid-through date and a daily job (`payments-expire-canceled`) downgrades it after that; a

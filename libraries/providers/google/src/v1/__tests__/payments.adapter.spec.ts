@@ -71,8 +71,9 @@ describe('config', () => {
 });
 
 describe('verifyPurchase', () => {
-  it('reads the purchase from Play, acknowledges it, and activates keyed on the token', async () => {
+  it('reads the purchase from Play ONCE, acknowledges it, and activates keyed on the token', async () => {
     const events = await adapter.verifyPurchase({ orgId: ORG, payload: { purchaseToken: 'tok_1', productId: 'postmill.team.yearly' } });
+    expect(api.get).toHaveBeenCalledTimes(1);
     expect(api.get).toHaveBeenCalledWith({ packageName: 'ai.postmill.app', token: 'tok_1' });
     expect(api.acknowledge).toHaveBeenCalledWith({ packageName: 'ai.postmill.app', subscriptionId: 'postmill.team.yearly', token: 'tok_1' });
     expect(events).toEqual([
@@ -163,6 +164,22 @@ describe('receiveWebhook (Pub/Sub push)', () => {
 
     api.get.mockRejectedValue(new Error('gone'));
     expect((await adapter.receiveWebhook(rtdn(subNotification(13), 'm13'))).events).toEqual([{ type: 'subscription.canceled', customerRef: 'tok_1' }]);
+  });
+
+  it('acknowledges + ledgers an RTDN whose token Play now rejects, but still surfaces a Play outage as retryable', async () => {
+    api.get.mockRejectedValue(Object.assign(new Error('gone'), { code: 410 }));
+    expect(await adapter.receiveWebhook(rtdn(subNotification(4), 'mr'))).toEqual({ eventId: 'mr', eventType: 'rtdn.subscription.4.token-rejected', events: [] });
+    api.get.mockRejectedValue(Object.assign(new Error('backend error'), { code: 503 }));
+    await expect(adapter.receiveWebhook(rtdn(subNotification(4), 'mo'))).rejects.toThrow(/backend error/);
+  });
+
+  it('falls back to a deterministic event id when the push carries no message id', async () => {
+    const body = { message: { data: Buffer.from(JSON.stringify(subNotification(4))).toString('base64') } };
+    const input = { rawBody: Buffer.from(JSON.stringify(body)), headers: { authorization: 'Bearer oidc' }, query: {} };
+    const a = await adapter.receiveWebhook(input);
+    const b = await adapter.receiveWebhook(input);
+    expect(a.eventId).toMatch(/^google:[0-9a-f]{64}$/);
+    expect(a.eventId).toBe(b.eventId);
   });
 
   it('carries the rotated token as customerRef, the org hint and the superseded token (linkedPurchaseToken)', async () => {

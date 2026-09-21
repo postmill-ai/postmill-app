@@ -11,7 +11,7 @@ export const metadata: ProviderMetadata = {
   "displayName": "Google Play",
   "kind": "action",
   "domains": [
-    "media"
+    "payments"
   ],
   "hasModelList": false,
   "mediaCategories": []

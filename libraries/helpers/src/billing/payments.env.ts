@@ -154,6 +154,36 @@ export function resolveDefaultWebPaymentProvider(env: Env = process.env): Defaul
   return { providerId: requested, reason: 'explicit' };
 }
 
+export type DefaultNativeProviderReason = 'single' | 'ambiguous' | 'none';
+
+export interface DefaultNativeProviderResolution {
+  providerId: PaymentProviderId | null;
+  reason: DefaultNativeProviderReason;
+  detail?: string;
+}
+
+/**
+ * The app-store provider a never-subscribed org is shown when no web provider
+ * exists (native-only deployments). Table order (apple first) breaks a tie —
+ * harmless, since only `checkoutMode` drives the UI until the org subscribes.
+ */
+export function resolveDefaultNativePaymentProvider(env: Env = process.env): DefaultNativeProviderResolution {
+  const native = configuredPaymentProviders(env).filter(
+    (id) => paymentProviderEnv(id).checkoutMode === 'native',
+  );
+  if (native.length === 0) {
+    return { providerId: null, reason: 'none' };
+  }
+  if (native.length === 1) {
+    return { providerId: native[0], reason: 'single' };
+  }
+  return {
+    providerId: native[0],
+    reason: 'ambiguous',
+    detail: `Several app-store payment providers are configured (${native.join(', ')}); never-subscribed organizations see ${native[0]}'s store copy.`,
+  };
+}
+
 export interface PublicPaymentProviderConfig {
   providerId: PaymentProviderId;
   displayName: string;
