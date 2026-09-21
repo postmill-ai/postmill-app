@@ -348,7 +348,7 @@ export class ApplePaymentsAdapter implements PaymentsCapability {
         return [
           {
             type: 'payment.succeeded',
-            ...refs,
+            ...byRef,
             ...(typeof transaction.price === 'number'
               ? { amountCents: Math.round(transaction.price / 10) }
               : {}),

@@ -169,7 +169,7 @@ super-admin branch to the billing path.
 - **Scheduled cancellations** (`Subscription.cancelAt`) are informational for providers with
   `periodEndCancel: true` (Stripe keeps the vendor subscription alive and sends the terminal
   webhook). For providers without it the row stays and the Inngest cron
-  `payments-expire-canceled` tears it down after `cancelAt` (log-only for Stripe rows).
+  `payments-expire-canceled` tears it down after `cancelAt` (Stripe/manual rows are excluded from that query).
 - **Price-env changes grandfather:** a new `ADDON_*_PRICE_CENTS` value creates a new Stripe
   Price for new purchases only; existing add-on subscriptions keep the old price (migrating
   them is a manual Stripe operation). The same env value must feed both the Stripe price

@@ -52,7 +52,24 @@ describe('CheckPayment', () => {
     await waitFor(() => expect(screen.getByText('child')).toBeTruthy());
   });
 
-  it('gives up with a "still processing" notice when the fetch fails or the poll cap is hit', async () => {
+  it('survives a transient fetch failure and continues polling', async () => {
+    let calls = 0;
+    mockFetch.mockImplementation(async () => {
+      calls += 1;
+      if (calls === 1) throw new Error('blip');
+      return { json: async () => ({ status: 2 }) };
+    });
+    const mutate = vi.fn();
+    render(
+      <CheckPayment check="uid-4" mutate={mutate}>
+        <div>child</div>
+      </CheckPayment>,
+    );
+    await waitFor(() => expect(mutate).toHaveBeenCalled());
+    expect(mockModalOpen).not.toHaveBeenCalled();
+  });
+
+  it('gives up with a "still processing" notice after repeated fetch failures or when the poll cap is hit', async () => {
     mockFetch.mockRejectedValue(new Error('network'));
     render(
       <CheckPayment check="uid-3" mutate={vi.fn()}>

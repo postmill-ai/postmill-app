@@ -229,25 +229,33 @@ describe('webhooks', () => {
       eventType: 'BILLING.SUBSCRIPTION.ACTIVATED',
       events: [{ type: 'subscription.activated', customerRef: 'I-ABC', orgIdHint: 'org-1', state: expect.objectContaining({ tier: 'PRO', period: 'MONTHLY', identifier: 'uid-1' }) }],
     });
-    expect((await deliver({ id: 'E2', event_type: 'BILLING.SUBSCRIPTION.SUSPENDED', resource: sub() })).events).toEqual([{ type: 'subscription.past_due', customerRef: 'I-ABC', orgIdHint: 'org-1', providerSubscriptionRef: 'I-ABC' }]);
-    expect((await deliver({ id: 'E3', event_type: 'BILLING.SUBSCRIPTION.EXPIRED', resource: sub() })).events).toEqual([{ type: 'subscription.canceled', customerRef: 'I-ABC', orgIdHint: 'org-1' }]);
+    // Only activation carries the org hint; everything else resolves by ref.
+    expect((await deliver({ id: 'E2', event_type: 'BILLING.SUBSCRIPTION.SUSPENDED', resource: sub() })).events).toEqual([{ type: 'subscription.past_due', customerRef: 'I-ABC', providerSubscriptionRef: 'I-ABC' }]);
+    expect((await deliver({ id: 'E3', event_type: 'BILLING.SUBSCRIPTION.EXPIRED', resource: sub() })).events).toEqual([{ type: 'subscription.canceled', customerRef: 'I-ABC' }]);
     expect((await deliver({ id: 'E4', event_type: 'BILLING.SUBSCRIPTION.PAYMENT.FAILED', resource: sub() })).events[0].type).toBe('payment.failed');
     expect((await deliver({ id: 'E5', event_type: 'BILLING.SUBSCRIPTION.CREATED', resource: sub() })).events).toEqual([]);
   });
 
-  it('CANCELLED keeps access until the paid-through date, or tears down when it has passed', async () => {
+  it('CANCELLED reads the LIVE subscription (never the payload) for the paid-through date', async () => {
     f.routes.set('POST /v1/notifications/verify-webhook-signature', () => ({ body: { verification_status: 'SUCCESS' } }));
-    const future = await deliver({ id: 'E6', event_type: 'BILLING.SUBSCRIPTION.CANCELLED', resource: sub({ status: 'CANCELLED' }) });
-    expect(future.events[0]).toMatchObject({ type: 'subscription.updated', state: { status: 'active', cancelAt: new Date('2030-01-01T00:00:00Z') } });
-    const past = await deliver({ id: 'E7', event_type: 'BILLING.SUBSCRIPTION.CANCELLED', resource: sub({ status: 'CANCELLED', billing_info: { next_billing_time: '2020-01-01T00:00:00Z' } }) });
-    expect(past.events).toEqual([{ type: 'subscription.canceled', customerRef: 'I-ABC', orgIdHint: 'org-1' }]);
+    // Payload omits billing_info entirely; the live GET says the user is paid through 2030.
+    f.routes.set('GET /v1/billing/subscriptions/I-ABC', () => ({ body: sub({ status: 'CANCELLED' }) }));
+    const future = await deliver({ id: 'E6', event_type: 'BILLING.SUBSCRIPTION.CANCELLED', resource: { id: 'I-ABC', status: 'CANCELLED' } });
+    expect(future.events[0]).toMatchObject({ type: 'subscription.updated', customerRef: 'I-ABC', state: { status: 'active', cancelAt: new Date('2030-01-01T00:00:00Z') } });
+    expect(future.events[0]).not.toHaveProperty('orgIdHint');
+    f.routes.set('GET /v1/billing/subscriptions/I-ABC', () => ({ body: sub({ status: 'CANCELLED', billing_info: { next_billing_time: '2020-01-01T00:00:00Z' } }) }));
+    const past = await deliver({ id: 'E7', event_type: 'BILLING.SUBSCRIPTION.CANCELLED', resource: sub({ status: 'CANCELLED' }) });
+    expect(past.events).toEqual([{ type: 'subscription.canceled', customerRef: 'I-ABC' }]);
   });
 
   it('PAYMENT.SALE.COMPLETED becomes payment.succeeded keyed on the billing agreement', async () => {
     f.routes.set('POST /v1/notifications/verify-webhook-signature', () => ({ body: { verification_status: 'SUCCESS' } }));
     const r = await deliver({ id: 'E8', event_type: 'PAYMENT.SALE.COMPLETED', resource: { billing_agreement_id: 'I-ABC', custom: 'org-1|uid-1', amount: { total: '29.00', currency: 'USD' } } });
-    expect(r.events).toEqual([{ type: 'payment.succeeded', customerRef: 'I-ABC', orgIdHint: 'org-1', amountCents: 2900, currency: 'usd', isAddon: false, providerSubscriptionRef: 'I-ABC', subscriptionStatus: 'active' }]);
+    expect(r.events).toEqual([{ type: 'payment.succeeded', customerRef: 'I-ABC', amountCents: 2900, currency: 'usd', isAddon: false, providerSubscriptionRef: 'I-ABC', subscriptionStatus: 'active' }]);
     expect((await deliver({ id: 'E9', event_type: 'PAYMENT.SALE.COMPLETED', resource: {} })).events).toEqual([]);
+    // No amount in the payload ⇒ amountCents omitted (tracking skipped), never a $0 purchase.
+    const noAmount = await deliver({ id: 'E9b', event_type: 'PAYMENT.SALE.COMPLETED', resource: { billing_agreement_id: 'I-ABC' } });
+    expect(noAmount.events[0]).not.toHaveProperty('amountCents');
   });
 
   it('drops events whose plan is not a Postmill plan, but a failed plan lookup propagates so PayPal redelivers', async () => {
@@ -255,6 +263,7 @@ describe('webhooks', () => {
     f.routes.set('GET /v1/billing/plans/P-X', () => ({ body: { id: 'P-X', name: 'Something else' } }));
     expect((await deliver({ id: 'E10', event_type: 'BILLING.SUBSCRIPTION.ACTIVATED', resource: sub({ plan_id: 'P-X' }) })).events).toEqual([]);
     f.routes.set('GET /v1/billing/plans/P-DOWN', () => ({ status: 503, body: {} }));
+    f.routes.set('GET /v1/billing/subscriptions/I-ABC', () => ({ body: sub({ plan_id: 'P-DOWN', status: 'CANCELLED' }) }));
     await expect(deliver({ id: 'E11', event_type: 'BILLING.SUBSCRIPTION.CANCELLED', resource: sub({ plan_id: 'P-DOWN', status: 'CANCELLED' }) })).rejects.toThrow(/503/);
   });
 

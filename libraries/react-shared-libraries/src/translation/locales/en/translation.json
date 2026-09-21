@@ -538,6 +538,7 @@
   "billing_checkout_unavailable": "Checkout is temporarily unavailable. Please try again later.",
   "billing_still_processing": "Payment still processing",
   "billing_still_processing_description": "We have not received confirmation from the payment provider yet. Your subscription will appear once it lands — please check back in a few minutes.",
+  "billing_subscribe_in_app": "Plans on this deployment are purchased in the mobile app. Open the app to subscribe.",
   "billing_your_7_day_trial_is": "Your 7-day trial is",
   "billing_100_percent_free": "100% free",
   "billing_ending": "ending",

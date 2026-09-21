@@ -433,7 +433,7 @@ export class PaypalPaymentsAdapter implements PaymentsCapability {
       return [];
     }
     const state = await this._toState(live);
-    return state ? [{ type: 'subscription.activated', ...this._refs(live), state }] : [];
+    return state ? [{ type: 'subscription.activated', ...this._activationRefs(live), state }] : [];
   }
 
   // ---------------------------------------------------------------- charges
@@ -527,9 +527,14 @@ export class PaypalPaymentsAdapter implements PaymentsCapability {
     return { eventId: event.id, eventType: event.event_type, events };
   }
 
-  private _refs(sub: PaypalSubscription): { customerRef: string; orgIdHint?: string } {
+  /** Activation refs carry the org hint from `custom_id`; every other event resolves by ref alone. */
+  private _activationRefs(sub: PaypalSubscription): { customerRef: string; orgIdHint?: string } {
     const orgIdHint = sub.custom_id?.split('|')[0] || undefined;
     return { customerRef: sub.id, ...(orgIdHint ? { orgIdHint } : {}) };
+  }
+
+  private _refs(sub: PaypalSubscription): { customerRef: string } {
+    return { customerRef: sub.id };
   }
 
   private async _toState(sub: PaypalSubscription): Promise<NormalizedSubscriptionState | null> {
@@ -583,11 +588,9 @@ export class PaypalPaymentsAdapter implements PaymentsCapability {
           return [];
         }
         return [
-          {
-            type: type === 'BILLING.SUBSCRIPTION.UPDATED' ? 'subscription.updated' : 'subscription.activated',
-            ...this._refs(sub),
-            state,
-          },
+          type === 'BILLING.SUBSCRIPTION.UPDATED'
+            ? { type: 'subscription.updated', ...this._refs(sub), state }
+            : { type: 'subscription.activated', ...this._activationRefs(sub), state },
         ];
       }
       case 'BILLING.SUBSCRIPTION.SUSPENDED': {
@@ -595,7 +598,13 @@ export class PaypalPaymentsAdapter implements PaymentsCapability {
         return [{ type: 'subscription.past_due', ...this._refs(sub), providerSubscriptionRef: sub.id }];
       }
       case 'BILLING.SUBSCRIPTION.CANCELLED': {
-        const sub = resource as PaypalSubscription;
+        // The webhook payload may omit billing_info; the live subscription is
+        // authoritative for the paid-through date (a missing one here would
+        // tear a paid user down immediately).
+        const sub = await this._api<PaypalSubscription>(
+          'GET',
+          `/v1/billing/subscriptions/${(resource as PaypalSubscription).id}`,
+        );
         const until = sub.billing_info?.next_billing_time ? new Date(sub.billing_info.next_billing_time) : null;
         if (!until || until.getTime() <= Date.now()) {
           return [{ type: 'subscription.canceled', ...this._refs(sub) }];
@@ -626,13 +635,16 @@ export class PaypalPaymentsAdapter implements PaymentsCapability {
         if (!subId) {
           return [];
         }
-        const orgIdHint = typeof resource.custom === 'string' ? resource.custom.split('|')[0] : undefined;
+        // No amount ⇒ omit it: the orchestrator then skips conversion tracking
+        // rather than recording a $0 purchase.
+        const total = Number(resource.amount?.total);
         return [
           {
             type: 'payment.succeeded',
             customerRef: subId,
-            ...(orgIdHint ? { orgIdHint } : {}),
-            amountCents: Math.round(Number(resource.amount?.total || 0) * 100),
+            ...(resource.amount?.total !== undefined && Number.isFinite(total)
+              ? { amountCents: Math.round(total * 100) }
+              : {}),
             currency: (resource.amount?.currency || 'USD').toLowerCase(),
             isAddon: false,
             providerSubscriptionRef: subId,

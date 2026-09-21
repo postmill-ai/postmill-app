@@ -662,7 +662,11 @@ export class PaymentsService {
       await this._paymentEventRepository.record(receipt.eventId, receipt.eventType, providerId);
       return receipt.ackBody ?? result ?? ack;
     } catch (e) {
-      throw new HttpException(e as any, 500);
+      // Sanitized: the vendor only needs a retryable status, never our stack.
+      throw new HttpException(
+        { statusCode: 500, message: (e as Error)?.message ?? 'Webhook processing failed' },
+        500
+      );
     }
   }
 
@@ -675,6 +679,11 @@ export class PaymentsService {
       case 'subscription.activated':
       case 'subscription.updated': {
         if (!org) {
+          this._logger.warn(
+            `${providerId} ${event.type} for ref ${event.customerRef}${
+              event.orgIdHint ? ` (hint ${event.orgIdHint})` : ''
+            } resolved no organization — acknowledged without activation`
+          );
           return { ok: false };
         }
         const state = event.state;
@@ -805,10 +814,16 @@ export class PaymentsService {
       );
       return null;
     }
-    const boundHere = hinted.paymentProvider === providerId && !!hinted.paymentId;
-    if (boundHere && hinted.paymentId !== event.previousCustomerRef) {
+    // A same-provider re-bind is refused only while the org has a LIVE
+    // subscription on this provider (the theft this guards against needs an
+    // actively billed victim). A lapsed org keeps a stale `paymentId` after
+    // teardown, and its ordinary resubscribe (a fresh Google token with no
+    // linkedPurchaseToken, a new Apple ID) must re-bind freely.
+    const livelyBoundHere =
+      subscription?.provider === providerId && !!hinted.paymentId && hinted.paymentId !== event.customerRef;
+    if (livelyBoundHere && hinted.paymentId !== event.previousCustomerRef) {
       this._logger.warn(
-        `Ignoring ${providerId} activation for org ${hinted.id}: already bound to another ${providerId} ref and the event does not supersede it`
+        `Ignoring ${providerId} activation for org ${hinted.id}: it has a live ${providerId} subscription on another ref and the event does not supersede it`
       );
       return null;
     }
@@ -904,8 +919,9 @@ export class PaymentsService {
    * Tear down subscriptions whose scheduled end has passed. Required for
    * providers without period-end cancel (PayPal cancels at the vendor at once
    * and we keep the row until `cancelAt`); a missed-webhook safety net for the
-   * rest. Stripe rows are only logged for now — its `subscription.deleted`
-   * webhook is the authoritative teardown.
+   * rest. Stripe rows are excluded at the query: Stripe keeps a cancelled
+   * subscription alive to period end and its `subscription.deleted` webhook is
+   * the authoritative teardown.
    */
   async expireCanceledSubscriptions(now = new Date()) {
     const cutoff = new Date(now.getTime() - 24 * 60 * 60 * 1000);
@@ -922,15 +938,6 @@ export class PaymentsService {
       try {
         const eventId = `expiry:${sub.id}:${sub.cancelAt?.getTime()}`;
         if (await this._paymentEventRepository.exists(eventId)) {
-          continue;
-        }
-        if (sub.provider === 'stripe') {
-          // Stripe's subscription.deleted webhook is the authoritative teardown;
-          // observe once (ledgered) rather than re-warning every night.
-          this._logger.warn(
-            `Subscription ${sub.id} (stripe) has cancelAt ${sub.cancelAt?.toISOString()} in the past but no teardown webhook arrived`
-          );
-          await this._paymentEventRepository.record(eventId, 'subscription.expiry-observed', sub.provider);
           continue;
         }
         await this.applyEvent(sub.provider, {

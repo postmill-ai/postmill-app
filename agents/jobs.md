@@ -53,7 +53,7 @@ All ids below are copied verbatim from `inngest.createFunction({ id: ... })` cal
 | `comms-matrix-sync` | `TZ=UTC * * * * *` (minutely) | 1 | Fans out `comms/matrix.sync-one` per enabled Matrix comms config (Matrix has no webhooks). |
 | `campaign-tag-purge` | `TZ=UTC 0 3 * * *` | — | Purges expired campaign tags. |
 | `retention-purge` | `TZ=UTC 30 3 * * *` | — | Data-retention purge. |
-| `payments-expire-canceled` | `TZ=UTC 15 3 * * *` | — | Tears down subscriptions whose `cancelAt` passed (+1 day) for payment providers without period-end cancel; log-only for Stripe rows. `PaymentsService.expireCanceledSubscriptions`. |
+| `payments-expire-canceled` | `TZ=UTC 15 3 * * *` | — | Tears down subscriptions whose `cancelAt` passed (+1 day) for payment providers without period-end cancel (Stripe and manual rows are excluded at the query). `PaymentsService.expireCanceledSubscriptions`. |
 
 ### Event-triggered functions
 

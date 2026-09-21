@@ -537,6 +537,7 @@
   "billing_checkout_unavailable": "结账暂时不可用，请稍后再试。",
   "billing_still_processing": "付款仍在处理中",
   "billing_still_processing_description": "我们尚未收到支付服务商的确认。确认到达后您的订阅即会显示，请几分钟后再查看。",
+  "billing_subscribe_in_app": "此部署中的套餐需在移动应用中购买。请打开应用进行订阅。",
   "billing_your_7_day_trial_is": "您的7天试用期",
   "billing_100_percent_free": "100%免费",
   "billing_ending": "即将结束",

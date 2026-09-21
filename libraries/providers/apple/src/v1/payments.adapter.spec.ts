@@ -211,7 +211,7 @@ describe('receiveWebhook (App Store Server Notifications V2)', () => {
 
     const renewed = await deliver({ notificationType: 'DID_RENEW', notificationUUID: 'n2', data: data() });
     expect(renewed.events).toEqual([
-      { type: 'payment.succeeded', customerRef: 'otx_1', orgIdHint: ORG, amountCents: 2999, currency: 'usd', isAddon: false, providerSubscriptionRef: 'otx_1', subscriptionStatus: 'active' },
+      { type: 'payment.succeeded', customerRef: 'otx_1', amountCents: 2999, currency: 'usd', isAddon: false, providerSubscriptionRef: 'otx_1', subscriptionStatus: 'active' },
       expect.objectContaining({ type: 'subscription.updated' }),
     ]);
 
@@ -222,6 +222,17 @@ describe('receiveWebhook (App Store Server Notifications V2)', () => {
     expect((await deliver({ notificationType: 'REFUND', notificationUUID: 'n5', data: data(5) })).events[0].type).toBe('subscription.canceled');
     expect((await deliver({ notificationType: 'REFUND', notificationUUID: 'n5b', data: data(1) })).events[0].type).toBe('subscription.updated');
     expect(await deliver({ notificationType: 'TEST', notificationUUID: 'n6' })).toEqual({ eventId: 'n6', eventType: 'TEST', events: [] });
+  });
+
+  it('ignores sandbox notifications for orgs outside the sandbox allowlist', async () => {
+    process.env.APPLE_IAP_ALLOW_SANDBOX = 'true';
+    process.env.APPLE_IAP_SANDBOX_ORG_IDS = 'someone-else';
+    adapter = new ApplePaymentsAdapter();
+    const sandbox = { notificationType: 'SUBSCRIBED', notificationUUID: 'n-sb', data: { ...data(), environment: 'Sandbox' } };
+    expect((await deliver(sandbox)).events).toEqual([]);
+    process.env.APPLE_IAP_SANDBOX_ORG_IDS = ORG;
+    expect((await deliver(sandbox)).events[0].type).toBe('subscription.activated');
+    delete process.env.APPLE_IAP_SANDBOX_ORG_IDS;
   });
 
   it('DID_CHANGE_RENEWAL_STATUS with auto-renew off schedules the end at expiresDate; a DOWNGRADE pref carries pendingTier', async () => {

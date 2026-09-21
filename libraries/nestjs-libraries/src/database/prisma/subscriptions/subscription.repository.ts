@@ -284,9 +284,17 @@ export class SubscriptionRepository {
 
   // Rows whose scheduled end has passed — the expiry cron tears these down for
   // providers that cannot keep a cancelled subscription alive until period end.
+  // Only providers without period-end cancel keep a row past `cancelAt`; Stripe
+  // (its own teardown webhook) and manual grants are excluded so they can never
+  // crowd out rows that genuinely need the cron.
   findExpiredCancellations(before: Date, limit = 200) {
     return this._subscription.model.subscription.findMany({
-      where: { cancelAt: { lt: before }, deletedAt: null, isLifetime: false },
+      where: {
+        cancelAt: { lt: before },
+        deletedAt: null,
+        isLifetime: false,
+        provider: { notIn: ['stripe', 'manual'] },
+      },
       include: { organization: { select: { id: true, paymentId: true, paymentProvider: true } } },
       orderBy: { cancelAt: 'asc' },
       take: limit,

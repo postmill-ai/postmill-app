@@ -91,10 +91,10 @@ have no kernel access. Never read a vendor key anywhere else.
 |---|---|---|---|
 | `stripe` | `STRIPE_PUBLISHABLE_KEY` | `STRIPE_SECRET_KEY`, `STRIPE_SIGNING_KEY`, optional `STRIPE_DISCOUNT_ID` | embedded |
 | `paypal` | `PAYPAL_CLIENT_ID` | `PAYPAL_CLIENT_SECRET`, `PAYPAL_WEBHOOK_ID`, optional `PAYPAL_ENV`, `PAYPAL_BRAND_NAME` | hosted |
-
-Org binding rules (`PaymentsService._resolveEventOrg`): by `(customerRef, provider)` first; a vendor `orgIdHint` binds an org **only on `subscription.activated`**, never re-points an org already bound to any provider, and moves a same-provider binding only when the event carries `previousCustomerRef` equal to the org's current ref (Google `linkedPurchaseToken`). Cancel/past-due events must be emitted by ref alone.
 | `apple` | `APPLE_IAP_BUNDLE_ID` | `APPLE_IAP_ISSUER_ID`, `APPLE_IAP_KEY_ID`, `APPLE_IAP_PRIVATE_KEY`, `APPLE_IAP_APP_APPLE_ID`, optional `APPLE_IAP_SANDBOX_ORG_IDS`, `APPLE_IAP_ENV`, `APPLE_IAP_ALLOW_SANDBOX`, `PAYMENTS_APPLE_PRODUCT_PREFIX`, `APPLE_IAP_ROOT_CA_BASE64` | native |
 | `google` | `GOOGLE_PLAY_PACKAGE_NAME` | `GOOGLE_PLAY_SERVICE_ACCOUNT_JSON`, optional `GOOGLE_PLAY_RTDN_SERVICE_ACCOUNT_EMAIL` (webhook fails closed without it), `GOOGLE_PLAY_RTDN_AUDIENCE`, `PAYMENTS_GOOGLE_PRODUCT_PREFIX` | native |
+
+Org binding rules (`PaymentsService._resolveEventOrg`): by `(customerRef, provider)` first. A vendor `orgIdHint` binds an org **only on `subscription.activated`** and never re-points an org bound to a *different* provider. A same-provider re-bind is refused only while the org has a **live** subscription row on that provider, unless the event carries `previousCustomerRef` equal to the org's current ref (Google `linkedPurchaseToken`); a lapsed org keeps a stale `paymentId` after teardown and its ordinary resubscribe (fresh Google token, new Apple ID) re-binds freely. Cancel/past-due/payment events must be emitted by ref alone.
 
 Flag matrix as shipped:
 

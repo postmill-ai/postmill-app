@@ -704,11 +704,16 @@ export const MainBillingComponent: FC<{
       </div>
       {managedByStore && (
         <div className="text-center mt-[20px] text-textItemBlur">
-          {t(
-            'billing_managed_by_store',
-            'Your subscription is managed through the app store on your phone.'
-          )}{' '}
-          {manageUrl && (
+          {subscription?.id
+            ? t(
+                'billing_managed_by_store',
+                'Your subscription is managed through the app store on your phone.'
+              )
+            : t(
+                'billing_subscribe_in_app',
+                'Plans on this deployment are purchased in the mobile app. Open the app to subscribe.'
+              )}{' '}
+          {manageUrl && subscription?.id && (
             <a href={manageUrl} target="_blank" rel="noreferrer" className="underline">
               {t('billing_manage_in_store', 'Manage subscription')}
             </a>

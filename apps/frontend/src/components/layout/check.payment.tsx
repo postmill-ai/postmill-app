@@ -51,7 +51,9 @@ export const CheckPaymentInner: FC<{
     // Bounded: vendor webhooks can lag the redirect (PayPal by minutes), but a
     // loader that never ends is worse than asking the user to check back.
     let attempts = 0;
+    let consecutiveErrors = 0;
     const MAX_ATTEMPTS = 90;
+    const MAX_CONSECUTIVE_ERRORS = 3;
 
     const giveUp = () => {
       modal.open({
@@ -74,8 +76,15 @@ export const CheckPaymentInner: FC<{
         ).json());
       } catch {
         if (!mounted) return;
-        return giveUp();
+        // A flaky connection gets a few retries before we stop.
+        consecutiveErrors += 1;
+        if (consecutiveErrors >= MAX_CONSECUTIVE_ERRORS) {
+          return giveUp();
+        }
+        await timer(1000);
+        return checkSubscription();
       }
+      consecutiveErrors = 0;
       if (!mounted) return;
       if (status === 0) {
         attempts += 1;

@@ -537,6 +537,7 @@
   "billing_checkout_unavailable": "Ödeme geçici olarak kullanılamıyor. Lütfen daha sonra tekrar deneyin.",
   "billing_still_processing": "Ödeme hâlâ işleniyor",
   "billing_still_processing_description": "Ödeme sağlayıcısından henüz onay almadık. Aboneliğiniz onay gelince görünecek; lütfen birkaç dakika sonra tekrar kontrol edin.",
+  "billing_subscribe_in_app": "Bu kurulumda planlar mobil uygulamadan satın alınır. Abone olmak için uygulamayı açın.",
   "billing_your_7_day_trial_is": "7 günlük deneme süreniz",
   "billing_100_percent_free": "%100 ücretsiz",
   "billing_ending": "sona eriyor",

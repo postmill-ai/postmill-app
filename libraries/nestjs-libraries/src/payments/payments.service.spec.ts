@@ -283,6 +283,25 @@ describe('applyEvent — org resolution by hint', () => {
     expect(subscriptionService.updateCustomerId).toHaveBeenCalledWith('org-1', 'token_new', 'google');
   });
 
+  it('a lapsed native subscriber re-binds freely on a fresh purchase (no live row ⇒ stale binding)', async () => {
+    // Google: full expiry deleted the row; the org still carries the dead token.
+    const g = build(fakeCapability({ name: 'google' }), { paymentId: 'tok_dead', paymentProvider: 'google' });
+    g.subscriptionService.getSubscription.mockResolvedValue(null);
+    await g.service.applyEvent('google', activated({ customerRef: 'tok_fresh', orgIdHint: 'org-1' }));
+    expect(g.subscriptionService.updateCustomerId).toHaveBeenCalledWith('org-1', 'tok_fresh', 'google');
+    expect(g.subscriptionService.createOrUpdateSubscription).toHaveBeenCalled();
+    // Apple: resubscribing from another Apple ID yields a new originalTransactionId with no link.
+    const a = build(fakeCapability({ name: 'apple' }), { paymentId: 'otx_dead', paymentProvider: 'apple' });
+    a.subscriptionService.getSubscription.mockResolvedValue(null);
+    await a.service.applyEvent('apple', activated({ customerRef: 'otx_new', orgIdHint: 'org-1' }));
+    expect(a.subscriptionService.updateCustomerId).toHaveBeenCalledWith('org-1', 'otx_new', 'apple');
+    // …but an org with a LIVE subscription on this provider is still protected.
+    const live = build(fakeCapability({ name: 'google' }), { paymentId: 'tok_live', paymentProvider: 'google' });
+    live.subscriptionService.getSubscription.mockResolvedValue({ provider: 'google' });
+    expect(await live.service.applyEvent('google', activated({ customerRef: 'tok_attacker', orgIdHint: 'org-1' }))).toEqual({ ok: false });
+    expect(live.subscriptionService.updateCustomerId).not.toHaveBeenCalled();
+  });
+
   it('a hint never re-binds an org already bound to another provider, even before its first subscription row', async () => {
     const { service, subscriptionService } = build(fakeCapability({ name: 'paypal' }), { paymentId: 'cus_1', paymentProvider: 'stripe' });
     subscriptionService.getSubscription.mockResolvedValue(null);
@@ -513,21 +532,18 @@ describe('cancel + expiry', () => {
     expect(subscriptionService.deleteSubscription).not.toHaveBeenCalled();
   });
 
-  it('expireCanceledSubscriptions tears down non-stripe rows once and only logs stripe rows', async () => {
+  it('expireCanceledSubscriptions tears each expired row down exactly once', async () => {
     const { service, subscriptionService, paymentEventRepository } = build(fakeCapability({ name: 'paypal' }), { paymentId: 'I-1', paymentProvider: 'paypal' });
     const past = new Date('2020-01-01');
+    // Stripe and manual rows never reach the cron (excluded at the query).
     subscriptionService.findExpiredCancellations.mockResolvedValue([
       { id: 's1', provider: 'paypal', cancelAt: past, organization: { id: 'org-1', paymentId: 'I-1', paymentProvider: 'paypal' } },
-      { id: 's2', provider: 'stripe', cancelAt: past, organization: { id: 'org-2', paymentId: 'cus_2', paymentProvider: 'stripe' } },
-      { id: 's3', provider: 'manual', cancelAt: past, organization: { id: 'org-3', paymentId: 'x', paymentProvider: 'manual' } },
     ]);
-    expect(await service.expireCanceledSubscriptions()).toEqual({ checked: 3, tornDown: 1, failed: 0 });
+    expect(await service.expireCanceledSubscriptions()).toEqual({ checked: 1, tornDown: 1, failed: 0 });
     expect(subscriptionService.deleteSubscription).toHaveBeenCalledTimes(1);
     expect(subscriptionService.deleteSubscription).toHaveBeenCalledWith('I-1', 'paypal');
     expect(paymentEventRepository.record).toHaveBeenCalledWith(`expiry:s1:${past.getTime()}`, 'subscription.expired', 'paypal');
-    // The Stripe row is observed once (ledgered), not re-warned every night.
-    expect(paymentEventRepository.record).toHaveBeenCalledWith(`expiry:s2:${past.getTime()}`, 'subscription.expiry-observed', 'stripe');
-    expect(await service.expireCanceledSubscriptions()).toEqual({ checked: 3, tornDown: 0, failed: 0 });
+    expect(await service.expireCanceledSubscriptions()).toEqual({ checked: 1, tornDown: 0, failed: 0 });
   });
 
   it('expireCanceledSubscriptions survives one bad row and still tears down the rest', async () => {

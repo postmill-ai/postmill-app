@@ -537,6 +537,7 @@
   "billing_checkout_unavailable": "결제를 일시적으로 이용할 수 없습니다. 나중에 다시 시도해 주세요.",
   "billing_still_processing": "결제가 아직 처리 중입니다",
   "billing_still_processing_description": "결제 제공업체로부터 아직 확인을 받지 못했습니다. 확인이 도착하면 구독이 표시됩니다. 몇 분 후 다시 확인해 주세요.",
+  "billing_subscribe_in_app": "이 배포에서는 요금제를 모바일 앱에서 구매합니다. 앱을 열어 구독하세요.",
   "billing_your_7_day_trial_is": "7일 무료 체험이",
   "billing_100_percent_free": "100% 무료",
   "billing_ending": "종료됩니다",

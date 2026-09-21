@@ -537,6 +537,7 @@
   "billing_checkout_unavailable": "Il pagamento non è al momento disponibile. Riprova più tardi.",
   "billing_still_processing": "Pagamento ancora in elaborazione",
   "billing_still_processing_description": "Non abbiamo ancora ricevuto la conferma dal fornitore di pagamento. L'abbonamento comparirà non appena arriva: ricontrolla tra qualche minuto.",
+  "billing_subscribe_in_app": "In questa installazione i piani si acquistano dall'app mobile. Apri l'app per abbonarti.",
   "billing_your_7_day_trial_is": "La tua prova di 7 giorni è",
   "billing_100_percent_free": "100% gratuita",
   "billing_ending": "in scadenza",

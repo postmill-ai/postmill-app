@@ -537,6 +537,7 @@
   "billing_checkout_unavailable": "Thanh toán tạm thời không khả dụng. Vui lòng thử lại sau.",
   "billing_still_processing": "Thanh toán vẫn đang xử lý",
   "billing_still_processing_description": "Chúng tôi chưa nhận được xác nhận từ nhà cung cấp thanh toán. Đăng ký của bạn sẽ hiển thị khi có xác nhận — vui lòng kiểm tra lại sau vài phút.",
+  "billing_subscribe_in_app": "Trên bản triển khai này, các gói được mua trong ứng dụng di động. Mở ứng dụng để đăng ký.",
   "billing_your_7_day_trial_is": "Dùng thử 7 ngày của bạn là",
   "billing_100_percent_free": "Miễn phí 100%",
   "billing_ending": "kết thúc",

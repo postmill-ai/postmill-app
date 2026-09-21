@@ -537,6 +537,7 @@
   "billing_checkout_unavailable": "Le paiement est temporairement indisponible. Veuillez réessayer plus tard.",
   "billing_still_processing": "Paiement en cours de traitement",
   "billing_still_processing_description": "Nous n'avons pas encore reçu la confirmation du prestataire de paiement. Votre abonnement apparaîtra dès réception ; revenez dans quelques minutes.",
+  "billing_subscribe_in_app": "Sur ce déploiement, les forfaits s'achètent dans l'application mobile. Ouvrez l'application pour vous abonner.",
   "billing_your_7_day_trial_is": "Votre essai de 7 jours est",
   "billing_100_percent_free": "100% gratuit",
   "billing_ending": "se termine",
