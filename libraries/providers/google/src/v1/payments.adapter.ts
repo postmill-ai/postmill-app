@@ -335,10 +335,9 @@ export class GooglePaymentsAdapter implements PaymentsCapability {
     const eventType = `rtdn.subscription.${sub.notificationType}`;
     const token = sub.purchaseToken;
 
-    const isActivation =
-      sub.notificationType === RTDN.PURCHASED ||
-      sub.notificationType === RTDN.RESTARTED ||
-      sub.notificationType === RTDN.RECOVERED;
+    // Only PURCHASED can arrive on a token Play's API does not know yet;
+    // RESTARTED/RECOVERED concern tokens that already existed.
+    const isFreshPurchase = sub.notificationType === RTDN.PURCHASED;
     const rejected = (err: unknown) => (err as Error)?.name === 'PaymentsWebhookVerificationError';
     try {
       return await this._translateSubscription(eventId, eventType, sub.notificationType, token);
@@ -347,11 +346,12 @@ export class GooglePaymentsAdapter implements PaymentsCapability {
         throw err;
       }
       // The push itself was authenticated; Play says the token is invalid/gone.
-      // For an activation the RTDN can outrun Play's own API propagation on a
-      // FRESH token: retry once after a short wait, and if still rejected
-      // acknowledge WITHOUT a ledger row so Pub/Sub's redelivery gets another
-      // look (the app's /billing/native/verify is the other backstop).
-      if (isActivation) {
+      // A PURCHASED RTDN can outrun Play's own API propagation on a fresh
+      // token: retry once after a short wait. If still rejected, acknowledge
+      // without a ledger row — an acknowledged push is NOT redelivered, so this
+      // only keeps the ledger clean; the real backstop for a purchase the
+      // webhook never activated is the app's own POST /billing/native/verify.
+      if (isFreshPurchase) {
         await new Promise((r) => setTimeout(r, this._activationRetryDelayMs));
         try {
           return await this._translateSubscription(eventId, eventType, sub.notificationType, token);
