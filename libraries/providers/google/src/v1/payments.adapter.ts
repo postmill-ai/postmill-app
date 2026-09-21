@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import { google, androidpublisher_v3 } from 'googleapis';
 import { OAuth2Client } from 'google-auth-library';
 import { metadata as providerMetadata } from './payments.metadata';
@@ -122,12 +123,27 @@ export class GooglePaymentsAdapter implements PaymentsCapability {
 
   // ---------------------------------------------------------------- purchase state
 
+  /**
+   * Read a purchase from Play. Only Play's own verdict on the token (400/404/410)
+   * is a verification failure; a 5xx, quota or network error is rethrown so it
+   * surfaces as retryable rather than "rejected".
+   */
   private async _readPurchase(token: string): Promise<SubscriptionPurchase> {
-    const res = await this._client().purchases.subscriptionsv2.get({
-      packageName: this._packageName,
-      token,
-    });
-    return res.data;
+    try {
+      const res = await this._client().purchases.subscriptionsv2.get({
+        packageName: this._packageName,
+        token,
+      });
+      return res.data;
+    } catch (err) {
+      const status = Number((err as { code?: number; status?: number })?.code ?? (err as { status?: number })?.status);
+      if (status === 400 || status === 404 || status === 410) {
+        throw new PaymentsWebhookVerificationError(
+          `Google Play rejected the purchase token: ${(err as Error)?.message ?? err}`,
+        );
+      }
+      throw err;
+    }
   }
 
   private async _acknowledge(token: string, productId: string, purchase: SubscriptionPurchase): Promise<void> {
@@ -212,8 +228,9 @@ export class GooglePaymentsAdapter implements PaymentsCapability {
   private async _eventsFor(
     token: string,
     kind: 'activated' | 'updated' | 'renewed',
+    alreadyRead?: SubscriptionPurchase,
   ): Promise<NormalizedPaymentEvent[]> {
-    const purchase = await this._readPurchase(token);
+    const purchase = alreadyRead ?? (await this._readPurchase(token));
     if (!purchase.lineItems?.length) {
       return [];
     }
@@ -254,20 +271,7 @@ export class GooglePaymentsAdapter implements PaymentsCapability {
     if (!purchaseToken || typeof purchaseToken !== 'string') {
       throw new PaymentsWebhookVerificationError('Google purchase payload must carry `purchaseToken`');
     }
-    let purchase: SubscriptionPurchase;
-    try {
-      purchase = await this._readPurchase(purchaseToken);
-    } catch (err) {
-      // Only Play's own verdict on the token is a verification failure; a 5xx,
-      // quota or network error must surface as retryable, not "rejected".
-      const status = Number((err as { code?: number; status?: number })?.code ?? (err as { status?: number })?.status);
-      if (status === 400 || status === 404 || status === 410) {
-        throw new PaymentsWebhookVerificationError(
-          `Google Play rejected the purchase token: ${(err as Error)?.message ?? err}`,
-        );
-      }
-      throw err;
-    }
+    const purchase = await this._readPurchase(purchaseToken);
     // Same rule as Apple: the app must tag the purchase with the org id.
     const boundOrg = purchase.externalAccountIdentifiers?.obfuscatedExternalAccountId;
     if (boundOrg !== input.orgId) {
@@ -275,7 +279,8 @@ export class GooglePaymentsAdapter implements PaymentsCapability {
         'Google purchase obfuscatedExternalAccountId does not match the organization',
       );
     }
-    return this._eventsFor(purchaseToken, 'activated');
+    // One Play round-trip: reuse the purchase we just read.
+    return this._eventsFor(purchaseToken, 'activated', purchase);
   }
 
   // ---------------------------------------------------------------- Pub/Sub push
@@ -293,7 +298,9 @@ export class GooglePaymentsAdapter implements PaymentsCapability {
     if (!message?.data) {
       throw new PaymentsWebhookVerificationError('Pub/Sub push body has no message.data');
     }
-    const eventId = message.messageId || message.message_id || `google:${Date.now()}`;
+    // Deterministic fallback so a redelivery without an id stays idempotent.
+    const eventId =
+      message.messageId || message.message_id || `google:${createHash('sha256').update(message.data).digest('hex')}`;
     let notification: {
       packageName?: string;
       subscriptionNotification?: { notificationType?: number; purchaseToken?: string; subscriptionId?: string };
@@ -326,7 +333,26 @@ export class GooglePaymentsAdapter implements PaymentsCapability {
     const eventType = `rtdn.subscription.${sub.notificationType}`;
     const token = sub.purchaseToken;
 
-    switch (sub.notificationType) {
+    try {
+      return await this._translateSubscription(eventId, eventType, sub.notificationType, token);
+    } catch (err) {
+      // The push itself was authenticated; if Play now says the token is
+      // invalid/gone, acknowledge and ledger it — a 401 would only make Pub/Sub
+      // redeliver the same verdict for up to seven days.
+      if ((err as Error)?.name === 'PaymentsWebhookVerificationError') {
+        return { eventId, eventType: `${eventType}.token-rejected`, events: [] };
+      }
+      throw err;
+    }
+  }
+
+  private async _translateSubscription(
+    eventId: string,
+    eventType: string,
+    notificationType: number,
+    token: string,
+  ): Promise<WebhookReceipt> {
+    switch (notificationType) {
       case RTDN.PURCHASED:
         return { eventId, eventType, events: await this._eventsFor(token, 'activated') };
       case RTDN.RESTARTED:
