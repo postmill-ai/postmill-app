@@ -1,8 +1,10 @@
+import { createHash } from 'node:crypto';
 import {
   AppStoreServerAPIClient,
   Environment,
   SignedDataVerifier,
   Status,
+  VerificationStatus,
 } from '@apple/app-store-server-library';
 import type {
   JWSRenewalInfoDecodedPayload,
@@ -27,6 +29,30 @@ import {
 } from '@postmill-ai/provider-kernel';
 
 const MANAGE_URL = 'https://apps.apple.com/account/subscriptions';
+
+const sha256 = (value: string) => createHash('sha256').update(value).digest('hex');
+
+/**
+ * Apple-signed payload that belongs to another app or the other environment.
+ * The library verifies the signature BEFORE checking bundle id / environment,
+ * so this never means "forged" — it means "not ours".
+ */
+class AppleForeignPayloadError extends Error {
+  override readonly name = 'AppleForeignPayloadError';
+  constructor(readonly status: VerificationStatus) {
+    super(
+      `Apple payload is for another ${status === VerificationStatus.INVALID_ENVIRONMENT ? 'environment' : 'app'}`,
+    );
+  }
+}
+
+// Duck-typed: the VerificationException class identity is not stable across
+// module realms (or the spec mock), but its numeric `status` is.
+const verificationStatusOf = (err: unknown): VerificationStatus | undefined => {
+  const status = (err as { status?: unknown })?.status;
+  return typeof status === 'number' ? (status as VerificationStatus) : undefined;
+};
+const message = (err: unknown) => (err as Error)?.message ?? String(err);
 
 /**
  * App Store payments adapter (`checkoutMode: 'native'`). The mobile app buys
@@ -156,9 +182,15 @@ export class ApplePaymentsAdapter implements PaymentsCapability {
     return client;
   }
 
-  /** Try each accepted environment's verifier; the first that validates wins. */
+  /**
+   * Try each accepted environment's verifier; the first that validates wins.
+   * When none does, the outcome is decided by precedence definitive > retryable
+   * > foreign: a signature/chain failure anywhere is a forgery (401); else a
+   * transient failure (OCSP/network) is a plain error (500 — Apple retries);
+   * else every verifier said "another app / environment", which the caller may
+   * acknowledge without acting on.
+   */
   private async _verifyWith<T>(fn: (v: SignedDataVerifier) => Promise<T>): Promise<T> {
-    let lastError: unknown;
     let verifiers: SignedDataVerifier[];
     try {
       verifiers = this._verifierSet();
@@ -166,20 +198,51 @@ export class ApplePaymentsAdapter implements PaymentsCapability {
       // e.g. "appAppleId is required when the environment is Production" — a
       // deployment misconfiguration, reported as a verification failure rather
       // than a crash so the vendor retries once the env is fixed.
-      throw new PaymentsWebhookVerificationError(
-        `Apple verifier could not be built: ${(err as Error)?.message ?? err}`,
-      );
+      throw new PaymentsWebhookVerificationError(`Apple verifier could not be built: ${message(err)}`);
     }
+    let definitive: unknown;
+    let retryable: unknown;
+    let foreign: VerificationStatus | undefined;
     for (const verifier of verifiers) {
       try {
         return await fn(verifier);
       } catch (err) {
-        lastError = err;
+        switch (verificationStatusOf(err)) {
+          case VerificationStatus.RETRYABLE_VERIFICATION_FAILURE:
+            retryable = err;
+            break;
+          case VerificationStatus.INVALID_APP_IDENTIFIER:
+            foreign = VerificationStatus.INVALID_APP_IDENTIFIER;
+            break;
+          case VerificationStatus.INVALID_ENVIRONMENT:
+            foreign ??= VerificationStatus.INVALID_ENVIRONMENT;
+            break;
+          default:
+            definitive = err;
+        }
       }
     }
-    throw new PaymentsWebhookVerificationError(
-      `Apple signed payload verification failed: ${(lastError as Error)?.message ?? lastError}`,
-    );
+    if (definitive) {
+      throw new PaymentsWebhookVerificationError(
+        `Apple signed payload verification failed: ${message(definitive)}`,
+      );
+    }
+    if (retryable) {
+      throw new Error(`Apple signed payload verification is temporarily unavailable: ${message(retryable)}`);
+    }
+    throw new AppleForeignPayloadError(foreign ?? VerificationStatus.INVALID_ENVIRONMENT);
+  }
+
+  /** `_verifyWith`, but a foreign payload is a verification failure (receipts handed over by the app must be ours). */
+  private async _verifyStrict<T>(fn: (v: SignedDataVerifier) => Promise<T>): Promise<T> {
+    try {
+      return await this._verifyWith(fn);
+    } catch (err) {
+      if (err instanceof AppleForeignPayloadError) {
+        throw new PaymentsWebhookVerificationError(err.message);
+      }
+      throw err;
+    }
   }
 
   private _envOf(value?: string): Environment {
@@ -193,7 +256,7 @@ export class ApplePaymentsAdapter implements PaymentsCapability {
     if (!jws || typeof jws !== 'string') {
       throw new PaymentsWebhookVerificationError('Apple purchase payload must carry the signed transaction as `jws`');
     }
-    const transaction = await this._verifyWith((v) => v.verifyAndDecodeTransaction(jws));
+    const transaction = await this._verifyStrict((v) => v.verifyAndDecodeTransaction(jws));
     if (transaction.bundleId && transaction.bundleId !== this._bundleId) {
       throw new PaymentsWebhookVerificationError('Apple transaction belongs to another app');
     }
@@ -224,7 +287,7 @@ export class ApplePaymentsAdapter implements PaymentsCapability {
         if (item.originalTransactionId !== transaction.originalTransactionId) continue;
         status = this._toStatus(item.status);
         if (item.signedRenewalInfo) {
-          renewal = await this._verifyWith((v) => v.verifyAndDecodeRenewalInfo(item.signedRenewalInfo!));
+          renewal = await this._verifyStrict((v) => v.verifyAndDecodeRenewalInfo(item.signedRenewalInfo!));
         }
       }
     }
@@ -286,7 +349,11 @@ export class ApplePaymentsAdapter implements PaymentsCapability {
       status,
       identifier: transaction.originalTransactionId,
       providerSubscriptionRef: transaction.originalTransactionId,
-      isTrialing: false,
+      // An introductory offer is a trial only when it is free; older payloads
+      // carry offerType without offerDiscountType.
+      isTrialing:
+        transaction.offerDiscountType === 'FREE_TRIAL' ||
+        (transaction.offerType === 1 && !transaction.offerDiscountType),
       cancelAt: autoRenewOff ? expiresAt : null,
       pendingTier: pending && pending.tier !== plan.tier ? pending.tier : null,
       expiresAt,
@@ -305,8 +372,26 @@ export class ApplePaymentsAdapter implements PaymentsCapability {
     if (!body?.signedPayload) {
       throw new PaymentsWebhookVerificationError('App Store notification is missing signedPayload');
     }
-    const notification = await this._verifyWith((v) => v.verifyAndDecodeNotification(body.signedPayload!));
-    const eventId = notification.notificationUUID || `apple:${notification.signedDate ?? Date.now()}`;
+    let notification: ResponseBodyV2DecodedPayload;
+    try {
+      notification = await this._verifyWith((v) => v.verifyAndDecodeNotification(body.signedPayload!));
+    } catch (err) {
+      if (err instanceof AppleForeignPayloadError) {
+        // Genuinely Apple-signed, but for another app or the other environment:
+        // acknowledge so Apple stops redelivering, without a ledger row.
+        return {
+          eventId: `apple:foreign:${sha256(body.signedPayload)}`,
+          eventType: `apple.foreign.${
+            err.status === VerificationStatus.INVALID_ENVIRONMENT ? 'environment' : 'app'
+          }`,
+          events: [],
+          skipRecord: true,
+        };
+      }
+      throw err;
+    }
+    // Deterministic fallback id so a redelivery without a UUID stays idempotent.
+    const eventId = notification.notificationUUID || `apple:${sha256(body.signedPayload)}`;
     const eventType = `${notification.notificationType}${notification.subtype ? `.${notification.subtype}` : ''}`;
     const events = await this._translate(notification);
     return { eventId, eventType, events };
@@ -317,9 +402,9 @@ export class ApplePaymentsAdapter implements PaymentsCapability {
     if (!data?.signedTransactionInfo) {
       return [];
     }
-    const transaction = await this._verifyWith((v) => v.verifyAndDecodeTransaction(data.signedTransactionInfo!));
+    const transaction = await this._verifyStrict((v) => v.verifyAndDecodeTransaction(data.signedTransactionInfo!));
     const renewal = data.signedRenewalInfo
-      ? await this._verifyWith((v) => v.verifyAndDecodeRenewalInfo(data.signedRenewalInfo!))
+      ? await this._verifyStrict((v) => v.verifyAndDecodeRenewalInfo(data.signedRenewalInfo!))
       : undefined;
     const customerRef = transaction.originalTransactionId;
     if (!customerRef) {
@@ -392,9 +477,9 @@ export class ApplePaymentsAdapter implements PaymentsCapability {
         for (const group of statuses.data || []) {
           for (const item of group.lastTransactions || []) {
             if (item.originalTransactionId !== input.customerRef || !item.signedTransactionInfo) continue;
-            const transaction = await this._verifyWith((v) => v.verifyAndDecodeTransaction(item.signedTransactionInfo!));
+            const transaction = await this._verifyStrict((v) => v.verifyAndDecodeTransaction(item.signedTransactionInfo!));
             const renewal = item.signedRenewalInfo
-              ? await this._verifyWith((v) => v.verifyAndDecodeRenewalInfo(item.signedRenewalInfo!))
+              ? await this._verifyStrict((v) => v.verifyAndDecodeRenewalInfo(item.signedRenewalInfo!))
               : undefined;
             return this._toState(transaction, renewal, this._toStatus(item.status));
           }
