@@ -538,6 +538,8 @@
   "billing_still_processing": "Pago aún en proceso",
   "billing_still_processing_description": "Aún no hemos recibido la confirmación del proveedor de pago. Tu suscripción aparecerá en cuanto llegue; vuelve a comprobarlo en unos minutos.",
   "billing_subscribe_in_app": "En esta instalación los planes se compran desde la app móvil. Abre la app para suscribirte.",
+  "no_subscription_yet": "Este espacio de trabajo aún no tiene suscripción.",
+  "billing_view_plans": "Ver planes",
   "billing_your_7_day_trial_is": "Tu prueba de 7 días es",
   "billing_100_percent_free": "100% gratis",
   "billing_ending": "finaliza",

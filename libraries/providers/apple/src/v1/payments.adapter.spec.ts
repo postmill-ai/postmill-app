@@ -276,11 +276,22 @@ describe('verification status handling', () => {
     await expect(deliver()).rejects.toSatisfy((e: Error) => !(e instanceof PaymentsWebhookVerificationError) && /temporarily unavailable/.test(e.message));
   });
 
-  it('a definitive signature failure anywhere is a verification failure', async () => {
+  it('a definitive signature failure anywhere is a verification failure — even beside a retryable one', async () => {
     perEnv({ Production: 1, Sandbox: 4 });
+    await expect(deliver()).rejects.toBeInstanceOf(PaymentsWebhookVerificationError);
+    perEnv({ Production: 2, Sandbox: 1 });
     await expect(deliver()).rejects.toBeInstanceOf(PaymentsWebhookVerificationError);
     lib.decodeNotification.mockRejectedValue(new Error('no status at all'));
     await expect(deliver()).rejects.toBeInstanceOf(PaymentsWebhookVerificationError);
+  });
+
+  it('a transient failure on the receipt path is a plain error (the app retries), not a rejection', async () => {
+    lib.decodeTransaction.mockImplementation(async () => {
+      throw vex(2);
+    });
+    await expect(adapter.verifyPurchase({ orgId: ORG, payload: { jws: 'x' } })).rejects.toSatisfy(
+      (e: Error) => !(e instanceof PaymentsWebhookVerificationError) && /temporarily unavailable/.test(e.message),
+    );
   });
 
   it('a foreign receipt handed over by the app is rejected (strict path)', async () => {

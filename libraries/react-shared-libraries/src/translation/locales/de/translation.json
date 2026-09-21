@@ -538,6 +538,8 @@
   "billing_still_processing": "Zahlung wird noch verarbeitet",
   "billing_still_processing_description": "Wir haben noch keine Bestätigung vom Zahlungsanbieter erhalten. Dein Abonnement erscheint, sobald sie eintrifft – bitte schau in ein paar Minuten noch einmal vorbei.",
   "billing_subscribe_in_app": "Tarife werden in dieser Installation über die mobile App gekauft. Öffne die App, um zu abonnieren.",
+  "no_subscription_yet": "Dieser Arbeitsbereich hat noch kein Abonnement.",
+  "billing_view_plans": "Tarife ansehen",
   "billing_your_7_day_trial_is": "Ihre 7-tägige Testphase ist",
   "billing_100_percent_free": "100% kostenlos",
   "billing_ending": "endet",

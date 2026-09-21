@@ -48,9 +48,12 @@ describe('ProviderKernel metadata conformance', () => {
   describe.each(providerModules)(
     '$manifest.domain/$manifest.providerId@$manifest.version',
     (mod) => {
-      it('payments modules claim only the payments surface', () => {
-        if (mod.manifest.domain !== 'payments') return;
-        expect(mod.metadata!.domains).toEqual(['payments']);
+      it('payments modules claim only the payments surface, and nothing else claims it', () => {
+        if (mod.manifest.domain === 'payments') {
+          expect(mod.metadata!.domains).toEqual(['payments']);
+        } else {
+          expect(mod.metadata!.domains).not.toContain('payments');
+        }
       });
 
       it('has metadata whose id matches the manifest providerId', () => {

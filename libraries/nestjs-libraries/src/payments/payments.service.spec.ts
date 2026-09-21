@@ -328,6 +328,13 @@ describe('applyEvent — org resolution by hint', () => {
       expect(b.subscriptionService.updateCustomerId).not.toHaveBeenCalled();
     }
 
+    // An adapter that echoes pendingTier === tier means "nothing pending": the zombie's old downgrade is still cleared.
+    const echoed = build(fakeCapability({ name: 'google' }), { paymentId: 'tok_zombie', paymentProvider: 'google' });
+    echoed.subscriptionService.getSubscription.mockResolvedValue({ provider: 'google', gracePeriodEnd: new Date(Date.now() - DAY) });
+    await echoed.service.applyEvent('google', activated({ customerRef: 'tok_fresh', orgIdHint: 'org-1' }, { pendingTier: 'TEAM' }));
+    expect(echoed.subscriptionService.clearPendingTier).toHaveBeenCalledWith('org-1');
+    expect(echoed.subscriptionService.setPendingTier).not.toHaveBeenCalled();
+
     // An unpaid (incomplete) activation re-binds the ref but never revives the zombie's entitlement.
     const incomplete = build(fakeCapability({ name: 'google' }), { paymentId: 'tok_zombie', paymentProvider: 'google' });
     incomplete.subscriptionService.getSubscription.mockResolvedValue({ provider: 'google', gracePeriodEnd: new Date(Date.now() - DAY) });

@@ -75,6 +75,8 @@ export class GooglePaymentsAdapter implements PaymentsCapability {
   readonly requiredEnvKeys = ['GOOGLE_PLAY_PACKAGE_NAME', 'GOOGLE_PLAY_SERVICE_ACCOUNT_JSON'];
 
   private _publisher: androidpublisher_v3.Androidpublisher | null = null;
+  /** Wait before re-reading a token Play rejected on an activation push (propagation lag). Specs set 0. */
+  _activationRetryDelayMs = 2000;
   private _oidc: OAuth2Client | null = null;
 
   isConfigured(): boolean {
@@ -333,16 +335,36 @@ export class GooglePaymentsAdapter implements PaymentsCapability {
     const eventType = `rtdn.subscription.${sub.notificationType}`;
     const token = sub.purchaseToken;
 
+    const isActivation =
+      sub.notificationType === RTDN.PURCHASED ||
+      sub.notificationType === RTDN.RESTARTED ||
+      sub.notificationType === RTDN.RECOVERED;
+    const rejected = (err: unknown) => (err as Error)?.name === 'PaymentsWebhookVerificationError';
     try {
       return await this._translateSubscription(eventId, eventType, sub.notificationType, token);
     } catch (err) {
-      // The push itself was authenticated; if Play now says the token is
-      // invalid/gone, acknowledge and ledger it — a 401 would only make Pub/Sub
-      // redeliver the same verdict for up to seven days.
-      if ((err as Error)?.name === 'PaymentsWebhookVerificationError') {
-        return { eventId, eventType: `${eventType}.token-rejected`, events: [] };
+      if (!rejected(err)) {
+        throw err;
       }
-      throw err;
+      // The push itself was authenticated; Play says the token is invalid/gone.
+      // For an activation the RTDN can outrun Play's own API propagation on a
+      // FRESH token: retry once after a short wait, and if still rejected
+      // acknowledge WITHOUT a ledger row so Pub/Sub's redelivery gets another
+      // look (the app's /billing/native/verify is the other backstop).
+      if (isActivation) {
+        await new Promise((r) => setTimeout(r, this._activationRetryDelayMs));
+        try {
+          return await this._translateSubscription(eventId, eventType, sub.notificationType, token);
+        } catch (again) {
+          if (!rejected(again)) {
+            throw again;
+          }
+          return { eventId, eventType: `${eventType}.token-rejected`, events: [], skipRecord: true };
+        }
+      }
+      // A dead token on a non-activation push is a permanent verdict: ledger it
+      // (a 401 would only make Pub/Sub redeliver it for up to seven days).
+      return { eventId, eventType: `${eventType}.token-rejected`, events: [] };
     }
   }
 
