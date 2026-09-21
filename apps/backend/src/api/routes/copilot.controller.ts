@@ -10,19 +10,12 @@ import {
   HttpException,
   HttpStatus,
 } from '@nestjs/common';
-import OpenAI from 'openai';
 import {
-  AnthropicAdapter,
   CopilotRuntime,
-  GoogleGenerativeAIAdapter,
-  GroqAdapter,
-  LangChainAdapter,
-  OpenAIAdapter,
   copilotRuntimeNodeHttpEndpoint,
   copilotRuntimeNestEndpoint,
 } from '@copilotkit/runtime';
-import Anthropic from '@anthropic-ai/sdk';
-import { Groq } from 'groq-sdk';
+import { BuiltInAgent } from '@copilotkit/runtime/v2';
 import { GetOrgFromRequest } from '@postmill-ai/nestjs-libraries/user/org.from.request';
 import { GetUserFromRequest } from '@postmill-ai/nestjs-libraries/user/user.from.request';
 import { Organization, User } from '@prisma/client';
@@ -33,10 +26,7 @@ import { RequestContext } from '@mastra/core/di';
 import { CheckPolicies } from '@postmill-ai/backend/services/auth/permissions/permissions.ability';
 import { AuthorizationActions, Sections } from '@postmill-ai/backend/services/auth/permissions/permission.exception.class';
 import { AIModelProvider } from '@postmill-ai/nestjs-libraries/ai/ai-model.provider';
-import { GuardrailService } from '@postmill-ai/nestjs-libraries/ai/governance/guardrail.service';
-import { TelemetryService } from '@postmill-ai/nestjs-libraries/ai/governance/telemetry.service';
-import { BudgetService } from '@postmill-ai/nestjs-libraries/ai/governance/budget.service';
-import { BudgetExceeded } from '@postmill-ai/nestjs-libraries/ai/governance/errors';
+import { BudgetExceeded, GuardrailViolation } from '@postmill-ai/nestjs-libraries/ai/governance/errors';
 import { FeatureFlagsService } from '@postmill-ai/nestjs-libraries/feature-flags';
 
 export type AgentRequestContext = {
@@ -53,9 +43,6 @@ export class CopilotController {
   constructor(
     private _mastraService: MastraService,
     private _aiModelProvider: AIModelProvider,
-    private _guardrails: GuardrailService,
-    private _telemetry: TelemetryService,
-    private _budget: BudgetService,
     private _featureFlagsService: FeatureFlagsService,
   ) {}
 
@@ -93,242 +80,38 @@ export class CopilotController {
     };
   }
 
-  private async _buildServiceAdapter(orgId?: string) {
-    const resolved = await this._aiModelProvider.resolveConfigForScope('agent', orgId);
+  /**
+   * The model behind `/copilot/chat`. Since @copilotkit/runtime 1.69 the
+   * single-route transport never calls a service adapter's `process()` — it
+   * runs an agent, so a runtime without `agents` auto-builds one from the
+   * adapter and throws `CopilotApiDiscoveryError` when the adapter cannot
+   * name its model (Sentry POSTMILL-APP-D: every LangChainAdapter provider).
+   * Passing an explicit BuiltInAgent on the org's governed model sidesteps
+   * the adapter zoo entirely and restores the gates the old `process()` proxy
+   * used to apply: budget check + usage recording (`languageModel`) and prompt
+   * guardrails + telemetry (`governedLanguageModel`).
+   */
+  private async _chatModel(orgId?: string) {
+    await this._assertAgentConfigured(orgId);
+    return this._aiModelProvider.governedLanguageModel('agent', orgId);
+  }
 
+  private async _assertAgentConfigured(orgId?: string) {
+    const resolved = await this._aiModelProvider.resolveConfigForScope('agent', orgId);
     if (!resolved) {
       throw new HttpException('AI is not configured for this organization. Go to Settings → AI to configure a provider.', HttpStatus.UNPROCESSABLE_ENTITY);
     }
-
-    const rawAdapter = await this._buildRawServiceAdapter(resolved);
-    return this._wrapServiceAdapter(rawAdapter, orgId, resolved.providerId, resolved.modelId);
   }
 
-  private async _buildRawServiceAdapter(resolved: any) {
-    const isOpenAICompatible = resolved.adapter.identifier === 'openai' ||
-      resolved.adapter.identifier === 'gateway' ||
-      resolved.adapter.credentialFields.some((f: any) => f.key === 'baseURL');
-
-    if (!isOpenAICompatible) {
-      if (resolved.adapter.identifier === 'anthropic') {
-        if (!resolved.creds.apiKey) {
-          throw new HttpException('AI provider credentials not configured', HttpStatus.UNPROCESSABLE_ENTITY);
-        }
-        return new AnthropicAdapter({
-          model: resolved.modelId,
-          anthropic: new Anthropic({ apiKey: resolved.creds.apiKey }),
-        });
-      }
-
-      if (resolved.adapter.identifier === 'google') {
-        if (!resolved.creds.apiKey) {
-          throw new HttpException('AI provider credentials not configured', HttpStatus.UNPROCESSABLE_ENTITY);
-        }
-        return new GoogleGenerativeAIAdapter({
-          model: resolved.modelId,
-          apiKey: resolved.creds.apiKey,
-        });
-      }
-
-      if (resolved.adapter.identifier === 'groq') {
-        if (!resolved.creds.apiKey) {
-          throw new HttpException('AI provider credentials not configured', HttpStatus.UNPROCESSABLE_ENTITY);
-        }
-        return new GroqAdapter({
-          model: resolved.modelId,
-          groq: new Groq({ apiKey: resolved.creds.apiKey }),
-        });
-      }
-
-      try {
-        const model = resolved.adapter.createLangchainModel(
-          resolved.creds,
-          resolved.modelId,
-          resolved.defaultSurface?.temperature
-            ? { temperature: resolved.defaultSurface.temperature }
-            : undefined,
-        );
-        return new LangChainAdapter({
-          chainFn: async ({ messages, tools }) => {
-            const maybeToolModel =
-              typeof (model as any).bindTools === 'function'
-                ? (model as any).bindTools(tools)
-                : model;
-            if (typeof (maybeToolModel as any).stream === 'function') {
-              return (maybeToolModel as any).stream(messages);
-            }
-            if (typeof (maybeToolModel as any).invoke === 'function') {
-              return (maybeToolModel as any).invoke(messages);
-            }
-            throw new Error('Resolved LangChain model does not support stream() or invoke()');
-          },
-        });
-      } catch (err) {
-        throw new HttpException(
-          `${resolved.adapter.name} is not supported by the CopilotKit runtime adapter: ${(err as Error).message}`,
-          HttpStatus.BAD_REQUEST,
-        );
-      }
+  private _mapAiError(err: unknown, surface: string): void {
+    if (err instanceof HttpException) throw err;
+    if (err instanceof BudgetExceeded) {
+      throw new HttpException(err.message, HttpStatus.TOO_MANY_REQUESTS);
     }
-
-    const apiKey = resolved.creds.apiKey;
-    if (!apiKey) {
-      throw new HttpException(
-        'AI provider credentials not configured',
-        HttpStatus.UNPROCESSABLE_ENTITY,
-      );
+    if (err instanceof GuardrailViolation) {
+      throw new HttpException(err.message, HttpStatus.UNPROCESSABLE_ENTITY);
     }
-
-    return new OpenAIAdapter({
-      model: resolved.modelId,
-      openai: new OpenAI({ apiKey, baseURL: resolved.creds.baseURL || undefined }) as any,
-    });
-  }
-
-  /**
-   * Wraps a CopilotKit service adapter so every `process()` call runs input
-   * guardrails, checks the org/provider AI budget, and records spend once the
-   * stream completes. Output guardrails are intentionally omitted here:
-   * CopilotKit streams token-by-token to the client, so intercepting the full
-   * response would require wrapping the runtime event source in a
-   * provider-specific way; the Mastra/agent path uses the governed model
-   * wrapper (AIModelProvider.governedLanguageModel) which does apply both input
-   * and output guardrails.
-   */
-  private _wrapServiceAdapter(
-    adapter: any,
-    orgId: string | undefined,
-    providerId: string,
-    modelId: string,
-  ): any {
-    const originalProcess = adapter.process.bind(adapter);
-    return new Proxy(adapter, {
-      get: (target, prop, receiver) => {
-        if (prop === 'process') {
-          return async (request: any) => {
-            const inputText = this._extractCopilotInputText(request.messages);
-            if (inputText) {
-              await this._guardrails.checkInput(inputText, { orgId });
-            }
-
-            const budgetCheck = await this._budget.checkBudget('agent', orgId, providerId);
-            if (!budgetCheck.allowed) {
-              throw new BudgetExceeded(budgetCheck.reason || 'Budget exceeded', 'agent', orgId);
-            }
-
-            const wrappedRequest = this._wrapRequestForUsageTracking(
-              request,
-              orgId,
-              providerId,
-              modelId,
-            );
-
-            return this._telemetry.startSpan(
-              'copilot.generate',
-              async (span) => {
-                span.setAttribute(TelemetryService.ATTR_GEN_AI_SYSTEM, providerId);
-                span.setAttribute(TelemetryService.ATTR_GEN_AI_REQUEST_MODEL, modelId);
-                if (orgId) span.setAttribute('ai.organizationId', orgId);
-                return originalProcess(wrappedRequest);
-              },
-              { 'ai.scope': 'agent' },
-            );
-          };
-        }
-        return Reflect.get(target, prop, receiver);
-      },
-    });
-  }
-
-  /**
-   * Wraps the CopilotKit request's event source so we can approximate output
-   * tokens from streamed TextMessageContent events and record spend once the
-   * stream finishes. Input tokens are estimated from the request messages.
-   * This is best-effort: adapters that do not stream through the event source
-   * (e.g., EmptyAdapter) will record zero output tokens.
-   */
-  private _wrapRequestForUsageTracking(
-    request: any,
-    orgId: string | undefined,
-    providerId: string,
-    modelId: string,
-  ): any {
-    const originalEventSource = request.eventSource;
-    if (!originalEventSource) return request;
-
-    const accumulatedContent: string[] = [];
-    const inputTokens = this._estimateTokensFromCopilotMessages(request.messages);
-
-    const wrapEventStream$ = (eventStream$: any) => {
-      return new Proxy(eventStream$, {
-        get: (streamTarget, streamProp) => {
-          if (streamProp === 'sendTextMessageContent') {
-            const original = streamTarget.sendTextMessageContent.bind(streamTarget);
-            return (event: any) => {
-              if (event?.content) {
-                accumulatedContent.push(String(event.content));
-              }
-              return original(event);
-            };
-          }
-          const value = (streamTarget as any)[streamProp];
-          return typeof value === 'function' ? value.bind(streamTarget) : value;
-        },
-      });
-    };
-
-    const wrappedEventSource = new Proxy(originalEventSource, {
-      get: (target, prop) => {
-        if (prop === 'stream') {
-          const originalStream = target.stream.bind(target);
-          return (callback: any) => {
-            return originalStream(async (eventStream$: any) => {
-              const wrapped$ = wrapEventStream$(eventStream$);
-              try {
-                return await callback(wrapped$);
-              } finally {
-                const outputTokens = Math.ceil(
-                  accumulatedContent.join('').length / 4,
-                );
-                try {
-                  await this._budget.recordSpend({
-                    organizationId: orgId,
-                    provider: providerId,
-                    model: modelId,
-                    scope: 'agent',
-                    inputTokens,
-                    outputTokens,
-                    costUsd: 0,
-                  });
-                } catch (err) {
-                  Logger.warn(
-                    `Copilot spend recording failed: ${(err as Error)?.message}`,
-                  );
-                }
-              }
-            });
-          };
-        }
-        const value = (target as any)[prop];
-        return typeof value === 'function' ? value.bind(target) : value;
-      },
-    });
-
-    return { ...request, eventSource: wrappedEventSource };
-  }
-
-  private _estimateTokensFromCopilotMessages(messages: any[] | undefined): number {
-    const text = this._extractCopilotInputText(messages);
-    return Math.ceil(text.length / 4);
-  }
-
-  private _extractCopilotInputText(messages: any[] | undefined): string {
-    if (!Array.isArray(messages)) return '';
-    return messages
-      .filter((m: any) => typeof m.isTextMessage === 'function' && m.isTextMessage())
-      .map((m: any) => m.content)
-      .filter((content: any) => typeof content === 'string')
-      .join('\n');
+    Logger.warn(`AI configuration not available, ${surface} will not work: ${(err as Error)?.message}`);
   }
 
   @Post('/chat')
@@ -343,18 +126,18 @@ export class CopilotController {
     }
 
     try {
-      const serviceAdapter = await this._buildServiceAdapter(organization?.id);
+      const model = await this._chatModel(organization?.id);
       const copilotRuntimeHandler = copilotRuntimeNodeHttpEndpoint({
         endpoint: '/copilot/chat',
-        runtime: new CopilotRuntime(),
-        serviceAdapter,
+        runtime: new CopilotRuntime({
+          agents: { default: new BuiltInAgent({ model }) } as any,
+        }),
       });
 
       this._reflectCredentialedCors(req, res);
       return copilotRuntimeHandler(req, res);
     } catch (err) {
-      if (err instanceof HttpException) throw err;
-      Logger.warn('AI configuration not available, chat will not work');
+      this._mapAiError(err, 'chat');
       res.status(HttpStatus.INTERNAL_SERVER_ERROR).json({ error: 'AI configuration not available' });
       return;
     }
@@ -373,7 +156,7 @@ export class CopilotController {
     }
 
     try {
-      const serviceAdapter = await this._buildServiceAdapter(organization.id);
+      await this._assertAgentConfigured(organization.id);
       const mastra = await this._mastraService.mastra();
       const requestContext = new RequestContext<AgentRequestContext>();
       // Only the identity/access keys are set here. Page context (`ag-ui`) is
@@ -392,6 +175,9 @@ export class CopilotController {
         requestContext: requestContext as any,
       });
 
+      // No service adapter: with an explicit agents map the runtime ignores it
+      // (the Mastra agent owns its model), and building one 500'd the providers
+      // without a LangChain integration (azure, bedrock, vertex).
       const runtime = new CopilotRuntime({
         agents: agents as any,
       });
@@ -399,14 +185,12 @@ export class CopilotController {
       const copilotRuntimeHandler = copilotRuntimeNestEndpoint({
         endpoint: '/copilot/agent',
         runtime,
-        serviceAdapter,
       });
 
       this._reflectCredentialedCors(req, res);
       return copilotRuntimeHandler(req, res);
     } catch (err) {
-      if (err instanceof HttpException) throw err;
-      Logger.warn('AI configuration not available, agent will not work');
+      this._mapAiError(err, 'agent');
       res.status(HttpStatus.INTERNAL_SERVER_ERROR).json({ error: 'AI configuration not available' });
       return;
     }

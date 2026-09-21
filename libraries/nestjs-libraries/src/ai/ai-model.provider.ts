@@ -739,20 +739,37 @@ export class AIModelProvider {
       } catch (err) {
         throw toProviderError(err, providerId, { name: providerName }, undefined);
       }
+      // Record exactly once per stream, whichever way the consumer drains it:
+      // Mastra calls `consumeStream()`; Vercel `streamText` (CopilotKit's
+      // BuiltInAgent on /copilot/chat) reads `stream` directly and never calls
+      // it, so watch the stream's own `finish` part as well.
+      let recorded = false;
+      const recordOnce = async (usage: any) => {
+        if (recorded) return;
+        recorded = true;
+        await this._recordUsage({ usage, span, orgId, providerId, modelId, scope });
+      };
       const originalConsume = response?.consumeStream?.bind(response);
       if (originalConsume) {
         response.consumeStream = async () => {
           const consumed = await originalConsume();
-          await this._recordUsage({
-            usage: consumed?.usage,
-            span,
-            orgId,
-            providerId,
-            modelId,
-            scope,
-          });
+          await recordOnce(consumed?.usage);
           return consumed;
         };
+      }
+      if (response?.stream && typeof response.stream.pipeThrough === 'function') {
+        let finishUsage: any;
+        response.stream = response.stream.pipeThrough(
+          new TransformStream({
+            transform(part: any, controller) {
+              if (part?.type === 'finish') finishUsage = part.usage;
+              controller.enqueue(part);
+            },
+            flush: async () => {
+              await recordOnce(finishUsage);
+            },
+          }),
+        );
       }
       return response;
     };

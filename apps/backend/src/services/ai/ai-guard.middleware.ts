@@ -41,8 +41,19 @@ export class AiGuardMiddleware implements NestMiddleware {
   private _extractMessages(body: any): string[] {
     const messages: string[] = [];
 
-    if (body.messages && Array.isArray(body.messages)) {
-      for (const m of body.messages) {
+    // CopilotKit ≥1.69 single-route transport wraps the AG-UI run input in a
+    // `{ method, params, body }` envelope; the messages live one level down.
+    // Only the latest user turn is new input — assistant/tool messages are ours.
+    const source =
+      typeof body.method === 'string' && body.body && typeof body.body === 'object'
+        ? {
+            messages: (body.body.messages ?? []).filter((m: any) => m?.role === 'user'),
+            context: body.body.context,
+          }
+        : body;
+
+    if (source.messages && Array.isArray(source.messages)) {
+      for (const m of source.messages) {
         if (typeof m.content === 'string') {
           messages.push(m.content);
         } else if (m.content && Array.isArray(m.content)) {
@@ -55,8 +66,8 @@ export class AiGuardMiddleware implements NestMiddleware {
       }
     }
 
-    if (body.context && typeof body.context === 'string') {
-      messages.push(body.context);
+    if (source.context && typeof source.context === 'string') {
+      messages.push(source.context);
     }
 
     return messages;

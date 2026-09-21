@@ -137,10 +137,16 @@ enforcement point (exact file/symbol). Cross-refs: `agents/backend.md`,
   register 5/min, AI 10-30/min — comment :62-68). Endpoints the frontend **polls** at a
   few seconds (job status, notifications) must raise the hourly cap instead — a 5s poll is
   720/h and blows the 600/h default on its own.
-- CopilotKit `/copilot/chat` is policy- and budget-gated:
-  `@CheckPolicies([AuthorizationActions.Create, Sections.MCP])`
-  (`apps/backend/src/api/routes/copilot.controller.ts:356-357`) plus a per-request
-  `BudgetService.checkBudget('agent', …)` throw of `BudgetExceeded` (:216-218).
+- CopilotKit `/copilot/chat` is policy-, guardrail- and budget-gated:
+  `@CheckPolicies([AuthorizationActions.Create, Sections.MCP])`, `AiGuardMiddleware`
+  (reads user messages out of the `{ method, params, body }` single-route envelope), and the
+  model itself — the route builds `new CopilotRuntime({ agents: { default: new BuiltInAgent({
+  model }) } })` on `AIModelProvider.governedLanguageModel('agent', orgId)`, which carries the
+  budget check + usage recording and prompt guardrails + telemetry
+  (`apps/backend/src/api/routes/copilot.controller.ts` `_chatModel`). **No CopilotKit service
+  adapter**: since `@copilotkit/runtime` 1.69 the single-route transport never calls
+  `serviceAdapter.process()`, so any gate wrapped around it is dead code (Sentry
+  POSTMILL-APP-D) — never reintroduce one.
 
 ## NOT_SECURED — dev-only toggle
 

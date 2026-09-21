@@ -410,6 +410,64 @@ describe('AIModelProvider', () => {
     });
   });
 
+  describe('languageModel stream usage recording', () => {
+    const partsStream = (parts: any[]) =>
+      new ReadableStream({
+        start(controller) {
+          for (const p of parts) controller.enqueue(p);
+          controller.close();
+        },
+      });
+    const drain = async (stream: ReadableStream) => {
+      const out: any[] = [];
+      const reader = stream.getReader();
+      for (;;) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        out.push(value);
+      }
+      return out;
+    };
+
+    it('records usage from the finish part when the consumer reads `stream` directly (Vercel streamText / CopilotKit BuiltInAgent)', async () => {
+      (budget.recordSpend as any).mockClear();
+      (mockLanguageModel as any).doStream = vi.fn().mockResolvedValue({
+        stream: partsStream([
+          { type: 'text-delta', delta: 'PO' },
+          { type: 'text-delta', delta: 'NG' },
+          { type: 'finish', finishReason: 'stop', usage: { inputTokens: 11, outputTokens: 3 } },
+        ]),
+      });
+      const model = await provider.languageModel('agent', 'org-123');
+
+      const response = await (model as any).doStream({ prompt: [] });
+      const parts = await drain(response.stream);
+
+      expect(parts.map((p) => p.type)).toEqual(['text-delta', 'text-delta', 'finish']);
+      expect(budget.recordSpend).toHaveBeenCalledTimes(1);
+      expect((budget.recordSpend as any).mock.calls[0][0]).toMatchObject({
+        scope: 'agent',
+        inputTokens: 11,
+        outputTokens: 3,
+      });
+    });
+
+    it('records exactly once when consumeStream() is used as well (Mastra path)', async () => {
+      (budget.recordSpend as any).mockClear();
+      (mockLanguageModel as any).doStream = vi.fn().mockResolvedValue({
+        stream: partsStream([{ type: 'finish', finishReason: 'stop', usage: { inputTokens: 2, outputTokens: 4 } }]),
+        consumeStream: vi.fn().mockResolvedValue({ usage: { inputTokens: 2, outputTokens: 4 } }),
+      });
+      const model = await provider.languageModel('agent', 'org-123');
+
+      const response = await (model as any).doStream({ prompt: [] });
+      await response.consumeStream();
+      await drain(response.stream);
+
+      expect(budget.recordSpend).toHaveBeenCalledTimes(1);
+    });
+  });
+
   describe('imageModel', () => {
     it('returns a model with a generate method', async () => {
       const model = await provider.imageModel('utility', 'org-123');
