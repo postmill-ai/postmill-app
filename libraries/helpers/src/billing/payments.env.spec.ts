@@ -9,7 +9,7 @@ import {
 } from './payments.env';
 
 const stripe = { STRIPE_PUBLISHABLE_KEY: 'pk_test', STRIPE_SECRET_KEY: 'sk_test', STRIPE_SIGNING_KEY: 'whsec' };
-const paypal = { PAYPAL_CLIENT_ID: 'cid', PAYPAL_CLIENT_SECRET: 'sec', PAYPAL_WEBHOOK_ID: 'wh' };
+const paypal = { PAYPAL_CLIENT_ID: 'cid', PAYPAL_CLIENT_SECRET: 'PAYPAL_SECRET_X', PAYPAL_WEBHOOK_ID: 'PAYPAL_WEBHOOK_X' };
 const apple = { APPLE_IAP_BUNDLE_ID: 'ai.postmill.app', APPLE_IAP_PRIVATE_KEY: 'APPLE_SECRET_P8' };
 const google = { GOOGLE_PLAY_PACKAGE_NAME: 'ai.postmill.app', GOOGLE_PLAY_SERVICE_ACCOUNT_JSON: 'GOOGLE_SECRET_SA' };
 
@@ -87,18 +87,19 @@ describe('payments env', () => {
   });
 
   it('publicPaymentsConfig never leaks secrets', () => {
-    const cfg = publicPaymentsConfig({ ...stripe, ...apple, ...google });
+    const cfg = publicPaymentsConfig({ ...stripe, ...paypal, ...apple, ...google });
     expect(cfg).toEqual({
       enabled: true,
       defaultProvider: 'stripe',
       providers: [
         { providerId: 'stripe', displayName: 'Stripe', checkoutMode: 'embedded', publicKey: 'pk_test' },
+        { providerId: 'paypal', displayName: 'PayPal', checkoutMode: 'hosted', publicKey: 'cid' },
         { providerId: 'apple', displayName: 'App Store', checkoutMode: 'native' },
         { providerId: 'google', displayName: 'Google Play', checkoutMode: 'native' },
       ],
     });
     // Every secret-bearing key in the fixtures must stay out of the browser-safe view.
-    for (const secret of ['sk_test', 'whsec', 'APPLE_SECRET_P8', 'GOOGLE_SECRET_SA']) {
+    for (const secret of ['sk_test', 'whsec', 'PAYPAL_SECRET_X', 'PAYPAL_WEBHOOK_X', 'APPLE_SECRET_P8', 'GOOGLE_SECRET_SA']) {
       expect(JSON.stringify(cfg)).not.toContain(secret);
     }
     expect(publicPaymentsConfig({})).toEqual({ enabled: false, defaultProvider: null, providers: [] });

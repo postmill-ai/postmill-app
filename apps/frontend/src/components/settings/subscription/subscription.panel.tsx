@@ -462,7 +462,13 @@ export const SubscriptionPanel: React.FC = () => {
   }
 
   if (!error && !subscription && usage?.billingEnabled !== false) {
-    // A workspace that has never subscribed is not an error state.
+    // A workspace that has never subscribed is not an error state. Hold the copy
+    // until /billing/config resolves so a store-billed org never flashes "View plans".
+    if (!configReady) {
+      return (
+        <div className="bg-newBgColorInner border border-newTableBorder rounded-[4px] p-[24px] animate-pulse h-[120px]" />
+      );
+    }
     return (
       <div className="bg-newBgColorInner border border-newTableBorder rounded-[4px] p-[24px] flex flex-col items-center gap-[12px]">
         <span className="text-[14px] text-newTableText">

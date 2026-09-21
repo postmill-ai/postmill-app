@@ -173,15 +173,21 @@ describe('receiveWebhook (Pub/Sub push)', () => {
     await expect(adapter.receiveWebhook(rtdn(subNotification(4), 'mo'))).rejects.toThrow(/backend error/);
   });
 
-  it('an activation RTDN on a token Play does not know yet is retried once, then acked WITHOUT a ledger row', async () => {
+  it('a PURCHASED RTDN on a token Play does not know yet is retried once, then acked WITHOUT a ledger row', async () => {
     adapter._activationRetryDelayMs = 0;
-    // Propagation lag: first read 404s, the retry succeeds.
+    // Propagation lag: first read 404s, the retry succeeds — and that receipt is ledgerable.
     api.get
       .mockRejectedValueOnce(Object.assign(new Error('not found'), { code: 404 }))
       .mockResolvedValue({ data: purchase() });
     const r = await adapter.receiveWebhook(rtdn(subNotification(4), 'fresh'));
     expect(r.events[0]).toMatchObject({ type: 'subscription.activated', customerRef: 'tok_1' });
+    expect(r.skipRecord).toBeUndefined();
     expect(api.get).toHaveBeenCalledTimes(2);
+    // RESTARTED/RECOVERED never concern fresh tokens: a rejection is ledgered at once, no retry.
+    api.get.mockClear();
+    api.get.mockRejectedValue(Object.assign(new Error('gone'), { code: 410 }));
+    expect(await adapter.receiveWebhook(rtdn(subNotification(1), 'rec'))).toEqual({ eventId: 'rec', eventType: 'rtdn.subscription.1.token-rejected', events: [] });
+    expect(api.get).toHaveBeenCalledTimes(1);
     // Still rejected after the retry: acknowledged, not ledgered, so a redelivery looks again.
     api.get.mockRejectedValue(Object.assign(new Error('not found'), { code: 404 }));
     expect(await adapter.receiveWebhook(rtdn(subNotification(4), 'dead'))).toEqual({ eventId: 'dead', eventType: 'rtdn.subscription.4.token-rejected', events: [], skipRecord: true });
