@@ -8,7 +8,7 @@ export const metadata: ProviderMetadata = {
     "en": "Vultr Object Storage — S3-compatible object storage."
   },
   "id": "vultr",
-  "displayName": "vultr",
+  "displayName": "Vultr Object Storage",
   "kind": "action",
   "domains": [],
   "hasModelList": false,

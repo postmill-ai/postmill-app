@@ -54,12 +54,15 @@ describe('ProviderKernel metadata conformance', () => {
         // must say `[]` — the historical `['media']` placeholder is forbidden.
         const domains = mod.metadata!.domains;
         expect(domains.every((d) => ['ai', 'media', 'payments'].includes(d))).toBe(true);
+        expect(new Set(domains).size).toBe(domains.length);
         switch (mod.manifest.domain) {
           case 'ai':
             expect(domains).toContain('ai');
+            expect(domains).not.toContain('payments');
             break;
           case 'media':
             expect(domains).toContain('media');
+            expect(domains).not.toContain('payments');
             break;
           case 'payments':
             expect(domains).toEqual(['payments']);
