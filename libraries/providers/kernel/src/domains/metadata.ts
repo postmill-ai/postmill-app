@@ -56,8 +56,11 @@ export interface ProviderMetadata {
    */
   kind: 'direct' | 'hub' | 'action';
 
-  /** Which default surfaces this provider may serve. */
-  domains: Array<'ai' | 'media'>;
+  /**
+   * Which default surfaces this provider may serve. `payments` modules declare
+   * exactly `['payments']` — they never take part in AI/media default resolution.
+   */
+  domains: Array<'ai' | 'media' | 'payments'>;
 
   /** AI text/vision categories this provider can serve (e.g. 'low-reasoning', 'vision'). */
   modelCategories?: string[];

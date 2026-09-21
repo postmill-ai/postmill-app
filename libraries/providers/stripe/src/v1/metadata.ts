@@ -9,7 +9,7 @@ export const metadata: ProviderMetadata = {
   "displayName": "Stripe",
   "kind": "action",
   "domains": [
-    "media"
+    "payments"
   ],
   "hasModelList": false,
   "mediaCategories": []
