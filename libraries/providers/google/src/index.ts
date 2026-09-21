@@ -1,3 +1,3 @@
-import { googleAiModule, googleAuthModule } from './v1';
-const googleProviderModules = [googleAiModule, googleAuthModule];
+import { googleAiModule, googleAuthModule, googlePaymentsModule } from './v1';
+const googleProviderModules = [googleAiModule, googleAuthModule, googlePaymentsModule];
 export default googleProviderModules;

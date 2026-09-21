@@ -1,12 +1,12 @@
 import { ProviderMetadata } from '@postmill-ai/provider-kernel';
 
 export const metadata: ProviderMetadata = {
-  "website": "https://apple.com",
+  "website": "https://www.paypal.com",
   "description": {
-    "en": "Apple — Sign in with Apple for authentication, and App Store subscriptions for the mobile app."
+    "en": "PayPal — hosted subscription checkout through the PayPal Subscriptions API; buyers pay with a PayPal balance, bank or card."
   },
-  "id": "apple",
-  "displayName": "Apple",
+  "id": "paypal",
+  "displayName": "PayPal",
   "kind": "action",
   "domains": [
     "media"

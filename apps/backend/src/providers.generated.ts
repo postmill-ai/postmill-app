@@ -95,6 +95,7 @@ import openaicompatibleModules from '@postmill-ai/provider-openai-compatible';
 import openrouterModules from '@postmill-ai/provider-openrouter';
 import odyseeModules from '@postmill-ai/provider-odysee';
 import owlyModules from '@postmill-ai/provider-owly';
+import paypalModules from '@postmill-ai/provider-paypal';
 import peertubeModules from '@postmill-ai/provider-peertube';
 import perplexityModules from '@postmill-ai/provider-perplexity';
 import piaModules from '@postmill-ai/provider-pia';
@@ -260,6 +261,7 @@ export const providerModules: ProviderModule<any, any>[] = [
   ...openrouterModules,
   ...odyseeModules,
   ...owlyModules,
+  ...paypalModules,
   ...peertubeModules,
   ...perplexityModules,
   ...piaModules,

@@ -35,6 +35,25 @@ export const PAYMENT_PROVIDER_ENV = {
     publicKeyEnv: 'STRIPE_PUBLISHABLE_KEY',
     displayName: 'Stripe',
   },
+  paypal: {
+    enabledBy: 'PAYPAL_CLIENT_ID',
+    required: ['PAYPAL_CLIENT_ID', 'PAYPAL_CLIENT_SECRET', 'PAYPAL_WEBHOOK_ID'],
+    checkoutMode: 'hosted',
+    publicKeyEnv: 'PAYPAL_CLIENT_ID',
+    displayName: 'PayPal',
+  },
+  apple: {
+    enabledBy: 'APPLE_IAP_BUNDLE_ID',
+    required: ['APPLE_IAP_BUNDLE_ID', 'APPLE_IAP_ISSUER_ID', 'APPLE_IAP_KEY_ID', 'APPLE_IAP_PRIVATE_KEY'],
+    checkoutMode: 'native',
+    displayName: 'App Store',
+  },
+  google: {
+    enabledBy: 'GOOGLE_PLAY_PACKAGE_NAME',
+    required: ['GOOGLE_PLAY_PACKAGE_NAME', 'GOOGLE_PLAY_SERVICE_ACCOUNT_JSON'],
+    checkoutMode: 'native',
+    displayName: 'Google Play',
+  },
 } as const satisfies Record<string, PaymentProviderEnv>;
 
 export type PaymentProviderId = keyof typeof PAYMENT_PROVIDER_ENV;

@@ -1,13 +1,11 @@
 {
-  "name": "@postmill-ai/provider-apple",
+  "name": "@postmill-ai/provider-paypal",
   "version": "1.0.0",
   "private": true,
   "main": "src/index.ts",
   "types": "src/index.ts",
   "dependencies": {
-    "@apple/app-store-server-library": "^3.1.0",
-    "@postmill-ai/provider-kernel": "workspace:*",
-    "jsonwebtoken": "^9.0.2"
+    "@postmill-ai/provider-kernel": "workspace:*"
   },
   "license": "AGPL-3.0",
   "engines": {
