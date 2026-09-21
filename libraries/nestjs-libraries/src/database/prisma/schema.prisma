@@ -59,6 +59,11 @@ model Organization {
   mediaProviderConfigs MediaProviderConfig[]
   contentPackConfigs   ContentPackConfig[]
   activeContentPackIdentifier String? // null = free default; pointer to the active premium content pack identifier
+  // Org-wide AI budget ceiling across ALL providers (USD; null = no ceiling). Enforced
+  // independently of the per-provider caps on AIOrgProviderConfig.
+  aiBudgetMonthlyCap        Float?
+  aiBudgetDailyCap          Float?
+  aiBudgetAlertThresholdPct Float? // 0–1 fraction; null = global default
   auditLogs           AuditLog[]
   orgShortLinkConfigs  OrgShortLinkConfig[]
   shortLinks           ShortLink[]

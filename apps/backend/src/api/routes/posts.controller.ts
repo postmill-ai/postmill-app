@@ -295,10 +295,12 @@ export class PostsController {
       // The org's own AI provider said no → the global filter answers 502
       // with the provider named, not a Postmill 500.
       rethrowProviderError(err);
-      const status = err instanceof BudgetExceeded ? 429 : 500;
-      res
-        .status(status)
-        .json({ error: err?.message ?? 'Generator failed to start' });
+      if (err instanceof BudgetExceeded) {
+        // Same envelope as /copilot/chat so ai-error-display recognises it.
+        res.status(429).json({ error: 'BudgetExceeded', message: err.message });
+        return;
+      }
+      res.status(500).json({ error: err?.message ?? 'Generator failed to start' });
       return;
     }
 

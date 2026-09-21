@@ -36,6 +36,15 @@ import {
   UpsertOrgProviderConfigDto,
 } from '@postmill-ai/nestjs-libraries/dtos/providers/admin-ai-settings.dtos';
 
+// Per-org budget ceilings live on Organization.aiBudget* now (migrated by
+// BackfillService). Never expose a retired `perOrgCaps` slice to the admin UI
+// (it lists tenant ids + caps) and never let one be written back.
+function stripPerOrgCaps<T>(value: T): T {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return value;
+  const { perOrgCaps: _retired, ...rest } = value as Record<string, unknown>;
+  return rest as T;
+}
+
 // PROVIDER_REMEDIATION 0.1a/0.1b + 3.2: this controller writes the platform-global
 // AISystemSettings singleton and, via :orgId path params, ANY tenant's
 // AIOrgProviderConfig. It was gated only by `@RequirePermission('ai-config',
@@ -91,7 +100,7 @@ export class AiSettingsController {
 
     return {
       guardrailSettings: safeParse(settings.guardrailSettings),
-      budgetSettings: safeParse(settings.budgetSettings),
+      budgetSettings: stripPerOrgCaps(safeParse(settings.budgetSettings)),
       observability: safeParse(settings.observability),
       mcpSettings: safeParse(settings.mcpSettings),
       ragSettings: safeParse(settings.ragSettings),
@@ -109,7 +118,7 @@ export class AiSettingsController {
     this._assertSuperAdmin(user);
     await this._aiSettingsService.upsertSystemSettings({
       guardrailSettings: body.guardrailSettings,
-      budgetSettings: body.budgetSettings,
+      budgetSettings: stripPerOrgCaps(body.budgetSettings),
       observability: body.observability,
       mcpSettings: body.mcpSettings,
       ragSettings: body.ragSettings,

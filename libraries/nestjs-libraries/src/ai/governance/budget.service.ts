@@ -4,20 +4,14 @@ import { AiSettingsService } from '@postmill-ai/nestjs-libraries/database/prisma
 import { AiSettingsManager } from '@postmill-ai/nestjs-libraries/ai/ai-settings.manager';
 import { NotificationService } from '@postmill-ai/nestjs-libraries/database/prisma/notifications/notification.service';
 
+/**
+ * Deployment-wide (super-admin) caps from AISystemSettings.budgetSettings —
+ * alert-only. Per-org ceilings moved to Organization.aiBudget* (see
+ * `_getOrgCaps`); the old `perOrgCaps` slice was migrated by BackfillService.
+ */
 export interface BudgetSettings {
   monthlyCap?: number;
   dailyCap?: number;
-  // 5.5: the per-org slice also carries `alertThresholdPct` (per-org alert
-  // threshold, enforced in recordSpend). A per-org `enabled` kill-switch is
-  // deliberately NOT enforced: the slice is org-writable (PUT /settings/ai/budget)
-  // but a super-admin can impose a cap into the same slice via the governance
-  // whole-blob route — honoring an org-written `enabled:false` would let a tenant
-  // self-exempt from an operator-imposed cap. The org path also no longer
-  // persists `enabled` (see OrgAiSettingsRepository#dtoToBudgetSlice).
-  perOrgCaps?: Record<
-    string,
-    { monthly?: number; daily?: number; alertThresholdPct?: number }
-  >;
   alertThresholdPct?: number;
 }
 
@@ -27,6 +21,11 @@ interface ProviderBudgetCaps {
   alertThresholdPct?: number;
 }
 
+/** Org-wide ceiling across all providers; same shape as a provider's caps. */
+type OrgBudgetCaps = ProviderBudgetCaps;
+
+// Single enforcement kill-switch: covers both the org-wide ceiling and the
+// per-provider caps. Alerts keep firing regardless.
 const AI_PROVIDER_BUDGET_ENFORCE = process.env.AI_PROVIDER_BUDGET_ENFORCE !== 'false';
 const PROVIDER_CAPS_CACHE_TTL = 60_000;
 
@@ -161,6 +160,60 @@ export class BudgetService {
     const settings = await this._aiSettingsManager.getSettings();
     const caps: BudgetSettings | undefined = settings?.budgetSettings;
     return caps ?? {};
+  }
+
+  // 60s TTL cache for the org-wide ceiling; invalidated on save via
+  // `invalidateOrgCaps` so the saving instance enforces immediately (other
+  // instances converge within the TTL, same as provider caps).
+  private _orgCapsCache = new Map<string, { caps: OrgBudgetCaps | null; ts: number }>();
+
+  invalidateOrgCaps(organizationId: string) {
+    this._orgCapsCache.delete(organizationId);
+  }
+
+  invalidateProviderCaps(organizationId: string, provider: string) {
+    this._providerCapsCache.delete(`${organizationId}::${provider}`);
+  }
+
+  private async _getOrgCaps(organizationId: string): Promise<OrgBudgetCaps | null> {
+    const cached = this._orgCapsCache.get(organizationId);
+    if (cached && Date.now() - cached.ts < PROVIDER_CAPS_CACHE_TTL) {
+      return cached.caps;
+    }
+    const row = await this._aiSettings.getOrgBudget(organizationId);
+    const caps: OrgBudgetCaps | null = row
+      ? {
+          monthlyCap: row.monthlyCap ?? undefined,
+          dailyCap: row.dailyCap ?? undefined,
+          alertThresholdPct: row.alertThresholdPct ?? undefined,
+        }
+      : null;
+    this._orgCapsCache.set(organizationId, { caps, ts: Date.now() });
+    return caps;
+  }
+
+  // Live ledger read (not the 60s in-process accumulator): the org cap is a hard
+  // ceiling, so the gate must see spend recorded by every instance.
+  private async _orgSpend(
+    organizationId: string,
+    startOfMonth: Date,
+    startOfDay: Date,
+  ): Promise<{ monthly: number; daily: number }> {
+    const [monthlyRows, dailyRows] = await Promise.all([
+      this._spendLogRepo.model.aISpendLog.groupBy({
+        by: ['organizationId'],
+        where: { organizationId, createdAt: { gte: startOfMonth } },
+        _sum: { costUsd: true },
+      }),
+      this._spendLogRepo.model.aISpendLog.groupBy({
+        by: ['organizationId'],
+        where: { organizationId, createdAt: { gte: startOfDay } },
+        _sum: { costUsd: true },
+      }),
+    ]);
+    const sum = (rows: Array<{ _sum?: { costUsd?: number | null } }>) =>
+      rows.reduce((acc, r) => acc + (r._sum?.costUsd ?? 0), 0);
+    return { monthly: sum(monthlyRows), daily: sum(dailyRows) };
   }
 
   private async _getProviderCaps(
@@ -308,14 +361,33 @@ export class BudgetService {
       return { allowed: true };
     }
 
-    // Provider budgets are org-scoped and BYOK: no provider or no org means no gate.
-    if (!provider || !organizationId) {
+    // Both gates are org-scoped: no org means nothing to enforce.
+    if (!organizationId) {
       return { allowed: true };
     }
 
     const now = new Date();
     const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
     const startOfDay = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    const buffer = this.RESERVATION_BUFFER;
+
+    // Org-wide ceiling first: it is the broader limit and applies even to
+    // callers that resolve no single provider (designer, pipeline, digests).
+    const orgCaps = await this._getOrgCaps(organizationId);
+    if (orgCaps && (orgCaps.monthlyCap != null || orgCaps.dailyCap != null)) {
+      const orgSpend = await this._orgSpend(organizationId, startOfMonth, startOfDay);
+      if (orgCaps.monthlyCap != null && orgSpend.monthly >= orgCaps.monthlyCap - buffer) {
+        return { allowed: false, reason: 'org_budget_exceeded' };
+      }
+      if (orgCaps.dailyCap != null && orgSpend.daily >= orgCaps.dailyCap - buffer) {
+        return { allowed: false, reason: 'org_budget_exceeded' };
+      }
+    }
+
+    // Provider caps are BYOK per provider: no provider resolved means no provider gate.
+    if (!provider) {
+      return { allowed: true };
+    }
 
     const caps = await this._getProviderCaps(organizationId, provider);
     if (!caps || (caps.monthlyCap == null && caps.dailyCap == null)) {
@@ -328,7 +400,6 @@ export class BudgetService {
       startOfMonth,
       startOfDay,
     );
-    const buffer = this.RESERVATION_BUFFER;
 
     if (caps.monthlyCap != null && spend.monthly >= caps.monthlyCap - buffer) {
       return {
@@ -496,25 +567,23 @@ export class BudgetService {
       }
     }
 
+    const orgCaps = data.organizationId ? await this._getOrgCaps(data.organizationId) : null;
     if (data.organizationId) {
-      const orgCaps = caps.perOrgCaps?.[data.organizationId];
-      // 5.5: use the per-org alert threshold when the org set one, else the global.
-      // Normalize a percent-style value (e.g. 80) to a fraction — the field name
-      // says "Pct" and the DTO has no 0–1 range, so an API client sending 80
-      // would otherwise set the alert point at cap×80 (never fires).
+      // Use the org's own alert threshold when set, else the global one. The DTO
+      // enforces 0–1 now; keep normalizing a legacy percent-style value (80).
       const rawOrgThreshold = orgCaps?.alertThresholdPct ?? threshold;
       const orgThreshold =
         rawOrgThreshold > 1 ? rawOrgThreshold / 100 : rawOrgThreshold;
       const orgMonthly = this._spendAccum!.orgMonthly.get(data.organizationId) ?? 0;
-      if (orgCaps?.monthly && orgMonthly >= orgCaps.monthly * orgThreshold) {
+      if (orgCaps?.monthlyCap && orgMonthly >= orgCaps.monthlyCap * orgThreshold) {
         const alertKey = `${data.organizationId}:monthly:${this._getAccumKey()}`;
         if (!this._thresholdFired.has(alertKey)) {
           this._thresholdFired.add(alertKey);
           this._logger.warn(
-            `Budget alert: Org ${data.organizationId} at ${((orgMonthly / orgCaps.monthly) * 100).toFixed(0)}% of monthly cap`,
+            `Budget alert: Org ${data.organizationId} at ${((orgMonthly / orgCaps.monthlyCap) * 100).toFixed(0)}% of monthly cap`,
           );
           try {
-            await this._notificationService.notifyBudgetThreshold(data.organizationId, data.scope, (orgMonthly / orgCaps.monthly) * 100);
+            await this._notificationService.notifyBudgetThreshold(data.organizationId, data.scope, (orgMonthly / orgCaps.monthlyCap) * 100);
           } catch {}
         }
       }
@@ -590,14 +659,13 @@ export class BudgetService {
     }
 
     if (data.organizationId) {
-      const orgCaps = caps.perOrgCaps?.[data.organizationId];
       const orgDaily = this._spendAccum!.orgDaily.get(data.organizationId) ?? 0;
-      if (orgCaps?.daily && orgDaily >= orgCaps.daily) {
+      if (orgCaps?.dailyCap && orgDaily >= orgCaps.dailyCap) {
         const alertKey = `${data.organizationId}:daily:${this._getAccumKey()}`;
         if (!this._thresholdFired.has(alertKey)) {
           this._thresholdFired.add(alertKey);
           this._logger.warn(
-            `Daily cap of $${orgCaps.daily} exceeded for org ${data.organizationId} ($${orgDaily.toFixed(4)})`,
+            `Daily cap of $${orgCaps.dailyCap} exceeded for org ${data.organizationId} ($${orgDaily.toFixed(4)})`,
           );
           try {
             await this._notificationService.notifyBudgetThreshold(data.organizationId, 'daily_cap', 100);

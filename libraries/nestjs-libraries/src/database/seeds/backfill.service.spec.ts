@@ -20,6 +20,7 @@ type Tx = {
   };
   aIOrgProviderConfig: { findMany: ReturnType<typeof vi.fn> };
   mediaProviderConfig: { upsert: ReturnType<typeof vi.fn>; findMany: ReturnType<typeof vi.fn> };
+  organization: { updateMany: ReturnType<typeof vi.fn> };
   // legacy secret re-encryption targets not already listed above
   // (findMany returns [] = nothing to rewrite)
   integration: { findMany: ReturnType<typeof vi.fn> };
@@ -47,6 +48,7 @@ const makeTx = (): Tx => ({
   },
   aIOrgProviderConfig: { findMany: vi.fn().mockResolvedValue([]) },
   mediaProviderConfig: { upsert: vi.fn(), findMany: vi.fn().mockResolvedValue([]) },
+  organization: { updateMany: vi.fn().mockResolvedValue({ count: 1 }) },
   integration: { findMany: vi.fn().mockResolvedValue([]) },
   orgProviderConfiguration: { findMany: vi.fn().mockResolvedValue([]) },
   contentPackConfig: { findMany: vi.fn().mockResolvedValue([]) },
@@ -137,6 +139,64 @@ describe('BackfillService — ragSettings.mediaProviders migration', () => {
 
     expect(tx.mediaProviderConfig.upsert).not.toHaveBeenCalled();
     expect(tx.aISystemSettings.update).not.toHaveBeenCalled();
+  });
+});
+
+describe('BackfillService — org AI budget caps migration', () => {
+  let tx: Tx;
+
+  beforeEach(() => {
+    tx = makeTx();
+  });
+
+  it('moves each perOrgCaps slice onto the Organization columns, normalizes a percent threshold, and strips the key', async () => {
+    tx.aISystemSettings.findFirst.mockResolvedValue({
+      id: 'settings-1',
+      budgetSettings: JSON.stringify({
+        monthlyCap: 500,
+        perOrgCaps: {
+          'org-1': { monthly: 20, daily: 2, alertThresholdPct: 80 },
+          'org-2': { monthly: 5, alertThresholdPct: 0.5 },
+        },
+      }),
+    });
+
+    await makeService(tx).backfill();
+
+    expect(tx.organization.updateMany).toHaveBeenCalledTimes(2);
+    expect(tx.organization.updateMany).toHaveBeenCalledWith({
+      where: { id: 'org-1', aiBudgetMonthlyCap: null, aiBudgetDailyCap: null, aiBudgetAlertThresholdPct: null },
+      data: { aiBudgetMonthlyCap: 20, aiBudgetDailyCap: 2, aiBudgetAlertThresholdPct: 0.8 },
+    });
+    expect(tx.organization.updateMany).toHaveBeenCalledWith({
+      where: { id: 'org-2', aiBudgetMonthlyCap: null, aiBudgetDailyCap: null, aiBudgetAlertThresholdPct: null },
+      data: { aiBudgetMonthlyCap: 5, aiBudgetDailyCap: null, aiBudgetAlertThresholdPct: 0.5 },
+    });
+
+    const updateArg = tx.aISystemSettings.update.mock.calls.find(
+      (c: any[]) => c[0]?.data?.budgetSettings !== undefined,
+    )![0];
+    const rewritten = JSON.parse(updateArg.data.budgetSettings);
+    expect(rewritten.perOrgCaps).toBeUndefined();
+    expect(rewritten.monthlyCap).toBe(500);
+  });
+
+  it('is a no-op without a perOrgCaps key', async () => {
+    tx.aISystemSettings.findFirst.mockResolvedValue({
+      id: 'settings-1',
+      budgetSettings: JSON.stringify({ monthlyCap: 500 }),
+    });
+
+    await makeService(tx).backfill();
+
+    expect(tx.organization.updateMany).not.toHaveBeenCalled();
+  });
+
+  it('tolerates a corrupt budgetSettings blob', async () => {
+    tx.aISystemSettings.findFirst.mockResolvedValue({ id: 'settings-1', budgetSettings: '{nope' });
+
+    await expect(makeService(tx).backfill()).resolves.toBeUndefined();
+    expect(tx.organization.updateMany).not.toHaveBeenCalled();
   });
 });
 

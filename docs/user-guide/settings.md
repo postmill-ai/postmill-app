@@ -140,6 +140,12 @@ Configure AI providers, models, spending, and prompt management.
   the reasoning model and fall back to the default model when none is set. Image models are no
   longer part of AI provider configuration — image/video/audio generation is configured in the
   [Content tab](#content-tab).
+- **Organization budget** — the card at the top of **LLM Providers**: a hard ceiling on your
+  organisation's total AI spend across every provider (monthly cap, daily cap, both in USD, plus an
+  alert threshold). Once it is reached, every AI call is refused with HTTP 429 regardless of
+  per-provider caps — including surfaces that don't pick a single provider (AI Designer, content
+  pipeline, the daily brief). Turning the switch off clears the ceiling. A saved cap is enforced
+  immediately on the instance that saved it and within a minute everywhere else.
 - **Provider budget** — opt-in via the **Budget limits** switch in the provider's configure form
   (off by default). When enabled, each provider can carry its own monthly cap, daily cap (both
   numeric, in USD), and alert threshold (a percentage slider). When a cap is exceeded, calls against

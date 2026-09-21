@@ -11,6 +11,24 @@ import {
   validateBrandProfileData,
 } from './brand-profile.schema';
 
+
+export interface OrgAiBudget {
+  monthlyCap: number | null;
+  dailyCap: number | null;
+  /** 0–1 fraction; null = global default. */
+  alertThresholdPct: number | null;
+}
+
+const toOrgAiBudget = (row: {
+  aiBudgetMonthlyCap: number | null;
+  aiBudgetDailyCap: number | null;
+  aiBudgetAlertThresholdPct: number | null;
+}): OrgAiBudget => ({
+  monthlyCap: row.aiBudgetMonthlyCap,
+  dailyCap: row.aiBudgetDailyCap,
+  alertThresholdPct: row.aiBudgetAlertThresholdPct,
+});
+
 @Injectable()
 export class AiSettingsService {
   constructor(
@@ -214,16 +232,32 @@ export class AiSettingsService {
     return this._repository.getSpendSummary(organizationId, since);
   }
 
+  // ── Org-wide AI budget ceiling ──
+  async getOrgBudget(organizationId: string): Promise<OrgAiBudget | null> {
+    const row = await this._repository.getOrgBudget(organizationId);
+    return row ? toOrgAiBudget(row) : null;
+  }
+
+  /** `undefined` leaves a field untouched; `null` clears it. */
+  async updateOrgBudget(organizationId: string, patch: Partial<OrgAiBudget>): Promise<OrgAiBudget> {
+    const data: Parameters<AiSettingsRepository['updateOrgBudget']>[1] = {};
+    if (patch.monthlyCap !== undefined) data.aiBudgetMonthlyCap = patch.monthlyCap;
+    if (patch.dailyCap !== undefined) data.aiBudgetDailyCap = patch.dailyCap;
+    if (patch.alertThresholdPct !== undefined) data.aiBudgetAlertThresholdPct = patch.alertThresholdPct;
+    return toOrgAiBudget(await this._repository.updateOrgBudget(organizationId, data));
+  }
+
   async getUsageSummary(organizationId: string) {
     const now = new Date();
     const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
     const startOfDay = new Date(now.getFullYear(), now.getMonth(), now.getDate());
 
-    const [summary, monthSummary, daySummary, providerConfigs] = await Promise.all([
+    const [summary, monthSummary, daySummary, providerConfigs, orgBudget] = await Promise.all([
       this.getSpendSummary(organizationId),
       this.getSpendSummary(organizationId, startOfMonth),
       this.getSpendSummary(organizationId, startOfDay),
       this.getOrgProviderConfigs(organizationId),
+      this.getOrgBudget(organizationId),
     ]);
 
     const totalSpend = summary.reduce(
@@ -312,12 +346,26 @@ export class AiSettingsService {
       };
     });
 
+    // The org-wide ceiling, in the shape the dashboard/usage widgets already render.
+    const budget =
+      orgBudget && (orgBudget.monthlyCap != null || orgBudget.dailyCap != null)
+        ? {
+            monthlyCap: orgBudget.monthlyCap,
+            dailyCap: orgBudget.dailyCap,
+            remainingMonthly:
+              orgBudget.monthlyCap != null ? Math.max(0, orgBudget.monthlyCap - monthlySpend) : null,
+            remainingDaily:
+              orgBudget.dailyCap != null ? Math.max(0, orgBudget.dailyCap - dailySpend) : null,
+          }
+        : null;
+
     return {
       byScope,
       byProvider,
       totalSpendUsd: totalSpend,
       monthlySpendUsd: monthlySpend,
       dailySpendUsd: dailySpend,
+      budget,
     };
   }
 

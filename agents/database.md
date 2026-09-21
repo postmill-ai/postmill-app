@@ -69,6 +69,17 @@ Runs against a service container `postgres:17-alpine` (`postmill-local`/`postmil
 - **`tools/db/migrate-deploy-safe.mjs`** (`pnpm run prisma-migrate-deploy-safe`; used by `pm2-run` and CI): `migrate deploy` plus one recovery — on a DB created by the old `db push` workflow (tables present, no `_prisma_migrations` history) a bare deploy aborts with **P3005 "database schema is not empty"**; the wrapper detects P3005, baselines `0_init` via `migrate resolve --applied 0_init`, and re-deploys. One-time, idempotent. Sharp edge: the baseline marks `0_init` applied **without verifying the live DB matches it** — valid only because `0_init` is generated from the current schema and any db-push DB was pushed from that same schema. For a DB pushed from an *older* schema, use `pnpm run prisma-reset` instead.
 - **`tools/db/postmill-migrate.sh`**: manual, in-place `prisma db push` **inside the running Docker container** (`POSTMILL_CONTAINER`, default `postmill-app`). Refuses data loss unless passed `--accept-data-loss` (back up first). It pushes whatever schema is baked into the running image; the permanent path is edit → commit → tag → CI image → redeploy. Not part of the normal dev workflow.
 
+## Data backfills (blob → row, one-time)
+
+Cross-table data moves that need application code (JSON slice → columns, re-encryption) live in
+`libraries/nestjs-libraries/src/database/seeds/backfill.service.ts`, **not** in migration SQL and
+not in `tools/db`. `BackfillService` runs at every boot; register a one-time step with
+`_runStep(label, fn, true)` — it is ledger-gated (`backfill:<label>`) so it runs exactly once per
+deployment, must be idempotent anyway (write only rows still in the legacy state), and must never
+throw on missing targets (`updateMany`, not `update`). Precedents: `migrateRagSettingsMediaProviders`,
+`migrateOrgBudgetCaps`. Keep `legacy secret re-encryption` the last one-time step. `tools/db` is for
+operator-invoked one-shots that a runbook names.
+
 ## Rollback
 
 No down-migrations. Rollback = expand-contract in reverse: ship a new forward migration

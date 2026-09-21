@@ -112,8 +112,9 @@ export class OrgAiSettingsController {
   @Get('/budget')
   @RequirePermission('settings', 'read')
   async getBudget(@GetOrgFromRequest() org: Organization) {
+    // Always the full 3-key shape so the settings card can seed its form.
     const budget = await this._orgAiSettings.getBudget(org.id);
-    return budget || {};
+    return budget ?? { monthlyCap: null, dailyCap: null, alertThresholdPct: null };
   }
 
   @Put('/budget')

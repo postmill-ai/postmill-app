@@ -74,6 +74,11 @@ export class BackfillService {
       (tx) => this.backfillFileSize(tx),
       true,
     );
+    await this._runStep(
+      'org AI budget caps',
+      (tx) => this.migrateOrgBudgetCaps(tx),
+      true,
+    );
     // v1.0.0 cut-over guard: must be the LAST one-time step so every other
     // migration has run before values are rewritten to their final format.
     await this._runStep(
@@ -387,6 +392,59 @@ export class BackfillService {
     await tx.aISystemSettings.update({
       where: { id: aiSettings.id },
       data: { ragSettings: JSON.stringify(remainingRag) },
+    });
+  }
+
+  /**
+   * Move the org-wide AI budget ceiling out of the global AISystemSettings
+   * `budgetSettings.perOrgCaps[orgId]` JSON slice onto the Organization columns
+   * (`aiBudgetMonthlyCap` / `aiBudgetDailyCap` / `aiBudgetAlertThresholdPct`).
+   * Only orgs whose three columns are all still null are written, so a cap saved
+   * through the new endpoint after deploy is never overwritten; `updateMany`
+   * tolerates ids that no longer exist. Legacy percent-style thresholds (80)
+   * are normalized to the 0–1 contract. The slice is stripped afterwards so no
+   * reader can see stale state.
+   */
+  private async migrateOrgBudgetCaps(tx: Prisma.TransactionClient) {
+    const aiSettings = await tx.aISystemSettings.findFirst();
+    if (!aiSettings?.budgetSettings) return;
+
+    let budget: Record<string, unknown>;
+    try {
+      budget = JSON.parse(aiSettings.budgetSettings);
+    } catch {
+      return;
+    }
+    const perOrgCaps = budget?.perOrgCaps as
+      | Record<string, { monthly?: number | null; daily?: number | null; alertThresholdPct?: number | null }>
+      | undefined;
+    if (!perOrgCaps || typeof perOrgCaps !== 'object') return;
+
+    const num = (v: unknown): number | null =>
+      typeof v === 'number' && Number.isFinite(v) && v >= 0 ? v : null;
+
+    for (const [orgId, slice] of Object.entries(perOrgCaps)) {
+      if (!slice || typeof slice !== 'object') continue;
+      const threshold = num(slice.alertThresholdPct);
+      await tx.organization.updateMany({
+        where: {
+          id: orgId,
+          aiBudgetMonthlyCap: null,
+          aiBudgetDailyCap: null,
+          aiBudgetAlertThresholdPct: null,
+        },
+        data: {
+          aiBudgetMonthlyCap: num(slice.monthly),
+          aiBudgetDailyCap: num(slice.daily),
+          aiBudgetAlertThresholdPct: threshold != null && threshold > 1 ? threshold / 100 : threshold,
+        },
+      });
+    }
+
+    const { perOrgCaps: _migrated, ...remaining } = budget;
+    await tx.aISystemSettings.update({
+      where: { id: aiSettings.id },
+      data: { budgetSettings: JSON.stringify(remaining) },
     });
   }
 

@@ -16,7 +16,8 @@ import { ProviderKernel, DEFAULT_VERSION } from '@postmill-ai/provider-kernel';
 import { isSafePublicHttpsUrl } from '@postmill-ai/nestjs-libraries/dtos/webhooks/webhook.url.validator';
 import { bustDefaultsCatalogCache } from '@postmill-ai/nestjs-libraries/ai/defaults/defaults-cache';
 import { DefaultsSeedService } from '@postmill-ai/nestjs-libraries/ai/defaults/defaults-seed.service';
-import { AiSettingsService } from '@postmill-ai/nestjs-libraries/database/prisma/ai-settings/ai-settings.service';
+import { AiSettingsService, OrgAiBudget } from '@postmill-ai/nestjs-libraries/database/prisma/ai-settings/ai-settings.service';
+import { BudgetService } from '@postmill-ai/nestjs-libraries/ai/governance/budget.service';
 
 @Injectable()
 export class OrgAiSettingsService {
@@ -31,6 +32,9 @@ export class OrgAiSettingsService {
     private _defaultsSeed: DefaultsSeedService,
     private _aiSettings: AiSettingsService,
     @Optional() private _credentialLink?: ProviderCredentialLinkService,
+    // Optional + last so existing positional spec constructions stay valid. Lets a
+    // cap save enforce on this instance immediately instead of after the 60s cache.
+    @Optional() private _budget?: BudgetService,
   ) {}
 
   // Resolve a single AI adapter through the ProviderKernel; null for an
@@ -193,6 +197,7 @@ export class OrgAiSettingsService {
     }, version);
 
     await this._auditBudgetChange(orgId, identifier, version, existing, result);
+    this._budget?.invalidateProviderCaps(orgId, identifier);
 
     // §11.4 auto-config: OpenAI/MiniMax AI credentials live-link to the media surface.
     if (data.credentials && this._credentialLink) {
@@ -319,17 +324,41 @@ export class OrgAiSettingsService {
     return adapter.validateCredentials(decrypted);
   }
 
-  async getBudget(orgId: string) {
-    return this._repository.getBudget(orgId);
+  // ── Org-wide AI budget ceiling (Organization.aiBudget*) ──
+  async getBudget(orgId: string): Promise<OrgAiBudget | null> {
+    return this._aiSettings.getOrgBudget(orgId);
   }
 
+  /**
+   * `enabled: false` clears all three caps (the UI toggle-off); otherwise only the
+   * fields present in the body change (`null` clears one). There is no stored
+   * enabled flag — "disabled" is all three columns null.
+   */
   async updateBudget(orgId: string, data: {
-    monthlyCap?: number;
-    dailyCap?: number;
-    alertThresholdPct?: number;
+    monthlyCap?: number | null;
+    dailyCap?: number | null;
+    alertThresholdPct?: number | null;
     enabled?: boolean;
-  }) {
-    return this._repository.upsertBudget(orgId, data);
+  }): Promise<OrgAiBudget> {
+    const before = await this._aiSettings.getOrgBudget(orgId);
+    const patch: Partial<OrgAiBudget> =
+      data.enabled === false
+        ? { monthlyCap: null, dailyCap: null, alertThresholdPct: null }
+        : {
+            ...(data.monthlyCap !== undefined && { monthlyCap: data.monthlyCap }),
+            ...(data.dailyCap !== undefined && { dailyCap: data.dailyCap }),
+            ...(data.alertThresholdPct !== undefined && { alertThresholdPct: data.alertThresholdPct }),
+          };
+    const after = await this._aiSettings.updateOrgBudget(orgId, patch);
+    await this._auditChange(
+      'org_budget_updated',
+      { organizationId: orgId },
+      ['monthlyCap', 'dailyCap', 'alertThresholdPct'],
+      before,
+      after,
+    );
+    this._budget?.invalidateOrgCaps(orgId);
+    return after;
   }
 
   private async _assertBaseURLSafe(baseURL: string | undefined) {
@@ -342,15 +371,32 @@ export class OrgAiSettingsService {
     }
   }
 
-  private async _auditBudgetChange(
+  private _auditBudgetChange(
     orgId: string,
     identifier: string,
     version: string,
     before: { budgetMonthlyCap?: number | null; budgetDailyCap?: number | null; budgetAlertThresholdPct?: number | null } | null,
     after: { budgetMonthlyCap?: number | null; budgetDailyCap?: number | null; budgetAlertThresholdPct?: number | null },
   ): Promise<void> {
+    return this._auditChange(
+      'provider_budget_updated',
+      { organizationId: orgId, identifier, version },
+      ['budgetMonthlyCap', 'budgetDailyCap', 'budgetAlertThresholdPct'],
+      before,
+      after,
+    );
+  }
+
+  /** Writes one audit row listing the numeric fields that actually changed; none → no row. */
+  private async _auditChange<F extends string>(
+    action: string,
+    context: Record<string, unknown>,
+    fields: readonly F[],
+    before: Partial<Record<F, number | null | undefined>> | null,
+    after: Partial<Record<F, number | null | undefined>>,
+  ): Promise<void> {
     const changed: Record<string, { old: number | null; new: number | null }> = {};
-    for (const field of ['budgetMonthlyCap', 'budgetDailyCap', 'budgetAlertThresholdPct'] as const) {
+    for (const field of fields) {
       const oldVal = before?.[field] ?? null;
       const newVal = after[field] ?? null;
       if (oldVal !== newVal) {
@@ -361,13 +407,8 @@ export class OrgAiSettingsService {
 
     try {
       await this._aiSettings.createAuditLog({
-        action: 'provider_budget_updated',
-        detail: JSON.stringify({
-          organizationId: orgId,
-          identifier,
-          version,
-          changes: changed,
-        }),
+        action,
+        detail: JSON.stringify({ ...context, changes: changed }),
       });
     } catch (err) {
       this._logger.warn(

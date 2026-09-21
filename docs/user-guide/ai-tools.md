@@ -255,7 +255,7 @@ The spend tab in **Settings → AI** provides a visual dashboard of this data, i
 All AI operations are subject to three governance layers:
 
 1. **Guardrails** — input and output content filtering (toxicity, PII, prompt injection detection). Violations block the operation and return a `CapabilityNotAvailable` error.
-2. **Budgets** — per-provider spending caps (monthly and daily) plus per-scope caps. Exceeding a provider cap returns HTTP 429 for calls against that provider while other providers remain usable. Configure provider caps in **Settings → AI → Provider** when configuring a provider.
+2. **Budgets** — two independent layers, both monthly and daily, in USD. An **organisation budget** is a hard ceiling on total spend across all providers: once reached, every AI call returns HTTP 429 (`org_budget_exceeded`). **Provider caps** limit one provider at a time: exceeding one returns HTTP 429 (`provider_budget_exceeded`) for that provider while others remain usable. A call must pass both. Configure the organisation budget in the card at the top of **Settings → AI → LLM Providers**, and provider caps in each provider's configure form. The usage dashboard shows the organisation's remaining budget.
 3. **Rate limits** — throttle limits apply per endpoint (typically 30 requests per 60 seconds for most AI endpoints, lower for intensive operations like brand memory indexing).
 
 All AI operations log to the spend ledger (`AISpendLog`) for audit and cost tracking.

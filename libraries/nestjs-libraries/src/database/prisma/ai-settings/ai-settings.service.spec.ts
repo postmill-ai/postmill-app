@@ -10,6 +10,9 @@ const mockRepo = {
   // AISettingsAudit
   getAuditLogs: vi.fn(),
   createAuditLog: vi.fn(),
+  // Organization.aiBudget*
+  getOrgBudget: vi.fn(),
+  updateOrgBudget: vi.fn(),
   // AIOrgProviderConfig
   getOrgProviderConfigs: vi.fn(),
   getOrgProviderConfig: vi.fn(),
@@ -383,7 +386,8 @@ describe('AiSettingsService', () => {
           remainingDaily: 0.5,
         },
       ]);
-      expect(result.budget).toBeUndefined();
+      // No org-wide ceiling set → null (the widgets hide the "$X left" line).
+      expect(result.budget).toBeNull();
     });
 
     it('returns empty provider list when no active provider configs exist', async () => {
@@ -393,7 +397,42 @@ describe('AiSettingsService', () => {
       const result = await service.getUsageSummary('org1');
 
       expect(result.byProvider).toEqual([]);
-      expect(result.budget).toBeUndefined();
+      expect(result.budget).toBeNull();
+    });
+
+    it('reports the org-wide ceiling with remaining monthly/daily when set', async () => {
+      mockRepo.getSpendSummary
+        .mockResolvedValueOnce([{ _sum: { costUsd: 5 }, scope: 'generator', provider: 'openai' }])
+        .mockResolvedValueOnce([{ _sum: { costUsd: 2 }, scope: 'generator', provider: 'openai' }])
+        .mockResolvedValueOnce([{ _sum: { costUsd: 0.5 }, scope: 'generator', provider: 'openai' }]);
+      mockRepo.getOrgProviderConfigs.mockResolvedValue([]);
+      mockRepo.getOrgBudget.mockResolvedValue({
+        aiBudgetMonthlyCap: 10,
+        aiBudgetDailyCap: null,
+        aiBudgetAlertThresholdPct: 0.8,
+      });
+
+      const result = await service.getUsageSummary('org1');
+
+      expect(result.budget).toEqual({
+        monthlyCap: 10,
+        dailyCap: null,
+        remainingMonthly: 8,
+        remainingDaily: null,
+      });
+    });
+
+    it('clamps remaining to zero once the ceiling is exceeded', async () => {
+      mockRepo.getSpendSummary
+        .mockResolvedValueOnce([])
+        .mockResolvedValueOnce([{ _sum: { costUsd: 12 }, scope: 'generator', provider: 'openai' }])
+        .mockResolvedValueOnce([{ _sum: { costUsd: 3 }, scope: 'generator', provider: 'openai' }]);
+      mockRepo.getOrgProviderConfigs.mockResolvedValue([]);
+      mockRepo.getOrgBudget.mockResolvedValue({ aiBudgetMonthlyCap: 10, aiBudgetDailyCap: 1, aiBudgetAlertThresholdPct: null });
+
+      const result = await service.getUsageSummary('org1');
+
+      expect(result.budget).toEqual({ monthlyCap: 10, dailyCap: 1, remainingMonthly: 0, remainingDaily: 0 });
     });
   });
 
