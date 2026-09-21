@@ -18,6 +18,7 @@ import { Plus_Jakarta_Sans } from 'next/font/google';
 import PlausibleProvider from 'next-plausible';
 import clsx from 'clsx';
 import { VariableContextComponent } from '@postmill-ai/react/helpers/variable.context';
+import { paymentsVariables } from '@postmill-ai/frontend/app/payments.vars';
 import { Fragment } from 'react';
 import { PHProvider } from '@postmill-ai/react/helpers/posthog';
 import UtmSaver from '@postmill-ai/helpers/utils/utm.saver';
@@ -56,11 +57,12 @@ export default async function AppLayout({ children }: { children: ReactNode }) {
   const language = cookieStore.get(cookieName)?.value || fallbackLng;
   const mode = cookieStore.get('mode')?.value || 'dark';
   // Plausible tracking has its own switch now (NEXT_PUBLIC_PLAUSIBLE_DOMAIN) —
-  // it was gated on STRIPE_PUBLISHABLE_KEY, so analytics went dark on any
+  // it was gated on the billing switch, so analytics went dark on any
   // deployment with billing off. Legacy fallback keeps the old behavior.
+  const paymentsVars = paymentsVariables();
   const plausibleDomain =
     process.env.NEXT_PUBLIC_PLAUSIBLE_DOMAIN ||
-    (process.env.STRIPE_PUBLISHABLE_KEY ? 'postmill.ai' : '');
+    (paymentsVars.billingEnabled ? 'postmill.ai' : '');
   const Plausible = plausibleDomain ? PlausibleProvider : Fragment;
   return (
     <html lang="en">
@@ -83,8 +85,8 @@ export default async function AppLayout({ children }: { children: ReactNode }) {
           storageProvider={'local'}
           environment={process.env.NODE_ENV!}
           backendUrl={process.env.NEXT_PUBLIC_BACKEND_URL!}
-          stripeClient={process.env.STRIPE_PUBLISHABLE_KEY!}
-          billingEnabled={!!process.env.STRIPE_PUBLISHABLE_KEY}
+          payments={paymentsVars.payments}
+          billingEnabled={paymentsVars.billingEnabled}
           discordUrl={process.env.NEXT_PUBLIC_DISCORD_SUPPORT!}
           frontEndUrl={process.env.FRONTEND_URL!}
           isGeneral={!!process.env.IS_GENERAL}
@@ -94,7 +96,7 @@ export default async function AppLayout({ children }: { children: ReactNode }) {
           uploadDirectory={process.env.NEXT_PUBLIC_UPLOAD_STATIC_DIRECTORY!}
           mainUrl={process.env.MAIN_URL || ''}
           mcpUrl={process.env.MCP_URL}
-          dub={!!process.env.STRIPE_PUBLISHABLE_KEY}
+          dub={paymentsVars.billingEnabled}
           facebookPixel={process.env.NEXT_PUBLIC_FACEBOOK_PIXEL!}
           telegramBotName={process.env.TELEGRAM_BOT_NAME!}
           neynarClientId={process.env.NEYNAR_CLIENT_ID!}

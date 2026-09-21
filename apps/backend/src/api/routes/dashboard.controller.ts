@@ -22,6 +22,7 @@ import { Organization, User } from '@prisma/client';
 import { RequirePermission } from '@postmill-ai/backend/services/auth/rbac/require-permission.decorator';
 import { PermissionsService } from '@postmill-ai/backend/services/auth/permissions/permissions.service';
 import { RolesService } from '@postmill-ai/nestjs-libraries/database/prisma/roles/roles.service';
+import { billingEnabled } from '@postmill-ai/helpers/billing/payments.env';
 
 const KIND_PERMISSION_MAP: Record<AttentionKind, string> = {
   'failed-posts': 'posts:read',
@@ -118,8 +119,7 @@ export class DashboardController {
       throw new UnauthorizedException();
     }
 
-    const billingEnabled = !!process.env.STRIPE_PUBLISHABLE_KEY;
-    if (!billingEnabled) {
+    if (!billingEnabled()) {
       return { billingEnabled: false };
     }
 

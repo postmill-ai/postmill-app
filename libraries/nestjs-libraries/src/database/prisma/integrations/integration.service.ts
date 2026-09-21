@@ -31,6 +31,7 @@ import {
   isInngestEnabled,
 } from '@postmill-ai/nestjs-libraries/inngest/inngest.client';
 import { AuditService } from '@postmill-ai/nestjs-libraries/database/prisma/audit/audit.service';
+import { billingEnabled } from '@postmill-ai/helpers/billing/payments.env';
 
 dayjs.extend(utc);
 
@@ -426,7 +427,7 @@ export class IntegrationService {
       await this._integrationRepository.getIntegrationsList(org)
     ).filter((f) => !f.disabled);
     if (
-      !!process.env.STRIPE_PUBLISHABLE_KEY &&
+      billingEnabled() &&
       integrations.length >= totalChannels
     ) {
       throw new Error('You have reached the maximum number of channels');

@@ -277,6 +277,14 @@ export class SubscriptionService {
     return this._subscriptionRepository.clearPendingTier(organizationId);
   }
 
+  setCancelAt(organizationId: string, cancelAt: Date | null) {
+    return this._subscriptionRepository.setCancelAt(organizationId, cancelAt);
+  }
+
+  findExpiredCancellations(before: Date) {
+    return this._subscriptionRepository.findExpiredCancellations(before);
+  }
+
   async updateAddonQuantities(
     organizationId: string,
     quantities: Partial<Record<AddonExtraColumn, number>>

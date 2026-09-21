@@ -28,6 +28,7 @@ import { v4 as uuidv4 } from 'uuid';
 import { CircuitBreakerService } from '@postmill-ai/nestjs-libraries/ai/governance/circuit-breaker.service';
 import { webhookSignature, webhookTimeoutMs } from '@postmill-ai/nestjs-libraries/dtos/webhooks/safe.fetch';
 import type { Dispatcher } from 'undici';
+import { billingEnabled } from '@postmill-ai/helpers/billing/payments.env';
 
 // Drops fields the workflow and downstream activities never read — biggest wins are `error` (grows per retry) and `childrenPost` (Prisma side-loads it on every recursive row).
 // 2.5: also strips the decrypted OAuth secrets (`token`/`refreshToken`/
@@ -213,7 +214,7 @@ export class PostActivity {
   }
 
   async getPost(orgId: string, postId: string) {
-    if (process.env.STRIPE_SECRET_KEY) {
+    if (billingEnabled()) {
       const subscription = await this._subscriptionService.getSubscription(
         orgId
       );
@@ -233,7 +234,7 @@ export class PostActivity {
   }
 
   async getPostsList(orgId: string, postId: string) {
-    if (process.env.STRIPE_SECRET_KEY) {
+    if (billingEnabled()) {
       const subscription = await this._subscriptionService.getSubscription(
         orgId
       );
@@ -465,7 +466,7 @@ export class PostActivity {
       return [];
     }
 
-    if (process.env.STRIPE_SECRET_KEY) {
+    if (billingEnabled()) {
       const subscription = await this._subscriptionService.getSubscription(
         integration.organizationId
       );

@@ -49,7 +49,7 @@ const build = (over: Partial<Record<string, any>> = {}) => {
 beforeEach(() => {
   vi.clearAllMocks();
   vi.spyOn(Logger.prototype, 'warn').mockImplementation(() => {});
-  delete process.env.STRIPE_SECRET_KEY;
+  delete process.env.STRIPE_PUBLISHABLE_KEY;
 });
 
 describe('PostActivity.claimForPublish (0.7)', () => {

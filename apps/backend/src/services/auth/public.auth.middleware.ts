@@ -5,6 +5,7 @@ import { ApiKeysService } from '@postmill-ai/nestjs-libraries/database/prisma/ap
 import { AuthContextResolver } from '@postmill-ai/nestjs-libraries/auth/auth-context.resolver';
 import { HttpForbiddenException } from '@postmill-ai/nestjs-libraries/services/exception.filter';
 import * as crypto from 'crypto';
+import { billingEnabled } from '@postmill-ai/helpers/billing/payments.env';
 
 // How the caller authenticated on the public API. Stamped on the request so
 // downstream guards can apply the right policy posture:
@@ -41,7 +42,7 @@ export class PublicAuthMiddleware implements NestMiddleware {
         }
 
         const org = authorization.organization;
-        if (!!process.env.STRIPE_SECRET_KEY && !org.subscription) {
+        if (billingEnabled() && !org.subscription) {
           res
             .status(HttpStatus.UNAUTHORIZED)
             .json({ msg: 'No subscription found' });
@@ -97,7 +98,7 @@ export class PublicAuthMiddleware implements NestMiddleware {
           return;
         }
 
-        if (!!process.env.STRIPE_SECRET_KEY && !apiKey.organization.subscription) {
+        if (billingEnabled() && !apiKey.organization.subscription) {
           res
             .status(HttpStatus.UNAUTHORIZED)
             .json({ msg: 'No subscription found' });

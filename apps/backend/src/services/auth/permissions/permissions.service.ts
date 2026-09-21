@@ -18,6 +18,7 @@ import { StorageService } from '@postmill-ai/nestjs-libraries/database/prisma/st
 import { StorageProviderType } from '@prisma/client';
 import { AiSettingsRepository } from '@postmill-ai/nestjs-libraries/database/prisma/ai-settings/ai-settings.repository';
 import { AuthorizationActions, Sections } from './permission.exception.class';
+import { billingEnabled } from '@postmill-ai/helpers/billing/payments.env';
 
 export type AppAbility = Ability<[AuthorizationActions, Sections]>;
 
@@ -70,7 +71,7 @@ export class PermissionsService {
 
     const tier =
       effectiveSubscription?.subscriptionTier ||
-      (!process.env.STRIPE_PUBLISHABLE_KEY ? SELF_HOST_PLAN : 'STARTER');
+      (!billingEnabled() ? SELF_HOST_PLAN : 'STARTER');
 
     const { channel, ...all } = pricing[tier] ?? pricing['STARTER'];
     return {
@@ -109,7 +110,7 @@ export class PermissionsService {
 
     if (
       requestedPermission.length === 0 ||
-      !process.env.STRIPE_PUBLISHABLE_KEY
+      !billingEnabled()
     ) {
       for (const [action, section] of requestedPermission) {
         can(action, section);

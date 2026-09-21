@@ -11,10 +11,10 @@ describe('BillingController — plan changes and cancellations', () => {
       getSubscriptionByOrganizationId: vi.fn(),
       ...((overrides.subscriptionService as any) || {}),
     };
-    const stripeService = {
+    const paymentsService = {
       changePlan: vi.fn().mockResolvedValue({ ok: true }),
       setToCancel: vi.fn().mockResolvedValue({ id: 'cancel-1' }),
-      ...((overrides.stripeService as any) || {}),
+      ...((overrides.paymentsService as any) || {}),
     };
     const notificationService = {
       sendEmail: vi.fn().mockResolvedValue(undefined),
@@ -22,11 +22,11 @@ describe('BillingController — plan changes and cancellations', () => {
 
     const controller = new BillingController(
       subscriptionService as any,
-      stripeService as any,
+      paymentsService as any,
       notificationService as any
     );
 
-    return { controller, subscriptionService, stripeService, notificationService };
+    return { controller, subscriptionService, paymentsService, notificationService };
   }
 
   beforeEach(() => {
@@ -35,32 +35,32 @@ describe('BillingController — plan changes and cancellations', () => {
 
   describe('POST /change-plan', () => {
     it('upgrades immediately via subscribe/prorate and clears pendingTier', async () => {
-      const { controller, stripeService } = buildController();
-      stripeService.changePlan.mockResolvedValue({ id: 'sub-1' });
+      const { controller, paymentsService } = buildController();
+      paymentsService.changePlan.mockResolvedValue({ id: 'sub-1' });
 
       const result = await controller.changePlan(org, user, { tier: 'PRO' });
 
-      expect(stripeService.changePlan).toHaveBeenCalledWith(org.id, user.id, 'PRO');
+      expect(paymentsService.changePlan).toHaveBeenCalledWith(org.id, user.id, 'PRO');
       expect(result).toEqual({ id: 'sub-1' });
     });
 
     it('downgrade path sets pendingTier and schedules change at period end', async () => {
-      const { controller, stripeService } = buildController();
-      stripeService.changePlan.mockResolvedValue({ pendingTier: 'STARTER' });
+      const { controller, paymentsService } = buildController();
+      paymentsService.changePlan.mockResolvedValue({ pendingTier: 'STARTER' });
 
       const result = await controller.changePlan(org, user, { tier: 'STARTER' });
 
-      expect(stripeService.changePlan).toHaveBeenCalledWith(org.id, user.id, 'STARTER');
+      expect(paymentsService.changePlan).toHaveBeenCalledWith(org.id, user.id, 'STARTER');
       expect(result).toEqual({ pendingTier: 'STARTER' });
     });
 
     it('accepts all valid BillingTier values', async () => {
-      const { controller, stripeService } = buildController();
+      const { controller, paymentsService } = buildController();
 
       for (const tier of ['STARTER', 'PRO', 'TEAM', 'AGENCY'] as const) {
-        stripeService.changePlan.mockResolvedValue({ ok: true });
+        paymentsService.changePlan.mockResolvedValue({ ok: true });
         await controller.changePlan(org, user, { tier });
-        expect(stripeService.changePlan).toHaveBeenLastCalledWith(
+        expect(paymentsService.changePlan).toHaveBeenLastCalledWith(
           org.id,
           user.id,
           tier
@@ -71,7 +71,7 @@ describe('BillingController — plan changes and cancellations', () => {
 
   describe('POST /cancel', () => {
     it('flags add-on subscriptions to cancel at period end', async () => {
-      const { controller, stripeService, notificationService } = buildController();
+      const { controller, paymentsService, notificationService } = buildController();
 
       const result = await controller.cancel(org, user, {
         feedback: 'too expensive',
@@ -83,7 +83,7 @@ describe('BillingController — plan changes and cancellations', () => {
         expect.stringContaining('Test Org'),
         user.email
       );
-      expect(stripeService.setToCancel).toHaveBeenCalledWith(org.id);
+      expect(paymentsService.setToCancel).toHaveBeenCalledWith(org.id);
       expect(result).toEqual({ id: 'cancel-1' });
     });
   });

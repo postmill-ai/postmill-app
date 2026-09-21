@@ -8,15 +8,12 @@ import {
 } from './payments.env';
 
 const stripe = { STRIPE_PUBLISHABLE_KEY: 'pk_test', STRIPE_SECRET_KEY: 'sk_test', STRIPE_SIGNING_KEY: 'whsec' };
-const paypal = { PAYPAL_CLIENT_ID: 'cid', PAYPAL_CLIENT_SECRET: 'sec', PAYPAL_WEBHOOK_ID: 'wh' };
-const apple = { APPLE_IAP_BUNDLE_ID: 'ai.postmill.app' };
 
 describe('payments env', () => {
   it('billing is off with no keys and on with any enabling key', () => {
     expect(billingEnabled({})).toBe(false);
     expect(billingEnabled({ STRIPE_PUBLISHABLE_KEY: 'pk' })).toBe(true);
-    expect(billingEnabled(apple)).toBe(true);
-    expect(configuredPaymentProviders({ ...paypal, ...stripe })).toEqual(['stripe', 'paypal']);
+    expect(configuredPaymentProviders(stripe)).toEqual(['stripe']);
   });
 
   it('reports missing companion keys only for enabled providers', () => {
@@ -30,23 +27,15 @@ describe('payments env', () => {
   describe('resolveDefaultWebPaymentProvider', () => {
     it('none → null', () => {
       expect(resolveDefaultWebPaymentProvider({})).toEqual({ providerId: null, reason: 'none' });
-      expect(resolveDefaultWebPaymentProvider(apple)).toEqual({ providerId: null, reason: 'none' });
     });
 
     it('single configured web provider wins without a flag', () => {
-      expect(resolveDefaultWebPaymentProvider(paypal)).toEqual({ providerId: 'paypal', reason: 'single' });
-    });
-
-    it('several without a flag → ambiguous, stripe first', () => {
-      const r = resolveDefaultWebPaymentProvider({ ...paypal, ...stripe });
-      expect(r.providerId).toBe('stripe');
-      expect(r.reason).toBe('ambiguous');
-      expect(r.detail).toContain('PAYMENTS_PROVIDER');
+      expect(resolveDefaultWebPaymentProvider(stripe)).toEqual({ providerId: 'stripe', reason: 'single' });
     });
 
     it('explicit flag picks a configured web provider (version suffix ignored)', () => {
-      expect(resolveDefaultWebPaymentProvider({ ...paypal, ...stripe, PAYMENTS_PROVIDER: 'paypal' })).toEqual({
-        providerId: 'paypal',
+      expect(resolveDefaultWebPaymentProvider({ ...stripe, PAYMENTS_PROVIDER: 'stripe' })).toEqual({
+        providerId: 'stripe',
         reason: 'explicit',
       });
       expect(resolveDefaultWebPaymentProvider({ ...stripe, PAYMENTS_PROVIDER: 'stripe@v1' }).providerId).toBe('stripe');
@@ -56,29 +45,22 @@ describe('payments env', () => {
       expect(resolveDefaultWebPaymentProvider({ ...stripe, PAYMENTS_PROVIDER: 'razorpay' })).toMatchObject({
         providerId: 'stripe',
         reason: 'invalid',
+        detail: expect.stringContaining('not a known payment provider'),
       });
-      expect(resolveDefaultWebPaymentProvider({ ...stripe, ...apple, PAYMENTS_PROVIDER: 'apple' })).toMatchObject({
-        providerId: 'stripe',
+      expect(resolveDefaultWebPaymentProvider({ PAYMENTS_PROVIDER: 'stripe' })).toMatchObject({
+        providerId: null,
         reason: 'invalid',
-        detail: expect.stringContaining('native'),
-      });
-      expect(resolveDefaultWebPaymentProvider({ ...stripe, PAYMENTS_PROVIDER: 'paypal' })).toMatchObject({
-        providerId: 'stripe',
-        reason: 'invalid',
-        detail: expect.stringContaining('PAYPAL_CLIENT_ID'),
+        detail: expect.stringContaining('STRIPE_PUBLISHABLE_KEY'),
       });
     });
   });
 
   it('publicPaymentsConfig never leaks secrets', () => {
-    const cfg = publicPaymentsConfig({ ...stripe, ...apple });
+    const cfg = publicPaymentsConfig(stripe);
     expect(cfg).toEqual({
       enabled: true,
       defaultProvider: 'stripe',
-      providers: [
-        { providerId: 'stripe', displayName: 'Stripe', checkoutMode: 'embedded', publicKey: 'pk_test' },
-        { providerId: 'apple', displayName: 'App Store', checkoutMode: 'native' },
-      ],
+      providers: [{ providerId: 'stripe', displayName: 'Stripe', checkoutMode: 'embedded', publicKey: 'pk_test' }],
     });
     expect(JSON.stringify(cfg)).not.toContain('sk_test');
     expect(publicPaymentsConfig({})).toEqual({ enabled: false, defaultProvider: null, providers: [] });

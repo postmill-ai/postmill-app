@@ -277,6 +277,22 @@ export class SubscriptionRepository {
     });
   }
 
+  setCancelAt(organizationId: string, cancelAt: Date | null) {
+    return this._subscription.model.subscription.updateMany({
+      where: { organizationId, deletedAt: null },
+      data: { cancelAt },
+    });
+  }
+
+  // Rows whose scheduled end has passed — the expiry cron tears these down for
+  // providers that cannot keep a cancelled subscription alive until period end.
+  findExpiredCancellations(before: Date) {
+    return this._subscription.model.subscription.findMany({
+      where: { cancelAt: { lt: before }, deletedAt: null, isLifetime: false },
+      include: { organization: { select: { id: true, paymentId: true, paymentProvider: true } } },
+    });
+  }
+
   applyTier(
     organizationId: string,
     tier: 'STARTER' | 'PRO' | 'TEAM' | 'AGENCY',

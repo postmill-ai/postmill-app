@@ -98,6 +98,8 @@ const PUBLIC_CONTROLLERS = new Set<string>([
   'NoAuthIntegrationsController',
   'PublicController',
   'StripeController',
+  // Vendor webhooks: authenticated by the provider signature (PaymentsService.handleWebhook).
+  'PaymentsWebhooksController',
   'EmailWebhooksController',
   'MediaJobsWebhookController',
   'CommsWebhooksController',

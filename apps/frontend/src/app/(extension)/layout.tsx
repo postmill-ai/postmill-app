@@ -8,6 +8,8 @@ import { ReactNode } from 'react';
 import { Plus_Jakarta_Sans } from 'next/font/google';
 import clsx from 'clsx';
 import { VariableContextComponent } from '@postmill-ai/react/helpers/variable.context';
+import { NO_PAYMENTS } from '@postmill-ai/react/helpers/variable.context';
+import { paymentsVariables } from '@postmill-ai/frontend/app/payments.vars';
 import UtmSaver from '@postmill-ai/helpers/utils/utm.saver';
 
 const jakartaSans = Plus_Jakarta_Sans({
@@ -17,6 +19,7 @@ const jakartaSans = Plus_Jakarta_Sans({
 });
 
 export default async function AppLayout({ children }: { children: ReactNode }) {
+  const paymentsVars = paymentsVariables();
   return (
     <html lang="en">
       <head>
@@ -28,10 +31,10 @@ export default async function AppLayout({ children }: { children: ReactNode }) {
         <VariableContextComponent
           language="en"
           storageProvider={'local'}
-          stripeClient=""
+          payments={NO_PAYMENTS}
           environment={process.env.NODE_ENV!}
           backendUrl={process.env.NEXT_PUBLIC_BACKEND_URL!}
-          billingEnabled={!!process.env.STRIPE_PUBLISHABLE_KEY}
+          billingEnabled={paymentsVars.billingEnabled}
           discordUrl={process.env.NEXT_PUBLIC_DISCORD_SUPPORT!}
           frontEndUrl={process.env.FRONTEND_URL!}
           isGeneral={!!process.env.IS_GENERAL}

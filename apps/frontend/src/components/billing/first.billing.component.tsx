@@ -128,11 +128,12 @@ const JoinOver: FC<{ onShowYouTube: () => void }> = ({ onShowYouTube }) => {
 };
 
 export const FirstBillingComponent = () => {
-  const { stripeClient } = useVariables();
+  const { payments } = useVariables();
   const user = useUser();
   const dub = useDubClickId();
+  // Stripe.js only loads when Stripe is the deployment's web checkout provider.
   const [stripe] = useState<Promise<Stripe | null> | null>(() =>
-    stripeClient ? loadStripe(stripeClient) : null
+    payments.provider === 'stripe' && payments.publicKey ? loadStripe(payments.publicKey) : null
   );
   const searchParams = useSearchParams();
   // Preselect plan/period: URL params win (direct deep-link to the paywall),

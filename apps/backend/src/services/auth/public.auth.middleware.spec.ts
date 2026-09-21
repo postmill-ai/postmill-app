@@ -87,10 +87,10 @@ describe('PublicAuthMiddleware', () => {
   let authContextResolver: { resolve: ReturnType<typeof vi.fn> };
   let middleware: PublicAuthMiddleware;
   let next: Mock<(err?: unknown) => void>;
-  const originalStripeKey = process.env.STRIPE_SECRET_KEY;
+  const originalStripeKey = process.env.STRIPE_PUBLISHABLE_KEY;
 
   beforeEach(() => {
-    delete process.env.STRIPE_SECRET_KEY;
+    delete process.env.STRIPE_PUBLISHABLE_KEY;
     oauthService = { getOrgByOAuthToken: vi.fn() };
     apiKeysService = {
       findActiveByHash: vi.fn(),
@@ -107,9 +107,9 @@ describe('PublicAuthMiddleware', () => {
 
   afterEach(() => {
     if (originalStripeKey === undefined) {
-      delete process.env.STRIPE_SECRET_KEY;
+      delete process.env.STRIPE_PUBLISHABLE_KEY;
     } else {
-      process.env.STRIPE_SECRET_KEY = originalStripeKey;
+      process.env.STRIPE_PUBLISHABLE_KEY = originalStripeKey;
     }
   });
 
@@ -377,8 +377,8 @@ describe('PublicAuthMiddleware', () => {
     expect(next).not.toHaveBeenCalled();
   });
 
-  it('returns 401 "No subscription found" when STRIPE_SECRET_KEY is set and the org has no subscription', async () => {
-    process.env.STRIPE_SECRET_KEY = 'sk_test_123';
+  it('returns 401 "No subscription found" when STRIPE_PUBLISHABLE_KEY is set and the org has no subscription', async () => {
+    process.env.STRIPE_PUBLISHABLE_KEY = 'pk_test_123';
     const apiKey = makeApiKey({
       organization: { id: 'org-1', subscription: null },
     });
@@ -393,7 +393,7 @@ describe('PublicAuthMiddleware', () => {
     expect(next).not.toHaveBeenCalled();
   });
 
-  it('allows an org without subscription when STRIPE_SECRET_KEY is not set', async () => {
+  it('allows an org without subscription when STRIPE_PUBLISHABLE_KEY is not set', async () => {
     const apiKey = makeApiKey({
       organization: { id: 'org-1', subscription: null },
     });

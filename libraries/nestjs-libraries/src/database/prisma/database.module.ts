@@ -35,7 +35,6 @@ import { NotificationPreferenceService } from '@postmill-ai/nestjs-libraries/dat
 import { PushNotificationService } from '@postmill-ai/nestjs-libraries/database/prisma/notifications/push-notification.service';
 import { NotificationDigestService } from '@postmill-ai/nestjs-libraries/database/prisma/notifications/notification-digest.service';
 import { EmailService } from '@postmill-ai/nestjs-libraries/services/email.service';
-import { StripeService } from '@postmill-ai/nestjs-libraries/services/stripe.service';
 import { ExtractContentService } from '@postmill-ai/nestjs-libraries/openai/extract.content.service';
 import { OpenaiService } from '@postmill-ai/nestjs-libraries/openai/openai.service';
 import { TrackService } from '@postmill-ai/nestjs-libraries/track/track.service';
@@ -163,7 +162,6 @@ import { AnalyticsShareService } from '@postmill-ai/nestjs-libraries/analytics/a
     IntegrationRepository,
     PostsService,
     PostsRepository,
-    StripeService,
     SignatureRepository,
     AutopostRepository,
     AutopostService,

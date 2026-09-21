@@ -31,6 +31,7 @@ import { OrganizationService } from '@postmill-ai/nestjs-libraries/database/pris
 import { CampaignTagService } from '@postmill-ai/nestjs-libraries/database/prisma/campaigns/campaign-item.service';
 import { safeFetch } from '@postmill-ai/nestjs-libraries/dtos/webhooks/safe.fetch';
 import { isAllowedReturnUrl } from '@postmill-ai/nestjs-libraries/security/return-url.validator';
+import { billingEnabled } from '@postmill-ai/helpers/billing/payments.env';
 
 @ApiTags('Integrations')
 @Controller('/integrations')
@@ -261,7 +262,7 @@ export class NoAuthIntegrationsController {
     }
 
     if (
-      process.env.STRIPE_PUBLISHABLE_KEY &&
+      billingEnabled() &&
       org.isTrailing &&
       (await this._integrationService.checkPreviousConnections(
         org.id,

@@ -4,6 +4,7 @@ import { BadRequestException, Injectable } from '@nestjs/common';
 import { AuthService } from '@postmill-ai/helpers/auth/auth.service';
 import { CreateOrgUserDto } from '@postmill-ai/nestjs-libraries/dtos/auth/create.org.user.dto';
 import { makeId } from '@postmill-ai/nestjs-libraries/services/make.is';
+import { billingEnabled } from '@postmill-ai/helpers/billing/payments.env';
 
 // Terms-of-Service version recorded at account creation (I4 — consent tracking).
 // Bump when the ToS materially changes so re-acceptance can be detected.
@@ -241,7 +242,7 @@ export class OrganizationRepository {
       });
 
     if (
-      process.env.STRIPE_PUBLISHABLE_KEY &&
+      billingEnabled() &&
       checkForSubscription?.subscription?.subscriptionTier ===
         SubscriptionTier.STARTER
     ) {

@@ -35,28 +35,14 @@ export const PAYMENT_PROVIDER_ENV = {
     publicKeyEnv: 'STRIPE_PUBLISHABLE_KEY',
     displayName: 'Stripe',
   },
-  paypal: {
-    enabledBy: 'PAYPAL_CLIENT_ID',
-    required: ['PAYPAL_CLIENT_ID', 'PAYPAL_CLIENT_SECRET', 'PAYPAL_WEBHOOK_ID'],
-    checkoutMode: 'hosted',
-    publicKeyEnv: 'PAYPAL_CLIENT_ID',
-    displayName: 'PayPal',
-  },
-  apple: {
-    enabledBy: 'APPLE_IAP_BUNDLE_ID',
-    required: ['APPLE_IAP_BUNDLE_ID', 'APPLE_IAP_ISSUER_ID', 'APPLE_IAP_KEY_ID', 'APPLE_IAP_PRIVATE_KEY'],
-    checkoutMode: 'native',
-    displayName: 'App Store',
-  },
-  google: {
-    enabledBy: 'GOOGLE_PLAY_PACKAGE_NAME',
-    required: ['GOOGLE_PLAY_PACKAGE_NAME', 'GOOGLE_PLAY_SERVICE_ACCOUNT_JSON'],
-    checkoutMode: 'native',
-    displayName: 'Google Play',
-  },
 } as const satisfies Record<string, PaymentProviderEnv>;
 
 export type PaymentProviderId = keyof typeof PAYMENT_PROVIDER_ENV;
+
+/** Widened row view — the `as const` table narrows literals too far for comparisons. */
+export function paymentProviderEnv(id: PaymentProviderId): PaymentProviderEnv {
+  return PAYMENT_PROVIDER_ENV[id];
+}
 
 export const PAYMENT_PROVIDER_IDS = Object.keys(PAYMENT_PROVIDER_ENV) as PaymentProviderId[];
 
@@ -108,7 +94,7 @@ export interface DefaultWebProviderResolution {
  */
 export function resolveDefaultWebPaymentProvider(env: Env = process.env): DefaultWebProviderResolution {
   const web = configuredPaymentProviders(env).filter(
-    (id) => PAYMENT_PROVIDER_ENV[id].checkoutMode !== 'native',
+    (id) => paymentProviderEnv(id).checkoutMode !== 'native',
   );
   const raw = (env.PAYMENTS_PROVIDER || '').trim();
   const fallback = (): DefaultWebProviderResolution => {
@@ -132,7 +118,7 @@ export function resolveDefaultWebPaymentProvider(env: Env = process.env): Defaul
   if (!isPaymentProviderId(requested)) {
     return { ...fallback(), reason: 'invalid', detail: `PAYMENTS_PROVIDER=${raw} is not a known payment provider.` };
   }
-  if (PAYMENT_PROVIDER_ENV[requested].checkoutMode === 'native') {
+  if (paymentProviderEnv(requested).checkoutMode === 'native') {
     return {
       ...fallback(),
       reason: 'invalid',
@@ -165,7 +151,7 @@ export interface PublicPaymentsConfig {
 /** Browser-safe snapshot: no secret ever leaves this function. */
 export function publicPaymentsConfig(env: Env = process.env): PublicPaymentsConfig {
   const providers = configuredPaymentProviders(env).map((id) => {
-    const row = PAYMENT_PROVIDER_ENV[id] as PaymentProviderEnv;
+    const row = paymentProviderEnv(id);
     return {
       providerId: id,
       displayName: row.displayName,
