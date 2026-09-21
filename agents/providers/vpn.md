@@ -71,7 +71,7 @@ export const nordvpnVpnModule: ProviderModule<any, any> = {
 };
 ```
 
-`manifest.domain: 'vpn'` is the kernel routing key. `metadata.ts` uses the shared `ProviderMetadata` shape whose `domains` array is `["media"]` on both existing VPN adapters — copy it verbatim; it is not what routes the module. `create()` must be pure (no network I/O at construction) — enforced by `runDomainConformance`.
+`manifest.domain: 'vpn'` is the kernel routing key. `metadata.ts` uses the shared `ProviderMetadata` shape with `domains: []` (VPN serves no AI/media default surface; a kernel spec enforces it) — `domains` is not what routes the module. `create()` must be pure (no network I/O at construction) — enforced by `runDomainConformance`.
 
 ## Region model: static vs dynamic
 

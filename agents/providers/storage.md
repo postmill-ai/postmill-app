@@ -76,7 +76,7 @@ export const exampleStorageModule = makeS3StorageModule({
 exampleStorageModule.metadata = providerMetadata;
 ```
 
-`src/v1/metadata.ts` (copy the sibling shape exactly — storage providers declare `kind: 'action'`, `domains: ['media']`):
+`src/v1/metadata.ts` (copy the sibling shape exactly — storage providers declare `kind: 'action'`, `domains: []`):
 
 ```ts
 import { ProviderMetadata } from '@postmill-ai/provider-kernel';
@@ -87,7 +87,7 @@ export const metadata: ProviderMetadata = {
   id: 'example',                 // matches manifest.providerId (type.toLowerCase())
   displayName: 'example',
   kind: 'action',
-  domains: ['media'],
+  domains: [],
   hasModelList: false,
   mediaCategories: [],
 };

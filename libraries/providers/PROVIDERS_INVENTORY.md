@@ -6,12 +6,12 @@ kernel vitest alias. One row per **module** (multi-module packages — e.g. `ope
 get multiple rows). The `has-spec?` column reflects whether the **package** contains any
 `*.spec.ts` / `*.int-spec.ts` under `src/**`.
 
-- **Modules:** 186  (== `providerModules.length`)
+- **Modules:** 188  (== `providerModules.length`)
 - **Packages:** 163  (== real package dirs under `libraries/providers/`, excluding `kernel` and `node_modules`)
   - Note: `ls -d libraries/providers/*/ | grep -v kernel | wc -l` = **164** on a clean checkout because it also counts the `node_modules/` dir; **163** are real packages. (After a local `--coverage` run a gitignored `coverage/` dir also appears, making the raw count **165** — both `node_modules/` and `coverage/` are non-package artifacts.)
 - **Packages with at least one spec:** 138 / 163  (media adapters + the magnific content pack gained recorded-fixture `*.int-spec.ts` behavioral tests via the shared `kernel/src/testing/media-int-helpers.ts`)
 
-Modules per domain: ai=30, auth=6, comms=5, contentpack=4, email=7, media=35, payments=4, shortlink=20, social=45, storage=14, vpn=16
+Modules per domain: ai=30, auth=7, comms=5, contentpack=4, email=7, media=36, payments=4, shortlink=20, social=45, storage=14, vpn=16
 
 | package | domain | providerId | version | status | has-spec? |
 |---|---|---|---|---|---|
@@ -45,6 +45,7 @@ Modules per domain: ai=30, auth=6, comms=5, contentpack=4, email=7, media=35, pa
 | vultr | ai | vultr | v1 | active | no |
 | xai | ai | xai | v1 | active | yes |
 | zai | ai | zai | v1 | active | yes |
+| apple | auth | apple | v1 | active | yes |
 | generic | auth | generic | v1 | active | no |
 | github | auth | github | v1 | active | no |
 | google | auth | google | v1 | active | yes |
@@ -97,6 +98,7 @@ Modules per domain: ai=30, auth=6, comms=5, contentpack=4, email=7, media=35, pa
 | runway | media | runway | v1 | active | no |
 | siliconflow | media | siliconflow | v1 | active | no |
 | stability | media | stability-ai | v1 | active | no |
+| suno | media | suno | v1 | active | yes |
 | tavus | media | tavus | v1 | active | no |
 | togetherai | media | togetherai | v1 | active | yes |
 | vertex | media | vertex | v1 | active | yes |

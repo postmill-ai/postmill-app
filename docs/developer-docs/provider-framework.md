@@ -79,7 +79,7 @@ Every provider package must ship `src/v1/metadata.ts` that exports a `ProviderMe
 | `displayName` | `string` | Human-readable brand name. |
 | `uiName` | `string` (optional) | Suffix used when a provider has multiple surfaces; labels become `<provider>[-<ui-name>]: <model>`. |
 | `kind` | `'direct' \| 'hub' \| 'action'` | `direct` = single-brand provider with its own models; `hub` = aggregator exposing many third-party models; `action` = action-only, no model list. |
-| `domains` | `Array<'ai' \| 'media'>` | Which default surfaces this provider may serve. |
+| `domains` | `Array<'ai' \| 'media' \| 'payments'>` | Which default surfaces this module may serve; `[]` for modules that serve none (social, storage, …). |
 | `modelCategories` | `string[]` (optional) | AI model categories this provider supports (e.g. `low-reasoning`, `high-reasoning`, `vision`, `workflow`). |
 | `mediaCategories` | `string[]` (optional) | Media categories this provider supports (e.g. `text-to-image`, `text-to-video`). |
 | `hasModelList` | `boolean` | Whether the adapter implements `listModels` for its domain(s). |

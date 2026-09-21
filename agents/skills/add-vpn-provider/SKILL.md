@@ -22,7 +22,7 @@ Scaffold a `libraries/providers/<id>` package implementing `VpnCapability` so or
    - `resolveProxyAuth(config): VpnProxyAuth | null` — derive `{ username, password }` from stored creds; return `null` on missing/malformed creds (nordvpn splits `serviceCredentials` on `:`; custom-proxy returns stored username/password verbatim).
    - Optional `healthCheck(config)` backs the "Test connection" button; stub `{ ok: true }` is acceptable (nordvpn), custom-proxy does a real 5s TCP connect.
 4. Export the module from `src/v1/vpn.adapter.ts` — copy the exact shape at `nordvpn/src/v1/vpn.adapter.ts:86`: `manifest: { domain: 'vpn', providerId, version: 'v1', displayName, status: 'active', credentialFields, capabilities, setupNotes }`, `create: () => new MyAdapter()`. `manifest.domain: 'vpn'` is the kernel routing key; `create()` must be network-free (conformance-enforced).
-5. Author `src/v1/metadata.ts`: copy the existing VPN adapters verbatim (`nordvpn/src/v1/metadata.ts`) — `kind: 'action'`, `domains: ['media']`, `hasModelList: false`. The `domains` array is NOT what routes the module; the manifest domain is.
+5. Author `src/v1/metadata.ts`: copy the existing VPN adapters verbatim (`nordvpn/src/v1/metadata.ts`) — `kind: 'action'`, `domains: []`, `hasModelList: false`, `mediaCategories: []`. The `domains` array is NOT what routes the module; the manifest domain is.
 6. Register (3 file edits + install):
    - `apps/backend/package.json` — add `"@postmill-ai/provider-<id>": "workspace:*"` to dependencies.
    - `tsconfig.base.json` — two path aliases: `"@postmill-ai/provider-<id>": ["libraries/providers/<id>/src"]` and `"@postmill-ai/provider-<id>/*": ["libraries/providers/<id>/src/*"]`.
@@ -49,4 +49,4 @@ Runtime smoke: `GET /settings/vpn/config` and `GET /providers/catalog?domain=vpn
 - **Region `protocol` must be exactly `'socks5'` or `'http-connect'`** — no other value is dispatchable.
 - **Expecting per-channel routing automatically.** Egress happens only when a channel opts in via `OrgProviderConfiguration.vpnSelection`; a null resolution (provider disabled, region removed, creds malformed) silently falls back to the server IP with a logged warning.
 - **Doing SSRF checks in the adapter.** Proxy-host validation lives in the service (`resolveSafeProxyHost`); adapters can only depend on the kernel — connect only to config-supplied host/port in `healthCheck`.
-- **"Fixing" `domains: ['media']` in `metadata.ts`** or editing `providers.generated.ts` generation scripts — both are intentional; the former is the shared metadata shape, the latter is hand-maintained.
+- **Declaring `domains: ['media']` in `metadata.ts`** (the retired placeholder — the kernel metadata spec rejects it for a VPN module) or editing `providers.generated.ts` generation scripts (hand-maintained despite the name).

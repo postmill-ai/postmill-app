@@ -80,7 +80,7 @@ settings UI read instead of inferring from adapter capabilities. Authored as a s
 | `displayName` | Brand name. |
 | `uiName?` | UI suffix for `<provider>[-<ui-name>]: <model>` default formatting. |
 | `kind` | `'direct'` (own models) \| `'hub'` (aggregator) \| `'action'` (no model list). |
-| `domains` | `Array<'ai' \| 'media'>` — which default surfaces it may serve. |
+| `domains` | `Array<'ai' \| 'media' \| 'payments'>` — which default surfaces the module may serve: ai/media for model providers, exactly `['payments']` for payment providers, `[]` for everything else (social, storage, shortlink, vpn, email, auth, comms, contentpack). Enforced per module by `kernel.metadata.spec.ts`. |
 | `modelCategories?` | Subset of `AI_MODEL_CATEGORIES`. |
 | `mediaCategories?` | Subset of `AI_MEDIA_CATEGORIES`; each must be backed by `mediaModels`. |
 | `hasModelList` | Whether the adapter implements `listModels`. |
