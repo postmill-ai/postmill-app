@@ -21,7 +21,7 @@ const ERROR_TYPE_MAP: Record<string, string> = {
 };
 
 const DEFAULT_MESSAGES: Record<string, string> = {
-  'ai_budget_exceeded_message': 'Your org\'s monthly AI budget is used up (resets on the 1st)',
+  'ai_budget_exceeded_message': 'Your organization\'s AI budget cap has been reached. Adjust it in Settings → AI → LLM Providers.',
   'ai_guardrail_violation_message': 'This request was blocked by a content policy',
   'ai_capability_not_available_message': 'Image generation isn\'t available on the current AI provider',
   'ai_error_default': 'An AI error occurred',

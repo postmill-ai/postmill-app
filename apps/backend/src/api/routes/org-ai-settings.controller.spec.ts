@@ -130,7 +130,7 @@ describe('OrgAiSettingsController — provider config + cache invalidation', () 
     expect(result).toEqual({ valid: true });
   });
 
-  it('GET /settings/ai/budget returns the legacy budget shape (monthlyCap/dailyCap)', async () => {
+  it('GET /settings/ai/budget returns the org-wide ceiling (monthlyCap/dailyCap/alertThresholdPct)', async () => {
     mockOrgAiGetBudget.mockResolvedValue({
       monthlyCap: 100,
       dailyCap: 10,
@@ -148,13 +148,13 @@ describe('OrgAiSettingsController — provider config + cache invalidation', () 
     });
   });
 
-  it('GET /settings/ai/budget returns an empty object when no budget is configured', async () => {
+  it('GET /settings/ai/budget returns the full shape with nulls when no budget is configured', async () => {
     mockOrgAiGetBudget.mockResolvedValue(null);
     controller = makeController();
 
     const result = await controller.getBudget(org);
 
-    expect(result).toEqual({});
+    expect(result).toEqual({ monthlyCap: null, dailyCap: null, alertThresholdPct: null });
   });
 });
 

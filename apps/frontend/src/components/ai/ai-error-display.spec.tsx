@@ -18,7 +18,7 @@ describe('AiErrorDisplay', () => {
     );
     expect(
       screen.getByText(
-        "Your org's monthly AI budget is used up (resets on the 1st)"
+        "Your organization's AI budget cap has been reached. Adjust it in Settings → AI → LLM Providers."
       )
     ).toBeTruthy();
   });

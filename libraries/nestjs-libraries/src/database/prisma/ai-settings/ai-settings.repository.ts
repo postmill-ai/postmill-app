@@ -5,6 +5,12 @@ import utc from 'dayjs/plugin/utc';
 
 dayjs.extend(utc);
 
+const ORG_BUDGET_SELECT = {
+  aiBudgetMonthlyCap: true,
+  aiBudgetDailyCap: true,
+  aiBudgetAlertThresholdPct: true,
+} as const;
+
 @Injectable()
 export class AiSettingsRepository {
   constructor(
@@ -17,7 +23,31 @@ export class AiSettingsRepository {
     private _aiPromptLibraryItem: PrismaRepository<'aIPromptLibraryItem'>,
     private _aiContentIndex: PrismaRepository<'aIContentIndex'>,
     private _aiOrgProviderConfig: PrismaRepository<'aIOrgProviderConfig'>,
+    private _organization: PrismaRepository<'organization'>,
   ) {}
+
+  // ── Org-wide AI budget ceiling (Organization.aiBudget*) ──
+  getOrgBudget(organizationId: string) {
+    return this._organization.model.organization.findUnique({
+      where: { id: organizationId },
+      select: ORG_BUDGET_SELECT,
+    });
+  }
+
+  updateOrgBudget(
+    organizationId: string,
+    data: Partial<{
+      aiBudgetMonthlyCap: number | null;
+      aiBudgetDailyCap: number | null;
+      aiBudgetAlertThresholdPct: number | null;
+    }>,
+  ) {
+    return this._organization.model.organization.update({
+      where: { id: organizationId },
+      data,
+      select: ORG_BUDGET_SELECT,
+    });
+  }
 
   // ── AISystemSettings (singleton) ──
   getSystemSettings() {

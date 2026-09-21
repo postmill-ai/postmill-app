@@ -106,7 +106,12 @@ export class CopilotController {
   private _mapAiError(err: unknown, surface: string): void {
     if (err instanceof HttpException) throw err;
     if (err instanceof BudgetExceeded) {
-      throw new HttpException(err.message, HttpStatus.TOO_MANY_REQUESTS);
+      // `error: 'BudgetExceeded'` is what the frontend's ai-error-display keys on;
+      // `message` carries the reason (org_budget_exceeded / provider_budget_exceeded).
+      throw new HttpException(
+        { statusCode: HttpStatus.TOO_MANY_REQUESTS, error: 'BudgetExceeded', message: err.message },
+        HttpStatus.TOO_MANY_REQUESTS,
+      );
     }
     if (err instanceof GuardrailViolation) {
       throw new HttpException(err.message, HttpStatus.UNPROCESSABLE_ENTITY);

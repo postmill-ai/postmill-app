@@ -44,6 +44,8 @@ export default defineConfig({
       'src/components/ai/**/*.spec.{ts,tsx}',
       'src/components/settings/shortlinks/**/*.spec.{ts,tsx}',
       'src/components/settings/comms/**/*.spec.{ts,tsx}',
+      'src/components/settings/ai/**/*.spec.{ts,tsx}',
+      'src/components/settings/shared/kit/fields/**/*.spec.{ts,tsx}',
       'src/components/settings/vpn/**/*.spec.{ts,tsx}',
       'src/components/settings/storage/**/*.spec.{ts,tsx}',
       'src/components/settings/*.spec.{ts,tsx}',

@@ -148,8 +148,11 @@ enforcement point (exact file/symbol). Cross-refs: `agents/backend.md`,
   `serviceAdapter.process()`, so any gate wrapped around it is dead code (Sentry
   POSTMILL-APP-D) — never reintroduce one.
 
-## NOT_SECURED — dev-only toggle
-
+## NOT_SECURED — dev-only toggle The budget check is two-layered: the org-wide
+  ceiling (`Organization.aiBudget*`, reason `org_budget_exceeded`, applies even when the call
+  resolves no single provider) and the per-provider cap (`provider_budget_exceeded`); both map to
+  **429** with `{ error: 'BudgetExceeded', message: <reason> }` so the frontend's
+  `ai-error-display` recognises it.
 - `NOT_SECURED` relaxes transport hardening **only when
   `NODE_ENV === 'development'`**: `notSecuredDev = NOT_SECURED && NODE_ENV ===
   'development'` skips helmet (CSP/HSTS/frameguard/noSniff) (`main.ts:127-161`) and

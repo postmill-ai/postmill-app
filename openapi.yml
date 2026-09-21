@@ -11104,7 +11104,26 @@ components:
       properties: {}
     UpdateBudgetDto:
       type: object
-      properties: {}
+      properties:
+        monthlyCap:
+          type: number
+          description: Monthly ceiling in USD; null clears it
+          nullable: true
+          minimum: 0
+        dailyCap:
+          type: number
+          description: Daily ceiling in USD; null clears it
+          nullable: true
+          minimum: 0
+        alertThresholdPct:
+          type: number
+          description: Alert at this fraction of the cap (0–1); null = default 0.8
+          nullable: true
+          minimum: 0
+          maximum: 1
+        enabled:
+          type: boolean
+          description: false clears all three caps (toggle off)
     SetDefaultModelDto:
       type: object
       properties:

@@ -39,6 +39,8 @@ const mockDefaultsSeed = {
 
 const mockAiSettings = {
   createAuditLog: vi.fn().mockResolvedValue(undefined),
+  getOrgBudget: vi.fn().mockResolvedValue(null),
+  updateOrgBudget: vi.fn().mockResolvedValue({ monthlyCap: null, dailyCap: null, alertThresholdPct: null }),
 };
 
 vi.mock('./org-ai-settings.repository', () => ({
@@ -528,15 +530,59 @@ describe('OrgAiSettingsService reads/mutations', () => {
       expect(mockBustCache).toHaveBeenCalledWith('org-1');
     });
 
-    it('getBudget delegates to the repository', async () => {
-      mockRepo.getBudget.mockResolvedValue({ monthlyCap: 10 });
-      expect(await service.getBudget('org-1')).toEqual({ monthlyCap: 10 });
+    it('getBudget reads the org-wide ceiling from AiSettingsService', async () => {
+      mockAiSettings.getOrgBudget.mockResolvedValue({ monthlyCap: 10, dailyCap: null, alertThresholdPct: null });
+      expect(await service.getBudget('org-1')).toEqual({ monthlyCap: 10, dailyCap: null, alertThresholdPct: null });
+      expect(mockAiSettings.getOrgBudget).toHaveBeenCalledWith('org-1');
     });
 
-    it('updateBudget delegates to the repository', async () => {
-      mockRepo.upsertBudget.mockResolvedValue({ ok: true });
-      await service.updateBudget('org-1', { dailyCap: 5 });
-      expect(mockRepo.upsertBudget).toHaveBeenCalledWith('org-1', { dailyCap: 5 });
+    it('updateBudget patches only the fields present, audits the change, and invalidates the gate cache', async () => {
+      mockAiSettings.getOrgBudget.mockResolvedValue({ monthlyCap: 10, dailyCap: null, alertThresholdPct: null });
+      mockAiSettings.updateOrgBudget.mockResolvedValue({ monthlyCap: 10, dailyCap: 5, alertThresholdPct: null });
+      const budget = { invalidateOrgCaps: vi.fn(), invalidateProviderCaps: vi.fn() };
+      const svc = new OrgAiSettingsService(
+        mockRepo as any,
+        mockEncryption as any,
+        mockResolution as any,
+        mockKernel as any,
+        mockDefaultsSeed as any,
+        mockAiSettings as any,
+        undefined,
+        budget as any,
+      );
+
+      const result = await svc.updateBudget('org-1', { dailyCap: 5 });
+
+      expect(mockAiSettings.updateOrgBudget).toHaveBeenCalledWith('org-1', { dailyCap: 5 });
+      expect(result).toEqual({ monthlyCap: 10, dailyCap: 5, alertThresholdPct: null });
+      expect(mockAiSettings.createAuditLog).toHaveBeenCalledWith({
+        action: 'org_budget_updated',
+        detail: JSON.stringify({ organizationId: 'org-1', changes: { dailyCap: { old: null, new: 5 } } }),
+      });
+      expect(budget.invalidateOrgCaps).toHaveBeenCalledWith('org-1');
+    });
+
+    it('updateBudget with enabled:false clears all three caps', async () => {
+      mockAiSettings.getOrgBudget.mockResolvedValue({ monthlyCap: 10, dailyCap: 5, alertThresholdPct: 0.5 });
+      mockAiSettings.updateOrgBudget.mockResolvedValue({ monthlyCap: null, dailyCap: null, alertThresholdPct: null });
+
+      await service.updateBudget('org-1', { enabled: false, monthlyCap: 99 });
+
+      expect(mockAiSettings.updateOrgBudget).toHaveBeenCalledWith('org-1', {
+        monthlyCap: null,
+        dailyCap: null,
+        alertThresholdPct: null,
+      });
+    });
+
+    it('updateBudget writes no audit row when nothing changed', async () => {
+      mockAiSettings.createAuditLog.mockClear();
+      mockAiSettings.getOrgBudget.mockResolvedValue({ monthlyCap: 10, dailyCap: null, alertThresholdPct: null });
+      mockAiSettings.updateOrgBudget.mockResolvedValue({ monthlyCap: 10, dailyCap: null, alertThresholdPct: null });
+
+      await service.updateBudget('org-1', { monthlyCap: 10 });
+
+      expect(mockAiSettings.createAuditLog).not.toHaveBeenCalled();
     });
   });
 

@@ -5,6 +5,7 @@ import {
   SurfaceFetch,
 } from '../provider-surface.types';
 import { createFetchError } from '../../fetch-error';
+import { parseOptionalNumber } from '../fields/budget-limits.fields';
 
 /**
  * AI / LLM provider settings surface descriptor (migrated from
@@ -56,12 +57,6 @@ interface OrgProviderInfo {
 interface OrgConfigResponse {
   providers: OrgProviderInfo[];
 }
-
-const parseOptionalNumber = (value: unknown): number | undefined => {
-  if (value === '' || value == null) return undefined;
-  const parsed = typeof value === 'number' ? value : parseFloat(String(value));
-  return Number.isFinite(parsed) && parsed >= 0 ? parsed : undefined;
-};
 
 interface ProviderInfo {
   identifier: string;

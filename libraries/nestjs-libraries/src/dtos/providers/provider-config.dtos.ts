@@ -10,6 +10,7 @@ import {
   Max,
   Min,
 } from 'class-validator';
+import { ApiPropertyOptional } from '@nestjs/swagger';
 import { StorageProviderType } from '@prisma/client';
 
 /**
@@ -78,19 +79,31 @@ export class UpsertOrgAiConfigDto {
   enabled?: boolean;
 }
 
+/**
+ * Org-wide AI budget ceiling (all providers summed). Omitted fields are left
+ * unchanged; `null` clears a cap; `enabled: false` clears all three.
+ */
 export class UpdateBudgetDto {
+  @ApiPropertyOptional({ description: 'Monthly ceiling in USD; null clears it', nullable: true, minimum: 0 })
   @IsOptional()
   @IsNumber()
-  monthlyCap?: number;
+  @Min(0)
+  monthlyCap?: number | null;
 
+  @ApiPropertyOptional({ description: 'Daily ceiling in USD; null clears it', nullable: true, minimum: 0 })
   @IsOptional()
   @IsNumber()
-  dailyCap?: number;
+  @Min(0)
+  dailyCap?: number | null;
 
+  @ApiPropertyOptional({ description: 'Alert at this fraction of the cap (0–1); null = default 0.8', nullable: true, minimum: 0, maximum: 1 })
   @IsOptional()
   @IsNumber()
-  alertThresholdPct?: number;
+  @Min(0)
+  @Max(1)
+  alertThresholdPct?: number | null;
 
+  @ApiPropertyOptional({ description: 'false clears all three caps (toggle off)' })
   @IsOptional()
   @IsBoolean()
   enabled?: boolean;

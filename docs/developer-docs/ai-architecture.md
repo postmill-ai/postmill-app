@@ -140,11 +140,11 @@ Input and output guardrails via `@reaatech/guardrail-chain` and `GuardrailSettin
 
 Token/cost tracking with three cap levels:
 
-- **Global** — instance-wide monthly/daily spend caps
-- **Per-org** — per-tenant caps via `perOrgCaps`
+- **Global** — instance-wide monthly/daily spend caps in `AISystemSettings.budgetSettings` (super-admin; alert-only)
+- **Per-org** — the org-wide ceiling across all providers, stored on `Organization.aiBudgetMonthlyCap` / `aiBudgetDailyCap` / `aiBudgetAlertThresholdPct` (`GET/PUT /settings/ai/budget`; the legacy `budgetSettings.perOrgCaps` slice was migrated by `BackfillService.migrateOrgBudgetCaps`)
 - **Per-provider** — per-tenant, per-active-provider caps stored on `AIOrgProviderConfig`
 
-Provider budget enforcement is controlled by `AI_PROVIDER_BUDGET_ENFORCE` (default `true`). When enabled, `checkBudget(scope, orgId, providerId)` returns 429 for the provider whose cap is exhausted while other providers remain usable. Writes to `AISpendLog` for every AI call. Uses an in-memory accumulator with a 60s TTL. Fires threshold alerts at `alertThresholdPct` (default 80%) and includes the provider in provider-scoped alerts. Returns 429 when budget is exceeded.
+Enforcement is controlled by `AI_PROVIDER_BUDGET_ENFORCE` (default `true`) and covers both the org ceiling and the provider caps. `checkBudget(scope, orgId, providerId?)` checks the org ceiling first (`org_budget_exceeded`, even when no provider is resolved), then the provider cap (`provider_budget_exceeded`); either → HTTP 429. Both gates read spend live from `AISpendLog` (never from the in-memory accumulator, which is alert-only and 60s stale). Caps are cached 60s per instance; `invalidateOrgCaps` / `invalidateProviderCaps` are called on save so the saving instance enforces immediately. Writes to `AISpendLog` for every AI call; streamed usage is recorded once on the stream's `finish` part (or `consumeStream()`, whichever the consumer uses). Fires threshold alerts at `alertThresholdPct` (default 80%) and includes the provider in provider-scoped alerts.
 
 ### ProviderHealthService
 

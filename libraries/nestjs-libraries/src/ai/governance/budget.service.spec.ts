@@ -3,6 +3,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 const mockGroupBy = vi.fn().mockResolvedValue([]);
 const mockCreateSpendLog = vi.fn().mockResolvedValue(undefined);
 const mockGetSettings = vi.fn().mockResolvedValue(null);
+const mockGetOrgBudget = vi.fn().mockResolvedValue(null);
 
 vi.mock('@postmill-ai/nestjs-libraries/ai/ai-settings.manager', () => ({
   AiSettingsManager: class MockManager {
@@ -13,6 +14,7 @@ vi.mock('@postmill-ai/nestjs-libraries/ai/ai-settings.manager', () => ({
 vi.mock('@postmill-ai/nestjs-libraries/database/prisma/ai-settings/ai-settings.service', () => ({
   AiSettingsService: class MockAiSettings {
     createSpendLog = mockCreateSpendLog;
+    getOrgBudget = mockGetOrgBudget;
   },
 }));
 
@@ -61,6 +63,7 @@ describe('BudgetService', () => {
     mockGroupBy.mockReset().mockResolvedValue([]);
     mockFindFirstProviderConfig.mockReset().mockResolvedValue(null);
     mockGetSettings.mockReset().mockResolvedValue(null);
+    mockGetOrgBudget.mockReset().mockResolvedValue(null);
     service = freshService();
   });
 
@@ -108,14 +111,120 @@ describe('BudgetService', () => {
     });
 
     it('returns allowed:true when no organizationId is provided', async () => {
-      mockGetSettings.mockResolvedValue({
-        budgetSettings: {
-          perOrgCaps: { 'org-1': { monthly: 1 } },
-        },
-      });
+      mockGetOrgBudget.mockResolvedValue({ monthlyCap: 1, dailyCap: null, alertThresholdPct: null });
       service = freshService();
       const result = await service.checkBudget('utility');
       expect(result.allowed).toBe(true);
+      expect(mockGetOrgBudget).not.toHaveBeenCalled();
+    });
+
+    // ── Org-wide ceiling (Organization.aiBudget*) ──
+    const orgRow = (monthlyCap: number | null, dailyCap: number | null = null) => ({
+      monthlyCap,
+      dailyCap,
+      alertThresholdPct: null,
+    });
+    const ledger = (monthly: number, daily: number) =>
+      mockGroupBy
+        .mockResolvedValueOnce([{ organizationId: 'org-1', _sum: { costUsd: monthly } }])
+        .mockResolvedValueOnce([{ organizationId: 'org-1', _sum: { costUsd: daily } }]);
+
+    it('refuses with org_budget_exceeded when the org monthly ceiling is hit — even with no provider', async () => {
+      mockGetOrgBudget.mockResolvedValue(orgRow(10));
+      ledger(10, 1);
+      service = freshService();
+
+      const result = await service.checkBudget('utility', 'org-1');
+
+      expect(result).toEqual({ allowed: false, reason: 'org_budget_exceeded' });
+      expect(mockFindFirstProviderConfig).not.toHaveBeenCalled();
+    });
+
+    it('refuses with org_budget_exceeded when the org daily ceiling is hit', async () => {
+      mockGetOrgBudget.mockResolvedValue(orgRow(null, 2));
+      ledger(1, 2);
+      service = freshService();
+
+      const result = await service.checkBudget('utility', 'org-1', 'openai');
+
+      expect(result).toEqual({ allowed: false, reason: 'org_budget_exceeded' });
+    });
+
+    it('applies the reservation buffer to the org ceiling', async () => {
+      mockGetOrgBudget.mockResolvedValue(orgRow(10));
+      ledger(9.9995, 0);
+      service = freshService();
+
+      const result = await service.checkBudget('utility', 'org-1');
+
+      expect(result.allowed).toBe(false);
+    });
+
+    it('falls through to the provider gate when the org is under its ceiling', async () => {
+      mockGetOrgBudget.mockResolvedValue(orgRow(100));
+      mockFindFirstProviderConfig.mockResolvedValue({
+        budgetMonthlyCap: 5,
+        budgetDailyCap: null,
+        budgetAlertThresholdPct: null,
+      });
+      // org spend (month, day), then provider spend (month, day)
+      mockGroupBy
+        .mockResolvedValueOnce([{ organizationId: 'org-1', _sum: { costUsd: 20 } }])
+        .mockResolvedValueOnce([{ organizationId: 'org-1', _sum: { costUsd: 1 } }])
+        .mockResolvedValueOnce([{ organizationId: 'org-1', provider: 'openai', _sum: { costUsd: 5 } }])
+        .mockResolvedValueOnce([]);
+      service = freshService();
+
+      const result = await service.checkBudget('utility', 'org-1', 'openai');
+
+      expect(result).toEqual({ allowed: false, reason: 'provider_budget_exceeded', provider: 'openai' });
+    });
+
+    it('prefers the org reason when both the org ceiling and the provider cap are exhausted', async () => {
+      mockGetOrgBudget.mockResolvedValue(orgRow(10));
+      mockFindFirstProviderConfig.mockResolvedValue({ budgetMonthlyCap: 5, budgetDailyCap: null, budgetAlertThresholdPct: null });
+      ledger(10, 0);
+      service = freshService();
+
+      const result = await service.checkBudget('utility', 'org-1', 'openai');
+
+      expect(result.reason).toBe('org_budget_exceeded');
+    });
+
+    it('allows when the org has no ceiling and no provider is given', async () => {
+      mockGetOrgBudget.mockResolvedValue(orgRow(null, null));
+      service = freshService();
+
+      const result = await service.checkBudget('utility', 'org-1');
+
+      expect(result.allowed).toBe(true);
+      expect(mockGroupBy).not.toHaveBeenCalled();
+    });
+
+    it('caches the org ceiling for a minute and re-reads after invalidateOrgCaps', async () => {
+      mockGetOrgBudget.mockResolvedValue(orgRow(null, null));
+      service = freshService();
+
+      await service.checkBudget('utility', 'org-1');
+      await service.checkBudget('utility', 'org-1');
+      expect(mockGetOrgBudget).toHaveBeenCalledTimes(1);
+
+      service.invalidateOrgCaps('org-1');
+      await service.checkBudget('utility', 'org-1');
+      expect(mockGetOrgBudget).toHaveBeenCalledTimes(2);
+    });
+
+    it('invalidateProviderCaps forces the provider cap to be re-read', async () => {
+      mockFindFirstProviderConfig.mockResolvedValue(null);
+      service = freshService();
+
+      await service.checkBudget('utility', 'org-1', 'openai');
+      await service.checkBudget('utility', 'org-1', 'openai');
+      expect(mockFindFirstProviderConfig).toHaveBeenCalledTimes(1);
+
+      service.invalidateProviderCaps('org-1', 'openai');
+      await service.checkBudget('utility', 'org-1', 'openai');
+      expect(mockFindFirstProviderConfig).toHaveBeenCalledTimes(2);
     });
 
     it('returns allowed:true when provider cap is null', async () => {
@@ -464,12 +573,8 @@ describe('BudgetService', () => {
       expect(mockNotificationService.notifyBudgetThreshold).toHaveBeenCalledTimes(1);
     });
 
-    it('fires a per-org monthly alert, normalizing a percent-style threshold (>1)', async () => {
-      mockGetSettings.mockResolvedValue({
-        budgetSettings: {
-          perOrgCaps: { 'org-1': { monthly: 100, alertThresholdPct: 80 } },
-        },
-      });
+    it('fires a per-org monthly alert, normalizing a legacy percent-style threshold (>1)', async () => {
+      mockGetOrgBudget.mockResolvedValue({ monthlyCap: 100, dailyCap: null, alertThresholdPct: 80 });
       service = freshService();
 
       // rawOrgThreshold 80 > 1 → normalized to 0.8; $80 hits the per-org alert.
@@ -498,11 +603,7 @@ describe('BudgetService', () => {
         .mockResolvedValueOnce([
           { organizationId: 'org-1', scope: 'utility', _sum: { costUsd: 40 } },
         ]);
-      mockGetSettings.mockResolvedValue({
-        budgetSettings: {
-          perOrgCaps: { 'org-1': { monthly: 100 } },
-        },
-      });
+      mockGetOrgBudget.mockResolvedValue({ monthlyCap: 100, dailyCap: null, alertThresholdPct: null });
       service = freshService();
 
       // 40 (ledger) + 40 (this spend) = 80 ≥ 100 * 0.8 default → fires.
@@ -545,11 +646,7 @@ describe('BudgetService', () => {
     });
 
     it('fires a per-org daily-cap alert when exceeded', async () => {
-      mockGetSettings.mockResolvedValue({
-        budgetSettings: {
-          perOrgCaps: { 'org-1': { daily: 25 } },
-        },
-      });
+      mockGetOrgBudget.mockResolvedValue({ monthlyCap: null, dailyCap: 25, alertThresholdPct: null });
       service = freshService();
 
       await service.recordSpend({
