@@ -9,6 +9,8 @@ import { useDecisionModal } from '@postmill-ai/frontend/components/layout/new-mo
 import { useT } from '@postmill-ai/react/translation/get.transation.service.client';
 export const CheckPayment: FC<{
   check: string;
+  /** The provider's own subscription ref from the return URL (PayPal appends `subscription_id`). */
+  providerRef?: string;
   mutate: () => void;
   children: ReactNode;
 }> = (props) => {
@@ -20,9 +22,10 @@ export const CheckPayment: FC<{
 
 export const CheckPaymentInner: FC<{
   check: string;
+  providerRef?: string;
   mutate: () => void;
   children: ReactNode;
-}> = ({ check, mutate, children }) => {
+}> = ({ check, providerRef, mutate, children }) => {
   const [showLoader, setShowLoader] = useState(true);
   const fetch = useFetch();
   const toaster = useToaster();
@@ -47,7 +50,9 @@ export const CheckPaymentInner: FC<{
     let mounted = true;
 
     const checkSubscription = async () => {
-      const { status } = await (await fetch('/billing/check/' + check)).json();
+      const { status } = await (
+        await fetch('/billing/check/' + check + (providerRef ? `?ref=${encodeURIComponent(providerRef)}` : ''))
+      ).json();
       if (!mounted) return;
       if (status === 0) {
         await timer(1000);
@@ -76,7 +81,7 @@ export const CheckPaymentInner: FC<{
     return () => {
       mounted = false;
     };
-  }, [fetch, modal, check, mutate, t]);
+  }, [fetch, modal, check, providerRef, mutate, t]);
   if (showLoader) {
     return (
       <div className="fixed bg-black/40 w-full h-full flex justify-center items-center z-400">

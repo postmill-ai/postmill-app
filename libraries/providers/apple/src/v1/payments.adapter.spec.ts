@@ -2,6 +2,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 
 const lib = vi.hoisted(() => ({
   verifiers: [] as any[],
+  constructorError: null as string | null,
   clients: new Map<string, any>(),
   decodeTransaction: vi.fn(),
   decodeRenewal: vi.fn(),
@@ -15,6 +16,7 @@ vi.mock('@apple/app-store-server-library', () => ({
   SignedDataVerifier: class {
     env: string;
     constructor(_certs: Buffer[], _online: boolean, env: string) {
+      if (lib.constructorError) throw new Error(lib.constructorError);
       this.env = env;
       lib.verifiers.push(this);
     }
@@ -63,6 +65,7 @@ let adapter: ApplePaymentsAdapter;
 beforeEach(() => {
   vi.clearAllMocks();
   lib.verifiers.length = 0;
+  lib.constructorError = null;
   lib.clients.clear();
   process.env.APPLE_IAP_BUNDLE_ID = 'ai.postmill.app';
   process.env.APPLE_IAP_ISSUER_ID = 'iss';
@@ -83,6 +86,12 @@ describe('config', () => {
     expect(adapter.publicConfig()).toEqual({ providerId: 'apple', checkoutMode: 'native', capabilities: adapter.capabilities });
     delete process.env.APPLE_IAP_BUNDLE_ID;
     expect(adapter.isConfigured()).toBe(false);
+  });
+
+  it('reports a verifier that cannot be built (missing appAppleId) as a verification failure, not a crash', async () => {
+    lib.constructorError = 'appAppleId is required when the environment is Production';
+    await expect(adapter.verifyPurchase({ orgId: ORG, payload: { jws: 'x' } })).rejects.toBeInstanceOf(PaymentsWebhookVerificationError);
+    await expect(adapter.receiveWebhook({ rawBody: Buffer.from('{"signedPayload":"x"}'), headers: {}, query: {} })).rejects.toThrow(/appAppleId/);
   });
 
   it('builds one verifier per accepted environment', async () => {

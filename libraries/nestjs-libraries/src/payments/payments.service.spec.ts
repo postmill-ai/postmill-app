@@ -527,5 +527,8 @@ describe('checkSubscription + native verify', () => {
 
     const web = build();
     await expect(web.service.verifyNativePurchase(org as any, 'stripe', {})).rejects.toBeInstanceOf(PaymentsUnsupportedOperationError);
+
+    capability.verifyPurchase.mockRejectedValue(new PaymentsWebhookVerificationError('bad receipt'));
+    await expect(service.verifyNativePurchase(org as any, 'apple', { jws: 'x' })).rejects.toMatchObject({ status: 400 });
   });
 });

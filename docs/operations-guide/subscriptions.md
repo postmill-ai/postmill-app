@@ -40,6 +40,87 @@ Set these in your `.env` file or container environment:
 If `STRIPE_PUBLISHABLE_KEY` is absent (and no other provider is enabled), the entire billing gate
 is disabled and every org gets the [Agency defaults](#self-hosted-default).
 
+Stripe supports everything the billing UI offers: embedded checkout, the customer portal,
+proration previews, coupons, add-on packs, invoices and refunds, period-end cancellation with
+resume, and the 30-day trial with a card check.
+
+## PayPal
+
+Hosted checkout through the PayPal Subscriptions API: the buyer is redirected to PayPal to
+approve the subscription and returned to Postmill. Plans and products are created in your PayPal
+catalog on first use (`Postmill PRO MONTHLY`, `… TRIAL`, …), so nothing needs pre-creating.
+
+| Variable | Purpose |
+|----------|---------|
+| `PAYPAL_CLIENT_ID` | REST app client id (enables the provider; also exposed to the browser). |
+| `PAYPAL_CLIENT_SECRET` | REST app secret. |
+| `PAYPAL_WEBHOOK_ID` | The id of the webhook you register below — PayPal verifies deliveries against it. |
+| `PAYPAL_ENV` | `live` (default) or `sandbox`. |
+| `PAYPAL_BRAND_NAME` | Name shown on the PayPal approval page (default `Postmill`). |
+
+Setup: [developer.paypal.com](https://developer.paypal.com) → **Apps & Credentials** → create a
+REST app (a sandbox app for testing, a live app for production) → copy the client id and secret →
+**Webhooks** → add `https://<your-domain>/payments/webhooks/paypal` subscribed to
+`BILLING.SUBSCRIPTION.*` and `PAYMENT.SALE.COMPLETED` → copy the **Webhook ID**. For sandbox
+testing create a business and a personal sandbox account under **Sandbox → Accounts** and set
+`PAYPAL_ENV=sandbox`.
+
+What differs from Stripe: PayPal has no customer portal (the buyer manages the agreement at
+paypal.com), no proration preview (PayPal prorates plan revisions itself), no coupons, and no
+add-on packs. Cancelling is immediate at PayPal, so Postmill keeps the subscription active until
+the paid-through date and a daily job (`payments-expire-canceled`) downgrades it after that; a
+cancelled PayPal subscription cannot be resumed — the customer subscribes again. PayPal webhooks
+can lag the approval redirect by a minute or two; the post-checkout page reconciles from the
+`subscription_id` PayPal appends to the return URL, so the wait is short.
+
+## Apple App Store (mobile app)
+
+For the Postmill mobile app. Purchases happen in the app through StoreKit; the server verifies
+the signed transaction the app hands over (`POST /billing/native/verify`) and consumes App Store
+Server Notifications. Nothing is sold through the web UI for this provider.
+
+| Variable | Purpose |
+|----------|---------|
+| `APPLE_IAP_BUNDLE_ID` | The app's bundle id (enables the provider). |
+| `APPLE_IAP_ISSUER_ID`, `APPLE_IAP_KEY_ID`, `APPLE_IAP_PRIVATE_KEY` | An **In-App Purchase** key from App Store Connect → Users and Access → Integrations → In-App Purchase (base64 of the `.p8`). This is a different key from Sign in with Apple's. |
+| `APPLE_IAP_APP_APPLE_ID` | The numeric Apple ID of the app (App Store Connect → App Information). Required — Apple's verifier refuses production payloads without it. |
+| `APPLE_IAP_ENV` | `Production` (default) or `Sandbox`. |
+| `APPLE_IAP_ALLOW_SANDBOX` | `true` to also accept sandbox/TestFlight purchases on a production backend. |
+| `PAYMENTS_APPLE_PRODUCT_PREFIX` | Product-id prefix (default `postmill`). |
+| `APPLE_IAP_ROOT_CA_BASE64` | Override for Apple's root certificates (comma-separated base64 DER); normally unset. |
+
+Products: create auto-renewable subscriptions in one subscription group with ids
+`<prefix>.<tier>.monthly` / `<prefix>.<tier>.yearly` (e.g. `postmill.pro.monthly`); the free
+trial is the group's introductory offer. Notifications: App Store Connect → your app → **App
+Information → App Store Server Notifications** → version 2 → URL
+`https://<your-domain>/payments/webhooks/apple` for Production and Sandbox. The app must set the
+purchase's `appAccountToken` to the Postmill organization id so the server can bind it.
+
+## Google Play (mobile app)
+
+Same shape as Apple: the app buys through Play Billing and hands `{ purchaseToken, productId }`
+to `POST /billing/native/verify`; Real-time Developer Notifications arrive through Pub/Sub.
+
+| Variable | Purpose |
+|----------|---------|
+| `GOOGLE_PLAY_PACKAGE_NAME` | The app's package name (enables the provider). |
+| `GOOGLE_PLAY_SERVICE_ACCOUNT_JSON` | Base64 of a service-account key JSON with access to the Play Developer API. |
+| `GOOGLE_PLAY_RTDN_SERVICE_ACCOUNT_EMAIL` | The service account Pub/Sub uses to sign push requests; the webhook refuses requests when unset. |
+| `GOOGLE_PLAY_RTDN_AUDIENCE` | Audience of the push OIDC token (default: the webhook URL). |
+| `PAYMENTS_GOOGLE_PRODUCT_PREFIX` | Product-id prefix (default `postmill`). |
+
+Setup: Google Cloud → **Pub/Sub** → create a topic → grant
+`google-play-developer-notifications@system.gserviceaccount.com` the *Pub/Sub Publisher* role →
+add a **push** subscription to `https://<your-domain>/payments/webhooks/google` with
+*Enable authentication* on (choose a service account; its email goes into
+`GOOGLE_PLAY_RTDN_SERVICE_ACCOUNT_EMAIL`, the audience into `GOOGLE_PLAY_RTDN_AUDIENCE`). Play
+Console → **Monetize → Monetization setup** → paste the topic name and send a test notification.
+Invite the API service account under **Users and permissions** with *View financial data* and
+*Manage orders and subscriptions*. Products: subscription ids `<prefix>.<tier>.monthly` / `.yearly`,
+or one product per tier with `monthly`/`yearly` base plans. The app must set
+`obfuscatedExternalAccountId` to the Postmill organization id at purchase time. Postmill
+acknowledges every verified purchase (Play refunds unacknowledged ones after three days).
+
 ## Plans
 
 Plans are defined in `pricing.ts` and created dynamically in Stripe as products/prices on first
@@ -221,14 +302,16 @@ This path is intended for special deals, migration credits, or operator-granted 
 - `POST /billing/cancel` schedules cancellation at period end and emails the operator-defined
   billing address with the user's feedback.
 - `POST /billing/cancel-subscription` cancels immediately.
-- `GET /billing/portal` returns a Stripe Customer Portal link for payment-method and invoice
-  management.
+- `GET /billing/portal` returns the provider's management link (Stripe Customer Portal; the store's
+  subscription page for app-store providers). Providers without one answer 400
+  `PAYMENTS_UNSUPPORTED` and the button is hidden.
 
 Most billing-management routes require the `billing:manage` RBAC permission, but not all — `GET /billing/portal` and `POST /billing/finish-trial` are org-scoped without the `billing:manage` decorator (`billing.controller.ts:55,106`; the `@RequirePermission('billing','manage')` gate begins at line 123).
 
 ## Related
 
-- [Configuration](./configuration.md) — full env var reference including Stripe and add-on pack sizes
+- [Configuration](./configuration.md) — full env var reference including every payment provider and add-on pack sizes
+- [Writing a payment provider](../developer-docs/payment-providers.md) — add a provider that isn't shipped
 - [Security](./security.md) — webhook signature verification and audit logging
 - [Settings](../user-guide/settings.md) — the Team & Roles tab where the `billing:manage` permission is granted
 - [Subscription & Billing](../user-guide/subscription-and-billing.md) — end-user guide to plans, add-ons, and the `/billing` UI

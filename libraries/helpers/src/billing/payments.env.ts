@@ -44,7 +44,7 @@ export const PAYMENT_PROVIDER_ENV = {
   },
   apple: {
     enabledBy: 'APPLE_IAP_BUNDLE_ID',
-    required: ['APPLE_IAP_BUNDLE_ID', 'APPLE_IAP_ISSUER_ID', 'APPLE_IAP_KEY_ID', 'APPLE_IAP_PRIVATE_KEY'],
+    required: ['APPLE_IAP_BUNDLE_ID', 'APPLE_IAP_ISSUER_ID', 'APPLE_IAP_KEY_ID', 'APPLE_IAP_PRIVATE_KEY', 'APPLE_IAP_APP_APPLE_ID'],
     checkoutMode: 'native',
     displayName: 'App Store',
   },

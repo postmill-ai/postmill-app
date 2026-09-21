@@ -65,6 +65,8 @@ export class ApplePaymentsAdapter implements PaymentsCapability {
     'APPLE_IAP_ISSUER_ID',
     'APPLE_IAP_KEY_ID',
     'APPLE_IAP_PRIVATE_KEY',
+    // Apple's verifier refuses to validate Production payloads without the app's numeric id.
+    'APPLE_IAP_APP_APPLE_ID',
   ];
 
   private _verifiers: SignedDataVerifier[] | null = null;
@@ -135,7 +137,18 @@ export class ApplePaymentsAdapter implements PaymentsCapability {
   /** Try each accepted environment's verifier; the first that validates wins. */
   private async _verifyWith<T>(fn: (v: SignedDataVerifier) => Promise<T>): Promise<T> {
     let lastError: unknown;
-    for (const verifier of this._verifierSet()) {
+    let verifiers: SignedDataVerifier[];
+    try {
+      verifiers = this._verifierSet();
+    } catch (err) {
+      // e.g. "appAppleId is required when the environment is Production" — a
+      // deployment misconfiguration, reported as a verification failure rather
+      // than a crash so the vendor retries once the env is fixed.
+      throw new PaymentsWebhookVerificationError(
+        `Apple verifier could not be built: ${(err as Error)?.message ?? err}`,
+      );
+    }
+    for (const verifier of verifiers) {
       try {
         return await fn(verifier);
       } catch (err) {

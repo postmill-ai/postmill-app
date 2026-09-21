@@ -154,6 +154,20 @@ per-provider setup: [Subscriptions & payment providers](./subscriptions.md).
 | `STRIPE_SECRET_KEY` | — | Stripe secret key |
 | `STRIPE_SIGNING_KEY` | — | Stripe webhook signing secret |
 | `STRIPE_DISCOUNT_ID` | — | Stripe coupon ID. When set, eligible existing paying customers on a monthly plan (no yearly plan, no existing discount) can have the coupon applied to their subscription |
+| `PAYPAL_CLIENT_ID` | — | PayPal REST app client id — enables the PayPal provider |
+| `PAYPAL_CLIENT_SECRET` | — | PayPal REST app secret |
+| `PAYPAL_WEBHOOK_ID` | — | Id of the registered PayPal webhook (signature verification) |
+| `PAYPAL_ENV` | `live` | `live` or `sandbox` |
+| `PAYPAL_BRAND_NAME` | `Postmill` | Name shown on PayPal's approval page |
+| `APPLE_IAP_BUNDLE_ID` | — | Mobile app bundle id — enables the App Store provider |
+| `APPLE_IAP_ISSUER_ID` / `APPLE_IAP_KEY_ID` / `APPLE_IAP_PRIVATE_KEY` | — | App Store Connect In-App Purchase key (base64 `.p8`) |
+| `APPLE_IAP_APP_APPLE_ID` | — | Numeric Apple ID of the app |
+| `APPLE_IAP_ENV` / `APPLE_IAP_ALLOW_SANDBOX` | `Production` / — | Store environment; `true` also accepts sandbox purchases |
+| `PAYMENTS_APPLE_PRODUCT_PREFIX` | `postmill` | App Store product-id prefix |
+| `GOOGLE_PLAY_PACKAGE_NAME` | — | Mobile app package name — enables the Google Play provider |
+| `GOOGLE_PLAY_SERVICE_ACCOUNT_JSON` | — | Base64 service-account key with Play Developer API access |
+| `GOOGLE_PLAY_RTDN_SERVICE_ACCOUNT_EMAIL` / `GOOGLE_PLAY_RTDN_AUDIENCE` | — | Pub/Sub push authentication (service account email; audience defaults to the webhook URL) |
+| `PAYMENTS_GOOGLE_PRODUCT_PREFIX` | `postmill` | Google Play product-id prefix |
 | `ADDON_STORAGE_GB_PER_PACK` | `25` | Gigabytes added by one storage add-on pack |
 | `ADDON_VIDEO_EXPORTS_PER_PACK` | `50` | Video exports added by one video-exports add-on pack |
 | `ADDON_CHANNELS_PER_PACK` | `5` | Channels added by one channels add-on pack |

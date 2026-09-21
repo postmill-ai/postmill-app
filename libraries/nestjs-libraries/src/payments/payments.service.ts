@@ -589,7 +589,17 @@ export class PaymentsService {
     if (capability.capabilities.checkoutMode !== 'native' || !capability.verifyPurchase) {
       throw new PaymentsUnsupportedOperationError(providerId, 'verifyPurchase');
     }
-    const events = await capability.verifyPurchase({ orgId: org.id, payload });
+    let events: NormalizedPaymentEvent[];
+    try {
+      events = await capability.verifyPurchase({ orgId: org.id, payload });
+    } catch (err) {
+      // A receipt the store rejects is the client's problem (400) — never a 401,
+      // which the frontend treats as a dead session.
+      if (isWebhookVerificationError(err)) {
+        throw new BadRequestException((err as Error).message);
+      }
+      throw err;
+    }
     for (const event of events) {
       await this.applyEvent(providerId, event, capability);
     }
