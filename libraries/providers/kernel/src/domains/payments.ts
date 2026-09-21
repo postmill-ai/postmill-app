@@ -121,6 +121,8 @@ export type NormalizedPaymentEvent =
       currency: string;
       isAddon: boolean;
       providerSubscriptionRef?: string;
+      /** Live subscription status at payment time — dunning recovery clears grace only on active/trialing. */
+      subscriptionStatus?: PaymentsSubscriptionStatus;
       /** `metadata.userId` — attributes the purchase to a user for conversion tracking. */
       userIdHint?: string;
       /** `metadata.ud` — the tracking cookie captured at checkout. */
@@ -136,8 +138,10 @@ export interface WebhookReceipt {
   /** Vendor event id — recorded for idempotency (Stripe `evt_…`, PayPal `WH-…`, Apple notificationUUID, Pub/Sub messageId). */
   eventId: string;
   eventType: string;
-  /** Empty ⇒ nothing to apply; the event is still recorded and acknowledged. */
+  /** Empty ⇒ nothing to apply; the event is still recorded and acknowledged unless `skipRecord`. */
   events: NormalizedPaymentEvent[];
+  /** Foreign traffic (another app on the same vendor account): acknowledge without a ledger row. */
+  skipRecord?: boolean;
   /** Body the webhook controller must return verbatim (defaults to `{ ok: true }`). */
   ackBody?: unknown;
 }
@@ -162,13 +166,40 @@ export class PaymentsUnsupportedOperationError extends Error {
   }
 }
 
+/**
+ * A plan price as the orchestrator resolves it from `pricing.ts`. Adapters
+ * cannot import the pricing table (provider packages depend on the kernel
+ * only), so every price-creating call carries the amount explicitly.
+ */
+export interface PaymentsPlanPrice {
+  tier: PaymentsTier;
+  monthlyCents: number;
+  yearlyCents: number;
+  currency: string;
+}
+
+export function planUnitAmountCents(plan: PaymentsPlanPrice, period: PaymentsPeriod): number {
+  return period === 'MONTHLY' ? plan.monthlyCents : plan.yearlyCents;
+}
+
+/** An add-on pack as the orchestrator resolves it from `ADDONS`. */
+export interface PaymentsAddonSpec {
+  /** `ADDONS` key, e.g. `storage`. */
+  type: string;
+  /** Vendor-facing product name, e.g. `Postmill Extra Storage`. */
+  productName: string;
+  /** Monthly price of one pack. */
+  unitAmountCents: number;
+  currency: string;
+}
+
 export interface PaymentsCheckoutRequest {
   /** Existing vendor customer ref, or null on first purchase. */
   customerRef: string | null;
   orgId: string;
   userId: string;
   email: string;
-  tier: PaymentsTier;
+  plan: PaymentsPlanPrice;
   period: PaymentsPeriod;
   allowTrial: boolean;
   /** App-generated purchase id; the vendor must echo it back (`NormalizedSubscriptionState.identifier`). */
@@ -190,7 +221,9 @@ export type PaymentsCheckoutResult =
 export interface PaymentsPlanChangeRequest {
   customerRef: string;
   currentTier: PaymentsTier;
-  targetTier: PaymentsTier;
+  /** The target plan and its prices. */
+  plan: PaymentsPlanPrice;
+  /** The org's current billing period (adapters may prefer the live vendor interval). */
   period: PaymentsPeriod;
   direction: 'upgrade' | 'downgrade';
   identifier: string;
@@ -244,16 +277,26 @@ export interface PaymentsCapability {
   createCheckout?(request: PaymentsCheckoutRequest): Promise<PaymentsCheckoutResult>;
   changePlan?(request: PaymentsPlanChangeRequest): Promise<PaymentsPlanChangeResult>;
   /** Called once a pending downgrade has been applied locally, so vendor metadata agrees. */
-  commitPendingTier?(customerRef: string, tier: PaymentsTier): Promise<void>;
+  commitPendingTier?(
+    customerRef: string,
+    tier: PaymentsTier,
+    providerSubscriptionRef?: string,
+  ): Promise<void>;
   previewProration?(input: {
     customerRef: string;
-    tier: PaymentsTier;
+    plan: PaymentsPlanPrice;
     period: PaymentsPeriod;
   }): Promise<{ amountCents: number }>;
+  /**
+   * `true` schedules the cancel, `false` resumes, `'toggle'` flips the live
+   * vendor state (the `/billing/cancel` contract). `canceledNow` means the
+   * adapter cancelled immediately (e.g. the last payment already failed) and
+   * the orchestrator must drop the subscription row.
+   */
   setCancelAtPeriodEnd?(
     customerRef: string,
-    cancel: boolean,
-  ): Promise<{ cancelAt: Date | null; canceledNow: boolean }>;
+    cancel: boolean | 'toggle',
+  ): Promise<{ cancelAt: Date | null; cancelAtPeriodEnd: boolean; canceledNow: boolean }>;
   cancelNow?(customerRef: string): Promise<void>;
   finishTrial?(customerRef: string): Promise<void>;
   checkDiscount?(customerRef: string): Promise<boolean>;
@@ -261,7 +304,7 @@ export interface PaymentsCapability {
   manageUrl?(customerRef: string | null, returnUrl: string): Promise<string>;
 
   // ---- add-ons ----
-  upsertAddon?(customerRef: string, type: string, packs: number): Promise<void>;
+  upsertAddon?(customerRef: string, addon: PaymentsAddonSpec, packs: number): Promise<void>;
   cancelAddon?(customerRef: string, type: string): Promise<void>;
   /** Packs per add-on type (keys are `ADDONS` keys); absent types mean 0. */
   listAddonQuantities?(customerRef: string): Promise<Record<string, number>>;
