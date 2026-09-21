@@ -62,7 +62,7 @@ export class PermissionsService {
       await this._subscriptionService.getSubscriptionByOrganizationId(orgId);
 
     // Dunning grace (F5): a grace window that has lapsed downgrades the org to
-    // baseline. Recovery clears the marker first (stripe.service.ts), so a stale
+    // baseline. Recovery clears the marker first (PaymentsService.applyEvent), so a stale
     // timestamp from a since-recovered subscription can never wrongly downgrade.
     const graceLapsed =
       !!subscription?.gracePeriodEnd &&

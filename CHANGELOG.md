@@ -15,7 +15,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
-- The billing master switch is "at least one payment provider is configured" (`billingEnabled()`) instead of `STRIPE_PUBLISHABLE_KEY` presence. For a Stripe-only deployment nothing changes: the same three `STRIPE_*` variables enable it.
+- The billing master switch is "at least one payment provider is configured" (`billingEnabled()`) instead of `STRIPE_PUBLISHABLE_KEY` presence. For a Stripe-only deployment nothing changes: the same three `STRIPE_*` variables enable it. Deliberate normalisation: the public-API "no subscription" check and publish-time subscription checks previously keyed on `STRIPE_SECRET_KEY`; they now follow the same switch, so a deployment that set only the secret key loses those checks and one that set only the publishable key gains them — set both, as documented.
+- A Stripe webhook with a bad signature now answers **401** (was 500) on both `POST /stripe` and `POST /payments/webhooks/stripe`; Stripe retries any non-2xx, so delivery behaviour is unchanged — adjust alerting keyed on 5xx.
+- Purchase conversion tracking no longer substitutes the plan list price when the provider does not report the charged amount; those payments are simply not tracked.
 - Stripe's proration preview no longer requires the price nickname to match (the four other lookups never did); prices are still matched by product name, interval and amount.
 
 ### Deprecated

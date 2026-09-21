@@ -80,7 +80,13 @@ export class PaymentsConfigService implements OnModuleInit {
     try {
       const capability = this._resolution.resolvePayments(providerId);
       return capability.isConfigured() ? capability : null;
-    } catch {
+    } catch (err) {
+      // Distinguish "keys unset" (silent) from a kernel resolution failure —
+      // an org billed by this provider would otherwise fall through to the
+      // deployment default without a trace.
+      this._logger.warn(
+        `Payment provider ${providerId} is enabled but could not be resolved: ${(err as Error)?.message ?? err}`
+      );
       return null;
     }
   }

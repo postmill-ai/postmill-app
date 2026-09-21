@@ -95,16 +95,24 @@ describe('verifyPurchase', () => {
     ]);
   });
 
-  it('does not re-acknowledge, binds through the caller when Play carries no account id, rejects a foreign account id', async () => {
-    api.get.mockResolvedValue({ data: purchase({ acknowledgementState: 'ACKNOWLEDGEMENT_STATE_ACKNOWLEDGED', externalAccountIdentifiers: {} }) });
-    const events = await adapter.verifyPurchase({ orgId: ORG, payload: { purchaseToken: 'tok_1' } });
+  it('does not re-acknowledge, and rejects a missing or foreign account id (the app must tag the purchase)', async () => {
+    api.get.mockResolvedValue({ data: purchase({ acknowledgementState: 'ACKNOWLEDGEMENT_STATE_ACKNOWLEDGED' }) });
+    await adapter.verifyPurchase({ orgId: ORG, payload: { purchaseToken: 'tok_1' } });
     expect(api.acknowledge).not.toHaveBeenCalled();
-    expect(events[0]).toMatchObject({ orgIdHint: ORG });
+    api.get.mockResolvedValue({ data: purchase({ externalAccountIdentifiers: {} }) });
+    await expect(adapter.verifyPurchase({ orgId: ORG, payload: { purchaseToken: 'tok_1' } })).rejects.toBeInstanceOf(PaymentsWebhookVerificationError);
     api.get.mockResolvedValue({ data: purchase({ externalAccountIdentifiers: { obfuscatedExternalAccountId: 'other' } }) });
     await expect(adapter.verifyPurchase({ orgId: ORG, payload: { purchaseToken: 'tok_1' } })).rejects.toBeInstanceOf(PaymentsWebhookVerificationError);
     await expect(adapter.verifyPurchase({ orgId: ORG, payload: {} })).rejects.toBeInstanceOf(PaymentsWebhookVerificationError);
-    api.get.mockRejectedValue(new Error('invalid token'));
-    await expect(adapter.verifyPurchase({ orgId: ORG, payload: { purchaseToken: 'bad' } })).rejects.toThrow(/rejected the purchase token/);
+  });
+
+  it("only Play's verdict on the token is a verification failure; a 5xx is rethrown as retryable", async () => {
+    api.get.mockRejectedValue(Object.assign(new Error('invalid token'), { code: 400 }));
+    await expect(adapter.verifyPurchase({ orgId: ORG, payload: { purchaseToken: 'bad' } })).rejects.toBeInstanceOf(PaymentsWebhookVerificationError);
+    api.get.mockRejectedValue(Object.assign(new Error('backend error'), { code: 503 }));
+    await expect(adapter.verifyPurchase({ orgId: ORG, payload: { purchaseToken: 'tok_1' } })).rejects.toSatisfy(
+      (e: Error) => !(e instanceof PaymentsWebhookVerificationError) && /backend error/.test(e.message),
+    );
   });
 
   it('maps states: canceled-but-entitled keeps access until expiry, grace/hold are past_due, expired tears down', async () => {
@@ -113,7 +121,7 @@ describe('verifyPurchase', () => {
     api.get.mockResolvedValue({ data: purchase({ subscriptionState: 'SUBSCRIPTION_STATE_ON_HOLD' }) });
     expect((await adapter.verifyPurchase({ orgId: ORG, payload: { purchaseToken: 'tok_1' } }))[0]).toMatchObject({ state: { status: 'past_due' } });
     api.get.mockResolvedValue({ data: purchase({ subscriptionState: 'SUBSCRIPTION_STATE_EXPIRED' }) });
-    expect(await adapter.verifyPurchase({ orgId: ORG, payload: { purchaseToken: 'tok_1' } })).toEqual([{ type: 'subscription.canceled', customerRef: 'tok_1', orgIdHint: ORG }]);
+    expect(await adapter.verifyPurchase({ orgId: ORG, payload: { purchaseToken: 'tok_1' } })).toEqual([{ type: 'subscription.canceled', customerRef: 'tok_1' }]);
   });
 
   it('accepts product.basePlan ids and ignores foreign products', async () => {
@@ -142,7 +150,7 @@ describe('receiveWebhook (Pub/Sub push)', () => {
 
     const renewed = await adapter.receiveWebhook(rtdn(subNotification(2), 'm2'));
     expect(renewed.events).toEqual([
-      { type: 'payment.succeeded', customerRef: 'tok_1', orgIdHint: ORG, currency: 'usd', isAddon: false, providerSubscriptionRef: 'tok_1', subscriptionStatus: 'active' },
+      { type: 'payment.succeeded', customerRef: 'tok_1', currency: 'usd', isAddon: false, providerSubscriptionRef: 'tok_1', subscriptionStatus: 'active' },
       expect.objectContaining({ type: 'subscription.updated' }),
     ]);
 
@@ -150,16 +158,31 @@ describe('receiveWebhook (Pub/Sub push)', () => {
     expect((await adapter.receiveWebhook(rtdn(subNotification(3), 'm3'))).events[0]).toMatchObject({ type: 'subscription.updated', state: { status: 'active', cancelAt: new Date('2030-01-01T00:00:00Z') } });
 
     api.get.mockResolvedValue({ data: purchase({ subscriptionState: 'SUBSCRIPTION_STATE_ON_HOLD' }) });
-    expect((await adapter.receiveWebhook(rtdn(subNotification(5), 'm5'))).events).toEqual([{ type: 'subscription.past_due', customerRef: 'tok_1', orgIdHint: ORG, providerSubscriptionRef: 'tok_1' }]);
+    // Past-due and cancel events resolve by ref only — never a hint that could re-bind the org.
+    expect((await adapter.receiveWebhook(rtdn(subNotification(5), 'm5'))).events).toEqual([{ type: 'subscription.past_due', customerRef: 'tok_1', providerSubscriptionRef: 'tok_1' }]);
 
     api.get.mockRejectedValue(new Error('gone'));
     expect((await adapter.receiveWebhook(rtdn(subNotification(13), 'm13'))).events).toEqual([{ type: 'subscription.canceled', customerRef: 'tok_1' }]);
   });
 
-  it('carries the rotated token as customerRef with the org hint (linkedPurchaseToken)', async () => {
+  it('carries the rotated token as customerRef, the org hint and the superseded token (linkedPurchaseToken)', async () => {
     api.get.mockResolvedValue({ data: purchase({ linkedPurchaseToken: 'tok_old' }) });
     const r = await adapter.receiveWebhook(rtdn(subNotification(4, 'tok_new')));
-    expect(r.events[0]).toMatchObject({ customerRef: 'tok_new', orgIdHint: ORG, state: { providerSubscriptionRef: 'tok_new' } });
+    expect(r.events[0]).toMatchObject({ customerRef: 'tok_new', orgIdHint: ORG, previousCustomerRef: 'tok_old', state: { providerSubscriptionRef: 'tok_new' } });
+  });
+
+  it('EXPIRED for a rotated-out token carries no hint, so it cannot re-bind the org to the dead token', async () => {
+    api.get.mockResolvedValue({ data: purchase({ subscriptionState: 'SUBSCRIPTION_STATE_EXPIRED' }) });
+    const r = await adapter.receiveWebhook(rtdn(subNotification(13, 'tok_old'), 'm13b'));
+    expect(r.events).toEqual([{ type: 'subscription.canceled', customerRef: 'tok_old' }]);
+    expect(api.get).not.toHaveBeenCalled();
+  });
+
+  it('RECOVERED / RESTARTED emit subscription.updated (active) so the dunning grace marker clears', async () => {
+    for (const type of [1, 7]) {
+      const r = await adapter.receiveWebhook(rtdn(subNotification(type), `mr${type}`));
+      expect(r.events).toEqual([{ type: 'subscription.updated', customerRef: 'tok_1', state: expect.objectContaining({ status: 'active' }) }]);
+    }
   });
 
   it('records test notifications, skips foreign packages, cancels voided purchases, ignores unknown types', async () => {

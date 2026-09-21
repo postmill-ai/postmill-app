@@ -142,6 +142,7 @@ export function runPaymentsConformance(
     promoCodes: ['checkDiscount', 'applyDiscount'],
     cardCheck: ['verifyPaymentMethod'],
     planChange: ['changePlan'],
+    periodEndCancel: ['setCancelAtPeriodEnd'],
   };
   for (const [flag, methods] of Object.entries(FLAG_METHODS)) {
     if (flags[flag]) {

@@ -48,13 +48,40 @@ export const CheckPaymentInner: FC<{
 
   useEffect(() => {
     let mounted = true;
+    // Bounded: vendor webhooks can lag the redirect (PayPal by minutes), but a
+    // loader that never ends is worse than asking the user to check back.
+    let attempts = 0;
+    const MAX_ATTEMPTS = 90;
 
-    const checkSubscription = async () => {
-      const { status } = await (
-        await fetch('/billing/check/' + check + (providerRef ? `?ref=${encodeURIComponent(providerRef)}` : ''))
-      ).json();
+    const giveUp = () => {
+      modal.open({
+        title: t('billing_still_processing', 'Payment still processing'),
+        onlyApprove: true,
+        approveLabel: t('ok', 'OK'),
+        description: t(
+          'billing_still_processing_description',
+          'We have not received confirmation from the payment provider yet. Your subscription will appear once it lands — please check back in a few minutes.'
+        ),
+      });
+      setShowLoader(false);
+    };
+
+    const checkSubscription = async (): Promise<void> => {
+      let status: number;
+      try {
+        ({ status } = await (
+          await fetch('/billing/check/' + check + (providerRef ? `?ref=${encodeURIComponent(providerRef)}` : ''))
+        ).json());
+      } catch {
+        if (!mounted) return;
+        return giveUp();
+      }
       if (!mounted) return;
       if (status === 0) {
+        attempts += 1;
+        if (attempts >= MAX_ATTEMPTS) {
+          return giveUp();
+        }
         await timer(1000);
         return checkSubscription();
       }

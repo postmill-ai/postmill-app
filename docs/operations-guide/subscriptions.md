@@ -85,7 +85,7 @@ Server Notifications. Nothing is sold through the web UI for this provider.
 | `APPLE_IAP_ISSUER_ID`, `APPLE_IAP_KEY_ID`, `APPLE_IAP_PRIVATE_KEY` | An **In-App Purchase** key from App Store Connect → Users and Access → Integrations → In-App Purchase (base64 of the `.p8`). This is a different key from Sign in with Apple's. |
 | `APPLE_IAP_APP_APPLE_ID` | The numeric Apple ID of the app (App Store Connect → App Information). Required — Apple's verifier refuses production payloads without it. |
 | `APPLE_IAP_ENV` | `Production` (default) or `Sandbox`. |
-| `APPLE_IAP_ALLOW_SANDBOX` | `true` to also accept sandbox/TestFlight purchases on a production backend. |
+| `APPLE_IAP_ALLOW_SANDBOX` | `true` to also accept sandbox/TestFlight purchases on a production backend. **Sandbox purchases are free, so this grants real paid tiers to anyone with a TestFlight build** — pair it with `APPLE_IAP_SANDBOX_ORG_IDS` (comma-separated organization ids allowed to activate sandbox purchases) and turn it off after launch testing. |
 | `PAYMENTS_APPLE_PRODUCT_PREFIX` | Product-id prefix (default `postmill`). |
 | `APPLE_IAP_ROOT_CA_BASE64` | Override for Apple's root certificates (comma-separated base64 DER); normally unset. |
 
@@ -119,7 +119,7 @@ Invite the API service account under **Users and permissions** with *View financ
 *Manage orders and subscriptions*. Products: subscription ids `<prefix>.<tier>.monthly` / `.yearly`,
 or one product per tier with `monthly`/`yearly` base plans. The app must set
 `obfuscatedExternalAccountId` to the Postmill organization id at purchase time. Postmill
-acknowledges every verified purchase (Play refunds unacknowledged ones after three days).
+acknowledges every verified purchase (Play refunds unacknowledged ones after three days). Purchases that do not carry the organization id are rejected.
 
 ## Plans
 

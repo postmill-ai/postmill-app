@@ -162,6 +162,28 @@ describe('verifyPurchase', () => {
     expect((await adapter.verifyPurchase({ orgId: ORG, payload: { jws: 'x' } }))[0]).toMatchObject({ state: { cancelAt: new Date('2030-01-01T00:00:00Z') } });
   });
 
+  it('fails closed when the status API has no item for the transaction, and on an unknown status code', async () => {
+    lib.getAllSubscriptionStatuses.mockResolvedValue({ data: [] });
+    await expect(adapter.verifyPurchase({ orgId: ORG, payload: { jws: 'x' } })).rejects.toThrow(/no subscription/);
+    lib.getAllSubscriptionStatuses.mockResolvedValue(statuses(99));
+    expect((await adapter.verifyPurchase({ orgId: ORG, payload: { jws: 'x' } }))[0]).toMatchObject({ state: { status: 'incomplete' } });
+  });
+
+  it('accepts sandbox purchases only for allow-listed orgs when a list is set', async () => {
+    process.env.APPLE_IAP_ALLOW_SANDBOX = 'true';
+    process.env.APPLE_IAP_SANDBOX_ORG_IDS = 'some-other-org';
+    adapter = new ApplePaymentsAdapter();
+    lib.decodeTransaction.mockImplementation(async () => tx({ environment: 'Sandbox' }));
+    await expect(adapter.verifyPurchase({ orgId: ORG, payload: { jws: 'x' } })).rejects.toThrow(/sandbox/i);
+    process.env.APPLE_IAP_SANDBOX_ORG_IDS = `x, ${ORG}`;
+    expect((await adapter.verifyPurchase({ orgId: ORG, payload: { jws: 'x' } }))[0].type).toBe('subscription.activated');
+    delete process.env.APPLE_IAP_SANDBOX_ORG_IDS;
+    // Without the flag a sandbox transaction is never accepted.
+    delete process.env.APPLE_IAP_ALLOW_SANDBOX;
+    adapter = new ApplePaymentsAdapter();
+    await expect(adapter.verifyPurchase({ orgId: ORG, payload: { jws: 'x' } })).rejects.toThrow(/sandbox/i);
+  });
+
   it('ignores products outside the configured prefix', async () => {
     process.env.PAYMENTS_APPLE_PRODUCT_PREFIX = 'acme';
     adapter = new ApplePaymentsAdapter();
@@ -193,9 +215,12 @@ describe('receiveWebhook (App Store Server Notifications V2)', () => {
       expect.objectContaining({ type: 'subscription.updated' }),
     ]);
 
-    expect((await deliver({ notificationType: 'DID_FAIL_TO_RENEW', subtype: 'GRACE_PERIOD', notificationUUID: 'n3', data: data(4) })).events).toEqual([{ type: 'subscription.past_due', customerRef: 'otx_1', orgIdHint: ORG, providerSubscriptionRef: 'otx_1' }]);
-    expect((await deliver({ notificationType: 'EXPIRED', subtype: 'VOLUNTARY', notificationUUID: 'n4', data: data(2) })).events).toEqual([{ type: 'subscription.canceled', customerRef: 'otx_1', orgIdHint: ORG }]);
+    // Cancel/past-due events carry no org hint: they resolve by ref only.
+    expect((await deliver({ notificationType: 'DID_FAIL_TO_RENEW', subtype: 'GRACE_PERIOD', notificationUUID: 'n3', data: data(4) })).events).toEqual([{ type: 'subscription.past_due', customerRef: 'otx_1', providerSubscriptionRef: 'otx_1' }]);
+    expect((await deliver({ notificationType: 'EXPIRED', subtype: 'VOLUNTARY', notificationUUID: 'n4', data: data(2) })).events).toEqual([{ type: 'subscription.canceled', customerRef: 'otx_1' }]);
+    // A refund that ends the entitlement tears down; a refunded renewal on a still-active sub only updates.
     expect((await deliver({ notificationType: 'REFUND', notificationUUID: 'n5', data: data(5) })).events[0].type).toBe('subscription.canceled');
+    expect((await deliver({ notificationType: 'REFUND', notificationUUID: 'n5b', data: data(1) })).events[0].type).toBe('subscription.updated');
     expect(await deliver({ notificationType: 'TEST', notificationUUID: 'n6' })).toEqual({ eventId: 'n6', eventType: 'TEST', events: [] });
   });
 

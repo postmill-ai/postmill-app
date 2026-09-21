@@ -278,6 +278,16 @@ export const FirstBillingComponent = () => {
             ) : (
               <LoadingComponent />
             )
+          ) : payments.checkoutMode === 'embedded' ? (
+            // Embedded provider configured but Stripe.js could not load (no
+            // publishable key at build time) — say so instead of pretending the
+            // deployment is app-store only.
+            <div className="rounded-[12px] border border-newColColor p-[24px] text-[14px] text-textItemBlur">
+              {t(
+                'billing_checkout_unavailable',
+                'Checkout is temporarily unavailable. Please try again later.'
+              )}
+            </div>
           ) : payments.checkoutMode === 'hosted' ? (
             <div className="flex flex-col gap-[16px] rounded-[12px] border border-newColColor p-[24px]">
               <div className="text-[18px] font-[600]">

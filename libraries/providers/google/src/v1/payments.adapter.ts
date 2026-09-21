@@ -1,6 +1,6 @@
 import { google, androidpublisher_v3 } from 'googleapis';
 import { OAuth2Client } from 'google-auth-library';
-import { metadata as providerMetadata } from './metadata';
+import { metadata as providerMetadata } from './payments.metadata';
 import {
   NormalizedPaymentEvent,
   NormalizedSubscriptionState,
@@ -67,7 +67,8 @@ export class GooglePaymentsAdapter implements PaymentsCapability {
     trials: true,
     cardCheck: false,
     chargesHistory: false,
-    periodEndCancel: true,
+    // The store owns cancellation; the web app only links to the Play subscriptions page.
+    periodEndCancel: false,
     planChange: false,
   };
   readonly requiredEnvKeys = ['GOOGLE_PLAY_PACKAGE_NAME', 'GOOGLE_PLAY_SERVICE_ACCOUNT_JSON'];
@@ -191,9 +192,20 @@ export class GooglePaymentsAdapter implements PaymentsCapability {
     };
   }
 
-  private _refs(token: string, purchase: SubscriptionPurchase) {
+  /**
+   * Activation refs carry the org hint (binds the org on first purchase) and
+   * the token this purchase supersedes (`linkedPurchaseToken`, set on plan
+   * changes) so the orchestrator can move the binding. Every other event
+   * resolves by ref alone — a hint on EXPIRED for a rotated-out token would
+   * otherwise re-bind the org to the dead token and tear it down.
+   */
+  private _activationRefs(token: string, purchase: SubscriptionPurchase) {
     const hint = purchase.externalAccountIdentifiers?.obfuscatedExternalAccountId || undefined;
-    return { customerRef: token, ...(hint ? { orgIdHint: hint } : {}) };
+    return {
+      customerRef: token,
+      ...(hint ? { orgIdHint: hint } : {}),
+      ...(purchase.linkedPurchaseToken ? { previousCustomerRef: purchase.linkedPurchaseToken } : {}),
+    };
   }
 
   /** Read + acknowledge + translate a purchase token into events. */
@@ -212,15 +224,14 @@ export class GooglePaymentsAdapter implements PaymentsCapability {
     if (!state) {
       return [];
     }
-    const refs = this._refs(token, purchase);
     if (state.status === 'canceled') {
-      return [{ type: 'subscription.canceled', ...refs }];
+      return [{ type: 'subscription.canceled', customerRef: token }];
     }
     const events: NormalizedPaymentEvent[] = [];
     if (kind === 'renewed') {
       events.push({
         type: 'payment.succeeded',
-        ...refs,
+        customerRef: token,
         // Play's v2 purchase resource carries no amount; the orchestrator prices it from the plan.
         currency: 'usd',
         isAddon: false,
@@ -228,11 +239,11 @@ export class GooglePaymentsAdapter implements PaymentsCapability {
         subscriptionStatus: state.status,
       });
     }
-    events.push({
-      type: kind === 'activated' ? 'subscription.activated' : 'subscription.updated',
-      ...refs,
-      state,
-    });
+    events.push(
+      kind === 'activated'
+        ? { type: 'subscription.activated', ...this._activationRefs(token, purchase), state }
+        : { type: 'subscription.updated', customerRef: token, state },
+    );
     return events;
   }
 
@@ -247,19 +258,24 @@ export class GooglePaymentsAdapter implements PaymentsCapability {
     try {
       purchase = await this._readPurchase(purchaseToken);
     } catch (err) {
-      throw new PaymentsWebhookVerificationError(
-        `Google Play rejected the purchase token: ${(err as Error)?.message ?? err}`,
-      );
+      // Only Play's own verdict on the token is a verification failure; a 5xx,
+      // quota or network error must surface as retryable, not "rejected".
+      const status = Number((err as { code?: number; status?: number })?.code ?? (err as { status?: number })?.status);
+      if (status === 400 || status === 404 || status === 410) {
+        throw new PaymentsWebhookVerificationError(
+          `Google Play rejected the purchase token: ${(err as Error)?.message ?? err}`,
+        );
+      }
+      throw err;
     }
+    // Same rule as Apple: the app must tag the purchase with the org id.
     const boundOrg = purchase.externalAccountIdentifiers?.obfuscatedExternalAccountId;
-    if (boundOrg && boundOrg !== input.orgId) {
+    if (boundOrg !== input.orgId) {
       throw new PaymentsWebhookVerificationError(
         'Google purchase obfuscatedExternalAccountId does not match the organization',
       );
     }
-    const events = await this._eventsFor(purchaseToken, 'activated');
-    // A purchase made without the account identifier still binds through the caller.
-    return events.map((e) => ({ ...e, orgIdHint: e.orgIdHint ?? input.orgId }));
+    return this._eventsFor(purchaseToken, 'activated');
   }
 
   // ---------------------------------------------------------------- Pub/Sub push
@@ -312,9 +328,12 @@ export class GooglePaymentsAdapter implements PaymentsCapability {
 
     switch (sub.notificationType) {
       case RTDN.PURCHASED:
+        return { eventId, eventType, events: await this._eventsFor(token, 'activated') };
       case RTDN.RESTARTED:
       case RTDN.RECOVERED:
-        return { eventId, eventType, events: await this._eventsFor(token, 'activated') };
+        // Recovery from hold/grace carries no charge; `subscription.updated`
+        // (active) is what clears the dunning grace marker.
+        return { eventId, eventType, events: await this._eventsFor(token, 'updated') };
       case RTDN.RENEWED:
         return { eventId, eventType, events: await this._eventsFor(token, 'renewed') };
       case RTDN.CANCELED:
@@ -324,24 +343,16 @@ export class GooglePaymentsAdapter implements PaymentsCapability {
         return { eventId, eventType, events: await this._eventsFor(token, 'updated') };
       case RTDN.ON_HOLD:
       case RTDN.IN_GRACE_PERIOD:
-      case RTDN.PAUSED: {
-        const purchase = await this._readPurchase(token);
+      case RTDN.PAUSED:
         return {
           eventId,
           eventType,
-          events: [{ type: 'subscription.past_due', ...this._refs(token, purchase), providerSubscriptionRef: token }],
+          events: [{ type: 'subscription.past_due', customerRef: token, providerSubscriptionRef: token }],
         };
-      }
       case RTDN.REVOKED:
-      case RTDN.EXPIRED: {
-        let refs = { customerRef: token } as ReturnType<GooglePaymentsAdapter['_refs']>;
-        try {
-          refs = this._refs(token, await this._readPurchase(token));
-        } catch {
-          /* the token may already be unreadable — cancel by ref alone */
-        }
-        return { eventId, eventType, events: [{ type: 'subscription.canceled', ...refs }] };
-      }
+      case RTDN.EXPIRED:
+        // By ref only: for a rotated-out token this finds nothing and no-ops.
+        return { eventId, eventType, events: [{ type: 'subscription.canceled', customerRef: token }] };
       default:
         return { eventId, eventType, events: [] };
     }
@@ -365,7 +376,7 @@ export class GooglePaymentsAdapter implements PaymentsCapability {
     }
     const audience =
       process.env.GOOGLE_PLAY_RTDN_AUDIENCE ||
-      `${process.env.BACKEND_URL || process.env.NEXT_PUBLIC_BACKEND_URL || ''}/payments/webhooks/google`;
+      `${(process.env.BACKEND_URL || process.env.NEXT_PUBLIC_BACKEND_URL || '').replace(/\/+$/, '')}/payments/webhooks/google`;
     let payload: { email?: string; email_verified?: boolean } | undefined;
     try {
       const ticket = await this._oidcClient().verifyIdToken({ idToken: token, audience });

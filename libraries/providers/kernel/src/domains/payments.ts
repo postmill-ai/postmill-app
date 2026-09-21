@@ -20,7 +20,7 @@
 
 export type PaymentsCheckoutMode = 'hosted' | 'embedded' | 'native';
 
-/** Mirrors `SubscriptionTier` / `pricing.ts` — a nestjs-libraries spec asserts lockstep. */
+/** Mirrors `SubscriptionTier` / `pricing.ts` — `libraries/nestjs-libraries/src/payments/payments-tiers.spec.ts` asserts lockstep. */
 export type PaymentsTier = 'STARTER' | 'PRO' | 'TEAM' | 'AGENCY';
 export type PaymentsPeriod = 'MONTHLY' | 'YEARLY';
 export type PaymentsSubscriptionStatus =
@@ -97,16 +97,30 @@ interface NormalizedEventBase {
    * Org id the vendor echoed back (Apple `appAccountToken`, Google
    * `obfuscatedExternalAccountId`, PayPal `custom_id`). Used to bind an org on
    * first activation when no `customerRef` is known yet. Trusted only after the
-   * adapter verified the vendor signature.
+   * adapter verified the vendor signature, and only on `subscription.activated`
+   * — the orchestrator never rebinds an org on any other event. Adapters should
+   * omit it on cancel/past-due events: by-ref resolution always finds a live
+   * binding, and an unknown ref safely no-ops.
    */
   orgIdHint?: string;
+  /**
+   * The ref this event supersedes, when the vendor rotates refs (Google
+   * `linkedPurchaseToken`). Lets the orchestrator move an org's binding from
+   * the old ref to `customerRef`; without it, a hint can never re-point an org
+   * that is already bound to this provider.
+   */
+  previousCustomerRef?: string;
 }
 
 export type NormalizedPaymentEvent =
   | (NormalizedEventBase & {
       type: 'subscription.activated' | 'subscription.updated';
       state: NormalizedSubscriptionState;
-      /** Ask the orchestrator to run `verifyPaymentMethod` when the org is on a trial. */
+      /**
+       * Ask the orchestrator to run `verifyPaymentMethod`. The orchestrator only
+       * does so when `capabilities.cardCheck`, the org's `allowTrial` is set and
+       * the state is not `incomplete` (an incomplete subscription creates no row).
+       */
       requiresCardCheck?: boolean;
     })
   | (NormalizedEventBase & {

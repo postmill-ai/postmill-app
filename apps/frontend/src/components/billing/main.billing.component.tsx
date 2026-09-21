@@ -343,13 +343,20 @@ export const MainBillingComponent: FC<{
   );
   // Which affordances the org's payment provider supports (portal, proration,
   // coupons, period-end cancel…). Absent until loaded → everything shown, as before.
-  const { data: billingConfig } = useBillingConfig();
+  const { data: billingConfig, error: billingConfigError } = useBillingConfig();
   const capabilities = billingConfig?.org?.capabilities;
   const managedByStore = billingConfig?.org?.checkoutMode === 'native';
+  // Hold provider-specific affordances until the config resolves; only fall back
+  // to "show everything" if the config endpoint itself fails.
+  const configReady = !!billingConfig || !!billingConfigError;
+  const can = (flag: keyof NonNullable<typeof capabilities>) =>
+    configReady && (capabilities ? capabilities[flag] === true : !!billingConfigError);
 
   const [subscription, setSubscription] = useState<Subscription | undefined>(
     sub
   );
+  // A first purchase needs a web provider; a plan switch additionally needs planChange.
+  const canPurchase = configReady && !managedByStore && (!subscription || can('planChange'));
   const [loading, setLoading] = useState<boolean>(false);
 
   const [period, setPeriod] = useState<'MONTHLY' | 'YEARLY'>(
@@ -525,17 +532,25 @@ export const MainBillingComponent: FC<{
         return;
       }
       setLoading(true);
-      const { url, portal } = await (
-        await fetch('/billing/subscribe', {
-          method: 'POST',
-          body: JSON.stringify({
-            period: monthlyOrYearly === 'on' ? 'YEARLY' : 'MONTHLY',
-            utm,
-            billing,
-            ...(dub ? { dub } : {}),
-          }),
-        })
-      ).json();
+      const res = await fetch('/billing/subscribe', {
+        method: 'POST',
+        body: JSON.stringify({
+          period: monthlyOrYearly === 'on' ? 'YEARLY' : 'MONTHLY',
+          utm,
+          billing,
+          ...(dub ? { dub } : {}),
+        }),
+      });
+      const body = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        setLoading(false);
+        toast.show(
+          body?.message || t('change_plan_failed', 'Failed to change plan'),
+          'warning'
+        );
+        return;
+      }
+      const { url, portal } = body;
       if (url) {
         await track(TrackEnum.InitiateCheckout, {
           value:
@@ -635,7 +650,7 @@ export const MainBillingComponent: FC<{
               subscription?.cancelAt ? (
                 <div className="gap-[3px] flex flex-col">
                   <div>
-                    {capabilities?.periodEndCancel !== false ? (
+                    {can('periodEndCancel') ? (
                       <Button
                         onClick={handleCancelOrReactivate(true)}
                         loading={loading}
@@ -657,7 +672,7 @@ export const MainBillingComponent: FC<{
                     )}
                   </div>
                 </div>
-              ) : (
+              ) : !canPurchase ? null : (
                 <Button
                   loading={loading}
                   disabled={currentPackage === name.toUpperCase()}
@@ -676,7 +691,7 @@ export const MainBillingComponent: FC<{
               {subscription &&
                 currentPackage !== name.toUpperCase() &&
                 !!name &&
-                capabilities?.proration !== false && (
+                can('proration') && (
                   <Prorate
                     period={monthlyOrYearly === 'on' ? 'YEARLY' : 'MONTHLY'}
                     pack={name.toUpperCase() as TierKey}
@@ -702,7 +717,7 @@ export const MainBillingComponent: FC<{
       )}
       {!!subscription?.id && !managedByStore && (
         <div className="flex justify-center mt-[20px] gap-[10px]">
-          {capabilities?.portal !== false && (
+          {can('portal') && (
             <Button onClick={updatePayment}>
               {t(
                 'update_payment_method_invoices_history',
@@ -710,7 +725,7 @@ export const MainBillingComponent: FC<{
               )}
             </Button>
           )}
-          {!subscription?.cancelAt && (
+          {!subscription?.cancelAt && configReady && (
             <Button
               className="bg-red-500"
               loading={loading}

@@ -52,6 +52,17 @@ describe('CheckPayment', () => {
     await waitFor(() => expect(screen.getByText('child')).toBeTruthy());
   });
 
+  it('gives up with a "still processing" notice when the fetch fails or the poll cap is hit', async () => {
+    mockFetch.mockRejectedValue(new Error('network'));
+    render(
+      <CheckPayment check="uid-3" mutate={vi.fn()}>
+        <div>child</div>
+      </CheckPayment>,
+    );
+    await waitFor(() => expect(mockModalOpen).toHaveBeenCalledWith(expect.objectContaining({ title: 'Payment still processing' })));
+    await waitFor(() => expect(screen.getByText('child')).toBeTruthy());
+  });
+
   it('omits the ref when the provider did not supply one and reports an abandoned checkout', async () => {
     mockFetch.mockImplementation(async () => ({ json: async () => ({ status: 1 }) }));
     render(

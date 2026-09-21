@@ -113,11 +113,33 @@ describe('catalog + checkout', () => {
 
   it('reuses an existing plan by name and yearly amounts', async () => {
     f.routes.set('GET /v1/catalogs/products', () => ({ body: { products: [{ id: 'PROD-1', name: 'Postmill PRO' }] } }));
-    f.routes.set('GET /v1/billing/plans', () => ({ body: { plans: [{ id: 'P-Y', name: 'Postmill PRO YEARLY' }] } }));
+    f.routes.set('GET /v1/billing/plans', () => ({ body: { plans: [{ id: 'P-Y', name: 'Postmill PRO YEARLY 290.00 USD' }] } }));
     f.routes.set('POST /v1/billing/subscriptions', () => ({ body: sub() }));
     await adapter.createCheckout({ customerRef: null, orgId: 'org-1', userId: 'u', email: '', plan: PLAN, period: 'YEARLY', allowTrial: false, identifier: 'uid-2', metadata: {}, returnUrls: { success: 's', cancel: 'c' }, mode: 'hosted' });
     expect(f.calls.some((c) => c.method === 'POST' && c.url.endsWith('/v1/billing/plans'))).toBe(false);
     expect(f.calls.find((c) => c.method === 'POST' && c.url.endsWith('/v1/billing/subscriptions'))!.body.plan_id).toBe('P-Y');
+  });
+
+  it('a price change creates a new plan instead of reusing the old one by name', async () => {
+    f.routes.set('GET /v1/catalogs/products', () => ({ body: { products: [{ id: 'PROD-1', name: 'Postmill PRO' }] } }));
+    f.routes.set('GET /v1/billing/plans', () => ({ body: { plans: [{ id: 'P-OLD', name: 'Postmill PRO MONTHLY 19.00 USD' }] } }));
+    f.routes.set('POST /v1/billing/plans', () => ({ body: { id: 'P-NEW', name: 'Postmill PRO MONTHLY 29.00 USD' } }));
+    f.routes.set('POST /v1/billing/subscriptions', () => ({ body: sub() }));
+    await adapter.createCheckout({ customerRef: null, orgId: 'org-1', userId: 'u', email: '', plan: PLAN, period: 'MONTHLY', allowTrial: false, identifier: 'uid-3', metadata: {}, returnUrls: { success: 's', cancel: 'c' }, mode: 'hosted' });
+    expect(f.calls.find((c) => c.method === 'POST' && c.url.endsWith('/v1/billing/subscriptions'))!.body.plan_id).toBe('P-NEW');
+  });
+
+  it('refreshes the access token once on a 401 and retries', async () => {
+    let first = true;
+    f.routes.set('GET /v1/billing/subscriptions/I-ABC', () => {
+      if (first) {
+        first = false;
+        return { status: 401, body: {} };
+      }
+      return { body: sub() };
+    });
+    expect(await adapter.checkoutStatus({ customerRef: 'I-ABC', identifier: 'x' })).toBe('pending');
+    expect(f.calls.filter((c) => c.url.endsWith('/v1/oauth2/token'))).toHaveLength(2);
   });
 
   it('ensureCustomer returns the existing ref — PayPal has no customer object', async () => {
@@ -129,13 +151,31 @@ describe('catalog + checkout', () => {
 describe('plan change + cancel', () => {
   it('revise with an approval link redirects; a downgrade without one stays pending', async () => {
     f.routes.set('GET /v1/catalogs/products', () => ({ body: { products: [{ id: 'PROD-1', name: 'Postmill STARTER' }] } }));
-    f.routes.set('GET /v1/billing/plans', () => ({ body: { plans: [{ id: 'P-S', name: 'Postmill STARTER MONTHLY' }] } }));
+    f.routes.set('GET /v1/billing/plans', () => ({ body: { plans: [{ id: 'P-S', name: 'Postmill STARTER MONTHLY 29.00 USD' }] } }));
     f.routes.set('POST /v1/billing/subscriptions/I-ABC/revise', () => ({ body: { links: [{ rel: 'approve', href: 'https://paypal.com/revise' }] } }));
     const req = { customerRef: 'I-ABC', currentTier: 'PRO' as const, plan: { ...PLAN, tier: 'STARTER' as const }, period: 'MONTHLY' as const, direction: 'downgrade' as const, identifier: 'i', userId: 'u', metadata: {} };
     expect(await adapter.changePlan(req)).toEqual({ kind: 'redirect', url: 'https://paypal.com/revise' });
     f.routes.set('POST /v1/billing/subscriptions/I-ABC/revise', () => ({ body: { links: [] } }));
     expect(await adapter.changePlan(req)).toEqual({ kind: 'pending', tier: 'STARTER' });
     expect(await adapter.changePlan({ ...req, direction: 'upgrade' })).toEqual({ kind: 'applied' });
+  });
+
+  it('never cancels blind: a live subscription without a next billing time is refused, a never-active one tears down now', async () => {
+    f.routes.set('GET /v1/billing/subscriptions/I-ABC', () => ({ body: sub({ billing_info: {} }) }));
+    await expect(adapter.setCancelAtPeriodEnd('I-ABC', true)).rejects.toThrow(/next_billing_time/);
+    expect(f.calls.some((c) => c.url.endsWith('/cancel'))).toBe(false);
+    f.routes.set('GET /v1/billing/subscriptions/I-ABC', () => ({ body: sub({ status: 'APPROVAL_PENDING', billing_info: {} }) }));
+    f.routes.set('POST /v1/billing/subscriptions/I-ABC/cancel', () => ({ status: 204 }));
+    expect(await adapter.setCancelAtPeriodEnd('I-ABC', true)).toMatchObject({ canceledNow: true, cancelAtPeriodEnd: false });
+  });
+
+  it('fetchSubscriptionState exposes the live state for the dunning guard, including the trial cycle', async () => {
+    f.routes.set('GET /v1/billing/subscriptions/I-ABC', () => ({ body: sub({ status: 'SUSPENDED' }) }));
+    expect((await adapter.fetchSubscriptionState({ customerRef: 'I-ABC' }))?.status).toBe('past_due');
+    f.routes.set('GET /v1/billing/subscriptions/I-ABC', () => ({
+      body: sub({ billing_info: { next_billing_time: '2030-01-01T00:00:00Z', cycle_executions: [{ tenure_type: 'TRIAL', cycles_remaining: 1 }] } }),
+    }));
+    expect((await adapter.fetchSubscriptionState({ customerRef: 'I-ABC' }))?.isTrialing).toBe(true);
   });
 
   it('cancel is immediate at PayPal but reports the paid-through date; resume is unsupported', async () => {
@@ -210,10 +250,19 @@ describe('webhooks', () => {
     expect((await deliver({ id: 'E9', event_type: 'PAYMENT.SALE.COMPLETED', resource: {} })).events).toEqual([]);
   });
 
-  it('drops events whose plan is not a Postmill plan', async () => {
+  it('drops events whose plan is not a Postmill plan, but a failed plan lookup propagates so PayPal redelivers', async () => {
     f.routes.set('POST /v1/notifications/verify-webhook-signature', () => ({ body: { verification_status: 'SUCCESS' } }));
     f.routes.set('GET /v1/billing/plans/P-X', () => ({ body: { id: 'P-X', name: 'Something else' } }));
     expect((await deliver({ id: 'E10', event_type: 'BILLING.SUBSCRIPTION.ACTIVATED', resource: sub({ plan_id: 'P-X' }) })).events).toEqual([]);
+    f.routes.set('GET /v1/billing/plans/P-DOWN', () => ({ status: 503, body: {} }));
+    await expect(deliver({ id: 'E11', event_type: 'BILLING.SUBSCRIPTION.CANCELLED', resource: sub({ plan_id: 'P-DOWN', status: 'CANCELLED' }) })).rejects.toThrow(/503/);
+  });
+
+  it('a verification-API outage is a plain (retryable) error, not a forgery verdict', async () => {
+    f.routes.set('POST /v1/notifications/verify-webhook-signature', () => ({ status: 503, body: {} }));
+    await expect(deliver({ id: 'E12', event_type: 'BILLING.SUBSCRIPTION.ACTIVATED', resource: sub() })).rejects.toSatisfy(
+      (e: Error) => !(e instanceof PaymentsWebhookVerificationError) && /verification call failed/.test(e.message),
+    );
   });
 });
 

@@ -286,10 +286,16 @@ export const SubscriptionPanel: React.FC = () => {
   const { data: usage, isLoading: usageLoading, error: usageError } = useSubscriptionUsage();
   // Provider capabilities gate the affordances (a store-billed org manages
   // everything in the store; PayPal has no add-ons and no resume).
-  const { data: billingConfig } = useBillingConfig();
+  const { data: billingConfig, error: billingConfigError } = useBillingConfig();
   const capabilities = billingConfig?.org?.capabilities;
   const managedByStore = billingConfig?.org?.checkoutMode === 'native';
   const manageUrl = billingConfig?.org?.manageUrl ?? null;
+  // Hold provider-specific sections until the config resolves (no flash of
+  // Stripe-only affordances for a store-billed org); show everything only if
+  // the config endpoint itself fails.
+  const configReady = !!billingConfig || !!billingConfigError;
+  const can = (flag: keyof NonNullable<typeof capabilities>) =>
+    configReady && (capabilities ? capabilities[flag] === true : !!billingConfigError);
 
   const [selectedTier, setSelectedTier] = useState<SubscriptionTier | null>(null);
   const [changeLoading, setChangeLoading] = useState(false);
@@ -540,7 +546,7 @@ export const SubscriptionPanel: React.FC = () => {
                 <Button secondary>{t('billing_manage_in_store', 'Manage subscription')}</Button>
               </a>
             ) : null
-          ) : subscription?.cancelAt && capabilities?.periodEndCancel === false ? (
+          ) : !configReady ? null : subscription?.cancelAt && !can('periodEndCancel') ? (
             <span className="text-[13px] text-newTableText">
               {t('billing_resubscribe_after_end', 'You can subscribe again once the current period ends.')}
             </span>
@@ -651,7 +657,7 @@ export const SubscriptionPanel: React.FC = () => {
       </div>
 
       {/* Change plan (the store owns plan changes for native providers; PayPal revises through its own approval flow) */}
-      {capabilities?.planChange !== false && !managedByStore && (
+      {can('planChange') && !managedByStore && (
       <div className="bg-newBgColorInner border border-newTableBorder rounded-[4px] p-[20px] flex flex-col gap-[16px]">
         <h3 className="text-[16px] font-semibold text-textColor">
           {t('change_plan', 'Change plan')}
@@ -681,7 +687,7 @@ export const SubscriptionPanel: React.FC = () => {
       )}
 
       {/* Add-ons (hidden for lifetime orgs — no base vendor subscription to ride on — and for providers without them) */}
-      {!subscription?.isLifetime && capabilities?.addons !== false && (
+      {!subscription?.isLifetime && can('addons') && (
         <div className="bg-newBgColorInner border border-newTableBorder rounded-[4px] p-[20px] flex flex-col gap-[16px]">
           <h3 className="text-[16px] font-semibold text-textColor">
             {t('addons', 'Add-ons')}

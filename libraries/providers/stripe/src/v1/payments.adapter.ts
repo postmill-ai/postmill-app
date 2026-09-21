@@ -133,6 +133,8 @@ export class StripePaymentsAdapter implements PaymentsCapability {
           type: event.type === 'customer.subscription.created' ? 'subscription.activated' : 'subscription.updated',
           customerRef,
           state: this._toState(sub),
+          // The orchestrator gates this on capabilities.cardCheck, org.allowTrial
+          // and a non-incomplete state — see NormalizedPaymentEvent.
           requiresCardCheck: true,
         });
         break;
@@ -159,9 +161,13 @@ export class StripePaymentsAdapter implements PaymentsCapability {
       }
       case 'invoice.payment_failed': {
         const invoice = event.data.object as Stripe.Invoice;
+        // A deleted customer's invoice has no customer to put in grace.
+        if (!invoice.customer) {
+          break;
+        }
         events.push({
           type: 'payment.failed',
-          customerRef: invoice.customer as string,
+          customerRef: typeof invoice.customer === 'string' ? invoice.customer : invoice.customer.id,
           providerSubscriptionRef: this._invoiceSubscriptionId(invoice),
         });
         break;
@@ -415,10 +421,10 @@ export class StripePaymentsAdapter implements PaymentsCapability {
         await this.stripe.subscriptions.update(current[0].id, {
           cancel_at_period_end: false,
           metadata: {
+            ...request.metadata,
             service: SERVICE_TAG,
             billing: request.plan.tier,
             period: request.period,
-            ...request.metadata,
             userId: request.userId,
             id: request.identifier,
             ud: request.identifier,

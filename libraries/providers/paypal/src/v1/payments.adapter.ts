@@ -41,8 +41,19 @@ interface PaypalSubscription {
   custom_id?: string;
   status_update_time?: string;
   start_time?: string;
-  billing_info?: { next_billing_time?: string };
+  billing_info?: {
+    next_billing_time?: string;
+    cycle_executions?: Array<{ tenure_type?: string; cycles_remaining?: number; cycles_completed?: number }>;
+  };
   links?: PaypalLink[];
+}
+
+/** A vendor call that did not complete — retryable, never "not ours". */
+class PaypalApiError extends Error {
+  constructor(message: string, public readonly status: number) {
+    super(message);
+    this.name = 'PaypalApiError';
+  }
 }
 
 /**
@@ -139,6 +150,7 @@ export class PaypalPaymentsAdapter implements PaymentsCapability {
     path: string,
     body?: unknown,
     extraHeaders: Record<string, string> = {},
+    retried = false,
   ): Promise<T> {
     const token = await this._accessToken();
     const res = await this._fetch(`${this.base}${path}`, {
@@ -150,9 +162,14 @@ export class PaypalPaymentsAdapter implements PaymentsCapability {
       },
       ...(body !== undefined ? { body: JSON.stringify(body) } : {}),
     });
+    if (res.status === 401 && !retried) {
+      // A cached token PayPal no longer honours — refresh once and retry.
+      this._token = null;
+      return this._api<T>(method, path, body, extraHeaders, true);
+    }
     if (!res.ok) {
       const text = await res.text().catch(() => '');
-      throw new Error(`PayPal ${method} ${path} failed: ${res.status} ${text}`.trim());
+      throw new PaypalApiError(`PayPal ${method} ${path} failed: ${res.status} ${text}`.trim(), res.status);
     }
     if (res.status === 204) {
       return undefined as T;
@@ -166,8 +183,30 @@ export class PaypalPaymentsAdapter implements PaymentsCapability {
     return `Postmill ${tier}`;
   }
 
-  private _planName(tier: PaymentsTier, period: PaymentsPeriod, trial: boolean): string {
-    return `Postmill ${tier} ${period}${trial ? ' TRIAL' : ''}`;
+  /**
+   * Plan names carry the amount + currency: a `pricing.ts` change therefore
+   * creates a fresh plan for new subscribers (existing subscriptions keep the
+   * old plan and price — the same grandfathering rule as Stripe).
+   */
+  private _planName(plan: PaymentsPlanPrice, period: PaymentsPeriod, trial: boolean): string {
+    const amount = (planUnitAmountCents(plan, period) / 100).toFixed(2);
+    return `Postmill ${plan.tier} ${period} ${amount} ${plan.currency.toUpperCase()}${trial ? ' TRIAL' : ''}`;
+  }
+
+  /** Walk every page of a PayPal list endpoint (they page at 20 by default). */
+  private async _listAll<T>(path: string, key: string): Promise<T[]> {
+    const items: T[] = [];
+    for (let page = 1; page <= 50; page += 1) {
+      const res = await this._api<Record<string, unknown> & { total_pages?: number }>(
+        'GET',
+        `${path}${path.includes('?') ? '&' : '?'}page_size=20&page=${page}&total_required=true`,
+      );
+      items.push(...((res[key] as T[]) || []));
+      if (!res.total_pages || page >= res.total_pages) {
+        break;
+      }
+    }
+    return items;
   }
 
   private async _getOrCreateProduct(tier: PaymentsTier): Promise<string> {
@@ -176,11 +215,8 @@ export class PaypalPaymentsAdapter implements PaymentsCapability {
     if (cached) {
       return cached;
     }
-    const list = await this._api<{ products?: Array<{ id: string; name: string }> }>(
-      'GET',
-      '/v1/catalogs/products?page_size=20&total_required=true',
-    );
-    let product = list.products?.find((p) => p.name === name);
+    const products = await this._listAll<{ id: string; name: string }>('/v1/catalogs/products', 'products');
+    let product = products.find((p) => p.name === name);
     if (!product) {
       product = await this._api<{ id: string; name: string }>(
         'POST',
@@ -198,17 +234,17 @@ export class PaypalPaymentsAdapter implements PaymentsCapability {
     period: PaymentsPeriod,
     trial: boolean,
   ): Promise<string> {
-    const name = this._planName(plan.tier, period, trial);
+    const name = this._planName(plan, period, trial);
     const cached = this._planIds.get(name);
     if (cached) {
       return cached;
     }
     const productId = await this._getOrCreateProduct(plan.tier);
-    const list = await this._api<{ plans?: Array<{ id: string; name: string }> }>(
-      'GET',
-      `/v1/billing/plans?product_id=${encodeURIComponent(productId)}&page_size=20`,
+    const plans = await this._listAll<{ id: string; name: string }>(
+      `/v1/billing/plans?product_id=${encodeURIComponent(productId)}`,
+      'plans',
     );
-    let found = list.plans?.find((p) => p.name === name);
+    let found = plans.find((p) => p.name === name);
     if (!found) {
       const amount = (planUnitAmountCents(plan, period) / 100).toFixed(2);
       const cycles: unknown[] = [];
@@ -246,17 +282,17 @@ export class PaypalPaymentsAdapter implements PaymentsCapability {
     return found.id;
   }
 
-  /** Reverse-map a plan id to tier/period, fetching the plan on a cache miss. */
+  /**
+   * Reverse-map a plan id to tier/period, fetching the plan on a cache miss.
+   * A failed fetch throws (the webhook answers 500 and PayPal redelivers);
+   * only a plan that is genuinely not a Postmill plan yields null.
+   */
   private async _planTier(planId: string): Promise<{ tier: PaymentsTier; period: PaymentsPeriod } | null> {
     let name = this._planNames.get(planId);
     if (!name) {
-      try {
-        const plan = await this._api<{ id: string; name: string }>('GET', `/v1/billing/plans/${planId}`);
-        name = plan.name;
-        this._planNames.set(planId, name);
-      } catch {
-        return null;
-      }
+      const plan = await this._api<{ id: string; name: string }>('GET', `/v1/billing/plans/${planId}`);
+      name = plan.name;
+      this._planNames.set(planId, name);
     }
     const m = /^Postmill (\w+) (MONTHLY|YEARLY)/.exec(name);
     if (!m || !TIERS.includes(m[1] as PaymentsTier) || !PERIODS.includes(m[2] as PaymentsPeriod)) {
@@ -335,12 +371,28 @@ export class PaypalPaymentsAdapter implements PaymentsCapability {
     const cancelAt = live.billing_info?.next_billing_time
       ? new Date(live.billing_info.next_billing_time)
       : null;
+    if (live.status === 'ACTIVE' && !cancelAt) {
+      // Cancelling now would stop billing with no end date for the expiry cron
+      // to act on — paid access forever. Refuse rather than cancel blind.
+      throw new Error(`PayPal subscription ${customerRef} has no next_billing_time; cannot schedule its end`);
+    }
     if (!alreadyCancelled) {
       await this._api('POST', `/v1/billing/subscriptions/${customerRef}/cancel`, {
         reason: 'Cancelled from Postmill',
       });
     }
+    // A subscription that never became ACTIVE (approval pending, suspended with
+    // nothing paid through) has nothing to keep alive.
+    if (live.status !== 'ACTIVE' || !cancelAt) {
+      return { cancelAt: new Date(), cancelAtPeriodEnd: false, canceledNow: true };
+    }
     return { cancelAt, cancelAtPeriodEnd: false, canceledNow: false };
+  }
+
+  /** Live vendor state — the orchestrator's dunning guard reads this before opening a grace window. */
+  async fetchSubscriptionState(input: { customerRef: string }): Promise<NormalizedSubscriptionState | null> {
+    const live = await this._api<PaypalSubscription>('GET', `/v1/billing/subscriptions/${input.customerRef}`);
+    return this._toState(live);
   }
 
   async cancelNow(customerRef: string): Promise<void> {
@@ -408,7 +460,7 @@ export class PaypalPaymentsAdapter implements PaymentsCapability {
         amountCents: Math.round(Number(t.amount_with_breakdown?.gross_amount?.value || 0) * 100),
         currency: (t.amount_with_breakdown?.gross_amount?.currency_code || 'USD').toLowerCase(),
         createdAt: new Date(t.time),
-        refunded: t.status === 'REFUNDED',
+        refunded: t.status === 'REFUNDED' || t.status === 'PARTIALLY_REFUNDED',
         amountRefundedCents: 0,
         description: null,
         receiptUrl: null,
@@ -463,9 +515,9 @@ export class PaypalPaymentsAdapter implements PaymentsCapability {
         webhook_event: event,
       });
     } catch (err) {
-      throw new PaymentsWebhookVerificationError(
-        `PayPal webhook verification call failed: ${(err as Error)?.message ?? err}`,
-      );
+      // The verification API itself failed — not a forgery verdict. Let the
+      // webhook answer 500 so PayPal redelivers once PayPal is back.
+      throw new Error(`PayPal webhook verification call failed: ${(err as Error)?.message ?? err}`);
     }
     if (verification?.verification_status !== 'SUCCESS') {
       throw new PaymentsWebhookVerificationError('PayPal webhook signature verification failed');
@@ -491,13 +543,16 @@ export class PaypalPaymentsAdapter implements PaymentsCapability {
       sub.status === 'CANCELLED' && sub.billing_info?.next_billing_time
         ? new Date(sub.billing_info.next_billing_time)
         : null;
+    const isTrialing = !!sub.billing_info?.cycle_executions?.some(
+      (c) => c.tenure_type === 'TRIAL' && (c.cycles_remaining ?? 0) > 0,
+    );
     return {
       tier: plan.tier,
       period: plan.period,
       status,
       identifier,
       providerSubscriptionRef: sub.id,
-      isTrialing: false,
+      isTrialing,
       cancelAt,
       pendingTier: null,
     };

@@ -57,7 +57,9 @@ export class ApplePaymentsAdapter implements PaymentsCapability {
     trials: true,
     cardCheck: false,
     chargesHistory: false,
-    periodEndCancel: true,
+    // The store owns cancellation (the user cancels in Settings → Subscriptions);
+    // the web app only links there via manageUrl.
+    periodEndCancel: false,
     planChange: false,
   };
   readonly requiredEnvKeys = [
@@ -90,6 +92,26 @@ export class ApplePaymentsAdapter implements PaymentsCapability {
 
   private get _prefix(): string {
     return process.env.PAYMENTS_APPLE_PRODUCT_PREFIX || 'postmill';
+  }
+
+  /**
+   * Sandbox payloads are genuinely Apple-signed, so with sandbox accepted on a
+   * production backend anyone with a TestFlight build could "buy" a real tier.
+   * `APPLE_IAP_SANDBOX_ORG_IDS` restricts sandbox purchases to listed orgs;
+   * unset means every org (documented as a launch-only setting).
+   */
+  private _sandboxAllowedFor(orgId: string | undefined, environment?: string): boolean {
+    if (environment !== Environment.SANDBOX) {
+      return true;
+    }
+    if (!this._environments().includes(Environment.SANDBOX)) {
+      return false;
+    }
+    const allowlist = (process.env.APPLE_IAP_SANDBOX_ORG_IDS || '')
+      .split(',')
+      .map((s) => s.trim())
+      .filter(Boolean);
+    return allowlist.length === 0 || (!!orgId && allowlist.includes(orgId));
   }
 
   private _environments(): Environment[] {
@@ -180,15 +202,22 @@ export class ApplePaymentsAdapter implements PaymentsCapability {
         'Apple transaction appAccountToken does not match the organization',
       );
     }
+    if (!this._sandboxAllowedFor(input.orgId, transaction.environment)) {
+      throw new PaymentsWebhookVerificationError(
+        'Apple sandbox purchases are not accepted for this organization',
+      );
+    }
     if (!transaction.originalTransactionId) {
       return [];
     }
 
     // The signed transaction proves the purchase; the subscription-status API is
-    // authoritative for the current state and carries the renewal info.
+    // authoritative for the current state and carries the renewal info. No
+    // matching status item ⇒ fail closed (a stale or foreign transaction must
+    // not activate anything).
     const client = this._client(this._envOf(transaction.environment));
     const statuses = await client.getAllSubscriptionStatuses(transaction.originalTransactionId);
-    let status: PaymentsSubscriptionStatus = 'active';
+    let status: PaymentsSubscriptionStatus | null = null;
     let renewal: JWSRenewalInfoDecodedPayload | undefined;
     for (const group of statuses.data || []) {
       for (const item of group.lastTransactions || []) {
@@ -198,6 +227,11 @@ export class ApplePaymentsAdapter implements PaymentsCapability {
           renewal = await this._verifyWith((v) => v.verifyAndDecodeRenewalInfo(item.signedRenewalInfo!));
         }
       }
+    }
+    if (status === null) {
+      throw new PaymentsWebhookVerificationError(
+        'App Store reports no subscription for this transaction',
+      );
     }
     if (status === 'canceled') {
       return [{ type: 'subscription.canceled', customerRef: transaction.originalTransactionId, orgIdHint: input.orgId }];
@@ -227,7 +261,8 @@ export class ApplePaymentsAdapter implements PaymentsCapability {
       case Status.REVOKED:
         return 'canceled';
       default:
-        return 'active';
+        // Unknown status: never grant access on a guess.
+        return 'incomplete';
     }
   }
 
@@ -290,16 +325,21 @@ export class ApplePaymentsAdapter implements PaymentsCapability {
     if (!customerRef) {
       return [];
     }
+    if (!this._sandboxAllowedFor(transaction.appAccountToken, data.environment)) {
+      return [];
+    }
+    // Hints bind an org on activation only; cancel/past-due events resolve by ref.
     const refs = {
       customerRef,
       ...(transaction.appAccountToken ? { orgIdHint: transaction.appAccountToken } : {}),
     };
+    const byRef = { customerRef };
     const status = this._toStatus(data.status);
     const state = this._toState(transaction, renewal, status === 'canceled' ? 'active' : status);
     const activated = (): NormalizedPaymentEvent[] =>
       state ? [{ type: 'subscription.activated', ...refs, state }] : [];
     const updated = (patch: Partial<NormalizedSubscriptionState> = {}): NormalizedPaymentEvent[] =>
-      state ? [{ type: 'subscription.updated', ...refs, state: { ...state, ...patch } }] : [];
+      state ? [{ type: 'subscription.updated', ...byRef, state: { ...state, ...patch } }] : [];
 
     switch (n.notificationType) {
       case 'SUBSCRIBED':
@@ -326,12 +366,15 @@ export class ApplePaymentsAdapter implements PaymentsCapability {
       case 'OFFER_REDEEMED':
         return updated();
       case 'DID_FAIL_TO_RENEW':
-        return [{ type: 'subscription.past_due', ...refs, providerSubscriptionRef: customerRef }];
+        return [{ type: 'subscription.past_due', ...byRef, providerSubscriptionRef: customerRef }];
       case 'GRACE_PERIOD_EXPIRED':
       case 'EXPIRED':
       case 'REVOKE':
+        return [{ type: 'subscription.canceled', ...byRef }];
       case 'REFUND':
-        return [{ type: 'subscription.canceled', ...refs }];
+        // A refunded renewal on a still-active subscription keeps the entitlement;
+        // only a refund that ends it (status expired/revoked) tears down.
+        return status === 'canceled' ? [{ type: 'subscription.canceled', ...byRef }] : updated();
       case 'REFUND_REVERSED':
         return activated();
       default:
