@@ -142,11 +142,15 @@ Per-provider AI budgets are configured per-organization in **Settings → AI**. 
 | `RESTRICT_UPLOAD_DOMAINS` | — | When set, media attached to a post must contain this domain in its path; saving a post with externally-hosted media is rejected (HTTP 400). Use the domain of your own upload endpoint |
 | `NOT_SECURED` | — | Dev-only toggle. Skips Helmet, HSTS, CSRF enforcement, and CopilotKit policy gating. Never set in production |
 
-## Payments (Stripe)
+## Payments
+
+Payment providers are enabled by their keys; billing is on when at least one is set. Details and
+per-provider setup: [Subscriptions & payment providers](./subscriptions.md).
 
 | Variable | Default | Purpose |
 |----------|---------|---------|
-| `STRIPE_PUBLISHABLE_KEY` | — | Stripe publishable key |
+| `PAYMENTS_PROVIDER` | — | Which enabled provider serves web checkout when several are enabled (`stripe`, …). Unset with several enabled → error logged, Stripe preferred |
+| `STRIPE_PUBLISHABLE_KEY` | — | Stripe publishable key — enables the Stripe provider |
 | `STRIPE_SECRET_KEY` | — | Stripe secret key |
 | `STRIPE_SIGNING_KEY` | — | Stripe webhook signing secret |
 | `STRIPE_DISCOUNT_ID` | — | Stripe coupon ID. When set, eligible existing paying customers on a monthly plan (no yearly plan, no existing discount) can have the coupon applied to their subscription |

@@ -67,7 +67,8 @@ services:
       # API_LIMIT: unset = 600 req/hr global throttle. Do NOT set it to 30: the
       # SPA fires 15-30 API calls per page navigation, so 30/hr 429s normal use.
 
-      # === Payment / Stripe Settings
+      # === Payment providers (billing is on when at least one is configured)
+      # PAYMENTS_PROVIDER: 'stripe'
       STRIPE_PUBLISHABLE_KEY: ''
       STRIPE_SECRET_KEY: ''
       STRIPE_SIGNING_KEY: ''

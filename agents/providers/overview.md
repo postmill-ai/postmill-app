@@ -1,19 +1,19 @@
 # Provider framework: kernel essentials + add-a-provider recipe
 
 Every provider domain (AI, media, storage, short-link, social, VPN, content pack, email, auth,
-comms) resolves through a single `ProviderKernel`; one workspace package per provider lives under
+comms, payments) resolves through a single `ProviderKernel`; one workspace package per provider lives under
 `libraries/providers/<id>`. This doc covers the kernel contracts and the universal recipe for
 adding a provider; per-domain specifics are in the sibling docs linked at the end.
 
 ## Domains and identity
 
-The 10 domains are the `ProviderDomain` union and `PROVIDER_DOMAINS` const in
+The 11 domains are the `ProviderDomain` union and `PROVIDER_DOMAINS` const in
 `libraries/providers/kernel/src/identity.ts` (kept in lockstep via `satisfies`):
 
 ```ts
 export type ProviderDomain =
   | 'ai' | 'media' | 'storage' | 'shortlink' | 'social'
-  | 'vpn' | 'contentpack' | 'email' | 'auth' | 'comms';
+  | 'vpn' | 'contentpack' | 'email' | 'auth' | 'comms' | 'payments';
 ```
 
 - A provider version is addressed as the identity triple `domain/providerId@version`
@@ -21,7 +21,8 @@ export type ProviderDomain =
   `isProviderDomain()` — all in `identity.ts`. `DEFAULT_VERSION = 'v1'`.
 - Each domain's capability interface (the contract an adapter implements) lives in
   `libraries/providers/kernel/src/domains/<domain>.ts` (`ai.ts`, `media.ts`, `storage.ts`,
-  `shortlink.ts`, `social.ts`, `vpn.ts`, `contentpack.ts`, `email.ts`, `auth.ts`).
+  `shortlink.ts`, `social.ts`, `vpn.ts`, `contentpack.ts`, `email.ts`, `auth.ts`, `comms.ts`,
+  `payments.ts`).
 - `validateManifest()` (`kernel/src/manifest.ts`) rejects unknown domains, `/` `@` or whitespace
   in `providerId`, and `@` `/` or surrounding whitespace in `version` — they break qualified-id
   round-tripping.
@@ -161,7 +162,7 @@ export default bitlyProviderModules;
 | `shortlink` | `DEV_DISABLE_SHORTLINKS` |
 | `email` | `DEV_DISABLE_EMAIL`, **except** providerId `empty` (always-on fallback) |
 | `comms` | `DEV_DISABLE_COMMS` |
-| `social`, `storage`, `vpn`, `contentpack`, `auth` | always on |
+| `social`, `storage`, `vpn`, `contentpack`, `auth`, `payments` | always on (payments providers are enabled purely by their env keys) |
 
 A `ProviderManifestError` (malformed manifest / duplicate registration) is **fatal at boot** —
 it aborts startup and fails CI. Other registration errors are logged + Sentry-tagged and skipped.
@@ -185,6 +186,8 @@ interface. Required-method matrix (verified against the spec, which cross-checks
 | contentpack | `search`, `resolveDownload` |
 | email | `send`, `isConfigured` |
 | auth | `generateLink`, `getToken`, `getUser` |
+| comms | `sendDirectMessage` |
+| payments | `isConfigured`, `publicConfig`, `receiveWebhook` — plus the mode/flag-driven set checked by `runPaymentsConformance` (see `agents/providers/payments.md`) |
 
 The spec also locks base-class consolidation: migrated media adapters must extend
 `BearerTokenMediaAdapter`, shortlink adapters `BaseShortLinkAdapter`.
@@ -209,8 +212,8 @@ generator script exists in-repo — maintain it by hand:
   within its domain section).
 - Update the header counts: **Modules** (`providerModules.length`), **Packages**, **Packages
   with at least one spec**, and the per-domain module counts
-  (currently: ai=30, auth=6, contentpack=4, email=7, media=35, shortlink=20, social=45,
-  storage=14, vpn=16 — verify against the file, they drift).
+  (currently: ai=30, auth=6, comms=5, contentpack=4, email=7, media=35, payments=1,
+  shortlink=20, social=45, storage=14, vpn=16 — verify against the file, they drift).
 
 ## Resolution & APIs
 
@@ -239,6 +242,7 @@ generator script exists in-repo — maintain it by hand:
 | `agents/providers/email.md` | Adding an email sender; env-only credentials. |
 | `agents/providers/auth.md` | Touching platform login providers (separate admin app owns writes). |
 | `agents/providers/comms.md` | Adding a bi-directional chat app (agent chat + notification delivery to Slack/Telegram/…). |
+| `agents/providers/payments.md` | Adding a subscription-billing provider (Stripe, PayPal, app stores, a local PSP); env-only, webhook-driven. |
 
 ### Frontend work required?
 
@@ -250,6 +254,7 @@ generator script exists in-repo — maintain it by hand:
 | ai | Minor | Optional icon in `apps/frontend/src/components/shared/provider-icon.tsx`; `BASE_URL_PROVIDERS` in `apps/frontend/src/components/settings/shared/kit/descriptors/ai.descriptor.ts` only for endpoint-bringing providers (currently just `openai-compatible`). |
 | shortlink, vpn, contentpack, storage | No | Catalog-driven settings kits render from manifest `credentialFields`. |
 | email | No | Env-only credentials (e.g. `resend` reads `process.env.EMAIL_API_KEY`); no per-org config UI. |
+| payments | No (usually) | Env-only. The billing pages read `GET /billing/config` and the layout-injected `useVariables().payments` to pick the checkout flow (`embedded` = Stripe.js, `hosted` = redirect, `native` = app-store copy); a new hosted provider needs no UI work. |
 | auth | No | Managed by the separate administration app; this repo only reads `AuthProviderConfig`. |
 
 ## Checklist

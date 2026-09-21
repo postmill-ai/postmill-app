@@ -149,6 +149,7 @@ paths:
         - Health
   /stripe:
     post:
+      deprecated: true
       operationId: StripeController_stripe
       parameters: []
       responses:
@@ -158,8 +159,28 @@ paths:
             application/json:
               schema:
                 type: object
+      summary: "Deprecated: use POST /payments/webhooks/stripe"
       tags:
         - Stripe
+  /payments/webhooks/{provider}:
+    post:
+      operationId: PaymentsWebhooksController_receive
+      parameters:
+        - name: provider
+          required: true
+          in: path
+          schema:
+            type: string
+      responses:
+        "201":
+          description: ""
+          content:
+            application/json:
+              schema:
+                type: object
+      summary: Vendor webhook receiver (stripe, paypal, apple, google)
+      tags:
+        - Payments
   /auth/providers:
     get:
       operationId: AuthController_getProviders
@@ -3679,6 +3700,16 @@ paths:
           description: ""
       tags:
         - Files
+  /billing/config:
+    get:
+      operationId: BillingController_getConfig
+      parameters: []
+      responses:
+        "200":
+          description: ""
+      summary: Deployment + org payment configuration the billing UI branches on (no secrets).
+      tags:
+        - Billing
   /billing/check/{id}:
     get:
       operationId: BillingController_checkId
@@ -3686,6 +3717,11 @@ paths:
         - name: id
           required: true
           in: path
+          schema:
+            type: string
+        - name: ref
+          required: false
+          in: query
           schema:
             type: string
       responses:
@@ -3742,6 +3778,10 @@ paths:
       responses:
         "201":
           description: ""
+          content:
+            application/json:
+              schema:
+                type: object
       tags:
         - Billing
   /billing/subscribe:
@@ -3920,6 +3960,22 @@ paths:
       responses:
         "200":
           description: ""
+      tags:
+        - Billing
+  /billing/native/verify:
+    post:
+      operationId: BillingController_verifyNativePurchase
+      parameters: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/NativeVerifyDto"
+      responses:
+        "201":
+          description: ""
+      summary: Mobile app hands over a store purchase; the server verifies it with the store.
       tags:
         - Billing
   /notifications:
@@ -10618,6 +10674,17 @@ components:
       required:
         - type
         - packs
+    NativeVerifyDto:
+      type: object
+      properties:
+        provider:
+          type: string
+          enum: []
+        payload:
+          type: object
+      required:
+        - provider
+        - payload
     ChannelTogglesDto:
       type: object
       properties:

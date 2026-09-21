@@ -46,7 +46,7 @@ domain/providerId@version
 
 Examples: `ai/openai@v1`, `media/runway@v1`, `shortlink/bitly@v1`, `social/x@v1`.
 
-- `domain` — one of `ai`, `media`, `storage`, `shortlink`, `social`, `vpn`, `contentpack`, `email`, `auth`.
+- `domain` — one of `ai`, `media`, `storage`, `shortlink`, `social`, `vpn`, `contentpack`, `email`, `auth`, `comms`, `payments`.
 - `providerId` — the stable, lowercased identifier (`openai`, `runway`, `bitly`, `x`).
 - `version` — the adapter era (`v1`, `v2`, …). Current providers are all `v1`.
 
@@ -109,7 +109,7 @@ Usage:
 
 The kernel is the **sole** resolution path for every domain — there is no fallback registry.
 
-`ProviderResolutionService` exposes typed helpers for each domain (`resolveAI`, `resolveMedia`, `resolveShortLink`, `resolveVpn`, `resolveEmail`, `resolveStorage`, `resolveSocial`, `resolveContentPack`). Each call returns a telemetry-wrapped capability instance cached by `(domain/providerId@version, orgId, credentials/extras fingerprint)`. Config-mutation services must call `invalidate()` or `invalidateOrg()` after credential changes so the next resolve rebuilds the capability with fresh credentials.
+`ProviderResolutionService` exposes typed helpers for each domain (`resolveAI`, `resolveMedia`, `resolveShortLink`, `resolveVpn`, `resolveEmail`, `resolveStorage`, `resolveSocial`, `resolveContentPack`, `resolveComms`, `resolvePayments`). Each call returns a telemetry-wrapped capability instance cached by `(domain/providerId@version, orgId, credentials/extras fingerprint)`. Config-mutation services must call `invalidate()` or `invalidateOrg()` after credential changes so the next resolve rebuilds the capability with fresh credentials.
 
 ## Catalog & health endpoints
 

@@ -1,16 +1,16 @@
 # Subscription and Billing
 
-The billing system at `/billing` manages subscription plans, payment methods, and invoicing when Stripe is configured. Billing is entirely optional — Postmill works with all features available without Stripe.
+The billing system at `/billing` manages subscription plans, payment methods, and invoicing when a payment provider (Stripe by default) is configured. Billing is entirely optional — Postmill works with all features available without one.
 
-## When Stripe is not configured
+## When no payment provider is configured
 
-If no Stripe integration is set up (no `STRIPE_PUBLISHABLE_KEY` environment variable — this is the key the feature gate checks, `permissions.service.ts:58,103` — or Stripe is otherwise unreachable):
+If no payment provider is set up (for Stripe that means no `STRIPE_PUBLISHABLE_KEY` environment variable — the feature gate checks whether any provider is configured):
 
 - All features are available to all users without restriction.
 - The `/billing` page may redirect or show a "billing not configured" state.
 - No subscription checks gate any functionality.
 
-## When Stripe is configured
+## When a payment provider is configured
 
 ### Subscription plans
 
@@ -27,7 +27,7 @@ Postmill uses four fixed plans. Prices and limits are defined in `libraries/nest
 
 **30-day free trial** — new organizations start with a 30-day trial on the plan they select. The trial can be ended early from `/billing`.
 
-**Self-host unlock** — deployments without Stripe configured treat every org as the **Agency** plan (`SELF_HOST_PLAN = 'AGENCY'`), so self-hosters get the full feature set.
+**Self-host unlock** — deployments without a payment provider configured treat every org as the **Agency** plan (`SELF_HOST_PLAN = 'AGENCY'`), so self-hosters get the full feature set.
 
 ### Metered usage
 

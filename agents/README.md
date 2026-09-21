@@ -29,6 +29,7 @@ Root companions:
 | [`providers/email.md`](./providers/email.md) | Adding an email provider (env-selected, not per-org). |
 | [`providers/auth.md`](./providers/auth.md) | Adding a login/auth provider (platform-level, rare). |
 | [`providers/comms.md`](./providers/comms.md) | Adding a bi-directional chat app (agent chat + notifications to Slack/Telegram/…). |
+| [`providers/payments.md`](./providers/payments.md) | Adding a subscription-billing provider (Stripe, PayPal, app stores, a local PSP). |
 | [`ui-standards.md`](./ui-standards.md) | Writing **any** frontend UI — tokens, primitives, modals, toasts, icons, states. |
 | [`frontend.md`](./frontend.md) | Frontend structure: routing, SWR/`useFetch`, contexts, error boundaries, dashboard widgets. |
 | [`backend.md`](./backend.md) | Any server-side change — layering rules + recipes (controller, DTO, repository, Inngest function). |
@@ -39,7 +40,7 @@ Root companions:
 | [`jobs.md`](./jobs.md) | Adding or modifying a background job (Inngest function catalog + recipe). |
 | [`notifications.md`](./notifications.md) | Sending user-facing email/in-app/push — the `NotificationService` chokepoint. |
 | [`campaigns.md`](./campaigns.md) | Working on Campaign Hub (models, services, UTM, share reports). |
-| [`billing.md`](./billing.md) | Gating features behind plans, Stripe, metering (402 gate). |
+| [`billing.md`](./billing.md) | Gating features behind plans, metering (402 gate), the `PaymentsService` surface. |
 | [`video-rendering.md`](./video-rendering.md) | Touching the video render pipeline. |
 
 ## Reading order for common tasks
@@ -70,6 +71,7 @@ it inlines the load-bearing rules and cites the docs for depth.
 | [`add-vpn-provider`](./skills/add-vpn-provider/SKILL.md) | Adding a VPN/proxy egress provider. |
 | [`add-contentpack-provider`](./skills/add-contentpack-provider/SKILL.md) | Adding a premium stock content pack. |
 | [`add-email-provider`](./skills/add-email-provider/SKILL.md) | Adding a transactional email provider. |
+| [`add-payments-provider`](./skills/add-payments-provider/SKILL.md) | Adding a payment provider (PSP, regional gateway, app store). |
 | [`add-auth-provider`](./skills/add-auth-provider/SKILL.md) | Adding a login/SSO provider (platform-level, rare). |
 | [`new-endpoint`](./skills/new-endpoint/SKILL.md) | Adding a REST endpoint / controller. |
 | [`new-inngest-job`](./skills/new-inngest-job/SKILL.md) | Adding a background/scheduled job. |

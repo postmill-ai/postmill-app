@@ -1,25 +1,44 @@
-# Subscriptions & Stripe
+# Subscriptions & payment providers
 
-Postmill's billing layer is built on Stripe. Organizations subscribe to one of four plans, each
-with hard limits on channels, posts, team seats, video exports, and storage. The backend enforces
-these limits at the API level; when a limit is hit the caller receives a `402 Payment Required`
-response with an upsell link to `/billing`.
+Postmill's billing layer runs on pluggable **payment providers**. Organizations subscribe to one
+of four plans, each with hard limits on channels, posts, team seats, video exports, and storage.
+The backend enforces these limits at the API level; when a limit is hit the caller receives a
+`402 Payment Required` response with an upsell link to `/billing`.
 
-For self-hosted instances that do **not** set Stripe keys, billing is bypassed and every
-organization is treated as the **Agency** plan.
+A provider is enabled by setting its keys in the environment — there is nothing to configure in
+the UI. Billing is **on** as soon as at least one provider is enabled. For self-hosted instances
+that set **no** provider keys, billing is bypassed and every organization is treated as the
+**Agency** plan.
 
-## Required Stripe environment variables
+Want to plug in a provider that isn't shipped (a regional PSP, say)? See the developer guide:
+[Writing a payment provider](../developer-docs/payment-providers.md).
+
+## Choosing the default provider
+
+`PAYMENTS_PROVIDER=<id>` names the provider that serves checkout on the web app. You only need
+it when more than one web provider is enabled:
+
+- unset + exactly one web provider enabled → that provider;
+- unset + several enabled → the backend logs an error at boot and defaults to Stripe (if
+  enabled) or the first enabled provider;
+- an id whose keys are not set, or an app-store provider, is rejected (logged) and the rules
+  above apply.
+
+An organization stays with the provider it subscribed through until it cancels; changing
+providers is cancel + resubscribe.
+
+## Stripe
 
 Set these in your `.env` file or container environment:
 
 | Variable | Purpose |
 |----------|---------|
-| `STRIPE_PUBLISHABLE_KEY` | Stripe publishable key (used by the frontend billing page). |
+| `STRIPE_PUBLISHABLE_KEY` | Stripe publishable key (enables the provider; used by the frontend billing page). |
 | `STRIPE_SECRET_KEY` | Stripe secret key (used server-side for charges, subscriptions, and the customer portal). |
 | `STRIPE_SIGNING_KEY` | Stripe webhook signing secret (see [Webhook setup](#webhook-setup)). |
 
-If `STRIPE_PUBLISHABLE_KEY` is absent, the entire billing gate is disabled and every org gets the
-[Agency defaults](#self-hosted-default).
+If `STRIPE_PUBLISHABLE_KEY` is absent (and no other provider is enabled), the entire billing gate
+is disabled and every org gets the [Agency defaults](#self-hosted-default).
 
 ## Plans
 
@@ -136,8 +155,14 @@ This is controlled by `SELF_HOST_PLAN = 'AGENCY'` in the pricing module.
 Create a Stripe webhook endpoint that points to:
 
 ```
-POST https://<your-domain>/stripe
+POST https://<your-domain>/payments/webhooks/stripe
 ```
+
+::: tip Upgrading from a release before the payments domain
+`POST https://<your-domain>/stripe` still works as a deprecated alias, so an existing dashboard
+webhook keeps delivering. Re-point it to `/payments/webhooks/stripe` at your convenience — the
+alias will be removed in a later release.
+:::
 
 Subscribe to these events:
 
@@ -149,8 +174,8 @@ Subscribe to these events:
 
 Copy the webhook signing secret into `STRIPE_SIGNING_KEY`. The controller rejects events whose
 `metadata.service !== 'postmill'` (except for the two invoice events, which are inspected per
-subscription). Events are recorded in the `StripeEvent` table for idempotency; redeliveries of the
-same `event.id` are ignored.
+subscription). Events are recorded in the payment-event ledger (the `StripeEvent` table, shared by
+every provider) for idempotency; redeliveries of the same `event.id` are ignored.
 
 ## Subscription lifecycle
 

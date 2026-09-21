@@ -10,7 +10,7 @@ agent development docs live next to it:
 
 - **[`ARCHITECTURE.md`](./ARCHITECTURE.md)** — system architecture: layout, request lifecycle,
   provider kernel, data flows, identity/RBAC/sessions.
-- **[`agents/`](./agents/README.md)** — the agent development docs: provider how-tos for all 10
+- **[`agents/`](./agents/README.md)** — the agent development docs: provider how-tos for all 11
   domains, UI standards, libraries map, backend/frontend recipes, database, testing, security, jobs,
   and subsystem deep-dives. **Read the doc for your task before writing code** — the index in
   [`agents/README.md`](./agents/README.md) maps tasks to docs.
@@ -87,7 +87,7 @@ Full directory tour, import aliases, and "where does new code go": [`agents/libr
 
 ## Unified provider framework
 
-All provider domains (AI, Media, Storage, Short-link, Social, VPN, Content Packs, Email, Auth, Comms) resolve
+All provider domains (AI, Media, Storage, Short-link, Social, VPN, Content Packs, Email, Auth, Comms, Payments) resolve
 through a single **`ProviderKernel`** (`libraries/providers/kernel`), one workspace package per
 provider (`libraries/providers/<id>`), each version an internal module (`src/v1`, `src/v2`, …).
 

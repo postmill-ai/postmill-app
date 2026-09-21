@@ -53,6 +53,7 @@ All ids below are copied verbatim from `inngest.createFunction({ id: ... })` cal
 | `comms-matrix-sync` | `TZ=UTC * * * * *` (minutely) | 1 | Fans out `comms/matrix.sync-one` per enabled Matrix comms config (Matrix has no webhooks). |
 | `campaign-tag-purge` | `TZ=UTC 0 3 * * *` | — | Purges expired campaign tags. |
 | `retention-purge` | `TZ=UTC 30 3 * * *` | — | Data-retention purge. |
+| `payments-expire-canceled` | `TZ=UTC 15 3 * * *` | — | Tears down subscriptions whose `cancelAt` passed (+1 day) for payment providers without period-end cancel; log-only for Stripe rows. `PaymentsService.expireCanceledSubscriptions`. |
 
 ### Event-triggered functions
 
@@ -122,7 +123,7 @@ Backed by Prisma model `InngestFunctionRun` (schema.prisma ~L1938): one row per 
 Consumed by `HealthService` (`apps/backend/src/services/health.service.ts:131`,
 `inngestRunRepository.getAllLatest()`) for `/health`. Used by: `analytics-collection`,
 `comments-collection`, `media-jobs-poll`, `missing-post-finder`, `campaign-tag-purge`,
-`retention-purge`.
+`retention-purge`, `payments-expire-canceled`.
 
 ## 4. Recipe: add a new function (5 steps)
 
