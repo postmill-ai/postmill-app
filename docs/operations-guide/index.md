@@ -44,6 +44,6 @@ through Inngest, and media can live on local disk or cloud object storage.
 | [Schema Rollback](./schema-rollback.md) | Prisma migrate rollback playbook — forward-only down migrations, half-applied recovery, expand/contract |
 | [Security](./security.md) | Helmet, CSRF, SSRF, encryption, JWT, Sentry scrubbing, throttling |
 | [OAuth / SSO](./oauth-sso.md) | Generic OIDC provider setup (Authentik, Keycloak, etc.) |
-| [Subscriptions & Stripe](./subscriptions.md) | Stripe config, plans, metered caps, add-ons, and self-host defaults |
+| [Subscriptions & payment providers](./subscriptions.md) | Payment provider config (Stripe and others), plans, metered caps, add-ons, and self-host defaults |
 
 > Verified against v1.0.0

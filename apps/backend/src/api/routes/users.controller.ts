@@ -19,7 +19,7 @@ import { sign } from 'jsonwebtoken';
 import { Organization, User } from '@prisma/client';
 import { SubscriptionService } from '@postmill-ai/nestjs-libraries/database/prisma/subscriptions/subscription.service';
 import { GetOrgFromRequest } from '@postmill-ai/nestjs-libraries/user/org.from.request';
-import { StripeService } from '@postmill-ai/nestjs-libraries/services/stripe.service';
+import { PaymentsService } from '@postmill-ai/nestjs-libraries/payments/payments.service';
 import { Response, Request } from 'express';
 import { AuthService } from '@postmill-ai/backend/services/auth/auth.service';
 import { OrganizationService } from '@postmill-ai/nestjs-libraries/database/prisma/organizations/organization.service';
@@ -45,6 +45,7 @@ import { TrackEnum } from '@postmill-ai/nestjs-libraries/user/track.enum';
 import { TrackService } from '@postmill-ai/nestjs-libraries/track/track.service';
 import { makeId } from '@postmill-ai/nestjs-libraries/services/make.is';
 import crypto from 'crypto';
+import { billingEnabled } from '@postmill-ai/helpers/billing/payments.env';
 
 @ApiTags('User')
 @Controller('/user')
@@ -52,7 +53,7 @@ export class UsersController {
   private readonly _logger = new Logger(UsersController.name);
   constructor(
     private _subscriptionService: SubscriptionService,
-    private _stripeService: StripeService,
+    private _payments: PaymentsService,
     private _authService: AuthService,
     private _orgService: OrganizationService,
     private _userService: UsersService,
@@ -98,7 +99,7 @@ export class UsersController {
     // The request-scoped org.subscription select is intentionally narrow (no
     // extra*/limitOverrides) — fetch the full row so the effective channel
     // limit includes add-ons and super-admin overrides.
-    const subscription = !process.env.STRIPE_PUBLISHABLE_KEY
+    const subscription = !billingEnabled()
       ? null
       : await this._subscriptionService.getSubscriptionByOrganizationId(
           organization.id
@@ -108,7 +109,7 @@ export class UsersController {
       ...user,
       orgId: organization.id,
       // @ts-ignore
-      totalChannels: !process.env.STRIPE_PUBLISHABLE_KEY
+      totalChannels: !billingEnabled()
         ? 10000
         : mergeEffectiveLimits(
             pricing[subscription?.subscriptionTier || 'STARTER'] ??
@@ -118,14 +119,14 @@ export class UsersController {
       // @ts-ignore
       tier:
         org?.subscription?.subscriptionTier ||
-        (!process.env.STRIPE_PUBLISHABLE_KEY ? SELF_HOST_PLAN : 'STARTER'),
+        (!billingEnabled() ? SELF_HOST_PLAN : 'STARTER'),
       // @ts-ignore
       role: org?.users[0]?.roleId,
       // @ts-ignore
       isLifetime: !!org?.subscription?.isLifetime,
       admin: !!user.isSuperAdmin,
       impersonate: !!impersonate,
-      isTrailing: !process.env.STRIPE_PUBLISHABLE_KEY ? false : organization?.isTrailing,
+      isTrailing: !billingEnabled() ? false : organization?.isTrailing,
       allowTrial: organization?.allowTrial,
       streakSince: organization?.streakSince || null,
       setupCompleted: !!organization?.setupCompletedAt,
@@ -233,7 +234,7 @@ export class UsersController {
   // Pricing tiers are public, identical for every user — gating on ADMIN made the
   // Billing page 401 for non-admins (#20). Keep auth-only (no per-section policy).
   async tiers() {
-    return this._stripeService.getPackages();
+    return this._payments.getPackages();
   }
 
   @Post('/join-org')

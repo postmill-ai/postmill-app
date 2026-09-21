@@ -1,6 +1,6 @@
-import { BadRequestException, Body, Controller, Delete, Get, Param, Post, Req, UseGuards } from '@nestjs/common';
+import { BadRequestException, Body, Controller, Delete, Get, Param, Post, Query, Req, UseGuards } from '@nestjs/common';
 import { SubscriptionService } from '@postmill-ai/nestjs-libraries/database/prisma/subscriptions/subscription.service';
-import { StripeService } from '@postmill-ai/nestjs-libraries/services/stripe.service';
+import { PaymentsService } from '@postmill-ai/nestjs-libraries/payments/payments.service';
 import { GetOrgFromRequest } from '@postmill-ai/nestjs-libraries/user/org.from.request';
 import { Organization, User } from '@prisma/client';
 import { BillingSubscribeDto } from '@postmill-ai/nestjs-libraries/dtos/billing/billing.subscribe.dto';
@@ -8,6 +8,7 @@ import { CancelSubscriptionDto } from '@postmill-ai/backend/dtos/billing/cancel-
 import { LifetimeCodeDto } from '@postmill-ai/backend/dtos/billing/lifetime-code.dto';
 import { RefundChargesDto } from '@postmill-ai/backend/dtos/billing/refund-charges.dto';
 import { AddSubscriptionDto } from '@postmill-ai/backend/dtos/billing/add-subscription.dto';
+import { NativeVerifyDto } from '@postmill-ai/nestjs-libraries/dtos/billing/native-verify.dto';
 import { ChangePlanDto } from '@postmill-ai/nestjs-libraries/dtos/billing/change-plan.dto';
 import { ManageAddonsDto } from '@postmill-ai/nestjs-libraries/dtos/billing/manage-addons.dto';
 import {
@@ -28,24 +29,33 @@ import { OrgRbacGuard } from '@postmill-ai/backend/services/auth/rbac/org-rbac.g
 export class BillingController {
   constructor(
     private _subscriptionService: SubscriptionService,
-    private _stripeService: StripeService,
+    private _payments: PaymentsService,
     private _notificationService: NotificationService
   ) {}
+
+  /** Deployment + org payment configuration the billing UI branches on (no secrets). */
+  @Get('/config')
+  getConfig(@GetOrgFromRequest() org: Organization) {
+    return this._payments.getConfig(org);
+  }
 
   @Get('/check/:id')
   async checkId(
     @GetOrgFromRequest() org: Organization,
-    @Param('id') body: string
+    @Param('id') body: string,
+    // Providers whose webhooks lag the checkout redirect append their own
+    // subscription ref to the return URL; the poll reconciles from it.
+    @Query('ref') ref?: string
   ) {
     return {
-      status: await this._stripeService.checkSubscription(org.id, body),
+      status: await this._payments.checkSubscription(org, body, ref || undefined),
     };
   }
 
   @Get('/check-discount')
   async checkDiscount(@GetOrgFromRequest() org: Organization) {
     return {
-      offerCoupon: !(await this._stripeService.checkDiscount(org.paymentId))
+      offerCoupon: !(await this._payments.checkDiscount(org))
         ? false
         : AuthService.signJWT({ discount: true }),
     };
@@ -53,13 +63,13 @@ export class BillingController {
 
   @Post('/apply-discount')
   async applyDiscount(@GetOrgFromRequest() org: Organization) {
-    await this._stripeService.applyDiscount(org.paymentId);
+    await this._payments.applyDiscount(org);
   }
 
   @Post('/finish-trial')
   async finishTrial(@GetOrgFromRequest() org: Organization) {
     try {
-      await this._stripeService.finishTrial(org.paymentId);
+      await this._payments.finishTrial(org);
     } catch (err) {}
     return {
       finish: true,
@@ -81,7 +91,8 @@ export class BillingController {
     @Req() req: Request
   ) {
     const uniqueId = req?.cookies?.track;
-    return this._stripeService.embedded(
+    return this._payments.startCheckout(
+      'embedded',
       uniqueId,
       org.id,
       user.id,
@@ -98,7 +109,8 @@ export class BillingController {
     @Req() req: Request
   ) {
     const uniqueId = req?.cookies?.track;
-    return this._stripeService.subscribe(
+    return this._payments.startCheckout(
+      'hosted',
       uniqueId,
       org.id,
       user.id,
@@ -109,13 +121,7 @@ export class BillingController {
 
   @Get('/portal')
   async modifyPayment(@GetOrgFromRequest() org: Organization) {
-    const customer = await this._stripeService.getCustomerByOrganizationId(
-      org.id
-    );
-    const { url } = await this._stripeService.createBillingPortalLink(customer);
-    return {
-      portal: url,
-    };
+    return this._payments.portalUrl(org.id);
   }
 
   @Get('/')
@@ -137,7 +143,7 @@ export class BillingController {
       user.email
     );
 
-    return this._stripeService.setToCancel(org.id);
+    return this._payments.setToCancel(org.id);
   }
 
   @Post('/prorate')
@@ -145,7 +151,7 @@ export class BillingController {
     @GetOrgFromRequest() org: Organization,
     @Body() body: BillingSubscribeDto
   ) {
-    return this._stripeService.prorate(org.id, body);
+    return this._payments.prorate(org.id, body);
   }
 
   @Post('/lifetime')
@@ -154,7 +160,7 @@ export class BillingController {
     @GetOrgFromRequest() org: Organization,
     @Body() body: LifetimeCodeDto
   ) {
-    return this._stripeService.lifetimeDeal(org.id, body.code);
+    return this._payments.lifetimeDeal(org.id, body.code);
   }
 
   @Get('/charges')
@@ -162,7 +168,7 @@ export class BillingController {
   async getCharges(
     @GetOrgFromRequest() org: Organization
   ) {
-    return this._stripeService.getCharges(org.id);
+    return this._payments.getCharges(org.id);
   }
 
   @Post('/refund-charges')
@@ -171,7 +177,7 @@ export class BillingController {
     @GetOrgFromRequest() org: Organization,
     @Body() body: RefundChargesDto
   ) {
-    return this._stripeService.refundCharges(org.id, body.chargeIds);
+    return this._payments.refundCharges(org.id, body.chargeIds);
   }
 
   @Post('/cancel-subscription')
@@ -179,7 +185,7 @@ export class BillingController {
   async cancelSubscription(
     @GetOrgFromRequest() org: Organization
   ) {
-    return this._stripeService.cancelSubscription(org.id);
+    return this._payments.cancelSubscription(org.id);
   }
 
   @Post('/add-subscription')
@@ -203,7 +209,7 @@ export class BillingController {
     @GetUserFromRequest() user: User,
     @Body() body: ChangePlanDto
   ) {
-    return this._stripeService.changePlan(org.id, user.id, body.tier);
+    return this._payments.changePlan(org.id, user.id, body.tier);
   }
 
   @Post('/addons')
@@ -212,7 +218,7 @@ export class BillingController {
     @GetOrgFromRequest() org: Organization,
     @Body() body: ManageAddonsDto
   ) {
-    return this._stripeService.createOrUpdateAddon(
+    return this._payments.createOrUpdateAddon(
       org.id,
       body.type,
       body.packs
@@ -228,7 +234,16 @@ export class BillingController {
     if (!Object.prototype.hasOwnProperty.call(ADDONS, type)) {
       throw new BadRequestException('Invalid add-on type');
     }
-    return this._stripeService.cancelAddon(org.id, type);
+    return this._payments.cancelAddon(org.id, type);
   }
 
+  /** Mobile app hands over a store purchase; the server verifies it with the store. */
+  @Post('/native/verify')
+  @RequirePermission('billing', 'manage')
+  async verifyNativePurchase(
+    @GetOrgFromRequest() org: Organization,
+    @Body() body: NativeVerifyDto
+  ) {
+    return this._payments.verifyNativePurchase(org, body.provider, body.payload);
+  }
 }

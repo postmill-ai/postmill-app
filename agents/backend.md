@@ -53,7 +53,7 @@ Verified sites (grep `layering: sanctioned leaf-read`):
 | `OrgMediaProviderSettingsService` — `database/prisma/media-providers/org-media-provider-settings.service.ts` | `@Optional() OrgAiSettingsRepository` | `OrgAiSettingsService` imports `ProviderCredentialLinkService` from media-providers |
 | `MediaService` (AI governance) — `ai/governance/media.service.ts` | `@Optional() OrgAiSettingsRepository` (universal-credential fallback) | same DI-cycle rationale as above |
 | `OrgVpnConfigService` — `vpn/org-vpn-config.service.ts` | `OrgProviderConfigRepository` (clear orphaned channel `vpnSelection` rows) | `OrgProviderConfigService` → `OrgVpnConfigService` |
-| `StripeService` — `services/stripe.service.ts` | `StripeEventRepository` (webhook idempotency/grace reads) | narrow leaf reads, no cycle |
+| `PaymentsService` — `payments/payments.service.ts` | `PaymentEventRepository` (webhook idempotency/grace reads) | narrow leaf reads, no cycle |
 
 ---
 
@@ -67,7 +67,7 @@ Verified sites (grep `layering: sanctioned leaf-read`):
      (`api.module.ts:102`). Membership auto-applies `AuthMiddleware` **and** `CsrfMiddleware`
      (`ApiModule.configure`, `api.module.ts:211-214`).
    - **Public / webhook / OAuth-callback controller** → add to the module's `controllers`
-     array directly (e.g. `StripeController`, `EmailWebhooksController`).
+     array directly (e.g. `PaymentsWebhooksController`, `EmailWebhooksController`).
    - **Backend-only services** → the module's `providers` array.
 3. Choose the gates (a route may carry both):
 

@@ -127,6 +127,7 @@ import smtpModules from '@postmill-ai/provider-smtp';
 import sniplyModules from '@postmill-ai/provider-sniply';
 import stabilityModules from '@postmill-ai/provider-stability';
 import storjModules from '@postmill-ai/provider-storj';
+import stripeModules from '@postmill-ai/provider-stripe';
 import sunoModules from '@postmill-ai/provider-suno';
 import surfsharkModules from '@postmill-ai/provider-surfshark';
 import switchyModules from '@postmill-ai/provider-switchy';
@@ -291,6 +292,7 @@ export const providerModules: ProviderModule<any, any>[] = [
   ...sniplyModules,
   ...stabilityModules,
   ...storjModules,
+  ...stripeModules,
   ...sunoModules,
   ...surfsharkModules,
   ...switchyModules,

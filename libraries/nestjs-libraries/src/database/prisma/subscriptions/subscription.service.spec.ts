@@ -142,7 +142,8 @@ describe('SubscriptionService', () => {
 
       expect(subscriptionRepository.setCustomerId).toHaveBeenCalledWith(
         orgId,
-        userId
+        userId,
+        'manual'
       );
       expect(subscriptionRepository.createOrUpdateSubscription).toHaveBeenCalledWith(
         false,
@@ -153,7 +154,8 @@ describe('SubscriptionService', () => {
         'MONTHLY',
         null,
         undefined,
-        { id: orgId }
+        { id: orgId },
+        'manual'
       );
 
       const call = subscriptionRepository.createOrUpdateSubscription.mock.calls[0];

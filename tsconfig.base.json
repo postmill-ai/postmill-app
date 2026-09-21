@@ -835,6 +835,12 @@
       "@postmill-ai/provider-storj/*": [
         "libraries/providers/storj/src/*"
       ],
+      "@postmill-ai/provider-stripe": [
+        "libraries/providers/stripe/src"
+      ],
+      "@postmill-ai/provider-stripe/*": [
+        "libraries/providers/stripe/src/*"
+      ],
       "@postmill-ai/provider-suno": [
         "libraries/providers/suno/src"
       ],

@@ -22,6 +22,7 @@ import {
   ValidUrlExtension,
   ValidUrlPath,
 } from '@postmill-ai/helpers/utils/valid.url.path';
+import { billingEnabled } from '@postmill-ai/helpers/billing/payments.env';
 
 const validUrlExtension = new ValidUrlExtension();
 const validUrlPath = new ValidUrlPath();
@@ -57,8 +58,8 @@ export class IntegrationSchedulePostTool implements AgentToolInterface {
     orgCreatedAt: Date | undefined
   ): Promise<string | null> {
     // No billing configured (self-hosted / dev) → no cap, same as the guard's
-    // early return when STRIPE_PUBLISHABLE_KEY is unset.
-    if (!process.env.STRIPE_PUBLISHABLE_KEY) {
+    // early return when no payment provider is configured.
+    if (!billingEnabled()) {
       return null;
     }
 

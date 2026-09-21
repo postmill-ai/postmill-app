@@ -14,6 +14,7 @@ model Organization {
   description         String?
   apiKey              String?
   paymentId           String?
+  paymentProvider     String?              // payments/<id> the org's paymentId belongs to (stripe|paypal|apple|google); null = unbound
   streakSince         DateTime?
   createdAt           DateTime             @default(now())
   updatedAt           DateTime             @updatedAt
@@ -248,6 +249,7 @@ model Subscription {
   extraCompetitors  Int              @default(0)
   limitOverrides    Json?
   pendingTier       SubscriptionTier?
+  provider          String           @default("stripe") // payments/<id> that bills this subscription; 'manual' for lifetime/admin-granted rows
   createdAt         DateTime         @default(now())
   updatedAt         DateTime         @updatedAt
   deletedAt         DateTime?
@@ -257,10 +259,15 @@ model Subscription {
   @@index([deletedAt])
 }
 
-model StripeEvent {
-  id          String   @id // the Stripe event.id
+// Webhook idempotency ledger for every payment provider. Mapped onto the
+// historical StripeEvent table; `id` is the raw vendor event id.
+model PaymentEvent {
+  id          String   @id // vendor event id (Stripe evt_…, PayPal WH-…, Apple notificationUUID, Pub/Sub messageId)
   type        String
+  provider    String   @default("stripe")
   processedAt DateTime @default(now())
+
+  @@map("StripeEvent")
 }
 
 model Integration {

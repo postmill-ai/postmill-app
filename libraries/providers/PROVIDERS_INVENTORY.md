@@ -6,12 +6,12 @@ kernel vitest alias. One row per **module** (multi-module packages — e.g. `ope
 get multiple rows). The `has-spec?` column reflects whether the **package** contains any
 `*.spec.ts` / `*.int-spec.ts` under `src/**`.
 
-- **Modules:** 182  (== `providerModules.length`)
-- **Packages:** 159  (== real package dirs under `libraries/providers/`, excluding `kernel` and `node_modules`)
-  - Note: `ls -d libraries/providers/*/ | grep -v kernel | wc -l` = **160** on a clean checkout because it also counts the `node_modules/` dir; **159** are real packages. (After a local `--coverage` run a gitignored `coverage/` dir also appears, making the raw count **161** — both `node_modules/` and `coverage/` are non-package artifacts.)
-- **Packages with at least one spec:** 108 / 159  (media adapters + the magnific content pack gained recorded-fixture `*.int-spec.ts` behavioral tests via the shared `kernel/src/testing/media-int-helpers.ts`)
+- **Modules:** 183  (== `providerModules.length`)
+- **Packages:** 162  (== real package dirs under `libraries/providers/`, excluding `kernel` and `node_modules`)
+  - Note: `ls -d libraries/providers/*/ | grep -v kernel | wc -l` = **163** on a clean checkout because it also counts the `node_modules/` dir; **162** are real packages. (After a local `--coverage` run a gitignored `coverage/` dir also appears, making the raw count **164** — both `node_modules/` and `coverage/` are non-package artifacts.)
+- **Packages with at least one spec:** 137 / 162  (media adapters + the magnific content pack gained recorded-fixture `*.int-spec.ts` behavioral tests via the shared `kernel/src/testing/media-int-helpers.ts`)
 
-Modules per domain: ai=30, auth=6, comms=5, contentpack=4, email=7, media=35, shortlink=20, social=45, storage=14, vpn=16
+Modules per domain: ai=30, auth=6, comms=5, contentpack=4, email=7, media=35, payments=1, shortlink=20, social=45, storage=14, vpn=16
 
 | package | domain | providerId | version | status | has-spec? |
 |---|---|---|---|---|---|
@@ -102,6 +102,7 @@ Modules per domain: ai=30, auth=6, comms=5, contentpack=4, email=7, media=35, sh
 | vertex | media | vertex | v1 | active | yes |
 | wan | media | wan | v1 | active | no |
 | xai | media | xai | v1 | active | yes |
+| stripe | payments | stripe | v1 | active | yes |
 | bitly | shortlink | bitly | v1 | active | yes |
 | blink | shortlink | blink | v1 | active | yes |
 | cleanuri | shortlink | cleanuri | v1 | active | yes |

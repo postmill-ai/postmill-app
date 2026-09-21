@@ -144,6 +144,7 @@
     "@postmill-ai/provider-sniply": "workspace:*",
     "@postmill-ai/provider-stability": "workspace:*",
     "@postmill-ai/provider-storj": "workspace:*",
+    "@postmill-ai/provider-stripe": "workspace:*",
     "@postmill-ai/provider-suno": "workspace:*",
     "@postmill-ai/provider-surfshark": "workspace:*",
     "@postmill-ai/provider-switchy": "workspace:*",

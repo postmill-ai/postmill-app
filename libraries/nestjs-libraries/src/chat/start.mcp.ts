@@ -16,6 +16,7 @@ import { resolveClientIp } from '@postmill-ai/nestjs-libraries/utils/client-ip';
 import { runWithContext } from './async.storage';
 import { createOAuthMiddleware } from './oauth-middleware';
 import type { AuthStrategy, AuthResult, AuthContext } from '@reaatech/a2a-reference-auth';
+import { billingEnabled } from '@postmill-ai/helpers/billing/payments.env';
 // Two-layer auth:
 // 1. Custom middleware resolves pos_/api-key tokens (backward compatible)
 // 2. @reaatech/a2a-reference-auth AuthStrategy enforces scopes on the resolved identity
@@ -60,7 +61,7 @@ async function checkMcpAccess(
   subscriptionService: SubscriptionService,
   organizationId: string
 ): Promise<{ allowed: boolean; reason?: string }> {
-  if (!process.env.STRIPE_PUBLISHABLE_KEY) {
+  if (!billingEnabled()) {
     return { allowed: true };
   }
   const subscription =

@@ -35,6 +35,9 @@ export class ProvidersBootstrap implements OnModuleInit {
         case 'vpn':
         case 'contentpack':
         case 'auth':
+        // Payments providers are enabled purely by their env keys; "billing off"
+        // is expressed by not setting them, so there is no DEV_DISABLE flag.
+        case 'payments':
           return true;
         default:
           return true;

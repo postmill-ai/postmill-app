@@ -65,10 +65,11 @@ export class SubscriptionService {
     );
   }
 
-  updateCustomerId(organizationId: string, customerId: string) {
+  updateCustomerId(organizationId: string, customerId: string, provider: string) {
     return this._subscriptionRepository.updateCustomerId(
       organizationId,
-      customerId
+      customerId,
+      provider
     );
   }
 
@@ -213,7 +214,8 @@ export class SubscriptionService {
     period: 'MONTHLY' | 'YEARLY',
     cancelAt: number | null,
     code?: string,
-    org?: string
+    org?: string,
+    provider = 'stripe'
   ) {
     if (!code) {
       try {
@@ -238,7 +240,8 @@ export class SubscriptionService {
       period,
       cancelAt,
       code,
-      org ? { id: org } : undefined
+      org ? { id: org } : undefined,
+      provider
     );
   }
 
@@ -251,7 +254,7 @@ export class SubscriptionService {
   }
 
   async addSubscription(orgId: string, userId: string, subscription: BillingTier) {
-    await this._subscriptionRepository.setCustomerId(orgId, userId);
+    await this._subscriptionRepository.setCustomerId(orgId, userId, 'manual');
     return this.createOrUpdateSubscription(
       false,
       makeId(5),
@@ -261,7 +264,8 @@ export class SubscriptionService {
       'MONTHLY',
       null,
       undefined,
-      orgId
+      orgId,
+      'manual'
     );
   }
 
@@ -271,6 +275,14 @@ export class SubscriptionService {
 
   async clearPendingTier(organizationId: string) {
     return this._subscriptionRepository.clearPendingTier(organizationId);
+  }
+
+  setCancelAt(organizationId: string, cancelAt: Date | null) {
+    return this._subscriptionRepository.setCancelAt(organizationId, cancelAt);
+  }
+
+  findExpiredCancellations(before: Date) {
+    return this._subscriptionRepository.findExpiredCancellations(before);
   }
 
   async updateAddonQuantities(

@@ -6,7 +6,6 @@ import {
 } from '@nestjs/common';
 import type { Request, Response, NextFunction } from 'express';
 import { AuthService } from '@postmill-ai/backend/services/auth/auth.service';
-import { StripeService } from '@postmill-ai/nestjs-libraries/services/stripe.service';
 import { PoliciesGuard } from '@postmill-ai/backend/services/auth/permissions/permissions.guard';
 import { PermissionsService } from '@postmill-ai/backend/services/auth/permissions/permissions.service';
 import { IntegrationManager } from '@postmill-ai/nestjs-libraries/integrations/integration.manager';
@@ -40,7 +39,6 @@ const publicController = [PublicCampaignController, PublicAnalyticsController];
   controllers: [...authenticatedController, ...publicController],
   providers: [
     AuthService,
-    StripeService,
     OpenaiService,
     ExtractContentService,
     PoliciesGuard,

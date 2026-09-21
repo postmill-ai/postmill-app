@@ -193,8 +193,8 @@ All external-service domains resolve through a single `ProviderKernel`
 (`libraries/providers/<id>`), each version an internal module (`src/v1`, `src/v2`, …).
 
 - **Identity triple:** `domain/providerId@version` (e.g. `ai/openai@v1`).
-  Nine domains: `ai`, `media`, `storage`, `shortlink`, `social`, `vpn`, `contentpack`,
-  `email`, `auth` (`ProviderDomain` in `kernel/src/identity.ts`).
+  Eleven domains: `ai`, `media`, `storage`, `shortlink`, `social`, `vpn`, `contentpack`,
+  `email`, `auth`, `comms`, `payments` (`ProviderDomain` in `kernel/src/identity.ts`).
 - **Version lifecycle** (`kernel/src/manifest.ts`, `ProviderVersionStatus`):
   `preview → active → deprecated → retired`. `resolveForWrite` rejects newly pinning a
   `deprecated` version (`allowDeprecated` permits in-place updates of rows already pinned),
@@ -230,7 +230,7 @@ All external-service domains resolve through a single `ProviderKernel`
 - Catalog/health APIs: `GET /providers/catalog?domain=` (authenticated; unknown domain → 400),
   `GET /admin/providers/health?domain=` (super-admin).
 
-Overview + 9 domain docs: `agents/providers/overview.md`, `agents/providers/<domain>.md`.
+Overview + 11 domain docs: `agents/providers/overview.md`, `agents/providers/<domain>.md`.
 
 ## 6. Key data flows
 

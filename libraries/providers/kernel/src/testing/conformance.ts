@@ -84,3 +84,71 @@ export function runDomainConformance(
     }
   }
 }
+
+/**
+ * Payments-domain conformance: the base check plus the mode/flag-driven
+ * method requirements of `domains/payments.ts`. A flag set to `true` without
+ * its method (or a native provider without `verifyPurchase`) is a hard failure
+ * so the orchestrator can trust `capabilities` when deciding what to call.
+ */
+export function runPaymentsConformance(
+  module: ProviderModule,
+  fixtures: DomainConformanceFixtures = {},
+): void {
+  runDomainConformance(
+    'payments',
+    module,
+    { requiredMethods: ['isConfigured', 'publicConfig', 'receiveWebhook'] },
+    fixtures,
+  );
+
+  const capability: any = module.create({
+    credentials: fixtures.credentials || {},
+    encryption: { encrypt: (v) => v, decrypt: (v) => v },
+    fetch: async () => {
+      throw new Error('conformance fetch');
+    },
+    logger: { log: () => {}, warn: () => {}, error: () => {}, debug: () => {} },
+    telemetry: { recordCall: () => {} },
+  });
+  const flags = capability.capabilities;
+  if (!flags || !['hosted', 'embedded', 'native'].includes(flags.checkoutMode)) {
+    throw new Error('payments capability must declare capabilities.checkoutMode');
+  }
+  if (!Array.isArray(capability.requiredEnvKeys) || capability.requiredEnvKeys.length === 0) {
+    throw new Error('payments capability must declare requiredEnvKeys');
+  }
+
+  const requireMethod = (method: string, reason: string) => {
+    if (typeof capability[method] !== 'function') {
+      throw new Error(`payments capability missing ${method} (${reason})`);
+    }
+  };
+
+  if (flags.checkoutMode === 'native') {
+    requireMethod('verifyPurchase', 'checkoutMode native');
+  } else {
+    for (const m of ['ensureCustomer', 'createCheckout', 'setCancelAtPeriodEnd', 'cancelNow', 'checkoutStatus']) {
+      requireMethod(m, `checkoutMode ${flags.checkoutMode}`);
+    }
+  }
+
+  const FLAG_METHODS: Record<string, string[]> = {
+    portal: ['manageUrl'],
+    proration: ['previewProration'],
+    addons: ['upsertAddon', 'cancelAddon', 'listAddonQuantities'],
+    refunds: ['refund'],
+    chargesHistory: ['listCharges'],
+    promoCodes: ['checkDiscount', 'applyDiscount'],
+    cardCheck: ['verifyPaymentMethod'],
+    planChange: ['changePlan'],
+  };
+  for (const [flag, methods] of Object.entries(FLAG_METHODS)) {
+    if (flags[flag]) {
+      for (const m of methods) requireMethod(m, `capabilities.${flag}`);
+    }
+  }
+  if (flags.trials && flags.checkoutMode !== 'native') {
+    requireMethod('finishTrial', 'capabilities.trials on a web provider');
+  }
+}

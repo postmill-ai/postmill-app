@@ -10,6 +10,7 @@ import { SubscriptionRepository } from '@postmill-ai/nestjs-libraries/database/p
 import { FileRepository } from '@postmill-ai/nestjs-libraries/database/prisma/file/file.repository';
 import { pricing } from '@postmill-ai/nestjs-libraries/database/prisma/subscriptions/pricing';
 import { mergeEffectiveLimits } from '@postmill-ai/nestjs-libraries/database/prisma/subscriptions/effective.limits';
+import { billingEnabled } from '@postmill-ai/helpers/billing/payments.env';
 
 type StorageConfigRow = {
   id: string;
@@ -447,7 +448,7 @@ export class StorageService {
   // Enforce per-org local storage quota before a local write (#57).
   async assertWithinQuota(orgId: string, incomingBytes: number) {
     // Self-host deployments are fully unlocked.
-    if (!process.env.STRIPE_PUBLISHABLE_KEY) {
+    if (!billingEnabled()) {
       return;
     }
 

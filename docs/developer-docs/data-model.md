@@ -167,7 +167,7 @@ A connected `Integration` carries a nullable `providerConfigId` FK (`onDelete: S
 | Model | Purpose | Key Relationships |
 |---|---|---|
 | `Subscription` | Billing subscription — tier, period, channel count, lifetime flag, add-on storage/video exports | FK → `Organization` (unique) |
-| `StripeEvent` | Deduplication ledger for Stripe webhooks | Unique on `id` (the Stripe event id) |
+| `PaymentEvent` (table `StripeEvent`) | Deduplication ledger for payment-provider webhooks | Unique on `id` (the vendor event id); `provider` column |
 | `Credits` | AI credit balance per org (type: `ai_images`/`ai_videos`) | FK → `Organization` |
 | `UsedCodes` | Used promo/referral codes per org | FK → `Organization` |
 

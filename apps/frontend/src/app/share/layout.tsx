@@ -7,6 +7,7 @@ import { Plus_Jakarta_Sans } from 'next/font/google';
 import clsx from 'clsx';
 import { cookies } from 'next/headers';
 import { VariableContextComponent } from '@postmill-ai/react/helpers/variable.context';
+import { paymentsVariables } from '@postmill-ai/frontend/app/payments.vars';
 import { FetchWrapperComponent } from '@postmill-ai/helpers/utils/custom.fetch';
 
 const jakartaSans = Plus_Jakarta_Sans({
@@ -20,6 +21,7 @@ export default async function ShareLayout({
 }: {
   children: ReactNode;
 }) {
+  const paymentsVars = paymentsVariables();
   const cookieStore = await cookies();
   const mode = cookieStore.get('mode')?.value || 'dark';
   return (
@@ -38,8 +40,8 @@ export default async function ShareLayout({
           storageProvider={'local'}
           environment={process.env.NODE_ENV!}
           backendUrl={process.env.NEXT_PUBLIC_BACKEND_URL!}
-          stripeClient={process.env.STRIPE_PUBLISHABLE_KEY!}
-          billingEnabled={!!process.env.STRIPE_PUBLISHABLE_KEY}
+          payments={paymentsVars.payments}
+          billingEnabled={paymentsVars.billingEnabled}
           discordUrl={process.env.NEXT_PUBLIC_DISCORD_SUPPORT!}
           frontEndUrl={process.env.FRONTEND_URL!}
           isGeneral={!!process.env.IS_GENERAL}
@@ -49,7 +51,7 @@ export default async function ShareLayout({
           uploadDirectory={process.env.NEXT_PUBLIC_UPLOAD_STATIC_DIRECTORY!}
           mainUrl={process.env.MAIN_URL || ''}
           mcpUrl={process.env.MCP_URL}
-          dub={!!process.env.STRIPE_PUBLISHABLE_KEY}
+          dub={paymentsVars.billingEnabled}
           facebookPixel={process.env.NEXT_PUBLIC_FACEBOOK_PIXEL!}
           telegramBotName={process.env.TELEGRAM_BOT_NAME!}
           neynarClientId={process.env.NEYNAR_CLIENT_ID!}

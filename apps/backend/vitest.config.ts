@@ -40,6 +40,7 @@ export default defineConfig({
         // F5: auth + stripe controllers are now measured (F1/F2 specs).
         'src/api/routes/auth.controller.ts',
         'src/api/routes/stripe.controller.ts',
+        'src/api/routes/payments.webhooks.controller.ts',
       ],
       // Thresholds are declared PER FILE rather than as one aggregate `global` gate.
       // Why: vitest 4's aggregate global threshold is applied to *every* included file
@@ -79,7 +80,12 @@ export default defineConfig({
         'src/api/routes/auth.controller.ts': {
           statements: 35, branches: 15, functions: 20, lines: 35,
         },
+        // The webhook pipeline moved into PaymentsService (libraries); these two
+        // routes are thin delegates and keep the 90 floor.
         'src/api/routes/stripe.controller.ts': {
+          statements: 90, branches: 80, functions: 90, lines: 90,
+        },
+        'src/api/routes/payments.webhooks.controller.ts': {
           statements: 90, branches: 80, functions: 90, lines: 90,
         },
       },

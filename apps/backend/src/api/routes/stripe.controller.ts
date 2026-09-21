@@ -1,97 +1,29 @@
-import {
-  Controller,
-  HttpException,
-  Post,
-  RawBodyRequest,
-  Req,
-} from '@nestjs/common';
-import { StripeService } from '@postmill-ai/nestjs-libraries/services/stripe.service';
-import { ADDONS } from '@postmill-ai/nestjs-libraries/database/prisma/subscriptions/pricing';
-import { ApiTags } from '@nestjs/swagger';
-import Stripe from 'stripe';
+import { Controller, Post, RawBodyRequest, Req } from '@nestjs/common';
+import { ApiOperation, ApiTags } from '@nestjs/swagger';
+import { Request } from 'express';
+import { PaymentsService } from '@postmill-ai/nestjs-libraries/payments/payments.service';
 
+/**
+ * Deprecated alias for `POST /payments/webhooks/stripe`, kept so Stripe
+ * dashboards configured before the payments domain existed keep delivering.
+ * Re-point the dashboard webhook and this route goes away in a later release.
+ */
 @ApiTags('Stripe')
 @Controller('/stripe')
 export class StripeController {
-  constructor(private readonly _stripeService: StripeService) {}
+  constructor(private readonly _payments: PaymentsService) {}
 
   @Post('/')
+  @ApiOperation({
+    deprecated: true,
+    summary: 'Deprecated: use POST /payments/webhooks/stripe',
+  })
   async stripe(@Req() req: RawBodyRequest<Request>) {
-    const event = this._stripeService.validateRequest(
-      req.rawBody,
-      // @ts-ignore
-      req.headers['stripe-signature'],
-      process.env.STRIPE_SIGNING_KEY
+    return this._payments.handleWebhook(
+      'stripe',
+      req.rawBody ?? Buffer.from(''),
+      req.headers as Record<string, string | undefined>,
+      {}
     );
-
-    // Maybe it comes from another stripe webhook
-    if (
-       
-      // @ts-ignore
-      event?.data?.object?.metadata?.service !== 'postmill' &&
-      event.type !== 'invoice.payment_succeeded' &&
-      event.type !== 'invoice.payment_failed'
-    ) {
-      return { ok: true };
-    }
-
-    // Idempotency (C1): Stripe redelivers events; ignore an event.id we've already
-    // processed so a redelivered subscription mutation can't re-run the transition.
-    if (await this._stripeService.isEventProcessed(event.id)) {
-      return { ok: true };
-    }
-
-    try {
-      let result: any;
-      // @ts-ignore
-      const metadata = event?.data?.object?.metadata || {};
-      const isAddon =
-        metadata.service === 'postmill' &&
-        Object.prototype.hasOwnProperty.call(ADDONS, metadata.addon);
-
-      switch (event.type) {
-        case 'invoice.payment_succeeded':
-          result = await this._stripeService.paymentSucceeded(event);
-          break;
-        case 'invoice.payment_failed':
-          result = await this._stripeService.paymentFailed(event);
-          break;
-        case 'customer.subscription.created':
-        case 'customer.subscription.updated':
-        case 'customer.subscription.deleted':
-          result = isAddon
-            ? await this._stripeService.syncAddonQuantities(
-                event.data.object.customer as string
-              )
-            : await this._routeBaseSubscriptionEvent(event);
-          break;
-        default:
-          result = { ok: true };
-      }
-
-      // Record only after successful processing so a thrown error stays retryable.
-      await this._stripeService.recordEvent(event.id, event.type);
-      return result;
-    } catch (e) {
-      throw new HttpException(e, 500);
-    }
-  }
-
-  private async _routeBaseSubscriptionEvent(
-    event:
-      | Stripe.CustomerSubscriptionCreatedEvent
-      | Stripe.CustomerSubscriptionUpdatedEvent
-      | Stripe.CustomerSubscriptionDeletedEvent
-  ) {
-    switch (event.type) {
-      case 'customer.subscription.created':
-        return this._stripeService.createSubscription(event);
-      case 'customer.subscription.updated':
-        return this._stripeService.updateSubscription(event);
-      case 'customer.subscription.deleted':
-        return this._stripeService.deleteSubscription(event);
-      default:
-        return { ok: true };
-    }
   }
 }

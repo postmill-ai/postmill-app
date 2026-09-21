@@ -120,7 +120,7 @@ export class BackfillService {
       ['orgVpnConfig', 'credentials', false],
       ['authProviderConfig', 'clientId', false],
       ['authProviderConfig', 'clientSecret', false],
-      // Stripe lifetime-deal codes (CodesService / StripeService.lifetimeDeal).
+      // Lifetime-deal codes (CodesService / PaymentsService.lifetimeDeal).
       ['usedCodes', 'code', false],
     ];
 

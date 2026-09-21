@@ -67,13 +67,14 @@ export class SubscriptionRepository {
     });
   }
 
-  updateCustomerId(organizationId: string, customerId: string) {
+  updateCustomerId(organizationId: string, customerId: string, provider: string) {
     return this._organization.model.organization.update({
       where: {
         id: organizationId,
       },
       data: {
         paymentId: customerId,
+        paymentProvider: provider,
       },
     });
   }
@@ -113,7 +114,8 @@ export class SubscriptionRepository {
     period: 'MONTHLY' | 'YEARLY',
     cancelAt: number | null,
     code?: string,
-    org?: { id: string }
+    org?: { id: string },
+    provider = 'stripe'
   ) {
     const findOrg =
       org || (await this.getOrganizationByCustomerId(customerId))!;
@@ -141,6 +143,7 @@ export class SubscriptionRepository {
         isLifetime: !!code,
         cancelAt: cancelAt ? new Date(cancelAt * 1000) : null,
         deletedAt: null,
+        provider,
       },
       create: {
         organizationId: findOrg.id,
@@ -151,6 +154,7 @@ export class SubscriptionRepository {
         cancelAt: cancelAt ? new Date(cancelAt * 1000) : null,
         identifier,
         deletedAt: null,
+        provider,
       },
     });
 
@@ -244,13 +248,14 @@ export class SubscriptionRepository {
     });
   }
 
-  setCustomerId(orgId: string, customerId: string) {
+  setCustomerId(orgId: string, customerId: string, provider: string) {
     return this._organization.model.organization.update({
       where: {
         id: orgId,
       },
       data: {
         paymentId: customerId,
+        paymentProvider: provider,
       },
     });
   }
@@ -269,6 +274,22 @@ export class SubscriptionRepository {
     return this._subscription.model.subscription.updateMany({
       where: { organizationId, deletedAt: null },
       data: { pendingTier: null },
+    });
+  }
+
+  setCancelAt(organizationId: string, cancelAt: Date | null) {
+    return this._subscription.model.subscription.updateMany({
+      where: { organizationId, deletedAt: null },
+      data: { cancelAt },
+    });
+  }
+
+  // Rows whose scheduled end has passed — the expiry cron tears these down for
+  // providers that cannot keep a cancelled subscription alive until period end.
+  findExpiredCancellations(before: Date) {
+    return this._subscription.model.subscription.findMany({
+      where: { cancelAt: { lt: before }, deletedAt: null, isLifetime: false },
+      include: { organization: { select: { id: true, paymentId: true, paymentProvider: true } } },
     });
   }
 

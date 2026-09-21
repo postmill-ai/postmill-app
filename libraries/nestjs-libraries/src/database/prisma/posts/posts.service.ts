@@ -68,6 +68,7 @@ import { validate } from 'class-validator';
 import { plainToInstance } from 'class-transformer';
 import { stripHtmlValidation } from '@postmill-ai/helpers/utils/strip.html.validation';
 import { weightedLength } from '@postmill-ai/helpers/utils/count.length';
+import { billingEnabled } from '@postmill-ai/helpers/billing/payments.env';
 
 type PostWithConditionals = Post & {
   integration?: Integration;
@@ -1847,10 +1848,10 @@ export class PostsService {
    * `requestedCount` posts up front (e.g. bulk create), mirroring the
    * PermissionsService POSTS_PER_MONTH computation — which only fires once per
    * request, so a large batch would otherwise blow past the monthly cap.
-   * No-op when billing is disabled (no STRIPE_PUBLISHABLE_KEY).
+   * No-op when billing is disabled (no payment provider configured).
    */
   private async _enforcePostsBudget(orgId: string, requestedCount: number) {
-    if (!process.env.STRIPE_PUBLISHABLE_KEY || requestedCount <= 0) {
+    if (!billingEnabled() || requestedCount <= 0) {
       return;
     }
 

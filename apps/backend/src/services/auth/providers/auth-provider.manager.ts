@@ -8,6 +8,7 @@ import { PROVIDER_KERNEL } from '@postmill-ai/nestjs-libraries/providers/provide
 import { RuntimeContextFactory } from '@postmill-ai/nestjs-libraries/providers/runtime-context.factory';
 import { AuthProviderRepository } from '@postmill-ai/nestjs-libraries/database/prisma/auth-providers/auth-provider.repository';
 import { ioRedis } from '@postmill-ai/nestjs-libraries/redis/redis.service';
+import { billingEnabled } from '@postmill-ai/helpers/billing/payments.env';
 
 @Injectable()
 export class AuthProviderManager {
@@ -110,7 +111,7 @@ export class AuthProviderManager {
 
     // NOTE: Wallet's env gate is a billing var, not a wallet-auth config —
     // known misalignment, out of scope for the phantom-provider fix.
-    if (process.env.STRIPE_PUBLISHABLE_KEY) {
+    if (billingEnabled()) {
       providers.push({
         provider: 'WALLET',
         displayName: 'Wallet',

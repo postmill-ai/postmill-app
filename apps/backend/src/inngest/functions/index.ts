@@ -10,8 +10,10 @@ import { CampaignActivity } from '@postmill-ai/nestjs-libraries/inngest/activiti
 import { RetentionActivity } from '@postmill-ai/nestjs-libraries/inngest/activities/retention.activity';
 import { AgentDigestActivity } from '@postmill-ai/nestjs-libraries/inngest/activities/agent-digest.activity';
 import { CommsInboundService } from '@postmill-ai/nestjs-libraries/comms/comms-inbound.service';
+import { PaymentsService } from '@postmill-ai/nestjs-libraries/payments/payments.service';
 import { InngestRunService } from '@postmill-ai/nestjs-libraries/inngest/inngest-run.service';
 import { OrganizationService } from '@postmill-ai/nestjs-libraries/database/prisma/organizations/organization.service';
+import { InngestFunction } from 'inngest';
 import {
   createAnalyticsCollection,
   createAnalyticsSyncOrg,
@@ -31,6 +33,7 @@ import { createDigestEmailWeekly } from './digest-email-weekly';
 import { createAgentDigest, createAgentDigestOrg } from './agent-digest';
 import { createCampaignTagPurge } from './campaign-tag-purge';
 import { createRetentionPurge } from './retention-purge';
+import { createPaymentsExpiry } from './payments-expiry';
 import { createAutopostProcess } from './autopost-process';
 import { createRefreshToken } from './refresh-token';
 import { createStreakTracker } from './streak-tracker';
@@ -55,11 +58,12 @@ export interface InngestActivities {
   retentionActivity: RetentionActivity;
   agentDigestActivity: AgentDigestActivity;
   commsInboundService: CommsInboundService;
+  paymentsService: PaymentsService;
   inngestRunService: InngestRunService;
   organizationService: OrganizationService;
 }
 
-export const createFunctions = (activities: InngestActivities) => [
+export const createFunctions = (activities: InngestActivities): InngestFunction.Any[] => [
   createAnalyticsCollection(activities.analyticsActivity, activities.inngestRunService),
   createAnalyticsSyncOrg(activities.analyticsActivity),
   createAnalyticsSyncIntegration(activities.analyticsActivity),
@@ -77,6 +81,7 @@ export const createFunctions = (activities: InngestActivities) => [
   createAgentDigestOrg(activities.agentDigestActivity),
   createCampaignTagPurge(activities.campaignActivity, activities.inngestRunService),
   createRetentionPurge(activities.retentionActivity, activities.inngestRunService),
+  createPaymentsExpiry(activities.paymentsService, activities.inngestRunService),
   createAutopostProcess(activities.autopostActivity),
   createRefreshToken(activities.integrationsActivity),
   createStreakTracker(activities.emailActivity, activities.postActivity),

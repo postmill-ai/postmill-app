@@ -1,8 +1,25 @@
 'use client';
 
 import { createContext, FC, ReactNode, useContext, useEffect } from 'react';
+
+/** The deployment's default web payment provider, as the server layouts resolve it (no secrets). */
+export interface PaymentsVariables {
+  provider: string | null;
+  checkoutMode: 'hosted' | 'embedded' | 'native' | null;
+  /** Stripe publishable key / PayPal client id — whatever the checkout UI needs. */
+  publicKey: string;
+  displayName: string;
+}
+
+export const NO_PAYMENTS: PaymentsVariables = {
+  provider: null,
+  checkoutMode: null,
+  publicKey: '',
+  displayName: '',
+};
+
 interface VariableContextInterface {
-  stripeClient: string;
+  payments: PaymentsVariables;
   billingEnabled: boolean;
   isGeneral: boolean;
   genericOauth: boolean;
@@ -31,7 +48,7 @@ interface VariableContextInterface {
   googleAdsTrialTracking?: string;
 }
 const VariableContext = createContext({
-  stripeClient: '',
+  payments: NO_PAYMENTS,
   billingEnabled: false,
   isGeneral: true,
   genericOauth: false,

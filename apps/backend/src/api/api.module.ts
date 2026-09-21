@@ -6,7 +6,7 @@ import { AuthMiddleware } from '@postmill-ai/backend/services/auth/auth.middlewa
 import { AuthGuard } from '@postmill-ai/backend/services/auth/auth.guard';
 import { CsrfMiddleware } from '@postmill-ai/backend/services/auth/csrf.middleware';
 import { StripeController } from '@postmill-ai/backend/api/routes/stripe.controller';
-import { StripeService } from '@postmill-ai/nestjs-libraries/services/stripe.service';
+import { PaymentsWebhooksController } from '@postmill-ai/backend/api/routes/payments.webhooks.controller';
 import { AnalyticsService } from '@postmill-ai/nestjs-libraries/analytics/analytics.service';
 import { AnalyticsLiveFallbackService } from '@postmill-ai/nestjs-libraries/analytics/analytics-live-fallback';
 import { AnalyticsOverviewService } from '@postmill-ai/nestjs-libraries/analytics/analytics-overview.service';
@@ -168,6 +168,7 @@ export const authenticatedController = [
     RootController,
     HealthController,
     StripeController,
+    PaymentsWebhooksController,
     AuthController,
     PublicController,
     MonitorController,
@@ -185,7 +186,6 @@ export const authenticatedController = [
   ],
   providers: [
     AuthService,
-    StripeService,
     OpenaiService,
     ExtractContentService,
     AuthMiddleware,
