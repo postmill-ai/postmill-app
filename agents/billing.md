@@ -107,7 +107,7 @@ super-admin branch to the billing path.
   dashboards configured before the payments domain; remove once every deployment has
   re-pointed its Stripe webhook.
 - **Billing API:** `apps/backend/src/api/routes/billing.controller.ts` —
-  `@Controller('/billing')`: `GET /config` (deployment + org payment config for the UI),
+  `@Controller('/billing')`: `GET /config` (deployment + org payment config for the UI, incl. `org.lockedTo`),
   `GET /` (current billing), `GET /check/:id?ref=`, `GET /check-discount`,
   `POST /apply-discount`, `POST /finish-trial`, `GET /is-trial-finished`, `POST /embedded`,
   `POST /subscribe`, `GET /portal`, `POST /cancel`, `POST /prorate`, `POST /lifetime`,

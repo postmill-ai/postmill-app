@@ -75,7 +75,10 @@ hides those features for organizations billed through it.
 ### Normalized events
 
 `receiveWebhook` returns `{ eventId, eventType, events[] }`. `eventId` is the vendor's event id and
-feeds the idempotency ledger; `events` are drawn from:
+feeds the idempotency ledger — when the vendor sends none, derive one from the payload (a sha256 of
+the body), never from the clock, so a redelivery stays idempotent. Traffic that is genuinely the
+vendor's but not yours (another app on the same account, the other store environment) should return
+`events: []` with `skipRecord: true`: acknowledged, not ledgered. `events` are drawn from:
 
 | Event | Meaning |
 |---|---|
