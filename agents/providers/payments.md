@@ -90,8 +90,28 @@ have no kernel access. Never read a vendor key anywhere else.
 | Provider | Enabling key | Other keys | Mode |
 |---|---|---|---|
 | `stripe` | `STRIPE_PUBLISHABLE_KEY` | `STRIPE_SECRET_KEY`, `STRIPE_SIGNING_KEY`, optional `STRIPE_DISCOUNT_ID` | embedded |
+| `paypal` | `PAYPAL_CLIENT_ID` | `PAYPAL_CLIENT_SECRET`, `PAYPAL_WEBHOOK_ID`, optional `PAYPAL_ENV`, `PAYPAL_BRAND_NAME` | hosted |
+| `apple` | `APPLE_IAP_BUNDLE_ID` | `APPLE_IAP_ISSUER_ID`, `APPLE_IAP_KEY_ID`, `APPLE_IAP_PRIVATE_KEY`, `APPLE_IAP_APP_APPLE_ID`, optional `APPLE_IAP_SANDBOX_ORG_IDS`, `APPLE_IAP_ENV`, `APPLE_IAP_ALLOW_SANDBOX`, `PAYMENTS_APPLE_PRODUCT_PREFIX`, `APPLE_IAP_ROOT_CA_BASE64` | native |
+| `google` | `GOOGLE_PLAY_PACKAGE_NAME` | `GOOGLE_PLAY_SERVICE_ACCOUNT_JSON`, optional `GOOGLE_PLAY_RTDN_SERVICE_ACCOUNT_EMAIL` (webhook fails closed without it), `GOOGLE_PLAY_RTDN_AUDIENCE`, `PAYMENTS_GOOGLE_PRODUCT_PREFIX` | native |
 
-(PayPal, Apple, Google rows land with their modules.)
+Org binding rules (`PaymentsService._resolveEventOrg`): by `(customerRef, provider)` first. A vendor `orgIdHint` binds an org **only on `subscription.activated`** and never re-points an org bound to a *different* provider. A same-provider re-bind is refused only while the org has a **live** subscription row on that provider, unless the event carries `previousCustomerRef` equal to the org's current ref (Google `linkedPurchaseToken`); a lapsed org keeps a stale `paymentId` after teardown and its ordinary resubscribe (fresh Google token, new Apple ID) re-binds freely. Cancel/past-due/payment events must be emitted by ref alone.
+
+Flag matrix as shipped:
+
+| Provider | portal | proration | addons | refunds | promoCodes | trials | cardCheck | chargesHistory | periodEndCancel | planChange |
+|---|---|---|---|---|---|---|---|---|---|---|
+| stripe | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
+| paypal | – | – | – | ✓ | – | ✓ (trial cycle; `finishTrial` unsupported) | – | ✓ | – (immediate cancel + `cancelAt`) | ✓ (revise) |
+| apple | ✓ (store page) | – | – | – | – | ✓ (intro offer) | – | – | – (store cancels) | – |
+| google | ✓ (store page) | – | – | – | – | ✓ | – | – | – (store cancels) | – |
+
+Frontend branches: `apps/frontend/src/components/billing/first.billing.component.tsx` on
+`useVariables().payments.checkoutMode` (embedded → Stripe.js form, hosted → "Continue with
+<Provider>" redirect, native → store copy); `main.billing.component.tsx` and
+`settings/subscription/subscription.panel.tsx` hide portal/proration/coupon/add-on/resume/plan-change
+affordances from `GET /billing/config` (`useBillingConfig`), and render "managed through the app
+store" + `manageUrl` for native orgs. `CheckPayment` forwards `?subscription_id=`/`?ref=` from the
+return URL to `/billing/check/:id?ref=`.
 
 ## HTTP surface
 

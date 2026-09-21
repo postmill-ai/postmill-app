@@ -3,10 +3,10 @@ import { ProviderMetadata } from '@postmill-ai/provider-kernel';
 export const metadata: ProviderMetadata = {
   "website": "https://apple.com",
   "description": {
-    "en": "Sign in with Apple — let users authenticate with their Apple ID."
+    "en": "Apple — Sign in with Apple for authentication, and App Store subscriptions for the mobile app."
   },
   "id": "apple",
-  "displayName": "apple",
+  "displayName": "Apple",
   "kind": "action",
   "domains": [
     "media"

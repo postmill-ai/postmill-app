@@ -179,6 +179,13 @@ describe('handleWebhook pipeline', () => {
     expect(paymentEventRepository.record).not.toHaveBeenCalled();
   });
 
+  it('a non-signature adapter failure answers 500 so the vendor redelivers, and records nothing', async () => {
+    const { service, capability, paymentEventRepository } = build();
+    capability.receiveWebhook.mockRejectedValue(new Error('vendor API down'));
+    await expect(service.handleWebhook('stripe', Buffer.from(''), {}, {})).rejects.toMatchObject({ status: 500 });
+    expect(paymentEventRepository.record).not.toHaveBeenCalled();
+  });
+
   it('returns the adapter ackBody verbatim when one is given', async () => {
     const { service, capability } = build();
     capability.receiveWebhook.mockResolvedValue({ eventId: 'evt_a', eventType: 'ping', events: [], ackBody: { pong: true } });
@@ -225,7 +232,8 @@ describe('applyEvent — subscription transitions', () => {
   it('canceled tears the row down and audits "deleted"', async () => {
     const { service, subscriptionService, audit } = build();
     await service.applyEvent('stripe', { type: 'subscription.canceled', customerRef: 'cus_1' });
-    expect(subscriptionService.deleteSubscription).toHaveBeenCalledWith('cus_1');
+    // Teardown is scoped to the provider: a ref string alone must never match another provider's org.
+    expect(subscriptionService.deleteSubscription).toHaveBeenCalledWith('cus_1', 'stripe');
     expect(audit.record).toHaveBeenCalledWith(expect.objectContaining({ metadata: { status: 'deleted' } }));
   });
 
@@ -235,7 +243,7 @@ describe('applyEvent — subscription transitions', () => {
     await expect(service.applyEvent('stripe', { type: 'subscription.canceled', customerRef: 'cus_1' })).resolves.toEqual({ ok: true });
     audit.record.mockClear();
     await service.applyEvent('stripe', { type: 'subscription.canceled', customerRef: 'cus_unknown' });
-    expect(subscriptionService.deleteSubscription).toHaveBeenCalledWith('cus_unknown');
+    expect(subscriptionService.deleteSubscription).toHaveBeenCalledWith('cus_unknown', 'stripe');
     expect(audit.record).not.toHaveBeenCalled();
   });
 
@@ -265,11 +273,50 @@ describe('applyEvent — org resolution by hint', () => {
     expect(subscriptionService.createOrUpdateSubscription).toHaveBeenCalledWith(expect.anything(), 'u1', 'I-1', expect.anything(), 'TEAM', 'MONTHLY', null, undefined, 'org-1', 'paypal');
   });
 
-  it('re-points a rotated Google purchase token through the hint', async () => {
+  it('re-points a rotated Google purchase token only when the vendor asserts the link (previousCustomerRef)', async () => {
     const { service, subscriptionService } = build(fakeCapability({ name: 'google' }), { paymentId: 'token_old', paymentProvider: 'google' });
     subscriptionService.getSubscription.mockResolvedValue({ provider: 'google' });
-    await service.applyEvent('google', activated({ customerRef: 'token_new', orgIdHint: 'org-1' }));
+    // Same org id in the hint, but no link to the org's current token: a stranger's purchase — ignored.
+    expect(await service.applyEvent('google', activated({ customerRef: 'token_attacker', orgIdHint: 'org-1' }))).toEqual({ ok: false });
+    expect(subscriptionService.updateCustomerId).not.toHaveBeenCalled();
+    await service.applyEvent('google', activated({ customerRef: 'token_new', orgIdHint: 'org-1', previousCustomerRef: 'token_old' }));
     expect(subscriptionService.updateCustomerId).toHaveBeenCalledWith('org-1', 'token_new', 'google');
+  });
+
+  it('a lapsed native subscriber re-binds freely on a fresh purchase (no live row ⇒ stale binding)', async () => {
+    // Google: full expiry deleted the row; the org still carries the dead token.
+    const g = build(fakeCapability({ name: 'google' }), { paymentId: 'tok_dead', paymentProvider: 'google' });
+    g.subscriptionService.getSubscription.mockResolvedValue(null);
+    await g.service.applyEvent('google', activated({ customerRef: 'tok_fresh', orgIdHint: 'org-1' }));
+    expect(g.subscriptionService.updateCustomerId).toHaveBeenCalledWith('org-1', 'tok_fresh', 'google');
+    expect(g.subscriptionService.createOrUpdateSubscription).toHaveBeenCalled();
+    // Apple: resubscribing from another Apple ID yields a new originalTransactionId with no link.
+    const a = build(fakeCapability({ name: 'apple' }), { paymentId: 'otx_dead', paymentProvider: 'apple' });
+    a.subscriptionService.getSubscription.mockResolvedValue(null);
+    await a.service.applyEvent('apple', activated({ customerRef: 'otx_new', orgIdHint: 'org-1' }));
+    expect(a.subscriptionService.updateCustomerId).toHaveBeenCalledWith('org-1', 'otx_new', 'apple');
+    // …but an org with a LIVE subscription on this provider is still protected.
+    const live = build(fakeCapability({ name: 'google' }), { paymentId: 'tok_live', paymentProvider: 'google' });
+    live.subscriptionService.getSubscription.mockResolvedValue({ provider: 'google' });
+    expect(await live.service.applyEvent('google', activated({ customerRef: 'tok_attacker', orgIdHint: 'org-1' }))).toEqual({ ok: false });
+    expect(live.subscriptionService.updateCustomerId).not.toHaveBeenCalled();
+  });
+
+  it('a hint never re-binds an org already bound to another provider, even before its first subscription row', async () => {
+    const { service, subscriptionService } = build(fakeCapability({ name: 'paypal' }), { paymentId: 'cus_1', paymentProvider: 'stripe' });
+    subscriptionService.getSubscription.mockResolvedValue(null);
+    expect(await service.applyEvent('paypal', activated({ customerRef: 'I-1', orgIdHint: 'org-1' }))).toEqual({ ok: false });
+    expect(subscriptionService.updateCustomerId).not.toHaveBeenCalled();
+  });
+
+  it('hints are honoured on activation only — a cancel or past-due event for an unknown ref no-ops', async () => {
+    const { service, subscriptionService, paymentEventRepository } = build(fakeCapability({ name: 'google' }), { paymentId: 'token_new', paymentProvider: 'google' });
+    await service.applyEvent('google', { type: 'subscription.canceled', customerRef: 'token_old', orgIdHint: 'org-1' });
+    expect(subscriptionService.updateCustomerId).not.toHaveBeenCalled();
+    expect(subscriptionService.deleteSubscription).toHaveBeenCalledWith('token_old', 'google');
+    await service.applyEvent('google', { type: 'subscription.past_due', customerRef: 'token_old', orgIdHint: 'org-1', providerSubscriptionRef: 'token_old' });
+    expect(subscriptionService.updateCustomerId).not.toHaveBeenCalled();
+    expect(paymentEventRepository.setGracePeriod).not.toHaveBeenCalled();
   });
 
   it('never lets a hint steal an org billed by another provider', async () => {
@@ -382,11 +429,11 @@ describe('payment.succeeded — pendingTier apply-on-renewal (B9.2) + tracking',
     expect(capability.commitPendingTier).not.toHaveBeenCalled();
   });
 
-  it('falls back to the plan price when the vendor gives no amount', async () => {
+  it('skips conversion tracking when the vendor gives no amount (never attributes the list price)', async () => {
     const { service, subscriptionService, trackService } = build();
     subscriptionService.getSubscription.mockResolvedValue({ pendingTier: null, subscriptionTier: 'PRO', period: 'YEARLY' });
     await service.applyEvent('stripe', { ...paid, amountCents: undefined });
-    expect(trackService.track).toHaveBeenCalledWith(expect.anything(), expect.anything(), expect.anything(), expect.anything(), { value: pricing.PRO.year_price });
+    expect(trackService.track).not.toHaveBeenCalled();
   });
 });
 
@@ -472,7 +519,7 @@ describe('cancel + expiry', () => {
 
     capability.setCancelAtPeriodEnd.mockResolvedValue({ cancelAt: new Date(), cancelAtPeriodEnd: false, canceledNow: true });
     await service.setToCancel('org-1');
-    expect(subscriptionService.deleteSubscription).toHaveBeenCalledWith('cus_1');
+    expect(subscriptionService.deleteSubscription).toHaveBeenCalledWith('cus_1', 'stripe');
   });
 
   it('a provider without period-end cancel keeps the row with cancelAt for the expiry cron', async () => {
@@ -485,19 +532,33 @@ describe('cancel + expiry', () => {
     expect(subscriptionService.deleteSubscription).not.toHaveBeenCalled();
   });
 
-  it('expireCanceledSubscriptions tears down non-stripe rows once and only logs stripe rows', async () => {
+  it('expireCanceledSubscriptions tears each expired row down exactly once', async () => {
     const { service, subscriptionService, paymentEventRepository } = build(fakeCapability({ name: 'paypal' }), { paymentId: 'I-1', paymentProvider: 'paypal' });
     const past = new Date('2020-01-01');
+    // Stripe and manual rows never reach the cron (excluded at the query).
     subscriptionService.findExpiredCancellations.mockResolvedValue([
       { id: 's1', provider: 'paypal', cancelAt: past, organization: { id: 'org-1', paymentId: 'I-1', paymentProvider: 'paypal' } },
-      { id: 's2', provider: 'stripe', cancelAt: past, organization: { id: 'org-2', paymentId: 'cus_2', paymentProvider: 'stripe' } },
-      { id: 's3', provider: 'manual', cancelAt: past, organization: { id: 'org-3', paymentId: 'x', paymentProvider: 'manual' } },
     ]);
-    expect(await service.expireCanceledSubscriptions()).toEqual({ checked: 3, tornDown: 1 });
+    expect(await service.expireCanceledSubscriptions()).toEqual({ checked: 1, tornDown: 1, failed: 0 });
     expect(subscriptionService.deleteSubscription).toHaveBeenCalledTimes(1);
-    expect(subscriptionService.deleteSubscription).toHaveBeenCalledWith('I-1');
+    expect(subscriptionService.deleteSubscription).toHaveBeenCalledWith('I-1', 'paypal');
     expect(paymentEventRepository.record).toHaveBeenCalledWith(`expiry:s1:${past.getTime()}`, 'subscription.expired', 'paypal');
-    expect(await service.expireCanceledSubscriptions()).toEqual({ checked: 3, tornDown: 0 });
+    expect(await service.expireCanceledSubscriptions()).toEqual({ checked: 1, tornDown: 0, failed: 0 });
+  });
+
+  it('expireCanceledSubscriptions survives one bad row and still tears down the rest', async () => {
+    const { service, subscriptionService, config } = build(fakeCapability({ name: 'paypal' }), { paymentId: 'I-2', paymentProvider: 'paypal' });
+    const past = new Date('2020-01-01');
+    subscriptionService.findExpiredCancellations.mockResolvedValue([
+      { id: 's1', provider: 'razorpay', cancelAt: past, organization: { id: 'org-9', paymentId: 'rz_1', paymentProvider: 'razorpay' } },
+      { id: 's2', provider: 'paypal', cancelAt: past, organization: { id: 'org-1', paymentId: 'I-2', paymentProvider: 'paypal' } },
+    ]);
+    config.resolve.mockImplementation((id: string) => {
+      if (id !== 'paypal') throw new Error(`not configured: ${id}`);
+      return fakeCapability({ name: 'paypal' });
+    });
+    expect(await service.expireCanceledSubscriptions()).toEqual({ checked: 2, tornDown: 1, failed: 1 });
+    expect(subscriptionService.deleteSubscription).toHaveBeenCalledWith('I-2', 'paypal');
   });
 });
 
@@ -527,5 +588,8 @@ describe('checkSubscription + native verify', () => {
 
     const web = build();
     await expect(web.service.verifyNativePurchase(org as any, 'stripe', {})).rejects.toBeInstanceOf(PaymentsUnsupportedOperationError);
+
+    capability.verifyPurchase.mockRejectedValue(new PaymentsWebhookVerificationError('bad receipt'));
+    await expect(service.verifyNativePurchase(org as any, 'apple', { jws: 'x' })).rejects.toMatchObject({ status: 400 });
   });
 });

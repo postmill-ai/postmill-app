@@ -54,14 +54,16 @@ export class SubscriptionService {
     return this._subscriptionRepository.getCode(code);
   }
 
-  async deleteSubscription(customerId: string) {
+  async deleteSubscription(customerId: string, provider?: string) {
     await this.modifySubscription(
       customerId,
       pricing.STARTER.channel || 0,
-      'STARTER'
+      'STARTER',
+      provider
     );
     return this._subscriptionRepository.deleteSubscriptionByCustomerId(
-      customerId
+      customerId,
+      provider
     );
   }
 
@@ -173,7 +175,8 @@ export class SubscriptionService {
   async modifySubscription(
     customerId: string,
     totalChannels: number,
-    billing: BillingTier
+    billing: BillingTier,
+    provider?: string
   ) {
     if (!customerId) {
       return false;
@@ -181,12 +184,14 @@ export class SubscriptionService {
 
     const getOrgByCustomerId =
       await this._subscriptionRepository.getOrganizationByCustomerId(
-        customerId
+        customerId,
+        provider
       );
 
     const getCurrentSubscription =
       (await this._subscriptionRepository.getSubscriptionByCustomerId(
-        customerId
+        customerId,
+        provider
       ))!;
 
     if (
@@ -222,7 +227,8 @@ export class SubscriptionService {
         const load = await this.modifySubscription(
           customerId,
           totalChannels,
-          billing
+          billing,
+          provider
         );
         if (!load) {
           return {};
@@ -281,8 +287,8 @@ export class SubscriptionService {
     return this._subscriptionRepository.setCancelAt(organizationId, cancelAt);
   }
 
-  findExpiredCancellations(before: Date) {
-    return this._subscriptionRepository.findExpiredCancellations(before);
+  findExpiredCancellations(before: Date, limit?: number) {
+    return this._subscriptionRepository.findExpiredCancellations(before, limit);
   }
 
   async updateAddonQuantities(

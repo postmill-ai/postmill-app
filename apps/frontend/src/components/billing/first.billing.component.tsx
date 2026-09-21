@@ -35,6 +35,8 @@ import { useModals } from '@postmill-ai/frontend/components/layout/new-modal';
 import useCookie from 'react-use-cookie';
 import { LogoutComponent } from '@postmill-ai/frontend/components/layout/logout.component';
 import { DeveloperIconComponent } from '@postmill-ai/frontend/components/developer/developer.icon.component';
+import { Button } from '@postmill-ai/react/form/button';
+import { useToaster } from '@postmill-ai/react/toaster/toaster';
 
 const ModeComponent = dynamic(
   () => import('@postmill-ai/frontend/components/layout/mode.component'),
@@ -160,8 +162,10 @@ export const FirstBillingComponent = () => {
   const fetch = useFetch();
   const modals = useModals();
   const t = useT();
+  const toaster = useToaster();
   const [datafast_visitor_id] = useCookie('datafast_visitor_id', '');
   const [datafast_session_id] = useCookie('datafast_session_id', '');
+  const [redirecting, setRedirecting] = useState(false);
 
   const loadCheckout = useCallback(async () => {
     return (
@@ -178,6 +182,26 @@ export const FirstBillingComponent = () => {
       })
     ).json();
   }, [fetch, tier, period, datafast_visitor_id, datafast_session_id, dub]);
+
+  // Hosted providers (PayPal, a regional PSP) hand back a vendor page to redirect to
+  // instead of an embeddable form; the return URL lands on /posts?check=<id>.
+  const startHostedCheckout = useCallback(async () => {
+    setRedirecting(true);
+    try {
+      const result = await loadCheckout();
+      const url = result?.url || result?.portal;
+      if (!url) {
+        throw new Error('no redirect');
+      }
+      window.location.href = url;
+    } catch {
+      setRedirecting(false);
+      toaster.show(
+        t('billing_checkout_failed', 'We could not start the checkout. Please try again.'),
+        'warning'
+      );
+    }
+  }, [loadCheckout, toaster, t]);
 
   const showYouTube = () => {
     modals.openModal({
@@ -197,8 +221,11 @@ export const FirstBillingComponent = () => {
     });
   };
 
+  const isEmbedded = payments.checkoutMode === 'embedded' && !!stripe;
+  // Only the embedded flow pre-creates a checkout session on plan change; a
+  // hosted provider creates its session when the user clicks through.
   const { data, isLoading } = useSWR(
-    `/billing-${tier}-${period}`,
+    isEmbedded ? `/billing-${tier}-${period}` : null,
     loadCheckout,
     {
       revalidateOnFocus: false,
@@ -240,15 +267,52 @@ export const FirstBillingComponent = () => {
           <div className="block tablet:hidden">
             <JoinOver onShowYouTube={showYouTube} />
           </div>
-          {!isLoading && data && stripe ? (
-            <EmbeddedBilling
-              stripe={stripe}
-              secret={data.client_secret}
-              showCoupon={period === 'MONTHLY'}
-              autoApplyCoupon={data.auto_apply_coupon}
-            />
+          {isEmbedded ? (
+            !isLoading && data ? (
+              <EmbeddedBilling
+                stripe={stripe!}
+                secret={data.client_secret}
+                showCoupon={period === 'MONTHLY'}
+                autoApplyCoupon={data.auto_apply_coupon}
+              />
+            ) : (
+              <LoadingComponent />
+            )
+          ) : payments.checkoutMode === 'embedded' ? (
+            // Embedded provider configured but Stripe.js could not load (no
+            // publishable key at build time) — say so instead of pretending the
+            // deployment is app-store only.
+            <div className="rounded-[12px] border border-newColColor p-[24px] text-[14px] text-textItemBlur">
+              {t(
+                'billing_checkout_unavailable',
+                'Checkout is temporarily unavailable. Please try again later.'
+              )}
+            </div>
+          ) : payments.checkoutMode === 'hosted' ? (
+            <div className="flex flex-col gap-[16px] rounded-[12px] border border-newColColor p-[24px]">
+              <div className="text-[18px] font-[600]">
+                {t('billing_hosted_title', 'Complete your subscription')}
+              </div>
+              <div className="text-[14px] text-textItemBlur">
+                {t(
+                  'billing_hosted_description',
+                  'You will be taken to {{provider}} to approve the subscription and then brought back here.',
+                  { provider: payments.displayName }
+                )}
+              </div>
+              <Button onClick={startHostedCheckout} loading={redirecting}>
+                {t('billing_continue_with_provider', 'Continue with {{provider}}', {
+                  provider: payments.displayName,
+                })}
+              </Button>
+            </div>
           ) : (
-            <LoadingComponent />
+            <div className="rounded-[12px] border border-newColColor p-[24px] text-[14px] text-textItemBlur">
+              {t(
+                'billing_native_only',
+                'Subscriptions for this deployment are managed through the mobile app store.'
+              )}
+            </div>
           )}
         </div>
         <div className="flex flex-col ps-[40px] tablet:ps-![0] border-l border-newColColor py-[40px] mobile:pt-![24px] tablet:border-none tablet:pb-0">

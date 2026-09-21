@@ -30,6 +30,7 @@ import { newDayjs } from '@postmill-ai/frontend/components/layout/set.timezone';
 import { useDubClickId } from '@postmill-ai/frontend/components/layout/dubAnalytics';
 import { LogoutComponent } from '@postmill-ai/frontend/components/layout/logout.component';
 import { PageHeader } from '@postmill-ai/frontend/components/ui/page-header';
+import { useBillingConfig } from '@postmill-ai/frontend/components/billing/use-billing-config';
 
 type TierKey = PlanInterface['current'];
 
@@ -340,10 +341,22 @@ export const MainBillingComponent: FC<{
   const [finishTrial, setFinishTrial] = useState(
     !!queryParams.get('finishTrial')
   );
+  // Which affordances the org's payment provider supports (portal, proration,
+  // coupons, period-end cancel…). Absent until loaded → everything shown, as before.
+  const { data: billingConfig, error: billingConfigError } = useBillingConfig();
+  const capabilities = billingConfig?.org?.capabilities;
+  const managedByStore = billingConfig?.org?.checkoutMode === 'native';
+  // Hold provider-specific affordances until the config resolves; only fall back
+  // to "show everything" if the config endpoint itself fails.
+  const configReady = !!billingConfig || !!billingConfigError;
+  const can = (flag: keyof NonNullable<typeof capabilities>) =>
+    configReady && (capabilities ? capabilities[flag] === true : !!billingConfigError);
 
   const [subscription, setSubscription] = useState<Subscription | undefined>(
     sub
   );
+  // A first purchase needs a web provider; a plan switch additionally needs planChange.
+  const canPurchase = configReady && !managedByStore && (!subscription || can('planChange'));
   const [loading, setLoading] = useState<boolean>(false);
 
   const [period, setPeriod] = useState<'MONTHLY' | 'YEARLY'>(
@@ -371,6 +384,7 @@ export const MainBillingComponent: FC<{
     const { portal } = await (await fetch('/billing/portal')).json();
     window.location.href = portal;
   }, [fetch]);
+  const manageUrl = billingConfig?.org?.manageUrl;
 
   const currentPackage = useMemo(() => {
     if (!subscription) {
@@ -426,9 +440,10 @@ export const MainBillingComponent: FC<{
           t('cancel_subscription', 'Cancel Subscription')
         ))
       ) {
-        const checkDiscount = await (
-          await fetch('/billing/check-discount')
-        ).json();
+        const checkDiscount =
+          capabilities && !capabilities.promoCodes
+            ? { offerCoupon: false }
+            : await (await fetch('/billing/check-discount')).json();
         if (checkDiscount.offerCoupon) {
           const info = await new Promise((res) => {
             modal.openModal({
@@ -488,7 +503,7 @@ export const MainBillingComponent: FC<{
         setLoading(false);
       }
     },
-    [fetch, modal, subscription, t, toast]
+    [fetch, modal, subscription, t, toast, capabilities]
   );
 
   const moveToCheckout = useCallback(
@@ -517,17 +532,25 @@ export const MainBillingComponent: FC<{
         return;
       }
       setLoading(true);
-      const { url, portal } = await (
-        await fetch('/billing/subscribe', {
-          method: 'POST',
-          body: JSON.stringify({
-            period: monthlyOrYearly === 'on' ? 'YEARLY' : 'MONTHLY',
-            utm,
-            billing,
-            ...(dub ? { dub } : {}),
-          }),
-        })
-      ).json();
+      const res = await fetch('/billing/subscribe', {
+        method: 'POST',
+        body: JSON.stringify({
+          period: monthlyOrYearly === 'on' ? 'YEARLY' : 'MONTHLY',
+          utm,
+          billing,
+          ...(dub ? { dub } : {}),
+        }),
+      });
+      const body = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        setLoading(false);
+        toast.show(
+          body?.message || t('change_plan_failed', 'Failed to change plan'),
+          'warning'
+        );
+        return;
+      }
+      const { url, portal } = body;
       if (url) {
         await track(TrackEnum.InitiateCheckout, {
           value:
@@ -627,18 +650,29 @@ export const MainBillingComponent: FC<{
               subscription?.cancelAt ? (
                 <div className="gap-[3px] flex flex-col">
                   <div>
-                    <Button
-                      onClick={handleCancelOrReactivate(true)}
-                      loading={loading}
-                    >
-                      {t(
-                        'reactivate_subscription',
-                        'Reactivate subscription'
-                      )}
-                    </Button>
+                    {can('periodEndCancel') ? (
+                      <Button
+                        onClick={handleCancelOrReactivate(true)}
+                        loading={loading}
+                      >
+                        {t(
+                          'reactivate_subscription',
+                          'Reactivate subscription'
+                        )}
+                      </Button>
+                    ) : (
+                      // The vendor cancelled immediately; access runs to cancelAt
+                      // and a new subscription is the only way back.
+                      <div className="text-textItemBlur">
+                        {t(
+                          'billing_resubscribe_after_end',
+                          'You can subscribe again once the current period ends.'
+                        )}
+                      </div>
+                    )}
                   </div>
                 </div>
-              ) : (
+              ) : !canPurchase ? null : (
                 <Button
                   loading={loading}
                   disabled={currentPackage === name.toUpperCase()}
@@ -656,7 +690,8 @@ export const MainBillingComponent: FC<{
               )}
               {subscription &&
                 currentPackage !== name.toUpperCase() &&
-                !!name && (
+                !!name &&
+                can('proration') && (
                   <Prorate
                     period={monthlyOrYearly === 'on' ? 'YEARLY' : 'MONTHLY'}
                     pack={name.toUpperCase() as TierKey}
@@ -667,15 +702,35 @@ export const MainBillingComponent: FC<{
           </div>
         ))}
       </div>
-      {!!subscription?.id && (
+      {managedByStore && (
+        <div className="text-center mt-[20px] text-textItemBlur">
+          {subscription?.id
+            ? t(
+                'billing_managed_by_store',
+                'Your subscription is managed through the app store on your phone.'
+              )
+            : t(
+                'billing_subscribe_in_app',
+                'Plans on this deployment are purchased in the mobile app. Open the app to subscribe.'
+              )}{' '}
+          {manageUrl && subscription?.id && (
+            <a href={manageUrl} target="_blank" rel="noreferrer" className="underline">
+              {t('billing_manage_in_store', 'Manage subscription')}
+            </a>
+          )}
+        </div>
+      )}
+      {!!subscription?.id && !managedByStore && (
         <div className="flex justify-center mt-[20px] gap-[10px]">
-          <Button onClick={updatePayment}>
-            {t(
-              'update_payment_method_invoices_history',
-              'Update Payment Method / Invoices History'
-            )}
-          </Button>
-          {!subscription?.cancelAt && (
+          {can('portal') && (
+            <Button onClick={updatePayment}>
+              {t(
+                'update_payment_method_invoices_history',
+                'Update Payment Method / Invoices History'
+              )}
+            </Button>
+          )}
+          {!subscription?.cancelAt && configReady && (
             <Button
               className="bg-red-500"
               loading={loading}

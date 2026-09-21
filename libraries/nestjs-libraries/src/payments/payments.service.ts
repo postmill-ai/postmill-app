@@ -194,8 +194,15 @@ export class PaymentsService {
   async getConfig(org: Organization) {
     const deployment = this._config.publicConfig();
     const binding = await this.resolveOrgProvider(org);
+    // Only native providers expose their manage URL here (it is a constant store
+    // page). Web providers mint a portal session lazily behind GET /billing/portal
+    // — never a vendor round-trip per billing-page load.
     let manageUrl: string | null = null;
-    if (binding?.capability.capabilities.portal && binding.capability.manageUrl) {
+    if (
+      binding?.capability.capabilities.checkoutMode === 'native' &&
+      binding.capability.capabilities.portal &&
+      binding.capability.manageUrl
+    ) {
       try {
         manageUrl = await binding.capability.manageUrl(
           binding.customerRef,
@@ -383,13 +390,14 @@ export class PaymentsService {
     const org = await this._org(organizationId);
     const binding = await this._bind(org);
     const customerRef = await this._ensureCustomer(org, binding);
+    const identifier = makeId(10);
     const result = await this._require(binding, 'changePlan')({
       customerRef: customerRef!,
       currentTier,
       plan: this._plan(tier),
       period: (current?.period as PaymentsPeriod) || 'MONTHLY',
       direction: 'downgrade',
-      identifier: makeId(10),
+      identifier,
       userId,
       metadata: {},
     });
@@ -397,7 +405,7 @@ export class PaymentsService {
       await this._subscriptionService.setPendingTier(organizationId, result.tier);
       return { pendingTier: result.tier };
     }
-    return this._planChangeResponse(result, makeId(10));
+    return this._planChangeResponse(result, identifier);
   }
 
   async prorate(organizationId: string, body: BillingSubscribeDto) {
@@ -426,7 +434,7 @@ export class PaymentsService {
     const result = await this._require(binding, 'setCancelAtPeriodEnd')(customerRef!, 'toggle');
     if (result.canceledNow) {
       // The vendor already tore it down (payment had failed) — drop our row too.
-      await this._subscriptionService.deleteSubscription(customerRef!);
+      await this._subscriptionService.deleteSubscription(customerRef!, binding.providerId);
       return { id, cancel_at: new Date() };
     }
     if (!binding.capability.capabilities.periodEndCancel) {
@@ -443,7 +451,7 @@ export class PaymentsService {
     const binding = await this._bind(org);
     const customerRef = this._requireCustomer(binding);
     await this._require(binding, 'cancelNow')(customerRef);
-    await this._subscriptionService.deleteSubscription(customerRef);
+    await this._subscriptionService.deleteSubscription(customerRef, binding.providerId);
     return { cancelled: true };
   }
 
@@ -589,7 +597,17 @@ export class PaymentsService {
     if (capability.capabilities.checkoutMode !== 'native' || !capability.verifyPurchase) {
       throw new PaymentsUnsupportedOperationError(providerId, 'verifyPurchase');
     }
-    const events = await capability.verifyPurchase({ orgId: org.id, payload });
+    let events: NormalizedPaymentEvent[];
+    try {
+      events = await capability.verifyPurchase({ orgId: org.id, payload });
+    } catch (err) {
+      // A receipt the store rejects is the client's problem (400) — never a 401,
+      // which the frontend treats as a dead session.
+      if (isWebhookVerificationError(err)) {
+        throw new BadRequestException((err as Error).message);
+      }
+      throw err;
+    }
     for (const event of events) {
       await this.applyEvent(providerId, event, capability);
     }
@@ -617,7 +635,13 @@ export class PaymentsService {
       if (isWebhookVerificationError(err)) {
         throw new UnauthorizedException((err as Error).message);
       }
-      throw new BadRequestException((err as Error)?.message ?? 'Malformed webhook');
+      // Not a forgery (adapters raise the verification error for those, including
+      // malformed bodies) — a vendor API hiccup while translating. 500 so the
+      // vendor redelivers instead of dropping the event.
+      throw new HttpException(
+        { statusCode: 500, message: (err as Error)?.message ?? 'Webhook processing failed' },
+        500
+      );
     }
 
     const ack = receipt.ackBody ?? { ok: true };
@@ -638,7 +662,11 @@ export class PaymentsService {
       await this._paymentEventRepository.record(receipt.eventId, receipt.eventType, providerId);
       return receipt.ackBody ?? result ?? ack;
     } catch (e) {
-      throw new HttpException(e as any, 500);
+      // Sanitized: the vendor only needs a retryable status, never our stack.
+      throw new HttpException(
+        { statusCode: 500, message: (e as Error)?.message ?? 'Webhook processing failed' },
+        500
+      );
     }
   }
 
@@ -651,6 +679,11 @@ export class PaymentsService {
       case 'subscription.activated':
       case 'subscription.updated': {
         if (!org) {
+          this._logger.warn(
+            `${providerId} ${event.type} for ref ${event.customerRef}${
+              event.orgIdHint ? ` (hint ${event.orgIdHint})` : ''
+            } resolved no organization — acknowledged without activation`
+          );
           return { ok: false };
         }
         const state = event.state;
@@ -701,7 +734,7 @@ export class PaymentsService {
       case 'payment.failed':
         return this._enterGracePeriod(providerId, cap, event.customerRef, event.providerSubscriptionRef);
       case 'subscription.canceled': {
-        await this._subscriptionService.deleteSubscription(event.customerRef);
+        await this._subscriptionService.deleteSubscription(event.customerRef, providerId);
         if (org) {
           await this._auditSubscriptionChanged(org.id, 'deleted');
         }
@@ -716,14 +749,14 @@ export class PaymentsService {
           await this._paymentEventRepository.setGracePeriod(event.customerRef, providerId, null);
         }
         const dbSub = org ? await this._subscriptionService.getSubscription(org.id) : null;
-        if (event.userIdHint) {
+        // Conversion tracking wants the real charge; an adapter that cannot
+        // normalize the amount (Google RTDN) skips it rather than attributing the
+        // list price to a prorated or discounted payment.
+        if (event.userIdHint && typeof event.amountCents === 'number') {
           const user = await this._userService.getUserById(event.userIdHint);
           if (user && user.ip && user.agent) {
-            const amountCents =
-              event.amountCents ??
-              (dbSub ? this._planAmount(dbSub.subscriptionTier, dbSub.period as PaymentsPeriod) : 0);
             this._trackService.track(event.trackingRef || '', user.ip, user.agent, TrackEnum.Purchase, {
-              value: amountCents / 100,
+              value: event.amountCents / 100,
             });
           }
         }
@@ -747,29 +780,50 @@ export class PaymentsService {
     }
   }
 
-  private _planAmount(tier: BillingTier, period: PaymentsPeriod): number {
-    return period === 'YEARLY' ? pricing[tier].year_price * 100 : pricing[tier].month_price * 100;
-  }
-
   /**
-   * Which org a vendor event belongs to. By customer ref first; else by the org
-   * id the vendor echoed back (store purchases, PayPal's first activation,
-   * Google token rotation) — which then binds the org to this ref. A hint can
-   * never steal an org that another provider is actively billing.
+   * Which org a vendor event belongs to. By customer ref (scoped to the
+   * provider) first. Otherwise, and only for `subscription.activated`, by the
+   * org id the vendor echoed back — which binds the org to this ref. A hint can
+   * never re-point an org that is already bound (to any provider, with or
+   * without a subscription row yet), except when the vendor itself asserts the
+   * rotation (`previousCustomerRef` = the org's current ref). Org ids are not
+   * secret, so anything looser lets a stranger's cheap purchase re-bind and
+   * downgrade a paying org.
    */
   private async _resolveEventOrg(providerId: string, event: NormalizedPaymentEvent) {
     const byRef = await this._organizationService.getOrgByCustomerId(event.customerRef, providerId);
-    if (byRef || !event.orgIdHint) {
+    if (byRef || !event.orgIdHint || event.type !== 'subscription.activated') {
       return byRef;
     }
     const hinted = await this._organizationService.getOrgById(event.orgIdHint);
     if (!hinted) {
       return null;
     }
+    const boundElsewhere =
+      hinted.paymentProvider &&
+      hinted.paymentProvider !== providerId &&
+      hinted.paymentProvider !== MANUAL_PROVIDER;
     const subscription = await this._subscriptionService.getSubscription(hinted.id);
-    if (subscription && subscription.provider !== providerId && subscription.provider !== MANUAL_PROVIDER) {
+    const billedElsewhere =
+      subscription && subscription.provider !== providerId && subscription.provider !== MANUAL_PROVIDER;
+    if (boundElsewhere || billedElsewhere) {
       this._logger.warn(
-        `Ignoring ${providerId} event for org ${hinted.id}: it is billed by ${subscription.provider}`
+        `Ignoring ${providerId} activation for org ${hinted.id}: it is bound to ${
+          subscription?.provider ?? hinted.paymentProvider
+        }`
+      );
+      return null;
+    }
+    // A same-provider re-bind is refused only while the org has a LIVE
+    // subscription on this provider (the theft this guards against needs an
+    // actively billed victim). A lapsed org keeps a stale `paymentId` after
+    // teardown, and its ordinary resubscribe (a fresh Google token with no
+    // linkedPurchaseToken, a new Apple ID) must re-bind freely.
+    const livelyBoundHere =
+      subscription?.provider === providerId && !!hinted.paymentId && hinted.paymentId !== event.customerRef;
+    if (livelyBoundHere && hinted.paymentId !== event.previousCustomerRef) {
+      this._logger.warn(
+        `Ignoring ${providerId} activation for org ${hinted.id}: it has a live ${providerId} subscription on another ref and the event does not supersede it`
       );
       return null;
     }
@@ -865,36 +919,40 @@ export class PaymentsService {
    * Tear down subscriptions whose scheduled end has passed. Required for
    * providers without period-end cancel (PayPal cancels at the vendor at once
    * and we keep the row until `cancelAt`); a missed-webhook safety net for the
-   * rest. Stripe rows are only logged for now — its `subscription.deleted`
-   * webhook is the authoritative teardown.
+   * rest. Stripe rows are excluded at the query: Stripe keeps a cancelled
+   * subscription alive to period end and its `subscription.deleted` webhook is
+   * the authoritative teardown.
    */
   async expireCanceledSubscriptions(now = new Date()) {
     const cutoff = new Date(now.getTime() - 24 * 60 * 60 * 1000);
     const expired = await this._subscriptionService.findExpiredCancellations(cutoff);
     let torn = 0;
+    let failed = 0;
     for (const sub of expired) {
       const org = sub.organization;
       if (!org?.paymentId || sub.provider === MANUAL_PROVIDER) {
         continue;
       }
-      if (sub.provider === 'stripe') {
-        this._logger.warn(
-          `Subscription ${sub.id} (stripe) has cancelAt ${sub.cancelAt?.toISOString()} in the past but no teardown webhook arrived`
+      // One row's failure (a provider whose keys were removed, a vendor outage)
+      // must not stop every later row from being torn down.
+      try {
+        const eventId = `expiry:${sub.id}:${sub.cancelAt?.getTime()}`;
+        if (await this._paymentEventRepository.exists(eventId)) {
+          continue;
+        }
+        await this.applyEvent(sub.provider, {
+          type: 'subscription.canceled',
+          customerRef: org.paymentId,
+        });
+        await this._paymentEventRepository.record(eventId, 'subscription.expired', sub.provider);
+        torn += 1;
+      } catch (err) {
+        failed += 1;
+        this._logger.error(
+          `Expiry teardown failed for subscription ${sub.id} (${sub.provider}): ${(err as Error)?.message ?? err}`
         );
-        continue;
       }
-      const eventId = `expiry:${sub.id}:${sub.cancelAt?.getTime()}`;
-      if (await this._paymentEventRepository.exists(eventId)) {
-        continue;
-      }
-      await this.applyEvent(sub.provider, {
-        type: 'subscription.canceled',
-        customerRef: org.paymentId,
-        orgIdHint: org.id,
-      });
-      await this._paymentEventRepository.record(eventId, 'subscription.expired', sub.provider);
-      torn += 1;
     }
-    return { checked: expired.length, tornDown: torn };
+    return { checked: expired.length, tornDown: torn, failed };
   }
 }

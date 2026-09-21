@@ -10679,7 +10679,9 @@ components:
       properties:
         provider:
           type: string
-          enum: []
+          enum:
+            - apple
+            - google
         payload:
           type: object
       required:

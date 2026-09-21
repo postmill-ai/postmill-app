@@ -15,6 +15,7 @@ import {
 } from '@postmill-ai/nestjs-libraries/database/prisma/subscriptions/pricing';
 import { newDayjs } from '@postmill-ai/frontend/components/layout/set.timezone';
 import Link from 'next/link';
+import { useBillingConfig } from '@postmill-ai/frontend/components/billing/use-billing-config';
 import {
   refreshSubscriptionData,
   useSubscription,
@@ -283,6 +284,18 @@ export const SubscriptionPanel: React.FC = () => {
 
   const { data: subscription, isLoading: subLoading, error: subError } = useSubscription();
   const { data: usage, isLoading: usageLoading, error: usageError } = useSubscriptionUsage();
+  // Provider capabilities gate the affordances (a store-billed org manages
+  // everything in the store; PayPal has no add-ons and no resume).
+  const { data: billingConfig, error: billingConfigError } = useBillingConfig();
+  const capabilities = billingConfig?.org?.capabilities;
+  const managedByStore = billingConfig?.org?.checkoutMode === 'native';
+  const manageUrl = billingConfig?.org?.manageUrl ?? null;
+  // Hold provider-specific sections until the config resolves (no flash of
+  // Stripe-only affordances for a store-billed org); show everything only if
+  // the config endpoint itself fails.
+  const configReady = !!billingConfig || !!billingConfigError;
+  const can = (flag: keyof NonNullable<typeof capabilities>) =>
+    configReady && (capabilities ? capabilities[flag] === true : !!billingConfigError);
 
   const [selectedTier, setSelectedTier] = useState<SubscriptionTier | null>(null);
   const [changeLoading, setChangeLoading] = useState(false);
@@ -527,17 +540,34 @@ export const SubscriptionPanel: React.FC = () => {
               </div>
             )}
           </div>
-          <Button
-            loading={cancelLoading}
-            secondary={!subscription?.cancelAt}
-            danger={!subscription?.cancelAt}
-            onClick={handleCancel}
-          >
-            {subscription?.cancelAt
-              ? t('resume_subscription', 'Resume subscription')
-              : t('cancel_subscription_1', 'Cancel subscription')}
-          </Button>
+          {managedByStore ? (
+            manageUrl ? (
+              <a href={manageUrl} target="_blank" rel="noreferrer">
+                <Button secondary>{t('billing_manage_in_store', 'Manage subscription')}</Button>
+              </a>
+            ) : null
+          ) : !configReady ? null : subscription?.cancelAt && !can('periodEndCancel') ? (
+            <span className="text-[13px] text-newTableText">
+              {t('billing_resubscribe_after_end', 'You can subscribe again once the current period ends.')}
+            </span>
+          ) : (
+            <Button
+              loading={cancelLoading}
+              secondary={!subscription?.cancelAt}
+              danger={!subscription?.cancelAt}
+              onClick={handleCancel}
+            >
+              {subscription?.cancelAt
+                ? t('resume_subscription', 'Resume subscription')
+                : t('cancel_subscription_1', 'Cancel subscription')}
+            </Button>
+          )}
         </div>
+        {managedByStore && (
+          <div className="text-[13px] text-newTableText">
+            {t('billing_managed_by_store', 'Your subscription is managed through the app store on your phone.')}
+          </div>
+        )}
 
         {subscription?.pendingTier && (
           <div className="rounded-[4px] bg-amber-500/10 border border-amber-500/20 p-[12px] flex flex-col sm:flex-row sm:items-center sm:justify-between gap-[12px]">
@@ -626,7 +656,8 @@ export const SubscriptionPanel: React.FC = () => {
         )}
       </div>
 
-      {/* Change plan */}
+      {/* Change plan (the store owns plan changes for native providers; PayPal revises through its own approval flow) */}
+      {can('planChange') && !managedByStore && (
       <div className="bg-newBgColorInner border border-newTableBorder rounded-[4px] p-[20px] flex flex-col gap-[16px]">
         <h3 className="text-[16px] font-semibold text-textColor">
           {t('change_plan', 'Change plan')}
@@ -653,9 +684,10 @@ export const SubscriptionPanel: React.FC = () => {
           </div>
         )}
       </div>
+      )}
 
-      {/* Add-ons (hidden for lifetime orgs — no base Stripe subscription to ride on) */}
-      {!subscription?.isLifetime && (
+      {/* Add-ons (hidden for lifetime orgs — no base vendor subscription to ride on — and for providers without them) */}
+      {!subscription?.isLifetime && can('addons') && (
         <div className="bg-newBgColorInner border border-newTableBorder rounded-[4px] p-[20px] flex flex-col gap-[16px]">
           <h3 className="text-[16px] font-semibold text-textColor">
             {t('addons', 'Add-ons')}

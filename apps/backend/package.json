@@ -112,6 +112,7 @@
     "@postmill-ai/provider-openrouter": "workspace:*",
     "@postmill-ai/provider-odysee": "workspace:*",
     "@postmill-ai/provider-owly": "workspace:*",
+    "@postmill-ai/provider-paypal": "workspace:*",
     "@postmill-ai/provider-peertube": "workspace:*",
     "@postmill-ai/provider-perplexity": "workspace:*",
     "@postmill-ai/provider-pia": "workspace:*",

@@ -6,8 +6,10 @@
   "types": "src/index.ts",
   "dependencies": {
     "@ai-sdk/google": "^2.0.0",
+    "@langchain/core": "^1.1.48",
     "@postmill-ai/provider-kernel": "workspace:*",
-    "@langchain/core": "^1.1.48"
+    "google-auth-library": "^9.11.0",
+    "googleapis": "^137.1.0"
   },
   "license": "AGPL-3.0",
   "engines": {

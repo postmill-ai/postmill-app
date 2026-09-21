@@ -643,6 +643,12 @@
       "@postmill-ai/provider-owly/*": [
         "libraries/providers/owly/src/*"
       ],
+      "@postmill-ai/provider-paypal": [
+        "libraries/providers/paypal/src"
+      ],
+      "@postmill-ai/provider-paypal/*": [
+        "libraries/providers/paypal/src/*"
+      ],
       "@postmill-ai/provider-peertube": [
         "libraries/providers/peertube/src"
       ],

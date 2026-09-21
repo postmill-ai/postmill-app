@@ -178,7 +178,11 @@ export const LayoutComponent = ({ children }: { children: ReactNode }) => {
           <ToolTip />
           <Toaster />
           <TrialTracker />
-          <CheckPayment check={searchParams.get('check') || ''} mutate={mutate}>
+          <CheckPayment
+            check={searchParams.get('check') || ''}
+            providerRef={searchParams.get('subscription_id') || searchParams.get('ref') || undefined}
+            mutate={mutate}
+          >
             <ShowLinkedinCompany />
             <MediaSettingsLayout />
             <ShowPostSelector />

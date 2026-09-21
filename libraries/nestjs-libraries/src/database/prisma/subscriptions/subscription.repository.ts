@@ -57,12 +57,16 @@ export class SubscriptionRepository {
     });
   }
 
-  deleteSubscriptionByCustomerId(customerId: string) {
+  // `provider` scopes every customer-ref lookup: paymentId is a cross-provider
+  // namespace, so a ref string alone could match another provider's org.
+  private _customerWhere(customerId: string, provider?: string) {
+    return { paymentId: customerId, ...(provider ? { paymentProvider: provider } : {}) };
+  }
+
+  deleteSubscriptionByCustomerId(customerId: string, provider?: string) {
     return this._subscription.model.subscription.deleteMany({
       where: {
-        organization: {
-          paymentId: customerId,
-        },
+        organization: this._customerWhere(customerId, provider),
       },
     });
   }
@@ -87,21 +91,17 @@ export class SubscriptionRepository {
     });
   }
 
-  async getSubscriptionByCustomerId(customerId: string) {
+  async getSubscriptionByCustomerId(customerId: string, provider?: string) {
     return this._subscription.model.subscription.findFirst({
       where: {
-        organization: {
-          paymentId: customerId,
-        },
+        organization: this._customerWhere(customerId, provider),
       },
     });
   }
 
-  async getOrganizationByCustomerId(customerId: string) {
+  async getOrganizationByCustomerId(customerId: string, provider?: string) {
     return this._organization.model.organization.findFirst({
-      where: {
-        paymentId: customerId,
-      },
+      where: this._customerWhere(customerId, provider),
     });
   }
 
@@ -118,7 +118,7 @@ export class SubscriptionRepository {
     provider = 'stripe'
   ) {
     const findOrg =
-      org || (await this.getOrganizationByCustomerId(customerId))!;
+      org || (await this.getOrganizationByCustomerId(customerId, provider))!;
 
     if (!findOrg) {
       return;
@@ -129,9 +129,7 @@ export class SubscriptionRepository {
         organizationId: findOrg.id,
         ...(!code
           ? {
-              organization: {
-                paymentId: customerId,
-              },
+              organization: this._customerWhere(customerId, provider),
             }
           : {}),
       },
@@ -286,10 +284,20 @@ export class SubscriptionRepository {
 
   // Rows whose scheduled end has passed — the expiry cron tears these down for
   // providers that cannot keep a cancelled subscription alive until period end.
-  findExpiredCancellations(before: Date) {
+  // Only providers without period-end cancel keep a row past `cancelAt`; Stripe
+  // (its own teardown webhook) and manual grants are excluded so they can never
+  // crowd out rows that genuinely need the cron.
+  findExpiredCancellations(before: Date, limit = 200) {
     return this._subscription.model.subscription.findMany({
-      where: { cancelAt: { lt: before }, deletedAt: null, isLifetime: false },
+      where: {
+        cancelAt: { lt: before },
+        deletedAt: null,
+        isLifetime: false,
+        provider: { notIn: ['stripe', 'manual'] },
+      },
       include: { organization: { select: { id: true, paymentId: true, paymentProvider: true } } },
+      orderBy: { cancelAt: 'asc' },
+      take: limit,
     });
   }
 
