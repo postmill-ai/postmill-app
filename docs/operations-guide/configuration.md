@@ -317,8 +317,7 @@ invalid request, outage — the API answers **502** with
 `{ error: "ProviderUpstreamError", provider, providerName, kind, upstreamStatus, message, settingsUrl }`
 and the UI shows the provider's name and message ("Google AI Studio reports the account's quota or
 billing limit was reached (HTTP 429): …"). `kind` is one of `auth`, `quota`, `rate_limit`,
-`invalid_request`, `timeout`, `unavailable`, `unknown`. The backend logs one `provider upstream error
-<domain>/<provider> <kind> HTTP <status>` warning per occurrence. Sentry receives **only**
+`invalid_request`, `timeout`, `unavailable`, `unknown`. The backend logs one `provider upstream error <domain>/<provider> <kind> HTTP <status>` warning per occurrence. Sentry receives **only**
 `unavailable` / `timeout` / `unknown` kinds, as warnings tagged `provider` + `kind` (provider outages
 are worth seeing; a user's expired key or exhausted plan is not an application error). A 500 from
 the API therefore always means a Postmill-side failure.

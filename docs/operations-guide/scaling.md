@@ -22,6 +22,10 @@ docker build -f Dockerfile -t postmill-app .
 docker run -p 4007:5000 --env-file .env postmill-app
 ```
 
+Building is only necessary if you are modifying Postmill. For a stock deployment, pull the published
+image from GHCR or Docker Hub instead — see
+[Container images](./docker.md#container-images).
+
 **All-in-one process model.** The image runs three processes under
 [`docker/entrypoint.sh`](https://github.com/postmill-ai/postmill-app/blob/main/docker/entrypoint.sh):
 nginx on container port **5000** (the only published port), the NestJS backend on 127.0.0.1:**3000**,

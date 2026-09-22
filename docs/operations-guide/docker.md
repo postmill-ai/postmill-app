@@ -22,13 +22,36 @@ docker compose up -d
 
 The application will be available at `http://localhost:4007`.
 
+## Container images
+
+Postmill publishes the same all-in-one image to two registries. Both are official; pull from
+whichever suits your environment.
+
+| Registry | Image | Notes |
+|---|---|---|
+| GitHub Container Registry | `ghcr.io/postmill-ai/postmill-app` | Used by the shipped `docker-compose.yaml`. No anonymous pull rate limit |
+| Docker Hub | `postmillai/postmill-app` | The same image. Anonymous pulls are subject to Docker Hub's rate limits |
+
+```bash
+docker pull ghcr.io/postmill-ai/postmill-app:v1.0.0   # GitHub Container Registry
+docker pull postmillai/postmill-app:v1.0.0            # Docker Hub
+```
+
+Every release is published to both as `:vX.Y.Z` and `:latest`, built for `linux/amd64` only.
+
+::: tip Pinning by digest
+The two registries serve identical layers, but the top-level manifest digest differs between them
+(the Docker Hub copy is wrapped in a single-platform image index). Pin by version tag, or take the
+digest from the registry you actually pull from.
+:::
+
 ## Service inventory
 
 ### Application stack (`postmill-network`)
 
 | Service              | Image                                   | Port            | Purpose |
 |----------------------|-----------------------------------------|-----------------|---------|
-| `postmill`           | `ghcr.io/postmill-ai/postmill-app:latest`  | `4007:5000`     | All-in-one app: nginx on :5000 routes `/api/*` → NestJS backend (:3000) and everything else → Next.js frontend (:4200); backend and frontend are internal-only |
+| `postmill`           | `ghcr.io/postmill-ai/postmill-app:latest` (or `postmillai/postmill-app:latest` — see [Container images](#container-images))  | `4007:5000`     | All-in-one app: nginx on :5000 routes `/api/*` → NestJS backend (:3000) and everything else → Next.js frontend (:4200); backend and frontend are internal-only |
 | `postmill-postgres`  | `postgres:17-alpine`                    | —               | Application database |
 | `spotlight`          | `ghcr.io/getsentry/spotlight:latest`    | `8969:8969`     | Sentry debug proxy (dev/monitoring) |
 
@@ -65,7 +88,8 @@ API_LIMIT: 600
 | `postmill-uploads`   | `/uploads/`               | Uploaded media (always local) |
 
 The `:latest` tag shown above is suitable for quick-start only. In production, pin a specific
-version tag (for example, `ghcr.io/postmill-ai/postmill-app:v1.0.0`) to get a known rollback target.
+version tag (for example, `ghcr.io/postmill-ai/postmill-app:v1.0.0`, or `postmillai/postmill-app:v1.0.0`
+on Docker Hub) to get a known rollback target.
 
 ## Background jobs
 

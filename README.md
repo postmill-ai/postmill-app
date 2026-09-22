@@ -21,7 +21,7 @@
 
 ---
 
-# Postmill
+# Postmill AI
 
 **Open-source, AI-native social media management and scheduling.**
 
@@ -75,7 +75,14 @@ docker compose -f docker/docker-compose.dev.yaml up -d        # postgres + redis
 pnpm run dev:minimal                                   # backend + frontend
 ```
 
-The frontend runs on port `4200`. That's the development stack; for production, use the published Docker image with the root [`docker-compose.yaml`](./docker-compose.yaml). Full setup, configuration reference, and deployment guide: [documentation](https://docs.postmill.ai).
+The frontend runs on port `4200`. That's the development stack; for production, use the published Docker image with the root [`docker-compose.yaml`](./docker-compose.yaml):
+
+```bash
+docker pull postmillai/postmill-app                    # Docker Hub
+docker pull ghcr.io/postmill-ai/postmill-app           # GitHub Container Registry (same image)
+```
+
+Full setup, configuration reference, and deployment guide: [documentation](https://docs.postmill.ai).
 
 ## 🔌 Channel setup
 
@@ -153,7 +160,7 @@ The full UI — composer, settings, media tools, analytics, and auth — ships i
 
 ## 🔒 Self-hosted & security-hardened
 
-Own your whole stack — posts, analytics, media, and provider credentials stay on infrastructure you control, deployed from the published Docker image and Compose setup.
+Own your whole stack — posts, analytics, media, and provider credentials stay on infrastructure you control, deployed from the published Docker image (`postmillai/postmill-app`, mirrored at `ghcr.io/postmill-ai/postmill-app`) and Compose setup.
 
 Security runs through the application: secrets are encrypted at rest with AES-256-GCM, data access is scoped to each organization, and requests to user-supplied URLs are SSRF-checked across DNS lookups and redirects. Cookie-authenticated changes require CSRF protection, and production security headers, a Content Security Policy, API rate limits, and strict request validation add further safeguards. Bring your own object storage (S3 / R2 / Backblaze B2 / IDrive), swap in pluggable email and short-link providers, and optionally route outbound posting through per-channel VPN egress.
 

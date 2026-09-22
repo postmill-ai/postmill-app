@@ -32,10 +32,12 @@ docker exec postmill-postgres pg_dump -U postmill-user postmill-db-local > pre_u
 services:
   postmill:
     image: ghcr.io/postmill-ai/postmill-app:v1.0.0  # pin a specific tag, not :latest
+    # image: postmillai/postmill-app:v1.0.0         # the same image on Docker Hub
 ```
 
 Pinning specific tags gives you a known rollback target. Using `:latest` means every restart may
-pull an untested version.
+pull an untested version. Both registries carry the same release — see
+[Container images](./docker.md#container-images).
 
 ### 4. Redeploy
 
