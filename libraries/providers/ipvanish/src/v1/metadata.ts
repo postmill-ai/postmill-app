@@ -8,9 +8,7 @@ export const metadata: ProviderMetadata = {
   "id": "ipvanish",
   "displayName": "ipvanish",
   "kind": "action",
-  "domains": [
-    "media"
-  ],
+  "domains": [],
   "hasModelList": false,
   "mediaCategories": []
 };

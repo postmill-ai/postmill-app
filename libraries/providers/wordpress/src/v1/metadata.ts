@@ -8,9 +8,7 @@ export const metadata: ProviderMetadata = {
   "id": "wordpress",
   "displayName": "wordpress",
   "kind": "action",
-  "domains": [
-    "media"
-  ],
+  "domains": [],
   "hasModelList": false,
   "mediaCategories": []
 };

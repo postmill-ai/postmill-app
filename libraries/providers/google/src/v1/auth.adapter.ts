@@ -6,7 +6,7 @@ import {
 } from '@postmill-ai/provider-kernel';
 import { google } from 'googleapis';
 
-import { metadata as providerMetadata } from './metadata';
+import { metadata as providerMetadata } from './auth.metadata';
 
 // S-17 / known proxy gap: the googleapis SDK creates its own Gaxios/OAuth2 HTTP
 // clients and does not expose a hook that accepts an undici Dispatcher. The

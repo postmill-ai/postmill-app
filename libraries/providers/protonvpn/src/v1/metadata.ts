@@ -8,9 +8,7 @@ export const metadata: ProviderMetadata = {
   "id": "protonvpn",
   "displayName": "protonvpn",
   "kind": "action",
-  "domains": [
-    "media"
-  ],
+  "domains": [],
   "hasModelList": false,
   "mediaCategories": []
 };

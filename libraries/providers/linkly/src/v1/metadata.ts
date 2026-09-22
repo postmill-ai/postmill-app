@@ -8,9 +8,7 @@ export const metadata: ProviderMetadata = {
   "id": "linkly",
   "displayName": "linkly",
   "kind": "action",
-  "domains": [
-    "media"
-  ],
+  "domains": [],
   "hasModelList": false,
   "mediaCategories": []
 };

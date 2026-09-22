@@ -8,9 +8,7 @@ export const metadata: ProviderMetadata = {
   "id": "tinyurl",
   "displayName": "tinyurl",
   "kind": "action",
-  "domains": [
-    "media"
-  ],
+  "domains": [],
   "hasModelList": false,
   "mediaCategories": []
 };

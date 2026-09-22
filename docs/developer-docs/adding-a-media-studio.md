@@ -178,7 +178,7 @@ export interface ProviderMetadata {
   id: string;
   displayName: string;
   kind: 'direct' | 'hub' | 'action';
-  domains: Array<'ai' | 'media'>;
+  domains: Array<'ai' | 'media' | 'payments'>;
   mediaCategories?: string[];   // e.g. 'text-to-image', 'text-to-video'
   mediaModels?: Record<string, MediaModel[]>; // static fallback catalog
   hasModelList: boolean;

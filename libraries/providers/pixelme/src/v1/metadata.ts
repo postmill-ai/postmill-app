@@ -8,9 +8,7 @@ export const metadata: ProviderMetadata = {
   "id": "pixelme",
   "displayName": "pixelme",
   "kind": "action",
-  "domains": [
-    "media"
-  ],
+  "domains": [],
   "hasModelList": false,
   "mediaCategories": []
 };

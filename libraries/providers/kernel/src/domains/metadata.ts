@@ -57,8 +57,11 @@ export interface ProviderMetadata {
   kind: 'direct' | 'hub' | 'action';
 
   /**
-   * Which default surfaces this provider may serve. `payments` modules declare
-   * exactly `['payments']` — they never take part in AI/media default resolution.
+   * Which default surfaces this module may serve: `ai` and/or `media` for
+   * model providers, exactly `['payments']` for payment providers, and `[]`
+   * for every module that serves no default surface (social, storage,
+   * shortlink, vpn, email, auth, comms, contentpack). The kernel metadata spec
+   * enforces this per module; the old `['media']` placeholder is not allowed.
    */
   domains: Array<'ai' | 'media' | 'payments'>;
 

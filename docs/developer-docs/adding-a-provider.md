@@ -255,12 +255,12 @@ export const metadata: ProviderMetadata = {
   id: 'yourprovider',
   displayName: 'Your Provider',
   kind: 'action',
-  domains: ['media'],
+  domains: [],
   hasModelList: false,
 };
 ```
 
-For social providers `kind` is usually `'action'` and `domains` is `['media']`.
+For social providers `kind` is `'action'` and `domains` is `[]` — only AI/media/payments modules declare a default surface, and a kernel spec enforces it.
 
 ## Step 5: Register in the provider capabilities matrix
 

@@ -8,9 +8,7 @@ export const metadata: ProviderMetadata = {
   "id": "purevpn",
   "displayName": "purevpn",
   "kind": "action",
-  "domains": [
-    "media"
-  ],
+  "domains": [],
   "hasModelList": false,
   "mediaCategories": []
 };

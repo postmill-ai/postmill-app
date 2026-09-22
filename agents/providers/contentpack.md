@@ -40,7 +40,7 @@ Each version exports a `ProviderModule` (`libraries/providers/kernel/src/module.
 
 ```ts
 export const myPackModule: ProviderModule<any, any> = {
-  metadata: providerMetadata,           // src/v1/metadata.ts — content packs use domains: ["media"]
+  metadata: providerMetadata,           // src/v1/metadata.ts — content packs declare domains: []
   manifest: {
     domain: 'contentpack',              // single word; NOT 'content-pack'
     providerId: 'mypack',
@@ -54,7 +54,7 @@ export const myPackModule: ProviderModule<any, any> = {
 };
 ```
 
-Note the two domain spellings: `manifest.domain` is `'contentpack'` (kernel identity domain, used by the settings catalog), while `metadata.domains` is `["media"]` (verified for both envato and adobe-stock).
+Note the two domain spellings: `manifest.domain` is `'contentpack'` (kernel identity domain, used by the settings catalog), while `metadata.domains` is `[]` — content packs serve no AI/media default surface (a kernel spec enforces it).
 
 ## HTTP, credentials, errors
 
@@ -107,7 +107,7 @@ Each pack ships `src/v1/contentpack.int-spec.ts` (reference: `libraries/provider
 ## Checklist
 
 - [ ] 1. Create `libraries/providers/<id>/` package (`package.json`, `src/index.ts` default-exporting the modules array).
-- [ ] 2. Write `src/v1/metadata.ts` (`domains: ["media"]`) and `src/v1/contentpack.adapter.ts` implementing `ContentPackCapability` with only the capabilities the pack truly serves.
+- [ ] 2. Write `src/v1/metadata.ts` (`domains: []`) and `src/v1/contentpack.adapter.ts` implementing `ContentPackCapability` with only the capabilities the pack truly serves.
 - [ ] 3. Export `myPackModule` from `src/v1/index.ts`: `manifest.domain: 'contentpack'`, `credentialFields`, `capabilities` matching the class; `create` reads `ctx.credentials` and injects `ctx.fetch`.
 - [ ] 4. Route every outbound request through the injected `SafeFetchPort`; throw `ContentPackDailyCapError` on 429.
 - [ ] 5. Add `src/v1/contentpack.int-spec.ts` using `makeCtx`/`res` from `@postmill-ai/provider-kernel/testing/media-int-helpers`, with a file-header API description and `// UNVERIFIED vs live key:` notes; add `contentpack.adapter.spec.ts` for mapping edge cases.

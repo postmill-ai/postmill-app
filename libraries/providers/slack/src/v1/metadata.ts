@@ -8,9 +8,7 @@ export const metadata: ProviderMetadata = {
   "id": "slack",
   "displayName": "slack",
   "kind": "action",
-  "domains": [
-    "media"
-  ],
+  "domains": [],
   "hasModelList": false,
   "mediaCategories": []
 };

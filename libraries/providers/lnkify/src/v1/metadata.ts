@@ -8,9 +8,7 @@ export const metadata: ProviderMetadata = {
   "id": "lnkify",
   "displayName": "Lnkify",
   "kind": "action",
-  "domains": [
-    "media"
-  ],
+  "domains": [],
   "hasModelList": false,
   "mediaCategories": []
 };

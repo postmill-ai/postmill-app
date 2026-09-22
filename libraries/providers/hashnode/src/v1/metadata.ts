@@ -8,9 +8,7 @@ export const metadata: ProviderMetadata = {
   "id": "hashnode",
   "displayName": "hashnode",
   "kind": "action",
-  "domains": [
-    "media"
-  ],
+  "domains": [],
   "hasModelList": false,
   "mediaCategories": []
 };

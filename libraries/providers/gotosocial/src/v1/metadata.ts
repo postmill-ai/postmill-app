@@ -8,9 +8,7 @@ export const metadata: ProviderMetadata = {
   "id": "gotosocial",
   "displayName": "gotosocial",
   "kind": "action",
-  "domains": [
-    "media"
-  ],
+  "domains": [],
   "hasModelList": false,
   "mediaCategories": []
 };

@@ -8,9 +8,7 @@ export const metadata: ProviderMetadata = {
   "id": "cyberghost",
   "displayName": "cyberghost",
   "kind": "action",
-  "domains": [
-    "media"
-  ],
+  "domains": [],
   "hasModelList": false,
   "mediaCategories": []
 };

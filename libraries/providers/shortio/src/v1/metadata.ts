@@ -8,9 +8,7 @@ export const metadata: ProviderMetadata = {
   "id": "shortio",
   "displayName": "shortio",
   "kind": "action",
-  "domains": [
-    "media"
-  ],
+  "domains": [],
   "hasModelList": false,
   "mediaCategories": []
 };

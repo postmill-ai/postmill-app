@@ -8,9 +8,7 @@ export const metadata: ProviderMetadata = {
   "id": "tunnelbear",
   "displayName": "tunnelbear",
   "kind": "action",
-  "domains": [
-    "media"
-  ],
+  "domains": [],
   "hasModelList": false,
   "mediaCategories": []
 };

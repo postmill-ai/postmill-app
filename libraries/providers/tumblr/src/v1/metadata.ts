@@ -8,9 +8,7 @@ export const metadata: ProviderMetadata = {
   "id": "tumblr",
   "displayName": "tumblr",
   "kind": "action",
-  "domains": [
-    "media"
-  ],
+  "domains": [],
   "hasModelList": false,
   "mediaCategories": []
 };

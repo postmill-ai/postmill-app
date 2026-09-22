@@ -8,9 +8,7 @@ export const metadata: ProviderMetadata = {
   "id": "sharkey",
   "displayName": "sharkey",
   "kind": "action",
-  "domains": [
-    "media"
-  ],
+  "domains": [],
   "hasModelList": false,
   "mediaCategories": []
 };

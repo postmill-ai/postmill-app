@@ -16,7 +16,7 @@ import { languages } from '@postmill-ai/react-shared-libraries/translation/i18n.
  * `LANGUAGE_CODES` must stay in lockstep with the UI i18n `languages` list.
  *
  * Enumeration mirrors the generator: glob `libraries/providers/*\/src/v1/metadata.ts`
- * and keep `domains: ['media']`.
+ * and keep only entries whose `domains` includes 'media' (surface-less providers declare `[]`).
  *
  * Note: an EMPTY `fields` array is VALID (well-formed) — e.g. replicate's snapshot
  * was generated without an API token, so its model fields are intentionally empty.

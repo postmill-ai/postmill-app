@@ -35,7 +35,7 @@ settings UI lists.
    from `@postmill-ai/provider-kernel` (`libraries/providers/kernel/src/domains/storage-helpers.ts:386`);
    11 of 14 providers are this one file.
    - Set `metadata` on the returned module; `metadata.ts` uses `kind: 'action'`,
-     `domains: ['media']`, `id` = `type.toLowerCase()` (factory sets `manifest.providerId`
+     `domains: []`, `id` = `type.toLowerCase()` (factory sets `manifest.providerId`
      = `type.toLowerCase()` automatically).
 4. **Bespoke only when non-S3.** Hand-roll `StorageCapability` only for non-S3 protocols —
    existing exceptions: `local` (filesystem), `medialocker` (REST presign), `cloudflare-r2`

@@ -8,9 +8,7 @@ export const metadata: ProviderMetadata = {
   "id": "envato",
   "displayName": "envato",
   "kind": "action",
-  "domains": [
-    "media"
-  ],
+  "domains": [],
   "hasModelList": false,
   "mediaCategories": []
 };

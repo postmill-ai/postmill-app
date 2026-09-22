@@ -27,7 +27,7 @@ Wire a premium, per-org BYOK stock-media pack into the `contentpack` domain so i
 
 5. **Errors.** On upstream HTTP 429, throw `ContentPackDailyCapError` (exported from `@postmill-ai/provider-kernel`). `ProviderExceptionFilter` (`apps/backend/src/api/filters/provider-exception.filter.ts`) maps it to HTTP 402. All other failures: throw a plain `Error` with status + body — `StockMediaService.resolveSearch` degrades those to free stock; cap errors are rethrown, never degraded.
 
-6. **Module wiring** in `src/v1/index.ts`: `manifest.domain: 'contentpack'` (single word), `version: 'v1'`, `status: 'active'`, `credentialFields` (typically one `password` field), `capabilities` matching the class; `metadata.ts` uses `domains: ["media"]`. Keep `create()` network-free (conformance-tested).
+6. **Module wiring** in `src/v1/index.ts`: `manifest.domain: 'contentpack'` (single word), `version: 'v1'`, `status: 'active'`, `credentialFields` (typically one `password` field), `capabilities` matching the class; `metadata.ts` uses `domains: []`. Keep `create()` network-free (conformance-tested).
 
 7. **Persistence (no new schema).** Per-org BYOK config rows land in the existing `ContentPackConfig` Prisma model (unique `[organizationId, identifier, version]`, encrypted `credentials`); the org-wide active pack is the pointer `Organization.activeContentPackIdentifier` (null = free default). Resolution entry point: `OrgContentPackSettingsService.getActiveForCapability(orgId, capability)` in `libraries/nestjs-libraries/src/database/prisma/content-packs/org-content-pack-settings.service.ts`.
 
@@ -59,4 +59,4 @@ Then end-to-end: configure the pack at `/settings/content-packs`, make it Primar
 - **Building frontend UI** — the settings kit and the six stock browsers pick packs up automatically from the catalog; new frontend code is dead weight.
 - **Modeling free stock providers as packs** — Unsplash/Pexels/Pixabay/GIPHY/Jamendo/Iconify live outside versioning with no config row; premium packs are per-org BYOK only.
 - **Over-declaring `capabilities`** — anything listed must be genuinely served by `search`; undeclared capabilities are the supported fallback mechanism, not a gap.
-- **Wrong domain spelling** — `manifest.domain` is `'contentpack'` (not `'content-pack'`), while `metadata.domains` is `["media"]`; mixing them up breaks registration or catalog rendering.
+- **Wrong domain spelling** — `manifest.domain` is `'contentpack'` (not `'content-pack'`), while `metadata.domains` is `[]`; mixing them up breaks registration or catalog rendering.

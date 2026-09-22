@@ -8,9 +8,7 @@ export const metadata: ProviderMetadata = {
   "id": "replug",
   "displayName": "replug",
   "kind": "action",
-  "domains": [
-    "media"
-  ],
+  "domains": [],
   "hasModelList": false,
   "mediaCategories": []
 };

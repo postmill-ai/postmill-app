@@ -8,9 +8,7 @@ export const metadata: ProviderMetadata = {
   "id": "pinterest",
   "displayName": "pinterest",
   "kind": "action",
-  "domains": [
-    "media"
-  ],
+  "domains": [],
   "hasModelList": false,
   "mediaCategories": []
 };

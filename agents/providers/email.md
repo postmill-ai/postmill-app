@@ -100,7 +100,7 @@ export const resendEmailModule: ProviderModule<any, any> = {
 };
 ```
 
-The kernel registers by `manifest.domain`/`providerId`/`version`. Note: existing email providers all carry `"domains": ["media"]` in `metadata.ts` — a repo-wide quirk; copy it as-is, the catalog `metadata` is not what routes email resolution.
+The kernel registers by `manifest.domain`/`providerId`/`version`. Note: email providers declare `"domains": []` in `metadata.ts` (they serve no AI/media default surface; a kernel spec enforces it) — the catalog `metadata` is not what routes email resolution.
 
 ## Universal steps vs. overview.md
 

@@ -8,9 +8,7 @@ export const metadata: ProviderMetadata = {
   "id": "instagram",
   "displayName": "instagram",
   "kind": "action",
-  "domains": [
-    "media"
-  ],
+  "domains": [],
   "hasModelList": false,
   "mediaCategories": []
 };
