@@ -1,6 +1,6 @@
-# Postmill NodeJS SDK
+# Postmill AI NodeJS SDK
 
-This is the NodeJS SDK for [Postmill](https://postmill.ai).
+This is the NodeJS SDK for [Postmill AI](https://postmill.ai) - **Open-source, AI-native social media management and scheduling.**
 
 You can start by installing the package:
 
@@ -21,6 +21,7 @@ The second constructor argument is optional and defaults to `https://api.postmil
 ## Available methods
 
 ### Posts
+
 - `post(posts: CreatePostDto)` — Schedule a post to Postmill
 - `postList(filters: GetPostsDto)` — Get a page of posts (always returns `{ posts, cursor }`; `cursor` is `null` on the last page)
 - `deletePost(id: string)` — Delete a post by ID
@@ -30,6 +31,7 @@ The second constructor argument is optional and defaults to `https://api.postmil
 - `postMissingContent(id: string)` — Get missing content for a post
 
 ### Channels / integrations
+
 - `integrations()` — Get a list of connected channels
 - `connectChannel(integration: string, opts?: { refresh?: string; version?: string })` — Generate an OAuth URL to connect a channel. **An explicit provider version is required**: pass the integration as `"providerId@version"` (e.g. `"x@v1"`) or set `opts.version`; the SDK throws before any request otherwise.
 - `deleteChannel(id: string)` — Delete a connected channel
@@ -37,6 +39,7 @@ The second constructor argument is optional and defaults to `https://api.postmil
 - `isConnected()` — Check whether the organization has any connected channels
 
 ### Media
+
 - `upload(file: BlobPart | Buffer, extension: string)` — Upload a file to Postmill
 - `uploadFromUrl(url: string)` — Import a file from a public URL
 - `generateVideo(body: VideoDto)` — Start an async video generation job
@@ -45,6 +48,7 @@ The second constructor argument is optional and defaults to `https://api.postmil
 - `loadVoices(identifier: string)` — Load available voices for a video provider
 
 ### Analytics
+
 - `analyticsOverview({ from, to, integrations?, compare? })` — Get an analytics overview
 - `campaignAnalytics(id, { from?, to? })` — Get analytics for a campaign
 - `anomalies({ limit?, includeDismissed? })` — List anomaly alerts
@@ -56,6 +60,7 @@ The second constructor argument is optional and defaults to `https://api.postmil
 > scope.
 
 ### Utilities
+
 - `findSlot(integrationId?: string)` — Find the next free publishing slot
 - `notifications(page?: number)` — Get paginated notifications
 - `triggerIntegrationTool(id: string, body: TriggerIntegrationToolDto)` — Trigger a tool on an integration
