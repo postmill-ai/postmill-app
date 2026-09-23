@@ -17,7 +17,7 @@ const FEDERATION_SCOPES = ['profile', 'email', 'org'] as const;
 type FederationScope = (typeof FEDERATION_SCOPES)[number];
 
 const DEFAULT_TRUSTED_REDIRECT_URIS = [
-  'https://store.postmill.com/auth/callback',
+  'https://templates.postmill.ai/auth/callback',
 ];
 
 interface IdentityKeys {

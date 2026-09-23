@@ -86,7 +86,7 @@ curl -X POST https://instance.example.com/federation/token \
   -d '{
     "grant_type": "authorization_code",
     "code": "…",
-    "redirect_uri": "https://store.postmill.com/auth/callback",
+    "redirect_uri": "https://templates.postmill.ai/auth/callback",
     "code_verifier": "…"
   }'
 ```
@@ -112,7 +112,7 @@ hour.
 
 | Variable | Default | Purpose |
 |---|---|---|
-| `FEDERATION_TRUSTED_REDIRECT_URIS` | `https://store.postmill.com/auth/callback` | Comma-separated allow-list of redirect URIs codes may be sent to. Exact match. Add staging/dev store URLs here. |
+| `FEDERATION_TRUSTED_REDIRECT_URIS` | `https://templates.postmill.ai/auth/callback` | Comma-separated allow-list of redirect URIs codes may be sent to. Exact match. Add staging/dev store URLs here. |
 | `FEDERATION_ISSUER` | `BACKEND_URL` / `NEXT_PUBLIC_BACKEND_URL` | Explicit `iss` override (e.g. behind a path-rewriting proxy). |
 
 To rotate the signing key, delete the `InstanceIdentity` row — a fresh keypair is
