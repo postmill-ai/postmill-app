@@ -417,4 +417,43 @@ describe('PublicAuthMiddleware', () => {
     );
     expect(next).not.toHaveBeenCalled();
   });
+  // A Postmill ID (`posf_`) token is an IDENTITY assertion for the template
+  // store. It must never buy org API access. Today that holds for one reason
+  // only: `'posf_'.startsWith('pos_')` is false, because index 3 is `f` and not
+  // `_`. That is a load-bearing accident of the prefix spelling — rename either
+  // token and the federation credential silently becomes an org read token.
+  // These assertions exist so the rename fails here instead of in production.
+  describe('Postmill ID federation tokens are not org credentials', () => {
+    it('never routes a posf_ token to the OAuth resolver', async () => {
+      apiKeysService.findActiveByHash.mockResolvedValue(null);
+      const req = mockReq('posf_' + 'a'.repeat(40));
+      const res = mockRes();
+
+      await middleware.use(req, res, next);
+
+      expect(oauthService.getOrgByOAuthToken).not.toHaveBeenCalled();
+      expect(res.status).toHaveBeenCalledWith(HttpStatus.UNAUTHORIZED);
+      expect(res.json).toHaveBeenCalledWith({ msg: 'Invalid API key' });
+      expect(next).not.toHaveBeenCalled();
+      expect((req as any).org).toBeUndefined();
+    });
+
+    it('still routes a genuine pos_ OAuth token to the OAuth resolver', async () => {
+      // The negative above is only meaningful if the branch it avoids is live.
+      oauthService.getOrgByOAuthToken.mockResolvedValue(null);
+      const req = mockReq('pos_' + 'a'.repeat(40));
+      const res = mockRes();
+
+      await middleware.use(req, res, next);
+
+      expect(oauthService.getOrgByOAuthToken).toHaveBeenCalledTimes(1);
+      expect(res.json).toHaveBeenCalledWith({ msg: 'Invalid OAuth token' });
+    });
+
+    it('does not treat the posf_ prefix as an accepted OAuth prefix', async () => {
+      // The invariant stated directly, so a prefix change is caught even if the
+      // middleware is refactored out from under the two tests above.
+      expect('posf_'.startsWith('pos_')).toBe(false);
+    });
+  });
 });

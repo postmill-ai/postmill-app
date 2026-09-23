@@ -143,15 +143,21 @@ export class FederationRepository {
     });
   }
 
-  revoke(userId: string, grantId: string) {
-    return this._federationGrant.model.federationGrant.update({
-      where: {
-        id: grantId,
-        userId,
-      },
-      data: {
-        revokedAt: new Date(),
-      },
-    });
+  async revoke(userId: string, grantId: string) {
+    // updateMany so an unknown or foreign id yields count=0 (mapped to a 404
+    // by the service) instead of a Prisma P2025 surfacing as a 500.
+    const { count } = await this._federationGrant.model.federationGrant.updateMany(
+      {
+        where: {
+          id: grantId,
+          userId,
+          revokedAt: null,
+        },
+        data: {
+          revokedAt: new Date(),
+        },
+      }
+    );
+    return count;
   }
 }

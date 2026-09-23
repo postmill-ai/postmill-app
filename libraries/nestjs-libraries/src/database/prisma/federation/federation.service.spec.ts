@@ -49,6 +49,7 @@ describe('FederationService (Postmill ID)', () => {
 
   beforeEach(() => {
     process.env.BACKEND_URL = ISSUER;
+    process.env.FRONTEND_URL = 'https://app.example.com';
     process.env.FEDERATION_TRUSTED_REDIRECT_URIS = REDIRECT_URI;
     storedPrivateKeyPem = '';
     repository = {
@@ -73,6 +74,7 @@ describe('FederationService (Postmill ID)', () => {
 
   afterEach(() => {
     delete process.env.BACKEND_URL;
+    delete process.env.FRONTEND_URL;
     delete process.env.FEDERATION_TRUSTED_REDIRECT_URIS;
     delete process.env.FEDERATION_ISSUER;
     delete process.env.NEXT_PUBLIC_OVERRIDE_BACKEND_URL;
@@ -115,6 +117,36 @@ describe('FederationService (Postmill ID)', () => {
       expect(encryption.decrypt).toHaveBeenCalled();
       expect(jwks.keys[0].kid).toBe('abc123');
     });
+
+    it('adopts the winning row when a concurrent boot creates the identity first', async () => {
+      const { privateKey, publicKey } = crypto.generateKeyPairSync('rsa', {
+        modulusLength: 2048,
+      });
+      const winner = {
+        kid: 'winner1',
+        publicJwk: publicKey.export({ format: 'jwk' }),
+        privateKeyEnc: `enc:${privateKey.export({ type: 'pkcs8', format: 'pem' })}`,
+      };
+      repository.getIdentity
+        .mockResolvedValueOnce(null) // first read: no identity yet
+        .mockResolvedValueOnce(winner); // after losing the create race
+      repository.createIdentity.mockRejectedValue(
+        new Error('Unique constraint failed')
+      );
+
+      const jwks = await service.getJwks();
+
+      expect(jwks.keys[0].kid).toBe('winner1');
+    });
+
+    it('rethrows a persistent createIdentity failure instead of recursing', async () => {
+      repository.getIdentity.mockResolvedValue(null);
+      repository.createIdentity.mockRejectedValue(new Error('db down'));
+
+      await expect(service.getJwks()).rejects.toThrow('db down');
+      // One create attempt only — no retry loop, no stack growth.
+      expect(repository.createIdentity).toHaveBeenCalledTimes(1);
+    });
   });
 
   describe('validateAuthorizeRequest', () => {
@@ -136,6 +168,32 @@ describe('FederationService (Postmill ID)', () => {
       expect(() => service.validateAuthorizeRequest(undefined)).toThrowError(
         expect.objectContaining({ status: 400 })
       );
+    });
+
+    // Every other test in this file sets FEDERATION_TRUSTED_REDIRECT_URIS in
+    // beforeEach, so the baked-in default — the value production actually runs
+    // on, since the variable is optional — was covered by nothing at all. It has
+    // to agree character for character with the store's own callbackUrl().
+    describe('with no FEDERATION_TRUSTED_REDIRECT_URIS set', () => {
+      beforeEach(() => {
+        delete process.env.FEDERATION_TRUSTED_REDIRECT_URIS;
+      });
+
+      it('falls back to the template store callback, per-provider path included', () => {
+        const uri = 'https://templates.postmill.ai/auth/callback/postmill';
+
+        expect(service.validateAuthorizeRequest(uri)).toEqual({
+          redirectUri: uri,
+        });
+      });
+
+      it('rejects the bare /auth/callback path — matching is exact, not prefix', () => {
+        expect(() =>
+          service.validateAuthorizeRequest(
+            'https://templates.postmill.ai/auth/callback'
+          )
+        ).toThrowError(expect.objectContaining({ status: 400 }));
+      });
     });
   });
 
@@ -311,6 +369,8 @@ describe('FederationService (Postmill ID)', () => {
 
       expect(doc).toMatchObject({
         issuer: ISSUER,
+        authorization_endpoint:
+          'https://app.example.com/oauth/authorize?client=federation',
         token_endpoint: `${ISSUER}/federation/token`,
         userinfo_endpoint: `${ISSUER}/federation/userinfo`,
         jwks_uri: `${ISSUER}/federation/jwks`,
@@ -319,6 +379,31 @@ describe('FederationService (Postmill ID)', () => {
         audience: FEDERATION_AUDIENCE,
       });
       expect(doc.scopes_supported).toEqual(['profile', 'email', 'org']);
+    });
+
+    it('fails loudly (500) when FRONTEND_URL is unset instead of advertising "undefined/..."', async () => {
+      delete process.env.FRONTEND_URL;
+
+      await expect(service.getDiscoveryDocument()).rejects.toMatchObject({
+        status: 500,
+      });
+    });
+  });
+
+  describe('revoke', () => {
+    it('returns success when a grant was revoked', async () => {
+      repository.revoke.mockResolvedValue(1);
+      await expect(service.revoke('user-1', 'grant-1')).resolves.toEqual({
+        success: true,
+      });
+      expect(repository.revoke).toHaveBeenCalledWith('user-1', 'grant-1');
+    });
+
+    it('404s on an unknown or foreign grant id', async () => {
+      repository.revoke.mockResolvedValue(0);
+      await expect(service.revoke('user-1', 'nope')).rejects.toMatchObject({
+        status: 404,
+      });
     });
   });
 });

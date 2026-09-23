@@ -709,7 +709,25 @@ paths:
         - Federation
   /federation/userinfo:
     get:
-      operationId: FederationController_userinfo
+      operationId: FederationController_userinfoGet
+      parameters:
+        - name: authorization
+          required: true
+          in: header
+          schema:
+            type: string
+      responses:
+        "200":
+          description: ""
+          content:
+            application/json:
+              schema:
+                type: object
+      summary: Scope-gated identity claims for a posf_ access token
+      tags:
+        - Federation
+    post:
+      operationId: FederationController_userinfoPost
       parameters:
         - name: authorization
           required: true

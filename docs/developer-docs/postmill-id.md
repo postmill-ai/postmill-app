@@ -42,12 +42,26 @@ store — this is inherent to any SSO-with-self-hosted design.
 | `GET /.well-known/postmill-identity` | none | Discovery document (endpoints, scopes, JWKS URI, fixed audience) |
 | `GET /federation/jwks` | none | Public keys for `id_token` verification |
 | `GET /federation/authorize` | none | Validates the request; drives the consent screen |
-| `POST /federation/authorize` | session + CSRF | User approve/deny (from the consent screen) |
-| `POST /federation/token` | PKCE | Code → `id_token` + `posf_` access token (20 req/min throttle) |
+| `POST /federation/authorize` | session + CSRF | User approve/deny (from the consent screen). Returns **201** |
+| `POST /federation/token` | PKCE | Code → `id_token` + `posf_` access token (20 req/min throttle). Returns **201** |
 | `GET`/`POST /federation/userinfo` | `Bearer posf_…` | Scope-gated claims (1 h token lifetime) |
 
 The consent screen lives on the instance's frontend at
 `/oauth/authorize?client=federation&redirect_uri=…&code_challenge=…&code_challenge_method=S256&scope=…&state=…&nonce=…`.
+
+### Two things that will bite a client implementer
+
+**Every call but the browser redirect must be server-side.** CORS allows only this
+instance's own `FRONTEND_URL`, so a relying party's browser cannot reach
+`/federation/token`, `/federation/userinfo`, `/federation/jwks` or the discovery
+document. Fetch them from the relying party's backend.
+
+**Send no field the endpoint does not declare.** The global validation pipe runs
+`whitelist` + `forbidNonWhitelisted`, so an extra body key on `/federation/token`
+— `client_id` and `client_secret` are the tempting ones, and neither exists in
+federation — is answered with a bare `400 {"statusCode":400,"message":[…],"error":"Bad Request"}`
+rather than an OAuth-shaped `invalid_request`. The token body is exactly
+`grant_type`, `code`, `redirect_uri` and `code_verifier`.
 
 ## Scopes and claims
 
@@ -86,7 +100,7 @@ curl -X POST https://instance.example.com/federation/token \
   -d '{
     "grant_type": "authorization_code",
     "code": "…",
-    "redirect_uri": "https://templates.postmill.ai/auth/callback",
+    "redirect_uri": "https://templates.postmill.ai/auth/callback/postmill",
     "code_verifier": "…"
   }'
 ```
@@ -104,7 +118,8 @@ curl -X POST https://instance.example.com/federation/token \
 ## Revocation
 
 Users see active sign-ins under **Settings → Approved apps → Postmill ID sign-ins**
-and can revoke them there (`GET`/`DELETE /user/approved-apps/federation`). Revoking
+and can revoke them there (`GET /user/approved-apps/federation`,
+`DELETE /user/approved-apps/federation/:id`). Revoking
 immediately invalidates the access token; outstanding `id_token`s expire within an
 hour.
 
@@ -112,9 +127,11 @@ hour.
 
 | Variable | Default | Purpose |
 |---|---|---|
-| `FEDERATION_TRUSTED_REDIRECT_URIS` | `https://templates.postmill.ai/auth/callback` | Comma-separated allow-list of redirect URIs codes may be sent to. Exact match. Add staging/dev store URLs here. |
+| `FEDERATION_TRUSTED_REDIRECT_URIS` | `https://templates.postmill.ai/auth/callback/postmill` | Comma-separated allow-list of redirect URIs codes may be sent to. Exact match. **Setting it REPLACES the default rather than extending it**, so listing a staging or dev URL means re-listing production too. |
 | `FEDERATION_ISSUER` | `BACKEND_URL` / `NEXT_PUBLIC_BACKEND_URL` | Explicit `iss` override (e.g. behind a path-rewriting proxy). |
 
-To rotate the signing key, delete the `InstanceIdentity` row — a fresh keypair is
-generated on next use. Rotation invalidates outstanding `id_token`s (they expire
-within an hour anyway).
+To rotate the signing key, delete the `InstanceIdentity` row **and restart the
+backend** — the keypair is memoised in-process for the lifetime of the process, so
+deleting the row alone has no effect until then. The JWKS publishes a single key
+with no overlap window, so rotation invalidates outstanding `id_token`s
+immediately (they expire within an hour anyway).

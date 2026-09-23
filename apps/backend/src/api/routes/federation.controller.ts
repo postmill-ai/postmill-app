@@ -85,10 +85,23 @@ export class FederationController {
     );
   }
 
+  // GET and POST are separate handlers on purpose: a stacked @Get+@Post on one
+  // method is inert — decorators apply bottom-up and the second overwrites
+  // METHOD_METADATA — so it would read as supported while 404ing. OIDC Core
+  // 5.3 requires the UserInfo endpoint to support both methods.
   @Get('/userinfo')
+  @ApiOperation({ summary: 'Scope-gated identity claims for a posf_ access token' })
+  async userinfoGet(@Headers('authorization') authorization?: string) {
+    return this.userinfo(authorization);
+  }
+
   @Post('/userinfo')
   @ApiOperation({ summary: 'Scope-gated identity claims for a posf_ access token' })
-  async userinfo(@Headers('authorization') authorization?: string) {
+  async userinfoPost(@Headers('authorization') authorization?: string) {
+    return this.userinfo(authorization);
+  }
+
+  private async userinfo(authorization?: string) {
     const token = authorization?.startsWith('Bearer ')
       ? authorization.slice('Bearer '.length)
       : undefined;

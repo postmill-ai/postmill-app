@@ -16,8 +16,13 @@ const FEDERATION_SCOPES = ['profile', 'email', 'org'] as const;
 
 type FederationScope = (typeof FEDERATION_SCOPES)[number];
 
+// The template store builds this from its own `callbackUrl()` helper, which
+// gives every login provider its own path — the convention this instance also
+// documents for its inbound providers (docs/operations-guide/oauth-sso.md).
+// Matching is exact full-string, so this value and the store's must agree
+// character for character or every authorize fails with invalid_request.
 const DEFAULT_TRUSTED_REDIRECT_URIS = [
-  'https://templates.postmill.ai/auth/callback',
+  'https://templates.postmill.ai/auth/callback/postmill',
 ];
 
 interface IdentityKeys {
@@ -56,6 +61,21 @@ export class FederationService {
       );
     }
     return issuer.replace(/\/+$/, '');
+  }
+
+  private frontendUrl() {
+    const frontendUrl = process.env.FRONTEND_URL;
+    if (!frontendUrl) {
+      throw new HttpException(
+        {
+          error: 'server_error',
+          error_description:
+            'FRONTEND_URL is not configured — it is the published authorization_endpoint for federation',
+        },
+        HttpStatus.INTERNAL_SERVER_ERROR
+      );
+    }
+    return frontendUrl.replace(/\/+$/, '');
   }
 
   trustedRedirectUris() {
@@ -104,10 +124,20 @@ export class FederationService {
         publicJwk,
         privateKeyEnc: this._encryptionService.encrypt(privateKeyPem),
       });
-    } catch {
-      // Concurrent boot lost the race — another replica created the row.
-      this._identityCache = undefined;
-      return this.getOrCreateIdentity();
+    } catch (err) {
+      // The only legitimate failure is losing the unique race with a
+      // concurrent boot. Re-read once: if a row now exists, use it. Anything
+      // else (DB down, encryption key missing) must surface, not recurse.
+      const winner = await this._federationRepository.getIdentity();
+      if (!winner) {
+        throw err;
+      }
+      this._identityCache = {
+        kid: winner.kid,
+        publicJwk: winner.publicJwk as IdentityKeys['publicJwk'],
+        privateKeyPem: this._encryptionService.decrypt(winner.privateKeyEnc),
+      };
+      return this._identityCache;
     }
 
     this._identityCache = { kid, publicJwk, privateKeyPem };
@@ -134,7 +164,7 @@ export class FederationService {
     const issuer = this.issuer();
     return {
       issuer,
-      authorization_endpoint: `${process.env.FRONTEND_URL}/oauth/authorize?client=federation`,
+      authorization_endpoint: `${this.frontendUrl()}/oauth/authorize?client=federation`,
       token_endpoint: `${issuer}/federation/token`,
       userinfo_endpoint: `${issuer}/federation/userinfo`,
       jwks_uri: `${issuer}/federation/jwks`,
@@ -403,7 +433,13 @@ export class FederationService {
   }
 
   async revoke(userId: string, grantId: string) {
-    await this._federationRepository.revoke(userId, grantId);
+    const revoked = await this._federationRepository.revoke(userId, grantId);
+    if (!revoked) {
+      throw new HttpException(
+        { error: 'not_found', error_description: 'No active grant with that id' },
+        HttpStatus.NOT_FOUND
+      );
+    }
     return { success: true };
   }
 }
