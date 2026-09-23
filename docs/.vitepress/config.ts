@@ -161,6 +161,7 @@ export default defineConfig({
             { text: 'SDK', link: '/developer-docs/sdk' },
             { text: 'MCP Server', link: '/developer-docs/mcp' },
             { text: 'OAuth Apps', link: '/developer-docs/oauth-apps' },
+            { text: 'Postmill ID (SSO)', link: '/developer-docs/postmill-id' },
             { text: 'Plugs', link: '/developer-docs/plugs' },
             { text: 'Setup Gate', link: '/developer-docs/setup-gate' },
           ],

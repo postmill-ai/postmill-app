@@ -616,6 +616,126 @@ paths:
           description: ""
       tags:
         - OAuth
+  /federation/jwks:
+    get:
+      operationId: FederationController_jwks
+      parameters: []
+      responses:
+        "200":
+          description: ""
+      summary: Public JWKS used to verify federation id_tokens
+      tags:
+        - Federation
+  /federation/authorize:
+    get:
+      operationId: FederationController_authorize
+      parameters:
+        - name: response_type
+          required: true
+          in: query
+          schema:
+            type: string
+            enum:
+              - code
+        - name: redirect_uri
+          required: true
+          in: query
+          schema:
+            format: uri
+            type: string
+        - name: state
+          required: false
+          in: query
+          schema:
+            type: string
+        - name: nonce
+          required: false
+          in: query
+          schema:
+            type: string
+        - name: code_challenge
+          required: false
+          in: query
+          schema:
+            type: string
+        - name: code_challenge_method
+          required: false
+          in: query
+          schema:
+            type: string
+            enum:
+              - S256
+        - name: scope
+          required: false
+          in: query
+          schema:
+            type: string
+      responses:
+        "200":
+          description: ""
+      summary: Validate a federation authorize request (consent screen metadata)
+      tags:
+        - Federation
+    post:
+      operationId: FederationAuthorizedController_approveOrDeny
+      parameters: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ApproveFederationDto"
+      responses:
+        "201":
+          description: ""
+      summary: Approve or deny a federation consent request
+      tags:
+        - Federation
+  /federation/token:
+    post:
+      operationId: FederationController_token
+      parameters: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/TokenFederationDto"
+      responses:
+        "201":
+          description: ""
+      summary: Exchange a federation authorization code (public client, PKCE only)
+      tags:
+        - Federation
+  /federation/userinfo:
+    get:
+      operationId: FederationController_userinfo
+      parameters:
+        - name: authorization
+          required: true
+          in: header
+          schema:
+            type: string
+      responses:
+        "201":
+          description: ""
+          content:
+            application/json:
+              schema:
+                type: object
+      summary: Scope-gated identity claims for a posf_ access token
+      tags:
+        - Federation
+  /.well-known/postmill-identity:
+    get:
+      operationId: FederationDiscoveryController_discovery
+      parameters: []
+      responses:
+        "200":
+          description: ""
+      summary: Postmill ID discovery document (endpoints, JWKS URI, scopes)
+      tags:
+        - Federation
   /webhooks/email:
     post:
       operationId: EmailWebhooksController_handle
@@ -4585,6 +4705,31 @@ paths:
       responses:
         "200":
           description: ""
+      tags:
+        - Approved Apps
+  /user/approved-apps/federation:
+    get:
+      operationId: ApprovedAppsController_listFederation
+      parameters: []
+      responses:
+        "200":
+          description: ""
+      summary: List active Postmill ID (federation) sign-in grants for the user
+      tags:
+        - Approved Apps
+  /user/approved-apps/federation/{id}:
+    delete:
+      operationId: ApprovedAppsController_revokeFederation
+      parameters:
+        - name: id
+          required: true
+          in: path
+          schema:
+            type: string
+      responses:
+        "200":
+          description: ""
+      summary: Revoke a Postmill ID (federation) sign-in grant
       tags:
         - Approved Apps
   /announcements:
@@ -9329,6 +9474,22 @@ components:
         - code
         - client_id
         - client_secret
+    TokenFederationDto:
+      type: object
+      properties:
+        grant_type:
+          type: string
+        code:
+          type: string
+        redirect_uri:
+          type: string
+          format: uri
+        code_verifier:
+          type: string
+      required:
+        - grant_type
+        - code
+        - redirect_uri
     MetaSignedRequestDto:
       type: object
       properties:
@@ -10965,6 +11126,32 @@ components:
       required:
         - client_id
         - action
+    ApproveFederationDto:
+      type: object
+      properties:
+        action:
+          type: string
+          enum:
+            - approve
+            - deny
+        redirect_uri:
+          type: string
+          format: uri
+        state:
+          type: string
+        nonce:
+          type: string
+        code_challenge:
+          type: string
+        code_challenge_method:
+          type: string
+          enum:
+            - S256
+        scope:
+          type: string
+      required:
+        - action
+        - redirect_uri
     AnnouncementDto:
       type: object
       properties:

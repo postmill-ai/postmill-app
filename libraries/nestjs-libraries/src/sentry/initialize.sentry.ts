@@ -7,9 +7,9 @@ const logger = new Logger('Sentry');
 
 const SENSITIVE_FIELDS = new Set([
   'Authorization', 'auth', 'cookie', 'showorg', 'impersonate',
-  'apiKey', 'api_key', 'pos_', 'pca_', 'pcs_', 'pm_',
+  'apiKey', 'api_key', 'pos_', 'pca_', 'pcs_', 'pm_', 'posf_',
   'password', 'secret', 'accessToken', 'access_token',
-  'refreshToken', 'refresh_token', 'token',
+  'refreshToken', 'refresh_token', 'token', 'id_token', 'code_verifier',
 ]);
 
 function scrubValue(value: unknown): unknown {

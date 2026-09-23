@@ -19,6 +19,28 @@ const SCOPE_LABELS: Record<string, { key: string; text: string }> = {
     key: 'oauth_scope_mcp_posts_write',
     text: 'Create, schedule, and publish posts on your behalf',
   },
+  profile: {
+    key: 'oauth_scope_profile',
+    text: 'Read your name and profile picture',
+  },
+  email: {
+    key: 'oauth_scope_email',
+    text: 'Read your email address',
+  },
+  org: {
+    key: 'oauth_scope_org',
+    text: 'Read the organization you are currently using and your role in it',
+  },
+};
+
+// First-party federation clients pinned in the product (no OAuth app registration).
+// The backend validates redirect_uri against its own allow-list; this is display
+// metadata only.
+const FEDERATION_CLIENTS: Record<string, { name: string; description: string }> = {
+  federation: {
+    name: 'Postmill Template Store',
+    description: 'Sign in with your Postmill account',
+  },
 };
 
 export default function OAuthAuthorizePage() {
@@ -26,6 +48,8 @@ export default function OAuthAuthorizePage() {
   const searchParams = useSearchParams();
   const fetch = useFetch();
   const clientId = searchParams.get('client_id');
+  const federationClient = searchParams.get('client');
+  const isFederation = !!federationClient && !!FEDERATION_CLIENTS[federationClient];
   const responseType = searchParams.get('response_type');
   const state = searchParams.get('state');
   // These were previously read from the URL but never forwarded, so the consented
@@ -35,16 +59,17 @@ export default function OAuthAuthorizePage() {
   const codeChallenge = searchParams.get('code_challenge');
   const codeChallengeMethod = searchParams.get('code_challenge_method');
   const scope = searchParams.get('scope');
+  const nonce = searchParams.get('nonce');
 
   const [appInfo, setAppInfo] = useState<any>(null);
   const [error, setError] = useState(() => {
-    if (!clientId || !responseType) {
+    if (isFederation ? !redirectUri : !clientId || !responseType) {
       return t(
         'oauth_missing_required_params',
         'Missing required parameters (client_id, response_type)'
       );
     }
-    if (responseType !== 'code') {
+    if (!isFederation && responseType !== 'code') {
       return t(
         'oauth_only_code_supported',
         'Only response_type=code is supported'
@@ -53,7 +78,7 @@ export default function OAuthAuthorizePage() {
     return '';
   });
   const [loading, setLoading] = useState(() => {
-    return !!clientId && responseType === 'code';
+    return isFederation ? !!redirectUri : !!clientId && responseType === 'code';
   });
   const [submitting, setSubmitting] = useState(false);
 
@@ -62,17 +87,54 @@ export default function OAuthAuthorizePage() {
       // 3.3: dedupe so `?scope=mcp:read+mcp:read` doesn't render duplicate React keys.
       [
         ...new Set(
-          (scope || 'mcp:read')
+          (scope || (isFederation ? 'profile email org' : 'mcp:read'))
             .split(/[\s,]+/)
             .map((s) => s.trim())
             .filter(Boolean)
         ),
       ],
-    [scope]
+    [scope, isFederation]
   );
 
   useEffect(() => {
     if (!loading) {
+      return;
+    }
+
+    if (isFederation) {
+      // Federation mode: no client_id lookup — the client is pinned in the
+      // product. The backend re-validates redirect_uri against its allow-list.
+      const params = new URLSearchParams({
+        response_type: 'code',
+        redirect_uri: redirectUri!,
+        ...(state ? { state } : {}),
+        ...(scope ? { scope } : {}),
+      });
+
+      fetch(`/federation/authorize?${params}`)
+        .then((r) => r.json())
+        .then((data) => {
+          if (data.statusCode && data.statusCode >= 400) {
+            setError(
+              data.message || t('oauth_invalid_request', 'Invalid OAuth request')
+            );
+          } else {
+            setAppInfo({
+              app: {
+                name: FEDERATION_CLIENTS[federationClient!].name,
+                description: FEDERATION_CLIENTS[federationClient!].description,
+                picture: null,
+              },
+            });
+          }
+          setLoading(false);
+        })
+        .catch(() => {
+          setError(
+            t('oauth_failed_validate_request', 'Failed to validate OAuth request')
+          );
+          setLoading(false);
+        });
       return;
     }
 
@@ -105,17 +167,17 @@ export default function OAuthAuthorizePage() {
         );
         setLoading(false);
       });
-  }, [clientId, responseType, state, redirectUri, scope, fetch, loading, t]);
+  }, [clientId, responseType, state, redirectUri, scope, fetch, loading, t, isFederation, federationClient]);
 
   const handleAction = useCallback(
     async (action: 'approve' | 'deny') => {
       setSubmitting(true);
       try {
         const result = await (
-          await fetch('/oauth/authorize', {
+          await fetch(isFederation ? '/federation/authorize' : '/oauth/authorize', {
             method: 'POST',
             body: JSON.stringify({
-              client_id: clientId,
+              ...(isFederation ? {} : { client_id: clientId }),
               state,
               action,
               // Forward what the user actually consented to so the authorization
@@ -126,6 +188,7 @@ export default function OAuthAuthorizePage() {
               ...(codeChallengeMethod
                 ? { code_challenge_method: codeChallengeMethod }
                 : {}),
+              ...(nonce ? { nonce } : {}),
               // Always bind exactly the scopes the user saw (defaulting to
               // mcp:read), so a client cannot re-request write/admin unbound at the
               // token-exchange step for something the user never approved here.
@@ -164,7 +227,9 @@ export default function OAuthAuthorizePage() {
       redirectUri,
       codeChallenge,
       codeChallengeMethod,
+      nonce,
       requestedScopes,
+      isFederation,
       t,
     ]
   );
