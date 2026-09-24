@@ -47,6 +47,11 @@ import { EnterpriseController } from '@postmill-ai/backend/api/routes/enterprise
 import { OAuthAppController } from '@postmill-ai/backend/api/routes/oauth-app.controller';
 import { ApprovedAppsController } from '@postmill-ai/backend/api/routes/approved-apps.controller';
 import { OAuthController, OAuthAuthorizedController } from '@postmill-ai/backend/api/routes/oauth.controller';
+import {
+  FederationController,
+  FederationAuthorizedController,
+  FederationDiscoveryController,
+} from '@postmill-ai/backend/api/routes/federation.controller';
 import { AnnouncementsController } from '@postmill-ai/backend/api/routes/announcements.controller';
 import { ChannelConfigPerTenantController } from '@postmill-ai/backend/api/routes/channel-config.per-tenant.controller';
 import { SocialCommentsController } from '@postmill-ai/backend/api/routes/social-comments.controller';
@@ -126,6 +131,7 @@ export const authenticatedController = [
   OAuthAppController,
   ApprovedAppsController,
   OAuthAuthorizedController,
+  FederationAuthorizedController,
   AnnouncementsController,
   AiSettingsController,
   AdminDefaultsController,
@@ -175,6 +181,8 @@ export const authenticatedController = [
     EnterpriseController,
     NoAuthIntegrationsController,
     OAuthController,
+    FederationController,
+    FederationDiscoveryController,
     EmailWebhooksController,
     MediaJobsWebhookController,
     CommsWebhooksController,

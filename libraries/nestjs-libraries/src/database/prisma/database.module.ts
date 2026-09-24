@@ -62,6 +62,8 @@ import { RefreshIntegrationService } from '@postmill-ai/nestjs-libraries/integra
 import { MetaCallbacksService } from '@postmill-ai/nestjs-libraries/integrations/meta-callbacks.service';
 import { OAuthRepository } from '@postmill-ai/nestjs-libraries/database/prisma/oauth/oauth.repository';
 import { OAuthService } from '@postmill-ai/nestjs-libraries/database/prisma/oauth/oauth.service';
+import { FederationRepository } from '@postmill-ai/nestjs-libraries/database/prisma/federation/federation.repository';
+import { FederationService } from '@postmill-ai/nestjs-libraries/database/prisma/federation/federation.service';
 import { AnnouncementsRepository } from '@postmill-ai/nestjs-libraries/database/prisma/announcements/announcements.repository';
 import { AnnouncementsService } from '@postmill-ai/nestjs-libraries/database/prisma/announcements/announcements.service';
 import { OrgProviderConfigService } from '@postmill-ai/nestjs-libraries/database/prisma/provider-configs/org-provider-config.service';
@@ -180,6 +182,8 @@ import { AnalyticsShareService } from '@postmill-ai/nestjs-libraries/analytics/a
     SetsRepository,
     OAuthRepository,
     OAuthService,
+    FederationRepository,
+    FederationService,
     AnnouncementsRepository,
     AnnouncementsService,
     FeaturedProviderRepository,

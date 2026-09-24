@@ -90,6 +90,27 @@ export async function proxy(request: NextRequest) {
 
   const org = nextUrl.searchParams.get('org');
   const url = new URL(nextUrl).search;
+
+  // Postmill ID federation: the consent screen is the one authenticated page an
+  // external relying party links a COLD browser to. The generic branch below
+  // rewrites to `/auth${search}` and so discards the pathname, which strands the
+  // visitor on the dashboard after sign-in — the store then waits for a callback
+  // that never comes and cannot tell that apart from a crash. Carry the intended
+  // destination as returnUrl instead: ReturnUrlComponent (mounted for every
+  // /auth* page) parks it in localStorage and navigateAfterAuth restores it,
+  // which every sign-in path already reaches via layout.context's reload header.
+  if (nextUrl.pathname === '/oauth/authorize' && !authCookie) {
+    // Absolute on purpose: ReturnUrlComponent compares `parsed.origin` to decide
+    // whether to keep the value, so a relative path is dropped on the floor.
+    const target = new URL(
+      nextUrl.pathname + nextUrl.search,
+      nextUrl.origin
+    ).toString();
+    return NextResponse.redirect(
+      new URL(`/auth/login?returnUrl=${encodeURIComponent(target)}`, nextUrl.href)
+    );
+  }
+
   if (!nextUrl.pathname.startsWith('/auth') && !authCookie) {
     // Explicit pathname → login-provider map for OAuth callbacks carrying
     // state=login (channel-connect callbacks without state=login returned

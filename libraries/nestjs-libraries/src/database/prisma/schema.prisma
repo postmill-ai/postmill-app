@@ -44,6 +44,7 @@ model Organization {
   webhooks            Webhooks[]
   oauthApp            OAuthApp[]
   oauthAuthorizations OAuthAuthorization[]
+  federationGrants    FederationGrant[]
   aiOrgProviderConfigs AIOrgProviderConfig[]
   orgDefaultModels    OrgDefaultModel[]
   aiBrandProfiles     AIBrandProfile[]
@@ -130,6 +131,7 @@ model User {
   comments              Comments[]
   organizations         UserOrganization[]
   oauthAuthorizations   OAuthAuthorization[]
+  federationGrants      FederationGrant[]
   commentReads          PostCommentRead[]
   assignedComments      SocialComment[]
   aiSettingsAudits      AISettingsAudit[]
@@ -1045,6 +1047,50 @@ model OAuthAuthorization {
   @@index([accessToken])
   @@index([authorizationCode])
   @@index([oauthAppId])
+  @@index([userId])
+  @@index([organizationId])
+  @@index([revokedAt])
+}
+
+// "Postmill ID" first-party federation: this instance's RS256 signing identity for
+// id_tokens issued to the pinned first-party apps (e.g. the template store). Single
+// row, auto-generated on first use — privateKeyEnc is an EncryptionService `v2:`
+// AES-GCM blob holding the RSA private PEM. Delete the row to rotate.
+model InstanceIdentity {
+  id            String    @id @default(uuid())
+  kid           String    @unique
+  publicJwk     Json
+  privateKeyEnc String
+  createdAt     DateTime  @default(now())
+  rotatedAt     DateTime?
+}
+
+// A user's consent grant to a first-party federation client (the template store).
+// Bound to the consent-context org (userId + organizationId, both NOT NULL); the
+// grant carries no client registration — the client is pinned in code via the
+// FEDERATION_TRUSTED_REDIRECT_URIS allow-list and PKCE.
+model FederationGrant {
+  id                  String       @id @default(uuid())
+  userId              String
+  organizationId      String
+  authorizationCode   String?      // sha256 lookup hash of the one-time code
+  codeChallenge       String?      // PKCE: S256 hash of code_verifier
+  codeChallengeMethod String?      // PKCE: "S256"
+  nonce               String?      // OIDC-style nonce, echoed into the id_token
+  scope               String?      // space-separated: profile email org
+  redirectUri         String       // exact allow-listed redirect URI used
+  accessToken         String?      // sha256 lookup hash of the posf_ token
+  codeExpiresAt       DateTime?
+  tokenExpiresAt      DateTime?
+  revokedAt           DateTime?
+  createdAt           DateTime     @default(now())
+  updatedAt           DateTime     @updatedAt
+  user                User         @relation(fields: [userId], references: [id])
+  organization        Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, organizationId])
+  @@index([authorizationCode])
+  @@index([accessToken])
   @@index([userId])
   @@index([organizationId])
   @@index([revokedAt])

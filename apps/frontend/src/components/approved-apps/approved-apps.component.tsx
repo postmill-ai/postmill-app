@@ -21,11 +21,53 @@ const useApprovedApps = () => {
   });
 };
 
+const useFederationGrants = () => {
+  const fetch = useFetch();
+  const load = useCallback(async () => {
+    return (await fetch('/user/approved-apps/federation')).json();
+  }, [fetch]);
+  return useSWR('approved-apps-federation', load, {
+    revalidateOnFocus: false,
+    revalidateOnReconnect: false,
+    revalidateIfStale: false,
+  });
+};
+
 export const ApprovedAppsComponent: FC = () => {
   const fetch = useFetch();
   const toaster = useToaster();
   const t = useT();
   const { data: apps, mutate } = useApprovedApps();
+  const { data: federationGrants, mutate: mutateFederation } =
+    useFederationGrants();
+
+  const revokeFederationGrant = useCallback(
+    (grant: any) => async () => {
+      if (
+        await deleteDialog(
+          t(
+            'are_you_sure_revoke_access',
+            'Are you sure you want to revoke access for {{name}}?',
+            { name: grant.client?.name }
+          )
+        )
+      ) {
+        try {
+          await fetch(`/user/approved-apps/federation/${grant.id}`, {
+            method: 'DELETE',
+          });
+          toaster.show(
+            t('access_revoked', 'Access revoked successfully'),
+            'success'
+          );
+          mutateFederation();
+        } catch {
+          toaster.show(t('failed_to_revoke', 'Failed to revoke access'), 'warning');
+        }
+      }
+    },
+    [fetch, mutateFederation, t, toaster]
+  );
 
   const revokeApp = useCallback(
     (app: any) => async () => {
@@ -109,6 +151,45 @@ export const ApprovedAppsComponent: FC = () => {
           </div>
         )}
       </div>
+
+      {!!federationGrants?.length && (
+        <div className="bg-newBgColorInner border-newTableBorder border rounded-[12px] p-[24px]">
+          <div className="text-[16px] font-bold mb-[16px]">
+            {t('postmill_id_signins', 'Postmill ID sign-ins')}
+          </div>
+          <div className="flex flex-col gap-[16px]">
+            {federationGrants.map((grant: any) => (
+              <div
+                key={grant.id}
+                className="flex items-center justify-between p-[12px] border border-newTableBorder rounded-[4px]"
+              >
+                <div className="flex items-center gap-[12px]">
+                  <div className="w-[40px] h-[40px] rounded-full bg-newTableHeader flex items-center justify-center text-newTableText">
+                    {grant.client?.name?.[0]?.toUpperCase() || 'P'}
+                  </div>
+                  <div>
+                    <div className="text-[14px] font-bold">
+                      {grant.client?.name}
+                    </div>
+                    <div className="text-newTableText text-[12px]">
+                      {t('signed_in_with_org', 'Organization: {{name}}', {
+                        name: grant.organization?.name,
+                      })}
+                    </div>
+                    <div className="text-newTableText text-[12px]">
+                      {t('authorized_on', 'Authorized on')}{' '}
+                      {dayjs(grant.createdAt).format(t('approved_app_date_format', 'MMM D, YYYY'))}
+                    </div>
+                  </div>
+                </div>
+                <Button onClick={revokeFederationGrant(grant)}>
+                  {t('revoke', 'Revoke')}
+                </Button>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
     </div>
   );
 };

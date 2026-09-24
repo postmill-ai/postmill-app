@@ -101,6 +101,20 @@ enforcement point (exact file/symbol). Cross-refs: `agents/backend.md`,
 - IDs/secrets use CSPRNG (`crypto.randomBytes`, `crypto.randomUUID`) — never
   `Math.random` for tokens.
 
+## Federation (Postmill ID)
+
+- `id_token`s for first-party SSO are **RS256** with the auto-generated instance key
+  (`InstanceIdentity` table, private PEM encrypted via `EncryptionService`) — never
+  the HS256 `JWT_SECRET` session key, and never shared between instances.
+  Enforcement: `libraries/nestjs-libraries/src/database/prisma/federation/federation.service.ts`.
+- There is **no client registration**: the audience is fixed
+  (`postmill-template-store`) and codes are only sent to redirect URIs on the
+  `FEDERATION_TRUSTED_REDIRECT_URIS` allow-list (exact match). PKCE S256 is
+  mandatory; codes/`posf_` tokens are sha256-hashed at rest, codes single-use.
+- Claims are **scope-gated** (`profile`/`email`/`org` only — never `mcp:*`); the org
+  claim is always the consent-context org from the `FederationGrant` row, never
+  client-supplied.
+
 ## CSRF
 
 - Required on cookie-authenticated mutating routes. Enforcement: every controller in

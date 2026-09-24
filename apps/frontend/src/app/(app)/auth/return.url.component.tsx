@@ -7,7 +7,10 @@ const ReturnUrlComponent: FC = () => {
   const url = params.get('returnUrl');
   useEffect(() => {
     try {
-      const parsed = new URL(url!);
+      // Resolved against our own origin so a relative returnUrl is honoured
+      // rather than throwing into the catch below and vanishing; the origin
+      // check still rejects an absolute off-site value.
+      const parsed = new URL(url!, window.location.origin);
       if (parsed.origin === window.location.origin) {
         localStorage.setItem('returnUrl', url!);
       }

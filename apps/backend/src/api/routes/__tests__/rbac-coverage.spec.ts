@@ -110,6 +110,13 @@ const PUBLIC_CONTROLLERS = new Set<string>([
   'PublicCatalogController',
   'OAuthController',
   'OAuthAuthorizedController',
+  // Postmill ID federation: discovery/JWKS/authorize-metadata are anonymous; token
+  // exchange is PKCE-authenticated; userinfo is Bearer posf_-authenticated; the
+  // approve/deny POST is session-authenticated via authenticatedController (same
+  // shape as OAuthAuthorizedController above).
+  'FederationDiscoveryController',
+  'FederationController',
+  'FederationAuthorizedController',
 ]);
 
 // Operational / health / root controllers.
