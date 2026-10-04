@@ -378,7 +378,7 @@ export class OpenAICompatibleAdapter implements AiCapability {
       throw new Error(`${this.name}: Base URL is required`);
     }
     return new ChatOpenAI({
-      openAIApiKey: creds.apiKey,
+      apiKey: creds.apiKey,
       configuration: {
         baseURL: baseURL || undefined,
         // Same tenant-URL rule as _getProvider: org-supplied endpoints go

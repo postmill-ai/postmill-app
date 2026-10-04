@@ -144,7 +144,7 @@ export class OpenAIAdapter implements AIProviderAdapter {
     opts?: AIModelOptions,
   ): BaseChatModel {
     return new ChatOpenAI({
-      openAIApiKey: creds.apiKey,
+      apiKey: creds.apiKey,
       configuration: {
         baseURL: creds.baseURL || undefined,
         organization: creds.organization || undefined,

@@ -92,7 +92,7 @@ export class MistralAdapter implements AIProviderAdapter {
 
   createLangchainModel(creds: Record<string, string>, modelId: string, opts?: AIModelOptions): BaseChatModel {
     return new ChatOpenAI({
-      openAIApiKey: creds.apiKey,
+      apiKey: creds.apiKey,
       configuration: { baseURL: MISTRAL_BASE_URL },
       model: modelId,
       temperature: opts?.temperature,

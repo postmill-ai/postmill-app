@@ -66,6 +66,13 @@ const isCopilotController = (file: string) =>
 
 const ALL_FILES = SCAN_ROOTS.flatMap(collectTsFiles);
 
+// The provider packages (libraries/providers) are outside SCAN_ROOTS because the
+// construction invariants above only govern the nestjs-libraries/backend surfaces
+// (adapters legitimately live under libraries/providers/*/src/v1). The credential-field
+// invariant below scans them separately.
+const PROVIDERS_ROOT = path.resolve(__dirname, '../../../providers');
+const PROVIDER_FILES = collectTsFiles(PROVIDERS_ROOT);
+
 describe('AI surface-drift invariant (§13)', () => {
   it('scans at least one source root (path resolution sanity check)', () => {
     expect(ALL_FILES.length).toBeGreaterThan(0);
@@ -130,6 +137,24 @@ describe('AI surface-drift invariant (§13)', () => {
     expect(
       offenders,
       `\`new OpenAIAdapter(\` may only appear inside /ai/adapters/, /ai/ai.module.ts, or the CopilotKit env-fallback (copilot.controller.ts). Offenders:\n${offenders.join(
+        '\n'
+      )}`
+    ).toEqual([]);
+  });
+
+  it('no `openAIApiKey` anywhere — @langchain/openai ≥1.x silently DROPS the deprecated field', () => {
+    // POSTMILL-APP-T: every createLangchainModel passed `openAIApiKey`, which
+    // @langchain/openai@1.x ignores (the field is now `apiKey`), producing a
+    // keyless ChatOpenAI that throws "Missing credentials" on invoke. A text
+    // scan is the guard: any reintroduction fails here.
+    const offenders: string[] = [];
+    for (const file of [...ALL_FILES, ...PROVIDER_FILES]) {
+      const src = fs.readFileSync(file, 'utf8');
+      if (src.includes('openAIApiKey')) offenders.push(file);
+    }
+    expect(
+      offenders,
+      `\`openAIApiKey\` is silently ignored by @langchain/openai ≥1.x — use \`apiKey\`. Offenders:\n${offenders.join(
         '\n'
       )}`
     ).toEqual([]);

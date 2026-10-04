@@ -116,7 +116,7 @@ export class GatewayAdapter implements AIProviderAdapter {
    */
   createLangchainModel(creds: Record<string, string>, modelId: string, opts?: AIModelOptions): BaseChatModel {
     return new ChatOpenAI({
-      openAIApiKey: creds.apiKey,
+      apiKey: creds.apiKey,
       configuration: { baseURL: creds.baseURL || GATEWAY_DEFAULT_BASE_URL },
       model: modelId,
       temperature: opts?.temperature,
