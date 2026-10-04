@@ -67,16 +67,41 @@ jobs:
         # the dependency tree. Tolerate ONLY that endpoint outage (as a warning)
         # — any real high/critical advisory still fails the job. Restore the
         # hard gate once pnpm supports the bulk advisory endpoint.
+        #
+        # Advisory allowlist (2026-10): advisories with NO patched version
+        # ("patched: <0.0.0"), each unreachable in practice:
+        #   GHSA-vfj7-8cjw-p6xm  braces       — dev-only: eslint-config-next → fast-glob → micromatch (lint tooling, never ships)
+        #   GHSA-ch52-4w7c-c8xp  http-cache-semantics — dev-only: @swc/cli → bin-wrapper → got (build tooling, never ships)
+        #   GHSA-86w9-cpqp-85rv  node-forge   — @copilotkit/runtime → @langchain/google-gauth → gtoken → google-p12-pem;
+        #                                     the LangChain Google-auth path is never exercised (Google provider uses the AI SDK)
+        # Drop entries the moment a patched release exists. Any NON-allowlisted
+        # high/critical advisory fails the job.
         run: |
           set +e
-          OUT=$(pnpm audit --audit-level=high 2>&1)
+          OUT=$(pnpm audit --audit-level=high --json 2>&1)
           CODE=$?
-          echo "$OUT"
           if [ "$CODE" -ne 0 ] && echo "$OUT" | grep -q "ERR_PNPM_AUDIT_BAD_RESPONSE"; then
             echo "::warning::pnpm audit endpoint unavailable (npm retired the quick-audit endpoint); treating as non-blocking."
             exit 0
           fi
-          exit "$CODE"
+          if [ "$CODE" -eq 0 ]; then
+            echo "No high/critical advisories."
+            exit 0
+          fi
+          ALLOWED='[
+            "https://github.com/advisories/GHSA-vfj7-8cjw-p6xm",
+            "https://github.com/advisories/GHSA-ch52-4w7c-c8xp",
+            "https://github.com/advisories/GHSA-86w9-cpqp-85rv"
+          ]'
+          REMAINING=$(echo "$OUT" | jq -c --argjson allowed "$ALLOWED" \
+            '[.advisories[] | select(.url as $u | $allowed | index($u) | not) | {module: .module_name, severity, url}]')
+          if [ "$REMAINING" != "[]" ]; then
+            echo "$REMAINING" | jq .
+            echo "::error::high/critical advisories present (see above)"
+            exit 1
+          fi
+          echo "::warning::Only allowlisted unfixable advisories remain (braces, http-cache-semantics, node-forge — see step comment). Revisit when patched releases ship."
+          exit 0
 
       - name: Check for reintroduced channel env reads
         run: |
