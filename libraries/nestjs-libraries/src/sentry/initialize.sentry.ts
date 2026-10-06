@@ -155,7 +155,19 @@ export const initializeSentry = (appName: string, allowLogs = false) => {
       profileSessionSampleRate: profilingEnabled ? (isDev ? 1.0 : 0.45) : 0,
       profileLifecycle: 'trace',
 
-      beforeSend(event, _hint) {
+      beforeSend(event, hint) {
+        const original = hint?.originalException as
+          | { type?: string; code?: string }
+          | undefined;
+        const isAbortedRequest =
+          original?.type === 'request.aborted' ||
+          original?.code === 'ECONNABORTED' ||
+          event.exception?.values?.some(
+            (v) =>
+              v.type === 'BadRequestError' &&
+              /request aborted/i.test(v.value ?? '')
+          );
+        if (isAbortedRequest) return null;
         return scrubEvent(event);
       },
 
