@@ -283,4 +283,46 @@ describe('InstagramProvider', () => {
       expect(url).not.toContain('scope=');
     });
   });
+
+  describe('handleErrors — OAuth token-exchange errors', () => {
+    it('maps an invalid/used authorization code to a retry-promptly message', () => {
+      const body = JSON.stringify({
+        error_type: 'OAuthException',
+        code: 400,
+        error_message: 'Invalid authorization code',
+      });
+      expect(provider.handleErrors(body, 400)).toEqual({
+        type: 'bad-body',
+        value:
+          'The Instagram authorization code expired or was already used — please restart the connection and complete it without going back in the browser',
+      });
+    });
+
+    it('maps a redirect_uri mismatch to a configuration message', () => {
+      const body = JSON.stringify({
+        error_type: 'OAuthException',
+        code: 400,
+        error_message:
+          'Error validating verification code. Please make sure your redirect_uri is identical to the one you used in the OAuth dialog request',
+      });
+      expect(provider.handleErrors(body, 400)?.value).toContain(
+        'redirect URI mismatch'
+      );
+    });
+
+    it('maps invalid app credentials to a credentials message', () => {
+      const body = JSON.stringify({
+        error_type: 'OAuthException',
+        code: 400,
+        error_message: 'Invalid platform app',
+      });
+      expect(provider.handleErrors(body, 400)?.value).toContain(
+        'App ID is invalid'
+      );
+    });
+
+    it('returns undefined for unmapped bodies', () => {
+      expect(provider.handleErrors('{"some":"other error"}', 400)).toBeUndefined();
+    });
+  });
 });

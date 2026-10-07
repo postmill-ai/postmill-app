@@ -113,6 +113,47 @@ export class InstagramProvider
       };
     }
 
+    // OAuth token-exchange errors (standalone Instagram login). Without these
+    // the connect flow collapses every failure into "Unknown Error", which is
+    // undiagnosable in logs and Sentry (POSTMILL-APP-S).
+    if (
+      body.indexOf('Invalid authorization code') > -1 ||
+      body.indexOf('Matching code was not found') > -1
+    ) {
+      return {
+        type: 'bad-body' as const,
+        value:
+          'The Instagram authorization code expired or was already used — please restart the connection and complete it without going back in the browser',
+      };
+    }
+
+    if (body.toLowerCase().indexOf('redirect_uri') > -1) {
+      return {
+        type: 'bad-body' as const,
+        value:
+          "Instagram OAuth redirect URI mismatch — the callback URL must be listed exactly in your Meta app's OAuth redirect URIs",
+      };
+    }
+
+    if (
+      body.indexOf('Invalid platform app') > -1 ||
+      body.indexOf('Invalid client_id') > -1
+    ) {
+      return {
+        type: 'bad-body' as const,
+        value:
+          'Instagram App ID is invalid — check the App ID and App Secret in the channel settings',
+      };
+    }
+
+    if (body.indexOf('Invalid client_secret') > -1) {
+      return {
+        type: 'bad-body' as const,
+        value:
+          'Instagram App Secret is invalid — check the App ID and App Secret in the channel settings',
+      };
+    }
+
     if (
       body.indexOf('REVOKED_ACCESS_TOKEN') > -1 ||
       body.indexOf('"error_subcode":33') > -1
