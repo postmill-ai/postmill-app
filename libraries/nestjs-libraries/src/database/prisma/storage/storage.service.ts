@@ -232,7 +232,19 @@ export class StorageService {
   ) {
     const created = await this.createConfig(orgId, data, userId);
 
-    const testResult = await this.testConnection(created.id, orgId);
+    // Adapter construction can throw synchronously (e.g. R2 without an
+    // endpoint — POSTMILL-APP-W). Treat it like a failed test: roll back the
+    // persisted row and surface a 400, never a 500 + orphaned config.
+    let testResult: { ok: boolean; error?: string };
+    try {
+      testResult = await this.testConnection(created.id, orgId);
+    } catch (err) {
+      await this.deleteConfig(created.id, orgId);
+      throw new HttpException(
+        `Connection test failed: ${(err as Error)?.message || String(err)}`,
+        400
+      );
+    }
     if (!testResult.ok) {
       await this.deleteConfig(created.id, orgId);
       throw new HttpException(
@@ -378,7 +390,15 @@ export class StorageService {
     orgId: string
   ): Promise<{ ok: boolean; error?: string }> {
     const config = await this.#getOrgScopedConfig(id, orgId);
-    const result = await this.#buildAdapter(config).testConnection();
+    // Adapter construction can throw synchronously on incomplete config
+    // (e.g. R2 without an endpoint) — report it as a failed test so the
+    // health check records it and callers get ok:false, not a 500.
+    let result: { ok: boolean; error?: string };
+    try {
+      result = await this.#buildAdapter(config).testConnection();
+    } catch (err) {
+      result = { ok: false, error: (err as Error)?.message || String(err) };
+    }
     // Track health (#62)
     await this._storageRepository.updateHealthCheck(orgId, id, result.ok, result.error);
     return result;

@@ -620,6 +620,69 @@ describe('StorageService — health tracking (#62)', () => {
   });
 });
 
+describe('StorageService — adapter construction failures (POSTMILL-APP-W)', () => {
+  // The R2 adapter throws synchronously in its constructor when the config is
+  // incomplete (no endpoint). That must surface as a failed test / 400 with a
+  // rollback — never a 500 with the row left behind.
+  const throwingResolution = () =>
+    makeResolution({
+      resolveStorage: vi.fn(() => {
+        throw new Error('Cloudflare R2 requires an endpoint URL.');
+      }),
+    });
+
+  it('testConnection returns ok:false when adapter construction throws', async () => {
+    const repo = makeRepo({
+      findById: vi.fn().mockResolvedValue({
+        id: 'p1',
+        organizationId: 'org-1',
+        type: StorageProviderType.CLOUDFLARE_R2,
+      }),
+      updateHealthCheck: vi.fn(),
+    });
+    const service = makeStorageService(repo, undefined, throwingResolution());
+
+    const result = await service.testConnection('p1', 'org-1');
+
+    expect(result).toEqual({
+      ok: false,
+      error: 'Cloudflare R2 requires an endpoint URL.',
+    });
+    expect(repo.updateHealthCheck).toHaveBeenCalledWith(
+      'org-1',
+      'p1',
+      false,
+      'Cloudflare R2 requires an endpoint URL.'
+    );
+  });
+
+  it('createAndTestConfig rolls back the row and 400s when adapter construction throws', async () => {
+    const createdRow = {
+      id: 'r2-1',
+      organizationId: 'org-1',
+      type: StorageProviderType.CLOUDFLARE_R2,
+      mounted: false,
+      name: 'My R2',
+    };
+    const repo = makeRepo({
+      create: vi.fn().mockResolvedValue(createdRow),
+      findById: vi.fn().mockResolvedValue(createdRow),
+      delete: vi.fn().mockResolvedValue(createdRow),
+    });
+    const service = makeStorageService(repo, undefined, throwingResolution());
+
+    await expect(
+      service.createAndTestConfig('org-1', {
+        type: StorageProviderType.CLOUDFLARE_R2,
+        name: 'My R2',
+        credentials: { accessKeyId: 'AKIA', secretAccessKey: 'secret' },
+        bucket: 'my-bucket',
+      })
+    ).rejects.toMatchObject({ status: 400 });
+    expect(repo.delete).toHaveBeenCalledWith('org-1', 'r2-1');
+  });
+});
+
 describe('StorageService — getLocalAdapterForOrg', () => {
   it('synthesizes a virtual LOCAL adapter when no DB row exists and createIfMissing is false (default)', async () => {
     const repo = makeRepo({

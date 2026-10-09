@@ -54,6 +54,27 @@ const TYPE_FIELD_SPECS: Record<
   string,
   { credentials: ProviderExtraFieldSpec[]; config: ProviderExtraFieldSpec[] }
 > = {
+  CLOUDFLARE_R2: {
+    credentials: DEFAULT_CREDENTIAL_SPECS,
+    // R2 has no default endpoint derivation — the backend adapter throws
+    // without it (POSTMILL-APP-W), so it is required here, not "optional".
+    config: [
+      { type: 'text', key: 'bucket', label: 'Bucket', placeholder: 'my-bucket', required: true },
+      {
+        type: 'text',
+        key: 'endpoint',
+        label: 'Endpoint (required)',
+        placeholder: 'https://<accountId>.r2.cloudflarestorage.com',
+        required: true,
+      },
+      {
+        type: 'text',
+        key: 'publicUrl',
+        label: 'Public URL (optional)',
+        placeholder: 'https://cdn.example.com',
+      },
+    ],
+  },
   MEDIALOCKER: {
     credentials: [
       {
@@ -156,7 +177,25 @@ export const ProviderFormModal: React.FC<ProviderFormModalProps> = ({
     return Object.keys(credentials).length > 0 ? credentials : undefined;
   };
 
+  // Config specs flagged `required` are enforced client-side (the kit renderer
+  // only draws the asterisk) so an incomplete form never reaches the API.
+  const missingRequiredLabels = () =>
+    configSpecs
+      .filter((s) => s.required && !String(state.extra[s.key] ?? '').trim())
+      .map((s) => s.label || s.key);
+
   const handleTest = async () => {
+    const missing = missingRequiredLabels();
+    if (missing.length > 0) {
+      setTestResult({
+        ok: false,
+        error: translate(
+          'missing_required_fields',
+          `Missing required fields: ${missing.join(', ')}`
+        ),
+      });
+      return;
+    }
     setTesting(true);
     setTestResult(null);
     try {
@@ -190,6 +229,17 @@ export const ProviderFormModal: React.FC<ProviderFormModalProps> = ({
   };
 
   const handleSave = async () => {
+    const missing = missingRequiredLabels();
+    if (missing.length > 0) {
+      setTestResult({
+        ok: false,
+        error: translate(
+          'missing_required_fields',
+          `Missing required fields: ${missing.join(', ')}`
+        ),
+      });
+      return;
+    }
     setSaving(true);
     try {
       const body: any = { name: state.name };
