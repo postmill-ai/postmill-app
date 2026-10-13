@@ -127,7 +127,18 @@
       "js-yaml": "^4.3.2",
       "@opentelemetry/propagator-jaeger": "^2.9.0",
       "protobufjs": "^8.4.1",
-      "ws": "^8.21.0"
+      "ws": "^8.21.0",
+      "proxy-addr": "^2.0.8",
+      "handlebars": "^4.7.10",
+      "fast-jwt": "^6.3.1",
+      "source-map-js": "^1.2.2",
+      "shell-quote": "^1.11.0",
+      "@modelcontextprotocol/sdk": "^1.31.0",
+      "@mastra/mcp>@modelcontextprotocol/client": "2.2.0",
+      "graphql-yoga": "^5.24.4",
+      "@graphql-yoga/plugin-defer-stream": "^3.24.4",
+      "sharp": "^0.35.5",
+      "compression": "^1.8.2"
     }
   },
   "volta": {

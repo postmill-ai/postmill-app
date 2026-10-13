@@ -141,7 +141,7 @@
     "puppeteer": "^25.8.0",
     "resend": "^6.12.4",
     "rss-parser": "^3.13.0",
-    "sharp": "^0.35.4",
+    "sharp": "^0.35.5",
     "slugify": "^1.6.9",
     "socks": "^2.8.9",
     "subtitle": "4.2.2-alpha.0",

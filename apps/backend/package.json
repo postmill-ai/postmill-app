@@ -181,7 +181,7 @@
     "@nestjs/platform-socket.io": "^11.2.7",
     "@nestjs/websockets": "^11.2.7",
     "bs58": "^6.0.0",
-    "compression": "^1.8.1",
+    "compression": "^1.8.2",
     "cookie-parser": "^1.4.7",
     "dotenv-cli": "^8.0.0",
     "socket.io": "^4.8.3",
