@@ -127,6 +127,13 @@ describe('DesignerDoc schema', () => {
     expect(parsed.mode).toBe('image');
   });
 
+  it('accepts justify as a text align value', () => {
+    const doc = JSON.parse(JSON.stringify(imageDocFixture));
+    doc.outputs[0].children[0].align = 'justify';
+    const result = DesignerDocStrictSchema.safeParse(migrateDoc(doc));
+    expect(result.success).toBe(true);
+  });
+
   it('rejects unknown keys in strict mode', () => {
     const migrated = migrateDoc(imageDocFixture);
     const bad = { ...migrated, extraField: true };

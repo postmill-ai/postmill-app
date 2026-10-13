@@ -473,7 +473,7 @@ export interface DesignerElement {
   fontWeight?: number;
   fontStyle?: 'normal' | 'italic';
   fill?: string;
-  align?: 'left' | 'center' | 'right';
+  align?: 'left' | 'center' | 'right' | 'justify';
   /** Vertical alignment of the wrapped text block inside the element box. */
   verticalAlign?: 'top' | 'middle' | 'bottom';
   lineHeight?: number;
@@ -1108,7 +1108,7 @@ const elementCommon = {
   fontFamily: z.string().max(200).optional(),
   fontStyle: z.enum(['normal', 'italic']).optional(),
   fill: ColorSchema.optional(),
-  align: z.enum(['left', 'center', 'right']).optional(),
+  align: z.enum(['left', 'center', 'right', 'justify']).optional(),
   verticalAlign: z.enum(['top', 'middle', 'bottom']).optional(),
   textPath: z.string().max(MAX_TEXT_LEN).optional(),
   textTransform: z.enum(['none', 'uppercase', 'lowercase', 'capitalize']).optional(),

@@ -14,8 +14,8 @@ import Konva from 'konva';
 import { isNativeBlend } from '@postmill-ai/nestjs-libraries/media/designer-doc/pixel-ops';
 import type { DesignerElement, DesignerGradient, TextRun } from './designer.store';
 import { computeCoverCrop } from './reflow';
-import { fittedFontSize, fitDesignerText } from './measure-text';
-import { measureLineWidth, applyTextTransform } from '@postmill-ai/nestjs-libraries/media/designer-doc/fit-text';
+import { fittedFontSize, fitDesignerText, measureForElement } from './measure-text';
+import { measureLineWidth, applyTextTransform, justifyLineWords } from '@postmill-ai/nestjs-libraries/media/designer-doc/fit-text';
 import {
   pointsForShape,
   flattenPoints,
@@ -80,6 +80,12 @@ interface ElementsProps {
    * the "black canvas on a freshly loaded doc" bug.
    */
   backdropKey?: string | number;
+  /**
+   * The text element currently open in the inline editor. Its Konva node is
+   * hidden while the DOM overlay is up, or both paint the same string at
+   * slightly different metrics and the text reads doubled.
+   */
+  editingTextId?: string | null;
 }
 
 const imageCache = new Map<string, HTMLImageElement>();
@@ -316,6 +322,8 @@ interface RichSegment {
   y: number;
   run: TextRun;
   element: DesignerElement;
+  /** A paragraph break (or the end of the text) follows this segment. */
+  endsParagraph?: boolean;
 }
 
 const layoutRichRuns = (runs: TextRun[], el: DesignerElement): RichSegment[] => {
@@ -367,9 +375,18 @@ const layoutRichRuns = (runs: TextRun[], el: DesignerElement): RichSegment[] => 
         x += wordWidth;
       }
 
-      if (pi < paragraphs.length - 1) advanceLine();
+      if (pi < paragraphs.length - 1) {
+        // Justify needs to know which lines END a paragraph — those stay
+        // left-aligned, the way CSS `text-align: justify` behaves.
+        const last = segments[segments.length - 1];
+        if (last) last.endsParagraph = true;
+        advanceLine();
+      }
     }
   }
+
+  const last = segments[segments.length - 1];
+  if (last) last.endsParagraph = true;
 
   return segments;
 };
@@ -394,6 +411,23 @@ const applyAlignment = (segments: RichSegment[], el: DesignerElement): RichSegme
   for (const [, entry] of lineMap) {
     const lastSeg = entry.segments[entry.segments.length - 1];
     const lineEnd = lastSeg.x + measureRunWidth(lastSeg.text, lastSeg.run, el);
+
+    if (align === 'justify') {
+      // Extra width goes into the gaps BETWEEN words; a paragraph's last line
+      // keeps its natural spacing.
+      const extra = el.width - lineEnd;
+      const gaps = entry.segments.length - 1;
+      if (extra > 0 && gaps > 0 && !lastSeg.endsParagraph) {
+        const perGap = extra / gaps;
+        entry.segments.forEach((seg, i) => {
+          result.push({ ...seg, x: seg.x + perGap * i });
+        });
+        continue;
+      }
+      for (const seg of entry.segments) result.push(seg);
+      continue;
+    }
+
     const offset = align === 'center' ? (el.width - lineEnd) / 2 : el.width - lineEnd;
 
     for (const seg of entry.segments) {
@@ -836,6 +870,7 @@ export const CanvasElements: FC<ElementsProps> = ({
   interactive = true,
   backdrop,
   backdropKey,
+  editingTextId,
 }) => {
   // Symbol instances expand to ordinary elements before the tree is built, so
   // nothing below here needs to know symbols exist — the same contract the
@@ -855,6 +890,10 @@ export const CanvasElements: FC<ElementsProps> = ({
           width: el.width,
           height: el.height,
           rotation: el.rotation,
+          // The id only ever names a text element, so gating here (rather than
+          // per text branch) is what hides the node under the edit overlay for
+          // flat, rich, staggered and on-path text alike.
+          visible: el.id !== editingTextId,
           // Flip mirrors about the element's centre, for EVERY layer type. The
           // Flip control is offered for any selection but was only ever honoured
           // inside ImageNode, so flipping text or a shape did nothing on the
@@ -890,6 +929,10 @@ export const CanvasElements: FC<ElementsProps> = ({
             const outline = el.textStroke;
             const fontStyle = konvaWeight(el.fontWeight, el.fontStyle === 'italic');
             const curve = el.curve ?? 0;
+            // Konva's fill resolve prefers a plain `fill` colour over the
+            // gradient props when both are set, so the colour has to be gated
+            // off — the same rule the shape branches follow.
+            const hasGrad = !!el.fillGradient?.stops?.length;
             // Shared with the server, which walks the same arc a glyph at a
             // time. Deriving it here independently is how a positive Arc Angle
             // ended up putting the baseline a full radius below the element.
@@ -908,6 +951,7 @@ export const CanvasElements: FC<ElementsProps> = ({
                     {...commonProps}
                     data={textPathData}
                     text={flatText}
+                    {...gradientFillProps(el.fillGradient, el.width, el.height)}
                     // The server offsets the run along the path for centre/right;
                     // without this the canvas always started at the path origin.
                     align={el.align || 'left'}
@@ -915,7 +959,7 @@ export const CanvasElements: FC<ElementsProps> = ({
                     fontFamily={el.fontFamily || 'Arial'}
                     fontSize={el.fontSize || 16}
                     fontStyle={fontStyle}
-                    fill={el.fill || '#000000'}
+                    fill={hasGrad ? undefined : el.fill || '#000000'}
                     shadowColor={shadow?.color}
                     shadowBlur={shadow?.blur}
                     shadowOffsetX={shadow?.offsetX}
@@ -951,7 +995,10 @@ export const CanvasElements: FC<ElementsProps> = ({
                       {...(seg.run.fill
                         ? {}
                         : gradientFillProps(el.fillGradient, el.width, el.height))}
-                      fill={seg.run.fill || el.fill || '#000000'}
+                      fill={
+                        seg.run.fill ||
+                        (hasGrad ? undefined : el.fill || '#000000')
+                      }
                       textDecoration={seg.run.underline ? 'underline' : undefined}
                       shadowColor={shadow?.color}
                       shadowBlur={shadow?.blur}
@@ -980,7 +1027,7 @@ export const CanvasElements: FC<ElementsProps> = ({
                   fontFamily={el.fontFamily || 'Arial'}
                   fontSize={el.fontSize || 16}
                   fontStyle={fontStyle}
-                  fill={el.fill || '#000000'}
+                  fill={hasGrad ? undefined : el.fill || '#000000'}
                   shadowColor={shadow?.color}
                   shadowBlur={shadow?.blur}
                   shadowOffsetX={shadow?.offsetX}
@@ -998,14 +1045,16 @@ export const CanvasElements: FC<ElementsProps> = ({
             // out or condensed text would also re-wrap at a narrower measure.
             const scaleX = el.textScaleX || 1;
 
-            // Paragraph spacing and a first-line indent have no Konva `Text`
-            // equivalent, so those two lay the block out line by line from the
-            // SHARED fitter — the same lines, gaps and indents the server
+            // Paragraph spacing, a first-line indent and JUSTIFY have no Konva
+            // `Text` equivalent, so those lay the block out line by line from
+            // the SHARED fitter — the same lines, gaps and indents the server
             // paints. Everything else keeps the single wrapping node.
             const fitted = fitDesignerText(el);
             const staggered =
               fitted &&
-              (fitted.lineGaps.some((g) => g > 0) || fitted.lineIndents.some((i) => i > 0));
+              (el.align === 'justify' ||
+                fitted.lineGaps.some((g) => g > 0) ||
+                fitted.lineIndents.some((i) => i > 0));
             if (staggered && fitted) {
               const boxWidth = el.width / scaleX;
               const contentHeight =
@@ -1024,33 +1073,78 @@ export const CanvasElements: FC<ElementsProps> = ({
                 cursor += fitted.lineHeight;
                 return row;
               });
+              // Justify paints word by word from the shared offsets; a
+              // paragraph's last line (and a line with no slack) stays a
+              // single left-aligned node.
+              const justifyMeasure =
+                el.align === 'justify' ? measureForElement(el) : undefined;
+              const sharedTextProps = {
+                fontFamily: el.fontFamily || 'Arial',
+                fontSize: fitted.fontSize,
+                fontStyle,
+                letterSpacing: el.letterSpacing || 0,
+                shadowColor: shadow?.color,
+                shadowBlur: shadow?.blur,
+                shadowOffsetX: shadow?.offsetX,
+                shadowOffsetY: shadow?.offsetY,
+                shadowEnabled: !!shadow,
+                stroke: outline?.color,
+                strokeWidth: outline?.width,
+                strokeScaleEnabled: false,
+                fillAfterStrokeEnabled: !!outline,
+              };
               return (
                 <Group key={el.id} {...commonProps} scaleX={scaleX}>
-                  {rows.map((row, i) => (
-                    <KonvaText
-                      key={`${i}-${row.line}`}
-                      x={row.indent}
-                      y={row.y}
-                      width={boxWidth - row.indent}
-                      text={row.line}
-                      fontFamily={el.fontFamily || 'Arial'}
-                      fontSize={fitted.fontSize}
-                      fontStyle={fontStyle}
-                      fill={el.fill || '#000000'}
-                      {...gradientFillProps(el.fillGradient, boxWidth, el.height)}
-                      align={el.align || 'left'}
-                      letterSpacing={el.letterSpacing || 0}
-                      shadowColor={shadow?.color}
-                      shadowBlur={shadow?.blur}
-                      shadowOffsetX={shadow?.offsetX}
-                      shadowOffsetY={shadow?.offsetY}
-                      shadowEnabled={!!shadow}
-                      stroke={outline?.color}
-                      strokeWidth={outline?.width}
-                      strokeScaleEnabled={false}
-                      fillAfterStrokeEnabled={!!outline}
-                    />
-                  ))}
+                  {rows.map((row, i) => {
+                    const words = justifyMeasure
+                      ? // A paragraph's last line keeps natural spacing, like
+                        // CSS `text-align: justify`.
+                        i < rows.length - 1 && !fitted.paragraphStarts[i + 1]
+                        ? justifyLineWords(
+                            row.line,
+                            boxWidth - row.indent,
+                            fitted.fontSize,
+                            el.letterSpacing || 0,
+                            justifyMeasure
+                          )
+                        : null
+                      : null;
+                    if (words) {
+                      return (
+                        <Group key={`${i}-${row.line}`} x={row.indent} y={row.y}>
+                          {words.map((word, wi) => (
+                            <KonvaText
+                              key={`${wi}-${word.text}`}
+                              x={word.x}
+                              y={0}
+                              text={word.text}
+                              {...sharedTextProps}
+                              fill={hasGrad ? undefined : el.fill || '#000000'}
+                              // The ramp spans the whole BOX, not the word, so
+                              // it is rebuilt in the box's space via the origin.
+                              {...gradientFillProps(el.fillGradient, boxWidth, el.height, {
+                                x: -(row.indent + word.x),
+                                y: -row.y,
+                              })}
+                            />
+                          ))}
+                        </Group>
+                      );
+                    }
+                    return (
+                      <KonvaText
+                        key={`${i}-${row.line}`}
+                        x={row.indent}
+                        y={row.y}
+                        width={boxWidth - row.indent}
+                        text={row.line}
+                        {...sharedTextProps}
+                        fill={hasGrad ? undefined : el.fill || '#000000'}
+                        {...gradientFillProps(el.fillGradient, boxWidth, el.height)}
+                        align={el.align === 'justify' ? 'left' : el.align || 'left'}
+                      />
+                    );
+                  })}
                 </Group>
               );
             }
@@ -1076,8 +1170,10 @@ export const CanvasElements: FC<ElementsProps> = ({
                 // its own selection box and the canvas disagrees with the PNG.
                 fontSize={fittedFontSize(el)}
                 fontStyle={fontStyle}
-                fill={el.fill || '#000000'}
-                align={el.align || 'left'}
+                fill={hasGrad ? undefined : el.fill || '#000000'}
+                // Justify is laid out line by line above; a measurable element
+                // never reaches this node with it set.
+                align={el.align === 'justify' ? 'left' : el.align || 'left'}
                 verticalAlign={el.verticalAlign || 'top'}
                 wrap="word"
                 lineHeight={el.lineHeight || 1.2}

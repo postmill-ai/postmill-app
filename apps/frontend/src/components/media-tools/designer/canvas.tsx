@@ -1511,6 +1511,7 @@ export const DesignerCanvas: FC<CanvasProps> = ({
           <CanvasElements
             elements={isVideo ? [] : (output?.children || [])}
             symbols={doc.symbols}
+            editingTextId={editingTextId}
             // Re-cache the adjustment scopes once the bg image arrives — see
             // `backdropKey` on ElementsProps.
             backdropKey={bgImage ? 'bg-loaded' : 'bg-pending'}
@@ -1569,6 +1570,7 @@ export const DesignerCanvas: FC<CanvasProps> = ({
               height={output.height}
               interactive={effectiveTool === 'move' && !isSpacePressed}
               onEditText={setEditingTextId}
+              editingTextId={editingTextId}
             />
           )}
           {/* Grid overlay. Editor chrome: drawn on the stage but never in an

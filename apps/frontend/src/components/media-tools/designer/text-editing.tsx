@@ -2,6 +2,7 @@
 
 import React, { FC, useEffect, useRef, useState } from 'react';
 import type { DesignerElement, TextRun } from './designer.store';
+import { fittedFontSize } from './measure-text';
 
 interface TextEditingProps {
   element: DesignerElement;
@@ -223,10 +224,12 @@ export const TextEditingOverlay: FC<TextEditingProps> = ({
 
   // Match the canvas HUD: the Stage is offset by the viewport (stageRect.x/y),
   // which is a screen-space translation applied AFTER scaling the element coords.
-  const left = element.x * scale + stageRect.x + 2;
-  const top = element.y * scale + stageRect.y + 2;
-  const width = element.width * scale - 4;
-  const minHeight = Math.max(element.height * scale - 4, 20);
+  // No inset: the canvas paints the text box edge-to-edge, so an offset or a
+  // narrower wrap here is what made the glyphs sit off the canvas rendering.
+  const left = element.x * scale + stageRect.x;
+  const top = element.y * scale + stageRect.y;
+  const width = element.width * scale;
+  const minHeight = Math.max(element.height * scale, 20);
 
   return (
     <div
@@ -248,7 +251,9 @@ export const TextEditingOverlay: FC<TextEditingProps> = ({
         width: `${Math.max(width, 20) / (element.textScaleX || 1)}px`,
         minHeight: `${minHeight}px`,
         fontFamily: element.fontFamily || 'Arial',
-        fontSize: `${(element.fontSize || 16) * scale}px`,
+        // The canvas paints flat text at the FITTED size (shrink-to-fit), so the
+        // overlay must match it or the string reflows the moment editing ends.
+        fontSize: `${fittedFontSize(element) * scale}px`,
         fontWeight: element.fontWeight ?? 400,
         fontStyle: element.fontStyle === 'italic' ? 'italic' : 'normal',
         color: element.fill || '#000000',

@@ -31,6 +31,11 @@ interface VideoCanvasOverlayProps {
   interactive?: boolean;
   /** Double-click on a text clip asks the host to open the inline editor. */
   onEditText?: (clipId: string) => void;
+  /**
+   * The clip currently open in the inline editor. Its Konva node is hidden
+   * while the DOM overlay is up, or the two paint the same string doubled.
+   */
+  editingTextId?: string | null;
 }
 
 const videoElements = new Map<string, HTMLVideoElement>();
@@ -378,6 +383,7 @@ export const VideoCanvasOverlay: FC<VideoCanvasOverlayProps> = ({
   height,
   interactive = false,
   onEditText,
+  editingTextId,
 }) => {
   const doc = store((s) => s.doc);
   const currentOutput = store((s) => s.currentOutput);
@@ -599,6 +605,7 @@ export const VideoCanvasOverlay: FC<VideoCanvasOverlayProps> = ({
             <KonvaText
               key={clip.id}
               {...nodeProps}
+              visible={clip.id !== editingTextId}
               x={props.x}
               y={props.y}
               width={props.width}

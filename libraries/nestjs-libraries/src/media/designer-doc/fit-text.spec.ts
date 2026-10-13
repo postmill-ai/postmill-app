@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest';
 import {
   applyTextTransform,
   fitTextToBox,
+  justifyLineWords,
   wrapTextLines,
   type MeasureText,
 } from './fit-text';
@@ -102,5 +103,49 @@ describe('paragraph spacing and first-line indent', () => {
     expect(wide).toEqual(['aaaa', 'aaaa']);
     // 60 - 20 = 40px of measure: 'aaaa' is exactly 40, so it still fits alone.
     expect(indented.lines).toEqual(['aaaa', 'aaaa']);
+  });
+});
+
+describe('paragraphStarts', () => {
+  it('marks paragraph-first lines even with no spacing or indent set', () => {
+    const fitted = fitTextToBox(
+      { text: 'aaaa aaaa\nbb', width: 60, height: 500, fontSize: 20 },
+      measure
+    );
+    // 'aaaa aaaa' wraps to two lines at 40px measure each, then 'bb'.
+    expect(fitted.lines).toEqual(['aaaa', 'aaaa', 'bb']);
+    expect(fitted.paragraphStarts).toEqual([true, false, true]);
+  });
+});
+
+describe('justifyLineWords', () => {
+  it('distributes the slack evenly into the gaps BETWEEN words', () => {
+    // 'aaaa bbbb cccc' at 0.5em glyphs: 14 chars * 10 = 140 natural, in a
+    // 200px line — 60px of slack over two gaps = 30px each.
+    const words = justifyLineWords('aaaa bbbb cccc', 200, 20, 0, measure)!;
+    expect(words.map((w) => w.text)).toEqual(['aaaa', 'bbbb', 'cccc']);
+    expect(words[0].x).toBe(0);
+    // word (40) + space (10) + gap (30)
+    expect(words[1].x).toBe(80);
+    expect(words[2].x).toBe(160);
+    // The last word ends flush with the target width.
+    expect(words[2].x + 40).toBe(200);
+  });
+
+  it('returns null when there is no slack or fewer than two words', () => {
+    expect(justifyLineWords('aaaa', 200, 20, 0, measure)).toBeNull();
+    // 24 chars * 10px = 240 natural — wider than the line, so nothing to spread.
+    expect(justifyLineWords('aaaa bbbb cccc dddd eeee', 200, 20, 0, measure)).toBeNull();
+  });
+
+  it('honours letterSpacing and scaleX in the measurement', () => {
+    // letterSpacing 2: each char carries +2, so 'aaaa bbbb' measures
+    // (4+1+4) chars * 10 + 9 * 2 = 108; slack 200 - 108 = 92 in one gap.
+    const words = justifyLineWords('aaaa bbbb', 200, 20, 2, measure)!;
+    expect(words[1].x).toBe(40 + 8 + 10 + 2 + 92);
+    // scaleX 0.5: everything measures half, and the slack is against the
+    // SCALED width — 200 - 45 = 155 in the single gap.
+    const condensed = justifyLineWords('aaaa bbbb', 200, 20, 0, measure, 0.5)!;
+    expect(condensed[1].x).toBe((40 + 10) * 0.5 + (200 - 45));
   });
 });

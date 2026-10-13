@@ -15,10 +15,22 @@ import {
 } from '../controls';
 import { DESIGNER_FONTS, ensureFontLoaded } from '../fonts';
 import { GOOGLE_FONTS } from '@postmill-ai/nestjs-libraries/media/designer-doc/font-catalog';
-import { fitDesignerText, fittedFontSize } from '../measure-text';
+import { fittedFontSize, measureForElement } from '../measure-text';
+import {
+  applyTextTransform,
+  measureLineWidth,
+  wrapTextLines,
+  type MeasureText,
+} from '@postmill-ai/nestjs-libraries/media/designer-doc/fit-text';
 import { useBrandColors } from './use-brand-colors';
 import { useBrandFonts, useCustomFonts } from './use-brand-fonts';
 import { useT } from '@postmill-ai/react/translation/get.transation.service.client';
+import {
+  AlignCenterIcon,
+  AlignJustifyIcon,
+  AlignLeftIcon,
+  AlignRightIcon,
+} from '@postmill-ai/frontend/components/ui/icons';
 
 const RUN_STYLE_KEYS = new Set(['fill', 'fontFamily', 'fontSize', 'fontWeight', 'fontStyle']);
 
@@ -26,21 +38,94 @@ const RUN_STYLE_KEYS = new Set(['fill', 'fontFamily', 'fontSize', 'fontWeight', 
 const MAX_FONT_RESULTS = 60;
 
 /**
- * Height the box needs so a typed font size is actually the size that paints.
+ * Height (and, when a lone word overflows, width) the box needs so a typed
+ * font size is actually the size that paints.
  *
  * The fitter is shrink-only by design, which means the Size field could be set
  * to anything and the canvas would quietly paint something smaller. Growing the
  * box (never shrinking it — that would fight a deliberate layout) makes the
- * number honest.
+ * number honest. The wrap is computed AT THE REQUESTED size: measuring the line
+ * count at the current size grew the box for the old wrap, which the fitter
+ * then immediately shrank the font back into.
  */
-const growBoxFor = (
+export const growBoxFor = (
   element: DesignerElement | null,
-  fontSize: number
+  fontSize: number,
+  measure?: MeasureText
 ): Partial<DesignerElement> => {
   if (!element || element.type !== 'text') return {};
-  const lines = Math.max(1, fitDesignerText(element)?.lines.length ?? 1);
-  const needed = Math.ceil(lines * (element.lineHeight || 1.2) * fontSize);
-  return needed > element.height ? { height: needed } : {};
+  // Rich, on-path and curved text lay out differently and are never shrunk by
+  // the fitter, so the authored size already renders — no box to grow.
+  if (element.richText?.length || element.textPath || (element.curve || 0) !== 0) {
+    return {};
+  }
+  const m = measure ?? measureForElement(element);
+  if (!m) return {};
+
+  const text = applyTextTransform(element.text ?? '', element.textTransform);
+  const indent = element.firstLineIndent || 0;
+  const letterSpacing = element.letterSpacing || 0;
+  const scaleX = element.textScaleX || 1;
+  // Same wrap rule the fitter applies: the box narrows by the first-line indent.
+  const lines = wrapTextLines(
+    text,
+    Math.max(1, element.width - indent),
+    fontSize,
+    letterSpacing,
+    m,
+    scaleX
+  );
+  const paragraphs = text.split('\n').length;
+  const needed =
+    Math.ceil(Math.max(1, lines.length) * (element.lineHeight || 1.2) * fontSize) +
+    Math.max(0, paragraphs - 1) * (element.paragraphSpacing || 0);
+
+  const patch: Partial<DesignerElement> = {};
+  if (needed > element.height) patch.height = needed;
+  // A single word wider than the box never wraps — it overflows — so growing
+  // height can't make the size honest there; the box has to widen.
+  if (lines.length === 1 && paragraphs === 1) {
+    const lineWidth =
+      measureLineWidth(lines[0], fontSize, letterSpacing, m, scaleX) + indent;
+    if (lineWidth > element.width) patch.width = Math.ceil(lineWidth);
+  }
+  return patch;
+};
+
+/**
+ * The patch one `update()` call writes to an element.
+ *
+ * Run-style keys go to `richText` runs, but a change that covers the WHOLE text
+ * (no sub-selection inside the edit overlay) lands on the element too — the
+ * picker label, run fallbacks, newly typed characters and curved text all read
+ * the element-level style, which otherwise stayed at the creation defaults
+ * forever once the element had runs.
+ */
+export const buildTextElementPatch = (
+  el: DesignerElement,
+  updates: Partial<DesignerElement>,
+  selection: { start: number; end: number } | null
+): Partial<DesignerElement> => {
+  const runUpdate: Partial<TextRun> = {};
+  const elUpdate: Partial<DesignerElement> = {};
+  for (const [k, v] of Object.entries(updates)) {
+    if (RUN_STYLE_KEYS.has(k)) (runUpdate as any)[k] = v;
+    else (elUpdate as any)[k] = v;
+  }
+
+  const merged: Partial<DesignerElement> = { ...elUpdate };
+  if (!Object.keys(runUpdate).length) return merged;
+  if (!el.richText?.length) return { ...merged, ...runUpdate };
+
+  const styledRuns = applyStyleToRuns(
+    el.richText,
+    selection?.start ?? 0,
+    selection?.end ?? Infinity,
+    runUpdate
+  );
+  return selection
+    ? { ...merged, richText: styledRuns }
+    : { ...merged, ...runUpdate, richText: styledRuns };
 };
 
 const runStylesEqual = (a: Partial<TextRun>, b: Partial<TextRun>): boolean => {
@@ -198,37 +283,15 @@ export const TextFormatPanel: FC<TextFormatPanelProps> = ({ store }) => {
     (updates: Partial<DesignerElement>, commit = true) => {
       if (!textElements.length) return;
 
-      const runUpdate: Partial<TextRun> = {};
-      const elUpdate: Partial<DesignerElement> = {};
-      for (const [k, v] of Object.entries(updates)) {
-        if (RUN_STYLE_KEYS.has(k)) (runUpdate as any)[k] = v;
-        else (elUpdate as any)[k] = v;
-      }
-
-      const hasRunUpdate = Object.keys(runUpdate).length > 0;
       const selection =
         textElements.length === 1 && element
           ? getSelectionOffsets(element.id)
           : null;
 
       for (const el of textElements) {
-        let merged: Partial<DesignerElement> = { ...elUpdate };
-        if (hasRunUpdate) {
-          if (el.richText?.length) {
-            const offsets =
-              selection && textElements.length === 1 ? selection : null;
-            const styledRuns = applyStyleToRuns(
-              el.richText,
-              offsets?.start ?? 0,
-              offsets?.end ?? Infinity,
-              runUpdate
-            );
-            merged = { ...merged, richText: styledRuns };
-          } else {
-            Object.assign(merged, runUpdate);
-          }
-        }
-        store.getState().updateElement(el.id, merged);
+        store
+          .getState()
+          .updateElement(el.id, buildTextElementPatch(el, updates, selection));
       }
       // Continuous controls (sliders) pass commit=false during the drag and push a
       // single history entry on release.
@@ -531,12 +594,22 @@ export const TextFormatPanel: FC<TextFormatPanelProps> = ({ store }) => {
         <SegmentedControl
           id="text-align"
           value={element.align || 'left'}
-          options={[
-            { value: 'left', label: '⇤' },
-            { value: 'center', label: '⇔' },
-            { value: 'right', label: '⇥' },
-          ]}
-          onChange={(align) => update({ align: align as 'left' | 'center' | 'right' })}
+          options={([
+            ['left', AlignLeftIcon, t('designer_align_left', 'Align left')],
+            ['center', AlignCenterIcon, t('designer_align_center', 'Align center')],
+            ['right', AlignRightIcon, t('designer_align_right', 'Align right')],
+            ['justify', AlignJustifyIcon, t('designer_align_justify', 'Justify')],
+          ] as const).map(([value, Icon, label]) => ({
+            value,
+            label: (
+              <span title={label} aria-label={label} className="flex items-center">
+                <Icon size={14} />
+              </span>
+            ),
+          }))}
+          onChange={(align) =>
+            update({ align: align as DesignerElement['align'] })
+          }
         />
       </div>
 

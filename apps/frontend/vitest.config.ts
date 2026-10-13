@@ -66,6 +66,7 @@ export default defineConfig({
       'src/components/new-layout/bottom-tab-bar.spec.{ts,tsx}',
       'src/components/setup/**/*.spec.{ts,tsx}',
       'src/components/media-tools/designer/*.spec.{ts,tsx}',
+      'src/components/media-tools/designer/panels/*.spec.{ts,tsx}',
       'src/components/media-tools/ai-designer/*.spec.{ts,tsx}',
       'src/components/media-tools/studio-kit/*.spec.{ts,tsx}',
       'src/components/media-tools/*.spec.{ts,tsx}',

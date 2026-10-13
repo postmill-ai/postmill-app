@@ -146,6 +146,12 @@ export interface FittedText {
   lineGaps: number[];
   /** Left indent per line, index-aligned with `lines`. */
   lineIndents: number[];
+  /**
+   * Which wrapped lines START a paragraph, index-aligned with `lines` — even
+   * when no paragraph spacing or indent is set, so justify can leave every
+   * paragraph's LAST line at its natural spacing.
+   */
+  paragraphStarts: boolean[];
 }
 
 /**
@@ -173,9 +179,10 @@ export const fitTextToBox = (
   const text = applyTextTransform(box.text, box.textTransform);
 
   // Which wrapped lines START a paragraph — the only ones paragraph spacing and
-  // a first-line indent apply to. Derived per wrap, since the wrap changes.
+  // a first-line indent apply to, and the ones justify uses to leave every
+  // paragraph's LAST line at natural spacing. Derived per wrap, since the wrap
+  // changes.
   const paragraphStarts = (lines: string[]): boolean[] => {
-    if (!paragraphSpacing && !indent) return lines.map(() => false);
     const counts = text
       .split('\n')
       .map((p) => wrapTextLines(p, box.width - indent, size, letterSpacing, measure, scaleX).length);
@@ -212,5 +219,51 @@ export const fitTextToBox = (
     lineHeight: lineHeightFactor * size,
     lineGaps: starts.map((start, i) => (start && i > 0 ? paragraphSpacing : 0)),
     lineIndents: starts.map((start) => (start ? indent : 0)),
+    paragraphStarts: starts,
   };
+};
+
+export interface JustifiedWord {
+  /** The word itself, without surrounding spaces. */
+  text: string;
+  /** X offset from the line's left edge. */
+  x: number;
+}
+
+/**
+ * Lay one wrapped line out justified: the slack between the line's natural
+ * width and `targetWidth` is distributed evenly into the gaps BETWEEN words.
+ * Both renderers paint justified lines word-by-word from these offsets — Konva
+ * has no justify of its own and node-canvas no `textAlign: 'justify'`, so this
+ * one layout is what keeps the canvas and the export in agreement.
+ *
+ * Returns null when the line can't or shouldn't be stretched (fewer than two
+ * words, or no slack) — the caller then paints it left-aligned, which is also
+ * what a paragraph's last line does.
+ */
+export const justifyLineWords = (
+  line: string,
+  targetWidth: number,
+  fontSize: number,
+  letterSpacing: number,
+  measure: MeasureText,
+  scaleX = 1
+): JustifiedWord[] | null => {
+  const words = line.split(' ').filter((w) => w.length > 0);
+  if (words.length < 2) return null;
+  const slack =
+    targetWidth - measureLineWidth(line, fontSize, letterSpacing, measure, scaleX);
+  if (slack <= 0) return null;
+  const gap = slack / (words.length - 1);
+  const spaceWidth = measureLineWidth(' ', fontSize, letterSpacing, measure, scaleX);
+  const out: JustifiedWord[] = [];
+  let x = 0;
+  for (const word of words) {
+    out.push({ text: word, x });
+    x +=
+      measureLineWidth(word, fontSize, letterSpacing, measure, scaleX) +
+      spaceWidth +
+      gap;
+  }
+  return out;
 };

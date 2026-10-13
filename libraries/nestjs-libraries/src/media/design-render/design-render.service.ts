@@ -25,6 +25,7 @@ import {
 } from '../designer-doc/designer-doc.limits';
 import {
   fitTextToBox,
+  justifyLineWords,
   measureLineWidth,
   type FittedText,
 } from '../designer-doc/fit-text';
@@ -2478,6 +2479,30 @@ export class DesignRenderService {
         cursor += fitted.lineGaps[i] || 0;
         const indent = fitted.lineIndents[i] || 0;
         const lineWidth = this.measureLine(target, line, letterSpacing);
+        const lineY = cursor + fitted.lineHeight / 2;
+        if (align === 'justify') {
+          // Slack goes into the gaps BETWEEN words, from the shared layout —
+          // Konva has no justify either, so the canvas paints the same offsets.
+          // A paragraph's last line keeps its natural spacing, like CSS.
+          const paragraphLast =
+            i === fitted.lines.length - 1 || fitted.paragraphStarts[i + 1];
+          const words = paragraphLast
+            ? null
+            : justifyLineWords(
+                line,
+                boxWidth - indent,
+                fitted.fontSize,
+                letterSpacing,
+                (s) => target.measureText(s).width
+              );
+          if (words) {
+            for (const word of words) {
+              this.drawTextLine(target, word.text, indent + word.x, lineY, letterSpacing, el);
+            }
+            cursor += fitted.lineHeight;
+            return;
+          }
+        }
         let x = indent;
         if (align === 'center') x = indent + (boxWidth - indent - lineWidth) / 2;
         else if (align === 'right') x = boxWidth - lineWidth;
@@ -2486,7 +2511,7 @@ export class DesignRenderService {
         // Text.js `translateY = lineHeightPx / 2`). Drawing from the TOP of the
         // box instead put the export a fraction of a line-height above the
         // canvas — ~13px on a 41px footer, and more the larger the type.
-        this.drawTextLine(target, line, x, cursor + fitted.lineHeight / 2, letterSpacing, el);
+        this.drawTextLine(target, line, x, lineY, letterSpacing, el);
         cursor += fitted.lineHeight;
       });
     };
@@ -2591,6 +2616,9 @@ export class DesignRenderService {
     interface Seg { text: string; run: TextRun; }
     const lines: Seg[][] = [[]];
     let lineWidth = 0;
+    // Which lines END a paragraph — justify leaves those at natural spacing,
+    // the way CSS `text-align: justify` does.
+    const paragraphEndLines = new Set<number>();
 
     const setRunFont = (run: TextRun) => {
       const s = run.fontStyle ?? el.fontStyle ?? 'normal';
@@ -2621,9 +2649,14 @@ export class DesignRenderService {
           lines[lines.length - 1].push({ text: display, run: { ...run } });
           lineWidth += ww;
         }
-        if (pi < paragraphs.length - 1) { lines.push([]); lineWidth = 0; }
+        if (pi < paragraphs.length - 1) {
+          paragraphEndLines.add(lines.length - 1);
+          lines.push([]);
+          lineWidth = 0;
+        }
       }
     }
+    paragraphEndLines.add(lines.length - 1);
 
     const emptyLineH = lineHeightFactor * (runs[0]?.fontSize ?? el.fontSize ?? 16);
     const lineHeights = lines.map((line) => {
@@ -2651,10 +2684,23 @@ export class DesignRenderService {
       for (const seg of line) { setRunFont(seg.run); totalW += this.measureLine(ctx, seg.text, letterSpacing); }
 
       let x = 0;
+      let gap = 0;
       if (align === 'center') x = (maxWidth - totalW) / 2;
       else if (align === 'right') x = maxWidth - totalW;
+      else if (
+        align === 'justify' &&
+        !paragraphEndLines.has(li) &&
+        line.length > 1 &&
+        totalW < maxWidth
+      ) {
+        // The extra width goes into the gaps BETWEEN the word segments — the
+        // same distribution the canvas's `applyAlignment` computes.
+        gap = (maxWidth - totalW) / (line.length - 1);
+      }
 
-      for (const seg of line) {
+      for (let si = 0; si < line.length; si++) {
+        const seg = line[si];
+        if (si > 0) x += gap;
         setRunFont(seg.run);
         const fill = seg.run.fill || el.fill || '#000000';
         const sz = seg.run.fontSize ?? el.fontSize ?? 16;
