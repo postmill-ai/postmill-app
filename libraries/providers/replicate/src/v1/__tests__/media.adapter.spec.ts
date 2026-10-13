@@ -93,3 +93,69 @@ describe('ReplicateMediaAdapter.generateImage aspect mapping', () => {
     );
   });
 });
+
+describe('ReplicateMediaAdapter.generateImage image-to-image (sourceUrl)', () => {
+  let fetchMock: ReturnType<typeof makeFetch>;
+  let adapter: ReplicateMediaAdapter;
+
+  beforeEach(() => {
+    fetchMock = makeFetch();
+    adapter = new ReplicateMediaAdapter(fetchMock as any);
+  });
+
+  it('routes sourceUrl into input_image for the flux-kontext family', async () => {
+    await adapter.generateImage('make it a poster', {
+      credentials: { apiKey: 'k' },
+      model: 'black-forest-labs/flux-kontext-pro',
+      sourceUrl: 'data:image/jpeg;base64,QUJD',
+    });
+    const body = lastRequestBody(fetchMock);
+    expect(body.input.input_image).toBe('data:image/jpeg;base64,QUJD');
+    expect(body.input.prompt).toBe('make it a poster');
+    expect(body.input.image).toBeUndefined();
+  });
+
+  it('routes sourceUrl into image for flux-dev (metadata-declared i2i)', async () => {
+    await adapter.generateImage('make it a poster', {
+      credentials: { apiKey: 'k' },
+      model: 'black-forest-labs/flux-dev',
+      sourceUrl: 'https://cdn.example/ref.png',
+    });
+    const body = lastRequestBody(fetchMock);
+    expect(body.input.image).toBe('https://cdn.example/ref.png');
+    expect(body.input.input_image).toBeUndefined();
+  });
+
+  it('lets an explicit org tunable in options.input win over the mapping', async () => {
+    await adapter.generateImage('make it a poster', {
+      credentials: { apiKey: 'k' },
+      model: 'black-forest-labs/flux-kontext-pro',
+      sourceUrl: 'https://cdn.example/ref.png',
+      input: { input_image: 'https://cdn.example/override.png' },
+    });
+    expect(lastRequestBody(fetchMock).input.input_image).toBe(
+      'https://cdn.example/override.png'
+    );
+  });
+
+  it('throws for a text-to-image-only model rather than dropping the source', async () => {
+    await expect(
+      adapter.generateImage('a cat', {
+        credentials: { apiKey: 'k' },
+        model: 'black-forest-labs/flux-1.1-pro',
+        sourceUrl: 'https://cdn.example/ref.png',
+      })
+    ).rejects.toThrow('does not accept image-to-image input');
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it('sends no init-image field on the plain text-to-image path', async () => {
+    await adapter.generateImage('a cat', {
+      credentials: { apiKey: 'k' },
+      model: 'black-forest-labs/flux-kontext-pro',
+    });
+    const body = lastRequestBody(fetchMock);
+    expect(body.input.input_image).toBeUndefined();
+    expect(body.input.image).toBeUndefined();
+  });
+});

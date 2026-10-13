@@ -148,6 +148,23 @@ export class ReplicateMediaAdapter implements MediaProviderAdapter {
     tall: '9:16',
   };
 
+  // Model → native init-image field for the models `metadata.mediaModels`
+  // declares under `image-to-image` (the guard is the metadata declaration;
+  // this map is only the field-name knowledge): the flux-kontext family
+  // takes `input_image`, flux-dev takes `image`. A declared model with no
+  // known field returns null — guessing a field name ships broken input.
+  private static _i2iInputField(model: string): string | null {
+    const declared = (
+      (providerMetadata.mediaModels as Record<string, { id: string }[]> | undefined)?.[
+        'image-to-image'
+      ] ?? []
+    ).some((m) => m.id === model);
+    if (!declared) return null;
+    if (model.includes('flux-kontext')) return 'input_image';
+    if (model === 'black-forest-labs/flux-dev') return 'image';
+    return null;
+  }
+
   async generateImage(prompt: string, options?: MediaGenerateOptions): Promise<MediaGenerationResult> {
     const aspectRatio = options?.aspect
       ? ReplicateMediaAdapter.ASPECT_RATIO[options.aspect]
@@ -156,9 +173,26 @@ export class ReplicateMediaAdapter implements MediaProviderAdapter {
     // the job, and "which model painted this?" is otherwise unanswerable from
     // the logs (the default is implicit).
     const model = options?.version || options?.model || DEFAULT_IMAGE_MODEL;
+    // image-to-image: a `sourceUrl` lands in the model's native init-image
+    // field, but ONLY for models the package metadata declares under
+    // `image-to-image` — anything else throws rather than silently dropping
+    // the conditioning (an unconditioned image must never ship labelled as
+    // reference-matched; the caller falls back to text-to-image explicitly).
+    // `options.input` still spreads last in `_createPrediction`, so an
+    // explicit org tunable wins over this mapping.
+    const sourceInput: Record<string, string> = {};
+    if (options?.sourceUrl) {
+      const field = ReplicateMediaAdapter._i2iInputField(model);
+      if (!field) {
+        throw new Error(
+          `Replicate model ${model} does not accept image-to-image input`,
+        );
+      }
+      sourceInput[field] = options.sourceUrl;
+    }
     const created = await this._createPrediction(
       { ...options, version: model },
-      { prompt, ...(aspectRatio ? { aspect_ratio: aspectRatio } : {}) },
+      { prompt, ...(aspectRatio ? { aspect_ratio: aspectRatio } : {}), ...sourceInput },
       PREFER_WAIT_SECONDS,
     );
     const data = await this._resolvePrediction(created, options);

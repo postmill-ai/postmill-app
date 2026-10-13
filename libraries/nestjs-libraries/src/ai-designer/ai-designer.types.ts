@@ -377,6 +377,20 @@ export interface AssetNeedRequest {
    * re-generating is the same dice, not an escalation).
    */
   stockOnly?: boolean;
+  /**
+   * A reference image (media-library File id) the generation should be
+   * conditioned on. The asset agent resolves it to a fetchable URL itself
+   * (same mechanism the vision critic uses for interpretation) and tries the
+   * org's `media/image-to-image` default BEFORE plain text-to-image. The
+   * conductor stamps it on background/hero slots when the session carries
+   * reference images.
+   */
+  sourceFileId?: string;
+  /**
+   * An already-resolved reference image URL (https or data URI), used instead
+   * of `sourceFileId` when the caller has one in hand.
+   */
+  sourceUrl?: string;
 }
 
 export interface AssetResult {

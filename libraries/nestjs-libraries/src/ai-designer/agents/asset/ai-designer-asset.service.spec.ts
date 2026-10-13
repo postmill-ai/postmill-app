@@ -4,6 +4,9 @@ import os from 'os';
 import path from 'path';
 import sharp from 'sharp';
 import { AiDesignerAssetService } from './ai-designer-asset.service';
+import { DefaultNotConfiguredError } from '../../../ai/defaults/defaults.errors';
+import { BudgetExceeded } from '../../../ai/governance/errors';
+import { ProviderUpstreamError } from '@postmill-ai/provider-kernel';
 
 // Icon needs resolve through the shared Iconify resolver (network) — mocked
 // so the icon-kind tests stay hermetic.
@@ -1043,10 +1046,10 @@ describe('AiDesignerAssetService gradient fallback aspect (round 7 C4)', () => {
   });
 });
 
-// Round 7 C3: `referenceFileIds` used to be handed to this agent and was never
-// read — a dead feature. No image provider in use accepts an init/reference
-// image on the text-to-image path, so references stay an interpreted-cue
-// feature and the payload no longer pretends otherwise.
+// Round 7 C3: a PAYLOAD-level `referenceFileIds` array is still not an input
+// to this agent — conditioning rides per-need as `sourceFileId`/`sourceUrl`
+// (stamped by the conductor on background/hero slots), which the agent
+// resolves and sends to the image-to-image default (see the i2i block below).
 describe('AiDesignerAssetService reference images are not an asset input (round 7 C3)', () => {
   it('ignores referenceFileIds entirely and never forwards them to generation', async () => {
     const { service, aiDefaults } = makeService();
@@ -1065,6 +1068,228 @@ describe('AiDesignerAssetService reference images are not an asset input (round 
     const [, prompt, opts] = aiDefaults.textToImage.mock.calls[0];
     expect(prompt).not.toContain('file-ref-1');
     expect(JSON.stringify(opts)).not.toContain('file-ref');
+  });
+});
+
+// PR D: reference-image conditioning. A need carrying a source image tries
+// the org's image-to-image default FIRST; the fallback chain is
+// i2i → text-to-image → stock.
+describe('AiDesignerAssetService image-to-image conditioning (PR D)', () => {
+  const makeI2iService = () => {
+    const base = makeService();
+    const aiDefaults = {
+      ...base.aiDefaults,
+      imageToImage: vi.fn().mockResolvedValue('https://example.com/i2i.png'),
+    };
+    const service = new AiDesignerAssetService(
+      aiDefaults as any,
+      base.fileService as any,
+      { getLocalAdapterForOrg: vi.fn() } as any,
+      base.stockMedia as any
+    );
+    return { ...base, aiDefaults, service };
+  };
+
+  const sourceRequest = (need: Record<string, unknown>) =>
+    makeContext({
+      rawInput: JSON.stringify({
+        type: 'asset-request',
+        assetNeeds: [
+          { slotId: 's1', brief: 'a pool poster background', prefer: 'generate', ...need },
+        ],
+      }),
+    });
+
+  it('prefers image-to-image when the need carries a sourceUrl', async () => {
+    const { service, aiDefaults, fileService } = makeI2iService();
+
+    const response = await (service as any)._handler(
+      sourceRequest({ sourceUrl: 'https://cdn.example/ref.png' })
+    );
+
+    expect(aiDefaults.imageToImage).toHaveBeenCalledWith(
+      ORG_ID,
+      expect.any(String),
+      'https://cdn.example/ref.png'
+    );
+    expect(aiDefaults.textToImage).not.toHaveBeenCalled();
+    expect(fileService.importFromUrl).toHaveBeenCalledWith(
+      ORG_ID,
+      expect.objectContaining({ url: 'https://example.com/i2i.png' })
+    );
+    expect(JSON.parse(response.content).assets['s1'].source).toBe('generate');
+  });
+
+  it('resolves a sourceFileId to an inline image via the File row', async () => {
+    const { service, aiDefaults, fileService } = makeI2iService();
+    const png = await sharp({
+      create: { width: 8, height: 8, channels: 3, background: '#336699' },
+    })
+      .png()
+      .toBuffer();
+    fileService.getFileById = vi.fn().mockResolvedValue({
+      id: 'ref-1',
+      path: `data:image/png;base64,${png.toString('base64')}`,
+    });
+
+    await (service as any)._handler(sourceRequest({ sourceFileId: 'ref-1' }));
+
+    expect(fileService.getFileById).toHaveBeenCalledWith(ORG_ID, 'ref-1');
+    expect(aiDefaults.imageToImage).toHaveBeenCalledWith(
+      ORG_ID,
+      expect.any(String),
+      expect.stringMatching(/^data:image\/jpeg;base64,/)
+    );
+    expect(aiDefaults.textToImage).not.toHaveBeenCalled();
+  });
+
+  it('falls back to text-to-image when the i2i default is unconfigured', async () => {
+    const { service, aiDefaults } = makeI2iService();
+    aiDefaults.imageToImage.mockRejectedValue(
+      new DefaultNotConfiguredError('image-to-image')
+    );
+
+    const response = await (service as any)._handler(
+      sourceRequest({ sourceUrl: 'https://cdn.example/ref.png' })
+    );
+
+    expect(aiDefaults.imageToImage).toHaveBeenCalledTimes(1);
+    expect(aiDefaults.textToImage).toHaveBeenCalledTimes(1);
+    expect(JSON.parse(response.content).assets['s1'].source).toBe('generate');
+  });
+
+  it('falls back to text-to-image when the i2i call fails', async () => {
+    const { service, aiDefaults } = makeI2iService();
+    aiDefaults.imageToImage.mockRejectedValue(new Error('provider down'));
+
+    const response = await (service as any)._handler(
+      sourceRequest({ sourceUrl: 'https://cdn.example/ref.png' })
+    );
+
+    expect(aiDefaults.textToImage).toHaveBeenCalledTimes(1);
+    expect(JSON.parse(response.content).assets['s1'].source).toBe('generate');
+  });
+
+  it('full fallback order: i2i failure → t2i failure → stock', async () => {
+    const { service, aiDefaults, stockMedia, fileService } = makeI2iService();
+    aiDefaults.imageToImage.mockRejectedValue(new Error('i2i down'));
+    aiDefaults.textToImage.mockRejectedValue(new Error('t2i down'));
+    stockMedia.searchPhotos.mockResolvedValue({
+      results: [{ id: 'p1', url: 'https://example.com/stock.png', source: 'unsplash' }],
+    });
+
+    const response = await (service as any)._handler(
+      sourceRequest({ sourceUrl: 'https://cdn.example/ref.png' })
+    );
+
+    expect(stockMedia.searchPhotos).toHaveBeenCalled();
+    expect(fileService.importFromUrl).toHaveBeenCalledWith(
+      ORG_ID,
+      expect.objectContaining({ url: 'https://example.com/stock.png' })
+    );
+    expect(JSON.parse(response.content).assets['s1'].source).toBe('stock');
+  });
+
+  it('ignores a sourceUrl that is neither https nor an image data URI', async () => {
+    const { service, aiDefaults } = makeI2iService();
+
+    await (service as any)._handler(sourceRequest({ sourceUrl: 'file:///etc/passwd' }));
+
+    expect(aiDefaults.imageToImage).not.toHaveBeenCalled();
+    expect(aiDefaults.textToImage).toHaveBeenCalledTimes(1);
+  });
+
+  it('generates text-only when the sourceFileId resolves to nothing', async () => {
+    const { service, aiDefaults, fileService } = makeI2iService();
+    fileService.getFileById = vi.fn().mockResolvedValue(null);
+
+    await (service as any)._handler(sourceRequest({ sourceFileId: 'gone' }));
+
+    expect(aiDefaults.imageToImage).not.toHaveBeenCalled();
+    expect(aiDefaults.textToImage).toHaveBeenCalledTimes(1);
+  });
+});
+
+// PR D: the second generation attempt is conditional — only transient
+// failures (timeouts, rate limits, 5xx, network) earn the retry; definitive
+// ones (unconfigured default, auth/quota, budget) fall to stock immediately.
+describe('AiDesignerAssetService conditional generation retry (PR D)', () => {
+  const makeRetryService = () => {
+    const base = makeService();
+    base.stockMedia.searchPhotos.mockResolvedValue({
+      results: [{ id: 'p1', url: 'https://example.com/stock.png', source: 'unsplash' }],
+    });
+    return base;
+  };
+  const oneNeed = makeContext();
+
+  it('does not retry a definitive error (unconfigured default)', async () => {
+    const { service, aiDefaults, stockMedia } = makeRetryService();
+    aiDefaults.textToImage.mockRejectedValue(
+      new DefaultNotConfiguredError('text-to-image')
+    );
+
+    const response = await (service as any)._handler(oneNeed);
+
+    expect(aiDefaults.textToImage).toHaveBeenCalledTimes(1);
+    expect(stockMedia.searchPhotos).toHaveBeenCalled();
+    expect(JSON.parse(response.content).assets['s1'].source).toBe('stock');
+  });
+
+  it('does not retry a non-retryable upstream error (auth)', async () => {
+    const { service, aiDefaults } = makeRetryService();
+    aiDefaults.textToImage.mockRejectedValue(
+      new ProviderUpstreamError(
+        { domain: 'media', providerId: 'openrouter', providerName: 'OpenRouter' },
+        'auth',
+        'bad key',
+        401
+      )
+    );
+
+    await (service as any)._handler(oneNeed);
+
+    expect(aiDefaults.textToImage).toHaveBeenCalledTimes(1);
+  });
+
+  it('does not retry a budget cap', async () => {
+    const { service, aiDefaults } = makeRetryService();
+    aiDefaults.textToImage.mockRejectedValue(
+      new BudgetExceeded('Budget exceeded', 'media', ORG_ID)
+    );
+
+    await (service as any)._handler(oneNeed);
+
+    expect(aiDefaults.textToImage).toHaveBeenCalledTimes(1);
+  });
+
+  it('retries a retryable upstream error (rate limit) once', async () => {
+    const { service, aiDefaults } = makeRetryService();
+    aiDefaults.textToImage.mockRejectedValue(
+      new ProviderUpstreamError(
+        { domain: 'media', providerId: 'openrouter', providerName: 'OpenRouter' },
+        'rate_limit',
+        'slow down',
+        429
+      )
+    );
+
+    await (service as any)._handler(oneNeed);
+
+    expect(aiDefaults.textToImage).toHaveBeenCalledTimes(2);
+  });
+
+  it('retries a timeout once, then lands the second attempt', async () => {
+    const { service, aiDefaults, stockMedia } = makeRetryService();
+    aiDefaults.textToImage
+      .mockRejectedValueOnce(new Error('Asset generation timed out after 90000ms'))
+      .mockResolvedValueOnce('https://example.com/img.png');
+
+    const response = await (service as any)._handler(oneNeed);
+
+    expect(aiDefaults.textToImage).toHaveBeenCalledTimes(2);
+    expect(stockMedia.searchPhotos).not.toHaveBeenCalled();
+    expect(JSON.parse(response.content).assets['s1'].source).toBe('generate');
   });
 });
 

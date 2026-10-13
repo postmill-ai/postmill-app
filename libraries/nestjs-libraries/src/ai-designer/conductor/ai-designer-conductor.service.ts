@@ -36,6 +36,7 @@ import { matchSlotTexts, normalizeSlotText } from '../util/slot-keys';
 import { applyReferenceGeometry } from '../util/apply-reference-geometry';
 import { isDeliveredAccept } from '../util/accept-phrases';
 import { collectDocFileIds } from '@postmill-ai/nestjs-libraries/media/designer-doc/doc-file-refs';
+import { mapWithConcurrency } from '@postmill-ai/nestjs-libraries/utils/concurrency';
 import type {
   AiDesignerAgentContext,
   AiDesignerConfig,
@@ -160,6 +161,16 @@ export class AiDesignerConductorService {
    * only, so the decision below is made on the render the fixes produced.
    */
   private static readonly MAX_QUALITY_PASSES = 3;
+  /**
+   * Bounded parallelism for the per-variant pipeline loops (compose, quality
+   * passes, format expansion). Variants are independent — each composes,
+   * renders and QC's its own Design row — so they run `VARIANT_CONCURRENCY`
+   * at a time via `mapWithConcurrency` (order-preserving). 3 keeps one
+   * variant's slow LLM/render chain from serializing the whole run without
+   * turning an accepted plan into an unbounded provider fan-out (the
+   * per-dispatch budget gate and critique cap still apply).
+   */
+  private static readonly VARIANT_CONCURRENCY = 3;
   /**
    * Findings under these criteria say "not beautiful enough", not "broken" —
    * a variant still flagged for them after MAX_QUALITY_PASSES is held back
@@ -1458,20 +1469,26 @@ export class AiDesignerConductorService {
 
     emitter.progress('asset', 'Generating shared assets', undefined, 'Generating imagery');
 
-    const assetNeeds = this._collectAssetNeeds(plans, outputs, brief.intent);
+    const assetNeeds = this._collectAssetNeeds(
+      plans,
+      outputs,
+      brief.intent,
+      config.referenceFileIds?.[0]
+    );
     if (assetNeeds.dropped > 0) {
       notes.push(
         `only the ${AiDesignerConductorService.MAX_ASSET_NEEDS} most-needed images were generated — the remaining slots have no generated imagery`
       );
     }
-    // `referenceFileIds` used to ride along here and was never read by the
-    // asset agent — see the note on `AssetRequestInput`: no image provider in
-    // use accepts an init/reference image on the text-to-image path. The
-    // references DO shape the design, as interpreted cues on the brief; say
-    // so rather than letting the user believe the imagery was matched.
+    // The session's first reference image rides the background/hero needs as
+    // `sourceFileId` — the asset agent conditions those generations on the
+    // reference pixels through the org's image-to-image default when one is
+    // configured (text-to-image otherwise). The references ALSO shape the
+    // design as interpreted cues on the brief; the note keeps both channels
+    // honest.
     if ((config.referenceFileIds ?? []).length > 0) {
       notes.push(
-        'your reference images guided the brief (style, mood, subject) — the image generator cannot copy them directly, so the generated imagery is an interpretation'
+        'your reference images guided the brief (style, mood, subject) and conditioned the generated imagery directly where the image provider accepts a reference — the imagery is an interpretation, not a copy'
       );
     }
     const assetResponse = await this._dispatchAgent(ctx, 'asset', {
@@ -1556,135 +1573,148 @@ export class AiDesignerConductorService {
     // with the SAME copy (locked texts included), so nothing is rewritten.
     const copiesByVariant = new Map<string, SlotTextMap>();
     const total = plans.length;
-    let done = 0;
     let lastError: unknown;
 
-    for (const plan of plans) {
-      try {
-        this._throwIfCancelled(sessionId);
-        done++;
-        emitter.progress(
-          'composer',
-          `Composing variant ${plan.variantId}`,
-          Math.round((done / total) * 100),
-          `Variant ${done}/${total}`
-        );
+    // Variants are independent — each composes and renders its own Design row
+    // — so the compose loop runs VARIANT_CONCURRENCY at a time instead of
+    // fully serially. `mapWithConcurrency` preserves plan order in the
+    // returned array regardless of completion order; a failing variant is
+    // caught per item and must not abort the others (the old sequential
+    // loop's semantics); a user cancel still throws through.
+    const composed = await mapWithConcurrency(
+      plans,
+      AiDesignerConductorService.VARIANT_CONCURRENCY,
+      async (plan, planIdx): Promise<AiDesignerRenderResult | null> => {
+        const ordinal = planIdx + 1;
+        try {
+          this._throwIfCancelled(sessionId);
+          emitter.progress(
+            'composer',
+            `Composing variant ${plan.variantId}`,
+            Math.round((ordinal / total) * 100),
+            `Variant ${ordinal}/${total}`
+          );
 
-        // The plan's texts are the copy the user saw (and possibly edited) on
-        // the plan card — locked for the copywriter, never rewritten. When
-        // every copy slot is locked the dispatch is skipped entirely: there
-        // is nothing left to write.
-        const copySlotIds = (plan.slots ?? [])
-          .filter(isCopySlot)
-          .map((slot) => slot.id);
-        const planTexts =
-          plan.texts && typeof plan.texts === 'object' ? plan.texts : {};
-        // Plan texts may be keyed by role or a case variant rather than the
-        // exact slot id — an exact-only lookup then silently misses, the lock
-        // is dropped, and the copywriter rewrites approved copy from the
-        // concept alone. Align keys to slot ids first (same matcher the
-        // copywriter uses on model output). Pipe compounds are normalized
-        // HERE, before the value becomes the lock — a render-side cleanup
-        // would be reverted by the copy-lock on the next fix loop.
-        const lockedTexts: Record<string, string> = Object.fromEntries(
-          Object.entries(
-            matchSlotTexts(planTexts, (plan.slots ?? []).filter(isCopySlot))
-          ).map(([slotId, text]) => [slotId, normalizeSlotText(text)])
-        );
-        let copy: SlotTextMap;
-        if (
-          copySlotIds.length > 0 &&
-          copySlotIds.every((slotId) => slotId in lockedTexts)
-        ) {
-          copy = lockedTexts;
-        } else {
-          const copyResponse = await this._dispatchAgent(ctx, 'copywriter', {
-            type: 'copy-request',
+          // The plan's texts are the copy the user saw (and possibly edited) on
+          // the plan card — locked for the copywriter, never rewritten. When
+          // every copy slot is locked the dispatch is skipped entirely: there
+          // is nothing left to write.
+          const copySlotIds = (plan.slots ?? [])
+            .filter(isCopySlot)
+            .map((slot) => slot.id);
+          const planTexts =
+            plan.texts && typeof plan.texts === 'object' ? plan.texts : {};
+          // Plan texts may be keyed by role or a case variant rather than the
+          // exact slot id — an exact-only lookup then silently misses, the lock
+          // is dropped, and the copywriter rewrites approved copy from the
+          // concept alone. Align keys to slot ids first (same matcher the
+          // copywriter uses on model output). Pipe compounds are normalized
+          // HERE, before the value becomes the lock — a render-side cleanup
+          // would be reverted by the copy-lock on the next fix loop.
+          const lockedTexts: Record<string, string> = Object.fromEntries(
+            Object.entries(
+              matchSlotTexts(planTexts, (plan.slots ?? []).filter(isCopySlot))
+            ).map(([slotId, text]) => [slotId, normalizeSlotText(text)])
+          );
+          let copy: SlotTextMap;
+          if (
+            copySlotIds.length > 0 &&
+            copySlotIds.every((slotId) => slotId in lockedTexts)
+          ) {
+            copy = lockedTexts;
+          } else {
+            const copyResponse = await this._dispatchAgent(ctx, 'copywriter', {
+              type: 'copy-request',
+              plan,
+              brand: null,
+              ...(Object.keys(lockedTexts).length > 0 ? { lockedTexts } : {}),
+            });
+            copy = this._parseCopy(copyResponse);
+            if (Object.keys(copy).length === 0 && copySlotIds.length > 0) {
+              notes.push(`copy for variant ${ordinal} fell back to placeholder text`);
+            }
+          }
+          copiesByVariant.set(plan.variantId, copy);
+
+          // ONE original per plan: the composer only ever sees the primary
+          // format (with a single output it emits no addOutput ops and the
+          // per-channel layout passes are no-ops). The other formats are added
+          // to the saved doc afterwards by `_expandVariants` (designer-doc
+          // addOutput auto-seed + per-variant quality passes).
+          const composerResponse = await this._dispatchAgent(ctx, 'composer', {
+            type: 'compose-request',
             plan,
-            brand: null,
-            ...(Object.keys(lockedTexts).length > 0 ? { lockedTexts } : {}),
+            copy,
+            assets,
+            outputs: outputs.slice(0, 1),
+            orgId: ctx.orgId,
+            userId: ctx.userId,
           });
-          copy = this._parseCopy(copyResponse);
-          if (Object.keys(copy).length === 0 && copySlotIds.length > 0) {
-            notes.push(`copy for variant ${done} fell back to placeholder text`);
+          // The composer returns the doc without persisting — the saver is the
+          // single Design writer (one row per variant, no orphans).
+          const composedDoc = this._parseDesignDoc(composerResponse);
+          composedDocs.set(plan.variantId, composedDoc);
+          // The composer's total-fallback doc means the planned layout failed
+          // doc validation — the variant ships simplified and the user should
+          // hear about it (same honest-degradation trail as the other notes).
+          if (
+            (this._safeJson(composerResponse.content) as any)?.fallback === true
+          ) {
+            notes.push(`variant ${ordinal} used a simplified fallback layout`);
           }
-        }
-        copiesByVariant.set(plan.variantId, copy);
 
-        // ONE original per plan: the composer only ever sees the primary
-        // format (with a single output it emits no addOutput ops and the
-        // per-channel layout passes are no-ops). The other formats are added
-        // to the saved doc afterwards by `_expandVariants` (designer-doc
-        // addOutput auto-seed + per-variant quality passes).
-        const composerResponse = await this._dispatchAgent(ctx, 'composer', {
-          type: 'compose-request',
-          plan,
-          copy,
-          assets,
-          outputs: outputs.slice(0, 1),
-          orgId: ctx.orgId,
-          userId: ctx.userId,
-        });
-        // The composer returns the doc without persisting — the saver is the
-        // single Design writer (one row per variant, no orphans).
-        const composedDoc = this._parseDesignDoc(composerResponse);
-        composedDocs.set(plan.variantId, composedDoc);
-        // The composer's total-fallback doc means the planned layout failed
-        // doc validation — the variant ships simplified and the user should
-        // hear about it (same honest-degradation trail as the other notes).
-        if (
-          (this._safeJson(composerResponse.content) as any)?.fallback === true
-        ) {
-          notes.push(`variant ${done} used a simplified fallback layout`);
-        }
-
-        this._throwIfCancelled(sessionId);
-        // Intermediate state: the QC loops below re-render this variant up to
-        // ~10x, so File rows are deferred to the delivery registration at the
-        // end of the pipeline (see the saver's registerPreviews).
-        let render = await this._saver.saveDesign(
-          ctx.orgId,
-          ctx.userId,
-          plan.variantId,
-          composedDoc,
-          {
-            name: `${plan.skill}-${plan.variantId}`,
+          this._throwIfCancelled(sessionId);
+          // Intermediate state: the QC loops below re-render this variant up to
+          // ~10x, so File rows are deferred to the delivery registration at the
+          // end of the pipeline (see the saver's registerPreviews).
+          let render = await this._saver.saveDesign(
+            ctx.orgId,
+            ctx.userId,
+            plan.variantId,
+            composedDoc,
+            {
+              name: `${plan.skill}-${plan.variantId}`,
+              saveFolderId,
+              registerPreviews: false,
+            }
+          );
+          // Deterministic contrast repair over imagery (no LLM): flip the fill
+          // or halo the failing text, then ONE re-render.
+          const contrastFixed = await this._fixContrastOverImagery(
+            ctx,
+            render.designId,
+            composedDoc,
+            render,
+            `${plan.skill}-${plan.variantId}`,
             saveFolderId,
-            registerPreviews: false,
-          }
-        );
-        // Deterministic contrast repair over imagery (no LLM): flip the fill
-        // or halo the failing text, then ONE re-render.
-        const contrastFixed = await this._fixContrastOverImagery(
-          ctx,
-          render.designId,
-          composedDoc,
-          render,
-          `${plan.skill}-${plan.variantId}`,
-          saveFolderId,
-          notes,
-          `variant ${done}`
-        );
-        render = contrastFixed.render;
-        composedDocs.set(plan.variantId, contrastFixed.doc);
+            notes,
+            `variant ${ordinal}`
+          );
+          render = contrastFixed.render;
+          composedDocs.set(plan.variantId, contrastFixed.doc);
 
-        results.push(render);
-        emitter.preview(render);
-      } catch (err) {
-        if (this._wasCancelled(err)) throw err;
-        lastError = err;
-        this._logger.warn(
-          `Variant ${plan.variantId} failed: ${(err as Error).message}`,
-          AiDesignerConductorService.name
-        );
-        notes.push(`variant ${done} of ${total} failed to generate`);
-        emitter.progress(
-          'composer',
-          `Variant ${plan.variantId} failed — continuing`,
-          undefined,
-          `variant ${plan.variantId} failed`
-        );
+          emitter.preview(render);
+          return render;
+        } catch (err) {
+          if (this._wasCancelled(err)) throw err;
+          lastError = err;
+          this._logger.warn(
+            `Variant ${plan.variantId} failed: ${(err as Error).message}`,
+            AiDesignerConductorService.name
+          );
+          notes.push(`variant ${ordinal} of ${total} failed to generate`);
+          emitter.progress(
+            'composer',
+            `Variant ${plan.variantId} failed — continuing`,
+            undefined,
+            `variant ${plan.variantId} failed`
+          );
+          return null;
+        }
       }
+    );
+    for (const render of composed) {
+      if (render) results.push(render);
     }
 
     if (results.length === 0 && lastError) {
@@ -1710,11 +1740,18 @@ export class AiDesignerConductorService {
     // Variants that already spent their one full rebuild (fresh imagery +
     // recompose) — see the ship gate below the quality loop.
     const rebuiltVariants = new Set<string>();
-    for (let i = 0; i < results.length; i++) {
+    // One variant's full critique/fix/rebuild lifecycle. Variants QC their own
+    // Design rows, so — like the compose loop above — they run
+    // VARIANT_CONCURRENCY at a time; per-variant failure handling inside is
+    // unchanged (a failed pass breaks to delivery, never aborts the run), and
+    // the shared notes/holdback sets only ever get per-variant keys. The
+    // ship-gate rebuild RE-ENTERS this function for the same index (the old
+    // sequential loop's `i--; continue;`), guarded by `rebuiltVariants`.
+    const runVariantQualityPasses = async (i: number): Promise<void> => {
       this._throwIfCancelled(sessionId);
       if (!results[i].contactSheetUrl) {
         notes.push(`the automatic quality pass was skipped for variant ${i + 1}`);
-        continue;
+        return;
       }
 
       let aestheticFindings: VisionFinding[] = [];
@@ -2061,7 +2098,8 @@ export class AiDesignerConductorService {
             const needs = this._collectAssetNeeds(
               [planForRebuild],
               outputs,
-              brief.intent
+              brief.intent,
+              config.referenceFileIds?.[0]
             ).needs;
             // Assets the fresh set displaces: once the rebuilt doc no longer
             // references them their File rows leak, so they are soft-deleted
@@ -2116,8 +2154,12 @@ export class AiDesignerConductorService {
               `Ship gate: rebuilt variant ${results[i].variantId} after residual ship-blockers.`,
               AiDesignerConductorService.name
             );
-            i--;
-            continue;
+            // Re-judge the rebuilt render from scratch (the sequential loop's
+            // `i--; continue;`), then STOP — the recursive call runs this
+            // variant's own beauty gate, so the stale findings below must not
+            // judge the pre-rebuild render.
+            await runVariantQualityPasses(i);
+            return;
           } catch (rebuildErr) {
             if (this._wasCancelled(rebuildErr)) throw rebuildErr;
             this._logger.warn(
@@ -2154,7 +2196,12 @@ export class AiDesignerConductorService {
           );
         }
       }
-    }
+    };
+    await mapWithConcurrency(
+      results.map((_, idx) => idx),
+      AiDesignerConductorService.VARIANT_CONCURRENCY,
+      runVariantQualityPasses
+    );
     // The QC notes above name variants by their pre-holdback position, so the
     // delivery captions must use the same numbers — renumbering the survivors
     // here used to make "variant 2 was held back" disagree with the captions.
@@ -2362,10 +2409,16 @@ export class AiDesignerConductorService {
     // Variants that already spent their one expansion retry (see the catch).
     const retriedExpansions = new Set<string>();
 
-    for (let i = 0; i < results.length; i++) {
+    // One variant's seed → refit → per-format QC lifecycle. Each variant
+    // expands its OWN Design row, so variants run VARIANT_CONCURRENCY at a
+    // time (the per-format passes inside stay sequential — each one mutates
+    // and re-persists the shared doc). Failure handling is unchanged: roll
+    // back, retry once (re-entering this function for the same index — the
+    // old loop's `i--; continue;`), then degrade with a note.
+    const expandVariant = async (i: number): Promise<void> => {
       const result = results[i];
       const plan = plans.find((p) => p.variantId === result.variantId);
-      if (!plan) continue;
+      if (!plan) return;
 
       // The doc as it stood BEFORE any output was seeded. The expanded doc is
       // persisted before the per-format QC loop runs, so a failure in that loop
@@ -2620,14 +2673,19 @@ export class AiDesignerConductorService {
             `Retrying the format expansion for ${result.variantId} once.`,
             AiDesignerConductorService.name
           );
-          i--;
-          continue;
+          await expandVariant(i);
+          return;
         }
         notes.push(
           `variant ${i + 1} could only be delivered in its original format`
         );
       }
-    }
+    };
+    await mapWithConcurrency(
+      results.map((_, idx) => idx),
+      AiDesignerConductorService.VARIANT_CONCURRENCY,
+      expandVariant
+    );
   }
 
   /**
@@ -2814,10 +2872,18 @@ export class AiDesignerConductorService {
   // need targets a single aspect (the primary output's class): variants are
   // seeded from the original on the same Design row and the renderer
   // cover-crops per format, so per-aspect fan-out is unnecessary.
+  //
+  // `sourceFileId` (the session's first reference image) is stamped on the
+  // slots whose imagery CARRIES the design — the image background and the
+  // hero-layout image slots — so the asset agent can condition those
+  // generations on the reference pixels (image-to-image) instead of on prose
+  // cues alone. Ancillary subject slots (small product/decor imagery) go
+  // without: a whole-design reference is the wrong conditioning for them.
   private _collectAssetNeeds(
     plans: DesignPlan[],
     outputs: { formatId: string; width: number; height: number }[],
-    originalPrompt?: string
+    originalPrompt?: string,
+    sourceFileId?: string
   ): { needs: AssetNeedRequest[]; dropped: number } {
     const primaryAspect = outputs[0]
       ? aspectClass(outputs[0].width, outputs[0].height)
@@ -2848,16 +2914,21 @@ export class AiDesignerConductorService {
         const key = `${plan.variantId}:${need.slotId}`;
         if (seen.has(key)) continue;
         seen.add(key);
+        const isBackground = backgroundSlotId === need.slotId;
+        const heroLayout = this._heroLayoutForNeed(plan, need.slotId, dominantFormatId);
         needs.push({
           slotId: key,
           brief:
-            backgroundSlotId && need.slotId === backgroundSlotId
+            isBackground
               ? `${need.brief}${promptSuffix}`
               : need.brief,
           prefer: need.prefer,
           ...(need.kind ? { kind: need.kind } : {}),
           aspect: primaryAspect,
-          heroLayout: this._heroLayoutForNeed(plan, need.slotId, dominantFormatId),
+          heroLayout,
+          ...(sourceFileId && (isBackground || heroLayout)
+            ? { sourceFileId }
+            : {}),
         });
       }
     }

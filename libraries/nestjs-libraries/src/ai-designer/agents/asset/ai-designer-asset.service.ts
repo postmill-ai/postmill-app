@@ -9,10 +9,21 @@ import sharp from 'sharp';
 import { readFile } from 'fs/promises';
 import * as path from 'path';
 import { AiDefaultsService } from '@postmill-ai/nestjs-libraries/ai/defaults/ai-defaults.service';
+import { DefaultNotConfiguredError } from '@postmill-ai/nestjs-libraries/ai/defaults/defaults.errors';
+import {
+  BudgetExceeded,
+  CapabilityNotAvailable,
+} from '@postmill-ai/nestjs-libraries/ai/governance/errors';
+import { ProviderUpstreamError } from '@postmill-ai/provider-kernel';
 import { FileService } from '@postmill-ai/nestjs-libraries/database/prisma/file/file.service';
 import { StorageService } from '@postmill-ai/nestjs-libraries/database/prisma/storage/storage.service';
 import { StockMediaService } from '@postmill-ai/nestjs-libraries/media/stock/stock-media.service';
 import { resolveIconifyIcon } from '@postmill-ai/nestjs-libraries/media/designer-doc/icon-resolver';
+import {
+  isLocalStorageUrl,
+  readLocalUpload,
+} from '@postmill-ai/nestjs-libraries/ai/vision-image-url';
+import { isSafePublicHttpsUrl } from '@postmill-ai/nestjs-libraries/dtos/webhooks/webhook.url.validator';
 import type { AssetAspect, AssetNeedRequest, AssetResult } from '../../ai-designer.types';
 import { assetKey } from '../../util/aspect';
 import { raceWithTimeout } from '../../util/race-with-timeout';
@@ -139,17 +150,23 @@ interface AssetRequestInput {
   regenerate?: boolean;
 }
 
-// NOTE on reference images: this agent takes NO `referenceFileIds`. Neither
-// image provider in use can condition a generation on a source image through
-// the text-to-image path — the OpenAI adapter posts to
-// `/v1/images/generations` (no image input; `edits` is a different endpoint
-// it does not implement) and the Replicate adapter builds its prediction body
-// from `{ prompt, aspect_ratio }` only, dropping `options.sourceUrl`
-// entirely, and none of its six text-to-image model descriptors declares an
-// image/init-image/reference field. References therefore reach the design as
-// ENGLISH CUES (the vision critic's `interpret-request` → `brief.referenceCues`
-// → the art director's plan), which is honest and useful; they do not steer
-// the pixels. The conductor says so in its degradation trail.
+// Reference images: a need MAY carry `sourceFileId`/`sourceUrl` (the conductor
+// stamps the session's first reference onto background/hero slots). When one is
+// present the agent FIRST tries the org's `media/image-to-image` default via
+// `AiDefaultsService.imageToImage`, falling back to plain text-to-image when
+// i2i is unconfigured or fails, then to stock. References also still reach the
+// design as ENGLISH CUES (the vision critic's `interpret-request` →
+// `brief.referenceCues` → the art director's plan) — the two channels
+// complement each other: cues steer the plan, the source image steers the
+// pixels.
+
+// The source image rides the i2i call as an inline data URI (local uploads,
+// data-URI files) or a verified public https URL — downscaled to this long
+// edge, same treatment the vision critic gives reference pixels.
+const SOURCE_IMAGE_MAX_EDGE = 1024;
+const SOURCE_IMAGE_JPEG_QUALITY = 80;
+/** Bounded memo of resolved references — one file conditions every need. */
+const SOURCE_IMAGE_CACHE_MAX = 20;
 
 @Injectable()
 export class AiDesignerAssetService implements OnModuleInit {
@@ -282,8 +299,11 @@ export class AiDesignerAssetService implements OnModuleInit {
         ? 'either'
         : need.prefer;
     if (prefer === 'generate' || prefer === 'either') {
-      // One retry before stock: transient provider failures (rate limits,
-      // timeouts) are the common case and a second attempt usually lands.
+      // One retry before stock — and only for TRANSIENT failures (timeouts,
+      // rate limits, 5xx, network). A definitive failure (unconfigured
+      // default, auth/quota rejection, budget cap, a 4xx validation error)
+      // cannot succeed on an identical second roll, so it falls to stock
+      // immediately instead of paying for a second 90s attempt.
       for (let attempt = 1; attempt <= 2; attempt++) {
         throwIfAborted(signal);
         try {
@@ -311,12 +331,14 @@ export class AiDesignerAssetService implements OnModuleInit {
           // A cancel is not a provider failure — don't retry it, don't fall
           // through to stock, and don't log it as a generation failure.
           throwIfAborted(signal);
+          const retry = attempt < 2 && this._isTransientGenerationError(err);
           // Swallow provider/timeout/capability errors and try stock — but say
           // so: a silent fallthrough here renders flat backgrounds with zero
           // diagnostic trail.
           this._logger.warn(
-            `Asset generate failed for slot ${assetKey(need.slotId, need.aspect)} (attempt ${attempt}/2): ${(err as Error).message}${attempt < 2 ? '; retrying once.' : '; trying stock.'}`
+            `Asset generate failed for slot ${assetKey(need.slotId, need.aspect)} (attempt ${attempt}/2): ${(err as Error).message}${retry ? '; retrying once.' : '; trying stock.'}`
           );
+          if (!retry) break;
         }
       }
     }
@@ -339,14 +361,129 @@ export class AiDesignerAssetService implements OnModuleInit {
   ): Promise<string> {
     const raw = Number(process.env.AI_DESIGNER_ASSET_TIMEOUT_MS);
     const timeoutMs = Number.isFinite(raw) && raw > 0 ? raw : 90_000;
+    const prompt = this._buildPrompt(need, regenerate);
+    // Reference-conditioned generation: a need carrying a source image tries
+    // the org's image-to-image default FIRST — the reference steers the
+    // pixels directly instead of only through the prose cues. Unconfigured
+    // (DefaultNotConfiguredError) or failed i2i falls through to the ordinary
+    // text-to-image path; the retry/fallback chain around this call is
+    // unchanged either way.
+    const sourceUrl = await this._sourceUrlFor(orgId, need);
+    if (sourceUrl) {
+      try {
+        return await raceWithTimeout(
+          this._aiDefaults.imageToImage(orgId, prompt, sourceUrl),
+          timeoutMs,
+          { signal, label: 'Asset image-to-image generation' }
+        );
+      } catch (err) {
+        // A cancel belongs to the whole run, not to this technique swap.
+        throwIfAborted(signal);
+        this._logger.warn(
+          `Image-to-image generation failed for slot ${assetKey(need.slotId, need.aspect)} — falling back to text-to-image: ${(err as Error).message}`
+        );
+      }
+    }
     return raceWithTimeout(
-      this._aiDefaults.textToImage(orgId, this._buildPrompt(need, regenerate), {
+      this._aiDefaults.textToImage(orgId, prompt, {
         aspect: need.aspect,
         signal,
       }),
       timeoutMs,
       { signal, label: 'Asset generation' }
     );
+  }
+
+  /**
+   * Transient vs definitive generation failure, for the single retry: only
+   * timeouts, rate limits, 5xx/unavailable and network errors earn the second
+   * attempt. Provider errors carry the classification on the typed
+   * `ProviderUpstreamError.retryable`; local guards (no configured default,
+   * missing capability, budget cap) and 4xx-style rejections are definitive.
+   * Unknown errors keep the historical behaviour (retry once) — most of them
+   * are provider/network failures that never got typed.
+   */
+  private _isTransientGenerationError(err: unknown): boolean {
+    if (err instanceof ProviderUpstreamError) return err.retryable;
+    if (
+      err instanceof DefaultNotConfiguredError ||
+      err instanceof CapabilityNotAvailable ||
+      err instanceof BudgetExceeded
+    ) {
+      return false;
+    }
+    return true;
+  }
+
+  /**
+   * The need's conditioning image as a URL the provider can consume: an
+   * explicit `sourceUrl` verbatim (already https/data), else the File behind
+   * `sourceFileId` resolved the same way the vision critic serves reference
+   * bytes to providers — data-URI files and local uploads read + downscaled
+   * to an inline JPEG, remote files only when they pass the SSRF allowlist.
+   * Fail-soft: any resolution problem returns null and the need generates
+   * text-only. Resolved URLs are memoized (bounded) — one reference
+   * conditions every need in the dispatch.
+   */
+  private readonly _sourceImageCache = new Map<string, string>();
+
+  private async _sourceUrlFor(
+    orgId: string,
+    need: AssetNeed
+  ): Promise<string | null> {
+    if (need.sourceUrl) {
+      return /^https:|^data:image\//i.test(need.sourceUrl)
+        ? need.sourceUrl
+        : null;
+    }
+    if (!need.sourceFileId) return null;
+    const cached = this._sourceImageCache.get(need.sourceFileId);
+    if (cached) return cached;
+    try {
+      const file = await this._fileService.getFileById(orgId, need.sourceFileId);
+      if (!file || !file.path) return null;
+      let resolved: string | null = null;
+      if (/^data:image\//i.test(file.path)) {
+        resolved = await this._downscaleToDataUri(
+          Buffer.from(file.path.slice(file.path.indexOf(',') + 1), 'base64')
+        );
+      } else if (isLocalStorageUrl(file.path)) {
+        resolved = await this._downscaleToDataUri(
+          await readLocalUpload(file.path)
+        );
+      } else if (await isSafePublicHttpsUrl(file.path)) {
+        resolved = file.path;
+      }
+      if (resolved) {
+        if (this._sourceImageCache.size >= SOURCE_IMAGE_CACHE_MAX) {
+          const oldest = this._sourceImageCache.keys().next().value;
+          if (oldest !== undefined) this._sourceImageCache.delete(oldest);
+        }
+        this._sourceImageCache.set(need.sourceFileId, resolved);
+      }
+      return resolved;
+    } catch (err) {
+      this._logger.warn(
+        `Asset could not attach reference ${need.sourceFileId}: ${(err as Error).message}`
+      );
+      return null;
+    }
+  }
+
+  private async _downscaleToDataUri(buffer: Buffer): Promise<string> {
+    const small = await sharp(buffer)
+      .resize({
+        width: SOURCE_IMAGE_MAX_EDGE,
+        height: SOURCE_IMAGE_MAX_EDGE,
+        fit: 'inside',
+        withoutEnlargement: true,
+      })
+      // JPEG drops alpha — flatten onto white so a transparent-PNG reference
+      // doesn't silhouette onto black.
+      .flatten({ background: '#ffffff' })
+      .jpeg({ quality: SOURCE_IMAGE_JPEG_QUALITY })
+      .toBuffer();
+    return `data:image/jpeg;base64,${small.toString('base64')}`;
   }
 
   // Brief + a short (≤2 sentence) layout suffix for background/hero slots:

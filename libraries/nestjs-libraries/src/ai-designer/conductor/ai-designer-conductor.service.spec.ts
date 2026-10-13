@@ -4948,6 +4948,329 @@ describe('AiDesignerConductorService reference images are cue-only (round 7 C3)'
   });
 });
 
+// PR D: reference images now condition GENERATION, not just the brief — the
+// conductor stamps the session's first reference File id onto the asset needs
+// whose imagery carries the design (the image background and hero-layout
+// image slots). Ancillary slots go without.
+describe('AiDesignerConductorService stamps sourceFileId on design-carrying asset needs (PR D)', () => {
+  const runWithPlans = async (
+    plans: Record<string, unknown>[],
+    config: Record<string, unknown> = {}
+  ) => {
+    const emitter = makeEmitter();
+    const service = {
+      getSessionForUser: vi.fn().mockResolvedValue({
+        id: SESSION_ID,
+        state: 'awaiting_plan',
+        mode: 'prompt',
+        brief: { intent: 'x' },
+        config: { channels: ['ig-post'], variants: plans.length, ...config },
+        activeDesignIds: null,
+      }),
+      updateSession: vi.fn().mockResolvedValue(undefined),
+      appendMessage: vi.fn().mockResolvedValue({ id: 'msg-1' }),
+    };
+    const { conductor } = makeConductor({ service });
+    (conductor as any)._saver = {
+      saveDesign: vi
+        .fn()
+        .mockImplementation((_o: unknown, _u: unknown, variantId: string) =>
+          Promise.resolve({
+            designId: `design-${variantId}`,
+            variantId,
+            outputPreviews: [],
+          })
+        ),
+    };
+    const dispatches: { agentId: string; payload: any }[] = [];
+    (conductor as any)._dispatchAgent = vi
+      .fn()
+      .mockImplementation((_: unknown, agentId: string, payload: any) => {
+        dispatches.push({ agentId, payload });
+        if (agentId === 'art-director') {
+          return Promise.resolve({
+            content: JSON.stringify({ type: 'plans', plans }),
+          });
+        }
+        if (agentId === 'asset') {
+          const assets: Record<string, unknown> = {};
+          for (const need of payload.assetNeeds) {
+            assets[`${need.slotId}:${need.aspect}`] = {
+              slotId: need.slotId,
+              fileId: `f-${need.slotId}`,
+              path: 'https://example.com/i.png',
+              type: 'image',
+              source: 'generate',
+              aspect: need.aspect,
+            };
+          }
+          return Promise.resolve({
+            content: JSON.stringify({ type: 'assets', assets }),
+          });
+        }
+        if (agentId === 'copywriter') {
+          return Promise.resolve({
+            content: JSON.stringify({ type: 'copy', texts: {} }),
+          });
+        }
+        return Promise.resolve({ content: '{}' });
+      });
+    (conductor as any)._parseDesignDoc = vi.fn().mockReturnValue({ layers: [] });
+    const emitDelivery = vi.fn().mockResolvedValue(undefined);
+    (conductor as any)._emitDelivery = emitDelivery;
+
+    await conductor.handleAcceptPlan(
+      SESSION_ID,
+      ctx,
+      'reply-1',
+      undefined,
+      false,
+      undefined,
+      emitter
+    );
+    return { dispatches, emitDelivery };
+  };
+
+  it('stamps the first reference onto the image-background need only when no hero layout applies', async () => {
+    const { dispatches } = await runWithPlans(
+      [
+        {
+          variantId: 'v1',
+          skill: 'meme',
+          background: { kind: 'image', ref: 'asset:bg' },
+          slots: [
+            { id: 'bg', role: 'image', kind: 'image' },
+            { id: 'accent', role: 'decor', kind: 'illustration' },
+          ],
+          assetNeeds: [
+            { slotId: 'bg', brief: 'pool background', prefer: 'generate' },
+            { slotId: 'accent', brief: 'a small star doodle', prefer: 'generate' },
+          ],
+        },
+      ],
+      { referenceFileIds: ['file-a', 'file-b'] }
+    );
+
+    const assetDispatch = dispatches.find((d) => d.agentId === 'asset');
+    expect(assetDispatch).toBeDefined();
+    expect(assetDispatch!.payload).not.toHaveProperty('referenceFileIds');
+    const needs = assetDispatch!.payload.assetNeeds;
+    const bg = needs.find((n: any) => n.slotId === 'v1:bg');
+    const accent = needs.find((n: any) => n.slotId === 'v1:accent');
+    expect(bg.sourceFileId).toBe('file-a');
+    expect(accent).toBeDefined();
+    expect(accent).not.toHaveProperty('sourceFileId');
+  });
+
+  it('stamps the reference onto hero-layout subject image slots too', async () => {
+    const { dispatches } = await runWithPlans(
+      [
+        {
+          variantId: 'v1',
+          skill: 'meme',
+          formatTemplate: 'hero-fullbleed',
+          slots: [{ id: 'product', role: 'image', kind: 'image' }],
+          assetNeeds: [
+            { slotId: 'product', brief: 'a bottle hero shot', prefer: 'generate' },
+          ],
+        },
+      ],
+      { referenceFileIds: ['file-a'] }
+    );
+
+    const needs = dispatches.find((d) => d.agentId === 'asset')!.payload.assetNeeds;
+    expect(needs.find((n: any) => n.slotId === 'v1:product').sourceFileId).toBe(
+      'file-a'
+    );
+  });
+
+  it('stamps nothing when the session carries no references', async () => {
+    const { dispatches } = await runWithPlans([
+      {
+        variantId: 'v1',
+        skill: 'meme',
+        background: { kind: 'image', ref: 'asset:bg' },
+        slots: [{ id: 'bg', role: 'image', kind: 'image' }],
+        assetNeeds: [{ slotId: 'bg', brief: 'pool background', prefer: 'generate' }],
+      },
+    ]);
+
+    const needs = dispatches.find((d) => d.agentId === 'asset')!.payload.assetNeeds;
+    expect(needs[0]).not.toHaveProperty('sourceFileId');
+  });
+});
+
+// PR D: the per-variant compose/QC loops run with BOUNDED concurrency
+// (VARIANT_CONCURRENCY = 3) instead of fully serially. Ordering and error
+// semantics are unchanged: results keep plan order, a failed variant is
+// noted and skipped, and the run never exceeds the bound.
+describe('AiDesignerConductorService parallel variant loops (PR D)', () => {
+  const runParallelPipeline = async (opts: {
+    variants: number;
+    composerFailFor?: string[];
+    criticFailFor?: string[];
+    composerDelayMs?: number;
+    trackComposerInflight?: { current: number; max: number };
+  }) => {
+    const emitter = makeEmitter();
+    const plans = Array.from({ length: opts.variants }, (_, i) => ({
+      variantId: `v${i + 1}`,
+      skill: 'meme',
+      slots: [{ id: 'hero', role: 'image', kind: 'image' }],
+      assetNeeds: [{ slotId: 'hero', brief: `hero ${i + 1}`, prefer: 'generate' }],
+    }));
+    const service = {
+      getSessionForUser: vi.fn().mockResolvedValue({
+        id: SESSION_ID,
+        state: 'awaiting_plan',
+        mode: 'prompt',
+        brief: { intent: 'x' },
+        config: { channels: ['ig-post'], variants: opts.variants },
+        activeDesignIds: null,
+      }),
+      updateSession: vi.fn().mockResolvedValue(undefined),
+      appendMessage: vi.fn().mockResolvedValue({ id: 'msg-1' }),
+    };
+    const { conductor } = makeConductor({ service });
+    (conductor as any)._saver = {
+      saveDesign: vi
+        .fn()
+        .mockImplementation((_o: unknown, _u: unknown, variantId: string) =>
+          Promise.resolve({
+            designId: `design-${variantId}`,
+            variantId,
+            contactSheetUrl: `https://example.com/${variantId}.png`,
+            outputPreviews: [
+              { formatId: 'ig-post', url: `https://example.com/${variantId}.png` },
+            ],
+          })
+        ),
+    };
+    (conductor as any)._skillRouter = {
+      getRubric: vi.fn().mockReturnValue([]),
+    };
+    (conductor as any)._dispatchAgent = vi
+      .fn()
+      .mockImplementation(async (_: unknown, agentId: string, payload: any) => {
+        if (agentId === 'art-director') {
+          return { content: JSON.stringify({ type: 'plans', plans }) };
+        }
+        if (agentId === 'asset') {
+          const assets: Record<string, unknown> = {};
+          for (const need of payload.assetNeeds) {
+            assets[`${need.slotId}:${need.aspect}`] = {
+              slotId: need.slotId,
+              fileId: `f-${need.slotId}`,
+              path: 'https://example.com/i.png',
+              type: 'image',
+              source: 'generate',
+              aspect: need.aspect,
+            };
+          }
+          return { content: JSON.stringify({ type: 'assets', assets }) };
+        }
+        if (agentId === 'copywriter') {
+          return { content: JSON.stringify({ type: 'copy', texts: {} }) };
+        }
+        if (agentId === 'composer') {
+          if (opts.composerFailFor?.includes(payload.plan?.variantId)) {
+            throw new Error('composer blew up');
+          }
+          if (opts.trackComposerInflight) {
+            opts.trackComposerInflight.current++;
+            opts.trackComposerInflight.max = Math.max(
+              opts.trackComposerInflight.max,
+              opts.trackComposerInflight.current
+            );
+            await new Promise((r) =>
+              setTimeout(r, opts.composerDelayMs ?? 20)
+            );
+            opts.trackComposerInflight.current--;
+          }
+          return { content: JSON.stringify({ type: 'doc' }) };
+        }
+        if (agentId === 'vision-critic') {
+          // The primary QC dispatch carries the FULL plans array — the
+          // variant under review is identifiable by its preview URL.
+          const variantId = /\/(v\d+)\.png/.exec(payload.contactSheetUrl ?? '')?.[1];
+          if (opts.criticFailFor?.includes(variantId ?? '')) {
+            throw new Error('critic blew up');
+          }
+          return { content: JSON.stringify({ type: 'findings', findings: [] }) };
+        }
+        return { content: '{}' };
+      });
+    (conductor as any)._parseDesignDoc = vi.fn().mockReturnValue({ layers: [] });
+    const emitDelivery = vi.fn().mockResolvedValue(undefined);
+    (conductor as any)._emitDelivery = emitDelivery;
+
+    await conductor.handleAcceptPlan(
+      SESSION_ID,
+      ctx,
+      'reply-1',
+      undefined,
+      false,
+      undefined,
+      emitter
+    );
+    return { emitDelivery };
+  };
+
+  it('preserves plan order and delivers the survivors when one variant fails', async () => {
+    const { emitDelivery } = await runParallelPipeline({
+      variants: 3,
+      composerFailFor: ['v2'],
+    });
+
+    const results = emitDelivery.mock.calls[0][3];
+    expect(results.map((r: any) => r.variantId)).toEqual(['v1', 'v3']);
+    const notes: string[] = emitDelivery.mock.calls[0][4];
+    expect(notes.some((n) => n.includes('variant 2 of 3 failed to generate'))).toBe(
+      true
+    );
+  });
+
+  it('bounds concurrent composer work to VARIANT_CONCURRENCY (3)', async () => {
+    const inflight = { current: 0, max: 0 };
+    const { emitDelivery } = await runParallelPipeline({
+      variants: 5,
+      trackComposerInflight: inflight,
+    });
+
+    expect(inflight.max).toBeGreaterThan(1);
+    expect(inflight.max).toBeLessThanOrEqual(3);
+    const results = emitDelivery.mock.calls[0][3];
+    expect(results.map((r: any) => r.variantId)).toEqual([
+      'v1',
+      'v2',
+      'v3',
+      'v4',
+      'v5',
+    ]);
+  });
+
+  it('a failing quality pass notes only its own variant; the others judge clean', async () => {
+    const { emitDelivery } = await runParallelPipeline({
+      variants: 3,
+      criticFailFor: ['v2'],
+    });
+
+    const results = emitDelivery.mock.calls[0][3];
+    expect(results.map((r: any) => r.variantId)).toEqual(['v1', 'v2', 'v3']);
+    const notes: string[] = emitDelivery.mock.calls[0][4];
+    expect(
+      notes.some((n) => n.includes('quality pass failed for variant 2'))
+    ).toBe(true);
+    expect(
+      notes.some(
+        (n) =>
+          n.includes('quality pass failed for variant 1') ||
+          n.includes('quality pass failed for variant 3')
+      )
+    ).toBe(false);
+  });
+});
+
 // Round 8 C7b: a pinned style preset and a selected brand are both honoured by
 // the art director in the same breath, so plans could come back entirely in the
 // preset's colours with nothing telling the user the brand was dropped.

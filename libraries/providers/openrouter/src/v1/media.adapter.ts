@@ -27,6 +27,17 @@ interface OpenRouterModelsResponse {
   data?: { id?: string; name?: string; architecture?: { output_modalities?: string[] } }[];
 }
 
+// Chat-completions image response (OpenRouter's image-capable chat models,
+// e.g. google/gemini-2.5-flash-image): the generated images ride back on the
+// assistant message as data-URI image_url parts.
+interface OpenRouterChatImageResponse {
+  choices?: {
+    message?: {
+      images?: { type?: string; image_url?: { url?: string } }[];
+    };
+  }[];
+}
+
 export class OpenRouterMediaAdapter implements MediaProviderAdapter {
   constructor(private readonly _fetch: SafeFetchPort) {}
   readonly identifier = 'openrouter';
@@ -52,6 +63,9 @@ export class OpenRouterMediaAdapter implements MediaProviderAdapter {
   async generateImage(prompt: string, options?: MediaGenerateOptions): Promise<MediaGenerationResult> {
     const model = options?.model;
     if (!model) throw new Error('OpenRouter image generation requires a model');
+    if (options?.sourceUrl) {
+      return this._generateImageToImage(prompt, model, options.sourceUrl, options);
+    }
     const input: Record<string, unknown> = {};
     for (const [k, v] of Object.entries(options?.input || {})) {
       if (v !== undefined && v !== '') input[k] = v;
@@ -65,6 +79,60 @@ export class OpenRouterMediaAdapter implements MediaProviderAdapter {
     const data = (await res.json()) as OpenRouterImageResponse;
     const urls = (data.data || [])
       .map((d) => d.url || (d.b64_json ? `data:image/png;base64,${d.b64_json}` : undefined))
+      .filter((u): u is string => !!u);
+    if (!urls.length) throw new Error('OpenRouter returned no image');
+    return {
+      multi: urls.length > 1,
+      image: urls[0],
+      images: urls,
+      metadata: { provider: this.identifier, model, prompt },
+    };
+  }
+
+  // The gemini-image family (google/gemini-2.5-flash-image, …) accepts image
+  // input — OpenRouter's image-to-image route for these models is the
+  // chat-completions surface: the source image rides as an image_url content
+  // part (https or data URI) and `modalities: ['image','text']` asks for an
+  // image back. Any other model handed a `sourceUrl` throws rather than
+  // silently dropping the conditioning — an unconditioned image must never
+  // ship labelled as reference-matched; the caller falls back to
+  // text-to-image explicitly.
+  private static _acceptsImageInput(model: string): boolean {
+    return model.includes('gemini') && model.includes('image');
+  }
+
+  private async _generateImageToImage(
+    prompt: string,
+    model: string,
+    sourceUrl: string,
+    options?: MediaGenerateOptions,
+  ): Promise<MediaGenerationResult> {
+    if (!OpenRouterMediaAdapter._acceptsImageInput(model)) {
+      throw new Error(
+        `OpenRouter model ${model} does not accept image input through this adapter`,
+      );
+    }
+    const res = await this._fetch(`${BASE}/chat/completions`, {
+      method: 'POST',
+      headers: this._headers(options),
+      body: JSON.stringify({
+        model,
+        modalities: ['image', 'text'],
+        messages: [
+          {
+            role: 'user',
+            content: [
+              { type: 'image_url', image_url: { url: sourceUrl } },
+              { type: 'text', text: prompt },
+            ],
+          },
+        ],
+      }),
+    });
+    if (!res.ok) throw await mediaUpstreamError(this, res, 'image');
+    const data = (await res.json()) as OpenRouterChatImageResponse;
+    const urls = (data.choices?.[0]?.message?.images || [])
+      .map((img) => img?.image_url?.url)
       .filter((u): u is string => !!u);
     if (!urls.length) throw new Error('OpenRouter returned no image');
     return {
