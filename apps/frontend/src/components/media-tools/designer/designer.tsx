@@ -502,13 +502,26 @@ export const Designer: FC<DesignerProps> = ({
     const sentDoc = debouncedDoc;
     store.getState().setSaving(true);
     (async () => {
-      const preview = await uploadPreview();
-      // If a newer edit landed while the thumbnail upload was in flight, skip
-      // the preview fields — a stale thumbnail must not clobber the design.
-      const previewFields = store.getState().doc === sentDoc ? preview : {};
+      // Check staleness BEFORE uploading: the PUT below omits preview fields
+      // for a stale doc, so a thumbnail uploaded for one would orphan its
+      // File row in the library (backend cleanup only deletes REPLACED
+      // referenced previews).
+      let preview: Awaited<ReturnType<typeof uploadPreview>> = {};
+      if (store.getState().doc === sentDoc) {
+        preview = await uploadPreview();
+        // Re-check after the upload: an edit landed mid-flight, so the PUT
+        // must not carry the stale thumbnail — and the just-created File row
+        // would orphan, so trash it (same endpoint the file manager uses).
+        if (store.getState().doc !== sentDoc) {
+          if (preview.previewFileId) {
+            fetch(`/files/${preview.previewFileId}/trash`, { method: 'POST' }).catch(() => {});
+          }
+          preview = {};
+        }
+      }
       const res = await fetch(`/media/designs/${currentDesignId}`, {
         method: 'PUT',
-        body: JSON.stringify({ doc: sentDoc, ...previewFields }),
+        body: JSON.stringify({ doc: sentDoc, ...preview }),
       });
       await res.json();
     })()

@@ -83,30 +83,45 @@ export const TemplatesPanel: FC<TemplatesPanelProps> = ({ store, onClose, guard 
       doc: state.doc,
     };
     if (thumbnailFileId) payload.thumbnailFileId = thumbnailFileId;
-    if (state.templateId) {
-      const res = await fetch(`/media/design-templates/${state.templateId}`, {
-        method: 'PUT',
-        body: JSON.stringify(payload),
-      });
-      if (res.ok) {
-        toaster.show(t('templates_panel_template_updated', 'Template updated'), 'success');
-        mutate();
-      } else {
-        toaster.show(t('templates_panel_failed_to_update_template', 'Failed to update template'), 'warning');
+    // The thumbnail upload already minted a File row — if the template save
+    // fails or aborts, that row is referenced by nothing and would orphan in
+    // the library. Trash it (same endpoint the file manager uses).
+    const trashOrphanThumbnail = () => {
+      if (thumbnailFileId) {
+        fetch(`/files/${thumbnailFileId}/trash`, { method: 'POST' }).catch(() => {});
       }
-    } else {
-      const res = await fetch('/media/design-templates', {
-        method: 'POST',
-        body: JSON.stringify(payload),
-      });
-      if (res.ok) {
-        const data = await res.json();
-        state.setTemplateId(data.id);
-        toaster.show(t('templates_panel_saved_as_template', 'Saved as template'), 'success');
-        mutate();
+    };
+    try {
+      if (state.templateId) {
+        const res = await fetch(`/media/design-templates/${state.templateId}`, {
+          method: 'PUT',
+          body: JSON.stringify(payload),
+        });
+        if (res.ok) {
+          toaster.show(t('templates_panel_template_updated', 'Template updated'), 'success');
+          mutate();
+        } else {
+          trashOrphanThumbnail();
+          toaster.show(t('templates_panel_failed_to_update_template', 'Failed to update template'), 'warning');
+        }
       } else {
-        toaster.show(t('template_save_failed', 'Failed to save template'), 'warning');
+        const res = await fetch('/media/design-templates', {
+          method: 'POST',
+          body: JSON.stringify(payload),
+        });
+        if (res.ok) {
+          const data = await res.json();
+          state.setTemplateId(data.id);
+          toaster.show(t('templates_panel_saved_as_template', 'Saved as template'), 'success');
+          mutate();
+        } else {
+          trashOrphanThumbnail();
+          toaster.show(t('template_save_failed', 'Failed to save template'), 'warning');
+        }
       }
+    } catch {
+      trashOrphanThumbnail();
+      toaster.show(t('template_save_failed', 'Failed to save template'), 'warning');
     }
   }, [store, fetch, mutate, toaster, t]);
 

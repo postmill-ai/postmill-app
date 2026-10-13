@@ -328,7 +328,12 @@ export class FileRepository {
     tag?: string,
     sort?: string,
     order?: string,
-    limit?: number
+    limit?: number,
+    // AI Designer intermediates (metadata.aiDesigner) flood the library — one
+    // run mints ~15 internal files. Hidden by default; internal AI-designer
+    // code paths that genuinely need them opt in. Direct access (getFileById,
+    // path loads) is unaffected, so delivered designs keep rendering.
+    includeAiDesigner?: boolean
   ) {
     const pageNum = (page || 1) - 1;
     const pageSize = limit || 18;
@@ -338,6 +343,15 @@ export class FileRepository {
       organizationId: org,
       deletedAt: null as null,
     };
+
+    const and: any[] = [];
+    if (!includeAiDesigner) {
+      // "metadata->>'aiDesigner' is unset" — AnyNull covers both a missing key
+      // and a JSON null value at the path.
+      and.push({
+        NOT: { metadata: { path: ['aiDesigner'], not: Prisma.AnyNull } },
+      });
+    }
 
     if (trimmedSearch) {
       where.OR = [
@@ -352,7 +366,11 @@ export class FileRepository {
 
     if (type) {
       // AND, not OR — `where.OR` already carries the search clause above.
-      where.AND = [typeFilterClause(type)];
+      and.push(typeFilterClause(type));
+    }
+
+    if (and.length) {
+      where.AND = and;
     }
 
     if (tag) {
@@ -698,6 +716,45 @@ export class FileRepository {
       where: { id: fileId, organizationId: org },
       data: { deletedAt: new Date() },
     });
+  }
+
+  /** AI Designer asset intermediates stamped with the given session id. */
+  findAiDesignerSessionAssetFiles(org: string, sessionId: string) {
+    return this._file.model.file.findMany({
+      where: {
+        organizationId: org,
+        deletedAt: null as null,
+        AND: [
+          { metadata: { path: ['aiDesigner'], equals: 'asset' } },
+          { metadata: { path: ['sessionId'], equals: sessionId } },
+        ],
+      },
+      select: { id: true },
+    });
+  }
+
+  /** Of the given ids, the ones actually stamped as AI Designer references. */
+  findAiDesignerReferenceFiles(org: string, ids: string[]) {
+    if (!ids.length) return Promise.resolve([]);
+    return this._file.model.file.findMany({
+      where: {
+        organizationId: org,
+        deletedAt: null as null,
+        id: { in: ids },
+        metadata: { path: ['aiDesigner'], equals: 'reference' },
+      },
+      select: { id: true },
+    });
+  }
+
+  /** Batch soft-delete; only live rows are touched. Returns the row count. */
+  async softDeleteMany(org: string, ids: string[]) {
+    if (!ids.length) return 0;
+    const r = await this._file.model.file.updateMany({
+      where: { id: { in: ids }, organizationId: org, deletedAt: null as null },
+      data: { deletedAt: new Date() },
+    });
+    return r.count;
   }
 
   restoreFile(org: string, fileId: string) {

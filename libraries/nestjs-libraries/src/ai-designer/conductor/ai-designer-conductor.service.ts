@@ -35,6 +35,7 @@ import { DEGENERATE_VIOLATION_PREFIX } from '../util/doc-validator';
 import { matchSlotTexts, normalizeSlotText } from '../util/slot-keys';
 import { applyReferenceGeometry } from '../util/apply-reference-geometry';
 import { isDeliveredAccept } from '../util/accept-phrases';
+import { collectDocFileIds } from '@postmill-ai/nestjs-libraries/media/designer-doc/doc-file-refs';
 import type {
   AiDesignerAgentContext,
   AiDesignerConfig,
@@ -2053,6 +2054,11 @@ export class AiDesignerConductorService {
             // agent re-rolls instead of replaying its cache.
             const needs = this._collectAssetNeeds([planForRebuild], outputs)
               .needs;
+            // Assets the fresh set displaces: once the rebuilt doc no longer
+            // references them their File rows leak, so they are soft-deleted
+            // after the rebuild lands (never before — a failed rebuild keeps
+            // the old doc and its imagery).
+            const displacedFileIds: string[] = [];
             if (needs.length > 0) {
               const assetResponse = await this._dispatchAgent(ctx, 'asset', {
                 type: 'asset-request',
@@ -2060,6 +2066,12 @@ export class AiDesignerConductorService {
                 regenerate: true,
               });
               const { assets: fresh } = this._parseAssets(assetResponse);
+              for (const [key, freshAsset] of Object.entries(fresh)) {
+                const oldFileId = assets[key]?.fileId;
+                if (oldFileId && oldFileId !== freshAsset?.fileId) {
+                  displacedFileIds.push(oldFileId);
+                }
+              }
               Object.assign(assets, fresh);
             }
             const composeResponse = await this._dispatchAgent(ctx, 'composer', {
@@ -2086,6 +2098,11 @@ export class AiDesignerConductorService {
             composedDocs.set(results[i].variantId, rebuiltDoc);
             results[i] = { ...rebuiltRender, variantId: results[i].variantId };
             emitter.preview(results[i]);
+            await this._softDeleteReplacedAssets(
+              ctx.orgId,
+              displacedFileIds,
+              rebuiltDoc
+            );
             this._logger.log(
               `Ship gate: rebuilt variant ${results[i].variantId} after residual ship-blockers.`,
               AiDesignerConductorService.name
@@ -3108,7 +3125,14 @@ export class AiDesignerConductorService {
           notes.push(failNote);
           continue;
         }
-        doc = patched;
+        doc = patched.doc;
+        // The displaced intermediate's File row would otherwise leak — the
+        // doc no longer references it and nothing else ever did.
+        await this._softDeleteReplacedAssets(
+          ctx.orgId,
+          patched.replacedFileIds,
+          doc
+        );
         // A replacement landed: if the critic flags this slot again and no
         // technique is left, the surviving-defect disclosure in
         // _executePipeline tells the user about it.
@@ -3180,14 +3204,16 @@ export class AiDesignerConductorService {
    * image elements both — through the doc service's ops path. This is the
    * conductor's own patch, NOT an LLM op: it must not ride the composer's
    * `_filterReviseOps`, which (correctly) blocks src/fileId on imagery.
-   * Returns null when nothing matched.
+   * Returns null when nothing matched; otherwise the patched doc plus the
+   * fileIds the swap displaced (so the caller can soft-delete the replaced
+   * intermediates — they would otherwise leak in the library forever).
    */
   private _replaceSlotImagery(
     doc: DesignerDoc,
     plan: DesignPlan,
     slotId: string,
     asset: AssetResult
-  ): DesignerDoc | null {
+  ): { doc: DesignerDoc; replacedFileIds: string[] } | null {
     const bgIsSlot =
       plan.background?.kind === 'image' &&
       plan.background.ref === `asset:${slotId}`;
@@ -3296,7 +3322,39 @@ export class AiDesignerConductorService {
     });
 
     if (ops.length === 0) return null;
-    return this._docService.applyOps(doc, ops);
+    return {
+      doc: this._docService.applyOps(doc, ops),
+      replacedFileIds: [...oldFileIds].filter((id) => id !== asset.fileId),
+    };
+  }
+
+  /**
+   * Soft-delete replaced AI Designer asset files, best-effort — mirrors
+   * `DesignService._cleanupReplacedFile`: a deletion failure must never fail
+   * the pipeline, and only files actually stamped as intermediates
+   * (`metadata.aiDesigner`) are touched, so a slot pointing at a library file
+   * is never deleted. Files still referenced anywhere on the patched doc are
+   * kept (the same asset can back two slots).
+   */
+  private async _softDeleteReplacedAssets(
+    orgId: string,
+    fileIds: string[],
+    doc: DesignerDoc
+  ): Promise<void> {
+    const stillUsed = collectDocFileIds(doc);
+    for (const fileId of fileIds) {
+      if (!fileId || stillUsed.has(fileId)) continue;
+      try {
+        const file = await this._fileService.getFileById(orgId, fileId);
+        const metadata = file?.metadata as Record<string, unknown> | null;
+        if (!metadata?.aiDesigner) continue;
+        await this._fileService.softDelete(fileId, orgId);
+      } catch (err) {
+        this._logger.warn(
+          `Could not delete replaced AI Designer asset file ${fileId}: ${(err as Error)?.message}`
+        );
+      }
+    }
   }
 
   private async _loadDesignDoc(

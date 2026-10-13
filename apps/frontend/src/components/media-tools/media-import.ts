@@ -19,7 +19,7 @@ export const useImportStockMedia = () => {
   return useCallback(
     async (
       item: MediaSelectorItem,
-      opts: { folderId?: string | null; name?: string } = {}
+      opts: { folderId?: string | null; name?: string; aiDesigner?: 'reference' } = {}
     ): Promise<MediaSelectorItem> => {
       if (item.source === 'file' && item.fileId) return item;
       const body: Record<string, unknown> = {
@@ -31,6 +31,9 @@ export const useImportStockMedia = () => {
       if (item.downloadLocation) body.downloadLocation = item.downloadLocation;
       if (item.attribution) body.attribution = item.attribution;
       if (opts.folderId) body.folderId = opts.folderId;
+      // AI Designer reference images are intermediates: the stamp hides them
+      // from the library listing and lets session teardown purge them.
+      if (opts.aiDesigner) body.aiDesigner = opts.aiDesigner;
 
       const res = await fetch('/files/import', {
         method: 'POST',

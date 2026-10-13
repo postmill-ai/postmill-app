@@ -1,4 +1,4 @@
-import { IsObject, IsOptional, IsString, MaxLength } from 'class-validator';
+import { IsIn, IsObject, IsOptional, IsString, MaxLength } from 'class-validator';
 
 /**
  * 6.3 — `/files/import` previously took an inline body type, so the global
@@ -39,4 +39,15 @@ export class ImportFromUrlDto {
   @IsOptional()
   @IsObject()
   attribution?: Record<string, unknown>;
+
+  /**
+   * Marks the import as an AI Designer intermediate so the library listing
+   * hides it and session teardown can purge it. Clients may only set the
+   * documented marker shape — `'reference'` for reference-image imports; the
+   * `'asset'` stamp and `sessionId` are backend-internal (the asset agent
+   * stamps them server-side), never client-controllable metadata.
+   */
+  @IsOptional()
+  @IsIn(['reference'])
+  aiDesigner?: 'reference';
 }

@@ -57,7 +57,7 @@ Postmill prunes and rolls up data through Inngest scheduled functions. You do no
 | Incomplete multipart uploads | 7 days | Hard-deleted by the retention-purge function | `MULTIPART_UPLOAD_RETENTION_DAYS` |
 | Mastra traces/scorers | 30 days | Hard-deleted by the retention-purge function | `MASTRA_TRACE_RETENTION_DAYS` |
 | Soft-deleted posts/files | 30 days | Hard-purged by the retention-purge function | `SOFT_DELETE_RETENTION_DAYS` |
-| AI Designer chat sessions | 90 days | Hard-deleted by the retention-purge function | `AI_DESIGNER_SESSION_RETENTION_DAYS` |
+| AI Designer chat sessions | 90 days | Hard-deleted by the retention-purge function (which also soft-deletes the session's intermediate asset/reference files not referenced by a delivered design) | `AI_DESIGNER_SESSION_RETENTION_DAYS` |
 | User/Session IP and agent | 90 days | Nulled by the retention-purge function | `IP_RETENTION_DAYS` |
 
 See [Inngest & Cron](./inngest-and-cron.md) for how the functions operate.

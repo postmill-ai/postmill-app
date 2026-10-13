@@ -122,6 +122,11 @@ describe('FileRepository — type filter', () => {
   const findManyArgs = (model: ReturnType<typeof makeModel>) =>
     model.file.findMany.mock.calls[0][0] as any;
 
+  // The AI Designer intermediate exclusion rides the same AND array, first.
+  const AI_DESIGNER_EXCLUSION = {
+    NOT: { metadata: { path: ['aiDesigner'], not: expect.anything() } },
+  };
+
   it('matches both the bare category and the MIME form', async () => {
     // AI Designer output is stored as 'image/png'; an exact match on 'image'
     // hid every one of those files from the library's Images filter.
@@ -132,6 +137,7 @@ describe('FileRepository — type filter', () => {
     await repo.getFiles('org-1', 1, undefined, undefined, 'image');
 
     expect(findManyArgs(model).where.AND).toEqual([
+      AI_DESIGNER_EXCLUSION,
       { OR: [{ type: 'image' }, { type: { startsWith: 'image/' } }] },
     ]);
     expect(findManyArgs(model).where.type).toBeUndefined();
@@ -145,6 +151,7 @@ describe('FileRepository — type filter', () => {
     await repo.getFiles('org-1', 1, undefined, undefined, 'document');
 
     expect(findManyArgs(model).where.AND).toEqual([
+      AI_DESIGNER_EXCLUSION,
       {
         OR: [
           { type: 'document' },
@@ -169,6 +176,7 @@ describe('FileRepository — type filter', () => {
       { name: { contains: 'alpha', mode: 'insensitive' } },
     ]);
     expect(where.AND).toEqual([
+      AI_DESIGNER_EXCLUSION,
       { OR: [{ type: 'video' }, { type: { startsWith: 'video/' } }] },
     ]);
   });
@@ -180,7 +188,115 @@ describe('FileRepository — type filter', () => {
 
     await repo.getFiles('org-1', 1, undefined, undefined, 'other');
 
-    expect(findManyArgs(model).where.AND).toEqual([{ type: 'other' }]);
+    expect(findManyArgs(model).where.AND).toEqual([
+      AI_DESIGNER_EXCLUSION,
+      { type: 'other' },
+    ]);
+  });
+});
+
+describe('FileRepository — AI Designer intermediate visibility', () => {
+  const findManyArgs = (model: ReturnType<typeof makeModel>) =>
+    model.file.findMany.mock.calls[0][0] as any;
+
+  it('hides metadata-stamped intermediates by default, even without a type filter', async () => {
+    const { repo, model } = makeRepo();
+    model.file.count.mockResolvedValue(0);
+    model.file.findMany.mockResolvedValue([]);
+
+    await repo.getFiles('org-1', 1);
+
+    const { where } = findManyArgs(model);
+    expect(where.AND).toEqual([
+      {
+        NOT: {
+          metadata: { path: ['aiDesigner'], not: expect.anything() },
+        },
+      },
+    ]);
+  });
+
+  it('returns stamped files when the caller explicitly opts in', async () => {
+    const { repo, model } = makeRepo();
+    model.file.count.mockResolvedValue(0);
+    model.file.findMany.mockResolvedValue([]);
+
+    await repo.getFiles(
+      'org-1', 1, undefined, undefined, undefined, undefined,
+      undefined, undefined, undefined, true
+    );
+
+    expect(findManyArgs(model).where.AND).toBeUndefined();
+  });
+});
+
+describe('FileRepository — AI Designer session purge queries', () => {
+  it('findAiDesignerSessionAssetFiles matches the asset stamp + session id', async () => {
+    const { repo, model } = makeRepo();
+    model.file.findMany.mockResolvedValue([{ id: 'file-1' }]);
+
+    const rows = await repo.findAiDesignerSessionAssetFiles('org-1', 'sess-1');
+
+    expect(rows).toEqual([{ id: 'file-1' }]);
+    expect(model.file.findMany).toHaveBeenCalledWith({
+      where: {
+        organizationId: 'org-1',
+        deletedAt: null,
+        AND: [
+          { metadata: { path: ['aiDesigner'], equals: 'asset' } },
+          { metadata: { path: ['sessionId'], equals: 'sess-1' } },
+        ],
+      },
+      select: { id: true },
+    });
+  });
+
+  it('findAiDesignerReferenceFiles only matches stamped reference rows among the ids', async () => {
+    const { repo, model } = makeRepo();
+    model.file.findMany.mockResolvedValue([]);
+
+    await repo.findAiDesignerReferenceFiles('org-1', ['a', 'b']);
+
+    expect(model.file.findMany).toHaveBeenCalledWith({
+      where: {
+        organizationId: 'org-1',
+        deletedAt: null,
+        id: { in: ['a', 'b'] },
+        metadata: { path: ['aiDesigner'], equals: 'reference' },
+      },
+      select: { id: true },
+    });
+  });
+
+  it('findAiDesignerReferenceFiles short-circuits on an empty id list', async () => {
+    const { repo, model } = makeRepo();
+
+    const rows = await repo.findAiDesignerReferenceFiles('org-1', []);
+
+    expect(rows).toEqual([]);
+    expect(model.file.findMany).not.toHaveBeenCalled();
+  });
+
+  it('softDeleteMany updateMany-marks live rows and returns the count', async () => {
+    const { repo, model } = makeRepo();
+    model.file.updateMany.mockResolvedValue({ count: 2 });
+
+    const count = await repo.softDeleteMany('org-1', ['a', 'b']);
+
+    expect(count).toBe(2);
+    expect(model.file.updateMany).toHaveBeenCalledWith({
+      where: { id: { in: ['a', 'b'] }, organizationId: 'org-1', deletedAt: null },
+      data: { deletedAt: expect.any(Date) },
+    });
+  });
+
+  it('softDeleteMany skips the query on an empty id list', async () => {
+    const { repo, model } = makeRepo();
+
+    const count = await repo.softDeleteMany('org-1', []);
+
+    expect(count).toBe(0);
+    expect(model.file.updateMany).not.toHaveBeenCalled();
   });
 });
 

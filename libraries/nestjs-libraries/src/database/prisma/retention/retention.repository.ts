@@ -1,5 +1,6 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { PrismaService } from '@postmill-ai/nestjs-libraries/database/prisma/prisma.service';
+import { collectDocFileIds } from '@postmill-ai/nestjs-libraries/media/designer-doc/doc-file-refs';
 
 /**
  * RetentionRepository — encapsulated data access for the retention sweep.
@@ -105,10 +106,15 @@ export class RetentionRepository {
     for (let i = 0; i < RetentionRepository.MAX_BATCHES; i++) {
       const rows = await this._prisma.aiDesignerSession.findMany({
         where: { updatedAt: { lt: cutoff } },
-        select: { id: true },
+        select: { id: true, activeDesignIds: true, config: true },
         take: RetentionRepository.BATCH,
       });
       if (!rows.length) break;
+      // Soft-delete the sessions' AI Designer intermediate files BEFORE the
+      // session rows go: the rows carry the config (reference imports) and
+      // activeDesignIds (delivered docs whose assets must be kept) that the
+      // purge needs. Files a delivered design still references survive.
+      await this._softDeleteAiDesignerIntermediates(rows);
       const r = await this._prisma.aiDesignerSession.deleteMany({
         where: { id: { in: rows.map((s) => s.id) } },
       });
@@ -116,6 +122,90 @@ export class RetentionRepository {
       if (rows.length < RetentionRepository.BATCH) break;
     }
     return total;
+  }
+
+  /**
+   * Soft-delete File rows stamped as AI Designer intermediates for the given
+   * sessions: asset imports carry `metadata.sessionId`; reference imports
+   * carry no sessionId (minted before the session exists) and are found via
+   * each session config's `referenceFileIds`. Files still referenced by a
+   * delivered design doc (`activeDesignIds` → doc fileIds) are kept.
+   * Best-effort per sweep: a failure logs and leaves the rows for the next
+   * cron tick, never aborts the session purge.
+   */
+  private async _softDeleteAiDesignerIntermediates(
+    sessions: { id: string; activeDesignIds: unknown; config: unknown }[]
+  ): Promise<void> {
+    try {
+      const sessionIds = sessions.map((s) => s.id);
+      const keep = new Set<string>();
+      const designIds = sessions.flatMap((s) =>
+        Array.isArray(s.activeDesignIds) ? (s.activeDesignIds as string[]) : []
+      );
+      if (designIds.length) {
+        const designs = await this._prisma.design.findMany({
+          where: { id: { in: designIds }, deletedAt: null },
+          select: { doc: true },
+        });
+        for (const design of designs) {
+          for (const fileId of collectDocFileIds(design.doc)) keep.add(fileId);
+        }
+      }
+
+      const candidateIds = new Set<string>();
+      // JSON path filters have no `in`, so chunk the session ids into ORs.
+      for (let c = 0; c < sessionIds.length; c += 50) {
+        const chunk = sessionIds.slice(c, c + 50);
+        const assets = await this._prisma.file.findMany({
+          where: {
+            deletedAt: null,
+            AND: [
+              { metadata: { path: ['aiDesigner'], equals: 'asset' } },
+              {
+                OR: chunk.map((id) => ({
+                  metadata: { path: ['sessionId'], equals: id },
+                })),
+              },
+            ],
+          },
+          select: { id: true },
+        });
+        for (const f of assets) candidateIds.add(f.id);
+      }
+      const referenceFileIds = sessions.flatMap((s) => {
+        const config = s.config as { referenceFileIds?: unknown } | null;
+        return Array.isArray(config?.referenceFileIds)
+          ? (config.referenceFileIds as string[])
+          : [];
+      });
+      if (referenceFileIds.length) {
+        const references = await this._prisma.file.findMany({
+          where: {
+            deletedAt: null,
+            id: { in: referenceFileIds },
+            metadata: { path: ['aiDesigner'], equals: 'reference' },
+          },
+          select: { id: true },
+        });
+        for (const f of references) candidateIds.add(f.id);
+      }
+
+      const toDelete = [...candidateIds].filter((id) => !keep.has(id));
+      if (!toDelete.length) return;
+      const r = await this._prisma.file.updateMany({
+        where: { id: { in: toDelete }, deletedAt: null },
+        data: { deletedAt: new Date() },
+      });
+      if (r.count > 0) {
+        this._logger.log(
+          `Soft-deleted ${r.count} AI Designer intermediate file(s) across ${sessionIds.length} purged session(s).`
+        );
+      }
+    } catch (err) {
+      this._logger.warn(
+        `AI Designer intermediate purge failed (non-fatal): ${(err as Error)?.message}`
+      );
+    }
   }
 
   async nullUserIpAgentOlderThan(cutoff: Date): Promise<number> {

@@ -118,3 +118,38 @@ describe('FileService — cloud fileSize persistence', () => {
     expect(created.metadata.fileSize).toBe(0);
   });
 });
+
+describe('FileService — purgeAiDesignerSessionFiles', () => {
+  it('soft-deletes session assets + stamped references, keeping delivered-referenced files', async () => {
+    const { fileRepo, model } = makeRepo();
+    model.file.findMany.mockImplementation((args: any) => {
+      // Asset query (AND on aiDesigner/sessionId) vs reference query (id in).
+      if (args.where.AND) return Promise.resolve([{ id: 'asset-1' }, { id: 'asset-2' }]);
+      return Promise.resolve([{ id: 'ref-1' }]);
+    });
+    model.file.updateMany.mockResolvedValue({ count: 2 });
+
+    const service = makeService(fileRepo);
+    const purged = await service.purgeAiDesignerSessionFiles('org-1', 'sess-1', {
+      referenceFileIds: ['ref-1', 'library-file'],
+      keepFileIds: new Set(['asset-2']),
+    });
+
+    expect(purged).toBe(2);
+    const update = model.file.updateMany.mock.calls[0][0];
+    expect(update.where.id.in.sort()).toEqual(['asset-1', 'ref-1']);
+  });
+
+  it('skips the delete when every candidate is still referenced', async () => {
+    const { fileRepo, model } = makeRepo();
+    model.file.findMany.mockResolvedValue([{ id: 'asset-1' }]);
+
+    const service = makeService(fileRepo);
+    const purged = await service.purgeAiDesignerSessionFiles('org-1', 'sess-1', {
+      keepFileIds: new Set(['asset-1']),
+    });
+
+    expect(purged).toBe(0);
+    expect(model.file.updateMany).not.toHaveBeenCalled();
+  });
+});

@@ -114,7 +114,9 @@ export const AiDesignerStart: React.FC<AiDesignerStartProps> = ({
       setReferenceImporting(true);
       try {
         const imported = await Promise.all(
-          stockItems.map((item) => importStockMedia(item))
+          stockItems.map((item) =>
+            importStockMedia(item, { aiDesigner: 'reference' })
+          )
         );
         setReferenceItems((prev) => mergeReferenceItems(prev, imported));
       } catch (e) {

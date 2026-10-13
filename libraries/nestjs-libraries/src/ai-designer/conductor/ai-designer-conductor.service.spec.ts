@@ -5905,3 +5905,144 @@ describe('AiDesignerConductorService best-of-N reference delivery', () => {
     ]);
   });
 });
+
+// A regeneration mints a fresh intermediate File for the slot and re-points
+// the doc — the displaced row would leak forever unless the conductor
+// soft-deletes it (stamped intermediates only, never library files).
+describe('AiDesignerConductorService replaced-asset cleanup', () => {
+  const makeCleanupConductor = (fileService: any, docService: any) =>
+    new AiDesignerConductorService(
+      null as any,
+      null as any,
+      null as any,
+      null as any,
+      null as any,
+      { checkStartBudget: vi.fn().mockResolvedValue({ allowed: true }) } as any,
+      fileService,
+      null as any,
+      docService
+    );
+
+  const docWithImage = (fileId: string) => ({
+    outputs: [
+      {
+        width: 1080,
+        height: 1080,
+        formatId: 'ig-post',
+        children: [
+          {
+            id: 'el-1',
+            type: 'image',
+            originId: 'slot-1',
+            fileId,
+            src: `/uploads/${fileId}.png`,
+            x: 0,
+            y: 0,
+            width: 400,
+            height: 400,
+          },
+        ],
+      },
+    ],
+  });
+
+  it('_replaceSlotImagery returns the patched doc and the displaced fileIds', () => {
+    const patchedDoc = { patched: true };
+    const docService = { applyOps: vi.fn().mockReturnValue(patchedDoc) };
+    const conductor = makeCleanupConductor(null, docService);
+
+    const result = (conductor as any)._replaceSlotImagery(
+      docWithImage('old-file'),
+      { variantId: 'v1', concept: 'c' },
+      'slot-1',
+      { fileId: 'new-file', path: '/uploads/new-file.png' }
+    );
+
+    expect(result.doc).toBe(patchedDoc);
+    expect(result.replacedFileIds).toEqual(['old-file']);
+    expect(docService.applyOps).toHaveBeenCalled();
+  });
+
+  it('_replaceSlotImagery drops the surviving fileId when the swap is a no-op replacement', () => {
+    const docService = { applyOps: vi.fn().mockReturnValue({}) };
+    const conductor = makeCleanupConductor(null, docService);
+
+    const result = (conductor as any)._replaceSlotImagery(
+      docWithImage('same-file'),
+      { variantId: 'v1', concept: 'c' },
+      'slot-1',
+      { fileId: 'same-file', path: '/uploads/same-file.png' }
+    );
+
+    expect(result.replacedFileIds).toEqual([]);
+  });
+
+  it('_softDeleteReplacedAssets soft-deletes stamped intermediates no longer on the doc', async () => {
+    const fileService = {
+      getFileById: vi.fn().mockResolvedValue({
+        id: 'old-file',
+        metadata: { aiDesigner: 'asset', sessionId: 'sess-1' },
+      }),
+      softDelete: vi.fn().mockResolvedValue(undefined),
+    };
+    const conductor = makeCleanupConductor(fileService, null);
+
+    await (conductor as any)._softDeleteReplacedAssets(
+      ORG_ID,
+      ['old-file'],
+      docWithImage('new-file')
+    );
+
+    expect(fileService.softDelete).toHaveBeenCalledWith('old-file', ORG_ID);
+  });
+
+  it('_softDeleteReplacedAssets never deletes an unstamped library file', async () => {
+    const fileService = {
+      getFileById: vi.fn().mockResolvedValue({ id: 'lib-file', metadata: { source: 'unsplash' } }),
+      softDelete: vi.fn(),
+    };
+    const conductor = makeCleanupConductor(fileService, null);
+
+    await (conductor as any)._softDeleteReplacedAssets(
+      ORG_ID,
+      ['lib-file'],
+      docWithImage('new-file')
+    );
+
+    expect(fileService.softDelete).not.toHaveBeenCalled();
+  });
+
+  it('_softDeleteReplacedAssets keeps a file still referenced by the patched doc', async () => {
+    const fileService = {
+      getFileById: vi.fn(),
+      softDelete: vi.fn(),
+    };
+    const conductor = makeCleanupConductor(fileService, null);
+
+    await (conductor as any)._softDeleteReplacedAssets(
+      ORG_ID,
+      ['still-used'],
+      docWithImage('still-used')
+    );
+
+    expect(fileService.getFileById).not.toHaveBeenCalled();
+    expect(fileService.softDelete).not.toHaveBeenCalled();
+  });
+
+  it('_softDeleteReplacedAssets logs and continues when a delete fails', async () => {
+    const fileService = {
+      getFileById: vi
+        .fn()
+        .mockRejectedValueOnce(new Error('db down'))
+        .mockResolvedValue({ id: 'b', metadata: { aiDesigner: 'asset' } }),
+      softDelete: vi.fn().mockResolvedValue(undefined),
+    };
+    const conductor = makeCleanupConductor(fileService, null);
+
+    await expect(
+      (conductor as any)._softDeleteReplacedAssets(ORG_ID, ['a', 'b'], docWithImage('new-file'))
+    ).resolves.toBeUndefined();
+    expect(fileService.softDelete).toHaveBeenCalledTimes(1);
+    expect(fileService.softDelete).toHaveBeenCalledWith('b', ORG_ID);
+  });
+});

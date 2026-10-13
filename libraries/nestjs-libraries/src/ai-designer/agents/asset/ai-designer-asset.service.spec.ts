@@ -1067,3 +1067,127 @@ describe('AiDesignerAssetService reference images are not an asset input (round 
     expect(JSON.stringify(opts)).not.toContain('file-ref');
   });
 });
+
+// Every File row this agent mints is an intermediate: it must carry the
+// `aiDesigner: 'asset'` stamp (+ sessionId when the dispatch metadata carries
+// one) so the library hides it and session teardown can purge it.
+describe('AiDesignerAssetService intermediate stamping', () => {
+  const SESSION_ID = 'sess-1';
+  const withSession = (ctx: any) => ({
+    ...ctx,
+    metadata: { ...ctx.metadata, sessionId: SESSION_ID },
+  });
+
+  it('stamps a generated URL import with asset + session id', async () => {
+    const { service, fileService } = makeService();
+
+    await (service as any)._handler(withSession(makeContext()));
+
+    expect(fileService.importFromUrl).toHaveBeenCalledWith(
+      ORG_ID,
+      expect.objectContaining({
+        url: 'https://example.com/img.png',
+        aiDesigner: 'asset',
+        aiDesignerSessionId: SESSION_ID,
+      })
+    );
+  });
+
+  it('stamps asset even when the dispatch metadata carries no session id', async () => {
+    const { service, fileService } = makeService();
+
+    await (service as any)._handler(makeContext());
+
+    expect(fileService.importFromUrl).toHaveBeenCalledWith(
+      ORG_ID,
+      expect.objectContaining({ aiDesigner: 'asset', aiDesignerSessionId: undefined })
+    );
+  });
+
+  it('stamps a stock photo import', async () => {
+    const { service, aiDefaults, stockMedia, fileService } = makeService();
+    aiDefaults.textToImage.mockRejectedValue(new Error('provider down'));
+    stockMedia.searchPhotos.mockResolvedValue({
+      results: [{ id: 'p1', url: 'https://example.com/stock.png', source: 'unsplash' }],
+    });
+
+    await (service as any)._handler(withSession(makeContext({
+      rawInput: JSON.stringify({
+        type: 'asset-request',
+        assetNeeds: [{ slotId: 's1', brief: 'mountain lake', prefer: 'stock' }],
+      }),
+    })));
+
+    expect(fileService.importFromUrl).toHaveBeenCalledWith(
+      ORG_ID,
+      expect.objectContaining({
+        url: 'https://example.com/stock.png',
+        aiDesigner: 'asset',
+        aiDesignerSessionId: SESSION_ID,
+      })
+    );
+  });
+
+  it('stamps a stock vector import', async () => {
+    const { fileService } = makeService();
+    const stockMedia = {
+      searchPhotos: vi.fn().mockResolvedValue({ results: [] }),
+      searchVectors: vi.fn().mockResolvedValue({
+        results: [{ id: 'vec-1', url: 'https://pixabay.example/vector.png', source: 'pixabay' }],
+      }),
+    };
+    const vectorService = new AiDesignerAssetService(
+      { textToImage: vi.fn() } as any,
+      fileService as any,
+      { getLocalAdapterForOrg: vi.fn() } as any,
+      stockMedia as any
+    );
+
+    await (vectorService as any)._handler(withSession({
+      raw_input: JSON.stringify({
+        type: 'asset-request',
+        assetNeeds: [{ slotId: 'art', brief: 'pizza doodle', prefer: 'either', kind: 'vector' }],
+      }),
+      metadata: { orgId: ORG_ID },
+    }));
+
+    expect(fileService.importFromUrl).toHaveBeenCalledWith(
+      ORG_ID,
+      expect.objectContaining({
+        url: 'https://pixabay.example/vector.png',
+        aiDesigner: 'asset',
+        aiDesignerSessionId: SESSION_ID,
+      })
+    );
+  });
+
+  it('stamps a generated data-URL import (saveGeneratedMedia metadata)', async () => {
+    const { service, aiDefaults, fileService } = makeService();
+    aiDefaults.textToImage.mockResolvedValue(
+      `data:image/png;base64,${Buffer.from('png-bytes').toString('base64')}`
+    );
+
+    await (service as any)._handler(withSession(makeContext()));
+
+    expect(fileService.saveGeneratedMedia).toHaveBeenCalledWith(
+      ORG_ID,
+      expect.objectContaining({
+        metadata: { aiDesigner: 'asset', sessionId: SESSION_ID },
+      })
+    );
+  });
+
+  it('stamps the gradient placeholder (last-resort fallback)', async () => {
+    const { service, aiDefaults, fileService } = makeService();
+    aiDefaults.textToImage.mockRejectedValue(new Error('provider down'));
+
+    await (service as any)._handler(withSession(makeContext()));
+
+    expect(fileService.saveGeneratedMedia).toHaveBeenCalledWith(
+      ORG_ID,
+      expect.objectContaining({
+        metadata: { aiDesigner: 'asset', sessionId: SESSION_ID },
+      })
+    );
+  });
+});

@@ -177,6 +177,13 @@ export class AiDesignerAssetService implements OnModuleInit {
       context.metadata && typeof context.metadata.orgId === 'string'
         ? context.metadata.orgId
         : '';
+    // Rides the same dispatch metadata as orgId (the conductor sets it on
+    // every _dispatchAgent call) — stamps the minted File rows so the library
+    // hides them and session teardown can purge the unreferenced ones.
+    const sessionId =
+      context.metadata && typeof context.metadata.sessionId === 'string'
+        ? context.metadata.sessionId
+        : undefined;
 
     if (!orgId) {
       return {
@@ -209,8 +216,8 @@ export class AiDesignerAssetService implements OnModuleInit {
     await Promise.all(
       assetNeeds.map(async (need) => {
         const result = payload.regenerate
-          ? await this.regenerateForSlot(orgId, need, signal)
-          : await this._resolveAsset(orgId, need, false, signal);
+          ? await this.regenerateForSlot(orgId, need, signal, sessionId)
+          : await this._resolveAsset(orgId, need, false, signal, sessionId);
         if (result) {
           assets[assetKey(need.slotId, need.aspect)] = result;
         }
@@ -236,16 +243,18 @@ export class AiDesignerAssetService implements OnModuleInit {
   async regenerateForSlot(
     orgId: string,
     need: AssetNeed,
-    signal?: AbortSignal
+    signal?: AbortSignal,
+    sessionId?: string
   ): Promise<AssetResult | null> {
-    return this._resolveAsset(orgId, need, true, signal);
+    return this._resolveAsset(orgId, need, true, signal, sessionId);
   }
 
   private async _resolveAsset(
     orgId: string,
     need: AssetNeed,
     regenerate = false,
-    signal?: AbortSignal
+    signal?: AbortSignal,
+    sessionId?: string
   ): Promise<AssetResult | null> {
     // Icon needs never touch the image pipeline: the brief is an Iconify
     // SEARCH QUERY ("pizza slice icon"), resolved to an inline SVG body. A
@@ -259,7 +268,7 @@ export class AiDesignerAssetService implements OnModuleInit {
     // the slot still gets imagery.
     if (need.kind === 'vector') {
       throwIfAborted(signal);
-      const vector = await this._tryVector(orgId, need);
+      const vector = await this._tryVector(orgId, need, sessionId);
       if (vector) return vector;
     }
     // A `prefer: 'stock'` need used to skip the generate block entirely, so a
@@ -287,11 +296,13 @@ export class AiDesignerAssetService implements OnModuleInit {
             const file = await this._fileService.importFromUrl(orgId, {
               url,
               name: need.brief.slice(0, 40),
+              aiDesigner: 'asset',
+              aiDesignerSessionId: sessionId,
             });
             return await this._toResult(need, file, 'generate');
           }
           if (url.startsWith('data:')) {
-            const file = await this._importDataUrl(orgId, url, need.brief);
+            const file = await this._importDataUrl(orgId, url, need.brief, sessionId);
             if (file) return await this._toResult(need, file, 'generate');
           }
           // An unusable URL shape won't change on a retry — go to stock.
@@ -311,13 +322,13 @@ export class AiDesignerAssetService implements OnModuleInit {
     }
 
     throwIfAborted(signal);
-    const stock = await this._tryStock(orgId, need, regenerate);
+    const stock = await this._tryStock(orgId, need, regenerate, sessionId);
     if (stock) return stock;
 
     this._logger.warn(
       `Asset for slot ${assetKey(need.slotId, need.aspect)} fell back to gradient (generate + stock both unavailable).`
     );
-    return this._fallbackGradient(orgId, need);
+    return this._fallbackGradient(orgId, need, sessionId);
   }
 
   private async _generateImageWithTimeout(
@@ -407,7 +418,8 @@ export class AiDesignerAssetService implements OnModuleInit {
   /** Stock vector art (Pixabay raster renders), imported like a photo. */
   private async _tryVector(
     orgId: string,
-    need: AssetNeed
+    need: AssetNeed,
+    sessionId?: string
   ): Promise<AssetResult | null> {
     try {
       const response = await this._stockMedia.searchVectors(
@@ -423,6 +435,8 @@ export class AiDesignerAssetService implements OnModuleInit {
         name: need.brief.slice(0, 40),
         source: item.source,
         attribution: item.attribution,
+        aiDesigner: 'asset',
+        aiDesignerSessionId: sessionId,
       });
       return await this._toResult(need, file, 'stock', {
         stockId: typeof item.id === 'string' ? item.id : undefined,
@@ -435,7 +449,8 @@ export class AiDesignerAssetService implements OnModuleInit {
   private async _tryStock(
     orgId: string,
     need: AssetNeed,
-    regenerate = false
+    regenerate = false,
+    sessionId?: string
   ): Promise<AssetResult | null> {
     try {
       const response = await this._stockMedia.searchPhotos(
@@ -465,6 +480,8 @@ export class AiDesignerAssetService implements OnModuleInit {
         name: need.brief.slice(0, 40),
         source: item.source,
         attribution: item.attribution,
+        aiDesigner: 'asset',
+        aiDesignerSessionId: sessionId,
       });
 
       return await this._toResult(need, file, 'stock', {
@@ -556,7 +573,8 @@ export class AiDesignerAssetService implements OnModuleInit {
   private async _importDataUrl(
     orgId: string,
     dataUrl: string,
-    brief: string
+    brief: string,
+    sessionId?: string
   ): Promise<{ id: string; path: string } | null> {
     const match = dataUrl.match(/^data:([^;]+);base64,(.+)$/);
     if (!match) return null;
@@ -577,6 +595,7 @@ export class AiDesignerAssetService implements OnModuleInit {
         type: mime,
         folderId: null,
         fileSize: buffer.length,
+        metadata: this._assetStamp(sessionId),
       });
       return { id: file.id, path: file.path };
     } catch {
@@ -586,7 +605,8 @@ export class AiDesignerAssetService implements OnModuleInit {
 
   private async _fallbackGradient(
     orgId: string,
-    need: AssetNeed
+    need: AssetNeed,
+    sessionId?: string
   ): Promise<AssetResult | null> {
     try {
       const { width, height } = FALLBACK_GRADIENT_SIZE[need.aspect ?? 'square'];
@@ -604,6 +624,7 @@ export class AiDesignerAssetService implements OnModuleInit {
         type: 'image/png',
         folderId: null,
         fileSize: buffer.length,
+        metadata: this._assetStamp(sessionId),
       });
 
       return await this._toResult(need, file, 'gradient');
@@ -647,6 +668,16 @@ export class AiDesignerAssetService implements OnModuleInit {
       return { from: '#111827', to: '#374151' };
     }
     return { from: '#e5e7eb', to: '#9ca3af' };
+  }
+
+  /**
+   * The intermediate stamp written to every File row this agent mints: hides
+   * the row from the default library listing and lets session teardown
+   * (`FileService.purgeAiDesignerSessionFiles`) find and delete the ones no
+   * delivered design ended up referencing.
+   */
+  private _assetStamp(sessionId?: string): Record<string, unknown> {
+    return { aiDesigner: 'asset', ...(sessionId ? { sessionId } : {}) };
   }
 
   private async _toResult(

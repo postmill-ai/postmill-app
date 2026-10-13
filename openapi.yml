@@ -10754,6 +10754,16 @@ components:
           maxLength: 4096
         attribution:
           type: object
+        aiDesigner:
+          type: string
+          description: |-
+            Marks the import as an AI Designer intermediate so the library listing
+            hides it and session teardown can purge it. Clients may only set the
+            documented marker shape — `'reference'` for reference-image imports; the
+            `'asset'` stamp and `sessionId` are backend-internal (the asset agent
+            stamps them server-side), never client-controllable metadata.
+          enum:
+            - reference
       required:
         - url
         - name

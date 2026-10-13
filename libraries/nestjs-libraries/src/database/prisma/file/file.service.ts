@@ -104,9 +104,39 @@ export class FileService {
     tag?: string,
     sort?: string,
     order?: string,
-    limit?: number
+    limit?: number,
+    includeAiDesigner?: boolean
   ) {
-    return this._fileRepository.getFiles(org, page, search, folderId, type, tag, sort, order, limit);
+    return this._fileRepository.getFiles(org, page, search, folderId, type, tag, sort, order, limit, includeAiDesigner);
+  }
+
+  /**
+   * Soft-delete the AI Designer intermediate files owned by a session, except
+   * those still referenced (delivered design docs embed their asset fileIds —
+   * pass them via `keepFileIds`). Reference imports carry no sessionId at
+   * creation (the session does not exist yet), so callers pass the session
+   * config's `referenceFileIds` explicitly; only rows actually stamped
+   * `aiDesigner: 'reference'` match. Best-effort caller: row deletion failures
+   * surface as throws for the caller to log — never block session teardown.
+   */
+  async purgeAiDesignerSessionFiles(
+    orgId: string,
+    sessionId: string,
+    opts: { referenceFileIds?: string[]; keepFileIds?: ReadonlySet<string> } = {}
+  ): Promise<number> {
+    const keep = opts.keepFileIds ?? new Set<string>();
+    const [assets, references] = await Promise.all([
+      this._fileRepository.findAiDesignerSessionAssetFiles(orgId, sessionId),
+      this._fileRepository.findAiDesignerReferenceFiles(
+        orgId,
+        opts.referenceFileIds ?? []
+      ),
+    ]);
+    const ids = [...assets, ...references]
+      .map((f) => f.id)
+      .filter((id) => !keep.has(id));
+    if (!ids.length) return 0;
+    return this._fileRepository.softDeleteMany(orgId, ids);
   }
 
   saveMediaInformation(org: string, data: SaveMediaInformationDto) {
@@ -391,6 +421,15 @@ export class FileService {
       type?: string;
       source?: string;
       attribution?: Record<string, unknown>;
+      /**
+       * AI Designer intermediate stamp. `'reference'` is client-settable via
+       * `/files/import` (ImportFromUrlDto); `'asset'` and
+       * `aiDesignerSessionId` are backend-internal — the asset agent stamps
+       * them server-side. Stamped rows are hidden from the default library
+       * listing and purged when the owning session ends.
+       */
+      aiDesigner?: 'asset' | 'reference';
+      aiDesignerSessionId?: string;
     }
   ) {
     // 1.3: never trust a client folderId — attach only to a folder the caller's
@@ -471,6 +510,14 @@ export class FileService {
       metadata: {
         ...(data.source ? { source: data.source } : {}),
         ...(data.attribution ? { attribution: data.attribution } : {}),
+        ...(data.aiDesigner
+          ? {
+              aiDesigner: data.aiDesigner,
+              ...(data.aiDesignerSessionId
+                ? { sessionId: data.aiDesignerSessionId }
+                : {}),
+            }
+          : {}),
       },
     });
   }

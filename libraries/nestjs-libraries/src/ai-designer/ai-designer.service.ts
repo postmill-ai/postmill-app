@@ -1,7 +1,11 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, Logger } from '@nestjs/common';
 import { AiDesignerSessionRepository } from '@postmill-ai/nestjs-libraries/database/prisma/ai-designer/ai-designer-session.repository';
 import { AiDesignerMessageRepository } from '@postmill-ai/nestjs-libraries/database/prisma/ai-designer/ai-designer-message.repository';
 import { GuardrailService } from '@postmill-ai/nestjs-libraries/ai/governance/guardrail.service';
+import { FileService } from '@postmill-ai/nestjs-libraries/database/prisma/file/file.service';
+import { DesignService } from '@postmill-ai/nestjs-libraries/database/prisma/design/design.service';
+import { collectDocFileIds } from '@postmill-ai/nestjs-libraries/media/designer-doc/doc-file-refs';
+import type { AiDesignerSession as PrismaAiDesignerSession } from '@prisma/client';
 import type {
   AiDesignerConfig,
   AiDesignerMessagePayload,
@@ -14,10 +18,14 @@ import type {
 
 @Injectable()
 export class AiDesignerService {
+  private readonly _logger = new Logger(AiDesignerService.name);
+
   constructor(
     private readonly _sessionRepo: AiDesignerSessionRepository,
     private readonly _messageRepo: AiDesignerMessageRepository,
     private readonly _guardrails: GuardrailService,
+    private readonly _fileService: FileService,
+    private readonly _designService: DesignService,
   ) {}
 
   async createSession(data: {
@@ -103,9 +111,68 @@ export class AiDesignerService {
   }
 
   async deleteSession(id: string, organizationId: string, userId: string) {
+    // Loaded before the delete: the session row carries everything the
+    // intermediate purge needs (config.referenceFileIds, activeDesignIds).
+    const session = await this._sessionRepo.findByIdForOrgAndUser(
+      id,
+      organizationId,
+      userId
+    );
     const deleted = await this._sessionRepo.delete(id, organizationId, userId);
     await this._messageRepo.clearSeq(id);
+    if (session) {
+      // Best-effort: a purge failure must never block session deletion — the
+      // retention sweep reaps the stamped rows later anyway.
+      await this._purgeSessionIntermediates(organizationId, session).catch(
+        (err) =>
+          this._logger.warn(
+            `Could not purge AI Designer intermediates for session ${id}: ${(err as Error)?.message}`
+          )
+      );
+    }
     return deleted;
+  }
+
+  /**
+   * Soft-delete the session's intermediate files (stamped assets +
+   * config-tracked reference imports) EXCEPT the ones a delivered design
+   * still references: delivered design docs embed their asset fileIds, so
+   * the keep-set is scanned from the session's `activeDesignIds` docs rather
+   * than tracked as new state.
+   */
+  private async _purgeSessionIntermediates(
+    organizationId: string,
+    session: PrismaAiDesignerSession
+  ): Promise<void> {
+    const keep = new Set<string>();
+    const designIds = Array.isArray(session.activeDesignIds)
+      ? (session.activeDesignIds as string[])
+      : [];
+    for (const designId of designIds) {
+      const design = await this._designService.getDesign(
+        organizationId,
+        designId
+      );
+      if (design?.doc) {
+        for (const fileId of collectDocFileIds(design.doc)) keep.add(fileId);
+      }
+    }
+    const config = session.config as { referenceFileIds?: string[] } | null;
+    const purged = await this._fileService.purgeAiDesignerSessionFiles(
+      organizationId,
+      session.id,
+      {
+        referenceFileIds: Array.isArray(config?.referenceFileIds)
+          ? config.referenceFileIds
+          : [],
+        keepFileIds: keep,
+      }
+    );
+    if (purged > 0) {
+      this._logger.log(
+        `Purged ${purged} AI Designer intermediate file(s) for session ${session.id}.`
+      );
+    }
   }
 
   async getMessages(sessionId: string): Promise<AiDesignerMessagePayload[]> {
