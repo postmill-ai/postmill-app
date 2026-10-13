@@ -1952,6 +1952,39 @@ export class AiDesignerComposerService implements OnModuleInit {
     lockedTexts?: Record<string, string>,
     plan?: DesignPlan
   ): Promise<DesignerDoc> {
+    return (
+      await this.reviseByInstructionWithResult(
+        doc,
+        instruction,
+        scope,
+        orgId,
+        targetOutputs,
+        targetSlots,
+        signal,
+        lockedTexts,
+        plan
+      )
+    ).doc;
+  }
+
+  /**
+   * `reviseByInstruction` plus a `changed` signal: `_llmReviseOps` returns the
+   * input doc BY REFERENCE when every emitted op was filtered out (or none
+   * was emitted), so the conductor can tell "the model declined / every op
+   * was dropped" apart from a real revision instead of silently re-delivering
+   * an unchanged design.
+   */
+  async reviseByInstructionWithResult(
+    doc: DesignerDoc,
+    instruction: string,
+    scope: Fix['scope'],
+    orgId: string,
+    targetOutputs?: string[],
+    targetSlots?: string[],
+    signal?: AbortSignal,
+    lockedTexts?: Record<string, string>,
+    plan?: DesignPlan
+  ): Promise<{ doc: DesignerDoc; changed: boolean }> {
     const revised = await this._llmReviseOps(
       doc,
       instruction,
@@ -1962,7 +1995,7 @@ export class AiDesignerComposerService implements OnModuleInit {
       signal,
       lockedTexts
     );
-    return this.sanitizeDoc(revised, plan).doc;
+    return { doc: this.sanitizeDoc(revised, plan).doc, changed: revised !== doc };
   }
 
   /**

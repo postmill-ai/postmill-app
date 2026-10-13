@@ -938,14 +938,9 @@ export class AiDesignerConductorService {
       );
 
       if (!revised) {
+        // `_reviseDesign` already told the user why (an unsupported change or
+        // a failed imagery replacement) — just put the session back.
         await this._setState(sessionId, ctx, emitter, 'delivered');
-        await this._emitText(
-          sessionId,
-          ctx,
-          emitter,
-          'conversationalist',
-          'I could not apply that revision.'
-        );
         return;
       }
 
@@ -1463,7 +1458,7 @@ export class AiDesignerConductorService {
 
     emitter.progress('asset', 'Generating shared assets', undefined, 'Generating imagery');
 
-    const assetNeeds = this._collectAssetNeeds(plans, outputs);
+    const assetNeeds = this._collectAssetNeeds(plans, outputs, brief.intent);
     if (assetNeeds.dropped > 0) {
       notes.push(
         `only the ${AiDesignerConductorService.MAX_ASSET_NEEDS} most-needed images were generated — the remaining slots have no generated imagery`
@@ -1534,7 +1529,18 @@ export class AiDesignerConductorService {
           notes.push(
             `no imagery was available for "${briefLabel}" — a gradient placeholder was used`
           );
-        } else if (asset.source === 'stock' && need.prefer === 'generate') {
+        } else if (
+          asset.source === 'stock' &&
+          need.prefer !== 'stock' &&
+          need.kind !== 'icon' &&
+          need.kind !== 'vector'
+        ) {
+          // ANY stock stand-in is disclosed, not just prefer:'generate' — a
+          // stock photo under 'either' (or the art-director's fallback plan)
+          // used to ship silently. The only suppressions: the planner
+          // DELIBERATELY chose stock (prefer:'stock'), and kinds whose primary
+          // resolution path IS a search (icon/vector — stock is the intent
+          // there, not a fallback).
           notes.push(
             `image generation was unavailable for "${briefLabel}" — a stock photo was used`
           );
@@ -2052,8 +2058,11 @@ export class AiDesignerConductorService {
             );
             // Fresh imagery: the same needs, regenerate:true so the asset
             // agent re-rolls instead of replaying its cache.
-            const needs = this._collectAssetNeeds([planForRebuild], outputs)
-              .needs;
+            const needs = this._collectAssetNeeds(
+              [planForRebuild],
+              outputs,
+              brief.intent
+            ).needs;
             // Assets the fresh set displaces: once the rebuilt doc no longer
             // references them their File rows leak, so they are soft-deleted
             // after the rebuild lands (never before — a failed rebuild keeps
@@ -2807,12 +2816,21 @@ export class AiDesignerConductorService {
   // cover-crops per format, so per-aspect fan-out is unnecessary.
   private _collectAssetNeeds(
     plans: DesignPlan[],
-    outputs: { formatId: string; width: number; height: number }[]
+    outputs: { formatId: string; width: number; height: number }[],
+    originalPrompt?: string
   ): { needs: AssetNeedRequest[]; dropped: number } {
     const primaryAspect = outputs[0]
       ? aspectClass(outputs[0].width, outputs[0].height)
       : 'square';
     const dominantFormatId = outputs[0]?.formatId;
+    // The art director PARAPHRASES the user's prompt into per-slot briefs —
+    // specifics it dropped ("a red barn", "our golden retriever") never
+    // reached the image model. Pin the raw prompt onto the BACKGROUND slot's
+    // need (the imagery that carries the design); bounded so a long chat
+    // intent cannot drown the art direction.
+    const promptSuffix = originalPrompt?.trim()
+      ? `. Original request: "${originalPrompt.trim().slice(0, 240)}"`
+      : '';
 
     // Dedupe within a plan (first occurrence wins), keeping the plan so
     // hero/background slots can carry layout intent into the image prompt.
@@ -2820,6 +2838,10 @@ export class AiDesignerConductorService {
     const needs: AssetNeedRequest[] = [];
     let unplaceable = 0;
     for (const plan of plans) {
+      const backgroundSlotId =
+        plan.background?.kind === 'image'
+          ? (plan.background.ref || '').replace(/^asset:/, '')
+          : undefined;
       const placeable = this._placeableAssetNeeds(plan, outputs[0]);
       unplaceable += placeable.dropped;
       for (const need of placeable.needs) {
@@ -2828,7 +2850,10 @@ export class AiDesignerConductorService {
         seen.add(key);
         needs.push({
           slotId: key,
-          brief: need.brief,
+          brief:
+            backgroundSlotId && need.slotId === backgroundSlotId
+              ? `${need.brief}${promptSuffix}`
+              : need.brief,
           prefer: need.prefer,
           ...(need.kind ? { kind: need.kind } : {}),
           aspect: primaryAspect,
@@ -3669,8 +3694,56 @@ export class AiDesignerConductorService {
         // revise aimed at variant 3 silently landed on variant 1.
         instruction,
         scope: 'shared',
+        // The LLM classifier never ran on this path, so detect a background
+        // IMAGE replacement deterministically — without it "change the
+        // background" no-ops against the composer's image-background
+        // protection. Recolor wording stays a doc-op revise.
+        ...(this._isBackgroundImageryWording(instruction)
+          ? { kind: 'imagery' as const }
+          : {}),
       },
     };
+  }
+
+  /**
+   * Does the instruction clearly ask for the background IMAGE to be replaced
+   * rather than recolored? Conservative by design: any color/gradient wording
+   * or a missing background mention stays a doc-op revise (ambiguity resolves
+   * to the cheaper, reversible path). The conductor additionally gates on the
+   * design actually having an image background (`_isImageryRevision`).
+   */
+  private _isBackgroundImageryWording(instruction: string): boolean {
+    const text = (instruction || '').toLowerCase();
+    if (!/\b(background|backdrop)\b/.test(text)) return false;
+    if (/\b(colou?r|colours|gradient|tint|shade|shading|darker|lighter|brighter|dimmer|hex)\b|#/.test(text)) {
+      return false;
+    }
+    return (
+      /\b(regenerat\w*|replac\w*|swap\w*|chang\w*|switch\w*|new|different|another|redo)\b/.test(
+        text
+      ) || /\b(image|photo\w*|picture\w*|imagery|scene|illustration)\b/.test(text)
+    );
+  }
+
+  /**
+   * Should this revision run the imagery-regeneration branch instead of the
+   * composer's doc ops? The classifier's `kind: 'imagery'` decides outright;
+   * otherwise the wording heuristic applies ONLY when the design's background
+   * is an image — there "change the background" can only mean new imagery,
+   * because doc ops (correctly) refuse to touch an image background and would
+   * no-op. On a color/gradient background the same words stay a doc-op
+   * recolor.
+   */
+  private _isImageryRevision(
+    revision: RevisionRequest,
+    doc: DesignerDoc
+  ): boolean {
+    if (revision.kind === 'imagery') return true;
+    if (revision.kind === 'edit') return false;
+    if (!this._isBackgroundImageryWording(revision.instruction)) return false;
+    return doc.outputs.some(
+      (out) => 'children' in out && out.bg?.type === 'image'
+    );
   }
 
   /**
@@ -3732,6 +3805,173 @@ export class AiDesignerConductorService {
     );
   }
 
+  /**
+   * The stored plan behind a delivered design, for the revise imagery branch.
+   * Plans are recorded in delivery order (the catalogue makes the same
+   * positional assumption), but revisions APPEND the revised design's new id,
+   * so a positional miss falls back to any plan with an image background.
+   */
+  private _planForDesign(
+    plans: DesignPlan[],
+    session: unknown,
+    designId: string
+  ): DesignPlan | undefined {
+    const activeDesignIds = (session as { activeDesignIds?: unknown })
+      ?.activeDesignIds;
+    const index = Array.isArray(activeDesignIds)
+      ? (activeDesignIds as string[]).indexOf(designId)
+      : -1;
+    const byPosition = index >= 0 ? plans[index] : undefined;
+    if (byPosition?.background?.kind === 'image' && byPosition.background.ref) {
+      return byPosition;
+    }
+    return (
+      plans.find((p) => p.background?.kind === 'image' && p.background.ref) ??
+      byPosition
+    );
+  }
+
+  /**
+   * The revise path's imagery branch: the user asked for a NEW background
+   * image. Rebuilds the background slot's asset need from the stored plan
+   * (the user's instruction rides as the brief's guidance) and dispatches the
+   * asset agent with `regenerate: true` — the same plumbing (and the same
+   * `_replaceSlotImagery` swap) as the critic's regenerateAsset fix in
+   * `_regenerateFlaggedAssets`, deliberately not re-implemented here.
+   *
+   * Returns the patched doc, or null after telling the user why nothing
+   * changed (no image background to replace, or the regeneration failed —
+   * the original imagery is kept either way).
+   */
+  private async _replaceBackgroundImageryForRevise(
+    sessionId: string,
+    ctx: AiDesignerAgentContext,
+    doc: DesignerDoc,
+    revision: RevisionRequest,
+    plans: DesignPlan[],
+    session: unknown,
+    targetDesignId: string,
+    emitter: AiDesignerEmitter,
+    notes: string[]
+  ): Promise<DesignerDoc | null> {
+    const plan = this._planForDesign(plans, session, targetDesignId);
+    const slotId =
+      plan?.background?.kind === 'image'
+        ? (plan.background.ref || '').replace(/^asset:/, '')
+        : '';
+    if (!plan || !slotId) {
+      await this._emitText(
+        sessionId,
+        ctx,
+        emitter,
+        'conversationalist',
+        "This design doesn't have an image background I can replace — I can change its background color or gradient instead."
+      );
+      return null;
+    }
+
+    emitter.progress(
+      'asset',
+      'Replacing the background image',
+      undefined,
+      revision.instruction
+    );
+    const slotKey = `${plan.variantId}:${slotId}`;
+    const primary = doc.outputs[0];
+    const planNeed = (plan.assetNeeds ?? []).find((n) => n.slotId === slotId);
+    // Same need shape `_collectAssetNeeds` builds at compose (variant-scoped
+    // key, primary aspect, hero layout intent), with the user's instruction as
+    // the guidance — mirroring the critic-brief append in
+    // `_regenerateFlaggedAssets`.
+    const need: AssetNeedRequest = {
+      slotId: slotKey,
+      brief: [planNeed?.brief ?? plan.concept, revision.instruction]
+        .filter(Boolean)
+        .join('. '),
+      prefer: planNeed?.prefer ?? 'generate',
+      ...(planNeed?.kind ? { kind: planNeed.kind } : {}),
+      aspect:
+        primary && 'width' in primary
+          ? aspectClass(primary.width, primary.height)
+          : 'square',
+      heroLayout: this._heroLayoutForNeed(plan, slotId, primary?.formatId),
+    };
+    const key = assetKey(need.slotId, need.aspect);
+    // Excluding the current pick stops the deterministic, Redis-cached stock
+    // search from handing the identical photo straight back.
+    const previousStockId = this._assetStockIds.get(sessionId)?.get(key);
+    if (previousStockId) need.excludeStockId = previousStockId;
+
+    try {
+      const response = await this._dispatchAgent(ctx, 'asset', {
+        type: 'asset-request',
+        assetNeeds: [need],
+        regenerate: true,
+      });
+      const { assets } = this._parseAssets(response);
+      const asset = assets[key];
+      // A gradient placeholder is not a usable replacement — keep the
+      // original background, as `_regenerateFlaggedAssets` does.
+      if (!asset?.fileId || !asset.path || asset.source === 'gradient') {
+        throw new Error('no usable replacement asset');
+      }
+      if (
+        asset.source === 'stock' &&
+        asset.stockId &&
+        asset.stockId === previousStockId
+      ) {
+        throw new Error('stock search returned the same photo');
+      }
+      const patched = this._replaceSlotImagery(doc, plan, slotId, asset);
+      if (!patched) {
+        throw new Error('the background slot matched no imagery on the doc');
+      }
+      // The displaced intermediate's File row would otherwise leak.
+      await this._softDeleteReplacedAssets(
+        ctx.orgId,
+        patched.replacedFileIds,
+        patched.doc
+      );
+      if (asset.stockId) {
+        const perSession =
+          this._assetStockIds.get(sessionId) ?? new Map<string, string>();
+        perSession.set(key, asset.stockId);
+        this._assetStockIds.set(sessionId, perSession);
+      }
+      // The swap is disclosed like any other stock stand-in (fix: silent
+      // stock fallback) unless the slot was deliberately stock-only.
+      if (
+        asset.source === 'stock' &&
+        need.prefer !== 'stock' &&
+        need.kind !== 'icon' &&
+        need.kind !== 'vector'
+      ) {
+        notes.push(
+          'image generation was unavailable for the new background — a stock photo was used'
+        );
+      }
+      this._logger.log(
+        `Replaced the background imagery for ${slotKey} on user revise (source=${asset.source}).`,
+        AiDesignerConductorService.name
+      );
+      return patched.doc;
+    } catch (err) {
+      if (this._wasCancelled(err)) throw err;
+      this._logger.warn(
+        `Background imagery revise failed for ${slotKey}: ${(err as Error).message}`,
+        AiDesignerConductorService.name
+      );
+      await this._emitText(
+        sessionId,
+        ctx,
+        emitter,
+        'conversationalist',
+        "I couldn't create a new background image this time — the original was kept. Try again in a moment, or ask for a different look."
+      );
+      return null;
+    }
+  }
+
   private async _reviseDesign(
     sessionId: string,
     ctx: AiDesignerAgentContext,
@@ -3742,46 +3982,87 @@ export class AiDesignerConductorService {
   ): Promise<AiDesignerRenderResult | null> {
     const doc = await this._loadDesignDoc(ctx.orgId, targetDesignId);
 
-    // A `format-only` revision that names no output this doc actually has
-    // used to filter every emitted op away (`_filterReviseOps` allows an
-    // EMPTY index set through nothing) and no-op in silence. Applying the
-    // user's change to every format is the lesser evil — but say so.
-    let scope = revision.scope;
-    let targetOutputs = revision.targetOutputs;
-    if (
-      scope === 'format-only' &&
-      !this._composer.canResolveFormatScope(doc, targetOutputs)
-    ) {
-      this._logger.warn(
-        `Revision asked for format-only scope but named no known output (${(targetOutputs ?? []).join(', ') || 'none'}); applying it to every format.`,
-        AiDesignerConductorService.name
-      );
-      scope = 'shared';
-      targetOutputs = undefined;
-      notes.push(
-        "I couldn't tell which format you meant, so the change was applied to every size"
-      );
-    }
-
-    emitter.progress('composer', 'Applying revision', undefined, revision.instruction);
-    // The session's plans ride into sanitize: the validator's duplicate-copy
-    // dedupe exempts same-role plan echoes, but only when it can SEE the plan.
+    // The session's plans ride into sanitize (the validator's duplicate-copy
+    // dedupe exempts same-role plan echoes, but only when it can SEE the plan)
+    // and into the imagery branch (background slot + plan brief lookup).
     const sessionForPlans = await this._service.getSessionForUser(sessionId, ctx.orgId, ctx.userId);
     const briefForPlans = this._brief(sessionForPlans ?? {});
     const plansForSanitize = (briefForPlans.lastPlans as DesignPlan[] | undefined) ?? [];
-    // Real LLM re-emit of updateElement ops (not a note-only no-op): honors
-    // scope (shared vs format-only), so the revised design actually changes.
-    let revisedDoc = await this._composer.reviseByInstruction(
-      doc,
-      revision.instruction,
-      scope,
-      ctx.orgId,
-      targetOutputs,
-      revision.targetSlots,
-      this._aborts.get(sessionId)?.signal,
-      undefined,
-      plansForSanitize[0]
-    );
+
+    let revisedDoc: DesignerDoc;
+    if (this._isImageryRevision(revision, doc)) {
+      // "Change the background" on an image-backed design: doc ops cannot
+      // touch an image background (the composer correctly drops them), so the
+      // request routes to the same deterministic asset-regeneration path the
+      // critic's regenerateAsset fix uses.
+      const patched = await this._replaceBackgroundImageryForRevise(
+        sessionId,
+        ctx,
+        doc,
+        revision,
+        plansForSanitize,
+        sessionForPlans,
+        targetDesignId,
+        emitter,
+        notes
+      );
+      // A null here already told the user why (no image background, or the
+      // regeneration failed) — do not re-deliver the unchanged design.
+      if (!patched) return null;
+      revisedDoc = patched;
+    } else {
+      // A `format-only` revision that names no output this doc actually has
+      // used to filter every emitted op away (`_filterReviseOps` allows an
+      // EMPTY index set through nothing) and no-op in silence. Applying the
+      // user's change to every format is the lesser evil — but say so.
+      let scope = revision.scope;
+      let targetOutputs = revision.targetOutputs;
+      if (
+        scope === 'format-only' &&
+        !this._composer.canResolveFormatScope(doc, targetOutputs)
+      ) {
+        this._logger.warn(
+          `Revision asked for format-only scope but named no known output (${(targetOutputs ?? []).join(', ') || 'none'}); applying it to every format.`,
+          AiDesignerConductorService.name
+        );
+        scope = 'shared';
+        targetOutputs = undefined;
+        notes.push(
+          "I couldn't tell which format you meant, so the change was applied to every size"
+        );
+      }
+
+      emitter.progress('composer', 'Applying revision', undefined, revision.instruction);
+      // Real LLM re-emit of updateElement ops (not a note-only no-op): honors
+      // scope (shared vs format-only), so the revised design actually changes.
+      const reviseResult = await this._composer.reviseByInstructionWithResult(
+        doc,
+        revision.instruction,
+        scope,
+        ctx.orgId,
+        targetOutputs,
+        revision.targetSlots,
+        this._aborts.get(sessionId)?.signal,
+        undefined,
+        plansForSanitize[0]
+      );
+      revisedDoc = reviseResult.doc;
+
+      // `_filterReviseOps` is fail-closed: an instruction the doc ops cannot
+      // honor (e.g. swapping an image's src, replacing an image background)
+      // drops every op and the revise used to re-deliver the design
+      // UNCHANGED, in silence. Say so instead of faking a revision.
+      if (!reviseResult.changed) {
+        await this._emitText(
+          sessionId,
+          ctx,
+          emitter,
+          'conversationalist',
+          "I couldn't apply that change — it isn't something I can edit on this design. I can adjust copy, colors, and layout, or replace the background image if you ask for a new one — try rephrasing the request."
+        );
+        return null;
+      }
+    }
 
     const session = sessionForPlans ?? (await this._service.getSessionForUser(sessionId, ctx.orgId, ctx.userId));
     const config = this._config(session ?? {});

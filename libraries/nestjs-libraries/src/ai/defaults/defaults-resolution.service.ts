@@ -127,6 +127,20 @@ export class DefaultsResolutionService {
     return this._candidates(domain, category, orgId);
   }
 
+  /**
+   * The org's stored default row for a category, whether or not it still
+   * resolves — a disabled/removed provider leaves the row behind. Lets a
+   * caller distinguish "nothing was ever configured" (block-worthy) from
+   * "configured but the provider is gone" (warn-and-degrade).
+   */
+  async storedDefault(
+    domain: 'ai' | 'media',
+    category: string,
+    orgId: string,
+  ) {
+    return this._repository.get(orgId, domain, category);
+  }
+
   private async _candidates(
     domain: 'ai' | 'media',
     category: string,

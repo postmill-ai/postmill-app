@@ -539,6 +539,14 @@ export interface RevisionRequest {
   scope: FixScope;
   targetOutputs?: string[];
   targetSlots?: string[];
+  /**
+   * `imagery` = replace/regenerate the design's background IMAGE with new
+   * imagery — the revise equivalent of the critic's regenerateAsset fix,
+   * handled by the conductor's deterministic asset-regeneration path (the
+   * composer's doc ops cannot touch an image background). Absent / `edit` =
+   * an ordinary doc-op revision; a background recolor is always `edit`.
+   */
+  kind?: 'edit' | 'imagery';
 }
 
 export interface FormOption {

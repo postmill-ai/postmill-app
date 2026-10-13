@@ -1061,4 +1061,26 @@ describe('AiDesignerConversationalistService delivered state', () => {
 
     expect(res.revision.targetDesignId).toBe('design-B');
   });
+
+  it('passes a clear imagery-replacement classification through', async () => {
+    const res = await handle(
+      makeDeliveredInput('change the background to a beach at sunset', {
+        instruction: 'change the background to a beach at sunset',
+        kind: 'imagery',
+      })
+    );
+
+    expect(res.revision.kind).toBe('imagery');
+  });
+
+  it('drops a hallucinated revision kind — only "imagery" survives', async () => {
+    const res = await handle(
+      makeDeliveredInput('make the headline bigger', {
+        instruction: 'make the headline bigger',
+        kind: 'everything',
+      })
+    );
+
+    expect(res.revision.kind).toBeUndefined();
+  });
 });

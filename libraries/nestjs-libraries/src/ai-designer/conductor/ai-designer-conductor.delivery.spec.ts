@@ -450,7 +450,7 @@ describe('AiDesignerConductorService delivery state machine', () => {
       service: makeSessionService(sessionState),
     });
     (conductor as any)._composer = {
-      reviseByInstruction: vi.fn().mockResolvedValue({ layers: [] }),
+      reviseByInstructionWithResult: vi.fn().mockResolvedValue({ doc: { layers: [] }, changed: true }),
     };
     (conductor as any)._saver = {
       saveDesign: vi.fn().mockResolvedValue(render),

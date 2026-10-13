@@ -1766,7 +1766,7 @@ describe('AiDesignerConductorService vision-critic rubric resolution', () => {
       getDesign: vi.fn().mockResolvedValue({ id: 'design-A', doc: { metadata: {}, layers: [] } }),
     };
     const composer = {
-      reviseByInstruction: vi.fn().mockResolvedValue({ metadata: {}, layers: [] }),
+      reviseByInstructionWithResult: vi.fn().mockResolvedValue({ doc: { metadata: {}, layers: [] }, changed: true }),
       applyFixes: vi.fn(),
     };
     const saver = {
@@ -1829,7 +1829,7 @@ describe('AiDesignerConductorService vision-critic rubric resolution', () => {
       getDesign: vi.fn().mockResolvedValue({ id: 'design-A', doc: { metadata: {}, layers: [] } }),
     };
     const composer = {
-      reviseByInstruction: vi.fn().mockResolvedValue({ metadata: {}, layers: [] }),
+      reviseByInstructionWithResult: vi.fn().mockResolvedValue({ doc: { metadata: {}, layers: [] }, changed: true }),
       applyFixes: vi.fn(),
     };
     const saver = {
@@ -1901,7 +1901,7 @@ describe('AiDesignerConductorService vision-critic rubric resolution', () => {
       getDesign: vi.fn().mockResolvedValue({ id: 'design-A', doc: { metadata: {}, layers: [] } }),
     };
     const composer = {
-      reviseByInstruction: vi.fn().mockResolvedValue({ metadata: {}, layers: [] }),
+      reviseByInstructionWithResult: vi.fn().mockResolvedValue({ doc: { metadata: {}, layers: [] }, changed: true }),
       applyFixes: vi.fn(),
     };
     const saver = {
@@ -1971,7 +1971,7 @@ describe('AiDesignerConductorService vision-critic rubric resolution', () => {
           .mockResolvedValue({ id: 'd', doc: { metadata: {}, layers: [] } }),
       };
       const composer = {
-        reviseByInstruction: vi.fn().mockResolvedValue({ metadata: {}, layers: [] }),
+        reviseByInstructionWithResult: vi.fn().mockResolvedValue({ doc: { metadata: {}, layers: [] }, changed: true }),
         applyFixes: vi.fn(),
         canResolveFormatScope: vi.fn().mockReturnValue(true),
       };
@@ -3508,7 +3508,7 @@ describe('AiDesignerConductorService variant expansion', () => {
       getDesign: vi.fn().mockResolvedValue({ id: 'design-A', doc: { mode: 'image', outputs: [] } }),
     };
     const composer = {
-      reviseByInstruction: vi.fn().mockResolvedValue({ mode: 'image', outputs: [] }),
+      reviseByInstructionWithResult: vi.fn().mockResolvedValue({ doc: { mode: 'image', outputs: [] }, changed: true }),
       applyFixes: vi.fn().mockResolvedValue({ mode: 'image', outputs: [] }),
     };
     const saver = {
@@ -4706,9 +4706,9 @@ describe('AiDesignerConductorService format-only revise degradation (round 7 C6)
 
   const setup = () => {
     const { conductor, service } = makeConductor({});
-    const reviseByInstruction = vi.fn().mockResolvedValue(DOC);
+    const reviseByInstruction = vi.fn().mockResolvedValue({ doc: DOC, changed: true });
     (conductor as any)._composer = {
-      reviseByInstruction,
+      reviseByInstructionWithResult: reviseByInstruction,
       canResolveFormatScope: (doc: any, targetOutputs?: string[]) =>
         (targetOutputs ?? []).some((id) =>
           doc.outputs.some((o: any) => o.formatId === id)
@@ -6044,5 +6044,517 @@ describe('AiDesignerConductorService replaced-asset cleanup', () => {
     ).resolves.toBeUndefined();
     expect(fileService.softDelete).toHaveBeenCalledTimes(1);
     expect(fileService.softDelete).toHaveBeenCalledWith('b', ORG_ID);
+  });
+});
+
+// PR C: the stock fallback is disclosed for EVERY non-deliberate stock pick
+// (not just prefer:'generate'), the fallback plan no longer hardcodes stock,
+// and "change the background" routes to imagery regeneration.
+describe('AiDesignerConductorService stock fallback disclosure (PR C)', () => {
+  const runPipelineWithAsset = async (
+    assetNeed: Record<string, unknown>,
+    asset: Record<string, unknown> | null,
+    planExtra: Record<string, unknown> = {}
+  ) => {
+    const emitter = makeEmitter();
+    const plan = {
+      variantId: 'v1',
+      skill: 'meme',
+      concept: 'A scenic promo',
+      slots: [{ id: 'image', role: 'image', kind: 'image' }],
+      assetNeeds: [assetNeed],
+      palette: [],
+      typeScale: {},
+      background: { kind: 'solid' },
+      ...planExtra,
+    };
+    const service = {
+      getSessionForUser: vi.fn().mockResolvedValue({
+        id: SESSION_ID,
+        state: 'awaiting_plan',
+        mode: 'prompt',
+        brief: { intent: 'x', lastPlans: [plan] },
+        config: { channels: ['ig-post'], variants: 1 },
+        activeDesignIds: null,
+      }),
+      updateSession: vi.fn().mockResolvedValue(undefined),
+      appendMessage: vi.fn().mockResolvedValue({ id: 'msg-1' }),
+    };
+    const saver = {
+      saveDesign: vi.fn().mockImplementation((orgId, userId, variantId) =>
+        Promise.resolve({
+          designId: `design-${variantId}`,
+          variantId,
+          outputPreviews: [],
+        })
+      ),
+    };
+    const { conductor } = makeConductor({ service });
+    (conductor as any)._saver = saver;
+    (conductor as any)._dispatchAgent = vi.fn().mockImplementation((_, agentId) => {
+      if (agentId === 'asset') {
+        return Promise.resolve({
+          content: JSON.stringify({
+            type: 'assets',
+            assets: asset ? { 'v1:image:square': asset } : {},
+          }),
+        });
+      }
+      if (agentId === 'copywriter') {
+        return Promise.resolve({
+          content: JSON.stringify({ type: 'copy', texts: {} }),
+        });
+      }
+      if (agentId === 'composer') {
+        return Promise.resolve({
+          content: JSON.stringify({ type: 'doc', doc: { layers: [] } }),
+        });
+      }
+      return Promise.resolve({ content: '{}' });
+    });
+    (conductor as any)._parseDesignDoc = vi.fn().mockReturnValue({ layers: [] });
+
+    await conductor.handleAcceptPlan(
+      SESSION_ID,
+      ctx,
+      'reply-1',
+      undefined,
+      false,
+      undefined,
+      emitter
+    );
+
+    const headsUp = (service.appendMessage as ReturnType<typeof vi.fn>).mock.calls
+      .filter(
+        (call) =>
+          call[0].kind === 'markdown' && call[0].content.md.includes('Heads up')
+      )
+      .map((call) => call[0].content.md)
+      .join('\n');
+    return { headsUp };
+  };
+
+  const STOCK = {
+    slotId: 'v1:image',
+    fileId: 'f-stock',
+    path: 'https://example.com/stock.png',
+    type: 'image',
+    source: 'stock',
+    aspect: 'square',
+    stockId: 'photo-1',
+  };
+
+  it('discloses a stock stand-in under prefer:either (was silent before)', async () => {
+    const { headsUp } = await runPipelineWithAsset(
+      { slotId: 'image', brief: 'mountain lake at dawn', prefer: 'either' },
+      STOCK
+    );
+
+    expect(headsUp).toContain(
+      'image generation was unavailable for "mountain lake at dawn" — a stock photo was used'
+    );
+  });
+
+  it('discloses stock served by the deterministic fallback plan', async () => {
+    // The fallback plan used to hardcode prefer:'stock' — it now asks for
+    // 'either', and a stock landing is disclosed like any other fallback.
+    const { headsUp } = await runPipelineWithAsset(
+      {
+        slotId: 'image',
+        brief: 'A high-quality background image matching the brief',
+        prefer: 'either',
+      },
+      STOCK,
+      { fallback: true }
+    );
+
+    expect(headsUp).toContain('planning ran in fallback mode');
+    expect(headsUp).toContain('a stock photo was used');
+  });
+
+  it('stays silent when the planner deliberately chose stock', async () => {
+    const { headsUp } = await runPipelineWithAsset(
+      { slotId: 'image', brief: 'candid office photo', prefer: 'stock' },
+      STOCK
+    );
+
+    expect(headsUp).not.toContain('a stock photo was used');
+  });
+
+  it('stays silent for kinds whose primary path IS a search (icon)', async () => {
+    const { headsUp } = await runPipelineWithAsset(
+      { slotId: 'image', brief: 'pizza slice icon', prefer: 'either', kind: 'icon' },
+      STOCK
+    );
+
+    expect(headsUp).not.toContain('a stock photo was used');
+  });
+});
+
+describe('AiDesignerConductorService background-imagery revise (PR C)', () => {
+  const BG_PLAN = {
+    variantId: 'v1',
+    skill: 'meme',
+    concept: 'coffee promo',
+    slots: [{ id: 'headline', role: 'headline', kind: 'text' }],
+    assetNeeds: [
+      { slotId: 'image', brief: 'coffee shop interior', prefer: 'generate' },
+    ],
+    palette: [],
+    typeScale: {},
+    background: { kind: 'image' as const, ref: 'asset:image' as const },
+  };
+  const BG_DOC = {
+    mode: 'image',
+    outputs: [
+      {
+        formatId: 'ig-post',
+        name: 'Instagram Post',
+        width: 1080,
+        height: 1080,
+        background: '#000000',
+        bg: {
+          type: 'image',
+          src: 'https://example.com/old-bg.png',
+          fileId: 'f-old',
+          focalPoint: { x: 0.5, y: 0.5 },
+        },
+        children: [],
+      },
+    ],
+  };
+  const NEW_BG = {
+    slotId: 'v1:image',
+    fileId: 'f-new',
+    path: 'https://example.com/new-bg.png',
+    type: 'image',
+    source: 'generate',
+    aspect: 'square',
+    focalPoint: { x: 0.5, y: 0.5 },
+  };
+
+  const makeReviseImageryConductor = (opts: {
+    assets?: Record<string, unknown>;
+    plan?: unknown;
+    doc?: unknown;
+  } = {}) => {
+    const service = {
+      getSessionForUser: vi.fn().mockResolvedValue({
+        id: SESSION_ID,
+        state: 'delivered',
+        mode: 'prompt',
+        brief: {
+          intent: 'x',
+          skillId: 'meme',
+          lastPlans: [opts.plan ?? BG_PLAN],
+        },
+        config: {},
+        activeDesignIds: ['design-v1'],
+      }),
+      updateSession: vi.fn().mockResolvedValue(undefined),
+      appendMessage: vi.fn().mockResolvedValue({ id: 'msg-1' }),
+    };
+    const saver = {
+      saveDesign: vi.fn().mockResolvedValue({
+        designId: 'design-v1-revised',
+        variantId: 'revised',
+        outputPreviews: [],
+      }),
+      updateDesign: vi.fn(),
+    };
+    const realDocService = new DesignerDocService();
+    const docService = {
+      applyOps: vi.fn((d: any, ops: any[]) => realDocService.applyOps(d, ops)),
+    };
+    const fileService = {
+      getFileById: vi
+        .fn()
+        .mockResolvedValue({ id: 'f-old', metadata: { aiDesigner: 'asset' } }),
+      softDelete: vi.fn().mockResolvedValue(undefined),
+    };
+    const composer = {
+      reviseByInstructionWithResult: vi.fn(),
+      canResolveFormatScope: vi.fn().mockReturnValue(true),
+    };
+    const { conductor } = makeConductor({ service });
+    (conductor as any)._saver = saver;
+    (conductor as any)._docService = docService;
+    (conductor as any)._fileService = fileService;
+    (conductor as any)._composer = composer;
+    (conductor as any)._designService = {
+      getDesign: vi
+        .fn()
+        .mockResolvedValue({ id: 'design-v1', doc: opts.doc ?? BG_DOC }),
+    };
+    const dispatchAgent = vi.fn().mockImplementation((_, agentId) => {
+      if (agentId === 'asset') {
+        return Promise.resolve({
+          content: JSON.stringify({
+            type: 'assets',
+            assets: opts.assets ?? { 'v1:image:square': NEW_BG },
+          }),
+        });
+      }
+      return Promise.resolve({ content: '{}' });
+    });
+    (conductor as any)._dispatchAgent = dispatchAgent;
+    const texts = () =>
+      (service.appendMessage as ReturnType<typeof vi.fn>).mock.calls
+        .filter((call) => call[0].kind === 'text')
+        .map((call) => call[0].content.text)
+        .join('\n');
+    return { conductor, service, saver, composer, dispatchAgent, fileService, texts };
+  };
+
+  it('replaces the background imagery through the asset agent + _replaceSlotImagery', async () => {
+    const { conductor, saver, composer, dispatchAgent, fileService } =
+      makeReviseImageryConductor();
+    const notes: string[] = [];
+
+    const result = await (conductor as any)._reviseDesign(
+      SESSION_ID,
+      ctx,
+      'design-v1',
+      {
+        instruction: 'change the background to a beach at sunset',
+        scope: 'shared',
+        kind: 'imagery',
+      },
+      makeEmitter(),
+      notes
+    );
+
+    expect(result).toBeTruthy();
+    // The doc-op revise path was NOT used.
+    expect(composer.reviseByInstructionWithResult).not.toHaveBeenCalled();
+    // The asset agent was dispatched exactly like a regenerateAsset fix:
+    // variant-scoped slot, plan brief + the user's instruction, regenerate.
+    const assetCalls = dispatchAgent.mock.calls.filter(
+      ([, agentId]: any) => agentId === 'asset'
+    );
+    expect(assetCalls).toHaveLength(1);
+    expect(assetCalls[0][2].regenerate).toBe(true);
+    const need = assetCalls[0][2].assetNeeds[0];
+    expect(need.slotId).toBe('v1:image');
+    expect(need.brief).toContain('coffee shop interior');
+    expect(need.brief).toContain('change the background to a beach at sunset');
+    expect(need.prefer).toBe('generate');
+    expect(need.aspect).toBe('square');
+    // The saved doc points at the NEW asset — the actual swap.
+    const savedDoc = saver.saveDesign.mock.calls[0][3];
+    expect(savedDoc.outputs[0].bg.fileId).toBe('f-new');
+    expect(savedDoc.outputs[0].bg.src).toBe('https://example.com/new-bg.png');
+    // The displaced intermediate File row was soft-deleted.
+    expect(fileService.softDelete).toHaveBeenCalledWith('f-old', ORG_ID);
+  });
+
+  it('routes bare "change the background" wording to imagery when the design has an image background', async () => {
+    const { conductor, composer, dispatchAgent } = makeReviseImageryConductor();
+
+    await (conductor as any)._reviseDesign(
+      SESSION_ID,
+      ctx,
+      'design-v1',
+      // NO kind — the wording heuristic + the image background decide.
+      { instruction: 'change the background to a beach', scope: 'shared' },
+      makeEmitter(),
+      []
+    );
+
+    expect(composer.reviseByInstructionWithResult).not.toHaveBeenCalled();
+    expect(
+      dispatchAgent.mock.calls.filter(([, agentId]: any) => agentId === 'asset')
+    ).toHaveLength(1);
+  });
+
+  it('keeps a background recolor on the doc-op path', async () => {
+    const { conductor, composer, dispatchAgent } = makeReviseImageryConductor();
+    composer.reviseByInstructionWithResult.mockResolvedValue({
+      doc: BG_DOC,
+      changed: true,
+    });
+
+    await (conductor as any)._reviseDesign(
+      SESSION_ID,
+      ctx,
+      'design-v1',
+      { instruction: 'make the background blue', scope: 'shared' },
+      makeEmitter(),
+      []
+    );
+
+    expect(composer.reviseByInstructionWithResult).toHaveBeenCalled();
+    expect(
+      dispatchAgent.mock.calls.filter(([, agentId]: any) => agentId === 'asset')
+    ).toHaveLength(0);
+  });
+
+  it('keeps the original and says so when the regeneration produces nothing', async () => {
+    const { conductor, saver, texts } = makeReviseImageryConductor({
+      assets: {},
+    });
+
+    const result = await (conductor as any)._reviseDesign(
+      SESSION_ID,
+      ctx,
+      'design-v1',
+      {
+        instruction: 'change the background to a beach',
+        scope: 'shared',
+        kind: 'imagery',
+      },
+      makeEmitter(),
+      []
+    );
+
+    expect(result).toBeNull();
+    expect(saver.saveDesign).not.toHaveBeenCalled();
+    expect(texts()).toContain(
+      "I couldn't create a new background image this time"
+    );
+  });
+
+  it('offers the color path instead when the design has no image background', async () => {
+    const solidPlan = {
+      ...BG_PLAN,
+      background: { kind: 'solid' as const },
+    };
+    const solidDoc = {
+      mode: 'image',
+      outputs: [
+        {
+          formatId: 'ig-post',
+          width: 1080,
+          height: 1080,
+          background: '#000000',
+          children: [],
+        },
+      ],
+    };
+    const { conductor, saver, dispatchAgent, texts } =
+      makeReviseImageryConductor({ plan: solidPlan, doc: solidDoc });
+
+    const result = await (conductor as any)._reviseDesign(
+      SESSION_ID,
+      ctx,
+      'design-v1',
+      {
+        instruction: 'change the background to a beach',
+        scope: 'shared',
+        kind: 'imagery',
+      },
+      makeEmitter(),
+      []
+    );
+
+    expect(result).toBeNull();
+    expect(saver.saveDesign).not.toHaveBeenCalled();
+    expect(
+      dispatchAgent.mock.calls.filter(([, agentId]: any) => agentId === 'asset')
+    ).toHaveLength(0);
+    expect(texts()).toContain("doesn't have an image background");
+  });
+
+  it('says the change is unsupported when every doc op is filtered out', async () => {
+    const { conductor, saver, composer, texts } = makeReviseImageryConductor();
+    composer.reviseByInstructionWithResult.mockResolvedValue({
+      doc: BG_DOC,
+      changed: false,
+    });
+
+    const result = await (conductor as any)._reviseDesign(
+      SESSION_ID,
+      ctx,
+      'design-v1',
+      { instruction: 'make it pop', scope: 'shared' },
+      makeEmitter(),
+      []
+    );
+
+    expect(result).toBeNull();
+    expect(saver.saveDesign).not.toHaveBeenCalled();
+    expect(texts()).toContain("I couldn't apply that change");
+  });
+
+  it('classifies background-replacement wording as imagery in the blind fallback', async () => {
+    const { conductor } = makeConductor({});
+
+    const imagery = await (conductor as any)._classifyDeliveredChat(
+      ctx,
+      'change the background to a beach',
+      ['design-1'],
+      'prompt'
+    );
+    expect(imagery.kind).toBe('revise');
+    expect(imagery.revision.kind).toBe('imagery');
+
+    const recolor = await (conductor as any)._classifyDeliveredChat(
+      ctx,
+      'make the background blue',
+      ['design-1'],
+      'prompt'
+    );
+    expect(recolor.revision.kind).toBeUndefined();
+
+    const unrelated = await (conductor as any)._classifyDeliveredChat(
+      ctx,
+      'make the headline bigger',
+      ['design-1'],
+      'prompt'
+    );
+    expect(unrelated.revision.kind).toBeUndefined();
+  });
+});
+
+describe('AiDesignerConductorService prompt fidelity (PR C)', () => {
+  it('pins the raw user prompt onto the background slot brief only', () => {
+    const { conductor } = makeConductor({});
+    const plan = {
+      variantId: 'v1',
+      slots: [{ id: 'image', role: 'image', kind: 'image' }],
+      assetNeeds: [
+        { slotId: 'image', brief: 'coffee shop interior', prefer: 'generate' },
+        { slotId: 'logo', brief: 'steam swirl icon', prefer: 'either', kind: 'icon' },
+      ],
+      background: { kind: 'image', ref: 'asset:image' },
+    } as any;
+
+    const { needs } = (conductor as any)._collectAssetNeeds(
+      [plan],
+      [{ formatId: 'ig-post', width: 1080, height: 1080 }],
+      'a cozy promo with a red barn out front'
+    );
+
+    const background = needs.find((n: any) => n.slotId === 'v1:image');
+    const icon = needs.find((n: any) => n.slotId === 'v1:logo');
+    expect(background.brief).toBe(
+      'coffee shop interior. Original request: "a cozy promo with a red barn out front"'
+    );
+    expect(icon.brief).toBe('steam swirl icon');
+  });
+
+  it('bounds the appended prompt and tolerates its absence', () => {
+    const { conductor } = makeConductor({});
+    const plan = {
+      variantId: 'v1',
+      slots: [{ id: 'image', role: 'image', kind: 'image' }],
+      assetNeeds: [
+        { slotId: 'image', brief: 'coffee shop interior', prefer: 'generate' },
+      ],
+      background: { kind: 'image', ref: 'asset:image' },
+    } as any;
+    const outputs = [{ formatId: 'ig-post', width: 1080, height: 1080 }];
+
+    const without = (conductor as any)._collectAssetNeeds([plan], outputs);
+    expect(without.needs[0].brief).toBe('coffee shop interior');
+
+    const long = (conductor as any)._collectAssetNeeds(
+      [plan],
+      outputs,
+      `  ${'x'.repeat(1000)}  `
+    );
+    expect(long.needs[0].brief.length).toBeLessThanOrEqual(
+      'coffee shop interior. Original request: ""'.length + 240
+    );
   });
 });

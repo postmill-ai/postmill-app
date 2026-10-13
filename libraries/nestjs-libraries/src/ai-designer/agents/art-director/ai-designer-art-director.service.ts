@@ -1601,7 +1601,11 @@ export class AiDesignerArtDirectorService implements OnModuleInit {
         {
           slotId: 'image',
           brief: 'A high-quality background image matching the brief',
-          prefer: 'stock',
+          // 'either', not 'stock': the fallback plan is a DETERMINISTIC
+          // stand-in for a failed planning pass, not an art-direction choice
+          // — hardcoding 'stock' both skipped generation entirely and (via the
+          // prefer:'stock' suppression) hid the substitution from the user.
+          prefer: 'either',
         },
       ],
     };

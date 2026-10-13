@@ -307,6 +307,23 @@ export class AiDesignerGateway
         });
         return;
       }
+      // Configured-but-unresolvable defaults (e.g. the text-to-image
+      // provider was disabled): warn in chat and continue — the run's stock
+      // fallbacks are disclosed per slot in the delivery notes.
+      if (defaultsCheck.warnings?.length) {
+        client.emit('message', {
+          id: 'defaults-warning',
+          seq: -1,
+          role: 'assistant',
+          kind: 'markdown',
+          content: {
+            kind: 'markdown',
+            md: this._defaultsGate.defaultsWarningMarkdown(
+              defaultsCheck.warnings
+            ),
+          },
+        });
+      }
 
       const budgetCheck = await this._budgetGuard.checkStartBudget(ctx.orgId);
       if (!budgetCheck.allowed) {
