@@ -3799,11 +3799,13 @@ export class AiDesignerConductorService {
   /**
    * Should this revision run the imagery-regeneration branch instead of the
    * composer's doc ops? The classifier's `kind: 'imagery'` decides outright;
-   * otherwise the wording heuristic applies ONLY when the design's background
-   * is an image — there "change the background" can only mean new imagery,
-   * because doc ops (correctly) refuse to touch an image background and would
-   * no-op. On a color/gradient background the same words stay a doc-op
-   * recolor.
+   * otherwise the wording heuristic applies ONLY when the design has imagery
+   * functioning as the background — an output-level image background OR a
+   * full-bleed hero image ELEMENT (hero-fullbleed paints the "background" as
+   * a canvas-sized image child over a color doc background). In both cases
+   * "change the background" can only mean new imagery, because doc ops
+   * (correctly) refuse to touch imagery and would no-op. On a color-only
+   * design the same words stay a doc-op recolor.
    */
   private _isImageryRevision(
     revision: RevisionRequest,
@@ -3813,7 +3815,12 @@ export class AiDesignerConductorService {
     if (revision.kind === 'edit') return false;
     if (!this._isBackgroundImageryWording(revision.instruction)) return false;
     return doc.outputs.some(
-      (out) => 'children' in out && out.bg?.type === 'image'
+      (out) =>
+        'children' in out &&
+        (out.bg?.type === 'image' ||
+          out.children.some(
+            (el) => el.type === 'image' && (el.src || el.fileId)
+          ))
     );
   }
 
@@ -3879,8 +3886,10 @@ export class AiDesignerConductorService {
   /**
    * The stored plan behind a delivered design, for the revise imagery branch.
    * Plans are recorded in delivery order (the catalogue makes the same
-   * positional assumption), but revisions APPEND the revised design's new id,
-   * so a positional miss falls back to any plan with an image background.
+   * positional assumption), so the design's own position wins; a positional
+   * miss falls back to any plan with an image background, then to the first
+   * plan — the plan drives only the slot brief/technique lookup, and a
+   * wrong-but-close plan beats none.
    */
   private _planForDesign(
     plans: DesignPlan[],
@@ -3893,26 +3902,60 @@ export class AiDesignerConductorService {
       ? (activeDesignIds as string[]).indexOf(designId)
       : -1;
     const byPosition = index >= 0 ? plans[index] : undefined;
-    if (byPosition?.background?.kind === 'image' && byPosition.background.ref) {
-      return byPosition;
-    }
     return (
+      byPosition ??
       plans.find((p) => p.background?.kind === 'image' && p.background.ref) ??
-      byPosition
+      plans[0]
     );
   }
 
   /**
+   * The slot whose imagery functions as the design's background — the
+   * replacement target for a background-imagery revise.
+   *
+   * 1. The plan's image BACKGROUND (`background.ref` → output-level bg) —
+   *    the direct case.
+   * 2. Hero layouts (e.g. hero-fullbleed): the visual background is a
+   *    full-bleed image ELEMENT over a color doc background, so resolve the
+   *    primary output's image elements instead: the first covering ≥90% of
+   *    the canvas, else the largest. Empty only when the design carries no
+   *    image element at all — the honest "no image background" case.
+   */
+  private _backgroundSlotForRevise(
+    doc: DesignerDoc,
+    plan: DesignPlan | undefined
+  ): string {
+    if (plan?.background?.kind === 'image' && plan.background.ref) {
+      return (plan.background.ref || '').replace(/^asset:/, '');
+    }
+    const primary = doc.outputs[0];
+    if (!primary || !('children' in primary)) return '';
+    const images = primary.children.filter(
+      (el) => el.type === 'image' && (el.src || el.fileId)
+    );
+    if (images.length === 0) return '';
+    const canvasArea = Math.max(1, primary.width * primary.height);
+    const byArea = [...images].sort(
+      (a, b) => b.width * b.height - a.width * a.height
+    );
+    const target =
+      byArea.find((el) => el.width * el.height >= canvasArea * 0.9) ?? byArea[0];
+    return target.originId || target.id || '';
+  }
+
+  /**
    * The revise path's imagery branch: the user asked for a NEW background
-   * image. Rebuilds the background slot's asset need from the stored plan
-   * (the user's instruction rides as the brief's guidance) and dispatches the
-   * asset agent with `regenerate: true` — the same plumbing (and the same
-   * `_replaceSlotImagery` swap) as the critic's regenerateAsset fix in
-   * `_regenerateFlaggedAssets`, deliberately not re-implemented here.
+   * image. Resolves the slot functioning as the background (the plan's image
+   * background, or — hero layouts — the full-bleed/largest image element,
+   * `_backgroundSlotForRevise`), rebuilds that slot's asset need from the
+   * stored plan (the user's instruction rides as the brief's guidance) and
+   * dispatches the asset agent with `regenerate: true` — the same plumbing
+   * (and the same `_replaceSlotImagery` swap) as the critic's regenerateAsset
+   * fix in `_regenerateFlaggedAssets`, deliberately not re-implemented here.
    *
    * Returns the patched doc, or null after telling the user why nothing
-   * changed (no image background to replace, or the regeneration failed —
-   * the original imagery is kept either way).
+   * changed (no imagery functions as a background, or the regeneration
+   * failed — the original imagery is kept either way).
    */
   private async _replaceBackgroundImageryForRevise(
     sessionId: string,
@@ -3926,17 +3969,26 @@ export class AiDesignerConductorService {
     notes: string[]
   ): Promise<DesignerDoc | null> {
     const plan = this._planForDesign(plans, session, targetDesignId);
-    const slotId =
-      plan?.background?.kind === 'image'
-        ? (plan.background.ref || '').replace(/^asset:/, '')
-        : '';
-    if (!plan || !slotId) {
+    const slotId = this._backgroundSlotForRevise(doc, plan);
+    if (!slotId) {
       await this._emitText(
         sessionId,
         ctx,
         emitter,
         'conversationalist',
         "This design doesn't have an image background I can replace — I can change its background color or gradient instead."
+      );
+      return null;
+    }
+    if (!plan) {
+      // A slot without its stored plan has no brief/technique context —
+      // a system inconsistency, not a user-facing "no background".
+      await this._emitText(
+        sessionId,
+        ctx,
+        emitter,
+        'conversationalist',
+        "I couldn't create a new background image this time — the original was kept. Try again in a moment, or ask for a different look."
       );
       return null;
     }

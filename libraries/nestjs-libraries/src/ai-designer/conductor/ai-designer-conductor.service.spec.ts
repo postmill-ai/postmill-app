@@ -6827,6 +6827,181 @@ describe('AiDesignerConductorService background-imagery revise (PR C)', () => {
     );
     expect(unrelated.revision.kind).toBeUndefined();
   });
+
+  // PR E (live verification): hero-fullbleed — the most common AI Designer
+  // layout — paints the visual background as a canvas-sized image ELEMENT
+  // over a COLOR doc background. The branch used to find no image doc-bg and
+  // reply "no image background", which from the user's seat was just wrong.
+  const HERO_PLAN = {
+    variantId: 'v1',
+    skill: 'meme',
+    concept: 'coffee promo',
+    slots: [
+      { id: 'headline', role: 'headline', kind: 'text' },
+      { id: 'image', role: 'image', kind: 'image' },
+    ],
+    assetNeeds: [
+      { slotId: 'image', brief: 'coffee shop interior', prefer: 'generate' },
+    ],
+    palette: [],
+    typeScale: {},
+    formatTemplate: 'hero-fullbleed',
+    background: { kind: 'solid' as const, value: '#ffffff' },
+  };
+  const heroImageEl = (overrides: Record<string, unknown> = {}) => ({
+    id: 'e-image',
+    originId: 'image',
+    type: 'image',
+    x: 0,
+    y: 0,
+    width: 1080,
+    height: 1080,
+    rotation: 0,
+    opacity: 1,
+    locked: false,
+    hidden: false,
+    src: 'https://example.com/old-hero.png',
+    fileId: 'f-old',
+    fitMode: 'cover',
+    ...overrides,
+  });
+  const heroDoc = (children: unknown[]) => ({
+    mode: 'image',
+    outputs: [
+      {
+        formatId: 'ig-post',
+        name: 'Instagram Post',
+        width: 1080,
+        height: 1080,
+        background: '#ffffff',
+        children,
+      },
+    ],
+  });
+
+  it('replaces a full-bleed hero image element when the doc background is a color', async () => {
+    const { conductor, saver, composer, dispatchAgent, fileService } =
+      makeReviseImageryConductor({
+        plan: HERO_PLAN,
+        doc: heroDoc([heroImageEl()]),
+      });
+    const notes: string[] = [];
+
+    const result = await (conductor as any)._reviseDesign(
+      SESSION_ID,
+      ctx,
+      'design-v1',
+      {
+        instruction: 'change the background to a beach at sunset',
+        scope: 'shared',
+        kind: 'imagery',
+      },
+      makeEmitter(),
+      notes
+    );
+
+    expect(result).toBeTruthy();
+    expect(composer.reviseByInstructionWithResult).not.toHaveBeenCalled();
+    const assetCalls = dispatchAgent.mock.calls.filter(
+      ([, agentId]: any) => agentId === 'asset'
+    );
+    expect(assetCalls).toHaveLength(1);
+    const need = assetCalls[0][2].assetNeeds[0];
+    expect(assetCalls[0][2].regenerate).toBe(true);
+    expect(need.slotId).toBe('v1:image');
+    expect(need.brief).toContain('coffee shop interior');
+    expect(need.brief).toContain('change the background to a beach at sunset');
+    // The swap landed on the full-bleed ELEMENT, not the (color) doc bg.
+    const savedDoc = saver.saveDesign.mock.calls[0][3];
+    const hero = savedDoc.outputs[0].children.find(
+      (el: any) => el.originId === 'image'
+    );
+    expect(hero.fileId).toBe('f-new');
+    expect(hero.src).toBe('https://example.com/new-bg.png');
+    expect(savedDoc.outputs[0].background).toBe('#ffffff');
+    expect(fileService.softDelete).toHaveBeenCalledWith('f-old', ORG_ID);
+  });
+
+  it('promotes bare "change the background" wording on a hero-fullbleed doc (no classifier kind)', async () => {
+    const { conductor, composer, dispatchAgent } = makeReviseImageryConductor({
+      plan: HERO_PLAN,
+      doc: heroDoc([heroImageEl()]),
+    });
+
+    await (conductor as any)._reviseDesign(
+      SESSION_ID,
+      ctx,
+      'design-v1',
+      // NO kind — the wording heuristic + the full-bleed element decide.
+      { instruction: 'change the background to a beach', scope: 'shared' },
+      makeEmitter(),
+      []
+    );
+
+    expect(composer.reviseByInstructionWithResult).not.toHaveBeenCalled();
+    expect(
+      dispatchAgent.mock.calls.filter(([, agentId]: any) => agentId === 'asset')
+    ).toHaveLength(1);
+  });
+
+  it('falls back to the largest image element when none is full-bleed', async () => {
+    const { conductor, saver, dispatchAgent } = makeReviseImageryConductor({
+      plan: HERO_PLAN,
+      // 540×540 on a 1080×1080 canvas — 25% coverage, under the threshold.
+      doc: heroDoc([heroImageEl({ width: 540, height: 540 })]),
+    });
+
+    const result = await (conductor as any)._reviseDesign(
+      SESSION_ID,
+      ctx,
+      'design-v1',
+      {
+        instruction: 'change the background to a beach',
+        scope: 'shared',
+        kind: 'imagery',
+      },
+      makeEmitter(),
+      []
+    );
+
+    expect(result).toBeTruthy();
+    expect(
+      dispatchAgent.mock.calls.filter(([, agentId]: any) => agentId === 'asset')
+    ).toHaveLength(1);
+    const savedDoc = saver.saveDesign.mock.calls[0][3];
+    expect(
+      savedDoc.outputs[0].children.find((el: any) => el.originId === 'image')
+        .fileId
+    ).toBe('f-new');
+  });
+
+  it('still says there is no image background when the design carries no image at all', async () => {
+    const { conductor, saver, dispatchAgent, texts } =
+      makeReviseImageryConductor({
+        plan: HERO_PLAN,
+        doc: heroDoc([]),
+      });
+
+    const result = await (conductor as any)._reviseDesign(
+      SESSION_ID,
+      ctx,
+      'design-v1',
+      {
+        instruction: 'change the background to a beach',
+        scope: 'shared',
+        kind: 'imagery',
+      },
+      makeEmitter(),
+      []
+    );
+
+    expect(result).toBeNull();
+    expect(saver.saveDesign).not.toHaveBeenCalled();
+    expect(
+      dispatchAgent.mock.calls.filter(([, agentId]: any) => agentId === 'asset')
+    ).toHaveLength(0);
+    expect(texts()).toContain("doesn't have an image background");
+  });
 });
 
 describe('AiDesignerConductorService prompt fidelity (PR C)', () => {
