@@ -409,14 +409,6 @@ export const DesignerCanvas: FC<CanvasProps> = ({
     // window listener on every keystroke.
   }, [isVideo, editingTextId, store]);
 
-  // Which elements exist, as a stable key. Depending on the whole `doc` re-ran
-  // the attach effect on EVERY store write — including the per-frame writes of
-  // a live transform, detaching and re-binding the transformer each frame. Node
-  // identity for a given id is stable, so only the membership matters.
-  const childIdsKey = ((output as DesignerOutput | undefined)?.children || [])
-    .map((c) => c.id)
-    .join(',');
-
   // Keep the window key handler's view of the draft current without re-binding
   // the listener on every anchor. Writing the ref in an effect rather than
   // during render is what react-hooks/refs requires.
@@ -433,10 +425,24 @@ export const DesignerCanvas: FC<CanvasProps> = ({
   // Attach transformer to the current selection. In video mode the selection is
   // a clip rather than a list of elements, but the node lookup is the same — the
   // overlay gives each clip node its clip id.
+  //
+  // Runs after EVERY commit (no dep array): React can unmount a Konva node
+  // (font load, element type swap, tool switch remounting the Transformer
+  // itself) without any membership key changing. Konva 9's destroy() is just
+  // remove()+clearCache(), so the detached node stays in transformer._nodes
+  // with a null parent — and during an active anchor drag, the window-level
+  // mousemove → Transformer._fitNodesInto → node.getParent().getAbsoluteTransform()
+  // throws on EVERY mousemove until mouseup (POSTMILL-APP-Y, 74 events/sec).
+  // Re-resolving by id always lands on the live instance (or drops the id).
+  //
+  // The identity check is load-bearing the other way: a live drag/transform
+  // writes the store per frame (rAF-throttled), and re-binding the Transformer
+  // each frame would fight the gesture. Same instances in the same order →
+  // leave it alone; only a real membership/instance change re-binds.
   useEffect(() => {
-    if (!transformerRef.current) return;
+    const transformer = transformerRef.current;
     const stage = stageRef.current;
-    if (!stage) return;
+    if (!transformer || !stage) return;
     const ids = isVideo
       ? selectedClip?.clipId
         ? [selectedClip.clipId]
@@ -444,10 +450,23 @@ export const DesignerCanvas: FC<CanvasProps> = ({
       : selectedIds;
     const nodes = ids
       .map((id) => stage.findOne('#' + id))
-      .filter(Boolean) as Konva.Node[];
-    transformerRef.current.nodes(nodes);
-    transformerRef.current.getLayer()?.batchDraw();
-  }, [selectedIds, childIdsKey, currentOutput, isVideo, selectedClip, playheadMs]);
+      .filter((n): n is Konva.Node => !!n);
+    const current = transformer.nodes();
+    const unchanged =
+      current.length === nodes.length &&
+      current.every((n, i) => n === nodes[i]);
+    if (unchanged) return;
+    transformer.nodes(nodes);
+    transformer.getLayer()?.batchDraw();
+  });
+
+  // Detach on canvas unmount so the Transformer never outlives its stage.
+  useEffect(
+    () => () => {
+      transformerRef.current?.nodes([]);
+    },
+    []
+  );
 
   // Resolve a click into a selection, honoring group membership and additive (shift/meta) clicks.
   const handleElementSelect = useCallback(
