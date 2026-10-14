@@ -164,6 +164,30 @@ const mergeRuns = (runs: TextRun[], el: DesignerElement): TextRun[] => {
   return out;
 };
 
+export const buildTextEditCommit = (
+  runs: TextRun[],
+  element: DesignerElement
+): Partial<DesignerElement> => {
+  const flat = runs.map((r) => r.text).join('');
+  const hasStyle = runs.some(
+    (r) =>
+      r.fontFamily !== undefined ||
+      r.fontSize !== undefined ||
+      r.fontWeight !== undefined ||
+      r.fontStyle !== undefined ||
+      r.fill !== undefined ||
+      r.underline
+  );
+  // Always write richText: when an edit collapses the text to a single
+  // base-styled run (e.g. the one bold word was deleted), the runs MUST be
+  // cleared — the canvas prefers richText over text, so leaving the old runs
+  // in place keeps rendering the deleted words.
+  return {
+    text: flat,
+    richText: runs.length > 1 || hasStyle ? runs : undefined,
+  };
+};
+
 export const TextEditingOverlay: FC<TextEditingProps> = ({
   element,
   stageRect,
@@ -193,23 +217,10 @@ export const TextEditingOverlay: FC<TextEditingProps> = ({
   const handleBlur = () => {
     const currentHtml = editorRef.current?.innerHTML ?? '';
     const runs = serializeHtml(currentHtml, element);
-    const flat = runs.map((r) => r.text).join('');
-    const hasStyle = runs.some(
-      (r) =>
-        r.fontFamily !== undefined ||
-        r.fontSize !== undefined ||
-        r.fontWeight !== undefined ||
-        r.fontStyle !== undefined ||
-        r.fill !== undefined ||
-        r.underline
-    );
-    const next: Partial<DesignerElement> = { text: flat };
-    if (runs.length > 1 || hasStyle) {
-      next.richText = runs;
-    }
+    const next = buildTextEditCommit(runs, element);
     if (
-      flat !== (element.text ?? '') ||
-      JSON.stringify(runs) !== JSON.stringify(element.richText ?? [])
+      next.text !== (element.text ?? '') ||
+      JSON.stringify(next.richText ?? []) !== JSON.stringify(element.richText ?? [])
     ) {
       onUpdate(element.id, next);
     }

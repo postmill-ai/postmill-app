@@ -9,6 +9,11 @@ import {
 import type Konva from 'konva';
 import { CanvasElements, gradientFillProps } from './elements';
 import { TextEditingOverlay } from './text-editing';
+import {
+  resolveSelectableId,
+  resolveTextEditTarget,
+  symbolTextCommit,
+} from './symbol-edit';
 import { SafeZoneOverlay } from './safe-zones';
 import { Rulers } from './rulers';
 import { ContextMenu } from './context-menu';
@@ -473,6 +478,9 @@ export const DesignerCanvas: FC<CanvasProps> = ({
     (id: string, evt?: Konva.KonvaEventObject<MouseEvent | TouchEvent>) => {
       if (isVideo) return;
       const children = (output as DesignerOutput | undefined)?.children || [];
+      // An expanded symbol child (e.g. a CTA label) is not a real layer — its
+      // instance is what move/delete/transform should act on.
+      id = resolveSelectableId(output as DesignerOutput | undefined, id);
       const el = children.find((c) => c.id === id);
       const groupId = el?.groupId;
       const groupIds = groupId
@@ -1234,12 +1242,13 @@ export const DesignerCanvas: FC<CanvasProps> = ({
         if (moved) pushHistory();
       } else if (e.key === 'Enter') {
         if (selectedIds.length === 1) {
-          const el = ((output as any)?.children || []).find((c: any) => c.id === selectedIds[0]);
-          if (el?.type === 'text') setEditingTextId(el.id);
+          if (resolveTextEditTarget(output as DesignerOutput | undefined, doc.symbols, selectedIds[0])) {
+            setEditingTextId(selectedIds[0]);
+          }
         }
       }
     },
-    [editingTextId, selectedIds, setSelectedIds, updateElement, output, duplicateElement, store, pushHistory]
+    [editingTextId, selectedIds, setSelectedIds, updateElement, output, doc, duplicateElement, store, pushHistory]
   );
 
   const handleStageDblClick = useCallback(
@@ -1254,12 +1263,11 @@ export const DesignerCanvas: FC<CanvasProps> = ({
       }
       const target = e.target;
       const id = target.id() || target.getParent()?.id();
-      if (id) {
-        const el = ((output as any)?.children || []).find((c: any) => c.id === id);
-        if (el?.type === 'text') setEditingTextId(id);
+      if (id && resolveTextEditTarget(output as DesignerOutput | undefined, doc.symbols, id)) {
+        setEditingTextId(id);
       }
     },
-    [output, effectiveTool, paint]
+    [output, doc, effectiveTool, paint]
   );
 
   // Drop from panels (designer elements) and OS file drops.
@@ -1910,13 +1918,33 @@ export const DesignerCanvas: FC<CanvasProps> = ({
       )}
 
       {editingTextId && !isVideo && (() => {
-        const el = ((output as any)?.children || []).find((c: any) => c.id === editingTextId);
-        if (!el || el.type !== 'text') return null;
+        const target = resolveTextEditTarget(
+          output as DesignerOutput | undefined,
+          doc.symbols,
+          editingTextId
+        );
+        if (!target) return null;
         return (
           <TextEditingOverlay
-            element={el}
+            element={target.element}
             stageRect={{ x: viewportX, y: viewportY, scale: zoom }}
-            onUpdate={updateElement}
+            onUpdate={(id, updates) => {
+              if (target.instanceId && target.childId) {
+                // A symbol child writes through the instance's overrides — the
+                // only channel an instance may write (see symbol-edit.ts).
+                const instance = (output?.children || []).find(
+                  (c: DesignerElement) => c.id === target.instanceId
+                );
+                if (instance) {
+                  updateElement(
+                    target.instanceId,
+                    symbolTextCommit(instance, target.childId, updates.text ?? '')
+                  );
+                }
+                return;
+              }
+              updateElement(id, updates);
+            }}
             onComplete={() => setEditingTextId(null)}
           />
         );
