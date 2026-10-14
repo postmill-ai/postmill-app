@@ -28,8 +28,11 @@ const splitPhantomId = (
   id: string
 ): { instanceId: string; childId: string } | null => {
   const sep = id.indexOf('::');
-  if (sep <= 0 || sep === id.length - 2) return null;
-  return { instanceId: id.slice(0, sep), childId: id.slice(sep + 2) };
+  if (sep === -1) return null;
+  const instanceId = id.slice(0, sep);
+  const childId = id.slice(sep + 2);
+  if (!instanceId || !childId) return null;
+  return { instanceId, childId };
 };
 
 /** The real element a canvas click id belongs to (instance for expanded children). */
