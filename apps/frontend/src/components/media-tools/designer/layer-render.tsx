@@ -174,12 +174,21 @@ export const StyledLayer: FC<{
   const pad = stylePadding(elementStyles(element)) + warpPadding(element);
 
   // The blend applies to the finished stack, so the group needs a buffer of its
-  // own — the same reason LayerGroup caches.
+  // own — the same reason LayerGroup caches. The rect must be stated explicitly:
+  // the effect painters are zero-size sceneFunc shapes that Konva skips in the
+  // client rect, so a bare cache() would buffer exactly the element box and clip
+  // away everything painted outside it — the glow, the drop shadow, an outside
+  // stroke. The pad is the same one the paint surface uses.
   useEffect(() => {
     const node = outerRef.current;
     if (!node) return;
     try {
-      node.cache();
+      node.cache({
+        x: element.x - pad,
+        y: element.y - pad,
+        width: element.width + pad * 2,
+        height: element.height + pad * 2,
+      });
     } catch {
       node.clearCache();
     }

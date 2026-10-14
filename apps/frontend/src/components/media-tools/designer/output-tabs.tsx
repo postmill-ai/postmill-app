@@ -64,6 +64,23 @@ interface PortalPopoverProps {
   className?: string;
 }
 
+/**
+ * Pick the side of the anchor with more room and cap the popover to it. The
+ * old positioning always opened upward with no height limit, so on short
+ * viewports the resize/format menu ran off the top of the screen.
+ */
+export const computePopoverPlacement = (
+  anchor: { top: number; bottom: number },
+  viewportHeight: number,
+  gap = 4
+): { side: 'above' | 'below'; maxHeight: number } => {
+  const above = anchor.top - gap - 8;
+  const below = viewportHeight - anchor.bottom - gap - 8;
+  return above >= below
+    ? { side: 'above', maxHeight: Math.max(120, above) }
+    : { side: 'below', maxHeight: Math.max(120, below) };
+};
+
 const PortalPopover: React.FC<PortalPopoverProps> = ({
   anchorEl,
   open,
@@ -72,7 +89,7 @@ const PortalPopover: React.FC<PortalPopoverProps> = ({
   children,
   className = '',
 }) => {
-  const [pos, setPos] = useState({ left: 0, top: 0 });
+  const [pos, setPos] = useState({ left: 0, top: 0, bottom: 0 });
   const ref = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -82,7 +99,7 @@ const PortalPopover: React.FC<PortalPopoverProps> = ({
       const r = anchorEl.getBoundingClientRect();
       const left =
         align === 'right' ? r.right - (r.width || 280) : r.left;
-      setPos({ left, top: r.top });
+      setPos({ left, top: r.top, bottom: r.bottom });
     };
 
     const raf = requestAnimationFrame(updatePos);
@@ -113,10 +130,18 @@ const PortalPopover: React.FC<PortalPopoverProps> = ({
 
   if (!open || !anchorEl || typeof document === 'undefined') return null;
 
+  const placement = computePopoverPlacement(
+    { top: pos.top, bottom: pos.bottom },
+    window.innerHeight
+  );
   const style: React.CSSProperties = {
     position: 'fixed',
     left: pos.left,
-    bottom: window.innerHeight - pos.top + 4,
+    ...(placement.side === 'above'
+      ? { bottom: window.innerHeight - pos.top + 4 }
+      : { top: pos.bottom + 4 }),
+    maxHeight: placement.maxHeight,
+    overflowY: 'auto',
     zIndex: 9999,
   };
 

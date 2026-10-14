@@ -6,7 +6,7 @@ import { useCollaboration } from './collaboration';
 import type { TimelineAwareness, ImageAwareness } from './collaboration';
 import { CollaborationCursors, type PeerTimelineState } from './collaboration-cursors';
 import { DesignerCanvas } from './canvas';
-import { setImageFetch, clearImageCache } from './elements';
+import { setImageFetch, clearImageCache, probeImageNaturalSize } from './elements';
 import { useFetch } from '@postmill-ai/helpers/utils/custom.fetch';
 import {
   useDecisionModal,
@@ -673,27 +673,39 @@ export const Designer: FC<DesignerProps> = ({
       initialAssets.forEach((asset, i) => {
         if (!asset.url) return;
         const imgUrl = asset.type === 'video' ? (asset.thumbUrl || asset.url) : asset.url;
-        const { width: w, height: h } = fitWithin(
-          asset.naturalWidth || active.width * 0.5,
-          asset.naturalHeight || active.height * 0.5,
-          active.width,
-          active.height
-        );
-        // Cascade each element from the top-left so they don't fully overlap.
-        const off = i * 32;
-        store.getState().addElement({
-          id: '',
-          type: 'image',
-          x: Math.min(40 + off, Math.max(0, active.width - w)),
-          y: Math.min(40 + off, Math.max(0, active.height - h)),
-          width: w,
-          height: h,
-          rotation: 0,
-          opacity: 1,
-          locked: false,
-          hidden: false,
-          src: imgUrl,
-        });
+        const place = (natW?: number, natH?: number) => {
+          const { width: w, height: h } = fitWithin(
+            natW || active.width * 0.5,
+            natH || active.height * 0.5,
+            active.width,
+            active.height
+          );
+          // Cascade each element from the top-left so they don't fully overlap.
+          const off = i * 32;
+          store.getState().addElement({
+            id: '',
+            type: 'image',
+            x: Math.min(40 + off, Math.max(0, active.width - w)),
+            y: Math.min(40 + off, Math.max(0, active.height - h)),
+            width: w,
+            height: h,
+            rotation: 0,
+            opacity: 1,
+            locked: false,
+            hidden: false,
+            src: imgUrl,
+            naturalWidth: natW,
+            naturalHeight: natH,
+          });
+        };
+        if (asset.naturalWidth && asset.naturalHeight) {
+          place(asset.naturalWidth, asset.naturalHeight);
+        } else {
+          // The half-canvas guess distorted anything whose aspect differed.
+          probeImageNaturalSize(imgUrl).then((dims) =>
+            place(dims?.width, dims?.height)
+          );
+        }
       });
       return;
     }
@@ -913,28 +925,40 @@ export const Designer: FC<DesignerProps> = ({
     (item: { url: string; fileId?: string; width?: number; height?: number }) => {
       const state = store.getState();
       const active = state.doc.outputs[state.currentOutput];
-      const { width: w, height: h } = fitWithin(
-        item.width || active.width,
-        item.height || active.height,
-        active.width,
-        active.height
+      const place = (natW?: number, natH?: number) => {
+        const { width: w, height: h } = fitWithin(
+          natW || active.width,
+          natH || active.height,
+          active.width * 0.8,
+          active.height * 0.8
+        );
+        state.addElement({
+          id: '',
+          type: 'image',
+          x: (active.width - w) / 2,
+          y: (active.height - h) / 2,
+          width: w,
+          height: h,
+          rotation: 0,
+          opacity: 1,
+          locked: false,
+          hidden: false,
+          src: item.url,
+          fileId: item.fileId,
+          naturalWidth: natW,
+          naturalHeight: natH,
+        });
+      };
+      if (item.width && item.height) {
+        place(item.width, item.height);
+        return;
+      }
+      // Library files carry no dimension metadata; inserting without the real
+      // pixels stretched the bitmap to the canvas box. Probe first, as the
+      // drag-drop path does.
+      probeImageNaturalSize(item.url).then((dims) =>
+        place(dims?.width, dims?.height)
       );
-      state.addElement({
-        id: '',
-        type: 'image',
-        x: (active.width - w) / 2,
-        y: (active.height - h) / 2,
-        width: w,
-        height: h,
-        rotation: 0,
-        opacity: 1,
-        locked: false,
-        hidden: false,
-        src: item.url,
-        fileId: item.fileId,
-        naturalWidth: item.width || undefined,
-        naturalHeight: item.height || undefined,
-      });
     },
     [store]
   );

@@ -525,6 +525,16 @@ export const ExportDialog: FC<ExportDialogProps> = ({ store, onClose, initialAct
   const [previews, setPreviews] = useState<{ idx: number; dataUrl: string }[]>([]);
   const [loadingPreviews, setLoadingPreviews] = useState(false);
   const previewDoneRef = useRef(false);
+  // Object URLs of the just-exported blobs, keyed by saved file id, so the
+  // done step can offer a real browser download alongside the /files copy.
+  const downloadUrlsRef = useRef(new Map<string, string>());
+  useEffect(
+    () => () => {
+      downloadUrlsRef.current.forEach((url) => URL.revokeObjectURL(url));
+      downloadUrlsRef.current.clear();
+    },
+    []
+  );
 
   const [videoFormat, setVideoFormat] = useState<'mp4' | 'webm' | 'gif' | 'webp-animated'>('mp4');
   const [videoQuality, setVideoQuality] = useState<'low' | 'medium' | 'high'>('medium');
@@ -1116,7 +1126,11 @@ export const ExportDialog: FC<ExportDialogProps> = ({ store, onClose, initialAct
       const endpoint = blob.size > MAX_UPLOAD_BYTES ? '/files/upload-server' : '/files/upload-simple';
       const res = await fetch(endpoint, { method: 'POST', body: formData });
       if (!res.ok) return null;
-      return res.json();
+      const saved = (await res.json()) as { id: string; path: string };
+      try {
+        downloadUrlsRef.current.set(saved.id, URL.createObjectURL(blob));
+      } catch {}
+      return saved;
     },
     [fetch, selectedFolderId]
   );
@@ -1165,6 +1179,9 @@ export const ExportDialog: FC<ExportDialogProps> = ({ store, onClose, initialAct
   const handleExport = useCallback(async () => {
     setExporting(true);
     try {
+      // A re-export replaces the last batch's download URLs.
+      downloadUrlsRef.current.forEach((url) => URL.revokeObjectURL(url));
+      downloadUrlsRef.current.clear();
       const state = store.getState();
       const baseName = (state.designName || 'design').replace(/[^a-zA-Z0-9]/g, '_');
 
@@ -1719,6 +1736,42 @@ export const ExportDialog: FC<ExportDialogProps> = ({ store, onClose, initialAct
                     />
                   </div>
                 ))}
+              </div>
+            )}
+
+            {savedFiles.length > 0 && (
+              <div className="flex flex-col gap-1 mt-3 w-full">
+                <div className="text-[12px] text-newTextColor/60 text-center">
+                  {t(
+                    'designer_download_to_computer_hint',
+                    'Exports are saved in Media → Files. Download a copy to your computer:'
+                  )}
+                </div>
+                <div className="flex flex-col gap-1 max-h-[140px] overflow-y-auto">
+                  {savedFiles.map((f) => {
+                    const url = downloadUrlsRef.current.get(f.id);
+                    if (!url) return null;
+                    return (
+                      <a
+                        key={f.id}
+                        href={url}
+                        download={f.name}
+                        className="flex items-center gap-2 px-3 h-[32px] rounded-[6px] border border-studioBorder text-[12px] text-textColor hover:bg-boxHover transition-all truncate"
+                      >
+                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" className="shrink-0">
+                          <path
+                            d="M12 3v12m0 0l-4-4m4 4l4-4M4 21h16"
+                            stroke="currentColor"
+                            strokeWidth="2"
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                          />
+                        </svg>
+                        <span className="truncate">{f.name}</span>
+                      </a>
+                    );
+                  })}
+                </div>
               </div>
             )}
           </div>

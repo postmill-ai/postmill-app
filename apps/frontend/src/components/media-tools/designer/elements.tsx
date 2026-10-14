@@ -213,6 +213,14 @@ export const getImageNaturalSize = (src?: string): { width: number; height: numb
   return img ? { width: img.naturalWidth, height: img.naturalHeight } : null;
 };
 
+/** Load an image just to learn its pixels — null when it cannot be loaded. */
+export const probeImageNaturalSize = (
+  src: string
+): Promise<{ width: number; height: number } | null> =>
+  loadImage(src)
+    .then((img) => ({ width: img.naturalWidth, height: img.naturalHeight }))
+    .catch(() => null);
+
 export const useLoadedImage = (src: string | undefined) => {
   const image = useSyncExternalStore(
     subscribeToCache,
