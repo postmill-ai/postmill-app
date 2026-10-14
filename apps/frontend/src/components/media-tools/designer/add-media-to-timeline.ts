@@ -1,4 +1,5 @@
 import type { createDesignerStore, VideoClip, VideoOutput, VideoTrack } from './designer.store';
+import { fitWithin } from './panels/fit-within';
 
 type StoreApi = ReturnType<typeof createDesignerStore>;
 
@@ -31,19 +32,25 @@ function findOrCreateTrack(
   return track;
 }
 
-function probeVideoDuration(url: string): Promise<number> {
+function probeVideoMetadata(
+  url: string
+): Promise<{ durationMs: number; width?: number; height?: number }> {
   return new Promise((resolve) => {
     let settled = false;
-    const finish = (ms: number) => {
+    const finish = (ms: number, width?: number, height?: number) => {
       if (settled) return;
       settled = true;
-      resolve(ms);
+      resolve({ durationMs: ms, width, height });
     };
 
     const probe = document.createElement('video');
     probe.preload = 'metadata';
     probe.onloadedmetadata = () =>
-      finish(Math.max(1000, Math.round((probe.duration || 10) * 1000)));
+      finish(
+        Math.max(1000, Math.round((probe.duration || 10) * 1000)),
+        probe.videoWidth || undefined,
+        probe.videoHeight || undefined
+      );
     probe.onerror = () => finish(10000);
     probe.src = url;
     window.setTimeout(() => finish(10000), 5000);
@@ -98,9 +105,12 @@ export function addMediaToTimeline(
       return;
     }
 
-    const probe = type === 'audio' ? probeAudioDuration(url) : probeVideoDuration(url);
+    const probe: Promise<{ durationMs: number; width?: number; height?: number }> =
+      type === 'audio'
+        ? probeAudioDuration(url).then((durationMs) => ({ durationMs }))
+        : probeVideoMetadata(url);
 
-    probe.then((durationMs) => {
+    probe.then(({ durationMs, width: natW, height: natH }) => {
       const endMs = Math.min(durationMs, MAX_TIMELINE_DURATION_MS);
 
       // Extend the output duration BEFORE adding the clip; addClip silently
@@ -124,11 +134,25 @@ export function addMediaToTimeline(
         };
         store.getState().addClip(out, track.id, clip);
       } else {
+        // A clip with no geometry renders at the 1×1 fallback — a blank
+        // artboard. Fit the probed pixels to the canvas, centered, preserving
+        // aspect (same rule as image inserts).
+        const vo = store.getState().doc.outputs[out] as VideoOutput;
+        const fit =
+          natW && natH
+            ? fitWithin(natW, natH, vo.width, vo.height)
+            : { width: vo.width, height: vo.height };
         const clip: VideoClip = {
           ...clipBase,
           id: `clip-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
           startMs: 0,
           endMs,
+          x: Math.round((vo.width - fit.width) / 2),
+          y: Math.round((vo.height - fit.height) / 2),
+          width: fit.width,
+          height: fit.height,
+          naturalWidth: natW,
+          naturalHeight: natH,
         };
         store.getState().addClip(out, track.id, clip);
       }
