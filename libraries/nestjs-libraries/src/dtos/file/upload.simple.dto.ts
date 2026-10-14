@@ -1,4 +1,4 @@
-import { IsBoolean, IsOptional, IsString } from 'class-validator';
+import { IsBoolean, IsIn, IsOptional, IsString } from 'class-validator';
 import { Transform } from 'class-transformer';
 
 export class UploadSimpleBodyDto {
@@ -22,4 +22,12 @@ export class UploadSimpleBodyDto {
     return value === true || value === 'true';
   })
   preventSave?: boolean;
+
+  @IsOptional()
+  @IsIn(['design-preview'])
+  // System-artifact stamp. Preview thumbnails must be File rows (designs and
+  // templates reference them by FK) but are not library content; stamped rows
+  // are hidden from the default listing. Client-settable, same trust level as
+  // ImportFromUrlDto.aiDesigner='reference' — org-scoped, listing-only.
+  internal?: 'design-preview';
 }

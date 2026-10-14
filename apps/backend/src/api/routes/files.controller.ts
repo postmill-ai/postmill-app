@@ -173,7 +173,8 @@ export class FilesController {
         getFile.path,
         originalName,
         folderId,
-        file?.size
+        file?.size,
+        { internal: body.internal }
       );
     } catch (err) {
       // M4: same delete-on-failure as uploadServer — the stored object must not

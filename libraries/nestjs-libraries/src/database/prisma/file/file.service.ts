@@ -88,11 +88,12 @@ export class FileService {
     filePath: string,
     originalName?: string,
     folderId?: string,
-    fileSize?: number
+    fileSize?: number,
+    options?: { internal?: 'design-preview' }
   ) {
     await this._storageService.assertWithinQuota(org, fileSize ?? 0);
     const ownedFolderId = await this.resolveOwnedFolderId(org, folderId);
-    return this._fileRepository.saveFile(org, fileName, filePath, originalName, ownedFolderId, fileSize);
+    return this._fileRepository.saveFile(org, fileName, filePath, originalName, ownedFolderId, fileSize, options);
   }
 
   getFiles(

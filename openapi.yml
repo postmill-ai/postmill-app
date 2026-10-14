@@ -10584,6 +10584,10 @@ components:
           type: string
         preventSave:
           type: boolean
+        internal:
+          type: string
+          enum:
+            - design-preview
     SaveMediaDto:
       type: object
       properties:

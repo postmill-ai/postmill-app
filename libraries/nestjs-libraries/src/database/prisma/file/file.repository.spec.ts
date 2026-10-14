@@ -122,9 +122,13 @@ describe('FileRepository — type filter', () => {
   const findManyArgs = (model: ReturnType<typeof makeModel>) =>
     model.file.findMany.mock.calls[0][0] as any;
 
-  // The AI Designer intermediate exclusion rides the same AND array, first.
+  // The AI Designer intermediate exclusion rides the same AND array, first —
+  // and the design-preview (internal) exclusion always follows it.
   const AI_DESIGNER_EXCLUSION = {
     NOT: { metadata: { path: ['aiDesigner'], not: expect.anything() } },
+  };
+  const INTERNAL_EXCLUSION = {
+    NOT: { metadata: { path: ['internal'], not: expect.anything() } },
   };
 
   it('matches both the bare category and the MIME form', async () => {
@@ -138,6 +142,7 @@ describe('FileRepository — type filter', () => {
 
     expect(findManyArgs(model).where.AND).toEqual([
       AI_DESIGNER_EXCLUSION,
+      INTERNAL_EXCLUSION,
       { OR: [{ type: 'image' }, { type: { startsWith: 'image/' } }] },
     ]);
     expect(findManyArgs(model).where.type).toBeUndefined();
@@ -152,6 +157,7 @@ describe('FileRepository — type filter', () => {
 
     expect(findManyArgs(model).where.AND).toEqual([
       AI_DESIGNER_EXCLUSION,
+      INTERNAL_EXCLUSION,
       {
         OR: [
           { type: 'document' },
@@ -177,6 +183,7 @@ describe('FileRepository — type filter', () => {
     ]);
     expect(where.AND).toEqual([
       AI_DESIGNER_EXCLUSION,
+      INTERNAL_EXCLUSION,
       { OR: [{ type: 'video' }, { type: { startsWith: 'video/' } }] },
     ]);
   });
@@ -190,6 +197,7 @@ describe('FileRepository — type filter', () => {
 
     expect(findManyArgs(model).where.AND).toEqual([
       AI_DESIGNER_EXCLUSION,
+      INTERNAL_EXCLUSION,
       { type: 'other' },
     ]);
   });
@@ -213,10 +221,15 @@ describe('FileRepository — AI Designer intermediate visibility', () => {
           metadata: { path: ['aiDesigner'], not: expect.anything() },
         },
       },
+      {
+        NOT: {
+          metadata: { path: ['internal'], not: expect.anything() },
+        },
+      },
     ]);
   });
 
-  it('returns stamped files when the caller explicitly opts in', async () => {
+  it('returns stamped files when the caller explicitly opts in — but never internal previews', async () => {
     const { repo, model } = makeRepo();
     model.file.count.mockResolvedValue(0);
     model.file.findMany.mockResolvedValue([]);
@@ -226,7 +239,15 @@ describe('FileRepository — AI Designer intermediate visibility', () => {
       undefined, undefined, undefined, true
     );
 
-    expect(findManyArgs(model).where.AND).toBeUndefined();
+    // The aiDesigner exclusion lifts on opt-in; the design-preview (internal)
+    // exclusion always applies.
+    expect(findManyArgs(model).where.AND).toEqual([
+      {
+        NOT: {
+          metadata: { path: ['internal'], not: expect.anything() },
+        },
+      },
+    ]);
   });
 });
 

@@ -118,7 +118,8 @@ export class FileRepository {
     filePath: string,
     originalName?: string,
     folderId?: string,
-    fileSize?: number
+    fileSize?: number,
+    options?: { internal?: 'design-preview' }
   ) {
     const mimeType = mimeFromName(fileName);
     const fileType = mediaCategoryFromMime(mimeType);
@@ -126,6 +127,9 @@ export class FileRepository {
       mimeType,
       originalName: originalName || fileName,
     };
+    // System artifacts (design/template preview thumbnails) are real File rows
+    // — designs reference them by FK — but they are not library content.
+    if (options?.internal) meta.internal = options.internal;
 
     let resolvedFileSize = fileSize ?? 0;
 
@@ -352,6 +356,13 @@ export class FileRepository {
         NOT: { metadata: { path: ['aiDesigner'], not: Prisma.AnyNull } },
       });
     }
+    // Design/template preview thumbnails live as File rows (the designs
+    // reference them by FK) but are system artifacts, not library content —
+    // always hidden, no opt-in, same "direct access unaffected" contract as
+    // the aiDesigner stamp above.
+    and.push({
+      NOT: { metadata: { path: ['internal'], not: Prisma.AnyNull } },
+    });
 
     if (trimmedSearch) {
       where.OR = [

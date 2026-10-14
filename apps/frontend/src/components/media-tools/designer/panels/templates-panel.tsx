@@ -70,6 +70,7 @@ export const TemplatesPanel: FC<TemplatesPanelProps> = ({ store, onClose, guard 
         const blob = await (await fetch(previewDataUrl)).blob();
         const form = new FormData();
         form.append('file', blob, 'thumbnail.jpg');
+        form.append('internal', 'design-preview');
         const uploadRes = await fetch('/files/upload-simple', { method: 'POST', body: form });
         if (uploadRes.ok) {
           const uploadData = await uploadRes.json();

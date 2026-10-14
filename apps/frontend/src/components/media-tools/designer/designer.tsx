@@ -482,6 +482,9 @@ export const Designer: FC<DesignerProps> = ({
         try {
           const form = new FormData();
           form.append('file', previewBlob, 'thumbnail.jpg');
+          // System artifact: the design references the row by FK, but it must
+          // not appear in the user's Files library.
+          form.append('internal', 'design-preview');
           const uploadRes = await fetch('/files/upload-simple', { method: 'POST', body: form });
           if (uploadRes.ok) {
             const uploadData = await uploadRes.json();
@@ -619,6 +622,7 @@ export const Designer: FC<DesignerProps> = ({
         try {
           const form = new FormData();
           form.append('file', previewBlob, 'thumbnail.jpg');
+          form.append('internal', 'design-preview');
           const uploadRes = await fetch('/files/upload-simple', { method: 'POST', body: form });
           if (uploadRes.ok) {
             const uploadData = await uploadRes.json();
