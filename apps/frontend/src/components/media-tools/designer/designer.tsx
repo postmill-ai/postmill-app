@@ -2,6 +2,7 @@
 
 import React, { FC, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { createDesignerStore, migrateDoc, type DesignerStore, type DesignerDoc, type DesignerAttribution, type VideoOutput, type VideoClip, type DesignerOutput, type DesignerElement } from './designer.store';
+import { createDesignAutosave } from './designer-autosave';
 import { useCollaboration } from './collaboration';
 import type { TimelineAwareness, ImageAwareness } from './collaboration';
 import { CollaborationCursors, type PeerTimelineState } from './collaboration-cursors';
@@ -500,48 +501,20 @@ export const Designer: FC<DesignerProps> = ({
     }
   }, [fetch]);
 
+  // Autosave pipeline (create-on-first-edit, then PUT) — hoisted so both the
+  // debounced-doc effect and manual Save share the same in-flight create guard.
+  const designAutosave = useMemo(
+    () => createDesignAutosave({ store, fetchFn: fetch, uploadPreview }),
+    [store, fetch, uploadPreview]
+  );
+
   useEffect(() => {
-    if (!debouncedDoc || !currentDesignId || !isDirty) return;
-    const sentDoc = debouncedDoc;
-    store.getState().setSaving(true);
-    (async () => {
-      // Check staleness BEFORE uploading: the PUT below omits preview fields
-      // for a stale doc, so a thumbnail uploaded for one would orphan its
-      // File row in the library (backend cleanup only deletes REPLACED
-      // referenced previews).
-      let preview: Awaited<ReturnType<typeof uploadPreview>> = {};
-      if (store.getState().doc === sentDoc) {
-        preview = await uploadPreview();
-        // Re-check after the upload: an edit landed mid-flight, so the PUT
-        // must not carry the stale thumbnail — and the just-created File row
-        // would orphan, so trash it (same endpoint the file manager uses).
-        if (store.getState().doc !== sentDoc) {
-          if (preview.previewFileId) {
-            fetch(`/files/${preview.previewFileId}/trash`, { method: 'POST' }).catch(() => {});
-          }
-          preview = {};
-        }
-      }
-      const res = await fetch(`/media/designs/${currentDesignId}`, {
-        method: 'PUT',
-        body: JSON.stringify({ doc: sentDoc, ...preview }),
-      });
-      await res.json();
-    })()
-      .then(() => {
-        // Only clear isDirty if no edit landed while the PUT was in flight —
-        // zustand replaces the doc object on every edit, so a reference mismatch
-        // means unsaved changes exist and must not be marked "Saved".
-        if (store.getState().doc === sentDoc) {
-          store.getState().markSaved();
-        } else {
-          store.getState().setSaving(false);
-        }
-      })
-      .catch(() => {
-        store.getState().setSaving(false);
-      });
-  }, [debouncedDoc, currentDesignId, isDirty, fetch, store, uploadPreview]);
+    if (!debouncedDoc || !isDirty) return;
+    designAutosave.save(debouncedDoc);
+    // currentDesignId is a dep, not read here: the first-edit create landing
+    // its id in the store must re-fire this effect so the PUT cycle picks up
+    // the latest debounced doc.
+  }, [debouncedDoc, currentDesignId, isDirty, designAutosave]);
 
   const openExportDialog = useCallback(
     (initialAction?: 'save' | 'create-post') => {
@@ -571,40 +544,42 @@ export const Designer: FC<DesignerProps> = ({
     }
     s.setSaving(true);
     try {
-      const { previewFileId, previewDataUrl } = await uploadPreview();
-      const payload: Record<string, unknown> = {
-        name: s.designName,
-        doc: s.doc,
-        width: s.doc.outputs[0]?.width,
-        height: s.doc.outputs[0]?.height,
-      };
-      if (previewFileId) payload.previewFileId = previewFileId;
-      // Only ship the base64 preview as a fallback when the upload failed, to keep
-      // the save JSON small.
-      else if (previewDataUrl) payload.previewDataUrl = previewDataUrl;
-      if (s.designId) {
-        const res = await fetch(`/media/designs/${s.designId}`, {
+      // A first save goes through the autosave create guard, so a create
+      // already in flight (or a rapid Cmd+S repeat) can never POST a duplicate
+      // design. The brand-compliance check above stays manual-save-only.
+      if (!store.getState().designId) {
+        await designAutosave.ensureCreated();
+      }
+      const cur = store.getState();
+      // ensureCreated already persisted the current doc + preview; only PUT
+      // when edits landed while it was in flight (or a pre-existing design
+      // still has unsaved work).
+      if (cur.designId && cur.isDirty) {
+        const { previewFileId, previewDataUrl } = await uploadPreview();
+        const payload: Record<string, unknown> = {
+          name: cur.designName,
+          doc: cur.doc,
+          width: cur.doc.outputs[0]?.width,
+          height: cur.doc.outputs[0]?.height,
+        };
+        if (previewFileId) payload.previewFileId = previewFileId;
+        // Only ship the base64 preview as a fallback when the upload failed, to keep
+        // the save JSON small.
+        else if (previewDataUrl) payload.previewDataUrl = previewDataUrl;
+        const res = await fetch(`/media/designs/${cur.designId}`, {
           method: 'PUT',
           body: JSON.stringify(payload),
         });
         if (!res.ok) throw new Error('Save failed');
-      } else {
-        const res = await fetch('/media/designs', {
-          method: 'POST',
-          body: JSON.stringify(payload),
-        });
-        if (!res.ok) throw new Error('Save failed');
-        const data = await res.json();
-        s.setDesignId(data.id);
+        cur.markSaved();
       }
-      s.markSaved();
       toaster.show(translate('design_saved', 'Design saved'), 'success');
     } catch {
       toaster.show(translate('save_failed', 'Failed to save'), 'warning');
     } finally {
-      s.setSaving(false);
+      store.getState().setSaving(false);
     }
-  }, [fetch, toaster, store, brandViolations, translate, uploadPreview]);
+  }, [fetch, toaster, store, brandViolations, translate, uploadPreview, designAutosave]);
 
   const handleSaveAsTemplate = useCallback(async () => {
     const s = store.getState();
