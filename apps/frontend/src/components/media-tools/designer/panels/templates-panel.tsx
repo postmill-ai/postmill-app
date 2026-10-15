@@ -14,6 +14,13 @@ import {
   ALL_CATEGORIES_KEY,
   groupTemplatesByCategory,
 } from './template-categories';
+import {
+  UNFILED_FOLDER_KEY,
+  filterTemplatesByFolder,
+  unfiledTemplates,
+  type FolderSelection,
+} from './template-folders';
+import { TemplateFolderTree, useTemplateFolders } from './template-folder-tree';
 import { SaveTemplateModal } from './save-template-modal';
 import { useT } from '@postmill-ai/react/translation/get.transation.service.client';
 
@@ -23,6 +30,7 @@ interface DesignTemplate {
   doc: DesignerDoc;
   isSystem: boolean;
   category?: string | null;
+  folderId?: string | null;
   thumbnail?: string;
 }
 
@@ -50,11 +58,20 @@ export const TemplatesPanel: FC<TemplatesPanelProps> = ({ store, onClose, guard 
     { keepPreviousData: true }
   );
 
+  const { data: folders, mutate: mutateFolders } = useTemplateFolders(user?.orgId);
+  const [selection, setSelection] = useState<FolderSelection>(null);
   const [activeCategory, setActiveCategory] = useState(ALL_CATEGORIES_KEY);
 
-  // Sections drive both the filter chips and the grouped grid; phase 2 turns
-  // these into folders, so everything category-shaped funnels through here.
-  const sections = useMemo(() => groupTemplatesByCategory(data ?? []), [data]);
+  // Folders organize (org templates only); the phase-1 category sections and
+  // filter chips then group/filter inside the current folder view.
+  const folderTemplates = useMemo(
+    () => filterTemplatesByFolder(data ?? [], selection),
+    [data, selection]
+  );
+  const unfiledCount = useMemo(() => unfiledTemplates(data ?? []).length, [data]);
+
+  // Sections drive both the filter chips and the grouped grid.
+  const sections = useMemo(() => groupTemplatesByCategory(folderTemplates), [folderTemplates]);
   const visibleSections = useMemo(
     () =>
       activeCategory === ALL_CATEGORIES_KEY
@@ -62,9 +79,14 @@ export const TemplatesPanel: FC<TemplatesPanelProps> = ({ store, onClose, guard 
         : sections.filter((section) => section.key === activeCategory),
     [sections, activeCategory]
   );
+  // Category suggestions for the save modal stay global — picking a folder
+  // shouldn't shrink the vocabulary of existing category names.
   const categoryLabels = useMemo(
-    () => sections.map((s) => s.label).filter((label): label is string => !!label),
-    [sections]
+    () =>
+      groupTemplatesByCategory(data ?? [])
+        .map((s) => s.label)
+        .filter((label): label is string => !!label),
+    [data]
   );
 
   const applyTemplate = useCallback(async (template: DesignTemplate) => {
@@ -135,7 +157,12 @@ export const TemplatesPanel: FC<TemplatesPanelProps> = ({ store, onClose, guard 
       }
       const res = await fetch('/media/design-templates', {
         method: 'POST',
-        body: JSON.stringify(payload),
+        body: JSON.stringify(
+          // Saving while a folder is selected files the new template there.
+          selection && selection !== UNFILED_FOLDER_KEY
+            ? { ...payload, folderId: selection }
+            : payload
+        ),
       });
       if (res.ok) {
         const data = await res.json();
@@ -152,7 +179,7 @@ export const TemplatesPanel: FC<TemplatesPanelProps> = ({ store, onClose, guard 
       toaster.show(t('template_save_failed', 'Failed to save template'), 'warning');
       return false;
     }
-  }, [store, fetch, mutate, toaster, t]);
+  }, [store, fetch, mutate, toaster, selection, t]);
 
   const saveAsTemplate = useCallback(() => {
     const state = store.getState();
@@ -191,6 +218,15 @@ export const TemplatesPanel: FC<TemplatesPanelProps> = ({ store, onClose, guard 
         {t('templates_panel_save_current_as_template', 'Save current as template')}
       </button>
 
+      <TemplateFolderTree
+        folders={folders ?? []}
+        unfiledCount={unfiledCount}
+        selection={selection}
+        onSelect={setSelection}
+        onRefresh={() => mutateFolders()}
+        onTemplateMoved={() => mutate()}
+      />
+
       {isLoading && !data ? (
         <PanelSkeletonGrid count={4} />
       ) : error && !data ? (
@@ -220,7 +256,9 @@ export const TemplatesPanel: FC<TemplatesPanelProps> = ({ store, onClose, guard 
           )}
           {visibleSections.length === 0 ? (
             <div className="text-[12px] text-newTextColor/60 text-center py-4">
-              {t('templates_panel_no_templates_in_category', 'No templates in this category')}
+              {selection
+                ? t('templates_panel_no_templates_in_folder', 'No templates in this folder')
+                : t('templates_panel_no_templates_in_category', 'No templates in this category')}
             </div>
           ) : (
             visibleSections.map((section) => (
@@ -228,18 +266,36 @@ export const TemplatesPanel: FC<TemplatesPanelProps> = ({ store, onClose, guard 
                 <h3 className="text-[11px] font-[600] uppercase tracking-wide text-newTextColor/60">
                   {section.label ?? t('other', 'Other')}
                 </h3>
-                <div className="grid grid-cols-2 gap-2">
+                <div className="grid grid-cols-2 gap-2" role="list">
                   {section.templates.map((template) => (
                     <div
                       key={template.id}
+                      role="listitem"
                       className="rounded-lg border border-studioBorder bg-newBgColorInner overflow-hidden group"
                     >
-                      <div className="aspect-4/3 bg-studioBorder/10 flex items-center justify-center text-[20px] text-newTextColor/20">
+                      <div className="relative aspect-4/3 bg-studioBorder/10 flex items-center justify-center text-[20px] text-newTextColor/20">
                         {template.thumbnail ? (
                           // eslint-disable-next-line @next/next/no-img-element -- server-rendered template thumbnail
                           <img src={template.thumbnail} alt={template.name} className="w-full h-full object-cover" />
                         ) : (
                           template.isSystem ? '◧' : '▣'
+                        )}
+                        {!template.isSystem && (
+                          // Drag handle — drop onto a folder row in the tree to
+                          // file the template (system templates are not folder-able).
+                          <div
+                            role="button"
+                            tabIndex={0}
+                            aria-label={t('templates_panel_drag_to_folder', 'Drag to a folder')}
+                            draggable
+                            onDragStart={(e) => {
+                              e.dataTransfer.setData('text/plain', template.id);
+                              e.dataTransfer.effectAllowed = 'move';
+                            }}
+                            className="absolute top-1 end-1 px-1.5 py-0.5 rounded-sm bg-newBgColorInner/80 text-newTextColor/60 cursor-grab active:cursor-grabbing opacity-0 group-hover:opacity-100 focus-visible:opacity-100 transition-opacity text-[11px] leading-none select-none"
+                          >
+                            ⠿
+                          </div>
                         )}
                       </div>
                       <div className="p-2">
