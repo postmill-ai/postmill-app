@@ -32,6 +32,12 @@ describe('DesignService', () => {
     findByOrg: ReturnType<typeof vi.fn>;
     countByOrg: ReturnType<typeof vi.fn>;
     findTemplatesByOrg: ReturnType<typeof vi.fn>;
+    createFolder: ReturnType<typeof vi.fn>;
+    getFolder: ReturnType<typeof vi.fn>;
+    updateFolder: ReturnType<typeof vi.fn>;
+    deleteFolder: ReturnType<typeof vi.fn>;
+    getFolderTree: ReturnType<typeof vi.fn>;
+    moveTemplate: ReturnType<typeof vi.fn>;
   };
   let fileService: {
     importFromUrl: ReturnType<typeof vi.fn>;
@@ -51,6 +57,12 @@ describe('DesignService', () => {
       findByOrg: vi.fn(),
       countByOrg: vi.fn(),
       findTemplatesByOrg: vi.fn(),
+      createFolder: vi.fn(),
+      getFolder: vi.fn(),
+      updateFolder: vi.fn(),
+      deleteFolder: vi.fn(),
+      getFolderTree: vi.fn(),
+      moveTemplate: vi.fn(),
     };
     fileService = {
       importFromUrl: vi.fn(),
@@ -309,6 +321,136 @@ describe('DesignService', () => {
 
       expect(templates[0].thumbnail).toBe('http://localhost/uploads/t1.png');
       expect(templates[1].thumbnail).toBeNull();
+    });
+  });
+
+  describe('template folders', () => {
+    it('createFolder validates the parent belongs to the org', async () => {
+      repository.getFolder.mockResolvedValue({ id: 'f0' });
+
+      await service.createFolder('org-1', { name: 'Ads', parentId: 'f0' });
+
+      expect(repository.createFolder).toHaveBeenCalledWith('org-1', {
+        name: 'Ads',
+        parentId: 'f0',
+      });
+    });
+
+    it('createFolder rejects a foreign parent folder', async () => {
+      repository.getFolder.mockResolvedValue(null);
+
+      await expect(
+        service.createFolder('org-1', { name: 'Ads', parentId: 'foreign' })
+      ).rejects.toThrow(NotFoundException);
+      expect(repository.createFolder).not.toHaveBeenCalled();
+    });
+
+    it('updateFolder 404s on a missing folder', async () => {
+      repository.getFolder.mockResolvedValue(null);
+
+      await expect(
+        service.updateFolder('org-1', 'nope', { name: 'x' })
+      ).rejects.toThrow(NotFoundException);
+      expect(repository.updateFolder).not.toHaveBeenCalled();
+    });
+
+    it('deleteFolder 404s on a missing folder and delegates otherwise', async () => {
+      repository.getFolder.mockResolvedValueOnce(null);
+      await expect(service.deleteFolder('org-1', 'nope')).rejects.toThrow(NotFoundException);
+
+      repository.getFolder.mockResolvedValueOnce({ id: 'f1' });
+      repository.deleteFolder.mockResolvedValue({ id: 'f1' });
+      expect(await service.deleteFolder('org-1', 'f1')).toEqual({ id: 'f1' });
+    });
+
+    it('moveTemplate moves an org-owned template into an owned folder', async () => {
+      repository.findTemplateForOrg.mockResolvedValue({
+        id: 't1',
+        organizationId: 'org-1',
+        isSystem: false,
+      });
+      repository.getFolder.mockResolvedValue({ id: 'f1' });
+
+      await service.moveTemplate('org-1', 't1', 'f1');
+
+      expect(repository.moveTemplate).toHaveBeenCalledWith('org-1', 't1', 'f1');
+    });
+
+    it('moveTemplate null moves a template back to root without a folder lookup', async () => {
+      repository.findTemplateForOrg.mockResolvedValue({
+        id: 't1',
+        organizationId: 'org-1',
+        isSystem: false,
+      });
+
+      await service.moveTemplate('org-1', 't1', null);
+
+      expect(repository.getFolder).not.toHaveBeenCalled();
+      expect(repository.moveTemplate).toHaveBeenCalledWith('org-1', 't1', null);
+    });
+
+    it('moveTemplate rejects a system template (organizationId null)', async () => {
+      repository.findTemplateForOrg.mockResolvedValue({
+        id: 't1',
+        organizationId: null,
+        isSystem: true,
+      });
+
+      await expect(service.moveTemplate('org-1', 't1', 'f1')).rejects.toThrow(
+        NotFoundException
+      );
+      expect(repository.moveTemplate).not.toHaveBeenCalled();
+    });
+
+    it('moveTemplate rejects a foreign folder', async () => {
+      repository.findTemplateForOrg.mockResolvedValue({
+        id: 't1',
+        organizationId: 'org-1',
+        isSystem: false,
+      });
+      repository.getFolder.mockResolvedValue(null);
+
+      await expect(service.moveTemplate('org-1', 't1', 'foreign')).rejects.toThrow(
+        NotFoundException
+      );
+      expect(repository.moveTemplate).not.toHaveBeenCalled();
+    });
+
+    it('resolveOwnedFolderId returns undefined for missing or foreign folders', async () => {
+      expect(await service.resolveOwnedFolderId('org-1', null)).toBeUndefined();
+
+      repository.getFolder.mockResolvedValue(null);
+      expect(await service.resolveOwnedFolderId('org-1', 'foreign')).toBeUndefined();
+
+      repository.getFolder.mockResolvedValue({ id: 'f1' });
+      expect(await service.resolveOwnedFolderId('org-1', 'f1')).toBe('f1');
+    });
+
+    it('createTemplate attaches an owned folderId and drops a foreign one', async () => {
+      repository.getFolder.mockResolvedValue({ id: 'f1' });
+      await service.createTemplate({
+        organizationId: 'org-1',
+        name: 'Tmpl',
+        category: 'social',
+        doc: makeDoc(),
+        folderId: 'f1',
+      });
+      expect(repository.createTemplate).toHaveBeenCalledWith(
+        expect.objectContaining({ folderId: 'f1' })
+      );
+
+      repository.createTemplate.mockClear();
+      repository.getFolder.mockResolvedValue(null);
+      await service.createTemplate({
+        organizationId: 'org-1',
+        name: 'Tmpl',
+        category: 'social',
+        doc: makeDoc(),
+        folderId: 'foreign',
+      });
+      expect(repository.createTemplate).toHaveBeenCalledWith(
+        expect.objectContaining({ folderId: undefined })
+      );
     });
   });
 

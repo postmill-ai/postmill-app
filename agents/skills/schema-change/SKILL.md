@@ -13,7 +13,7 @@ Prisma 6.5.0 + PostgreSQL. Migrations apply against the live production DB, so e
 - `agents/testing.md` — test commands for the nestjs-libraries package
 
 ## Procedure
-1. Edit `libraries/nestjs-libraries/src/database/prisma/schema.prisma` (89 models — read it for ground truth).
+1. Edit `libraries/nestjs-libraries/src/database/prisma/schema.prisma` (90 models — read it for ground truth).
 2. `pnpm run prisma-migrate-dev` — authors `migrations/<timestamp>_<name>/migration.sql` and applies it to the local dev DB. It does **not** git-commit; commit the migration directory yourself, in the same commit as the schema edit.
 3. `pnpm run prisma-schema-diff` — eyeball the SQL production will run (detail: `agents/database.md` § Scripts).
 4. `pnpm run prisma-schema-check` — pipes the diff through `tools/db/schema-destructive-guard.mjs`. Flags `DROP TABLE`, `DROP COLUMN`, `DROP CONSTRAINT`, `ADD COLUMN ... NOT NULL` without `DEFAULT`.

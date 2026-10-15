@@ -75,6 +75,7 @@ model Organization {
   roles                AppRole[]
   designs              Design[]
   designTemplates      DesignTemplate[]
+  designTemplateFolders DesignTemplateFolder[]
   aiDesignerSessions   AiDesignerSession[]
   commsProviderConfigs CommsProviderConfig[]
   commsUserLinks       CommsUserLink[]
@@ -1855,16 +1856,39 @@ model DesignTemplate {
   doc             Json
   thumbnailFileId String?
   isSystem        Boolean       @default(false)
+  folderId        String?
   deletedAt       DateTime?
   createdAt       DateTime      @default(now())
   updatedAt       DateTime      @updatedAt
 
   organization    Organization? @relation(fields: [organizationId], references: [id])
   thumbnailFile   File?         @relation(fields: [thumbnailFileId], references: [id])
+  folder          DesignTemplateFolder? @relation(fields: [folderId], references: [id])
 
   @@index([organizationId])
   @@index([category])
+  @@index([folderId])
   @@index([deletedAt])
+}
+
+// Org-defined folders for grouping design templates in the Templates panel.
+// Adjacency list, same shape as FileFolder; null DesignTemplate.folderId =
+// unfiled (root). System templates are never foldered.
+model DesignTemplateFolder {
+  id             String   @id @default(cuid())
+  organizationId String
+  parentId       String?
+  name           String
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  parent       DesignTemplateFolder?  @relation("DesignTemplateFolderTree", fields: [parentId], references: [id])
+  children     DesignTemplateFolder[] @relation("DesignTemplateFolderTree")
+  templates    DesignTemplate[]
+  organization Organization           @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@index([organizationId])
+  @@index([parentId])
 }
 
 // AI Designer sessions — persistent chat threads that drive headless design generation

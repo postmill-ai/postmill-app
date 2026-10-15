@@ -42,6 +42,11 @@ import { CreateDesignDto } from '@postmill-ai/nestjs-libraries/dtos/design/creat
 import { UpdateDesignDto } from '@postmill-ai/nestjs-libraries/dtos/design/update-design.dto';
 import { CreateTemplateDto } from '@postmill-ai/nestjs-libraries/dtos/design/create-template.dto';
 import { UpdateTemplateDto } from '@postmill-ai/nestjs-libraries/dtos/design/update-template.dto';
+import {
+  CreateTemplateFolderDto,
+  MoveTemplateDto,
+  UpdateTemplateFolderDto,
+} from '@postmill-ai/nestjs-libraries/dtos/design/template-folder.dto';
 import { ValidateDocDto } from '@postmill-ai/nestjs-libraries/dtos/design/validate-doc.dto';
 import { ApplyOpsDto } from '@postmill-ai/nestjs-libraries/dtos/design/apply-ops.dto';
 import type { DesignerDoc } from '@postmill-ai/nestjs-libraries/media/design-render/design-render.types';
@@ -293,6 +298,59 @@ export class DesignController {
 @Controller('/media/design-templates')
 export class DesignTemplateController {
   constructor(private _designService: DesignService) {}
+
+  // ── Folder endpoints ─────────────────────────────────────────
+  // Declared before '/:id' so the single-segment '/folders' route wins.
+
+  @Get('/folders')
+  @CheckPolicies([AuthorizationActions.Read, Sections.MEDIA])
+  @RequirePermission('media', 'read')
+  async getFolderTree(@GetOrgFromRequest() org: Organization) {
+    return this._designService.getFolderTree(org.id);
+  }
+
+  @Post('/folders')
+  @CheckPolicies([AuthorizationActions.Create, Sections.MEDIA])
+  @RequirePermission('media', 'create')
+  async createFolder(
+    @GetOrgFromRequest() org: Organization,
+    @Body() body: CreateTemplateFolderDto,
+  ) {
+    return this._designService.createFolder(org.id, body);
+  }
+
+  @Put('/folders/:id')
+  @CheckPolicies([AuthorizationActions.Update, Sections.MEDIA])
+  @RequirePermission('media', 'update')
+  async updateFolder(
+    @GetOrgFromRequest() org: Organization,
+    @Param('id') id: string,
+    @Body() body: UpdateTemplateFolderDto,
+  ) {
+    return this._designService.updateFolder(org.id, id, body);
+  }
+
+  @Delete('/folders/:id')
+  @CheckPolicies([AuthorizationActions.Delete, Sections.MEDIA])
+  @RequirePermission('media', 'delete')
+  async deleteFolder(
+    @GetOrgFromRequest() org: Organization,
+    @Param('id') id: string,
+  ) {
+    await this._designService.deleteFolder(org.id, id);
+    return { success: true };
+  }
+
+  @Put('/:id/move')
+  @CheckPolicies([AuthorizationActions.Update, Sections.MEDIA])
+  @RequirePermission('media', 'update')
+  async moveTemplate(
+    @GetOrgFromRequest() org: Organization,
+    @Param('id') id: string,
+    @Body() body: MoveTemplateDto,
+  ) {
+    return this._designService.moveTemplate(org.id, id, body.folderId || null);
+  }
 
   @Get('/')
   @CheckPolicies([AuthorizationActions.Read, Sections.MEDIA])

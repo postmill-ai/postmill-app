@@ -7385,6 +7385,88 @@ paths:
           description: ""
       tags:
         - Design
+  /media/design-templates/folders:
+    get:
+      operationId: DesignTemplateController_getFolderTree
+      parameters: []
+      responses:
+        "200":
+          description: ""
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: object
+      tags:
+        - Design Templates
+    post:
+      operationId: DesignTemplateController_createFolder
+      parameters: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateTemplateFolderDto"
+      responses:
+        "201":
+          description: ""
+      tags:
+        - Design Templates
+  /media/design-templates/folders/{id}:
+    put:
+      operationId: DesignTemplateController_updateFolder
+      parameters:
+        - name: id
+          required: true
+          in: path
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateTemplateFolderDto"
+      responses:
+        "200":
+          description: ""
+      tags:
+        - Design Templates
+    delete:
+      operationId: DesignTemplateController_deleteFolder
+      parameters:
+        - name: id
+          required: true
+          in: path
+          schema:
+            type: string
+      responses:
+        "200":
+          description: ""
+      tags:
+        - Design Templates
+  /media/design-templates/{id}/move:
+    put:
+      operationId: DesignTemplateController_moveTemplate
+      parameters:
+        - name: id
+          required: true
+          in: path
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/MoveTemplateDto"
+      responses:
+        "200":
+          description: ""
+      tags:
+        - Design Templates
   /media/design-templates:
     get:
       operationId: DesignTemplateController_list
@@ -11699,6 +11781,28 @@ components:
           type: string
       required:
         - composition
+    CreateTemplateFolderDto:
+      type: object
+      properties:
+        name:
+          type: string
+          maxLength: 100
+        parentId:
+          type: string
+          maxLength: 100
+      required:
+        - name
+    UpdateTemplateFolderDto:
+      type: object
+      properties:
+        name:
+          type: string
+          maxLength: 100
+    MoveTemplateDto:
+      type: object
+      properties:
+        folderId:
+          type: string
     UpdateTemplateDto:
       type: object
       properties:
@@ -11720,6 +11824,8 @@ components:
         doc:
           type: object
         thumbnailFileId:
+          type: string
+        folderId:
           type: string
       required:
         - name

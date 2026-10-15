@@ -39,6 +39,11 @@ describe('DesignController', () => {
     getTemplate: ReturnType<typeof vi.fn>;
     createTemplate: ReturnType<typeof vi.fn>;
     deleteTemplate: ReturnType<typeof vi.fn>;
+    getFolderTree: ReturnType<typeof vi.fn>;
+    createFolder: ReturnType<typeof vi.fn>;
+    updateFolder: ReturnType<typeof vi.fn>;
+    deleteFolder: ReturnType<typeof vi.fn>;
+    moveTemplate: ReturnType<typeof vi.fn>;
   };
   let fileService: {
     getFileById: ReturnType<typeof vi.fn>;
@@ -62,6 +67,11 @@ describe('DesignController', () => {
       getTemplate: vi.fn(),
       createTemplate: vi.fn(),
       deleteTemplate: vi.fn(),
+      getFolderTree: vi.fn(),
+      createFolder: vi.fn(),
+      updateFolder: vi.fn(),
+      deleteFolder: vi.fn(),
+      moveTemplate: vi.fn(),
     };
     fileService = {
       getFileById: vi.fn(),
@@ -384,6 +394,85 @@ describe('DesignController', () => {
 
       expect(await templateController.delete(org, 't1')).toEqual({ success: true });
       expect(designService.deleteTemplate).toHaveBeenCalledWith('org-1', 't1');
+    });
+  });
+
+  describe('template folder endpoints', () => {
+    it('GET /media/design-templates/folders is gated on media:read and returns the tree', async () => {
+      expect(
+        Reflect.getMetadata(
+          REQUIRE_PERMISSION_KEY,
+          DesignTemplateController.prototype.getFolderTree
+        )
+      ).toEqual({ resource: 'media', action: 'read' });
+
+      const tree = [{ id: 'f1', name: 'Ads', children: [] }];
+      designService.getFolderTree.mockResolvedValue(tree);
+
+      expect(await templateController.getFolderTree(org)).toBe(tree);
+      expect(designService.getFolderTree).toHaveBeenCalledWith('org-1');
+    });
+
+    it('POST /media/design-templates/folders is gated on media:create and creates the folder', async () => {
+      expect(
+        Reflect.getMetadata(
+          REQUIRE_PERMISSION_KEY,
+          DesignTemplateController.prototype.createFolder
+        )
+      ).toEqual({ resource: 'media', action: 'create' });
+
+      const body = { name: 'Ads', parentId: 'f0' };
+      const created = { id: 'f1', ...body };
+      designService.createFolder.mockResolvedValue(created);
+
+      expect(await templateController.createFolder(org, body)).toBe(created);
+      expect(designService.createFolder).toHaveBeenCalledWith('org-1', body);
+    });
+
+    it('PUT /media/design-templates/folders/:id is gated on media:update and renames the folder', async () => {
+      expect(
+        Reflect.getMetadata(
+          REQUIRE_PERMISSION_KEY,
+          DesignTemplateController.prototype.updateFolder
+        )
+      ).toEqual({ resource: 'media', action: 'update' });
+
+      const updated = { id: 'f1', name: 'Renamed' };
+      designService.updateFolder.mockResolvedValue(updated);
+
+      expect(await templateController.updateFolder(org, 'f1', { name: 'Renamed' })).toBe(updated);
+      expect(designService.updateFolder).toHaveBeenCalledWith('org-1', 'f1', { name: 'Renamed' });
+    });
+
+    it('DELETE /media/design-templates/folders/:id is gated on media:delete and reports success', async () => {
+      expect(
+        Reflect.getMetadata(
+          REQUIRE_PERMISSION_KEY,
+          DesignTemplateController.prototype.deleteFolder
+        )
+      ).toEqual({ resource: 'media', action: 'delete' });
+
+      designService.deleteFolder.mockResolvedValue({ id: 'f1' });
+
+      expect(await templateController.deleteFolder(org, 'f1')).toEqual({ success: true });
+      expect(designService.deleteFolder).toHaveBeenCalledWith('org-1', 'f1');
+    });
+
+    it('PUT /media/design-templates/:id/move is gated on media:update and defaults to root', async () => {
+      expect(
+        Reflect.getMetadata(
+          REQUIRE_PERMISSION_KEY,
+          DesignTemplateController.prototype.moveTemplate
+        )
+      ).toEqual({ resource: 'media', action: 'update' });
+
+      designService.moveTemplate.mockResolvedValue({ id: 't1', folderId: null });
+
+      await templateController.moveTemplate(org, 't1', {});
+      expect(designService.moveTemplate).toHaveBeenCalledWith('org-1', 't1', null);
+
+      await templateController.moveTemplate(org, 't1', { folderId: 'f1' });
+      expect(designService.moveTemplate).toHaveBeenCalledWith('org-1', 't1', 'f1');
     });
   });
 });

@@ -17,4 +17,8 @@ export class CreateTemplateDto {
   @IsOptional()
   @IsString()
   thumbnailFileId?: string;
+
+  @IsOptional()
+  @IsString()
+  folderId?: string;
 }

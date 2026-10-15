@@ -118,6 +118,7 @@ export class DesignService {
     doc: any;
     isSystem?: boolean;
     thumbnailFileId?: string;
+    folderId?: string;
   }) {
     if (data.thumbnailFileId) {
       // System templates have no organizationId; running the ownership check
@@ -129,9 +130,19 @@ export class DesignService {
       }
       await this._assertOwnedFile(data.organizationId, data.thumbnailFileId);
     }
+    let folderId: string | undefined;
+    if (data.folderId) {
+      if (!data.organizationId) {
+        throw new BadRequestException(
+          'A folder requires an owning organization'
+        );
+      }
+      folderId = await this.resolveOwnedFolderId(data.organizationId, data.folderId);
+    }
     const validatedDoc = this._designerDocService.validate(data.doc);
     return this._designRepository.createTemplate({
       ...data,
+      folderId,
       doc: validatedDoc,
     });
   }
@@ -161,6 +172,73 @@ export class DesignService {
 
   async deleteTemplate(orgId: string, id: string) {
     return this._designRepository.deleteTemplate(id, orgId);
+  }
+
+  // ── DesignTemplateFolder operations (mirrors FileService folder methods) ──
+
+  async createFolder(orgId: string, data: { name: string; parentId?: string }) {
+    if (data.parentId) {
+      const parent = await this._designRepository.getFolder(orgId, data.parentId);
+      if (!parent) {
+        throw new NotFoundException('Parent folder not found');
+      }
+    }
+    return this._designRepository.createFolder(orgId, data);
+  }
+
+  async getFolder(orgId: string, id: string) {
+    const folder = await this._designRepository.getFolder(orgId, id);
+    if (!folder) {
+      throw new NotFoundException('Folder not found');
+    }
+    return folder;
+  }
+
+  async updateFolder(orgId: string, id: string, data: { name?: string }) {
+    const folder = await this._designRepository.getFolder(orgId, id);
+    if (!folder) {
+      throw new NotFoundException('Folder not found');
+    }
+    return this._designRepository.updateFolder(orgId, id, data);
+  }
+
+  async deleteFolder(orgId: string, id: string) {
+    const folder = await this._designRepository.getFolder(orgId, id);
+    if (!folder) {
+      throw new NotFoundException('Folder not found');
+    }
+    return this._designRepository.deleteFolder(orgId, id);
+  }
+
+  getFolderTree(orgId: string) {
+    return this._designRepository.getFolderTree(orgId);
+  }
+
+  // folderId null = unfiled/root. System templates are shared across orgs and
+  // stay folder-less; only org-owned templates move.
+  async moveTemplate(orgId: string, templateId: string, folderId: string | null) {
+    const template = await this._designRepository.findTemplateForOrg(templateId, orgId);
+    if (!template || template.organizationId !== orgId) {
+      throw new NotFoundException('Template not found');
+    }
+    if (folderId) {
+      const folder = await this._designRepository.getFolder(orgId, folderId);
+      if (!folder) {
+        throw new NotFoundException('Folder not found');
+      }
+    }
+    return this._designRepository.moveTemplate(orgId, templateId, folderId);
+  }
+
+  // Non-throwing ownership check for a client-supplied folderId (mirrors
+  // FileService.resolveOwnedFolderId): a foreign/bogus id falls back to
+  // unfiled rather than 500ing the save.
+  async resolveOwnedFolderId(orgId: string, folderId?: string | null) {
+    if (!folderId) {
+      return undefined;
+    }
+    const folder = await this._designRepository.getFolder(orgId, folderId);
+    return folder ? folderId : undefined;
   }
 
   async instantiateTemplate(orgId: string, templateId: string): Promise<DesignerDoc> {
