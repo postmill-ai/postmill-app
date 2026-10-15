@@ -100,17 +100,8 @@ export const setImageFetch = (fn: ImageFetch | null) => {
   injectedFetch = fn;
 };
 
-const isCrossOrigin = (src: string): boolean => {
-  if (!/^https?:\/\//i.test(src)) return false;
-  try {
-    return new URL(src).origin !== window.location.origin;
-  } catch {
-    return false;
-  }
-};
-
-// Pull a cross-origin image through the authenticated designer proxy and return
-// a same-origin object URL (untainted — usable for both display and export).
+// Pull an image through the authenticated designer proxy and return a
+// same-origin object URL (untainted — usable for both display and export).
 const loadViaProxy = async (src: string): Promise<string | null> => {
   if (!injectedFetch) return null;
   try {
@@ -171,27 +162,24 @@ const loadImage = (src: string): Promise<HTMLImageElement> => {
     img.onload = () => finish(img);
 
     img.onerror = () => {
-      // A cross-origin host without CORS headers blocks the anonymous load.
-      // Retry once through the same-origin authenticated proxy.
-      if (isCrossOrigin(src)) {
-        loadViaProxy(src).then((objectUrl) => {
-          if (!objectUrl) {
-            notifyCacheListeners();
-            reject(new Error('Failed to load image'));
-            return;
-          }
-          const proxied = new Image();
-          proxied.onload = () => finish(proxied);
-          proxied.onerror = () => {
-            notifyCacheListeners();
-            reject(new Error('Failed to load image'));
-          };
-          proxied.src = objectUrl; // same-origin blob — no crossOrigin / no taint
-        });
-        return;
-      }
-      notifyCacheListeners();
-      reject(new Error('Failed to load image'));
+      // Retry once through the same-origin authenticated proxy. This is not
+      // only for cross-origin hosts without CORS headers: a same-origin URL
+      // can 302 to object storage that sends none, which fails the anonymous
+      // load in exactly the same way.
+      loadViaProxy(src).then((objectUrl) => {
+        if (!objectUrl) {
+          notifyCacheListeners();
+          reject(new Error('Failed to load image'));
+          return;
+        }
+        const proxied = new Image();
+        proxied.onload = () => finish(proxied);
+        proxied.onerror = () => {
+          notifyCacheListeners();
+          reject(new Error('Failed to load image'));
+        };
+        proxied.src = objectUrl; // same-origin blob — no crossOrigin / no taint
+      });
     };
 
     img.src = src;
@@ -833,6 +821,21 @@ const MaskedLeaf: FC<{ element: DesignerElement; children: ReactNode }> = ({
 };
 
 /**
+ * The StyledLayer cache key for a leaf.
+ *
+ * StyledLayer Konva-caches its buffer in an effect keyed partly on this value,
+ * and an image's bitmap arrives ASYNCHRONOUSLY after mount — so a styled image
+ * keyed on its id alone was buffered blank on first render and never rebuilt,
+ * the same bug class `backdropKey` documents for the artboard background (and
+ * the filter-cache fix at ImageNode). Folding the load state into the key
+ * forces a re-cache the moment the bitmap lands.
+ */
+export const styledLeafCacheKey = (
+  element: DesignerElement,
+  image: HTMLImageElement | null
+): string => `${element.id}:${image ? 'ready' : 'pending'}`;
+
+/**
  * Wraps a leaf in its layer effects, if it has any.
  *
  * Unstyled layers go through untouched, so the common case pays nothing for
@@ -842,12 +845,17 @@ const StyledLeaf: FC<{ element: DesignerElement; children: ReactNode }> = ({
   element,
   children,
 }) => {
+  // Subscribes to the image cache; null until the bitmap is ready. Non-image
+  // layers pass no src, so their key is stable and nothing re-caches for them.
+  const image = useLoadedImage(
+    element.type === 'image' || element.type === 'raster' ? element.src : undefined
+  );
   // Frosted glass draws BEFORE the layer, from the pixels already beneath it.
   const backdrop = element.backdropFilter ? (
     <BackdropFilterShape key={`${element.id}-backdrop`} element={element} />
   ) : null;
   const styled = hasLayerStyles(element) ? (
-    <StyledLayer element={element} cacheKey={element.id}>
+    <StyledLayer element={element} cacheKey={styledLeafCacheKey(element, image)}>
       {children}
     </StyledLayer>
   ) : (
@@ -870,6 +878,46 @@ const StyledLeaf: FC<{ element: DesignerElement; children: ReactNode }> = ({
   );
 };
 
+/**
+ * The instance's own hit node.
+ *
+ * `expandSymbols` replaces an instance with its namespaced children, so no
+ * Konva node carries the instance id — and the Transformer, which binds with
+ * `stage.findOne('#' + id)`, found nothing to attach to: a symbol instance
+ * (every AI-composed CTA lockup) could be selected but neither resized nor
+ * drag-moved. This transparent rect sits at the instance's box, keyed by its
+ * id, rendered just before the instance's first expanded child so it stacks
+ * exactly where the instance itself would. Its transform writes back through
+ * the ordinary element patch path, and `expandSymbolInstance` scales the
+ * plate, the label box and the font proportionally from the new size.
+ */
+const SymbolHitRect: FC<{
+  instance: DesignerElement;
+  onSelect: SelectHandler;
+  onContextMenu?: (elementId: string, clientX: number, clientY: number) => void;
+  interactive: boolean;
+}> = ({ instance, onSelect, onContextMenu, interactive }) => (
+  <Rect
+    id={instance.id}
+    x={instance.x}
+    y={instance.y}
+    width={instance.width}
+    height={instance.height}
+    rotation={instance.rotation}
+    // Invisible paint but a real hit surface: Konva's hit graph keys on the
+    // shape, not the fill's alpha.
+    fill="rgba(0,0,0,0)"
+    draggable={!instance.locked && interactive}
+    onClick={(e) => onSelect(instance.id, e)}
+    onTap={(e) => onSelect(instance.id, e)}
+    onContextMenu={(e) => {
+      e.evt.preventDefault();
+      e.evt.stopPropagation();
+      onContextMenu?.(instance.id, e.evt.clientX, e.evt.clientY);
+    }}
+  />
+);
+
 export const CanvasElements: FC<ElementsProps> = ({
   elements,
   symbols,
@@ -885,6 +933,27 @@ export const CanvasElements: FC<ElementsProps> = ({
   // server renderer follows.
   const expanded = useMemo(() => expandSymbols(elements, symbols), [elements, symbols]);
   const tree = useMemo(() => buildLayerTree(expanded), [expanded]);
+
+  // Where each instance's hit rect goes: just before the first VISIBLE expanded
+  // child carrying its namespace, keyed by that child's id. A hidden instance
+  // expands to all-hidden children and gets no rect — same as any hidden layer.
+  const symbolHitAnchors = useMemo(() => {
+    const anchors = new Map<string, DesignerElement>();
+    const claimed = new Set<string>();
+    for (const el of expanded) {
+      if (el.hidden) continue;
+      const sep = el.id.indexOf('::');
+      if (sep === -1) continue;
+      const instanceId = el.id.slice(0, sep);
+      if (claimed.has(instanceId)) continue;
+      claimed.add(instanceId);
+      const instance = elements.find(
+        (c) => c.id === instanceId && c.type === 'symbol'
+      );
+      if (instance) anchors.set(el.id, instance);
+    }
+    return anchors;
+  }, [expanded, elements]);
 
   const renderLeaf = (el: DesignerElement): ReactNode => {
         // A styled layer draws inside StyledLayer, which owns the blend and the
@@ -1439,8 +1508,20 @@ export const CanvasElements: FC<ElementsProps> = ({
         ];
       }
 
+      const hitInstance = symbolHitAnchors.get(el.id);
       return [
         ...acc,
+        ...(hitInstance
+          ? [
+              <SymbolHitRect
+                key={`symbol-hit-${hitInstance.id}`}
+                instance={hitInstance}
+                onSelect={onSelect}
+                onContextMenu={onContextMenu}
+                interactive={interactive}
+              />,
+            ]
+          : []),
         <MaskedLeaf key={el.id} element={el}>
           <StyledLeaf element={el}>{renderLeaf(el)}</StyledLeaf>
         </MaskedLeaf>,

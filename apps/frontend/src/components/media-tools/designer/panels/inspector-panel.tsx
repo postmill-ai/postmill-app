@@ -7,6 +7,7 @@ import { ShapeInspector } from './shape-inspector';
 import { IconInspector } from './icon-inspector';
 import { TextInspector } from './text-inspector';
 import { ClipInspector } from './clip-inspector';
+import { SymbolInspector } from './symbol-inspector';
 import { FillLayerInspector } from './fill-layer-inspector';
 import { AdjustmentInspector } from './adjustment-inspector';
 import { EffectsList } from './effects-list';
@@ -143,6 +144,12 @@ export const InspectorPanel: FC<InspectorProps> = ({ store }) => {
 
       {!isMixedType && primary.type === 'icon' && (
         <IconInspector element={primary} ids={ids} store={store} />
+      )}
+
+      {/* A symbol instance (the CTA lockup) edits per-child content through
+          its overrides, not through the child's own inspector. */}
+      {!isMixedType && primary.type === 'symbol' && (
+        <SymbolInspector element={primary} store={store} />
       )}
 
       {/* A fill layer used to route to nothing: addable, never editable. */}

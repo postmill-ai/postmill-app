@@ -1,12 +1,12 @@
 'use client';
 
 import React, { FC, useCallback, useState } from 'react';
-import { ColorSwatch, Slider, SegmentedControl } from '../controls';
+import { ColorSwatch, Slider, SegmentedControl, Stepper } from '../controls';
 import { useBrandColors } from './use-brand-colors';
 import { GradientEditor, gradientCss } from '../controls/gradient-editor';
 import { useMediaPicker } from '../../use-media-picker';
 import { useT } from '@postmill-ai/react/translation/get.transation.service.client';
-import type { DesignerGradient, DesignerOutput, VideoOutput } from '../designer.store';
+import type { DesignerBackground, DesignerGradient, DesignerOutput, VideoOutput } from '../designer.store';
 
 interface CanvasInspectorProps {
   store: any;
@@ -47,20 +47,70 @@ export const CanvasInspector: FC<CanvasInspectorProps> = ({ store }) => {
   const [w, setW] = useState(String(out?.width ?? 1080));
   const [h, setH] = useState(String(out?.height ?? 1080));
 
-  const [bgMode, setBgMode] = useState<BgMode>('color');
+  // Seeded from the document, not hard-initialized: opening a design whose
+  // background is already an image must land on the Image tab.
+  const [bgMode, setBgMode] = useState<BgMode>(
+    () => ((out as DesignerOutput | undefined)?.bg?.type as BgMode) ?? 'color'
+  );
   // The gradient lives on the document, not in local state — the old
   // start/end/angle trio could only ever describe two stops, and needed an
   // "Apply" button because it wasn't reading what was already there.
   const bgGradient = (out as DesignerOutput | undefined)?.bg?.gradient as
     | DesignerGradient
     | undefined;
+  const bg = (out as DesignerOutput | undefined)?.bg;
+  const bgImage = bg?.type === 'image' ? bg : undefined;
+
+  // Local during a focal drag: setOutputBackground pushes a history entry on
+  // every call, so the pointer-move stream must not commit per frame — only
+  // the drop point does.
+  const [focalDrag, setFocalDrag] = useState<{ x: number; y: number } | null>(null);
+  const focal = focalDrag ?? bgImage?.focalPoint ?? { x: 0.5, y: 0.5 };
 
   const setColor = useCallback(
     (color: string) => store.getState().setOutputBackground({ type: 'color', color }),
     [store]
   );
 
+  const patchBg = useCallback(
+    (patch: Partial<DesignerBackground>) => {
+      const current = store.getState().doc.outputs[store.getState().currentOutput]?.bg;
+      if (!current) return;
+      store.getState().setOutputBackground({ ...current, ...patch });
+    },
+    [store]
+  );
 
+  const focalFromEvent = (e: React.PointerEvent<HTMLDivElement>) => {
+    const rect = e.currentTarget.getBoundingClientRect();
+    return {
+      x: Math.min(1, Math.max(0, (e.clientX - rect.left) / rect.width)),
+      y: Math.min(1, Math.max(0, (e.clientY - rect.top) / rect.height)),
+    };
+  };
+
+  const handleFocalPointerDown = (e: React.PointerEvent<HTMLDivElement>) => {
+    e.currentTarget.setPointerCapture(e.pointerId);
+    setFocalDrag(focalFromEvent(e));
+  };
+
+  const handleFocalPointerMove = (e: React.PointerEvent<HTMLDivElement>) => {
+    if (!focalDrag) return;
+    setFocalDrag(focalFromEvent(e));
+  };
+
+  const handleFocalPointerUp = () => {
+    if (focalDrag) patchBg({ focalPoint: focalDrag });
+    setFocalDrag(null);
+  };
+
+  const nudgeFocal = (dx: number, dy: number) =>
+    patchBg({
+      focalPoint: {
+        x: Math.min(1, Math.max(0, focal.x + dx)),
+        y: Math.min(1, Math.max(0, focal.y + dy)),
+      },
+    });
 
   // One picker, no second file browser: MediaSelectorModal already lists My
   // Files alongside the stock tabs.
@@ -73,6 +123,8 @@ export const CanvasInspector: FC<CanvasInspectorProps> = ({ store }) => {
         type: 'image',
         src: item.url,
         fileId: item.fileId,
+        naturalWidth: item.width || undefined,
+        naturalHeight: item.height || undefined,
       });
     },
   });
@@ -194,15 +246,121 @@ export const CanvasInspector: FC<CanvasInspectorProps> = ({ store }) => {
             </div>
           )}
 
-          {bgMode === 'image' && (
-            <button
-              type="button"
-              onClick={imagePicker.open}
-              className="w-full px-3 py-2 rounded-lg text-[12px] font-medium bg-designerAccent text-white hover:bg-designerAccent/80"
-            >
-              {t('designer_choose_from_media_library', 'Choose from media library…')}
-            </button>
-          )}
+          {bgMode === 'image' &&
+            (bgImage?.src ? (
+              <div className="flex flex-col gap-2">
+                <div className="flex items-center justify-between">
+                  <span className="text-[11px] text-textColor/50">{t('designer_label_focal_point', 'Focal point')}</span>
+                  <button
+                    className="text-[10px] text-btnPrimaryAccent"
+                    onClick={() => patchBg({ focalPoint: { x: 0.5, y: 0.5 } })}
+                  >
+                    {t('designer_center', 'Center')}
+                  </button>
+                </div>
+                {/* The drag pad doubles as the preview thumbnail — the same
+                    pattern the image inspector uses for a layer's focal point.
+                    The renderer cover-crops the background around this point. */}
+                <div
+                  className="relative w-full h-[96px] rounded-sm overflow-hidden border border-studioBorder bg-newBgColorInner cursor-crosshair"
+                  style={{
+                    backgroundImage: `url(${bgImage.src})`,
+                    backgroundSize: 'cover',
+                    backgroundPosition: 'center',
+                  }}
+                  onPointerDown={handleFocalPointerDown}
+                  onPointerMove={handleFocalPointerMove}
+                  onPointerUp={handleFocalPointerUp}
+                  onPointerLeave={handleFocalPointerUp}
+                >
+                  <div
+                    className="absolute w-3 h-3 rounded-full border-2 border-white bg-designerAccent shadow pointer-events-none"
+                    style={{
+                      left: `calc(${focal.x * 100}% - 6px)`,
+                      top: `calc(${focal.y * 100}% - 6px)`,
+                    }}
+                  />
+                </div>
+                <div className="grid grid-cols-3 gap-1">
+                  <div />
+                  <button
+                    className="px-2 py-1 bg-newBgColor hover:bg-studioBorder/10 rounded-sm border border-studioBorder text-xs"
+                    onClick={() => nudgeFocal(0, -0.02)}
+                    aria-label={t('designer_move_focal_point_up', 'Move focal point up')}
+                  >
+                    ↑
+                  </button>
+                  <div />
+                  <button
+                    className="px-2 py-1 bg-newBgColor hover:bg-studioBorder/10 rounded-sm border border-studioBorder text-xs"
+                    onClick={() => nudgeFocal(-0.02, 0)}
+                    aria-label={t('designer_move_focal_point_left', 'Move focal point left')}
+                  >
+                    ←
+                  </button>
+                  <button
+                    className="px-2 py-1 bg-newBgColor hover:bg-studioBorder/10 rounded-sm border border-studioBorder text-xs"
+                    onClick={() => nudgeFocal(0, 0.02)}
+                    aria-label={t('designer_move_focal_point_down', 'Move focal point down')}
+                  >
+                    ↓
+                  </button>
+                  <button
+                    className="px-2 py-1 bg-newBgColor hover:bg-studioBorder/10 rounded-sm border border-studioBorder text-xs"
+                    onClick={() => nudgeFocal(0.02, 0)}
+                    aria-label={t('designer_move_focal_point_right', 'Move focal point right')}
+                  >
+                    →
+                  </button>
+                </div>
+                <div className="grid grid-cols-2 gap-2">
+                  <Stepper
+                    label={t('designer_focal_x', 'Focal X')}
+                    min={0}
+                    max={100}
+                    step={1}
+                    value={Math.round(focal.x * 100)}
+                    onChange={(n) =>
+                      patchBg({ focalPoint: { x: n / 100, y: focal.y } })
+                    }
+                  />
+                  <Stepper
+                    label={t('designer_focal_y', 'Focal Y')}
+                    min={0}
+                    max={100}
+                    step={1}
+                    value={Math.round(focal.y * 100)}
+                    onChange={(n) =>
+                      patchBg({ focalPoint: { x: focal.x, y: n / 100 } })
+                    }
+                  />
+                </div>
+                <div className="grid grid-cols-2 gap-2">
+                  <button
+                    type="button"
+                    onClick={imagePicker.open}
+                    className="px-3 py-2 rounded-lg text-[12px] font-medium border border-designerAccent text-btnPrimaryAccent hover:bg-designerAccent/10"
+                  >
+                    {t('designer_replace_image', 'Replace image…')}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setColor(bgColor)}
+                    className="px-3 py-2 rounded-lg text-[12px] font-medium border border-studioBorder bg-newBgColor text-textColor/70 hover:text-textColor hover:bg-studioBorder/10"
+                  >
+                    {t('designer_remove_background_image', 'Remove')}
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <button
+                type="button"
+                onClick={imagePicker.open}
+                className="w-full px-3 py-2 rounded-lg text-[12px] font-medium bg-designerAccent text-white hover:bg-designerAccent/80"
+              >
+                {t('designer_choose_from_media_library', 'Choose from media library…')}
+              </button>
+            ))}
           {imagePicker.element}
         </div>
       )}

@@ -13,7 +13,10 @@ import {
   resolveSelectableId,
   resolveTextEditTarget,
   symbolTextCommit,
+  refitSymbolToText,
 } from './symbol-edit';
+import { measureForElement } from './measure-text';
+import type { SymbolDefinition } from '@postmill-ai/nestjs-libraries/media/designer-doc/symbols';
 import { SafeZoneOverlay } from './safe-zones';
 import { Rulers } from './rulers';
 import { ContextMenu } from './context-menu';
@@ -1936,10 +1939,30 @@ export const DesignerCanvas: FC<CanvasProps> = ({
                   (c: DesignerElement) => c.id === target.instanceId
                 );
                 if (instance) {
-                  updateElement(
-                    target.instanceId,
-                    symbolTextCommit(instance, target.childId, updates.text ?? '')
-                  );
+                  const definition = instance.symbolId
+                    ? doc.symbols?.find(
+                        (d: SymbolDefinition) => d.id === instance.symbolId
+                      )
+                    : undefined;
+                  updateElement(target.instanceId, {
+                    ...symbolTextCommit(
+                      instance,
+                      target.childId,
+                      updates.text ?? '',
+                      updates.fill
+                    ),
+                    // Longer copy refits the pill instead of shrinking the
+                    // font — see refitSymbolToText.
+                    ...(definition
+                      ? refitSymbolToText(
+                          instance,
+                          definition,
+                          target.childId,
+                          updates.text ?? '',
+                          measureForElement(target.element)
+                        )
+                      : null),
+                  });
                 }
                 return;
               }

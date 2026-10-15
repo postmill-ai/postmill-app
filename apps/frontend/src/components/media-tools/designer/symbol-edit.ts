@@ -15,6 +15,7 @@ import {
   expandSymbolInstance,
   type SymbolDefinition,
 } from '@postmill-ai/nestjs-libraries/media/designer-doc/symbols';
+import { applyTextTransform } from '@postmill-ai/nestjs-libraries/media/designer-doc/fit-text';
 
 export interface TextEditTarget {
   /** The element the overlay should edit — expanded geometry for a symbol child. */
@@ -97,14 +98,88 @@ export const resolveTextEditTarget = (
   };
 };
 
-/** The element patch that commits an edited symbol-child text to the instance. */
+/**
+ * The element patch that commits an edited symbol-child text to the instance.
+ * `fill` rides along only when the editor actually changed it — writing a fill
+ * the user did not touch would freeze it against future definition edits.
+ */
 export const symbolTextCommit = (
   instance: DesignerElement,
   childId: string,
-  text: string
+  text: string,
+  fill?: string
 ): Partial<DesignerElement> => ({
   symbolOverrides: {
     ...(instance.symbolOverrides || {}),
-    [childId]: { ...(instance.symbolOverrides?.[childId] || {}), text },
+    [childId]: {
+      ...(instance.symbolOverrides?.[childId] || {}),
+      text,
+      ...(fill !== undefined ? { fill } : {}),
+    },
   },
 });
+
+/**
+ * The element patch that commits a symbol child's fill to the instance. Kept
+ * separate from `symbolTextCommit` so a colour change does not also pin the
+ * child's CURRENT text as an override (which would orphan it from later
+ * definition edits).
+ */
+export const symbolFillCommit = (
+  instance: DesignerElement,
+  childId: string,
+  fill: string
+): Partial<DesignerElement> => ({
+  symbolOverrides: {
+    ...(instance.symbolOverrides || {}),
+    [childId]: { ...(instance.symbolOverrides?.[childId] || {}), fill },
+  },
+});
+
+/** Breathing room either side of the measured glyphs, in canvas px. */
+const LABEL_REFIT_SLACK = 8;
+
+/**
+ * The geometry patch that grows an instance when a longer committed label
+ * would overflow its pill.
+ *
+ * The CTA lockup fits text to the label box by SHRINKING the font; retyping
+ * "Shop now" as "Get 20% off today" painted the new copy at half size inside
+ * the same button. Refitting widens the instance instead — expansion scales
+ * the plate and the label box proportionally from the instance size, so the
+ * pill grows around the text at its authored font size. Grow-only, and grown
+ * about the centre: shrinking on a shorter edit (or growing one-sided) would
+ * walk the button away from where the user placed it.
+ *
+ * `measure` is the browser measurement primitive (`measureForElement`); null
+ * when no canvas is available (jsdom, locked-down environments), in which case
+ * the instance keeps its size.
+ */
+export const refitSymbolToText = (
+  instance: DesignerElement,
+  definition: SymbolDefinition,
+  childId: string,
+  text: string,
+  measure: ((line: string, fontSize: number) => number) | undefined
+): Partial<DesignerElement> | null => {
+  if (!measure || !definition.width) return null;
+  const child = definition.children.find((c) => c.id === childId);
+  if (!child || child.type !== 'text' || !(child.width > 0)) return null;
+
+  // The same scales expansion applies, so the measurement happens at the font
+  // size the label will actually paint at.
+  const scaleX = instance.width / definition.width;
+  const scaleY = definition.height ? instance.height / definition.height : 1;
+  const fontSize = (child.fontSize || 16) * Math.min(scaleX, scaleY);
+  const measured =
+    measure(applyTextTransform(text, child.textTransform), fontSize) +
+    (child.letterSpacing || 0) * text.length;
+  const required = measured + LABEL_REFIT_SLACK * 2;
+
+  // The expanded label box is child.width * scaleX; the copy already fits.
+  if (required <= child.width * scaleX) return null;
+
+  const width = Math.ceil((definition.width * required) / child.width);
+  const x = Math.round(instance.x - (width - instance.width) / 2);
+  return { x, width };
+};

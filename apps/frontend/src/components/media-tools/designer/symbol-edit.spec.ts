@@ -3,6 +3,8 @@ import {
   resolveSelectableId,
   resolveTextEditTarget,
   symbolTextCommit,
+  symbolFillCommit,
+  refitSymbolToText,
 } from './symbol-edit';
 import type { DesignerElement, DesignerOutput } from './designer.store';
 import type { SymbolDefinition } from '@postmill-ai/nestjs-libraries/media/designer-doc/symbols';
@@ -138,5 +140,81 @@ describe('symbolTextCommit', () => {
         label: { text: 'New text' },
       },
     });
+  });
+
+  it('carries fill when the editor changed it', () => {
+    expect(symbolTextCommit(instance, 'label', 'New text', '#00ff00')).toEqual({
+      symbolOverrides: { label: { text: 'New text', fill: '#00ff00' } },
+    });
+  });
+
+  it('leaves an existing fill override alone when only the text changed', () => {
+    const inst = {
+      ...instance,
+      symbolOverrides: { label: { fill: '#123456' } },
+    } as unknown as DesignerElement;
+    expect(symbolTextCommit(inst, 'label', 'New text')).toEqual({
+      symbolOverrides: { label: { fill: '#123456', text: 'New text' } },
+    });
+  });
+});
+
+describe('symbolFillCommit', () => {
+  it('writes the label fill without pinning the current text as an override', () => {
+    expect(symbolFillCommit(instance, 'label', '#ff0000')).toEqual({
+      symbolOverrides: { label: { fill: '#ff0000' } },
+    });
+  });
+
+  it('preserves other overrides on the instance and the child', () => {
+    const inst = {
+      ...instance,
+      symbolOverrides: { plate: { fill: '#0000ff' }, label: { text: 'Old' } },
+    } as unknown as DesignerElement;
+    expect(symbolFillCommit(inst, 'label', '#ff0000')).toEqual({
+      symbolOverrides: {
+        plate: { fill: '#0000ff' },
+        label: { text: 'Old', fill: '#ff0000' },
+      },
+    });
+  });
+});
+
+describe('refitSymbolToText', () => {
+  // 10px per glyph at the label's 20px — close enough to a real measure.
+  const measure = (line: string, fontSize: number) => line.length * (fontSize / 2);
+
+  it('returns null when the committed copy already fits the pill', () => {
+    expect(
+      refitSymbolToText(instance, definition, 'label', 'Shop now', measure)
+    ).toBeNull();
+  });
+
+  it('grows the instance to fit a longer label, centred on the old box', () => {
+    const copy = 'Get 20% off today only';
+    const patch = refitSymbolToText(instance, definition, 'label', copy, measure);
+    expect(patch).not.toBeNull();
+    expect(patch!.width).toBeGreaterThan(instance.width);
+    // Grown about the centre, not drifted right.
+    expect(patch!.x).toBe(
+      Math.round(instance.x - (patch!.width! - instance.width) / 2)
+    );
+    // The new box actually fits: the expanded label box (child.width × the new
+    // scale) covers the measured copy plus slack, at the authored font size.
+    const expandedLabelWidth = 180 * (patch!.width! / 200);
+    expect(expandedLabelWidth).toBeGreaterThanOrEqual(measure(copy, 20) + 16);
+  });
+
+  it('never shrinks the instance when the copy gets shorter', () => {
+    const wide = { ...instance, width: 400 } as unknown as DesignerElement;
+    expect(
+      refitSymbolToText(wide, definition, 'label', 'Sale', measure)
+    ).toBeNull();
+  });
+
+  it('returns null without a measurement primitive', () => {
+    expect(
+      refitSymbolToText(instance, definition, 'label', 'Get 20% off today only', undefined)
+    ).toBeNull();
   });
 });
