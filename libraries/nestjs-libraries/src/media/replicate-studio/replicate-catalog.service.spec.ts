@@ -1,4 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { NotFoundException } from '@nestjs/common';
 
 const mockSafeFetch = vi.fn();
 vi.mock('@postmill-ai/nestjs-libraries/dtos/webhooks/safe.fetch', () => ({
@@ -22,7 +23,6 @@ describe('ReplicateCatalogService', () => {
   let service: ReplicateCatalogService;
   let mockOrgMediaProviderSettings: any;
   let mockRedis: any;
-  let mockEncryption: any;
 
   beforeEach(() => {
     vi.clearAllMocks();
@@ -30,7 +30,9 @@ describe('ReplicateCatalogService', () => {
 
     mockOrgMediaProviderSettings = {
       getConfigForProvider: vi.fn().mockResolvedValue({
-        credentials: { apiKey: 'v2:test-key' },
+        // Mirrors the real OrgMediaProviderSettingsService contract:
+        // credentials arrive already decrypted (plaintext fields).
+        credentials: { apiKey: 'r8_test-key' },
       }),
     };
 
@@ -39,14 +41,9 @@ describe('ReplicateCatalogService', () => {
       set: vi.fn().mockResolvedValue(undefined),
     };
 
-    mockEncryption = {
-      decrypt: vi.fn().mockReturnValue('decrypted-key'),
-    };
-
     service = new ReplicateCatalogService(
       mockOrgMediaProviderSettings,
       mockRedis,
-      mockEncryption,
       new ReplicateCostService(),
     );
   });
@@ -160,9 +157,18 @@ describe('ReplicateCatalogService', () => {
   });
 
   describe('getReplicateKey', () => {
-    it('decrypts the stored v2: key unconditionally (no plaintext pass-through)', async () => {
-      await expect(service.getReplicateKey('org1')).resolves.toBe('decrypted-key');
-      expect(mockEncryption.decrypt).toHaveBeenCalledWith('v2:test-key');
+    it('returns the key as-is — getConfigForProvider already decrypted it', async () => {
+      await expect(service.getReplicateKey('org1')).resolves.toBe('r8_test-key');
+    });
+
+    it('throws NotFound when the provider row is missing', async () => {
+      mockOrgMediaProviderSettings.getConfigForProvider.mockResolvedValueOnce(null);
+      await expect(service.getReplicateKey('org1')).rejects.toThrow(NotFoundException);
+    });
+
+    it('throws NotFound when no key field is present', async () => {
+      mockOrgMediaProviderSettings.getConfigForProvider.mockResolvedValueOnce({ credentials: {} });
+      await expect(service.getReplicateKey('org1')).rejects.toThrow(NotFoundException);
     });
   });
 });

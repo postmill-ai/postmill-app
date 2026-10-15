@@ -1,7 +1,6 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { safeFetch } from '@postmill-ai/nestjs-libraries/dtos/webhooks/safe.fetch';
 import { RedisService } from '@postmill-ai/nestjs-libraries/redis/redis.service';
-import { EncryptionService } from '@postmill-ai/nestjs-libraries/encryption/encryption.service';
 import { OrgMediaProviderSettingsService } from '@postmill-ai/nestjs-libraries/database/prisma/media-providers/org-media-provider-settings.service';
 import { CATEGORIES, MODEL_ALLOWLIST, isWarm, CategoryDefinition } from './replicate-catalog.allowlist';
 import { pricingCategory, hasPrice, ReplicateCostService } from './replicate-cost';
@@ -52,7 +51,6 @@ export class ReplicateCatalogService {
   constructor(
     private readonly _orgMediaProviderSettings: OrgMediaProviderSettingsService,
     private readonly _redis: RedisService,
-    private readonly _encryption: EncryptionService,
     private readonly _cost: ReplicateCostService,
   ) {}
 
@@ -70,10 +68,11 @@ export class ReplicateCatalogService {
     if (!apiKey) {
       throw new NotFoundException('Replicate API key is not configured');
     }
-    // Credentials are always v2:-encrypted at rest (the "legacy secret
-    // re-encryption" backfill step rewrites older rows at boot) — decrypt
-    // unconditionally; a non-v2: value throws from EncryptionService.decrypt.
-    return this._encryption.decrypt(apiKey);
+    // getConfigForProvider already decrypted the credentials blob — the key
+    // arrives plaintext. Do NOT decrypt again: EncryptionService.decrypt is
+    // GCM-only and throws on non-v2: values, which broke this path (and with
+    // it the whole Replicate studio) when plaintext pass-through was removed.
+    return apiKey;
   }
 
   private async _fetchModel(owner: string, name: string, apiKey: string): Promise<ReplicateModelApi> {
