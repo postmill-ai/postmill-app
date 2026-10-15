@@ -26,6 +26,8 @@ export const STYLE_ORDER: DesignerLayerStyle['type'][] = [
   'inner-glow',
   'inner-shadow',
   'bevel-emboss',
+  // Grain goes on last, over the finished layer — but under the outline.
+  'noise',
   'stroke',
 ];
 

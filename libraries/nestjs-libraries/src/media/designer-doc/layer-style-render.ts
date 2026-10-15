@@ -2,9 +2,12 @@ import type {
   DesignerElement,
   DesignerGradient,
   DesignerLayerStyle,
+  DesignerPattern,
 } from './designer-doc.schema';
 import { styleBlur, styleOffset } from './layer-styles';
 import { canvasCompositeFor, isNativeBlend } from './pixel-ops';
+import { canvasColor } from './canvas-color';
+import { drawPatternTile, tileSizeFor } from './pattern-tiles';
 
 /**
  * How a layer style is painted, shared by the Konva canvas and the server
@@ -180,7 +183,11 @@ export const buildStyleGradient = (
     grad = ctx.createLinearGradient(halfW - dx, halfH - dy, halfW + dx, halfH + dy);
   }
   for (const stop of g.stops ?? []) {
-    grad.addColorStop(Math.min(1, Math.max(0, stop.offset)), stop.color);
+    grad.addColorStop(
+      Math.min(1, Math.max(0, stop.offset)),
+      // A stop may carry alpha as 8-digit hex; node-canvas wants rgba().
+      canvasColor(stop.color) as string
+    );
   }
   return grad;
 };
@@ -202,7 +209,7 @@ export const drawUnderStyle = (
   // Tint the silhouette: draw it, then flood the colour through source-in.
   sctx.drawImage(layer, 0, 0);
   sctx.globalCompositeOperation = 'source-in';
-  sctx.fillStyle = style.color || '#000000';
+  sctx.fillStyle = canvasColor(style.color || '#000000');
   sctx.fillRect(0, 0, w, h);
 
   // Blurred in the buffer's own device pixels, so the softness is the same
@@ -243,9 +250,9 @@ export const drawOverStyle = (
       bctx.fillStyle = buildStyleGradient(bctx, style.gradient, el.width, el.height);
     } else if (style.type === 'pattern-overlay' && style.pattern) {
       const tile = deps.patternTile(style);
-      bctx.fillStyle = tile ? bctx.createPattern(tile, 'repeat') : style.color || '#000000';
+      bctx.fillStyle = tile ? bctx.createPattern(tile, 'repeat') : canvasColor(style.color || '#000000');
     } else {
-      bctx.fillStyle = style.color || '#000000';
+      bctx.fillStyle = canvasColor(style.color || '#000000');
     }
     // Anchored to the element's own origin so a gradient or pattern is placed
     // relative to the layer, while still flooding the whole buffer.
@@ -260,7 +267,7 @@ export const drawOverStyle = (
     // layer — the same destination-in trick the text mask uses.
     const inverse = deps.createCanvas(w, h);
     const ictx: any = inverse.getContext('2d');
-    ictx.fillStyle = style.color || '#000000';
+    ictx.fillStyle = canvasColor(style.color || '#000000');
     ictx.fillRect(0, 0, w, h);
     ictx.globalCompositeOperation = 'destination-out';
     ictx.drawImage(layer, 0, 0);
@@ -277,7 +284,7 @@ export const drawOverStyle = (
     // Approximate an outline by stamping the silhouette around a ring, then
     // removing the interior — no path data needed, so it works for images too.
     const size = Math.max(1, style.size ?? 1) * ratio;
-    bctx.fillStyle = style.color || '#000000';
+    bctx.fillStyle = canvasColor(style.color || '#000000');
     for (let a = 0; a < Math.PI * 2; a += Math.PI / 8) {
       bctx.drawImage(layer, Math.cos(a) * size, Math.sin(a) * size);
     }
@@ -295,10 +302,29 @@ export const drawOverStyle = (
     bctx.globalAlpha = 0.6;
     bctx.drawImage(layer, -offset.x * ratio, -offset.y * ratio);
     bctx.globalCompositeOperation = 'source-in';
-    bctx.fillStyle = style.highlightColor || '#ffffff';
+    bctx.fillStyle = canvasColor(style.highlightColor || '#ffffff');
     bctx.fillRect(0, 0, w, h);
     bctx.globalCompositeOperation = 'destination-in';
     bctx.drawImage(layer, 0, 0);
+  } else if (style.type === 'noise') {
+    // Film grain over the layer: the same deterministic generator the 'noise'
+    // pattern preset uses, but on a TRANSPARENT tile — the preset's white
+    // ground would flood the silhouette solid at source-in, where the grain
+    // should be speckles over the layer's own pixels.
+    bctx.drawImage(layer, 0, 0);
+    bctx.globalCompositeOperation = 'source-in';
+    bctx.scale(ratio, ratio);
+    const pattern: DesignerPattern = {
+      preset: 'noise',
+      scale: style.scale ?? 1,
+      color: canvasColor(style.color || '#000000'),
+      background: 'transparent',
+    };
+    const tileEdge = tileSizeFor(pattern);
+    const tile = deps.createCanvas(tileEdge, tileEdge);
+    drawPatternTile(tile.getContext('2d') as never, pattern, tileEdge);
+    bctx.fillStyle = bctx.createPattern(tile, 'repeat');
+    bctx.fillRect(0, 0, w / ratio, h / ratio);
   }
 
   ctx.save();

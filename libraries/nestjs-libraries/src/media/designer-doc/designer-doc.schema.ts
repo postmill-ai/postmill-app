@@ -334,7 +334,8 @@ export interface DesignerLayerStyle {
   type:
     | 'drop-shadow' | 'inner-shadow' | 'outer-glow' | 'inner-glow'
     | 'stroke' | 'bevel-emboss' | 'satin'
-    | 'color-overlay' | 'gradient-overlay' | 'pattern-overlay';
+    | 'color-overlay' | 'gradient-overlay' | 'pattern-overlay'
+    | 'noise';
   enabled?: boolean;
   color?: string;
   opacity?: number;
@@ -345,6 +346,8 @@ export interface DesignerLayerStyle {
   distance?: number;
   spread?: number;
   size?: number;
+  /** Grain size for the `noise` style — the pattern tile's scale. */
+  scale?: number;
   /** Stroke placement. */
   position?: 'outside' | 'inside' | 'center';
   /** Bevel shape and depth. */
@@ -1027,6 +1030,7 @@ const layerStyleShape = (gradient: z.ZodTypeAny) =>
       'drop-shadow', 'inner-shadow', 'outer-glow', 'inner-glow',
       'stroke', 'bevel-emboss', 'satin',
       'color-overlay', 'gradient-overlay', 'pattern-overlay',
+      'noise',
     ]),
     enabled: z.boolean().optional(),
     color: ColorSchema.optional(),
@@ -1037,6 +1041,7 @@ const layerStyleShape = (gradient: z.ZodTypeAny) =>
     distance: z.number().min(0).max(MAX_DIMENSION).optional(),
     spread: z.number().min(0).max(100).optional(),
     size: z.number().min(0).max(MAX_DIMENSION).optional(),
+    scale: z.number().min(0.01).max(100).optional(),
     position: z.enum(['outside', 'inside', 'center']).optional(),
     style: z.enum(['outer-bevel', 'inner-bevel', 'emboss', 'pillow-emboss']).optional(),
     depth: z.number().min(0).max(1000).optional(),

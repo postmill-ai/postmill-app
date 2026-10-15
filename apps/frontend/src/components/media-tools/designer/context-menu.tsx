@@ -2,6 +2,12 @@
 import React, { useEffect, useRef } from 'react';
 import { useT } from '@postmill-ai/react/translation/get.transation.service.client';
 import { defaultTextBox } from './measure-text';
+import {
+  combinableElements,
+  combineElements,
+  PATHFINDER_OPS,
+} from './layer-actions';
+import type { DesignerElement } from './designer.store';
 
 interface ContextMenuProps {
   x: number;
@@ -13,6 +19,14 @@ interface ContextMenuProps {
   onAddImage?: () => void;
 }
 
+interface MenuItem {
+  label: string;
+  action: (() => void) | null;
+  /** A hover flyout — the canvas context menu's answer to the menu bar's
+      submenuPath (used by Pathfinder). */
+  children?: { label: string; action: () => void }[];
+}
+
 export const ContextMenu: React.FC<ContextMenuProps> = ({ x, y, targetType, elementId, store, onClose, onAddImage }) => {
   const t = useT();
   const menuRef = useRef<HTMLDivElement>(null);
@@ -22,6 +36,14 @@ export const ContextMenu: React.FC<ContextMenuProps> = ({ x, y, targetType, elem
   const el = elementId
     ? imageOut?.children.find((c: { id: string }) => c.id === elementId) ?? null
     : null;
+
+  // Selection order matters to Pathfinder (Minus Front consumes the top one),
+  // so the ops read the selected elements in selectedIds order, like the
+  // Layer menu does.
+  const selectedEls = ((s.selectedIds || [])
+    .map((id: string) => imageOut?.children.find((c: { id: string }) => c.id === id))
+    .filter(Boolean) || []) as DesignerElement[];
+  const pathfinderReady = combinableElements(selectedEls).length === 2;
 
   useEffect(() => {
     const handler = (e: MouseEvent) => {
@@ -66,7 +88,7 @@ export const ContextMenu: React.FC<ContextMenuProps> = ({ x, y, targetType, elem
     return () => el.removeEventListener('keydown', handler);
   }, []);
 
-  const items =
+  const items: MenuItem[] =
     targetType === 'element' && el
       ? [
           { label: t('designer_action_cut_cut', 'Cut'), action: () => { s.setSelectedIds([el.id]); s.cutSelection(); } },
@@ -86,16 +108,27 @@ export const ContextMenu: React.FC<ContextMenuProps> = ({ x, y, targetType, elem
           { label: '-', action: null },
           { label: t('group', 'Group'), action: () => { s.setSelectedIds([el.id]); setTimeout(() => s.groupSelection(), 0); } },
           { label: t('designer_action_ungroup_ungroup', 'Ungroup'), action: () => { s.setSelectedIds([el.id]); setTimeout(() => s.ungroupSelection(), 0); } },
+          // The same six ops the Layer ▸ Pathfinder submenu runs, surfaced
+          // where a two-shape selection actually right-clicks.
+          ...(pathfinderReady
+            ? [{
+                label: t('designer_context_pathfinder', 'Pathfinder'),
+                action: null,
+                children: PATHFINDER_OPS.map((p) => ({
+                  label: t(`designer_pathfinder_${p.op}`, p.label),
+                  action: () => combineElements(store, selectedEls, p.op),
+                })),
+              }]
+            : []),
           { label: '-', action: null },
           ...(el.originId
             ? [{ label: t('designer_context_unlink', 'Unlink'), action: () => s.unlinkElement(el.id) }]
             : el.type !== 'icon'
               ? [{
                   label: t('designer_context_apply_all_formats', 'Apply to All Formats'),
-                  action: () => {
-                    const newOriginId = `relink-${Date.now()}`;
-                    s.relinkElement(el.id, newOriginId);
-                  },
+                  // Same deterministic group id the Layers footer uses — a
+                  // wall-clock id here trips the render-purity lint.
+                  action: () => s.relinkElement(el.id, `relink-${el.id}`),
                 }]
               : []),
           ...(el.type === 'image' ? [{ label: t('designer_context_set_as_background', 'Set as Background'), action: () => { s.setOutputBackground({ type: 'image', src: el.src! }); } }] : []),
@@ -119,6 +152,34 @@ export const ContextMenu: React.FC<ContextMenuProps> = ({ x, y, targetType, elem
       {items.map((item, i) => {
         if (item.label === '-')
           return <div key={`divider-${i}`} className="border-t border-[#2a2a4a] my-1" />;
+        if (item.children) {
+          return (
+            <div key={item.label} className="relative group">
+              <button
+                type="button"
+                aria-haspopup="menu"
+                className="w-full text-left px-3 py-1.5 text-sm text-gray-300 hover:bg-white/10 hover:text-white focus-visible:bg-white/10 focus-visible:text-white focus-visible:outline-hidden flex items-center justify-between gap-3"
+              >
+                {item.label}
+                <span aria-hidden="true">▸</span>
+              </button>
+              <div className="absolute left-full top-[-4px] hidden group-hover:block group-focus-within:block bg-[#1a1a2e] border border-[#2a2a4a] rounded-lg py-1 min-w-[160px] shadow-xl">
+                {item.children.map((child) => (
+                  <button
+                    key={child.label}
+                    className="w-full text-left px-3 py-1.5 text-sm text-gray-300 hover:bg-white/10 hover:text-white focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-designerAccent focus-visible:ring-inset"
+                    onClick={() => {
+                      child.action();
+                      onClose();
+                    }}
+                  >
+                    {child.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+          );
+        }
         return (
           <button
             key={item.label}

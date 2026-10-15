@@ -401,34 +401,40 @@ export class FileRepository {
 
     const query = { where };
 
-    const pages = Math.ceil((await this._file.model.file.count(query)) / pageSize);
-    const results = await this._file.model.file.findMany({
-      where,
-      orderBy,
-      select: {
-        id: true,
-        name: true,
-        originalName: true,
-        path: true,
-        thumbnail: true,
-        alt: true,
-        thumbnailTimestamp: true,
-        fileSize: true,
-        type: true,
-        tags: true,
-        description: true,
-        folderId: true,
-        createdAt: true,
-        folder: {
-          select: {
-            id: true,
-            name: true,
+    // Count and page are independent reads over the same `where` — awaiting
+    // them one after the other doubled the latency of every folder click.
+    const [total, results] = await Promise.all([
+      this._file.model.file.count(query),
+      this._file.model.file.findMany({
+        where,
+        orderBy,
+        select: {
+          id: true,
+          name: true,
+          originalName: true,
+          path: true,
+          thumbnail: true,
+          alt: true,
+          thumbnailTimestamp: true,
+          fileSize: true,
+          type: true,
+          tags: true,
+          description: true,
+          folderId: true,
+          createdAt: true,
+          folder: {
+            select: {
+              id: true,
+              name: true,
+            },
           },
         },
-      },
-      skip: pageNum * pageSize,
-      take: pageSize,
-    });
+        skip: pageNum * pageSize,
+        take: pageSize,
+      }),
+    ]);
+
+    const pages = Math.ceil(total / pageSize);
 
     return { pages, results };
   }

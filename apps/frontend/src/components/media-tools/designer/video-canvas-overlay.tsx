@@ -12,6 +12,7 @@ import {
 import type Konva from 'konva';
 import type { VideoClip, VideoOutput } from './designer.store';
 import { composeClipsAtPlayhead, sourceTimeForPlayhead } from './video-preview';
+import { canvasColor } from '@postmill-ai/nestjs-libraries/media/designer-doc/canvas-color';
 import { clipGeometryUpdate, type ClipBox } from './clip-geometry';
 import { getBuffer } from './raster-layers';
 import { captionWordStates } from '@postmill-ai/nestjs-libraries/media/designer-doc/caption-styles';
@@ -550,8 +551,8 @@ export const VideoCanvasOverlay: FC<VideoCanvasOverlayProps> = ({
 
         if (trackType === 'shape') {
           const common = {
-            fill: clip.fill || '#2B5CD3',
-            stroke: clip.stroke,
+            fill: canvasColor(clip.fill || '#2B5CD3'),
+            stroke: canvasColor(clip.stroke),
             strokeWidth: clip.strokeWidth || (clip.stroke ? 1 : 0),
           };
           const points = pointsForShape(
@@ -585,7 +586,7 @@ export const VideoCanvasOverlay: FC<VideoCanvasOverlayProps> = ({
               ) : clip.shape === 'line' ? (
                 <KonvaLine
                   points={[0, props.height / 2, props.width, props.height / 2]}
-                  stroke={clip.stroke || clip.fill || '#2B5CD3'}
+                  stroke={canvasColor(clip.stroke || clip.fill || '#2B5CD3')}
                   strokeWidth={clip.strokeWidth || 2}
                 />
               ) : (
@@ -615,7 +616,7 @@ export const VideoCanvasOverlay: FC<VideoCanvasOverlayProps> = ({
               fontSize={clip.fontSize || 16}
               // Numeric weight straight through, the same as an element's text.
               fontStyle={String(clip.fontWeight ?? 400)}
-              fill={clip.fill || '#000000'}
+              fill={canvasColor(clip.fill || '#000000')}
               rotation={props.rotation}
               opacity={props.opacity}
             />

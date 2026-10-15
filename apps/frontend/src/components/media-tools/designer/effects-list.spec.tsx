@@ -135,7 +135,7 @@ describe('LAYER_STYLE_DESCRIPTORS', () => {
   it('covers every style type exactly once', () => {
     const types = LAYER_STYLE_DESCRIPTORS.map((d) => d.type);
     expect(new Set(types).size).toBe(types.length);
-    expect(types).toHaveLength(10);
+    expect(types).toHaveLength(11);
   });
 
   it('keeps every slider inside what the schema accepts', () => {

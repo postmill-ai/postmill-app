@@ -1581,6 +1581,21 @@ export const DesignerCanvas: FC<CanvasProps> = ({
               editingTextId={editingTextId}
             />
           )}
+          {/* Artboard edge. Overflow is unclipped, so paint past the edge
+              covers the pasteboard and the design boundary disappears — this
+              hairline stays on top of both. A separate node, not a stroke on
+              the bg Rect, which carries the page-chrome shadow. Editor chrome
+              like the grid below: exports render from the document and never
+              see it. */}
+          <Rect
+            x={0}
+            y={0}
+            width={output.width}
+            height={output.height}
+            stroke="rgba(120,130,150,0.55)"
+            strokeWidth={1 / zoom}
+            listening={false}
+          />
           {/* Grid overlay. Editor chrome: drawn on the stage but never in an
               export, which renders from the document, not from this component. */}
           {showGrid &&

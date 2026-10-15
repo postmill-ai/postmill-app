@@ -27,6 +27,46 @@ type StoreApi = ReturnType<typeof import('./designer.store').createDesignerStore
 /** Copy buffer for Copy/Paste Layer Style. Editor state, not document state. */
 let styleClipboard: DesignerLayerStyle[] | null = null;
 
+/** Pathfinder needs exactly two combinable outlines, in selection order. */
+export const combinableElements = (els: DesignerElement[]): DesignerElement[] =>
+  els.filter(
+    (e) => (e.type === 'shape' || e.type === 'path' || e.type === 'icon') && !e.locked
+  );
+
+export const PATHFINDER_OPS: { op: BooleanOp; label: string }[] = [
+  { op: 'unite', label: 'Unite' },
+  { op: 'subtract', label: 'Minus Front' },
+  { op: 'intersect', label: 'Intersect' },
+  { op: 'exclude', label: 'Exclude' },
+  { op: 'divide', label: 'Divide' },
+  { op: 'outline', label: 'Outline' },
+];
+
+/**
+ * Combine the two combinable elements in `els` (selection order). The subject
+ * becomes the result and the clip is consumed — Illustrator's own behaviour,
+ * and the reason selection ORDER matters for Minus Front. Shared by the Layer
+ * menu and the canvas context menu so the two can never drift.
+ */
+export const combineElements = (
+  store: StoreApi,
+  els: DesignerElement[],
+  op: BooleanOp
+): void => {
+  const [subject, clip] = combinableElements(els);
+  if (!subject || !clip) return;
+  const result = pathfinder(subject, clip, op);
+  if (!result) return;
+  const st = store.getState();
+  st.updateElement(subject.id, result.element);
+  for (const extra of result.extra) {
+    st.addElement({ ...(extra as DesignerElement), id: '' });
+  }
+  st.removeElement(clip.id);
+  st.setSelectedIds([subject.id]);
+  st.pushHistory();
+};
+
 const STYLES: { type: DesignerLayerStyle['type']; label: string }[] = [
   { type: 'bevel-emboss', label: 'Bevel and Emboss' },
   { type: 'stroke', label: 'Stroke' },
@@ -36,6 +76,7 @@ const STYLES: { type: DesignerLayerStyle['type']; label: string }[] = [
   { type: 'color-overlay', label: 'Color Overlay' },
   { type: 'gradient-overlay', label: 'Gradient Overlay' },
   { type: 'pattern-overlay', label: 'Pattern Overlay' },
+  { type: 'noise', label: 'Noise' },
   { type: 'outer-glow', label: 'Outer Glow' },
   { type: 'drop-shadow', label: 'Drop Shadow' },
 ];
@@ -64,6 +105,9 @@ export const defaultStyle = (type: DesignerLayerStyle['type']): DesignerLayerSty
       return { ...base, opacity: 1, angle: 90, gradient: { type: 'linear', stops: [{ offset: 0, color: '#2B5CD3' }, { offset: 1, color: '#ffffff' }] } };
     case 'pattern-overlay':
       return { ...base, opacity: 1, pattern: { preset: 'dots', scale: 1, color: '#000000', background: '#ffffff' } };
+    case 'noise':
+      // Subtle by default: grain should read as texture, not as a veil.
+      return { ...base, color: '#000000', opacity: 0.15, scale: 1 };
     default:
       return base;
   }
@@ -86,30 +130,7 @@ export const layerActions = (
     st.pushHistory();
   };
 
-
-    /** Pathfinder needs exactly two combinable outlines, in selection order. */
-    const combinable = (): DesignerElement[] =>
-      live().selectedEls.filter(
-        (e) => (e.type === 'shape' || e.type === 'path' || e.type === 'icon') && !e.locked
-      );
-    const canCombine = () => combinable().length === 2;
-
-    const combine = (op: BooleanOp) => {
-      const [subject, clip] = combinable();
-      if (!subject || !clip) return;
-      const result = pathfinder(subject, clip, op);
-      if (!result) return;
-      const st = store.getState();
-      // The subject becomes the result and the clip is consumed — Illustrator's
-      // own behaviour, and the reason selection ORDER matters for Minus Front.
-      st.updateElement(subject.id, result.element);
-      for (const extra of result.extra) {
-        st.addElement({ ...(extra as DesignerElement), id: '' });
-      }
-      st.removeElement(clip.id);
-      st.setSelectedIds([subject.id]);
-      st.pushHistory();
-    };
+  const canCombine = () => combinableElements(live().selectedEls).length === 2;
 
   return [
     // ── New ▸ ───────────────────────────────────────────────────────────────
@@ -202,14 +223,18 @@ export const layerActions = (
     { id: 'ungroup', label: 'Ungroup Layers', menu: 'layer', group: 'group', shortcut: '⇧⌘G', keywords: ['ungroup'], enabled: () => live().selectedEls.some((e) => e.type === 'group' || e.parentId), run: () => store.getState().ungroupSelection() },
     { id: 'layer-hide', label: () => { const els = live().selectedEls; return els.length > 0 && els.every((e) => e.hidden) ? 'Show Layers' : 'Hide Layers'; }, menu: 'layer', group: 'visibility', keywords: ['hide', 'show', 'visibility'], enabled: () => live().hasSelection, run: () => { const st = store.getState(); const els = live().selectedEls; const allHidden = els.length > 0 && els.every((e) => e.hidden); st.updateElements(selected(), { hidden: !allHidden }); } },
     { id: 'lock-toggle', label: () => { const els = live().selectedEls; return els.length > 0 && els.every((e) => e.locked) ? 'Unlock Layers' : 'Lock Layers'; }, menu: 'layer', group: 'visibility', keywords: ['lock', 'unlock'], enabled: () => live().hasSelection, run: () => { const st = store.getState(); const els = live().selectedEls; const allLocked = els.length > 0 && els.every((e) => e.locked); st.updateElements(selected(), { locked: !allLocked }); } },
-    { id: 'pathfinder-unite', label: 'Unite', menu: 'layer', submenuPath: ['Pathfinder'], group: 'pathfinder', keywords: ['pathfinder', 'boolean', 'unite'], enabled: () => canCombine(), run: () => combine('unite') },
-    { id: 'pathfinder-subtract', label: 'Minus Front', menu: 'layer', submenuPath: ['Pathfinder'], group: 'pathfinder', keywords: ['pathfinder', 'boolean', 'subtract'], enabled: () => canCombine(), run: () => combine('subtract') },
-    { id: 'pathfinder-intersect', label: 'Intersect', menu: 'layer', submenuPath: ['Pathfinder'], group: 'pathfinder', keywords: ['pathfinder', 'boolean', 'intersect'], enabled: () => canCombine(), run: () => combine('intersect') },
-    { id: 'pathfinder-exclude', label: 'Exclude', menu: 'layer', submenuPath: ['Pathfinder'], group: 'pathfinder', keywords: ['pathfinder', 'boolean', 'exclude'], enabled: () => canCombine(), run: () => combine('exclude') },
-    { id: 'pathfinder-divide', label: 'Divide', menu: 'layer', submenuPath: ['Pathfinder'], group: 'pathfinder', keywords: ['pathfinder', 'boolean', 'divide'], enabled: () => canCombine(), run: () => combine('divide') },
-    { id: 'pathfinder-outline', label: 'Outline', menu: 'layer', submenuPath: ['Pathfinder'], group: 'pathfinder', keywords: ['pathfinder', 'boolean', 'outline'], enabled: () => canCombine(), run: () => combine('outline') },
-    { id: 'layer-offset-path', label: 'Offset Path…', menu: 'layer', submenuPath: ['Path'], group: 'path', keywords: ['offset', 'path', 'outline'], enabled: () => !!firstSelected() && combinable().length === 1, run: () => { const el = firstSelected(); if (!el) return; const patch = offsetElement(el, 8); if (!patch) return; store.getState().updateElement(el.id, patch); store.getState().pushHistory(); } },
-    { id: 'layer-round-corners', label: 'Round Corners', menu: 'layer', submenuPath: ['Path'], group: 'path', keywords: ['round', 'corners', 'live corners'], enabled: () => !!firstSelected() && combinable().length === 1, run: () => { const el = firstSelected(); if (!el) return; const patch = roundElementCorners(el, 12); if (!patch) return; store.getState().updateElement(el.id, patch); store.getState().pushHistory(); } },
+    ...PATHFINDER_OPS.map((p) => ({
+      id: `pathfinder-${p.op}`,
+      label: p.label,
+      menu: 'layer' as const,
+      submenuPath: ['Pathfinder'],
+      group: 'pathfinder',
+      keywords: ['pathfinder', 'boolean', p.op],
+      enabled: () => canCombine(),
+      run: () => combineElements(store, live().selectedEls, p.op),
+    })),
+    { id: 'layer-offset-path', label: 'Offset Path…', menu: 'layer', submenuPath: ['Path'], group: 'path', keywords: ['offset', 'path', 'outline'], enabled: () => !!firstSelected() && combinableElements(live().selectedEls).length === 1, run: () => { const el = firstSelected(); if (!el) return; const patch = offsetElement(el, 8); if (!patch) return; store.getState().updateElement(el.id, patch); store.getState().pushHistory(); } },
+    { id: 'layer-round-corners', label: 'Round Corners', menu: 'layer', submenuPath: ['Path'], group: 'path', keywords: ['round', 'corners', 'live corners'], enabled: () => !!firstSelected() && combinableElements(live().selectedEls).length === 1, run: () => { const el = firstSelected(); if (!el) return; const patch = roundElementCorners(el, 12); if (!patch) return; store.getState().updateElement(el.id, patch); store.getState().pushHistory(); } },
 
     { id: 'layer-clip', label: 'Create Clipping Mask', menu: 'layer', group: 'visibility', shortcut: '⌥⌘G', keywords: ['clip', 'clipping', 'mask'], enabled: () => live().hasSelection, run: () => store.getState().toggleClipped(selected()) },
   ];

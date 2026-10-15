@@ -12,7 +12,7 @@ import { FilePreviewModal } from '@postmill-ai/frontend/components/files/file-pr
 import { BulkToolbar } from '@postmill-ai/frontend/components/files/bulk-toolbar';
 import { useModals } from '@postmill-ai/frontend/components/layout/new-modal';
 import { FileUploader } from '@postmill-ai/frontend/components/files/file-uploader';
-import { LoadingComponent } from '@postmill-ai/frontend/components/layout/loading';
+import Spinner, { LoadingComponent } from '@postmill-ai/frontend/components/layout/loading';
 import { TrashComponent } from '@postmill-ai/frontend/components/files/trash.component';
 import clsx from 'clsx';
 import { PageHeader } from '@postmill-ai/frontend/components/ui/page-header';
@@ -266,9 +266,14 @@ export const FileManager: FC<{
   if (sortOrder) params.set('order', sortOrder);
   params.set('limit', '24');
 
-  const { data, mutate, isLoading } = useSWR(
+  const { data, mutate, isLoading, isValidating } = useSWR(
     `files-${page}-${debouncedSearch}-${selectedFolderId || 'root'}-${filterType}-${filterTag}-${sortField}-${sortOrder}-${refreshKey ?? 0}`,
-    async () => (await fetch(`/files?${params.toString()}`)).json()
+    async () => (await fetch(`/files?${params.toString()}`)).json(),
+    // Keep the previous folder's grid on screen while the next one loads —
+    // blanking to a full-area spinner on every folder click made navigation
+    // feel broken. `isLoading && !data` below is what keeps the first load
+    // on the spinner.
+    { keepPreviousData: true }
   );
 
   const toggleFileSelection = useCallback((file: FileItem) => {
@@ -762,7 +767,7 @@ export const FileManager: FC<{
         />
 
         <div className="flex-1 relative min-h-0">
-          {isLoading ? (
+          {isLoading && !data ? (
             <LoadingComponent />
           ) : !data?.results?.length && !visibleFolders.length ? (
             <div className="flex flex-col items-center justify-center h-full gap-[15px] text-textColor/60">
@@ -815,6 +820,13 @@ export const FileManager: FC<{
                 }
               }}
             />
+          )}
+          {/* Revalidating with previous data on screen: a corner hint instead
+              of unmounting the grid. */}
+          {isValidating && !!data && (
+            <div className="absolute top-[8px] end-[8px] pointer-events-none rounded-full bg-newBgColorInner/80 border border-newTableBorder p-[6px]">
+              <Spinner width={16} height={16} />
+            </div>
           )}
         </div>
 

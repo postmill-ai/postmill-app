@@ -1,4 +1,5 @@
 import type { DesignerPattern } from './designer-doc.schema';
+import { canvasColor } from './canvas-color';
 
 /**
  * Procedural pattern tiles for Pattern Fill and Pattern Overlay.
@@ -43,8 +44,8 @@ export const drawPatternTile = (
   pattern: DesignerPattern,
   size: number
 ): void => {
-  const fg = pattern.color || '#000000';
-  const bg = pattern.background || '#ffffff';
+  const fg = canvasColor(pattern.color || '#000000') as string;
+  const bg = canvasColor(pattern.background || '#ffffff') as string;
 
   ctx.fillStyle = bg;
   ctx.fillRect(0, 0, size, size);

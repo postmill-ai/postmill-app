@@ -2,8 +2,8 @@
  * What every layer style is called and what you can set on it.
  *
  * `layer-style-render` decides what each property *does*; this table adds the
- * range, the step and the human label so one generic editor covers all ten
- * effects rather than ten hand-built panels. A spec ties the two together — a
+ * range, the step and the human label so one generic editor covers all eleven
+ * effects rather than eleven hand-built panels. A spec ties the two together — a
  * slider whose range disagrees with the schema is the failure this table exists
  * to prevent, and the schema's own bounds are tighter than they look
  * (`opacity` is 0–1, not 0–100).
@@ -19,7 +19,7 @@
 import type { DesignerLayerStyle } from './designer-doc.schema';
 
 export interface LayerStyleParam {
-  key: 'opacity' | 'angle' | 'distance' | 'spread' | 'size' | 'depth';
+  key: 'opacity' | 'angle' | 'distance' | 'spread' | 'size' | 'depth' | 'scale';
   label: string;
   min: number;
   max: number;
@@ -156,6 +156,15 @@ export const LAYER_STYLE_DESCRIPTORS: LayerStyleDescriptor[] = [
     label: 'Pattern Overlay',
     params: [OPACITY],
     pattern: true,
+  },
+  {
+    type: 'noise',
+    label: 'Noise',
+    params: [
+      OPACITY,
+      { key: 'scale', label: 'Scale', min: 0.1, max: 10, step: 0.1, suffix: '×' },
+    ],
+    color: true,
   },
 ];
 

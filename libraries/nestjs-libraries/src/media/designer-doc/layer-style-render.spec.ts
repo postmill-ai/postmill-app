@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { createCanvas } from 'canvas';
-import { blurCanvas, buildStyleGradient } from './layer-style-render';
+import { blurCanvas, buildStyleGradient, drawOverStyle } from './layer-style-render';
 
 /**
  * `ctx.filter = 'blur(Npx)'` is accepted and silently ignored by node-canvas,
@@ -86,5 +86,71 @@ describe('buildStyleGradient', () => {
         10
       )
     ).not.toThrow();
+  });
+
+  it('honours the alpha of an 8-digit hex stop', () => {
+    const canvas = createCanvas(10, 10);
+    const ctx = canvas.getContext('2d');
+    ctx.fillStyle = buildStyleGradient(
+      ctx,
+      { type: 'linear', stops: [{ offset: 0, color: '#FF000080' }, { offset: 1, color: '#FF000080' }] },
+      10,
+      10
+    );
+    ctx.fillRect(0, 0, 10, 10);
+    const [r, , , a] = px(canvas, 5, 5);
+    expect(r).toBe(255);
+    expect(a).toBeGreaterThan(100);
+    expect(a).toBeLessThan(160);
+  });
+});
+
+describe("the 'noise' layer style", () => {
+  const el = { x: 0, y: 0, width: 40, height: 40 } as any;
+  const surface = { x: 0, y: 0, width: 40, height: 40 };
+  const deps = { createCanvas, patternTile: () => null };
+
+  const renderNoise = () => {
+    const layer = opaqueSquare(40, '#ffffff');
+    const canvas = createCanvas(40, 40);
+    const ctx = canvas.getContext('2d');
+    // The painter composites the EFFECT alone; the layer's own pixels are
+    // drawn by the caller, exactly as `drawElementWithStyles` orders them.
+    ctx.drawImage(layer, 0, 0);
+    drawOverStyle(
+      ctx,
+      layer,
+      el,
+      { type: 'noise', enabled: true, opacity: 1, scale: 1, color: '#000000' },
+      1,
+      surface,
+      deps
+    );
+    return canvas;
+  };
+
+  it('scatters grain inside the silhouette and leaves the outside untouched', () => {
+    const canvas = renderNoise();
+    // The hash noise fills roughly half the cells — with a 40px square the
+    // odds of an all-or-nothing draw are vanishing, so assert on both kinds.
+    let dark = 0;
+    let white = 0;
+    for (let y = 10; y < 30; y++) {
+      for (let x = 10; x < 30; x++) {
+        const [r, , , a] = px(canvas, x, y);
+        if (a === 255 && r === 0) dark++;
+        else if (a === 255 && r === 255) white++;
+      }
+    }
+    expect(dark).toBeGreaterThan(0);
+    expect(white).toBeGreaterThan(0);
+    // Outside the square nothing was composited.
+    expect(px(canvas, 2, 2)).toEqual([0, 0, 0, 0]);
+  });
+
+  it('is deterministic — the same style paints the same grain twice', () => {
+    const a = renderNoise().getContext('2d').getImageData(0, 0, 40, 40).data;
+    const b = renderNoise().getContext('2d').getImageData(0, 0, 40, 40).data;
+    expect(Array.from(a)).toEqual(Array.from(b));
   });
 });

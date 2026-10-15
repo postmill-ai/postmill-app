@@ -9,6 +9,7 @@ import {
   filtersInFamily,
 } from '@postmill-ai/nestjs-libraries/media/designer-doc/filter-descriptors';
 import { layerActions } from './layer-actions';
+import { buildShapeElement } from './tool-draw';
 import {
   distribute,
   type DistributeMode,
@@ -259,23 +260,19 @@ export const useDesignerActions = (
       addTextTo(store as never);
     };
 
-    const addShape = () => {
+    // One builder for every shape kind, shared with the drag-to-draw tools so
+    // a menu-inserted star carries the same defaults a drawn one does.
+    const insertShape = (toolId: string, size: { width: number; height: number }) => {
       const st = store.getState();
       const out = st.doc.outputs[st.currentOutput];
-      st.addElement({
-        id: '',
-        type: 'shape',
-        shape: 'rect',
-        x: out.width / 2 - 50,
-        y: out.height / 2 - 50,
-        width: 100,
-        height: 100,
-        rotation: 0,
-        opacity: 1,
-        locked: false,
-        hidden: false,
-        fill: '#2B5CD3',
-      });
+      st.addElement(
+        buildShapeElement(toolId, {
+          x: out.width / 2 - size.width / 2,
+          y: out.height / 2 - size.height / 2,
+          width: size.width,
+          height: size.height,
+        })
+      );
     };
 
     const alignSelected = (fn: (el: DesignerElement, out: DesignerOutput) => Partial<DesignerElement>) => {
@@ -372,7 +369,14 @@ export const useDesignerActions = (
 
       // ---------------- Insert ----------------
       { id: 'insert-text', label: 'Text', menu: 'insert', keywords: ['text'], run: addText },
-      { id: 'insert-shape', label: 'Shape', menu: 'insert', keywords: ['shape', 'rectangle'], enabled: () => live().mode === 'image', run: addShape },
+      // The Shape tool's whole palette, at a sensible default size — the menu
+      // used to offer nothing but a rect.
+      { id: 'insert-shape', label: 'Rectangle', menu: 'insert', submenuPath: ['Shapes'], keywords: ['shape', 'rectangle'], enabled: () => live().mode === 'image', run: () => insertShape('shape-rect', { width: 100, height: 100 }) },
+      { id: 'insert-ellipse', label: 'Ellipse', menu: 'insert', submenuPath: ['Shapes'], keywords: ['shape', 'ellipse', 'circle', 'oval'], enabled: () => live().mode === 'image', run: () => insertShape('shape-ellipse', { width: 140, height: 100 }) },
+      { id: 'insert-triangle', label: 'Triangle', menu: 'insert', submenuPath: ['Shapes'], keywords: ['shape', 'triangle'], enabled: () => live().mode === 'image', run: () => insertShape('shape-triangle', { width: 120, height: 100 }) },
+      { id: 'insert-polygon', label: 'Polygon', menu: 'insert', submenuPath: ['Shapes'], keywords: ['shape', 'polygon', 'hexagon'], enabled: () => live().mode === 'image', run: () => insertShape('shape-polygon', { width: 120, height: 120 }) },
+      { id: 'insert-star', label: 'Star', menu: 'insert', submenuPath: ['Shapes'], keywords: ['shape', 'star'], enabled: () => live().mode === 'image', run: () => insertShape('shape-star', { width: 140, height: 140 }) },
+      { id: 'insert-line', label: 'Line', menu: 'insert', submenuPath: ['Shapes'], keywords: ['shape', 'line', 'rule'], enabled: () => live().mode === 'image', run: () => insertShape('shape-line', { width: 160, height: 0 }) },
       { id: 'insert-image', label: 'Image…', menu: 'insert', keywords: ['image', 'photo'], enabled: () => live().mode === 'image', run: () => ctx.onInsertMedia('image') },
       // Timeline media: only a video document has somewhere to put these.
       { id: 'insert-video', label: 'Video…', menu: 'insert', keywords: ['video', 'clip', 'footage'], enabled: () => live().mode === 'video', run: () => ctx.onInsertMedia('video') },

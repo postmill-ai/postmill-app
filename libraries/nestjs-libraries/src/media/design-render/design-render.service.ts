@@ -45,6 +45,7 @@ import {
   isNativeBlend,
 } from '../designer-doc/pixel-ops';
 import { drawPatternTile, tileSizeFor } from '../designer-doc/pattern-tiles';
+import { canvasColor } from '../designer-doc/canvas-color';
 import { splitStyles, styleOffset, styleBlur, stylePadding, elementStyles } from '../designer-doc/layer-styles';
 import {
   buildStyleGradient,
@@ -1722,7 +1723,7 @@ export class DesignRenderService {
 
     const color = bg?.color || output.background || '#ffffff';
     ctx.save();
-    ctx.fillStyle = color;
+    ctx.fillStyle = canvasColor(color);
     ctx.fillRect(0, 0, w, h);
     ctx.restore();
   }
@@ -2215,9 +2216,9 @@ export class DesignRenderService {
       ctx.fillStyle = this.buildGradient(ctx, style.gradient, el.width, el.height);
     } else if (style.type === 'pattern' && style.pattern) {
       const tile = await this.buildPatternTile(style.pattern);
-      ctx.fillStyle = tile ? ctx.createPattern(tile, 'repeat') : (style.color || '#000000');
+      ctx.fillStyle = tile ? ctx.createPattern(tile, 'repeat') : canvasColor(style.color || '#000000');
     } else {
-      ctx.fillStyle = style.color || '#000000';
+      ctx.fillStyle = canvasColor(style.color || '#000000');
     }
     ctx.fillRect(0, 0, el.width, el.height);
   }
@@ -2247,11 +2248,11 @@ export class DesignRenderService {
     }
     // Only a closed path is fillable; an open one would fill its implicit chord.
     if (fill && el.closed) {
-      ctx.fillStyle = fill;
+      ctx.fillStyle = canvasColor(fill);
       ctx.fill();
     }
     if (el.stroke && (el.strokeWidth || 0) > 0) {
-      ctx.strokeStyle = el.stroke;
+      ctx.strokeStyle = canvasColor(el.stroke);
       ctx.lineWidth = el.strokeWidth as number;
       this.applyStrokeStyle(ctx, el);
       ctx.stroke();
@@ -2286,7 +2287,7 @@ export class DesignRenderService {
     const width = el.strokeWidth || 1;
     ctx.save();
     ctx.setLineDash([]);
-    ctx.fillStyle = el.stroke || el.fill || '#000000';
+    ctx.fillStyle = canvasColor(el.stroke || el.fill || '#000000');
     for (const [head, tip, angle] of [
       [st.arrowStart, ends.start, ends.startAngle] as const,
       [st.arrowEnd, ends.end, ends.endAngle] as const,
@@ -2316,9 +2317,9 @@ export class DesignRenderService {
         warped.map((p) => [p.x, p.y] as [number, number]),
         shape !== 'line'
       );
-      if (fill && shape !== 'line') { ctx.fillStyle = fill; ctx.fill(); }
+      if (fill && shape !== 'line') { ctx.fillStyle = canvasColor(fill); ctx.fill(); }
       if (el.stroke && (el.strokeWidth || 0) > 0) {
-        ctx.strokeStyle = el.stroke;
+        ctx.strokeStyle = canvasColor(el.stroke);
         ctx.lineWidth = el.strokeWidth as number;
         this.applyStrokeStyle(ctx, el);
         ctx.stroke();
@@ -2336,7 +2337,7 @@ export class DesignRenderService {
       ctx.beginPath();
       ctx.moveTo(0, 0);
       ctx.lineTo(el.width, el.height);
-      ctx.strokeStyle = el.stroke || el.fill || '#000000';
+      ctx.strokeStyle = canvasColor(el.stroke || el.fill || '#000000');
       ctx.lineWidth = el.strokeWidth || 1;
       this.applyStrokeStyle(ctx, el);
       ctx.stroke();
@@ -2360,9 +2361,9 @@ export class DesignRenderService {
       this.traceRoundRect(ctx, 0, 0, el.width, el.height, el.borderRadius || 0);
     }
 
-    if (fill) { ctx.fillStyle = fill; ctx.fill(); }
+    if (fill) { ctx.fillStyle = canvasColor(fill); ctx.fill(); }
     if (el.stroke && (el.strokeWidth || 0) > 0) {
-      ctx.strokeStyle = el.stroke;
+      ctx.strokeStyle = canvasColor(el.stroke);
       ctx.lineWidth = el.strokeWidth as number;
       this.applyStrokeStyle(ctx, el);
       ctx.stroke();
@@ -2399,9 +2400,9 @@ export class DesignRenderService {
         // below — with `top` a curved rich line exported half a font size
         // lower than the canvas drew it.
         ctx.textBaseline = 'middle';
-        ctx.fillStyle = el.fill || '#000000';
+        ctx.fillStyle = canvasColor(el.fill || '#000000');
         if (el.textStroke && el.textStroke.width > 0) {
-          ctx.strokeStyle = el.textStroke.color;
+          ctx.strokeStyle = canvasColor(el.textStroke.color);
           ctx.lineWidth = el.textStroke.width;
         }
         this.drawCurvedText(ctx, flatText, el, size, style, weight, family, curve);
@@ -2429,19 +2430,19 @@ export class DesignRenderService {
     // whichever type carries it.
     ctx.fillStyle = el.fillGradient?.stops?.length
       ? buildStyleGradient(ctx, el.fillGradient, el.width, el.height)
-      : el.fill || '#000000';
+      : canvasColor(el.fill || '#000000');
     if (typeof ctx.textAlign === 'string') ctx.textAlign = 'left';
 
     // The outline's own colour and width. `drawTextLine` calls `strokeText`
     // whenever `textStroke` is set but never set the state, so a 4px white
     // outline exported as the context defaults — a 1px black hairline.
     if (el.textStroke && el.textStroke.width > 0) {
-      ctx.strokeStyle = el.textStroke.color;
+      ctx.strokeStyle = canvasColor(el.textStroke.color);
       ctx.lineWidth = el.textStroke.width;
     }
 
     if (el.textShadow) {
-      ctx.shadowColor = el.textShadow.color;
+      ctx.shadowColor = canvasColor(el.textShadow.color);
       ctx.shadowBlur = el.textShadow.blur || 0;
       ctx.shadowOffsetX = el.textShadow.offsetX || 0;
       ctx.shadowOffsetY = el.textShadow.offsetY || 0;
@@ -2549,7 +2550,7 @@ export class DesignRenderService {
       : ctx.fillStyle;
     if (typeof bctx.textAlign === 'string') bctx.textAlign = 'left';
     if (el.textStroke && el.textStroke.width > 0) {
-      bctx.strokeStyle = el.textStroke.color;
+      bctx.strokeStyle = canvasColor(el.textStroke.color);
       bctx.lineWidth = el.textStroke.width;
     }
     paint(bctx, 0);
@@ -2607,7 +2608,7 @@ export class DesignRenderService {
     const letterSpacing = el.letterSpacing || 0;
 
     if (el.textShadow) {
-      ctx.shadowColor = el.textShadow.color;
+      ctx.shadowColor = canvasColor(el.textShadow.color);
       ctx.shadowBlur = el.textShadow.blur || 0;
       ctx.shadowOffsetX = el.textShadow.offsetX || 0;
       ctx.shadowOffsetY = el.textShadow.offsetY || 0;
@@ -2704,7 +2705,7 @@ export class DesignRenderService {
         setRunFont(seg.run);
         const fill = seg.run.fill || el.fill || '#000000';
         const sz = seg.run.fontSize ?? el.fontSize ?? 16;
-        ctx.fillStyle = fill;
+        ctx.fillStyle = canvasColor(fill);
         // The canvas draws each rich run as its own Konva `Text` node, which
         // centres its single line with `textBaseline = 'middle'` at half a line
         // height — and those nodes carry no `lineHeight`, so Konva's default of
@@ -2719,7 +2720,7 @@ export class DesignRenderService {
 
         if (seg.run.underline) {
           const uy = y + sz * 1.15;
-          ctx.strokeStyle = fill;
+          ctx.strokeStyle = canvasColor(fill);
           ctx.lineWidth = Math.max(1, sz / 14);
           ctx.beginPath();
           ctx.moveTo(x, uy);
@@ -2786,7 +2787,7 @@ export class DesignRenderService {
       ctx.translate(cx, cy);
       ctx.rotate(geometry.up ? midAngle : -midAngle);
       if (el.textStroke && el.textStroke.width > 0) {
-        ctx.strokeStyle = el.textStroke.color;
+        ctx.strokeStyle = canvasColor(el.textStroke.color);
         ctx.lineWidth = el.textStroke.width;
         ctx.strokeText(ch, -charWidth / 2, 0);
       }
@@ -2825,10 +2826,10 @@ export class DesignRenderService {
     ctx.font = `${fontStyle} ${fontWeight} ${fontSize}px ${fontFamily}`;
     ctx.textBaseline = 'middle';
     ctx.textAlign = 'left';
-    ctx.fillStyle = el.fill || '#000000';
+    ctx.fillStyle = canvasColor(el.fill || '#000000');
 
     if (el.textShadow) {
-      ctx.shadowColor = el.textShadow.color;
+      ctx.shadowColor = canvasColor(el.textShadow.color);
       ctx.shadowBlur = el.textShadow.blur || 0;
       ctx.shadowOffsetX = el.textShadow.offsetX || 0;
       ctx.shadowOffsetY = el.textShadow.offsetY || 0;
@@ -2857,7 +2858,7 @@ export class DesignRenderService {
       ctx.translate(x, y);
       ctx.rotate(angle);
       if (el.textStroke && el.textStroke.width > 0) {
-        ctx.strokeStyle = el.textStroke.color;
+        ctx.strokeStyle = canvasColor(el.textStroke.color);
         ctx.lineWidth = el.textStroke.width;
         ctx.strokeText(ch, -cw / 2, 0);
       }
@@ -3016,7 +3017,7 @@ export class DesignRenderService {
     // Border, which the canvas draws as a stroked rect over the image and the
     // server used not to draw at all.
     if (el.strokeWidth && el.strokeWidth > 0) {
-      ctx.strokeStyle = el.stroke || '#000000';
+      ctx.strokeStyle = canvasColor(el.stroke || '#000000');
       ctx.lineWidth = el.strokeWidth;
       if (hasCornerRadius(el.borderRadius)) {
         this.traceRoundRect(ctx, 0, 0, el.width, el.height, el.borderRadius);

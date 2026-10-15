@@ -18,7 +18,7 @@ const style = (over: Partial<DesignerLayerStyle> & { type: DesignerLayerStyle['t
 describe('paint order', () => {
   it('lists every effect exactly once', () => {
     expect(new Set(STYLE_ORDER).size).toBe(STYLE_ORDER.length);
-    expect(STYLE_ORDER).toHaveLength(10);
+    expect(STYLE_ORDER).toHaveLength(11);
   });
 
   it('puts shadow and outer glow beneath the layer, stroke last', () => {

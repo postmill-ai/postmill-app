@@ -16,6 +16,7 @@ import React, {
   useRef,
   useState,
 } from 'react';
+import { HexColorPicker } from 'react-colorful';
 import { useUser } from '@postmill-ai/frontend/components/layout/user.context';
 import { useT } from '@postmill-ai/react/translation/get.transation.service.client';
 
@@ -64,11 +65,39 @@ function normalizeHex(input: string): string | null {
   let v = input.trim();
   if (!v) return null;
   if (!v.startsWith('#')) v = `#${v}`;
-  if (/^#([0-9a-fA-F]{3}|[0-9a-fA-F]{6})$/.test(v)) {
+  // 8-digit hex carries an alpha byte — how a semi-transparent fill or
+  // gradient stop is stored without a schema change.
+  if (/^#([0-9a-fA-F]{3}|[0-9a-fA-F]{6}|[0-9a-fA-F]{8})$/.test(v)) {
     return v.toUpperCase();
   }
   return null;
 }
+
+/** '#RGB' → '#RRGGBB'; anything longer passes through. */
+const expandHex3 = (hex: string): string =>
+  /^#[0-9a-fA-F]{3}$/.test(hex)
+    ? `#${hex[1]}${hex[1]}${hex[2]}${hex[2]}${hex[3]}${hex[3]}`.toUpperCase()
+    : hex;
+
+/** The 6-digit colour part of a normalized hex (alpha byte dropped). */
+const hexWithoutAlpha = (hex: string): string =>
+  expandHex3(hex).slice(0, 7);
+
+/** The alpha of a normalized hex, 0–1. Opaque (or absent) is 1. */
+const hexAlpha = (hex: string): number => {
+  const expanded = expandHex3(hex);
+  return expanded.length === 9 ? parseInt(expanded.slice(7, 9), 16) / 255 : 1;
+};
+
+/** Colour part + alpha as one stored string: 8-digit only when translucent. */
+const withAlpha = (hex: string, alpha: number): string => {
+  const base = hexWithoutAlpha(hex);
+  if (alpha >= 1) return base;
+  const byte = Math.round(Math.min(1, Math.max(0, alpha)) * 255)
+    .toString(16)
+    .padStart(2, '0');
+  return `${base}${byte}`.toUpperCase();
+};
 
 /** Close a floating element when the user clicks outside it or presses Escape. */
 function useDismiss(
@@ -191,6 +220,20 @@ export const ColorSwatch: React.FC<ColorSwatchProps> = ({
   );
   const enforce = !!(brandEnforcement && brandHexes.length > 0);
 
+  // The picker is 6-digit-only, so the colour and the alpha of the stored
+  // (possibly 8-digit) value are derived separately and recombined on change.
+  const draftHex = normalizeHex(draft) ?? normalizeHex(value);
+  const pickerColor = draftHex ? hexWithoutAlpha(draftHex) : '#000000';
+  const alphaPct = Math.round((draftHex ? hexAlpha(draftHex) : 1) * 100);
+
+  const handlePickerChange = (hex: string) => {
+    setDraft(withAlpha(hex.toUpperCase(), draftHex ? hexAlpha(draftHex) : 1));
+  };
+
+  const handleAlphaChange = (pct: number) => {
+    setDraft(withAlpha(draftHex ?? '#000000', pct / 100));
+  };
+
   return (
     <div className="flex flex-col gap-[6px]" ref={wrapRef}>
       {label && (
@@ -219,6 +262,36 @@ export const ColorSwatch: React.FC<ColorSwatchProps> = ({
             role="dialog"
             className="absolute z-50 mt-[6px] left-0 w-[208px] p-[10px] rounded-[10px] bg-newBgColorInner border border-studioBorder shadow-menu flex flex-col gap-[10px]"
           >
+            {!enforce && (
+              <>
+                <div
+                  // The picker has no commit event of its own: the drag edits
+                  // the draft, and releasing it commits once — one history
+                  // entry, not one per tick. Non-semantic wrapper; the picker
+                  // inside carries the interaction.
+                  role="presentation"
+                  onPointerUp={() => commitDraft(draft)}
+                  onKeyUp={() => commitDraft(draft)}
+                >
+                  <HexColorPicker
+                    color={pickerColor}
+                    onChange={handlePickerChange}
+                    style={{ width: '100%', height: '140px' }}
+                  />
+                </div>
+                <Slider
+                  label={t('opacity', 'Opacity')}
+                  suffix="%"
+                  min={0}
+                  max={100}
+                  step={1}
+                  value={alphaPct}
+                  onChange={handleAlphaChange}
+                  onCommit={() => commitDraft(draft)}
+                />
+              </>
+            )}
+
             {!enforce && (
               <div className="flex items-center gap-[8px]">
                 <span
