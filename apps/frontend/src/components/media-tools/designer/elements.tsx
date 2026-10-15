@@ -232,6 +232,51 @@ export const useLoadedImage = (src: string | undefined) => {
   return image;
 };
 
+const isBitmapLayer = (el: DesignerElement): boolean =>
+  (el.type === 'image' || el.type === 'raster') && !!el.src;
+
+/**
+ * A per-layer cache-key fragment: identity for every layer, plus src and load
+ * state for bitmap layers. `isReady` is injectable so specs can drive the
+ * pending→ready transition without seeding the module cache.
+ */
+const bitmapLayersKey = (
+  els: DesignerElement[],
+  isReady: (src: string) => boolean
+): string =>
+  els
+    .map((el) =>
+      isBitmapLayer(el)
+        ? `${el.id}:${el.src}:${isReady(el.src!) ? 'ready' : 'pending'}`
+        : el.id
+    )
+    .join(',');
+
+/**
+ * The cache key for one AdjustmentScope's folded contents.
+ *
+ * An AdjustmentScope Konva-caches its accumulated layers once, keyed by this
+ * value — and it used to be keyed on `backdropKey` alone, which only tracks
+ * the BACKGROUND image. On a design with no bg image the key never changed,
+ * so a scope whose in-scope image loaded AFTER mount kept the empty buffer it
+ * was captured with: the image (and anything else folded in later) never
+ * composited, and the stale 0×0 cache also dead-ended hit-testing in the
+ * region. This is the `backdropKey` bug class one level up — the third
+ * instance after the artboard backdrop and StyledLayer.
+ *
+ * The key therefore covers: the backdrop (as before), the ids of every folded
+ * layer (an insert/delete/reorder under the adjustment rebuilds the cache),
+ * and each bitmap layer's src + readiness (load and Replace both rebuild).
+ * Geometry is deliberately NOT part of the key — re-rasterising a filtered
+ * scope on every drag frame is the cost the debounced filter cache exists to
+ * avoid.
+ */
+export const adjustmentScopeCacheKey = (
+  backdropKey: string | number | undefined,
+  els: DesignerElement[],
+  isReady: (src: string) => boolean = (src) => imageCache.has(src)
+): string => `${backdropKey ?? ''}::${bitmapLayersKey(els, isReady)}`;
+
 // Convert a DesignerGradient into Konva gradient props for a w×h box.
 export const gradientFillProps = (
   g: DesignerGradient | undefined,
@@ -920,6 +965,18 @@ const SymbolHitRect: FC<{
   />
 );
 
+/**
+ * Every visible leaf under a tree node, recursively. Used to derive an
+ * AdjustmentScope's cache key from the layers folded into it — hidden members
+ * are excluded so a visibility toggle also rebuilds the scope's cache (a
+ * cached scope would otherwise keep showing the hidden layer).
+ */
+const collectVisibleLeaves = (nodes: LayerNode[]): DesignerElement[] =>
+  nodes.flatMap((n) => {
+    if (n.element.hidden) return [];
+    return n.children.length ? collectVisibleLeaves(n.children) : [n.element];
+  });
+
 export const CanvasElements: FC<ElementsProps> = ({
   elements,
   symbols,
@@ -935,6 +992,17 @@ export const CanvasElements: FC<ElementsProps> = ({
   // server renderer follows.
   const expanded = useMemo(() => expandSymbols(elements, symbols), [elements, symbols]);
   const tree = useMemo(() => buildLayerTree(expanded), [expanded]);
+
+  // Re-render when ANY bitmap in the tree finishes loading (or fails). Each
+  // AdjustmentScope derives its cache key from the load state of the images
+  // folded into it during render (see adjustmentScopeCacheKey), so this one
+  // subscription is what makes a pending→ready transition reach the scope —
+  // the scope's own effect only re-runs when the key changes.
+  useSyncExternalStore(
+    subscribeToCache,
+    () => bitmapLayersKey(expanded, (src) => imageCache.has(src)),
+    () => bitmapLayersKey(expanded, (src) => imageCache.has(src))
+  );
 
   // Where each instance's hit rect goes: just before the first VISIBLE expanded
   // child carrying its namespace, keyed by that child's id. A hidden instance
@@ -1481,54 +1549,86 @@ export const CanvasElements: FC<ElementsProps> = ({
    * reached — matching Photoshop, and matching what the server does by reading
    * back the canvas at the same point. A clipped adjustment folds in only the
    * single layer directly beneath it.
+   *
+   * The fold tracks each accumulated item's LEAF elements alongside its view
+   * (`els`), because the scope's cache key is derived from the folded layers —
+   * see `adjustmentScopeCacheKey`.
    */
-  const renderNodes = (nodes: LayerNode[], seed: ReactNode[] = []): ReactNode[] =>
-    nodes.reduce<ReactNode[]>((acc, node) => {
-      const el = node.element;
-      if (el.hidden) return acc;
+  const renderNodes = (nodes: LayerNode[], seed: ReactNode[] = []): ReactNode[] => {
+    const folded = nodes.reduce<{ view: ReactNode; els: DesignerElement[] }[]>(
+      (acc, node) => {
+        const el = node.element;
+        if (el.hidden) return acc;
 
-      if (el.type === 'group') {
+        if (el.type === 'group') {
+          return [
+            ...acc,
+            {
+              view: (
+                <LayerGroup key={el.id} element={el} cacheKey={node.children.length}>
+                  {renderNodes(node.children)}
+                </LayerGroup>
+              ),
+              els: collectVisibleLeaves(node.children),
+            },
+          ];
+        }
+
+        if (el.type === 'adjustment') {
+          if (!el.adjustment || !acc.length) return acc;
+          // Clipped: only the layer directly beneath. Otherwise: everything
+          // accumulated in this scope so far.
+          const scoped = el.clipped ? acc.slice(-1) : acc;
+          const kept = el.clipped ? acc.slice(0, -1) : [];
+          const scopeEls = scoped.flatMap((s) => s.els);
+          return [
+            ...kept,
+            {
+              view: (
+                <AdjustmentScope
+                  key={`adj-${el.id}`}
+                  adjustment={el.adjustment}
+                  cacheKey={adjustmentScopeCacheKey(backdropKey, scopeEls)}
+                >
+                  {scoped.map((s) => s.view)}
+                </AdjustmentScope>
+              ),
+              // An adjustment further up folds THIS scope in turn, so its
+              // layers keep contributing to the outer scope's key.
+              els: scopeEls,
+            },
+          ];
+        }
+
+        const hitInstance = symbolHitAnchors.get(el.id);
         return [
           ...acc,
-          <LayerGroup key={el.id} element={el} cacheKey={node.children.length}>
-            {renderNodes(node.children)}
-          </LayerGroup>,
+          {
+            view: (
+              <React.Fragment key={el.id}>
+                {hitInstance && (
+                  <SymbolHitRect
+                    key={`symbol-hit-${hitInstance.id}`}
+                    instance={hitInstance}
+                    onSelect={onSelect}
+                    onContextMenu={onContextMenu}
+                    interactive={interactive}
+                  />
+                )}
+                <MaskedLeaf element={el}>
+                  <StyledLeaf element={el}>{renderLeaf(el)}</StyledLeaf>
+                </MaskedLeaf>
+              </React.Fragment>
+            ),
+            els: [el],
+          },
         ];
-      }
-
-      if (el.type === 'adjustment') {
-        if (!el.adjustment || !acc.length) return acc;
-        // Clipped: only the layer directly beneath. Otherwise: everything
-        // accumulated in this scope so far.
-        const scoped = el.clipped ? acc.slice(-1) : acc;
-        const kept = el.clipped ? acc.slice(0, -1) : [];
-        return [
-          ...kept,
-          <AdjustmentScope key={`adj-${el.id}`} adjustment={el.adjustment} cacheKey={backdropKey}>
-            {scoped}
-          </AdjustmentScope>,
-        ];
-      }
-
-      const hitInstance = symbolHitAnchors.get(el.id);
-      return [
-        ...acc,
-        ...(hitInstance
-          ? [
-              <SymbolHitRect
-                key={`symbol-hit-${hitInstance.id}`}
-                instance={hitInstance}
-                onSelect={onSelect}
-                onContextMenu={onContextMenu}
-                interactive={interactive}
-              />,
-            ]
-          : []),
-        <MaskedLeaf key={el.id} element={el}>
-          <StyledLeaf element={el}>{renderLeaf(el)}</StyledLeaf>
-        </MaskedLeaf>,
-      ];
-    }, seed);
+      },
+      // The backdrop seeds the fold; its own readiness arrives via backdropKey.
+      seed.map((view) => ({ view, els: [] as DesignerElement[] }))
+    );
+    return folded.map((f) => f.view);
+  };
 
   return <>{renderNodes(tree, backdrop ? [backdrop] : [])}</>;
 };
