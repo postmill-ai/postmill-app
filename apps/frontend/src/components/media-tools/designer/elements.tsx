@@ -9,7 +9,7 @@ import React, {
   useState,
   useSyncExternalStore,
 } from 'react';
-import { Image as KonvaImage, Rect, Ellipse, Line, Star, Text as KonvaText, TextPath, Group, Shape } from 'react-konva';
+import { Image as KonvaImage, Rect, Line, Star, Text as KonvaText, TextPath, Group, Shape } from 'react-konva';
 import Konva from 'konva';
 import { isNativeBlend } from '@postmill-ai/nestjs-libraries/media/designer-doc/pixel-ops';
 import { canvasColor } from '@postmill-ai/nestjs-libraries/media/designer-doc/canvas-color';
@@ -1369,27 +1369,35 @@ export const CanvasElements: FC<ElementsProps> = ({
             switch (el.shape) {
               case 'ellipse':
                 return (
-                  <Ellipse
+                  <Shape
                     key={el.id}
                     {...commonProps}
-                    // Konva's Ellipse is centre-origin, but every OTHER element
-                    // rotates about its top-left — so the pivot stays at el.x/y
-                    // and a negative offset pushes the ellipse into its box.
-                    // Positioning it at the centre instead made it the one shape
-                    // that rotated differently from the rest, and put its
-                    // gradient half a box out of place.
-                    offsetX={-el.width / 2}
-                    offsetY={-el.height / 2}
-                    radiusX={el.width / 2}
-                    radiusY={el.height / 2}
+                    // Traced in the same top-left box space every other shape
+                    // (and the mask clipFunc, and the server renderer) uses.
+                    // Konva's Ellipse is CENTRE-origin, and the negative-offset
+                    // shim that pushed it into the box made its hit region sit
+                    // one radius off the painted shape — clicks missed by
+                    // exactly (+radiusX, +radiusY). Tracing the path ourselves
+                    // makes the hit graph trace the very same path, so hit and
+                    // paint agree by construction. The rotation pivot stays at
+                    // el.x/el.y, unchanged.
+                    sceneFunc={(ctx, shape) => {
+                      ctx.beginPath();
+                      ctx.ellipse(
+                        el.width / 2,
+                        el.height / 2,
+                        el.width / 2,
+                        el.height / 2,
+                        0,
+                        0,
+                        Math.PI * 2
+                      );
+                      ctx.closePath();
+                      ctx.fillStrokeShape(shape);
+                    }}
                     fill={hasGrad ? undefined : canvasColor(el.fill || '#2B5CD3')}
-                    {...gradientFillProps(
-                      el.fillGradient,
-                      el.width,
-                      el.height,
-                      // Node-local coordinates run from the ellipse's centre.
-                      { x: -el.width / 2, y: -el.height / 2 }
-                    )}
+                    // Box-space gradient, same as the Rect branch.
+                    {...gradientFillProps(el.fillGradient, el.width, el.height)}
                     stroke={canvasColor(el.stroke)}
                     strokeWidth={el.strokeWidth}
                   />
