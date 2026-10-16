@@ -137,15 +137,17 @@ export class FileRepository {
     // public URLs (https://…) where stat() will fail; the caller must supply fileSize.
     const uploadRoot = resolve(process.env.UPLOAD_DIRECTORY || './uploads');
     const safePath = confineToRoot(uploadRoot, filePath);
-    if (resolvedFileSize === 0 && safePath) {
+    if (safePath) {
       try {
         const s = await stat(safePath);
-        resolvedFileSize = s.size;
+        if (!resolvedFileSize) resolvedFileSize = s.size;
 
         if (IMAGE_EXTS.has(extname(fileName).toLowerCase())) {
           try {
             const sharp = (await import('sharp')).default;
             const metadata = await sharp(safePath).metadata();
+            // Intrinsic pixel dims let the designer picker place the image
+            // without a blocking client-side probe of the full file.
             meta.dimensions = { width: metadata.width, height: metadata.height };
           } catch {
           }
@@ -422,6 +424,9 @@ export class FileRepository {
           description: true,
           folderId: true,
           createdAt: true,
+          // metadata.dimensions lets the designer media picker place an image
+          // without a blocking full-image probe.
+          metadata: true,
           folder: {
             select: {
               id: true,
@@ -607,6 +612,7 @@ export class FileRepository {
         description: true,
         folderId: true,
         createdAt: true,
+        metadata: true,
         folder: { select: { id: true, name: true } },
       },
     });

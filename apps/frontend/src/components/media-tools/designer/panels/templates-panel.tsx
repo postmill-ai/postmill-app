@@ -273,7 +273,19 @@ export const TemplatesPanel: FC<TemplatesPanelProps> = ({ store, onClose, guard 
                       role="listitem"
                       className="rounded-lg border border-studioBorder bg-newBgColorInner overflow-hidden group"
                     >
-                      <div className="relative aspect-4/3 bg-studioBorder/10 flex items-center justify-center text-[20px] text-newTextColor/20">
+                      <div
+                        role="button"
+                        tabIndex={0}
+                        aria-label={t('templates_panel_apply_template', 'Apply template {{name}}', { name: template.name })}
+                        onClick={() => applyTemplate(template)}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter' || e.key === ' ') {
+                            e.preventDefault();
+                            applyTemplate(template);
+                          }
+                        }}
+                        className="relative aspect-4/3 bg-studioBorder/10 flex items-center justify-center text-[20px] text-newTextColor/20 cursor-pointer hover:ring-2 hover:ring-designerAccent/60 focus-visible:ring-2 focus-visible:ring-designerAccent"
+                      >
                         {template.thumbnail ? (
                           // eslint-disable-next-line @next/next/no-img-element -- server-rendered template thumbnail
                           <img src={template.thumbnail} alt={template.name} className="w-full h-full object-cover" />
@@ -283,6 +295,8 @@ export const TemplatesPanel: FC<TemplatesPanelProps> = ({ store, onClose, guard 
                         {!template.isSystem && (
                           // Drag handle — drop onto a folder row in the tree to
                           // file the template (system templates are not folder-able).
+                          // Clicks/keys here must never bubble to the tile's
+                          // apply action; starting a drag takes precedence.
                           <div
                             role="button"
                             tabIndex={0}
@@ -292,6 +306,8 @@ export const TemplatesPanel: FC<TemplatesPanelProps> = ({ store, onClose, guard 
                               e.dataTransfer.setData('text/plain', template.id);
                               e.dataTransfer.effectAllowed = 'move';
                             }}
+                            onClick={(e) => e.stopPropagation()}
+                            onKeyDown={(e) => e.stopPropagation()}
                             className="absolute top-1 end-1 px-1.5 py-0.5 rounded-sm bg-newBgColorInner/80 text-newTextColor/60 cursor-grab active:cursor-grabbing opacity-0 group-hover:opacity-100 focus-visible:opacity-100 transition-opacity text-[11px] leading-none select-none"
                           >
                             ⠿
@@ -299,7 +315,13 @@ export const TemplatesPanel: FC<TemplatesPanelProps> = ({ store, onClose, guard 
                         )}
                       </div>
                       <div className="p-2">
-                        <div className="text-[11px] text-textColor truncate">{template.name}</div>
+                        <button
+                          type="button"
+                          onClick={() => applyTemplate(template)}
+                          className="block w-full text-left text-[11px] text-textColor truncate cursor-pointer hover:underline"
+                        >
+                          {template.name}
+                        </button>
                         <div className="flex items-center justify-between gap-1">
                           <div className="text-[10px] text-newTextColor/60">
                             {template.isSystem ? t('system', 'System') : t('templates_panel_org', 'Org')}

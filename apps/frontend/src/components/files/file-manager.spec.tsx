@@ -141,6 +141,34 @@ describe('FileManager folders in the browse area', () => {
 
     await waitFor(() => expect(screen.getByText('This folder is empty')).toBeTruthy());
   });
+
+  it('makes the previous folder’s file tiles inert while the next folder loads', async () => {
+    // keepPreviousData keeps alpha.png on screen after the folder click;
+    // until the new folder's listing arrives those tiles belong to the OLD
+    // folder and must not take clicks.
+    renderManager();
+    await waitFor(() => expect(screen.getByText('alpha.png')).toBeTruthy());
+    expect(document.querySelector('[aria-busy="true"]')).toBeNull();
+
+    let resolveNext: (value: unknown) => void = () => {};
+    mockFetch.mockImplementation((url: string) => {
+      if (url.startsWith('/files/folders')) {
+        return Promise.resolve({ ok: true, json: async () => FOLDERS });
+      }
+      return new Promise((resolve) => {
+        resolveNext = resolve;
+      });
+    });
+
+    fireEvent.click(screen.getByLabelText('Open folder Brand assets'));
+
+    await waitFor(() => expect(document.querySelector('[aria-busy="true"]')).toBeTruthy());
+    // The stale tile is still on screen, inside the inert region.
+    expect(document.querySelector('[aria-busy="true"]')!.textContent).toContain('alpha.png');
+
+    resolveNext({ ok: true, json: async () => ({ results: [], pages: 1 }) });
+    await waitFor(() => expect(document.querySelector('[aria-busy="true"]')).toBeNull());
+  });
 });
 
 describe('FileManager sidebar', () => {

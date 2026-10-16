@@ -14,6 +14,7 @@ import { useFetch } from '@postmill-ai/helpers/utils/custom.fetch';
 import { useToaster } from '@postmill-ai/react/toaster/toaster';
 import { useT } from '@postmill-ai/react/translation/get.transation.service.client';
 import { useImportStockMedia } from '@postmill-ai/frontend/components/media-tools/media-import';
+import { downscaleImageForUpload } from '@postmill-ai/frontend/components/media-tools/downscale-image';
 import { OverflowTabs } from '@postmill-ai/frontend/components/ui/overflow-tabs';
 
 export type MediaKind = 'image' | 'video' | 'audio';
@@ -315,12 +316,16 @@ export const MediaSelectorModal: React.FC<MediaSelectorModalProps> = ({
   const handleFileSelect = (items: FileItem[]) => {
     const item = items[0];
     if (!item) return;
+    // Intrinsic dims recorded at upload time — handing them through lets the
+    // designer place the image immediately instead of blocking on a full
+    // re-download just to learn its size.
+    const dims = item.metadata?.dimensions;
     finalize({
       source: 'file',
       url: item.path,
       fileId: item.id,
-      width: 0,
-      height: 0,
+      width: dims?.width || 0,
+      height: dims?.height || 0,
       type: item.type?.startsWith('audio')
         ? 'audio'
         : item.type?.startsWith('video')
@@ -351,8 +356,12 @@ export const MediaSelectorModal: React.FC<MediaSelectorModalProps> = ({
     setIsUploading(true);
     try {
       for (const file of fileList) {
+        // Downscale oversized raster images before upload (same convention as
+        // the /files Uppy pipeline) — a raw 24 MP phone photo otherwise gets
+        // stored, probed, and decoded at full size on every insert.
+        const prepared = await downscaleImageForUpload(file);
         const formData = new FormData();
-        formData.append('file', file);
+        formData.append('file', prepared);
         if (myFilesFolderId) {
           formData.append('folderId', myFilesFolderId);
         }

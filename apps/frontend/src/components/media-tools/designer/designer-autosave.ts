@@ -45,6 +45,7 @@ export const createDesignAutosave = ({
       try {
         const s = store.getState();
         const sentDoc = s.doc;
+        const sentName = s.designName;
         // Best-effort preview, identical fallback semantics to manual save:
         // upload wins, else base64, else nothing. A thumbnail failure must
         // never sink the create, so degrade to no preview.
@@ -52,7 +53,7 @@ export const createDesignAutosave = ({
           () => ({}) as PreviewUpload
         );
         const payload: Record<string, unknown> = {
-          name: s.designName,
+          name: sentName,
           doc: sentDoc,
           width: sentDoc.outputs[0]?.width,
           height: sentDoc.outputs[0]?.height,
@@ -74,9 +75,11 @@ export const createDesignAutosave = ({
         }
         // Only mark saved when no edit landed mid-flight — zustand replaces
         // the doc object on every edit, so a reference mismatch means unsaved
-        // changes exist and must not be marked "Saved".
-        if (store.getState().doc === sentDoc) {
-          store.getState().markSaved();
+        // changes exist and must not be marked "Saved". Same for the name: a
+        // rename mid-POST is unsaved work the PUT cycle must pick up.
+        const after = store.getState();
+        if (after.doc === sentDoc && after.designName === sentName) {
+          after.markSaved();
         }
         return data.id as string;
       } finally {
@@ -104,11 +107,16 @@ export const createDesignAutosave = ({
         preview = {};
       }
     }
+    // Read the name at send time, not at schedule time: a rename that landed
+    // while the preview uploaded must ride along, or the library name would
+    // lag the header (and a later markSaved would bury it — see save()).
+    const sentName = store.getState().designName;
     const res = await fetchFn(`/media/designs/${designId}`, {
       method: 'PUT',
-      body: JSON.stringify({ doc: sentDoc, ...preview }),
+      body: JSON.stringify({ name: sentName, doc: sentDoc, ...preview }),
     });
     await res.json();
+    return sentName;
   };
 
   const save = (sentDoc: DesignerDoc) => {
@@ -127,12 +135,16 @@ export const createDesignAutosave = ({
     const designId = state.designId;
     state.setSaving(true);
     putDoc(designId, sentDoc)
-      .then(() => {
-        // Only clear isDirty if no edit landed while the PUT was in flight.
-        if (store.getState().doc === sentDoc) {
-          store.getState().markSaved();
+      .then((sentName) => {
+        // Only clear isDirty when neither the doc nor the name moved on while
+        // the PUT was in flight — it persisted exactly those two snapshots. A
+        // mid-flight rename keeps the design dirty so the debounced effect
+        // (which also watches the name) re-fires and persists it.
+        const s = store.getState();
+        if (s.doc === sentDoc && s.designName === sentName) {
+          s.markSaved();
         } else {
-          store.getState().setSaving(false);
+          s.setSaving(false);
         }
       })
       .catch(() => {

@@ -8,6 +8,7 @@ import type { TimelineAwareness, ImageAwareness } from './collaboration';
 import { CollaborationCursors, type PeerTimelineState } from './collaboration-cursors';
 import { DesignerCanvas } from './canvas';
 import { setImageFetch, clearImageCache, probeImageNaturalSize } from './elements';
+import { addImageElementFromMedia } from './insert-image';
 import { useFetch } from '@postmill-ai/helpers/utils/custom.fetch';
 import {
   useDecisionModal,
@@ -466,6 +467,10 @@ export const Designer: FC<DesignerProps> = ({
   }, [designId, fetch, store]);
 
   const [debouncedDoc] = useDebounce(doc, 2000);
+  // The name is autosaved with the doc (the PUT carries both), so a rename
+  // must wake the same debounced pipeline — a doc-only debounce would leave a
+  // pure rename unpersisted until the next canvas edit.
+  const [debouncedName] = useDebounce(designName, 2000);
 
   // Snapshot the stage canvas to a small JPEG and upload it as a File. Falls
   // back to the raw data URL when the upload fails so a preview is never lost.
@@ -513,8 +518,9 @@ export const Designer: FC<DesignerProps> = ({
     designAutosave.save(debouncedDoc);
     // currentDesignId is a dep, not read here: the first-edit create landing
     // its id in the store must re-fire this effect so the PUT cycle picks up
-    // the latest debounced doc.
-  }, [debouncedDoc, currentDesignId, isDirty, designAutosave]);
+    // the latest debounced doc. debouncedName likewise: a rename is dirty
+    // state without a doc change, and the PUT persists both.
+  }, [debouncedDoc, debouncedName, currentDesignId, isDirty, designAutosave]);
 
   const openExportDialog = useCallback(
     (initialAction?: 'save' | 'create-post') => {
@@ -900,44 +906,12 @@ export const Designer: FC<DesignerProps> = ({
     store.getState().removeElements([el.id]);
   }, [store, fetch, toaster, translate]);
 
+  // Placement is instant even when the intrinsic size is unknown — the helper
+  // drops the element at the canvas fit and corrects the box when the (cache-
+  // shared) probe resolves.
   const addImageFromMedia = useCallback(
     (item: { url: string; fileId?: string; width?: number; height?: number }) => {
-      const state = store.getState();
-      const active = state.doc.outputs[state.currentOutput];
-      const place = (natW?: number, natH?: number) => {
-        const { width: w, height: h } = fitWithin(
-          natW || active.width,
-          natH || active.height,
-          active.width * 0.8,
-          active.height * 0.8
-        );
-        state.addElement({
-          id: '',
-          type: 'image',
-          x: (active.width - w) / 2,
-          y: (active.height - h) / 2,
-          width: w,
-          height: h,
-          rotation: 0,
-          opacity: 1,
-          locked: false,
-          hidden: false,
-          src: item.url,
-          fileId: item.fileId,
-          naturalWidth: natW,
-          naturalHeight: natH,
-        });
-      };
-      if (item.width && item.height) {
-        place(item.width, item.height);
-        return;
-      }
-      // Library files carry no dimension metadata; inserting without the real
-      // pixels stretched the bitmap to the canvas box. Probe first, as the
-      // drag-drop path does.
-      probeImageNaturalSize(item.url).then((dims) =>
-        place(dims?.width, dims?.height)
-      );
+      addImageElementFromMedia(store, item);
     },
     [store]
   );

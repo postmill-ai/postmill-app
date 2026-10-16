@@ -83,6 +83,14 @@ export type FileItem = {
   description: string | null;
   folderId: string | null;
   createdAt: string;
+  /**
+   * Server-maintained extras; `dimensions` (intrinsic pixels, images only,
+   * local storage only) lets pickers place an image without probing it.
+   */
+  metadata?: {
+    dimensions?: { width?: number; height?: number };
+    mimeType?: string;
+  } | null;
   folder?: { id: string; name: string } | null;
 };
 
@@ -783,8 +791,14 @@ export const FileManager: FC<{
               </div>
             </div>
           ) : viewMode === 'grid' ? (
+            // keepPreviousData keeps the previous folder's tiles on screen
+            // while the next folder loads — `isLoading` with data on screen
+            // means exactly that stale set. Make those tiles inert so a fast
+            // click can't land on a wrong-folder item. Folder tiles are not
+            // covered: they already reflect the NEW folder.
             <FileGrid
               files={data?.results || []}
+              filesInert={isLoading}
               selectedFiles={selectedFiles}
               onToggleSelect={toggleFileSelection}
               onFileClick={handleFileClick}

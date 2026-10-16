@@ -132,6 +132,12 @@ export const FileGrid: FC<{
   onFileClick: (file: FileItem) => void;
   standalone?: boolean;
   onSelect?: (items: FileItem[]) => void;
+  /**
+   * Render the file tiles inert (no pointer interaction, dimmed). Used while
+   * the visible files are the PREVIOUS folder's keepPreviousData set — a click
+   * there would act on an item that isn't in the folder being opened.
+   */
+  filesInert?: boolean;
   /** Subfolders of the current folder, rendered ahead of the files. */
   folders?: FolderItem[];
   onFolderOpen?: (folderId: string) => void;
@@ -146,6 +152,7 @@ export const FileGrid: FC<{
   onToggleSelect,
   onFileClick,
   onSelect,
+  filesInert,
   folders = [],
   onFolderOpen,
   folderDropProps,
@@ -198,7 +205,13 @@ export const FileGrid: FC<{
       )}
 
       {showHeadings && <SectionHeading>{t('files', 'Files')}</SectionHeading>}
-      <div className="flex flex-wrap gap-[3px]">
+      <div
+        className={clsx(
+          'flex flex-wrap gap-[3px] transition-opacity',
+          filesInert && 'pointer-events-none opacity-60'
+        )}
+        aria-busy={filesInert || undefined}
+      >
         {files.map((file) => (
           <FileTile
             key={file.id}
@@ -229,12 +242,55 @@ const FileTile: FC<{
 }> = ({ file, isSelected, onDragStart, onActivate, onPreview, onMenu, longPress, t }) => {
   const tags: string[] = file.tags ? JSON.parse(file.tags) : [];
 
+  // The tile is only armed for HTML5 drag after the pointer has actually
+  // travelled — with `draggable` set unconditionally, a few px of movement
+  // during mousedown started a drag that swallowed the click (and made
+  // double-click unreliable). A plain click never crosses the threshold, so
+  // selection/preview stay crisp while drag-to-move keeps working.
+  const DRAG_THRESHOLD_PX = 5;
+  const [dragArmed, setDragArmed] = useState(false);
+  const pressPos = useRef<{ x: number; y: number } | null>(null);
+  // Firefox dispatches a click on the drag source after dragend; swallowing
+  // that one synthetic click keeps "drag to a folder" from also selecting the
+  // file. Reset on pointerdown so a genuine later click is never eaten.
+  const justDragged = useRef(false);
+  const disarmDrag = useCallback(() => {
+    pressPos.current = null;
+    setDragArmed(false);
+  }, []);
+
   return (
     <div
       role="button"
       tabIndex={0}
-      draggable
+      draggable={dragArmed}
       onDragStart={(e) => onDragStart(e, file.id)}
+      onDragEnd={() => {
+        justDragged.current = true;
+        disarmDrag();
+      }}
+      onPointerDown={(e) => {
+        if (e.button === 0) {
+          justDragged.current = false;
+          pressPos.current = { x: e.clientX, y: e.clientY };
+        }
+      }}
+      onPointerMove={(e) => {
+        const start = pressPos.current;
+        if (
+          start &&
+          !dragArmed &&
+          Math.hypot(e.clientX - start.x, e.clientY - start.y) >= DRAG_THRESHOLD_PX
+        ) {
+          setDragArmed(true);
+        }
+      }}
+      // A real HTML5 drag suppresses pointerup on the source (dragend handles
+      // the reset), so releasing here always means "no drag happened".
+      onPointerUp={disarmDrag}
+      onPointerCancel={() => {
+        pressPos.current = null;
+      }}
       className={clsx(
         'group relative rounded-[8px] cursor-grab active:cursor-grabbing border-[3px] transition-all select-none',
         TILE_WIDTH,
@@ -244,7 +300,14 @@ const FileTile: FC<{
       style={{ WebkitTouchCallout: 'none' }}
       onContextMenu={onMenu}
       {...longPress}
-      onClick={onActivate}
+      onClick={() => {
+        disarmDrag();
+        if (justDragged.current) {
+          justDragged.current = false;
+          return;
+        }
+        onActivate();
+      }}
       onDoubleClick={onPreview}
       onKeyDown={(e) => {
         if (e.key === 'Enter' || e.key === ' ') {

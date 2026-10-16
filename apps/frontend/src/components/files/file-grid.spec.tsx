@@ -18,6 +18,12 @@ vi.mock('@postmill-ai/react/translation/i18next', () => ({
   default: { resolvedLanguage: 'en' },
 }));
 
+// jsdom has no PointerEvent constructor; React's pointer handlers only need
+// the MouseEvent shape (clientX/clientY/button), so alias them for tests.
+if (typeof window !== 'undefined' && !('PointerEvent' in window)) {
+  (window as unknown as { PointerEvent: typeof MouseEvent }).PointerEvent = window.MouseEvent;
+}
+
 import { FileGrid } from './file-grid';
 import type { FileItem } from './file-manager';
 import type { FolderItem } from './folder.utils';
@@ -194,5 +200,91 @@ describe('FileGrid', () => {
 
     fireEvent.doubleClick(tile);
     expect(onFileClick).toHaveBeenCalledWith(target);
+  });
+
+  it('arms drag only after the pointer travels past the threshold', () => {
+    // An always-draggable tile turns a slightly sloppy click into a drag that
+    // swallows the click. The tile must stay non-draggable until the press has
+    // moved ~5px, and disarm again on release.
+    const target = file('f1', 'alpha.png');
+    render(<FileGrid {...baseProps} files={[target]} folders={[]} />);
+
+    const tile = screen.getByRole('button');
+    expect(tile.getAttribute('draggable')).toBe('false');
+
+    fireEvent.pointerDown(tile, { button: 0, clientX: 100, clientY: 100 });
+    fireEvent.pointerMove(tile, { clientX: 102, clientY: 101 });
+    expect(tile.getAttribute('draggable')).toBe('false');
+
+    fireEvent.pointerMove(tile, { clientX: 110, clientY: 100 });
+    expect(tile.getAttribute('draggable')).toBe('true');
+
+    // Releasing without a drag disarms again, so the next click is clean.
+    fireEvent.pointerUp(tile, { clientX: 110, clientY: 100 });
+    expect(tile.getAttribute('draggable')).toBe('false');
+  });
+
+  it('still fires the click after a small sub-threshold wiggle', () => {
+    const onToggleSelect = vi.fn();
+    const target = file('f1', 'alpha.png');
+    render(
+      <FileGrid {...baseProps} onToggleSelect={onToggleSelect} files={[target]} folders={[]} />
+    );
+
+    const tile = screen.getByRole('button');
+    fireEvent.pointerDown(tile, { button: 0, clientX: 50, clientY: 50 });
+    fireEvent.pointerMove(tile, { clientX: 53, clientY: 52 });
+    fireEvent.pointerUp(tile, { clientX: 53, clientY: 52 });
+    fireEvent.click(tile);
+
+    expect(onToggleSelect).toHaveBeenCalledWith(target);
+  });
+
+  it('suppresses the synthetic click some browsers fire on the drag source after drop', () => {
+    const onToggleSelect = vi.fn();
+    const target = file('f1', 'alpha.png');
+    render(
+      <FileGrid {...baseProps} onToggleSelect={onToggleSelect} files={[target]} folders={[]} />
+    );
+
+    const tile = screen.getByRole('button');
+    fireEvent.pointerDown(tile, { button: 0, clientX: 50, clientY: 50 });
+    fireEvent.pointerMove(tile, { clientX: 80, clientY: 80 });
+    fireEvent.dragStart(tile, { dataTransfer: { setData: vi.fn(), effectAllowed: '' } });
+    fireEvent.dragEnd(tile);
+    fireEvent.click(tile);
+
+    expect(onToggleSelect).not.toHaveBeenCalled();
+    expect(tile.getAttribute('draggable')).toBe('false');
+
+    // …but the NEXT genuine click must not be eaten.
+    fireEvent.pointerDown(tile, { button: 0, clientX: 60, clientY: 60 });
+    fireEvent.pointerUp(tile, { clientX: 60, clientY: 60 });
+    fireEvent.click(tile);
+    expect(onToggleSelect).toHaveBeenCalledWith(target);
+  });
+
+  it('makes file tiles inert while filesInert, but leaves folder tiles live', () => {
+    // While the next folder loads, the visible file tiles are the previous
+    // folder's — clicks there must not land. Folder tiles already reflect the
+    // new folder, so they stay interactive.
+    const onFolderOpen = vi.fn();
+    render(
+      <FileGrid
+        {...baseProps}
+        files={[file('f1', 'alpha.png')]}
+        folders={[folder('d1', 'Brand')]}
+        onFolderOpen={onFolderOpen}
+        filesInert
+      />
+    );
+
+    const inertRegion = document.querySelector('[aria-busy="true"]') as HTMLElement;
+    expect(inertRegion).toBeTruthy();
+    expect(inertRegion.className).toContain('pointer-events-none');
+    expect(inertRegion.textContent).toContain('alpha.png');
+
+    fireEvent.click(screen.getByLabelText('Open folder Brand'));
+    expect(onFolderOpen).toHaveBeenCalledWith('d1');
   });
 });

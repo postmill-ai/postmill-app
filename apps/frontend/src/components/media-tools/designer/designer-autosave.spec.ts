@@ -79,7 +79,76 @@ describe('createDesignAutosave', () => {
     expect(puts).toHaveLength(1);
     const putPayload = JSON.parse((puts[0][1] as RequestInit).body as string);
     expect(putPayload.doc).toEqual(nextDoc);
+    // The PUT carries the current name too — a rename must survive autosave,
+    // not just the doc.
+    expect(putPayload.name).toBe('Untitled Design');
     expect(putPayload.previewFileId).toBe('file-1');
+    expect(store.getState().isDirty).toBe(false);
+  });
+
+  it('persists a rename through the autosave PUT (name read at send time)', async () => {
+    const store = createDesignerStore(1080, 1080);
+    const fetchMock = vi.fn((url: string) => {
+      if (url === '/media/designs') return Promise.resolve(okJson({ id: 'design-1' }));
+      return Promise.resolve(okJson({}));
+    });
+    const uploadPreview = vi.fn().mockResolvedValue({} as PreviewUpload);
+    const autosave = createDesignAutosave({ store, fetchFn: fetchMock, uploadPreview });
+
+    addText(store, 'First edit');
+    autosave.save(store.getState().doc);
+    await flush();
+    expect(store.getState().designId).toBe('design-1');
+    expect(store.getState().isDirty).toBe(false);
+
+    // A rename changes no doc — the PUT must still carry the new name.
+    store.getState().setDesignName('Spring campaign');
+    autosave.save(store.getState().doc);
+    await flush();
+
+    const puts = callsTo(fetchMock, 'PUT', '/media/designs/design-1');
+    expect(puts).toHaveLength(1);
+    const putPayload = JSON.parse((puts[0][1] as RequestInit).body as string);
+    expect(putPayload.name).toBe('Spring campaign');
+    expect(store.getState().isDirty).toBe(false);
+  });
+
+  it('stays dirty when a rename lands while the PUT is in flight', async () => {
+    const store = createDesignerStore();
+    store.getState().setDesignId('design-5');
+    let resolvePut: (res: Response) => void = () => {};
+    const fetchMock = vi.fn(() =>
+      new Promise<Response>((resolve) => {
+        resolvePut = resolve;
+      })
+    );
+    const autosave = createDesignAutosave({
+      store,
+      fetchFn: fetchMock,
+      uploadPreview: vi.fn().mockResolvedValue({}),
+    });
+
+    addText(store, 'Edit');
+    autosave.save(store.getState().doc);
+    await flush();
+    // Rename mid-PUT: the in-flight request carries the old name, so the new
+    // one is still unsaved work when it resolves.
+    store.getState().setDesignName('Renamed');
+    resolvePut(okJson({}));
+    await flush();
+
+    expect(store.getState().isDirty).toBe(true);
+    expect(store.getState().isSaving).toBe(false);
+
+    // The next autosave cycle persists the rename.
+    autosave.save(store.getState().doc);
+    await flush();
+    resolvePut(okJson({}));
+    await flush();
+    const puts = callsTo(fetchMock, 'PUT', '/media/designs/design-5');
+    expect(puts).toHaveLength(2);
+    const lastPut = JSON.parse((puts[1][1] as RequestInit).body as string);
+    expect(lastPut.name).toBe('Renamed');
     expect(store.getState().isDirty).toBe(false);
   });
 
