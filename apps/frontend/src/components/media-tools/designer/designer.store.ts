@@ -234,6 +234,16 @@ export interface DesignerActions {
   setSelectedClip: (clip: { outputIndex: number; trackId: string; clipId: string } | null) => void;
   setTrackGain: (outputIndex: number, trackId: string, gain: number, commit?: boolean) => void;
   setTrackAutoDuck: (outputIndex: number, trackId: string, autoDuck: boolean) => void;
+  /** Rename a track (empty/whitespace clears the custom name back to the type label). */
+  renameTrack: (outputIndex: number, trackId: string, name: string) => void;
+  /** Muted audio tracks contribute nothing to preview or export. */
+  setTrackMuted: (outputIndex: number, trackId: string, muted: boolean) => void;
+  /**
+   * Copy a clip onto the same track right after the source clip (extending the
+   * output duration when it would overflow, like an insert). Returns the new
+   * clip id, or null when there is no room even after extension.
+   */
+  duplicateClip: (outputIndex: number, trackId: string, clipId: string) => string | null;
 }
 
 export type DesignerStore = DesignerState & DesignerActions;
@@ -1282,6 +1292,80 @@ export const createDesignerStore = (
         outs[outputIndex] = updated;
         set({ doc: { ...doc, outputs: outs }, isDirty: true });
         get().pushHistory();
+      },
+
+      renameTrack: (outputIndex, trackId, name) => {
+        const { doc } = get();
+        const vo = doc.outputs[outputIndex] as VideoOutput | undefined;
+        if (!vo || doc.mode !== 'video') return;
+        const trimmed = name.trim();
+        const updated: VideoOutput = {
+          ...vo,
+          // Clearing the name stores undefined (not '') so the label falls back
+          // to the track type and the field stays absent from the saved doc.
+          tracks: vo.tracks.map((t) => t.id === trackId ? { ...t, name: trimmed || undefined } : t),
+        };
+        const outs = [...doc.outputs];
+        outs[outputIndex] = updated;
+        set({ doc: { ...doc, outputs: outs }, isDirty: true });
+        get().pushHistory('Rename track');
+      },
+
+      setTrackMuted: (outputIndex, trackId, muted) => {
+        const { doc } = get();
+        const vo = doc.outputs[outputIndex] as VideoOutput | undefined;
+        if (!vo || doc.mode !== 'video') return;
+        const updated: VideoOutput = {
+          ...vo,
+          tracks: vo.tracks.map((t) => t.id === trackId ? { ...t, muted } : t),
+        };
+        const outs = [...doc.outputs];
+        outs[outputIndex] = updated;
+        set({ doc: { ...doc, outputs: outs }, isDirty: true });
+        get().pushHistory(muted ? 'Mute track' : 'Unmute track');
+      },
+
+      duplicateClip: (outputIndex, trackId, clipId) => {
+        const { doc } = get();
+        const vo = doc.outputs[outputIndex] as VideoOutput | undefined;
+        if (!vo || doc.mode !== 'video') return;
+        const track = vo.tracks.find((t) => t.id === trackId);
+        const source = track?.clips.find((c) => c.id === clipId);
+        if (!track || !source) return null;
+
+        // Start at the source's VISUAL end (freeze extension included) so the
+        // copy never overlaps the original's held frame.
+        const duration = source.endMs - source.startMs;
+        const startMs = source.endMs + (source.freezeAtMs || 0);
+        // Extend the output when the copy would overflow, the way insert flows
+        // do — but the 60 s ceiling still applies; past it there is no room.
+        const durationMs = Math.max(vo.durationMs, startMs + duration);
+        if (durationMs > 60000 || startMs >= durationMs) return null;
+        const newClip: VideoClip = {
+          ...source,
+          id: genId(),
+          startMs,
+          endMs: startMs + duration,
+          // A frozen hold is not part of the copy: duplicating a half-frozen
+          // clip would otherwise paste a clip whose tail sits inside the new
+          // duration bounds but reads as a longer freeze.
+          freezeAtMs: undefined,
+        };
+        const updated: VideoOutput = {
+          ...vo,
+          durationMs,
+          tracks: vo.tracks.map((t) =>
+            t.id === trackId ? { ...t, clips: [...t.clips, newClip] } : t
+          ),
+        };
+        const outs = [...doc.outputs];
+        outs[outputIndex] = updated;
+        // One history entry for the whole operation (duration extension +
+        // insert) — a split setVideoDuration/addClip pair would undo in two
+        // steps for a single user gesture.
+        set({ doc: { ...doc, outputs: outs }, isDirty: true, selectedClip: { outputIndex, trackId, clipId: newClip.id }, selectedIds: [] });
+        get().pushHistory('Duplicate clip');
+        return newClip.id;
       },
 
     };

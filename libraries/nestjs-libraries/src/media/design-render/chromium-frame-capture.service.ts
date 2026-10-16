@@ -83,6 +83,10 @@ export class ChromiumFrameCaptureService {
    * Render every frame of a VideoOutput to PNG files in `frameDir`.
    * Files are named `frame-00001.png`, `frame-00002.png`, etc.
    * Returns the number of frames written.
+   *
+   * `scale` multiplies the output resolution: the viewport and the page's frame
+   * canvas run at canvas×scale (the renderer script reads `renderScale` off the
+   * composition it is handed), so 2× is a true supersample, not an upscale.
    */
   async captureFrames(
     output: VideoOutput,
@@ -90,9 +94,10 @@ export class ChromiumFrameCaptureService {
     frameDir: string,
     onProgress?: (progress: FrameCaptureProgress) => void,
     routeOptions?: RenderRouteOptions,
+    scale = 1,
   ): Promise<number> {
-    const width = output.width;
-    const height = output.height;
+    const width = Math.round(output.width * scale);
+    const height = Math.round(output.height * scale);
     const durationMs = output.durationMs;
     const totalFrames = Math.max(1, Math.ceil((durationMs / 1000) * fps));
 
@@ -125,11 +130,19 @@ export class ChromiumFrameCaptureService {
         'http://localhost:3000';
 
       if (routeOptions) {
-        const renderUrl = `${baseUrl.replace(/\/$/, '')}/media/designs/render-frame/${routeOptions.jobId}?token=${encodeURIComponent(routeOptions.token)}`;
+        // scale/fps ride as query params: the route serves the composition from
+        // the render payload, so the overrides are applied there — the stored
+        // document itself is never mutated.
+        const params = new URLSearchParams({ token: routeOptions.token });
+        if (scale !== 1) params.set('scale', String(scale));
+        params.set('fps', String(fps));
+        const renderUrl = `${baseUrl.replace(/\/$/, '')}/media/designs/render-frame/${routeOptions.jobId}?${params.toString()}`;
         await page.goto(renderUrl, { waitUntil: 'networkidle0' });
       } else {
         const html = buildFramePage({
-          outputLiteral: escapeForScriptTag(output),
+          outputLiteral: escapeForScriptTag(
+            scale === 1 ? output : { ...output, renderScale: scale },
+          ),
           baseUrlLiteral: escapeForScriptTag(baseUrl),
           baseUrl,
           script: FRAME_RENDERER_SCRIPT,

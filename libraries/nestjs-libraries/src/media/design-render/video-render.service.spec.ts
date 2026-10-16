@@ -162,6 +162,16 @@ describe('VideoRenderService', () => {
 
     await service.processVideoRender('job-1');
 
+    // The payload is re-published for the render's duration (the token-gated
+    // render-frame route serves it to the headless page) and removed afterwards.
+    expect(vi.mocked(ioRedis.set)).toHaveBeenCalledWith(
+      'video-render:payload:job-1',
+      expect.stringContaining('"composition"'),
+      'EX',
+      24 * 60 * 60,
+    );
+    expect(vi.mocked(ioRedis.del)).toHaveBeenCalledWith('video-render:payload:job-1');
+
     expect(aiSettings.updateMediaJob).toHaveBeenCalledWith(orgId, 'job-1', {
       status: 'processing',
     });
@@ -276,6 +286,60 @@ describe('VideoRenderService', () => {
     );
     // The loser's finally must not release keys owned by the winning runner.
     expect(vi.mocked(ioRedis.del)).not.toHaveBeenCalled();
+  });
+
+  it('accepts a 2× scale on a 1080×1080 canvas @60fps and stores the overrides in the payload', async () => {
+    const composition = { ...videoOutput(3000), height: 1080, fps: 30 };
+    await service.enqueueRender(orgId, { composition, scale: 2, fps: 60 });
+
+    const stored = JSON.parse(vi.mocked(ioRedis.set).mock.calls[0][1] as string);
+    expect(stored.scale).toBe(2);
+    expect(stored.fps).toBe(60);
+    // The composition itself is stored unscaled — the render pipeline applies it.
+    expect(stored.composition.width).toBe(1080);
+  });
+
+  it('rejects a scale that pushes the effective dimensions out of range', async () => {
+    await expect(
+      service.enqueueRender(orgId, {
+        composition: { ...videoOutput(3000), width: 10000, height: 1080 },
+        scale: 2,
+      }),
+    ).rejects.toThrow(/out of range/);
+  });
+
+  it('applies scale/fps overrides from the payload when processing', async () => {
+    const composition = { ...videoOutput(3000), height: 1080, fps: 30 };
+    vi.mocked(ioRedis.get).mockResolvedValueOnce(
+      JSON.stringify({ organizationId: orgId, composition, scale: 2, fps: 60 }),
+    );
+
+    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'postmill-test-'));
+    const videoPath = path.join(tmpDir, 'output.mp4');
+    const thumbPath = path.join(tmpDir, 'thumb.jpg');
+    fs.writeFileSync(videoPath, Buffer.from('fake-video'));
+    fs.writeFileSync(thumbPath, Buffer.from('fake-thumb'));
+    vi.mocked(encoder.encode).mockResolvedValueOnce({
+      videoPath,
+      thumbnailPath: thumbPath,
+    });
+
+    await service.processVideoRender('job-1');
+
+    expect(encoder.encode).toHaveBeenCalledWith(
+      composition,
+      expect.objectContaining({ fps: 60, scale: 2 }),
+    );
+    expect(lifecycle.completeJobWithBuffer).toHaveBeenCalledWith(
+      expect.objectContaining({ id: 'job-1' }),
+      expect.any(Buffer),
+      'video/mp4',
+      // Metadata records the EFFECTIVE (scaled) dimensions and overridden fps.
+      expect.objectContaining({ width: 2160, height: 2160, fps: 60 }),
+      expect.any(Buffer),
+    );
+
+    encoder.cleanup(tmpDir);
   });
 
   it('does not double-render or spuriously fail a job when two runners race the claim', async () => {

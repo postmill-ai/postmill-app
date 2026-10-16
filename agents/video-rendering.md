@@ -25,7 +25,15 @@ with one `video_export` credit charged. Sibling docs: `agents/backend.md`,
    - Validates the composition: 60 s duration cap, `validateVideoComposition` bounds
      (dims ≤ `MAX_DIMENSION`, fps ≤ 240, `MAX_TRACKS`, `MAX_CLIPS_PER_TRACK` from
      `media/designer-doc/designer-doc.limits.ts`) — a resource-DoS guard on input that
-     drives Puppeteer/FFmpeg.
+     drives Puppeteer/FFmpeg. The bounds apply to the EFFECTIVE render: the optional
+     `scale` (0.5|1|2, resolution multiplier) and `fps` (24|30|60 override) DTO fields
+     are folded into the composition copy before validation, and ride the payload +
+     `DesignRenderJobSpec.options.scale` through to the encoder. The stored document is
+     never mutated; on the render-route path the overrides reach the frame page as
+     clamped `scale`/`fps` query params (`renderScale` on the served composition copy).
+   - Track-level `muted` (audio tracks) is honored by both the preview engine and the
+     FFmpeg mixer — a muted track's clips contribute nothing, not even to the ducking
+     sidechain.
    - `MediaJobLifecycleService.createPendingJob({ provider: 'chromium-ffmpeg', creditType: 'video_export' })`
      creates the `AIMediaJob` row.
    - Payload stashed in Redis: `video-render:payload:<jobId>` (design) or

@@ -130,18 +130,31 @@ export class VideoRenderService {
       format?: string;
       quality?: number;
       bitrateKbps?: number;
+      /** Resolution multiplier over the canvas size (0.5 | 1 | 2); default 1. */
+      scale?: number;
+      /** Frame-rate override (24 | 30 | 60); default = composition.fps. */
+      fps?: number;
       posterUrl?: string;
       folderId?: string;
     },
   ) {
     const composition = body.composition || {};
+    const scale = body.scale || 1;
+    const fps = body.fps || composition.fps || 30;
     const durationMs = composition.durationMs || 10000;
     if (durationMs > MAX_DURATION_MS) {
       throw new Error(
         `Composition duration ${durationMs}ms exceeds the 60 s hard cap`,
       );
     }
-    validateVideoComposition(composition);
+    // Bounds apply to the EFFECTIVE render: a 2× 1080×1080 @60fps job must pass
+    // (2160 ≤ MAX_DIMENSION, 60 ≤ MAX_FPS) while a 2× near-max canvas is rejected.
+    validateVideoComposition({
+      ...composition,
+      width: Math.round((composition.width || 0) * scale),
+      height: Math.round((composition.height || 0) * scale),
+      fps,
+    });
 
     const job = await this._lifecycle.createPendingJob({
       organizationId: orgId,
@@ -158,6 +171,8 @@ export class VideoRenderService {
       format: body.format,
       quality: body.quality,
       bitrateKbps: body.bitrateKbps,
+      scale: body.scale,
+      fps: body.fps,
       posterUrl: body.posterUrl,
       folderId: body.folderId,
       enqueuedAt: new Date().toISOString(),
@@ -253,17 +268,29 @@ export class VideoRenderService {
         }
         throw new Error(`Render claim for job ${jobId} is held while the job is still pending`);
       }
+      // Re-store the payload for the render's duration: the headless page loads
+      // the composition from `GET /media/designs/render-frame/:jobId` (token-
+      // gated), which reads this same key — GETDEL alone left it 404ing. The
+      // single-winner claim already happened; re-publishing does not weaken it.
+      // The key is deleted again in the finally below.
+      await ioRedis.set(payloadKey(jobId), raw, 'EX', RENDER_PAYLOAD_TTL_SECONDS);
       const input = JSON.parse(raw);
 
       const composition = input.composition || {};
-      const fps = composition.fps || 30;
+      const scale = typeof input.scale === 'number' && input.scale > 0 ? input.scale : 1;
+      const fps = input.fps || composition.fps || 30;
       const durationMs = composition.durationMs || 10000;
       if (durationMs > MAX_DURATION_MS) {
         throw new Error(
           `Composition duration ${durationMs}ms exceeds the 60 s hard cap`,
         );
       }
-      validateVideoComposition(composition);
+      validateVideoComposition({
+        ...composition,
+        width: Math.round((composition.width || 0) * scale),
+        height: Math.round((composition.height || 0) * scale),
+        fps,
+      });
 
       const format = ['webm', 'gif', 'webp-animated'].includes(input.format)
         ? input.format
@@ -271,6 +298,7 @@ export class VideoRenderService {
       const renderToken = mediaJobWebhookToken(jobId, job.organizationId);
       const options = {
         fps,
+        scale,
         bitrateKbps: input.bitrateKbps || composition.bitrateKbps || 8000,
         format: format as DesignRenderJobSpec['options']['format'],
         quality: input.quality,
@@ -329,8 +357,8 @@ export class VideoRenderService {
         videoBuffer,
         mimeType,
         {
-          width: composition.width,
-          height: composition.height,
+          width: Math.round((composition.width || 0) * scale),
+          height: Math.round((composition.height || 0) * scale),
           durationSeconds: durationMs / 1000,
           fps,
           provider: 'chromium-ffmpeg',

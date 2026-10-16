@@ -613,6 +613,17 @@ export const ClipInspector: FC<ClipInspectorProps> = ({ store, outputIndex, trac
             </button>
           ))}
         </div>
+        {/* Arbitrary speed within the schema's 0.1–10 range — the presets above
+            are just the common stops. Preview honours it via playbackRate and
+            the server seeks/mixes with the same multiplier. */}
+        <Stepper
+          label={translate('designer_label_custom_speed', 'Custom speed (x)')}
+          min={0.1}
+          max={10}
+          step={0.05}
+          value={Math.round((clip.speed ?? 1) * 100) / 100}
+          onChange={(n) => updateClip({ speed: Math.min(10, Math.max(0.1, Math.round(n * 100) / 100)) })}
+        />
 
         <div className="flex items-center justify-between pt-1">
           <span className="text-[11px] text-textColor/70">{translate('designer_label_reverse', 'Reverse')}</span>

@@ -183,6 +183,19 @@ describe('DesignerDoc schema', () => {
     expect(result.success).toBe(false);
   });
 
+  it('accepts optional track name/muted in strict mode, and tolerates their absence', () => {
+    const withFields = JSON.parse(JSON.stringify(videoDocFixture));
+    withFields.outputs[0].tracks[0].name = 'B-roll';
+    withFields.outputs[0].tracks[0].muted = true;
+    const parsed = DesignerDocStrictSchema.parse(migrateDoc(withFields));
+    expect(parsed.outputs[0].tracks[0].name).toBe('B-roll');
+    expect(parsed.outputs[0].tracks[0].muted).toBe(true);
+
+    // Absence is fine too (pre-existing docs carry neither field).
+    const absent = DesignerDocStrictSchema.safeParse(migrateDoc(videoDocFixture));
+    expect(absent.success).toBe(true);
+  });
+
   it('round-trips a background texture through both parsers (v7)', () => {
     const doc = JSON.parse(JSON.stringify(imageDocFixture));
     doc.outputs[0].bg.texture = { type: 'grain', intensity: 0.4, scale: 2, seed: 1234 };

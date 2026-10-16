@@ -54,6 +54,8 @@ function getEffectiveEnd(clip: VideoClip): number {
 
 export interface VideoEncodeOptions {
   fps?: number;
+  /** Resolution multiplier over the composition canvas (default 1). */
+  scale?: number;
   bitrateKbps?: number;
   format?: 'mp4' | 'webm' | 'gif' | 'webp-animated';
   quality?: number;
@@ -89,6 +91,10 @@ export class FfmpegVideoEncoderService {
   ): Promise<EncodeResult> {
     const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'postmill-render-'));
     const fps = options.fps || output.fps || 30;
+    const scale = options.scale && options.scale > 0 ? options.scale : 1;
+    // Frames are captured at canvas×scale, so the encoded raster is scaled too.
+    const outWidth = Math.round(output.width * scale);
+    const outHeight = Math.round(output.height * scale);
     const bitrateKbps = options.bitrateKbps || 8000;
     const format = options.format || 'mp4';
 
@@ -104,7 +110,7 @@ export class FfmpegVideoEncoderService {
           : undefined;
       await this._frameCapture.captureFrames(output, fps, tmpDir, (p) => {
         this._logger.debug(`Frame ${p.frame}/${p.total}`);
-      }, routeOptions);
+      }, routeOptions, scale);
 
       const durationS = output.durationMs / 1000;
       const videoPath = path.join(tmpDir, `output.${format}`);
@@ -121,7 +127,7 @@ export class FfmpegVideoEncoderService {
             '-i',
             framePattern,
             '-vf',
-            `fps=${fps},scale=${output.width}:${output.height}:flags=lanczos,split[s0][s1];[s0]palettegen=max_colors=128[p];[s1][p]paletteuse=dither=bayer`,
+            `fps=${fps},scale=${outWidth}:${outHeight}:flags=lanczos,split[s0][s1];[s0]palettegen=max_colors=128[p];[s1][p]paletteuse=dither=bayer`,
             '-loop',
             '0',
             videoPath,
@@ -136,7 +142,7 @@ export class FfmpegVideoEncoderService {
             '-i',
             framePattern,
             '-vf',
-            `fps=${fps},scale=${output.width}:${output.height}:flags=lanczos`,
+            `fps=${fps},scale=${outWidth}:${outHeight}:flags=lanczos`,
             '-c:v',
             'libwebp',
             '-loop',
@@ -232,6 +238,9 @@ export class FfmpegVideoEncoderService {
     const downloadCache = new Map<string, string>();
 
     for (const track of output.tracks) {
+      // A muted track contributes nothing to the mix (the preview engine skips
+      // it the same way) — and it must not feed the ducking sidechain either.
+      if (track.muted) continue;
       const trackGain = track.gain ?? 1;
       for (const clip of track.clips) {
         const effectiveEnd = getEffectiveEnd(clip);

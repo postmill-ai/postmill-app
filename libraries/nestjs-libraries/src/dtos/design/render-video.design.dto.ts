@@ -1,4 +1,5 @@
 import {
+  IsIn,
   IsInt,
   IsNumber,
   IsObject,
@@ -27,6 +28,22 @@ export class RenderVideoDesignDto {
   @IsOptional()
   @IsNumber()
   bitrateKbps?: number;
+
+  /**
+   * Output resolution as a multiple of the canvas size (0.5×/1×/2×). Absent =
+   * render at canvas size. Applied to the Chromium viewport and frame canvas,
+   * not as a post-scale, so 2× is a true supersample.
+   */
+  @IsOptional()
+  @IsNumber()
+  @IsIn([0.5, 1, 2])
+  scale?: number;
+
+  /** Frame-rate override (24/30/60). Absent = the composition's own fps. */
+  @IsOptional()
+  @IsInt()
+  @IsIn([24, 30, 60])
+  fps?: number;
 
   @IsOptional()
   @IsString()

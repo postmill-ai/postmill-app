@@ -5,9 +5,10 @@ import type { VideoClip, VideoTrack, VideoOutput, DesignerElement } from './desi
 import { VideoPreviewEngine } from './video-preview';
 import { useFetch } from '@postmill-ai/helpers/utils/custom.fetch';
 import { useToaster } from '@postmill-ai/react/toaster/toaster';
-import { useModals } from '@postmill-ai/frontend/components/layout/new-modal';
+import { useModals, usePromptModal } from '@postmill-ai/frontend/components/layout/new-modal';
 import { useMediaToolsStatus } from '@postmill-ai/frontend/components/layout/use-media-tools-status';
 import { VoiceoverDialog } from './voiceover-dialog';
+import { Stepper } from './controls';
 import { addMediaToTimeline, probeAudioDuration, probeVideoMetadata } from './add-media-to-timeline';
 import { clipEdgeUpdate } from './clip-geometry';
 import { timelineBeats } from './beat-sync';
@@ -26,6 +27,9 @@ const RULER_HEIGHT = 22;
 const LABEL_WIDTH = 64;
 const MS_PER_PIXEL_DEFAULT = 4;
 const SNAP_THRESHOLD_MS = 80;
+const TRANSITION_MIN_MS = 100;
+const TRANSITION_MAX_MS = 2000;
+const TRANSITION_DEFAULT_MS = 500;
 
 const TRACK_COLORS: Record<VideoTrack['type'], string> = {
   video: '#4F46E5',
@@ -563,6 +567,7 @@ export const VideoTimeline: FC<VideoTimelineProps> = ({ store, sendTimelineAware
 
   const [zoomPxPerMs, setZoomPxPerMs] = useState(1 / MS_PER_PIXEL_DEFAULT);
   const [isPlaying, setIsPlaying] = useState(false);
+  const [loopPlayback, setLoopPlayback] = useState(false);
   const [dragging, setDragging] = useState<{
     trackId: string;
     clipId: string;
@@ -596,6 +601,7 @@ export const VideoTimeline: FC<VideoTimelineProps> = ({ store, sendTimelineAware
     x: number;
     y: number;
   } | null>(null);
+  const [addTrackMenu, setAddTrackMenu] = useState<{ x: number; y: number } | null>(null);
   const [dragOverTrackId, setDragOverTrackId] = useState<string | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
   const previewRef = useRef<VideoPreviewEngine | null>(null);
@@ -604,6 +610,7 @@ export const VideoTimeline: FC<VideoTimelineProps> = ({ store, sendTimelineAware
   const fetch = useFetch();
   const toaster = useToaster();
   const modals = useModals();
+  const promptModal = usePromptModal();
 
   const vo = doc.outputs[currentOutput] as VideoOutput | undefined;
   const isVideo = doc.mode === 'video' && !!vo;
@@ -686,6 +693,7 @@ export const VideoTimeline: FC<VideoTimelineProps> = ({ store, sendTimelineAware
       previewRef.current = new VideoPreviewEngine(store);
     }
     previewRef.current.play({
+      loop: loopPlayback,
       onTick: (ms) => {
         setPlayhead(ms);
       },
@@ -695,7 +703,7 @@ export const VideoTimeline: FC<VideoTimelineProps> = ({ store, sendTimelineAware
     });
     setIsPlaying(true);
     scrollToPlayhead();
-  }, [isVideo, vo, isPlaying, store, setPlayhead, scrollToPlayhead]);
+  }, [isVideo, vo, isPlaying, loopPlayback, store, setPlayhead, scrollToPlayhead]);
 
   // Guards the long-running poll loops (landOrPoll / runClipTransform) so they
   // stop touching the store / firing toasts after the timeline unmounts.
@@ -715,17 +723,58 @@ export const VideoTimeline: FC<VideoTimelineProps> = ({ store, sendTimelineAware
     if (isPlaying) scrollToPlayhead();
   }, [playheadMs, isPlaying, scrollToPlayhead]);
 
-  const handleRulerClick = useCallback(
-    (e: React.MouseEvent) => {
+  const seekFromClientX = useCallback(
+    (clientX: number) => {
       if (!scrollRef.current) return;
       const rect = scrollRef.current.getBoundingClientRect();
-      const x = e.clientX - rect.left + scrollRef.current.scrollLeft - LABEL_WIDTH;
+      const x = clientX - rect.left + scrollRef.current.scrollLeft - LABEL_WIDTH;
       const ms = Math.max(0, Math.min(vo?.durationMs ?? 60000, x / pixelsPerMs));
       setPlayhead(ms);
       if (previewRef.current) previewRef.current.seek(ms);
     },
     [pixelsPerMs, setPlayhead, vo?.durationMs],
   );
+
+  // Ruler drag-scrub: mousedown seeks, mousemove-while-down keeps scrubbing
+  // (rAF-throttled so a fast drag doesn't seek the media elements per pixel),
+  // mouseup releases.
+  const [scrubbing, setScrubbing] = useState(false);
+  const scrubRafRef = useRef<number | null>(null);
+  const scrubLastXRef = useRef(0);
+
+  const handleRulerMouseDown = useCallback(
+    (e: React.MouseEvent) => {
+      if (e.button !== 0) return;
+      // Focus the ruler (no preventDefault — that would suppress focus and
+      // break the ruler's keyboard stepping) so arrows keep working mid-scrub.
+      (e.currentTarget as HTMLElement).focus();
+      seekFromClientX(e.clientX);
+      scrubLastXRef.current = e.clientX;
+      setScrubbing(true);
+    },
+    [seekFromClientX],
+  );
+
+  useEffect(() => {
+    if (!scrubbing) return;
+    const onMove = (e: MouseEvent) => {
+      scrubLastXRef.current = e.clientX;
+      if (scrubRafRef.current !== null) return;
+      scrubRafRef.current = requestAnimationFrame(() => {
+        scrubRafRef.current = null;
+        seekFromClientX(scrubLastXRef.current);
+      });
+    };
+    const onUp = () => setScrubbing(false);
+    window.addEventListener('mousemove', onMove);
+    window.addEventListener('mouseup', onUp);
+    return () => {
+      window.removeEventListener('mousemove', onMove);
+      window.removeEventListener('mouseup', onUp);
+      if (scrubRafRef.current !== null) cancelAnimationFrame(scrubRafRef.current);
+      scrubRafRef.current = null;
+    };
+  }, [scrubbing, seekFromClientX]);
 
   const handleZoomIn = useCallback(() => {
     setZoomPxPerMs((z) => Math.min(z * 1.5, 4));
@@ -1045,6 +1094,21 @@ export const VideoTimeline: FC<VideoTimelineProps> = ({ store, sendTimelineAware
           store.getState().removeClip(currentOutput, selectedClip.trackId, selectedClip.clipId);
           setSelectedClip(null);
         }
+      } else if (
+        (e.key === ',' || e.key === '.') &&
+        !e.ctrlKey && !e.metaKey && !e.altKey &&
+        !(e.target as HTMLElement)?.matches?.('input,textarea')
+      ) {
+        // Frame step: ,/. walk the playhead one frame back/forward (CapCut
+        // muscle memory), bounded to the timeline.
+        e.preventDefault();
+        const frameMs = 1000 / (vo.fps || 30);
+        const next = Math.max(
+          0,
+          Math.min(vo.durationMs, playheadMs + (e.key === '.' ? frameMs : -frameMs))
+        );
+        setPlayhead(next);
+        previewRef.current?.seek(next);
       } else if (e.key === ' ' && !(e.target as HTMLElement)?.matches?.('input,textarea')) {
         e.preventDefault();
         handlePlayPause();
@@ -1069,7 +1133,7 @@ export const VideoTimeline: FC<VideoTimelineProps> = ({ store, sendTimelineAware
         handleFreezeFrame(selectedClip.trackId, selectedClip.clipId);
       }
     },
-    [isVideo, vo, selectedClip, store, currentOutput, playheadMs, handlePlayPause, setSelectedClip, handleFreezeFrame],
+    [isVideo, vo, selectedClip, store, currentOutput, playheadMs, handlePlayPause, setSelectedClip, setPlayhead, handleFreezeFrame],
   );
 
   const isSelected = useCallback(
@@ -1101,7 +1165,14 @@ export const VideoTimeline: FC<VideoTimelineProps> = ({ store, sendTimelineAware
   const handleSetTransition = useCallback(
     (trackId: string, fromClipId: string, toClipId: string, type: 'cut' | 'fade' | 'dissolve' | 'slide', direction?: 'left' | 'right' | 'up' | 'down') => {
       const state = store.getState();
-      const durationMs = type === 'cut' ? 0 : 500;
+      const vo = state.doc.outputs[currentOutput] as VideoOutput | undefined;
+      const track = vo?.tracks.find((t) => t.id === trackId);
+      // Switching type keeps a custom duration the user already dialled in;
+      // only a fresh transition starts at the 500 ms default.
+      const existing =
+        track?.clips.find((c) => c.id === fromClipId)?.transitionOut?.durationMs ??
+        track?.clips.find((c) => c.id === toClipId)?.transitionIn?.durationMs;
+      const durationMs = type === 'cut' ? 0 : existing && existing > 0 ? existing : TRANSITION_DEFAULT_MS;
       state.updateClipSilent(currentOutput, trackId, fromClipId, {
         transitionOut: { type, durationMs, direction },
       });
@@ -1113,6 +1184,78 @@ export const VideoTimeline: FC<VideoTimelineProps> = ({ store, sendTimelineAware
     },
     [store, currentOutput],
   );
+
+  const handleSetTransitionDuration = useCallback(
+    (trackId: string, fromClipId: string, toClipId: string, durationMs: number) => {
+      const state = store.getState();
+      const clamped = Math.max(TRANSITION_MIN_MS, Math.min(TRANSITION_MAX_MS, Math.round(durationMs)));
+      const vo = state.doc.outputs[currentOutput] as VideoOutput | undefined;
+      const track = vo?.tracks.find((t) => t.id === trackId);
+      const from = track?.clips.find((c) => c.id === fromClipId);
+      const to = track?.clips.find((c) => c.id === toClipId);
+      if (from?.transitionOut) {
+        state.updateClipSilent(currentOutput, trackId, fromClipId, {
+          transitionOut: { ...from.transitionOut, durationMs: clamped },
+        });
+      }
+      if (to?.transitionIn) {
+        state.updateClipSilent(currentOutput, trackId, toClipId, {
+          transitionIn: { ...to.transitionIn, durationMs: clamped },
+        });
+      }
+      store.getState().pushHistory();
+    },
+    [store, currentOutput],
+  );
+
+  const handleRenameTrack = useCallback(
+    async (trackId: string) => {
+      setTrackSettings(null);
+      const state = store.getState();
+      const vo = state.doc.outputs[currentOutput] as VideoOutput | undefined;
+      const track = vo?.tracks.find((t) => t.id === trackId);
+      if (!track) return;
+      // promptModal resolves null on dismiss — that means "keep the old name",
+      // while a submitted empty string clears back to the type label.
+      const name = await promptModal.open({
+        title: translate('rename_track', 'Rename track'),
+        label: translate('track_name', 'Track name'),
+        initialValue: track.name ?? '',
+      });
+      if (name === null) return;
+      store.getState().renameTrack(currentOutput, trackId, name);
+    },
+    [store, currentOutput, promptModal, translate],
+  );
+
+  const handleDeleteTrack = useCallback(
+    (trackId: string) => {
+      setTrackSettings(null);
+      const state = store.getState();
+      if (state.selectedClip?.outputIndex === currentOutput && state.selectedClip?.trackId === trackId) {
+        state.setSelectedClip(null);
+      }
+      store.getState().removeTrack(currentOutput, trackId);
+    },
+    [store, currentOutput],
+  );
+
+  const handleAddTrack = useCallback(
+    (type: VideoTrack['type']) => {
+      setAddTrackMenu(null);
+      store.getState().addTrack(currentOutput, type);
+    },
+    [store, currentOutput],
+  );
+
+  const handleDuplicateClip = useCallback(() => {
+    if (!clipMenu) return;
+    const id = store.getState().duplicateClip(clipMenu.outputIndex, clipMenu.trackId, clipMenu.clipId);
+    if (!id) {
+      toaster.show(translate('no_room_to_duplicate_clip', 'No room to duplicate — the timeline is at the 60 s limit'), 'warning');
+    }
+    setClipMenu(null);
+  }, [clipMenu, store, toaster, translate]);
 
   const generateVoiceover = useCallback(
     async (text: string, voiceId: string) => {
@@ -1458,6 +1601,17 @@ export const VideoTimeline: FC<VideoTimelineProps> = ({ store, sendTimelineAware
         >
           {isPlaying ? '⏸' : '▶'}
         </button>
+        <button
+          onClick={() => setLoopPlayback((v) => !v)}
+          aria-pressed={loopPlayback}
+          className={`w-7 h-7 flex items-center justify-center rounded-sm text-[13px] ${
+            loopPlayback ? 'bg-designerAccent/20 text-textColor' : 'text-textColor/60 hover:text-textColor hover:bg-studioBorder/30'
+          }`}
+          title={translate('loop_playback', 'Loop playback')}
+          aria-label={translate('loop_playback', 'Loop playback')}
+        >
+          🔁
+        </button>
         <span className="text-[12px] text-textColor font-mono min-w-[70px] tabular-nums">
           {formatTime(playheadMs)}
         </span>
@@ -1482,9 +1636,14 @@ export const VideoTimeline: FC<VideoTimelineProps> = ({ store, sendTimelineAware
           +
         </button>
         <button
-          onClick={() => store.getState().addTrack(currentOutput, 'video')}
+          onClick={(e) => {
+            const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
+            setAddTrackMenu({ x: rect.left + rect.width / 2, y: rect.bottom });
+          }}
           className="px-2 py-0.5 rounded-sm text-[10px] border border-studioBorder text-textColor/60 hover:text-textColor"
-          title={translate('add_video_track', 'Add video track')}
+          title={translate('add_track', 'Add track')}
+          aria-haspopup="menu"
+          aria-expanded={!!addTrackMenu}
         >
           {translate('plus_track', '+ Track')}
         </button>
@@ -1583,9 +1742,9 @@ export const VideoTimeline: FC<VideoTimelineProps> = ({ store, sendTimelineAware
             aria-valuemax={Math.round(vo.durationMs)}
             aria-valuetext={formatTime(playheadMs)}
             tabIndex={0}
-            className="sticky top-0 z-10 bg-newBgColorInner border-b border-studioBorder/40"
+            className="sticky top-0 z-10 bg-newBgColorInner border-b border-studioBorder/40 select-none"
             style={{ height: RULER_HEIGHT, marginLeft: LABEL_WIDTH }}
-            onMouseDown={handleRulerClick}
+            onMouseDown={handleRulerMouseDown}
             onKeyDown={handleRulerKeyDown}
             onKeyUp={handleSliderKeyUp}
           >
@@ -1623,21 +1782,26 @@ export const VideoTimeline: FC<VideoTimelineProps> = ({ store, sendTimelineAware
                 className="flex flex-col items-end justify-center px-2 text-[10px] font-medium uppercase tracking-wider shrink-0 border-r border-studioBorder/30 gap-0.5"
                 style={{ width: LABEL_WIDTH }}
               >
-                <span style={{ color: TRACK_COLORS[track.type] }}>
-                  {trackTypeLabel(track.type)}
+                <span
+                  style={{ color: TRACK_COLORS[track.type] }}
+                  className={`truncate max-w-full ${track.name ? 'normal-case' : ''}`}
+                  title={track.name || trackTypeLabel(track.type)}
+                >
+                  {track.name || trackTypeLabel(track.type)}
+                  {track.type === 'audio' && track.muted ? ' \uD83D\uDD07' : ''}
                 </span>
-                {track.type === 'audio' && (
-                  <button
-                    className="text-[9px] text-textColor/40 hover:text-textColor"
-                    title={translate('track_audio_settings', 'Track audio settings')}
-                    onClick={(e) => {
-                      const rect = (e.target as HTMLElement).getBoundingClientRect();
-                      setTrackSettings({ trackId: track.id, x: rect.left + rect.width / 2, y: rect.top });
-                    }}
-                  >
-                    ⋮
-                  </button>
-                )}
+                <button
+                  className="text-[9px] text-textColor/40 hover:text-textColor"
+                  title={translate('track_settings', 'Track settings')}
+                  aria-label={translate('track_settings_for', 'Track settings: {{name}}', { name: track.name || trackTypeLabel(track.type) })}
+                  aria-haspopup="menu"
+                  onClick={(e) => {
+                    const rect = (e.target as HTMLElement).getBoundingClientRect();
+                    setTrackSettings({ trackId: track.id, x: rect.left + rect.width / 2, y: rect.top });
+                  }}
+                >
+                  ⋮
+                </button>
               </div>
 
               {/* Track content area */}
@@ -1820,7 +1984,7 @@ export const VideoTimeline: FC<VideoTimelineProps> = ({ store, sendTimelineAware
         {formatTime(vo.durationMs)}
       </div>
 
-      {/* Track audio settings popover */}
+      {/* Track settings popover */}
       {trackSettings && (
         <>
           <button
@@ -1842,34 +2006,96 @@ export const VideoTimeline: FC<VideoTimelineProps> = ({ store, sendTimelineAware
               if (!track) return null;
               return (
                 <div className="space-y-2">
-                  <div className="text-[11px] font-medium text-textColor/60 mb-1">{translate('track_audio', 'Track Audio')}</div>
-                  <div className="flex items-center justify-between">
-                    <span className="text-[10px] text-textColor/70">{translate('gain', 'Gain')}</span>
-                    <span className="text-[10px] text-textColor/40">{Math.round((track.gain ?? 1) * 100)}%</span>
+                  <div className="text-[11px] font-medium text-textColor/60 mb-1 truncate max-w-[180px]">
+                    {track.name || trackTypeLabel(track.type)}
                   </div>
-                  <input
-                    type="range"
-                    min={0}
-                    max={200}
-                    value={Math.round((track.gain ?? 1) * 100)}
-                    onChange={(e) => store.getState().setTrackGain(currentOutput, track.id, Number(e.target.value) / 100, false)}
-                    onPointerUp={() => store.getState().pushHistory()}
-                    onKeyUp={() => store.getState().pushHistory()}
-                    onBlur={() => store.getState().pushHistory()}
-                    className="w-full accent-designerAccent"
-                  />
-                  <label className="flex items-center gap-2 cursor-pointer">
-                    <input
-                      type="checkbox"
-                      checked={!!track.autoDuck}
-                      onChange={(e) => store.getState().setTrackAutoDuck(currentOutput, track.id, e.target.checked)}
-                      className="accent-designerAccent w-3 h-3"
-                    />
-                    <span className="text-[10px] text-textColor/70">{translate('auto_duck_under_voice', 'Auto-duck under voice')}</span>
-                  </label>
+                  {track.type === 'audio' && (
+                    <>
+                      <div className="flex items-center justify-between">
+                        <span className="text-[10px] text-textColor/70">{translate('gain', 'Gain')}</span>
+                        <span className="text-[10px] text-textColor/40">{Math.round((track.gain ?? 1) * 100)}%</span>
+                      </div>
+                      <input
+                        type="range"
+                        min={0}
+                        max={200}
+                        value={Math.round((track.gain ?? 1) * 100)}
+                        onChange={(e) => store.getState().setTrackGain(currentOutput, track.id, Number(e.target.value) / 100, false)}
+                        onPointerUp={() => store.getState().pushHistory()}
+                        onKeyUp={() => store.getState().pushHistory()}
+                        onBlur={() => store.getState().pushHistory()}
+                        className="w-full accent-designerAccent"
+                      />
+                      <label className="flex items-center gap-2 cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={!!track.autoDuck}
+                          onChange={(e) => store.getState().setTrackAutoDuck(currentOutput, track.id, e.target.checked)}
+                          className="accent-designerAccent w-3 h-3"
+                        />
+                        <span className="text-[10px] text-textColor/70">{translate('auto_duck_under_voice', 'Auto-duck under voice')}</span>
+                      </label>
+                      <label className="flex items-center gap-2 cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={!!track.muted}
+                          onChange={(e) => store.getState().setTrackMuted(currentOutput, track.id, e.target.checked)}
+                          className="accent-designerAccent w-3 h-3"
+                        />
+                        <span className="text-[10px] text-textColor/70">{translate('mute_track', 'Mute track')}</span>
+                      </label>
+                    </>
+                  )}
+                  <div className="pt-1.5 border-t border-studioBorder flex flex-col gap-0.5">
+                    <button
+                      onClick={() => void handleRenameTrack(track.id)}
+                      className="w-full text-left px-2 py-1 rounded-sm text-[12px] hover:bg-studioBorder/30 text-textColor"
+                    >
+                      {translate('rename_track', 'Rename track')}
+                    </button>
+                    <button
+                      onClick={() => handleDeleteTrack(track.id)}
+                      className="w-full text-left px-2 py-1 rounded-sm text-[12px] hover:bg-studioBorder/30 text-dangerText"
+                    >
+                      {translate('delete_track', 'Delete track')}
+                    </button>
+                  </div>
                 </div>
               );
             })()}
+          </div>
+        </>
+      )}
+
+      {/* + Track menu */}
+      {addTrackMenu && (
+        <>
+          <button
+            type="button"
+            aria-label={translate('close', 'Close')}
+            className="fixed inset-0 z-50"
+            onClick={() => setAddTrackMenu(null)}
+          />
+          <div
+            role="menu"
+            className="fixed z-60 bg-newBgColor border border-studioBorder rounded-lg p-1.5 shadow-xl min-w-[140px]"
+            style={{
+              left: addTrackMenu.x,
+              top: addTrackMenu.y + 4,
+              transform: 'translateX(-50%)',
+            }}
+          >
+            {(['video', 'image', 'text', 'audio'] as const).map((type) => (
+              <button
+                key={type}
+                role="menuitem"
+                onClick={() => handleAddTrack(type)}
+                className="w-full text-left px-2 py-1 rounded-sm text-[12px] hover:bg-studioBorder/30 text-textColor flex items-center gap-2"
+              >
+                <span className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: TRACK_COLORS[type] }} />
+                {trackTypeLabel(type)}
+              </button>
+            ))}
           </div>
         </>
       )}
@@ -1884,7 +2110,7 @@ export const VideoTimeline: FC<VideoTimelineProps> = ({ store, sendTimelineAware
             onClick={() => setTransitionPopover(null)}
           />
           <div
-            className="fixed z-60 bg-newBgColor border border-studioBorder rounded-lg p-2 shadow-xl min-w-[140px]"
+            className="fixed z-60 bg-newBgColor border border-studioBorder rounded-lg p-2 shadow-xl min-w-[180px]"
             style={{
               left: transitionPopover.x,
               top: transitionPopover.y + 8,
@@ -1903,6 +2129,36 @@ export const VideoTimeline: FC<VideoTimelineProps> = ({ store, sendTimelineAware
                 {transitionLabel(type)}
               </button>
             ))}
+            {(() => {
+              const track = vo.tracks.find((t) => t.id === transitionPopover.trackId);
+              const from = track?.clips.find((c) => c.id === transitionPopover.fromClipId);
+              const to = track?.clips.find((c) => c.id === transitionPopover.toClipId);
+              const type = from?.transitionOut?.type || to?.transitionIn?.type || 'cut';
+              if (type === 'cut') return null;
+              const durationMs =
+                from?.transitionOut?.durationMs ??
+                to?.transitionIn?.durationMs ??
+                TRANSITION_DEFAULT_MS;
+              return (
+                <div className="mt-1.5 pt-1.5 border-t border-studioBorder px-1">
+                  <Stepper
+                    label={translate('transition_duration_ms', 'Duration (ms)')}
+                    min={TRANSITION_MIN_MS}
+                    max={TRANSITION_MAX_MS}
+                    step={100}
+                    value={durationMs}
+                    onChange={(n) =>
+                      handleSetTransitionDuration(
+                        transitionPopover.trackId,
+                        transitionPopover.fromClipId,
+                        transitionPopover.toClipId,
+                        n,
+                      )
+                    }
+                  />
+                </div>
+              );
+            })()}
             {transitionPopover.trackId && (
               <div className="mt-1.5 pt-1.5 border-t border-studioBorder">
                 <div className="text-[10px] text-textColor/40 mb-1 px-1">{translate('slide_direction', 'Slide direction')}</div>
@@ -1947,14 +2203,8 @@ export const VideoTimeline: FC<VideoTimelineProps> = ({ store, sendTimelineAware
               const track = vo.tracks.find((t) => t.id === clipMenu.trackId);
               const clip = track?.clips.find((c) => c.id === clipMenu.clipId);
               const clipSrc = clip?.src;
-              if (!clipSrc) {
-                return (
-                  <div className="text-[11px] text-textColor/60 px-1">
-                    {translate('clip_has_no_source', 'Selected clip has no source')}
-                  </div>
-                );
-              }
-              if (clipTransformMode === 'upscale') {
+              if (!clip) return null;
+              if (clipSrc && clipTransformMode === 'upscale') {
                 return (
                   <div className="flex flex-col gap-1">
                     <div className="text-[11px] font-medium text-textColor/60 mb-1 px-1">{translate('upscale_video', 'Upscale video')}</div>
@@ -1973,7 +2223,7 @@ export const VideoTimeline: FC<VideoTimelineProps> = ({ store, sendTimelineAware
                   </div>
                 );
               }
-              if (clipTransformMode === 'remove-bg') {
+              if (clipSrc && clipTransformMode === 'remove-bg') {
                 return (
                   <div className="flex flex-col gap-1">
                     <div className="text-[11px] font-medium text-textColor/60 mb-1 px-1">{translate('remove_background', 'Remove background')}</div>
@@ -1992,7 +2242,7 @@ export const VideoTimeline: FC<VideoTimelineProps> = ({ store, sendTimelineAware
                   </div>
                 );
               }
-              if (clipTransformMode === 'video-to-video') {
+              if (clipSrc && clipTransformMode === 'video-to-video') {
                 return (
                   <div className="flex flex-col gap-1.5">
                     <div className="text-[11px] font-medium text-textColor/60 px-1">{translate('transform_with_prompt', 'Transform with prompt')}</div>
@@ -2022,26 +2272,37 @@ export const VideoTimeline: FC<VideoTimelineProps> = ({ store, sendTimelineAware
               return (
                 <div className="flex flex-col gap-1">
                   <button
-                    onClick={() => setClipTransformMode('upscale')}
-                    disabled={!videoUpscaleAvailable}
-                    className="w-full text-left px-2 py-1 rounded-sm text-[12px] hover:bg-studioBorder/30 text-textColor disabled:opacity-40 disabled:cursor-not-allowed"
+                    onClick={handleDuplicateClip}
+                    className="w-full text-left px-2 py-1 rounded-sm text-[12px] hover:bg-studioBorder/30 text-textColor"
                   >
-                    {translate('upscale', 'Upscale')}
+                    {translate('duplicate_clip', 'Duplicate')}
                   </button>
-                  <button
-                    onClick={() => setClipTransformMode('remove-bg')}
-                    disabled={!videoBackgroundAvailable}
-                    className="w-full text-left px-2 py-1 rounded-sm text-[12px] hover:bg-studioBorder/30 text-textColor disabled:opacity-40 disabled:cursor-not-allowed"
-                  >
-                    {translate('remove_background', 'Remove background')}
-                  </button>
-                  <button
-                    onClick={() => setClipTransformMode('video-to-video')}
-                    disabled={!videoToVideoAvailable}
-                    className="w-full text-left px-2 py-1 rounded-sm text-[12px] hover:bg-studioBorder/30 text-textColor disabled:opacity-40 disabled:cursor-not-allowed"
-                  >
-                    {translate('transform_with_prompt', 'Transform with prompt')}
-                  </button>
+                  {clipSrc && (
+                    <>
+                      <div className="border-t border-studioBorder my-1" />
+                      <button
+                        onClick={() => setClipTransformMode('upscale')}
+                        disabled={!videoUpscaleAvailable}
+                        className="w-full text-left px-2 py-1 rounded-sm text-[12px] hover:bg-studioBorder/30 text-textColor disabled:opacity-40 disabled:cursor-not-allowed"
+                      >
+                        {translate('upscale', 'Upscale')}
+                      </button>
+                      <button
+                        onClick={() => setClipTransformMode('remove-bg')}
+                        disabled={!videoBackgroundAvailable}
+                        className="w-full text-left px-2 py-1 rounded-sm text-[12px] hover:bg-studioBorder/30 text-textColor disabled:opacity-40 disabled:cursor-not-allowed"
+                      >
+                        {translate('remove_background', 'Remove background')}
+                      </button>
+                      <button
+                        onClick={() => setClipTransformMode('video-to-video')}
+                        disabled={!videoToVideoAvailable}
+                        className="w-full text-left px-2 py-1 rounded-sm text-[12px] hover:bg-studioBorder/30 text-textColor disabled:opacity-40 disabled:cursor-not-allowed"
+                      >
+                        {translate('transform_with_prompt', 'Transform with prompt')}
+                      </button>
+                    </>
+                  )}
                   <div className="border-t border-studioBorder my-1" />
                   <button
                     onClick={() => setClipMenu(null)}

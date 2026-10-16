@@ -755,8 +755,20 @@ export interface VideoTrack {
   id: string;
   type: 'video' | 'image' | 'text' | 'audio' | 'sticker' | 'caption' | 'shape' | 'raster';
   clips: VideoClip[];
+  /**
+   * User-given label (Rename track). Absent means the timeline shows the
+   * track's type label — optional and additive, so pre-v7 docs need no
+   * migration.
+   */
+  name?: string;
   gain?: number;
   autoDuck?: boolean;
+  /**
+   * Muted tracks contribute nothing to the audio mix — the preview engine
+   * skips their clips and the server mixer drops them. Visual tracks ignore
+   * it (there is nothing to mute); only audio tracks expose the toggle.
+   */
+  muted?: boolean;
 }
 
 export interface VideoOutput {
@@ -1618,6 +1630,10 @@ const trackCommon = {
   id: z.string().max(200),
   type: z.enum(['video', 'image', 'text', 'audio', 'sticker', 'caption', 'shape', 'raster']),
   autoDuck: z.boolean().optional(),
+  // Rename/mute (track management) — optional in both strict and lenient, so
+  // docs written before the fields existed keep validating unchanged.
+  name: z.string().max(200).optional(),
+  muted: z.boolean().optional(),
 };
 const { strict: StrictVideoTrackSchema, lenient: LenientVideoTrackSchema } =
   dualObject(

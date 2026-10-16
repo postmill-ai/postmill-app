@@ -16,6 +16,8 @@ export interface DesignRenderJobSpec {
   composition: any;
   options: {
     fps: number;
+    /** Resolution multiplier over the canvas size (default 1). */
+    scale?: number;
     bitrateKbps: number;
     format: 'mp4' | 'webm' | 'gif' | 'webp-animated';
     quality?: number;

@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, afterEach } from 'vitest';
 import { createDesignerStore } from './designer.store';
-import { addMediaToTimeline } from './add-media-to-timeline';
+import { addImageClipToTimeline, addMediaToTimeline } from './add-media-to-timeline';
+import { DEFAULT_CLIP_MS } from './add-text';
 import type { VideoOutput } from './designer.store';
 
 /**
@@ -69,5 +70,99 @@ describe('addMediaToTimeline — clip geometry', () => {
     expect(clip!.height).toBe(vo.height);
     expect(clip!.x).toBe(0);
     expect(clip!.y).toBe(0);
+  });
+});
+
+describe('addImageClipToTimeline', () => {
+  afterEach(() => vi.restoreAllMocks());
+
+  const toVideoMode = (store: ReturnType<typeof createDesignerStore>) => {
+    store.getState().setMode('video');
+    return store.getState().doc.outputs[0] as VideoOutput;
+  };
+
+  const firstImageClip = (store: ReturnType<typeof createDesignerStore>) => {
+    const vo = store.getState().doc.outputs[0] as VideoOutput;
+    const track = vo.tracks.find((t) => t.type === 'image');
+    return { vo, track, clip: track?.clips[0] };
+  };
+
+  it('does nothing in an image document', () => {
+    const store = createDesignerStore();
+    expect(store.getState().doc.mode).toBe('image');
+    const id = addImageClipToTimeline(store, { url: 'https://example.com/a.png', width: 400, height: 300 });
+    expect(id).toBeNull();
+  });
+
+  it('creates an image track and lands a 4 s clip at the playhead', () => {
+    const store = createDesignerStore();
+    const vo = toVideoMode(store);
+    store.getState().setPlayhead(2000);
+
+    const id = addImageClipToTimeline(store, {
+      url: 'https://example.com/a.png',
+      fileId: 'file-1',
+      width: 1600,
+      height: 900,
+    });
+
+    expect(id).toBeTruthy();
+    const { track, clip } = firstImageClip(store);
+    expect(track).toBeDefined();
+    expect(clip).toBeDefined();
+    expect(clip!.startMs).toBe(2000);
+    expect(clip!.endMs).toBe(2000 + DEFAULT_CLIP_MS);
+    expect(clip!.src).toBe('https://example.com/a.png');
+    expect(clip!.fileId).toBe('file-1');
+    // fitWithin(1600×900 into 864×864): width-bounded, aspect preserved.
+    expect(clip!.width).toBe(Math.round(vo.width * 0.8));
+    expect(clip!.height).toBe(Math.round(vo.width * 0.8 * (900 / 1600)));
+    expect(clip!.x).toBe(Math.round((vo.width - clip!.width!) / 2));
+    expect(clip!.y).toBe(Math.round((vo.height - clip!.height!) / 2));
+    expect(clip!.naturalWidth).toBe(1600);
+    // The new clip is selected, like an inserted text clip.
+    expect(store.getState().selectedClip?.clipId).toBe(id);
+  });
+
+  it('extends the output duration when the clip would run past the end', () => {
+    const store = createDesignerStore();
+    toVideoMode(store);
+    const before = (store.getState().doc.outputs[0] as VideoOutput).durationMs;
+    store.getState().setPlayhead(before - 1000);
+
+    const id = addImageClipToTimeline(store, { url: 'https://example.com/a.png', width: 100, height: 100 });
+
+    expect(id).toBeTruthy();
+    const { vo, clip } = firstImageClip(store);
+    expect(vo.durationMs).toBe(before - 1000 + DEFAULT_CLIP_MS);
+    expect(clip!.endMs).toBe(clip!.startMs + DEFAULT_CLIP_MS);
+  });
+
+  it('places icon picks as a centered square without probing', () => {
+    const store = createDesignerStore();
+    const vo = toVideoMode(store);
+
+    addImageClipToTimeline(store, { url: 'https://api.iconify.design/mdi/play.svg', square: true });
+
+    const { clip } = firstImageClip(store);
+    const side = Math.round(Math.min(vo.width, vo.height) * 0.2);
+    expect(clip!.width).toBe(side);
+    expect(clip!.height).toBe(side);
+    expect(clip!.x).toBe(Math.round((vo.width - side) / 2));
+    expect(clip!.y).toBe(Math.round((vo.height - side) / 2));
+    expect(clip!.naturalWidth).toBeUndefined();
+  });
+
+  it('reuses an existing image track rather than adding a second one', () => {
+    const store = createDesignerStore();
+    toVideoMode(store);
+
+    addImageClipToTimeline(store, { url: 'https://example.com/a.png', width: 100, height: 100 });
+    addImageClipToTimeline(store, { url: 'https://example.com/b.png', width: 100, height: 100 });
+
+    const vo = store.getState().doc.outputs[0] as VideoOutput;
+    const imageTracks = vo.tracks.filter((t) => t.type === 'image');
+    expect(imageTracks).toHaveLength(1);
+    expect(imageTracks[0].clips).toHaveLength(2);
   });
 });

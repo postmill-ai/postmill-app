@@ -16,7 +16,7 @@ import type { TextStylePreset } from './text-styles';
 type Store = ReturnType<typeof import('./designer.store').createDesignerStore>;
 
 /** How long a new text clip lasts, unless the document is shorter. */
-const DEFAULT_CLIP_MS = 4000;
+export const DEFAULT_CLIP_MS = 4000;
 
 /** The preset used when the caller has no opinion (Type tool, Insert ▸ Text). */
 export const DEFAULT_TEXT: Pick<

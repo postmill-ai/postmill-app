@@ -25,7 +25,18 @@ const SHORTCUTS: { keys: string; label: string; labelKey: string }[] = [
   { keys: '⌘/Ctrl + K', label: 'Command palette', labelKey: 'designer_command_palette_lower' },
 ];
 
-export const ShortcutsOverlay: FC<{ onClose: () => void }> = ({ onClose }) => {
+/** Timeline shortcuts — only meaningful while a video document is open. */
+const VIDEO_SHORTCUTS: { keys: string; label: string; labelKey: string }[] = [
+  { keys: 'Space', label: 'Play / pause', labelKey: 'designer_video_play_pause' },
+  { keys: 'S', label: 'Split clip at playhead', labelKey: 'designer_video_split_clip' },
+  { keys: '⌘/Ctrl + F', label: 'Freeze frame at playhead', labelKey: 'designer_video_freeze_frame' },
+  { keys: 'Delete / Backspace', label: 'Remove selected clip', labelKey: 'designer_video_remove_clip' },
+  { keys: '← / →', label: 'Ruler: ±0.1s (Shift: ±1s)', labelKey: 'designer_video_ruler_step' },
+  { keys: ', / .', label: 'Step one frame back / forward', labelKey: 'designer_video_frame_step' },
+  { keys: 'Drag on ruler', label: 'Scrub the playhead', labelKey: 'designer_video_scrub' },
+];
+
+export const ShortcutsOverlay: FC<{ onClose: () => void; videoMode?: boolean }> = ({ onClose, videoMode }) => {
   const t = useT();
   return (
     <div className="p-5 w-[420px] max-w-full">
@@ -45,6 +56,23 @@ export const ShortcutsOverlay: FC<{ onClose: () => void }> = ({ onClose }) => {
           </div>
         ))}
       </div>
+      {videoMode && (
+        <>
+          <h4 className="text-[12px] font-semibold text-textColor/60 uppercase tracking-wider mt-4 mb-2">
+            {t('designer_video_timeline_section', 'Video timeline')}
+          </h4>
+          <div className="grid grid-cols-1 gap-1.5">
+            {VIDEO_SHORTCUTS.map((s) => (
+              <div key={s.keys} className="flex items-center justify-between text-[12px]">
+                <span className="text-textColor/70">{t(s.labelKey, s.label)}</span>
+                <kbd className="px-2 py-0.5 rounded-sm bg-studioBorder/40 border border-studioBorder text-textColor/80 text-[11px]">
+                  {s.keys}
+                </kbd>
+              </div>
+            ))}
+          </div>
+        </>
+      )}
     </div>
   );
 };

@@ -49,7 +49,7 @@ import { useMediaPicker } from '../use-media-picker';
 import { StartDialog } from './start-dialog';
 import { aiRemoveBackground, aiUpscale, aiDetectSubject, aiOutpaint } from './ai-image-actions';
 import { OutpaintDialog } from './outpaint-dialog';
-import { addMediaToTimeline } from './add-media-to-timeline';
+import { addImageClipToTimeline, addMediaToTimeline } from './add-media-to-timeline';
 import { Logo } from '@postmill-ai/frontend/components/new-layout/logo';
 import { FullscreenButton } from '@postmill-ai/frontend/components/media-tools/fullscreen-button';
 import { useFullscreenSurface } from '@postmill-ai/frontend/components/media-tools/use-fullscreen';
@@ -934,9 +934,10 @@ export const Designer: FC<DesignerProps> = ({
    * Insert ▸ Image / Sticker / Vector / Video / Audio.
    *
    * One picker instance, narrowed per call through `openWith` — which is what
-   * that API exists for. Image-kind picks become elements; video and audio go to
-   * `addMediaToTimeline`, which finds or creates the track and probes the clip's
-   * real duration.
+   * that API exists for. In an image document, image-kind picks become elements;
+   * in a video document they become image clips at the playhead via
+   * `addImageClipToTimeline`; video and audio go to `addMediaToTimeline`, which
+   * finds or creates the track and probes the clip's real duration.
    */
   const onInsertMedia = useCallback(
     (kind: 'image' | 'sticker' | 'vector' | 'icon' | 'video' | 'audio') => {
@@ -959,6 +960,11 @@ export const Designer: FC<DesignerProps> = ({
         audio: translate('insert_audio', 'Insert audio'),
       };
       const isTimelineMedia = kind === 'video' || kind === 'audio';
+      // In a video document an image/sticker/icon pick becomes an image CLIP on
+      // the timeline (schema track types `image`/`sticker` and both renderers
+      // already support it), not an element — image-mode behaviour is unchanged.
+      const isTimelineImage =
+        !isTimelineMedia && store.getState().doc.mode === 'video';
 
       mediaPicker.openWith({
         title: TITLES[kind],
@@ -976,6 +982,18 @@ export const Designer: FC<DesignerProps> = ({
                 translate('couldnt_add_to_timeline', "Couldn't add that to the timeline"),
                 'warning'
               );
+            });
+            return;
+          }
+          if (isTimelineImage) {
+            // Iconify picks have no useful intrinsic size (24×24 SVGs), so they
+            // take a square badge box instead of the aspect probe.
+            addImageClipToTimeline(store, {
+              url: item.url,
+              fileId: item.fileId,
+              width: item.width,
+              height: item.height,
+              square: kind === 'icon',
             });
             return;
           }
@@ -1118,7 +1136,9 @@ export const Designer: FC<DesignerProps> = ({
       onActualSize: () => store.getState().setZoom(1),
       onShortcuts: () =>
         modals.openModal({
-          children: (close: () => void) => <ShortcutsOverlay onClose={close} />,
+          children: (close: () => void) => (
+            <ShortcutsOverlay onClose={close} videoMode={store.getState().doc.mode === 'video'} />
+          ),
         }),
       onTextToOutlines,
       onConvertMode: async () => {
@@ -1238,13 +1258,15 @@ export const Designer: FC<DesignerProps> = ({
       if (e.key === '?' && !e.metaKey && !e.ctrlKey && !e.altKey && !typing) {
         e.preventDefault();
         modals.openModal({
-          children: (close: () => void) => <ShortcutsOverlay onClose={close} />,
+          children: (close: () => void) => (
+            <ShortcutsOverlay onClose={close} videoMode={store.getState().doc.mode === 'video'} />
+          ),
         });
       }
     };
     window.addEventListener('keydown', handler);
     return () => window.removeEventListener('keydown', handler);
-  }, [handleSaveToFiles, modals]);
+  }, [handleSaveToFiles, modals, store]);
 
   // Full screen fills the browser window, not the display: the root goes immersive
   // (fixed inset-0) to cover the app chrome. Modals/dialogs mount at the app root

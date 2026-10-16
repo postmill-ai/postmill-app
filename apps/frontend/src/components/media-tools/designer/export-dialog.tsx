@@ -564,6 +564,9 @@ export const ExportDialog: FC<ExportDialogProps> = ({ store, onClose, initialAct
   const [videoFormat, setVideoFormat] = useState<'mp4' | 'webm' | 'gif' | 'webp-animated'>('mp4');
   const [videoQuality, setVideoQuality] = useState<'low' | 'medium' | 'high'>('medium');
   const [videoBitrateKbps, setVideoBitrateKbps] = useState<number>(5000);
+  // 0 = "canvas default" (the composition's own fps); the DTO only takes 24/30/60.
+  const [videoFps, setVideoFps] = useState<0 | 24 | 30 | 60>(0);
+  const [videoScale, setVideoScale] = useState<0.5 | 1 | 2>(1);
   const [posterUrl, setPosterUrl] = useState<string>('');
   const [posterUploading, setPosterUploading] = useState(false);
   const [renderedPosterUrl, setRenderedPosterUrl] = useState<string>('');
@@ -885,6 +888,8 @@ export const ExportDialog: FC<ExportDialogProps> = ({ store, onClose, initialAct
             format: outputFormat,
             quality: videoQuality === 'high' ? 1 : videoQuality === 'medium' ? 0.7 : 0.4,
             bitrateKbps: videoBitrateKbps,
+            scale: videoScale !== 1 ? videoScale : undefined,
+            fps: videoFps || undefined,
             posterUrl: posterUrl || undefined,
             folderId: selectedFolderId || undefined,
           }),
@@ -924,7 +929,7 @@ export const ExportDialog: FC<ExportDialogProps> = ({ store, onClose, initialAct
     } finally {
       setIsEnqueuing(false);
     }
-  }, [doc, store, exportAll, forceAllOutputs, outputFormats, videoFormat, videoQuality, videoBitrateKbps, posterUrl, selectedFolderId, fetch, toaster]);
+  }, [doc, store, exportAll, forceAllOutputs, outputFormats, videoFormat, videoQuality, videoBitrateKbps, videoFps, videoScale, posterUrl, selectedFolderId, fetch, toaster]);
 
   useEffect(() => {
     if (step !== 'video-rendering' || renderJobsRef.current.length === 0) {
@@ -1878,6 +1883,48 @@ export const ExportDialog: FC<ExportDialogProps> = ({ store, onClose, initialAct
                 <span className="text-[12px] text-textColor tabular-nums w-20 text-right">
                   {videoBitrateKbps} kbps
                 </span>
+              </div>
+            </div>
+
+            <div className="flex flex-col gap-1">
+              <div className="text-[13px] font-medium text-textColor">{t('designer_resolution_label', 'Resolution')}</div>
+              <div className="flex gap-2">
+                {([0.5, 1, 2] as const).map((s) => (
+                  <button
+                    key={s}
+                    onClick={() => setVideoScale(s)}
+                    className={`flex-1 h-[36px] rounded-[6px] text-[13px] font-medium transition-all ${
+                      videoScale === s
+                        ? 'bg-designerAccent text-white'
+                        : 'border border-studioBorder text-textColor hover:bg-boxHover'
+                    }`}
+                  >
+                    {s === 0.5 ? '0.5×' : s === 1 ? t('designer_resolution_canvas', '1× (canvas)') : '2×'}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            <div className="flex flex-col gap-1">
+              <div className="text-[13px] font-medium text-textColor">{t('designer_frame_rate_label', 'Frame rate')}</div>
+              <div className="flex gap-2">
+                {([0, 24, 30, 60] as const).map((f) => (
+                  <button
+                    key={f}
+                    onClick={() => setVideoFps(f)}
+                    className={`flex-1 h-[36px] rounded-[6px] text-[13px] font-medium transition-all ${
+                      videoFps === f
+                        ? 'bg-designerAccent text-white'
+                        : 'border border-studioBorder text-textColor hover:bg-boxHover'
+                    }`}
+                  >
+                    {f === 0
+                      ? t('designer_fps_canvas_default', 'Canvas ({{fps}} fps)', {
+                          fps: (doc.outputs[0] as { fps?: number })?.fps ?? 30,
+                        })
+                      : `${f}`}
+                  </button>
+                ))}
               </div>
             </div>
 

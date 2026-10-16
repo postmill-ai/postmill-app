@@ -932,6 +932,16 @@ paths:
           in: query
           schema:
             type: string
+        - name: scale
+          required: false
+          in: query
+          schema:
+            type: string
+        - name: fps
+          required: false
+          in: query
+          schema:
+            type: string
       responses:
         "200":
           description: ""
@@ -11811,6 +11821,23 @@ components:
           type: number
         bitrateKbps:
           type: number
+        scale:
+          type: number
+          description: |-
+            Output resolution as a multiple of the canvas size (0.5×/1×/2×). Absent =
+            render at canvas size. Applied to the Chromium viewport and frame canvas,
+            not as a post-scale, so 2× is a true supersample.
+          enum:
+            - 0.5
+            - 1
+            - 2
+        fps:
+          type: number
+          description: Frame-rate override (24/30/60). Absent = the composition's own fps.
+          enum:
+            - 24
+            - 30
+            - 60
         posterUrl:
           type: string
         folderId:

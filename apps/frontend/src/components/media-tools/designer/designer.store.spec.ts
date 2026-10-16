@@ -536,3 +536,128 @@ describe('raster buffer lifecycle', () => {
     expect(getBuffer(id)).toBeUndefined();
   });
 });
+
+describe('video track management', () => {
+  const videoStore = () => {
+    const store = createDesignerStore();
+    store.getState().setMode('video');
+    return store;
+  };
+  const vo = (store: ReturnType<typeof createDesignerStore>) =>
+    store.getState().doc.outputs[0] as import('./designer.store').VideoOutput;
+
+  it('removeTrack drops the track and is undoable', () => {
+    const store = videoStore();
+    const trackId = vo(store).tracks[0].id;
+
+    store.getState().removeTrack(0, trackId);
+    expect(vo(store).tracks).toHaveLength(0);
+
+    store.getState().undo();
+    expect(vo(store).tracks).toHaveLength(1);
+  });
+
+  it('renameTrack sets a custom name, and blank clears it back to the type label', () => {
+    const store = videoStore();
+    const trackId = vo(store).tracks[0].id;
+
+    store.getState().renameTrack(0, trackId, '  B-roll  ');
+    expect(vo(store).tracks[0].name).toBe('B-roll');
+
+    store.getState().renameTrack(0, trackId, '   ');
+    expect(vo(store).tracks[0].name).toBeUndefined();
+
+    store.getState().undo();
+    expect(vo(store).tracks[0].name).toBe('B-roll');
+  });
+
+  it('setTrackMuted persists the flag and is undoable', () => {
+    const store = videoStore();
+    store.getState().addTrack(0, 'audio');
+    const audio = vo(store).tracks.find((t) => t.type === 'audio')!;
+
+    store.getState().setTrackMuted(0, audio.id, true);
+    expect(vo(store).tracks.find((t) => t.id === audio.id)!.muted).toBe(true);
+
+    store.getState().undo();
+    expect(vo(store).tracks.find((t) => t.id === audio.id)!.muted).toBeUndefined();
+  });
+});
+
+describe('duplicateClip', () => {
+  const videoStore = () => {
+    const store = createDesignerStore();
+    store.getState().setMode('video');
+    return store;
+  };
+  const vo = (store: ReturnType<typeof createDesignerStore>) =>
+    store.getState().doc.outputs[0] as import('./designer.store').VideoOutput;
+
+  it('copies the clip right after the source with a fresh id and selects it', () => {
+    const store = videoStore();
+    const trackId = vo(store).tracks[0].id;
+    store.getState().addClip(0, trackId, {
+      id: 'src', startMs: 1000, endMs: 3000, src: 'https://example.com/v.mp4',
+      x: 10, y: 20, width: 100, height: 100,
+    } as never);
+
+    const newId = store.getState().duplicateClip(0, trackId, 'src');
+
+    expect(newId).toBeTruthy();
+    expect(newId).not.toBe('src');
+    const clips = vo(store).tracks[0].clips;
+    expect(clips).toHaveLength(2);
+    const copy = clips.find((c) => c.id === newId)!;
+    expect(copy.startMs).toBe(3000);
+    expect(copy.endMs).toBe(5000);
+    expect(copy.src).toBe('https://example.com/v.mp4');
+    expect(copy.x).toBe(10);
+    expect(store.getState().selectedClip?.clipId).toBe(newId);
+    // One undo removes the whole gesture (no half-extended duration step).
+    store.getState().undo();
+    expect(vo(store).tracks[0].clips).toHaveLength(1);
+  });
+
+  it('extends the output duration when the copy would overflow', () => {
+    const store = videoStore();
+    const trackId = vo(store).tracks[0].id;
+    const durationMs = vo(store).durationMs;
+    store.getState().addClip(0, trackId, {
+      id: 'src', startMs: durationMs - 2000, endMs: durationMs, src: 'https://example.com/v.mp4',
+    } as never);
+
+    const newId = store.getState().duplicateClip(0, trackId, 'src');
+
+    expect(newId).toBeTruthy();
+    expect(vo(store).durationMs).toBe(durationMs + 2000);
+    const copy = vo(store).tracks[0].clips.find((c) => c.id === newId)!;
+    expect(copy.endMs).toBe(durationMs + 2000);
+  });
+
+  it('starts after the freeze extension rather than the raw end', () => {
+    const store = videoStore();
+    const trackId = vo(store).tracks[0].id;
+    store.getState().addClip(0, trackId, {
+      id: 'src', startMs: 0, endMs: 2000, freezeAtMs: 1500, src: 'https://example.com/v.mp4',
+    } as never);
+
+    const newId = store.getState().duplicateClip(0, trackId, 'src');
+
+    const copy = vo(store).tracks[0].clips.find((c) => c.id === newId)!;
+    expect(copy.startMs).toBe(3500);
+    // The freeze hold itself is not duplicated.
+    expect(copy.freezeAtMs).toBeUndefined();
+  });
+
+  it('returns null when there is no room even at the 60 s ceiling', () => {
+    const store = videoStore();
+    const trackId = vo(store).tracks[0].id;
+    store.getState().setVideoDuration(0, 60000);
+    store.getState().addClip(0, trackId, {
+      id: 'src', startMs: 55000, endMs: 60000, src: 'https://example.com/v.mp4',
+    } as never);
+
+    expect(store.getState().duplicateClip(0, trackId, 'src')).toBeNull();
+    expect(vo(store).tracks[0].clips).toHaveLength(1);
+  });
+});

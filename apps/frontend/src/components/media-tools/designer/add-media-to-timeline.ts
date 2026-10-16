@@ -1,5 +1,7 @@
 import type { createDesignerStore, VideoClip, VideoOutput, VideoTrack } from './designer.store';
 import { fitWithin } from './panels/fit-within';
+import { probeImageNaturalSize } from './elements';
+import { DEFAULT_CLIP_MS } from './add-text';
 
 type StoreApi = ReturnType<typeof createDesignerStore>;
 
@@ -9,6 +11,19 @@ interface AddMediaToTimelineOptions {
   fileId?: string;
   width?: number;
   height?: number;
+}
+
+export interface AddImageClipOptions {
+  url: string;
+  fileId?: string;
+  width?: number;
+  height?: number;
+  /**
+   * Icon picks carry no meaningful intrinsic size (a 24×24 SVG would land
+   * tiny — `fitWithin` never upscales), so they skip the aspect probe and take
+   * a square box at a fifth of the canvas instead.
+   */
+  square?: boolean;
 }
 
 const MAX_TIMELINE_DURATION_MS = 60000;
@@ -74,6 +89,112 @@ export function probeAudioDuration(url: string): Promise<number> {
     probe.src = url;
     window.setTimeout(() => finish(10000), 5000);
   });
+}
+
+/**
+ * Insert ▸ Image/Sticker/Icon in a video document: land the pick as an `image`
+ * clip at the playhead on an image track (created on demand).
+ *
+ * Placement mirrors `addImageElementFromMedia` (insert-image.ts): aspect-
+ * preserving fit within 80% of the canvas, centered, with the natural size
+ * probed asynchronously when the picker doesn't know it — the probe shares the
+ * image cache, so the Konva loader doesn't fetch twice. Duration defaults to
+ * DEFAULT_CLIP_MS (same as a text clip), extending the output the way a media
+ * drop does rather than silently truncating at the current end.
+ *
+ * Returns the new clip's id, or null when the document can't take one.
+ */
+export function addImageClipToTimeline(
+  store: StoreApi,
+  options: AddImageClipOptions
+): string | null {
+  const state = store.getState();
+  if (state.doc.mode !== 'video') return null;
+
+  const out = state.currentOutput;
+  const track = findOrCreateTrack(store, out, 'image');
+  if (!track) return null;
+
+  const vo = store.getState().doc.outputs[out] as VideoOutput;
+  const startMs = Math.max(0, Math.min(state.playheadMs, vo.durationMs - 100));
+  const wantedEnd = startMs + DEFAULT_CLIP_MS;
+  if (wantedEnd > vo.durationMs) {
+    // Extend BEFORE addClip: addClip rejects clips past the output duration.
+    // setVideoDuration clamps to the 60 s ceiling, so the clip end is re-read
+    // from the (possibly still shorter) output afterwards.
+    store.getState().setVideoDuration(out, wantedEnd);
+  }
+  const durationMs = (store.getState().doc.outputs[out] as VideoOutput).durationMs;
+  const endMs = Math.min(wantedEnd, durationMs);
+  if (endMs <= startMs) return null;
+
+  const fitBox = { maxW: vo.width * 0.8, maxH: vo.height * 0.8 };
+  const geometryFor = (natW?: number, natH?: number) => {
+    if (options.square) {
+      const side = Math.round(Math.min(vo.width, vo.height) * 0.2);
+      return { width: side, height: side };
+    }
+    return fitWithin(natW || vo.width, natH || vo.height, fitBox.maxW, fitBox.maxH);
+  };
+
+  const known = options.width && options.height;
+  const geo = geometryFor(known ? options.width : undefined, known ? options.height : undefined);
+  const clip: VideoClip = {
+    id: '',
+    startMs,
+    endMs,
+    src: options.url,
+    fileId: options.fileId,
+    x: Math.round((vo.width - geo.width) / 2),
+    y: Math.round((vo.height - geo.height) / 2),
+    width: Math.round(geo.width),
+    height: Math.round(geo.height),
+    opacity: 1,
+    naturalWidth: known ? options.width : undefined,
+    naturalHeight: known ? options.height : undefined,
+  };
+  store.getState().addClip(out, track.id, clip);
+
+  // addClip assigns the id; read it back off the track it landed on (same
+  // pattern as addText). addTrack/addClip already pushed history.
+  const after = store.getState().doc.outputs[out] as VideoOutput;
+  const landed = after.tracks.find((t) => t.id === track.id)?.clips.at(-1);
+  if (!landed) return null;
+  store.getState().setSelectedClip({ outputIndex: out, trackId: track.id, clipId: landed.id });
+
+  if (!known && !options.square) {
+    // Aspect-correct the box once the probe resolves, but only while the clip
+    // is untouched since placement — a user resize wins (same rule as
+    // insert-image.ts, and silent so it isn't a separate undo step).
+    const placed = { w: clip.width!, h: clip.height! };
+    void probeImageNaturalSize(options.url).then((dims) => {
+      if (!dims) return;
+      const cur = store.getState();
+      const curVo = cur.doc.outputs[out] as VideoOutput | undefined;
+      const curClip = curVo?.tracks
+        .find((t) => t.id === track.id)
+        ?.clips.find((c) => c.id === landed.id);
+      if (!curClip || curClip.src !== options.url) return;
+      if (curClip.width === placed.w && curClip.height === placed.h) {
+        const fitted = fitWithin(dims.width, dims.height, fitBox.maxW, fitBox.maxH);
+        cur.updateClipSilent(out, track.id, landed.id, {
+          x: Math.round((curClip.x ?? 0) + (placed.w - fitted.width) / 2),
+          y: Math.round((curClip.y ?? 0) + (placed.h - fitted.height) / 2),
+          width: Math.round(fitted.width),
+          height: Math.round(fitted.height),
+          naturalWidth: dims.width,
+          naturalHeight: dims.height,
+        });
+      } else {
+        cur.updateClipSilent(out, track.id, landed.id, {
+          naturalWidth: dims.width,
+          naturalHeight: dims.height,
+        });
+      }
+    });
+  }
+
+  return landed.id;
 }
 
 /**

@@ -501,6 +501,8 @@ export class DesignRenderFrameController {
     @Param('jobId') jobId: string,
     @Query('token') token: string,
     @Query('frame') frame?: string,
+    @Query('scale') scale?: string,
+    @Query('fps') fps?: string,
     @Res() res?: Response,
   ): Promise<void> {
     if (!res) {
@@ -532,12 +534,24 @@ export class DesignRenderFrameController {
       return;
     }
 
-    const output = payload.composition || {};
+    const output = { ...(payload.composition || {}) };
     const baseUrl =
       process.env.NEXT_PUBLIC_BACKEND_URL ||
       process.env.FRONTEND_URL ||
       'http://localhost:3000';
     const initialFrame = frame ? Number(frame) : undefined;
+
+    // Export-time overrides ride query params (the capture service sets them
+    // from the job's options) — the stored composition is never mutated.
+    // Clamped here because the params are reachable by anyone with a token.
+    const scaleNum = Number(scale);
+    if (scale && Number.isFinite(scaleNum)) {
+      output.renderScale = Math.max(0.25, Math.min(4, scaleNum));
+    }
+    const fpsNum = Number(fps);
+    if (fps && Number.isFinite(fpsNum)) {
+      output.fps = Math.max(1, Math.min(240, Math.round(fpsNum)));
+    }
 
     // Org custom fonts join the catalog `<link>`s as @font-face rules — a
     // caption set in an uploaded brand font otherwise painted in Chromium's

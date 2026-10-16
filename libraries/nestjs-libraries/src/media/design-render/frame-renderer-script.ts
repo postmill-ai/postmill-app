@@ -39,8 +39,13 @@ ${backgroundTextureSource()}
   const baseUrl = window.__DATA.baseUrl || '';
   const canvas = document.getElementById('frame-canvas');
   const ctx = canvas.getContext('2d');
-  canvas.width = output.width;
-  canvas.height = output.height;
+  // Render-time resolution multiplier (export option; NOT document content — it
+  // is injected onto the composition copy the render pipeline serves). All
+  // drawing below stays in logical canvas units; the transform supersamples it.
+  const renderScale = Math.max(0.25, Math.min(4, output.renderScale || 1));
+  canvas.width = Math.round(output.width * renderScale);
+  canvas.height = Math.round(output.height * renderScale);
+  ctx.scale(renderScale, renderScale);
 
   const imageCache = new Map();
   const videoCache = new Map();
@@ -491,16 +496,20 @@ ${backgroundTextureSource()}
 
   async function renderFrame(timeMs) {
     window.__CURRENT_TIME = timeMs;
-    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    // Logical units — the renderScale transform maps them onto the device
+    // pixels, so clear/fill/gradient/texture all span exactly the canvas.
+    const logicalW = output.width;
+    const logicalH = output.height;
+    ctx.clearRect(0, 0, logicalW, logicalH);
     ctx.globalCompositeOperation = 'source-over';
 
     ctx.fillStyle = output.background || '#000000';
-    ctx.fillRect(0, 0, canvas.width, canvas.height);
+    ctx.fillRect(0, 0, logicalW, logicalH);
 
     if (output.bg && output.bg.type === 'image' && output.bg.src) {
       try {
         const img = await loadImage(output.bg.src);
-        ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+        ctx.drawImage(img, 0, 0, logicalW, logicalH);
       } catch {}
     } else if (output.bg && output.bg.type === 'gradient' && output.bg.gradient) {
       // "stops", not "colors" — this read a field the schema has never had,
@@ -509,10 +518,10 @@ ${backgroundTextureSource()}
       const stops = output.bg.gradient.stops || [];
       if (stops.length) {
         const angle = ((output.bg.gradient.angle || 0) * Math.PI) / 180;
-        const hx = (Math.cos(angle) * canvas.width) / 2;
-        const hy = (Math.sin(angle) * canvas.height) / 2;
-        const cx = canvas.width / 2;
-        const cy = canvas.height / 2;
+        const hx = (Math.cos(angle) * logicalW) / 2;
+        const hy = (Math.sin(angle) * logicalH) / 2;
+        const cx = logicalW / 2;
+        const cy = logicalH / 2;
         const grd = ctx.createLinearGradient(cx - hx, cy - hy, cx + hx, cy + hy);
         stops.forEach(function (s, i) {
           const offset = typeof s.offset === 'number'
@@ -521,14 +530,14 @@ ${backgroundTextureSource()}
           grd.addColorStop(offset, s.color);
         });
         ctx.fillStyle = grd;
-        ctx.fillRect(0, 0, canvas.width, canvas.height);
+        ctx.fillRect(0, 0, logicalW, logicalH);
       }
     }
 
     // Texture is an overlay ON the base (shared generator, injected above), so
     // grain over a gradient keeps the gradient — same rule as the page render.
     if (output.bg && output.bg.texture) {
-      drawTextureOverlay(ctx, output.bg.texture, canvas.width, canvas.height, function (w, h) {
+      drawTextureOverlay(ctx, output.bg.texture, logicalW, logicalH, function (w, h) {
         var tile = document.createElement('canvas');
         tile.width = w;
         tile.height = h;
@@ -552,11 +561,15 @@ ${backgroundTextureSource()}
       // source-over at opacity/N is not an average — overlapping samples
       // compound to 1-(1-o/N)^N (66% at N=8), darkening every blurred clip
       // against the already-painted background. Each sample also carries its
-      // OWN keyframed opacity, not the playhead's.
+      // OWN keyframed opacity, not the playhead's. The buffer is sized in
+      // DEVICE pixels (like the frame canvas) and drawn under the same
+      // renderScale transform, so a supersampled export blurs at full
+      // resolution; the composite maps it back onto the logical rect.
       const acc = document.createElement('canvas');
       acc.width = canvas.width;
       acc.height = canvas.height;
       const actx = acc.getContext('2d');
+      actx.scale(renderScale, renderScale);
       actx.globalCompositeOperation = 'lighter';
       for (const sampleMs of times) {
         window.__CURRENT_TIME = sampleMs;
@@ -570,7 +583,7 @@ ${backgroundTextureSource()}
         );
       }
       window.__CURRENT_TIME = wasTime;
-      ctx.drawImage(acc, 0, 0);
+      ctx.drawImage(acc, 0, 0, logicalW, logicalH);
     }
   }
 

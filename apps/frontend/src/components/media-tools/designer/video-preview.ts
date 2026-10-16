@@ -7,6 +7,8 @@ import {
 interface PlayOptions {
   onTick: (ms: number) => void;
   onEnd: () => void;
+  /** Restart at 0 instead of stopping when the playhead reaches the end. */
+  loop?: boolean;
 }
 
 /**
@@ -209,6 +211,16 @@ export class VideoPreviewEngine {
       opts.onTick(ms);
 
       if (ms >= vo.durationMs) {
+        if (opts.loop) {
+          // Loop: rewind the wall-clock baseline and the media elements, then
+          // keep the rAF chain alive instead of ending.
+          this.startWallMs = performance.now();
+          this.startPlayheadMs = 0;
+          this.seekMediaElements(0, vo);
+          opts.onTick(0);
+          this.rafId = requestAnimationFrame(tick);
+          return;
+        }
         this.pause();
         opts.onEnd();
         return;
@@ -239,6 +251,9 @@ export class VideoPreviewEngine {
   private seekMediaElements(ms: number, vo: VideoOutput) {
     const activeIds = new Set<string>();
     for (const track of vo.tracks) {
+      // A muted audio track contributes nothing — its clips don't play and they
+      // don't count as voice for ducking (mirrors the server mixer).
+      if (track.type === 'audio' && track.muted) continue;
       const trackGain = track.gain ?? 1;
       const activeVoice = track.type === 'audio' && track.autoDuck
         ? this.voiceActiveAt(vo, ms)
@@ -295,7 +310,7 @@ export class VideoPreviewEngine {
 
   private voiceActiveAt(vo: VideoOutput, ms: number): boolean {
     for (const track of vo.tracks) {
-      if (track.type !== 'audio') continue;
+      if (track.type !== 'audio' || track.muted) continue;
       for (const clip of track.clips) {
         // Voice clips: not on a ducking track and have actual audio content.
         if (track.autoDuck) continue;

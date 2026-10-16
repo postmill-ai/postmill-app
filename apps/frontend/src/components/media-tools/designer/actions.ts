@@ -379,13 +379,15 @@ export const useDesignerActions = (
       { id: 'insert-polygon', label: 'Polygon', menu: 'insert', submenuPath: ['Shapes'], keywords: ['shape', 'polygon', 'hexagon'], enabled: () => live().mode === 'image', run: () => insertShape('shape-polygon', { width: 120, height: 120 }) },
       { id: 'insert-star', label: 'Star', menu: 'insert', submenuPath: ['Shapes'], keywords: ['shape', 'star'], enabled: () => live().mode === 'image', run: () => insertShape('shape-star', { width: 140, height: 140 }) },
       { id: 'insert-line', label: 'Line', menu: 'insert', submenuPath: ['Shapes'], keywords: ['shape', 'line', 'rule'], enabled: () => live().mode === 'image', run: () => insertShape('shape-line', { width: 160, height: 0 }) },
-      { id: 'insert-image', label: 'Image…', menu: 'insert', keywords: ['image', 'photo'], enabled: () => live().mode === 'image', run: () => ctx.onInsertMedia('image') },
+      // Image-kind inserts work in both modes: in a video document the pick
+      // lands on the timeline as an image clip (see designer.tsx onInsertMedia).
+      { id: 'insert-image', label: 'Image…', menu: 'insert', keywords: ['image', 'photo'], run: () => ctx.onInsertMedia('image') },
       // Timeline media: only a video document has somewhere to put these.
       { id: 'insert-video', label: 'Video…', menu: 'insert', keywords: ['video', 'clip', 'footage'], enabled: () => live().mode === 'video', run: () => ctx.onInsertMedia('video') },
       { id: 'insert-audio', label: 'Audio…', menu: 'insert', keywords: ['audio', 'music', 'sound', 'track'], enabled: () => live().mode === 'video', run: () => ctx.onInsertMedia('audio') },
-      { id: 'insert-icon', label: 'Icon', menu: 'insert', keywords: ['icon'], run: () => ctx.onTogglePanel('icons') },
-      { id: 'insert-stock-icon', label: 'Stock Icon…', menu: 'insert', keywords: ['icon', 'iconify', 'stock'], enabled: () => live().mode === 'image', run: () => ctx.onInsertMedia('icon') },
-      { id: 'insert-sticker', label: 'Sticker…', menu: 'insert', keywords: ['sticker'], enabled: () => live().mode === 'image', run: () => ctx.onInsertMedia('sticker') },
+      { id: 'insert-icon', label: 'Icon', menu: 'insert', keywords: ['icon'], enabled: () => live().mode === 'image', run: () => ctx.onTogglePanel('icons') },
+      { id: 'insert-stock-icon', label: 'Stock Icon…', menu: 'insert', keywords: ['icon', 'iconify', 'stock'], run: () => ctx.onInsertMedia('icon') },
+      { id: 'insert-sticker', label: 'Sticker…', menu: 'insert', keywords: ['sticker'], run: () => ctx.onInsertMedia('sticker') },
       { id: 'insert-vector', label: 'Vector…', menu: 'insert', keywords: ['vector', 'svg', 'illustration'], enabled: () => live().mode === 'image', run: () => ctx.onInsertMedia('vector') },
 
       // ---------------- Format ----------------
