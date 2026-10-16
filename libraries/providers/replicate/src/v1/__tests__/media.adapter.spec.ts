@@ -247,3 +247,87 @@ describe('ReplicateMediaAdapter.upscaleImage / inpaintImage model resolution', (
     );
   });
 });
+
+describe('ReplicateMediaAdapter.outpaintImage (flux-fill-pro)', () => {
+  let fetchMock: ReturnType<typeof makeFetch>;
+  let adapter: ReplicateMediaAdapter;
+
+  beforeEach(() => {
+    fetchMock = makeFetch();
+    adapter = new ReplicateMediaAdapter(fetchMock as any);
+  });
+
+  it('declares the outpaint capability', () => {
+    expect(adapter.capabilities.outpaint).toBe(true);
+  });
+
+  it('defaults to flux-fill-pro and maps the canonical mode onto the outpaint input', async () => {
+    const url = await adapter.outpaintImage('https://cdn.example.com/in.png', 'zoom-2x', undefined, {
+      credentials: { apiKey: 'k' },
+    });
+    expect(url).toBe('https://example.com/img.png');
+    expect(lastRequestUrl(fetchMock)).toBe(
+      'https://api.replicate.com/v1/models/black-forest-labs/flux-fill-pro/predictions'
+    );
+    expect(lastRequestBody(fetchMock).input).toEqual({
+      image: 'https://cdn.example.com/in.png',
+      outpaint: 'Zoom out 2x',
+    });
+  });
+
+  it('maps every canonical mode to its flux-fill-pro token', async () => {
+    const tokens: Record<string, string> = {
+      'zoom-1.5x': 'Zoom out 1.5x',
+      'zoom-2x': 'Zoom out 2x',
+      'make-square': 'Make square',
+      left: 'Left outpaint',
+      right: 'Right outpaint',
+      top: 'Top outpaint',
+      bottom: 'Bottom outpaint',
+    };
+    for (const [mode, token] of Object.entries(tokens)) {
+      await adapter.outpaintImage('https://cdn.example.com/in.png', mode as any, undefined, {
+        credentials: { apiKey: 'k' },
+      });
+      expect(lastRequestBody(fetchMock).input.outpaint).toBe(token);
+    }
+  });
+
+  it('passes an optional prompt through and omits it when absent', async () => {
+    await adapter.outpaintImage('https://cdn.example.com/in.png', 'left', 'more ocean', {
+      credentials: { apiKey: 'k' },
+    });
+    expect(lastRequestBody(fetchMock).input).toEqual({
+      image: 'https://cdn.example.com/in.png',
+      outpaint: 'Left outpaint',
+      prompt: 'more ocean',
+    });
+  });
+
+  it('honors options.model over the default, and options.version over both', async () => {
+    await adapter.outpaintImage('https://cdn.example.com/in.png', 'make-square', undefined, {
+      credentials: { apiKey: 'k' },
+      model: 'acme/custom-fill',
+    });
+    expect(lastRequestUrl(fetchMock)).toBe(
+      'https://api.replicate.com/v1/models/acme/custom-fill/predictions'
+    );
+
+    const hash = 'c'.repeat(64);
+    await adapter.outpaintImage('https://cdn.example.com/in.png', 'make-square', undefined, {
+      credentials: { apiKey: 'k' },
+      model: 'acme/custom-fill',
+      version: hash,
+    });
+    expect(lastRequestUrl(fetchMock)).toBe('https://api.replicate.com/v1/predictions');
+    expect(lastRequestBody(fetchMock).version).toBe(hash);
+  });
+
+  it('lets an explicit org tunable in options.input win over the mode mapping', async () => {
+    await adapter.outpaintImage('https://cdn.example.com/in.png', 'zoom-1.5x', undefined, {
+      credentials: { apiKey: 'k' },
+      input: { outpaint: 'Right outpaint' },
+    });
+    expect(lastRequestBody(fetchMock).input.outpaint).toBe('Right outpaint');
+  });
+});

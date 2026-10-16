@@ -1,6 +1,6 @@
 # Adding a media-generation provider + studio
 
-Wire a new media provider (image / video / audio / avatar / TTS / STT / upscale / bg-remove / inpaint) into the unified provider framework and, when wanted, ship a user-facing studio under `/media/<id>`. The generic `MediaStudioController` / `MediaStudioService` plus the descriptor-driven studio-kit cover the standard case end-to-end — most providers need no backend controller work.
+Wire a new media provider (image / video / audio / avatar / TTS / STT / upscale / bg-remove / inpaint / outpaint) into the unified provider framework and, when wanted, ship a user-facing studio under `/media/<id>`. The generic `MediaStudioController` / `MediaStudioService` plus the descriptor-driven studio-kit cover the standard case end-to-end — most providers need no backend controller work.
 
 See `agents/providers/overview.md` for kernel concepts (manifest, `ProviderModule`, resolution via `ProviderResolutionService`, version lifecycle).
 
@@ -14,7 +14,7 @@ Required members:
 |---|---|---|
 | `identifier` | `string` | Routing id, matches `metadata.id` and the studio descriptor's `provider` |
 | `name` | `string` | Display name |
-| `capabilities` | `MediaProviderCapabilities` | Boolean flags: `image`, `video`, `audio`, `avatar`, `tts`, `stt`, `upscale`, `bgRemove`, `inpaint` (+ optional `videoBg`, `videoUpscale`, `videoToVideo`) |
+| `capabilities` | `MediaProviderCapabilities` | Boolean flags: `image`, `video`, `audio`, `avatar`, `tts`, `stt`, `upscale`, `bgRemove`, `inpaint`, `outpaint` (+ optional `videoBg`, `videoUpscale`, `videoToVideo`) |
 | `credentialFields?` | `MediaCredentialField[]` | Multi-field creds (`{key,label,type:'string'\|'password'\|'textarea',required,placeholder?,help?}`); omit for single-API-key providers |
 | `generateImage(prompt, options?)` | `Promise<MediaGenerationResult>` | **Synchronous** contract — near-real-time or fail. Async providers do bounded internal polling (see `QwenMediaAdapter.generateImage`) |
 | `generateVideo / generateAudio / generateAvatar(prompt, options?)` | `Promise<MediaJobSubmission>` | Async: return `{ jobId }`; throw "does not support" for unsupported ops |
@@ -22,7 +22,7 @@ Required members:
 | `listModels?(operation, options?)` | `Promise<MediaModelOption[]>` | Feeds the studio's dynamic model dropdown (`operation: 'image'\|'video'\|'audio'`) |
 | `testConnection?(options?)` | `Promise<{ok,message}>` | Must be cheap/free — never bill a render for an auth check |
 
-Optional extended ops: `textToSpeech`, `speechToText`, `speechToTextWords`, `upscaleImage`, `removeBackground`, `inpaintImage`, `listVoices`, `upscaleVideo`, `removeVideoBackground`.
+Optional extended ops: `textToSpeech`, `speechToText`, `speechToTextWords`, `upscaleImage`, `removeBackground`, `inpaintImage`, `outpaintImage`, `listVoices`, `upscaleVideo`, `removeVideoBackground`.
 
 Key option/result types: `MediaGenerateOptions extends MediaCredentialOptions` (adds `model`, `size`, `n`, `durationSeconds`, `input: Record<string, MediaInputValue>` — the flat descriptor params), `MediaGenerationResult` (`{multi, image?, images?, metadata?}`), `MediaPollResult.extraArtifactUrls` (multi-clip jobs like Suno land each extra as a sibling job).
 

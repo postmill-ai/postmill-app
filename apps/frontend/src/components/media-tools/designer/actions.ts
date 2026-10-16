@@ -124,6 +124,8 @@ export interface DesignerActionCtx {
   onAiRemoveBg: () => void;
   onAiUpscale: (scale: number) => void;
   onAiInpaint: () => void;
+  /** Open the Expand Image (AI outpaint) mode dialog for the selected image. */
+  onAiOutpaint: () => void;
   onAiDetectSubject: () => void;
 }
 
@@ -432,6 +434,7 @@ export const useDesignerActions = (
       { id: 'ai-upscale-2x', label: '2×', menu: 'tools', submenu: 'Upscale', group: 'ai', keywords: ['ai', 'upscale'], enabled: () => mediaOp('upscale') && live().singleImageSelected, run: () => ctx.onAiUpscale(2) },
       { id: 'ai-upscale-4x', label: '4×', menu: 'tools', submenu: 'Upscale', group: 'ai', keywords: ['ai', 'upscale'], enabled: () => mediaOp('upscale') && live().singleImageSelected, run: () => ctx.onAiUpscale(4) },
       { id: 'ai-inpaint', label: 'Inpaint…', menu: 'tools', group: 'ai', keywords: ['ai', 'inpaint'], enabled: () => mediaOp('inpaint') && live().singleImageSelected, run: ctx.onAiInpaint },
+      { id: 'ai-outpaint', label: 'Expand Image (AI)…', menu: 'tools', group: 'ai', keywords: ['ai', 'outpaint', 'expand', 'extend', 'canvas'], enabled: () => mediaOp('outpaint') && live().singleImageSelected, run: ctx.onAiOutpaint },
       { id: 'ai-detect-subject', label: 'Auto-detect Subject', menu: 'tools', group: 'ai2', keywords: ['ai', 'subject', 'focal'], enabled: () => ctx.aiActive && live().singleImageSelected, run: ctx.onAiDetectSubject },
       { id: 'replace-image', label: 'Replace Image…', menu: 'tools', group: 'ai2', keywords: ['replace', 'image'], enabled: () => live().singleImageSelected, run: ctx.onOpenMedia },
 

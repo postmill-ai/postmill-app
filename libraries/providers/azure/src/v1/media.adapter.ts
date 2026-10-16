@@ -21,6 +21,7 @@ export class AzureMediaAdapter extends AiSdkMediaAdapter {
     upscale: false,
     bgRemove: false,
     inpaint: false,
+    outpaint: false,
   };
   override readonly credentialFields: MediaCredentialField[] = [
     { key: 'apiKey', label: 'API Key', type: 'password', required: true },

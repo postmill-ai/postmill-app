@@ -43,6 +43,7 @@ export class LeonardoMediaAdapter extends BearerTokenMediaAdapter {
     upscale: false,
     bgRemove: false,
     inpaint: false,
+    outpaint: false,
   };
 
   async generateImage(prompt: string, options?: MediaGenerateOptions): Promise<MediaGenerationResult> {

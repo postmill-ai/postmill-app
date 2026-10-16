@@ -110,6 +110,7 @@ export class OpenaiMediaAdapter implements MediaProviderAdapter {
     upscale: false,
     bgRemove: false,
     inpaint: false,
+    outpaint: false,
   };
 
   private _apiKey(options?: MediaGenerateOptions): string {

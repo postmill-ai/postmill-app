@@ -15,7 +15,9 @@ import type {
 } from '../designer.store';
 import { useMediaPicker } from '../../use-media-picker';
 import { useMediaToolsStatus } from '@postmill-ai/frontend/components/layout/use-media-tools-status';
-import { aiRemoveBackground, aiUpscale, readErrorMessage } from '../ai-image-actions';
+import { useModals } from '@postmill-ai/frontend/components/layout/new-modal';
+import { aiRemoveBackground, aiUpscale, aiOutpaint, readErrorMessage } from '../ai-image-actions';
+import { OutpaintDialog } from '../outpaint-dialog';
 
 interface ImageInspectorProps {
   element: DesignerElement;
@@ -34,6 +36,7 @@ export const ImageInspector: FC<ImageInspectorProps> = ({
   // Same availability signal the Tools menu gates on (GET /media/tools/status) —
   // hide AI buttons the org has no configured provider for (fail-open while loading).
   const { operationAvailable } = useMediaToolsStatus();
+  const modals = useModals();
   const brandColors = useBrandColors();
   const brandEnforcement = store((s: any) => s.brandEnforcement);
   const updateElement = store((s: any) => s.updateElement);
@@ -213,6 +216,31 @@ export const ImageInspector: FC<ImageInspectorProps> = ({
     } finally {
       setAiLoading(false);
     }
+  };
+
+  // Same dialog the Tools ▸ Expand Image (AI)… action opens — one implementation.
+  const handleOutpaint = () => {
+    if (!element.src) return;
+    modals.openModal({
+      title: t('designer_expand_image_ai', 'Expand Image (AI)'),
+      children: (close: () => void) => (
+        <OutpaintDialog
+          busy={aiLoading === 'outpaint'}
+          onCancel={close}
+          onApply={async (mode, prompt) => {
+            setAiLoading('outpaint');
+            try {
+              await aiOutpaint({ fetch, store, elementId: element.id }, mode, prompt);
+              close();
+            } catch (err) {
+              toaster.show((err as Error)?.message || t('designer_outpaint_failed', 'Image expansion failed'), 'warning');
+            } finally {
+              setAiLoading(false);
+            }
+          }}
+        />
+      ),
+    });
   };
 
   const initMaskCanvases = useCallback(() => {
@@ -963,6 +991,16 @@ export const ImageInspector: FC<ImageInspectorProps> = ({
               {aiLoading === 'inpaint' ? '…' : t('designer_inpaint', 'Inpaint')}
             </button>
           </div>
+          )}
+
+          {operationAvailable('outpaint') && (
+            <button
+              className="w-full px-3 py-2 bg-designerAccent/10 hover:bg-designerAccent/20 text-sm rounded-sm border border-designerAccent/30 text-left"
+              onClick={handleOutpaint}
+              disabled={!!aiLoading}
+            >
+              {aiLoading === 'outpaint' ? t('designer_processing_ellipsis', 'Processing...') : t('designer_expand_image_ai', 'Expand Image (AI)')}
+            </button>
           )}
         </div>
       </div>

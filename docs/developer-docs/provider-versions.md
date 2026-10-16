@@ -126,7 +126,7 @@ The table below shows each provider's registered domains. A provider that appear
 | Qwen | `qwen` | ai, media | direct; image-slide, image-to-video, text-to-image, text-to-video |
 | Recraft | `recraft` | media | direct; image-slide, text-to-image |
 | Reel.Farm | `reelfarm` | media | action; image-to-video, text-to-video |
-| Replicate | `replicate` | media | direct; image-bg-remove, image-inpaint, image-slide, image-to-image, image-to-video, image-upscale, text-to-image, text-to-music, text-to-video, video-background, video-to-video, video-upscale |
+| Replicate | `replicate` | media | direct; image-bg-remove, image-inpaint, image-outpaint, image-slide, image-to-image, image-to-video, image-upscale, text-to-image, text-to-music, text-to-video, video-background, video-to-video, video-upscale |
 | Runway | `runway` | media | direct; image-slide, image-to-video, text-to-image |
 | SiliconFlow | `siliconflow` | ai, media | hub; image-slide, image-to-image, image-to-video, text-to-image, text-to-speech, text-to-video |
 | Stability AI | `stability-ai` | media | direct; image-slide, text-to-image |

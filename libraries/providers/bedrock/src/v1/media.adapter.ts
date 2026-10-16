@@ -22,6 +22,7 @@ export class BedrockMediaAdapter extends AiSdkMediaAdapter {
     upscale: false,
     bgRemove: false,
     inpaint: false,
+    outpaint: false,
   };
   override readonly credentialFields: MediaCredentialField[] = [
     { key: 'region', label: 'AWS Region', type: 'string', required: true, placeholder: 'us-east-1' },

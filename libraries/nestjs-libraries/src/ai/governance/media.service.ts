@@ -24,6 +24,7 @@ import {
   MediaGenerationResult,
 } from '@postmill-ai/nestjs-libraries/media/media-provider-adapter.interface';
 import type { MediaGenerateOptions } from '@postmill-ai/provider-kernel';
+import type { OutpaintMode } from '@postmill-ai/provider-kernel';
 // Type-only imports: SlideService/CaptionService both inject back into this AI module
 // (slide -> AiDefaultsService -> AiMediaService; caption -> AiMediaService), so a runtime
 // value-import here closes a circular `require` that leaves AiMediaService `undefined` at
@@ -53,7 +54,7 @@ export interface MediaProviderSummaryEntry {
 // generation path uses (`_resolveForOperation`, incl. the image AI-fallback), so the
 // Settings disable-state, the composer/Designer gating, and the actual generate endpoints
 // can never disagree. `operations` is the authoritative availability (what consumers gate
-// on); `tools` projects it onto the 16 user-facing categories with best-effort
+// on); `tools` projects it onto the 17 user-facing categories with best-effort
 // provider/model detail for display.
 export interface MediaToolStatusEntry {
   available: boolean;
@@ -77,6 +78,7 @@ const ALL_MEDIA_OPERATIONS: MediaOperation[] = [
   'upscale',
   'bg-remove',
   'inpaint',
+  'outpaint',
   'focal-point',
   'slide',
   'caption',
@@ -96,6 +98,7 @@ const OPERATION_CAPABILITY: Record<MediaOperation, keyof MediaProviderCapabiliti
   upscale: 'upscale',
   'bg-remove': 'bgRemove',
   inpaint: 'inpaint',
+  outpaint: 'outpaint',
   'focal-point': 'image',
   slide: 'image',
   caption: 'stt',
@@ -111,6 +114,7 @@ const OPERATION_CREDIT_TYPE: Record<MediaOperation, undefined> = {
   upscale: undefined,
   'bg-remove': undefined,
   inpaint: undefined,
+  outpaint: undefined,
   video: undefined,
   avatar: undefined,
   audio: undefined,
@@ -135,6 +139,7 @@ const OPERATION_COST_USD: Record<MediaOperation, number> = {
   upscale: 0.01,
   'bg-remove': 0.01,
   inpaint: 0.02,
+  outpaint: 0.05,
   tts: 0.015,
   stt: 0.01,
   'focal-point': 0.005,
@@ -152,6 +157,7 @@ const PROVENANCE_OPERATIONS = new Set<MediaOperation>([
   'avatar',
   'upscale',
   'inpaint',
+  'outpaint',
   'bg-remove',
   'slide',
   'caption',
@@ -277,6 +283,8 @@ export class AiMediaService {
         return ['image-bg-remove'];
       case 'inpaint':
         return ['image-inpaint'];
+      case 'outpaint':
+        return ['image-outpaint'];
       case 'avatar':
         return ['video-avatar'];
       case 'video-bg':
@@ -1457,6 +1465,50 @@ export class AiMediaService {
     if (lastError) throw lastError;
     throw new CapabilityNotAvailable(
       'Inpainting is not available. Configure a media provider with image-edit support (Replicate) in Settings > Media.',
+      'image_edit',
+    );
+  }
+
+  async outpaintImage(
+    imageUrl: string,
+    mode: OutpaintMode,
+    prompt?: string,
+    options?: { orgId?: string },
+  ): Promise<string> {
+    const candidates = await this._resolveForOperation(options?.orgId, 'outpaint');
+
+    // Same taxonomy as removeBackground/inpaintImage: a resolved candidate that
+    // failed upstream rethrows its real error (502 envelope), 409 is only for
+    // genuinely unconfigured.
+    let lastError: unknown;
+    for (const candidate of candidates) {
+      if (!candidate.adapter.outpaintImage) continue;
+      await this._assertMediaBudget(options?.orgId, candidate.adapter.identifier);
+      try {
+        const result = await candidate.adapter.outpaintImage(imageUrl, mode, prompt, {
+          credentials: candidate.credentials,
+          model: candidate.model,
+          input: candidate.settings as MediaGenerateOptions['input'],
+        });
+        if (!result) continue;
+        const persisted = await this._persistJob({
+          operation: 'outpaint',
+          provider: candidate.adapter.identifier,
+          orgId: options?.orgId,
+          artifactUrl: result,
+        });
+        return persisted.artifactUrl || result;
+      } catch (err) {
+        lastError = err;
+        this._logger.warn(
+          `Media provider ${candidate.adapter.identifier} outpaint failed: ${(err as Error).message} — trying next`,
+        );
+      }
+    }
+
+    if (lastError) throw lastError;
+    throw new CapabilityNotAvailable(
+      'Image expansion is not available. Configure a media provider with outpaint support (Replicate) in Settings > Media.',
       'image_edit',
     );
   }

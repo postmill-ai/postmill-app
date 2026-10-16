@@ -38,6 +38,7 @@ const AI_MEDIA_CATEGORIES = [
   'image-upscale',
   'image-bg-remove',
   'image-inpaint',
+  'image-outpaint',
   'image-focal-point',
   'image-slide',
   'video-avatar',

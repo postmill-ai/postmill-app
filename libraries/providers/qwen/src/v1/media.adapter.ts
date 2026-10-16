@@ -65,6 +65,7 @@ export class QwenMediaAdapter implements MediaProviderAdapter {
     upscale: false,
     bgRemove: false,
     inpaint: false,
+    outpaint: false,
   };
 
   private _headers(options?: MediaCredentialOptions, async = false): Record<string, string> {

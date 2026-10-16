@@ -8,6 +8,7 @@ export interface MediaProviderCapabilities {
   upscale: boolean;
   bgRemove: boolean;
   inpaint: boolean;
+  outpaint: boolean;
 
   // Extended operation taxonomy for tenant media defaults.
   videoBg?: boolean;
@@ -116,6 +117,28 @@ export interface MediaPollResult {
 
 export type MediaOperation = 'image' | 'video' | 'audio';
 
+// Canonical outpainting modes. Each adapter maps these onto its provider-specific
+// tokens (e.g. Replicate flux-fill-pro's `outpaint` select values); callers never
+// send provider vocabulary across the API boundary.
+export type OutpaintMode =
+  | 'zoom-1.5x'
+  | 'zoom-2x'
+  | 'make-square'
+  | 'left'
+  | 'right'
+  | 'top'
+  | 'bottom';
+
+export const OUTPAINT_MODES: OutpaintMode[] = [
+  'zoom-1.5x',
+  'zoom-2x',
+  'make-square',
+  'left',
+  'right',
+  'top',
+  'bottom',
+];
+
 export interface MediaModelOption {
   id: string;
   label: string;
@@ -147,6 +170,7 @@ export interface MediaCapability {
   upscaleImage?(imageUrl: string, options?: MediaGenerateOptions): Promise<string>;
   removeBackground?(imageUrl: string, options?: MediaGenerateOptions): Promise<string>;
   inpaintImage?(imageUrl: string, maskUrl: string, prompt: string, options?: MediaGenerateOptions): Promise<string>;
+  outpaintImage?(imageUrl: string, mode: OutpaintMode, prompt?: string, options?: MediaGenerateOptions): Promise<string>;
 
   listVoices?(options?: MediaCredentialOptions): Promise<Array<{ id: string; label: string; previewUrl?: string }>>;
   upscaleVideo?(videoUrl: string, options?: MediaGenerateOptions): Promise<MediaJobSubmission>;

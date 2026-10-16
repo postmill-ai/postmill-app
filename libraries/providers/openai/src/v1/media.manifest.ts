@@ -10,6 +10,7 @@ export const OPENAI_MEDIA_CAPABILITIES: MediaProviderCapabilities = {
   upscale: false,
   bgRemove: false,
   inpaint: false,
+  outpaint: false,
 };
 
 export const openaiMediaManifest: ProviderManifest<MediaProviderCapabilities> = {

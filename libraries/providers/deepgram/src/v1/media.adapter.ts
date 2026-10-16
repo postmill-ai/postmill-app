@@ -36,6 +36,7 @@ export class DeepgramAdapter implements MediaProviderAdapter {
     upscale: false,
     bgRemove: false,
     inpaint: false,
+    outpaint: false,
   };
 
   async generateImage(_prompt: string, _options?: MediaGenerateOptions): Promise<MediaGenerationResult> {

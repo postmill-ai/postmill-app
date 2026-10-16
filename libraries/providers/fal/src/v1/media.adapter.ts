@@ -71,6 +71,7 @@ export class FalAdapter implements MediaProviderAdapter {
     upscale: false,
     bgRemove: false,
     inpaint: false,
+    outpaint: false,
   };
 
   private _headers(options?: MediaCredentialOptions): Record<string, string> {

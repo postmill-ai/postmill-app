@@ -359,6 +359,7 @@ export class DefaultsResolutionService {
       case 'image-upscale':
       case 'image-bg-remove':
       case 'image-inpaint':
+      case 'image-outpaint':
       case 'image-slide':
       case 'image-focal-point':
         return 'image';

@@ -58,6 +58,7 @@ export class HiggsfieldAdapter extends BearerTokenMediaAdapter {
     upscale: false,
     bgRemove: false,
     inpaint: false,
+    outpaint: false,
   };
 
   // Two-part key — the V2 client expects `Authorization: Key KEY_ID:KEY_SECRET`. A combined

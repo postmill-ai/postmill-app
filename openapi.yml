@@ -3159,6 +3159,21 @@ paths:
           description: ""
       tags:
         - Media
+  /media/outpaint:
+    post:
+      operationId: MediaController_outpaint
+      parameters: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/OutpaintImageDto"
+      responses:
+        "201":
+          description: ""
+      tags:
+        - Media
   /media/upscale:
     post:
       operationId: MediaController_upscale
@@ -10563,6 +10578,27 @@ components:
         - imageUrl
         - maskUrl
         - prompt
+    OutpaintImageDto:
+      type: object
+      properties:
+        imageUrl:
+          type: string
+          format: uri
+        mode:
+          type: string
+          enum:
+            - zoom-1.5x
+            - zoom-2x
+            - make-square
+            - left
+            - right
+            - top
+            - bottom
+        prompt:
+          type: string
+      required:
+        - imageUrl
+        - mode
     UpscaleImageDto:
       type: object
       properties:

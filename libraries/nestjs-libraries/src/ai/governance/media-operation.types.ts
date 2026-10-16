@@ -14,6 +14,7 @@ export type MediaOperation =
   | 'upscale'
   | 'bg-remove'
   | 'inpaint'
+  | 'outpaint'
   | 'focal-point'
   | 'slide'
   | 'caption'

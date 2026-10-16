@@ -4,6 +4,7 @@ import { DefaultsResolutionService } from './defaults-resolution.service';
 import { OrgDefaultModelRepository } from '@postmill-ai/nestjs-libraries/database/prisma/ai-settings/org-default-model.repository';
 import { DefaultsSettingsValidator } from './defaults-settings.validator';
 import { OrgMediaProviderSettingsService } from '@postmill-ai/nestjs-libraries/database/prisma/media-providers/org-media-provider-settings.service';
+import { AI_MEDIA_CATEGORIES } from './default-categories';
 
 const mockRedisGet = vi.fn();
 const mockRedisSet = vi.fn();
@@ -112,7 +113,7 @@ describe('MediaDefaultsService', () => {
     const service = makeService();
     const result = await service.getMediaDefaults(orgId);
 
-    expect(result.categories).toHaveLength(16);
+    expect(result.categories).toHaveLength(AI_MEDIA_CATEGORIES.length);
     const imageRow = result.categories.find((c: any) => c.category === 'text-to-image');
     expect(imageRow).toMatchObject({
       category: 'text-to-image',

@@ -31,7 +31,7 @@ function makeService() {
 
   const adapter = {
     identifier: 'test-provider',
-    capabilities: { image: true, video: true, audio: false, avatar: false, tts: false, stt: false, upscale: false, bgRemove: false, inpaint: false },
+    capabilities: { image: true, video: true, audio: false, avatar: false, tts: false, stt: false, upscale: false, bgRemove: false, inpaint: false, outpaint: false },
     generateImage: vi.fn(),
     generateVideo: vi.fn(),
     generateAudio: vi.fn(),

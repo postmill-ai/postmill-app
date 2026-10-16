@@ -70,6 +70,7 @@ export class GatewayMediaAdapter extends AiSdkMediaAdapter {
     upscale: false,
     bgRemove: false,
     inpaint: false,
+    outpaint: false,
   };
   override readonly credentialFields: MediaCredentialField[] = [
     { key: 'apiKey', label: 'Gateway API Key', type: 'password', required: true, placeholder: 'vck_…' },

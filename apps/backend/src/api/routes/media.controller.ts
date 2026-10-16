@@ -27,6 +27,7 @@ import { RemoveBackgroundDto } from '@postmill-ai/nestjs-libraries/dtos/ai/remov
 import { DetectFocalPointDto } from '@postmill-ai/nestjs-libraries/dtos/ai/detect-focal-point.dto';
 import { UpscaleImageDto } from '@postmill-ai/nestjs-libraries/dtos/ai/upscale.image.dto';
 import { InpaintImageDto } from '@postmill-ai/nestjs-libraries/dtos/ai/inpaint.image.dto';
+import { OutpaintImageDto } from '@postmill-ai/nestjs-libraries/dtos/ai/outpaint.image.dto';
 import { ImageToImageDto } from '@postmill-ai/nestjs-libraries/dtos/ai/image-to-image.dto';
 import { UpscaleVideoDto } from '@postmill-ai/nestjs-libraries/dtos/ai/upscale-video.dto';
 import { RemoveVideoBackgroundDto } from '@postmill-ai/nestjs-libraries/dtos/ai/remove-video-background.dto';
@@ -242,6 +243,23 @@ export class MediaController {
       url: await this._aiMediaService.inpaintImage(
         body.imageUrl,
         body.maskUrl,
+        body.prompt,
+        { orgId: org.id }
+      ),
+    };
+  }
+
+  @Post('/outpaint')
+  @CheckPolicies([AuthorizationActions.Create, Sections.MEDIA])
+  @RequirePermission('media', 'create')
+  async outpaint(
+    @GetOrgFromRequest() org: Organization,
+    @Body() body: OutpaintImageDto
+  ) {
+    return {
+      url: await this._aiMediaService.outpaintImage(
+        body.imageUrl,
+        body.mode,
         body.prompt,
         { orgId: org.id }
       ),

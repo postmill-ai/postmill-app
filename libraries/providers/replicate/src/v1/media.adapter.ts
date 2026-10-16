@@ -7,6 +7,7 @@ import {
   MediaCredentialOptions,
   MediaJobSubmission,
   MediaPollResult,
+  OutpaintMode,
   resolveApiKey,
   redactError,
   isTransientStatus,
@@ -32,6 +33,20 @@ const DEFAULT_IMAGE_MODEL = 'black-forest-labs/flux-1.1-pro';
 const DEFAULT_BG_REMOVE_MODEL = '851-labs/background-remover';
 const DEFAULT_UPSCALE_MODEL = 'nightmareai/real-esrgan';
 const DEFAULT_INPAINT_MODEL = 'stability-ai/stable-diffusion-inpainting';
+// flux-fill-pro carries the dedicated `outpaint` input (zoom-out / make-square /
+// directional) — declared in this package's metadata under `image-outpaint`.
+const DEFAULT_OUTPAINT_MODEL = 'black-forest-labs/flux-fill-pro';
+
+// Canonical OutpaintMode → flux-fill-pro `outpaint` select token.
+const OUTPAINT_TOKENS: Record<OutpaintMode, string> = {
+  'zoom-1.5x': 'Zoom out 1.5x',
+  'zoom-2x': 'Zoom out 2x',
+  'make-square': 'Make square',
+  left: 'Left outpaint',
+  right: 'Right outpaint',
+  top: 'Top outpaint',
+  bottom: 'Bottom outpaint',
+};
 
 type ReplicateOutput = string | string[] | undefined;
 
@@ -70,6 +85,7 @@ export class ReplicateMediaAdapter implements MediaProviderAdapter {
     upscale: true,
     bgRemove: true,
     inpaint: true,
+    outpaint: true,
     videoToVideo: true,
     videoUpscale: true,
     videoBg: true,
@@ -317,6 +333,17 @@ export class ReplicateMediaAdapter implements MediaProviderAdapter {
     return this._createAndResolveUrl(
       { ...options, version: options?.version || options?.model || DEFAULT_INPAINT_MODEL },
       { image: imageUrl, mask: maskUrl, prompt },
+    );
+  }
+
+  async outpaintImage(imageUrl: string, mode: OutpaintMode, prompt?: string, options?: MediaGenerateOptions): Promise<string> {
+    return this._createAndResolveUrl(
+      { ...options, version: options?.version || options?.model || DEFAULT_OUTPAINT_MODEL },
+      {
+        image: imageUrl,
+        outpaint: OUTPAINT_TOKENS[mode] ?? OUTPAINT_TOKENS['zoom-1.5x'],
+        ...(prompt ? { prompt } : {}),
+      },
     );
   }
 

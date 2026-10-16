@@ -10,6 +10,7 @@ export const metadata: ProviderMetadata = {
   "mediaCategories": [
     "image-bg-remove",
     "image-inpaint",
+    "image-outpaint",
     "image-slide",
     "image-to-image",
     "image-to-video",
@@ -3247,6 +3248,116 @@ export const metadata: ProviderMetadata = {
               }
             ],
             "default": "vibes"
+          }
+        ]
+      }
+    ],
+    "image-outpaint": [
+      {
+        "id": "black-forest-labs/flux-fill-pro",
+        "label": "flux-fill-pro",
+        "fields": [
+          {
+            "name": "outpaint",
+            "label": "outpaint",
+            "help": "A quick option for outpainting an input image. Mask will be ignored.",
+            "type": "select",
+            "options": [
+              {
+                "value": "None",
+                "label": "None"
+              },
+              {
+                "value": "Zoom out 1.5x",
+                "label": "Zoom out 1.5x"
+              },
+              {
+                "value": "Zoom out 2x",
+                "label": "Zoom out 2x"
+              },
+              {
+                "value": "Make square",
+                "label": "Make square"
+              },
+              {
+                "value": "Left outpaint",
+                "label": "Left outpaint"
+              },
+              {
+                "value": "Right outpaint",
+                "label": "Right outpaint"
+              },
+              {
+                "value": "Top outpaint",
+                "label": "Top outpaint"
+              },
+              {
+                "value": "Bottom outpaint",
+                "label": "Bottom outpaint"
+              }
+            ],
+            "default": "None"
+          },
+          {
+            "name": "seed",
+            "label": "Seed",
+            "help": "Random seed. Set for reproducible generation",
+            "type": "number",
+            "step": 1
+          },
+          {
+            "name": "steps",
+            "label": "Steps",
+            "help": "Number of diffusion steps. Higher values yield finer details but increase processing time.",
+            "type": "number",
+            "min": 15,
+            "max": 50,
+            "step": 1,
+            "default": 50
+          },
+          {
+            "name": "prompt_upsampling",
+            "label": "Prompt Upsampling",
+            "help": "Automatically modify the prompt for more creative generation",
+            "type": "toggle",
+            "default": false
+          },
+          {
+            "name": "guidance",
+            "label": "Guidance",
+            "help": "Controls the balance between adherence to the text prompt and image quality/diversity. Higher values make the output more closely match the prompt but may reduce overall image quality. Lower values allow for more creative freedom but might produce results less relevant to the prompt.",
+            "type": "number",
+            "min": 1.5,
+            "max": 100,
+            "step": 0.1,
+            "default": 60
+          },
+          {
+            "name": "safety_tolerance",
+            "label": "Safety Tolerance",
+            "help": "Safety tolerance, 1 is most strict and 6 is most permissive",
+            "type": "number",
+            "min": 1,
+            "max": 6,
+            "step": 1,
+            "default": 2
+          },
+          {
+            "name": "output_format",
+            "label": "output_format",
+            "help": "Format of the output images.",
+            "type": "select",
+            "options": [
+              {
+                "value": "jpg",
+                "label": "jpg"
+              },
+              {
+                "value": "png",
+                "label": "png"
+              }
+            ],
+            "default": "jpg"
           }
         ]
       }

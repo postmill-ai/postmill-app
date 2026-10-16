@@ -25,6 +25,7 @@ export class GroqMediaAdapter extends OpenAiCompatibleMediaAdapter {
     upscale: false,
     bgRemove: false,
     inpaint: false,
+    outpaint: false,
   };
 
   protected readonly baseUrl = 'https://api.groq.com/openai/v1';

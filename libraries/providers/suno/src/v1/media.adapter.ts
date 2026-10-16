@@ -74,6 +74,7 @@ export class SunoAdapter extends BearerTokenMediaAdapter {
     upscale: false,
     bgRemove: false,
     inpaint: false,
+    outpaint: false,
   };
 
   async generateImage(

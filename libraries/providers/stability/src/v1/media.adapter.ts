@@ -58,6 +58,7 @@ export class StabilityAdapter implements MediaProviderAdapter {
     upscale: false,
     bgRemove: false,
     inpaint: false,
+    outpaint: false,
   };
 
   private _auth(options?: MediaCredentialOptions): string {

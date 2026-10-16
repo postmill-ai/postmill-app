@@ -47,7 +47,8 @@ import { NewDesignDialog } from './new-design-dialog';
 import { CanvasInspector } from './panels/canvas-inspector';
 import { useMediaPicker } from '../use-media-picker';
 import { StartDialog } from './start-dialog';
-import { aiRemoveBackground, aiUpscale, aiDetectSubject } from './ai-image-actions';
+import { aiRemoveBackground, aiUpscale, aiDetectSubject, aiOutpaint } from './ai-image-actions';
+import { OutpaintDialog } from './outpaint-dialog';
 import { addMediaToTimeline } from './add-media-to-timeline';
 import { Logo } from '@postmill-ai/frontend/components/new-layout/logo';
 import { FullscreenButton } from '@postmill-ai/frontend/components/media-tools/fullscreen-button';
@@ -1158,6 +1159,25 @@ export const Designer: FC<DesignerProps> = ({
         if (!id) return;
         setInspectorCollapsed(false);
         toaster.show(translate('draw_mask_ai_tools_inpaint', 'Draw a mask in the inspector’s AI Tools, then Inpaint'), 'success');
+      },
+      onAiOutpaint: () => {
+        const id = selectedImageId();
+        if (!id) return;
+        modals.openModal({
+          title: translate('designer_expand_image_ai', 'Expand Image (AI)'),
+          children: (close: () => void) => (
+            <OutpaintDialog
+              onCancel={close}
+              onApply={(mode, prompt) => {
+                close();
+                runAi(
+                  (elId) => aiOutpaint({ fetch, store, elementId: elId }, mode, prompt),
+                  translate('image_expansion_failed', 'Image expansion failed')
+                );
+              }}
+            />
+          ),
+        });
       },
       onAiDetectSubject: () =>
         runAi((id) => aiDetectSubject({ fetch, store, elementId: id }), translate('subject_detection_failed', 'Subject detection failed')),

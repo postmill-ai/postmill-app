@@ -97,6 +97,7 @@ export class VertexMediaAdapter implements MediaProviderAdapter {
     upscale: false,
     bgRemove: false,
     inpaint: false,
+    outpaint: false,
   };
 
   // Vertex uses GCP credentials, not a single API key. The service-account JSON is the

@@ -48,6 +48,7 @@ export class TogetherAiMediaAdapter extends OpenAiCompatibleMediaAdapter {
     upscale: false,
     bgRemove: false,
     inpaint: false,
+    outpaint: false,
   };
 
   protected readonly baseUrl = 'https://api.together.ai/v1';

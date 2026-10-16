@@ -46,6 +46,7 @@ const GROUPS: { titleKey: [string, string]; categories: AiMediaCategory[] }[] = 
       'image-upscale',
       'image-bg-remove',
       'image-inpaint',
+      'image-outpaint',
       'image-focal-point',
       'image-slide',
     ],
@@ -78,6 +79,7 @@ const CATEGORY_LABELS: Record<AiMediaCategory, [string, string]> = {
   'image-upscale': ['ai_media_category_image_upscale', 'Image Upscale'],
   'image-bg-remove': ['ai_media_category_image_bg_remove', 'Remove Background'],
   'image-inpaint': ['ai_media_category_image_inpaint', 'Inpaint'],
+  'image-outpaint': ['ai_media_category_image_outpaint', 'Expand Image (Outpaint)'],
   'image-focal-point': ['ai_media_category_image_focal_point', 'Focal Point'],
   'image-slide': ['ai_media_category_image_slide', 'Slide Generator'],
   'video-avatar': ['ai_media_category_video_avatar', 'Avatar Video'],
@@ -97,6 +99,10 @@ const CATEGORY_HELP: Record<AiMediaCategory, [string, string]> = {
   'image-upscale': ['ai_media_category_help_image_upscale', 'Image upscaling/enhancement.'],
   'image-bg-remove': ['ai_media_category_help_image_bg_remove', 'Background removal for images.'],
   'image-inpaint': ['ai_media_category_help_image_inpaint', 'Inpainting with a mask.'],
+  'image-outpaint': [
+    'ai_media_category_help_image_outpaint',
+    'Expanding an image beyond its borders (outpainting).',
+  ],
   'image-focal-point': [
     'ai_media_category_help_image_focal_point',
     'Vision model used to detect focal points.',

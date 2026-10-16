@@ -29,6 +29,7 @@ function build(defaultsOverride: Record<string, any> = {}) {
   };
   const aiMediaService = {
     urlToBase64Image: vi.fn().mockResolvedValue('data:image/png;base64,abc'),
+    outpaintImage: vi.fn().mockResolvedValue('https://cdn/expanded.png'),
     saveUrlToFile: vi.fn().mockResolvedValue({
       id: 'file-1',
       path: 'http://localhost/uploads/file-1.png',
@@ -121,6 +122,22 @@ describe('MediaController — Designer AI-media routes', () => {
       await expect(
         controller.generateSlide(org, { prompt: 'x' } as any)
       ).rejects.toMatchObject({ status: HttpStatus.CONFLICT });
+    });
+
+    it('outpaint delegates (imageUrl, mode, prompt, { orgId }) and returns { url }', async () => {
+      const { controller, aiMediaService } = build();
+      const res = await controller.outpaint(org, {
+        imageUrl: 'https://x/a.png',
+        mode: 'zoom-2x',
+        prompt: 'more sky',
+      } as any);
+      expect(aiMediaService.outpaintImage).toHaveBeenCalledWith(
+        'https://x/a.png',
+        'zoom-2x',
+        'more sky',
+        { orgId: 'org-1' }
+      );
+      expect(res).toEqual({ url: 'https://cdn/expanded.png' });
     });
 
     it('generate-image returns { output: <base64 dataUrl> }', async () => {

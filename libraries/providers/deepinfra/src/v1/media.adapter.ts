@@ -38,6 +38,7 @@ export class DeepInfraMediaAdapter extends BearerTokenMediaAdapter {
     upscale: false,
     bgRemove: false,
     inpaint: false,
+    outpaint: false,
   };
 
   private async _infer(model: string, body: Record<string, unknown>, options?: MediaCredentialOptions): Promise<InferenceResponse> {

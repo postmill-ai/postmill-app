@@ -90,7 +90,7 @@ settings UI read instead of inferring from adapter capabilities. Authored as a s
 
 Category unions live in `libraries/nestjs-libraries/src/ai/defaults/default-categories.ts`:
 `AI_MODEL_CATEGORIES` = `low-reasoning, high-reasoning, vision, workflow` (4);
-`AI_MEDIA_CATEGORIES` = 16 values (`text-to-image`, `video-avatar`, …). Subset compliance is
+`AI_MEDIA_CATEGORIES` = 17 values (`text-to-image`, `video-avatar`, …). Subset compliance is
 enforced by `libraries/providers/kernel/src/__tests__/kernel.metadata.spec.ts`
 ("declares only known model/media categories", "backs every declared media category with a
 model catalog").

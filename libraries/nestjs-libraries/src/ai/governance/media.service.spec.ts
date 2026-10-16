@@ -84,6 +84,7 @@ const NO_CAPS: MediaProviderCapabilities = {
   upscale: false,
   bgRemove: false,
   inpaint: false,
+  outpaint: false,
 };
 
 function makeAdapter(
@@ -744,6 +745,68 @@ describe('AiMediaService', () => {
     });
   });
 
+  describe('outpaintImage', () => {
+    it('throws CapabilityNotAvailable when no provider configured', async () => {
+      const service = bareService();
+      await expect(service.outpaintImage('img.png', 'zoom-2x')).rejects.toThrow(CapabilityNotAvailable);
+      await expect(service.outpaintImage('img.png', 'zoom-2x', undefined, { orgId: 'org-1' })).rejects.toThrow(
+        'Image expansion is not available',
+      );
+    });
+
+    it('uses an outpaint-capable adapter and forwards mode/prompt', async () => {
+      const adapter = makeAdapter('replicate', { outpaint: true }, {
+        outpaintImage: vi.fn().mockResolvedValue('https://x/expanded.png'),
+      });
+      const { service } = setup([adapter]);
+
+      const result = await service.outpaintImage('img.png', 'left', 'more ocean', { orgId: 'org-1' });
+      expect(result).toBe('https://x/expanded.png');
+      expect(adapter.outpaintImage).toHaveBeenCalledWith('img.png', 'left', 'more ocean', {
+        credentials: { apiKey: 'replicate-key' },
+      });
+    });
+
+    it('propagates the typed upstream error when a configured provider fails (→ 502, not 409)', async () => {
+      const upstream = new ProviderUpstreamError(
+        { domain: 'media', providerId: 'replicate', providerName: 'Replicate', operation: 'outpaint' },
+        'unavailable',
+        'upstream 503',
+        503,
+      );
+      const adapter = makeAdapter('replicate', { outpaint: true }, {
+        outpaintImage: vi.fn().mockRejectedValue(upstream),
+      });
+      const { service } = setup([adapter]);
+
+      await expect(service.outpaintImage('img.png', 'make-square', undefined, { orgId: 'org-1' })).rejects.toBe(upstream);
+    });
+
+    it('propagates a plain adapter failure too (configured-but-failed is never 409)', async () => {
+      const adapter = makeAdapter('replicate', { outpaint: true }, {
+        outpaintImage: vi.fn().mockRejectedValue(new Error('boom')),
+      });
+      const { service } = setup([adapter]);
+
+      await expect(service.outpaintImage('img.png', 'top', undefined, { orgId: 'org-1' })).rejects.toThrow('boom');
+      await expect(service.outpaintImage('img.png', 'top', undefined, { orgId: 'org-1' })).rejects.not.toThrow(
+        CapabilityNotAvailable,
+      );
+    });
+
+    it('skips providers that resolved for the operation but lack outpaintImage', async () => {
+      const capable = makeAdapter('replicate', { outpaint: true }, {
+        outpaintImage: vi.fn().mockResolvedValue('https://x/expanded.png'),
+      });
+      // Capability flag on, method missing — defensive guard parity with inpaint.
+      const noMethod = makeAdapter('other', { outpaint: true });
+      const { service } = setup([noMethod, capable]);
+
+      const result = await service.outpaintImage('img.png', 'zoom-1.5x', undefined, { orgId: 'org-1' });
+      expect(result).toBe('https://x/expanded.png');
+    });
+  });
+
   // ── Focal point ──
 
   describe('detectFocalPoint', () => {
@@ -900,6 +963,7 @@ describe('AiMediaService', () => {
         'upscale',
         'bg-remove',
         'inpaint',
+        'outpaint',
         'focal-point',
         'slide',
         'caption',
