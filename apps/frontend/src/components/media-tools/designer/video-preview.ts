@@ -1,6 +1,7 @@
 import type { VideoClip, VideoOutput, VideoTrack } from './designer.store';
 import {
   interpolateClipKeyframes,
+  volumeAtClipTime,
   type EasePreset,
 } from '@postmill-ai/nestjs-libraries/media/designer-doc/keyframes';
 
@@ -9,6 +10,32 @@ interface PlayOptions {
   onEnd: () => void;
   /** Restart at 0 instead of stopping when the playhead reaches the end. */
   loop?: boolean;
+}
+
+/** HTMLMediaElement.volume throws outside [0,1]. */
+const clampVolume = (v: number): number => Math.max(0, Math.min(1, v));
+
+/**
+ * Speed with the pitch kept. ffmpeg's `atempo` — the export path for
+ * `clip.speed` — is pitch-preserving, so the preview must be too or a sped-up
+ * clip sounds a fifth higher in the browser than in the exported mp4.
+ * (`preservesPitch` already defaults to true in most engines; Safari needs the
+ * prefixed variant. Set both explicitly so the parity does not rest on a
+ * default.)
+ */
+function applySpeed(el: HTMLMediaElement, speed: number) {
+  el.playbackRate = speed;
+  el.preservesPitch = true;
+  (el as HTMLMediaElement & { webkitPreservesPitch?: boolean }).webkitPreservesPitch = true;
+}
+
+/**
+ * The one volume composition rule, mirrored by the server's mixer:
+ * keyframed-or-base volume × track gain × duck gain, clamped — fades multiply
+ * separately downstream (the export's afade filters), not folded in here.
+ */
+function effectiveVolume(clip: VideoClip, localMs: number, trackGain: number, duckGain: number): number {
+  return clampVolume(volumeAtClipTime(clip, Math.max(0, localMs)) * trackGain * duckGain);
 }
 
 /**
@@ -276,6 +303,11 @@ export class VideoPreviewEngine {
             if (Math.abs(el.currentTime - seekTime) > 0.1) {
               el.currentTime = seekTime;
             }
+            // Keyframed (or base) volume per tick, same composition as the
+            // audio path below — video-clip audio is mixed on the server too.
+            const v = effectiveVolume(clip, ms - clip.startMs, trackGain, duckGain);
+            el.volume = v;
+            el.muted = v <= 0;
             if (el.paused) {
               el.play().catch(() => {});
             }
@@ -290,7 +322,7 @@ export class VideoPreviewEngine {
             if (Math.abs(el.currentTime - seekTime) > 0.1) {
               el.currentTime = seekTime;
             }
-            el.volume = Math.min(1, (clip.volume ?? 1) * trackGain * duckGain);
+            el.volume = effectiveVolume(clip, ms - clip.startMs, trackGain, duckGain);
             if (el.paused) {
               el.play().catch(() => {});
             }
@@ -326,7 +358,7 @@ export class VideoPreviewEngine {
     if (this.videoElements.has(clip.id)) {
       const el = this.videoElements.get(clip.id)!;
       if (clip.speed !== undefined && clip.speed > 0) {
-        el.playbackRate = clip.speed;
+        applySpeed(el, clip.speed);
       }
       return el;
     }
@@ -334,11 +366,12 @@ export class VideoPreviewEngine {
     const el = document.createElement('video');
     el.src = clip.src;
     // Only mute when the volume is explicitly zeroed; an unset volume defaults to
-    // 1 (audible), so the preview no longer silences default video audio.
-    el.muted = clip.volume === 0;
-    el.volume = Math.min(1, (clip.volume ?? 1));
+    // 1 (audible), so the preview no longer silences default video audio. A
+    // keyframed volume overrides this on the next tick (see seekMediaElements).
+    el.muted = volumeAtClipTime(clip, 0) <= 0;
+    el.volume = clampVolume(volumeAtClipTime(clip, 0));
     if (clip.speed !== undefined && clip.speed > 0) {
-      el.playbackRate = clip.speed;
+      applySpeed(el, clip.speed);
     }
     el.style.position = 'fixed';
     el.style.left = '-10000px';
@@ -354,16 +387,16 @@ export class VideoPreviewEngine {
     if (this.audioElements.has(clip.id)) {
       const el = this.audioElements.get(clip.id)!;
       if (clip.speed !== undefined && clip.speed > 0) {
-        el.playbackRate = clip.speed;
+        applySpeed(el, clip.speed);
       }
       return el;
     }
 
     const el = document.createElement('audio');
     el.src = clip.src;
-    el.volume = Math.min(1, (clip.volume ?? 1));
+    el.volume = clampVolume(volumeAtClipTime(clip, 0));
     if (clip.speed !== undefined && clip.speed > 0) {
-      el.playbackRate = clip.speed;
+      applySpeed(el, clip.speed);
     }
     el.style.position = 'fixed';
     el.style.left = '-10000px';

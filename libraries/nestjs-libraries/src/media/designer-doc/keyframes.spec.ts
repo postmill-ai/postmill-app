@@ -3,8 +3,10 @@ import {
   applyEasePreset,
   cubicBezierEase,
   easeSegment,
+  hasVolumeKeyframes,
   interpolateClipKeyframes,
   keyframesSource,
+  volumeAtClipTime,
   DEFAULT_IN_HANDLE,
   DEFAULT_OUT_HANDLE,
 } from './keyframes';
@@ -102,7 +104,7 @@ describe('interpolateClipKeyframes', () => {
 
   it('returns the clip’s own transform when there are no keyframes', () => {
     expect(interpolateClipKeyframes({ x: 5, y: 6, width: 7, height: 8 }, 500)).toEqual({
-      x: 5, y: 6, width: 7, height: 8, rotation: 0, opacity: 1,
+      x: 5, y: 6, width: 7, height: 8, rotation: 0, opacity: 1, volume: 1,
     });
   });
 
@@ -152,6 +154,72 @@ describe('interpolateClipKeyframes', () => {
       ],
     };
     expect(Number.isFinite(interpolateClipKeyframes(degenerate, 500).x)).toBe(true);
+  });
+});
+
+describe('volume keyframes', () => {
+  it('interpolates volume like any other prop', () => {
+    const c = {
+      volume: 1,
+      keyframes: [
+        { tMs: 0, props: { volume: 0 } },
+        { tMs: 1000, props: { volume: 1 } },
+      ],
+    };
+    expect(interpolateClipKeyframes(c, 500).volume).toBeCloseTo(0.5);
+  });
+
+  it('falls back to the base volume on keyframes that do not set it', () => {
+    const c = {
+      volume: 0.4,
+      keyframes: [
+        { tMs: 0, props: { volume: 0 } },
+        { tMs: 1000, props: { x: 10 } },
+      ],
+    };
+    expect(interpolateClipKeyframes(c, 1000).volume).toBeCloseTo(0.4);
+    expect(interpolateClipKeyframes(c, 500).volume).toBeCloseTo(0.2);
+  });
+
+  it('hasVolumeKeyframes only when a keyframe carries the prop', () => {
+    expect(hasVolumeKeyframes({ keyframes: [{ tMs: 0, props: { x: 1 } }] })).toBe(false);
+    expect(hasVolumeKeyframes({ keyframes: [{ tMs: 0, props: { volume: 0 } }] })).toBe(true);
+    expect(hasVolumeKeyframes({})).toBe(false);
+  });
+
+  it('volumeAtClipTime replaces the base when keyframes exist, clamps otherwise', () => {
+    expect(volumeAtClipTime({ volume: 0.5 }, 100)).toBe(0.5);
+    expect(volumeAtClipTime({}, 100)).toBe(1);
+    // An out-of-schema value is clamped rather than throwing downstream.
+    expect(volumeAtClipTime({ volume: 3 }, 100)).toBe(1);
+    const c = {
+      volume: 0.9,
+      keyframes: [
+        { tMs: 0, props: { volume: 0.2 } },
+        { tMs: 1000, props: { volume: 0.8 } },
+      ],
+    };
+    // Keyframes REPLACE the base — 0.9 plays no part once a keyframe exists.
+    expect(volumeAtClipTime(c, 0)).toBeCloseTo(0.2);
+    expect(volumeAtClipTime(c, 500)).toBeCloseTo(0.5);
+    expect(volumeAtClipTime(c, 2000)).toBeCloseTo(0.8);
+  });
+
+  it('the injected source copy carries the volume helpers too', () => {
+    const fn = new Function(
+      `${keyframesSource()}
+      return { volumeAtClipTime };`
+    ) as () => { volumeAtClipTime: typeof volumeAtClipTime };
+    const c = {
+      volume: 1,
+      keyframes: [
+        { tMs: 0, props: { volume: 0 } },
+        { tMs: 1000, props: { volume: 1 }, ease: 'easeIn' as const },
+      ],
+    };
+    for (const ms of [0, 250, 500, 750, 1000]) {
+      expect(fn().volumeAtClipTime(c, ms)).toBeCloseTo(volumeAtClipTime(c, ms), 6);
+    }
   });
 });
 

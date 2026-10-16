@@ -20,7 +20,7 @@ import type { VideoClip } from './designer.store';
  * is the motion you get rather than an illustration of it.
  */
 
-export const GRAPH_PROPS = ['x', 'y', 'width', 'height', 'rotation', 'opacity'] as const;
+export const GRAPH_PROPS = ['x', 'y', 'width', 'height', 'rotation', 'opacity', 'volume'] as const;
 export type GraphProp = (typeof GRAPH_PROPS)[number];
 
 /** Which properties this clip actually animates. Nothing else is worth a curve. */

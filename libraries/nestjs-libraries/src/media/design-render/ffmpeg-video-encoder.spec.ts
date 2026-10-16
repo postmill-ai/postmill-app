@@ -92,4 +92,124 @@ describe('FfmpegVideoEncoderService.mixAudio filter graph', () => {
     const caIdx = args.indexOf('-c:a');
     expect(caIdx).toBeGreaterThan(audioInputIdx);
   });
+
+  const mixGraph = async (out: any): Promise<string> => {
+    const service = new FfmpegVideoEncoderService();
+    vi.spyOn(service as any, 'getAudioDurationMs').mockResolvedValue(60000);
+    vi.spyOn(service as any, 'downloadAudio').mockResolvedValue('/tmp/fake.mp4');
+    await service.mixAudio(out, '/tmp');
+    const mixCall = spawnCalls.find((c) => c.args.includes('-filter_complex'));
+    expect(mixCall).toBeTruthy();
+    return mixCall!.args[mixCall!.args.indexOf('-filter_complex') + 1];
+  };
+
+  it('emits a per-frame volume expression when a clip has volume keyframes', async () => {
+    const graph = await mixGraph({
+      ...output,
+      tracks: [
+        {
+          type: 'audio',
+          gain: 0.5,
+          clips: [
+            {
+              id: 'm1',
+              startMs: 0,
+              endMs: 4000,
+              src: 'https://example.com/m.mp3',
+              volume: 1,
+              keyframes: [
+                { tMs: 0, props: { volume: 0 } },
+                { tMs: 4000, props: { volume: 1 } },
+              ],
+            },
+          ],
+        },
+      ],
+    });
+
+    // The constant filter must be gone; the quoted expression carries track
+    // gain baked in (endpoint 1 × 0.5) and evaluates per frame.
+    expect(graph).toContain(":eval=frame");
+    expect(graph).toMatch(/volume='[^']*':eval=frame/);
+    expect(graph).not.toMatch(/volume=0\.5[,:]/);
+    // Linear ramp 0 → 0.5 over 4s: slope 0.125, first segment min(t,0.1).
+    expect(graph).toContain('+0.125*(min(t,0.1)-min(t,0))');
+  });
+
+  it('keeps the constant volume filter when no volume keyframes exist', async () => {
+    const graph = await mixGraph({
+      ...output,
+      tracks: [
+        {
+          type: 'audio',
+          gain: 0.5,
+          clips: [
+            {
+              id: 'm1',
+              startMs: 0,
+              endMs: 4000,
+              src: 'https://example.com/m.mp3',
+              volume: 1,
+              keyframes: [{ tMs: 0, props: { x: 10 } }],
+            },
+          ],
+        },
+      ],
+    });
+    expect(graph).toContain('volume=0.5000');
+    expect(graph).not.toContain('eval=frame');
+  });
+
+  it('mixes a video clip whose base volume is 0 but whose keyframes raise it', async () => {
+    const graph = await mixGraph({
+      ...output,
+      tracks: [
+        {
+          type: 'video',
+          gain: 1,
+          clips: [
+            {
+              id: 'v1',
+              startMs: 0,
+              endMs: 2000,
+              src: 'https://example.com/v.mp4',
+              volume: 0,
+              keyframes: [
+                { tMs: 0, props: { volume: 0 } },
+                { tMs: 2000, props: { volume: 0.8 } },
+              ],
+            },
+          ],
+        },
+      ],
+    });
+    expect(graph).toContain('[p0]');
+    expect(graph).toContain(':eval=frame');
+  });
+
+  it('emits the constant filter for keyframes that sample flat', async () => {
+    const graph = await mixGraph({
+      ...output,
+      tracks: [
+        {
+          type: 'audio',
+          gain: 1,
+          clips: [
+            {
+              id: 'm1',
+              startMs: 0,
+              endMs: 2000,
+              src: 'https://example.com/m.mp3',
+              keyframes: [
+                { tMs: 0, props: { volume: 0.3 } },
+                { tMs: 2000, props: { volume: 0.3 } },
+              ],
+            },
+          ],
+        },
+      ],
+    });
+    expect(graph).toContain('volume=0.3000');
+    expect(graph).not.toContain('eval=frame');
+  });
 });

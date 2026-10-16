@@ -32,6 +32,14 @@ export interface KeyframeProps {
   height?: number;
   rotation?: number;
   opacity?: number;
+  /**
+   * Audio level, 0–1. Unlike the transform props this one is heard, not seen —
+   * the preview applies it to the media element and the export bakes it into
+   * the ffmpeg `volume` filter. When ANY keyframe carries `volume`, the
+   * interpolated value REPLACES the clip's base `volume` at that time; with no
+   * volume keyframes the base applies unchanged.
+   */
+  volume?: number;
 }
 
 export interface Keyframe {
@@ -142,6 +150,8 @@ export interface InterpolatedProps {
   height: number;
   rotation: number;
   opacity: number;
+  /** Always resolved — the base `volume` when no keyframe sets it. */
+  volume: number;
 }
 
 export interface KeyframedClip extends KeyframeProps {
@@ -160,6 +170,7 @@ export const interpolateClipKeyframes = (
     height: clip.height == null ? 1 : clip.height,
     rotation: clip.rotation == null ? 0 : clip.rotation,
     opacity: clip.opacity == null ? 1 : clip.opacity,
+    volume: clip.volume == null ? 1 : clip.volume,
   };
 
   const kfs = clip.keyframes || [];
@@ -173,6 +184,7 @@ export const interpolateClipKeyframes = (
     height: kf.props.height == null ? defaults.height : kf.props.height,
     rotation: kf.props.rotation == null ? defaults.rotation : kf.props.rotation,
     opacity: kf.props.opacity == null ? defaults.opacity : kf.props.opacity,
+    volume: kf.props.volume == null ? defaults.volume : kf.props.volume,
   });
 
   if (relativeMs <= sorted[0].tMs) return at(sorted[0]);
@@ -201,7 +213,31 @@ export const interpolateClipKeyframes = (
     height: lerp(a.height, b.height, t),
     rotation: lerp(a.rotation, b.rotation, t),
     opacity: lerp(a.opacity, b.opacity, t),
+    volume: lerp(a.volume, b.volume, t),
   };
+};
+
+/** True when at least one keyframe carries `volume` — the keyframed values
+ *  then replace the clip's base `volume` instead of multiplying it. */
+export const hasVolumeKeyframes = (clip: KeyframedClip): boolean =>
+  (clip.keyframes || []).some((kf) => kf.props.volume !== undefined);
+
+/**
+ * The clip's effective volume at `relativeMs` into its own timeline, clamped
+ * to [0,1]. This is the ONE composition rule both sides share: the preview
+ * multiplies the result by track gain (and duck gain) per tick; the export
+ * samples it into the ffmpeg `volume` expression. Fades stay separate and
+ * multiply downstream of it on both sides.
+ */
+export const volumeAtClipTime = (
+  clip: KeyframedClip,
+  relativeMs: number
+): number => {
+  const base = clip.volume == null ? 1 : clip.volume;
+  const v = hasVolumeKeyframes(clip)
+    ? interpolateClipKeyframes(clip, relativeMs).volume
+    : base;
+  return Math.max(0, Math.min(1, v));
 };
 
 /**
@@ -219,5 +255,7 @@ export const keyframesSource = (): string => {
     decl('cubicBezierEase', cubicBezierEase),
     decl('easeSegment', easeSegment),
     decl('interpolateClipKeyframes', interpolateClipKeyframes),
+    decl('hasVolumeKeyframes', hasVolumeKeyframes),
+    decl('volumeAtClipTime', volumeAtClipTime),
   ].join('\n');
 };

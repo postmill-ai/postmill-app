@@ -5,6 +5,11 @@ import * as os from 'os';
 import * as path from 'path';
 import { safeFetch } from '@postmill-ai/nestjs-libraries/dtos/webhooks/safe.fetch';
 import { ChromiumFrameCaptureService } from './chromium-frame-capture.service';
+import { hasVolumeKeyframes } from '../designer-doc/keyframes';
+import {
+  sampleVolumeEnvelope,
+  volumeEnvelopeExpr,
+} from './volume-envelope';
 import type { VideoClip, VideoOutput, VideoTrack } from './design-render.types';
 
 function getFfmpegPath(): string {
@@ -249,7 +254,13 @@ export class FfmpegVideoEncoderService {
         if (!clip.src) continue;
 
         const isAudioTrack = track.type === 'audio';
-        const isVideoWithAudio = track.type === 'video' && (clip.volume ?? 1) > 0;
+        // A base volume of 0 no longer silences the clip when volume keyframes
+        // raise it above zero somewhere along the clip.
+        const keyframedAudible =
+          hasVolumeKeyframes(clip) &&
+          (clip.keyframes || []).some((kf) => (kf.props.volume ?? 0) > 0);
+        const isVideoWithAudio =
+          track.type === 'video' && ((clip.volume ?? 1) > 0 || keyframedAudible);
         if (!isAudioTrack && !isVideoWithAudio) continue;
 
         const url = resolveMediaUrl(clip.src);
@@ -323,7 +334,31 @@ export class FfmpegVideoEncoderService {
         }
       }
 
-      if (volume !== 1) filterParts.push(`volume=${volume.toFixed(4)}`);
+      // Volume: constant when the clip carries no volume keyframes, otherwise
+      // a piecewise-linear expression sampled from the SHARED interpolation at
+      // 100ms steps — the same function the preview evaluates per tick, so a
+      // bezier easing quantises identically on both sides. Track gain is baked
+      // into the envelope values (the preview multiplies it per tick). The
+      // expression sits after atrim/asetpts (and any atempo), so its `t` is
+      // seconds from the clip's LOCAL start — the keyframe timeline. Fades
+      // stay separate afade filters below and multiply downstream, mirroring
+      // the preview's composition order.
+      const envelope = hasVolumeKeyframes(clip)
+        ? sampleVolumeEnvelope(clip, trackGain, timelineDuration)
+        : null;
+      const envelopeExpr = envelope ? volumeEnvelopeExpr(envelope) : null;
+      if (envelopeExpr) {
+        // Single quotes: the expression contains commas, which the filtergraph
+        // parser would otherwise read as filter separators.
+        filterParts.push(`volume='${envelopeExpr}':eval=frame`);
+      } else if (envelope) {
+        // Keyframed but sampled flat — the constant filter is the same
+        // automation (and covers the expression's null case by construction).
+        const flat = envelope[0].v;
+        if (flat !== 1) filterParts.push(`volume=${flat.toFixed(4)}`);
+      } else if (volume !== 1) {
+        filterParts.push(`volume=${volume.toFixed(4)}`);
+      }
       if (fadeInS > 0) {
         filterParts.push(`afade=t=in:st=0:d=${fadeInS.toFixed(3)}`);
       }

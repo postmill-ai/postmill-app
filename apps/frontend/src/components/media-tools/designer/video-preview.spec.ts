@@ -181,3 +181,110 @@ describe('VideoPreviewEngine — muted tracks and looping', () => {
     engine.destroy();
   });
 });
+
+describe('VideoPreviewEngine — keyframed volume and pitch', () => {
+  const stubMedia = () => {
+    Object.defineProperty(HTMLMediaElement.prototype, 'play', {
+      value: vi.fn().mockResolvedValue(undefined),
+      configurable: true,
+    });
+    Object.defineProperty(HTMLMediaElement.prototype, 'pause', {
+      value: vi.fn(),
+      configurable: true,
+    });
+  };
+
+  const audioStoreWithClip = (clip: Partial<VideoClip>, trackGain?: number) => {
+    const store = createDesignerStore();
+    store.getState().setMode('video');
+    store.getState().addTrack(0, 'audio');
+    const vo = store.getState().doc.outputs[0] as VideoOutput;
+    const audioTrack = vo.tracks.find((t) => t.type === 'audio')!;
+    store.getState().addClip(0, audioTrack.id, {
+      id: 'a1',
+      startMs: 0,
+      endMs: 2000,
+      src: 'https://example.com/a.mp3',
+      ...clip,
+    } as VideoClip);
+    if (trackGain !== undefined) {
+      store.getState().setTrackGain(0, audioTrack.id, trackGain);
+    }
+    return store;
+  };
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it('applies the interpolated volume at the playhead, times track gain', () => {
+    stubMedia();
+    const store = audioStoreWithClip(
+      {
+        keyframes: [
+          { tMs: 0, props: { volume: 0 } },
+          { tMs: 2000, props: { volume: 1 } },
+        ],
+      },
+      0.5
+    );
+    const engine = new VideoPreviewEngine(store);
+    engine.seek(1000);
+    const el = (engine as any).audioElements.get('a1') as HTMLAudioElement;
+    expect(el).toBeTruthy();
+    // Halfway up a linear 0→1 ramp, × 0.5 track gain.
+    expect(el.volume).toBeCloseTo(0.25, 6);
+    engine.destroy();
+  });
+
+  it('falls back to the base volume when no keyframe sets volume', () => {
+    stubMedia();
+    const store = audioStoreWithClip({
+      volume: 0.6,
+      keyframes: [{ tMs: 0, props: { x: 5 } }],
+    });
+    const engine = new VideoPreviewEngine(store);
+    engine.seek(1000);
+    const el = (engine as any).audioElements.get('a1') as HTMLAudioElement;
+    expect(el.volume).toBeCloseTo(0.6, 6);
+    engine.destroy();
+  });
+
+  it('drives a VIDEO element’s audio from the keyframes too, and keeps pitch', () => {
+    stubMedia();
+    const store = createDesignerStore();
+    store.getState().setMode('video');
+    const vo = store.getState().doc.outputs[0] as VideoOutput;
+    const videoTrack = vo.tracks.find((t) => t.type === 'video');
+    // A fresh store may have no video track yet — add one if so.
+    const trackId = videoTrack
+      ? videoTrack.id
+      : (() => {
+          store.getState().addTrack(0, 'video');
+          const vo2 = store.getState().doc.outputs[0] as VideoOutput;
+          return vo2.tracks.find((t) => t.type === 'video')!.id;
+        })();
+    store.getState().addClip(0, trackId, {
+      id: 'v1',
+      startMs: 0,
+      endMs: 2000,
+      src: 'https://example.com/v.mp4',
+      speed: 2,
+      keyframes: [
+        { tMs: 0, props: { volume: 0.2 } },
+        { tMs: 2000, props: { volume: 0.8 } },
+      ],
+    } as VideoClip);
+
+    const engine = new VideoPreviewEngine(store);
+    engine.seek(1000);
+    const el = (engine as any).videoElements.get('v1') as HTMLVideoElement;
+    expect(el).toBeTruthy();
+    expect(el.volume).toBeCloseTo(0.5, 6);
+    expect(el.playbackRate).toBe(2);
+    // Explicit pitch preservation — ffmpeg's atempo on the export path is
+    // pitch-preserving, so the preview must not chipmunk either.
+    expect(el.preservesPitch).toBe(true);
+    engine.destroy();
+  });
+});

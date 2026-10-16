@@ -199,6 +199,7 @@ const KeyframePropRow: FC<{
     : prop === 'height' ? (clip.height ?? 1)
     : prop === 'rotation' ? (clip.rotation ?? 0)
     : prop === 'opacity' ? (clip.opacity ?? 1)
+    : prop === 'volume' ? (clip.volume ?? 1)
     : 0;
   const step = Math.max(1, Math.round(totalMs * 0.01));
 
@@ -207,7 +208,7 @@ const KeyframePropRow: FC<{
       <div className="flex items-center justify-between">
         <span className="text-[10px] text-textColor/50 capitalize">{prop}</span>
         <span className="text-[10px] text-textColor/30">
-          {prop === 'opacity' ? `${Math.round(currentVal * 100)}%` : Math.round(currentVal)}
+          {prop === 'opacity' || prop === 'volume' ? `${Math.round(currentVal * 100)}%` : Math.round(currentVal)}
         </span>
       </div>
       <div
@@ -385,6 +386,7 @@ export const ClipInspector: FC<ClipInspectorProps> = ({ store, outputIndex, trac
         : prop === 'scale' ? ((clip.width ?? 1) / (clip.naturalWidth || 100))
         : prop === 'rotation' ? (clip.rotation ?? 0)
         : prop === 'opacity' ? (clip.opacity ?? 1)
+        : prop === 'volume' ? (clip.volume ?? 1)
         : 0;
 
       const idx = existing.findIndex((kf) => kf.tMs === tMs);
@@ -573,6 +575,29 @@ export const ClipInspector: FC<ClipInspectorProps> = ({ store, outputIndex, trac
           onChange={(n) => updateClipSilent({ volume: n / 100 })}
           onCommit={commitClip}
         />
+        {/* Keyframable volume. The slider sets the BASE level; a keyframed
+            value replaces it where the keyframes span (per-keyframe fallback
+            keeps a partially-keyframed clip on the base). Same prop the
+            export bakes into the ffmpeg volume filter. */}
+        <KeyframePropRow
+          prop="volume"
+          clip={clip}
+          keyframes={keyframes}
+          totalMs={totalMs}
+          onAdd={handleAddKeyframe}
+          onMove={handleMoveKeyframe}
+          onRemove={handleRemoveKeyframe}
+          onEase={handleSetEase}
+          onCommit={commitClip}
+        />
+        {keyframes.some((kf) => kf.props.volume !== undefined) && (
+          <p className="text-[10px] text-textColor/40">
+            {translate(
+              'designer_volume_keyframes_note',
+              'Volume keyframes replace the base volume where they span.'
+            )}
+          </p>
+        )}
         <Slider
           label={translate('designer_label_fade_in', 'Fade In')}
           suffix="ms"
@@ -920,8 +945,9 @@ export const ClipInspector: FC<ClipInspectorProps> = ({ store, outputIndex, trac
           onCommit={commitClip}
         />
 
-        {/* Per-property keyframe controls */}
-        {keyframeProps.map((prop) => (
+        {/* Per-property keyframe controls. `volume` is excluded — it is a
+            first-class row in the Audio section above, not derived here. */}
+        {keyframeProps.filter((prop) => prop !== 'volume').map((prop) => (
           <KeyframePropRow
             key={prop}
             prop={prop}

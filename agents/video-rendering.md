@@ -34,6 +34,14 @@ with one `video_export` credit charged. Sibling docs: `agents/backend.md`,
    - Track-level `muted` (audio tracks) is honored by both the preview engine and the
      FFmpeg mixer — a muted track's clips contribute nothing, not even to the ducking
      sidechain.
+   - Clip `volume` is keyframable: keyframes REPLACE the base volume where they span
+     (both sides evaluate the shared `volumeAtClipTime`), and the mixer bakes the
+     eased curve into `volume='<expr>':eval=frame` sampled at 100 ms steps
+     (`design-render/volume-envelope.ts`) — fades stay separate downstream afade
+     filters in both engines.
+   - Speed (`clip.speed`) is pitch-preserving on both sides: the preview sets
+     `playbackRate` with `preservesPitch`/`webkitPreservesPitch`, and the mixer's
+     `atempo` is likewise pitch-preserving, so preview and export audio match.
    - `MediaJobLifecycleService.createPendingJob({ provider: 'chromium-ffmpeg', creditType: 'video_export' })`
      creates the `AIMediaJob` row.
    - Payload stashed in Redis: `video-render:payload:<jobId>` (design) or
