@@ -8,7 +8,8 @@ import { useToaster } from '@postmill-ai/react/toaster/toaster';
 import { useModals } from '@postmill-ai/frontend/components/layout/new-modal';
 import { useMediaToolsStatus } from '@postmill-ai/frontend/components/layout/use-media-tools-status';
 import { VoiceoverDialog } from './voiceover-dialog';
-import { addMediaToTimeline } from './add-media-to-timeline';
+import { addMediaToTimeline, probeAudioDuration, probeVideoMetadata } from './add-media-to-timeline';
+import { clipEdgeUpdate } from './clip-geometry';
 import { timelineBeats } from './beat-sync';
 import { isArtifactPath } from '@postmill-ai/frontend/components/launches/ai.video';
 import { useMediaPicker } from '@postmill-ai/frontend/components/media-tools/use-media-picker';
@@ -43,6 +44,32 @@ const formatTime = (ms: number): string => {
   const seconds = totalSec % 60;
   const millis = Math.floor((ms % 1000) / 10);
   return `${minutes}:${String(seconds).padStart(2, '0')}.${String(millis).padStart(2, '0')}`;
+};
+
+// Trim clamps need the SOURCE duration, which a clip does not store (the doc
+// schema stays untouched) — probe it lazily per src, exactly as a media drop
+// does, and cache it. Returns undefined until the probe lands; the end-edge
+// clamp only applies once the duration is known.
+const sourceDurationCache = new Map<string, number>();
+const sourceDurationInflight = new Set<string>();
+const getSourceDurationMs = (
+  src: string,
+  kind: 'video' | 'audio'
+): number | undefined => {
+  const cached = sourceDurationCache.get(src);
+  if (cached !== undefined) return cached;
+  if (!sourceDurationInflight.has(src)) {
+    sourceDurationInflight.add(src);
+    const probe =
+      kind === 'audio'
+        ? probeAudioDuration(src)
+        : probeVideoMetadata(src).then((r) => r.durationMs);
+    probe.then((ms) => {
+      sourceDurationCache.set(src, ms);
+      sourceDurationInflight.delete(src);
+    });
+  }
+  return undefined;
 };
 
 const audioContextSingleton =
@@ -543,6 +570,10 @@ export const VideoTimeline: FC<VideoTimelineProps> = ({ store, sendTimelineAware
     startX: number;
     origStart: number;
     origEnd: number;
+    /** The clip as it was at mousedown — trim deltas are computed against it. */
+    origClip: VideoClip;
+    trackType: VideoTrack['type'];
+    sourceDurationMs?: number;
   } | null>(null);
   const [transitionPopover, setTransitionPopover] = useState<{
     trackId: string;
@@ -612,6 +643,17 @@ export const VideoTimeline: FC<VideoTimelineProps> = ({ store, sendTimelineAware
     }
     return pairs;
   }, [isVideo, vo, sortedTrackClips]);
+
+  // Warm the source-duration cache so the first edge drag already clamps.
+  useEffect(() => {
+    if (!isVideo || !vo) return;
+    for (const track of vo.tracks) {
+      if (track.type !== 'video' && track.type !== 'audio') continue;
+      for (const clip of track.clips) {
+        if (clip.src) getSourceDurationMs(clip.src, track.type);
+      }
+    }
+  }, [isVideo, vo]);
 
   const rulerMarks = useMemo(() => {
     if (!isVideo) return [];
@@ -745,7 +787,7 @@ export const VideoTimeline: FC<VideoTimelineProps> = ({ store, sendTimelineAware
         0,
         Math.min(max - duration, clip.startMs + step)
       );
-      state.updateClip(currentOutput, trackId, clip.id, {
+      state.updateClipSilent(currentOutput, trackId, clip.id, {
         startMs: Math.round(nextStart),
       });
     },
@@ -764,27 +806,31 @@ export const VideoTimeline: FC<VideoTimelineProps> = ({ store, sendTimelineAware
       e.stopPropagation();
       const state = store.getState();
       const vo = state.doc.outputs[currentOutput] as VideoOutput | undefined;
-      const max = vo?.durationMs ?? 0;
+      if (!vo) return;
+      const track = vo.tracks.find((t) => t.id === trackId);
       const step =
         (e.shiftKey ? SLIDER_BIG_STEP_MS : SLIDER_STEP_MS) *
         (e.key === 'ArrowLeft' ? -1 : 1);
-      if (edge === 'start') {
-        const nextStart = Math.max(
-          0,
-          Math.min(clip.endMs - 100, clip.startMs + step)
-        );
-        state.updateClip(currentOutput, trackId, clip.id, {
-          startMs: Math.round(nextStart),
-        });
-      } else {
-        const nextEnd = Math.max(
-          clip.startMs + 100,
-          Math.min(max, clip.endMs + step)
-        );
-        state.updateClip(currentOutput, trackId, clip.id, {
-          endMs: Math.round(nextEnd),
-        });
-      }
+      // Same trim rules as an edge drag: the start edge cuts source (trimInMs
+      // follows), the end edge cannot run past the probed source duration.
+      const update = clipEdgeUpdate(
+        clip,
+        edge,
+        (edge === 'start' ? clip.startMs : clip.endMs) + step,
+        {
+          sourceDurationMs:
+            track && (track.type === 'video' || track.type === 'audio') && clip.src
+              ? getSourceDurationMs(clip.src, track.type)
+              : undefined,
+          hasSourceWindow: track?.type === 'video' || track?.type === 'audio',
+          maxEndMs: vo.durationMs,
+        }
+      );
+      state.updateClipSilent(currentOutput, trackId, clip.id, {
+        startMs: Math.round(update.startMs),
+        endMs: Math.round(update.endMs),
+        ...(update.trimInMs !== undefined ? { trimInMs: Math.round(update.trimInMs) } : {}),
+      });
     },
     [currentOutput, store]
   );
@@ -803,17 +849,23 @@ export const VideoTimeline: FC<VideoTimelineProps> = ({ store, sendTimelineAware
   );
 
   const handleClipMouseDown = useCallback(
-    (e: React.MouseEvent, trackId: string, clip: VideoClip, edge: 'start' | 'end' | 'move') => {
+    (e: React.MouseEvent, track: VideoTrack, clip: VideoClip, edge: 'start' | 'end' | 'move') => {
       e.stopPropagation();
       setDragging({
-        trackId,
+        trackId: track.id,
         clipId: clip.id,
         edge,
         startX: e.clientX,
         origStart: clip.startMs,
         origEnd: clip.endMs,
+        origClip: clip,
+        trackType: track.type,
+        sourceDurationMs:
+          (track.type === 'video' || track.type === 'audio') && clip.src
+            ? getSourceDurationMs(clip.src, track.type)
+            : undefined,
       });
-      setSelectedClip({ outputIndex: currentOutput, trackId, clipId: clip.id });
+      setSelectedClip({ outputIndex: currentOutput, trackId: track.id, clipId: clip.id });
     },
     [currentOutput, setSelectedClip],
   );
@@ -859,32 +911,34 @@ export const VideoTimeline: FC<VideoTimelineProps> = ({ store, sendTimelineAware
       const hovered = trackAtY(e.clientY);
       setDragOverTrackId(hovered?.id ?? null);
 
+      // dx is measured from the gesture's mousedown and applied to the values
+      // captured AT mousedown — folding it into the previously written value
+      // compounded every mousemove into the next, and made the trim-in delta
+      // uncomputable. Writes stay silent; mouseup pushes one history entry.
       const dx = (e.clientX - dragging.startX) / pixelsPerMs;
-      setDragging((prev) => {
-        if (!prev) return null;
-        let { origStart, origEnd } = prev;
-        const duration = origEnd - origStart;
 
-        if (prev.edge === 'move') {
-          origStart = Math.max(0, Math.min(vo.durationMs - duration, origStart + dx));
-          origEnd = origStart + duration;
-        } else if (prev.edge === 'start') {
-          origStart = Math.max(0, Math.min(origEnd - 100, origStart + dx));
-        } else {
-          origEnd = Math.max(origStart + 100, Math.min(vo.durationMs, origEnd + dx));
-        }
-
-        origStart = snapEdges(origStart, prev.clipId);
-        if (prev.edge !== 'start') {
-          origEnd = snapEdges(origEnd, prev.clipId);
-        }
-
-        store.getState().updateClip(currentOutput, prev.trackId, prev.clipId, {
-          startMs: Math.round(origStart),
-          endMs: Math.round(origEnd),
+      if (dragging.edge === 'move') {
+        const duration = dragging.origEnd - dragging.origStart;
+        let nextStart = Math.max(0, Math.min(vo.durationMs - duration, dragging.origStart + dx));
+        nextStart = snapEdges(nextStart, dragging.clipId);
+        store.getState().updateClipSilent(currentOutput, dragging.trackId, dragging.clipId, {
+          startMs: Math.round(nextStart),
+          endMs: Math.round(nextStart + duration),
         });
+        return;
+      }
 
-        return { ...prev, origStart, origEnd };
+      const proposed =
+        (dragging.edge === 'start' ? dragging.origStart : dragging.origEnd) + dx;
+      const update = clipEdgeUpdate(dragging.origClip, dragging.edge, snapEdges(proposed, dragging.clipId), {
+        sourceDurationMs: dragging.sourceDurationMs,
+        hasSourceWindow: dragging.trackType === 'video' || dragging.trackType === 'audio',
+        maxEndMs: vo.durationMs,
+      });
+      store.getState().updateClipSilent(currentOutput, dragging.trackId, dragging.clipId, {
+        startMs: Math.round(update.startMs),
+        endMs: Math.round(update.endMs),
+        ...(update.trimInMs !== undefined ? { trimInMs: Math.round(update.trimInMs) } : {}),
       });
     };
 
@@ -1048,10 +1102,10 @@ export const VideoTimeline: FC<VideoTimelineProps> = ({ store, sendTimelineAware
     (trackId: string, fromClipId: string, toClipId: string, type: 'cut' | 'fade' | 'dissolve' | 'slide', direction?: 'left' | 'right' | 'up' | 'down') => {
       const state = store.getState();
       const durationMs = type === 'cut' ? 0 : 500;
-      state.updateClip(currentOutput, trackId, fromClipId, {
+      state.updateClipSilent(currentOutput, trackId, fromClipId, {
         transitionOut: { type, durationMs, direction },
       });
-      state.updateClip(currentOutput, trackId, toClipId, {
+      state.updateClipSilent(currentOutput, trackId, toClipId, {
         transitionIn: { type, durationMs, direction },
       });
       setTransitionPopover(null);
@@ -1073,6 +1127,11 @@ export const VideoTimeline: FC<VideoTimelineProps> = ({ store, sendTimelineAware
           return;
         }
         const { id, path } = await res.json();
+        // Size the clip to the REAL audio: the old hardcoded 5s left a tail of
+        // silence on short lines and cut long ones off mid-word. The probe has
+        // its own fallback when metadata never arrives.
+        const probedMs = await probeAudioDuration(path);
+        if (!mountedRef.current) return;
         const state = store.getState();
         const currentVo = state.doc.outputs[currentOutput] as VideoOutput;
         let audioTrack = currentVo.tracks.find((t) => t.type === 'audio');
@@ -1081,17 +1140,17 @@ export const VideoTimeline: FC<VideoTimelineProps> = ({ store, sendTimelineAware
           audioTrack = (store.getState().doc.outputs[currentOutput] as VideoOutput).tracks.find((t) => t.type === 'audio');
         }
         if (!audioTrack) return;
-        const durationMs = 5000;
         const clip: VideoClip = {
           id: `clip-${Date.now()}`,
           startMs: playheadMs,
-          endMs: Math.min(playheadMs + durationMs, vo.durationMs),
+          endMs: Math.min(playheadMs + probedMs, vo.durationMs),
           src: path,
           fileId: id,
           volume: 1,
         } as VideoClip;
         store.getState().addClip(currentOutput, audioTrack.id, clip);
-        store.getState().pushHistory();
+        // addClip (and addTrack) already pushed history — a further push would
+        // add a no-op undo step.
         toaster.show(translate('voiceover_added_to_timeline', 'Voiceover added to timeline'), 'success');
       } catch {
         toaster.show(translate('voiceover_generation_failed', 'Voiceover generation failed'), 'warning');
@@ -1266,7 +1325,7 @@ export const VideoTimeline: FC<VideoTimelineProps> = ({ store, sendTimelineAware
       if (!res.ok) throw new Error(translate('transform_failed', 'Transform failed'));
       const { id } = await res.json();
       if (isArtifactPath(id)) {
-        state.updateClip(clipMenu.outputIndex, clipMenu.trackId, clipMenu.clipId, {
+        state.updateClipSilent(clipMenu.outputIndex, clipMenu.trackId, clipMenu.clipId, {
           src: id,
           fileId: undefined,
         });
@@ -1280,7 +1339,7 @@ export const VideoTimeline: FC<VideoTimelineProps> = ({ store, sendTimelineAware
           const job = await jobRes.json();
           if (job.status === 'completed') {
             if (!job.artifactUrl) throw new Error(translate('no_artifact', 'No artifact'));
-            state.updateClip(clipMenu.outputIndex, clipMenu.trackId, clipMenu.clipId, {
+            state.updateClipSilent(clipMenu.outputIndex, clipMenu.trackId, clipMenu.clipId, {
               src: job.artifactUrl,
               fileId: undefined,
             });
@@ -1619,7 +1678,7 @@ export const VideoTimeline: FC<VideoTimelineProps> = ({ store, sendTimelineAware
                       }}
                       onKeyDown={(e) => handleClipKeyDown(e, track.id, clip)}
                       onKeyUp={handleSliderKeyUp}
-                      onMouseDown={(e) => handleClipMouseDown(e, track.id, clip, 'move')}
+                      onMouseDown={(e) => handleClipMouseDown(e, track, clip, 'move')}
                       onContextMenu={(e) => handleClipContextMenu(e, track.id, clip.id)}
                     >
                       <div className="text-[9px] text-white/90 px-1.5 truncate leading-[28px] select-none">
@@ -1672,7 +1731,7 @@ export const VideoTimeline: FC<VideoTimelineProps> = ({ store, sendTimelineAware
                         aria-valuetext={formatTime(clip.startMs)}
                         tabIndex={0}
                         className="absolute left-0 top-0 bottom-0 w-2 cursor-ew-resize opacity-0 group-hover:opacity-100 bg-black/20 rounded-l-[4px]"
-                        onMouseDown={(e) => handleClipMouseDown(e, track.id, clip, 'start')}
+                        onMouseDown={(e) => handleClipMouseDown(e, track, clip, 'start')}
                         onKeyDown={(e) => handleEdgeKeyDown(e, track.id, clip, 'start')}
                         onKeyUp={handleSliderKeyUp}
                       />
@@ -1686,7 +1745,7 @@ export const VideoTimeline: FC<VideoTimelineProps> = ({ store, sendTimelineAware
                         aria-valuetext={formatTime(clip.endMs)}
                         tabIndex={0}
                         className="absolute right-0 top-0 bottom-0 w-2 cursor-ew-resize opacity-0 group-hover:opacity-100 bg-black/20 rounded-r-[4px]"
-                        onMouseDown={(e) => handleClipMouseDown(e, track.id, clip, 'end')}
+                        onMouseDown={(e) => handleClipMouseDown(e, track, clip, 'end')}
                         onKeyDown={(e) => handleEdgeKeyDown(e, track.id, clip, 'end')}
                         onKeyUp={handleSliderKeyUp}
                       />
@@ -1793,7 +1852,10 @@ export const VideoTimeline: FC<VideoTimelineProps> = ({ store, sendTimelineAware
                     min={0}
                     max={200}
                     value={Math.round((track.gain ?? 1) * 100)}
-                    onChange={(e) => store.getState().setTrackGain(currentOutput, track.id, Number(e.target.value) / 100)}
+                    onChange={(e) => store.getState().setTrackGain(currentOutput, track.id, Number(e.target.value) / 100, false)}
+                    onPointerUp={() => store.getState().pushHistory()}
+                    onKeyUp={() => store.getState().pushHistory()}
+                    onBlur={() => store.getState().pushHistory()}
                     className="w-full accent-designerAccent"
                   />
                   <label className="flex items-center gap-2 cursor-pointer">

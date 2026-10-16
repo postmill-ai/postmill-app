@@ -222,12 +222,17 @@ export interface DesignerActions {
   addClip: (outputIndex: number, trackId: string, clip: VideoClip) => void;
   removeClip: (outputIndex: number, trackId: string, clipId: string) => void;
   updateClip: (outputIndex: number, trackId: string, clipId: string, updates: Partial<VideoClip>) => void;
+  // Same as updateClip but does NOT commit history — for continuous controls
+  // (slider/drag), which push a single history entry on release instead, the
+  // same discipline `updateElementsSilent` gives element sliders.
+  // Returns whether the write landed.
+  updateClipSilent: (outputIndex: number, trackId: string, clipId: string, updates: Partial<VideoClip>) => boolean;
   setVideoDuration: (outputIndex: number, durationMs: number) => void;
   splitClip: (outputIndex: number, trackId: string, clipId: string, atMs: number) => void;
   setMode: (mode: 'image' | 'video') => void;
   setPlayhead: (ms: number) => void;
   setSelectedClip: (clip: { outputIndex: number; trackId: string; clipId: string } | null) => void;
-  setTrackGain: (outputIndex: number, trackId: string, gain: number) => void;
+  setTrackGain: (outputIndex: number, trackId: string, gain: number, commit?: boolean) => void;
   setTrackAutoDuck: (outputIndex: number, trackId: string, autoDuck: boolean) => void;
 }
 
@@ -1133,17 +1138,25 @@ export const createDesignerStore = (
       },
 
       updateClip: (outputIndex, trackId, clipId, updates) => {
+        if (get().updateClipSilent(outputIndex, trackId, clipId, updates)) {
+          get().pushHistory();
+        }
+      },
+
+      // Returns whether the write landed — a rejected update (unknown clip,
+      // out-of-range geometry) must not become an empty undo step.
+      updateClipSilent: (outputIndex, trackId, clipId, updates) => {
         const { doc } = get();
         const vo = doc.outputs[outputIndex] as VideoOutput | undefined;
-        if (!vo || doc.mode !== 'video') return;
+        if (!vo || doc.mode !== 'video') return false;
         const track = vo.tracks.find((t) => t.id === trackId);
         const clip = track?.clips.find((c) => c.id === clipId);
-        if (!clip) return;
+        if (!clip) return false;
         const nextStart = updates.startMs ?? clip.startMs;
         const nextEnd = updates.endMs ?? clip.endMs;
         // Explicit 60 s cap: reject updates that would push the clip beyond the output duration.
         if (nextEnd > vo.durationMs || nextStart >= vo.durationMs || nextEnd <= nextStart) {
-          return;
+          return false;
         }
         const updated: VideoOutput = {
           ...vo,
@@ -1156,6 +1169,7 @@ export const createDesignerStore = (
         const outs = [...doc.outputs];
         outs[outputIndex] = updated;
         set({ doc: { ...doc, outputs: outs }, isDirty: true });
+        return true;
       },
 
       setVideoDuration: (outputIndex, durationMs) => {
@@ -1240,7 +1254,7 @@ export const createDesignerStore = (
         set({ selectedClip: clip, selectedIds: clip ? [] : [] });
       },
 
-      setTrackGain: (outputIndex, trackId, gain) => {
+      setTrackGain: (outputIndex, trackId, gain, commit = true) => {
         const { doc } = get();
         const vo = doc.outputs[outputIndex] as VideoOutput | undefined;
         if (!vo || doc.mode !== 'video') return;
@@ -1251,6 +1265,9 @@ export const createDesignerStore = (
         const outs = [...doc.outputs];
         outs[outputIndex] = updated;
         set({ doc: { ...doc, outputs: outs }, isDirty: true });
+        // Gain rides a range slider: the caller passes commit:false per tick
+        // and pushes one history entry on release.
+        if (commit) get().pushHistory();
       },
 
       setTrackAutoDuck: (outputIndex, trackId, autoDuck) => {
@@ -1264,6 +1281,7 @@ export const createDesignerStore = (
         const outs = [...doc.outputs];
         outs[outputIndex] = updated;
         set({ doc: { ...doc, outputs: outs }, isDirty: true });
+        get().pushHistory();
       },
 
     };

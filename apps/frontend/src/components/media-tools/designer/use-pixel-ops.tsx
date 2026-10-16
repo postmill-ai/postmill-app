@@ -483,7 +483,7 @@ export const usePixelOps = ({ store, fetchFn }: UsePixelOpsArgs) => {
         }
         store
           .getState()
-          .updateClip(sel.outputIndex, sel.trackId, sel.clipId, {
+          .updateClipSilent(sel.outputIndex, sel.trackId, sel.clipId, {
             src: result.src,
             fileId: result.fileId,
           });
@@ -509,7 +509,9 @@ export const usePixelOps = ({ store, fetchFn }: UsePixelOpsArgs) => {
           patch.originalSrc = clip.src;
           patch.originalFileId = clip.fileId;
         }
-        store.getState().updateClip(sel.outputIndex, sel.trackId, sel.clipId, patch);
+        // Silent: the rebake below writes src and pushes the single entry
+        // covering both the stack change and its bake.
+        store.getState().updateClipSilent(sel.outputIndex, sel.trackId, sel.clipId, patch);
         await rebakeClip(sel);
         return;
       }

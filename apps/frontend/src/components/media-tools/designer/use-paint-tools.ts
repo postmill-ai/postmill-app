@@ -429,7 +429,7 @@ export const usePaintTools = ({ store, stageRef, output, fetchFn }: UsePaintTool
       }
       const trackId = rasterClipTrack.current;
       if (trackId) {
-        store.getState().updateClip(store.getState().currentOutput, trackId, id, {
+        store.getState().updateClipSilent(store.getState().currentOutput, trackId, id, {
           src: result.src,
           fileId: result.fileId,
         });

@@ -1231,7 +1231,18 @@ export const DesignerCanvas: FC<CanvasProps> = ({
       const st = store.getState();
       const mod = e.ctrlKey || e.metaKey;
       if (e.key === 'Delete' || e.key === 'Backspace') {
-        st.removeElements(selectedIds);
+        // A video document holds clips, not elements — removeElements is a
+        // no-op there, so the Delete key goes through the clip path, exactly
+        // like the timeline's own Delete handler.
+        if (isVideo) {
+          const sel = st.selectedClip;
+          if (sel && sel.outputIndex === st.currentOutput) {
+            st.removeClip(sel.outputIndex, sel.trackId, sel.clipId);
+            st.setSelectedClip(null);
+          }
+        } else {
+          st.removeElements(selectedIds);
+        }
       } else if (e.key === 'Escape') {
         setSelectedIds([]);
         if (isVideo) st.setSelectedClip(null);
@@ -1297,7 +1308,7 @@ export const DesignerCanvas: FC<CanvasProps> = ({
         }
       }
     },
-    [editingTextId, selectedIds, setSelectedIds, updateElement, output, doc, duplicateElement, store, pushHistory]
+    [editingTextId, selectedIds, setSelectedIds, updateElement, output, doc, duplicateElement, store, pushHistory, isVideo]
   );
 
   const handleStageDblClick = useCallback(
@@ -1925,7 +1936,7 @@ export const DesignerCanvas: FC<CanvasProps> = ({
               ratio={String(store.getState().toolOptions['crop']?.ratio ?? 'free')}
               onCommit={(patch) => {
                 if (isVideo && selectedClip) {
-                  store.getState().updateClip(
+                  store.getState().updateClipSilent(
                     selectedClip.outputIndex,
                     selectedClip.trackId,
                     selectedClip.clipId,

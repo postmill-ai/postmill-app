@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { clipGeometryUpdate, hasKeyframeAtPlayhead, type ClipBox } from './clip-geometry';
+import { clipEdgeUpdate, clipGeometryUpdate, hasKeyframeAtPlayhead, type ClipBox } from './clip-geometry';
 import type { VideoClip } from './designer.store';
 
 const clip = (over: Partial<VideoClip> = {}): VideoClip =>
@@ -115,5 +115,107 @@ describe('hasKeyframeAtPlayhead', () => {
 
   it('is false for a clip with no keyframes', () => {
     expect(hasKeyframeAtPlayhead(clip(), 2000)).toBe(false);
+  });
+});
+
+describe('clipEdgeUpdate', () => {
+  const av = { hasSourceWindow: true, maxEndMs: 60000 };
+
+  it('start-edge trim advances trimInMs by the same delta (head is CUT, not slid)', () => {
+    const c = clip({ startMs: 1000, endMs: 5000, trimInMs: 0 });
+    const update = clipEdgeUpdate(c, 'start', 2500, av);
+    expect(update.startMs).toBe(2500);
+    expect(update.endMs).toBe(5000);
+    expect(update.trimInMs).toBe(1500);
+  });
+
+  it('start-edge extension left re-winds trimInMs but never below 0', () => {
+    const c = clip({ startMs: 1000, endMs: 5000, trimInMs: 800 });
+    // 600ms left: within the available 800ms of trimmed head.
+    expect(clipEdgeUpdate(c, 'start', 400, av)).toEqual({
+      startMs: 400,
+      endMs: 5000,
+      trimInMs: 200,
+    });
+    // 2000ms left: only 800ms of source head exists — the edge stops there.
+    const update = clipEdgeUpdate(c, 'start', 0, av);
+    expect(update.startMs).toBe(200);
+    expect(update.trimInMs).toBe(0);
+  });
+
+  it('scales the trim delta by the clip speed', () => {
+    const c = clip({ startMs: 1000, endMs: 5000, trimInMs: 0, speed: 2 });
+    // 1s of timeline at 2x consumes 2s of source.
+    expect(clipEdgeUpdate(c, 'start', 2000, av).trimInMs).toBe(2000);
+  });
+
+  it('leaves trimInMs alone on a freeze (speed:0) clip', () => {
+    const c = clip({ startMs: 1000, endMs: 5000, trimInMs: 3200, speed: 0 });
+    const update = clipEdgeUpdate(c, 'start', 2000, av);
+    expect(update.startMs).toBe(2000);
+    // Omitted = unchanged: the frozen frame must not move to another time.
+    expect(update.trimInMs).toBeUndefined();
+  });
+
+  it('end-edge extension is clamped to the probed source duration', () => {
+    const c = clip({ startMs: 1000, endMs: 5000, trimInMs: 2000 });
+    // Source is 8s: 2s already trimmed in, 4s on the timeline → 2s of headroom.
+    const update = clipEdgeUpdate(c, 'end', 30000, { ...av, sourceDurationMs: 8000 });
+    expect(update.endMs).toBe(7000);
+  });
+
+  it('end-edge headroom shrinks with speed', () => {
+    const c = clip({ startMs: 1000, endMs: 5000, trimInMs: 0, speed: 2 });
+    // 8s source at 2x → at most 4s of timeline.
+    const update = clipEdgeUpdate(c, 'end', 30000, { ...av, sourceDurationMs: 8000 });
+    expect(update.endMs).toBe(5000);
+  });
+
+  it('end-edge extends freely (up to the output cap) when the source duration is unknown', () => {
+    const c = clip({ startMs: 1000, endMs: 5000, trimInMs: 0 });
+    const update = clipEdgeUpdate(c, 'end', 30000, av);
+    expect(update.endMs).toBe(30000);
+  });
+
+  it('image/text clips have no source window: edges move, trimInMs untouched', () => {
+    const c = clip({ startMs: 1000, endMs: 5000, trimInMs: 500 });
+    expect(
+      clipEdgeUpdate(c, 'start', 2000, { hasSourceWindow: false, maxEndMs: 60000 })
+    ).toEqual({ startMs: 2000, endMs: 5000 });
+    expect(
+      clipEdgeUpdate(c, 'end', 40000, { hasSourceWindow: false, maxEndMs: 60000 })
+    ).toEqual({ startMs: 1000, endMs: 40000 });
+  });
+
+  it('keeps the minimum clip duration on both edges', () => {
+    const c = clip({ startMs: 1000, endMs: 5000 });
+    expect(clipEdgeUpdate(c, 'start', 4950, av).startMs).toBe(4900);
+    expect(clipEdgeUpdate(c, 'end', 1050, av).endMs).toBe(1100);
+  });
+
+  it('reverse clips consume source from the other side: start edge keeps trimInMs…', () => {
+    const c = clip({ startMs: 1000, endMs: 5000, trimInMs: 1000, reverse: true });
+    const update = clipEdgeUpdate(c, 'start', 2500, av);
+    // Omitted = unchanged: the reversed end frame stays anchored to trimInMs.
+    expect(update.trimInMs).toBeUndefined();
+    // …but extending left past the probed source end is still clamped.
+    const clamped = clipEdgeUpdate(c, 'start', 0, { ...av, sourceDurationMs: 6000 });
+    // Window can be at most 6000 - 1000 = 5000ms → startMs >= 0 here.
+    expect(clamped.startMs).toBe(0);
+    const tight = clipEdgeUpdate(c, 'start', 0, { ...av, sourceDurationMs: 4000 });
+    expect(tight.startMs).toBe(2000); // window capped at 3000ms
+  });
+
+  it('reverse end-edge extension pulls trimInMs down and bottoms out at 0', () => {
+    const c = clip({ startMs: 1000, endMs: 5000, trimInMs: 1000, reverse: true });
+    expect(clipEdgeUpdate(c, 'end', 5500, av)).toEqual({
+      startMs: 1000,
+      endMs: 5500,
+      trimInMs: 500,
+    });
+    // Only 1000ms of earlier source exists: 3s of extension collapses to 1s.
+    const update = clipEdgeUpdate(c, 'end', 8000, av);
+    expect(update.endMs).toBe(6000);
+    expect(update.trimInMs).toBe(0);
   });
 });

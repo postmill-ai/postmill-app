@@ -29,6 +29,80 @@ export type ClipGeometry = Partial<
   Pick<VideoClip, 'x' | 'y' | 'width' | 'height' | 'rotation' | 'keyframes'>
 >;
 
+/**
+ * Timeline edge trims.
+ *
+ * A video/audio clip shows a WINDOW of its source: `trimInMs` in, lasting
+ * `(endMs - startMs) * speed` of source time (see `sourceTimeForPlayhead`).
+ * Moving the START edge must therefore advance `trimInMs` by the same (scaled)
+ * delta — otherwise the window slides and the head is never actually cut.
+ * A reversed clip plays that window backwards, so its edges consume source
+ * from the opposite side: the start edge leaves `trimInMs` alone and the end
+ * edge pulls it down.
+ *
+ * The END edge may not extend past the source's duration when that duration is
+ * known (probed); image/text/shape clips have no source and skip both rules.
+ */
+export interface ClipEdgeOptions {
+  /** Probed source-media duration in ms, when known. */
+  sourceDurationMs?: number;
+  /** Only tracks with a real source window (video/audio) trim their source. */
+  hasSourceWindow: boolean;
+  /** Smallest allowed clip length — the timeline/store minimum is 100ms. */
+  minDurationMs?: number;
+  /** Output duration cap for the end edge. */
+  maxEndMs: number;
+}
+
+export const clipEdgeUpdate = (
+  clip: VideoClip,
+  edge: 'start' | 'end',
+  proposedMs: number,
+  opts: ClipEdgeOptions
+): { startMs: number; endMs: number; trimInMs?: number } => {
+  const minDuration = opts.minDurationMs ?? 100;
+  const trimIn = clip.trimInMs ?? 0;
+  // A speed:0 (freeze) clip holds one frame at trimInMs — trimming its edges
+  // changes only how long the frame is held, never which frame.
+  const speed = clip.speed === 0 ? null : (clip.speed ?? 1);
+  const trimmable = opts.hasSourceWindow && speed !== null;
+
+  if (edge === 'start') {
+    let startMs = Math.max(0, Math.min(clip.endMs - minDuration, proposedMs));
+    if (!trimmable) return { startMs, endMs: clip.endMs };
+    if (clip.reverse) {
+      // The end frame is anchored; extending left consumes LATER source.
+      if (opts.sourceDurationMs !== undefined) {
+        const maxWindow = (opts.sourceDurationMs - trimIn) / speed;
+        startMs = Math.max(startMs, clip.endMs - maxWindow);
+      }
+      return { startMs, endMs: clip.endMs };
+    }
+    let nextTrimIn = trimIn + (startMs - clip.startMs) * speed;
+    if (nextTrimIn < 0) {
+      // No source before 0: the edge cannot extend further left.
+      nextTrimIn = 0;
+      startMs = clip.startMs - trimIn / speed;
+    }
+    return { startMs, endMs: clip.endMs, trimInMs: nextTrimIn };
+  }
+
+  let endMs = Math.max(clip.startMs + minDuration, Math.min(opts.maxEndMs, proposedMs));
+  if (!trimmable) return { startMs: clip.startMs, endMs };
+  if (clip.reverse) {
+    // Extending the end shows EARLIER source: trimInMs drops, bottoming at 0.
+    const delta = (endMs - clip.endMs) * speed;
+    const nextTrimIn = Math.max(0, trimIn - delta);
+    endMs = clip.endMs + (trimIn - nextTrimIn) / speed;
+    return { startMs: clip.startMs, endMs, trimInMs: nextTrimIn };
+  }
+  if (opts.sourceDurationMs !== undefined) {
+    const maxWindow = (opts.sourceDurationMs - trimIn) / speed;
+    endMs = Math.min(endMs, clip.startMs + Math.max(minDuration, maxWindow));
+  }
+  return { startMs: clip.startMs, endMs };
+};
+
 /** Milliseconds of slack when matching a keyframe to the playhead. */
 const KEYFRAME_EPSILON = 1;
 

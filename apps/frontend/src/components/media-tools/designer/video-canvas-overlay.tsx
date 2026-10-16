@@ -1,6 +1,6 @@
 'use client';
 
-import React, { FC, useEffect, useMemo, useState, useSyncExternalStore } from 'react';
+import React, { FC, useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
 import {
   Group,
   Image as KonvaImage,
@@ -46,6 +46,19 @@ const captionCanvasCache = new Map<string, HTMLCanvasElement>();
 let canvasIdCounter = 0;
 const getNextCanvasId = () => String(++canvasIdCounter);
 
+/**
+ * Konva is retained-mode: a React re-render with identical props does NOT
+ * repaint the layer, and drawing a <video> paints whatever frame the element
+ * currently holds. So the overlay must be told explicitly when a video
+ * element has a NEW frame worth painting — first data arrival (first paint at
+ * t=0, where no seek is ever issued) and the end of every programmatic seek
+ * (drawing pre-seek would paint the stale frame).
+ */
+const frameReadyListeners = new Set<() => void>();
+const notifyFrameReady = () => {
+  frameReadyListeners.forEach((cb) => cb());
+};
+
 // Minimal external store used to notify React after an imperative canvas has
 // been drawn into. Using useSyncExternalStore avoids calling setState directly
 // inside an effect, which the React Compiler rules disallow.
@@ -87,6 +100,11 @@ const getOrCreateVideo = (clip: VideoClip): HTMLVideoElement | null => {
   el.crossOrigin = 'anonymous';
   el.muted = true;
   el.playsInline = true;
+  // metadata-only preload would never reach a paintable readyState on its own;
+  // auto loads the first frames so loadeddata can fire without playing.
+  el.preload = 'auto';
+  el.addEventListener('loadeddata', notifyFrameReady);
+  el.addEventListener('seeked', notifyFrameReady);
   el.style.position = 'fixed';
   el.style.left = '-10000px';
   el.style.top = '0';
@@ -137,7 +155,13 @@ const seekVideo = (clip: VideoClip, playheadMs: number) => {
   if (!el) return;
   const sourceTime = sourceTimeForPlayhead(clip, playheadMs);
   if (sourceTime === null) return;
-  const t = sourceTime / 1000;
+  let t = sourceTime / 1000;
+  // Seeking to exactly the source duration can land past the last decodable
+  // frame; hold one frame back so a clip's final frame stays visible at its
+  // end instead of the artboard going blank.
+  if (Number.isFinite(el.duration) && el.duration > 0 && t >= el.duration) {
+    t = Math.max(0, el.duration - 1 / 30);
+  }
   if (Number.isFinite(t) && Math.abs(el.currentTime - t) > 0.05) {
     el.currentTime = t;
   }
@@ -394,6 +418,32 @@ export const VideoCanvasOverlay: FC<VideoCanvasOverlayProps> = ({
   const vo = doc.outputs[currentOutput] as VideoOutput | undefined;
   const isVideo = doc.mode === 'video' && !!vo;
 
+  // Any rendered clip node — the Konva layer is resolved off it lazily, at
+  // repaint time. Needed because a video frame change is invisible to
+  // react-konva — identical props mean no redraw — so the layer must be
+  // repainted by hand.
+  const nodeRef = useRef<Konva.Node | null>(null);
+  const captureNode = useCallback((node: Konva.Node | null) => {
+    if (node) nodeRef.current = node;
+  }, []);
+
+  const redrawLayer = useCallback(() => {
+    nodeRef.current?.getLayer()?.batchDraw();
+    // Filtered clips paint through an offscreen canvas derived from the video
+    // element; the tick re-runs that draw so the new frame lands there too.
+    setTick((t) => t + 1);
+  }, []);
+
+  // First paint and post-seek paint: the hidden <video> announces a fresh
+  // frame via loadeddata/seeked (wired in getOrCreateVideo) — repaint then,
+  // never before the seek completes.
+  useEffect(() => {
+    frameReadyListeners.add(redrawLayer);
+    return () => {
+      frameReadyListeners.delete(redrawLayer);
+    };
+  }, [redrawLayer]);
+
   const clipsAtPlayhead = useMemo(() => {
     if (!isVideo || !vo) return [];
     return composeClipsAtPlayhead(vo, playheadMs);
@@ -423,11 +473,16 @@ export const VideoCanvasOverlay: FC<VideoCanvasOverlayProps> = ({
     [isVideo, clipsAtPlayhead]
   );
 
-  // Keep redrawing so the video frame updates while playing.
+  // Keep redrawing so the video frame updates while playing. The batchDraw is
+  // the load-bearing half: setTick alone re-renders React with IDENTICAL Konva
+  // props, which react-konva rightly treats as a no-op — without the explicit
+  // repaint the artboard keeps whatever it last drew (blank until some
+  // unrelated interaction, like selecting the clip, forced a draw).
   useEffect(() => {
     if (!needsRaf) return;
     let raf: number;
     const loop = () => {
+      nodeRef.current?.getLayer()?.batchDraw();
       setTick((t) => t + 1);
       raf = requestAnimationFrame(loop);
     };
@@ -531,6 +586,7 @@ export const VideoCanvasOverlay: FC<VideoCanvasOverlayProps> = ({
           return (
             <Group
               key={clip.id}
+              ref={captureNode}
               {...nodeProps}
               x={props.x}
               y={props.y}
@@ -565,6 +621,7 @@ export const VideoCanvasOverlay: FC<VideoCanvasOverlayProps> = ({
           return (
             <Group
               key={clip.id}
+              ref={captureNode}
               {...nodeProps}
               x={props.x}
               y={props.y}
@@ -605,6 +662,7 @@ export const VideoCanvasOverlay: FC<VideoCanvasOverlayProps> = ({
           return (
             <KonvaText
               key={clip.id}
+              ref={captureNode}
               {...nodeProps}
               visible={clip.id !== editingTextId}
               x={props.x}
@@ -626,6 +684,7 @@ export const VideoCanvasOverlay: FC<VideoCanvasOverlayProps> = ({
         return (
           <Group
             key={clip.id}
+            ref={captureNode}
             {...nodeProps}
             x={props.x}
             y={props.y}

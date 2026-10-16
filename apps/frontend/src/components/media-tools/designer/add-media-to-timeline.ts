@@ -32,7 +32,7 @@ function findOrCreateTrack(
   return track;
 }
 
-function probeVideoMetadata(
+export function probeVideoMetadata(
   url: string
 ): Promise<{ durationMs: number; width?: number; height?: number }> {
   return new Promise((resolve) => {
@@ -57,7 +57,7 @@ function probeVideoMetadata(
   });
 }
 
-function probeAudioDuration(url: string): Promise<number> {
+export function probeAudioDuration(url: string): Promise<number> {
   return new Promise((resolve) => {
     let settled = false;
     const finish = (ms: number) => {

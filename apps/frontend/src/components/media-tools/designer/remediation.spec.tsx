@@ -136,3 +136,78 @@ describe('4.2 text editor escapes stored HTML', () => {
     cleanup();
   });
 });
+
+describe('video clip undo history', () => {
+  const videoStoreWithClip = () => {
+    const store = createDesignerStore(1080, 1080);
+    store.getState().setMode('video');
+    const out = store.getState().currentOutput;
+    const vo = () => store.getState().doc.outputs[out] as VideoOutput;
+    const trackId = vo().tracks[0].id;
+    store.getState().addClip(out, trackId, { id: 'c1', startMs: 0, endMs: 4000, src: 'a.mp4' });
+    return { store, out, trackId, vo };
+  };
+
+  it('updateClip pushes one history entry; undo restores the prior clip props', () => {
+    const { store, out, trackId, vo } = videoStoreWithClip();
+    const before = store.getState().historyIndex;
+
+    store.getState().updateClip(out, trackId, 'c1', { speed: 2, reverse: true });
+    expect(store.getState().historyIndex).toBe(before + 1);
+    expect(vo().tracks[0].clips[0].speed).toBe(2);
+
+    store.getState().undo();
+    expect(vo().tracks[0].clips[0].speed).toBeUndefined();
+    expect(vo().tracks[0].clips[0].reverse).toBeUndefined();
+
+    store.getState().redo();
+    expect(vo().tracks[0].clips[0].speed).toBe(2);
+  });
+
+  it('a slider drag (silent writes + one commit) produces ONE history entry', () => {
+    const { store, out, trackId } = videoStoreWithClip();
+    const before = store.getState().historyIndex;
+
+    // Simulated volume-slider drag: a write per tick, none of them committing.
+    for (const v of [0.9, 0.7, 0.5, 0.3]) {
+      store.getState().updateClipSilent(out, trackId, 'c1', { volume: v });
+    }
+    expect(store.getState().historyIndex).toBe(before); // no flood mid-gesture
+
+    store.getState().pushHistory(); // pointerup
+    expect(store.getState().historyIndex).toBe(before + 1);
+
+    store.getState().undo();
+    const clip = (store.getState().doc.outputs[out] as VideoOutput).tracks[0].clips[0];
+    expect(clip.volume).toBeUndefined(); // the whole gesture reverts at once
+  });
+
+  it('a rejected updateClip (out-of-range geometry) pushes no empty entry', () => {
+    const { store, out, trackId } = videoStoreWithClip();
+    const before = store.getState().historyIndex;
+    // endMs beyond the 10s output duration is rejected by the 60s-cap guard.
+    store.getState().updateClip(out, trackId, 'c1', { endMs: 99000 });
+    expect(store.getState().historyIndex).toBe(before);
+  });
+
+  it('setTrackGain and setTrackAutoDuck are undoable', () => {
+    const { store, out, trackId, vo } = videoStoreWithClip();
+    const before = store.getState().historyIndex;
+
+    store.getState().setTrackAutoDuck(out, trackId, true);
+    expect(store.getState().historyIndex).toBe(before + 1);
+
+    // Gain slider: silent per tick, one commit on release.
+    store.getState().setTrackGain(out, trackId, 0.5, false);
+    store.getState().setTrackGain(out, trackId, 0.4, false);
+    expect(store.getState().historyIndex).toBe(before + 1);
+    store.getState().pushHistory();
+    expect(store.getState().historyIndex).toBe(before + 2);
+    expect(vo().tracks[0].gain).toBe(0.4);
+
+    store.getState().undo(); // gain gesture
+    expect(vo().tracks[0].gain).toBeUndefined();
+    store.getState().undo(); // auto-duck
+    expect(vo().tracks[0].autoDuck).toBeUndefined();
+  });
+});

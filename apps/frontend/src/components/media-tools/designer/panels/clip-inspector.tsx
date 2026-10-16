@@ -52,6 +52,9 @@ function useKeyframeDrag(
   containerRef: React.RefObject<HTMLDivElement | null>,
   totalMs: number,
   onMove: (oldTMs: number, newTMs: number) => void,
+  // Continuous moves write silently; this fires once when the gesture ends so
+  // a drag lands as a single history entry.
+  onCommit?: () => void,
 ) {
   const [dragging, setDragging] = useState<{ oldTMs: number; startX: number } | null>(null);
   // The dragged keyframe's tMs changes after each move, so match on its CURRENT
@@ -83,6 +86,7 @@ function useKeyframeDrag(
         setTimeout(() => {
           justDraggedRef.current = false;
         }, 0);
+        onCommit?.();
       }
       setDragging(null);
     };
@@ -92,7 +96,7 @@ function useKeyframeDrag(
       window.removeEventListener('mousemove', handleMove);
       window.removeEventListener('mouseup', handleUp);
     };
-  }, [dragging, totalMs, onMove, containerRef]);
+  }, [dragging, totalMs, onMove, onCommit, containerRef]);
 
   return { setDragging, justDraggedRef };
 }
@@ -103,10 +107,12 @@ const MiniKeyframeTimeline: FC<{
   onAdd: (prop: string, tMs: number) => void;
   onMove: (oldTMs: number, newTMs: number) => void;
   onRemove: (tMs: number) => void;
-}> = ({ keyframes, totalMs, onAdd, onMove, onRemove }) => {
+  /** Fired when a continuous move gesture ends, and after each keyboard move. */
+  onCommit: () => void;
+}> = ({ keyframes, totalMs, onAdd, onMove, onRemove, onCommit }) => {
   const t = useT();
   const ref = useRef<HTMLDivElement>(null);
-  const { setDragging, justDraggedRef } = useKeyframeDrag(ref, totalMs, onMove);
+  const { setDragging, justDraggedRef } = useKeyframeDrag(ref, totalMs, onMove, onCommit);
   const [keyboardMs, setKeyboardMs] = useState(0);
   const step = Math.max(1, Math.round(totalMs * 0.01));
   return (
@@ -158,6 +164,7 @@ const MiniKeyframeTimeline: FC<{
               const step = Math.max(1, Math.round(totalMs * 0.01));
               const delta = e.key === 'ArrowLeft' ? -step : step;
               onMove(kf.tMs, Math.max(0, Math.min(totalMs, kf.tMs + delta)));
+              onCommit();
             } else if (e.key === 'Enter') {
               e.preventDefault();
               onRemove(kf.tMs);
@@ -178,10 +185,11 @@ const KeyframePropRow: FC<{
   onMove: (oldTMs: number, newTMs: number) => void;
   onRemove: (tMs: number, prop?: string) => void;
   onEase: (tMs: number, ease: EasePresetName) => void;
-}> = ({ prop, clip, keyframes, totalMs, onAdd, onMove, onRemove, onEase }) => {
+  onCommit: () => void;
+}> = ({ prop, clip, keyframes, totalMs, onAdd, onMove, onRemove, onEase, onCommit }) => {
   const t = useT();
   const ref = useRef<HTMLDivElement>(null);
-  const { setDragging, justDraggedRef } = useKeyframeDrag(ref, totalMs, onMove);
+  const { setDragging, justDraggedRef } = useKeyframeDrag(ref, totalMs, onMove, onCommit);
   const [keyboardMs, setKeyboardMs] = useState(0);
   const propKeyframes = keyframes.filter((kf) => kf.props[prop] !== undefined);
   const currentVal =
@@ -255,6 +263,7 @@ const KeyframePropRow: FC<{
                 const step = Math.max(1, Math.round(totalMs * 0.01));
                 const delta = e.key === 'ArrowLeft' ? -step : step;
                 onMove(kf.tMs, Math.max(0, Math.min(totalMs, kf.tMs + delta)));
+                onCommit();
               } else if (e.key === 'Enter') {
                 e.preventDefault();
                 onRemove(kf.tMs, prop);
@@ -318,6 +327,20 @@ export const ClipInspector: FC<ClipInspectorProps> = ({ store, outputIndex, trac
     [store, outputIndex, trackId, clipId],
   );
 
+  // Continuous controls (sliders, keyframe drags) write silently per tick and
+  // commit ONE history entry on release — the same discipline
+  // `updateElementsSilent` gives the element inspector.
+  const updateClipSilent = useCallback(
+    (updates: Partial<VideoClip>) => {
+      store.getState().updateClipSilent(outputIndex, trackId, clipId, updates);
+    },
+    [store, outputIndex, trackId, clipId],
+  );
+
+  const commitClip = useCallback(() => {
+    store.getState().pushHistory();
+  }, [store]);
+
   const hasFilter = useCallback(
     (prefix: string) => filters.some((f) => f === prefix || f.startsWith(prefix + ':')),
     [filters],
@@ -339,13 +362,15 @@ export const ClipInspector: FC<ClipInspectorProps> = ({ store, outputIndex, trac
     [filters, updateClip],
   );
 
+  // Filter VALUES ride sliders — silent per tick, committed by the Slider's
+  // onCommit. (toggleFilter stays committing: a switch is one discrete edit.)
   const setFilterVal = useCallback(
     (prefix: string, value: number, defaultVal: number) => {
       const rest = filters.filter((f) => !(f === prefix || f.startsWith(prefix + ':')));
       if (value !== defaultVal) rest.push(`${prefix}:${value}`);
-      updateClip({ filters: rest });
+      updateClipSilent({ filters: rest });
     },
-    [filters, updateClip],
+    [filters, updateClipSilent],
   );
 
   const handleAddKeyframe = useCallback(
@@ -400,9 +425,10 @@ export const ClipInspector: FC<ClipInspectorProps> = ({ store, outputIndex, trac
       const existing = keyframes.map((kf) =>
         kf.tMs === oldTMs ? { ...kf, tMs: clamped } : kf
       );
-      updateClip({ keyframes: existing });
+      // Drags call this per mousemove — silent; the gesture's onCommit pushes.
+      updateClipSilent({ keyframes: existing });
     },
-    [keyframes, totalMs, updateClip]
+    [keyframes, totalMs, updateClipSilent]
   );
 
   const handleSetEase = useCallback(
@@ -517,11 +543,12 @@ export const ClipInspector: FC<ClipInspectorProps> = ({ store, outputIndex, trac
 
       <Slider
         label={translate('designer_label_rotation', 'Rotation')}
-        suffix="\u00B0"
+        suffix="°"
         min={0}
         max={360}
         value={Math.round(clip.rotation ?? 0)}
-        onChange={(n) => updateClip({ rotation: n })}
+        onChange={(n) => updateClipSilent({ rotation: n })}
+        onCommit={commitClip}
       />
 
       <Slider
@@ -530,7 +557,8 @@ export const ClipInspector: FC<ClipInspectorProps> = ({ store, outputIndex, trac
         min={0}
         max={100}
         value={Math.round((clip.opacity ?? 1) * 100)}
-        onChange={(n) => updateClip({ opacity: n / 100 })}
+        onChange={(n) => updateClipSilent({ opacity: n / 100 })}
+        onCommit={commitClip}
       />
 
       {/* Audio */}
@@ -542,7 +570,8 @@ export const ClipInspector: FC<ClipInspectorProps> = ({ store, outputIndex, trac
           min={0}
           max={100}
           value={Math.round((clip.volume ?? 1) * 100)}
-          onChange={(n) => updateClip({ volume: n / 100 })}
+          onChange={(n) => updateClipSilent({ volume: n / 100 })}
+          onCommit={commitClip}
         />
         <Slider
           label={translate('designer_label_fade_in', 'Fade In')}
@@ -551,7 +580,8 @@ export const ClipInspector: FC<ClipInspectorProps> = ({ store, outputIndex, trac
           max={3000}
           step={100}
           value={clip.fadeInMs || 0}
-          onChange={(n) => updateClip({ fadeInMs: n })}
+          onChange={(n) => updateClipSilent({ fadeInMs: n })}
+          onCommit={commitClip}
         />
         <Slider
           label={translate('designer_label_fade_out', 'Fade Out')}
@@ -560,7 +590,8 @@ export const ClipInspector: FC<ClipInspectorProps> = ({ store, outputIndex, trac
           max={3000}
           step={100}
           value={clip.fadeOutMs || 0}
-          onChange={(n) => updateClip({ fadeOutMs: n })}
+          onChange={(n) => updateClipSilent({ fadeOutMs: n })}
+          onCommit={commitClip}
         />
       </div>
 
@@ -665,6 +696,7 @@ export const ClipInspector: FC<ClipInspectorProps> = ({ store, outputIndex, trac
           step={0.5}
           value={getFilterVal('blur', 0)}
           onChange={(n) => setFilterVal('blur', n, 0)}
+          onCommit={commitClip}
         />
         <Slider
           label={translate('designer_label_brightness', 'Brightness')}
@@ -673,6 +705,7 @@ export const ClipInspector: FC<ClipInspectorProps> = ({ store, outputIndex, trac
           step={0.05}
           value={getFilterVal('brightness', 1)}
           onChange={(n) => setFilterVal('brightness', n, 1)}
+          onCommit={commitClip}
         />
         <Slider
           label={translate('designer_label_contrast', 'Contrast')}
@@ -681,6 +714,7 @@ export const ClipInspector: FC<ClipInspectorProps> = ({ store, outputIndex, trac
           step={0.05}
           value={getFilterVal('contrast', 1)}
           onChange={(n) => setFilterVal('contrast', n, 1)}
+          onCommit={commitClip}
         />
         <Slider
           label={translate('designer_label_saturate', 'Saturate')}
@@ -689,6 +723,7 @@ export const ClipInspector: FC<ClipInspectorProps> = ({ store, outputIndex, trac
           step={0.05}
           value={getFilterVal('saturate', 1)}
           onChange={(n) => setFilterVal('saturate', n, 1)}
+          onCommit={commitClip}
         />
       </div>
 
@@ -830,8 +865,9 @@ export const ClipInspector: FC<ClipInspectorProps> = ({ store, outputIndex, trac
                   suffix="°"
                   value={clip.motionBlur.shutterAngle ?? DEFAULT_SHUTTER_ANGLE}
                   onChange={(n) =>
-                    updateClip({ motionBlur: { ...clip.motionBlur, shutterAngle: n } })
+                    updateClipSilent({ motionBlur: { ...clip.motionBlur, shutterAngle: n } })
                   }
+                  onCommit={commitClip}
                 />
                 <Slider
                   label={translate('designer_blur_samples', 'Samples')}
@@ -840,8 +876,9 @@ export const ClipInspector: FC<ClipInspectorProps> = ({ store, outputIndex, trac
                   step={1}
                   value={clip.motionBlur.samples ?? DEFAULT_MOTION_BLUR_SAMPLES}
                   onChange={(n) =>
-                    updateClip({ motionBlur: { ...clip.motionBlur, samples: n } })
+                    updateClipSilent({ motionBlur: { ...clip.motionBlur, samples: n } })
                   }
+                  onCommit={commitClip}
                 />
                 <p className="text-[10px] text-textColor/40">
                   {translate(
@@ -869,6 +906,7 @@ export const ClipInspector: FC<ClipInspectorProps> = ({ store, outputIndex, trac
           onAdd={handleAddKeyframe}
           onMove={handleMoveKeyframe}
           onRemove={handleRemoveKeyframe}
+          onCommit={commitClip}
         />
 
         {/* Per-property keyframe controls */}
@@ -883,6 +921,7 @@ export const ClipInspector: FC<ClipInspectorProps> = ({ store, outputIndex, trac
             onMove={handleMoveKeyframe}
             onRemove={handleRemoveKeyframe}
             onEase={handleSetEase}
+            onCommit={commitClip}
           />
         ))}
 
@@ -903,8 +942,8 @@ export const ClipInspector: FC<ClipInspectorProps> = ({ store, outputIndex, trac
               <GraphEditor
                 clip={clip}
                 totalMs={totalMs}
-                onChange={(next) => updateClip({ keyframes: next as VideoClip['keyframes'] })}
-                onCommit={() => store.getState().pushHistory()}
+                onChange={(next) => updateClipSilent({ keyframes: next as VideoClip['keyframes'] })}
+                onCommit={commitClip}
               />
             )}
           </div>
