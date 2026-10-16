@@ -1376,6 +1376,11 @@ export class AiMediaService {
   async removeBackground(imageUrl: string, options?: { orgId?: string }): Promise<string> {
     const candidates = await this._resolveForOperation(options?.orgId, 'bg-remove');
 
+    // A candidate that resolved (configured + credentialed) but failed upstream must
+    // surface its real error — falling through to CapabilityNotAvailable would tell
+    // the client 409 "not configured" when the org's provider actually said no (the
+    // typed ProviderUpstreamError reaches the 502 envelope via ProviderExceptionFilter).
+    let lastError: unknown;
     for (const candidate of candidates) {
       if (!candidate.adapter.removeBackground) continue;
       await this._assertMediaBudget(options?.orgId, candidate.adapter.identifier);
@@ -1394,12 +1399,14 @@ export class AiMediaService {
         });
         return persisted.artifactUrl || result;
       } catch (err) {
+        lastError = err;
         this._logger.warn(
           `Media provider ${candidate.adapter.identifier} bg-remove failed: ${(err as Error).message} — trying next`,
         );
       }
     }
 
+    if (lastError) throw lastError;
     throw new CapabilityNotAvailable(
       'Background removal is not available. Configure a media provider with image-edit support (Replicate) in Settings > Media.',
       'image_edit',
@@ -1414,6 +1421,9 @@ export class AiMediaService {
   ): Promise<string> {
     const candidates = await this._resolveForOperation(options?.orgId, 'inpaint');
 
+    // Same taxonomy as removeBackground: a resolved candidate that failed upstream
+    // rethrows its real error (502 envelope), 409 is only for genuinely unconfigured.
+    let lastError: unknown;
     for (const candidate of candidates) {
       if (!candidate.adapter.inpaintImage) continue;
       await this._assertMediaBudget(options?.orgId, candidate.adapter.identifier);
@@ -1432,12 +1442,14 @@ export class AiMediaService {
         });
         return persisted.artifactUrl || result;
       } catch (err) {
+        lastError = err;
         this._logger.warn(
           `Media provider ${candidate.adapter.identifier} inpaint failed: ${(err as Error).message} — trying next`,
         );
       }
     }
 
+    if (lastError) throw lastError;
     throw new CapabilityNotAvailable(
       'Inpainting is not available. Configure a media provider with image-edit support (Replicate) in Settings > Media.',
       'image_edit',

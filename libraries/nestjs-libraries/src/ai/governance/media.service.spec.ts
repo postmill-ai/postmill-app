@@ -3,6 +3,7 @@ import fs from 'fs';
 import os from 'os';
 import path from 'path';
 import { CapabilityNotAvailable } from './errors';
+import { ProviderUpstreamError } from '@postmill-ai/provider-kernel';
 
 const mockImageModelGenerate = vi.fn().mockResolvedValue('https://cdn.example.com/image.png');
 const mockImageModel = vi.fn().mockResolvedValue({
@@ -679,6 +680,33 @@ describe('AiMediaService', () => {
       const result = await service.removeBackground('https://x/img.png', { orgId: 'org-1' });
       expect(result).toBe('https://x/nobg.png');
     });
+
+    it('propagates the typed upstream error when a configured provider fails (→ 502, not 409)', async () => {
+      const upstream = new ProviderUpstreamError(
+        { domain: 'media', providerId: 'replicate', providerName: 'Replicate', operation: 'bg-remove' },
+        'invalid_request',
+        'The requested resource could not be found',
+        404,
+      );
+      const adapter = makeAdapter('replicate', { bgRemove: true }, {
+        removeBackground: vi.fn().mockRejectedValue(upstream),
+      });
+      const { service } = setup([adapter]);
+
+      await expect(service.removeBackground('https://x/img.png', { orgId: 'org-1' })).rejects.toBe(upstream);
+    });
+
+    it('propagates a plain adapter failure too (configured-but-failed is never 409)', async () => {
+      const adapter = makeAdapter('replicate', { bgRemove: true }, {
+        removeBackground: vi.fn().mockRejectedValue(new Error('boom')),
+      });
+      const { service } = setup([adapter]);
+
+      await expect(service.removeBackground('https://x/img.png', { orgId: 'org-1' })).rejects.toThrow('boom');
+      await expect(service.removeBackground('https://x/img.png', { orgId: 'org-1' })).rejects.not.toThrow(
+        CapabilityNotAvailable,
+      );
+    });
   });
 
   describe('inpaintImage', () => {
@@ -698,6 +726,21 @@ describe('AiMediaService', () => {
       expect(adapter.inpaintImage).toHaveBeenCalledWith('img.png', 'mask.png', 'fill sky', {
         credentials: { apiKey: 'replicate-key' },
       });
+    });
+
+    it('propagates the typed upstream error when a configured provider fails (→ 502, not 409)', async () => {
+      const upstream = new ProviderUpstreamError(
+        { domain: 'media', providerId: 'replicate', providerName: 'Replicate', operation: 'inpaint' },
+        'unavailable',
+        'upstream 503',
+        503,
+      );
+      const adapter = makeAdapter('replicate', { inpaint: true }, {
+        inpaintImage: vi.fn().mockRejectedValue(upstream),
+      });
+      const { service } = setup([adapter]);
+
+      await expect(service.inpaintImage('img.png', 'mask.png', 'fill', { orgId: 'org-1' })).rejects.toBe(upstream);
     });
   });
 

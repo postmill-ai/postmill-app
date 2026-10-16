@@ -94,8 +94,7 @@ describe('ReplicateMediaAdapter.generateImage aspect mapping', () => {
   });
 });
 
-describe('ReplicateMediaAdapter.generateImage image-to-image (sourceUrl)', () => {
-  let fetchMock: ReturnType<typeof makeFetch>;
+describe('ReplicateMediaAdapter.generateImage image-to-image (sourceUrl)', () => {  let fetchMock: ReturnType<typeof makeFetch>;
   let adapter: ReplicateMediaAdapter;
 
   beforeEach(() => {
@@ -157,5 +156,94 @@ describe('ReplicateMediaAdapter.generateImage image-to-image (sourceUrl)', () =>
     const body = lastRequestBody(fetchMock);
     expect(body.input.input_image).toBeUndefined();
     expect(body.input.image).toBeUndefined();
+  });
+});
+
+const lastRequestUrl = (fetchMock: ReturnType<typeof makeFetch>) =>
+  fetchMock.mock.calls[fetchMock.mock.calls.length - 1][0] as string;
+
+describe('ReplicateMediaAdapter.removeBackground model resolution', () => {
+  let fetchMock: ReturnType<typeof makeFetch>;
+  let adapter: ReplicateMediaAdapter;
+
+  beforeEach(() => {
+    fetchMock = makeFetch();
+    adapter = new ReplicateMediaAdapter(fetchMock as any);
+  });
+
+  it('falls back to the live 851-labs/background-remover default (cjwbw/rembg is deleted upstream)', async () => {
+    const url = await adapter.removeBackground('https://cdn.example.com/in.png', {
+      credentials: { apiKey: 'k' },
+    });
+    expect(url).toBe('https://example.com/img.png');
+    expect(lastRequestUrl(fetchMock)).toBe(
+      'https://api.replicate.com/v1/models/851-labs/background-remover/predictions'
+    );
+    expect(lastRequestBody(fetchMock).input).toEqual({ image: 'https://cdn.example.com/in.png' });
+  });
+
+  it('lets an org-configured options.model win over the default', async () => {
+    await adapter.removeBackground('https://cdn.example.com/in.png', {
+      credentials: { apiKey: 'k' },
+      model: 'bria/remove-background',
+    });
+    expect(lastRequestUrl(fetchMock)).toBe(
+      'https://api.replicate.com/v1/models/bria/remove-background/predictions'
+    );
+  });
+
+  it('lets an explicit options.version win over options.model', async () => {
+    const hash = 'b'.repeat(64);
+    await adapter.removeBackground('https://cdn.example.com/in.png', {
+      credentials: { apiKey: 'k' },
+      model: 'bria/remove-background',
+      version: hash,
+    });
+    expect(lastRequestUrl(fetchMock)).toBe('https://api.replicate.com/v1/predictions');
+    expect(lastRequestBody(fetchMock).version).toBe(hash);
+  });
+});
+
+describe('ReplicateMediaAdapter.upscaleImage / inpaintImage model resolution', () => {
+  let fetchMock: ReturnType<typeof makeFetch>;
+  let adapter: ReplicateMediaAdapter;
+
+  beforeEach(() => {
+    fetchMock = makeFetch();
+    adapter = new ReplicateMediaAdapter(fetchMock as any);
+  });
+
+  it('upscaleImage honors options.model and defaults to nightmareai/real-esrgan', async () => {
+    await adapter.upscaleImage('https://cdn.example.com/in.png', {
+      credentials: { apiKey: 'k' },
+      model: 'philz1337x/clarity-upscaler',
+    });
+    expect(lastRequestUrl(fetchMock)).toBe(
+      'https://api.replicate.com/v1/models/philz1337x/clarity-upscaler/predictions'
+    );
+
+    await adapter.upscaleImage('https://cdn.example.com/in.png', {
+      credentials: { apiKey: 'k' },
+    });
+    expect(lastRequestUrl(fetchMock)).toBe(
+      'https://api.replicate.com/v1/models/nightmareai/real-esrgan/predictions'
+    );
+  });
+
+  it('inpaintImage honors options.model and defaults to stable-diffusion-inpainting', async () => {
+    await adapter.inpaintImage('https://cdn.example.com/in.png', 'https://cdn.example.com/mask.png', 'fill', {
+      credentials: { apiKey: 'k' },
+      model: 'black-forest-labs/flux-fill-pro',
+    });
+    expect(lastRequestUrl(fetchMock)).toBe(
+      'https://api.replicate.com/v1/models/black-forest-labs/flux-fill-pro/predictions'
+    );
+
+    await adapter.inpaintImage('https://cdn.example.com/in.png', 'https://cdn.example.com/mask.png', 'fill', {
+      credentials: { apiKey: 'k' },
+    });
+    expect(lastRequestUrl(fetchMock)).toBe(
+      'https://api.replicate.com/v1/models/stability-ai/stable-diffusion-inpainting/predictions'
+    );
   });
 });

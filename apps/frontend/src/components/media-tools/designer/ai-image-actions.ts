@@ -20,6 +20,18 @@ const getSrc = (store: StoreApi, elementId: string): string | undefined => {
 
 // Shared by the inspector AI Tools and the Tools menu so the implementation
 // lives in exactly one place (D-10).
+
+// Failure envelopes carry the reason under `message` (502 provider-upstream)
+// or `error` (409 capability) — surface it in the toast instead of a bare "Failed".
+export const readErrorMessage = async (res: Response, fallback: string): Promise<string> => {
+  try {
+    const body = await res.json();
+    return body?.message || body?.error || fallback;
+  } catch {
+    return fallback;
+  }
+};
+
 export const aiRemoveBackground = async ({ fetch, store, elementId }: AiActionArgs): Promise<void> => {
   const src = getSrc(store, elementId);
   if (!src) throw new Error('No image');
@@ -28,7 +40,7 @@ export const aiRemoveBackground = async ({ fetch, store, elementId }: AiActionAr
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ imageUrl: src }),
   });
-  if (!res.ok) throw new Error('Failed');
+  if (!res.ok) throw new Error(await readErrorMessage(res, 'Background removal failed'));
   const data = await res.json();
   store.getState().updateElement(elementId, { src: data.url, fileId: undefined });
 };
@@ -41,7 +53,7 @@ export const aiUpscale = async ({ fetch, store, elementId }: AiActionArgs, scale
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ imageUrl: src, scale }),
   });
-  if (!res.ok) throw new Error('Failed');
+  if (!res.ok) throw new Error(await readErrorMessage(res, 'Upscale failed'));
   const data = await res.json();
   store.getState().updateElement(elementId, { src: data.url, fileId: undefined });
 };

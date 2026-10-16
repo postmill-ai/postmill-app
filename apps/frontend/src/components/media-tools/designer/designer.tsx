@@ -1023,8 +1023,10 @@ export const Designer: FC<DesignerProps> = ({
       if (!id) return;
       try {
         await fn(id);
-      } catch {
-        toaster.show(failMsg, 'warning');
+      } catch (err) {
+        // The shared AI actions throw the server's error message (502/409 envelope);
+        // show it so an upstream failure isn't reported as a bare "failed".
+        toaster.show((err as Error)?.message || failMsg, 'warning');
       }
     },
     [selectedImageId, toaster]

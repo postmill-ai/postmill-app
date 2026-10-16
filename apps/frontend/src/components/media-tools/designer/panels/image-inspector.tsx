@@ -14,6 +14,8 @@ import type {
   DesignerMask,
 } from '../designer.store';
 import { useMediaPicker } from '../../use-media-picker';
+import { useMediaToolsStatus } from '@postmill-ai/frontend/components/layout/use-media-tools-status';
+import { aiRemoveBackground, aiUpscale, readErrorMessage } from '../ai-image-actions';
 
 interface ImageInspectorProps {
   element: DesignerElement;
@@ -29,6 +31,9 @@ export const ImageInspector: FC<ImageInspectorProps> = ({
   const t = useT();
   const toaster = useToaster();
   const fetch = useFetch();
+  // Same availability signal the Tools menu gates on (GET /media/tools/status) —
+  // hide AI buttons the org has no configured provider for (fail-open while loading).
+  const { operationAvailable } = useMediaToolsStatus();
   const brandColors = useBrandColors();
   const brandEnforcement = store((s: any) => s.brandEnforcement);
   const updateElement = store((s: any) => s.updateElement);
@@ -151,16 +156,10 @@ export const ImageInspector: FC<ImageInspectorProps> = ({
     if (!element.src) return;
     setAiLoading('remove-bg');
     try {
-      const res = await fetch('/media/remove-background', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ imageUrl: element.src }),
-      });
-      if (!res.ok) throw new Error('Failed');
-      const data = await res.json();
-      updateElement(element.id, { src: data.url, fileId: undefined });
-    } catch {
-      toaster.show(t('designer_bg_removal_failed', 'Background removal failed'), 'warning');
+      await aiRemoveBackground({ fetch, store, elementId: element.id });
+    } catch (err) {
+      // The shared action throws the server's error message — show it verbatim.
+      toaster.show((err as Error)?.message || t('designer_bg_removal_failed', 'Background removal failed'), 'warning');
     } finally {
       setAiLoading(false);
     }
@@ -170,16 +169,9 @@ export const ImageInspector: FC<ImageInspectorProps> = ({
     if (!element.src) return;
     setAiLoading('upscale');
     try {
-      const res = await fetch('/media/upscale', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ imageUrl: element.src, scale: upscaleScale }),
-      });
-      if (!res.ok) throw new Error('Failed');
-      const data = await res.json();
-      updateElement(element.id, { src: data.url, fileId: undefined });
-    } catch {
-      toaster.show(t('designer_upscale_failed', 'Upscale failed'), 'warning');
+      await aiUpscale({ fetch, store, elementId: element.id }, upscaleScale);
+    } catch (err) {
+      toaster.show((err as Error)?.message || t('designer_upscale_failed', 'Upscale failed'), 'warning');
     } finally {
       setAiLoading(false);
     }
@@ -194,11 +186,11 @@ export const ImageInspector: FC<ImageInspectorProps> = ({
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ imageUrl: element.src, maskUrl: inpaintMaskUrl, prompt: inpaintPrompt }),
       });
-      if (!res.ok) throw new Error('Failed');
+      if (!res.ok) throw new Error(await readErrorMessage(res, ''));
       const data = await res.json();
       updateElement(element.id, { src: data.url, fileId: undefined });
-    } catch {
-      toaster.show(t('designer_inpaint_failed', 'Inpaint failed'), 'warning');
+    } catch (err) {
+      toaster.show((err as Error)?.message || t('designer_inpaint_failed', 'Inpaint failed'), 'warning');
     } finally {
       setAiLoading(false);
     }
@@ -213,11 +205,11 @@ export const ImageInspector: FC<ImageInspectorProps> = ({
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ imageUrl: element.src, prompt: imageToImagePrompt.trim() }),
       });
-      if (!res.ok) throw new Error('Failed');
+      if (!res.ok) throw new Error(await readErrorMessage(res, ''));
       const data = await res.json();
       updateElement(element.id, { src: data.url, fileId: undefined });
-    } catch {
-      toaster.show(t('designer_image_to_image_failed', 'Image-to-image failed'), 'warning');
+    } catch (err) {
+      toaster.show((err as Error)?.message || t('designer_image_to_image_failed', 'Image-to-image failed'), 'warning');
     } finally {
       setAiLoading(false);
     }
@@ -843,14 +835,17 @@ export const ImageInspector: FC<ImageInspectorProps> = ({
       <div className="pt-3 border-t border-studioBorder">
         <h4 className="text-xs font-semibold text-gray-400 mb-2 uppercase tracking-wider">{t('designer_ai_tools', 'AI Tools')}</h4>
         <div className="space-y-2">
-          <button
-            className="w-full px-3 py-2 bg-designerAccent/10 hover:bg-designerAccent/20 text-sm rounded-sm border border-designerAccent/30 text-left"
-            onClick={handleRemoveBackground}
-            disabled={!!aiLoading}
-          >
-            {aiLoading === 'remove-bg' ? t('designer_processing_ellipsis', 'Processing...') : t('designer_remove_background', 'Remove Background')}
-          </button>
+          {operationAvailable('bg-remove') && (
+            <button
+              className="w-full px-3 py-2 bg-designerAccent/10 hover:bg-designerAccent/20 text-sm rounded-sm border border-designerAccent/30 text-left"
+              onClick={handleRemoveBackground}
+              disabled={!!aiLoading}
+            >
+              {aiLoading === 'remove-bg' ? t('designer_processing_ellipsis', 'Processing...') : t('designer_remove_background', 'Remove Background')}
+            </button>
+          )}
 
+          {operationAvailable('upscale') && (
           <div className="flex gap-2">
             <select
               className="flex-1 px-2 py-1.5 bg-newBgColor border border-studioBorder rounded-sm text-sm text-textColor"
@@ -868,7 +863,9 @@ export const ImageInspector: FC<ImageInspectorProps> = ({
               {aiLoading === 'upscale' ? '...' : t('designer_upscale', 'Upscale')}
             </button>
           </div>
+          )}
 
+          {operationAvailable('image') && (
           <div className="flex flex-col gap-2">
             <input
               className="w-full px-2 py-1.5 bg-newBgColor border border-studioBorder rounded-sm text-sm text-textColor"
@@ -884,7 +881,9 @@ export const ImageInspector: FC<ImageInspectorProps> = ({
               {aiLoading === 'image-to-image' ? '…' : t('designer_image_to_image', 'Image to Image')}
             </button>
           </div>
+          )}
 
+          {operationAvailable('inpaint') && (
           <div className="flex flex-col gap-2">
             <input
               className="w-full px-2 py-1.5 bg-newBgColor border border-studioBorder rounded-sm text-sm text-textColor"
@@ -964,6 +963,7 @@ export const ImageInspector: FC<ImageInspectorProps> = ({
               {aiLoading === 'inpaint' ? '…' : t('designer_inpaint', 'Inpaint')}
             </button>
           </div>
+          )}
         </div>
       </div>
     </div>

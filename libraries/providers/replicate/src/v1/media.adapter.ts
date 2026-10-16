@@ -27,6 +27,11 @@ const PREFER_WAIT_SECONDS = 25;
 // flux-schnell was retired upstream ("No adapter found" 500s in prod); flux-1.1-pro is
 // allowlisted, cost-tabled, and verified live.
 const DEFAULT_IMAGE_MODEL = 'black-forest-labs/flux-1.1-pro';
+// cjwbw/rembg was deleted upstream (every call 404'd in prod). 851-labs/background-remover
+// is allowlisted, takes the same `{ image }` input, and returns a single image URL.
+const DEFAULT_BG_REMOVE_MODEL = '851-labs/background-remover';
+const DEFAULT_UPSCALE_MODEL = 'nightmareai/real-esrgan';
+const DEFAULT_INPAINT_MODEL = 'stability-ai/stable-diffusion-inpainting';
 
 type ReplicateOutput = string | string[] | undefined;
 
@@ -296,21 +301,21 @@ export class ReplicateMediaAdapter implements MediaProviderAdapter {
 
   async upscaleImage(imageUrl: string, options?: MediaGenerateOptions): Promise<string> {
     return this._createAndResolveUrl(
-      { ...options, version: options?.version || 'nightmareai/real-esrgan' },
+      { ...options, version: options?.version || options?.model || DEFAULT_UPSCALE_MODEL },
       { image: imageUrl, scale: options?.scale || 4 },
     );
   }
 
   async removeBackground(imageUrl: string, options?: MediaGenerateOptions): Promise<string> {
     return this._createAndResolveUrl(
-      { ...options, version: options?.version || 'cjwbw/rembg' },
+      { ...options, version: options?.version || options?.model || DEFAULT_BG_REMOVE_MODEL },
       { image: imageUrl },
     );
   }
 
   async inpaintImage(imageUrl: string, maskUrl: string, prompt: string, options?: MediaGenerateOptions): Promise<string> {
     return this._createAndResolveUrl(
-      { ...options, version: options?.version || 'stability-ai/stable-diffusion-inpainting' },
+      { ...options, version: options?.version || options?.model || DEFAULT_INPAINT_MODEL },
       { image: imageUrl, mask: maskUrl, prompt },
     );
   }
