@@ -272,6 +272,7 @@ describe('ReplicateMediaAdapter.outpaintImage (flux-fill-pro)', () => {
     expect(lastRequestBody(fetchMock).input).toEqual({
       image: 'https://cdn.example.com/in.png',
       outpaint: 'Zoom out 2x',
+      prompt: expect.stringContaining('Extend the image naturally'),
     });
   });
 
@@ -293,7 +294,25 @@ describe('ReplicateMediaAdapter.outpaintImage (flux-fill-pro)', () => {
     }
   });
 
-  it('passes an optional prompt through and omits it when absent', async () => {
+  // flux-fill-pro marks `prompt` required (live 422 when omitted), so a prompt-less
+  // outpaint must send the seamless-extension default, not drop the field.
+  it('sends the seamless-extension default prompt when none is supplied', async () => {
+    await adapter.outpaintImage('https://cdn.example.com/in.png', 'zoom-1.5x', undefined, {
+      credentials: { apiKey: 'k' },
+    });
+    expect(lastRequestBody(fetchMock).input.prompt).toBe(
+      'Extend the image naturally beyond its borders, seamlessly matching the existing style, lighting, colors, and content.'
+    );
+
+    await adapter.outpaintImage('https://cdn.example.com/in.png', 'zoom-1.5x', '   ', {
+      credentials: { apiKey: 'k' },
+    });
+    expect(lastRequestBody(fetchMock).input.prompt).toBe(
+      'Extend the image naturally beyond its borders, seamlessly matching the existing style, lighting, colors, and content.'
+    );
+  });
+
+  it('lets an explicit prompt win over the default', async () => {
     await adapter.outpaintImage('https://cdn.example.com/in.png', 'left', 'more ocean', {
       credentials: { apiKey: 'k' },
     });
