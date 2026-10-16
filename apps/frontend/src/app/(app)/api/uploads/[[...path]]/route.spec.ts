@@ -50,6 +50,9 @@ describe('/api/uploads serve route containment (F8)', () => {
     expect(res.headers.get('Cache-Control')).toBe(
       'public, max-age=31536000, immutable'
     );
+    // Cross-origin anonymous reads: the video-render frame page draws these
+    // files to canvas from the api origin (crossOrigin='anonymous').
+    expect(res.headers.get('Access-Control-Allow-Origin')).toBe('*');
     expect(await res.text()).toBe('hello world');
   });
 

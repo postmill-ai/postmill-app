@@ -60,6 +60,12 @@ with one `video_export` credit charged. Sibling docs: `agents/backend.md`,
    - `renderTimeoutMs` = `max(getRenderTimeoutMs(), frames * 150ms)` where
      `frames = ceil(durationMs/1000 * fps)` — the capture loop spends ~150 ms/frame
      (evaluate + PNG screenshot), so the env floor alone cannot fit long compositions.
+   - Cross-origin media: the frame page is served from the API origin but clip media
+     typically lives on the app/uploads origin. The route sets a page-scoped CSP with
+     `media-src`/`img-src https:` (helmet's default `default-src 'self'` would block the
+     loads), and the frontend `/api/uploads` serve route sends
+     `Access-Control-Allow-Origin: *` (public no-auth bucket) so `crossOrigin='anonymous'`
+     canvas draws are not tainted/blocked. Both are required for a render to see its clips.
    - Stores the artifact via `MediaJobLifecycleService.completeJobWithBuffer` (org
      storage, mime/metadata, thumbnail); on error marks the job `failed` (error truncated
      to 1000 chars), reports to Sentry (`subsystem: video-render`), and always removes

@@ -554,6 +554,15 @@ export class DesignRenderFrameController {
       fontLinks: fontLinksForOutput(output, customFonts),
     });
 
+    // The frame page pulls clip media cross-origin (uploads/CDN hosts) into a
+    // canvas, so helmet's default CSP (default-src 'self', no media-src) would
+    // block the render. Replace it with a scoped policy for this page only.
+    res.setHeader(
+      'Content-Security-Policy',
+      "default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline' https://fonts.googleapis.com; " +
+        "img-src https: data: blob:; media-src https: data: blob:; font-src https://fonts.gstatic.com https: data:; " +
+        "connect-src https: 'self'; worker-src blob:",
+    );
     res.setHeader('Content-Type', 'text/html');
     res.send(html);
   }

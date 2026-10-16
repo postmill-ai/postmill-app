@@ -91,6 +91,10 @@ export const GET = async (
       'Last-Modified': fileStats.mtime.toUTCString(),
       // Set the last-modified header
       'Cache-Control': 'public, max-age=31536000, immutable', // Example cache-control header
+      // Public no-auth bucket: allow cross-origin anonymous reads so the
+      // headless video-render frame page (api origin) can draw these files
+      // to canvas via crossOrigin='anonymous'.
+      'Access-Control-Allow-Origin': '*',
     },
   });
 };
