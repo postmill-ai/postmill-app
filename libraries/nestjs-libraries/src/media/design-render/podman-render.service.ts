@@ -27,9 +27,11 @@ export class PodmanRenderService {
    * Run one render job inside a Podman container. The caller owns `workDir` (writes any
    * input files there); this writes `job.json`, runs the container with the workdir mounted
    * at /work, and leaves the artifact(s) under `workDir/out`. Throws on non-zero exit/timeout.
+   * `timeoutMs` overrides the default wall-clock cap (callers scale it with frame count).
    */
-  async run(workDir: string, spec: RenderJobSpec): Promise<void> {
+  async run(workDir: string, spec: RenderJobSpec, timeoutMs?: number): Promise<void> {
     const cfg = getPodmanRenderConfig();
+    const budgetMs = timeoutMs ?? cfg.timeoutMs;
     fs.writeFileSync(path.join(workDir, 'job.json'), JSON.stringify(spec));
     fs.mkdirSync(path.join(workDir, 'out'), { recursive: true });
 
@@ -60,9 +62,9 @@ export class PodmanRenderService {
       '/work/job.json',
     );
 
-    const res = await this.exec(cfg.bin, args, cfg.timeoutMs);
+    const res = await this.exec(cfg.bin, args, budgetMs);
     if (res.timedOut) {
-      throw new Error(`Podman render timed out after ${cfg.timeoutMs}ms`);
+      throw new Error(`Podman render timed out after ${budgetMs}ms`);
     }
     if (res.code !== 0) {
       throw new Error(`Podman render exited ${res.code}: ${res.stderr.slice(-800)}`);

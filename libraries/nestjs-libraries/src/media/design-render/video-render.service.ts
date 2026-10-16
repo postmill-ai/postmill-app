@@ -1,4 +1,5 @@
 import { BadRequestException, Injectable, Logger } from '@nestjs/common';
+import * as Sentry from '@sentry/nestjs';
 import { MediaJobLifecycleService } from '@postmill-ai/nestjs-libraries/database/prisma/media-providers/media-job-lifecycle.service';
 import { AiSettingsService } from '@postmill-ai/nestjs-libraries/database/prisma/ai-settings/ai-settings.service';
 import { FfmpegVideoEncoderService } from './ffmpeg-video-encoder.service';
@@ -21,8 +22,22 @@ const MAX_DURATION_MS = 60000;
 const MAX_FPS = 240;
 const RENDER_PAYLOAD_TTL_SECONDS = 24 * 60 * 60;
 
+/**
+ * Per-frame wall-clock budget for scaling the render timeout. The capture loop
+ * (chromium-frame-capture.service.ts) does one page.evaluate + one PNG screenshot
+ * per frame — ~150 ms/frame at 1080p. A 60 s @ 30 fps composition is 1800 frames
+ * ≈ 270 s, which blows past the 120 s default, so the budget scales with frames.
+ * Exported for unit testing.
+ */
+export const PER_FRAME_CAPTURE_BUDGET_MS = 150;
+
 function payloadKey(jobId: string): string {
   return `video-render:payload:${jobId}`;
+}
+
+/** Exactly-once claim marker (SET NX) for a render job — the payload key itself must survive the render. */
+function claimKey(jobId: string): string {
+  return `video-render:claim:${jobId}`;
 }
 
 function mergePayloadKey(jobId: string): string {
@@ -208,15 +223,24 @@ export class VideoRenderService {
     const orgId = job.organizationId;
 
     let workDir: string | undefined;
+    let claimed = false;
 
     try {
       await this._aiSettings.updateMediaJob(orgId, jobId, { status: 'processing' });
 
-      // Atomically claim the render payload: GETDEL is a single Redis op, so exactly one
-      // concurrent runner obtains it (the equivalent of an `updateMany` count===1 claim).
-      // A loser sees null here and must NOT mark the job failed — the winner is rendering it.
-      const raw = await ioRedis.getdel(payloadKey(jobId));
-      if (!raw) {
+      // Read the payload WITHOUT deleting it: the render-frame route serves this
+      // key to headless Chromium (possibly repeatedly) while the encode runs, so a
+      // GETDEL here 404s the frame page and the render times out waiting for
+      // __FRAME_API. Exactly-once claiming moves to a SET NX marker: a loser (claim
+      // already held by another runner) must NOT mark the job failed — the winner
+      // is rendering it. A null payload with the job still pending means the TTL
+      // expired — a genuine failure.
+      const raw = await ioRedis.get(payloadKey(jobId));
+      claimed =
+        raw != null &&
+        (await ioRedis.set(claimKey(jobId), '1', 'EX', RENDER_PAYLOAD_TTL_SECONDS, 'NX')) !==
+          null;
+      if (!raw || !claimed) {
         const current = await this._aiSettings.getMediaJobById(orgId, jobId);
         if (current && current.status !== 'pending') {
           this.logger.log(
@@ -224,7 +248,10 @@ export class VideoRenderService {
           );
           return;
         }
-        throw new Error(`No pending composition found for job ${jobId}`);
+        if (!raw) {
+          throw new Error(`No pending composition found for job ${jobId}`);
+        }
+        throw new Error(`Render claim for job ${jobId} is held while the job is still pending`);
       }
       const input = JSON.parse(raw);
 
@@ -252,13 +279,22 @@ export class VideoRenderService {
         renderToken,
       };
 
+      // Scale the wall-clock budget with the frame count (see
+      // PER_FRAME_CAPTURE_BUDGET_MS): the env floor alone cannot fit a long
+      // composition's sequential frame captures. Applies to both render paths.
+      const frames = Math.max(1, Math.ceil((durationMs / 1000) * fps));
+      const renderTimeoutMs = Math.max(
+        getRenderTimeoutMs(),
+        frames * PER_FRAME_CAPTURE_BUDGET_MS,
+      );
+
       let videoPath: string;
       let thumbnailPath: string;
       if (isPodmanRenderEnabled()) {
         workDir = renderWorkDir(jobId);
         fs.mkdirSync(workDir, { recursive: true });
         const spec: DesignRenderJobSpec = { op: 'design', composition, options, baseUrl: baseUrl() };
-        await this._podman.run(workDir, spec);
+        await this._podman.run(workDir, spec, renderTimeoutMs);
         videoPath = path.join(workDir, 'out', `output.${format}`);
         thumbnailPath = path.join(workDir, 'out', 'thumbnail.jpg');
       } else {
@@ -266,7 +302,7 @@ export class VideoRenderService {
         // cap its wall-clock so a pathological composition can't pin a worker forever.
         const result = await withTimeout(
           this._encoder.encode(composition, options),
-          getRenderTimeoutMs(),
+          renderTimeoutMs,
           'In-process video encode',
         );
         videoPath = result.videoPath;
@@ -309,11 +345,18 @@ export class VideoRenderService {
       this.logger.error(
         `Video render failed: ${jobId}: ${(err as Error).message}`,
       );
+      Sentry.captureException(err, { tags: { subsystem: 'video-render' } });
       await this._aiSettings.updateMediaJob(orgId, jobId, {
         status: 'failed',
         error: (err as Error).message.slice(0, 1000),
       });
     } finally {
+      if (claimed) {
+        // The render concluded (success or failure) — release the payload and the
+        // claim marker. Never touch these keys when we lost the claim race: they
+        // belong to the winning runner, which may still be rendering.
+        await this.releasePayload(jobId);
+      }
       this.cleanupWorkDir(workDir);
     }
   }
@@ -387,12 +430,24 @@ export class VideoRenderService {
       }
     } catch (err) {
       this.logger.error(`Merge render failed: ${jobId}: ${(err as Error).message}`);
+      Sentry.captureException(err, { tags: { subsystem: 'video-render', op: 'merge' } });
       await this._aiSettings.updateMediaJob(orgId, jobId, {
         status: 'failed',
         error: (err as Error).message.slice(0, 1000),
       });
     } finally {
       this.cleanupWorkDir(workDir);
+    }
+  }
+
+  /** Best-effort release of the render payload + claim marker after a render concludes. */
+  private async releasePayload(jobId: string) {
+    try {
+      await ioRedis.del(payloadKey(jobId), claimKey(jobId));
+    } catch (err) {
+      this.logger.warn(
+        `Failed to release render payload keys for ${jobId}: ${(err as Error).message}`,
+      );
     }
   }
 

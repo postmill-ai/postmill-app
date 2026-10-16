@@ -2,8 +2,13 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
+import * as Sentry from '@sentry/nestjs';
 import { VideoRenderService, withTimeout } from './video-render.service';
 import { ioRedis } from '@postmill-ai/nestjs-libraries/redis/redis.service';
+
+vi.mock('@sentry/nestjs', () => ({
+  captureException: vi.fn(),
+}));
 
 vi.mock('@postmill-ai/nestjs-libraries/redis/redis.service', () => ({
   ioRedis: {
@@ -134,7 +139,7 @@ describe('VideoRenderService', () => {
 
   it('processes a pending job and completes it with the rendered artifact', async () => {
     const composition = videoOutput(3000);
-    vi.mocked(ioRedis.getdel).mockResolvedValueOnce(
+    vi.mocked(ioRedis.get).mockResolvedValueOnce(
       JSON.stringify({
         organizationId: orgId,
         composition,
@@ -148,9 +153,11 @@ describe('VideoRenderService', () => {
     fs.writeFileSync(videoPath, Buffer.from('fake-video'));
     fs.writeFileSync(thumbPath, Buffer.from('fake-thumb'));
 
-    vi.mocked(encoder.encode).mockResolvedValueOnce({
-      videoPath,
-      thumbnailPath: thumbPath,
+    vi.mocked(encoder.encode).mockImplementationOnce(async () => {
+      // The payload key must still be in Redis while the encode runs: the
+      // render-frame route serves it to headless Chromium during capture.
+      expect(vi.mocked(ioRedis.del)).not.toHaveBeenCalled();
+      return { videoPath, thumbnailPath: thumbPath };
     });
 
     await service.processVideoRender('job-1');
@@ -158,6 +165,16 @@ describe('VideoRenderService', () => {
     expect(aiSettings.updateMediaJob).toHaveBeenCalledWith(orgId, 'job-1', {
       status: 'processing',
     });
+    // Claim is a non-destructive GET + a SET NX marker — never GETDEL.
+    expect(vi.mocked(ioRedis.get)).toHaveBeenCalledWith('video-render:payload:job-1');
+    expect(vi.mocked(ioRedis.set)).toHaveBeenCalledWith(
+      'video-render:claim:job-1',
+      '1',
+      'EX',
+      24 * 60 * 60,
+      'NX',
+    );
+    expect(vi.mocked(ioRedis.getdel)).not.toHaveBeenCalled();
     expect(encoder.encode).toHaveBeenCalledWith(
       composition,
       expect.objectContaining({ fps: 30, bitrateKbps: 4000, format: 'mp4' }),
@@ -180,12 +197,17 @@ describe('VideoRenderService', () => {
       'job-1',
       expect.objectContaining({ status: 'failed' }),
     );
+    // Payload + claim keys are released only after the render concludes.
+    expect(vi.mocked(ioRedis.del)).toHaveBeenCalledWith(
+      'video-render:payload:job-1',
+      'video-render:claim:job-1',
+    );
 
     encoder.cleanup(tmpDir);
   });
 
   it('fails the job when no payload is found in Redis (genuinely missing, still pending)', async () => {
-    vi.mocked(ioRedis.getdel).mockResolvedValueOnce(null);
+    vi.mocked(ioRedis.get).mockResolvedValueOnce(null);
     // getMediaJobById keeps returning a 'pending' job → treated as a genuine missing payload.
 
     await service.processVideoRender('job-1');
@@ -198,6 +220,7 @@ describe('VideoRenderService', () => {
         error: expect.stringContaining('No pending composition'),
       }),
     );
+    expect(vi.mocked(Sentry.captureException)).toHaveBeenCalled();
   });
 
   it('org-scopes getJob — returns null for another org, the job for the owner', async () => {
@@ -228,13 +251,42 @@ describe('VideoRenderService', () => {
     ).rejects.toThrow(/fps .* out of range/);
   });
 
+  it('returns early without failing the job when the claim SET NX is already held', async () => {
+    const composition = videoOutput(3000);
+    vi.mocked(ioRedis.get).mockResolvedValueOnce(
+      JSON.stringify({ organizationId: orgId, composition }),
+    );
+    // Another runner holds the claim.
+    vi.mocked(ioRedis.set).mockResolvedValueOnce(null);
+    // The winner already moved the job past 'pending'.
+    vi.mocked(aiSettings.getMediaJobById).mockResolvedValueOnce({
+      id: 'job-1',
+      organizationId: orgId,
+      provider: 'chromium-ffmpeg',
+      status: 'processing',
+    } as any);
+
+    await service.processVideoRender('job-1');
+
+    expect(encoder.encode).not.toHaveBeenCalled();
+    expect(aiSettings.updateMediaJob).not.toHaveBeenCalledWith(
+      orgId,
+      'job-1',
+      expect.objectContaining({ status: 'failed' }),
+    );
+    // The loser's finally must not release keys owned by the winning runner.
+    expect(vi.mocked(ioRedis.del)).not.toHaveBeenCalled();
+  });
+
   it('does not double-render or spuriously fail a job when two runners race the claim', async () => {
     const composition = videoOutput(3000);
-    // Only the first GETDEL returns the payload; the loser gets null (atomic single-winner).
-    vi.mocked(ioRedis.getdel)
-      .mockResolvedValueOnce(
-        JSON.stringify({ organizationId: orgId, composition, bitrateKbps: 4000 }),
-      )
+    // Both runners can read the payload (GET is non-destructive); exactly one wins
+    // the SET NX claim — the loser gets null (atomic single-winner).
+    vi.mocked(ioRedis.get).mockResolvedValue(
+      JSON.stringify({ organizationId: orgId, composition, bitrateKbps: 4000 }),
+    );
+    vi.mocked(ioRedis.set)
+      .mockResolvedValueOnce('OK')
       .mockResolvedValueOnce(null);
 
     // Stateful job: both runners read 'pending' at the top guard; the winner's

@@ -45,16 +45,25 @@ with one `video_export` credit charged. Sibling docs: `agents/backend.md`,
      would abort a long render and silently skip metering). Failed renders throw before
      this line.
 4. **Process** — `VideoRenderService.processVideoRender` / `processMergeRender`:
-   - Claims the payload atomically via Redis `GETDEL` (single winner; a losing duplicate
-     runner skips silently and must **not** mark the job failed).
+   - Design renders claim via a non-destructive `GET` of the payload plus an atomic
+     `SET NX EX` marker `video-render:claim:<jobId>` (single winner; a losing duplicate
+     runner skips silently and must **not** mark the job failed). The payload key must
+     survive the render — the `render-frame` route serves it to headless Chromium —
+     so it is only `DEL`eted (with the claim key) in `finally` after the encode
+     concludes, and only by the claim winner. Merge payloads have no route reader and
+     still claim via Redis `GETDEL`.
    - Podman path (`isPodmanRenderEnabled()`): writes the spec into
      `renderWorkDir(jobId)` = `os.tmpdir()/postmill-render-work/<jobId>`, then
-     `PodmanRenderService.run(workDir, spec)`.
+     `PodmanRenderService.run(workDir, spec, renderTimeoutMs)`.
    - In-process fallback: `FfmpegVideoEncoderService` (+ `ChromiumFrameCaptureService`)
-     under `withTimeout(getRenderTimeoutMs())`.
+     under `withTimeout(renderTimeoutMs)`.
+   - `renderTimeoutMs` = `max(getRenderTimeoutMs(), frames * 150ms)` where
+     `frames = ceil(durationMs/1000 * fps)` — the capture loop spends ~150 ms/frame
+     (evaluate + PNG screenshot), so the env floor alone cannot fit long compositions.
    - Stores the artifact via `MediaJobLifecycleService.completeJobWithBuffer` (org
      storage, mime/metadata, thumbnail); on error marks the job `failed` (error truncated
-     to 1000 chars) and always removes the workdir in `finally`.
+     to 1000 chars), reports to Sentry (`subsystem: video-render`), and always removes
+     the workdir in `finally`.
 5. **Safety-net sweep** — `apps/backend/src/inngest/functions/media-jobs-poll.ts`
    (`media-jobs-poll`, every minute, `concurrency: 1`) →
    `MediaJobsActivity.processPendingMediaJobs`: re-enqueues **stale** still-pending local
@@ -93,7 +102,7 @@ with one `video_export` credit charged. Sibling docs: `agents/backend.md`,
 |---|---|---|
 | `VIDEO_RENDER_CONCURRENCY` | `3` | Inngest function concurrency cap |
 | `VIDEO_RENDER_PODMAN_ENABLED` | off | truthy → container path |
-| `VIDEO_RENDER_TIMEOUT_MS` | `120000` | In-process encode wall-clock cap |
+| `VIDEO_RENDER_TIMEOUT_MS` | `120000` | Render wall-clock floor (both paths); scaled up with frame count |
 | `VIDEO_RENDER_PODMAN_BIN` | `podman` | Binary |
 | `VIDEO_RENDER_IMAGE` | `localhost/postmill-render:latest` | Worker image |
 | `VIDEO_RENDER_POD` | `postmill-render` | Shared pod (aggregate cgroup) |
@@ -113,8 +122,10 @@ pipeline. `NEXT_PUBLIC_BACKEND_URL` / `FRONTEND_URL` feed `baseUrl()`.
   together.
 - Never bypass the composition bounds (`validateVideoComposition`, 60 s cap) — they are
   the resource-DoS boundary for attacker-controlled compositions.
-- Keep the idempotency invariants: `pending`-only gate in `processRenderJob`, `GETDEL`
-  claim in the processors, deterministic per-minute event ids, credit charged once after
+- Keep the idempotency invariants: `pending`-only gate in `processRenderJob`, the
+  single-winner claim in the processors (`SET NX` marker for design renders — never
+  delete the payload key before the encode concludes; `GETDEL` for merges),
+  deterministic per-minute event ids, credit charged once after
   confirmed completion. Do not wrap the render+charge in an interactive transaction.
 - Org-scope every status/artifact read (`getJob(orgId, jobId)` pattern); the Inngest
   entry points are job-id-only by necessity but must re-scope immediately.
