@@ -321,8 +321,10 @@ export class FfmpegVideoEncoderService {
       }
 
       filterParts.push(`adelay=delays=${delayMs}|${delayMs}:all=1`);
-      filterParts.push(`[p${index}]`);
-      filters.push(filterParts.join(','));
+      // The output pad label terminates the chain: appended WITHOUT a comma —
+      // `filter,[label]` parses as an empty filter and ffmpeg aborts with
+      // "No such filter: ''".
+      filters.push(`${filterParts.join(',')}[p${index}]`);
 
       inputs.push('-i', filePath);
     }
