@@ -23,7 +23,7 @@ import {
   type MeasureText,
 } from '@postmill-ai/nestjs-libraries/media/designer-doc/fit-text';
 import { useBrandColors } from './use-brand-colors';
-import { useBrandFonts, useCustomFonts } from './use-brand-fonts';
+import { useBrandFonts, useCustomFonts, useUploadCustomFont, fontServerRenderable } from './use-brand-fonts';
 import { useT } from '@postmill-ai/react/translation/get.transation.service.client';
 import {
   AlignCenterIcon,
@@ -268,6 +268,27 @@ export const TextFormatPanel: FC<TextFormatPanelProps> = ({ store }) => {
   const brandEnforcement = store((s) => s.brandEnforcement);
   const brandFonts = useBrandFonts();
   const { fonts: customFonts } = useCustomFonts();
+  // Same upload round trip as the Brand panel, surfaced here so adding a font
+  // doesn't mean leaving the picker for another panel.
+  const { upload: uploadCustomFont, uploading: fontUploading } = useUploadCustomFont();
+  const fontFileInputRef = useRef<HTMLInputElement>(null);
+
+  const hasNonServerFont = useMemo(
+    () => customFonts.some((f) => !fontServerRenderable(f)),
+    [customFonts]
+  );
+
+  const handleFontFileChange = useCallback(
+    async (e: React.ChangeEvent<HTMLInputElement>) => {
+      const file = e.target.files?.[0];
+      if (!file) return;
+      // The picker stays open: the uploaded family lands in the list via the
+      // SWR refresh the hook fires.
+      await uploadCustomFont(file);
+      if (fontFileInputRef.current) fontFileInputRef.current.value = '';
+    },
+    [uploadCustomFont]
+  );
 
   // Say so when the box is still forcing a smaller size than the field claims —
   // silence here is what made the Size field untrustworthy.
@@ -503,6 +524,31 @@ export const TextFormatPanel: FC<TextFormatPanelProps> = ({ store }) => {
                     })}
                   </div>
                 ))}
+              </div>
+              <div className="border-t border-studioBorder p-[4px]">
+                <input
+                  ref={fontFileInputRef}
+                  type="file"
+                  accept=".ttf,.otf,.woff2"
+                  onChange={handleFontFileChange}
+                  className="hidden"
+                  aria-label={t('designer_upload_font_input', 'Upload font file')}
+                />
+                <button
+                  type="button"
+                  disabled={fontUploading}
+                  onClick={() => fontFileInputRef.current?.click()}
+                  className="w-full text-left px-[10px] py-[8px] rounded-[6px] text-[12px] text-textColor/70 hover:bg-newBgColor hover:text-textColor transition-colors disabled:opacity-50"
+                >
+                  {fontUploading
+                    ? t('designer_uploading_ellipsis', 'Uploading...')
+                    : t('designer_upload_font_cta_short', '+ Upload font (.ttf, .otf, .woff2)')}
+                </button>
+                {hasNonServerFont && (
+                  <div className="px-[10px] pb-[6px] text-[10px] text-amber-400/80">
+                    {t('designer_woff2_server_render_note', 'WOFF2 fonts are not used in server-rendered exports')}
+                  </div>
+                )}
               </div>
             </div>
           )}

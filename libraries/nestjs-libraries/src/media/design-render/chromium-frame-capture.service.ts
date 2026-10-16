@@ -133,6 +133,9 @@ export class ChromiumFrameCaptureService {
           baseUrlLiteral: escapeForScriptTag(baseUrl),
           baseUrl,
           script: FRAME_RENDERER_SCRIPT,
+          // Direct mode carries no org context, so only catalog fonts can be
+          // linked here; org custom fonts reach the frame page through the
+          // render-frame route (the path real renders take) instead.
           fontLinks: fontLinksForOutput(output),
         });
 

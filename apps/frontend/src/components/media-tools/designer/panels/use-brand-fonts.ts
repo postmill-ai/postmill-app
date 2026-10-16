@@ -1,9 +1,11 @@
 'use client';
 
-import useSWR from 'swr';
+import useSWR, { useSWRConfig } from 'swr';
 import { useFetch } from '@postmill-ai/helpers/utils/custom.fetch';
 import { useUser } from '@postmill-ai/frontend/components/layout/user.context';
-import { useEffect } from 'react';
+import { useToaster } from '@postmill-ai/react/toaster/toaster';
+import { useT } from '@postmill-ai/react/translation/get.transation.service.client';
+import { useCallback, useEffect, useState } from 'react';
 
 export interface CustomFontEntry {
   family: string;
@@ -11,7 +13,18 @@ export interface CustomFontEntry {
   path: string;
   weights: number[];
   italic?: boolean;
+  /**
+   * False for WOFF2 uploads: the browser renders them, but node-canvas and the
+   * outline parser do not, so server-rendered exports fall back to another
+   * face. Absent on entries stored before the flag existed — those fall back
+   * to a path-extension check in `fontServerRenderable`.
+   */
+  serverRender?: boolean;
 }
+
+/** Whether a custom font can be used by server-side renderers (TTF/OTF only). */
+export const fontServerRenderable = (font: CustomFontEntry): boolean =>
+  font.serverRender ?? !/\.woff2(\?|#|$)/i.test(font.path || '');
 
 export const useBrandFonts = () => {
   const user = useUser();
@@ -78,4 +91,66 @@ export const useCustomFonts = (): {
   }, [fonts]);
 
   return { fonts, mutate: () => mutate() };
+};
+
+/**
+ * The font-upload round trip, shared by the Brand panel and the font picker so
+ * the two upload affordances validate, post and report identically. Refreshes
+ * the `useCustomFonts` SWR cache on success; resolves false when the upload
+ * was rejected or failed (the toast already says why).
+ */
+export const useUploadCustomFont = (): {
+  upload: (file: File) => Promise<boolean>;
+  uploading: boolean;
+} => {
+  const user = useUser();
+  const fetch = useFetch();
+  const toaster = useToaster();
+  const t = useT();
+  const { mutate } = useSWRConfig();
+  const [uploading, setUploading] = useState(false);
+
+  const upload = useCallback(
+    async (file: File): Promise<boolean> => {
+      const ext = file.name.split('.').pop()?.toLowerCase();
+      if (!ext || !['ttf', 'otf', 'woff2'].includes(ext)) {
+        toaster.show(t('designer_invalid_font_file_type', 'Invalid file type. Accepted: .ttf, .otf, .woff2'), 'warning');
+        return false;
+      }
+      if (file.size > 5 * 1024 * 1024) {
+        toaster.show(t('designer_font_file_too_large', 'Font file must be under 5MB'), 'warning');
+        return false;
+      }
+      setUploading(true);
+      try {
+        const form = new FormData();
+        form.append('file', file);
+        const res = await fetch('/media/fonts/upload', {
+          method: 'POST',
+          body: form,
+        });
+        if (!res.ok) {
+          const err = await res.json().catch(() => ({}));
+          toaster.show(err.message || t('designer_upload_failed', 'Upload failed'), 'warning');
+          return false;
+        }
+        const body = await res.json().catch(() => null);
+        if (body?.uploaded?.serverRender === false) {
+          toaster.show(
+            t('designer_font_uploaded_woff2_note', 'Font uploaded. WOFF2 fonts are not used in server-rendered exports.'),
+            'warning'
+          );
+        } else {
+          toaster.show(t('designer_font_uploaded', 'Font uploaded'), 'success');
+        }
+        if (user?.orgId) mutate(`custom-fonts-${user.orgId}`);
+        return true;
+      } finally {
+        setUploading(false);
+      }
+    },
+    [fetch, toaster, t, mutate, user?.orgId]
+  );
+
+  return { upload, uploading };
 };

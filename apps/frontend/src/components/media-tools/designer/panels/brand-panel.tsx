@@ -7,7 +7,7 @@ import { useUser } from '@postmill-ai/frontend/components/layout/user.context';
 import { useToaster } from '@postmill-ai/react/toaster/toaster';
 import { useT } from '@postmill-ai/react/translation/get.transation.service.client';
 import ProviderIcon from '@postmill-ai/frontend/components/shared/provider-icon';
-import { useCustomFonts, CustomFontEntry } from './use-brand-fonts';
+import { useCustomFonts, useUploadCustomFont, fontServerRenderable, CustomFontEntry } from './use-brand-fonts';
 import { getBrandViolations } from '../brand-compliance';
 import { useMediaPicker } from '../../use-media-picker';
 
@@ -43,7 +43,7 @@ export const BrandPanel: FC<BrandPanelProps> = ({ store }) => {
   const [saving, setSaving] = useState(false);
 
   const { fonts: customFonts, mutate: mutateCustomFonts } = useCustomFonts();
-  const [uploading, setUploading] = useState(false);
+  const { upload: uploadCustomFont, uploading } = useUploadCustomFont();
   const fileInputRef = React.useRef<HTMLInputElement>(null);
 
   const { data: brands, mutate } = useSWR<BrandProfile[]>(
@@ -267,36 +267,10 @@ export const BrandPanel: FC<BrandPanelProps> = ({ store }) => {
     async (e: React.ChangeEvent<HTMLInputElement>) => {
       const file = e.target.files?.[0];
       if (!file) return;
-      const ext = file.name.split('.').pop()?.toLowerCase();
-      if (!ext || !['ttf', 'otf', 'woff2'].includes(ext)) {
-        toaster.show(t('designer_invalid_font_file_type', 'Invalid file type. Accepted: .ttf, .otf, .woff2'), 'warning');
-        return;
-      }
-      if (file.size > 5 * 1024 * 1024) {
-        toaster.show(t('designer_font_file_too_large', 'Font file must be under 5MB'), 'warning');
-        return;
-      }
-      setUploading(true);
-      try {
-        const form = new FormData();
-        form.append('file', file);
-        const res = await fetch('/media/fonts/upload', {
-          method: 'POST',
-          body: form,
-        });
-        if (!res.ok) {
-          const err = await res.json().catch(() => ({}));
-          toaster.show(err.message || t('designer_upload_failed', 'Upload failed'), 'warning');
-          return;
-        }
-        toaster.show(t('designer_font_uploaded', 'Font uploaded'), 'success');
-        mutateCustomFonts();
-      } finally {
-        setUploading(false);
-        if (fileInputRef.current) fileInputRef.current.value = '';
-      }
+      await uploadCustomFont(file);
+      if (fileInputRef.current) fileInputRef.current.value = '';
     },
-    [fetch, toaster, mutateCustomFonts]
+    [uploadCustomFont]
   );
 
   const handleFontDelete = useCallback(
@@ -664,19 +638,26 @@ export const BrandPanel: FC<BrandPanelProps> = ({ store }) => {
                 key={f.fileId}
                 className="flex items-center justify-between px-3 py-2 rounded-[6px] border border-studioBorder bg-newBgColorInner"
               >
-                <button
-                  type="button"
-                  onClick={() => handleFontClick(f.family)}
-                  disabled={!selectedElement || selectedElement.type !== 'text'}
-                  className={`text-left flex-1 text-[13px] truncate ${
-                    !selectedElement || selectedElement.type !== 'text'
-                      ? 'text-textColor/60'
-                      : 'text-textColor hover:text-btnPrimaryAccent cursor-pointer'
-                  }`}
-                  style={{ fontFamily: `"${f.family}"` }}
-                >
-                  {f.family}
-                </button>
+                <div className="flex-1 min-w-0">
+                  <button
+                    type="button"
+                    onClick={() => handleFontClick(f.family)}
+                    disabled={!selectedElement || selectedElement.type !== 'text'}
+                    className={`text-left w-full text-[13px] truncate ${
+                      !selectedElement || selectedElement.type !== 'text'
+                        ? 'text-textColor/60'
+                        : 'text-textColor hover:text-btnPrimaryAccent cursor-pointer'
+                    }`}
+                    style={{ fontFamily: `"${f.family}"` }}
+                  >
+                    {f.family}
+                  </button>
+                  {!fontServerRenderable(f) && (
+                    <div className="text-[10px] text-amber-400/80">
+                      {t('designer_font_no_server_render', 'Not used in server-rendered exports (WOFF2)')}
+                    </div>
+                  )}
+                </div>
                 <button
                   type="button"
                   onClick={() => handleFontDelete(f)}

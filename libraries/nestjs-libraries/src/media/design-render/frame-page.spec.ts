@@ -120,3 +120,53 @@ describe('frame renderer inlined copies', () => {
     expect(FRAME_RENDERER_SCRIPT).toContain('output.bg.gradient.stops');
   });
 });
+
+describe('custom font injection', () => {
+  it('emits one @font-face rule per weight for an org font the composition uses', () => {
+    const html = fontLinksForOutput(
+      { tracks: [{ clips: [{ type: 'text', fontFamily: 'Acme Brand Sans', fontWeight: 700 }] }] },
+      [
+        {
+          family: 'Acme Brand Sans',
+          path: '/uploads/org1/acme.woff2',
+          weights: [400, 700],
+        },
+      ]
+    );
+    // Chromium loads WOFF2 fine — the server-side sfnt-only limit does not
+    // apply to the frame page.
+    expect(html).toContain('src:url("/uploads/org1/acme.woff2")');
+    expect(html.match(/font-family:"Acme Brand Sans"/g)).toHaveLength(2);
+    expect(html).toContain('font-weight:400');
+    expect(html).toContain('font-weight:700');
+  });
+
+  it('marks italic uploads and defaults the weight to 400', () => {
+    const html = fontLinksForOutput(
+      { clips: [{ fontFamily: 'Scripto' }] },
+      [{ family: 'Scripto', path: '/uploads/org1/scripto.ttf', italic: true }]
+    );
+    expect(html).toContain('font-weight:400;font-style:italic');
+  });
+
+  it('skips org fonts the composition never names', () => {
+    const html = fontLinksForOutput({ clips: [{ fontFamily: 'Inter' }] }, [
+      { family: 'Unused Face', path: '/uploads/org1/unused.ttf' },
+    ]);
+    expect(html).not.toContain('@font-face');
+  });
+
+  it('cannot break out of the <style> block through a hostile family or path', () => {
+    const family = 'Evil"</style><script>alert(1)</script>';
+    const html = fontLinksForOutput({ clips: [{ fontFamily: family }] }, [
+      { family, path: '/uploads/x.ttf"><script>', weights: [400] },
+    ]);
+    expect(html).not.toContain('<script>');
+    // The single closing tag is the block's own.
+    expect(html.match(/<\/style>/g)).toHaveLength(1);
+  });
+
+  it('still emits nothing at all when the composition uses no fonts', () => {
+    expect(fontLinksForOutput({ clips: [{ type: 'image' }] }, [])).toBe('');
+  });
+});

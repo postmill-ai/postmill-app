@@ -31,6 +31,23 @@ export const fontsUsedInOutput = (output: unknown): Map<string, Set<number>> => 
     used.get(family)!.add(typeof weight === 'number' ? weight : 400);
   };
 
+  walkFontUsage(output, note);
+  return used;
+};
+
+/** Every family named anywhere in the composition, catalog or not. */
+export const fontFamiliesUsedInOutput = (output: unknown): Set<string> => {
+  const families = new Set<string>();
+  walkFontUsage(output, (family) => {
+    if (typeof family === 'string' && family) families.add(family);
+  });
+  return families;
+};
+
+const walkFontUsage = (
+  output: unknown,
+  note: (family?: unknown, weight?: unknown) => void,
+): void => {
   const walk = (node: unknown): void => {
     if (Array.isArray(node)) {
       node.forEach(walk);
@@ -45,12 +62,39 @@ export const fontsUsedInOutput = (output: unknown): Map<string, Set<number>> => 
   };
 
   walk(output);
-  return used;
 };
 
-/** `<link>` tags for the families a composition uses, or '' when it uses none. */
-export const fontLinksForOutput = (output: unknown): string =>
-  [...fontsUsedInOutput(output).entries()]
+/** An org-uploaded font the frame page can load straight from its storage URL. */
+export interface FrameCustomFont {
+  family: string;
+  path: string;
+  weights?: number[];
+  italic?: boolean;
+}
+
+/**
+ * Neutralize a value before it lands inside a CSS string in a `<style>` block:
+ * quotes, backslashes, angle brackets and newlines are how a family name or
+ * storage path would break out of the rule (or the block) into markup.
+ */
+const cssStringSafe = (value: string): string =>
+  value.replace(/["'\\<>\n\r]/g, '');
+
+/**
+ * `<link>` tags for the catalog families a composition uses, plus `@font-face`
+ * rules for the org's custom uploads it uses (or '' when it uses neither).
+ *
+ * The frame page runs in Chromium, which loads WOFF2 as happily as TTF/OTF —
+ * the server-side WOFF2 limitation (node-canvas, outline extraction) does not
+ * apply here, so custom fonts are injected whatever their format. The rules go
+ * through `document.fonts.ready`, which `buildFramePage` awaits before
+ * announcing the frame API, so no frame paints in a fallback face.
+ */
+export const fontLinksForOutput = (
+  output: unknown,
+  customFonts: FrameCustomFont[] = [],
+): string => {
+  const links = [...fontsUsedInOutput(output).entries()]
     .map(([family, weights]) => {
       const resolved = catalogWeights(family, [...weights]);
       if (!resolved.length) return '';
@@ -59,6 +103,24 @@ export const fontLinksForOutput = (output: unknown): string =>
     })
     .filter(Boolean)
     .join('');
+
+  const usedFamilies = fontFamiliesUsedInOutput(output);
+  const faces = customFonts
+    .filter((f) => f && typeof f.family === 'string' && typeof f.path === 'string' && usedFamilies.has(f.family))
+    .flatMap((f) => {
+      const family = cssStringSafe(f.family);
+      const src = cssStringSafe(f.path);
+      if (!family || !src) return [];
+      const weights = f.weights?.length ? f.weights : [400];
+      const style = f.italic ? 'italic' : 'normal';
+      return weights.map(
+        (weight) =>
+          `@font-face{font-family:"${family}";src:url("${src}");font-weight:${weight};font-style:${style};font-display:swap;}`,
+      );
+    });
+
+  return faces.length ? `${links}<style>${faces.join('')}</style>` : links;
+};
 
 export interface FramePageOptions {
   /** The composition, already escaped for a script tag. */
@@ -71,7 +133,7 @@ export interface FramePageOptions {
   script: string;
   /** Preload and draw this frame as soon as the page is ready (preview route). */
   initialFrame?: number;
-  /** Font `<link>` tags — pass `fontLinksForOutput(output)`. */
+  /** Font `<link>`/`<style>` tags — pass `fontLinksForOutput(output, customFonts)`. */
   fontLinks: string;
 }
 

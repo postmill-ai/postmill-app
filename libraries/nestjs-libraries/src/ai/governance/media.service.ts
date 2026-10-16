@@ -693,7 +693,7 @@ export class AiMediaService {
   async uploadFont(
     orgId: string,
     file: Express.Multer.File,
-  ): Promise<{ fonts: any[]; uploaded: { family: string; fileId: string; path: string; weights: number[]; italic?: boolean } }> {
+  ): Promise<{ fonts: any[]; uploaded: { family: string; fileId: string; path: string; weights: number[]; italic?: boolean; serverRender: boolean } }> {
     if (!this._storageService || !this._brandsService) {
       throw new Error('Storage/brands services are not available');
     }
@@ -718,6 +718,11 @@ export class AiMediaService {
       path: uploaded.path,
       weights: [meta.weight ?? 400],
       ...(meta.italic ? { italic: true } : {}),
+      // WOFF2 loads in the browser (Designer canvas, Chromium frame page) but
+      // not in node-canvas / the outline parser — flag it so the UI can warn
+      // that server-rendered exports fall back to another face. The flag is
+      // stored with the entry, so `GET /media/fonts` carries it too.
+      serverRender: ext !== 'woff2',
     };
 
     const fonts = await this._brandsService.addCustomFont(orgId, fontEntry);

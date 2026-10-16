@@ -53,7 +53,7 @@ import { FullscreenButton } from '@postmill-ai/frontend/components/media-tools/f
 import { useFullscreenSurface } from '@postmill-ai/frontend/components/media-tools/use-fullscreen';
 import { getBrandViolations } from './brand-compliance';
 import { useBrandColors } from './panels/use-brand-colors';
-import { useBrandFonts } from './panels/use-brand-fonts';
+import { useBrandFonts, useCustomFonts } from './panels/use-brand-fonts';
 import { useUser } from '@postmill-ai/frontend/components/layout/user.context';
 import { KebabMenu } from '@postmill-ai/frontend/components/ui/kebab-menu';
 import { DropdownArrowIcon } from '@postmill-ai/frontend/components/ui/icons';
@@ -283,6 +283,11 @@ export const Designer: FC<DesignerProps> = ({
   });
   const brandColors = useBrandColors();
   const brandFonts = useBrandFonts();
+  // Mounted at the Designer root (not just in the panels that list fonts) so
+  // reopening a saved design paints its custom-font glyphs immediately, before
+  // any panel is visited. The hook's FontFaceSet guard makes the panels' own
+  // mounts of it no-ops, and its effect re-runs when the font list changes.
+  useCustomFonts();
   const storeRef = useRef<ReturnType<typeof createDesignerStore> | null>(null);
 
   // Destructure to keep dependency arrays primitive and avoid stale closures

@@ -147,7 +147,7 @@ export class BrandsRepository {
 
   async addCustomFont(
     organizationId: string,
-    font: { family: string; fileId: string; path: string; weights: number[]; italic?: boolean }
+    font: { family: string; fileId: string; path: string; weights: number[]; italic?: boolean; serverRender?: boolean }
   ) {
     const brand = await this.getDefaultBrand(organizationId) || await this.getFirstBrand(organizationId);
     if (!brand) return [];

@@ -101,7 +101,7 @@ export class BrandsService {
     return this._repository.getCustomFonts(orgId);
   }
 
-  addCustomFont(orgId: string, font: { family: string; fileId: string; path: string; weights: number[] }) {
+  addCustomFont(orgId: string, font: { family: string; fileId: string; path: string; weights: number[]; italic?: boolean; serverRender?: boolean }) {
     return this._repository.addCustomFont(orgId, font);
   }
 

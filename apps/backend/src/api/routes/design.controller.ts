@@ -25,6 +25,7 @@ import { RequirePermission } from '@postmill-ai/backend/services/auth/rbac/requi
 import { safeFetch } from '@postmill-ai/nestjs-libraries/dtos/webhooks/safe.fetch';
 import { FileService } from '@postmill-ai/nestjs-libraries/database/prisma/file/file.service';
 import { DesignRenderService } from '@postmill-ai/nestjs-libraries/media/design-render/design-render.service';
+import { BrandsService } from '@postmill-ai/nestjs-libraries/brands/brands.service';
 import { DesignBulkService } from '@postmill-ai/nestjs-libraries/media/design-render/design-bulk.service';
 import { VideoRenderService } from '@postmill-ai/nestjs-libraries/media/design-render/video-render.service';
 import {
@@ -493,6 +494,8 @@ export class DesignerProxyController {
 @ApiTags('Design Render')
 @Controller('/media/designs')
 export class DesignRenderFrameController {
+  constructor(private _brandsService: BrandsService) {}
+
   @Get('/render-frame/:jobId')
   async renderFrame(
     @Param('jobId') jobId: string,
@@ -536,13 +539,19 @@ export class DesignRenderFrameController {
       'http://localhost:3000';
     const initialFrame = frame ? Number(frame) : undefined;
 
+    // Org custom fonts join the catalog `<link>`s as @font-face rules — a
+    // caption set in an uploaded brand font otherwise painted in Chromium's
+    // default sans. The orgId came from the signed render payload, so this
+    // read stays inside the rendering org's own font list.
+    const customFonts = await this._brandsService.getCustomFonts(orgId).catch(() => []);
+
     const html = buildFramePage({
       outputLiteral: escapeForScriptTag(output),
       baseUrlLiteral: escapeForScriptTag(baseUrl),
       baseUrl,
       script: FRAME_RENDERER_SCRIPT,
       initialFrame,
-      fontLinks: fontLinksForOutput(output),
+      fontLinks: fontLinksForOutput(output, customFonts),
     });
 
     res.setHeader('Content-Type', 'text/html');

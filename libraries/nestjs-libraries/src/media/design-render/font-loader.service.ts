@@ -178,18 +178,30 @@ export class FontLoaderService {
         const tmpPath = path.join(this._tempDir, `${safeFileId(font.fileId)}${ext}`);
         await fs.writeFile(tmpPath, buffer);
 
-        registerFont(tmpPath, { family: font.family, weight: String(font.weights?.[0] || '400') });
+        // Register EVERY weight the upload claims, not just the first — the
+        // file is one cut, so the extra weights alias the same glyphs (the
+        // pattern `preregisterDefaultWeights` already follows). Registering
+        // only weights[0] left a design set in the other weight painting in
+        // the fallback face on server renders.
+        const weights = font.weights?.length ? font.weights : [400];
+        for (const weight of weights) {
+          try {
+            registerFont(tmpPath, { family: font.family, weight: String(weight) });
+            boundedCacheSet(
+              this._files,
+              `org:${orgId}:${font.family}|${weight}`,
+              tmpPath,
+              FontLoaderService.MAX_FONT_CACHE_ENTRIES
+            );
+          } catch (err) {
+            this._logger.warn(`Failed to register weight ${weight} of ${font.family}: ${(err as Error)?.message}`);
+          }
+        }
 
         boundedCacheSet(
           this._cache,
           cacheKey,
           { family: font.family, filePath: tmpPath },
-          FontLoaderService.MAX_FONT_CACHE_ENTRIES
-        );
-        boundedCacheSet(
-          this._files,
-          `org:${orgId}:${font.family}|${font.weights?.[0] || 400}`,
-          tmpPath,
           FontLoaderService.MAX_FONT_CACHE_ENTRIES
         );
         this._logger.log(`Registered font ${font.family} for org ${orgId}`);
@@ -210,7 +222,9 @@ export class FontLoaderService {
       const cacheKey = `${orgId}:${font.fileId}:${weight}`;
       if (this._cache.has(cacheKey)) continue;
 
-      if (weight === (font.weights?.[0] || 400)) continue;
+      // loadOrgFonts now registers every uploaded weight under the same tmp
+      // file; re-registering it here would double-register the face.
+      if (this._files.has(`org:${orgId}:${font.family}|${weight}`)) continue;
 
       try {
         const res = await safeFetch(font.path);
@@ -363,9 +377,17 @@ export class FontLoaderService {
   /**
    * The file backing one family + weight, downloading it first if need be.
    *
-   * Returns null for a family that could not be fetched, and for a WOFF2 —
-   * whose tables are Brotli-compressed, so an outline parser would read
-   * nonsense. Saying "not available" beats emitting wrong glyphs.
+   * WOFF2 policy: upload accepts .woff2 because the BROWSER loads it fine
+   * (FontFace in the Designer, @font-face in the Chromium frame page), but
+   * node-canvas `registerFont` and the outline parser here only understand
+   * plain sfnt (TTF/OTF) — a WOFF2's tables are Brotli-compressed, so an
+   * outline parser would read nonsense. `loadOrgFonts` still downloads the
+   * file; where node-canvas rejects it at `registerFont`, that failure is
+   * caught and logged like any other unloadable font, and this method —
+   * which feeds glyph-contour extraction — returns null for it.
+   * Saying "not available" beats emitting wrong glyphs. The upload response
+   * flags such fonts with `serverRender: false` so the UI can warn that
+   * server-rendered exports will fall back to another face.
    */
   async resolveFontFile(
     orgId: string,
