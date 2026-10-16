@@ -27,9 +27,26 @@ const RENDER_PAYLOAD_TTL_SECONDS = 24 * 60 * 60;
  * (chromium-frame-capture.service.ts) does one page.evaluate + one PNG screenshot
  * per frame — ~150 ms/frame at 1080p. A 60 s @ 30 fps composition is 1800 frames
  * ≈ 270 s, which blows past the 120 s default, so the budget scales with frames.
- * Exported for unit testing.
+ * The budget is further multiplied by scale² — a 2× export rasterizes and
+ * PNG-encodes 4× the pixels per frame. Exported for unit testing.
  */
 export const PER_FRAME_CAPTURE_BUDGET_MS = 150;
+
+/**
+ * Wall-clock budget for one render: max(env floor, frames × per-frame budget × scale²).
+ * scale² because a 2× export rasterizes and PNG-encodes 4× the pixels per frame.
+ */
+export function computeRenderTimeoutMs(
+  durationMs: number,
+  fps: number,
+  scale = 1,
+): number {
+  const frames = Math.max(1, Math.ceil((durationMs / 1000) * fps));
+  return Math.max(
+    getRenderTimeoutMs(),
+    Math.ceil(frames * PER_FRAME_CAPTURE_BUDGET_MS * scale * scale),
+  );
+}
 
 function payloadKey(jobId: string): string {
   return `video-render:payload:${jobId}`;
@@ -309,12 +326,9 @@ export class VideoRenderService {
 
       // Scale the wall-clock budget with the frame count (see
       // PER_FRAME_CAPTURE_BUDGET_MS): the env floor alone cannot fit a long
-      // composition's sequential frame captures. Applies to both render paths.
-      const frames = Math.max(1, Math.ceil((durationMs / 1000) * fps));
-      const renderTimeoutMs = Math.max(
-        getRenderTimeoutMs(),
-        frames * PER_FRAME_CAPTURE_BUDGET_MS,
-      );
+      // composition's sequential frame captures, and the per-frame budget
+      // scales with pixel area (scale²). Applies to both render paths.
+      const renderTimeoutMs = computeRenderTimeoutMs(durationMs, fps, scale);
 
       let videoPath: string;
       let thumbnailPath: string;

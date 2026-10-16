@@ -422,4 +422,23 @@ describe('VideoRenderService', () => {
       ).resolves.toBe('done');
     });
   });
+
+  describe('computeRenderTimeoutMs', () => {
+    it('scales with frames at 1× and with the pixel area at 2×', async () => {
+      const { computeRenderTimeoutMs } = await import('./video-render.service');
+      // 60s@30fps: 1800 frames × 150ms = 270s — above the 120s env floor.
+      const base = computeRenderTimeoutMs(60000, 30, 1);
+      // Same duration at 60fps and 2× scale: 2× frames × 4× pixels = 8×.
+      const scaled = computeRenderTimeoutMs(60000, 60, 2);
+      expect(base).toBe(1800 * 150);
+      expect(scaled).toBe(8 * base);
+    });
+
+    it('never goes below the env floor for tiny compositions', async () => {
+      const { computeRenderTimeoutMs } = await import('./video-render.service');
+      expect(computeRenderTimeoutMs(1000, 24, 0.5)).toBeGreaterThanOrEqual(
+        120_000,
+      );
+    });
+  });
 });
