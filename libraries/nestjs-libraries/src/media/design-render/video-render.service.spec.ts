@@ -170,7 +170,10 @@ describe('VideoRenderService', () => {
       'EX',
       24 * 60 * 60,
     );
-    expect(vi.mocked(ioRedis.del)).toHaveBeenCalledWith('video-render:payload:job-1');
+    expect(vi.mocked(ioRedis.del)).toHaveBeenCalledWith(
+      'video-render:payload:job-1',
+      'video-render:claim:job-1',
+    );
 
     expect(aiSettings.updateMediaJob).toHaveBeenCalledWith(orgId, 'job-1', {
       status: 'processing',
