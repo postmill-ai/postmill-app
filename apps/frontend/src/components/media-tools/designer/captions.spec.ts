@@ -249,6 +249,23 @@ describe('parseSubtitles', () => {
     const srt = '\uFEFF1\r\n00:00:02,000 --> 00:00:01,000\r\nInverted\r\n\r\n2\r\n00:00:02,000 --> 00:00:03,000\r\nGood\r\n';
     expect(parseSubtitles(srt)).toEqual([{ startMs: 2000, endMs: 3000, text: 'Good' }]);
   });
+
+  it('sanitizes tags safely: no double-decode, no partial-tag revival, literal < kept', () => {
+    // &amp;lt; must decode once to "&lt;" — never to "<" (double-escaping).
+    // <scr<script>ipt> must not leave a working "<script>" behind (incomplete
+    // multi-character sanitization). A bare "5 < 6" keeps its bracket.
+    const vtt = [
+      'WEBVTT',
+      '',
+      '00:00:01.000 --> 00:00:02.000',
+      'A &amp;lt; B <scr<script>ipt> C 5 < 6',
+      '',
+    ].join('\n');
+    const [cue] = parseSubtitles(vtt);
+    expect(cue.text).not.toContain('<script>');
+    expect(cue.text).toContain('&lt;'); // single decode only
+    expect(cue.text).toContain('5 < 6'); // literal angle bracket survives
+  });
 });
 
 describe('cuesToCaptionClips', () => {

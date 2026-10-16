@@ -188,15 +188,29 @@ export const parseSubtitleTimestamp = (raw: string): number | null => {
   return ((hours * 60 + minutes) * 60 + seconds) * 1000 + millis;
 };
 
-const stripCueTags = (text: string): string =>
-  text
-    .replace(/<[^>]+>/g, '')
-    .replace(/&amp;/g, '&')
+const stripCueTags = (text: string): string => {
+  // Strip inline <tags> with a state machine — a regex like /<[^>]+>/g is
+  // unsafe on malformed input (e.g. `<scr<script>ipt>` survives one pass).
+  // Entity decode afterwards with &amp; LAST so `&amp;lt;` doesn't
+  // double-decode into `<`.
+  let out = '';
+  let inTag = false;
+  for (let i = 0; i < text.length; i++) {
+    const ch = text[i];
+    // A `<` only opens a tag when followed by a letter, `/` or `!` —
+    // otherwise it's a literal angle bracket in the caption text.
+    if (ch === '<' && /[a-zA-Z/!]/.test(text[i + 1] ?? '')) inTag = true;
+    else if (ch === '>' && inTag) inTag = false;
+    else if (!inTag) out += ch;
+  }
+  return out
     .replace(/&lt;/g, '<')
     .replace(/&gt;/g, '>')
     .replace(/&quot;/g, '"')
     .replace(/&#39;/g, "'")
+    .replace(/&amp;/g, '&')
     .trim();
+};
 
 /**
  * Parse SRT or VTT content into cues. Handles the WEBVTT header, NOTE
