@@ -236,6 +236,61 @@ describe('StockMediaService', () => {
     });
   });
 
+  describe('network-level fetch failure degrades gracefully (POSTMILL-APP-11)', () => {
+    it('searchPhotos resolves to the degraded shape instead of rejecting', async () => {
+      process.env.UNSPLASH_ACCESS_KEY = 'secret-key';
+      mockSafeFetch.mockRejectedValue(new TypeError('fetch failed'));
+      const { service } = makeService();
+
+      const result = await service.searchPhotos('org-1', 'cats', 1);
+
+      expect(result.results).toEqual([]);
+      expect(result.configured).toBe(true);
+      expect(result.source).toBe('unsplash');
+      expect(result.error).toBe('unsplash request failed (network or invalid response)');
+    });
+
+    it('searchVideos resolves to the degraded shape instead of rejecting', async () => {
+      process.env.PEXELS_API_KEY = 'secret-key';
+      mockSafeFetch.mockRejectedValue(new TypeError('fetch failed'));
+      const { service } = makeService();
+
+      const result = await service.searchVideos('org-1', 'cats', 1);
+
+      expect(result.results).toEqual([]);
+      expect(result.configured).toBe(true);
+      expect(result.source).toBe('pexels');
+      expect(result.error).toBe('pexels request failed (network or invalid response)');
+    });
+
+    it('getRelatedPhotos resolves to [] instead of rejecting', async () => {
+      process.env.UNSPLASH_ACCESS_KEY = 'secret-key';
+      mockSafeFetch.mockRejectedValue(new TypeError('fetch failed'));
+      const { service } = makeService();
+
+      await expect(service.getRelatedPhotos('abc')).resolves.toEqual([]);
+    });
+
+    it('getRelatedVideos resolves to [] instead of rejecting', async () => {
+      process.env.PEXELS_API_KEY = 'secret-key';
+      mockSafeFetch.mockRejectedValue(new TypeError('fetch failed'));
+      const { service } = makeService();
+
+      await expect(service.getRelatedVideos('123')).resolves.toEqual([]);
+    });
+
+    it('triggerDownload never throws on a network failure', async () => {
+      process.env.UNSPLASH_ACCESS_KEY = 'secret-key';
+      mockSafeFetch.mockRejectedValue(new TypeError('fetch failed'));
+      const { service } = makeService();
+
+      await expect(
+        service.triggerDownload('https://api.unsplash.com/photos/abc/download?ixid=1'),
+      ).resolves.toBeUndefined();
+      expect(mockSafeFetch).toHaveBeenCalledTimes(1);
+    });
+  });
+
   describe('C3 — brand/adult safety on the Unsplash photo search', () => {
     it('sends content_filter=high on every photo search', async () => {
       process.env.UNSPLASH_ACCESS_KEY = 'secret-key';

@@ -106,62 +106,76 @@ export class StockMediaService {
 
     const cacheKey = this.buildCacheKey('unsplash', 'photos', query, page, orientation, color);
     return this.withCache(cacheKey, async () => {
-      if (!query) {
-        const params = new URLSearchParams({ page: String(page), per_page: '20' });
+      try {
+        if (!query) {
+          const params = new URLSearchParams({ page: String(page), per_page: '20' });
+          if (orientation) params.set('orientation', orientation);
+          const res = await safeFetch(`https://api.unsplash.com/photos?${params}`, {
+            headers: { Authorization: `Client-ID ${this.unsplashKey}` },
+          });
+          if (!res.ok) {
+            return { results: [], page, totalPages: 0, configured: true, source: 'unsplash', error: `unsplash request failed (HTTP ${res.status})` };
+          }
+          const data = await res.json();
+          const photos = Array.isArray(data) ? data : [];
+          return {
+            results: photos.map(this.mapUnsplashPhoto.bind(this)),
+            page,
+            totalPages: 100,
+            configured: true,
+            source: 'unsplash',
+          };
+        }
+
+        const params = new URLSearchParams({
+          query,
+          page: String(page),
+          per_page: '20',
+          content_filter: UNSPLASH_CONTENT_FILTER,
+        });
         if (orientation) params.set('orientation', orientation);
-        const res = await safeFetch(`https://api.unsplash.com/photos?${params}`, {
+        if (color) params.set('color', color);
+        const res = await safeFetch(`https://api.unsplash.com/search/photos?${params}`, {
           headers: { Authorization: `Client-ID ${this.unsplashKey}` },
         });
         if (!res.ok) {
           return { results: [], page, totalPages: 0, configured: true, source: 'unsplash', error: `unsplash request failed (HTTP ${res.status})` };
         }
-        const data = await res.json();
-        const photos = Array.isArray(data) ? data : [];
+        const data = (await res.json()) as any;
         return {
-          results: photos.map(this.mapUnsplashPhoto.bind(this)),
+          results: (data.results || []).map(this.mapUnsplashPhoto.bind(this)),
           page,
-          totalPages: 100,
+          totalPages: data.total_pages || 0,
           configured: true,
           source: 'unsplash',
         };
+      } catch (err) {
+        // A key IS configured (we passed the guard above) — a thrown failure is
+        // network/parse-level, so report it as a provider error, not as
+        // "not configured" (mirrors the jamendo catch below).
+        this._logger.warn(`Unsplash photo search failed: ${(err as Error).message}`);
+        return { results: [], page, totalPages: 0, configured: true, source: 'unsplash', error: 'unsplash request failed (network or invalid response)' };
       }
-
-      const params = new URLSearchParams({
-        query,
-        page: String(page),
-        per_page: '20',
-        content_filter: UNSPLASH_CONTENT_FILTER,
-      });
-      if (orientation) params.set('orientation', orientation);
-      if (color) params.set('color', color);
-      const res = await safeFetch(`https://api.unsplash.com/search/photos?${params}`, {
-        headers: { Authorization: `Client-ID ${this.unsplashKey}` },
-      });
-      if (!res.ok) {
-        return { results: [], page, totalPages: 0, configured: true, source: 'unsplash', error: `unsplash request failed (HTTP ${res.status})` };
-      }
-      const data = (await res.json()) as any;
-      return {
-        results: (data.results || []).map(this.mapUnsplashPhoto.bind(this)),
-        page,
-        totalPages: data.total_pages || 0,
-        configured: true,
-        source: 'unsplash',
-      };
     });
   }
 
   async getRelatedPhotos(photoId: string): Promise<StockPhotoItem[]> {
     if (!this.unsplashKey) return [];
-    const res = await safeFetch(
-      `https://api.unsplash.com/photos/${encodeURIComponent(photoId)}/related`,
-      {
-        headers: { Authorization: `Client-ID ${this.unsplashKey}` },
-      }
-    );
-    if (!res.ok) return [];
-    const data = (await res.json()) as any;
-    return (data.results || []).map(this.mapUnsplashPhoto.bind(this));
+    try {
+      const res = await safeFetch(
+        `https://api.unsplash.com/photos/${encodeURIComponent(photoId)}/related`,
+        {
+          headers: { Authorization: `Client-ID ${this.unsplashKey}` },
+        }
+      );
+      if (!res.ok) return [];
+      const data = (await res.json()) as any;
+      return (data.results || []).map(this.mapUnsplashPhoto.bind(this));
+    } catch (err) {
+      // Related items are a nice-to-have — a network blip must not 500 the modal.
+      this._logger.warn(`Unsplash related-photos lookup failed: ${(err as Error).message}`);
+      return [];
+    }
   }
 
   // ── Videos ─────────────────────────────────────────────────
@@ -195,43 +209,54 @@ export class StockMediaService {
 
     const cacheKey = this.buildCacheKey('pexels', 'videos', query, page, orientation, size);
     return this.withCache(cacheKey, async () => {
-      const endpoint = query
-        ? 'https://api.pexels.com/videos/search'
-        : 'https://api.pexels.com/videos/popular';
-      const params = new URLSearchParams({ page: String(page), per_page: '15' });
-      if (query) params.set('query', query);
-      if (orientation) params.set('orientation', orientation);
-      if (size) params.set('size', size);
-      const res = await safeFetch(`${endpoint}?${params}`, {
-        headers: { Authorization: this.pexelsKey! },
-      });
-      if (!res.ok) {
-        return { results: [], page, totalPages: 0, configured: true, source: 'pexels', error: `pexels request failed (HTTP ${res.status})` };
+      try {
+        const endpoint = query
+          ? 'https://api.pexels.com/videos/search'
+          : 'https://api.pexels.com/videos/popular';
+        const params = new URLSearchParams({ page: String(page), per_page: '15' });
+        if (query) params.set('query', query);
+        if (orientation) params.set('orientation', orientation);
+        if (size) params.set('size', size);
+        const res = await safeFetch(`${endpoint}?${params}`, {
+          headers: { Authorization: this.pexelsKey! },
+        });
+        if (!res.ok) {
+          return { results: [], page, totalPages: 0, configured: true, source: 'pexels', error: `pexels request failed (HTTP ${res.status})` };
+        }
+        const data = (await res.json()) as any;
+        return {
+          results: (data.videos || []).map(this.mapPexelsVideo.bind(this)),
+          page,
+          totalPages: Math.ceil((data.total_results || 0) / 15),
+          configured: true,
+          source: 'pexels',
+        };
+      } catch (err) {
+        this._logger.warn(`Pexels video search failed: ${(err as Error).message}`);
+        return { results: [], page, totalPages: 0, configured: true, source: 'pexels', error: 'pexels request failed (network or invalid response)' };
       }
-      const data = (await res.json()) as any;
-      return {
-        results: (data.videos || []).map(this.mapPexelsVideo.bind(this)),
-        page,
-        totalPages: Math.ceil((data.total_results || 0) / 15),
-        configured: true,
-        source: 'pexels',
-      };
     });
   }
 
   async getRelatedVideos(videoId: string): Promise<StockVideoItem[]> {
     if (!this.pexelsKey) return [];
-    const res = await safeFetch(
-      `https://api.pexels.com/videos/videos/${encodeURIComponent(videoId)}`,
-      {
-        headers: { Authorization: this.pexelsKey },
-      }
-    );
-    if (!res.ok) return [];
-    const video = (await res.json()) as any;
-    if (!video || !video.id) return [];
+    try {
+      const res = await safeFetch(
+        `https://api.pexels.com/videos/videos/${encodeURIComponent(videoId)}`,
+        {
+          headers: { Authorization: this.pexelsKey },
+        }
+      );
+      if (!res.ok) return [];
+      const video = (await res.json()) as any;
+      if (!video || !video.id) return [];
 
-    return this.searchVideosFree(video.url?.split('/').pop() || '', 1).then((r) => r.results);
+      return this.searchVideosFree(video.url?.split('/').pop() || '', 1).then((r) => r.results);
+    } catch (err) {
+      // Related items are a nice-to-have — a network blip must not 500 the modal.
+      this._logger.warn(`Pexels related-videos lookup failed: ${(err as Error).message}`);
+      return [];
+    }
   }
 
   // ── Vectors (Pixabay) ──────────────────────────────────────
@@ -265,32 +290,37 @@ export class StockMediaService {
 
     const cacheKey = this.buildCacheKey('pixabay', 'vectors', query, page, orientation, color);
     return this.withCache(cacheKey, async () => {
-      const params = new URLSearchParams({
-        key: this.pixabayKey!,
-        q: query || '',
-        page: String(page),
-        per_page: '20',
-        image_type: 'vector',
-        safesearch: 'true',
-      });
-      if (orientation) params.set('orientation', orientation);
-      if (color) params.set('colors', color);
+      try {
+        const params = new URLSearchParams({
+          key: this.pixabayKey!,
+          q: query || '',
+          page: String(page),
+          per_page: '20',
+          image_type: 'vector',
+          safesearch: 'true',
+        });
+        if (orientation) params.set('orientation', orientation);
+        if (color) params.set('colors', color);
 
-      const res = await safeFetch(`https://pixabay.com/api/?${params}`);
-      if (!res.ok) {
-        return { results: [], page, totalPages: 0, configured: true, source: 'pixabay', error: `pixabay request failed (HTTP ${res.status})` };
+        const res = await safeFetch(`https://pixabay.com/api/?${params}`);
+        if (!res.ok) {
+          return { results: [], page, totalPages: 0, configured: true, source: 'pixabay', error: `pixabay request failed (HTTP ${res.status})` };
+        }
+        const data = (await res.json()) as any;
+        const hits = Array.isArray(data?.hits) ? data.hits : [];
+        const totalHits = typeof data?.totalHits === 'number' ? data.totalHits : hits.length;
+
+        return {
+          results: hits.map(this.mapPixabayVector.bind(this)),
+          page,
+          totalPages: Math.max(1, Math.ceil(totalHits / 20)),
+          configured: true,
+          source: 'pixabay',
+        };
+      } catch (err) {
+        this._logger.warn(`Pixabay vector search failed: ${(err as Error).message}`);
+        return { results: [], page, totalPages: 0, configured: true, source: 'pixabay', error: 'pixabay request failed (network or invalid response)' };
       }
-      const data = (await res.json()) as any;
-      const hits = Array.isArray(data?.hits) ? data.hits : [];
-      const totalHits = typeof data?.totalHits === 'number' ? data.totalHits : hits.length;
-
-      return {
-        results: hits.map(this.mapPixabayVector.bind(this)),
-        page,
-        totalPages: Math.max(1, Math.ceil(totalHits / 20)),
-        configured: true,
-        source: 'pixabay',
-      };
     });
   }
 
@@ -321,37 +351,42 @@ export class StockMediaService {
 
     const cacheKey = this.buildCacheKey('giphy', 'stickers', query, page);
     return this.withCache(cacheKey, async () => {
-      const limit = 20;
-      const offset = (page - 1) * limit;
-      // GIPHY search requires a query; fall back to trending so the tab has
-      // content on load (matching the photos/videos behaviour).
-      const endpoint = query
-        ? 'https://api.giphy.com/v1/stickers/search'
-        : 'https://api.giphy.com/v1/stickers/trending';
-      const params = new URLSearchParams({
-        api_key: this.giphyKey!,
-        limit: String(limit),
-        offset: String(offset),
-        rating: 'g',
-        lang: 'en',
-      });
-      if (query) params.set('q', query);
+      try {
+        const limit = 20;
+        const offset = (page - 1) * limit;
+        // GIPHY search requires a query; fall back to trending so the tab has
+        // content on load (matching the photos/videos behaviour).
+        const endpoint = query
+          ? 'https://api.giphy.com/v1/stickers/search'
+          : 'https://api.giphy.com/v1/stickers/trending';
+        const params = new URLSearchParams({
+          api_key: this.giphyKey!,
+          limit: String(limit),
+          offset: String(offset),
+          rating: 'g',
+          lang: 'en',
+        });
+        if (query) params.set('q', query);
 
-      const res = await safeFetch(`${endpoint}?${params}`);
-      if (!res.ok) {
-        return { results: [], page, totalPages: 0, configured: true, source: 'giphy', error: `giphy request failed (HTTP ${res.status})` };
+        const res = await safeFetch(`${endpoint}?${params}`);
+        if (!res.ok) {
+          return { results: [], page, totalPages: 0, configured: true, source: 'giphy', error: `giphy request failed (HTTP ${res.status})` };
+        }
+        const data = (await res.json()) as any;
+        const items = Array.isArray(data?.data) ? data.data : [];
+        const total = typeof data?.pagination?.total_count === 'number' ? data.pagination.total_count : items.length;
+
+        return {
+          results: items.map(this.mapGiphySticker.bind(this)),
+          page,
+          totalPages: Math.max(1, Math.ceil(total / limit)),
+          configured: true,
+          source: 'giphy',
+        };
+      } catch (err) {
+        this._logger.warn(`GIPHY sticker search failed: ${(err as Error).message}`);
+        return { results: [], page, totalPages: 0, configured: true, source: 'giphy', error: 'giphy request failed (network or invalid response)' };
       }
-      const data = (await res.json()) as any;
-      const items = Array.isArray(data?.data) ? data.data : [];
-      const total = typeof data?.pagination?.total_count === 'number' ? data.pagination.total_count : items.length;
-
-      return {
-        results: items.map(this.mapGiphySticker.bind(this)),
-        page,
-        totalPages: Math.max(1, Math.ceil(total / limit)),
-        configured: true,
-        source: 'giphy',
-      };
     });
   }
 
@@ -381,30 +416,35 @@ export class StockMediaService {
 
     const cacheKey = this.buildCacheKey('iconify', 'icons', query, page);
     return this.withCache(cacheKey, async () => {
-      const limit = 32;
-      const start = (page - 1) * limit;
-      const params = new URLSearchParams({
-        query,
-        limit: String(limit),
-        start: String(start),
-      });
+      try {
+        const limit = 32;
+        const start = (page - 1) * limit;
+        const params = new URLSearchParams({
+          query,
+          limit: String(limit),
+          start: String(start),
+        });
 
-      const res = await safeFetch(`https://api.iconify.design/search?${params}`);
-      if (!res.ok) {
-        return { results: [], page, totalPages: 0, configured: true, source: 'iconify', error: `iconify request failed (HTTP ${res.status})` };
+        const res = await safeFetch(`https://api.iconify.design/search?${params}`);
+        if (!res.ok) {
+          return { results: [], page, totalPages: 0, configured: true, source: 'iconify', error: `iconify request failed (HTTP ${res.status})` };
+        }
+        const data = (await res.json()) as any;
+        const icons: string[] = Array.isArray(data?.icons) ? data.icons : [];
+        const total = typeof data?.total === 'number' ? data.total : icons.length;
+        const collections: Record<string, any> = data?.collections || {};
+
+        return {
+          results: icons.map((id: string) => this.mapIconifyIcon(id, collections)),
+          page,
+          totalPages: Math.max(1, Math.ceil(total / limit)),
+          configured: true,
+          source: 'iconify',
+        };
+      } catch (err) {
+        this._logger.warn(`Iconify icon search failed: ${(err as Error).message}`);
+        return { results: [], page, totalPages: 0, configured: true, source: 'iconify', error: 'iconify request failed (network or invalid response)' };
       }
-      const data = (await res.json()) as any;
-      const icons: string[] = Array.isArray(data?.icons) ? data.icons : [];
-      const total = typeof data?.total === 'number' ? data.total : icons.length;
-      const collections: Record<string, any> = data?.collections || {};
-
-      return {
-        results: icons.map((id: string) => this.mapIconifyIcon(id, collections)),
-        page,
-        totalPages: Math.max(1, Math.ceil(total / limit)),
-        configured: true,
-        source: 'iconify',
-      };
     });
   }
 
@@ -478,10 +518,11 @@ export class StockMediaService {
           configured: true,
           source: 'jamendo',
         };
-      } catch {
+      } catch (err) {
         // A key IS configured (we passed the guard above) — the failure is
         // network/parse-level, so report it as a provider error, not as
         // "not configured".
+        this._logger.warn(`Jamendo audio search failed: ${(err as Error).message}`);
         return { results: [], page, totalPages: 0, configured: true, source: 'jamendo', error: 'jamendo request failed (network or invalid response)' };
       }
     });
@@ -547,8 +588,9 @@ export class StockMediaService {
       await safeFetch(downloadLocation, {
         headers: { Authorization: `Client-ID ${this.unsplashKey}` },
       });
-    } catch {
-      // Non-fatal
+    } catch (err) {
+      // Non-fatal: the attribution ping must never fail a download request.
+      this._logger.warn(`Unsplash download ping failed: ${(err as Error).message}`);
     }
   }
 

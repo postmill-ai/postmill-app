@@ -120,9 +120,27 @@ async function start() {
     })
   );
 
-  app.use(['/copilot/{*splat}', '/posts'], (req: any, res: any, next: any) => {
-    json({ limit: '50mb' })(req, res, next);
-  });
+  // Design documents routinely exceed Nest's default 100kb JSON body limit (a
+  // real design save 413'd at 845KB — POSTMILL-APP-10). Verified against
+  // express 5.2.1 / path-to-regexp 8.4.2: a `{*splat}` entry does NOT match the
+  // bare path (so exact-path POSTs like POST /media/designs need the plain
+  // entry too), while a bare entry DOES prefix-match its sub-paths (covering
+  // PUT /media/designs/:id, /apply-ops, /validate). Both forms are listed
+  // explicitly so the coverage doesn't depend on that prefix-matching quirk.
+  app.use(
+    [
+      '/copilot/{*splat}',
+      '/posts',
+      '/media/designs',
+      '/media/designs/{*splat}',
+      '/media/design-templates',
+      '/media/design-templates/{*splat}',
+      '/media/designer/{*splat}',
+    ],
+    (req: any, res: any, next: any) => {
+      json({ limit: '50mb' })(req, res, next);
+    }
+  );
 
   app.use(cookieParser());
   app.use(compression());
