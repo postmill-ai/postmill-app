@@ -102,6 +102,10 @@ describe('PodmanRenderService', () => {
     // job.json + out dir were materialised in the workdir.
     expect(fs.existsSync(path.join(workDir, 'job.json'))).toBe(true);
     expect(fs.existsSync(path.join(workDir, 'out'))).toBe(true);
+    // World-writable so the container's unprivileged render user (a subuid)
+    // can write the artifact into /work/out.
+    expect(fs.statSync(workDir).mode & 0o777).toBe(0o777);
+    expect(fs.statSync(path.join(workDir, 'out')).mode & 0o777).toBe(0o777);
     fs.rmSync(workDir, { recursive: true, force: true });
   });
 

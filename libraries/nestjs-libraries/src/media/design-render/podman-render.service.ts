@@ -34,6 +34,12 @@ export class PodmanRenderService {
     const budgetMs = timeoutMs ?? cfg.timeoutMs;
     fs.writeFileSync(path.join(workDir, 'job.json'), JSON.stringify(spec));
     fs.mkdirSync(path.join(workDir, 'out'), { recursive: true });
+    // The container runs as the unprivileged `render` user, which maps to a
+    // subuid that cannot write this host-owned dir. Open up the workdir so the
+    // worker can drop the artifact in /work/out (contents are unguessable-id
+    // scoped and removed after the render).
+    fs.chmodSync(workDir, 0o777);
+    fs.chmodSync(path.join(workDir, 'out'), 0o777);
 
     await this.ensurePool(cfg);
 
