@@ -68,4 +68,28 @@ describe('FfmpegVideoEncoderService.mixAudio filter graph', () => {
     expect(graph).toContain('[p0]');
     expect(graph).toContain('[outa]');
   });
+
+  it('encode() places the audio input before any output options', async () => {
+    const frameCapture = { captureFrames: vi.fn().mockResolvedValue(381) };
+    const service = new FfmpegVideoEncoderService(frameCapture as any);
+    vi.spyOn(service as any, 'mixAudio').mockResolvedValue('/tmp/mixed-audio.wav');
+
+    await service.encode(output, { fps: 30, format: 'mp4' });
+
+    // Find the final mux call: the one whose inputs are the frame pattern.
+    const muxCall = spawnCalls.find((c) =>
+      c.args.some((a) => a.includes('frame-%05d')),
+    );
+    expect(muxCall).toBeTruthy();
+    const args = muxCall!.args;
+    const audioInputIdx = args.indexOf('/tmp/mixed-audio.wav');
+    expect(audioInputIdx).toBeGreaterThan(-1);
+    expect(args[audioInputIdx - 1]).toBe('-i');
+    // Regression: output options before the audio `-i` are parsed as INPUT
+    // options for the wav -> "Error parsing options for input file".
+    const cvIdx = args.indexOf('-c:v');
+    expect(cvIdx).toBeGreaterThan(audioInputIdx);
+    const caIdx = args.indexOf('-c:a');
+    expect(caIdx).toBeGreaterThan(audioInputIdx);
+  });
 });

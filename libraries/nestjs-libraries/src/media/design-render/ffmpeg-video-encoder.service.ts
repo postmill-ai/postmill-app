@@ -160,6 +160,11 @@ export class FfmpegVideoEncoderService {
           String(fps),
           '-i',
           framePattern,
+          // The audio input must follow the frame input directly: placing it
+          // after output options (-c:v/-pix_fmt/-t) makes ffmpeg parse those
+          // as INPUT options for the wav and abort with "Error parsing
+          // options for input file".
+          ...(audioPath ? ['-i', audioPath] : []),
           '-c:v',
           isWebm ? 'libvpx-vp9' : 'libx264',
           ...(isWebm
@@ -182,8 +187,6 @@ export class FfmpegVideoEncoderService {
 
         if (audioPath) {
           args.push(
-            '-i',
-            audioPath,
             '-c:a',
             isWebm ? 'libopus' : 'aac',
             '-b:a',
