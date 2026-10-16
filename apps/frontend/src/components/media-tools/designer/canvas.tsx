@@ -29,6 +29,7 @@ import { composeClipsAtPlayhead } from './video-preview';
 import { VideoCanvasOverlay } from './video-canvas-overlay';
 import { sharedStageRef } from './stage-ref';
 import { bakeElementTransform, buildResizePatch } from './transform-resize';
+import { useGeometryNonce } from './use-geometry-nonce';
 import { getTool, resolveToolShortcut } from './tools';
 import { rectFromDrag, isMeaningfulDraw, buildShapeElement, buildShapeClip } from './tool-draw';
 import { addText } from './add-text';
@@ -113,13 +114,15 @@ export const DesignerCanvas: FC<CanvasProps> = ({
   const [stageSize, setStageSize] = useState({ width: 0, height: 0 });
   const [editingTextId, setEditingTextId] = useState<string | null>(null);
   /**
-   * Bumped when a drag/transform gesture COMMITS. Cached Konva wrappers
-   * (StyledLayer / AdjustmentScope / MaskedLayer / LayerGroup) deliberately
-   * exclude geometry from their cache keys, so Konva never repaints them while
-   * a descendant moves — this nonce, folded into those keys via CanvasElements,
-   * refreshes them once per gesture instead of per frame.
+   * Folded into the cached wrappers' keys via CanvasElements. Gesture commits
+   * (dragEnd / transformEnd) bump it immediately; any OTHER committed geometry
+   * change (Inspector inputs, arrow nudges, align/distribute, undo) is caught
+   * by the hook's store subscription on a trailing debounce. Per drag frame
+   * nothing bumps — Konva never repaints a cached node for a moved descendant,
+   * and re-rasterising per frame is the cost the keys exist to avoid.
    */
-  const [geometryNonce, setGeometryNonce] = useState(0);
+  const { geometryNonce, bumpGeometryNow, noteGestureStart, noteGestureEnd } =
+    useGeometryNonce(store);
   const [isSpacePressed, setIsSpacePressed] = useState(false);
   const [isPanning, setIsPanning] = useState(false);
   const [guides, setGuides] = useState<{ points: number[] }[]>([]);
@@ -1000,6 +1003,7 @@ export const DesignerCanvas: FC<CanvasProps> = ({
 
   const handleDragEnd = useCallback(
     (e: Konva.KonvaEventObject<DragEvent>) => {
+      noteGestureEnd();
       setGuides([]);
       setSpacingGuide(null);
       setHud(null);
@@ -1021,11 +1025,13 @@ export const DesignerCanvas: FC<CanvasProps> = ({
       if (changed) {
         pushHistory();
         // Gesture committed: rebuild the cached wrappers around the moved
-        // nodes exactly once (see geometryNonce).
-        setGeometryNonce((n) => n + 1);
+        // nodes exactly once (see useGeometryNonce). Other commit paths (a
+        // direct-select anchor drag ends here with no element id) are caught
+        // by the store subscription's trailing debounce.
+        bumpGeometryNow();
       }
     },
-    [pushHistory, updateElement]
+    [pushHistory, updateElement, noteGestureEnd, bumpGeometryNow]
   );
 
   /**
@@ -1123,6 +1129,7 @@ export const DesignerCanvas: FC<CanvasProps> = ({
 
   const handleTransformEnd = useCallback(
     (e: Konva.KonvaEventObject<Event>) => {
+      noteGestureEnd();
       setHud(null);
       if (isVideo) return;
       if (rafIdRef.current) {
@@ -1133,10 +1140,10 @@ export const DesignerCanvas: FC<CanvasProps> = ({
       if (!patches.length) return;
       patches.forEach(({ id, patch }) => updateElement(id, patch));
       pushHistory();
-      // Same commit-time cache rebuild as dragEnd (see geometryNonce).
-      setGeometryNonce((n) => n + 1);
+      // Same commit-time cache rebuild as dragEnd (see useGeometryNonce).
+      bumpGeometryNow();
     },
-    [bakeTransform, pushHistory, updateElement, isVideo]
+    [bakeTransform, pushHistory, updateElement, isVideo, noteGestureEnd, bumpGeometryNow]
   );
 
   const handleWheel = useCallback(
@@ -1550,7 +1557,7 @@ export const DesignerCanvas: FC<CanvasProps> = ({
           }
         }}
       >
-        <Layer onDragMove={handleDragMove} onDragEnd={handleDragEnd}>
+        <Layer onDragStart={noteGestureStart} onDragMove={handleDragMove} onDragEnd={handleDragEnd}>
           <Rect
             x={0}
             y={0}
@@ -1952,6 +1959,7 @@ export const DesignerCanvas: FC<CanvasProps> = ({
               anchorSize={10}
               anchorCornerRadius={5}
               rotateAnchorOffset={24}
+              onTransformStart={noteGestureStart}
               onTransform={handleTransform}
               onTransformEnd={handleTransformEnd}
             />

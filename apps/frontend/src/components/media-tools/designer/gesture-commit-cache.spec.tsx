@@ -5,7 +5,16 @@ import { act } from 'react';
 import Konva from 'konva';
 import { Stage, Layer } from 'react-konva';
 import { CanvasElements } from './elements';
-import type { DesignerElement } from './designer.store';
+import {
+  createDesignerStore,
+  type DesignerElement,
+  type DesignerOutput,
+} from './designer.store';
+import {
+  GEOMETRY_CACHE_DEBOUNCE_MS,
+  geometrySignature,
+  useGeometryNonce,
+} from './use-geometry-nonce';
 
 /**
  * Regression: dragging a styled / adjusted image moved the Transformer frame
@@ -80,6 +89,7 @@ afterEach(async () => {
   });
   root = null;
   stageRef = null;
+  hookApi = null;
   vi.restoreAllMocks();
 });
 
@@ -169,5 +179,147 @@ describe('gesture-commit cache refresh', () => {
     await renderTree([{ ...plainImage, x: 64, y: 48 } as DesignerElement, brightnessAdj], 1);
     expect(callsOn(scope)).toBe(mountCalls + 1);
     expect(cacheCanvas(scope)).not.toBe(before);
+  });
+});
+
+/**
+ * The follow-up: geometry also commits through the STORE alone — Inspector
+ * X/Y/W/H inputs, arrow-key nudges, align/distribute, undo — with no Konva
+ * drag/transform events, so the gesture-commit bump never fired and the
+ * cached bitmap stayed frozen at the old position. `useGeometryNonce`
+ * subscribes to store geometry and applies a trailing debounced bump.
+ */
+const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+
+type GeometryApi = ReturnType<typeof useGeometryNonce>;
+type Store = ReturnType<typeof createDesignerStore>;
+let hookApi: GeometryApi | null = null;
+
+const storeWithImage = (): Store => {
+  const store = createDesignerStore(400, 400);
+  store.getState().addElement({ ...styledImage } as DesignerElement);
+  return store;
+};
+
+const renderWithStore = async (store: Store) => {
+  const host = document.createElement('div');
+  document.body.appendChild(host);
+  root = createRoot(host);
+  const Harness = () => {
+    const api = useGeometryNonce(store);
+    // Publishing to the module-level probe is a side effect, so it happens in
+    // an effect rather than during render (react-hooks/globals).
+    React.useEffect(() => {
+      hookApi = api;
+    });
+    const children = store(
+      (s) => (s.doc.outputs[s.currentOutput] as DesignerOutput).children
+    );
+    return (
+      <Stage width={400} height={400} ref={(s) => (stageRef = s)}>
+        <Layer>
+          <CanvasElements
+            elements={children}
+            onSelect={() => {}}
+            geometryNonce={api.geometryNonce}
+          />
+        </Layer>
+      </Stage>
+    );
+  };
+  await act(async () => {
+    root!.render(<Harness />);
+  });
+};
+
+describe('store-driven geometry commits (no Konva gesture)', () => {
+  it('geometrySignature ignores non-geometry writes, turns over on geometry', () => {
+    const store = storeWithImage();
+    const before = geometrySignature(store.getState());
+    store.getState().updateElement('img-1', { name: 'Hero' } as never);
+    expect(geometrySignature(store.getState())).toBe(before);
+    store.getState().updateElement('img-1', { x: 42 });
+    expect(geometrySignature(store.getState())).not.toBe(before);
+  });
+
+  it('refreshes the cached wrapper after the debounce window', async () => {
+    const store = storeWithImage();
+    await renderWithStore(store);
+    const styled = cachedAncestor('img-1');
+    const before = cacheCanvas(styled);
+
+    // The Inspector's X input: a plain store write, no drag events.
+    await act(async () => {
+      store.getState().updateElement('img-1', { x: 500 });
+    });
+    // Debounced: nothing has re-rasterised yet.
+    expect(cacheCanvas(styled)).toBe(before);
+
+    await act(async () => {
+      await sleep(GEOMETRY_CACHE_DEBOUNCE_MS + 150);
+    });
+    expect(cacheCanvas(styled)).not.toBe(before);
+  });
+
+  it('collapses rapid successive store changes into one refresh', async () => {
+    const cacheSpy = vi.spyOn(Konva.Group.prototype, 'cache');
+    const callsOn = (node: Konva.Node) =>
+      cacheSpy.mock.contexts.filter((ctx) => ctx === node).length;
+
+    const store = storeWithImage();
+    await renderWithStore(store);
+    const styled = cachedAncestor('img-1');
+    const mountCalls = callsOn(styled);
+
+    // An arrow-key nudge burst: five commits, each inside the debounce window.
+    for (let i = 1; i <= 5; i++) {
+      await act(async () => {
+        store.getState().updateElement('img-1', { x: 500 + i * 10 });
+        await sleep(60);
+      });
+    }
+    expect(callsOn(styled)).toBe(mountCalls);
+
+    await act(async () => {
+      await sleep(GEOMETRY_CACHE_DEBOUNCE_MS + 150);
+    });
+    expect(callsOn(styled)).toBe(mountCalls + 1);
+  });
+
+  it('does not rasterise mid-gesture; the commit bump is immediate and absorbs the debounce', async () => {
+    const store = storeWithImage();
+    await renderWithStore(store);
+    const styled = cachedAncestor('img-1');
+    const before = cacheCanvas(styled);
+    const nonceAtStart = hookApi!.geometryNonce;
+
+    // Konva dragstart → noteGestureStart.
+    act(() => hookApi!.noteGestureStart());
+    // A drag frame writes the store, then a long pause with the mouse still
+    // down — longer than the debounce — must NOT re-rasterise.
+    await act(async () => {
+      store.getState().updateElement('img-1', { x: 220 });
+    });
+    await act(async () => {
+      await sleep(GEOMETRY_CACHE_DEBOUNCE_MS + 150);
+    });
+    expect(cacheCanvas(styled)).toBe(before);
+    expect(hookApi!.geometryNonce).toBe(nonceAtStart);
+
+    // dragEnd: final store write + immediate bump, exactly as handleDragEnd
+    // does — the write schedules a debounce the bump must absorb.
+    act(() => {
+      hookApi!.noteGestureEnd();
+      store.getState().updateElement('img-1', { x: 240 });
+      hookApi!.bumpGeometryNow();
+    });
+    expect(hookApi!.geometryNonce).toBe(nonceAtStart + 1);
+    expect(cacheCanvas(styled)).not.toBe(before);
+
+    // No trailing second refresh from the absorbed debounce.
+    await act(async () => {
+      await sleep(GEOMETRY_CACHE_DEBOUNCE_MS + 150);
+    });
+    expect(hookApi!.geometryNonce).toBe(nonceAtStart + 1);
   });
 });
