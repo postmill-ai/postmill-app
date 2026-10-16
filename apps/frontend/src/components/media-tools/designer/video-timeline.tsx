@@ -15,6 +15,16 @@ import { timelineBeats } from './beat-sync';
 import { isArtifactPath } from '@postmill-ai/frontend/components/launches/ai.video';
 import { useMediaPicker } from '@postmill-ai/frontend/components/media-tools/use-media-picker';
 import { useT } from '@postmill-ai/react/translation/get.transation.service.client';
+import { genId } from '@postmill-ai/nestjs-libraries/media/designer-doc/designer-doc.migrate';
+import {
+  captionClipDefaults,
+  cuesToCaptionClips,
+  mapTranscriptionToCaptionPhrases,
+  parseSubtitles,
+  serializeSrt,
+  withCaptionClips,
+  type TranscribedWord,
+} from './captions';
 
 interface VideoTimelineProps {
   store: ReturnType<typeof import('./designer.store').createDesignerStore>;
@@ -602,6 +612,8 @@ export const VideoTimeline: FC<VideoTimelineProps> = ({ store, sendTimelineAware
     y: number;
   } | null>(null);
   const [addTrackMenu, setAddTrackMenu] = useState<{ x: number; y: number } | null>(null);
+  const [captionsMenu, setCaptionsMenu] = useState<{ x: number; y: number } | null>(null);
+  const captionFileRef = useRef<HTMLInputElement>(null);
   const [dragOverTrackId, setDragOverTrackId] = useState<string | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
   const previewRef = useRef<VideoPreviewEngine | null>(null);
@@ -1314,91 +1326,164 @@ export const VideoTimeline: FC<VideoTimelineProps> = ({ store, sendTimelineAware
     });
   }, [vo, modals, generateVoiceover]);
 
+  // Write a batch of caption clips into the output's caption track (creating
+  // it when absent) as ONE undo step — per-clip addClip would push a history
+  // entry per phrase. Same direct-setState discipline as handleFreezeFrame.
+  const commitCaptionClips = useCallback(
+    (clips: VideoClip[]) => {
+      const state = store.getState();
+      const currentVo = state.doc.outputs[currentOutput] as VideoOutput;
+      const updated = withCaptionClips(currentVo, clips, genId);
+      const outs = [...state.doc.outputs];
+      outs[currentOutput] = updated;
+      store.setState({ doc: { ...state.doc, outputs: outs }, isDirty: true });
+      store.getState().pushHistory();
+    },
+    [store, currentOutput],
+  );
+
   const handleGenerateCaptions = useCallback(async () => {
     if (!vo) return;
-    const audioClips = vo.tracks
-      .filter((t) => t.type === 'audio')
-      .flatMap((t) => t.clips)
-      .filter((c) => c.src);
-    if (audioClips.length === 0) {
+    setCaptionsMenu(null);
+    // Audio-bearing clips: every audio clip with a source, plus video clips
+    // whose own audio is audible (an unset volume defaults to 1, matching the
+    // preview engine). Freeze (speed:0) clips hold one frame — no advancing
+    // audio to transcribe.
+    const audioBearing = vo.tracks.flatMap((t) =>
+      t.clips.filter(
+        (c) =>
+          !!c.src &&
+          c.speed !== 0 &&
+          (t.type === 'audio' || (t.type === 'video' && (c.volume ?? 1) > 0))
+      )
+    );
+    if (audioBearing.length === 0) {
       toaster.show(translate('no_audio_clips_to_transcribe', 'No audio clips to transcribe'), 'warning');
       return;
     }
-    const src = audioClips[0].src;
-    try {
-      const res = await fetch('/media/speech-to-text-words', {
-        method: 'POST',
-        body: JSON.stringify({ audioUrl: src }),
-      });
-      if (!res.ok) {
-        toaster.show(translate('caption_generation_failed', 'Caption generation failed'), 'warning');
-        return;
-      }
-      const { words } = await res.json() as { words?: { word: string; start: number; end: number }[] };
-      if (!words?.length) {
-        toaster.show(translate('no_speech_detected', 'No speech detected'), 'warning');
-        return;
-      }
-      const state = store.getState();
-      const currentVo = state.doc.outputs[currentOutput] as VideoOutput;
-      let captionTrack = currentVo.tracks.find((t) => t.type === 'caption');
-      if (!captionTrack) {
-        state.addTrack(currentOutput, 'caption');
-        captionTrack = (store.getState().doc.outputs[currentOutput] as VideoOutput).tracks.find((t) => t.type === 'caption');
-      }
-      if (!captionTrack) return;
-      const audioStart = audioClips[0].startMs;
+    // A selected audio-bearing clip narrows the batch to just that clip.
+    const selected =
+      selectedClip?.outputIndex === currentOutput
+        ? audioBearing.find((c) => c.id === selectedClip.clipId)
+        : undefined;
+    const targets = selected ? [selected] : audioBearing;
 
-      // Group words into sentence/phrase chunks so each caption clip carries
-      // per-word timing instead of flattening to separate text clips.
-      const phrases: { word: string; start: number; end: number }[][] = [];
-      let current: { word: string; start: number; end: number }[] = [];
-      const maxWordsPerCaption = 6;
-      for (const w of words) {
-        current.push(w);
-        const endsPhrase = /[.!?]$/.test(w.word) || current.length >= maxWordsPerCaption;
-        if (endsPhrase) {
-          phrases.push(current);
-          current = [];
+    const captions: VideoClip[] = [];
+    let failed = 0;
+    let silent = 0;
+    const defaults = captionClipDefaults(vo);
+    for (const clip of targets) {
+      // A clip that fails (or has no speech) is skipped — the batch continues.
+      try {
+        const res = await fetch('/media/speech-to-text-words', {
+          method: 'POST',
+          body: JSON.stringify({ audioUrl: clip.src }),
+        });
+        if (!res.ok) {
+          failed++;
+          continue;
         }
+        const { words } = (await res.json()) as { words?: TranscribedWord[] };
+        if (!words?.length) {
+          silent++;
+          continue;
+        }
+        // Speech-to-text timings cover the FULL source; the mapping re-bases
+        // them for the clip's trim-in and speed and offsets by its startMs.
+        for (const phrase of mapTranscriptionToCaptionPhrases(words, clip, vo.durationMs)) {
+          captions.push({
+            id: genId(),
+            startMs: phrase.startMs,
+            endMs: phrase.endMs,
+            text: phrase.text,
+            words: phrase.words,
+            ...defaults,
+          } as VideoClip);
+        }
+      } catch {
+        failed++;
       }
-      if (current.length) phrases.push(current);
-
-      for (const phrase of phrases) {
-        const phraseStartRel = Math.round(phrase[0].start * 1000);
-        const phraseEndRel = Math.round(phrase[phrase.length - 1].end * 1000);
-        const startMs = audioStart + phraseStartRel;
-        const endMs = audioStart + phraseEndRel;
-        if (endMs > vo.durationMs) break;
-        const text = phrase.map((w) => w.word).join(' ');
-        const wordsTiming = phrase.map((w) => ({
-          word: w.word,
-          startMs: Math.round(w.start * 1000) - phraseStartRel,
-          endMs: Math.round(w.end * 1000) - phraseStartRel,
-        }));
-        const clip: VideoClip = {
-          id: `clip-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
-          startMs,
-          endMs,
-          text,
-          words: wordsTiming,
-          fontFamily: 'Arial',
-          fontSize: 28,
-          fontWeight: 700,
-          fill: '#ffffff',
-          x: (vo.width - 300) / 2,
-          y: vo.height - 120,
-          width: 300,
-          height: 70,
-        };
-        store.getState().addClip(currentOutput, captionTrack.id, clip);
-      }
-      store.getState().pushHistory();
-      toaster.show(translate('captions_added_to_timeline', 'Captions added to timeline'), 'success');
-    } catch {
-      toaster.show(translate('caption_generation_failed', 'Caption generation failed'), 'warning');
+      if (!mountedRef.current) return;
     }
-  }, [vo, currentOutput, store, fetch, toaster, translate]);
+
+    if (!captions.length) {
+      toaster.show(
+        failed > 0
+          ? translate('caption_generation_failed', 'Caption generation failed')
+          : translate('no_speech_detected', 'No speech detected'),
+        'warning'
+      );
+      return;
+    }
+    commitCaptionClips(captions);
+    if (failed > 0 || silent > 0) {
+      toaster.show(
+        translate('some_clips_could_not_be_transcribed', 'Captions added — some clips could not be transcribed'),
+        'warning'
+      );
+      return;
+    }
+    toaster.show(translate('captions_added_to_timeline', 'Captions added to timeline'), 'success');
+  }, [vo, currentOutput, fetch, toaster, translate, selectedClip, commitCaptionClips]);
+
+  const handleImportCaptions = useCallback(() => {
+    setCaptionsMenu(null);
+    captionFileRef.current?.click();
+  }, []);
+
+  const handleCaptionFilePicked = useCallback(
+    async (e: React.ChangeEvent<HTMLInputElement>) => {
+      const file = e.target.files?.[0];
+      // Reset so re-picking the same file fires onChange again.
+      e.target.value = '';
+      if (!file || !vo) return;
+      const cues = parseSubtitles(await file.text());
+      if (!cues.length) {
+        toaster.show(translate('no_captions_found_in_file', 'No captions found in that file'), 'warning');
+        return;
+      }
+      const { clips, skipped } = cuesToCaptionClips(cues, vo, genId);
+      if (!clips.length) {
+        toaster.show(
+          translate('cues_beyond_composition_end', 'All cues start past the end of the composition'),
+          'warning'
+        );
+        return;
+      }
+      commitCaptionClips(clips);
+      toaster.show(translate('captions_imported', 'Captions imported'), 'success');
+      if (skipped > 0) {
+        toaster.show(
+          translate('some_cues_skipped_beyond_end', 'Some cues start past the end of the composition and were skipped'),
+          'warning'
+        );
+      }
+    },
+    [vo, toaster, translate, commitCaptionClips],
+  );
+
+  const hasCaptionClips = useMemo(
+    () => !!vo && vo.tracks.some((t) => t.type === 'caption' && t.clips.length > 0),
+    [vo],
+  );
+
+  const handleExportCaptions = useCallback(() => {
+    setCaptionsMenu(null);
+    if (!vo) return;
+    const clips = vo.tracks
+      .filter((t) => t.type === 'caption')
+      .flatMap((t) => t.clips);
+    if (!clips.length) return;
+    const blob = new Blob([serializeSrt(clips)], { type: 'text/srt' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `${store.getState().designName || 'captions'}.srt`;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(url);
+  }, [vo, store]);
 
   const POLL_INTERVAL_MS = 3000;
   const MAX_POLLS = 200;
@@ -1592,6 +1677,16 @@ export const VideoTimeline: FC<VideoTimelineProps> = ({ store, sendTimelineAware
       aria-label={translate('video_timeline', 'Video timeline')}
       onKeyDown={handleKeyDown}
     >
+      {/* Caption import picker — opened from the Captions menu. */}
+      <input
+        ref={captionFileRef}
+        type="file"
+        accept=".srt,.vtt"
+        className="hidden"
+        tabIndex={-1}
+        aria-hidden="true"
+        onChange={handleCaptionFilePicked}
+      />
       <div className="flex items-center gap-2 px-3 py-1.5 border-b border-studioBorder">
         <button
           onClick={handlePlayPause}
@@ -1660,14 +1755,14 @@ export const VideoTimeline: FC<VideoTimelineProps> = ({ store, sendTimelineAware
           {translate('voiceover', 'Voiceover')}
         </button>
         <button
-          onClick={handleGenerateCaptions}
-          disabled={!sttAvailable}
-          className="px-2 py-0.5 rounded-sm text-[10px] border border-studioBorder text-textColor/60 hover:text-textColor disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:text-textColor/60"
-          title={
-            sttAvailable
-              ? translate('auto_generate_captions_from_audio', 'Auto-generate captions from audio')
-              : translate('configure_a_speech_to_text_provider_in_settings_media', 'Configure a speech-to-text provider (e.g. Deepgram) in Settings → Media')
-          }
+          onClick={(e) => {
+            const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
+            setCaptionsMenu({ x: rect.left + rect.width / 2, y: rect.bottom });
+          }}
+          className="px-2 py-0.5 rounded-sm text-[10px] border border-studioBorder text-textColor/60 hover:text-textColor"
+          title={translate('caption_options', 'Auto-generate, import or export captions')}
+          aria-haspopup="menu"
+          aria-expanded={!!captionsMenu}
         >
           {translate('captions', 'Captions')}
         </button>
@@ -2096,6 +2191,57 @@ export const VideoTimeline: FC<VideoTimelineProps> = ({ store, sendTimelineAware
                 {trackTypeLabel(type)}
               </button>
             ))}
+          </div>
+        </>
+      )}
+
+      {/* Captions menu: auto-generate / import / export */}
+      {captionsMenu && (
+        <>
+          <button
+            type="button"
+            aria-label={translate('close', 'Close')}
+            className="fixed inset-0 z-50"
+            onClick={() => setCaptionsMenu(null)}
+          />
+          <div
+            role="menu"
+            className="fixed z-60 bg-newBgColor border border-studioBorder rounded-lg p-1.5 shadow-xl min-w-[190px]"
+            style={{
+              left: captionsMenu.x,
+              top: captionsMenu.y + 4,
+              transform: 'translateX(-50%)',
+            }}
+          >
+            <button
+              role="menuitem"
+              onClick={handleGenerateCaptions}
+              disabled={!sttAvailable}
+              title={
+                sttAvailable
+                  ? translate('auto_generate_captions_from_audio', 'Auto-generate captions from audio')
+                  : translate('configure_a_speech_to_text_provider_in_settings_media', 'Configure a speech-to-text provider (e.g. Deepgram) in Settings → Media')
+              }
+              className="w-full text-left px-2 py-1 rounded-sm text-[12px] hover:bg-studioBorder/30 text-textColor disabled:opacity-40 disabled:cursor-not-allowed"
+            >
+              {translate('auto_generate_captions', 'Auto-generate')}
+            </button>
+            <button
+              role="menuitem"
+              onClick={handleImportCaptions}
+              className="w-full text-left px-2 py-1 rounded-sm text-[12px] hover:bg-studioBorder/30 text-textColor"
+            >
+              {translate('import_captions', 'Import Captions…')}
+            </button>
+            <button
+              role="menuitem"
+              onClick={handleExportCaptions}
+              disabled={!hasCaptionClips}
+              title={translate('export_captions_srt_hint', 'Download the caption tracks as an .srt file')}
+              className="w-full text-left px-2 py-1 rounded-sm text-[12px] hover:bg-studioBorder/30 text-textColor disabled:opacity-40 disabled:cursor-not-allowed"
+            >
+              {translate('export_captions_srt', 'Export Captions (.srt)')}
+            </button>
           </div>
         </>
       )}

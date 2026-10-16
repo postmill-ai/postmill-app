@@ -26,6 +26,7 @@ import { useFetch } from '@postmill-ai/helpers/utils/custom.fetch';
 import { useT } from '@postmill-ai/react/translation/get.transation.service.client';
 import type { DesignerElement, DesignerOutput, VideoOutput } from './designer.store';
 import { composeClipsAtPlayhead } from './video-preview';
+import { reconcileCaptionWords } from './captions';
 import { VideoCanvasOverlay } from './video-canvas-overlay';
 import { sharedStageRef } from './stage-ref';
 import { bakeElementTransform, buildResizePatch } from './transform-resize';
@@ -2126,6 +2127,13 @@ export const DesignerCanvas: FC<CanvasProps> = ({
             onUpdate={(id, updates) =>
               store.getState().updateClip(currentOutput, track.id, id, {
                 text: updates.text,
+                // A caption clip renders from its `words`, not `text` — a text
+                // edit must re-derive them (same count keeps timings, a changed
+                // count re-splits evenly) or the karaoke caption keeps showing
+                // the pre-edit words.
+                ...(track.type === 'caption'
+                  ? { words: reconcileCaptionWords(updates.text ?? '', clip) }
+                  : null),
               })
             }
             onComplete={() => setEditingTextId(null)}

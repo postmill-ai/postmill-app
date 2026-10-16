@@ -574,7 +574,9 @@ export const VideoCanvasOverlay: FC<VideoCanvasOverlayProps> = ({
             commitGeometry(trackId, clip, box, e.target),
           onTransformEnd: (e: Konva.KonvaEventObject<Event>) =>
             commitGeometry(trackId, clip, box, e.target),
-          ...(trackType === 'text' && onEditText
+          // Text and caption clips both open the inline text editor on
+          // double-click; a caption commit re-derives clip.words (canvas.tsx).
+          ...((trackType === 'text' || trackType === 'caption') && onEditText
             ? {
                 onDblClick: () => onEditText(clip.id),
                 onDblTap: () => onEditText(clip.id),
@@ -588,6 +590,10 @@ export const VideoCanvasOverlay: FC<VideoCanvasOverlayProps> = ({
               key={clip.id}
               ref={captureNode}
               {...nodeProps}
+              // Hidden while the inline text editor is open over this clip —
+              // same contract as a text clip, or the words double-render under
+              // the overlay.
+              visible={clip.id !== editingTextId}
               x={props.x}
               y={props.y}
               width={props.width}
