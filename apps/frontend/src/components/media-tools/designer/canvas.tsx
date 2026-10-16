@@ -36,6 +36,7 @@ import { CropOverlay } from './crop-overlay';
 import { ensureFontsUsed } from './fonts';
 import { getImageNaturalSize } from './elements';
 import { computeCoverCrop } from './reflow';
+import { textureFillProps } from './textures';
 import { svgToPathElements } from '@postmill-ai/nestjs-libraries/media/designer-doc/svg-import';
 import {
   type PenDraft,
@@ -1413,6 +1414,10 @@ export const DesignerCanvas: FC<CanvasProps> = ({
   const bg = output?.bg;
   const bgGrad =
     bg?.type === 'gradient' ? gradientFillProps(bg.gradient, output.width, output.height) : {};
+  // The texture is an overlay on the base fill (shared generator tile), painted
+  // by a separate fill-pattern Rect in both the visible stack and the backdrop
+  // fold — matching the server, where drawBackground composites it over the base.
+  const bgTexture = bg?.texture ? textureFillProps(bg.texture) : null;
 
   return (
     // eslint-disable-next-line jsx-a11y/no-noninteractive-element-interactions
@@ -1519,6 +1524,18 @@ export const DesignerCanvas: FC<CanvasProps> = ({
             shadowBlur={20}
             shadowOffset={{ x: 0, y: 4 }}
           />
+          {bgTexture && (
+            // Overlay only — the page-chrome shadow stays on the base Rect
+            // alone, and clicks fall through to it for canvas deselect.
+            <Rect
+              x={0}
+              y={0}
+              width={output.width}
+              height={output.height}
+              {...bgTexture}
+              listening={false}
+            />
+          )}
           <CanvasElements
             elements={isVideo ? [] : (output?.children || [])}
             symbols={doc.symbols}
@@ -1560,6 +1577,18 @@ export const DesignerCanvas: FC<CanvasProps> = ({
                       output.height,
                       bg.focalPoint
                     )}
+                    listening={false}
+                  />
+                )}
+                {bgTexture && (
+                  // Folded into the backdrop so an unclipped adjustment layer
+                  // sees the texture, exactly as the server's page render does.
+                  <Rect
+                    x={0}
+                    y={0}
+                    width={output.width}
+                    height={output.height}
+                    {...bgTexture}
                     listening={false}
                   />
                 )}

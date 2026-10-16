@@ -32,6 +32,9 @@ export const MAX_FILTERS_PER_ELEMENT = 16;
  * v6 adds `symbol` instances plus reusable definitions on the doc, and `slot`
  * markers for template placeholders. Additive: v5 documents keep validating.
  *
+ * v7 adds `texture` (procedural grain/paper overlays) on output backgrounds.
+ * Additive: v6 documents keep validating.
+ *
  * v4 adds Photoshop-parity layers: `group`/`fill`/`adjustment` element types,
  * `parentId`, blend modes and layer styles. Also additive — no rewrite.
  *
@@ -49,7 +52,7 @@ export const MAX_FILTERS_PER_ELEMENT = 16;
  * every AI-generated design under dozens of folders it never asked for. When a
  * user makes a layer group we set both, so a folder also reflows as a unit.
  */
-export const DESIGNER_DOC_VERSION = 6;
+export const DESIGNER_DOC_VERSION = 7;
 
 /** Maximum text length on a text element. */
 export const MAX_TEXT_LEN = 20000;

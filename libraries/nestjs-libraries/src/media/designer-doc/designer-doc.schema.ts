@@ -297,12 +297,30 @@ export interface DesignerWarp {
   distortV?: number;
 }
 
+/**
+ * A procedural texture OVERLAY on a background — the base (color, gradient or
+ * image) still paints; the texture is a deterministic, seeded pattern
+ * composited over it, so the same doc renders identically on the Konva canvas,
+ * the node-canvas server renderer and the video frame page.
+ */
+export interface DesignerTexture {
+  type: 'grain' | 'paper';
+  /** Overlay strength 0–1; renderers default to 0.35. */
+  intensity?: number;
+  /** Tile scale multiplier — grain coarseness / paper mottle size. Default 1. */
+  scale?: number;
+  /** Seed for the deterministic generator. Default 0. */
+  seed?: number;
+}
+
 export interface DesignerBackground {
   type: 'color' | 'gradient' | 'image';
   color?: string;
   gradient?: DesignerGradient;
   src?: string;
   fileId?: string;
+  /** Procedural overlay composited over the base fill (v7). */
+  texture?: DesignerTexture;
   /** Cover-crop anchor (0–1) for image backgrounds; defaults to center. */
   focalPoint?: { x: number; y: number };
   /**
@@ -968,6 +986,25 @@ const { strict: StrictFocalPointSchema, lenient: LenientFocalPointSchema } =
 // ---------------------------------------------------------------------------
 // DesignerBackground / DesignerPageBackground
 // ---------------------------------------------------------------------------
+// Seed is an int32: the generator hashes with Math.imul, which truncates to
+// 32 bits, so a wider bound would buy nothing.
+const textureCommon = { type: z.enum(['grain', 'paper']) };
+const { strict: StrictDesignerTextureSchema, lenient: LenientDesignerTextureSchema } =
+  dualObject(
+    {
+      ...textureCommon,
+      intensity: strictNum(0, 1).optional(),
+      scale: strictNum(0.01, 100).optional(),
+      seed: z.number().int().min(0).max(2147483647).optional(),
+    },
+    {
+      ...textureCommon,
+      intensity: lenientOptionalNum(0, 1),
+      scale: lenientOptionalNum(0.01, 100),
+      seed: lenientOptionalNum(0, 2147483647),
+    }
+  );
+
 const backgroundCommon = {
   type: z.enum(['color', 'gradient', 'image']),
   color: ColorSchema.optional(),
@@ -979,6 +1016,7 @@ const { strict: StrictDesignerBackgroundSchema, lenient: LenientDesignerBackgrou
     {
       ...backgroundCommon,
       gradient: StrictDesignerGradientSchema.optional(),
+      texture: StrictDesignerTextureSchema.optional(),
       // Cover-crop anchor for image backgrounds (renderer honors it, same as
       // image-element focalPoint), plus the centroid/intrinsic size a reflow
       // re-derives it from.
@@ -990,6 +1028,7 @@ const { strict: StrictDesignerBackgroundSchema, lenient: LenientDesignerBackgrou
     {
       ...backgroundCommon,
       gradient: LenientDesignerGradientSchema.optional(),
+      texture: LenientDesignerTextureSchema.optional(),
       focalPoint: LenientFocalPointSchema.optional(),
       subjectPoint: LenientFocalPointSchema.optional(),
       naturalWidth: lenientNum(0, MAX_DIMENSION, 0).optional(),

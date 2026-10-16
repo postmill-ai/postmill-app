@@ -183,6 +183,43 @@ describe('DesignerDoc schema', () => {
     expect(result.success).toBe(false);
   });
 
+  it('round-trips a background texture through both parsers (v7)', () => {
+    const doc = JSON.parse(JSON.stringify(imageDocFixture));
+    doc.outputs[0].bg.texture = { type: 'grain', intensity: 0.4, scale: 2, seed: 1234 };
+    const strict = DesignerDocStrictSchema.parse(migrateDoc(doc));
+    expect(strict.outputs[0].bg?.texture).toEqual({
+      type: 'grain',
+      intensity: 0.4,
+      scale: 2,
+      seed: 1234,
+    });
+    const lenient = DesignerDocLenientSchema.parse(migrateDoc(doc));
+    expect(lenient.outputs[0].bg?.texture).toEqual({
+      type: 'grain',
+      intensity: 0.4,
+      scale: 2,
+      seed: 1234,
+    });
+  });
+
+  it('rejects an unknown texture type in strict mode', () => {
+    const bad = JSON.parse(JSON.stringify(imageDocFixture));
+    bad.outputs[0].bg.texture = { type: 'denim' };
+    expect(DesignerDocStrictSchema.safeParse(migrateDoc(bad)).success).toBe(false);
+  });
+
+  it('clamps an out-of-range texture intensity in lenient mode', () => {
+    const doc = JSON.parse(JSON.stringify(imageDocFixture));
+    doc.outputs[0].bg.texture = { type: 'paper', intensity: 4 };
+    const parsed = DesignerDocLenientSchema.parse(migrateDoc(doc));
+    expect(parsed.outputs[0].bg?.texture?.intensity).toBe(1);
+  });
+
+  it('parses a texture-less background exactly as before', () => {
+    const parsed = DesignerDocStrictSchema.parse(migrateDoc(imageDocFixture));
+    expect(parsed.outputs[0].bg?.texture).toBeUndefined();
+  });
+
   it('rejects a non-data/http(s) src', () => {
     const bad = JSON.parse(JSON.stringify(imageDocFixture));
     bad.outputs[0].children[1].src = 'file:///etc/passwd';

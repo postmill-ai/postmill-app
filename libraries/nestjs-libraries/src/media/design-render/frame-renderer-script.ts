@@ -25,6 +25,7 @@ import { shapeGeometrySource } from '../designer-doc/shape-geometry';
 import { keyframesSource } from '../designer-doc/keyframes';
 import { motionBlurSource } from '../designer-doc/motion-blur';
 import { captionStylesSource } from '../designer-doc/caption-styles';
+import { backgroundTextureSource } from '../designer-doc/background-texture';
 
 export const FRAME_RENDERER_SCRIPT = /* js */ `
 (function () {
@@ -32,6 +33,7 @@ ${shapeGeometrySource()}
 ${keyframesSource()}
 ${motionBlurSource()}
 ${captionStylesSource()}
+${backgroundTextureSource()}
 
   const output = window.__DATA.output;
   const baseUrl = window.__DATA.baseUrl || '';
@@ -521,6 +523,17 @@ ${captionStylesSource()}
         ctx.fillStyle = grd;
         ctx.fillRect(0, 0, canvas.width, canvas.height);
       }
+    }
+
+    // Texture is an overlay ON the base (shared generator, injected above), so
+    // grain over a gradient keeps the gradient — same rule as the page render.
+    if (output.bg && output.bg.texture) {
+      drawTextureOverlay(ctx, output.bg.texture, canvas.width, canvas.height, function (w, h) {
+        var tile = document.createElement('canvas');
+        tile.width = w;
+        tile.height = h;
+        return tile;
+      });
     }
 
     const composed = composeClipsAtPlayhead(output, timeMs);

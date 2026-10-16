@@ -6,7 +6,7 @@ import { useBrandColors } from './use-brand-colors';
 import { GradientEditor, gradientCss } from '../controls/gradient-editor';
 import { useMediaPicker } from '../../use-media-picker';
 import { useT } from '@postmill-ai/react/translation/get.transation.service.client';
-import type { DesignerBackground, DesignerGradient, DesignerOutput, VideoOutput } from '../designer.store';
+import type { DesignerBackground, DesignerGradient, DesignerOutput, DesignerTexture, VideoOutput } from '../designer.store';
 
 interface CanvasInspectorProps {
   store: any;
@@ -77,6 +77,47 @@ export const CanvasInspector: FC<CanvasInspectorProps> = ({ store }) => {
       const current = store.getState().doc.outputs[store.getState().currentOutput]?.bg;
       if (!current) return;
       store.getState().setOutputBackground({ ...current, ...patch });
+    },
+    [store]
+  );
+
+  // Silent twin of patchBg for the texture sliders: a slider drag is a stream
+  // of ticks, and each committed setOutputBackground pushes a history entry —
+  // write per tick, pushHistory once on release (the effects panel's pattern).
+  const patchBgSilent = useCallback(
+    (patch: Partial<DesignerBackground>) => {
+      const state = store.getState();
+      const current = state.doc.outputs[state.currentOutput]?.bg;
+      if (!current) return;
+      state.setOutputBackground({ ...current, ...patch }, false);
+    },
+    [store]
+  );
+
+  const setTextureType = useCallback(
+    (type: 'none' | 'grain' | 'paper') => {
+      const state = store.getState();
+      const out = state.doc.outputs[state.currentOutput];
+      if (!out) return;
+      // A doc may carry no `bg` object yet (plain `background` color) — anchor
+      // the texture on that color so enabling one never blanks the page.
+      const current = out.bg ?? { type: 'color' as const, color: out.background || '#ffffff' };
+      if (type === 'none') {
+        state.setOutputBackground({ ...current, texture: undefined });
+        return;
+      }
+      // Retune rather than reset when switching kinds: intensity/scale/seed the
+      // user dialed in carry across.
+      const prev = current.texture;
+      state.setOutputBackground({
+        ...current,
+        texture: {
+          type,
+          intensity: prev?.intensity ?? 0.35,
+          scale: prev?.scale ?? 1,
+          seed: prev?.seed ?? 0,
+        },
+      });
     },
     [store]
   );
@@ -361,6 +402,74 @@ export const CanvasInspector: FC<CanvasInspectorProps> = ({ store }) => {
                 {t('designer_choose_from_media_library', 'Choose from media library…')}
               </button>
             ))}
+
+          {/* A texture is an overlay ON the chosen base (color, gradient or
+              image) — procedural, seeded and deterministic, so the canvas, the
+              export and the video frames all paint the same speckle. */}
+          <div className="space-y-2 pt-2 border-t border-studioBorder">
+            <div className="flex items-center justify-between">
+              <span className="text-[11px] text-textColor/50">{t('designer_label_texture', 'Texture')}</span>
+              {bg?.texture && (
+                <button
+                  type="button"
+                  className="text-[10px] text-btnPrimaryAccent"
+                  title={t('designer_texture_reseed_hint', 'New random grain')}
+                  // Edit-time randomness only — the seed is stored on the doc,
+                  // so every render afterwards is deterministic.
+                  onClick={() =>
+                    patchBg({
+                      texture: {
+                        ...(bg.texture as DesignerTexture),
+                        seed: Math.floor(Math.random() * 2147483647),
+                      },
+                    })
+                  }
+                >
+                  {t('designer_texture_reseed', 'Reseed')}
+                </button>
+              )}
+            </div>
+            <SegmentedControl
+              value={bg?.texture?.type ?? 'none'}
+              options={[
+                { value: 'none', label: t('designer_texture_none', 'None') },
+                { value: 'grain', label: t('designer_texture_grain', 'Grain') },
+                { value: 'paper', label: t('designer_texture_paper', 'Paper') },
+              ]}
+              onChange={(v) => setTextureType(v as 'none' | 'grain' | 'paper')}
+            />
+            {bg?.texture && (
+              <div className="flex flex-col gap-3">
+                <Slider
+                  label={t('designer_texture_intensity', 'Intensity')}
+                  min={0}
+                  max={100}
+                  suffix="%"
+                  value={Math.round((bg.texture.intensity ?? 0.35) * 100)}
+                  onChange={(n) =>
+                    patchBgSilent({
+                      texture: { ...(bg.texture as DesignerTexture), intensity: n / 100 },
+                    })
+                  }
+                  onCommit={() => store.getState().pushHistory('Background texture')}
+                />
+                <Slider
+                  label={t('designer_texture_scale', 'Scale')}
+                  min={0.25}
+                  max={4}
+                  step={0.25}
+                  suffix="×"
+                  value={bg.texture.scale ?? 1}
+                  onChange={(n) =>
+                    patchBgSilent({
+                      texture: { ...(bg.texture as DesignerTexture), scale: n },
+                    })
+                  }
+                  onCommit={() => store.getState().pushHistory('Background texture')}
+                />
+              </div>
+            )}
+          </div>
           {imagePicker.element}
         </div>
       )}

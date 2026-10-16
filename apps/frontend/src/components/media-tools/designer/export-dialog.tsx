@@ -24,6 +24,7 @@ import {
   outputToSvg,
 } from '@postmill-ai/nestjs-libraries/media/designer-doc/svg-export';
 import { CanvasElements, gradientFillProps, getImageNaturalSize } from './elements';
+import { textureFillProps } from './textures';
 import type { DesignerDoc, DesignerOutput } from './designer.store';
 import { getThumbnailDataUrl } from './designer';
 import { CHANNEL_PRESETS } from '@postmill-ai/nestjs-libraries/integrations/social/channel-presets';
@@ -224,6 +225,9 @@ const renderOutputToBlob = async (
     img.src = bgImageSrc;
     return img;
   })();
+  // The texture is part of the background: it exports with it and is skipped
+  // for a transparent export, exactly like the base fill.
+  const bgTexture = !transparent && bg?.texture ? textureFillProps(bg.texture) : null;
 
   try {
     await new Promise<void>((resolve) => {
@@ -255,6 +259,16 @@ const renderOutputToBlob = async (
                         y={0}
                         width={output.width}
                         height={output.height}
+                        listening={false}
+                      />
+                    )}
+                    {bgTexture && (
+                      <Rect
+                        x={0}
+                        y={0}
+                        width={output.width}
+                        height={output.height}
+                        {...bgTexture}
                         listening={false}
                       />
                     )}
@@ -444,6 +458,7 @@ const renderOutputThumbnail = async (
     img.src = bgImageSrc;
     return img;
   })();
+  const bgTexture = bg?.texture ? textureFillProps(bg.texture) : null;
 
   try {
     await new Promise<void>((resolve) => {
@@ -465,6 +480,16 @@ const renderOutputThumbnail = async (
                 y={0}
                 width={output.width}
                 height={output.height}
+                listening={false}
+              />
+            )}
+            {bgTexture && (
+              <Rect
+                x={0}
+                y={0}
+                width={output.width}
+                height={output.height}
+                {...bgTexture}
                 listening={false}
               />
             )}

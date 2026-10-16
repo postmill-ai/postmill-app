@@ -635,4 +635,68 @@ describe('parity: page background', () => {
     expect(pixels.at(4, 100)[0]).toBeLessThan(60);
     expect(pixels.at(196, 100)[0]).toBeGreaterThan(195);
   });
+
+  it('overlays a grain texture on the base colour, deterministically', async () => {
+    const design = doc([], {
+      background: '#224488',
+      bg: {
+        type: 'color',
+        color: '#224488',
+        texture: { type: 'grain', intensity: 0.6, seed: 11 },
+      },
+    });
+    // The whole point of the seeded generator: a re-render is byte-identical.
+    const a = await service().renderPage(design, 0, { pixelRatio: 1 });
+    const b = await service().renderPage(design, 0, { pixelRatio: 1 });
+    expect(Buffer.compare(a, b)).toBe(0);
+
+    const pixels = await render(design);
+    // Speckle over the blue base: some pixels drifted from it, none flooded.
+    let moved = 0;
+    for (let y = 0; y < 200; y += 7) {
+      for (let x = 0; x < 200; x += 7) {
+        const [r, g, bl] = pixels.at(x, y);
+        if (r !== 0x22 || g !== 0x44 || bl !== 0x88) moved++;
+      }
+    }
+    expect(moved).toBeGreaterThan(0);
+  });
+
+  it('keeps the gradient readable under a paper texture', async () => {
+    const pixels = await render(
+      doc([], {
+        bg: {
+          type: 'gradient',
+          gradient: {
+            type: 'linear',
+            angle: 0,
+            stops: [
+              { offset: 0, color: '#000000' },
+              { offset: 1, color: '#ffffff' },
+            ],
+          },
+          texture: { type: 'paper', intensity: 0.5, seed: 3 },
+        },
+      })
+    );
+    // The mottle modulates the ramp but never replaces it.
+    expect(pixels.at(4, 100)[0]).toBeLessThan(90);
+    expect(pixels.at(196, 100)[0]).toBeGreaterThan(165);
+  });
+
+  it('leaves the page alone at zero intensity', async () => {
+    const plain = await service().renderPage(
+      doc([], { bg: { type: 'color', color: '#ff0000' } }),
+      0,
+      { pixelRatio: 1 }
+    );
+    const textured = await service().renderPage(
+      doc([], {
+        bg: { type: 'color', color: '#ff0000', texture: { type: 'grain', intensity: 0 } },
+      }),
+      0,
+      { pixelRatio: 1 }
+    );
+    expect(Buffer.compare(plain, textured)).toBe(0);
+  });
 });

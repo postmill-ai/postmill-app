@@ -27,6 +27,7 @@ import type {
   VideoClip,
   DesignerBackground,
   DesignerGradient,
+  DesignerTexture,
   DesignerMask,
   TextRun,
   DesignerAttribution,
@@ -49,6 +50,7 @@ export type {
   VideoClip,
   DesignerBackground,
   DesignerGradient,
+  DesignerTexture,
   DesignerMask,
   TextRun,
   DesignerAttribution,
@@ -155,7 +157,10 @@ export interface DesignerActions {
   duplicateElement: (id: string) => void;
   setSelectedIds: (ids: string[]) => void;
   requestRename: (id: string | null) => void;
-  setOutputBackground: (bg: DesignerBackground) => void;
+  // `commit: false` writes without a history entry — continuous controls
+  // (texture sliders) write silently per tick and pushHistory once on release,
+  // the same discipline `updateElementsSilent` gives element sliders.
+  setOutputBackground: (bg: DesignerBackground, commit?: boolean) => void;
   copySelection: () => void; cutSelection: () => void; paste: () => void;
   groupSelection: () => void; ungroupSelection: () => void;
   /** Turn the selection into a reusable symbol, replacing it with an instance. */
@@ -478,7 +483,7 @@ export const createDesignerStore = (
       setSelectedIds: (ids) => set({ selectedIds: ids }),
       requestRename: (id) => set({ renamingId: id }),
 
-      setOutputBackground: (bg) => {
+      setOutputBackground: (bg, commit = true) => {
         if (isVideoMode()) return;
         const { doc, currentOutput } = get();
         const outs = [...doc.outputs];
@@ -489,7 +494,7 @@ export const createDesignerStore = (
           bg,
         };
         set({ doc: { ...doc, outputs: outs }, isDirty: true });
-        get().pushHistory();
+        if (commit) get().pushHistory();
       },
 
       copySelection: () => {

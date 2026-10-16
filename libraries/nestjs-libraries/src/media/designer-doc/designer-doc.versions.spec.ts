@@ -146,6 +146,25 @@ describe('DesignerDoc schema versions', () => {
     expect(DesignerDocStrictSchema.safeParse(doc).success).toBe(false);
   });
 
+  it('accepts a background texture through both parsers (v7)', () => {
+    const doc = blank();
+    doc.outputs[0].bg = {
+      type: 'color',
+      color: '#1e2a4a',
+      texture: { type: 'paper', intensity: 0.5, scale: 1.5, seed: 99 },
+    };
+    expect(DesignerDocStrictSchema.safeParse(doc).success).toBe(true);
+    expect(DesignerDocLenientSchema.safeParse(doc).success).toBe(true);
+  });
+
+  it('loads a v6 document intact, without rewriting it', () => {
+    const doc = blank();
+    doc.version = 6;
+    const migrated = migrateDoc(structuredClone(doc));
+    expect(migrated.version).toBe(6);
+    expect(DesignerDocStrictSchema.safeParse(migrated).success).toBe(true);
+  });
+
   it('keeps groupId and parentId as separate, coexisting concepts', () => {
     // groupId is the cross-format reflow move-unit; parentId is the layer
     // folder. A layer group sets BOTH, so the folder also reflows as a unit.

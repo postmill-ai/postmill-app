@@ -45,6 +45,7 @@ import {
   isNativeBlend,
 } from '../designer-doc/pixel-ops';
 import { drawPatternTile, tileSizeFor } from '../designer-doc/pattern-tiles';
+import { drawTextureOverlay } from '../designer-doc/background-texture';
 import { canvasColor } from '../designer-doc/canvas-color';
 import { splitStyles, styleOffset, styleBlur, stylePadding, elementStyles } from '../designer-doc/layer-styles';
 import {
@@ -1697,15 +1698,14 @@ export class DesignRenderService {
     const h = output.height;
     const bg = output.bg;
 
+    let basePainted = false;
     if (bg?.type === 'gradient' && bg.gradient) {
       ctx.save();
       ctx.fillStyle = this.buildGradient(ctx, bg.gradient, w, h);
       ctx.fillRect(0, 0, w, h);
       ctx.restore();
-      return;
-    }
-
-    if (bg?.type === 'image' && (bg.src || bg.fileId)) {
+      basePainted = true;
+    } else if (bg?.type === 'image' && (bg.src || bg.fileId)) {
       const img = await this.loadImageSafe(bg.src);
       if (img) {
         ctx.save();
@@ -1717,15 +1717,25 @@ export class DesignRenderService {
         const { sx, sy, sw, sh } = computeCoverCrop(srcW, srcH, w, h, bg.focalPoint);
         ctx.drawImage(img, sx, sy, sw, sh, 0, 0, w, h);
         ctx.restore();
-        return;
+        basePainted = true;
       }
     }
 
-    const color = bg?.color || output.background || '#ffffff';
-    ctx.save();
-    ctx.fillStyle = canvasColor(color);
-    ctx.fillRect(0, 0, w, h);
-    ctx.restore();
+    if (!basePainted) {
+      const color = bg?.color || output.background || '#ffffff';
+      ctx.save();
+      ctx.fillStyle = canvasColor(color);
+      ctx.fillRect(0, 0, w, h);
+      ctx.restore();
+    }
+
+    // A texture is an overlay ON the base, never a replacement for it — the
+    // shared generator paints a transparent-ground tile so grain over a
+    // gradient keeps the gradient.
+    if (bg?.texture) {
+      const { createCanvas } = await loadCanvasModule();
+      drawTextureOverlay(ctx, bg.texture, w, h, createCanvas);
+    }
   }
 
   private async drawElement(

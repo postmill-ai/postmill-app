@@ -57,7 +57,11 @@ describe('FRAME_RENDERER_SCRIPT', () => {
     const win: Record<string, unknown> = {
       __DATA: { output, baseUrl: 'https://example.test' },
     };
-    const doc = { getElementById: () => canvas };
+    const doc = {
+      getElementById: () => canvas,
+      // The background-texture overlay builds its tile through this.
+      createElement: () => ({ width: 0, height: 0, getContext: () => stubContext() }),
+    };
     const fn = new Function('window', 'document', 'Image', FRAME_RENDERER_SCRIPT);
     fn(win, doc, class {});
     return win.__FRAME_API as {
@@ -103,6 +107,21 @@ describe('FRAME_RENDERER_SCRIPT', () => {
 
   it('renders a frame without throwing', async () => {
     const api = run(output);
+    await expect(api.renderFrame(500)).resolves.toBeUndefined();
+  });
+
+  it('paints a background texture with the SHARED generator, not a copy', async () => {
+    // The texture overlay must come from the injected background-texture
+    // source — a hand-written grain here would drift from the page render.
+    expect(FRAME_RENDERER_SCRIPT).toContain('drawTextureTile');
+    expect(FRAME_RENDERER_SCRIPT).toContain('textureNoise');
+    expect(FRAME_RENDERER_SCRIPT).toContain('drawTextureOverlay');
+
+    const textured = {
+      ...output,
+      bg: { type: 'color', color: '#224488', texture: { type: 'grain', intensity: 0.5, seed: 4 } },
+    };
+    const api = run(textured);
     await expect(api.renderFrame(500)).resolves.toBeUndefined();
   });
 
