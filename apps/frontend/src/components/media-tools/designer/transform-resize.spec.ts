@@ -1,9 +1,12 @@
 import {
   axisForAnchor,
+  bakeElementTransform,
   buildResizePatch,
   MIN_ELEMENT_SIZE,
+  usesPointsBoundingBox,
 } from './transform-resize';
 import { fitTextToBox } from '@postmill-ai/nestjs-libraries/media/designer-doc/fit-text';
+import { pointsForShape } from '@postmill-ai/nestjs-libraries/media/designer-doc/shape-geometry';
 import type { DesignerElement } from './designer.store';
 
 const textEl = (over: Partial<DesignerElement> = {}) =>
@@ -135,6 +138,115 @@ describe('buildResizePatch', () => {
       'top-left'
     );
     expect(tiny.fontSize).toBeGreaterThanOrEqual(8);
+  });
+});
+
+describe('bakeElementTransform (Line-backed shapes)', () => {
+  /**
+   * What the canvas actually reads off a star's Konva node: `Konva.Line`
+   * reports the bbox of its POINTS, which for a 200×100 star is smaller than
+   * the element box (and asymmetrically so). Computed from the shared
+   * generator rather than hardcoded, so the fixture can't drift from the
+   * geometry the bug lived in.
+   */
+  const star = {
+    type: 'shape',
+    shape: 'star',
+    width: 200,
+    height: 100,
+  } as unknown as DesignerElement;
+
+  const starNodeGeometry = (over: Partial<Parameters<typeof node>[0]> = {}) => {
+    const pts = pointsForShape('star', star.width, star.height)!;
+    const xs = pts.map((p) => p.x);
+    const ys = pts.map((p) => p.y);
+    return node({
+      width: Math.max(...xs) - Math.min(...xs),
+      height: Math.max(...ys) - Math.min(...ys),
+      ...over,
+    });
+  };
+
+  it('confirms the points bbox is smaller than the element box (the bug setup)', () => {
+    const n = starNodeGeometry();
+    expect(n.width).toBeLessThan(star.width);
+    expect(n.height).toBeLessThan(star.height);
+    expect(usesPointsBoundingBox(star)).toBe(true);
+  });
+
+  it('preserves width/height through a pure rotation', () => {
+    // scale stays 1 on a rotation, but bbox ≠ box: baking from the node
+    // shrank the star on every rotate.
+    const { patch, writeBackSize } = bakeElementTransform(
+      star,
+      starNodeGeometry({ rotation: 45 }),
+      'rotater'
+    );
+    expect(patch.width).toBe(200);
+    expect(patch.height).toBe(100);
+    expect(patch.rotation).toBe(45);
+    // A Line's points re-derive from the patched element; the node is not
+    // written back to.
+    expect(writeBackSize).toBe(false);
+  });
+
+  it('keeps a non-uniform multi-select scale proportional to the gesture', () => {
+    const { patch } = bakeElementTransform(
+      star,
+      starNodeGeometry({ scaleX: 1.5, scaleY: 0.8 }),
+      'bottom-right'
+    );
+    expect(patch.width).toBe(300);
+    expect(patch.height).toBe(80);
+  });
+
+  it('does not compound distortion across frames', () => {
+    // Simulates two consecutive transform frames: the second frame's element
+    // carries the first frame's committed box. With the node as base the box
+    // shrank every frame even at scale 1; with the element box it is stable.
+    const frame1 = bakeElementTransform(star, starNodeGeometry({ rotation: 10 }), 'rotater');
+    const committed = { ...star, width: frame1.patch.width, height: frame1.patch.height };
+    const pts = pointsForShape('star', committed.width, committed.height)!;
+    const xs = pts.map((p) => p.x);
+    const ys = pts.map((p) => p.y);
+    const frame2 = bakeElementTransform(
+      committed as DesignerElement,
+      node({
+        width: Math.max(...xs) - Math.min(...xs),
+        height: Math.max(...ys) - Math.min(...ys),
+        rotation: 20,
+      }),
+      'rotater'
+    );
+    expect(frame2.patch.width).toBe(200);
+    expect(frame2.patch.height).toBe(100);
+  });
+
+  it('treats triangle/polygon/line and warped elements the same way', () => {
+    for (const shape of ['triangle', 'polygon', 'line']) {
+      expect(usesPointsBoundingBox({ type: 'shape', shape } as DesignerElement)).toBe(true);
+    }
+    expect(
+      usesPointsBoundingBox({
+        type: 'shape',
+        shape: 'rect',
+        warp: { preset: 'arc', bend: 50 },
+      } as DesignerElement)
+    ).toBe(true);
+    expect(usesPointsBoundingBox({ type: 'shape', shape: 'rect' } as DesignerElement)).toBe(false);
+    expect(usesPointsBoundingBox({ type: 'text' } as DesignerElement)).toBe(false);
+  });
+
+  it('still bakes from the node for primitives whose box IS the attr', () => {
+    const rect = { type: 'shape', shape: 'rect', width: 200, height: 100 } as DesignerElement;
+    const { patch, writeBackSize } = bakeElementTransform(
+      rect,
+      node({ scaleX: 1.5, scaleY: 0.8 }),
+      'bottom-right'
+    );
+    expect(patch.width).toBe(300);
+    expect(patch.height).toBe(80);
+    expect(writeBackSize).toBe(true);
   });
 });
 

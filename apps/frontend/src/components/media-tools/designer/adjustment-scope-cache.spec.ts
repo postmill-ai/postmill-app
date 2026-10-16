@@ -105,4 +105,22 @@ describe('adjustmentScopeCacheKey', () => {
       adjustmentScopeCacheKey('bg-pending', [prodImage], ready)
     );
   });
+
+  it('does NOT change when folded layers move mid-gesture (perf design)', () => {
+    // The prod fixture's styled image dragged across the canvas: x/y move per
+    // drag frame and must not re-rasterise the filtered scope.
+    const moved = { ...prodImage, x: 900, y: 640 } as DesignerElement;
+    expect(adjustmentScopeCacheKey('bg-pending', [prodImage], ready, 7)).toBe(
+      adjustmentScopeCacheKey('bg-pending', [moved], ready, 7)
+    );
+  });
+
+  it('changes when the gesture-commit geometry generation bumps', () => {
+    // A committed drag/transform bumps the nonce once, which is what refreshes
+    // the cached scope — Konva never repaints a cached node for a moved
+    // descendant, so without this the bitmap froze at the pre-drag position.
+    const before = adjustmentScopeCacheKey('bg-pending', [prodImage], ready, 7);
+    const after = adjustmentScopeCacheKey('bg-pending', [prodImage], ready, 8);
+    expect(before).not.toBe(after);
+  });
 });

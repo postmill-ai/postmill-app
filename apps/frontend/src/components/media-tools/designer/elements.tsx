@@ -87,6 +87,18 @@ interface ElementsProps {
    * slightly different metrics and the text reads doubled.
    */
   editingTextId?: string | null;
+  /**
+   * Bumped by the canvas when a drag/transform gesture COMMITS. The cached
+   * wrappers (StyledLayer, AdjustmentScope, MaskedLayer, LayerGroup) key their
+   * Konva caches on everything EXCEPT geometry — re-rasterising on every drag
+   * frame is the cost the keys exist to avoid — but Konva never repaints a
+   * cached node when a descendant moves, so without a commit-time bump the
+   * bitmap froze at the pre-drag position while the hit region and the
+   * Transformer frame tracked the pointer. Folding this into the cache keys
+   * refreshes each wrapper exactly once per gesture, through its own effect
+   * (which is also what re-applies StyledLayer's explicit padded cache rect).
+   */
+  geometryNonce?: number;
 }
 
 const imageCache = new Map<string, HTMLImageElement>();
@@ -269,13 +281,18 @@ const bitmapLayersKey = (
  * and each bitmap layer's src + readiness (load and Replace both rebuild).
  * Geometry is deliberately NOT part of the key — re-rasterising a filtered
  * scope on every drag frame is the cost the debounced filter cache exists to
- * avoid.
+ * avoid. What IS folded in is `geometryGen`, a nonce the canvas bumps only
+ * when a drag/transform gesture commits: Konva never repaints a cached node
+ * for a moved descendant, so the scope's bitmap otherwise stayed frozen at
+ * the pre-drag position while the hit region tracked the pointer.
  */
 export const adjustmentScopeCacheKey = (
   backdropKey: string | number | undefined,
   els: DesignerElement[],
-  isReady: (src: string) => boolean = (src) => imageCache.has(src)
-): string => `${backdropKey ?? ''}::${bitmapLayersKey(els, isReady)}`;
+  isReady: (src: string) => boolean = (src) => imageCache.has(src),
+  geometryGen?: string | number
+): string =>
+  `${backdropKey ?? ''}::${bitmapLayersKey(els, isReady)}${geometryGen != null ? `::g${geometryGen}` : ''}`;
 
 // Convert a DesignerGradient into Konva gradient props for a w×h box.
 export const gradientFillProps = (
@@ -850,10 +867,11 @@ const ArrowHeads: FC<{ element: DesignerElement; points: { x: number; y: number 
  * A component rather than a branch inside `renderLeaf` because loading the mask
  * bitmap needs a hook, and `renderLeaf` is a plain function called in a loop.
  */
-const MaskedLeaf: FC<{ element: DesignerElement; children: ReactNode }> = ({
-  element,
-  children,
-}) => {
+const MaskedLeaf: FC<{
+  element: DesignerElement;
+  geometryNonce?: number;
+  children: ReactNode;
+}> = ({ element, geometryNonce, children }) => {
   const mask = useLoadedImage(
     element.maskEnabled === false ? undefined : element.maskSrc
   );
@@ -861,7 +879,11 @@ const MaskedLeaf: FC<{ element: DesignerElement; children: ReactNode }> = ({
   const stencil = (live as HTMLCanvasElement | undefined) || mask;
   if (!stencil || element.maskEnabled === false) return <>{children}</>;
   return (
-    <MaskedLayer element={element} mask={stencil} cacheKey={element.maskSrc}>
+    <MaskedLayer
+      element={element}
+      mask={stencil}
+      cacheKey={`${element.maskSrc ?? ''}:${geometryNonce ?? 0}`}
+    >
       {children}
     </MaskedLayer>
   );
@@ -876,11 +898,18 @@ const MaskedLeaf: FC<{ element: DesignerElement; children: ReactNode }> = ({
  * the same bug class `backdropKey` documents for the artboard background (and
  * the filter-cache fix at ImageNode). Folding the load state into the key
  * forces a re-cache the moment the bitmap lands.
+ *
+ * `geometryGen` is the gesture-commit nonce (see `geometryNonce` on
+ * `CanvasElements`): the styled buffer is cached in scene space, so a
+ * committed move/resize must rebuild it once — per-frame geometry stays out
+ * of the key for the same perf reason as the adjustment scope's.
  */
 export const styledLeafCacheKey = (
   element: DesignerElement,
-  image: HTMLImageElement | null
-): string => `${element.id}:${image ? 'ready' : 'pending'}`;
+  image: HTMLImageElement | null,
+  geometryGen?: string | number
+): string =>
+  `${element.id}:${image ? 'ready' : 'pending'}${geometryGen != null ? `:${geometryGen}` : ''}`;
 
 /**
  * Wraps a leaf in its layer effects, if it has any.
@@ -888,10 +917,11 @@ export const styledLeafCacheKey = (
  * Unstyled layers go through untouched, so the common case pays nothing for
  * this and renders byte-for-byte as it did before effects existed.
  */
-const StyledLeaf: FC<{ element: DesignerElement; children: ReactNode }> = ({
-  element,
-  children,
-}) => {
+const StyledLeaf: FC<{
+  element: DesignerElement;
+  geometryNonce?: number;
+  children: ReactNode;
+}> = ({ element, geometryNonce, children }) => {
   // Subscribes to the image cache; null until the bitmap is ready. Non-image
   // layers pass no src, so their key is stable and nothing re-caches for them.
   const image = useLoadedImage(
@@ -902,7 +932,10 @@ const StyledLeaf: FC<{ element: DesignerElement; children: ReactNode }> = ({
     <BackdropFilterShape key={`${element.id}-backdrop`} element={element} />
   ) : null;
   const styled = hasLayerStyles(element) ? (
-    <StyledLayer element={element} cacheKey={styledLeafCacheKey(element, image)}>
+    <StyledLayer
+      element={element}
+      cacheKey={styledLeafCacheKey(element, image, geometryNonce)}
+    >
       {children}
     </StyledLayer>
   ) : (
@@ -986,6 +1019,7 @@ export const CanvasElements: FC<ElementsProps> = ({
   backdrop,
   backdropKey,
   editingTextId,
+  geometryNonce,
 }) => {
   // Symbol instances expand to ordinary elements before the tree is built, so
   // nothing below here needs to know symbols exist — the same contract the
@@ -1573,7 +1607,11 @@ export const CanvasElements: FC<ElementsProps> = ({
             ...acc,
             {
               view: (
-                <LayerGroup key={el.id} element={el} cacheKey={node.children.length}>
+                <LayerGroup
+                  key={el.id}
+                  element={el}
+                  cacheKey={`${node.children.length}:${geometryNonce ?? 0}`}
+                >
                   {renderNodes(node.children)}
                 </LayerGroup>
               ),
@@ -1596,7 +1634,7 @@ export const CanvasElements: FC<ElementsProps> = ({
                 <AdjustmentScope
                   key={`adj-${el.id}`}
                   adjustment={el.adjustment}
-                  cacheKey={adjustmentScopeCacheKey(backdropKey, scopeEls)}
+                  cacheKey={adjustmentScopeCacheKey(backdropKey, scopeEls, undefined, geometryNonce)}
                 >
                   {scoped.map((s) => s.view)}
                 </AdjustmentScope>
@@ -1623,8 +1661,10 @@ export const CanvasElements: FC<ElementsProps> = ({
                     interactive={interactive}
                   />
                 )}
-                <MaskedLeaf element={el}>
-                  <StyledLeaf element={el}>{renderLeaf(el)}</StyledLeaf>
+                <MaskedLeaf element={el} geometryNonce={geometryNonce}>
+                  <StyledLeaf element={el} geometryNonce={geometryNonce}>
+                    {renderLeaf(el)}
+                  </StyledLeaf>
                 </MaskedLeaf>
               </React.Fragment>
             ),

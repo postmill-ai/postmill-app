@@ -1005,7 +1005,12 @@ export const VideoTimeline: FC<VideoTimelineProps> = ({ store, sendTimelineAware
         // clip AND saved the mutated doc).
         e.preventDefault();
         store.getState().splitClip(currentOutput, selectedClip.trackId, selectedClip.clipId, playheadMs);
-      } else if (e.key === 'f' && e.ctrlKey && selectedClip && selectedClip.outputIndex === currentOutput) {
+      } else if (
+        e.key.toLowerCase() === 'f' &&
+        (e.ctrlKey || e.metaKey) &&
+        selectedClip && selectedClip.outputIndex === currentOutput
+      ) {
+        // Freeze frame: Ctrl on Windows/Linux, ⌘ on macOS.
         e.preventDefault();
         handleFreezeFrame(selectedClip.trackId, selectedClip.clipId);
       }

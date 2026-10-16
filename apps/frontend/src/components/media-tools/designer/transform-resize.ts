@@ -40,6 +40,34 @@ export interface NodeGeometry {
   rotation: number;
 }
 
+/**
+ * True when the canvas draws the element as a node whose `width()`/`height()`
+ * report the bbox of its drawn POINTS rather than the element box: anything
+ * warped (resampled to a Konva `Line` polyline) and the polygonal shapes
+ * (star/triangle/polygon/line), which are `Konva.Line`s with explicit points.
+ *
+ * That bbox is not the box — a star's points span ≈0.951 of the box width and
+ * ≈0.905 of the height — so baking `node.width() * scaleX` per transform frame
+ * shrank the stored box asymmetrically, React re-derived the points from the
+ * shrunken box, and the distortion compounded. Even a pure rotation suffered:
+ * scale stays 1 but bbox ≠ box. For these elements the document's own
+ * `width`/`height` is the only honest base.
+ */
+export const usesPointsBoundingBox = (
+  el: Pick<DesignerElement, 'type' | 'shape' | 'warp'>
+): boolean => {
+  if (el.warp?.preset && !!(el.warp.bend || el.warp.distortH || el.warp.distortV)) {
+    return true;
+  }
+  return (
+    el.type === 'shape' &&
+    (el.shape === 'star' ||
+      el.shape === 'triangle' ||
+      el.shape === 'polygon' ||
+      el.shape === 'line')
+  );
+};
+
 export interface ResizePatch {
   x: number;
   y: number;
@@ -98,4 +126,48 @@ export const buildResizePatch = (
   }
 
   return patch;
+};
+
+export interface BakedTransform {
+  patch: ResizePatch;
+  /**
+   * False for points-bbox elements: writing width/height onto a Konva `Line`
+   * does not rescale its points — the points are re-derived from the patched
+   * element on the next render, so the node must be left alone.
+   */
+  writeBackSize: boolean;
+}
+
+/**
+ * One node's transform, baked. Picks the honest base geometry per element
+ * (see `usesPointsBoundingBox`) and then delegates to `buildResizePatch`, so
+ * the canvas only reads raw numbers off the Konva node.
+ */
+export const bakeElementTransform = (
+  el: Pick<
+    DesignerElement,
+    | 'type'
+    | 'shape'
+    | 'warp'
+    | 'width'
+    | 'height'
+    | 'fontSize'
+    | 'richText'
+    | 'textPath'
+    | 'curve'
+  >,
+  node: NodeGeometry,
+  anchor: string | null | undefined
+): BakedTransform => {
+  const pointsBBox = usesPointsBoundingBox(el);
+  const patch = buildResizePatch(
+    el,
+    {
+      ...node,
+      width: pointsBBox ? el.width : node.width,
+      height: pointsBBox ? el.height : node.height,
+    },
+    anchor
+  );
+  return { patch, writeBackSize: !pointsBBox };
 };

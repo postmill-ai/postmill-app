@@ -54,4 +54,16 @@ describe('styledLeafCacheKey', () => {
     expect(styledLeafCacheKey(shape, null)).toBe(styledLeafCacheKey(shape, null));
     expect(styledLeafCacheKey(shape, null)).toBe('shape-1:pending');
   });
+
+  it('ignores per-frame geometry but turns over on a gesture-commit bump', () => {
+    // Mid-drag the element's x/y change every frame: the key must NOT follow
+    // (re-rasterising the effects stack per frame is the cost the cache
+    // avoids). On commit the canvas bumps the geometry generation once, and
+    // the key turns over so the styled buffer rebuilds at the final position.
+    const moved = { ...styledImage, x: 640, y: 480 } as DesignerElement;
+    expect(styledLeafCacheKey(moved, null, 3)).toBe(styledLeafCacheKey(styledImage, null, 3));
+    expect(styledLeafCacheKey(styledImage, null, 4)).not.toBe(
+      styledLeafCacheKey(styledImage, null, 3)
+    );
+  });
 });

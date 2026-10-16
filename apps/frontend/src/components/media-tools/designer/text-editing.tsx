@@ -1,7 +1,9 @@
 'use client';
 
-import React, { FC, useEffect, useRef, useState } from 'react';
-import type { DesignerElement, TextRun } from './designer.store';
+import React, { FC, useCallback, useEffect, useRef, useState } from 'react';
+import type { DesignerElement, DesignerOutput, TextRun, VideoOutput } from './designer.store';
+import type { SymbolDefinition } from '@postmill-ai/nestjs-libraries/media/designer-doc/symbols';
+import { resolveTextEditTarget } from './symbol-edit';
 import { fittedFontSize } from './measure-text';
 
 interface TextEditingProps {
@@ -188,6 +190,47 @@ export const buildTextEditCommit = (
   };
 };
 
+/**
+ * True while the target of an in-progress text edit still exists in the
+ * document. An edit target can vanish MID-EDIT — an output switch, an undo, a
+ * collab doc replace — and when it does the overlay unmounts without a blur,
+ * so the edit was lost AND `editingTextId` leaked: the canvas keyboard handler
+ * short-circuits on it and the Konva text node stays hidden, leaving an
+ * unresponsive, invisible text box. The canvas clears the id whenever this
+ * flips false.
+ */
+export const textEditTargetExists = (
+  output: DesignerOutput | VideoOutput | undefined,
+  symbols: SymbolDefinition[] | undefined,
+  id: string,
+  isVideo: boolean
+): boolean => {
+  if (isVideo) {
+    return !!(output as VideoOutput | undefined)?.tracks?.some((track) =>
+      track.clips.some((c) => c.id === id)
+    );
+  }
+  return !!resolveTextEditTarget(output as DesignerOutput | undefined, symbols, id);
+};
+
+/**
+ * Watches the resolved edit target and calls `onClear` the moment it stops
+ * resolving — see `textEditTargetExists` for the deadlock this prevents.
+ */
+export const useTextEditTargetGuard = (args: {
+  editingTextId: string | null;
+  output: DesignerOutput | VideoOutput | undefined;
+  symbols?: SymbolDefinition[];
+  isVideo: boolean;
+  onClear: () => void;
+}) => {
+  const { editingTextId, output, symbols, isVideo, onClear } = args;
+  useEffect(() => {
+    if (!editingTextId) return;
+    if (!textEditTargetExists(output, symbols, editingTextId, isVideo)) onClear();
+  }, [editingTextId, output, symbols, isVideo, onClear]);
+};
+
 export const TextEditingOverlay: FC<TextEditingProps> = ({
   element,
   stageRect,
@@ -195,6 +238,10 @@ export const TextEditingOverlay: FC<TextEditingProps> = ({
   onComplete,
 }) => {
   const editorRef = useRef<HTMLDivElement>(null);
+  // Our own handle on the editor node: React detaches `editorRef` BEFORE the
+  // passive unmount cleanup runs, but the DOM object outlives removal, so the
+  // unmount commit can still read the final innerHTML from this one.
+  const editorNodeRef = useRef<HTMLDivElement | null>(null);
   const [html] = useState(() => {
     if (element.richText?.length) {
       return runsToHtml(element.richText, element);
@@ -206,6 +253,7 @@ export const TextEditingOverlay: FC<TextEditingProps> = ({
   useEffect(() => {
     const el = editorRef.current;
     if (!el) return;
+    editorNodeRef.current = el;
     el.focus();
     const range = document.createRange();
     range.selectNodeContents(el);
@@ -214,8 +262,19 @@ export const TextEditingOverlay: FC<TextEditingProps> = ({
     sel?.addRange(range);
   }, []);
 
-  const handleBlur = () => {
-    const currentHtml = editorRef.current?.innerHTML ?? '';
+  /**
+   * An overlay settles exactly once. `settled` guards the three exits (blur
+   * commit, Escape discard, unmount) against each other: a blur commits and
+   * unmounts the overlay, and the unmount must not commit the same edit a
+   * second time — nor commit at all after an Escape discard.
+   */
+  const settledRef = useRef(false);
+
+  const commit = useCallback(() => {
+    if (settledRef.current) return;
+    settledRef.current = true;
+    const currentHtml =
+      editorRef.current?.innerHTML ?? editorNodeRef.current?.innerHTML ?? '';
     const runs = serializeHtml(currentHtml, element);
     const next = buildTextEditCommit(runs, element);
     if (
@@ -225,10 +284,34 @@ export const TextEditingOverlay: FC<TextEditingProps> = ({
       onUpdate(element.id, next);
     }
     onComplete();
-  };
+  }, [element, onUpdate, onComplete]);
+
+  // Read through a ref so the unmount cleanup (mounted once) always runs the
+  // CURRENT commit closure rather than the first render's.
+  const commitRef = useRef(commit);
+  useEffect(() => {
+    commitRef.current = commit;
+  });
+
+  useEffect(
+    () => () => {
+      // Unmount without a blur means the edit target vanished mid-edit
+      // (output switch, undo, a collab doc replace). Commit through the same
+      // path rather than dropping the typed text; the canvas's onUpdate
+      // re-resolves the target, so a genuinely gone element is a no-op and
+      // only the state cleanup matters.
+      commitRef.current();
+    },
+    []
+  );
+
+  const handleBlur = commit;
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === 'Escape') {
+      // Discard: settle WITHOUT committing, but always complete — a settled
+      // overlay that stayed mounted would keep the Konva text hidden.
+      settledRef.current = true;
       onComplete();
     }
   };

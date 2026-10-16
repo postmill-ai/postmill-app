@@ -8,7 +8,7 @@ import {
 } from '@postmill-ai/nestjs-libraries/media/designer-doc/align-distribute';
 import type Konva from 'konva';
 import { CanvasElements, gradientFillProps } from './elements';
-import { TextEditingOverlay } from './text-editing';
+import { TextEditingOverlay, useTextEditTargetGuard } from './text-editing';
 import {
   resolveSelectableId,
   resolveTextEditTarget,
@@ -28,7 +28,7 @@ import type { DesignerElement, DesignerOutput, VideoOutput } from './designer.st
 import { composeClipsAtPlayhead } from './video-preview';
 import { VideoCanvasOverlay } from './video-canvas-overlay';
 import { sharedStageRef } from './stage-ref';
-import { buildResizePatch } from './transform-resize';
+import { bakeElementTransform, buildResizePatch } from './transform-resize';
 import { getTool, resolveToolShortcut } from './tools';
 import { rectFromDrag, isMeaningfulDraw, buildShapeElement, buildShapeClip } from './tool-draw';
 import { addText } from './add-text';
@@ -111,6 +111,14 @@ export const DesignerCanvas: FC<CanvasProps> = ({
   const containerRef = useRef<HTMLDivElement>(null);
   const [stageSize, setStageSize] = useState({ width: 0, height: 0 });
   const [editingTextId, setEditingTextId] = useState<string | null>(null);
+  /**
+   * Bumped when a drag/transform gesture COMMITS. Cached Konva wrappers
+   * (StyledLayer / AdjustmentScope / MaskedLayer / LayerGroup) deliberately
+   * exclude geometry from their cache keys, so Konva never repaints them while
+   * a descendant moves — this nonce, folded into those keys via CanvasElements,
+   * refreshes them once per gesture instead of per frame.
+   */
+  const [geometryNonce, setGeometryNonce] = useState(0);
   const [isSpacePressed, setIsSpacePressed] = useState(false);
   const [isPanning, setIsPanning] = useState(false);
   const [guides, setGuides] = useState<{ points: number[] }[]>([]);
@@ -191,6 +199,18 @@ export const DesignerCanvas: FC<CanvasProps> = ({
     fetchFn: fetch,
   });
   const isVideo = doc.mode === 'video';
+  // If the edit target disappears mid-edit (output switch, undo, a collab doc
+  // replace), the overlay unmounts without a blur and editingTextId would
+  // leak: the keyboard handler short-circuits on it and the Konva text node
+  // stays hidden — an unresponsive, invisible text box. Clear it instead.
+  const clearEditingText = useCallback(() => setEditingTextId(null), []);
+  useTextEditTargetGuard({
+    editingTextId,
+    output,
+    symbols: doc.symbols,
+    isVideo,
+    onClear: clearEditingText,
+  });
   // Tools apply to video as well as image documents: a clip is a canvas object
   // like any other, so nothing is forced to the Move tool any more.
   const effectiveTool = store((s) => s.activeTool);
@@ -505,6 +525,17 @@ export const DesignerCanvas: FC<CanvasProps> = ({
 
   const handleStageMouseDown = useCallback(
     (e: Konva.KonvaEventObject<MouseEvent>) => {
+      // The canvas-scoped shortcuts live on the container div's onKeyDown, and
+      // a div only receives keys while focused — on macOS clicking a div never
+      // focuses it, so ⌘G / ⌘Z / arrows were dead until something else stole
+      // focus into the canvas. Focus on every press, but never pull focus out
+      // of a field the user is typing in.
+      const pressTarget = e.evt?.target as HTMLElement | null;
+      const isTypingTarget =
+        !!pressTarget?.matches?.('input,textarea,select') ||
+        !!pressTarget?.isContentEditable;
+      if (!isTypingTarget) containerRef.current?.focus({ preventScroll: true });
+
       if (isSpacePressed || effectiveTool === 'hand') {
         setIsPanning(true);
         return;
@@ -986,7 +1017,12 @@ export const DesignerCanvas: FC<CanvasProps> = ({
           changed = true;
         }
       });
-      if (changed) pushHistory();
+      if (changed) {
+        pushHistory();
+        // Gesture committed: rebuild the cached wrappers around the moved
+        // nodes exactly once (see geometryNonce).
+        setGeometryNonce((n) => n + 1);
+      }
     },
     [pushHistory, updateElement]
   );
@@ -1024,19 +1060,19 @@ export const DesignerCanvas: FC<CanvasProps> = ({
         const el = children.find((c) => c.id === id);
         if (!el) return;
         // Konva's `Line` overrides `width()` to return the bbox of its POINTS,
-        // and a warped shape is drawn as a Line whose points leave the element
-        // box — so reading the node grew `el.width` on every mousemove and the
-        // shape inflated as you dragged it. The element's own box is the truth
-        // for anything warped; the node is still authoritative for the rest,
+        // and warped shapes plus the polygonal shapes (star/triangle/polygon)
+        // are all drawn as Lines — so reading the node shrank `el.width`
+        // asymmetrically on every mousemove and the shape distorted as you
+        // dragged or even rotated it. `bakeElementTransform` uses the element's
+        // own box for those; the node stays authoritative for the rest,
         // because a live drag folds each tick's scale back into it below.
-        const warped = !!el.warp?.preset && !!(el.warp.bend || el.warp.distortH || el.warp.distortV);
-        const patch = buildResizePatch(
+        const { patch, writeBackSize } = bakeElementTransform(
           el,
           {
             x: node.x(),
             y: node.y(),
-            width: warped ? el.width : node.width(),
-            height: warped ? el.height : node.height(),
+            width: node.width(),
+            height: node.height(),
             scaleX: node.scaleX(),
             scaleY: node.scaleY(),
             rotation: node.rotation(),
@@ -1046,9 +1082,9 @@ export const DesignerCanvas: FC<CanvasProps> = ({
         patches.push({ id, patch });
         // Synchronous: fold the scale into the node's own size so the next
         // mousemove measures from a scale of 1 (see note 1 above).
-        // Writing width/height onto a warped Line would rewrite its points;
-        // it re-derives them from the patched element on the next render.
-        if (!warped) {
+        // Writing width/height onto a Line would not rescale its points; they
+        // re-derive from the patched element on the next render.
+        if (writeBackSize) {
           node.width(patch.width);
           node.height(patch.height);
         }
@@ -1096,6 +1132,8 @@ export const DesignerCanvas: FC<CanvasProps> = ({
       if (!patches.length) return;
       patches.forEach(({ id, patch }) => updateElement(id, patch));
       pushHistory();
+      // Same commit-time cache rebuild as dragEnd (see geometryNonce).
+      setGeometryNonce((n) => n + 1);
     },
     [bakeTransform, pushHistory, updateElement, isVideo]
   );
@@ -1523,6 +1561,7 @@ export const DesignerCanvas: FC<CanvasProps> = ({
             elements={isVideo ? [] : (output?.children || [])}
             symbols={doc.symbols}
             editingTextId={editingTextId}
+            geometryNonce={geometryNonce}
             // Re-cache the adjustment scopes once the bg image arrives — see
             // `backdropKey` on ElementsProps.
             backdropKey={bgImage ? 'bg-loaded' : 'bg-pending'}
@@ -1947,6 +1986,17 @@ export const DesignerCanvas: FC<CanvasProps> = ({
             element={target.element}
             stageRect={{ x: viewportX, y: viewportY, scale: zoom }}
             onUpdate={(id, updates) => {
+              // A commit can arrive from the overlay's UNMOUNT cleanup (the
+              // target vanished mid-edit), so re-resolve against the live
+              // store rather than trusting the render-time target — a
+              // genuinely gone element gets no write, only the state cleanup.
+              const liveState = store.getState();
+              const liveTarget = resolveTextEditTarget(
+                liveState.doc.outputs[liveState.currentOutput] as DesignerOutput | undefined,
+                liveState.doc.symbols,
+                id
+              );
+              if (!liveTarget) return;
               if (target.instanceId && target.childId) {
                 // A symbol child writes through the instance's overrides — the
                 // only channel an instance may write (see symbol-edit.ts).
