@@ -11,6 +11,7 @@ import { VoiceoverDialog } from './voiceover-dialog';
 import { Stepper } from './controls';
 import { addMediaToTimeline, probeAudioDuration, probeVideoMetadata } from './add-media-to-timeline';
 import { clipEdgeUpdate } from './clip-geometry';
+import { isMarqueeClick, marqueeHitClips, normalizeMarquee, type MarqueeRect } from './timeline-marquee';
 import { timelineBeats } from './beat-sync';
 import { isArtifactPath } from '@postmill-ai/frontend/components/launches/ai.video';
 import { useMediaPicker } from '@postmill-ai/frontend/components/media-tools/use-media-picker';
@@ -564,6 +565,7 @@ export const VideoTimeline: FC<VideoTimelineProps> = ({ store, sendTimelineAware
   const currentOutput = store((s) => s.currentOutput);
   const playheadMs = store((s) => s.playheadMs);
   const selectedClip = store((s) => s.selectedClip);
+  const selectedClips = store((s) => s.selectedClips);
   const selectedIds = store((s) => s.selectedIds);
   const setPlayhead = useCallback(
     (ms: number) => store.getState().setPlayhead(ms),
@@ -589,7 +591,20 @@ export const VideoTimeline: FC<VideoTimelineProps> = ({ store, sendTimelineAware
     origClip: VideoClip;
     trackType: VideoTrack['type'];
     sourceDurationMs?: number;
+    /**
+     * Multi-clip move: when the dragged clip is part of a multi-selection, the
+     * mousedown snapshot of EVERY selected clip (origStart/origEnd + track).
+     * Present only for 'move' drags with 2+ members; cross-track drop stays
+     * single-clip-only.
+     */
+    group?: { trackId: string; clipId: string; origStart: number; origEnd: number }[];
   } | null>(null);
+  // Set once a drag actually moved, so the click that follows mouseup does not
+  // collapse a multi-selection the user just finished dragging.
+  const dragMovedRef = useRef(false);
+  // Rubber-band selection rect in scroll-content coordinates (null = inactive).
+  const [marquee, setMarquee] = useState<MarqueeRect | null>(null);
+  const marqueeAnchorRef = useRef<{ x: number; y: number } | null>(null);
   const [transitionPopover, setTransitionPopover] = useState<{
     trackId: string;
     fromClipId: string;
@@ -912,6 +927,38 @@ export const VideoTimeline: FC<VideoTimelineProps> = ({ store, sendTimelineAware
   const handleClipMouseDown = useCallback(
     (e: React.MouseEvent, track: VideoTrack, clip: VideoClip, edge: 'start' | 'end' | 'move') => {
       e.stopPropagation();
+      dragMovedRef.current = false;
+      // Shift-click is pure selection: toggle membership and never start a
+      // drag, or the toggle would immediately drag the clip it just selected.
+      if (e.shiftKey && edge === 'move') {
+        store.getState().toggleClipSelection(track.id, clip.id);
+        return;
+      }
+      const inSelection = store
+        .getState()
+        .selectedClips.some((c) => c.trackId === track.id && c.clipId === clip.id);
+      // Pressing an unselected clip collapses the selection to it (the drag
+      // that follows is single-clip); pressing a selected clip keeps the group.
+      if (!inSelection) {
+        setSelectedClip({ outputIndex: currentOutput, trackId: track.id, clipId: clip.id });
+      }
+      // Multi-clip move: snapshot every selected clip's geometry at mousedown
+      // so mousemove can apply one dx to all of them (silent writes, one
+      // history entry on mouseup — the same discipline as a single drag).
+      let group: { trackId: string; clipId: string; origStart: number; origEnd: number }[] | undefined;
+      if (edge === 'move' && inSelection) {
+        const state = store.getState();
+        const groupVo = state.doc.outputs[currentOutput] as VideoOutput | undefined;
+        const snapshot = state.selectedClips.flatMap((ref) => {
+          const member = groupVo?.tracks
+            .find((t) => t.id === ref.trackId)
+            ?.clips.find((c) => c.id === ref.clipId);
+          return member
+            ? [{ trackId: ref.trackId, clipId: ref.clipId, origStart: member.startMs, origEnd: member.endMs }]
+            : [];
+        });
+        if (snapshot.length > 1) group = snapshot;
+      }
       setDragging({
         trackId: track.id,
         clipId: clip.id,
@@ -925,10 +972,10 @@ export const VideoTimeline: FC<VideoTimelineProps> = ({ store, sendTimelineAware
           (track.type === 'video' || track.type === 'audio') && clip.src
             ? getSourceDurationMs(clip.src, track.type)
             : undefined,
+        group,
       });
-      setSelectedClip({ outputIndex: currentOutput, trackId: track.id, clipId: clip.id });
     },
-    [currentOutput, setSelectedClip],
+    [currentOutput, setSelectedClip, store],
   );
 
   useEffect(() => {
@@ -970,15 +1017,36 @@ export const VideoTimeline: FC<VideoTimelineProps> = ({ store, sendTimelineAware
 
     const handleMouseMove = (e: MouseEvent) => {
       const hovered = trackAtY(e.clientY);
-      setDragOverTrackId(hovered?.id ?? null);
+      // Cross-track drop is single-clip only; a group drag stays on its tracks.
+      setDragOverTrackId(dragging.group ? null : (hovered?.id ?? null));
 
       // dx is measured from the gesture's mousedown and applied to the values
       // captured AT mousedown — folding it into the previously written value
       // compounded every mousemove into the next, and made the trim-in delta
       // uncomputable. Writes stay silent; mouseup pushes one history entry.
       const dx = (e.clientX - dragging.startX) / pixelsPerMs;
+      if (Math.abs(e.clientX - dragging.startX) > 3) dragMovedRef.current = true;
 
       if (dragging.edge === 'move') {
+        if (dragging.group) {
+          // Group clamp: the whole selection moves by one shared dx, bounded so
+          // the earliest clip cannot pass t=0 and the latest end cannot pass
+          // the output duration (same bounds a single drag respects).
+          const minStart = Math.min(...dragging.group.map((g) => g.origStart));
+          const maxEnd = Math.max(...dragging.group.map((g) => g.origEnd));
+          let groupDx = Math.max(-minStart, Math.min(vo.durationMs - maxEnd, dx));
+          // Snap guides apply to the primary clip only, then re-clamp so a
+          // snap cannot push another member out of bounds.
+          const snappedStart = snapEdges(dragging.origStart + groupDx, dragging.clipId);
+          groupDx = Math.max(-minStart, Math.min(vo.durationMs - maxEnd, snappedStart - dragging.origStart));
+          for (const member of dragging.group) {
+            store.getState().updateClipSilent(currentOutput, member.trackId, member.clipId, {
+              startMs: Math.round(member.origStart + groupDx),
+              endMs: Math.round(member.origEnd + groupDx),
+            });
+          }
+          return;
+        }
         const duration = dragging.origEnd - dragging.origStart;
         let nextStart = Math.max(0, Math.min(vo.durationMs - duration, dragging.origStart + dx));
         nextStart = snapEdges(nextStart, dragging.clipId);
@@ -1007,7 +1075,7 @@ export const VideoTimeline: FC<VideoTimelineProps> = ({ store, sendTimelineAware
       const hovered = trackAtY(e.clientY);
       setDragging(null);
       setDragOverTrackId(null);
-      if (hovered && hovered.id !== dragging.trackId) {
+      if (!dragging.group && hovered && hovered.id !== dragging.trackId) {
         const clip = vo.tracks
           .find((t) => t.id === dragging.trackId)
           ?.clips.find((c) => c.id === dragging.clipId);
@@ -1026,6 +1094,86 @@ export const VideoTimeline: FC<VideoTimelineProps> = ({ store, sendTimelineAware
       window.removeEventListener('mouseup', handleMouseUp);
     };
   }, [dragging, isVideo, vo, pixelsPerMs, store, currentOutput]);
+
+  // Marquee (rubber-band) selection: mousedown on empty track area starts the
+  // rect; clips/edges/ruler/buttons stopPropagation or are excluded by the
+  // closest() guard, so this never fights a clip drag or a ruler scrub.
+  const MARQUEE_GEOM = useMemo(
+    () => ({ rulerHeight: RULER_HEIGHT, trackHeight: TRACK_HEIGHT, trackGap: TRACK_GAP, labelWidth: LABEL_WIDTH }),
+    [],
+  );
+
+  // Attached natively on the scroll container: a JSX onMouseDown on the
+  // static wrapper trips jsx-a11y/no-static-element-interactions, and the
+  // marquee is a pointer gesture (keyboard selection is shift-click).
+  useEffect(() => {
+    const el = scrollRef.current;
+    if (!el) return;
+    const onMouseDown = (e: MouseEvent) => {
+      if (e.button !== 0) return;
+      const target = e.target as HTMLElement;
+      if (target.closest('[role="slider"], button, input, textarea, a')) return;
+      const rect = el.getBoundingClientRect();
+      const x = e.clientX - rect.left + el.scrollLeft;
+      const y = e.clientY - rect.top + el.scrollTop;
+      // The ruler row is drag-scrub territory — never a marquee origin.
+      if (y < RULER_HEIGHT) return;
+      marqueeAnchorRef.current = { x, y };
+      setMarquee({ left: x, right: x, top: y, bottom: y });
+    };
+    el.addEventListener('mousedown', onMouseDown);
+    return () => el.removeEventListener('mousedown', onMouseDown);
+    // isVideo: the scroll container only exists once video mode renders, so
+    // re-attach when it appears (the component stays mounted across modes).
+  }, [isVideo]);
+
+  // Keying on the boolean (not the rect) keeps the listeners stable while the
+  // rect updates per mousemove.
+  const marqueeActive = marquee !== null;
+
+  useEffect(() => {
+    if (!marqueeActive || !isVideo || !vo) return;
+    const toContent = (e: MouseEvent) => {
+      const el = scrollRef.current;
+      if (!el) return null;
+      const rect = el.getBoundingClientRect();
+      return { x: e.clientX - rect.left + el.scrollLeft, y: e.clientY - rect.top + el.scrollTop };
+    };
+    const onMove = (e: MouseEvent) => {
+      const anchor = marqueeAnchorRef.current;
+      const p = toContent(e);
+      if (!anchor || !p) return;
+      setMarquee(normalizeMarquee(anchor.x, anchor.y, p.x, p.y));
+    };
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        marqueeAnchorRef.current = null;
+        setMarquee(null);
+      }
+    };
+    const onUp = (e: MouseEvent) => {
+      const anchor = marqueeAnchorRef.current;
+      const p = toContent(e);
+      marqueeAnchorRef.current = null;
+      setMarquee(null);
+      if (!anchor || !p) return;
+      const rect = normalizeMarquee(anchor.x, anchor.y, p.x, p.y);
+      if (isMarqueeClick(rect)) {
+        // A click on empty track area clears the selection (standard NLE).
+        store.getState().setSelectedClips([]);
+        return;
+      }
+      store.getState().setSelectedClips(marqueeHitClips(vo.tracks, rect, pixelsPerMs, MARQUEE_GEOM));
+    };
+    window.addEventListener('mousemove', onMove);
+    window.addEventListener('mouseup', onUp);
+    window.addEventListener('keydown', onKey);
+    return () => {
+      window.removeEventListener('mousemove', onMove);
+      window.removeEventListener('mouseup', onUp);
+      window.removeEventListener('keydown', onKey);
+    };
+  }, [marqueeActive, isVideo, vo, pixelsPerMs, store, MARQUEE_GEOM]);
 
   const handleFreezeFrame = useCallback(
     (trackId: string, clipId: string) => {
@@ -1100,16 +1248,42 @@ export const VideoTimeline: FC<VideoTimelineProps> = ({ store, sendTimelineAware
   const handleKeyDown = useCallback(
     (e: React.KeyboardEvent) => {
       if (!isVideo || !vo) return;
+      const editingText = !!(e.target as HTMLElement)?.matches?.('input,textarea');
 
       if (e.key === 'Delete' || e.key === 'Backspace') {
         if (selectedClip && selectedClip.outputIndex === currentOutput) {
-          store.getState().removeClip(currentOutput, selectedClip.trackId, selectedClip.clipId);
-          setSelectedClip(null);
+          // Shift = ripple: later clips on the same track close the gap.
+          if (e.shiftKey) {
+            store.getState().rippleDeleteClip(currentOutput, selectedClip.trackId, selectedClip.clipId);
+          } else {
+            store.getState().removeClip(currentOutput, selectedClip.trackId, selectedClip.clipId);
+            setSelectedClip(null);
+          }
+        }
+      } else if (
+        (e.ctrlKey || e.metaKey) &&
+        e.key.toLowerCase() === 'c' &&
+        !editingText
+      ) {
+        const state = store.getState();
+        if (state.selectedClips.length) {
+          e.preventDefault();
+          state.copySelectedClips();
+        }
+      } else if (
+        (e.ctrlKey || e.metaKey) &&
+        e.key.toLowerCase() === 'v' &&
+        !editingText
+      ) {
+        const state = store.getState();
+        if (state.clipClipboard.length) {
+          e.preventDefault();
+          state.pasteClips(playheadMs);
         }
       } else if (
         (e.key === ',' || e.key === '.') &&
         !e.ctrlKey && !e.metaKey && !e.altKey &&
-        !(e.target as HTMLElement)?.matches?.('input,textarea')
+        !editingText
       ) {
         // Frame step: ,/. walk the playhead one frame back/forward (CapCut
         // muscle memory), bounded to the timeline.
@@ -1148,7 +1322,17 @@ export const VideoTimeline: FC<VideoTimelineProps> = ({ store, sendTimelineAware
     [isVideo, vo, selectedClip, store, currentOutput, playheadMs, handlePlayPause, setSelectedClip, setPlayhead, handleFreezeFrame],
   );
 
+  const selectedKeySet = useMemo(
+    () => new Set(selectedClips.map((c) => `${c.trackId}:${c.clipId}`)),
+    [selectedClips],
+  );
+
   const isSelected = useCallback(
+    (trackId: string, clipId: string) => selectedKeySet.has(`${trackId}:${clipId}`),
+    [selectedKeySet],
+  );
+
+  const isPrimary = useCallback(
     (trackId: string, clipId: string) =>
       selectedClip?.outputIndex === currentOutput &&
       selectedClip?.trackId === trackId &&
@@ -1168,10 +1352,17 @@ export const VideoTimeline: FC<VideoTimelineProps> = ({ store, sendTimelineAware
     (e: React.MouseEvent, trackId: string, clipId: string) => {
       e.preventDefault();
       e.stopPropagation();
-      setSelectedClip({ outputIndex: currentOutput, trackId, clipId });
+      // Right-clicking a clip that is already in the multi-selection keeps the
+      // group (so Copy/etc. apply to it); otherwise the selection collapses.
+      const inSelection = store
+        .getState()
+        .selectedClips.some((c) => c.trackId === trackId && c.clipId === clipId);
+      if (!inSelection) {
+        setSelectedClip({ outputIndex: currentOutput, trackId, clipId });
+      }
       setClipMenu({ x: e.clientX, y: e.clientY, outputIndex: currentOutput, trackId, clipId });
     },
-    [currentOutput, setSelectedClip],
+    [currentOutput, setSelectedClip, store],
   );
 
   const handleSetTransition = useCallback(
@@ -1268,6 +1459,17 @@ export const VideoTimeline: FC<VideoTimelineProps> = ({ store, sendTimelineAware
     }
     setClipMenu(null);
   }, [clipMenu, store, toaster, translate]);
+
+  const handleCopyClips = useCallback(() => {
+    store.getState().copySelectedClips();
+    setClipMenu(null);
+  }, [store]);
+
+  const handleRippleDeleteClip = useCallback(() => {
+    if (!clipMenu) return;
+    store.getState().rippleDeleteClip(clipMenu.outputIndex, clipMenu.trackId, clipMenu.clipId);
+    setClipMenu(null);
+  }, [clipMenu, store]);
 
   const generateVoiceover = useCallback(
     async (text: string, voiceId: string) => {
@@ -1909,6 +2111,7 @@ export const VideoTimeline: FC<VideoTimelineProps> = ({ store, sendTimelineAware
                   const effectiveEnd = clip.endMs + (clip.freezeAtMs || 0);
                   const width = Math.max(4, (effectiveEnd - clip.startMs) * pixelsPerMs);
                   const sel = isSelected(track.id, clip.id);
+                  const primary = isPrimary(track.id, clip.id);
 
                   return (
                     <div
@@ -1922,7 +2125,9 @@ export const VideoTimeline: FC<VideoTimelineProps> = ({ store, sendTimelineAware
                       tabIndex={0}
                       key={clip.id}
                       className={`absolute top-1 rounded-[4px] cursor-pointer group ${
-                        sel ? 'ring-2 ring-white/60 z-10' : ''
+                        // The primary (inspector target) keeps the white ring;
+                        // other selected clips get the accent ring.
+                        primary ? 'ring-2 ring-white/60 z-10' : sel ? 'ring-2 ring-designerAccent/80 z-10' : ''
                       }`}
                       style={{
                         left,
@@ -1933,6 +2138,14 @@ export const VideoTimeline: FC<VideoTimelineProps> = ({ store, sendTimelineAware
                       }}
                       onClick={(e) => {
                         e.stopPropagation();
+                        // The click that ends a real drag must not collapse the
+                        // multi-selection the drag just moved; shift was handled
+                        // at mousedown.
+                        if (dragMovedRef.current) {
+                          dragMovedRef.current = false;
+                          return;
+                        }
+                        if (e.shiftKey) return;
                         setSelectedClip({ outputIndex: currentOutput, trackId: track.id, clipId: clip.id });
                       }}
                       onKeyDown={(e) => handleClipKeyDown(e, track.id, clip)}
@@ -2055,6 +2268,19 @@ export const VideoTimeline: FC<VideoTimelineProps> = ({ store, sendTimelineAware
               </div>
             </div>
           )})}
+
+          {/* Marquee selection rect (scroll-content coordinates) */}
+          {marquee && (
+            <div
+              className="absolute z-30 pointer-events-none border border-designerAccent bg-designerAccent/15 rounded-xs"
+              style={{
+                left: marquee.left,
+                top: marquee.top,
+                width: marquee.right - marquee.left,
+                height: marquee.bottom - marquee.top,
+              }}
+            />
+          )}
 
           {/* Playhead */}
           <div
@@ -2422,6 +2648,19 @@ export const VideoTimeline: FC<VideoTimelineProps> = ({ store, sendTimelineAware
                     className="w-full text-left px-2 py-1 rounded-sm text-[12px] hover:bg-studioBorder/30 text-textColor"
                   >
                     {translate('duplicate_clip', 'Duplicate')}
+                  </button>
+                  <button
+                    onClick={handleCopyClips}
+                    className="w-full text-left px-2 py-1 rounded-sm text-[12px] hover:bg-studioBorder/30 text-textColor"
+                  >
+                    {translate('copy_clips', 'Copy')}
+                  </button>
+                  <button
+                    onClick={handleRippleDeleteClip}
+                    title={translate('ripple_delete_hint', 'Delete and close the gap on this track (Shift+Delete)')}
+                    className="w-full text-left px-2 py-1 rounded-sm text-[12px] hover:bg-studioBorder/30 text-dangerText"
+                  >
+                    {translate('ripple_delete', 'Ripple delete')}
                   </button>
                   {clipSrc && (
                     <>

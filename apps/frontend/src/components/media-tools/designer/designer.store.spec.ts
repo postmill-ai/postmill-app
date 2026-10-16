@@ -661,3 +661,247 @@ describe('duplicateClip', () => {
     expect(vo(store).tracks[0].clips).toHaveLength(1);
   });
 });
+
+describe('multi-clip selection', () => {
+  const videoStore = () => {
+    const store = createDesignerStore();
+    store.getState().setMode('video');
+    return store;
+  };
+  const vo = (store: ReturnType<typeof createDesignerStore>) =>
+    store.getState().doc.outputs[0] as import('./designer.store').VideoOutput;
+
+  it('setSelectedClip keeps selectedClips in sync with the primary', () => {
+    const store = videoStore();
+    const trackId = vo(store).tracks[0].id;
+    store.getState().addClip(0, trackId, { id: 'a', startMs: 0, endMs: 1000 } as never);
+
+    store.getState().setSelectedClip({ outputIndex: 0, trackId, clipId: 'a' });
+    expect(store.getState().selectedClips).toEqual([{ trackId, clipId: 'a' }]);
+
+    store.getState().setSelectedClip(null);
+    expect(store.getState().selectedClips).toEqual([]);
+  });
+
+  it('toggleClipSelection adds/removes members and moves the primary', () => {
+    const store = videoStore();
+    const trackId = vo(store).tracks[0].id;
+    store.getState().addClip(0, trackId, { id: 'a', startMs: 0, endMs: 1000 } as never);
+    store.getState().addClip(0, trackId, { id: 'b', startMs: 1000, endMs: 2000 } as never);
+
+    store.getState().setSelectedClip({ outputIndex: 0, trackId, clipId: 'a' });
+    store.getState().toggleClipSelection(trackId, 'b');
+    expect(store.getState().selectedClips).toEqual([
+      { trackId, clipId: 'a' },
+      { trackId, clipId: 'b' },
+    ]);
+    // The just-added clip drives the inspector.
+    expect(store.getState().selectedClip?.clipId).toBe('b');
+
+    // Removing the primary promotes the last remaining member.
+    store.getState().toggleClipSelection(trackId, 'b');
+    expect(store.getState().selectedClips).toEqual([{ trackId, clipId: 'a' }]);
+    expect(store.getState().selectedClip?.clipId).toBe('a');
+  });
+
+  it('setSelectedClips reassigns a primary that fell out of the set', () => {
+    const store = videoStore();
+    const trackId = vo(store).tracks[0].id;
+    store.getState().addClip(0, trackId, { id: 'a', startMs: 0, endMs: 1000 } as never);
+    store.getState().addClip(0, trackId, { id: 'b', startMs: 1000, endMs: 2000 } as never);
+
+    store.getState().setSelectedClip({ outputIndex: 0, trackId, clipId: 'a' });
+    store.getState().setSelectedClips([{ trackId, clipId: 'b' }]);
+    expect(store.getState().selectedClip?.clipId).toBe('b');
+
+    store.getState().setSelectedClips([]);
+    expect(store.getState().selectedClip).toBeNull();
+  });
+
+  it('selection changes never touch the undo history', () => {
+    const store = videoStore();
+    const trackId = vo(store).tracks[0].id;
+    store.getState().addClip(0, trackId, { id: 'a', startMs: 0, endMs: 1000 } as never);
+    const depth = store.getState().history.length;
+
+    store.getState().setSelectedClip({ outputIndex: 0, trackId, clipId: 'a' });
+    store.getState().toggleClipSelection(trackId, 'a');
+    store.getState().setSelectedClips([{ trackId, clipId: 'a' }]);
+    expect(store.getState().history.length).toBe(depth);
+  });
+});
+
+describe('rippleDeleteClip', () => {
+  const videoStore = () => {
+    const store = createDesignerStore();
+    store.getState().setMode('video');
+    return store;
+  };
+  const vo = (store: ReturnType<typeof createDesignerStore>) =>
+    store.getState().doc.outputs[0] as import('./designer.store').VideoOutput;
+
+  it('shifts same-track successors left by the removed duration, one history entry', () => {
+    const store = videoStore();
+    const trackId = vo(store).tracks[0].id;
+    store.getState().addClip(0, trackId, { id: 'a', startMs: 0, endMs: 1000 } as never);
+    store.getState().addClip(0, trackId, { id: 'b', startMs: 1000, endMs: 3000 } as never);
+    store.getState().addClip(0, trackId, { id: 'c', startMs: 4000, endMs: 5000 } as never);
+    const depth = store.getState().history.length;
+
+    store.getState().rippleDeleteClip(0, trackId, 'b');
+
+    const clips = vo(store).tracks[0].clips;
+    expect(clips.map((c) => c.id)).toEqual(['a', 'c']);
+    // c moves left by b's 2000 ms, keeping its own 1000 ms duration.
+    expect(clips[1].startMs).toBe(2000);
+    expect(clips[1].endMs).toBe(3000);
+    // a starts before the removed clip — untouched.
+    expect(clips[0].startMs).toBe(0);
+    expect(store.getState().history.length).toBe(depth + 1);
+
+    store.getState().undo();
+    expect(vo(store).tracks[0].clips.map((c) => c.id)).toEqual(['a', 'b', 'c']);
+  });
+
+  it('honors the freeze extension and clamps at t=0', () => {
+    const store = videoStore();
+    const trackId = vo(store).tracks[0].id;
+    store.getState().addClip(0, trackId, { id: 'a', startMs: 500, endMs: 2000, freezeAtMs: 1000 } as never);
+    store.getState().addClip(0, trackId, { id: 'b', startMs: 3200, endMs: 4000 } as never);
+
+    store.getState().rippleDeleteClip(0, trackId, 'a');
+
+    // Effective duration is 2500 (1500 + 1000 freeze); b moves left by 2500.
+    const b = vo(store).tracks[0].clips.find((c) => c.id === 'b')!;
+    expect(b.startMs).toBe(700);
+    expect(b.endMs).toBe(1500);
+  });
+
+  it('clamps a successor at t=0 without going negative, preserving duration', () => {
+    const store = videoStore();
+    const trackId = vo(store).tracks[0].id;
+    store.getState().addClip(0, trackId, { id: 'a', startMs: 0, endMs: 3000 } as never);
+    store.getState().addClip(0, trackId, { id: 'b', startMs: 2000, endMs: 3000 } as never);
+
+    store.getState().rippleDeleteClip(0, trackId, 'a');
+
+    // Shift (3000) exceeds b's start — it pins to 0 and keeps its 1000 ms.
+    const b = vo(store).tracks[0].clips.find((c) => c.id === 'b')!;
+    expect(b.startMs).toBe(0);
+    expect(b.endMs).toBe(1000);
+  });
+
+  it('leaves other tracks alone and drops the removed clip from the selection', () => {
+    const store = videoStore();
+    const trackId = vo(store).tracks[0].id;
+    store.getState().addTrack(0, 'audio');
+    const audioId = vo(store).tracks.find((t) => t.type === 'audio')!.id;
+    store.getState().addClip(0, trackId, { id: 'a', startMs: 0, endMs: 1000 } as never);
+    store.getState().addClip(0, audioId, { id: 'm', startMs: 1000, endMs: 2000 } as never);
+    store.getState().setSelectedClip({ outputIndex: 0, trackId, clipId: 'a' });
+
+    store.getState().rippleDeleteClip(0, trackId, 'a');
+
+    const m = vo(store).tracks.find((t) => t.id === audioId)!.clips[0];
+    expect(m.startMs).toBe(1000);
+    expect(store.getState().selectedClip).toBeNull();
+    expect(store.getState().selectedClips).toEqual([]);
+  });
+});
+
+describe('clip copy/paste', () => {
+  const videoStore = () => {
+    const store = createDesignerStore();
+    store.getState().setMode('video');
+    return store;
+  };
+  const vo = (store: ReturnType<typeof createDesignerStore>) =>
+    store.getState().doc.outputs[0] as import('./designer.store').VideoOutput;
+
+  it('pastes the group so the earliest clip lands at the playhead, with fresh ids, and selects the paste', () => {
+    const store = videoStore();
+    const trackId = vo(store).tracks[0].id;
+    store.getState().addTrack(0, 'audio');
+    const audioId = vo(store).tracks.find((t) => t.type === 'audio')!.id;
+    store.getState().addClip(0, trackId, { id: 'a', startMs: 2000, endMs: 4000, src: 'v.mp4' } as never);
+    store.getState().addClip(0, audioId, { id: 'm', startMs: 3000, endMs: 5000, src: 'a.mp3' } as never);
+    store.getState().setSelectedClips([
+      { trackId, clipId: 'a' },
+      { trackId: audioId, clipId: 'm' },
+    ]);
+    const depth = store.getState().history.length;
+
+    store.getState().copySelectedClips();
+    store.getState().pasteClips(10000);
+
+    const video = vo(store).tracks.find((t) => t.id === trackId)!;
+    const audio = vo(store).tracks.find((t) => t.id === audioId)!;
+    const pastedV = video.clips.find((c) => c.id !== 'a')!;
+    const pastedA = audio.clips.find((c) => c.id !== 'm')!;
+    // Group offset: earliest copied clip (a at 2000) lands at 10000 → +8000.
+    expect(pastedV.startMs).toBe(10000);
+    expect(pastedV.endMs).toBe(12000);
+    expect(pastedA.startMs).toBe(11000);
+    expect(pastedA.endMs).toBe(13000);
+    expect(pastedV.id).not.toBe('a');
+    expect(pastedA.id).not.toBe('m');
+    // Sources are deep-cloned, not shared references.
+    expect(pastedV).not.toBe(video.clips[0]);
+    // One undo step for the whole paste.
+    expect(store.getState().history.length).toBe(depth + 1);
+    // The pasted clips become the selection.
+    expect(store.getState().selectedClips).toEqual([
+      { trackId, clipId: pastedV.id },
+      { trackId: audioId, clipId: pastedA.id },
+    ]);
+
+    store.getState().undo();
+    expect(vo(store).tracks.find((t) => t.id === trackId)!.clips).toHaveLength(1);
+  });
+
+  it('falls back to the first track of the same type, creating one when absent', () => {
+    const store = videoStore();
+    const trackId = vo(store).tracks[0].id;
+    store.getState().addClip(0, trackId, { id: 'a', startMs: 0, endMs: 1000, src: 'v.mp4' } as never);
+    store.getState().addTrack(0, 'audio');
+    const audioId = vo(store).tracks.find((t) => t.type === 'audio')!.id;
+    store.getState().addClip(0, audioId, { id: 'm', startMs: 0, endMs: 1000, src: 'a.mp3' } as never);
+    store.getState().setSelectedClips([
+      { trackId, clipId: 'a' },
+      { trackId: audioId, clipId: 'm' },
+    ]);
+    store.getState().copySelectedClips();
+
+    // Delete the audio track — the paste must recreate one of the same type.
+    store.getState().removeTrack(0, audioId);
+    store.getState().pasteClips(0);
+
+    const audioTracks = vo(store).tracks.filter((t) => t.type === 'audio');
+    expect(audioTracks).toHaveLength(1);
+    expect(audioTracks[0].clips).toHaveLength(1);
+    expect(audioTracks[0].clips[0].src).toBe('a.mp3');
+  });
+
+  it('extends the output duration like duplicateClip and skips what still overflows', () => {
+    const store = videoStore();
+    const trackId = vo(store).tracks[0].id;
+    const durationMs = vo(store).durationMs;
+    store.getState().addClip(0, trackId, { id: 'a', startMs: 0, endMs: 2000, src: 'v.mp4' } as never);
+    store.getState().setSelectedClip({ outputIndex: 0, trackId, clipId: 'a' });
+    store.getState().copySelectedClips();
+
+    // Playhead near the end: the paste extends the output to fit.
+    store.getState().pasteClips(durationMs - 500);
+    expect(vo(store).durationMs).toBe(durationMs + 1500);
+    const pasted = vo(store).tracks[0].clips.find((c) => c.id !== 'a')!;
+    expect(pasted.startMs).toBe(durationMs - 500);
+
+    // At the 60 s ceiling there is no room — nothing is pasted, no history.
+    store.getState().setVideoDuration(0, 60000);
+    const depth = store.getState().history.length;
+    const count = vo(store).tracks[0].clips.length;
+    store.getState().pasteClips(59900);
+    expect(vo(store).tracks[0].clips.length).toBe(count);
+    expect(store.getState().history.length).toBe(depth);
+  });
+});

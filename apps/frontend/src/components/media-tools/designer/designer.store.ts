@@ -96,7 +96,20 @@ export interface DesignerState {
   brandEnforcement: boolean;
   brandAdminOverride: boolean;
   playheadMs: number;
+  /** The primary selection — drives the inspector. Always a member of `selectedClips`. */
   selectedClip: { outputIndex: number; trackId: string; clipId: string } | null;
+  /**
+   * Multi-select on the video timeline. Editor state, deliberately NOT part of
+   * history (snapshots carry only `doc`). Members carry no outputIndex — track
+   * ids are doc-unique and the timeline only renders the current output.
+   */
+  selectedClips: { trackId: string; clipId: string }[];
+  /**
+   * Clips copied from the timeline. `trackId` targets the paste at the original
+   * track; `trackType` is the fallback when that track is gone (find-or-create,
+   * the same rule add-media-to-timeline uses).
+   */
+  clipClipboard: { clip: VideoClip; trackId: string; trackType: VideoTrack['type'] }[];
   linkedUpdateFlash: Record<number, number>;
   // View prefs / canvas requests (menu-driven)
   snapEnabled: boolean;
@@ -232,6 +245,13 @@ export interface DesignerActions {
   setMode: (mode: 'image' | 'video') => void;
   setPlayhead: (ms: number) => void;
   setSelectedClip: (clip: { outputIndex: number; trackId: string; clipId: string } | null) => void;
+  /**
+   * Replace the multi-selection. Keeps the primary (`selectedClip`) a member:
+   * a primary outside the new set is moved to its first entry (or null).
+   */
+  setSelectedClips: (clips: { trackId: string; clipId: string }[]) => void;
+  /** Shift-click: add/remove one clip, making an added clip the primary. */
+  toggleClipSelection: (trackId: string, clipId: string) => void;
   setTrackGain: (outputIndex: number, trackId: string, gain: number, commit?: boolean) => void;
   setTrackAutoDuck: (outputIndex: number, trackId: string, autoDuck: boolean) => void;
   /** Rename a track (empty/whitespace clears the custom name back to the type label). */
@@ -244,6 +264,22 @@ export interface DesignerActions {
    * clip id, or null when there is no room even after extension.
    */
   duplicateClip: (outputIndex: number, trackId: string, clipId: string) => string | null;
+  /**
+   * Remove the clip and pull every later clip on the SAME track left by the
+   * removed clip's effective duration (freeze extension included), clamped at
+   * t=0. One history entry; other tracks are untouched.
+   */
+  rippleDeleteClip: (outputIndex: number, trackId: string, clipId: string) => void;
+  /** Deep-clone the multi-selection (primary when it stands alone) into the clip clipboard. */
+  copySelectedClips: () => void;
+  /**
+   * Paste the clip clipboard with the group's earliest clip landing at `atMs`
+   * (the playhead), onto the original tracks — falling back to the first track
+   * of the same type, created when none exists. Fresh ids, the output duration
+   * extends like duplicateClip (60 s ceiling; clips that still overflow are
+   * skipped). One history entry; the pasted clips become the selection.
+   */
+  pasteClips: (atMs: number) => void;
 }
 
 export type DesignerStore = DesignerState & DesignerActions;
@@ -319,6 +355,8 @@ export const createDesignerStore = (
       brandAdminOverride: false,
       playheadMs: 0,
       selectedClip: null,
+      selectedClips: [],
+      clipClipboard: [],
       linkedUpdateFlash: {},
       snapEnabled: true,
       showGrid: false,
@@ -1052,6 +1090,7 @@ export const createDesignerStore = (
           brandAdminOverride: false,
           playheadMs: 0,
           selectedClip: null,
+          selectedClips: [],
           linkedUpdateFlash: {},
         });
       },
@@ -1073,6 +1112,7 @@ export const createDesignerStore = (
           history: [JSON.parse(JSON.stringify(migrated))], historyLabels: ['Open'], historyIndex: 0, savedHistoryIndex: 0, isDirty: false,
           playheadMs: 0,
           selectedClip: null,
+          selectedClips: [],
           linkedUpdateFlash: {},
           brandAdminOverride: false,
         });
@@ -1241,7 +1281,7 @@ export const createDesignerStore = (
             durationMs: preset?.maxDurationMs ?? 10000,
             tracks: [{ id: trackId, type: 'video', clips: [] }],
           };
-          set({ doc: { ...doc, mode: 'video', outputs: [vo] }, selectedIds: [], selectedClip: null, currentOutput: 0, isDirty: true });
+          set({ doc: { ...doc, mode: 'video', outputs: [vo] }, selectedIds: [], selectedClip: null, selectedClips: [], currentOutput: 0, isDirty: true });
         } else {
           const source = doc.outputs[0] as VideoOutput;
           const imgOut: DesignerOutput = {
@@ -1253,7 +1293,7 @@ export const createDesignerStore = (
             background: '#ffffff',
             children: [],
           };
-          set({ doc: { ...doc, mode: 'image', outputs: [imgOut] }, selectedIds: [], selectedClip: null, currentOutput: 0, isDirty: true });
+          set({ doc: { ...doc, mode: 'image', outputs: [imgOut] }, selectedIds: [], selectedClip: null, selectedClips: [], currentOutput: 0, isDirty: true });
         }
         get().pushHistory();
       },
@@ -1261,7 +1301,52 @@ export const createDesignerStore = (
       setPlayhead: (ms) => set({ playheadMs: ms }),
 
       setSelectedClip: (clip) => {
-        set({ selectedClip: clip, selectedIds: clip ? [] : [] });
+        // Single select is a one-member multi-selection — keep the two in sync
+        // so every reader (inspector, timeline highlight, marquee) agrees.
+        set({
+          selectedClip: clip,
+          selectedClips: clip ? [{ trackId: clip.trackId, clipId: clip.clipId }] : [],
+          selectedIds: [],
+        });
+      },
+
+      setSelectedClips: (clips) => {
+        const { selectedClip, currentOutput } = get();
+        const primarySurvives =
+          selectedClip &&
+          clips.some((c) => c.trackId === selectedClip.trackId && c.clipId === selectedClip.clipId);
+        set({
+          selectedClips: clips,
+          selectedClip: primarySurvives
+            ? selectedClip
+            : clips.length
+            ? { outputIndex: currentOutput, trackId: clips[0].trackId, clipId: clips[0].clipId }
+            : null,
+        });
+      },
+
+      toggleClipSelection: (trackId, clipId) => {
+        const { selectedClips, selectedClip, currentOutput } = get();
+        const exists = selectedClips.some((c) => c.trackId === trackId && c.clipId === clipId);
+        if (!exists) {
+          // The newly added clip becomes the primary so the inspector follows
+          // the last thing the user shift-clicked.
+          set({
+            selectedClips: [...selectedClips, { trackId, clipId }],
+            selectedClip: { outputIndex: currentOutput, trackId, clipId },
+          });
+          return;
+        }
+        const next = selectedClips.filter((c) => !(c.trackId === trackId && c.clipId === clipId));
+        const wasPrimary = selectedClip?.trackId === trackId && selectedClip?.clipId === clipId;
+        set({
+          selectedClips: next,
+          selectedClip: wasPrimary
+            ? next.length
+              ? { outputIndex: currentOutput, trackId: next[next.length - 1].trackId, clipId: next[next.length - 1].clipId }
+              : null
+            : selectedClip,
+        });
       },
 
       setTrackGain: (outputIndex, trackId, gain, commit = true) => {
@@ -1363,9 +1448,131 @@ export const createDesignerStore = (
         // One history entry for the whole operation (duration extension +
         // insert) — a split setVideoDuration/addClip pair would undo in two
         // steps for a single user gesture.
-        set({ doc: { ...doc, outputs: outs }, isDirty: true, selectedClip: { outputIndex, trackId, clipId: newClip.id }, selectedIds: [] });
+        set({ doc: { ...doc, outputs: outs }, isDirty: true, selectedClip: { outputIndex, trackId, clipId: newClip.id }, selectedClips: [{ trackId, clipId: newClip.id }], selectedIds: [] });
         get().pushHistory('Duplicate clip');
         return newClip.id;
+      },
+
+      rippleDeleteClip: (outputIndex, trackId, clipId) => {
+        const { doc, selectedClip, selectedClips } = get();
+        const vo = doc.outputs[outputIndex] as VideoOutput | undefined;
+        if (!vo || doc.mode !== 'video') return;
+        const track = vo.tracks.find((t) => t.id === trackId);
+        const clip = track?.clips.find((c) => c.id === clipId);
+        if (!track || !clip) return;
+
+        // The gap a ripple closes is the clip's VISUAL length — a freeze hold
+        // occupies timeline space past endMs and must collapse with the clip.
+        const shift = clip.endMs + (clip.freezeAtMs || 0) - clip.startMs;
+        const updated: VideoOutput = {
+          ...vo,
+          tracks: vo.tracks.map((t) => {
+            if (t.id !== trackId) return t;
+            return {
+              ...t,
+              clips: t.clips
+                .filter((c) => c.id !== clipId)
+                .map((c) => {
+                  if (c.startMs < clip.startMs) return c;
+                  // Clamped at 0: a successor parked near the head stops there
+                  // rather than going negative; duration is preserved.
+                  const startMs = Math.max(0, c.startMs - shift);
+                  return { ...c, startMs, endMs: startMs + (c.endMs - c.startMs) };
+                }),
+            };
+          }),
+        };
+        const outs = [...doc.outputs];
+        outs[outputIndex] = updated;
+        const nextSelected = selectedClips.filter((c) => !(c.trackId === trackId && c.clipId === clipId));
+        const wasPrimary = selectedClip?.trackId === trackId && selectedClip?.clipId === clipId;
+        set({
+          doc: { ...doc, outputs: outs },
+          isDirty: true,
+          selectedClips: nextSelected,
+          selectedClip: wasPrimary
+            ? nextSelected.length
+              ? { outputIndex, trackId: nextSelected[nextSelected.length - 1].trackId, clipId: nextSelected[nextSelected.length - 1].clipId }
+              : null
+            : selectedClip,
+        });
+        get().pushHistory('Ripple delete');
+      },
+
+      copySelectedClips: () => {
+        const { doc, currentOutput, selectedClips, selectedClip } = get();
+        const vo = doc.outputs[currentOutput] as VideoOutput | undefined;
+        if (!vo || doc.mode !== 'video') return;
+        const refs = selectedClips.length
+          ? selectedClips
+          : selectedClip && selectedClip.outputIndex === currentOutput
+          ? [{ trackId: selectedClip.trackId, clipId: selectedClip.clipId }]
+          : [];
+        const entries: { clip: VideoClip; trackId: string; trackType: VideoTrack['type'] }[] = [];
+        for (const ref of refs) {
+          const track = vo.tracks.find((t) => t.id === ref.trackId);
+          const clip = track?.clips.find((c) => c.id === ref.clipId);
+          if (track && clip) {
+            entries.push({ clip: JSON.parse(JSON.stringify(clip)), trackId: track.id, trackType: track.type });
+          }
+        }
+        if (entries.length) set({ clipClipboard: entries });
+      },
+
+      pasteClips: (atMs) => {
+        const { doc, currentOutput, clipClipboard } = get();
+        const vo = doc.outputs[currentOutput] as VideoOutput | undefined;
+        if (!vo || doc.mode !== 'video' || !clipClipboard.length) return;
+
+        const anchor = Math.max(0, atMs);
+        const earliest = Math.min(...clipClipboard.map((e) => e.clip.startMs));
+        const offset = anchor - earliest;
+        const placed = clipClipboard.map((e) => {
+          const duration = e.clip.endMs - e.clip.startMs;
+          const startMs = e.clip.startMs + offset;
+          return { entry: e, startMs, endMs: startMs + duration, effectiveEnd: startMs + duration + (e.clip.freezeAtMs || 0) };
+        });
+
+        // Extend the output when the paste overflows, the way duplicateClip
+        // does — the 60 s ceiling still applies; clips past it are skipped.
+        const durationMs = Math.min(60000, Math.max(vo.durationMs, ...placed.map((p) => p.effectiveEnd)));
+        const fits = placed.filter((p) => p.startMs < durationMs && p.effectiveEnd <= durationMs);
+        if (!fits.length) return;
+
+        const tracks = vo.tracks.map((t) => ({ ...t, clips: [...t.clips] }));
+        const pastedRefs: { trackId: string; clipId: string }[] = [];
+        for (const p of fits) {
+          const track =
+            tracks.find((t) => t.id === p.entry.trackId) ??
+            tracks.find((t) => t.type === p.entry.trackType) ??
+            (() => {
+              const created = { id: genId(), type: p.entry.trackType, clips: [] as VideoClip[] };
+              tracks.push(created);
+              return created;
+            })();
+          const clip: VideoClip = {
+            ...JSON.parse(JSON.stringify(p.entry.clip)),
+            id: genId(),
+            startMs: p.startMs,
+            endMs: p.endMs,
+          };
+          track.clips.push(clip);
+          pastedRefs.push({ trackId: track.id, clipId: clip.id });
+        }
+
+        const updated: VideoOutput = { ...vo, durationMs, tracks };
+        const outs = [...doc.outputs];
+        outs[currentOutput] = updated;
+        // One history entry for the whole paste (track creation + duration
+        // extension + inserts), like duplicateClip.
+        set({
+          doc: { ...doc, outputs: outs },
+          isDirty: true,
+          selectedClips: pastedRefs,
+          selectedClip: { outputIndex: currentOutput, trackId: pastedRefs[0].trackId, clipId: pastedRefs[0].clipId },
+          selectedIds: [],
+        });
+        get().pushHistory('Paste clips');
       },
 
     };
