@@ -1,6 +1,6 @@
 'use client';
 
-import React, { FC } from 'react';
+import React from 'react';
 import { useT } from '@postmill-ai/react/translation/get.transation.service.client';
 import { getTool } from './tools';
 import { PEN_DEFAULT_STROKE } from './pen-tools';
@@ -192,7 +192,7 @@ interface ToolOptionsBarProps {
   onChange: (key: string, value: unknown) => void;
 }
 
-export const ToolOptionsBar: FC<ToolOptionsBarProps> = ({ activeTool, options, onChange }) => {
+export const ToolOptionsBar = React.memo(function ToolOptionsBar({ activeTool, options, onChange }: ToolOptionsBarProps) {
   const t = useT();
   const tool = getTool(activeTool);
   const specs = TOOL_OPTION_SPECS[activeTool];
@@ -285,4 +285,4 @@ export const ToolOptionsBar: FC<ToolOptionsBarProps> = ({ activeTool, options, o
       )}
     </div>
   );
-};
+});

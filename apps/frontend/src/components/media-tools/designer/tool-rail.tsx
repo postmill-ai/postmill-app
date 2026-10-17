@@ -1,6 +1,6 @@
 'use client';
 
-import React, { FC, useCallback, useEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { useT } from '@postmill-ai/react/translation/get.transation.service.client';
 import {
@@ -44,12 +44,12 @@ const slotTool = (
   return remembered || tools[0] || group.tools[0];
 };
 
-export const ToolRail: FC<ToolRailProps> = ({
+export const ToolRail = React.memo(function ToolRail({
   activeTool,
   lastToolPerGroup,
   onSelect,
   aiAvailable,
-}) => {
+}: ToolRailProps) {
   const t = useT();
   const [flyout, setFlyout] = useState<string | null>(null);
   /** Viewport position for the portalled flyout, taken from its rail button. */
@@ -216,4 +216,4 @@ export const ToolRail: FC<ToolRailProps> = ({
       })}
     </div>
   );
-};
+});

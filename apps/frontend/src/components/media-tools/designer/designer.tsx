@@ -16,7 +16,6 @@ import {
 } from '@postmill-ai/frontend/components/layout/new-modal';
 import { useToaster } from '@postmill-ai/react/toaster/toaster';
 import { useT } from '@postmill-ai/react/translation/get.transation.service.client';
-import { useDebounce } from 'use-debounce';
 import { useAiActive } from '@postmill-ai/frontend/components/layout/use-ai-active';
 import { useMediaToolsStatus } from '@postmill-ai/frontend/components/layout/use-media-tools-status';
 import { TemplatesPanel } from './panels/templates-panel';
@@ -356,7 +355,24 @@ export const Designer: FC<DesignerProps> = ({
   const isDirty = store((s) => s.isDirty);
   const isSaving = store((s) => s.isSaving);
   const saveFailed = store((s) => s.saveFailed);
-  const doc = store((s) => s.doc);
+  // Narrow slices instead of the whole doc: a root-level `doc` subscription
+  // re-rendered the entire app chrome on every edit. Anything that needs the
+  // full doc reads it imperatively (store.getState()) or subscribes outside
+  // React below.
+  const docMode = store((s) => s.doc.mode);
+  // Best-matching channel preset for safe-zone overlays (E7).
+  const safeZonePreset = store(
+    (s) => (s.doc.outputs[s.currentOutput] as any)?.formatId || null
+  );
+  const currentOutputDurationMs = store((s) =>
+    s.doc.mode === 'video'
+      ? (s.doc.outputs[s.currentOutput] as any)?.durationMs
+      : undefined
+  );
+  const currentOutputSizeKey = store((s) => {
+    const o = s.doc.outputs[s.currentOutput] as any;
+    return o ? `${o.width}x${o.height}` : '';
+  });
   const activeTool = store((s) => s.activeTool);
   const lastToolPerGroup = store((s) => s.lastToolPerGroup);
   const toolOptions = store((s) => s.toolOptions);
@@ -369,6 +385,20 @@ export const Designer: FC<DesignerProps> = ({
   const brandAdminOverride = store((s) => s.brandAdminOverride);
   const undo = store((s) => s.undo);
   const redo = store((s) => s.redo);
+
+  // Memoized so the memo'd ToolOptionsBar re-renders only when the tool or
+  // its options actually change.
+  const activeToolOptions = useMemo(
+    () => ({
+      ...defaultToolOptions(activeTool),
+      ...(toolOptions[activeTool] || {}),
+    }),
+    [activeTool, toolOptions]
+  );
+  const onToolOptionChange = useCallback(
+    (key: string, value: unknown) => setToolOption(activeTool, key, value),
+    [activeTool, setToolOption]
+  );
 
   const [collabEnabled, setCollabEnabled] = useState(false);
   const [connectedCount, setConnectedCount] = useState(0);
@@ -409,8 +439,14 @@ export const Designer: FC<DesignerProps> = ({
 
   useEffect(() => {
     if (!collabEnabled || !currentDesignId) return;
-    sendUpdate(doc);
-  }, [doc, collabEnabled, currentDesignId, sendUpdate]);
+    sendUpdate(store.getState().doc);
+    let prev = store.getState().doc;
+    return store.subscribe((state) => {
+      if (state.doc === prev) return;
+      prev = state.doc;
+      sendUpdate(state.doc);
+    });
+  }, [collabEnabled, currentDesignId, sendUpdate, store]);
 
   // Let the canvas image loader use the authenticated proxy for cross-origin
   // hosts (stock images) that don't send CORS headers (otherwise blank canvas).
@@ -419,24 +455,19 @@ export const Designer: FC<DesignerProps> = ({
     return () => setImageFetch(null);
   }, [fetch]);
 
-  // Best-matching channel preset for safe-zone overlays (E7).
-  const safeZonePreset = useMemo(
-    () => doc.outputs[currentOutput]?.formatId || null,
-    [doc.outputs, currentOutput]
-  );
-
-  const brandViolations = useMemo(
+  // Brand violations are read only by the save/export flows, so compute them
+  // on demand against the live doc rather than subscribing the root to it.
+  const getBrandViolationsNow = useCallback(
     () =>
-      getBrandViolations(doc, {
+      getBrandViolations(store.getState().doc, {
         enforcement: brandEnforcement,
         adminOverride: brandAdminOverride,
         brandColors,
         brandFonts,
       }),
-    [doc, brandEnforcement, brandAdminOverride, brandColors, brandFonts]
+    [store, brandEnforcement, brandAdminOverride, brandColors, brandFonts]
   );
   const canAdminOverride = user?.role === 'owner' || user?.role === 'admin';
-  const isBrandCompliant = brandViolations.length === 0 || brandAdminOverride;
 
   // Warn on tab-close while there are unsaved changes. Re-subscribes when
   // `isDirty` changes — but must NOT reset the doc here (that cleanup would run
@@ -473,12 +504,6 @@ export const Designer: FC<DesignerProps> = ({
         .catch(() => {});
     }
   }, [designId, fetch, store]);
-
-  const [debouncedDoc] = useDebounce(doc, 2000);
-  // The name is autosaved with the doc (the PUT carries both), so a rename
-  // must wake the same debounced pipeline — a doc-only debounce would leave a
-  // pure rename unpersisted until the next canvas edit.
-  const [debouncedName] = useDebounce(designName, 2000);
 
   // Snapshot the stage canvas to a small JPEG and upload it as a File. Falls
   // back to the raw data URL when the upload fails so a preview is never lost.
@@ -521,19 +546,38 @@ export const Designer: FC<DesignerProps> = ({
     [store, fetch, uploadPreview]
   );
 
+  // Autosave runs on a store subscription, not on render: the 2s trailing
+  // debounce watches doc AND name (the PUT carries both, so a pure rename
+  // must wake the same pipeline), and a create landing its id re-fires the
+  // save so the PUT cycle picks up the latest doc (it no-ops on a clean
+  // store). Moving it out of React is what lets the root stop subscribing
+  // to `doc`.
   useEffect(() => {
-    if (!debouncedDoc || !isDirty) return;
-    designAutosave.save(debouncedDoc);
-    // currentDesignId is a dep, not read here: the first-edit create landing
-    // its id in the store must re-fire this effect so the PUT cycle picks up
-    // the latest debounced doc. debouncedName likewise: a rename is dirty
-    // state without a doc change, and the PUT persists both.
-  }, [debouncedDoc, debouncedName, currentDesignId, isDirty, designAutosave]);
+    let timer: ReturnType<typeof setTimeout> | null = null;
+    let prev = store.getState();
+    const unsubscribe = store.subscribe((state) => {
+      if (state.doc !== prev.doc || state.designName !== prev.designName) {
+        if (timer) clearTimeout(timer);
+        timer = setTimeout(() => {
+          timer = null;
+          const s = store.getState();
+          if (s.isDirty) designAutosave.save(s.doc);
+        }, 2000);
+      } else if (state.designId !== prev.designId && state.designId) {
+        designAutosave.save(state.doc);
+      }
+      prev = state;
+    });
+    return () => {
+      unsubscribe();
+      if (timer) clearTimeout(timer);
+    };
+  }, [store, designAutosave]);
 
   const openExportDialog = useCallback(
     (initialAction?: 'save' | 'create-post') => {
       const s = store.getState();
-      if (s.brandEnforcement && !s.brandAdminOverride && brandViolations.length > 0) {
+      if (s.brandEnforcement && !s.brandAdminOverride && getBrandViolationsNow().length > 0) {
         toaster.show(translate('export_blocked_off_brand', 'Export blocked: off-brand elements detected. Fix them or use admin override.'), 'warning');
         return;
       }
@@ -541,7 +585,7 @@ export const Designer: FC<DesignerProps> = ({
         children: <ExportDialog store={store} initialAction={initialAction} onClose={() => modals.closeAll()} />,
       });
     },
-    [modals, store, brandViolations, toaster, translate]
+    [modals, store, getBrandViolationsNow, toaster, translate]
   );
 
   // Legacy entry (composer-embedded "Use in post"): current output, opt-in
@@ -552,7 +596,7 @@ export const Designer: FC<DesignerProps> = ({
 
   const handleSave = useCallback(async () => {
     const s = store.getState();
-    if (s.brandEnforcement && !s.brandAdminOverride && brandViolations.length > 0) {
+    if (s.brandEnforcement && !s.brandAdminOverride && getBrandViolationsNow().length > 0) {
       toaster.show(translate('save_blocked_off_brand', 'Save blocked: off-brand elements detected. Fix them or use admin override.'), 'warning');
       return;
     }
@@ -593,11 +637,11 @@ export const Designer: FC<DesignerProps> = ({
     } finally {
       store.getState().setSaving(false);
     }
-  }, [fetch, toaster, store, brandViolations, translate, uploadPreview, designAutosave]);
+  }, [fetch, toaster, store, getBrandViolationsNow, translate, uploadPreview, designAutosave]);
 
   const handleSaveAsTemplate = useCallback(async () => {
     const s = store.getState();
-    if (s.brandEnforcement && !s.brandAdminOverride && brandViolations.length > 0) {
+    if (s.brandEnforcement && !s.brandAdminOverride && getBrandViolationsNow().length > 0) {
       toaster.show(translate('save_blocked_off_brand', 'Save blocked: off-brand elements detected. Fix them or use admin override.'), 'warning');
       return;
     }
@@ -646,7 +690,7 @@ export const Designer: FC<DesignerProps> = ({
     } finally {
       s.setSaving(false);
     }
-  }, [fetch, toaster, store, brandViolations, translate]);
+  }, [fetch, toaster, store, getBrandViolationsNow, translate]);
 
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
@@ -1240,7 +1284,7 @@ export const Designer: FC<DesignerProps> = ({
   const actions = useDesignerActions(store, ctx);
 
   const hasInspectorTarget =
-    selectedIds.length >= 1 || (doc.mode === 'video' && !!selectedClip);
+    selectedIds.length >= 1 || (docMode === 'video' && !!selectedClip);
 
   // Global ⌘E → Export and ? → Keyboard Shortcuts (⌘S/⌘K already handled
   // elsewhere; the rest of the shortcut map is canvas-focus-scoped). Ignore
@@ -1409,11 +1453,8 @@ export const Designer: FC<DesignerProps> = ({
           only: video mode drives the timeline, which owns its own bindings. */}
       <ToolOptionsBar
         activeTool={activeTool}
-        options={{
-          ...defaultToolOptions(activeTool),
-          ...(toolOptions[activeTool] || {}),
-        }}
-        onChange={(key, value) => setToolOption(activeTool, key, value)}
+        options={activeToolOptions}
+        onChange={onToolOptionChange}
       />
 
       <div className="relative flex flex-1 min-h-0 w-full overflow-hidden">
@@ -1495,10 +1536,10 @@ export const Designer: FC<DesignerProps> = ({
             />
             <CollaborationCursors
               connectedCount={connectedCount}
-              peers={doc.mode === 'video' ? peerTimelines : undefined}
-              peerImages={doc.mode === 'image' ? peerImages : undefined}
-              mode={doc.mode}
-              durationMs={doc.mode === 'video' ? (doc.outputs[currentOutput] as any)?.durationMs : undefined}
+              peers={docMode === 'video' ? peerTimelines : undefined}
+              peerImages={docMode === 'image' ? peerImages : undefined}
+              mode={docMode}
+              durationMs={currentOutputDurationMs}
               store={store}
             />
 
@@ -1524,7 +1565,7 @@ export const Designer: FC<DesignerProps> = ({
                   <InspectorPanel store={store} />
                 ) : (
                   <CanvasInspector
-                    key={`canvas-${currentOutput}-${(doc.outputs[currentOutput] as any)?.width}x${(doc.outputs[currentOutput] as any)?.height}`}
+                    key={`canvas-${currentOutput}-${currentOutputSizeKey}`}
                     store={store}
                   />
                 )}
@@ -1542,7 +1583,7 @@ export const Designer: FC<DesignerProps> = ({
               </button>
             )}
           </div>
-          {doc.mode === 'video' && <VideoTimeline store={store} sendTimelineAwareness={collabData.sendTimelineAwareness} />}
+          {docMode === 'video' && <VideoTimeline store={store} sendTimelineAwareness={collabData.sendTimelineAwareness} />}
           <OutputTabs store={store} />
         </div>
       </div>

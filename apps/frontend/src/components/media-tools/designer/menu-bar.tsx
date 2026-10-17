@@ -287,7 +287,7 @@ const Dropdown: FC<{ items: DesignerAction[]; onClose: () => void }> = ({ items,
   );
 };
 
-export const MenuBar: FC<MenuBarProps> = ({ actions, visibleOnMobile = 4 }) => {
+export const MenuBar = React.memo(function MenuBar({ actions, visibleOnMobile = 4 }: MenuBarProps) {
   const t = useT();
   const [open, setOpen] = useState<DesignerMenu | 'more' | null>(null);
   const barRef = useRef<HTMLDivElement>(null);
@@ -390,7 +390,7 @@ export const MenuBar: FC<MenuBarProps> = ({ actions, visibleOnMobile = 4 }) => {
       )}
     </div>
   );
-};
+});
 
 // Inline variant (no absolute positioning) for the mobile ☰ overflow sheet.
 const DropdownInline: FC<{ items: DesignerAction[]; onClose: () => void }> = ({ items, onClose }) => {

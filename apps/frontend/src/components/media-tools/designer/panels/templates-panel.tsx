@@ -31,7 +31,9 @@ import { useT } from '@postmill-ai/react/translation/get.transation.service.clie
 interface DesignTemplate {
   id: string;
   name: string;
-  doc: DesignerDoc;
+  /** List payloads carry only `{ mode }` (badge/bucketing/confirm); the full
+   *  doc arrives with the per-template GET on apply. */
+  doc: { mode?: 'image' | 'video' } | DesignerDoc;
   isSystem: boolean;
   category?: string | null;
   folderId?: string | null;
@@ -95,12 +97,20 @@ export const TemplatesPanel: FC<TemplatesPanelProps> = ({ store, onClose, guard 
   );
 
   const applyTemplate = useCallback(async (template: DesignTemplate) => {
+    // The list is meta-only (doc carries just the mode) — fetch the full
+    // template on apply to get its doc.
+    const fullRes = await fetch(`/media/design-templates/${template.id}`);
+    if (!fullRes.ok) {
+      toaster.show(t('templates_panel_failed_to_create_from_template', 'Failed to create design from template'), 'warning');
+      return;
+    }
+    const full = (await fullRes.json()) as DesignTemplate;
     // Cross-mode applies swap the whole doc (loadDesign takes the template's
     // mode), so they get their own confirm — which also covers the dirty
     // guard's "replaces your design" warning, hence the else-if. An empty
     // canvas converts without asking.
-    if (needsModeConfirm(template, store.getState().doc)) {
-      const target = templateModeOf(template);
+    if (needsModeConfirm(full, store.getState().doc)) {
+      const target = templateModeOf(full);
       const ok = await decision.open({
         title:
           target === 'video'
@@ -117,8 +127,8 @@ export const TemplatesPanel: FC<TemplatesPanelProps> = ({ store, onClose, guard 
     const res = await fetch('/media/designs', {
       method: 'POST',
       body: JSON.stringify({
-        name: template.name,
-        doc: template.doc,
+        name: full.name,
+        doc: full.doc,
       }),
     });
     if (!res.ok) {
@@ -126,7 +136,7 @@ export const TemplatesPanel: FC<TemplatesPanelProps> = ({ store, onClose, guard 
       return;
     }
     const data = await res.json();
-    store.getState().loadDesign(template.doc, data.id, template.name, template.id);
+    store.getState().loadDesign(full.doc as DesignerDoc, data.id, full.name, full.id);
     onClose?.();
   }, [store, onClose, fetch, toaster, guard, decision, t]);
 

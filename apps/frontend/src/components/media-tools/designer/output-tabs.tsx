@@ -153,7 +153,7 @@ const PortalPopover: React.FC<PortalPopoverProps> = ({
   );
 };
 
-export const OutputTabs: React.FC<OutputTabsProps> = ({ store }) => {
+export const OutputTabs = React.memo(function OutputTabs({ store }: OutputTabsProps) {
   const t = useT();
   const doc = store((s: any) => s.doc);
   const currentOutput = store((s: any) => s.currentOutput);
@@ -628,6 +628,6 @@ export const OutputTabs: React.FC<OutputTabsProps> = ({ store }) => {
       </PortalPopover>
     </div>
   );
-};
+});
 
 export default OutputTabs;

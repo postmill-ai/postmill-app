@@ -162,3 +162,7 @@ export const applyLinked = (
 
   return { outputs, affected };
 };
+
+// The per-element half of applyLinked (path-node refit + symbolOverrides
+// merge), for write paths that patch the current output directly.
+export const applyElementPatch = applyPatch;

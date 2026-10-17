@@ -114,12 +114,20 @@ type WaveformFetch = (url: string, init?: RequestInit) => Promise<Response>;
 // so keying by count re-fetched + re-`decodeAudioData`'d the whole file on almost
 // every mousemove. Bars are resampled from the cached peaks in memory instead.
 const HIRES_BUCKETS = 2048;
+// One 2048-bucket array per audio src — bounded LRU so a long-lived tab
+// doesn't accumulate one per source ever decoded. Insertion order doubles as
+// recency: hits re-insert, overflow evicts the oldest entry.
+const PEAKS_CACHE_MAX = 50;
 const peaksCache = new Map<string, number[]>();
 const peaksInflight = new Map<string, Promise<number[]>>();
 
 async function getPeaks(src: string, fetchFn: WaveformFetch): Promise<number[]> {
   const cached = peaksCache.get(src);
-  if (cached) return cached;
+  if (cached) {
+    peaksCache.delete(src);
+    peaksCache.set(src, cached);
+    return cached;
+  }
   const inflight = peaksInflight.get(src);
   if (inflight) return inflight;
 
@@ -153,6 +161,10 @@ async function getPeaks(src: string, fetchFn: WaveformFetch): Promise<number[]> 
       peaks.fill(0.1);
     }
     peaksCache.set(src, peaks);
+    if (peaksCache.size > PEAKS_CACHE_MAX) {
+      const oldest = peaksCache.keys().next().value;
+      if (oldest !== undefined) peaksCache.delete(oldest);
+    }
     peaksInflight.delete(src);
     return peaks;
   })();
@@ -201,7 +213,7 @@ function useWaveform(
   return useMemo(() => (!src || !peaks ? null : resamplePeaks(peaks, barCount)), [src, peaks, barCount]);
 }
 
-const WaveformBars: FC<{ src: string | undefined; width: number }> = ({ src, width }) => {
+const WaveformBars = React.memo(function WaveformBars({ src, width }: { src: string | undefined; width: number }) {
   const fetch = useFetch();
   const barCount = Math.max(6, Math.floor(width / 6));
   const bars = useWaveform(src, barCount, fetch);
@@ -229,7 +241,363 @@ const WaveformBars: FC<{ src: string | undefined; width: number }> = ({ src, wid
       ))}
     </>
   );
+});
+
+// The playhead ticks per rAF during playback/scrubbing. Its subscribers are
+// confined to these small components (and the canvas's video overlay); the
+// timeline itself reads the playhead imperatively so a 60fps tick never
+// reconciles the whole track tree.
+
+/** Toolbar timecode readout — repaints per playhead tick, by design. */
+const PlayheadTimecode: FC<{ store: VideoTimelineProps['store'] }> = ({ store }) => {
+  const playheadMs = store((s) => s.playheadMs);
+  return (
+    <span className="text-[12px] text-textColor font-mono min-w-[70px] tabular-nums">
+      {formatTime(playheadMs)}
+    </span>
+  );
 };
+
+/** The red playhead line over the tracks — repaints per playhead tick. */
+const PlayheadIndicator: FC<{ store: VideoTimelineProps['store']; pixelsPerMs: number }> = ({
+  store,
+  pixelsPerMs,
+}) => {
+  const playheadMs = store((s) => s.playheadMs);
+  return (
+    <div
+      className="absolute top-0 bottom-0 z-20 pointer-events-none"
+      style={{ left: LABEL_WIDTH + playheadMs * pixelsPerMs }}
+    >
+      <div className="w-0.5 h-full bg-red-500" />
+      <div
+        className="w-2.5 h-2.5 bg-red-500 rotate-45 -translate-x-1/2 -translate-y-1/2"
+        style={{ marginTop: 0 }}
+      />
+    </div>
+  );
+};
+
+interface ClipRowProps {
+  trackId: string;
+  trackType: VideoTrack['type'];
+  clip: VideoClip;
+  durationMs: number;
+  pixelsPerMs: number;
+  selected: boolean;
+  primary: boolean;
+  translate: ReturnType<typeof useT>;
+  dragMovedRef: { current: boolean };
+  onSelectClip: (trackId: string, clipId: string) => void;
+  onClipKeyDown: (e: React.KeyboardEvent, trackId: string, clip: VideoClip) => void;
+  onSliderKeyUp: (e: React.KeyboardEvent) => void;
+  onClipMouseDown: (
+    e: React.MouseEvent,
+    trackId: string,
+    trackType: VideoTrack['type'],
+    clip: VideoClip,
+    edge: 'start' | 'end' | 'move'
+  ) => void;
+  onClipContextMenu: (e: React.MouseEvent, trackId: string, clipId: string) => void;
+  onEdgeKeyDown: (
+    e: React.KeyboardEvent,
+    trackId: string,
+    clip: VideoClip,
+    edge: 'start' | 'end'
+  ) => void;
+}
+
+const ClipRow = React.memo(function ClipRow({
+  trackId,
+  trackType,
+  clip,
+  durationMs,
+  pixelsPerMs,
+  selected,
+  primary,
+  translate,
+  dragMovedRef,
+  onSelectClip,
+  onClipKeyDown,
+  onSliderKeyUp,
+  onClipMouseDown,
+  onClipContextMenu,
+  onEdgeKeyDown,
+}: ClipRowProps) {
+  const left = clip.startMs * pixelsPerMs;
+  const effectiveEnd = clip.endMs + (clip.freezeAtMs || 0);
+  const width = Math.max(4, (effectiveEnd - clip.startMs) * pixelsPerMs);
+
+  return (
+    <div
+      role="slider"
+      aria-label={translate('clip', 'Clip')}
+      aria-orientation="horizontal"
+      aria-valuenow={Math.round(clip.startMs)}
+      aria-valuemin={0}
+      aria-valuemax={Math.round(durationMs - (clip.endMs - clip.startMs))}
+      aria-valuetext={translate('clip_start_time', 'Start {{time}}', { time: formatTime(clip.startMs) })}
+      tabIndex={0}
+      className={`absolute top-1 rounded-[4px] cursor-pointer group ${
+        // The primary (inspector target) keeps the white ring;
+        // other selected clips get the accent ring.
+        primary ? 'ring-2 ring-white/60 z-10' : selected ? 'ring-2 ring-designerAccent/80 z-10' : ''
+      }`}
+      style={{
+        left,
+        width,
+        height: TRACK_HEIGHT - 8,
+        backgroundColor: TRACK_COLORS[trackType],
+        opacity: clip.opacity ?? 0.9,
+      }}
+      onClick={(e) => {
+        e.stopPropagation();
+        // The click that ends a real drag must not collapse the
+        // multi-selection the drag just moved; shift was handled
+        // at mousedown.
+        if (dragMovedRef.current) {
+          dragMovedRef.current = false;
+          return;
+        }
+        if (e.shiftKey) return;
+        onSelectClip(trackId, clip.id);
+      }}
+      onKeyDown={(e) => onClipKeyDown(e, trackId, clip)}
+      onKeyUp={onSliderKeyUp}
+      onMouseDown={(e) => onClipMouseDown(e, trackId, trackType, clip, 'move')}
+      onContextMenu={(e) => onClipContextMenu(e, trackId, clip.id)}
+    >
+      <div className="text-[9px] text-white/90 px-1.5 truncate leading-[28px] select-none">
+        {trackType === 'video' && '\uD83C\uDFAC'}
+        {trackType === 'image' && '\uD83D\uDDBC'}
+        {trackType === 'text' && (clip.text?.substring(0, 10) || translate('clip_label_text_fallback', 'T'))}
+        {trackType === 'caption' && (clip.text?.substring(0, 10) || translate('clip_label_caption_fallback', 'CC'))}
+        {trackType === 'audio' && '\uD83D\uDD0A'}
+        {clip.speed !== undefined && clip.speed !== 1 && ` ${clip.speed}x`}
+        {clip.reverse && ' \u21A9'}
+        {clip.freezeAtMs && clip.freezeAtMs > 0 && ' \u2744'}
+        {' '}
+        {formatTime(effectiveEnd - clip.startMs)}
+      </div>
+      {trackType === 'audio' && (
+        <div className="absolute inset-x-1 bottom-1 flex items-end gap-px h-3 opacity-60">
+          <WaveformBars src={clip.src} width={width} />
+        </div>
+      )}
+      {/* Freeze indicator */}
+      {clip.freezeAtMs && clip.freezeAtMs > 0 && (
+        <div
+          className="absolute top-0 bottom-0 border-l-2 border-dashed border-white/40"
+          style={{ left: (clip.endMs - clip.startMs) * pixelsPerMs }}
+        />
+      )}
+      {/* Keyframe dots */}
+      {clip.keyframes && clip.keyframes.length > 0 && (
+        <div className="absolute bottom-0.5 left-0 right-0 flex gap-0.5 px-1 justify-center">
+          {clip.keyframes.map((kf, ki) => (
+            <div
+              key={ki}
+              className="w-1.5 h-1.5 rounded-full bg-white/60"
+              style={{
+                left: `${kf.tMs / (effectiveEnd - clip.startMs) * 100}%`,
+              }}
+              title={translate('kf_time', 'KF: {{time}}', { time: formatTime(kf.tMs) })}
+            />
+          ))}
+        </div>
+      )}
+      {/* Drag edges */}
+      <div
+        role="slider"
+        aria-label={translate('trim_clip_start', 'Trim clip start')}
+        aria-orientation="horizontal"
+        aria-valuenow={Math.round(clip.startMs)}
+        aria-valuemin={0}
+        aria-valuemax={Math.round(clip.endMs - 100)}
+        aria-valuetext={formatTime(clip.startMs)}
+        tabIndex={0}
+        className="absolute left-0 top-0 bottom-0 w-2 cursor-ew-resize opacity-0 group-hover:opacity-100 bg-black/20 rounded-l-[4px]"
+        onMouseDown={(e) => onClipMouseDown(e, trackId, trackType, clip, 'start')}
+        onKeyDown={(e) => onEdgeKeyDown(e, trackId, clip, 'start')}
+        onKeyUp={onSliderKeyUp}
+      />
+      <div
+        role="slider"
+        aria-label={translate('trim_clip_end', 'Trim clip end')}
+        aria-orientation="horizontal"
+        aria-valuenow={Math.round(clip.endMs)}
+        aria-valuemin={Math.round(clip.startMs + 100)}
+        aria-valuemax={Math.round(durationMs)}
+        aria-valuetext={formatTime(clip.endMs)}
+        tabIndex={0}
+        className="absolute right-0 top-0 bottom-0 w-2 cursor-ew-resize opacity-0 group-hover:opacity-100 bg-black/20 rounded-r-[4px]"
+        onMouseDown={(e) => onClipMouseDown(e, trackId, trackType, clip, 'end')}
+        onKeyDown={(e) => onEdgeKeyDown(e, trackId, clip, 'end')}
+        onKeyUp={onSliderKeyUp}
+      />
+    </div>
+  );
+});
+
+interface TrackRowProps {
+  track: VideoTrack;
+  pairs: { from: VideoClip; to: VideoClip }[];
+  durationMs: number;
+  totalPixels: number;
+  pixelsPerMs: number;
+  dragOver: boolean;
+  isSelected: (trackId: string, clipId: string) => boolean;
+  isPrimary: (trackId: string, clipId: string) => boolean;
+  trackTypeLabel: (type: VideoTrack['type']) => string;
+  transitionLabel: (type: string) => string;
+  translate: ReturnType<typeof useT>;
+  dragMovedRef: { current: boolean };
+  onSelectClip: (trackId: string, clipId: string) => void;
+  onClipKeyDown: (e: React.KeyboardEvent, trackId: string, clip: VideoClip) => void;
+  onSliderKeyUp: (e: React.KeyboardEvent) => void;
+  onClipMouseDown: ClipRowProps['onClipMouseDown'];
+  onClipContextMenu: (e: React.MouseEvent, trackId: string, clipId: string) => void;
+  onEdgeKeyDown: ClipRowProps['onEdgeKeyDown'];
+  setTrackSettings: React.Dispatch<
+    React.SetStateAction<{ trackId: string; x: number; y: number } | null>
+  >;
+  setTransitionPopover: React.Dispatch<
+    React.SetStateAction<{
+      trackId: string;
+      fromClipId: string;
+      toClipId: string;
+      x: number;
+      y: number;
+    } | null>
+  >;
+}
+
+const TrackRow = React.memo(function TrackRow({
+  track,
+  pairs,
+  durationMs,
+  totalPixels,
+  pixelsPerMs,
+  dragOver,
+  isSelected,
+  isPrimary,
+  trackTypeLabel,
+  transitionLabel,
+  translate,
+  dragMovedRef,
+  onSelectClip,
+  onClipKeyDown,
+  onSliderKeyUp,
+  onClipMouseDown,
+  onClipContextMenu,
+  onEdgeKeyDown,
+  setTrackSettings,
+  setTransitionPopover,
+}: TrackRowProps) {
+  return (
+    <div
+      className={`flex items-stretch border-b border-studioBorder/20 transition-colors ${
+        dragOver ? 'bg-designerAccent/10' : ''
+      }`}
+      style={{ height: TRACK_HEIGHT + TRACK_GAP }}
+    >
+      {/* Track label */}
+      <div
+        className="flex flex-col items-end justify-center px-2 text-[10px] font-medium uppercase tracking-wider shrink-0 border-r border-studioBorder/30 gap-0.5"
+        style={{ width: LABEL_WIDTH }}
+      >
+        <span
+          style={{ color: TRACK_COLORS[track.type] }}
+          className={`truncate max-w-full ${track.name ? 'normal-case' : ''}`}
+          title={track.name || trackTypeLabel(track.type)}
+        >
+          {track.name || trackTypeLabel(track.type)}
+          {track.type === 'audio' && track.muted ? ' \uD83D\uDD07' : ''}
+        </span>
+        <button
+          className="text-[9px] text-textColor/40 hover:text-textColor"
+          title={translate('track_settings', 'Track settings')}
+          aria-label={translate('track_settings_for', 'Track settings: {{name}}', { name: track.name || trackTypeLabel(track.type) })}
+          aria-haspopup="menu"
+          onClick={(e) => {
+            const rect = (e.target as HTMLElement).getBoundingClientRect();
+            setTrackSettings({ trackId: track.id, x: rect.left + rect.width / 2, y: rect.top });
+          }}
+        >
+          ⋮
+        </button>
+      </div>
+
+      {/* Track content area */}
+      <div
+        className="relative flex-1"
+        style={{ width: totalPixels + 40 }}
+      >
+        {track.clips.map((clip) => (
+          <ClipRow
+            key={clip.id}
+            trackId={track.id}
+            trackType={track.type}
+            clip={clip}
+            durationMs={durationMs}
+            pixelsPerMs={pixelsPerMs}
+            selected={isSelected(track.id, clip.id)}
+            primary={isPrimary(track.id, clip.id)}
+            translate={translate}
+            dragMovedRef={dragMovedRef}
+            onSelectClip={onSelectClip}
+            onClipKeyDown={onClipKeyDown}
+            onSliderKeyUp={onSliderKeyUp}
+            onClipMouseDown={onClipMouseDown}
+            onClipContextMenu={onClipContextMenu}
+            onEdgeKeyDown={onEdgeKeyDown}
+          />
+        ))}
+
+        {/* Transition handles between adjacent clips */}
+        {pairs.map(({ from, to }) => {
+          const handleX = from.endMs * pixelsPerMs;
+          const tType = from.transitionOut?.type || to.transitionIn?.type || 'cut';
+          const isTransitioning = tType !== 'cut';
+          return (
+            <div
+              key={`trans-${from.id}-${to.id}`}
+              className="absolute top-1 z-20 group"
+              style={{
+                left: handleX - 4,
+                height: TRACK_HEIGHT - 8,
+              }}
+            >
+              <button
+                type="button"
+                className={`w-2 h-full flex items-center justify-center rounded-xs ${
+                  isTransitioning ? 'bg-yellow-500/40 hover:bg-yellow-500/60' : 'bg-transparent hover:bg-white/10'
+                }`}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
+                  setTransitionPopover({
+                    trackId: track.id,
+                    fromClipId: from.id,
+                    toClipId: to.id,
+                    x: rect.left + rect.width / 2,
+                    y: rect.top,
+                  });
+                }}
+                title={translate('transition_hint', '{{label}} transition', { label: transitionLabel(tType) })}
+                aria-label={translate('transition_hint', '{{label}} transition', { label: transitionLabel(tType) })}
+              >
+                {isTransitioning && (
+                  <div className="w-1 h-3 rounded-full bg-yellow-400" />
+                )}
+              </button>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+});
 
 interface AiVideoDialogProps {
   fetch: ReturnType<typeof useFetch>;
@@ -578,7 +946,10 @@ export const VideoTimeline: FC<VideoTimelineProps> = ({ store, sendTimelineAware
   const imageSlideAvailable = toolAvailable('image-slide');
   const doc = store((s) => s.doc);
   const currentOutput = store((s) => s.currentOutput);
-  const playheadMs = store((s) => s.playheadMs);
+  // No root playheadMs subscription: the preview engine ticks per rAF, and a
+  // subscription here reconciled the whole timeline at 60fps. The playhead is
+  // read imperatively (store.getState()) in handlers, and the small
+  // PlayheadTimecode / PlayheadIndicator components subscribe for display.
   const selectedClip = store((s) => s.selectedClip);
   const selectedClips = store((s) => s.selectedClips);
   const selectedIds = store((s) => s.selectedIds);
@@ -650,6 +1021,7 @@ export const VideoTimeline: FC<VideoTimelineProps> = ({ store, sendTimelineAware
   const scrollRef = useRef<HTMLDivElement>(null);
   const previewRef = useRef<VideoPreviewEngine | null>(null);
   const timelineRef = useRef<HTMLDivElement>(null);
+  const rulerRef = useRef<HTMLDivElement>(null);
 
   const fetch = useFetch();
   const toaster = useToaster();
@@ -722,9 +1094,9 @@ export const VideoTimeline: FC<VideoTimelineProps> = ({ store, sendTimelineAware
 
   const scrollToPlayhead = useCallback(() => {
     if (!scrollRef.current) return;
-    const playheadPx = playheadMs * pixelsPerMs - 200;
+    const playheadPx = store.getState().playheadMs * pixelsPerMs - 200;
     scrollRef.current.scrollLeft = Math.max(0, playheadPx);
-  }, [playheadMs, pixelsPerMs]);
+  }, [store, pixelsPerMs]);
 
   const handlePlayPause = useCallback(() => {
     if (!isVideo || !vo) return;
@@ -764,8 +1136,26 @@ export const VideoTimeline: FC<VideoTimelineProps> = ({ store, sendTimelineAware
   }, []);
 
   useEffect(() => {
-    if (isPlaying) scrollToPlayhead();
-  }, [playheadMs, isPlaying, scrollToPlayhead]);
+    if (!isPlaying) return;
+    scrollToPlayhead();
+    let prev = store.getState().playheadMs;
+    return store.subscribe((state) => {
+      if (state.playheadMs === prev) return;
+      prev = state.playheadMs;
+      scrollToPlayhead();
+    });
+  }, [isPlaying, scrollToPlayhead, store]);
+
+  // The ruler's aria value tracks the playhead imperatively — re-rendering
+  // the ruler per tick would repaint every tick mark for an attribute change.
+  useEffect(() => {
+    return store.subscribe((state) => {
+      const el = rulerRef.current;
+      if (!el) return;
+      el.setAttribute('aria-valuenow', String(Math.round(state.playheadMs)));
+      el.setAttribute('aria-valuetext', formatTime(state.playheadMs));
+    });
+  }, [store]);
 
   const seekFromClientX = useCallback(
     (clientX: number) => {
@@ -845,7 +1235,7 @@ export const VideoTimeline: FC<VideoTimelineProps> = ({ store, sendTimelineAware
       const vo = state.doc.outputs[currentOutput] as VideoOutput | undefined;
       const max = vo?.durationMs ?? 0;
       const step = e.shiftKey ? SLIDER_BIG_STEP_MS : SLIDER_STEP_MS;
-      let next = playheadMs;
+      let next = state.playheadMs;
       if (e.key === 'ArrowLeft') next -= step;
       else if (e.key === 'ArrowRight') next += step;
       else if (e.key === 'Home') next = 0;
@@ -856,7 +1246,7 @@ export const VideoTimeline: FC<VideoTimelineProps> = ({ store, sendTimelineAware
       setPlayhead(next);
       previewRef.current?.seek(next);
     },
-    [currentOutput, playheadMs, setPlayhead, store]
+    [currentOutput, setPlayhead, store]
   );
 
   const handleClipKeyDown = useCallback(
@@ -942,22 +1332,22 @@ export const VideoTimeline: FC<VideoTimelineProps> = ({ store, sendTimelineAware
   );
 
   const handleClipMouseDown = useCallback(
-    (e: React.MouseEvent, track: VideoTrack, clip: VideoClip, edge: 'start' | 'end' | 'move') => {
+    (e: React.MouseEvent, trackId: string, trackType: VideoTrack['type'], clip: VideoClip, edge: 'start' | 'end' | 'move') => {
       e.stopPropagation();
       dragMovedRef.current = false;
       // Shift-click is pure selection: toggle membership and never start a
       // drag, or the toggle would immediately drag the clip it just selected.
       if (e.shiftKey && edge === 'move') {
-        store.getState().toggleClipSelection(track.id, clip.id);
+        store.getState().toggleClipSelection(trackId, clip.id);
         return;
       }
       const inSelection = store
         .getState()
-        .selectedClips.some((c) => c.trackId === track.id && c.clipId === clip.id);
+        .selectedClips.some((c) => c.trackId === trackId && c.clipId === clip.id);
       // Pressing an unselected clip collapses the selection to it (the drag
       // that follows is single-clip); pressing a selected clip keeps the group.
       if (!inSelection) {
-        setSelectedClip({ outputIndex: currentOutput, trackId: track.id, clipId: clip.id });
+        setSelectedClip({ outputIndex: currentOutput, trackId, clipId: clip.id });
       }
       // Multi-clip move: snapshot every selected clip's geometry at mousedown
       // so mousemove can apply one dx to all of them (silent writes, one
@@ -977,17 +1367,17 @@ export const VideoTimeline: FC<VideoTimelineProps> = ({ store, sendTimelineAware
         if (snapshot.length > 1) group = snapshot;
       }
       setDragging({
-        trackId: track.id,
+        trackId,
         clipId: clip.id,
         edge,
         startX: e.clientX,
         origStart: clip.startMs,
         origEnd: clip.endMs,
         origClip: clip,
-        trackType: track.type,
+        trackType,
         sourceDurationMs:
-          (track.type === 'video' || track.type === 'audio') && clip.src
-            ? getSourceDurationMs(clip.src, track.type)
+          (trackType === 'video' || trackType === 'audio') && clip.src
+            ? getSourceDurationMs(clip.src, trackType)
             : undefined,
         group,
       });
@@ -1212,7 +1602,7 @@ export const VideoTimeline: FC<VideoTimelineProps> = ({ store, sendTimelineAware
 
       const original = track.clips[idx];
       const freezeDuration = 2000;
-      const splitPoint = Math.max(original.startMs + 100, Math.min(original.endMs - 100, playheadMs));
+      const splitPoint = Math.max(original.startMs + 100, Math.min(original.endMs - 100, state.playheadMs));
 
       if (splitPoint <= original.startMs || splitPoint >= original.endMs) return;
 
@@ -1279,7 +1669,7 @@ export const VideoTimeline: FC<VideoTimelineProps> = ({ store, sendTimelineAware
       store.setState({ doc: { ...state.doc, outputs: outs }, isDirty: true });
       store.getState().pushHistory();
     },
-    [store, currentOutput, playheadMs],
+    [store, currentOutput],
   );
 
   const handleKeyDown = useCallback(
@@ -1322,7 +1712,7 @@ export const VideoTimeline: FC<VideoTimelineProps> = ({ store, sendTimelineAware
         const state = store.getState();
         if (state.clipClipboard.length) {
           e.preventDefault();
-          state.pasteClips(playheadMs);
+          state.pasteClips(state.playheadMs);
         }
       } else if (
         (e.key === ',' || e.key === '.') &&
@@ -1335,7 +1725,7 @@ export const VideoTimeline: FC<VideoTimelineProps> = ({ store, sendTimelineAware
         const frameMs = 1000 / (vo.fps || 30);
         const next = Math.max(
           0,
-          Math.min(vo.durationMs, playheadMs + (e.key === '.' ? frameMs : -frameMs))
+          Math.min(vo.durationMs, store.getState().playheadMs + (e.key === '.' ? frameMs : -frameMs))
         );
         setPlayhead(next);
         previewRef.current?.seek(next);
@@ -1352,7 +1742,7 @@ export const VideoTimeline: FC<VideoTimelineProps> = ({ store, sendTimelineAware
         // (the timeline is focusable, so overloading Ctrl+S silently split the
         // clip AND saved the mutated doc).
         e.preventDefault();
-        store.getState().splitClip(currentOutput, selectedClip.trackId, selectedClip.clipId, playheadMs);
+        store.getState().splitClip(currentOutput, selectedClip.trackId, selectedClip.clipId, store.getState().playheadMs);
       } else if (
         e.key.toLowerCase() === 'f' &&
         (e.ctrlKey || e.metaKey) &&
@@ -1363,7 +1753,7 @@ export const VideoTimeline: FC<VideoTimelineProps> = ({ store, sendTimelineAware
         handleFreezeFrame(selectedClip.trackId, selectedClip.clipId);
       }
     },
-    [isVideo, vo, selectedClip, store, currentOutput, playheadMs, handlePlayPause, setPlayhead, handleFreezeFrame],
+    [isVideo, vo, selectedClip, store, currentOutput, handlePlayPause, setPlayhead, handleFreezeFrame],
   );
 
   const selectedKeySet = useMemo(
@@ -1384,13 +1774,32 @@ export const VideoTimeline: FC<VideoTimelineProps> = ({ store, sendTimelineAware
     [selectedClip, currentOutput],
   );
 
-  const activeSelected = selectedClip?.outputIndex === currentOutput ? selectedClip : null;
-
+  // Timeline awareness rides a store subscription so the per-frame playhead
+  // tick doesn't re-render the timeline to broadcast it.
   useEffect(() => {
-    if (sendTimelineAwareness) {
-      sendTimelineAwareness(playheadMs, activeSelected?.clipId ?? null);
-    }
-  }, [playheadMs, activeSelected?.clipId, sendTimelineAwareness]);
+    if (!sendTimelineAwareness) return;
+    const clipIdOf = (s: { selectedClip: { outputIndex: number; clipId: string } | null; currentOutput: number }) =>
+      s.selectedClip?.outputIndex === s.currentOutput ? s.selectedClip.clipId : null;
+    sendTimelineAwareness(store.getState().playheadMs, clipIdOf(store.getState()));
+    let prev = store.getState();
+    return store.subscribe((state) => {
+      const before = clipIdOf(prev);
+      const after = clipIdOf(state);
+      if (state.playheadMs === prev.playheadMs && before === after) {
+        prev = state;
+        return;
+      }
+      prev = state;
+      sendTimelineAwareness(state.playheadMs, after);
+    });
+  }, [sendTimelineAwareness, store]);
+
+  const handleSelectClip = useCallback(
+    (trackId: string, clipId: string) => {
+      setSelectedClip({ outputIndex: currentOutput, trackId, clipId });
+    },
+    [setSelectedClip, currentOutput],
+  );
 
   const handleClipContextMenu = useCallback(
     (e: React.MouseEvent, trackId: string, clipId: string) => {
@@ -1549,9 +1958,9 @@ export const VideoTimeline: FC<VideoTimelineProps> = ({ store, sendTimelineAware
 
   const handleSplitClipAtPlayhead = useCallback(() => {
     if (!clipMenu) return;
-    store.getState().splitClip(clipMenu.outputIndex, clipMenu.trackId, clipMenu.clipId, playheadMs);
+    store.getState().splitClip(clipMenu.outputIndex, clipMenu.trackId, clipMenu.clipId, store.getState().playheadMs);
     setClipMenu(null);
-  }, [clipMenu, store, playheadMs]);
+  }, [clipMenu, store]);
 
   const handleFreezeFrameClip = useCallback(() => {
     if (!clipMenu) return;
@@ -1587,8 +1996,8 @@ export const VideoTimeline: FC<VideoTimelineProps> = ({ store, sendTimelineAware
         if (!audioTrack) return;
         const clip: VideoClip = {
           id: `clip-${Date.now()}`,
-          startMs: playheadMs,
-          endMs: Math.min(playheadMs + probedMs, vo.durationMs),
+          startMs: state.playheadMs,
+          endMs: Math.min(state.playheadMs + probedMs, vo.durationMs),
           src: path,
           fileId: id,
           volume: 1,
@@ -1601,7 +2010,7 @@ export const VideoTimeline: FC<VideoTimelineProps> = ({ store, sendTimelineAware
         toaster.show(translate('voiceover_generation_failed', 'Voiceover generation failed'), 'warning');
       }
     },
-    [vo, playheadMs, currentOutput, store, fetch, toaster, translate]
+    [vo, currentOutput, store, fetch, toaster, translate]
   );
 
   const handleGenerateVoiceover = useCallback(() => {
@@ -2013,7 +2422,7 @@ export const VideoTimeline: FC<VideoTimelineProps> = ({ store, sendTimelineAware
     if (!clip?.src) return;
     const menu = { outputIndex: clipMenu.outputIndex, trackId: clipMenu.trackId, clipId: clipMenu.clipId };
     const clipDurationMs = clip.endMs - clip.startMs;
-    const playheadOffset = Math.max(0, Math.min(playheadMs - clip.startMs, clipDurationMs));
+    const playheadOffset = Math.max(0, Math.min(store.getState().playheadMs - clip.startMs, clipDurationMs));
     const def = defaultSegmentWindow(clipDurationMs, playheadOffset);
     setClipMenu(null);
     modals.openModal({
@@ -2028,7 +2437,7 @@ export const VideoTimeline: FC<VideoTimelineProps> = ({ store, sendTimelineAware
         />
       ),
     });
-  }, [clipMenu, store, playheadMs, modals, translate, runSegmentTransform]);
+  }, [clipMenu, store, modals, translate, runSegmentTransform]);
 
   const handleGenerateVideo = useCallback(() => {
     modals.openModal({
@@ -2151,9 +2560,7 @@ export const VideoTimeline: FC<VideoTimelineProps> = ({ store, sendTimelineAware
         >
           🔁
         </button>
-        <span className="text-[12px] text-textColor font-mono min-w-[70px] tabular-nums">
-          {formatTime(playheadMs)}
-        </span>
+        <PlayheadTimecode store={store} />
         <span className="text-[11px] text-textColor/40">
           / {formatTime(vo.durationMs)}
         </span>
@@ -2288,13 +2695,14 @@ export const VideoTimeline: FC<VideoTimelineProps> = ({ store, sendTimelineAware
         <div style={{ position: 'relative', width: LABEL_WIDTH + totalPixels + 40, minWidth: '100%' }}>
           {/* Ruler */}
           <div
+            ref={rulerRef}
             role="slider"
             aria-label={translate('seek_timeline', 'Seek timeline')}
             aria-orientation="horizontal"
-            aria-valuenow={Math.round(playheadMs)}
+            aria-valuenow={Math.round(store.getState().playheadMs)}
             aria-valuemin={0}
             aria-valuemax={Math.round(vo.durationMs)}
-            aria-valuetext={formatTime(playheadMs)}
+            aria-valuetext={formatTime(store.getState().playheadMs)}
             tabIndex={0}
             className="sticky top-0 z-10 bg-newBgColorInner border-b border-studioBorder/40 select-none"
             style={{ height: RULER_HEIGHT, marginLeft: LABEL_WIDTH }}
@@ -2321,210 +2729,31 @@ export const VideoTimeline: FC<VideoTimelineProps> = ({ store, sendTimelineAware
           </div>
 
           {/* Tracks */}
-          {vo.tracks.map((track, ti) => {
-            const trackPairs = sortedAdjacentPairs[track.id] || [];
-            return (
-            <div
+          {vo.tracks.map((track) => (
+            <TrackRow
               key={track.id}
-              className={`flex items-stretch border-b border-studioBorder/20 transition-colors ${
-                dragOverTrackId === track.id ? 'bg-designerAccent/10' : ''
-              }`}
-              style={{ height: TRACK_HEIGHT + TRACK_GAP }}
-            >
-              {/* Track label */}
-              <div
-                className="flex flex-col items-end justify-center px-2 text-[10px] font-medium uppercase tracking-wider shrink-0 border-r border-studioBorder/30 gap-0.5"
-                style={{ width: LABEL_WIDTH }}
-              >
-                <span
-                  style={{ color: TRACK_COLORS[track.type] }}
-                  className={`truncate max-w-full ${track.name ? 'normal-case' : ''}`}
-                  title={track.name || trackTypeLabel(track.type)}
-                >
-                  {track.name || trackTypeLabel(track.type)}
-                  {track.type === 'audio' && track.muted ? ' \uD83D\uDD07' : ''}
-                </span>
-                <button
-                  className="text-[9px] text-textColor/40 hover:text-textColor"
-                  title={translate('track_settings', 'Track settings')}
-                  aria-label={translate('track_settings_for', 'Track settings: {{name}}', { name: track.name || trackTypeLabel(track.type) })}
-                  aria-haspopup="menu"
-                  onClick={(e) => {
-                    const rect = (e.target as HTMLElement).getBoundingClientRect();
-                    setTrackSettings({ trackId: track.id, x: rect.left + rect.width / 2, y: rect.top });
-                  }}
-                >
-                  ⋮
-                </button>
-              </div>
-
-              {/* Track content area */}
-              <div
-                className="relative flex-1"
-                style={{ width: totalPixels + 40 }}
-              >
-                {track.clips.map((clip) => {
-                  const left = clip.startMs * pixelsPerMs;
-                  const effectiveEnd = clip.endMs + (clip.freezeAtMs || 0);
-                  const width = Math.max(4, (effectiveEnd - clip.startMs) * pixelsPerMs);
-                  const sel = isSelected(track.id, clip.id);
-                  const primary = isPrimary(track.id, clip.id);
-
-                  return (
-                    <div
-                      role="slider"
-                      aria-label={translate('clip', 'Clip')}
-                      aria-orientation="horizontal"
-                      aria-valuenow={Math.round(clip.startMs)}
-                      aria-valuemin={0}
-                      aria-valuemax={Math.round(vo.durationMs - (clip.endMs - clip.startMs))}
-                      aria-valuetext={translate('clip_start_time', 'Start {{time}}', { time: formatTime(clip.startMs) })}
-                      tabIndex={0}
-                      key={clip.id}
-                      className={`absolute top-1 rounded-[4px] cursor-pointer group ${
-                        // The primary (inspector target) keeps the white ring;
-                        // other selected clips get the accent ring.
-                        primary ? 'ring-2 ring-white/60 z-10' : sel ? 'ring-2 ring-designerAccent/80 z-10' : ''
-                      }`}
-                      style={{
-                        left,
-                        width,
-                        height: TRACK_HEIGHT - 8,
-                        backgroundColor: TRACK_COLORS[track.type],
-                        opacity: clip.opacity ?? 0.9,
-                      }}
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        // The click that ends a real drag must not collapse the
-                        // multi-selection the drag just moved; shift was handled
-                        // at mousedown.
-                        if (dragMovedRef.current) {
-                          dragMovedRef.current = false;
-                          return;
-                        }
-                        if (e.shiftKey) return;
-                        setSelectedClip({ outputIndex: currentOutput, trackId: track.id, clipId: clip.id });
-                      }}
-                      onKeyDown={(e) => handleClipKeyDown(e, track.id, clip)}
-                      onKeyUp={handleSliderKeyUp}
-                      onMouseDown={(e) => handleClipMouseDown(e, track, clip, 'move')}
-                      onContextMenu={(e) => handleClipContextMenu(e, track.id, clip.id)}
-                    >
-                      <div className="text-[9px] text-white/90 px-1.5 truncate leading-[28px] select-none">
-                        {track.type === 'video' && '\uD83C\uDFAC'}
-                        {track.type === 'image' && '\uD83D\uDDBC'}
-                        {track.type === 'text' && (clip.text?.substring(0, 10) || translate('clip_label_text_fallback', 'T'))}
-                        {track.type === 'caption' && (clip.text?.substring(0, 10) || translate('clip_label_caption_fallback', 'CC'))}
-                        {track.type === 'audio' && '\uD83D\uDD0A'}
-                        {clip.speed !== undefined && clip.speed !== 1 && ` ${clip.speed}x`}
-                        {clip.reverse && ' \u21A9'}
-                        {clip.freezeAtMs && clip.freezeAtMs > 0 && ' \u2744'}
-                        {' '}
-                        {formatTime(effectiveEnd - clip.startMs)}
-                      </div>
-                      {track.type === 'audio' && (
-                        <div className="absolute inset-x-1 bottom-1 flex items-end gap-px h-3 opacity-60">
-                          <WaveformBars src={clip.src} width={width} />
-                        </div>
-                      )}
-                      {/* Freeze indicator */}
-                      {clip.freezeAtMs && clip.freezeAtMs > 0 && (
-                        <div
-                          className="absolute top-0 bottom-0 border-l-2 border-dashed border-white/40"
-                          style={{ left: (clip.endMs - clip.startMs) * pixelsPerMs }}
-                        />
-                      )}
-                      {/* Keyframe dots */}
-                      {clip.keyframes && clip.keyframes.length > 0 && (
-                        <div className="absolute bottom-0.5 left-0 right-0 flex gap-0.5 px-1 justify-center">
-                          {clip.keyframes.map((kf, ki) => (
-                            <div
-                              key={ki}
-                              className="w-1.5 h-1.5 rounded-full bg-white/60"
-                              style={{
-                                left: `${kf.tMs / (effectiveEnd - clip.startMs) * 100}%`,
-                              }}
-                              title={translate('kf_time', 'KF: {{time}}', { time: formatTime(kf.tMs) })}
-                            />
-                          ))}
-                        </div>
-                      )}
-                      {/* Drag edges */}
-                      <div
-                        role="slider"
-                        aria-label={translate('trim_clip_start', 'Trim clip start')}
-                        aria-orientation="horizontal"
-                        aria-valuenow={Math.round(clip.startMs)}
-                        aria-valuemin={0}
-                        aria-valuemax={Math.round(clip.endMs - 100)}
-                        aria-valuetext={formatTime(clip.startMs)}
-                        tabIndex={0}
-                        className="absolute left-0 top-0 bottom-0 w-2 cursor-ew-resize opacity-0 group-hover:opacity-100 bg-black/20 rounded-l-[4px]"
-                        onMouseDown={(e) => handleClipMouseDown(e, track, clip, 'start')}
-                        onKeyDown={(e) => handleEdgeKeyDown(e, track.id, clip, 'start')}
-                        onKeyUp={handleSliderKeyUp}
-                      />
-                      <div
-                        role="slider"
-                        aria-label={translate('trim_clip_end', 'Trim clip end')}
-                        aria-orientation="horizontal"
-                        aria-valuenow={Math.round(clip.endMs)}
-                        aria-valuemin={Math.round(clip.startMs + 100)}
-                        aria-valuemax={Math.round(vo.durationMs)}
-                        aria-valuetext={formatTime(clip.endMs)}
-                        tabIndex={0}
-                        className="absolute right-0 top-0 bottom-0 w-2 cursor-ew-resize opacity-0 group-hover:opacity-100 bg-black/20 rounded-r-[4px]"
-                        onMouseDown={(e) => handleClipMouseDown(e, track, clip, 'end')}
-                        onKeyDown={(e) => handleEdgeKeyDown(e, track.id, clip, 'end')}
-                        onKeyUp={handleSliderKeyUp}
-                      />
-                    </div>
-                  );
-                })}
-
-                {/* Transition handles between adjacent clips */}
-                {trackPairs.map(({ from, to }) => {
-                  const handleX = from.endMs * pixelsPerMs;
-                  const tType = from.transitionOut?.type || to.transitionIn?.type || 'cut';
-                  const isTransitioning = tType !== 'cut';
-                  return (
-                    <div
-                      key={`trans-${from.id}-${to.id}`}
-                      className="absolute top-1 z-20 group"
-                      style={{
-                        left: handleX - 4,
-                        height: TRACK_HEIGHT - 8,
-                      }}
-                    >
-                      <button
-                        type="button"
-                        className={`w-2 h-full flex items-center justify-center rounded-xs ${
-                          isTransitioning ? 'bg-yellow-500/40 hover:bg-yellow-500/60' : 'bg-transparent hover:bg-white/10'
-                        }`}
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
-                          setTransitionPopover({
-                            trackId: track.id,
-                            fromClipId: from.id,
-                            toClipId: to.id,
-                            x: rect.left + rect.width / 2,
-                            y: rect.top,
-                          });
-                        }}
-                        title={translate('transition_hint', '{{label}} transition', { label: transitionLabel(tType) })}
-                        aria-label={translate('transition_hint', '{{label}} transition', { label: transitionLabel(tType) })}
-                      >
-                        {isTransitioning && (
-                          <div className="w-1 h-3 rounded-full bg-yellow-400" />
-                        )}
-                      </button>
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
-          )})}
+              track={track}
+              pairs={sortedAdjacentPairs[track.id] || []}
+              durationMs={vo.durationMs}
+              totalPixels={totalPixels}
+              pixelsPerMs={pixelsPerMs}
+              dragOver={dragOverTrackId === track.id}
+              isSelected={isSelected}
+              isPrimary={isPrimary}
+              trackTypeLabel={trackTypeLabel}
+              transitionLabel={transitionLabel}
+              translate={translate}
+              dragMovedRef={dragMovedRef}
+              onSelectClip={handleSelectClip}
+              onClipKeyDown={handleClipKeyDown}
+              onSliderKeyUp={handleSliderKeyUp}
+              onClipMouseDown={handleClipMouseDown}
+              onClipContextMenu={handleClipContextMenu}
+              onEdgeKeyDown={handleEdgeKeyDown}
+              setTrackSettings={setTrackSettings}
+              setTransitionPopover={setTransitionPopover}
+            />
+          ))}
 
           {/* Keyframe lane — inside the same scroll container and on the same
               pixelsPerMs as the tracks, so alignment needs no syncing. */}
@@ -2551,16 +2780,7 @@ export const VideoTimeline: FC<VideoTimelineProps> = ({ store, sendTimelineAware
           )}
 
           {/* Playhead */}
-          <div
-            className="absolute top-0 bottom-0 z-20 pointer-events-none"
-            style={{ left: LABEL_WIDTH + playheadMs * pixelsPerMs }}
-          >
-            <div className="w-0.5 h-full bg-red-500" />
-            <div
-              className="w-2.5 h-2.5 bg-red-500 rotate-45 -translate-x-1/2 -translate-y-1/2"
-              style={{ marginTop: 0 }}
-            />
-          </div>
+          <PlayheadIndicator store={store} pixelsPerMs={pixelsPerMs} />
         </div>
       </div>
 
@@ -2989,7 +3209,7 @@ export const VideoTimeline: FC<VideoTimelineProps> = ({ store, sendTimelineAware
                       >
                         {translate('transform_with_prompt', 'Transform with prompt')}
                       </button>
-                      {playheadMs > clip.startMs && playheadMs < clip.endMs && clip.speed !== 0 && (
+                      {store.getState().playheadMs > clip.startMs && store.getState().playheadMs < clip.endMs && clip.speed !== 0 && (
                         <button
                           onClick={handleRegenerateSegment}
                           disabled={!videoToVideoAvailable}

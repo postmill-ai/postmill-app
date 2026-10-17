@@ -29,13 +29,13 @@ const Btn: FC<{ onClick: () => void; title: string; children: React.ReactNode }>
 
 // Contextual selection toolbar (A2): high-frequency actions surfaced at the top
 // of the canvas when one or more elements are selected.
-export const SelectionToolbar: FC<ToolbarProps> = ({
+export const SelectionToolbar = React.memo(function SelectionToolbar({
   store,
   aiActive,
   onAiRemoveBg,
   onAiUpscale,
   onAiInpaint,
-}) => {
+}: ToolbarProps) {
   const t = useT();
   const doc = store((s: any) => s.doc);
   const currentOutput = store((s: any) => s.currentOutput);
@@ -92,4 +92,4 @@ export const SelectionToolbar: FC<ToolbarProps> = ({
       )}
     </div>
   );
-};
+});

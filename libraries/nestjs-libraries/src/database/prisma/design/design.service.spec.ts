@@ -218,6 +218,34 @@ describe('DesignService', () => {
     });
   });
 
+  describe('listTemplates', () => {
+    it('slims each doc to its mode and maps the thumbnail file', async () => {
+      repository.findTemplatesByOrg.mockResolvedValue([
+        {
+          id: 't1',
+          name: 'Video Ad',
+          doc: makeDoc({ doc: { mode: 'video' } }),
+          thumbnailFile: { path: '/uploads/thumb.jpg' },
+        },
+        {
+          id: 't2',
+          name: 'Square',
+          doc: makeDoc(),
+          thumbnailFile: null,
+        },
+      ]);
+
+      const out = await service.listTemplates('org-1');
+
+      // The gallery reads the mode (badge/bucketing/confirm) but never the
+      // document — the apply flow fetches it via getTemplate.
+      expect(out[0].doc).toEqual({ mode: 'video' });
+      expect(out[0].thumbnail).toBe('/uploads/thumb.jpg');
+      expect(out[1].doc).toEqual({ mode: 'image' });
+      expect(out[1].thumbnail).toBeNull();
+    });
+  });
+
   describe('instantiateTemplate', () => {
     it('returns a detached, re-identified doc for a system template', async () => {
       const doc = makeDoc({ output: { id: 'tpl-out-1' } });

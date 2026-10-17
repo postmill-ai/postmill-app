@@ -17,7 +17,7 @@ import {
 } from '@postmill-ai/nestjs-libraries/media/designer-doc/designer-doc.migrate';
 import { smartReflow, computeGroupBoxes } from '@postmill-ai/nestjs-libraries/media/designer-doc/reflow';
 import { seedCopy } from '@postmill-ai/nestjs-libraries/media/designer-doc/seed-copy';
-import { applyLinked, GEOMETRY_KEYS } from '@postmill-ai/nestjs-libraries/media/designer-doc/apply-linked';
+import { applyLinked, applyElementPatch, GEOMETRY_KEYS } from '@postmill-ai/nestjs-libraries/media/designer-doc/apply-linked';
 import { moveLayers, descendantIds } from '@postmill-ai/nestjs-libraries/media/designer-doc/layer-tree';
 import type {
   DesignerDoc,
@@ -176,6 +176,14 @@ export interface DesignerActions {
   // Same as updateElements but does NOT commit history — for continuous controls
   // (slider/drag), which push a single history entry on release instead.
   updateElementsSilent: (ids: string[], updates: Partial<DesignerElement>) => void;
+  /**
+   * Gesture-scoped write: patches the element on the CURRENT output only, with
+   * no cross-output applyLinked and no linkedUpdateFlash churn. Drag/transform
+   * move events call it per rAF frame; dragEnd/transformEnd re-commit through
+   * updateElement (+ pushHistory), so the gesture's final state and its single
+   * history entry are identical to the plain updateElement path.
+   */
+  updateElementEphemeral: (id: string, updates: Partial<DesignerElement>) => void;
   removeElement: (id: string) => void;
   removeElements: (ids: string[]) => void;
   duplicateElement: (id: string) => void;
@@ -493,6 +501,19 @@ export const createDesignerStore = (
         const nextFlash: Record<number, number> = { ...linkedUpdateFlash };
         affected.forEach((i) => (nextFlash[i] = now));
         set({ doc: { ...doc, outputs }, isDirty: true, linkedUpdateFlash: nextFlash });
+      },
+
+      updateElementEphemeral: (id, updates) => {
+        if (isVideoMode()) return;
+        const { doc, currentOutput } = get();
+        const out = doc.outputs[currentOutput] as DesignerOutput | undefined;
+        if (!out || !('children' in out)) return;
+        const outs = [...doc.outputs];
+        outs[currentOutput] = {
+          ...out,
+          children: out.children.map((el) => (el.id === id ? applyElementPatch(el, updates) : el)),
+        };
+        set({ doc: { ...doc, outputs: outs }, isDirty: true });
       },
 
       removeElement: (id) => {

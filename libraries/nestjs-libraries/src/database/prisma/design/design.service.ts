@@ -103,6 +103,11 @@ export class DesignService {
     const templates = await this._designRepository.findTemplatesByOrg(orgId);
     return templates.map((t) => ({
       ...t,
+      // The gallery list is chrome: it reads the mode (badge, uncategorized
+      // bucketing, cross-mode confirm) but never the document — shipping every
+      // template's full doc made the panel download megabytes up front. The
+      // apply flow fetches the doc via getTemplate on demand.
+      doc: { mode: (t.doc as any)?.mode ?? 'image' },
       thumbnail: (t as any).thumbnailFile?.path ?? null,
     }));
   }

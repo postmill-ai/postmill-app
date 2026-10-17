@@ -189,6 +189,7 @@ export const DesignerCanvas: FC<CanvasProps> = ({
   const pushHistory = store((s) => s.pushHistory);
   const setSelectedIds = store((s) => s.setSelectedIds);
   const updateElement = store((s) => s.updateElement);
+  const updateElementEphemeral = store((s) => s.updateElementEphemeral);
   const duplicateElement = store((s) => s.duplicateElement);
   const addElement = store((s) => s.addElement);
   const setZoom = store((s) => s.setZoom);
@@ -221,10 +222,29 @@ export const DesignerCanvas: FC<CanvasProps> = ({
   const effectiveTool = store((s) => s.activeTool);
   const toolCursor = getTool(effectiveTool)?.cursor || 'default';
   const selectedClip = store((s) => s.selectedClip);
-  // Read here rather than at the transformer: it must re-attach when the
-  // playhead moves, since a clip that scrolls out from under it is unmounted
-  // and would leave the transformer on a dead node.
-  const playheadMs = store((s) => s.playheadMs);
+  // Read here rather than at the transformer: the transformer-attach effect
+  // re-resolves nodes after every render, so it needs a render when the
+  // selected clip's node mounts/unmounts as the playhead crosses the clip's
+  // bounds. Subscribing to the raw playhead would reconcile the whole stage at
+  // 60fps during playback — subscribe to the boundary FLIP only.
+  const selectedClipAtPlayhead = store((s) => {
+    if (s.doc.mode !== 'video' || !s.selectedClip) return false;
+    const vo = s.doc.outputs[s.selectedClip.outputIndex] as VideoOutput | undefined;
+    const clip = vo?.tracks
+      .find((tr) => tr.id === s.selectedClip?.trackId)
+      ?.clips.find((c) => c.id === s.selectedClip?.clipId);
+    if (!clip) return false;
+    return (
+      s.playheadMs >= clip.startMs &&
+      s.playheadMs <= clip.endMs + (clip.freezeAtMs || 0)
+    );
+  });
+  void selectedClipAtPlayhead;
+  // The text editor tracks an animated clip's composed position per tick —
+  // but only while a clip is actually being edited.
+  const editingPlayheadMs = store((s) =>
+    editingTextId && s.doc.mode === 'video' ? s.playheadMs : -1
+  );
   // The Crop tool acts on the single selected element; with nothing selected it
   // simply has no target and the overlay stays hidden.
   // In video the target is the selected clip, adapted into the element shape the
@@ -327,7 +347,11 @@ export const DesignerCanvas: FC<CanvasProps> = ({
   // on OPEN — `ensureFontLoaded` only ran when adding or restyling text — so
   // a doc carrying a display face (every AI-composed headline) opened in a
   // fallback serif and, Konva never being invalidated, stayed there.
-  useEffect(() => {
+  //
+  // Keyed on a signature of the families+weights in use, not on `doc`: an
+  // edit that changes no fonts (every keystroke) must not re-walk the doc
+  // re-calling document.fonts.load.
+  const fontSignature = React.useMemo(() => {
     // Weights as well as families: a face loads per weight, so warming only the
     // default would leave a 700 headline measuring against the 400 cut.
     const families = new Map<string, Set<number>>();
@@ -345,7 +369,19 @@ export const DesignerCanvas: FC<CanvasProps> = ({
         for (const clip of track.clips || []) note(clip.fontFamily, clip.fontWeight);
       }
     }
-    if (!families.size) return;
+    return [...families.entries()]
+      .map(([family, weights]) => `${family}@${[...weights].sort((a, b) => a - b).join(',')}`)
+      .sort()
+      .join('|');
+  }, [doc]);
+
+  useEffect(() => {
+    if (!fontSignature) return;
+    const families = new Map<string, Set<number>>();
+    for (const entry of fontSignature.split('|')) {
+      const [family, weights] = entry.split('@');
+      families.set(family, new Set(weights.split(',').map(Number)));
+    }
     let cancelled = false;
     void ensureFontsUsed(families).then(() => {
       if (cancelled) return;
@@ -369,7 +405,7 @@ export const DesignerCanvas: FC<CanvasProps> = ({
     return () => {
       cancelled = true;
     };
-  }, [doc]);
+  }, [fontSignature]);
 
   useEffect(() => {
     const isTypingTarget = (t: EventTarget | null) =>
@@ -994,12 +1030,14 @@ export const DesignerCanvas: FC<CanvasProps> = ({
         const node = e.target;
         const id = node.id();
         if (id) {
-          updateElement(id, { x: node.x(), y: node.y() });
+          // Gesture-scoped write: current output only, no cross-output
+          // applyLinked per frame. dragEnd re-commits through updateElement.
+          updateElementEphemeral(id, { x: node.x(), y: node.y() });
         }
         rafIdRef.current = null;
       });
     },
-    [computeSnap, updateElement]
+    [computeSnap, updateElementEphemeral]
   );
 
   const handleDragEnd = useCallback(
@@ -1121,11 +1159,12 @@ export const DesignerCanvas: FC<CanvasProps> = ({
       // Throttle only the store write; the node attrs above are already correct.
       if (rafIdRef.current) return;
       rafIdRef.current = requestAnimationFrame(() => {
-        patches.forEach(({ id, patch }) => updateElement(id, patch));
+        // Same gesture-scoped write as dragMove; transformEnd commits.
+        patches.forEach(({ id, patch }) => updateElementEphemeral(id, patch));
         rafIdRef.current = null;
       });
     },
-    [bakeTransform, updateElement, isVideo]
+    [bakeTransform, updateElementEphemeral, isVideo]
   );
 
   const handleTransformEnd = useCallback(
@@ -2112,7 +2151,7 @@ export const DesignerCanvas: FC<CanvasProps> = ({
         );
         const clip = track?.clips.find((c) => c.id === editingTextId);
         if (!track || !clip) return null;
-        const composed = composeClipsAtPlayhead(vo, playheadMs).find(
+        const composed = composeClipsAtPlayhead(vo, editingPlayheadMs).find(
           (c) => c.clip.id === editingTextId
         );
         const boxProps = composed?.props;
