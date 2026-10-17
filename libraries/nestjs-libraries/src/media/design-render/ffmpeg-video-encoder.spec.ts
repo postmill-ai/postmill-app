@@ -213,3 +213,30 @@ describe('FfmpegVideoEncoderService.mixAudio filter graph', () => {
     expect(graph).not.toContain('eval=frame');
   });
 });
+
+describe('formatExtension', () => {
+  it('maps webp-animated to webp (ffmpeg infers the muxer from the extension)', async () => {
+    const { formatExtension } = await import('./ffmpeg-video-encoder.service');
+    expect(formatExtension('webp-animated')).toBe('webp');
+    expect(formatExtension('mp4')).toBe('mp4');
+    expect(formatExtension('webm')).toBe('webm');
+    expect(formatExtension('gif')).toBe('gif');
+  });
+
+  it('encode() writes output.webp for webp-animated (regression: output.webp-animated fails ffmpeg with Invalid argument)', async () => {
+    const frameCapture = { captureFrames: vi.fn().mockResolvedValue(36) };
+    const service = new FfmpegVideoEncoderService(frameCapture as any);
+    vi.spyOn(service as any, 'mixAudio').mockResolvedValue(null);
+    const out: any = {
+      width: 540, height: 540, fps: 12, durationMs: 3000,
+      tracks: [{ type: 'video', gain: 1, clips: [] }],
+    };
+    await service.encode(out, { fps: 12, format: 'webp-animated' });
+    const muxCall = spawnCalls.find((c) =>
+      c.args.some((a) => a.includes('frame-%05d')),
+    );
+    expect(muxCall).toBeTruthy();
+    const outPath = muxCall!.args[muxCall!.args.length - 1];
+    expect(outPath).toMatch(/output\.webp$/);
+  });
+});

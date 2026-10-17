@@ -63,6 +63,15 @@ function getEffectiveEnd(clip: VideoClip): number {
   return clip.endMs + (clip.freezeAtMs || 0);
 }
 
+/**
+ * File extension for a render format. ffmpeg infers the muxer from the output
+ * extension, so the internal format id 'webp-animated' must become '.webp' —
+ * 'output.webp-animated' fails with "Invalid argument".
+ */
+export function formatExtension(format: string): string {
+  return format === 'webp-animated' ? 'webp' : format;
+}
+
 export interface VideoEncodeOptions {
   fps?: number;
   /** Resolution multiplier over the composition canvas (default 1). */
@@ -131,7 +140,7 @@ export class FfmpegVideoEncoderService {
       }, routeOptions, scale);
 
       const durationS = output.durationMs / 1000;
-      const videoPath = path.join(tmpDir, `output.${format}`);
+      const videoPath = path.join(tmpDir, `output.${formatExtension(format)}`);
       const framePattern = path.join(tmpDir, 'frame-%05d.png');
 
       if (format === 'gif' || format === 'webp-animated') {
@@ -227,18 +236,33 @@ export class FfmpegVideoEncoderService {
 
       // 4. Extract poster (mid-frame).
       const thumbnailPath = path.join(tmpDir, 'thumbnail.jpg');
-      await runFfmpeg([
-        '-y',
-        '-ss',
-        String(Math.max(0, durationS / 2)),
-        '-i',
-        videoPath,
-        '-frames:v',
-        '1',
-        '-q:v',
-        '2',
-        thumbnailPath,
-      ]);
+      if (format === 'webp-animated') {
+        // Distro ffmpeg's webp decoder can't read ANIM/ANMF chunks, so
+        // re-reading the animated output fails. Convert the mid capture frame
+        // instead — identical pixels, no decode of the animated container.
+        const totalFrames = Math.max(
+          1,
+          Math.ceil((output.durationMs / 1000) * fps),
+        );
+        const midFrame = path.join(
+          tmpDir,
+          `frame-${String(Math.max(1, Math.floor(totalFrames / 2))).padStart(5, '0')}.png`,
+        );
+        await runFfmpeg(['-y', '-i', midFrame, '-frames:v', '1', '-q:v', '2', thumbnailPath]);
+      } else {
+        await runFfmpeg([
+          '-y',
+          '-ss',
+          String(Math.max(0, durationS / 2)),
+          '-i',
+          videoPath,
+          '-frames:v',
+          '1',
+          '-q:v',
+          '2',
+          thumbnailPath,
+        ]);
+      }
 
       return { videoPath, thumbnailPath };
     } catch (err) {
