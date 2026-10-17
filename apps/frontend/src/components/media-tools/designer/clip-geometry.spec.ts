@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { clipEdgeUpdate, clipGeometryUpdate, hasKeyframeAtPlayhead, type ClipBox } from './clip-geometry';
+import { clipEdgeUpdate, clipGeometryUpdate, hasKeyframeAtPlayhead, canDropClipOnTrack, type ClipBox } from './clip-geometry';
 import type { VideoClip } from './designer.store';
 
 const clip = (over: Partial<VideoClip> = {}): VideoClip =>
@@ -217,5 +217,16 @@ describe('clipEdgeUpdate', () => {
     const update = clipEdgeUpdate(c, 'end', 8000, av);
     expect(update.endMs).toBe(6000);
     expect(update.trimInMs).toBe(0);
+  });
+});
+
+describe('canDropClipOnTrack', () => {
+  it('allows same-type drops and rejects cross-type drops', () => {
+    expect(canDropClipOnTrack('video', 'video')).toBe(true);
+    expect(canDropClipOnTrack('audio', 'audio')).toBe(true);
+    expect(canDropClipOnTrack('video', 'caption')).toBe(false);
+    expect(canDropClipOnTrack('caption', 'video')).toBe(false);
+    expect(canDropClipOnTrack('image', 'text')).toBe(false);
+    expect(canDropClipOnTrack('text', 'caption')).toBe(false);
   });
 });

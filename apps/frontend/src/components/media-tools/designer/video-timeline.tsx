@@ -10,7 +10,7 @@ import { useMediaToolsStatus } from '@postmill-ai/frontend/components/layout/use
 import { VoiceoverDialog } from './voiceover-dialog';
 import { Stepper } from './controls';
 import { addMediaToTimeline, probeAudioDuration, probeVideoMetadata } from './add-media-to-timeline';
-import { clipEdgeUpdate } from './clip-geometry';
+import { clipEdgeUpdate, canDropClipOnTrack } from './clip-geometry';
 import { isMarqueeClick, marqueeHitClips, normalizeMarquee, type MarqueeRect } from './timeline-marquee';
 import { KeyframeLane } from './keyframe-lane';
 import { timelineBeats } from './beat-sync';
@@ -1025,8 +1025,11 @@ export const VideoTimeline: FC<VideoTimelineProps> = ({ store, sendTimelineAware
 
     const handleMouseMove = (e: MouseEvent) => {
       const hovered = trackAtY(e.clientY);
-      // Cross-track drop is single-clip only; a group drag stays on its tracks.
-      setDragOverTrackId(dragging.group ? null : (hovered?.id ?? null));
+      // Cross-track drop is single-clip only, and only onto a SAME-TYPE track —
+      // a video clip dropped on a caption track would render as a caption (the
+      // renderers route by track type), effectively vanishing from the export.
+      const compatible = hovered && canDropClipOnTrack(dragging.trackType, hovered.type);
+      setDragOverTrackId(dragging.group || !compatible ? null : hovered.id);
 
       // dx is measured from the gesture's mousedown and applied to the values
       // captured AT mousedown — folding it into the previously written value
@@ -1083,7 +1086,12 @@ export const VideoTimeline: FC<VideoTimelineProps> = ({ store, sendTimelineAware
       const hovered = trackAtY(e.clientY);
       setDragging(null);
       setDragOverTrackId(null);
-      if (!dragging.group && hovered && hovered.id !== dragging.trackId) {
+      if (
+        !dragging.group &&
+        hovered &&
+        hovered.id !== dragging.trackId &&
+        canDropClipOnTrack(dragging.trackType, hovered.type)
+      ) {
         const clip = vo.tracks
           .find((t) => t.id === dragging.trackId)
           ?.clips.find((c) => c.id === dragging.clipId);

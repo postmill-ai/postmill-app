@@ -1,4 +1,4 @@
-import type { VideoClip } from './designer.store';
+import type { VideoClip, VideoTrack } from './designer.store';
 
 /**
  * Writing a canvas drag or resize back onto a video clip.
@@ -24,6 +24,17 @@ export interface ClipBox {
   height: number;
   rotation: number;
 }
+
+/**
+ * Cross-track drops are only legal between tracks of the same type: the
+ * renderers (preview overlay AND server frame script) route drawing by track
+ * type, so a video clip on a caption track would render as a caption — i.e.
+ * vanish from the export while looking fine in the preview.
+ */
+export const canDropClipOnTrack = (
+  clipTrackType: VideoTrack['type'],
+  targetTrackType: VideoTrack['type'],
+): boolean => clipTrackType === targetTrackType;
 
 export type ClipGeometry = Partial<
   Pick<VideoClip, 'x' | 'y' | 'width' | 'height' | 'rotation' | 'keyframes'>
