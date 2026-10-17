@@ -197,6 +197,55 @@ describe('DesignerDoc schema', () => {
     expect(absent.success).toBe(true);
   });
 
+  it('accepts optional track locked/hidden in both parsers, and tolerates their absence', () => {
+    const doc = JSON.parse(JSON.stringify(videoDocFixture));
+    doc.outputs[0].tracks[0].locked = true;
+    doc.outputs[0].tracks[0].hidden = true;
+    const strict = DesignerDocStrictSchema.parse(migrateDoc(doc));
+    expect(strict.outputs[0].tracks[0].locked).toBe(true);
+    expect(strict.outputs[0].tracks[0].hidden).toBe(true);
+    const lenient = DesignerDocLenientSchema.parse(migrateDoc(doc));
+    expect(lenient.outputs[0].tracks[0].locked).toBe(true);
+    expect(lenient.outputs[0].tracks[0].hidden).toBe(true);
+
+    expect(DesignerDocStrictSchema.safeParse(migrateDoc(videoDocFixture)).success).toBe(true);
+    expect(DesignerDocLenientSchema.safeParse(migrateDoc(videoDocFixture)).success).toBe(true);
+  });
+
+  it('round-trips the new transition types (wipe/zoom/blur) through BOTH parsers', () => {
+    for (const type of ['wipe', 'zoom', 'blur']) {
+      const doc = JSON.parse(JSON.stringify(videoDocFixture));
+      doc.outputs[0].tracks[0].clips[0].transitionOut = { type, durationMs: 500, direction: 'left' };
+      const strict = DesignerDocStrictSchema.parse(migrateDoc(doc));
+      expect(strict.outputs[0].tracks[0].clips[0].transitionOut?.type).toBe(type);
+      const lenient = DesignerDocLenientSchema.parse(migrateDoc(doc));
+      expect(lenient.outputs[0].tracks[0].clips[0].transitionOut?.type).toBe(type);
+    }
+  });
+
+  it('still rejects an unknown transition type in strict mode', () => {
+    const doc = JSON.parse(JSON.stringify(videoDocFixture));
+    doc.outputs[0].tracks[0].clips[0].transitionIn = { type: 'spin', durationMs: 500 };
+    expect(DesignerDocStrictSchema.safeParse(migrateDoc(doc)).success).toBe(false);
+  });
+
+  it('round-trips output markers through BOTH parsers, and tolerates their absence', () => {
+    const doc = JSON.parse(JSON.stringify(videoDocFixture));
+    doc.outputs[0].markers = [
+      { id: 'mk-1', tMs: 1500, name: 'Hook' },
+      { id: 'mk-2', tMs: 4000 },
+    ];
+    const strict = DesignerDocStrictSchema.parse(migrateDoc(doc));
+    expect(strict.outputs[0].markers).toEqual([
+      { id: 'mk-1', tMs: 1500, name: 'Hook' },
+      { id: 'mk-2', tMs: 4000 },
+    ]);
+    const lenient = DesignerDocLenientSchema.parse(migrateDoc(doc));
+    expect(lenient.outputs[0].markers).toHaveLength(2);
+
+    expect(DesignerDocStrictSchema.safeParse(migrateDoc(videoDocFixture)).success).toBe(true);
+  });
+
   it('round-trips a clip blendMode through migrateDoc and BOTH parsers', () => {
     // v7 additive field: docs saved before it existed carry nothing and keep
     // validating (covered by the fixture parse above); docs carrying it must

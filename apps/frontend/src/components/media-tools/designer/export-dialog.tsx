@@ -566,7 +566,10 @@ export const ExportDialog: FC<ExportDialogProps> = ({ store, onClose, initialAct
   const [videoBitrateKbps, setVideoBitrateKbps] = useState<number>(5000);
   // 0 = "canvas default" (the composition's own fps); the DTO only takes 24/30/60.
   const [videoFps, setVideoFps] = useState<0 | 24 | 30 | 60>(0);
-  const [videoScale, setVideoScale] = useState<0.5 | 1 | 2>(1);
+  // Free multiplier (0.25–4): the 0.5×/1×/2× buttons, the 720p/1080p/4K
+  // shorthands and the platform presets all resolve to one.
+  const [videoScale, setVideoScale] = useState<number>(1);
+  const [normalizeLoudness, setNormalizeLoudness] = useState(true);
   const [posterUrl, setPosterUrl] = useState<string>('');
   const [posterUploading, setPosterUploading] = useState(false);
   const [renderedPosterUrl, setRenderedPosterUrl] = useState<string>('');
@@ -610,6 +613,18 @@ export const ExportDialog: FC<ExportDialogProps> = ({ store, onClose, initialAct
   const doc: DesignerDoc = store((s: any) => s.doc);
   const multiOutput = doc.outputs.length > 1;
   const isVideoMode = doc.mode === 'video';
+
+  // Platform preset / resolution shorthand math is relative to the canvas the
+  // dialog would render (the current output), the same reference the fps
+  // "canvas default" label uses.
+  const videoCanvasHeight = useMemo(() => {
+    const out = doc.outputs[store.getState().currentOutput || 0] as { height?: number } | undefined;
+    return out?.height ?? 1080;
+  }, [doc.outputs, store]);
+  const scaleForHeight = useCallback(
+    (h: number) => Math.max(0.25, Math.min(4, Math.round((h / videoCanvasHeight) * 100) / 100)),
+    [videoCanvasHeight]
+  );
 
   const user = useUser();
   const brandColors = useBrandColors();
@@ -900,6 +915,7 @@ export const ExportDialog: FC<ExportDialogProps> = ({ store, onClose, initialAct
             bitrateKbps: videoBitrateKbps,
             scale: videoScale !== 1 ? videoScale : undefined,
             fps: videoFps || undefined,
+            normalizeLoudness: normalizeLoudness || undefined,
             posterUrl: posterUrl || undefined,
             folderId: selectedFolderId || undefined,
           }),
@@ -945,7 +961,7 @@ export const ExportDialog: FC<ExportDialogProps> = ({ store, onClose, initialAct
     } finally {
       setIsEnqueuing(false);
     }
-  }, [doc, store, exportAll, forceAllOutputs, outputFormats, videoFormat, videoQuality, videoBitrateKbps, videoFps, videoScale, posterUrl, selectedFolderId, fetch, toaster]);
+  }, [doc, store, exportAll, forceAllOutputs, outputFormats, videoFormat, videoQuality, videoBitrateKbps, videoFps, videoScale, normalizeLoudness, posterUrl, selectedFolderId, fetch, toaster]);
 
   const retryFailedRenders = useCallback(() => {
     const candidates = exportAll || forceAllOutputs
@@ -1855,6 +1871,31 @@ export const ExportDialog: FC<ExportDialogProps> = ({ store, onClose, initialAct
 
           <div className="flex flex-col gap-3">
             <div className="flex flex-col gap-1">
+              <div className="text-[13px] font-medium text-textColor">{t('designer_platform_presets_label', 'Platform presets')}</div>
+              <div className="flex gap-2">
+                {([
+                  { id: 'tiktok', label: 'TikTok', width: 1080, height: 1920, fps: 30 as const, bitrateKbps: 8000 },
+                  { id: 'reels', label: 'Reels', width: 1080, height: 1920, fps: 30 as const, bitrateKbps: 8000 },
+                  { id: 'shorts', label: 'Shorts', width: 1080, height: 1920, fps: 30 as const, bitrateKbps: 8000 },
+                  { id: 'youtube', label: 'YouTube', width: 1920, height: 1080, fps: 30 as const, bitrateKbps: 12000 },
+                ]).map((p) => (
+                  <button
+                    key={p.id}
+                    onClick={() => {
+                      setVideoFps(p.fps);
+                      setVideoBitrateKbps(p.bitrateKbps);
+                      setVideoScale(scaleForHeight(p.height));
+                    }}
+                    title={`${p.width}×${p.height} · ${p.fps}fps · ${p.bitrateKbps} kbps`}
+                    className="flex-1 h-[36px] rounded-[6px] text-[12px] font-medium transition-all border border-studioBorder text-textColor hover:bg-boxHover"
+                  >
+                    {p.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            <div className="flex flex-col gap-1">
               <div className="text-[13px] font-medium text-textColor">{t('designer_format_label', 'Format')}</div>
               <div className="flex gap-2">
                 {(['mp4', 'webm', 'gif', 'webp-animated'] as const).map((f) => (
@@ -1931,6 +1972,26 @@ export const ExportDialog: FC<ExportDialogProps> = ({ store, onClose, initialAct
                   </button>
                 ))}
               </div>
+              <div className="flex gap-2">
+                {([
+                  { h: 720, label: '720p' },
+                  { h: 1080, label: '1080p' },
+                  { h: 2160, label: '4K' },
+                ]).map((r) => (
+                  <button
+                    key={r.h}
+                    onClick={() => setVideoScale(scaleForHeight(r.h))}
+                    title={`${r.label} (${Math.round(videoCanvasHeight * scaleForHeight(r.h))}px ${t('designer_resolution_output_height', 'output height')})`}
+                    className={`flex-1 h-[30px] rounded-[6px] text-[12px] font-medium transition-all ${
+                      videoScale === scaleForHeight(r.h)
+                        ? 'bg-designerAccent text-white'
+                        : 'border border-studioBorder text-textColor hover:bg-boxHover'
+                    }`}
+                  >
+                    {r.label}
+                  </button>
+                ))}
+              </div>
             </div>
 
             <div className="flex flex-col gap-1">
@@ -1955,6 +2016,17 @@ export const ExportDialog: FC<ExportDialogProps> = ({ store, onClose, initialAct
                 ))}
               </div>
             </div>
+
+            <label className="flex items-center gap-2 cursor-pointer mt-1">
+              <input
+                type="checkbox"
+                checked={normalizeLoudness}
+                onChange={(e) => setNormalizeLoudness(e.target.checked)}
+                className="accent-designerAccent w-3.5 h-3.5"
+              />
+              <span className="text-[13px] text-textColor">{t('designer_normalize_loudness_label', 'Normalize loudness')}</span>
+              <span className="text-[11px] text-newTextColor/60">{t('designer_normalize_loudness_hint', '-14 LUFS / -1.5 dBTP (social platform target)')}</span>
+            </label>
 
             <div className="flex flex-col gap-1">
               <div className="text-[13px] font-medium text-textColor">{t('designer_poster_thumbnail_label', 'Poster / Thumbnail')}</div>

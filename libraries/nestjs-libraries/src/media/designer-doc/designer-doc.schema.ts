@@ -649,6 +649,21 @@ export interface CaptionWord {
   endMs: number;
 }
 
+/**
+ * Transition between two adjacent clips on a track. `fade` is a
+ * fade-through-black; `dissolve` is the plain cross-fade; `wipe` slides the
+ * incoming clip in over a static outgoing one (`direction`, like `slide`);
+ * `zoom` scales both clips through the overlap; `blur` ramps a gaussian blur
+ * inversely to the opacity. wipe/zoom/blur are optional-additive on v7 — older
+ * docs simply never carry them. Both renderers evaluate them through
+ * `designer-doc/transitions` (injected into the frame page as source).
+ */
+export interface ClipTransition {
+  type: 'cut' | 'fade' | 'dissolve' | 'slide' | 'wipe' | 'zoom' | 'blur';
+  durationMs: number;
+  direction?: 'left' | 'right' | 'up' | 'down';
+}
+
 export interface VideoClip {
   id: string;
   startMs: number;
@@ -700,16 +715,8 @@ export interface VideoClip {
   }[];
   naturalWidth?: number;
   naturalHeight?: number;
-  transitionIn?: {
-    type: 'cut' | 'fade' | 'dissolve' | 'slide';
-    durationMs: number;
-    direction?: 'left' | 'right' | 'up' | 'down';
-  };
-  transitionOut?: {
-    type: 'cut' | 'fade' | 'dissolve' | 'slide';
-    durationMs: number;
-    direction?: 'left' | 'right' | 'up' | 'down';
-  };
+  transitionIn?: ClipTransition;
+  transitionOut?: ClipTransition;
   speed?: number;
   /**
    * CapCut-style speed ramp (optional-additive on v7): piecewise-linear speed
@@ -789,6 +796,28 @@ export interface VideoTrack {
    * it (there is nothing to mute); only audio tracks expose the toggle.
    */
   muted?: boolean;
+  /**
+   * Locked tracks refuse clip edits — drag, trim, split and delete skip their
+   * clips (optional-additive; absent = unlocked).
+   */
+  locked?: boolean;
+  /**
+   * Hidden tracks are excluded from every renderer: the canvas preview, the
+   * frame-renderer script and (for audio tracks) the ffmpeg mix — the same
+   * exclusion `muted` applies to the audio paths (optional-additive).
+   */
+  hidden?: boolean;
+}
+
+/**
+ * A named point on a VideoOutput's timeline (optional-additive on v7). Editor
+ * state that belongs to the document — markers render on the ruler and the
+ * playhead snaps to them, but NO renderer reads them.
+ */
+export interface VideoMarker {
+  id: string;
+  tMs: number;
+  name?: string;
 }
 
 export interface VideoOutput {
@@ -800,6 +829,7 @@ export interface VideoOutput {
   fps: number;
   durationMs: number;
   tracks: VideoTrack[];
+  markers?: VideoMarker[];
 }
 
 export interface DesignerOutput {
@@ -1475,7 +1505,7 @@ const { strict: StrictCaptionWordSchema, lenient: LenientCaptionWordSchema } =
 // Transition
 // ---------------------------------------------------------------------------
 const transitionCommon = {
-  type: z.enum(['cut', 'fade', 'dissolve', 'slide']),
+  type: z.enum(['cut', 'fade', 'dissolve', 'slide', 'wipe', 'zoom', 'blur']),
   direction: z.enum(['left', 'right', 'up', 'down']).optional(),
 };
 const { strict: StrictTransitionSchema, lenient: LenientTransitionSchema } =
@@ -1695,6 +1725,9 @@ const trackCommon = {
   // docs written before the fields existed keep validating unchanged.
   name: z.string().max(200).optional(),
   muted: z.boolean().optional(),
+  // Lock/hide (track management) — same optional-additive rule as name/muted.
+  locked: z.boolean().optional(),
+  hidden: z.boolean().optional(),
 };
 const { strict: StrictVideoTrackSchema, lenient: LenientVideoTrackSchema } =
   dualObject(
@@ -1707,6 +1740,25 @@ const { strict: StrictVideoTrackSchema, lenient: LenientVideoTrackSchema } =
       ...trackCommon,
       clips: z.array(LenientVideoClipSchema).max(MAX_CLIPS_PER_TRACK),
       gain: lenientNum(0, 2, 1),
+    }
+  );
+
+// ---------------------------------------------------------------------------
+// VideoMarker
+// ---------------------------------------------------------------------------
+const markerCommon = {
+  id: z.string().max(200),
+  name: z.string().max(200).optional(),
+};
+const { strict: StrictVideoMarkerSchema, lenient: LenientVideoMarkerSchema } =
+  dualObject(
+    {
+      ...markerCommon,
+      tMs: strictNum(0, MAX_VIDEO_DURATION_MS),
+    },
+    {
+      ...markerCommon,
+      tMs: lenientNum(0, MAX_VIDEO_DURATION_MS, 0),
     }
   );
 
@@ -1727,6 +1779,7 @@ const { strict: StrictVideoOutputSchema, lenient: LenientVideoOutputSchema } =
       fps: strictNum(1, 240),
       durationMs: strictNum(0, MAX_VIDEO_DURATION_MS),
       tracks: z.array(StrictVideoTrackSchema).max(MAX_TRACKS),
+      markers: z.array(StrictVideoMarkerSchema).max(200).optional(),
     },
     {
       ...videoOutputCommon,
@@ -1735,6 +1788,7 @@ const { strict: StrictVideoOutputSchema, lenient: LenientVideoOutputSchema } =
       fps: lenientNum(1, 240, 30),
       durationMs: lenientNum(0, MAX_VIDEO_DURATION_MS, 10000),
       tracks: z.array(LenientVideoTrackSchema).max(MAX_TRACKS),
+      markers: z.array(LenientVideoMarkerSchema).max(200).optional(),
     }
   );
 
@@ -1845,6 +1899,7 @@ export { StrictDesignerElementSchema, LenientDesignerElementSchema };
 export { StrictStickerFrameSchema, LenientStickerFrameSchema };
 export { StrictCaptionWordSchema, LenientCaptionWordSchema };
 export { StrictTransitionSchema, LenientTransitionSchema };
+export { StrictVideoMarkerSchema, LenientVideoMarkerSchema };
 export { StrictKeyframeSchema, LenientKeyframeSchema };
 export { StrictSpeedCurvePointSchema, LenientSpeedCurvePointSchema };
 export { StrictVideoClipSchema, LenientVideoClipSchema };

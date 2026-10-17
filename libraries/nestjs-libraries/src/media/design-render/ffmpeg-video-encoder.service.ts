@@ -88,6 +88,12 @@ export interface VideoEncodeOptions {
    * render-progress HTTP route. Never serialized into a job spec.
    */
   onProgress?: (progress: FrameCaptureProgress) => void;
+  /**
+   * Apply EBU R128 loudness normalization (`loudnorm=I=-14:TP=-1.5`,
+   * single-pass) to the final audio mix — the -14 LUFS / -1.5 dBTP target the
+   * social platforms normalize to. No-op when the composition has no audio.
+   */
+  normalizeLoudness?: boolean;
 }
 
 export interface EncodeResult {
@@ -183,7 +189,7 @@ export class FfmpegVideoEncoderService {
         }
       } else {
         // 2. Mix audio if present.
-        const audioPath = await this.mixAudio(output, tmpDir);
+        const audioPath = await this.mixAudio(output, tmpDir, options.normalizeLoudness === true);
 
         // 3. Encode final video.
         const isWebm = format === 'webm';
@@ -275,14 +281,15 @@ export class FfmpegVideoEncoderService {
    * Mix all audio clips into a single WAV file aligned to the timeline.
    * Returns the mixed audio path, or null if there are no audible clips.
    */
-  async mixAudio(output: VideoOutput, tmpDir: string): Promise<string | null> {
+  async mixAudio(output: VideoOutput, tmpDir: string, normalizeLoudness = false): Promise<string | null> {
     const audioInputs: AudioInput[] = [];
     const downloadCache = new Map<string, string>();
 
     for (const track of output.tracks) {
       // A muted track contributes nothing to the mix (the preview engine skips
       // it the same way) — and it must not feed the ducking sidechain either.
-      if (track.muted) continue;
+      // A hidden track is excluded from every renderer, so its audio goes too.
+      if (track.muted || track.hidden) continue;
       const trackGain = track.gain ?? 1;
       for (const clip of track.clips) {
         const effectiveEnd = getEffectiveEnd(clip);
@@ -462,8 +469,12 @@ export class FfmpegVideoEncoderService {
     }
 
     const finalMix = finalLabels.join('');
+    // Loudness normalization sits AFTER the final mix so it measures (and
+    // gains) the summed signal, not one stem — single-pass loudnorm at the
+    // social-platform target (-14 LUFS integrated, -1.5 dBTP).
+    const loudnorm = normalizeLoudness ? ',loudnorm=I=-14:TP=-1.5' : '';
     filters.push(
-      `${finalMix}amix=inputs=${finalLabels.length}:duration=longest:dropout_transition=0[outa]`,
+      `${finalMix}amix=inputs=${finalLabels.length}:duration=longest:dropout_transition=0${loudnorm}[outa]`,
     );
 
     const mixedPath = path.join(tmpDir, 'mixed-audio.wav');

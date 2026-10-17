@@ -240,3 +240,74 @@ describe('formatExtension', () => {
     expect(outPath).toMatch(/output\.webp$/);
   });
 });
+
+describe('FfmpegVideoEncoderService.mixAudio loudness and hidden tracks', () => {
+  beforeEach(() => {
+    spawnCalls.length = 0;
+  });
+
+  const output: any = {
+    width: 1080,
+    height: 1080,
+    fps: 30,
+    durationMs: 12685,
+    tracks: [
+      {
+        type: 'video',
+        gain: 1,
+        clips: [
+          {
+            id: 'clip-1',
+            startMs: 0,
+            endMs: 12685,
+            src: 'https://example.com/uploads/clip.mp4',
+          },
+        ],
+      },
+    ],
+  };
+
+  const mixGraph = async (out: any, normalizeLoudness = false): Promise<string | null> => {
+    const service = new FfmpegVideoEncoderService();
+    vi.spyOn(service as any, 'getAudioDurationMs').mockResolvedValue(60000);
+    vi.spyOn(service as any, 'downloadAudio').mockResolvedValue('/tmp/fake.mp4');
+    const mixed = await service.mixAudio(out, '/tmp', normalizeLoudness);
+    if (!mixed) return null;
+    // Last matching call: a test may mix twice with different options.
+    const mixCall = [...spawnCalls].reverse().find((c) => c.args.includes('-filter_complex'));
+    expect(mixCall).toBeTruthy();
+    return mixCall!.args[mixCall!.args.indexOf('-filter_complex') + 1];
+  };
+
+  it('appends loudnorm after the final mix only when normalizeLoudness is on', async () => {
+    const withNorm = await mixGraph(output, true);
+    expect(withNorm).toContain('loudnorm=I=-14:TP=-1.5');
+    // It must sit on the FINAL mix chain (the [outa] leg), not on a stem.
+    expect(withNorm).toContain('loudnorm=I=-14:TP=-1.5[outa]');
+
+    const without = await mixGraph(output, false);
+    expect(without).not.toContain('loudnorm');
+  });
+
+  it('encode() forwards the normalizeLoudness option to mixAudio', async () => {
+    const frameCapture = { captureFrames: vi.fn().mockResolvedValue(10) };
+    const service = new FfmpegVideoEncoderService(frameCapture as any);
+    const mix = vi.spyOn(service as any, 'mixAudio').mockResolvedValue('/tmp/mixed-audio.wav');
+    await service.encode(output, { fps: 30, format: 'mp4', normalizeLoudness: true });
+    expect(mix).toHaveBeenCalledWith(output, expect.any(String), true);
+  });
+
+  it('a hidden track contributes nothing to the mix (like a muted one)', async () => {
+    const hiddenOut = {
+      ...output,
+      tracks: [{ ...output.tracks[0], hidden: true }],
+    };
+    const service = new FfmpegVideoEncoderService();
+    vi.spyOn(service as any, 'getAudioDurationMs').mockResolvedValue(60000);
+    const download = vi.spyOn(service as any, 'downloadAudio').mockResolvedValue('/tmp/fake.mp4');
+    const mixed = await service.mixAudio(hiddenOut, '/tmp');
+    expect(mixed).toBeNull();
+    // Not even downloaded — a hidden track is excluded everywhere.
+    expect(download).not.toHaveBeenCalled();
+  });
+});
