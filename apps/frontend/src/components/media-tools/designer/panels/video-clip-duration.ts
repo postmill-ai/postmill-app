@@ -1,7 +1,8 @@
 import { CHANNEL_PRESETS } from '@postmill-ai/nestjs-libraries/integrations/social/channel-presets';
+import { MAX_VIDEO_DURATION_MS } from '@postmill-ai/nestjs-libraries/media/designer-doc/designer-doc.limits';
 
 export function getFormatMaxDurationMs(formatId: string): number {
-  return CHANNEL_PRESETS.find((p) => p.id === formatId)?.maxDurationMs ?? 60000;
+  return CHANNEL_PRESETS.find((p) => p.id === formatId)?.maxDurationMs ?? MAX_VIDEO_DURATION_MS;
 }
 
 export function getDefaultClipEndMs(
@@ -11,7 +12,7 @@ export function getDefaultClipEndMs(
   outputDurationMs?: number,
 ): number {
   const formatMaxMs = getFormatMaxDurationMs(formatId);
-  const globalCapMs = 60000 - startMs;
+  const globalCapMs = MAX_VIDEO_DURATION_MS - startMs;
   const sourceCapMs = sourceDurationMs ?? formatMaxMs;
   const durationMs = Math.min(sourceCapMs, formatMaxMs, globalCapMs);
   let endMs = startMs + Math.max(100, durationMs);

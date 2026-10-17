@@ -19,10 +19,16 @@ with one `video_export` credit charged. Sibling docs: `agents/backend.md`,
    `POST /design/render-video` gated by `@CheckPolicies(Create MEDIA, Create VIDEO_EXPORTS)`
    (billing; the `VIDEO_EXPORTS` check counts used credits **plus in-flight renders**) and
    `@RequirePermission('media', 'create')`. Status polling: `GET /design/render-video/:jobId`
-   (org-scoped `getJob` — a foreign job id returns null, not data).
+   (org-scoped `getJob` — a foreign job id returns null, not data). While a job is
+   `processing`, the endpoint reads the real frame-capture progress
+   (`video-render:progress:<jobId>`) and returns a true percent; the static 50 midpoint
+   remains only as the fallback before the first report lands.
 2. **Enqueue** — `libraries/nestjs-libraries/src/media/design-render/video-render.service.ts`
    (`VideoRenderService`):
-   - Validates the composition: 60 s duration cap, `validateVideoComposition` bounds
+   - Validates the composition: **180 s duration cap** (`MAX_DURATION_MS`, lockstep with
+     `MAX_VIDEO_DURATION_MS` in `media/designer-doc/designer-doc.limits.ts` and the
+     frontend store clamp — enforced by `designer-doc.drift.spec.ts`),
+     `validateVideoComposition` bounds
      (dims ≤ `MAX_DIMENSION`, fps ≤ 240, `MAX_TRACKS`, `MAX_CLIPS_PER_TRACK` from
      `media/designer-doc/designer-doc.limits.ts`) — a resource-DoS guard on input that
      drives Puppeteer/FFmpeg. The bounds apply to the EFFECTIVE render: the optional
@@ -76,6 +82,28 @@ with one `video_export` credit charged. Sibling docs: `agents/backend.md`,
    - `renderTimeoutMs` = `max(getRenderTimeoutMs(), frames * 150ms)` where
      `frames = ceil(durationMs/1000 * fps)` — the capture loop spends ~150 ms/frame
      (evaluate + PNG screenshot), so the env floor alone cannot fit long compositions.
+   - **Parallel frame capture** (`ChromiumFrameCaptureService.captureFrames`): when
+     `totalFrames > PARALLEL_CAPTURE_MIN_FRAMES` (300), capture runs on N pages inside
+     ONE Chromium instance — N = `getCapturePageCount()` = `VIDEO_RENDER_CAPTURE_PAGES`
+     if set (1 forces sequential), else `min(3, os.availableParallelism())`, hard-capped
+     at `MAX_CAPTURE_PAGES` (8). Page i renders the frames where `frameIndex % N === i`;
+     files are written under their GLOBAL index (`frame-%05d.png`), so the ffmpeg image2
+     pattern sees one contiguous sequence. Each page navigates/preloads independently
+     (per-document caches in the frame-renderer script make page state isolated by
+     construction); screenshots serialize within a page while the evaluate+screenshot
+     pipelines overlap across pages. `onProgress` reports a GLOBAL completed count
+     (monotonic). MEMORY: every page loads all clip media, so peak RSS roughly
+     multiplies by N — the render pod is cgroup-capped (default 4 CPU / 8g).
+   - **Real render progress** (`design-render/render-progress.ts` +
+     `render-progress-throttle.ts`): the capture loop's `onProgress` is wired through
+     `FfmpegVideoEncoderService` (`VideoEncodeOptions.onProgress`) to a throttled
+     writer (every 10 frames or 2 s, whichever first, always the final frame) that
+     lands `{frame, total, updatedAt}` at `video-render:progress:<jobId>` (`EX 1h`).
+     In-process renders write Redis directly; the container worker (no Redis access)
+     POSTs to `POST /media/designs/render-progress/:jobId?token=…` via `safeFetch`
+     (same HMAC token guard as `render-frame`; throttled the same way; best-effort —
+     a failed report never fails the render). The progress key is `DEL`eted with the
+     payload/claim keys after the render concludes.
    - Cross-origin media: the frame page is served from the API origin but clip media
      typically lives on the app/uploads origin. The route sets a page-scoped CSP with
      `media-src`/`img-src https:` (helmet's default `default-src 'self'` would block the
@@ -103,7 +131,10 @@ with one `video_export` credit charged. Sibling docs: `agents/backend.md`,
 - **Container entrypoint:** `apps/backend/src/media-render-worker.ts` — a DI-light CLI
   (`node media-render-worker.js /work/job.json`), no Nest bootstrap; instantiates
   `FfmpegVideoEncoderService`/`ChromiumFrameCaptureService` directly for `design` and
-  calls `mergeLocalFiles` for `merge`; writes artifacts to `<workdir>/out/`.
+  calls `mergeLocalFiles` for `merge`; writes artifacts to `<workdir>/out/`. During
+  `design` captures it also reports progress over HTTP
+  (`POST /media/designs/render-progress/:jobId`, throttled) — the container has no
+  Redis access.
 - **Job spec contract:** `media/design-render/render-job-spec.ts` —
   `DesignRenderJobSpec` / `MergeRenderJobSpec` (`RenderJobSpec`), `RENDER_OUTPUT_DIR`,
   `RENDER_THUMBNAIL_NAME`, `renderOutputName`. Dependency-free by design; both host and
@@ -125,6 +156,7 @@ with one `video_export` credit charged. Sibling docs: `agents/backend.md`,
 | `VIDEO_RENDER_CONCURRENCY` | `3` | Inngest function concurrency cap |
 | `VIDEO_RENDER_PODMAN_ENABLED` | off | truthy → container path |
 | `VIDEO_RENDER_TIMEOUT_MS` | `120000` | Render wall-clock floor (both paths); scaled up with frame count |
+| `VIDEO_RENDER_CAPTURE_PAGES` | auto = `min(3, parallelism)` | Parallel capture pages (one browser) when frames > 300; `1` = force sequential; hard cap 8. Passed through to the render container. |
 | `VIDEO_RENDER_PODMAN_BIN` | `podman` | Binary |
 | `VIDEO_RENDER_IMAGE` | `localhost/postmill-render:latest` | Worker image |
 | `VIDEO_RENDER_POD` | `postmill-render` | Shared pod (aggregate cgroup) |
@@ -142,8 +174,11 @@ pipeline. `NEXT_PUBLIC_BACKEND_URL` / `FRONTEND_URL` feed `baseUrl()`.
   encoder, frame capture, Podman runner, config, spec). The controller stays thin; new
   render ops extend `RenderJobSpec` + the worker CLI + `processRenderJob` routing
   together.
-- Never bypass the composition bounds (`validateVideoComposition`, 60 s cap) — they are
-  the resource-DoS boundary for attacker-controlled compositions.
+- Never bypass the composition bounds (`validateVideoComposition`, 180 s cap) — they are
+  the resource-DoS boundary for attacker-controlled compositions. The cap lives in THREE
+  lockstep places (`MAX_DURATION_MS` in video-render.service.ts, `MAX_VIDEO_DURATION_MS`
+  in designer-doc.limits.ts, the frontend store clamp) — `designer-doc.drift.spec.ts`
+  fails if they drift apart.
 - Keep the idempotency invariants: `pending`-only gate in `processRenderJob`, the
   single-winner claim in the processors (`SET NX` marker for design renders — never
   delete the payload key before the encode concludes; `GETDEL` for merges),

@@ -42,6 +42,7 @@ import { ExportDialog } from './export-dialog';
 import { VideoTimeline } from './video-timeline';
 import { fitWithin } from './panels/fit-within';
 import { MenuBar } from './menu-bar';
+import { MAX_VIDEO_DURATION_MS } from '@postmill-ai/nestjs-libraries/media/designer-doc/designer-doc.limits';
 import { useDesignerActions, type DesignerActionCtx } from './actions';
 import { NewDesignDialog } from './new-design-dialog';
 import { CanvasInspector } from './panels/canvas-inspector';
@@ -745,8 +746,8 @@ export const Designer: FC<DesignerProps> = ({
       const out = store.getState().currentOutput;
       // Cap + extend the output duration BEFORE adding the clip: addClip silently
       // drops any clip whose endMs exceeds the current (seeded ~10 s) duration, and
-      // setVideoDuration hard-clamps to 60 s — so the clip's endMs must be capped too.
-      const durationMs = Math.min(rawDurationMs, 60000);
+      // setVideoDuration hard-clamps to MAX_VIDEO_DURATION_MS — so the clip's endMs must be capped too.
+      const durationMs = Math.min(rawDurationMs, MAX_VIDEO_DURATION_MS);
       store.getState().setVideoDuration(out, durationMs);
       let s = store.getState();
       const vo = () => s.doc.outputs[out] as VideoOutput;

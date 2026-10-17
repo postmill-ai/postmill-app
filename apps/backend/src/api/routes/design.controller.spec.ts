@@ -19,11 +19,18 @@ vi.mock('@postmill-ai/nestjs-libraries/media/designer-doc/designer-doc.service',
   DesignerDocService: class {},
 }));
 
+vi.mock('@postmill-ai/nestjs-libraries/media/design-render/render-progress', () => ({
+  reportRenderProgress: vi.fn(),
+  renderPayloadKey: (jobId: string) => `video-render:payload:${jobId}`,
+}));
+
 import { BadRequestException, NotFoundException } from '@nestjs/common';
 import {
   DesignController,
+  DesignRenderFrameController,
   DesignTemplateController,
 } from './design.controller';
+import { reportRenderProgress } from '@postmill-ai/nestjs-libraries/media/design-render/render-progress';
 
 const org = { id: 'org-1' } as any;
 const user = { id: 'user-1' } as any;
@@ -346,11 +353,36 @@ describe('DesignController', () => {
     it('returns the status for a job the org owns', async () => {
       const videoRenderService = {
         getJob: vi.fn().mockResolvedValue({ id: 'job-1', status: 'processing', artifactUrl: null }),
+        // No progress reported yet → the 50 midpoint fallback holds.
+        getRenderProgress: vi.fn().mockResolvedValue(null),
       };
       (controller as any)._videoRenderService = videoRenderService;
 
       const out = await controller.getVideoRenderStatus(org, 'job-1');
       expect(out).toMatchObject({ id: 'job-1', status: 'processing', progress: 50 });
+    });
+
+    it('returns the REAL frame-capture percent once the render reports progress', async () => {
+      const videoRenderService = {
+        getJob: vi.fn().mockResolvedValue({ id: 'job-1', status: 'processing', artifactUrl: null }),
+        getRenderProgress: vi.fn().mockResolvedValue({ frame: 300, total: 1200, updatedAt: 1 }),
+      };
+      (controller as any)._videoRenderService = videoRenderService;
+
+      const out = await controller.getVideoRenderStatus(org, 'job-1');
+      expect(videoRenderService.getRenderProgress).toHaveBeenCalledWith('job-1');
+      expect(out).toMatchObject({ id: 'job-1', status: 'processing', progress: 25 });
+    });
+
+    it('caps a reported percent at 99 while still processing', async () => {
+      const videoRenderService = {
+        getJob: vi.fn().mockResolvedValue({ id: 'job-1', status: 'processing', artifactUrl: null }),
+        getRenderProgress: vi.fn().mockResolvedValue({ frame: 1200, total: 1200, updatedAt: 1 }),
+      };
+      (controller as any)._videoRenderService = videoRenderService;
+
+      const out = await controller.getVideoRenderStatus(org, 'job-1');
+      expect(out.progress).toBe(99);
     });
   });
 
@@ -474,5 +506,52 @@ describe('DesignController', () => {
       await templateController.moveTemplate(org, 't1', { folderId: 'f1' });
       expect(designService.moveTemplate).toHaveBeenCalledWith('org-1', 't1', 'f1');
     });
+  });
+});
+
+describe('DesignRenderFrameController render-progress route', () => {
+  const frameController = new DesignRenderFrameController({} as any);
+  const makeRes = () => {
+    const res = {
+      status: vi.fn(),
+      send: vi.fn(),
+      end: vi.fn(),
+    };
+    res.status.mockReturnValue(res);
+    return res as any;
+  };
+
+  beforeEach(() => {
+    vi.mocked(reportRenderProgress).mockReset();
+  });
+
+  it('204s a valid progress report and passes jobId/token/frame/total through', async () => {
+    vi.mocked(reportRenderProgress).mockResolvedValue('ok');
+    const res = makeRes();
+
+    await frameController.renderProgress('job-1', 'tok', { frame: 30, total: 90 } as any, res);
+
+    expect(reportRenderProgress).toHaveBeenCalledWith('job-1', 'tok', 30, 90);
+    expect(res.status).toHaveBeenCalledWith(204);
+    expect(res.end).toHaveBeenCalled();
+  });
+
+  it('403s a bad render token', async () => {
+    vi.mocked(reportRenderProgress).mockResolvedValue('forbidden');
+    const res = makeRes();
+
+    await frameController.renderProgress('job-1', 'bad', { frame: 1, total: 90 } as any, res);
+
+    expect(res.status).toHaveBeenCalledWith(403);
+    expect(res.send).toHaveBeenCalledWith('Invalid render token');
+  });
+
+  it('404s when the render payload is gone', async () => {
+    vi.mocked(reportRenderProgress).mockResolvedValue('not-found');
+    const res = makeRes();
+
+    await frameController.renderProgress('job-1', 'tok', { frame: 1, total: 90 } as any, res);
+
+    expect(res.status).toHaveBeenCalledWith(404);
   });
 });

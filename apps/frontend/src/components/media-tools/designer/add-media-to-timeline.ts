@@ -26,7 +26,11 @@ export interface AddImageClipOptions {
   square?: boolean;
 }
 
-const MAX_TIMELINE_DURATION_MS = 60000;
+import { MAX_VIDEO_DURATION_MS } from '@postmill-ai/nestjs-libraries/media/designer-doc/designer-doc.limits';
+
+// The timeline ceiling is the shared DesignerDoc video cap (lockstep with the
+// server render cap — see designer-doc.limits.ts).
+const MAX_TIMELINE_DURATION_MS = MAX_VIDEO_DURATION_MS;
 
 function findOrCreateTrack(
   store: StoreApi,
@@ -120,8 +124,8 @@ export function addImageClipToTimeline(
   const wantedEnd = startMs + DEFAULT_CLIP_MS;
   if (wantedEnd > vo.durationMs) {
     // Extend BEFORE addClip: addClip rejects clips past the output duration.
-    // setVideoDuration clamps to the 60 s ceiling, so the clip end is re-read
-    // from the (possibly still shorter) output afterwards.
+    // setVideoDuration clamps to the MAX_VIDEO_DURATION_MS ceiling, so the clip
+    // end is re-read from the (possibly still shorter) output afterwards.
     store.getState().setVideoDuration(out, wantedEnd);
   }
   const durationMs = (store.getState().doc.outputs[out] as VideoOutput).durationMs;
@@ -205,7 +209,7 @@ export function addImageClipToTimeline(
  * - Probes the source duration (with a 5 s error/timeout fallback).
  * - Extends the output duration before adding the clip so long clips are not
  *   silently dropped.
- * - Caps clip end and duration at the store's 60 s ceiling.
+ * - Caps clip end and duration at the store's MAX_VIDEO_DURATION_MS ceiling.
  */
 export function addMediaToTimeline(
   store: StoreApi,

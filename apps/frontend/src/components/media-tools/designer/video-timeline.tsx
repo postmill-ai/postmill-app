@@ -14,6 +14,7 @@ import { clipEdgeUpdate } from './clip-geometry';
 import { isMarqueeClick, marqueeHitClips, normalizeMarquee, type MarqueeRect } from './timeline-marquee';
 import { timelineBeats } from './beat-sync';
 import { isArtifactPath } from '@postmill-ai/frontend/components/launches/ai.video';
+import { MAX_VIDEO_DURATION_MS } from '@postmill-ai/nestjs-libraries/media/designer-doc/designer-doc.limits';
 import { useMediaPicker } from '@postmill-ai/frontend/components/media-tools/use-media-picker';
 import { useT } from '@postmill-ai/react/translation/get.transation.service.client';
 import { genId } from '@postmill-ai/nestjs-libraries/media/designer-doc/designer-doc.migrate';
@@ -755,7 +756,7 @@ export const VideoTimeline: FC<VideoTimelineProps> = ({ store, sendTimelineAware
       if (!scrollRef.current) return;
       const rect = scrollRef.current.getBoundingClientRect();
       const x = clientX - rect.left + scrollRef.current.scrollLeft - LABEL_WIDTH;
-      const ms = Math.max(0, Math.min(vo?.durationMs ?? 60000, x / pixelsPerMs));
+      const ms = Math.max(0, Math.min(vo?.durationMs ?? MAX_VIDEO_DURATION_MS, x / pixelsPerMs));
       setPlayhead(ms);
       if (previewRef.current) previewRef.current.seek(ms);
     },
@@ -1455,7 +1456,7 @@ export const VideoTimeline: FC<VideoTimelineProps> = ({ store, sendTimelineAware
     if (!clipMenu) return;
     const id = store.getState().duplicateClip(clipMenu.outputIndex, clipMenu.trackId, clipMenu.clipId);
     if (!id) {
-      toaster.show(translate('no_room_to_duplicate_clip', 'No room to duplicate — the timeline is at the 60 s limit'), 'warning');
+      toaster.show(translate('no_room_to_duplicate_clip', 'No room to duplicate — the timeline is at the 180 s limit'), 'warning');
     }
     setClipMenu(null);
   }, [clipMenu, store, toaster, translate]);

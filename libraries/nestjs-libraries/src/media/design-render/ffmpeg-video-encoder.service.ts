@@ -5,6 +5,7 @@ import * as os from 'os';
 import * as path from 'path';
 import { safeFetch } from '@postmill-ai/nestjs-libraries/dtos/webhooks/safe.fetch';
 import { ChromiumFrameCaptureService } from './chromium-frame-capture.service';
+import type { FrameCaptureProgress } from './chromium-frame-capture.service';
 import { hasVolumeKeyframes } from '../designer-doc/keyframes';
 import {
   sampleVolumeEnvelope,
@@ -67,6 +68,12 @@ export interface VideoEncodeOptions {
   jobId?: string;
   orgId?: string;
   renderToken?: string;
+  /**
+   * Frame-capture progress hook (global completed count). In-process renders wire
+   * this to the Redis progress channel; the container worker wires it to the
+   * render-progress HTTP route. Never serialized into a job spec.
+   */
+  onProgress?: (progress: FrameCaptureProgress) => void;
 }
 
 export interface EncodeResult {
@@ -115,6 +122,7 @@ export class FfmpegVideoEncoderService {
           : undefined;
       await this._frameCapture.captureFrames(output, fps, tmpDir, (p) => {
         this._logger.debug(`Frame ${p.frame}/${p.total}`);
+        options.onProgress?.(p);
       }, routeOptions, scale);
 
       const durationS = output.durationMs / 1000;

@@ -126,8 +126,12 @@ export const MAX_CANVAS_DIMENSION = 16384;
 /** Maximum font size in px. */
 export const MAX_FONT_SIZE = 2000;
 
-/** Maximum video duration in milliseconds (must equal video-render.service.ts). */
-export const MAX_VIDEO_DURATION_MS = 60000;
+/**
+ * Maximum video duration in milliseconds (must equal MAX_DURATION_MS in
+ * design-render/video-render.service.ts — the designer-doc drift spec enforces the
+ * lockstep). The frontend clamps timeline edits against this same constant.
+ */
+export const MAX_VIDEO_DURATION_MS = 180_000;
 
 /** Maximum ops in a single `applyOps` request. */
 export const MAX_OPS_PER_REQUEST = 200;

@@ -50,6 +50,8 @@ import {
 } from '@postmill-ai/nestjs-libraries/dtos/design/template-folder.dto';
 import { ValidateDocDto } from '@postmill-ai/nestjs-libraries/dtos/design/validate-doc.dto';
 import { ApplyOpsDto } from '@postmill-ai/nestjs-libraries/dtos/design/apply-ops.dto';
+import { RenderProgressDto } from '@postmill-ai/nestjs-libraries/dtos/design/render-progress.dto';
+import { reportRenderProgress, renderPayloadKey } from '@postmill-ai/nestjs-libraries/media/design-render/render-progress';
 import type { DesignerDoc } from '@postmill-ai/nestjs-libraries/media/design-render/design-render.types';
 import { DesignerDocService } from '@postmill-ai/nestjs-libraries/media/designer-doc/designer-doc.service';
 import type { DesignerDocOp } from '@postmill-ai/nestjs-libraries/media/designer-doc/designer-doc-ops.schema';
@@ -284,13 +286,26 @@ export class DesignController {
       const file = await this._fileService.getFileByPath(org.id, job.artifactUrl);
       thumbnailUrl = file?.thumbnail || undefined;
     }
+    // Real frame-capture progress when the render has reported it (written to Redis by
+    // the in-process capture loop or POSTed by the container worker); the 50 midpoint
+    // stays as the fallback until the first report lands.
+    let progress = 0;
+    if (job.status === 'completed') {
+      progress = 100;
+    } else if (job.status === 'processing') {
+      const reported = await this._videoRenderService.getRenderProgress(jobId);
+      progress =
+        reported && reported.total > 0
+          ? Math.min(99, Math.round((reported.frame / reported.total) * 100))
+          : 50;
+    }
     return {
       id: job.id,
       status: job.status,
       artifactUrl: job.artifactUrl,
       thumbnailUrl,
       errorMessage: job.status === 'failed' ? job.error : undefined,
-      progress: job.status === 'completed' ? 100 : job.status === 'processing' ? 50 : 0,
+      progress,
     };
   }
 }
@@ -496,6 +511,34 @@ export class DesignerProxyController {
 export class DesignRenderFrameController {
   constructor(private _brandsService: BrandsService) {}
 
+  /**
+   * Progress sink for the container render worker — the pod has no Redis access, so
+   * the worker POSTs {frame, total} here (throttled to every 10 frames / 2s, whichever
+   * first). Same HMAC job token as render-frame; the org id is read from the render
+   * payload. Public controller group (token-gated, no session) — the throttle override
+   * keeps the global 600/h backstop from eating reports from a long render.
+   */
+  @Post('/render-progress/:jobId')
+  @Throttle({ default: { limit: 3600, ttl: 3600000 } })
+  async renderProgress(
+    @Param('jobId') jobId: string,
+    @Query('token') token: string,
+    @Body() body: RenderProgressDto,
+    @Res() res?: Response,
+  ): Promise<void> {
+    if (!res) return;
+    const result = await reportRenderProgress(jobId, token || '', body.frame, body.total);
+    if (result === 'not-found') {
+      res.status(404).send('Render job not found');
+      return;
+    }
+    if (result === 'forbidden') {
+      res.status(403).send('Invalid render token');
+      return;
+    }
+    res.status(204).end();
+  }
+
   @Get('/render-frame/:jobId')
   async renderFrame(
     @Param('jobId') jobId: string,
@@ -514,7 +557,7 @@ export class DesignRenderFrameController {
       return;
     }
 
-    const raw = await ioRedis.get(`video-render:payload:${jobId}`);
+    const raw = await ioRedis.get(renderPayloadKey(jobId));
     if (!raw) {
       res.status(404).send('Render job not found');
       return;

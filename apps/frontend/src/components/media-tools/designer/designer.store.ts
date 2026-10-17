@@ -8,7 +8,7 @@ import {
 } from './raster-layers';
 import { DEFAULT_TOOL_ID, getTool } from './tools';
 import type { SelectionMask } from './selection-mask';
-import { DESIGNER_DOC_VERSION } from '@postmill-ai/nestjs-libraries/media/designer-doc/designer-doc.limits';
+import { DESIGNER_DOC_VERSION, MAX_VIDEO_DURATION_MS } from '@postmill-ai/nestjs-libraries/media/designer-doc/designer-doc.limits';
 import {
   migrateDoc,
   genId,
@@ -276,8 +276,8 @@ export interface DesignerActions {
    * Paste the clip clipboard with the group's earliest clip landing at `atMs`
    * (the playhead), onto the original tracks — falling back to the first track
    * of the same type, created when none exists. Fresh ids, the output duration
-   * extends like duplicateClip (60 s ceiling; clips that still overflow are
-   * skipped). One history entry; the pasted clips become the selection.
+   * extends like duplicateClip (MAX_VIDEO_DURATION_MS ceiling; clips that still
+   * overflow are skipped). One history entry; the pasted clips become the selection.
    */
   pasteClips: (atMs: number) => void;
 }
@@ -1152,7 +1152,7 @@ export const createDesignerStore = (
         const { doc } = get();
         const vo = doc.outputs[outputIndex] as VideoOutput | undefined;
         if (!vo || doc.mode !== 'video') return;
-        // Explicit 60 s cap: reject clips that would exceed the output duration.
+        // Explicit duration cap: reject clips that would exceed the output duration.
         const startMs = Math.max(0, clip.startMs ?? 0);
         const endMs = Math.max(startMs + 100, clip.endMs ?? startMs + 1000);
         if (endMs > vo.durationMs || startMs >= vo.durationMs) {
@@ -1204,7 +1204,7 @@ export const createDesignerStore = (
         if (!clip) return false;
         const nextStart = updates.startMs ?? clip.startMs;
         const nextEnd = updates.endMs ?? clip.endMs;
-        // Explicit 60 s cap: reject updates that would push the clip beyond the output duration.
+        // Explicit duration cap: reject updates that would push the clip beyond the output duration.
         if (nextEnd > vo.durationMs || nextStart >= vo.durationMs || nextEnd <= nextStart) {
           return false;
         }
@@ -1226,7 +1226,7 @@ export const createDesignerStore = (
         const { doc } = get();
         const vo = doc.outputs[outputIndex] as VideoOutput | undefined;
         if (!vo || doc.mode !== 'video') return;
-        const clamped = Math.max(1000, Math.min(60000, durationMs));
+        const clamped = Math.max(1000, Math.min(MAX_VIDEO_DURATION_MS, durationMs));
         const updated: VideoOutput = { ...vo, durationMs: clamped };
         const outs = [...doc.outputs];
         outs[outputIndex] = updated;
@@ -1423,9 +1423,9 @@ export const createDesignerStore = (
         const duration = source.endMs - source.startMs;
         const startMs = source.endMs + (source.freezeAtMs || 0);
         // Extend the output when the copy would overflow, the way insert flows
-        // do — but the 60 s ceiling still applies; past it there is no room.
+        // do — but the MAX_VIDEO_DURATION_MS ceiling still applies; past it there is no room.
         const durationMs = Math.max(vo.durationMs, startMs + duration);
-        if (durationMs > 60000 || startMs >= durationMs) return null;
+        if (durationMs > MAX_VIDEO_DURATION_MS || startMs >= durationMs) return null;
         const newClip: VideoClip = {
           ...source,
           id: genId(),
@@ -1534,8 +1534,8 @@ export const createDesignerStore = (
         });
 
         // Extend the output when the paste overflows, the way duplicateClip
-        // does — the 60 s ceiling still applies; clips past it are skipped.
-        const durationMs = Math.min(60000, Math.max(vo.durationMs, ...placed.map((p) => p.effectiveEnd)));
+        // does — the MAX_VIDEO_DURATION_MS ceiling still applies; clips past it are skipped.
+        const durationMs = Math.min(MAX_VIDEO_DURATION_MS, Math.max(vo.durationMs, ...placed.map((p) => p.effectiveEnd)));
         const fits = placed.filter((p) => p.startMs < durationMs && p.effectiveEnd <= durationMs);
         if (!fits.length) return;
 

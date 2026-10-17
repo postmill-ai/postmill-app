@@ -129,12 +129,19 @@ describe('VideoRenderService', () => {
     );
   });
 
-  it('rejects compositions longer than 60 seconds', async () => {
+  it('rejects compositions longer than 180 seconds', async () => {
     await expect(
       service.enqueueRender(orgId, {
-        composition: videoOutput(61000),
+        composition: videoOutput(181000),
       }),
-    ).rejects.toThrow('exceeds the 60 s hard cap');
+    ).rejects.toThrow('exceeds the 180 s hard cap');
+  });
+
+  it('accepts a composition at the 180 s cap', async () => {
+    const result = await service.enqueueRender(orgId, {
+      composition: videoOutput(180000),
+    });
+    expect(result.id).toBe('job-1');
   });
 
   it('processes a pending job and completes it with the rendered artifact', async () => {
@@ -173,6 +180,7 @@ describe('VideoRenderService', () => {
     expect(vi.mocked(ioRedis.del)).toHaveBeenCalledWith(
       'video-render:payload:job-1',
       'video-render:claim:job-1',
+      'video-render:progress:job-1',
     );
 
     expect(aiSettings.updateMediaJob).toHaveBeenCalledWith(orgId, 'job-1', {
@@ -210,10 +218,11 @@ describe('VideoRenderService', () => {
       'job-1',
       expect.objectContaining({ status: 'failed' }),
     );
-    // Payload + claim keys are released only after the render concludes.
+    // Payload + claim + progress keys are released only after the render concludes.
     expect(vi.mocked(ioRedis.del)).toHaveBeenCalledWith(
       'video-render:payload:job-1',
       'video-render:claim:job-1',
+      'video-render:progress:job-1',
     );
 
     encoder.cleanup(tmpDir);
@@ -439,6 +448,65 @@ describe('VideoRenderService', () => {
       expect(computeRenderTimeoutMs(1000, 24, 0.5)).toBeGreaterThanOrEqual(
         120_000,
       );
+    });
+  });
+
+  describe('render progress channel (in-process path)', () => {
+    it('wires frame-capture progress into throttled Redis writes under video-render:progress:<jobId>', async () => {
+      const composition = videoOutput(3000);
+      vi.mocked(ioRedis.get).mockResolvedValueOnce(
+        JSON.stringify({ organizationId: orgId, composition }),
+      );
+
+      const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'postmill-test-'));
+      const videoPath = path.join(tmpDir, 'output.mp4');
+      fs.writeFileSync(videoPath, Buffer.from('fake-video'));
+
+      let onProgress: ((p: { frame: number; total: number }) => void) | undefined;
+      vi.mocked(encoder.encode).mockImplementationOnce(async (_c: any, opts: any) => {
+        onProgress = opts.onProgress;
+        // Simulate a 25-frame capture loop.
+        for (let frame = 1; frame <= 25; frame++) onProgress!({ frame, total: 25 });
+        return { videoPath, thumbnailPath: path.join(tmpDir, 'missing.jpg') };
+      });
+
+      await service.processVideoRender('job-1');
+
+      expect(onProgress).toBeTypeOf('function');
+      const progressWrites = vi
+        .mocked(ioRedis.set)
+        .mock.calls.filter((c) => c[0] === 'video-render:progress:job-1');
+      // Throttled: first frame, every 10 frames, and the final frame.
+      const reported = progressWrites.map((c) => JSON.parse(c[1] as string));
+      expect(reported.map((r) => r.frame)).toEqual([1, 11, 21, 25]);
+      expect(reported[0]).toMatchObject({ total: 25 });
+      expect(reported[0].updatedAt).toBeTypeOf('number');
+      for (const call of progressWrites) {
+        expect(call.slice(2)).toEqual(['EX', 3600]);
+      }
+
+      encoder.cleanup(tmpDir);
+    });
+
+    it('getRenderProgress returns the stored {frame,total} and null when absent or unreadable', async () => {
+      vi.mocked(ioRedis.get).mockResolvedValueOnce(
+        JSON.stringify({ frame: 12, total: 40, updatedAt: 123 }),
+      );
+      await expect(service.getRenderProgress('job-1')).resolves.toEqual({
+        frame: 12,
+        total: 40,
+        updatedAt: 123,
+      });
+      expect(vi.mocked(ioRedis.get)).toHaveBeenCalledWith('video-render:progress:job-1');
+
+      vi.mocked(ioRedis.get).mockResolvedValueOnce(null);
+      await expect(service.getRenderProgress('job-1')).resolves.toBeNull();
+
+      vi.mocked(ioRedis.get).mockResolvedValueOnce('not-json');
+      await expect(service.getRenderProgress('job-1')).resolves.toBeNull();
+
+      vi.mocked(ioRedis.get).mockResolvedValueOnce(JSON.stringify({ frame: 1, total: 0 }));
+      await expect(service.getRenderProgress('job-1')).resolves.toBeNull();
     });
   });
 });

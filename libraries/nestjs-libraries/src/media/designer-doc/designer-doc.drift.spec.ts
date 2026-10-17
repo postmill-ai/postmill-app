@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { readFileSync } from 'fs';
 import { resolve } from 'path';
+import { MAX_VIDEO_DURATION_MS } from './designer-doc.limits';
 
 const FORBIDDEN_CONTRACT_INTERFACES = [
   'DesignerDoc',
@@ -34,5 +35,20 @@ describe('DesignerDoc drift guard', () => {
     // Local state/actions remain.
     expect(src).toContain('interface DesignerState');
     expect(src).toContain('interface DesignerActions');
+  });
+
+  it('the video duration cap stays in lockstep across backend, limits and the frontend store', () => {
+    // Server render cap (design-render/video-render.service.ts) must equal the
+    // DesignerDoc schema cap.
+    const serviceSrc = read('../design-render/video-render.service.ts');
+    const match = serviceSrc.match(/const MAX_DURATION_MS = ([\d_]+)/);
+    expect(match, 'MAX_DURATION_MS not found in video-render.service.ts').toBeTruthy();
+    expect(Number(match![1].replace(/_/g, ''))).toBe(MAX_VIDEO_DURATION_MS);
+
+    // The frontend store clamps timeline edits against the shared constant,
+    // never a local literal that could drift (e.g. a leftover 60000).
+    const storeSrc = read('../../../../../apps/frontend/src/components/media-tools/designer/designer.store.ts');
+    expect(storeSrc).toContain('MAX_VIDEO_DURATION_MS');
+    expect(storeSrc).not.toMatch(/\b60000\b/);
   });
 });

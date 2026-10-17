@@ -913,6 +913,37 @@ paths:
           description: ""
       tags:
         - Comms OAuth
+  /media/designs/render-progress/{jobId}:
+    post:
+      operationId: DesignRenderFrameController_renderProgress
+      parameters:
+        - name: jobId
+          required: true
+          in: path
+          schema:
+            type: string
+        - name: token
+          required: true
+          in: query
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RenderProgressDto"
+      responses:
+        "201":
+          description: ""
+      summary: |-
+        Progress sink for the container render worker — the pod has no Redis access, so
+        the worker POSTs {frame, total} here (throttled to every 10 frames / 2s, whichever
+        first). Same HMAC job token as render-frame; the org id is read from the render
+        payload. Public controller group (token-gated, no session) — the throttle override
+        keeps the global 600/h backstop from eating reports from a long render.
+      tags:
+        - Design Render
   /media/designs/render-frame/{jobId}:
     get:
       operationId: DesignRenderFrameController_renderFrame
@@ -9768,6 +9799,20 @@ components:
         - generatedAt
         - total
         - domains
+    RenderProgressDto:
+      type: object
+      properties:
+        frame:
+          type: number
+          description: Frames captured so far (1-based global count across parallel capture pages).
+          minimum: 0
+        total:
+          type: number
+          description: Total frames in the render.
+          minimum: 1
+      required:
+        - frame
+        - total
     MediaDto:
       type: object
       properties:

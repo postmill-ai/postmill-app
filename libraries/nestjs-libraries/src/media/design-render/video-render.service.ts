@@ -9,6 +9,14 @@ import { inngest, isInngestEnabled } from '@postmill-ai/nestjs-libraries/inngest
 import { mediaJobWebhookToken } from '@postmill-ai/nestjs-libraries/media/media-job-token';
 import { isPodmanRenderEnabled, getRenderTimeoutMs } from './render-config';
 import { DesignRenderJobSpec, MergeRenderJobSpec, renderWorkDir } from './render-job-spec';
+import {
+  renderPayloadKey,
+  renderProgressKey,
+  readRenderProgress,
+  writeRenderProgress,
+} from './render-progress';
+import type { RenderProgress } from './render-progress';
+import { createThrottledProgressWriter } from './render-progress-throttle';
 import { mergeLocalFiles } from '@postmill-ai/nestjs-libraries/media/replicate-studio/video-merge';
 import {
   MAX_DIMENSION,
@@ -18,17 +26,21 @@ import {
 import * as fs from 'fs';
 import * as path from 'path';
 
-const MAX_DURATION_MS = 60000;
+// Lockstep with MAX_VIDEO_DURATION_MS (media/designer-doc/designer-doc.limits.ts) and
+// the frontend store clamp — the designer-doc drift spec enforces they stay equal.
+const MAX_DURATION_MS = 180_000;
 const MAX_FPS = 240;
 const RENDER_PAYLOAD_TTL_SECONDS = 24 * 60 * 60;
 
 /**
  * Per-frame wall-clock budget for scaling the render timeout. The capture loop
  * (chromium-frame-capture.service.ts) does one page.evaluate + one PNG screenshot
- * per frame — ~150 ms/frame at 1080p. A 60 s @ 30 fps composition is 1800 frames
- * ≈ 270 s, which blows past the 120 s default, so the budget scales with frames.
- * The budget is further multiplied by scale² — a 2× export rasterizes and
- * PNG-encodes 4× the pixels per frame. Exported for unit testing.
+ * per frame — ~150 ms/frame at 1080p on a single page. A 180 s @ 30 fps composition
+ * is 5400 frames ≈ 810 s sequential, which blows past the 120 s default, so the
+ * budget scales with frames (parallel capture spreads it across pages; the budget
+ * stays conservative either way). The budget is further multiplied by scale² — a 2×
+ * export rasterizes and PNG-encodes 4× the pixels per frame. Exported for unit
+ * testing.
  */
 export const PER_FRAME_CAPTURE_BUDGET_MS = 150;
 
@@ -46,10 +58,6 @@ export function computeRenderTimeoutMs(
     getRenderTimeoutMs(),
     Math.ceil(frames * PER_FRAME_CAPTURE_BUDGET_MS * scale * scale),
   );
-}
-
-function payloadKey(jobId: string): string {
-  return `video-render:payload:${jobId}`;
 }
 
 /** Exactly-once claim marker (SET NX) for a render job — the payload key itself must survive the render. */
@@ -161,7 +169,7 @@ export class VideoRenderService {
     const durationMs = composition.durationMs || 10000;
     if (durationMs > MAX_DURATION_MS) {
       throw new Error(
-        `Composition duration ${durationMs}ms exceeds the 60 s hard cap`,
+        `Composition duration ${durationMs}ms exceeds the 180 s hard cap`,
       );
     }
     // Bounds apply to the EFFECTIVE render: a 2× 1080×1080 @60fps job must pass
@@ -196,7 +204,7 @@ export class VideoRenderService {
     };
 
     await ioRedis.set(
-      payloadKey(job.id),
+      renderPayloadKey(job.id),
       JSON.stringify(payload),
       'EX',
       RENDER_PAYLOAD_TTL_SECONDS,
@@ -246,6 +254,15 @@ export class VideoRenderService {
     return job;
   }
 
+  /**
+   * Live frame-capture progress for a processing job (written by the render itself,
+   * throttled). Null when nothing has been reported yet — the status endpoint keeps
+   * its static fallback in that case.
+   */
+  async getRenderProgress(jobId: string): Promise<RenderProgress | null> {
+    return readRenderProgress(jobId);
+  }
+
   async processVideoRender(jobId: string) {
     // Job-id-only Inngest entry point: unscoped lookup, then all updates are org-scoped.
     const job = await this._aiSettings.getMediaJobByIdUnscoped(jobId);
@@ -267,7 +284,7 @@ export class VideoRenderService {
       // already held by another runner) must NOT mark the job failed — the winner
       // is rendering it. A null payload with the job still pending means the TTL
       // expired — a genuine failure.
-      const raw = await ioRedis.get(payloadKey(jobId));
+      const raw = await ioRedis.get(renderPayloadKey(jobId));
       claimed =
         raw != null &&
         (await ioRedis.set(claimKey(jobId), '1', 'EX', RENDER_PAYLOAD_TTL_SECONDS, 'NX')) !==
@@ -290,7 +307,7 @@ export class VideoRenderService {
       // gated), which reads this same key — GETDEL alone left it 404ing. The
       // single-winner claim already happened; re-publishing does not weaken it.
       // The key is deleted again in the finally below.
-      await ioRedis.set(payloadKey(jobId), raw, 'EX', RENDER_PAYLOAD_TTL_SECONDS);
+      await ioRedis.set(renderPayloadKey(jobId), raw, 'EX', RENDER_PAYLOAD_TTL_SECONDS);
       const input = JSON.parse(raw);
 
       const composition = input.composition || {};
@@ -299,7 +316,7 @@ export class VideoRenderService {
       const durationMs = composition.durationMs || 10000;
       if (durationMs > MAX_DURATION_MS) {
         throw new Error(
-          `Composition duration ${durationMs}ms exceeds the 60 s hard cap`,
+          `Composition duration ${durationMs}ms exceeds the 180 s hard cap`,
         );
       }
       validateVideoComposition({
@@ -340,13 +357,23 @@ export class VideoRenderService {
         videoPath = path.join(workDir, 'out', `output.${format}`);
         thumbnailPath = path.join(workDir, 'out', 'thumbnail.jpg');
       } else {
+        // Real render progress: the capture loop reports each captured frame
+        // (global count, even under parallel capture); the throttled writer lands
+        // it in Redis (every 10 frames / 2s, whichever first) for the status endpoint.
+        const progress = createThrottledProgressWriter((frame, total) =>
+          writeRenderProgress(jobId, frame, total),
+        );
         // The in-process encoder has no external timeout (only Podman enforces one);
         // cap its wall-clock so a pathological composition can't pin a worker forever.
         const result = await withTimeout(
-          this._encoder.encode(composition, options),
+          this._encoder.encode(composition, {
+            ...options,
+            onProgress: (p) => progress.report(p.frame, p.total),
+          }),
           renderTimeoutMs,
           'In-process video encode',
         );
+        await progress.flush();
         videoPath = result.videoPath;
         thumbnailPath = result.thumbnailPath;
         workDir = path.dirname(videoPath);
@@ -482,10 +509,10 @@ export class VideoRenderService {
     }
   }
 
-  /** Best-effort release of the render payload + claim marker after a render concludes. */
+  /** Best-effort release of the render payload + claim marker + progress key after a render concludes. */
   private async releasePayload(jobId: string) {
     try {
-      await ioRedis.del(payloadKey(jobId), claimKey(jobId));
+      await ioRedis.del(renderPayloadKey(jobId), claimKey(jobId), renderProgressKey(jobId));
     } catch (err) {
       this.logger.warn(
         `Failed to release render payload keys for ${jobId}: ${(err as Error).message}`,

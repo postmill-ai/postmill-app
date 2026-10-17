@@ -6,7 +6,7 @@ import {
   getBuffer,
   seedBufferFromImage,
 } from './raster-layers';
-import { DESIGNER_DOC_VERSION } from '@postmill-ai/nestjs-libraries/media/designer-doc/designer-doc.limits';
+import { DESIGNER_DOC_VERSION, MAX_VIDEO_DURATION_MS } from '@postmill-ai/nestjs-libraries/media/designer-doc/designer-doc.limits';
 
 /**
  * Simulates the designer export flow as implemented in Designer.tsx:
@@ -649,12 +649,12 @@ describe('duplicateClip', () => {
     expect(copy.freezeAtMs).toBeUndefined();
   });
 
-  it('returns null when there is no room even at the 60 s ceiling', () => {
+  it('returns null when there is no room even at the MAX_VIDEO_DURATION_MS ceiling', () => {
     const store = videoStore();
     const trackId = vo(store).tracks[0].id;
-    store.getState().setVideoDuration(0, 60000);
+    store.getState().setVideoDuration(0, MAX_VIDEO_DURATION_MS);
     store.getState().addClip(0, trackId, {
-      id: 'src', startMs: 55000, endMs: 60000, src: 'https://example.com/v.mp4',
+      id: 'src', startMs: MAX_VIDEO_DURATION_MS - 5000, endMs: MAX_VIDEO_DURATION_MS, src: 'https://example.com/v.mp4',
     } as never);
 
     expect(store.getState().duplicateClip(0, trackId, 'src')).toBeNull();
@@ -896,11 +896,11 @@ describe('clip copy/paste', () => {
     const pasted = vo(store).tracks[0].clips.find((c) => c.id !== 'a')!;
     expect(pasted.startMs).toBe(durationMs - 500);
 
-    // At the 60 s ceiling there is no room — nothing is pasted, no history.
-    store.getState().setVideoDuration(0, 60000);
+    // At the MAX_VIDEO_DURATION_MS ceiling there is no room — nothing is pasted, no history.
+    store.getState().setVideoDuration(0, MAX_VIDEO_DURATION_MS);
     const depth = store.getState().history.length;
     const count = vo(store).tracks[0].clips.length;
-    store.getState().pasteClips(59900);
+    store.getState().pasteClips(MAX_VIDEO_DURATION_MS - 100);
     expect(vo(store).tracks[0].clips.length).toBe(count);
     expect(store.getState().history.length).toBe(depth);
   });

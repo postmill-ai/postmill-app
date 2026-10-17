@@ -12,13 +12,40 @@ import * as fs from 'fs';
 import * as path from 'path';
 import { ChromiumFrameCaptureService } from '@postmill-ai/nestjs-libraries/media/design-render/chromium-frame-capture.service';
 import { FfmpegVideoEncoderService } from '@postmill-ai/nestjs-libraries/media/design-render/ffmpeg-video-encoder.service';
+import { createThrottledProgressWriter } from '@postmill-ai/nestjs-libraries/media/design-render/render-progress-throttle';
 import { mergeLocalFiles } from '@postmill-ai/nestjs-libraries/media/replicate-studio/video-merge';
+import { safeFetch } from '@postmill-ai/nestjs-libraries/dtos/webhooks/safe.fetch';
 import {
+  DesignRenderJobSpec,
   RenderJobSpec,
   RENDER_OUTPUT_DIR,
   RENDER_THUMBNAIL_NAME,
   renderOutputName,
 } from '@postmill-ai/nestjs-libraries/media/design-render/render-job-spec';
+/**
+ * The container has no Redis access, so progress goes over HTTP to the host:
+ * POST /media/designs/render-progress/:jobId (token-gated like render-frame),
+ * throttled to every 10 frames / 2s (whichever first). Best-effort — a failed
+ * report (e.g. a private baseUrl blocked by safeFetch without
+ * SSRF_ALLOWED_PRIVATE_CIDRS) must never fail the render.
+ */
+function createProgressReporter(spec: DesignRenderJobSpec) {
+  const { jobId, renderToken } = spec.options;
+  if (!jobId || !renderToken || !spec.baseUrl) return null;
+  const url =
+    `${spec.baseUrl.replace(/\/$/, '')}/media/designs/render-progress/${encodeURIComponent(jobId)}` +
+    `?token=${encodeURIComponent(renderToken)}`;
+  return createThrottledProgressWriter(async (frame, total) => {
+    const res = await safeFetch(url, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ frame, total }),
+    });
+    if (!res.ok && res.status !== 204) {
+      throw new Error(`progress report rejected (${res.status})`);
+    }
+  });
+}
 
 async function main(): Promise<void> {
   const jobFile = process.argv[2];
@@ -39,7 +66,13 @@ async function main(): Promise<void> {
       process.env.NEXT_PUBLIC_BACKEND_URL = spec.baseUrl;
     }
     const encoder = new FfmpegVideoEncoderService(new ChromiumFrameCaptureService());
-    const result = await encoder.encode(spec.composition, spec.options);
+    const progress = createProgressReporter(spec);
+    const result = await encoder.encode(spec.composition, {
+      ...spec.options,
+      onProgress: progress ? (p) => progress.report(p.frame, p.total) : undefined,
+    });
+    // Flush the last queued report before the container exits.
+    await progress?.flush();
     fs.copyFileSync(
       result.videoPath,
       path.join(outDir, renderOutputName(spec.options.format)),

@@ -2,6 +2,8 @@
 // process.env per call (not cached) so they can be tuned without a rebuild, following the
 // existing direct-process.env convention in this codebase.
 
+import * as os from 'os';
+
 function intEnv(name: string, fallback: number): number {
   const raw = process.env[name];
   if (!raw) return fallback;
@@ -26,6 +28,40 @@ export function isPodmanRenderEnabled(): boolean {
  */
 export function getRenderTimeoutMs(): number {
   return intEnv('VIDEO_RENDER_TIMEOUT_MS', 120000);
+}
+
+/**
+ * Below this frame count capture stays sequential: standing up extra Chromium
+ * pages (navigation + full media preload each) costs more than it saves.
+ */
+export const PARALLEL_CAPTURE_MIN_FRAMES = 300;
+
+/** Hard ceiling on capture pages regardless of env — each page loads ALL clip media. */
+export const MAX_CAPTURE_PAGES = 8;
+
+/**
+ * How many Chromium pages capture frames in parallel inside ONE browser instance.
+ * Page i takes frames where frameIndex % N === i; file naming stays global, so the
+ * ffmpeg image2 pattern is unaffected.
+ *
+ * `VIDEO_RENDER_CAPTURE_PAGES` pins the count (1 = force sequential). Default auto =
+ * min(3, available parallelism).
+ *
+ * MEMORY: N pages each load every clip of the composition, so peak RSS roughly
+ * multiplies by N — and the render pod is cgroup-capped (default 4 CPU / 8g, see
+ * getPodmanRenderConfig). Keep the default well under the CPU cap; raising pages
+ * past the CPU count buys nothing but memory pressure.
+ */
+export function getCapturePageCount(totalFrames: number): number {
+  if (totalFrames <= PARALLEL_CAPTURE_MIN_FRAMES) return 1;
+  const raw = process.env.VIDEO_RENDER_CAPTURE_PAGES;
+  if (raw) {
+    const parsed = Number.parseInt(raw, 10);
+    if (Number.isFinite(parsed) && parsed > 0) {
+      return Math.min(parsed, MAX_CAPTURE_PAGES);
+    }
+  }
+  return Math.max(1, Math.min(3, os.availableParallelism()));
 }
 
 export interface PodmanRenderConfig {
