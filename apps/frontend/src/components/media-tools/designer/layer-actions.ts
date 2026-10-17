@@ -142,7 +142,7 @@ export const layerActions = (
     { id: 'layer-new-group-from', label: 'Group from Layers', menu: 'layer', submenuPath: ['New'], group: 'new', keywords: ['group', 'folder'], enabled: () => selected().length >= 2, run: () => store.getState().groupSelection() },
 
     // ── Top level ───────────────────────────────────────────────────────────
-    { id: 'layer-duplicate', label: 'Duplicate Layer', menu: 'layer', group: 'edit', shortcut: '⌘J', keywords: ['duplicate', 'copy'], enabled: () => live().hasSelection, run: () => { const st = store.getState(); selected().forEach((id) => st.duplicateElement(id)); } },
+    // Duplicate lives once, in Edit ▸ Duplicate (⌘J) — the canonical command.
     { id: 'layer-rename', label: 'Rename Layer', menu: 'layer', group: 'edit', keywords: ['rename', 'name'], enabled: () => selected().length === 1, run: () => { const el = firstSelected(); if (!el) return; store.getState().requestRename(el.id); } },
 
     // ── Layer Style ▸ ───────────────────────────────────────────────────────

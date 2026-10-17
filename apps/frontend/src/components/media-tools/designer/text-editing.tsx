@@ -47,6 +47,7 @@ const styleStringToRun = (
   if (color) run.fill = color;
   const decoration = style.textDecoration;
   if (decoration?.includes('underline')) run.underline = true;
+  if (decoration?.includes('line-through')) run.lineThrough = true;
   return run;
 };
 
@@ -57,7 +58,13 @@ const runStyleToCss = (run: TextRun, el: DesignerElement): React.CSSProperties =
   if (run.fontSize && run.fontSize !== el.fontSize) css.fontSize = `${run.fontSize}px`;
   if (run.fontWeight && run.fontWeight !== el.fontWeight) css.fontWeight = run.fontWeight;
   if (run.fontStyle && run.fontStyle !== el.fontStyle) css.fontStyle = run.fontStyle;
-  if (run.underline) css.textDecoration = 'underline';
+  const decoration = [
+    run.underline ? 'underline' : '',
+    run.lineThrough ? 'line-through' : '',
+  ]
+    .filter(Boolean)
+    .join(' ');
+  if (decoration) css.textDecoration = decoration;
   return css;
 };
 
@@ -109,6 +116,8 @@ const serializeNode = (
     nextInherited.fontStyle = 'italic';
   } else if (tag === 'u') {
     nextInherited.underline = true;
+  } else if (tag === 's' || tag === 'strike' || tag === 'del') {
+    nextInherited.lineThrough = true;
   } else {
     nextInherited = styleStringToRun(el.style, nextInherited);
   }
@@ -143,6 +152,7 @@ const mergeRuns = (runs: TextRun[], el: DesignerElement): TextRun[] => {
       fontStyle: run.fontStyle === el.fontStyle ? undefined : run.fontStyle,
       fill: run.fill === el.fill ? undefined : run.fill,
       underline: run.underline ? true : undefined,
+      lineThrough: run.lineThrough ? true : undefined,
     }))
     .filter((run) => run.text.length > 0);
 
@@ -156,7 +166,8 @@ const mergeRuns = (runs: TextRun[], el: DesignerElement): TextRun[] => {
       last.fontWeight === run.fontWeight &&
       last.fontStyle === run.fontStyle &&
       last.fill === run.fill &&
-      last.underline === run.underline
+      last.underline === run.underline &&
+      last.lineThrough === run.lineThrough
     ) {
       last.text += run.text;
     } else {
@@ -178,7 +189,8 @@ export const buildTextEditCommit = (
       r.fontWeight !== undefined ||
       r.fontStyle !== undefined ||
       r.fill !== undefined ||
-      r.underline
+      r.underline ||
+      r.lineThrough
   );
   // Always write richText: when an edit collapses the text to a single
   // base-styled run (e.g. the one bold word was deleted), the runs MUST be
@@ -313,6 +325,27 @@ export const TextEditingOverlay: FC<TextEditingProps> = ({
       // overlay that stayed mounted would keep the Konva text hidden.
       settledRef.current = true;
       onComplete();
+      return;
+    }
+    // Inline style toggles, straight on the contentEditable DOM: the blur
+    // commit serialises the <b>/<i>/<u>/<strike> the browser wraps the
+    // selection in, so the runs pick the style up without leaving the editor.
+    if (e.ctrlKey || e.metaKey) {
+      const key = e.key.toLowerCase();
+      const command =
+        key === 'b'
+          ? 'bold'
+          : key === 'i'
+          ? 'italic'
+          : key === 'u'
+          ? 'underline'
+          : key === 'x' && e.shiftKey
+          ? 'strikeThrough'
+          : null;
+      if (command) {
+        e.preventDefault();
+        document.execCommand(command);
+      }
     }
   };
 

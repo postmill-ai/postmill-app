@@ -69,24 +69,33 @@ export const useCustomFonts = (): {
   useEffect(() => {
     if (typeof document === 'undefined' || !('fonts' in document)) return;
     for (const f of fonts) {
-      try {
-        const weight = f.weights.map(String).join(', ') || '400';
-        const style = f.italic ? 'italic' : 'normal';
-        // Keyed by family ALONE, the second weight of a family was skipped —
-        // upload Inter Regular then Inter Bold and Bold never loaded. A face is
-        // identified by family + weight + style.
-        const existing = Array.from((document.fonts as any).values()).find(
-          (ff: any) => ff.family === f.family && ff.weight === weight && ff.style === style
-        );
-        if (existing) continue;
-        const fontFace = new FontFace(f.family, `url(${f.path})`, {
-          weight,
-          style,
-        });
-        fontFace.load().then((loaded) => {
-          (document.fonts as any).add(loaded);
-        }).catch(() => {});
-      } catch {}
+      const style = f.italic ? 'italic' : 'normal';
+      // One FontFace per weight — a joined list ('400, 700') is not a valid
+      // weight descriptor, so the face never loaded and the family-keyed
+      // dedupe could never match it.
+      for (const w of f.weights.length ? f.weights : [400]) {
+        const weight = String(w);
+        try {
+          // A face is identified by family + weight + style: keyed by family
+          // ALONE, the second weight of a family was skipped — upload Inter
+          // Regular then Inter Bold and Bold never loaded.
+          const existing = Array.from((document.fonts as any).values()).find(
+            (ff: any) => ff.family === f.family && ff.weight === weight && ff.style === style
+          );
+          if (existing) continue;
+          const fontFace = new FontFace(f.family, `url(${f.path})`, {
+            weight,
+            style,
+          });
+          fontFace.load().then((loaded) => {
+            (document.fonts as any).add(loaded);
+          }).catch((err) => {
+            console.warn(`[designer] Failed to load font ${f.family} ${weight} ${style}`, err);
+          });
+        } catch (err) {
+          console.warn(`[designer] Failed to register font ${f.family} ${weight} ${style}`, err);
+        }
+      }
     }
   }, [fonts]);
 

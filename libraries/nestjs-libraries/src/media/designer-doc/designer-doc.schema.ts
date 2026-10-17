@@ -210,6 +210,7 @@ export interface TextRun {
   fontStyle?: 'normal' | 'italic';
   fill?: string;
   underline?: boolean;
+  lineThrough?: boolean;
 }
 
 export interface DesignerTextShadow {
@@ -863,6 +864,7 @@ const textRunCommon = {
   fontStyle: z.enum(['normal', 'italic']).optional(),
   fill: ColorSchema.optional(),
   underline: z.boolean().optional(),
+  lineThrough: z.boolean().optional(),
 };
 const { strict: StrictTextRunSchema, lenient: LenientTextRunSchema } =
   dualObject(

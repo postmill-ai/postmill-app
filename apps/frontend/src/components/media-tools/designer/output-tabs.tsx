@@ -334,7 +334,7 @@ export const OutputTabs: React.FC<OutputTabsProps> = ({ store }) => {
                 }}
                 title={t('designer_resize_change_format_title', 'Resize / change format')}
                 aria-label={t('designer_resize_or_change_format_aria', 'Resize or change format')}
-                className="w-4 h-4 flex items-center justify-center rounded-full bg-[#1e1e2e] border border-studioBorder text-[8px] text-textColor/60 hover:text-textColor"
+                className="w-4 h-4 flex items-center justify-center rounded-full bg-newBgColorInner border border-studioBorder text-[8px] text-textColor/60 hover:text-textColor"
               >
                 ⋮
               </button>
@@ -343,7 +343,7 @@ export const OutputTabs: React.FC<OutputTabsProps> = ({ store }) => {
                   onClick={(e) => handleRemove(e, i)}
                   title={t('designer_remove_format', 'Remove format')}
                   aria-label={t('designer_remove_format', 'Remove format')}
-                  className="w-4 h-4 flex items-center justify-center rounded-full bg-[#1e1e2e] border border-studioBorder text-[9px] text-dangerText hover:bg-red-500/20"
+                  className="w-4 h-4 flex items-center justify-center rounded-full bg-newBgColorInner border border-studioBorder text-[9px] text-dangerText hover:bg-red-500/20"
                 >
                   ×
                 </button>

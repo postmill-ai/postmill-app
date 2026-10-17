@@ -18,7 +18,7 @@ import { PEN_DEFAULT_STROKE } from './pen-tools';
 export type ToolOptionSpec =
   | { kind: 'number'; key: string; label: string; labelKey: string; min: number; max: number; step?: number; suffix?: string; def: number }
   | { kind: 'toggle'; key: string; label: string; labelKey: string; def: boolean }
-  | { kind: 'select'; key: string; label: string; labelKey: string; options: { value: string; label: string }[]; def: string }
+  | { kind: 'select'; key: string; label: string; labelKey: string; options: { value: string; label: string; labelKey?: string }[]; def: string }
   | { kind: 'color'; key: string; label: string; labelKey: string; def: string }
   | { kind: 'text'; key: string; label: string; labelKey: string; placeholder?: string; def: string };
 
@@ -69,7 +69,7 @@ export const TOOL_OPTION_SPECS: Record<string, ToolOptionSpec[]> = {
     {
       kind: 'select', key: 'ratio', label: 'Ratio', labelKey: 'tool_opt_ratio', def: 'free',
       options: [
-        { value: 'free', label: 'Free' },
+        { value: 'free', label: 'Free', labelKey: 'tool_opt_ratio_free' },
         { value: '1:1', label: '1:1' },
         { value: '4:5', label: '4:5' },
         { value: '16:9', label: '16:9' },
@@ -265,7 +265,7 @@ export const ToolOptionsBar: FC<ToolOptionsBarProps> = ({ activeTool, options, o
               >
                 {spec.options.map((o) => (
                   <option key={o.value} value={o.value}>
-                    {o.label}
+                    {o.labelKey ? t(o.labelKey, o.label) : o.label}
                   </option>
                 ))}
               </select>

@@ -1279,6 +1279,19 @@ export const DesignerCanvas: FC<CanvasProps> = ({
       } else if (mod && e.key.toLowerCase() === 'i' && e.shiftKey) {
         e.preventDefault();
         if (st.selection) st.setSelection(invertMask(st.selection));
+      } else if (mod && e.key.toLowerCase() === 'j') {
+        e.preventDefault();
+        // The shortcut the Edit ▸ Duplicate menu item advertises.
+        selectedIds.forEach((id) => st.duplicateElement(id));
+      } else if (mod && (e.key === '=' || e.key === '+')) {
+        e.preventDefault();
+        st.setZoom(st.zoom * 1.2);
+      } else if (mod && (e.key === '-' || e.key === '_')) {
+        e.preventDefault();
+        st.setZoom(st.zoom / 1.2);
+      } else if (mod && e.key === '0') {
+        e.preventDefault();
+        st.requestFit();
       } else if (mod && e.key.toLowerCase() === 'z') {
         e.preventDefault();
         if (e.shiftKey) st.redo();

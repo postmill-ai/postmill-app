@@ -3,6 +3,22 @@
 import dynamic from 'next/dynamic';
 import { Suspense, useState } from 'react';
 import { useSearchParams } from 'next/navigation';
+import { Logo } from '@postmill-ai/frontend/components/new-layout/logo';
+import { useT } from '@postmill-ai/react/translation/get.transation.service.client';
+
+/** First-open placeholder: a blank screen read as a broken page. */
+const DesignerLoading = () => {
+  const t = useT();
+  return (
+    <div className="h-full w-full flex flex-col bg-newBgColor">
+      <div className="h-[44px] shrink-0 border-b border-studioBorder bg-newBgColorInner" />
+      <div className="flex-1 flex flex-col items-center justify-center gap-3">
+        <Logo size={32} className="animate-pulse" />
+        <span className="text-[12px] text-textColor/50">{t('designer_loading', 'Loading Designer…')}</span>
+      </div>
+    </div>
+  );
+};
 
 // ---- sessionStorage handoff parsing (validated, one-shot) -------------------
 const isObj = (v: unknown): v is Record<string, unknown> =>
@@ -94,12 +110,24 @@ function parseTimelineHandoff(raw: unknown): TimelineHandoff | undefined {
   };
 }
 
+/**
+ * The sessionStorage handoff's fallback: private mode (or a full quota) makes
+ * setItem throw, so `openInDesigner` also carries the small timeline payload
+ * in the query string.
+ */
+function parseTimelineQuery(sp: { get: (k: string) => string | null }): TimelineHandoff | undefined {
+  const url = sp.get('mediaUrl');
+  const type = sp.get('mediaType');
+  if (!url || (type !== 'video' && type !== 'audio')) return undefined;
+  return { type, url, fileId: sp.get('mediaFileId') || undefined };
+}
+
 const DesignerPage = dynamic(
   () =>
     import('@postmill-ai/frontend/components/media-tools/designer/designer').then(
       (m) => m.Designer
     ),
-  { ssr: false }
+  { ssr: false, loading: () => <DesignerLoading /> }
 );
 
 // "Open in Designer" (stock photos/videos) navigates here with the asset in the
@@ -138,7 +166,7 @@ function DesignerWithParams() {
       ? parseCaptionHandoff(readHandoff('designer:caption-handoff'))
       : undefined;
     const timeline = sp.get('timeline')
-      ? parseTimelineHandoff(readHandoff('designer:timeline-handoff'))
+      ? parseTimelineHandoff(readHandoff('designer:timeline-handoff')) ?? parseTimelineQuery(sp)
       : undefined;
     if (typeof window !== 'undefined') {
       window.sessionStorage.removeItem('designer:timeline-handoff');
@@ -176,7 +204,7 @@ function DesignerWithParams() {
 export default function DesignerRoute() {
   return (
     <div className="h-full flex flex-col">
-      <Suspense fallback={null}>
+      <Suspense fallback={<DesignerLoading />}>
         <DesignerWithParams />
       </Suspense>
     </div>

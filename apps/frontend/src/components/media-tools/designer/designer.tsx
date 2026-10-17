@@ -355,6 +355,7 @@ export const Designer: FC<DesignerProps> = ({
   const currentDesignId = store((s) => s.designId);
   const isDirty = store((s) => s.isDirty);
   const isSaving = store((s) => s.isSaving);
+  const saveFailed = store((s) => s.saveFailed);
   const doc = store((s) => s.doc);
   const activeTool = store((s) => s.activeTool);
   const lastToolPerGroup = store((s) => s.lastToolPerGroup);
@@ -1297,11 +1298,16 @@ export const Designer: FC<DesignerProps> = ({
               {translate('designer_applying_filters', 'Applying filters…')}
             </span>
           )}
-          {!pixelOps.baking && isSaving && <span className="text-newTextColor/60">{translate('saving_ellipsis', 'Saving…')}</span>}
-          {!pixelOps.baking && !isSaving && !isDirty && currentDesignId && (
+          {!pixelOps.baking && saveFailed && (
+            <span className="px-2 py-0.5 rounded-full bg-red-500/10 text-dangerText">
+              {translate('designer_save_failed_retrying', 'Save failed — retrying')}
+            </span>
+          )}
+          {!pixelOps.baking && !saveFailed && isSaving && <span className="text-newTextColor/60">{translate('saving_ellipsis', 'Saving…')}</span>}
+          {!pixelOps.baking && !saveFailed && !isSaving && !isDirty && currentDesignId && (
             <span className="text-green-500">{translate('saved_status', 'Saved')}</span>
           )}
-          {!pixelOps.baking && !isSaving && isDirty && <span className="text-amber-600">{translate('unsaved_status', 'Unsaved')}</span>}
+          {!pixelOps.baking && !saveFailed && !isSaving && isDirty && <span className="text-amber-600">{translate('unsaved_status', 'Unsaved')}</span>}
         </div>
 
         <div className="flex-1" />

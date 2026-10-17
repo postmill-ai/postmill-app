@@ -36,6 +36,41 @@ export const createDesignAutosave = ({
   uploadPreview,
 }: DesignAutosaveDeps): DesignAutosave => {
   let createPromise: Promise<string> | null = null;
+  let retryTimer: ReturnType<typeof setTimeout> | null = null;
+  let retryAttempt = 0;
+
+  const clearRetry = () => {
+    if (retryTimer) clearTimeout(retryTimer);
+    retryTimer = null;
+    retryAttempt = 0;
+  };
+
+  /**
+   * A failed autosave used to end at setSaving(false) — silent data loss the
+   * header read as "Unsaved" forever. Surface it (`saveFailed`, the header's
+   * pill) and retry with exponential backoff until a write lands.
+   */
+  const scheduleRetry = () => {
+    store.getState().setSaveFailed(true);
+    if (retryTimer) return;
+    const delay = Math.min(30000, 2000 * 2 ** retryAttempt);
+    retryAttempt += 1;
+    retryTimer = setTimeout(() => {
+      retryTimer = null;
+      const s = store.getState();
+      if (!s.isDirty) {
+        s.setSaveFailed(false);
+        retryAttempt = 0;
+        return;
+      }
+      save(s.doc);
+    }, delay);
+  };
+
+  const notePersisted = () => {
+    clearRetry();
+    store.getState().setSaveFailed(false);
+  };
 
   const ensureCreated = (): Promise<string> => {
     const existing = store.getState().designId;
@@ -81,6 +116,7 @@ export const createDesignAutosave = ({
         if (after.doc === sentDoc && after.designName === sentName) {
           after.markSaved();
         }
+        notePersisted();
         return data.id as string;
       } finally {
         createPromise = null;
@@ -129,6 +165,7 @@ export const createDesignAutosave = ({
       state.setSaving(true);
       ensureCreated().catch(() => {
         store.getState().setSaving(false);
+        scheduleRetry();
       });
       return;
     }
@@ -146,9 +183,11 @@ export const createDesignAutosave = ({
         } else {
           s.setSaving(false);
         }
+        notePersisted();
       })
       .catch(() => {
         store.getState().setSaving(false);
+        scheduleRetry();
       });
   };
 

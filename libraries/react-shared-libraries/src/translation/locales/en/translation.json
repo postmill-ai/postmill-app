@@ -4504,5 +4504,17 @@
   "filter_priority": "Filter by priority",
   "comment_inbox.sort_priority_first": "High priority first",
   "comms": "Comms",
-  "comms_settings_description": "Chat with your Postmill agent and receive notifications in your team’s chat apps."
+  "comms_settings_description": "Chat with your Postmill agent and receive notifications in your team’s chat apps.",
+  "designer_save_failed_retrying": "Save failed — retrying",
+  "designer_style_underline": "Underline",
+  "designer_style_strikethrough": "Strikethrough",
+  "designer_label_decoration": "Decoration",
+  "tool_opt_ratio_free": "Free",
+  "designer_video_split_clip": "Split clip at playhead",
+  "designer_video_freeze_frame": "Freeze frame at playhead",
+  "split_clip_hint": "Split the clip at the playhead (S)",
+  "freeze_frame_hint": "Hold the frame under the playhead (Ctrl+F)",
+  "my_designs_panel_delete_title": "Delete design?",
+  "my_designs_panel_delete_description": "This will permanently delete \"{{name}}\".",
+  "designer_loading": "Loading Designer…"
 }

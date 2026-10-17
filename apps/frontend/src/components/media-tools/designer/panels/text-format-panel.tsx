@@ -32,7 +32,18 @@ import {
   AlignRightIcon,
 } from '@postmill-ai/frontend/components/ui/icons';
 
-const RUN_STYLE_KEYS = new Set(['fill', 'fontFamily', 'fontSize', 'fontWeight', 'fontStyle']);
+const RUN_STYLE_KEYS = new Set(['fill', 'fontFamily', 'fontSize', 'fontWeight', 'fontStyle', 'underline', 'lineThrough']);
+
+/**
+ * Decorations have no element-level home (unlike weight/style, which the flat
+ * renderer reads off the element) — they exist on runs only, so they must
+ * never be spread onto the element the way the other run styles are.
+ */
+const DECORATION_KEYS = new Set(['underline', 'lineThrough']);
+
+/** Panel updates: element fields plus the run-only decoration flags. */
+export type TextElementUpdates = Partial<DesignerElement> &
+  Partial<Pick<TextRun, 'underline' | 'lineThrough'>>;
 
 /** Catalog matches shown per search. Enough to choose from, short enough to scan. */
 const MAX_FONT_RESULTS = 60;
@@ -103,7 +114,7 @@ export const growBoxFor = (
  */
 export const buildTextElementPatch = (
   el: DesignerElement,
-  updates: Partial<DesignerElement>,
+  updates: TextElementUpdates,
   selection: { start: number; end: number } | null
 ): Partial<DesignerElement> => {
   const runUpdate: Partial<TextRun> = {};
@@ -115,7 +126,20 @@ export const buildTextElementPatch = (
 
   const merged: Partial<DesignerElement> = { ...elUpdate };
   if (!Object.keys(runUpdate).length) return merged;
-  if (!el.richText?.length) return { ...merged, ...runUpdate };
+  if (!el.richText?.length) {
+    const decorations = Object.keys(runUpdate).filter((k) => DECORATION_KEYS.has(k));
+    if (decorations.length) {
+      // Flat text becomes a one-run rich text so the decoration has somewhere
+      // to live; the other run styles keep their element-level home.
+      const run: TextRun = { text: el.text ?? '' };
+      for (const k of decorations) (run as any)[k] = (runUpdate as any)[k];
+      for (const k of Object.keys(runUpdate)) {
+        if (!DECORATION_KEYS.has(k)) (merged as any)[k] = (runUpdate as any)[k];
+      }
+      return { ...merged, richText: [run] };
+    }
+    return { ...merged, ...runUpdate };
+  }
 
   const styledRuns = applyStyleToRuns(
     el.richText,
@@ -123,9 +147,14 @@ export const buildTextElementPatch = (
     selection?.end ?? Infinity,
     runUpdate
   );
+  // Whole-text changes land on the element too (see the doc comment above) —
+  // except decorations, which are run-only.
+  const elSafeUpdate = Object.fromEntries(
+    Object.entries(runUpdate).filter(([k]) => !DECORATION_KEYS.has(k))
+  );
   return selection
     ? { ...merged, richText: styledRuns }
-    : { ...merged, ...runUpdate, richText: styledRuns };
+    : { ...merged, ...elSafeUpdate, richText: styledRuns };
 };
 
 const runStylesEqual = (a: Partial<TextRun>, b: Partial<TextRun>): boolean => {
@@ -135,7 +164,8 @@ const runStylesEqual = (a: Partial<TextRun>, b: Partial<TextRun>): boolean => {
     a.fontWeight === b.fontWeight &&
     a.fontStyle === b.fontStyle &&
     a.fill === b.fill &&
-    a.underline === b.underline
+    a.underline === b.underline &&
+    a.lineThrough === b.lineThrough
   );
 };
 
@@ -301,7 +331,7 @@ export const TextFormatPanel: FC<TextFormatPanelProps> = ({ store }) => {
   }, [element, t]);
 
   const update = useCallback(
-    (updates: Partial<DesignerElement>, commit = true) => {
+    (updates: TextElementUpdates, commit = true) => {
       if (!textElements.length) return;
 
       const selection =
@@ -435,6 +465,12 @@ export const TextFormatPanel: FC<TextFormatPanelProps> = ({ store }) => {
   const isBold = (element.fontWeight ?? 400) >= 600;
   const isItalic = element.fontStyle === 'italic';
   const styleValue = `${isBold ? 'b' : ''}${isItalic ? 'i' : ''}` || 'n';
+
+  // Decorations are run-level only; the toggle reads as ON when every run
+  // carries it (flat text has no runs, so it always starts OFF).
+  const runs = element.richText;
+  const isUnderline = !!runs?.length && runs.every((r) => r.underline);
+  const isLineThrough = !!runs?.length && runs.every((r) => r.lineThrough);
 
   const shadow = element.textShadow;
   const outline = element.textStroke;
@@ -576,6 +612,43 @@ export const TextFormatPanel: FC<TextFormatPanelProps> = ({ store }) => {
             });
           }}
         />
+      </div>
+
+      {/* Underline / Strikethrough — run-level decorations */}
+      <div className="flex flex-col gap-1.5">
+        <label className="text-[11px] text-newTextColor/60">{t('designer_label_decoration', 'Decoration')}</label>
+        <div className="inline-flex self-start p-[3px] rounded-[8px] bg-newBgColor border border-studioBorder gap-[3px]">
+          {([
+            {
+              on: isUnderline,
+              label: <span className="underline">U</span>,
+              title: t('designer_style_underline', 'Underline'),
+              toggle: () => update({ underline: !isUnderline }),
+            },
+            {
+              on: isLineThrough,
+              label: <span className="line-through">S</span>,
+              title: t('designer_style_strikethrough', 'Strikethrough'),
+              toggle: () => update({ lineThrough: !isLineThrough }),
+            },
+          ]).map((b) => (
+            <button
+              key={b.title}
+              type="button"
+              aria-pressed={b.on}
+              title={b.title}
+              aria-label={b.title}
+              onClick={b.toggle}
+              className={`min-w-[34px] px-[10px] h-[28px] rounded-[6px] text-[13px] flex items-center justify-center transition-colors ${
+                b.on
+                  ? 'bg-designerAccent text-white'
+                  : 'text-textColor/70 hover:text-textColor hover:bg-newBgColorInner'
+              }`}
+            >
+              {b.label}
+            </button>
+          ))}
+        </div>
       </div>
 
       <div className="grid grid-cols-2 gap-3">

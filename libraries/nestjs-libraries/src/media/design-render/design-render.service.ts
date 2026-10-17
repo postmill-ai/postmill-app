@@ -2738,6 +2738,16 @@ export class DesignRenderService {
           ctx.stroke();
         }
 
+        if (seg.run.lineThrough) {
+          const ly = y + sz * 0.6;
+          ctx.strokeStyle = canvasColor(fill);
+          ctx.lineWidth = Math.max(1, sz / 14);
+          ctx.beginPath();
+          ctx.moveTo(x, ly);
+          ctx.lineTo(x + segW, ly);
+          ctx.stroke();
+        }
+
         x += segW;
       }
       y += lineHeights[li];

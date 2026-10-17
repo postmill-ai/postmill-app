@@ -90,9 +90,16 @@ export const ContextMenu: React.FC<ContextMenuProps> = ({ x, y, targetType, elem
 
   const items: MenuItem[] =
     targetType === 'element' && el
-      ? [
-          { label: t('designer_action_cut_cut', 'Cut'), action: () => { s.setSelectedIds([el.id]); s.cutSelection(); } },
-          { label: t('copy', 'Copy'), action: () => { s.setSelectedIds([el.id]); s.copySelection(); } },
+      ? (() => {
+          // Right-clicking a member of a multi-selection keeps the selection —
+          // collapsing it made Cut/Copy/Group act on one layer out of five.
+          const effIds = s.selectedIds.includes(el.id) ? s.selectedIds : [el.id];
+          const ensureSelected = () => {
+            if (!store.getState().selectedIds.includes(el.id)) store.getState().setSelectedIds([el.id]);
+          };
+          const elementItems: MenuItem[] = [
+          { label: t('designer_action_cut_cut', 'Cut'), action: () => { ensureSelected(); s.cutSelection(); } },
+          { label: t('copy', 'Copy'), action: () => { ensureSelected(); s.copySelection(); } },
           { label: t('designer_action_paste_paste', 'Paste'), action: () => s.paste() },
           { label: t('designer_action_duplicate_duplicate', 'Duplicate'), action: () => s.duplicateElement(el.id) },
           { label: '-', action: null },
@@ -106,8 +113,8 @@ export const ContextMenu: React.FC<ContextMenuProps> = ({ x, y, targetType, elem
           { label: el.locked ? t('designer_action_lock_toggle_unlock', 'Unlock') : t('designer_action_lock_toggle_lock', 'Lock'), action: () => s.updateElement(el.id, { locked: !el.locked }) },
           { label: el.hidden ? t('designer_context_show', 'Show') : t('designer_context_hide', 'Hide'), action: () => s.updateElement(el.id, { hidden: !el.hidden }) },
           { label: '-', action: null },
-          { label: t('group', 'Group'), action: () => { s.setSelectedIds([el.id]); setTimeout(() => s.groupSelection(), 0); } },
-          { label: t('designer_action_ungroup_ungroup', 'Ungroup'), action: () => { s.setSelectedIds([el.id]); setTimeout(() => s.ungroupSelection(), 0); } },
+          { label: t('group', 'Group'), action: () => s.groupSelection(effIds) },
+          { label: t('designer_action_ungroup_ungroup', 'Ungroup'), action: () => s.ungroupSelection(effIds) },
           // The same six ops the Layer ▸ Pathfinder submenu runs, surfaced
           // where a two-shape selection actually right-clicks.
           ...(pathfinderReady
@@ -132,7 +139,9 @@ export const ContextMenu: React.FC<ContextMenuProps> = ({ x, y, targetType, elem
                 }]
               : []),
           ...(el.type === 'image' ? [{ label: t('designer_context_set_as_background', 'Set as Background'), action: () => { s.setOutputBackground({ type: 'image', src: el.src! }); } }] : []),
-        ]
+          ];
+          return elementItems;
+        })()
       : [
           { label: t('designer_action_paste_paste', 'Paste'), action: () => s.paste() },
           { label: '-', action: null },
@@ -146,28 +155,28 @@ export const ContextMenu: React.FC<ContextMenuProps> = ({ x, y, targetType, elem
   return (
     <div
       ref={menuRef}
-      className="fixed z-150 bg-[#1a1a2e] border border-[#2a2a4a] rounded-lg py-1 min-w-[200px] shadow-xl"
+      className="fixed z-150 bg-newBgColorInner border border-studioBorder rounded-lg py-1 min-w-[200px] shadow-xl"
       style={{ left: Math.min(x, window.innerWidth - 220), top: Math.min(y, window.innerHeight - 400) }}
     >
       {items.map((item, i) => {
         if (item.label === '-')
-          return <div key={`divider-${i}`} className="border-t border-[#2a2a4a] my-1" />;
+          return <div key={`divider-${i}`} className="border-t border-studioBorder my-1" />;
         if (item.children) {
           return (
             <div key={item.label} className="relative group">
               <button
                 type="button"
                 aria-haspopup="menu"
-                className="w-full text-left px-3 py-1.5 text-sm text-gray-300 hover:bg-white/10 hover:text-white focus-visible:bg-white/10 focus-visible:text-white focus-visible:outline-hidden flex items-center justify-between gap-3"
+                className="w-full text-left px-3 py-1.5 text-sm text-textColor/80 hover:bg-studioBorder/40 hover:text-textColor focus-visible:bg-studioBorder/40 focus-visible:text-textColor focus-visible:outline-hidden flex items-center justify-between gap-3"
               >
                 {item.label}
                 <span aria-hidden="true">▸</span>
               </button>
-              <div className="absolute left-full top-[-4px] hidden group-hover:block group-focus-within:block bg-[#1a1a2e] border border-[#2a2a4a] rounded-lg py-1 min-w-[160px] shadow-xl">
+              <div className="absolute left-full top-[-4px] hidden group-hover:block group-focus-within:block bg-newBgColorInner border border-studioBorder rounded-lg py-1 min-w-[160px] shadow-xl">
                 {item.children.map((child) => (
                   <button
                     key={child.label}
-                    className="w-full text-left px-3 py-1.5 text-sm text-gray-300 hover:bg-white/10 hover:text-white focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-designerAccent focus-visible:ring-inset"
+                    className="w-full text-left px-3 py-1.5 text-sm text-textColor/80 hover:bg-studioBorder/40 hover:text-textColor focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-designerAccent focus-visible:ring-inset"
                     onClick={() => {
                       child.action();
                       onClose();
@@ -183,7 +192,7 @@ export const ContextMenu: React.FC<ContextMenuProps> = ({ x, y, targetType, elem
         return (
           <button
             key={item.label}
-            className="w-full text-left px-3 py-1.5 text-sm text-gray-300 hover:bg-white/10 hover:text-white focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-designerAccent focus-visible:ring-inset"
+            className="w-full text-left px-3 py-1.5 text-sm text-textColor/80 hover:bg-studioBorder/40 hover:text-textColor focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-designerAccent focus-visible:ring-inset"
             onClick={() => {
               item.action?.();
               onClose();

@@ -93,6 +93,8 @@ export interface DesignerState {
   templateId: string | null;
   designName: string;
   isDirty: boolean; isSaving: boolean; lastSaved: Date | null;
+  /** An autosave write failed and a backoff retry is pending — drives the header pill. */
+  saveFailed: boolean;
   clipboard: DesignerElement[];
   editFormatOnly: boolean;
   brandEnforcement: boolean;
@@ -184,7 +186,7 @@ export interface DesignerActions {
   // the same discipline `updateElementsSilent` gives element sliders.
   setOutputBackground: (bg: DesignerBackground, commit?: boolean) => void;
   copySelection: () => void; cutSelection: () => void; paste: () => void;
-  groupSelection: () => void; ungroupSelection: () => void;
+  groupSelection: (ids?: string[]) => void; ungroupSelection: (ids?: string[]) => void;
   /** Turn the selection into a reusable symbol, replacing it with an instance. */
   createSymbol: (name?: string) => void;
   /** Place another instance of an existing symbol. */
@@ -235,7 +237,7 @@ export interface DesignerActions {
   undo: () => void; redo: () => void; pushHistory: (label?: string) => void;
   /** Jump straight to a history entry, as Photoshop's History panel does. */
   jumpToHistory: (index: number) => void;
-  markSaved: () => void; setSaving: (saving: boolean) => void;
+  markSaved: () => void; setSaving: (saving: boolean) => void; setSaveFailed: (failed: boolean) => void;
   reset: (width?: number, height?: number) => void;
   loadDesign: (doc: any, id: string, name: string, templateId?: string | null) => void;
   // video mode
@@ -279,6 +281,13 @@ export interface DesignerActions {
    * t=0. One history entry; other tracks are untouched.
    */
   rippleDeleteClip: (outputIndex: number, trackId: string, clipId: string) => void;
+  /**
+   * Multi-clip variants of removeClip/rippleDeleteClip — the timeline's Delete
+   * and Shift+Delete act on the whole multi-selection as ONE history step.
+   * Refs that don't resolve to a clip are ignored.
+   */
+  removeClips: (outputIndex: number, refs: { trackId: string; clipId: string }[]) => void;
+  rippleDeleteClips: (outputIndex: number, refs: { trackId: string; clipId: string }[]) => void;
   /** Deep-clone the multi-selection (primary when it stands alone) into the clip clipboard. */
   copySelectedClips: () => void;
   /**
@@ -369,6 +378,7 @@ export const createDesignerStore = (
       designId: null, designTemplateId: null, templateId: null,
       designName: 'Untitled Design',
       isDirty: false, isSaving: false, lastSaved: null,
+      saveFailed: false,
       editFormatOnly: false,
       brandEnforcement: false,
       brandAdminOverride: false,
@@ -714,9 +724,11 @@ export const createDesignerStore = (
         get().pushHistory('Edit symbol');
       },
 
-      groupSelection: () => {
+      groupSelection: (ids) => {
         if (isVideoMode()) return;
-        const { selectedIds } = get();
+        // Explicit ids let a caller (the canvas context menu) group without a
+        // selection round-trip; the default is the live selection.
+        const selectedIds = ids ?? get().selectedIds;
         // One layer is groupable — Photoshop's Layer ▸ Group Layers wraps a
         // single selection too. Only New ▸ Group from Layers is plural-only.
         if (selectedIds.length < 1) return;
@@ -750,9 +762,9 @@ export const createDesignerStore = (
       },
 
       /** Dissolve the selected groups, promoting members to the group's level. */
-      ungroupSelection: () => {
+      ungroupSelection: (ids) => {
         if (isVideoMode()) return;
-        const { selectedIds } = get();
+        const selectedIds = ids ?? get().selectedIds;
         const children = activeImage().children;
 
         // Accept either the group itself or any member being selected.
@@ -1090,8 +1102,9 @@ export const createDesignerStore = (
         reconcileBuffersWithDoc(nextDoc);
       },
 
-      markSaved: () => set({ isDirty: false, isSaving: false, lastSaved: new Date(), savedHistoryIndex: get().historyIndex }),
+      markSaved: () => set({ isDirty: false, isSaving: false, saveFailed: false, lastSaved: new Date(), savedHistoryIndex: get().historyIndex }),
       setSaving: (saving) => set({ isSaving: saving }),
+      setSaveFailed: (failed) => set({ saveFailed: failed }),
 
       reset: (w, h) => {
         const newDoc = createEmptyDoc(w, h);
@@ -1104,7 +1117,7 @@ export const createDesignerStore = (
           fitNonce: get().fitNonce + 1,
           history: [JSON.parse(JSON.stringify(newDoc))], historyLabels: ['New'], historyIndex: 0, savedHistoryIndex: 0,
           designId: null, designTemplateId: null, templateId: null,
-          designName: 'Untitled Design', isDirty: false, isSaving: false, lastSaved: null,
+          designName: 'Untitled Design', isDirty: false, isSaving: false, lastSaved: null, saveFailed: false,
           editFormatOnly: false,
           brandEnforcement: false,
           brandAdminOverride: false,
@@ -1192,18 +1205,36 @@ export const createDesignerStore = (
       },
 
       removeClip: (outputIndex, trackId, clipId) => {
-        const { doc } = get();
+        get().removeClips(outputIndex, [{ trackId, clipId }]);
+      },
+
+      removeClips: (outputIndex, refs) => {
+        const { doc, selectedClip, selectedClips } = get();
         const vo = doc.outputs[outputIndex] as VideoOutput | undefined;
-        if (!vo || doc.mode !== 'video') return;
+        if (!vo || doc.mode !== 'video' || !refs.length) return;
+        const doomed = new Set(refs.map((r) => `${r.trackId}:${r.clipId}`));
+        const isDoomed = (trackId: string, clipId: string) => doomed.has(`${trackId}:${clipId}`);
         const updated: VideoOutput = {
           ...vo,
-          tracks: vo.tracks.map((t) =>
-            t.id === trackId ? { ...t, clips: t.clips.filter((c) => c.id !== clipId) } : t
-          ),
+          tracks: vo.tracks.map((t) => ({
+            ...t,
+            clips: t.clips.filter((c) => !isDoomed(t.id, c.id)),
+          })),
         };
         const outs = [...doc.outputs];
         outs[outputIndex] = updated;
-        set({ doc: { ...doc, outputs: outs }, isDirty: true });
+        const nextSelected = selectedClips.filter((c) => !isDoomed(c.trackId, c.clipId));
+        const wasPrimary = selectedClip && isDoomed(selectedClip.trackId, selectedClip.clipId);
+        set({
+          doc: { ...doc, outputs: outs },
+          isDirty: true,
+          selectedClips: nextSelected,
+          selectedClip: wasPrimary
+            ? nextSelected.length
+              ? { outputIndex, trackId: nextSelected[nextSelected.length - 1].trackId, clipId: nextSelected[nextSelected.length - 1].clipId }
+              : null
+            : selectedClip,
+        });
         get().pushHistory();
       },
 
@@ -1524,6 +1555,54 @@ export const createDesignerStore = (
         outs[outputIndex] = updated;
         const nextSelected = selectedClips.filter((c) => !(c.trackId === trackId && c.clipId === clipId));
         const wasPrimary = selectedClip?.trackId === trackId && selectedClip?.clipId === clipId;
+        set({
+          doc: { ...doc, outputs: outs },
+          isDirty: true,
+          selectedClips: nextSelected,
+          selectedClip: wasPrimary
+            ? nextSelected.length
+              ? { outputIndex, trackId: nextSelected[nextSelected.length - 1].trackId, clipId: nextSelected[nextSelected.length - 1].clipId }
+              : null
+            : selectedClip,
+        });
+        get().pushHistory('Ripple delete');
+      },
+
+      rippleDeleteClips: (outputIndex, refs) => {
+        const { doc, selectedClip, selectedClips } = get();
+        const vo = doc.outputs[outputIndex] as VideoOutput | undefined;
+        if (!vo || doc.mode !== 'video' || !refs.length) return;
+        const doomed = new Set(refs.map((r) => `${r.trackId}:${r.clipId}`));
+        const isDoomed = (trackId: string, clipId: string) => doomed.has(`${trackId}:${clipId}`);
+        const updated: VideoOutput = {
+          ...vo,
+          tracks: vo.tracks.map((t) => {
+            const removed = t.clips
+              .filter((c) => isDoomed(t.id, c.id))
+              .sort((a, b) => a.startMs - b.startMs);
+            if (!removed.length) return t;
+            // A later clip closes the gap of every removed clip before it —
+            // the same visual-length rule the single-clip ripple applies.
+            const span = (c: VideoClip) => c.endMs + (c.freezeAtMs || 0) - c.startMs;
+            return {
+              ...t,
+              clips: t.clips
+                .filter((c) => !isDoomed(t.id, c.id))
+                .map((c) => {
+                  const shift = removed
+                    .filter((r) => r.startMs <= c.startMs)
+                    .reduce((sum, r) => sum + span(r), 0);
+                  if (!shift) return c;
+                  const startMs = Math.max(0, c.startMs - shift);
+                  return { ...c, startMs, endMs: startMs + (c.endMs - c.startMs) };
+                }),
+            };
+          }),
+        };
+        const outs = [...doc.outputs];
+        outs[outputIndex] = updated;
+        const nextSelected = selectedClips.filter((c) => !isDoomed(c.trackId, c.clipId));
+        const wasPrimary = selectedClip && isDoomed(selectedClip.trackId, selectedClip.clipId);
         set({
           doc: { ...doc, outputs: outs },
           isDirty: true,

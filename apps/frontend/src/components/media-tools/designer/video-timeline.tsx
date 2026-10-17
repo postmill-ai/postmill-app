@@ -1288,13 +1288,20 @@ export const VideoTimeline: FC<VideoTimelineProps> = ({ store, sendTimelineAware
       const editingText = !!(e.target as HTMLElement)?.matches?.('input,textarea');
 
       if (e.key === 'Delete' || e.key === 'Backspace') {
-        if (selectedClip && selectedClip.outputIndex === currentOutput) {
-          // Shift = ripple: later clips on the same track close the gap.
+        // Delete acts on the WHOLE multi-selection (the primary clip when it
+        // stands alone) as one history step; Shift = ripple: later clips on
+        // the same tracks close the gaps.
+        const state = store.getState();
+        const refs = state.selectedClips.length
+          ? state.selectedClips
+          : selectedClip && selectedClip.outputIndex === currentOutput
+          ? [{ trackId: selectedClip.trackId, clipId: selectedClip.clipId }]
+          : [];
+        if (refs.length) {
           if (e.shiftKey) {
-            store.getState().rippleDeleteClip(currentOutput, selectedClip.trackId, selectedClip.clipId);
+            state.rippleDeleteClips(currentOutput, refs);
           } else {
-            store.getState().removeClip(currentOutput, selectedClip.trackId, selectedClip.clipId);
-            setSelectedClip(null);
+            state.removeClips(currentOutput, refs);
           }
         }
       } else if (
@@ -1356,7 +1363,7 @@ export const VideoTimeline: FC<VideoTimelineProps> = ({ store, sendTimelineAware
         handleFreezeFrame(selectedClip.trackId, selectedClip.clipId);
       }
     },
-    [isVideo, vo, selectedClip, store, currentOutput, playheadMs, handlePlayPause, setSelectedClip, setPlayhead, handleFreezeFrame],
+    [isVideo, vo, selectedClip, store, currentOutput, playheadMs, handlePlayPause, setPlayhead, handleFreezeFrame],
   );
 
   const selectedKeySet = useMemo(
@@ -1523,6 +1530,34 @@ export const VideoTimeline: FC<VideoTimelineProps> = ({ store, sendTimelineAware
     store.getState().rippleDeleteClip(clipMenu.outputIndex, clipMenu.trackId, clipMenu.clipId);
     setClipMenu(null);
   }, [clipMenu, store]);
+
+  const handleDeleteClips = useCallback(() => {
+    if (!clipMenu) return;
+    const state = store.getState();
+    // Mirror the Delete key: when the menu's clip is part of a multi-selection,
+    // the whole selection goes as one history step.
+    const inSelection = state.selectedClips.some(
+      (c) => c.trackId === clipMenu.trackId && c.clipId === clipMenu.clipId
+    );
+    const refs =
+      inSelection && state.selectedClips.length
+        ? state.selectedClips
+        : [{ trackId: clipMenu.trackId, clipId: clipMenu.clipId }];
+    state.removeClips(clipMenu.outputIndex, refs);
+    setClipMenu(null);
+  }, [clipMenu, store]);
+
+  const handleSplitClipAtPlayhead = useCallback(() => {
+    if (!clipMenu) return;
+    store.getState().splitClip(clipMenu.outputIndex, clipMenu.trackId, clipMenu.clipId, playheadMs);
+    setClipMenu(null);
+  }, [clipMenu, store, playheadMs]);
+
+  const handleFreezeFrameClip = useCallback(() => {
+    if (!clipMenu) return;
+    handleFreezeFrame(clipMenu.trackId, clipMenu.clipId);
+    setClipMenu(null);
+  }, [clipMenu, handleFreezeFrame]);
 
   const generateVoiceover = useCallback(
     async (text: string, voiceId: string) => {
@@ -2902,6 +2937,26 @@ export const VideoTimeline: FC<VideoTimelineProps> = ({ store, sendTimelineAware
                     className="w-full text-left px-2 py-1 rounded-sm text-[12px] hover:bg-studioBorder/30 text-textColor disabled:opacity-40 disabled:cursor-not-allowed"
                   >
                     {translate('paste_keyframes', 'Paste keyframes')}
+                  </button>
+                  <button
+                    onClick={handleSplitClipAtPlayhead}
+                    title={translate('split_clip_hint', 'Split the clip at the playhead (S)')}
+                    className="w-full text-left px-2 py-1 rounded-sm text-[12px] hover:bg-studioBorder/30 text-textColor"
+                  >
+                    {translate('designer_video_split_clip', 'Split clip at playhead')}
+                  </button>
+                  <button
+                    onClick={handleFreezeFrameClip}
+                    title={translate('freeze_frame_hint', 'Hold the frame under the playhead (Ctrl+F)')}
+                    className="w-full text-left px-2 py-1 rounded-sm text-[12px] hover:bg-studioBorder/30 text-textColor"
+                  >
+                    {translate('designer_video_freeze_frame', 'Freeze frame at playhead')}
+                  </button>
+                  <button
+                    onClick={handleDeleteClips}
+                    className="w-full text-left px-2 py-1 rounded-sm text-[12px] hover:bg-studioBorder/30 text-dangerText"
+                  >
+                    {translate('delete', 'Delete')}
                   </button>
                   <button
                     onClick={handleRippleDeleteClip}

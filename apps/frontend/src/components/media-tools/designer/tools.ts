@@ -55,6 +55,10 @@ const tool = (
 /**
  * The 16 groups, in rail order. The first tool of each group is its default.
  *
+ * Rail order is usage-based for the social-media design persona (arrange,
+ * type, shapes and pen first; pixel-retouch tools further down), not
+ * Photoshop's canonical order — every id, shortcut and label is unchanged.
+ *
  * Pruned deliberately (agreed with the product owner): Slice and Slice Select
  * (1990s HTML-table export, nothing here consumes slices), both Type Mask tools
  * (superseded by a clipped text layer), and Mixer Brush / Pattern Stamp /
@@ -67,6 +71,47 @@ export const TOOL_GROUPS: DesignerToolGroup[] = [
     tools: [
       tool('move', 'move', 'Move', 'tool_move', I.MoveToolIcon, 'default'),
       tool('artboard', 'move', 'Artboard', 'tool_artboard', I.ArtboardToolIcon, 'default'),
+    ],
+  },
+  {
+    id: 'type',
+    shortcut: 't',
+    tools: [
+      tool('type-horizontal', 'type', 'Horizontal Type', 'tool_type_horizontal', I.TypeHorizontalIcon, 'text'),
+      tool('type-vertical', 'type', 'Vertical Type', 'tool_type_vertical', I.TypeVerticalIcon, 'text'),
+    ],
+  },
+  {
+    id: 'shape',
+    shortcut: 'u',
+    tools: [
+      tool('shape-rect', 'shape', 'Rectangle', 'tool_shape_rect', I.ShapeRectIcon, 'crosshair'),
+      tool('shape-ellipse', 'shape', 'Ellipse', 'tool_shape_ellipse', I.ShapeEllipseIcon, 'crosshair'),
+      tool('shape-triangle', 'shape', 'Triangle', 'tool_shape_triangle', I.ShapeTriangleIcon, 'crosshair'),
+      tool('shape-polygon', 'shape', 'Polygon', 'tool_shape_polygon', I.ShapePolygonIcon, 'crosshair'),
+      tool('shape-star', 'shape', 'Star', 'tool_shape_star', I.ShapeStarIcon, 'crosshair'),
+      tool('shape-line', 'shape', 'Line', 'tool_shape_line', I.ShapeLineIcon, 'crosshair'),
+      tool('shape-custom', 'shape', 'Custom Shape', 'tool_shape_custom', I.ShapeCustomIcon, 'crosshair'),
+    ],
+  },
+  {
+    id: 'pen',
+    shortcut: 'p',
+    tools: [
+      tool('pen', 'pen', 'Pen', 'tool_pen', I.PenToolIcon, 'crosshair'),
+      tool('pen-freeform', 'pen', 'Freeform Pen', 'tool_pen_freeform', I.PenFreeformIcon, 'crosshair'),
+      tool('pen-curvature', 'pen', 'Curvature Pen', 'tool_pen_curvature', I.PenCurvatureIcon, 'crosshair'),
+      tool('pen-add-anchor', 'pen', 'Add Anchor Point', 'tool_pen_add_anchor', I.PenAddAnchorIcon, 'crosshair'),
+      tool('pen-delete-anchor', 'pen', 'Delete Anchor Point', 'tool_pen_delete_anchor', I.PenDeleteAnchorIcon, 'crosshair'),
+      tool('pen-convert-point', 'pen', 'Convert Point', 'tool_pen_convert_point', I.PenConvertPointIcon, 'crosshair'),
+    ],
+  },
+  {
+    id: 'crop',
+    shortcut: 'c',
+    tools: [
+      tool('crop', 'crop', 'Crop', 'tool_crop', I.CropToolIcon, 'crosshair'),
+      tool('crop-perspective', 'crop', 'Perspective Crop', 'tool_crop_perspective', I.CropPerspectiveIcon, 'crosshair'),
     ],
   },
   {
@@ -100,28 +145,11 @@ export const TOOL_GROUPS: DesignerToolGroup[] = [
     ],
   },
   {
-    id: 'crop',
-    shortcut: 'c',
-    tools: [
-      tool('crop', 'crop', 'Crop', 'tool_crop', I.CropToolIcon, 'crosshair'),
-      tool('crop-perspective', 'crop', 'Perspective Crop', 'tool_crop_perspective', I.CropPerspectiveIcon, 'crosshair'),
-    ],
-  },
-  {
     id: 'brush',
     shortcut: 'b',
     tools: [
       tool('brush', 'brush', 'Brush', 'tool_brush', I.BrushToolIcon, 'crosshair', { requiresRaster: true }),
       tool('pencil', 'brush', 'Pencil', 'tool_pencil', I.PencilToolIcon, 'crosshair', { requiresRaster: true }),
-    ],
-  },
-  {
-    id: 'stamp',
-    shortcut: 's',
-    tools: [
-      tool('clone-stamp', 'stamp', 'Clone Stamp', 'tool_clone_stamp', I.CloneStampIcon, 'crosshair', {
-        requiresRaster: true,
-      }),
     ],
   },
   {
@@ -137,6 +165,15 @@ export const TOOL_GROUPS: DesignerToolGroup[] = [
     tools: [
       tool('gradient', 'gradient', 'Gradient', 'tool_gradient', I.GradientToolIcon, 'crosshair'),
       tool('paint-bucket', 'gradient', 'Paint Bucket', 'tool_paint_bucket', I.PaintBucketIcon, 'crosshair', {
+        requiresRaster: true,
+      }),
+    ],
+  },
+  {
+    id: 'stamp',
+    shortcut: 's',
+    tools: [
+      tool('clone-stamp', 'stamp', 'Clone Stamp', 'tool_clone_stamp', I.CloneStampIcon, 'crosshair', {
         requiresRaster: true,
       }),
     ],
@@ -160,44 +197,11 @@ export const TOOL_GROUPS: DesignerToolGroup[] = [
     ],
   },
   {
-    id: 'pen',
-    shortcut: 'p',
-    tools: [
-      tool('pen', 'pen', 'Pen', 'tool_pen', I.PenToolIcon, 'crosshair'),
-      tool('pen-freeform', 'pen', 'Freeform Pen', 'tool_pen_freeform', I.PenFreeformIcon, 'crosshair'),
-      tool('pen-curvature', 'pen', 'Curvature Pen', 'tool_pen_curvature', I.PenCurvatureIcon, 'crosshair'),
-      tool('pen-add-anchor', 'pen', 'Add Anchor Point', 'tool_pen_add_anchor', I.PenAddAnchorIcon, 'crosshair'),
-      tool('pen-delete-anchor', 'pen', 'Delete Anchor Point', 'tool_pen_delete_anchor', I.PenDeleteAnchorIcon, 'crosshair'),
-      tool('pen-convert-point', 'pen', 'Convert Point', 'tool_pen_convert_point', I.PenConvertPointIcon, 'crosshair'),
-    ],
-  },
-  {
-    id: 'type',
-    shortcut: 't',
-    tools: [
-      tool('type-horizontal', 'type', 'Horizontal Type', 'tool_type_horizontal', I.TypeHorizontalIcon, 'text'),
-      tool('type-vertical', 'type', 'Vertical Type', 'tool_type_vertical', I.TypeVerticalIcon, 'text'),
-    ],
-  },
-  {
     id: 'path-select',
     shortcut: 'a',
     tools: [
       tool('path-select', 'path-select', 'Path Selection', 'tool_path_select', I.PathSelectIcon, 'default'),
       tool('direct-select', 'path-select', 'Direct Selection', 'tool_direct_select', I.DirectSelectIcon, 'default'),
-    ],
-  },
-  {
-    id: 'shape',
-    shortcut: 'u',
-    tools: [
-      tool('shape-rect', 'shape', 'Rectangle', 'tool_shape_rect', I.ShapeRectIcon, 'crosshair'),
-      tool('shape-ellipse', 'shape', 'Ellipse', 'tool_shape_ellipse', I.ShapeEllipseIcon, 'crosshair'),
-      tool('shape-triangle', 'shape', 'Triangle', 'tool_shape_triangle', I.ShapeTriangleIcon, 'crosshair'),
-      tool('shape-polygon', 'shape', 'Polygon', 'tool_shape_polygon', I.ShapePolygonIcon, 'crosshair'),
-      tool('shape-star', 'shape', 'Star', 'tool_shape_star', I.ShapeStarIcon, 'crosshair'),
-      tool('shape-line', 'shape', 'Line', 'tool_shape_line', I.ShapeLineIcon, 'crosshair'),
-      tool('shape-custom', 'shape', 'Custom Shape', 'tool_shape_custom', I.ShapeCustomIcon, 'crosshair'),
     ],
   },
   {

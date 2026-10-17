@@ -277,12 +277,32 @@ export const useDesignerActions = (
       );
     };
 
-    const alignSelected = (fn: (el: DesignerElement, out: DesignerOutput) => Partial<DesignerElement>) => {
+    /**
+     * Align against a frame: the selection's own bounding box when more than
+     * one element is selected (Figma-style), the canvas when exactly one is.
+     */
+    const alignSelected = (fn: (el: DesignerElement, frame: { x: number; y: number; width: number; height: number }) => Partial<DesignerElement>) => {
       const st = store.getState();
       const out = st.doc.outputs[st.currentOutput] as DesignerOutput;
+      const selected = st.selectedIds
+        .map((id) => out.children.find((c) => c.id === id))
+        .filter((e): e is DesignerElement => !!e);
+      const frame =
+        selected.length > 1
+          ? (() => {
+              const x = Math.min(...selected.map((e) => e.x));
+              const y = Math.min(...selected.map((e) => e.y));
+              return {
+                x,
+                y,
+                width: Math.max(...selected.map((e) => e.x + e.width)) - x,
+                height: Math.max(...selected.map((e) => e.y + e.height)) - y,
+              };
+            })()
+          : { x: 0, y: 0, width: out.width, height: out.height };
       st.selectedIds.forEach((id) => {
         const el = out.children.find((c) => c.id === id);
-        if (el) st.updateElement(id, fn(el, out));
+        if (el) st.updateElement(id, fn(el, frame));
       });
     };
 
@@ -322,7 +342,7 @@ export const useDesignerActions = (
       { id: 'cut', label: 'Cut', menu: 'edit', group: 'clip', shortcut: '⌘X', keywords: ['cut'], enabled: () => live().hasSelection, run: () => store.getState().cutSelection() },
       { id: 'copy', label: 'Copy', menu: 'edit', group: 'clip', shortcut: '⌘C', keywords: ['copy'], enabled: () => live().hasSelection, run: () => store.getState().copySelection() },
       { id: 'paste', label: 'Paste', menu: 'edit', group: 'clip', shortcut: '⌘V', keywords: ['paste'], enabled: () => store.getState().clipboard.length > 0, run: () => store.getState().paste() },
-      { id: 'duplicate', label: 'Duplicate', menu: 'edit', group: 'clip', keywords: ['duplicate'], enabled: () => live().hasSelection, run: () => { const st = store.getState(); st.selectedIds.forEach((id) => st.duplicateElement(id)); } },
+      { id: 'duplicate', label: 'Duplicate', menu: 'edit', group: 'clip', shortcut: '⌘J', keywords: ['duplicate'], enabled: () => live().hasSelection, run: () => { const st = store.getState(); st.selectedIds.forEach((id) => st.duplicateElement(id)); } },
       { id: 'delete', label: 'Delete', menu: 'edit', group: 'clip', keywords: ['delete', 'remove'], enabled: () => live().hasSelection, run: () => { const st = store.getState(); [...st.selectedIds].forEach((id) => st.removeElement(id)); } },
       { id: 'fill', label: 'Fill…', menu: 'edit', group: 'pixels', shortcut: '⇧F5', keywords: ['fill', 'color', 'pattern'], enabled: () => ctx.canEditPixels(), run: () => ctx.onFill() },
       { id: 'stroke', label: 'Stroke…', menu: 'edit', group: 'pixels', keywords: ['stroke', 'outline', 'border'], enabled: () => ctx.canEditPixels(), run: () => ctx.onStroke() },
@@ -356,9 +376,9 @@ export const useDesignerActions = (
       ),
 
       // ---------------- View ----------------
-      { id: 'zoom-in', label: 'Zoom In', menu: 'view', group: 'zoom', keywords: ['zoom in'], run: () => { const st = store.getState(); st.setZoom(st.zoom * 1.2); } },
-      { id: 'zoom-out', label: 'Zoom Out', menu: 'view', group: 'zoom', keywords: ['zoom out'], run: () => { const st = store.getState(); st.setZoom(st.zoom / 1.2); } },
-      { id: 'fit-screen', label: 'Fit to Screen', menu: 'view', group: 'zoom', keywords: ['fit', 'screen'], run: ctx.onFitToScreen },
+      { id: 'zoom-in', label: 'Zoom In', menu: 'view', group: 'zoom', shortcut: '⌘+', keywords: ['zoom in'], run: () => { const st = store.getState(); st.setZoom(st.zoom * 1.2); } },
+      { id: 'zoom-out', label: 'Zoom Out', menu: 'view', group: 'zoom', shortcut: '⌘-', keywords: ['zoom out'], run: () => { const st = store.getState(); st.setZoom(st.zoom / 1.2); } },
+      { id: 'fit-screen', label: 'Fit to Screen', menu: 'view', group: 'zoom', shortcut: '⌘0', keywords: ['fit', 'screen'], run: ctx.onFitToScreen },
       { id: 'actual-size', label: 'Actual Size (100%)', menu: 'view', group: 'zoom', keywords: ['actual', '100', 'reset zoom'], run: ctx.onActualSize },
       { id: 'view-safe-zones', label: 'Safe Zones', menu: 'view', group: 'overlay', keywords: ['safe zones'], checked: () => ctx.showSafeZones, run: ctx.onToggleSafeZones },
       { id: 'view-rulers', label: 'Rulers', menu: 'view', group: 'overlay', keywords: ['rulers'], checked: () => ctx.showRulers, run: ctx.onToggleRulers },
@@ -398,12 +418,12 @@ export const useDesignerActions = (
       { id: 'distribute-v-centers', label: 'Vertical Centers', menu: 'file', submenuPath: ['Format'], group: 'distribute', keywords: ['distribute', 'vertical', 'spread'], enabled: () => store.getState().selectedIds.length >= 3, run: () => distributeSelected('vertical-centers') },
       { id: 'distribute-h-gaps', label: 'Horizontal Spacing', menu: 'file', submenuPath: ['Format'], group: 'distribute', keywords: ['distribute', 'spacing', 'gaps'], enabled: () => store.getState().selectedIds.length >= 3, run: () => distributeSelected('horizontal-gaps') },
       { id: 'distribute-v-gaps', label: 'Vertical Spacing', menu: 'file', submenuPath: ['Format'], group: 'distribute', keywords: ['distribute', 'spacing', 'gaps'], enabled: () => store.getState().selectedIds.length >= 3, run: () => distributeSelected('vertical-gaps') },
-      { id: 'align-left', label: 'Left', menu: 'file', submenuPath: ['Format'], group: 'align', keywords: ['align left'], enabled: () => live().hasSelection, run: () => alignSelected(() => ({ x: 0 })) },
-      { id: 'align-center-h', label: 'Center', menu: 'file', submenuPath: ['Format'], group: 'align', keywords: ['align center'], enabled: () => live().hasSelection, run: () => alignSelected((el, out) => ({ x: (out.width - el.width) / 2 })) },
-      { id: 'align-right', label: 'Right', menu: 'file', submenuPath: ['Format'], group: 'align', keywords: ['align right'], enabled: () => live().hasSelection, run: () => alignSelected((el, out) => ({ x: out.width - el.width })) },
-      { id: 'align-top', label: 'Top', menu: 'file', submenuPath: ['Format'], group: 'align', keywords: ['align top'], enabled: () => live().hasSelection, run: () => alignSelected(() => ({ y: 0 })) },
-      { id: 'align-middle', label: 'Middle', menu: 'file', submenuPath: ['Format'], group: 'align', keywords: ['align middle'], enabled: () => live().hasSelection, run: () => alignSelected((el, out) => ({ y: (out.height - el.height) / 2 })) },
-      { id: 'align-bottom', label: 'Bottom', menu: 'file', submenuPath: ['Format'], group: 'align', keywords: ['align bottom'], enabled: () => live().hasSelection, run: () => alignSelected((el, out) => ({ y: out.height - el.height })) },
+      { id: 'align-left', label: 'Left', menu: 'file', submenuPath: ['Format'], group: 'align', keywords: ['align left'], enabled: () => live().hasSelection, run: () => alignSelected((el, f) => ({ x: f.x })) },
+      { id: 'align-center-h', label: 'Center', menu: 'file', submenuPath: ['Format'], group: 'align', keywords: ['align center'], enabled: () => live().hasSelection, run: () => alignSelected((el, f) => ({ x: f.x + (f.width - el.width) / 2 })) },
+      { id: 'align-right', label: 'Right', menu: 'file', submenuPath: ['Format'], group: 'align', keywords: ['align right'], enabled: () => live().hasSelection, run: () => alignSelected((el, f) => ({ x: f.x + f.width - el.width })) },
+      { id: 'align-top', label: 'Top', menu: 'file', submenuPath: ['Format'], group: 'align', keywords: ['align top'], enabled: () => live().hasSelection, run: () => alignSelected((el, f) => ({ y: f.y })) },
+      { id: 'align-middle', label: 'Middle', menu: 'file', submenuPath: ['Format'], group: 'align', keywords: ['align middle'], enabled: () => live().hasSelection, run: () => alignSelected((el, f) => ({ y: f.y + (f.height - el.height) / 2 })) },
+      { id: 'align-bottom', label: 'Bottom', menu: 'file', submenuPath: ['Format'], group: 'align', keywords: ['align bottom'], enabled: () => live().hasSelection, run: () => alignSelected((el, f) => ({ y: f.y + f.height - el.height })) },
       // ── Layer menu ────────────────────────────────────────────────────────
       // Group / Ungroup / Lock live here rather than on Format, matching
       // Photoshop and keeping one home per command (the ⌘K palette flattens

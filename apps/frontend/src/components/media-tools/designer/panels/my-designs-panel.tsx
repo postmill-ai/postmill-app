@@ -4,6 +4,7 @@ import React, { FC, useCallback } from 'react';
 import useSWR from 'swr';
 import { useFetch } from '@postmill-ai/helpers/utils/custom.fetch';
 import { useUser } from '@postmill-ai/frontend/components/layout/user.context';
+import { useDecisionModal } from '@postmill-ai/frontend/components/layout/new-modal';
 import { PanelSkeletonGrid, PanelError } from './panel-states';
 import { useT } from '@postmill-ai/react/translation/get.transation.service.client';
 
@@ -24,6 +25,7 @@ export const MyDesignsPanel: FC<MyDesignsPanelProps> = ({ onOpen, onClose }) => 
   const fetch = useFetch();
   const user = useUser();
   const t = useT();
+  const decision = useDecisionModal();
 
   const { data, error, isLoading, mutate } = useSWR(
     `my-designs-${user.orgId}`,
@@ -35,10 +37,22 @@ export const MyDesignsPanel: FC<MyDesignsPanelProps> = ({ onOpen, onClose }) => 
     { keepPreviousData: true }
   );
 
-  const handleDelete = useCallback(async (id: string) => {
-    await fetch(`/media/designs/${id}`, { method: 'DELETE' });
+  // Hover ✕ used to DELETE immediately — a misclick destroyed the design.
+  const handleDelete = useCallback(async (design: MyDesign) => {
+    const approved = await decision.open({
+      title: t('my_designs_panel_delete_title', 'Delete design?'),
+      description: t(
+        'my_designs_panel_delete_description',
+        'This will permanently delete "{{name}}".',
+        { name: design.name }
+      ),
+      approveLabel: t('delete', 'Delete'),
+      cancelLabel: t('cancel', 'Cancel'),
+    });
+    if (!approved) return;
+    await fetch(`/media/designs/${design.id}`, { method: 'DELETE' });
     mutate();
-  }, [fetch, mutate]);
+  }, [decision, fetch, mutate, t]);
 
   if (isLoading && !data) {
     return <PanelSkeletonGrid count={6} columnsClassName="grid-cols-3" aspectClassName="aspect-square" />;
@@ -65,7 +79,7 @@ export const MyDesignsPanel: FC<MyDesignsPanelProps> = ({ onOpen, onClose }) => 
                 onOpen(d);
                 onClose?.();
               }}
-              className="group relative border border-[#2a2a4a] rounded-lg overflow-hidden hover:border-designerAccent/50 transition-colors cursor-pointer bg-newBgColorInner"
+              className="group relative border border-studioBorder rounded-lg overflow-hidden hover:border-designerAccent/50 transition-colors cursor-pointer bg-newBgColorInner"
             >
               {d.previewUrl || d.previewDataUrl ? (
                 // eslint-disable-next-line @next/next/no-img-element -- file URL or data URL preview
@@ -88,7 +102,7 @@ export const MyDesignsPanel: FC<MyDesignsPanelProps> = ({ onOpen, onClose }) => 
               <button
                 onClick={(e) => {
                   e.stopPropagation();
-                  handleDelete(d.id);
+                  handleDelete(d);
                 }}
                 className="absolute top-1 right-1 p-1 bg-red-500/80 rounded-sm text-[10px] text-white opacity-0 group-hover:opacity-100 transition-opacity"
               >

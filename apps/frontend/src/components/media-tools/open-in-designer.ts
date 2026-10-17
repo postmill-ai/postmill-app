@@ -79,7 +79,11 @@ export function openInDesigner(
       })
     );
   } catch {
-    // sessionStorage can throw in private mode or when quota is exceeded.
+    // sessionStorage can throw in private mode or when quota is exceeded —
+    // carry the (small) payload in the query string instead of dead-clicking.
+    const params = new URLSearchParams({ timeline: '1', mediaType: type, mediaUrl: artifactUrl });
+    if (fileId) params.set('mediaFileId', fileId);
+    go(`/media/designer?${params.toString()}`);
     return;
   }
 

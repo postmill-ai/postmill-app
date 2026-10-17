@@ -517,6 +517,14 @@ const ImageNode: FC<ImageNodeProps> = ({ element, onSelect, onContextMenu, inter
   const debounceRef = useRef<NodeJS.Timeout | null>(null);
   const [filterKey, setFilterKey] = useState(0);
   const [isTransforming, setIsTransforming] = useState(false);
+  // While the bitmap resolves, the box used to paint nothing — a pulsing
+  // placeholder reads as loading instead of a hole in the layout.
+  const [shimmer, setShimmer] = useState(false);
+  useEffect(() => {
+    if (image || !element.src) return;
+    const timer = setInterval(() => setShimmer((on) => !on), 700);
+    return () => clearInterval(timer);
+  }, [image, element.src]);
 
   // `contain` letterboxes inside the box; every other mode fills it. The canvas
   // used to handle only `cover`, so picking "Fit" changed nothing here while it
@@ -696,6 +704,18 @@ const ImageNode: FC<ImageNodeProps> = ({ element, onSelect, onContextMenu, inter
         setFilterKey((k) => k + 1);
       }}
     >
+      {!image && element.src && (
+        <Rect
+          x={0}
+          y={0}
+          width={element.width}
+          height={element.height}
+          fill="#808080"
+          opacity={shimmer ? 0.22 : 0.1}
+          cornerRadius={element.borderRadius || 0}
+          listening={false}
+        />
+      )}
       <KonvaImage
         ref={imageRef}
         image={image || undefined}
@@ -1165,7 +1185,7 @@ export const CanvasElements: FC<ElementsProps> = ({
                 <Group key={el.id} {...commonProps}>
                   {segments.map((seg, i) => (
                     <KonvaText
-                      key={`${seg.x}-${seg.y}-${seg.text}-${seg.run.fontFamily}-${seg.run.fontSize}-${seg.run.fontStyle}-${seg.run.fontWeight}-${seg.run.fill}-${seg.run.underline ? 'u' : 'n'}`}
+                      key={`${seg.x}-${seg.y}-${seg.text}-${seg.run.fontFamily}-${seg.run.fontSize}-${seg.run.fontStyle}-${seg.run.fontWeight}-${seg.run.fill}-${seg.run.underline ? 'u' : 'n'}-${seg.run.lineThrough ? 's' : 'n'}`}
                       x={seg.x}
                       y={seg.y}
                       text={seg.text}
@@ -1180,7 +1200,14 @@ export const CanvasElements: FC<ElementsProps> = ({
                         canvasColor(seg.run.fill) ||
                         (hasGrad ? undefined : canvasColor(el.fill || '#000000'))
                       }
-                      textDecoration={seg.run.underline ? 'underline' : undefined}
+                      textDecoration={
+                        [
+                          seg.run.underline ? 'underline' : '',
+                          seg.run.lineThrough ? 'line-through' : '',
+                        ]
+                          .filter(Boolean)
+                          .join(' ') || undefined
+                      }
                       shadowColor={canvasColor(shadow?.color)}
                       shadowBlur={shadow?.blur}
                       shadowOffsetX={shadow?.offsetX}
