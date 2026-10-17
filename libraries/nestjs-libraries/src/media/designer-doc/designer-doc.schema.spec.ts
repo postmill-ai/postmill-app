@@ -5,6 +5,7 @@ import {
   ColorSchema,
   SrcSchema,
   DesignerFilterStringSchema,
+  CLIP_BLEND_MODES,
 } from './designer-doc.schema';
 import { migrateDoc } from './designer-doc.migrate';
 import {
@@ -194,6 +195,38 @@ describe('DesignerDoc schema', () => {
     // Absence is fine too (pre-existing docs carry neither field).
     const absent = DesignerDocStrictSchema.safeParse(migrateDoc(videoDocFixture));
     expect(absent.success).toBe(true);
+  });
+
+  it('round-trips a clip blendMode through migrateDoc and BOTH parsers', () => {
+    // v7 additive field: docs saved before it existed carry nothing and keep
+    // validating (covered by the fixture parse above); docs carrying it must
+    // keep the value through load normalisation.
+    const doc = JSON.parse(JSON.stringify(videoDocFixture));
+    doc.outputs[0].tracks[0].clips[0].blendMode = 'overlay';
+    const strict = DesignerDocStrictSchema.parse(migrateDoc(doc));
+    expect(strict.outputs[0].tracks[0].clips[0].blendMode).toBe('overlay');
+    const lenient = DesignerDocLenientSchema.parse(migrateDoc(doc));
+    expect(lenient.outputs[0].tracks[0].clips[0].blendMode).toBe('overlay');
+  });
+
+  it('accepts every native blend mode on a clip, in both parsers', () => {
+    for (const mode of CLIP_BLEND_MODES) {
+      const doc = JSON.parse(JSON.stringify(videoDocFixture));
+      doc.outputs[0].tracks[0].clips[0].blendMode = mode;
+      expect(DesignerDocStrictSchema.safeParse(migrateDoc(doc)).success).toBe(true);
+      expect(DesignerDocLenientSchema.safeParse(migrateDoc(doc)).success).toBe(true);
+    }
+  });
+
+  it('rejects pixel-ops-only and unknown blend modes on a clip', () => {
+    // A clip has no per-layer backdrop pipeline on either renderer, so the
+    // pixel-evaluated modes (dissolve, vivid-light, …) must not validate here.
+    for (const mode of ['dissolve', 'vivid-light', 'teleport']) {
+      const doc = JSON.parse(JSON.stringify(videoDocFixture));
+      doc.outputs[0].tracks[0].clips[0].blendMode = mode;
+      expect(DesignerDocStrictSchema.safeParse(migrateDoc(doc)).success).toBe(false);
+      expect(DesignerDocLenientSchema.safeParse(migrateDoc(doc)).success).toBe(false);
+    }
   });
 
   it('round-trips a background texture through both parsers (v7)', () => {

@@ -2,6 +2,11 @@ import { describe, it, expect } from 'vitest';
 import { buildFramePage, fontLinksForOutput, fontsUsedInOutput } from './frame-page';
 import { FRAME_RENDERER_SCRIPT } from './frame-renderer-script';
 import { cssFilterForToken, parseDesignerFilterToken } from './filter-tokens';
+import {
+  canvasCompositeFor,
+  NATIVE_BLEND_ORDER,
+} from '../designer-doc/pixel-ops';
+import { CLIP_BLEND_MODES } from '../designer-doc/designer-doc.schema';
 
 /**
  * The video path had no test at all, which is how it came to load NO fonts —
@@ -103,6 +108,28 @@ describe('frame renderer inlined copies', () => {
     for (const token of ['brightness', 'contrast:', 'saturate:abc', 'nonsense:1']) {
       expect(mapFilterToken(token)).toBe('');
     }
+  });
+
+  // Same pin for the clip blend-mode copy: the page maps clip.blendMode onto
+  // globalCompositeOperation with an inlined helper, and the Konva overlay
+  // uses canvasCompositeFor — the two must agree on every mode the schema
+  // allows, or an exported video composites differently from its preview.
+  const clipCompositeOp = new Function(
+    `${/function clipCompositeOp\(mode\)[\s\S]*?\n  }/.exec(FRAME_RENDERER_SCRIPT)![0]}
+     return clipCompositeOp;`
+  )() as (mode?: string) => string;
+
+  it('the schema offers clips exactly the canvas-native blend modes', () => {
+    expect([...CLIP_BLEND_MODES]).toEqual([...NATIVE_BLEND_ORDER]);
+  });
+
+  it('maps a clip blend mode to the same composite op as the overlay', () => {
+    expect(clipCompositeOp(undefined)).toBe(canvasCompositeFor(undefined));
+    for (const mode of NATIVE_BLEND_ORDER) {
+      expect(clipCompositeOp(mode)).toBe(canvasCompositeFor(mode));
+    }
+    // 'normal' must spell the canvas default, not a value ctx rejects.
+    expect(clipCompositeOp('normal')).toBe('source-over');
   });
 
   it('quotes the font family, so a multi-word family is a valid shorthand', () => {

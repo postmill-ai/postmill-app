@@ -711,6 +711,14 @@ export interface VideoClip {
   reverse?: boolean;
   freezeAtMs?: number;
   filters?: string[];
+  /**
+   * Native canvas blend mode for the clip's own draw (optional-additive on
+   * v7). Restricted to the modes `globalCompositeOperation` supports — see
+   * `CLIP_BLEND_MODES` — so the Konva preview and the frame renderer composite
+   * it identically. Transitions still compose through opacity/offset; the
+   * blend applies within the clip's layer draw and does not change them.
+   */
+  blendMode?: ClipBlendMode;
   frames?: StickerFrame[];
   words?: CaptionWord[];
   /**
@@ -1062,6 +1070,25 @@ export const BLEND_MODES = [
 ] as const;
 
 const BlendModeSchema = z.enum(BLEND_MODES);
+
+/**
+ * The blend modes a VIDEO CLIP may carry: exactly the subset of
+ * `DesignerBlendMode` that canvas composites natively. Both clip renderers
+ * (the Konva overlay and the injected frame script) map these straight onto
+ * `globalCompositeOperation` — the pixel-ops modes have no per-clip backdrop
+ * pipeline on either side, so offering them would export differently from the
+ * preview. `pixel-ops`' `NATIVE_BLEND_ORDER` is the same list; a spec pins
+ * them together.
+ */
+export const CLIP_BLEND_MODES = [
+  'normal', 'multiply', 'screen', 'overlay', 'darken', 'lighten',
+  'color-dodge', 'color-burn', 'hard-light', 'soft-light',
+  'difference', 'exclusion', 'hue', 'saturation', 'color', 'luminosity',
+] as const;
+
+export type ClipBlendMode = (typeof CLIP_BLEND_MODES)[number];
+
+const ClipBlendModeSchema = z.enum(CLIP_BLEND_MODES);
 
 const PatternSchema = z.object({
   preset: z.enum(['stripes', 'dots', 'grid', 'checker', 'noise']).optional(),
@@ -1497,6 +1524,9 @@ const clipCommon = {
   // The frame renderer already honours these on clips; they were only ever
   // missing from the contract.
   fitMode: z.enum(['contain', 'cover', 'fill']).optional(),
+  // Native-only blend modes (doc v7) — additive, so earlier documents keep
+  // validating unchanged. Pixel-ops modes are deliberately not offered here.
+  blendMode: ClipBlendModeSchema.optional(),
   // Shape clips (doc v5) — additive, so v4 documents keep validating.
   shape: z
     .enum(['rect', 'ellipse', 'line', 'star', 'triangle', 'polygon'])

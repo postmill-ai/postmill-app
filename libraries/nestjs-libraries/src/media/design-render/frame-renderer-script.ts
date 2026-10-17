@@ -137,6 +137,15 @@ ${backgroundTextureSource()}
     if (str) ctx.filter = str;
   }
 
+  // Mirrors canvasCompositeFor (designer-doc/pixel-ops.ts), which this page
+  // cannot import — a drift spec pins the two together. The schema only lets a
+  // clip carry native modes, so the value goes straight onto
+  // globalCompositeOperation; 'normal'/absent spells 'source-over'.
+  function clipCompositeOp(mode) {
+    if (!mode || mode === 'normal') return 'source-over';
+    return mode;
+  }
+
   function computeCoverCrop(srcW, srcH, targetW, targetH, focalPoint) {
     const fp = focalPoint || { x: 0.5, y: 0.5 };
     const targetRatio = targetW / targetH;
@@ -462,6 +471,10 @@ ${backgroundTextureSource()}
   async function drawClip(ctx, clip, trackType, props) {
     ctx.save();
     ctx.globalAlpha = Math.max(0, Math.min(1, props.opacity));
+    // The clip's blend mode applies to ITS draw alone; the save/restore pair
+    // hands the previous composite op back to the next clip, so transitions
+    // (opacity/offset compositing in composeClipsAtPlayhead) are unaffected.
+    ctx.globalCompositeOperation = clipCompositeOp(clip.blendMode);
     const cx = props.x + props.width / 2;
     const cy = props.y + props.height / 2;
     ctx.translate(cx, cy);
@@ -571,19 +584,26 @@ ${backgroundTextureSource()}
       const actx = acc.getContext('2d');
       actx.scale(renderScale, renderScale);
       actx.globalCompositeOperation = 'lighter';
+      // The samples must accumulate additively, so the clip's blend mode is
+      // neutralized inside the buffer and applied once to the composite below —
+      // blending each sample instead would blend N ghosts against the page.
+      const accClip = { ...item.clip, blendMode: undefined };
       for (const sampleMs of times) {
         window.__CURRENT_TIME = sampleMs;
         const relativeMs = Math.max(0, sampleMs - item.clip.startMs);
         const sampled = interpolateKeyframes(item.clip, relativeMs);
         await drawClip(
           actx,
-          item.clip,
+          accClip,
           item.trackType,
           { ...sampled, opacity: (sampled.opacity == null ? 1 : sampled.opacity) / times.length }
         );
       }
       window.__CURRENT_TIME = wasTime;
+      ctx.save();
+      ctx.globalCompositeOperation = clipCompositeOp(item.clip.blendMode);
       ctx.drawImage(acc, 0, 0, logicalW, logicalH);
+      ctx.restore();
     }
   }
 

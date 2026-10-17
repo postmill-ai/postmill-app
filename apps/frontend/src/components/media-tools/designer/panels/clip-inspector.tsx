@@ -20,6 +20,13 @@ import {
 } from '@postmill-ai/nestjs-libraries/media/designer-doc/motion-blur';
 import type { EaseType } from '../video-preview';
 import type { KeyframeEase } from '@postmill-ai/nestjs-libraries/media/designer-doc/keyframes';
+import { NATIVE_BLEND_ORDER } from '@postmill-ai/nestjs-libraries/media/designer-doc/pixel-ops';
+import {
+  CLIP_LOOK_PRESETS,
+  activeLookForFilters,
+  lookCssFilter,
+  toggleClipLook,
+} from '../clip-look-presets';
 import { useT } from '@postmill-ai/react/translation/get.transation.service.client';
 
 interface ClipInspectorProps {
@@ -47,6 +54,21 @@ const EASE_OPTIONS: { value: EasePresetName; label: string; labelKey: string }[]
   { value: 'easeIn', label: 'Ease In', labelKey: 'designer_ease_in' },
   { value: 'easeOut', label: 'Ease Out', labelKey: 'designer_ease_out' },
 ];
+
+/**
+ * Clip blend modes: the canvas-native set only (the schema's CLIP_BLEND_MODES,
+ * pinned to NATIVE_BLEND_ORDER by a server-side spec). Labels mirror the
+ * layers panel's element blend dropdown.
+ */
+const CLIP_BLEND_LABELS: Record<string, string> = {
+  'normal': 'Normal', 'multiply': 'Multiply', 'screen': 'Screen',
+  'overlay': 'Overlay', 'darken': 'Darken', 'lighten': 'Lighten',
+  'color-dodge': 'Color Dodge', 'color-burn': 'Color Burn',
+  'hard-light': 'Hard Light', 'soft-light': 'Soft Light',
+  'difference': 'Difference', 'exclusion': 'Exclusion',
+  'hue': 'Hue', 'saturation': 'Saturation', 'color': 'Color',
+  'luminosity': 'Luminosity',
+};
 
 function useKeyframeDrag(
   containerRef: React.RefObject<HTMLDivElement | null>,
@@ -319,6 +341,7 @@ export const ClipInspector: FC<ClipInspectorProps> = ({ store, outputIndex, trac
   const [graphOpen, setGraphOpen] = useState(false);
   const [analysing, setAnalysing] = useState(false);
   const filters = useMemo(() => clip?.filters || [], [clip?.filters]);
+  const activeLook = useMemo(() => activeLookForFilters(clip?.filters), [clip?.filters]);
   const totalMs = clip ? (clip.endMs + (clip.freezeAtMs || 0)) - clip.startMs : 1;
 
   const updateClip = useCallback(
@@ -563,6 +586,33 @@ export const ClipInspector: FC<ClipInspectorProps> = ({ store, outputIndex, trac
         onCommit={commitClip}
       />
 
+      {/* Blend mode — native canvas modes only. 'Normal' stores nothing, so
+          pre-blend docs and cleared clips serialise identically. */}
+      <div className="flex items-center justify-between gap-2">
+        <span className="text-[11px] text-textColor/70">
+          {translate('designer_label_blend_mode', 'Blend')}
+        </span>
+        <select
+          aria-label={translate('designer_label_blend_mode', 'Blend')}
+          value={clip.blendMode || 'normal'}
+          onChange={(e) =>
+            updateClip({
+              blendMode:
+                e.target.value === 'normal'
+                  ? undefined
+                  : (e.target.value as VideoClip['blendMode']),
+            })
+          }
+          className="h-[26px] px-1.5 rounded-md bg-newBgColor border border-studioBorder text-[11px] text-textColor outline-hidden"
+        >
+          {NATIVE_BLEND_ORDER.map((m) => (
+            <option key={m} value={m}>
+              {translate(`designer_blend_${m.replace(/-/g, '_')}`, CLIP_BLEND_LABELS[m] || m)}
+            </option>
+          ))}
+        </select>
+      </div>
+
       {/* Audio */}
       <div className="pt-1 border-t border-studioBorder">
         <div className="text-[11px] text-textColor/50 mb-1">{translate('audio', 'Audio')}</div>
@@ -677,6 +727,56 @@ export const ClipInspector: FC<ClipInspectorProps> = ({ store, outputIndex, trac
           value={clip.freezeAtMs || 0}
           onChange={(n) => updateClip({ freezeAtMs: n > 0 ? n : undefined })}
         />
+      </div>
+
+      {/* Looks — named bundles of the filter tokens below. Picking one writes
+          its tokens onto the clip (both renderers already apply them); clicking
+          the active look clears. A look shows as active only while the tokens
+          match it exactly — slider edits after are just manual edits. */}
+      <div className="pt-1 border-t border-studioBorder space-y-2">
+        <div className="flex items-center justify-between">
+          <div className="text-[11px] text-textColor/50">{translate('designer_label_looks', 'Looks')}</div>
+          {activeLook && (
+            <span className="text-[10px] text-designerAccent">
+              {translate(activeLook.nameKey, activeLook.name)}
+            </span>
+          )}
+        </div>
+        <div className="grid grid-cols-3 gap-1.5">
+          {CLIP_LOOK_PRESETS.map((look) => {
+            const active = activeLook?.id === look.id;
+            return (
+              <button
+                key={look.id}
+                type="button"
+                aria-pressed={active}
+                title={translate(look.nameKey, look.name)}
+                onClick={() => updateClip({ filters: toggleClipLook(filters, look) })}
+                className={`rounded-sm border p-1 transition-all ${
+                  active
+                    ? 'border-designerAccent bg-designerAccent/10'
+                    : 'border-studioBorder hover:border-designerAccent/60 hover:bg-boxHover'
+                }`}
+              >
+                {/* The swatch is preview CONTENT (a photo stand-in run through
+                    the look's own CSS filter), not UI chrome — hence literal
+                    gradient colours rather than theme tokens. */}
+                <span
+                  aria-hidden
+                  className="block h-8 rounded-xs mb-1"
+                  style={{
+                    background:
+                      'linear-gradient(135deg, #f472b6 0%, #fbbf24 35%, #34d399 65%, #60a5fa 100%)',
+                    filter: lookCssFilter(look),
+                  }}
+                />
+                <span className="block text-[10px] text-textColor/80 text-center truncate">
+                  {translate(look.nameKey, look.name)}
+                </span>
+              </button>
+            );
+          })}
+        </div>
       </div>
 
       {/* Filters */}

@@ -146,4 +146,61 @@ describe('FRAME_RENDERER_SCRIPT', () => {
       expect(injected(clip, ms).x).toBeCloseTo(interpolateClipKeyframes(clip, ms).x, 6);
     }
   });
+
+  it('sets globalCompositeOperation from clip.blendMode for the clip draw', async () => {
+    // A recording context (the Proxy stub swallows sets) pins the drawClip
+    // contract: the clip's own draw composites under its blend mode, framed by
+    // the frame-start 'source-over' reset.
+    const gcoWrites: string[] = [];
+    const recordingContext = () => {
+      const ctx: Record<string, unknown> = { canvas: { width: 10, height: 10 } };
+      return new Proxy(ctx, {
+        get: (t, prop) => {
+          if (prop in t) return t[prop as string];
+          return () => undefined;
+        },
+        set: (t, prop, value) => {
+          if (prop === 'globalCompositeOperation') gcoWrites.push(value as string);
+          t[prop as string] = value;
+          return true;
+        },
+      });
+    };
+    const canvas = { width: 0, height: 0, getContext: () => recordingContext() };
+    const win: Record<string, unknown> = {
+      __DATA: {
+        output: {
+          ...output,
+          tracks: [
+            {
+              id: 'tr',
+              type: 'shape',
+              clips: [
+                {
+                  id: 'c',
+                  startMs: 0,
+                  endMs: 1000,
+                  shape: 'rect',
+                  fill: '#ff0000',
+                  x: 0, y: 0, width: 50, height: 50,
+                  blendMode: 'multiply',
+                },
+              ],
+            },
+          ],
+        },
+        baseUrl: 'https://example.test',
+      },
+    };
+    const doc = {
+      getElementById: () => canvas,
+      createElement: () => ({ width: 0, height: 0, getContext: () => recordingContext() }),
+    };
+    const fn = new Function('window', 'document', 'Image', FRAME_RENDERER_SCRIPT);
+    fn(win, doc, class {});
+    const api = win.__FRAME_API as { renderFrame: (ms: number) => Promise<void> };
+    await api.renderFrame(500);
+    expect(gcoWrites[0]).toBe('source-over');
+    expect(gcoWrites).toContain('multiply');
+  });
 });

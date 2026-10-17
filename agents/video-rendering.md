@@ -48,6 +48,16 @@ with one `video_export` credit charged. Sibling docs: `agents/backend.md`,
    - Speed (`clip.speed`) is pitch-preserving on both sides: the preview sets
      `playbackRate` with `preservesPitch`/`webkitPreservesPitch`, and the mixer's
      `atempo` is likewise pitch-preserving, so preview and export audio match.
+   - Clip `blendMode` (native canvas modes only — the schema's
+     `CLIP_BLEND_MODES`) is honored by both renderers: the preview sets it as
+     `globalCompositeOperation` on the clip's Konva node and the frame script
+     sets it on the 2D context inside `drawClip`, both through the shared
+     `canvasCompositeFor` mapping (the injected copy is drift-pinned to it). The
+     blend applies to the clip's own layer draw; transition opacity/offset
+     compositing is unaffected, and a motion-blurred clip blends its
+     accumulation buffer once rather than per sample. Pixel-ops-only modes are
+     not offered on clips — neither clip renderer has a per-layer backdrop
+     pipeline for them.
    - `MediaJobLifecycleService.createPendingJob({ provider: 'chromium-ffmpeg', creditType: 'video_export' })`
      creates the `AIMediaJob` row.
    - Payload stashed in Redis: `video-render:payload:<jobId>` (design) or

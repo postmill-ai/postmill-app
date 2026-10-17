@@ -13,6 +13,7 @@ import type Konva from 'konva';
 import type { VideoClip, VideoOutput } from './designer.store';
 import { composeClipsAtPlayhead, sourceTimeForPlayhead } from './video-preview';
 import { canvasColor } from '@postmill-ai/nestjs-libraries/media/designer-doc/canvas-color';
+import { canvasCompositeFor } from '@postmill-ai/nestjs-libraries/media/designer-doc/pixel-ops';
 import { clipGeometryUpdate, type ClipBox } from './clip-geometry';
 import { getBuffer } from './raster-layers';
 import { captionWordStates } from '@postmill-ai/nestjs-libraries/media/designer-doc/caption-styles';
@@ -271,6 +272,12 @@ const FilteredClipImage: FC<FilteredClipImageProps> = ({ clip, width, height, ti
   }, [canvasId]);
 
   if (!source) return null;
+  // The clip's blend mode composites its OWN draw against what is already on
+  // the layer — the same `globalCompositeOperation` the frame renderer sets in
+  // drawClip (canvasCompositeFor is the shared mapping; a drift spec pins the
+  // server copy to it). Transition opacity stays on the wrapping Group, so the
+  // blend never changes how transitions compose.
+  const blendGco = canvasCompositeFor(clip.blendMode) as never;
   if (!filterString) {
     return (
       <KonvaImage
@@ -289,6 +296,7 @@ const FilteredClipImage: FC<FilteredClipImageProps> = ({ clip, width, height, ti
               }
             : undefined
         }
+        globalCompositeOperation={blendGco}
         listening={false}
       />
     );
@@ -300,6 +308,7 @@ const FilteredClipImage: FC<FilteredClipImageProps> = ({ clip, width, height, ti
       width={width}
       height={height}
       listening={false}
+      globalCompositeOperation={blendGco}
       key={imageVersion}
     />
   );
@@ -397,6 +406,7 @@ const CaptionClip: FC<{ clip: VideoClip; width: number; height: number; playhead
       width={width}
       height={height}
       listening={false}
+      globalCompositeOperation={canvasCompositeFor(clip.blendMode) as never}
       key={renderKey}
     />
   );
@@ -562,6 +572,9 @@ export const VideoCanvasOverlay: FC<VideoCanvasOverlayProps> = ({
           height: props.height,
           rotation: props.rotation,
         };
+        // Blend composites the clip's own draw (see FilteredClipImage); text
+        // and shape clips carry it on their shape node directly.
+        const blendGco = canvasCompositeFor(clip.blendMode) as never;
         const nodeProps = {
           id: clip.id,
           name: 'video-clip',
@@ -616,6 +629,7 @@ export const VideoCanvasOverlay: FC<VideoCanvasOverlayProps> = ({
             fill: canvasColor(clip.fill || '#2B5CD3'),
             stroke: canvasColor(clip.stroke),
             strokeWidth: clip.strokeWidth || (clip.stroke ? 1 : 0),
+            globalCompositeOperation: blendGco,
           };
           const points = pointsForShape(
             clip.shape,
@@ -651,6 +665,7 @@ export const VideoCanvasOverlay: FC<VideoCanvasOverlayProps> = ({
                   points={[0, props.height / 2, props.width, props.height / 2]}
                   stroke={canvasColor(clip.stroke || clip.fill || '#2B5CD3')}
                   strokeWidth={clip.strokeWidth || 2}
+                  globalCompositeOperation={blendGco}
                 />
               ) : (
                 <KonvaRect
@@ -683,6 +698,7 @@ export const VideoCanvasOverlay: FC<VideoCanvasOverlayProps> = ({
               fill={canvasColor(clip.fill || '#000000')}
               rotation={props.rotation}
               opacity={props.opacity}
+              globalCompositeOperation={blendGco}
             />
           );
         }
