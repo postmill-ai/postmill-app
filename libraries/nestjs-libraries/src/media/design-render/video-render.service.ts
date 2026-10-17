@@ -2,13 +2,13 @@ import { BadRequestException, Injectable, Logger } from '@nestjs/common';
 import * as Sentry from '@sentry/nestjs';
 import { MediaJobLifecycleService } from '@postmill-ai/nestjs-libraries/database/prisma/media-providers/media-job-lifecycle.service';
 import { AiSettingsService } from '@postmill-ai/nestjs-libraries/database/prisma/ai-settings/ai-settings.service';
-import { FfmpegVideoEncoderService, formatExtension } from './ffmpeg-video-encoder.service';
+import { FfmpegVideoEncoderService } from './ffmpeg-video-encoder.service';
 import { PodmanRenderService } from './podman-render.service';
 import { ioRedis } from '@postmill-ai/nestjs-libraries/redis/redis.service';
 import { inngest, isInngestEnabled } from '@postmill-ai/nestjs-libraries/inngest/inngest.client';
 import { mediaJobWebhookToken } from '@postmill-ai/nestjs-libraries/media/media-job-token';
 import { isPodmanRenderEnabled, getRenderTimeoutMs } from './render-config';
-import { DesignRenderJobSpec, MergeRenderJobSpec, renderWorkDir } from './render-job-spec';
+import { DesignRenderJobSpec, MergeRenderJobSpec, renderWorkDir, renderOutputName } from './render-job-spec';
 import {
   renderPayloadKey,
   renderProgressKey,
@@ -436,7 +436,7 @@ export class VideoRenderService {
         fs.mkdirSync(workDir, { recursive: true });
         const spec: DesignRenderJobSpec = { op: 'design', composition, options, baseUrl: baseUrl() };
         await this._podman.run(workDir, spec, renderTimeoutMs);
-        videoPath = path.join(workDir, 'out', `output.${formatExtension(format)}`);
+        videoPath = path.join(workDir, 'out', renderOutputName(format));
         thumbnailPath = path.join(workDir, 'out', 'thumbnail.jpg');
       } else {
         // Real render progress: the capture loop reports each captured frame

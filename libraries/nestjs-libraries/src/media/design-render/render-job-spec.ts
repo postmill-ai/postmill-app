@@ -42,5 +42,8 @@ export type RenderJobSpec = DesignRenderJobSpec | MergeRenderJobSpec;
 export const RENDER_OUTPUT_DIR = 'out';
 export const RENDER_THUMBNAIL_NAME = 'thumbnail.jpg';
 export function renderOutputName(format: string): string {
-  return `output.${format}`;
+  // ffmpeg infers the muxer from the extension: the internal format id
+  // 'webp-animated' is not a real extension and fails with "Invalid argument".
+  // Must match the host-side read path (video-render.service.ts).
+  return `output.${format === 'webp-animated' ? 'webp' : format}`;
 }
