@@ -3,6 +3,7 @@ import {
   Controller,
   Delete,
   Get,
+  Logger,
   NotFoundException,
   Param,
   Post,
@@ -313,7 +314,12 @@ export class DesignController {
 @ApiTags('Design Templates')
 @Controller('/media/design-templates')
 export class DesignTemplateController {
-  constructor(private _designService: DesignService) {}
+  private readonly _logger = new Logger(DesignTemplateController.name);
+
+  constructor(
+    private _designService: DesignService,
+    private _videoRenderService: VideoRenderService,
+  ) {}
 
   // ── Folder endpoints ─────────────────────────────────────────
   // Declared before '/:id' so the single-segment '/folders' route wins.
@@ -393,7 +399,32 @@ export class DesignTemplateController {
     @Param('id') id: string,
     @Body() body: UpdateTemplateDto,
   ) {
-    return this._designService.updateTemplate(org.id, id, body);
+    const template = await this._designService.updateTemplate(org.id, id, body);
+    this._enqueueAnimatedPreview(org.id, template);
+    return template;
+  }
+
+  /**
+   * Fire-and-forget: a video-mode template gets an animated WebP thumbnail
+   * rendered in the background (no `video_export` credit). A failure must
+   * never block or fail the template write — the static JPEG thumbnail saved
+   * by the client stays as the fallback.
+   */
+  private _enqueueAnimatedPreview(
+    orgId: string,
+    template: { id: string; doc?: any } | null | undefined,
+  ) {
+    const doc = template?.doc;
+    if (!template || doc?.mode !== 'video') return;
+    const composition = doc?.outputs?.[0];
+    if (!composition) return;
+    this._videoRenderService
+      .enqueueTemplatePreview(orgId, template.id, composition)
+      .catch((err) =>
+        this._logger.warn(
+          `Animated preview enqueue failed for template ${template.id}: ${(err as Error).message}`,
+        ),
+      );
   }
 
   @Post('/')
@@ -403,7 +434,9 @@ export class DesignTemplateController {
     @GetOrgFromRequest() org: Organization,
     @Body() body: CreateTemplateDto,
   ) {
-    return this._designService.createTemplate({ organizationId: org.id, ...body });
+    const template = await this._designService.createTemplate({ organizationId: org.id, ...body });
+    this._enqueueAnimatedPreview(org.id, template);
+    return template;
   }
 
   @Delete('/:id')

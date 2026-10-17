@@ -23,6 +23,9 @@ import {
   MAX_TRACKS,
   MAX_CLIPS_PER_TRACK,
 } from '@postmill-ai/nestjs-libraries/media/designer-doc/designer-doc.limits';
+import { capCompositionDuration } from '@postmill-ai/nestjs-libraries/media/designer-doc/composition-cap';
+import { FileService } from '@postmill-ai/nestjs-libraries/database/prisma/file/file.service';
+import { DesignService } from '@postmill-ai/nestjs-libraries/database/prisma/design/design.service';
 import * as fs from 'fs';
 import * as path from 'path';
 
@@ -31,6 +34,24 @@ import * as path from 'path';
 const MAX_DURATION_MS = 180_000;
 const MAX_FPS = 240;
 const RENDER_PAYLOAD_TTL_SECONDS = 24 * 60 * 60;
+
+/**
+ * Animated template previews: only the opening seconds, at reduced fps and
+ * half resolution — a background nicety, so it must stay far cheaper than a
+ * real export (3000 ms × 12 fps = 36 frames at 0.5×).
+ */
+export const TEMPLATE_PREVIEW_DURATION_MS = 3000;
+export const TEMPLATE_PREVIEW_FPS = 12;
+export const TEMPLATE_PREVIEW_SCALE = 0.5;
+
+/**
+ * Credit sentinel for renders that must never consume a `video_export`
+ * credit (template previews). Distinct from NULL on purpose: merge jobs run
+ * with a NULL creditType and ARE charged — a null-means-free rule would
+ * silently unmeter them. The VIDEO_EXPORTS in-flight gate counts only
+ * `creditType: 'video_export'` rows, so 'none' jobs never hold a slot either.
+ */
+export const NO_CREDIT = 'none';
 
 /**
  * Per-frame wall-clock budget for scaling the render timeout. The capture loop
@@ -145,6 +166,8 @@ export class VideoRenderService {
     private _aiSettings: AiSettingsService,
     private _encoder: FfmpegVideoEncoderService,
     private _podman: PodmanRenderService,
+    private _fileService: FileService,
+    private _designService: DesignService,
   ) {}
 
   async enqueueRender(
@@ -213,6 +236,65 @@ export class VideoRenderService {
     await this.dispatch(job.id, 'design');
 
     this.logger.log(`Enqueued video render job ${job.id} for org ${orgId}`);
+    return { id: job.id, status: job.status };
+  }
+
+  /**
+   * Enqueue a cheap animated preview (first TEMPLATE_PREVIEW_DURATION_MS of the
+   * composition, reduced fps, half scale, animated WebP) whose artifact becomes the
+   * template's thumbnail on completion. Fire-and-forget from template save: the
+   * static JPEG thumbnail stays as the fallback if this render fails. No
+   * `video_export` credit is charged (NO_CREDIT sentinel — see media-jobs.activity).
+   */
+  async enqueueTemplatePreview(orgId: string, templateId: string, composition: any) {
+    const capped = capCompositionDuration(
+      composition || {},
+      TEMPLATE_PREVIEW_DURATION_MS,
+    );
+    if (!capped.durationMs || !capped.tracks?.length) {
+      return null;
+    }
+    const scale = TEMPLATE_PREVIEW_SCALE;
+    const fps = TEMPLATE_PREVIEW_FPS;
+    // Same bounds as a real export: the preview composition is derived from a
+    // validated stored doc, but the check is cheap and keeps one DoS boundary.
+    validateVideoComposition({
+      ...capped,
+      width: Math.round((capped.width || 0) * scale),
+      height: Math.round((capped.height || 0) * scale),
+      fps,
+    });
+
+    const job = await this._lifecycle.createPendingJob({
+      organizationId: orgId,
+      provider: 'chromium-ffmpeg',
+      operation: 'video',
+      costUsd: 0,
+      creditType: NO_CREDIT,
+    });
+
+    const payload = {
+      organizationId: orgId,
+      composition: capped,
+      format: 'webp-animated',
+      scale,
+      fps,
+      templateId,
+      enqueuedAt: new Date().toISOString(),
+    };
+
+    await ioRedis.set(
+      renderPayloadKey(job.id),
+      JSON.stringify(payload),
+      'EX',
+      RENDER_PAYLOAD_TTL_SECONDS,
+    );
+
+    await this.dispatch(job.id, 'design');
+
+    this.logger.log(
+      `Enqueued template preview render job ${job.id} for template ${templateId} (org ${orgId})`,
+    );
     return { id: job.id, status: job.status };
   }
 
@@ -393,22 +475,44 @@ export class VideoRenderService {
               ? 'image/webp'
               : 'video/mp4';
 
-      const ok = await this._lifecycle.completeJobWithBuffer(
-        job,
-        videoBuffer,
-        mimeType,
-        {
-          width: Math.round((composition.width || 0) * scale),
-          height: Math.round((composition.height || 0) * scale),
-          durationSeconds: durationMs / 1000,
-          fps,
-          provider: 'chromium-ffmpeg',
-        },
-        thumbnailBuffer,
-      );
+      // A template preview (payload.templateId) IS the thumbnail — skip the
+      // extra JPEG thumbnail artifact, mark the file internal so it stays out
+      // of the media library listing, and don't notify the org about a
+      // background render it never asked for. The plain-export call shape is
+      // unchanged (folderId/options only ride the preview path).
+      const isTemplatePreview = typeof input.templateId === 'string' && !!input.templateId;
+      const metadata = {
+        width: Math.round((composition.width || 0) * scale),
+        height: Math.round((composition.height || 0) * scale),
+        durationSeconds: durationMs / 1000,
+        fps,
+        provider: 'chromium-ffmpeg',
+      };
+
+      const ok = isTemplatePreview
+        ? await this._lifecycle.completeJobWithBuffer(
+            job,
+            videoBuffer,
+            mimeType,
+            { ...metadata, internal: 'design-preview' },
+            undefined,
+            undefined,
+            { notify: false },
+          )
+        : await this._lifecycle.completeJobWithBuffer(
+            job,
+            videoBuffer,
+            mimeType,
+            metadata,
+            thumbnailBuffer,
+          );
 
       if (!ok) {
         throw new Error('Lifecycle service failed to store artifact');
+      }
+
+      if (isTemplatePreview) {
+        await this.linkTemplatePreview(orgId, jobId, input.templateId);
       }
     } catch (err) {
       this.logger.error(
@@ -506,6 +610,40 @@ export class VideoRenderService {
       });
     } finally {
       this.cleanupWorkDir(workDir);
+    }
+  }
+
+  /**
+   * Point a template's thumbnail at the freshly rendered animated preview file.
+   * Best-effort: the static JPEG uploaded at template save stays as the
+   * fallback, so a link failure is logged, never thrown. `updateTemplate`
+   * soft-deletes the replaced static thumbnail file itself.
+   */
+  private async linkTemplatePreview(orgId: string, jobId: string, templateId: string) {
+    try {
+      const template = await this._designService.getTemplate(orgId, templateId);
+      if (!template) {
+        this.logger.warn(
+          `Template preview ${jobId}: template ${templateId} no longer exists; leaving static thumbnail`,
+        );
+        return;
+      }
+      const completed = await this._aiSettings.getMediaJobById(orgId, jobId);
+      const file = completed?.artifactUrl
+        ? await this._fileService.getFileByPath(orgId, completed.artifactUrl)
+        : null;
+      if (!file) {
+        this.logger.warn(`Template preview ${jobId}: stored artifact file not found`);
+        return;
+      }
+      await this._designService.updateTemplate(orgId, templateId, {
+        thumbnailFileId: file.id,
+      });
+      this.logger.log(`Template ${templateId} thumbnail set to animated preview ${file.id}`);
+    } catch (err) {
+      this.logger.warn(
+        `Linking template preview ${jobId} to template ${templateId} failed: ${(err as Error).message}`,
+      );
     }
   }
 

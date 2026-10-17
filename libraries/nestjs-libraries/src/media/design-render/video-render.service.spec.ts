@@ -3,7 +3,14 @@ import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
 import * as Sentry from '@sentry/nestjs';
-import { VideoRenderService, withTimeout } from './video-render.service';
+import {
+  VideoRenderService,
+  withTimeout,
+  NO_CREDIT,
+  TEMPLATE_PREVIEW_DURATION_MS,
+  TEMPLATE_PREVIEW_FPS,
+  TEMPLATE_PREVIEW_SCALE,
+} from './video-render.service';
 import { ioRedis } from '@postmill-ai/nestjs-libraries/redis/redis.service';
 
 vi.mock('@sentry/nestjs', () => ({
@@ -24,6 +31,8 @@ describe('VideoRenderService', () => {
   let lifecycle: MediaJobLifecycleService;
   let aiSettings: AiSettingsService;
   let encoder: FfmpegVideoEncoderService;
+  let fileService: { getFileByPath: ReturnType<typeof vi.fn> };
+  let designService: { getTemplate: ReturnType<typeof vi.fn>; updateTemplate: ReturnType<typeof vi.fn> };
 
   const orgId = 'org-1';
 
@@ -68,7 +77,22 @@ describe('VideoRenderService', () => {
       cleanup: vi.fn(),
     } as any;
 
-    service = new VideoRenderService(lifecycle, aiSettings, encoder);
+    fileService = {
+      getFileByPath: vi.fn().mockResolvedValue({ id: 'file-anim-1' }),
+    };
+    designService = {
+      getTemplate: vi.fn().mockResolvedValue({ id: 'tpl-1', organizationId: orgId }),
+      updateTemplate: vi.fn().mockResolvedValue({ id: 'tpl-1' }),
+    };
+
+    service = new VideoRenderService(
+      lifecycle,
+      aiSettings,
+      encoder,
+      undefined as any,
+      fileService as any,
+      designService as any,
+    );
 
     vi.clearAllMocks();
   });
@@ -448,6 +472,121 @@ describe('VideoRenderService', () => {
       expect(computeRenderTimeoutMs(1000, 24, 0.5)).toBeGreaterThanOrEqual(
         120_000,
       );
+    });
+  });
+
+  describe('template animated previews', () => {
+    it('enqueueTemplatePreview caps the composition and stores a no-credit webp payload', async () => {
+      const composition = videoOutput(10000);
+      const result = await service.enqueueTemplatePreview(orgId, 'tpl-1', composition);
+
+      expect(result).toMatchObject({ id: 'job-1', status: 'pending' });
+      // No video_export credit — the NO_CREDIT sentinel keeps the job out of
+      // both the post-render charge and the VIDEO_EXPORTS in-flight gate.
+      expect(lifecycle.createPendingJob).toHaveBeenCalledWith(
+        expect.objectContaining({
+          organizationId: orgId,
+          provider: 'chromium-ffmpeg',
+          creditType: NO_CREDIT,
+        }),
+      );
+      const stored = JSON.parse(vi.mocked(ioRedis.set).mock.calls[0][1] as string);
+      expect(stored.templateId).toBe('tpl-1');
+      expect(stored.format).toBe('webp-animated');
+      expect(stored.fps).toBe(TEMPLATE_PREVIEW_FPS);
+      expect(stored.scale).toBe(TEMPLATE_PREVIEW_SCALE);
+      // Only the opening seconds: capped duration, clips truncated/dropped.
+      expect(stored.composition.durationMs).toBe(TEMPLATE_PREVIEW_DURATION_MS);
+      expect(stored.composition.tracks[0].clips[0].endMs).toBe(TEMPLATE_PREVIEW_DURATION_MS);
+      // The caller's composition is not mutated.
+      expect(composition.durationMs).toBe(10000);
+    });
+
+    it('enqueueTemplatePreview skips empty/zero-length compositions', async () => {
+      await expect(
+        service.enqueueTemplatePreview(orgId, 'tpl-1', { durationMs: 0, tracks: [] }),
+      ).resolves.toBeNull();
+      expect(lifecycle.createPendingJob).not.toHaveBeenCalled();
+    });
+
+    it('links the rendered artifact as the template thumbnail on completion', async () => {
+      const composition = videoOutput(TEMPLATE_PREVIEW_DURATION_MS);
+      vi.mocked(ioRedis.get).mockResolvedValueOnce(
+        JSON.stringify({
+          organizationId: orgId,
+          composition,
+          format: 'webp-animated',
+          fps: TEMPLATE_PREVIEW_FPS,
+          scale: TEMPLATE_PREVIEW_SCALE,
+          templateId: 'tpl-1',
+        }),
+      );
+
+      const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'postmill-test-'));
+      const videoPath = path.join(tmpDir, 'output.webp-animated');
+      const thumbPath = path.join(tmpDir, 'thumb.jpg');
+      fs.writeFileSync(videoPath, Buffer.from('fake-webp'));
+      fs.writeFileSync(thumbPath, Buffer.from('fake-thumb'));
+      vi.mocked(encoder.encode).mockResolvedValueOnce({
+        videoPath,
+        thumbnailPath: thumbPath,
+      });
+      // After completion, the artifact URL resolves to the stored File row.
+      vi.mocked(aiSettings.getMediaJobById).mockResolvedValue({
+        id: 'job-1',
+        organizationId: orgId,
+        status: 'completed',
+        artifactUrl: '/uploads/org-1/video-job-1.webp',
+      } as any);
+
+      await service.processVideoRender('job-1');
+
+      expect(lifecycle.completeJobWithBuffer).toHaveBeenCalledWith(
+        expect.objectContaining({ id: 'job-1' }),
+        expect.any(Buffer),
+        'image/webp',
+        expect.objectContaining({ internal: 'design-preview' }),
+        undefined,
+        undefined,
+        { notify: false },
+      );
+      expect(fileService.getFileByPath).toHaveBeenCalledWith(
+        orgId,
+        '/uploads/org-1/video-job-1.webp',
+      );
+      expect(designService.updateTemplate).toHaveBeenCalledWith(orgId, 'tpl-1', {
+        thumbnailFileId: 'file-anim-1',
+      });
+
+      encoder.cleanup(tmpDir);
+    });
+
+    it('still completes the job when the thumbnail link fails', async () => {
+      const composition = videoOutput(TEMPLATE_PREVIEW_DURATION_MS);
+      vi.mocked(ioRedis.get).mockResolvedValueOnce(
+        JSON.stringify({ organizationId: orgId, composition, templateId: 'tpl-1' }),
+      );
+
+      const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'postmill-test-'));
+      const videoPath = path.join(tmpDir, 'output.webp-animated');
+      fs.writeFileSync(videoPath, Buffer.from('fake-webp'));
+      vi.mocked(encoder.encode).mockResolvedValueOnce({
+        videoPath,
+        thumbnailPath: path.join(tmpDir, 'missing.jpg'),
+      });
+      designService.getTemplate.mockResolvedValueOnce(null);
+
+      await service.processVideoRender('job-1');
+
+      // The render itself succeeded; the missing template only skips the link.
+      expect(aiSettings.updateMediaJob).not.toHaveBeenCalledWith(
+        orgId,
+        'job-1',
+        expect.objectContaining({ status: 'failed' }),
+      );
+      expect(designService.updateTemplate).not.toHaveBeenCalled();
+
+      encoder.cleanup(tmpDir);
     });
   });
 

@@ -145,6 +145,36 @@ describe('MediaJobsActivity — video export metering', () => {
     expect(credits[0]).toMatchObject({ type: 'video_export', orgId });
   });
 
+  it('does NOT charge a video_export credit for a NO_CREDIT template-preview render', async () => {
+    // Template previews run the same pipeline but must be free: the job row
+    // carries creditType 'none' (not NULL — merge jobs are NULL and ARE charged).
+    const { activity, subscriptionService, videoRenderService, credits, aiSettings } =
+      buildActivity();
+    aiSettings.getMediaJobByIdUnscoped
+      .mockResolvedValueOnce({
+        id: jobId,
+        organizationId: orgId,
+        provider: 'chromium-ffmpeg',
+        model: null,
+        status: 'pending',
+        creditType: 'none',
+      })
+      .mockResolvedValue({
+        id: jobId,
+        organizationId: orgId,
+        provider: 'chromium-ffmpeg',
+        model: null,
+        status: 'completed',
+        creditType: 'none',
+      });
+
+    await activity.processRenderJob(jobId);
+
+    expect(videoRenderService.processVideoRender).toHaveBeenCalledWith(jobId);
+    expect(subscriptionService.recordCredit).not.toHaveBeenCalled();
+    expect(credits).toHaveLength(0);
+  });
+
   it('does NOT charge when the job is already terminal — idempotent retry (B3.1)', async () => {
     // A retried / re-dispatched job that a prior invocation already completed.
     const { activity, subscriptionService, videoRenderService, credits, aiSettings } =

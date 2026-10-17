@@ -6,12 +6,44 @@ FFmpeg) or in a resource-capped Podman container, and the artifact lands in org 
 with one `video_export` credit charged. Sibling docs: `agents/backend.md`,
 `agents/frontend.md`, `agents/jobs.md`, `agents/billing.md`.
 
-## Two render ops
+## Render ops
 
 | Op | Job marker | What it does | Entry |
 |---|---|---|---|
 | `design` | `provider = 'chromium-ffmpeg'` | Encodes a Designer timeline composition (headless Chromium frame capture → FFmpeg) to mp4/webm/gif/animated-webp + thumbnail | `POST /design/render-video` → `VideoRenderService.enqueueRender` |
 | `merge` | `model = 'local/ffmpeg-merge'` | FFmpeg trim + xfade merge of stored clips | Replicate-studio clip-merge flow → `ReplicateRunnerService` (~line 450) resolves clips host-side into the workdir, then `VideoRenderService.enqueueMerge` |
+| template preview | `provider = 'chromium-ffmpeg'`, `creditType = 'none'`, payload carries `templateId` | Cheap animated-WebP thumbnail for a video-mode template (first 3 s, 12 fps, 0.5× scale) | Automatic fire-and-forget from `DesignTemplateController` create/update → `VideoRenderService.enqueueTemplatePreview` |
+
+## Template animated previews
+
+Saving a template whose `doc.mode === 'video'` (POST/PUT `/media/design-templates`)
+fire-and-forget enqueues a preview render alongside the static JPEG thumbnail the
+client already uploads. The flow reuses the `design` pipeline end-to-end:
+
+- **Cap server-side, not in the worker.** `enqueueTemplatePreview` runs
+  `capCompositionDuration` (`media/designer-doc/composition-cap.ts`) to slice the
+  composition to the first `TEMPLATE_PREVIEW_DURATION_MS` (3 s) — clips starting
+  at/after the cap are dropped, a straddling clip's `endMs` (and freeze tail) is
+  truncated; in-clip timelines (keyframes, speed curves, words) are untouched
+  because points past the new end never evaluate. `render-job-spec.ts` and the
+  container worker are UNCHANGED (no `maxDurationMs` to thread through); the
+  reduced `fps` (12) and `scale` (0.5) ride the existing payload/spec fields.
+- **No credit.** The job is created with `creditType: 'none'` (`NO_CREDIT` in
+  video-render.service.ts) and `MediaJobsActivity.processRenderJob` skips
+  `recordCredit` for it. The sentinel exists because merge jobs run with a NULL
+  creditType and ARE charged — never switch to a null-means-free rule. The
+  VIDEO_EXPORTS in-flight gate (`countInFlightVideoExports`) counts only
+  `creditType = 'video_export'` rows, so previews hold no entitlement slot.
+- **Completion links the thumbnail.** The payload's `templateId` routes the
+  completion in `processVideoRender`: the animated WebP is stored via
+  `completeJobWithBuffer` with `metadata.internal = 'design-preview'` (hidden
+  from the media-library listing), no separate JPEG thumbnail artifact, and
+  `notify: false`; then `linkTemplatePreview` resolves the stored File row by
+  `artifactUrl` and `DesignService.updateTemplate` points `thumbnailFileId` at
+  it (soft-deleting the replaced static thumbnail). Linking is best-effort — a
+  failure leaves the static JPEG in place and never fails the job.
+- Template panel tiles render the thumbnail in a plain `<img>`, so the WebP
+  animates on its own; no frontend changes.
 
 ## Job flow
 

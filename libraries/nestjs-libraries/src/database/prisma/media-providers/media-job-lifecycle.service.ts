@@ -345,6 +345,7 @@ export class MediaJobLifecycleService {
     metadata?: MediaArtifactMetadata,
     thumbnailBuffer?: Buffer,
     folderId?: string,
+    options?: { notify?: boolean },
   ): Promise<boolean> {
     // M-06: idempotent, crash-safe completion for buffer-based jobs (local render,
     // slide, caption, transcript). These jobs have no provider poll path, so we must
@@ -412,15 +413,19 @@ export class MediaJobLifecycleService {
         });
       }
 
-      await this._notify(
-        current,
-        'success',
-        `AI ${current.operation} ready`,
-        `Your generated ${current.operation} is ready in the media library.`,
-      );
+      if (options?.notify !== false) {
+        await this._notify(
+          current,
+          'success',
+          `AI ${current.operation} ready`,
+          `Your generated ${current.operation} is ready in the media library.`,
+        );
+      }
       return true;
     } catch (err) {
-      await this.failJob(current, `Failed to store generated artifact: ${(err as Error).message}`);
+      await this.failJob(current, `Failed to store generated artifact: ${(err as Error).message}`, {
+        notify: options?.notify,
+      });
       return false;
     }
   }

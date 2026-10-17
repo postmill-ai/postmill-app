@@ -1,7 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { MediaJobLifecycleService } from '@postmill-ai/nestjs-libraries/database/prisma/media-providers/media-job-lifecycle.service';
 import { AiSettingsService } from '@postmill-ai/nestjs-libraries/database/prisma/ai-settings/ai-settings.service';
-import { VideoRenderService } from '@postmill-ai/nestjs-libraries/media/design-render/video-render.service';
+import { VideoRenderService, NO_CREDIT } from '@postmill-ai/nestjs-libraries/media/design-render/video-render.service';
 import { SubscriptionService } from '@postmill-ai/nestjs-libraries/database/prisma/subscriptions/subscription.service';
 import { OrganizationService } from '@postmill-ai/nestjs-libraries/database/prisma/organizations/organization.service';
 import { inngest, isInngestEnabled } from '@postmill-ai/nestjs-libraries/inngest/inngest.client';
@@ -103,7 +103,12 @@ export class MediaJobsActivity {
     // render never reaches this line (we threw above), so there is nothing to roll back.
     // Idempotency: the `status !== 'pending'` guard above no-ops sequential retries, so a
     // completed job is charged exactly once.
-    await this._subscriptionService.recordCredit(org, 'video_export');
+    // `creditType: 'none'` (NO_CREDIT — template animated previews) is never charged. The
+    // sentinel exists because merge jobs run with a NULL creditType and ARE charged: a
+    // null-means-free rule would silently unmeter them.
+    if (after.creditType !== NO_CREDIT) {
+      await this._subscriptionService.recordCredit(org, 'video_export');
+    }
   }
 
   async processPendingMediaJobs(): Promise<{ processed: number; completed: number; failed: number }> {

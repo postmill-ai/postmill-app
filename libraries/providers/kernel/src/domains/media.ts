@@ -29,6 +29,11 @@ export interface MediaArtifactMetadata {
   provenance?: string;
   prompt?: string;
   source?: string;
+  /**
+   * Hidden-from-library marker (e.g. 'design-preview'): the file listing
+   * excludes rows whose metadata carries any `internal` value.
+   */
+  internal?: string;
   segments?: { start: number; end: number; text: string }[];
 }
 
