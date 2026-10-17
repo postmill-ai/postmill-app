@@ -11909,13 +11909,13 @@ components:
         scale:
           type: number
           description: |-
-            Output resolution as a multiple of the canvas size (0.5×/1×/2×). Absent =
-            render at canvas size. Applied to the Chromium viewport and frame canvas,
-            not as a post-scale, so 2× is a true supersample.
-          enum:
-            - 0.5
-            - 1
-            - 2
+            Output resolution as a multiple of the canvas size. Absent = render at
+            canvas size. Applied to the Chromium viewport and frame canvas, not as a
+            post-scale, so >1 is a true supersample. The shorthand buttons (0.5×/1×/2×)
+            and the 720p/1080p/4K + platform presets all resolve to a multiplier in
+            this range.
+          minimum: 0.25
+          maximum: 4
         fps:
           type: number
           description: Frame-rate override (24/30/60). Absent = the composition's own fps.
@@ -11923,6 +11923,9 @@ components:
             - 24
             - 30
             - 60
+        normalizeLoudness:
+          type: boolean
+          description: Normalize the final audio mix to -14 LUFS / -1.5 dBTP (ffmpeg loudnorm).
         posterUrl:
           type: string
         folderId:

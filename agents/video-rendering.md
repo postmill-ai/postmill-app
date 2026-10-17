@@ -64,14 +64,39 @@ client already uploads. The flow reuses the `design` pipeline end-to-end:
      (dims ≤ `MAX_DIMENSION`, fps ≤ 240, `MAX_TRACKS`, `MAX_CLIPS_PER_TRACK` from
      `media/designer-doc/designer-doc.limits.ts`) — a resource-DoS guard on input that
      drives Puppeteer/FFmpeg. The bounds apply to the EFFECTIVE render: the optional
-     `scale` (0.5|1|2, resolution multiplier) and `fps` (24|30|60 override) DTO fields
+     `scale` (0.25–4 resolution multiplier) and `fps` (24|30|60 override) DTO fields
      are folded into the composition copy before validation, and ride the payload +
      `DesignRenderJobSpec.options.scale` through to the encoder. The stored document is
      never mutated; on the render-route path the overrides reach the frame page as
      clamped `scale`/`fps` query params (`renderScale` on the served composition copy).
    - Track-level `muted` (audio tracks) is honored by both the preview engine and the
      FFmpeg mixer — a muted track's clips contribute nothing, not even to the ducking
-     sidechain.
+     sidechain. Track-level `locked`/`hidden` (both optional-additive on doc v7):
+     `locked` refuses clip drag/trim/split/delete (gesture guards in the timeline,
+     store guards in `removeClips`/`rippleDeleteClip(s)`/`splitClip`); `hidden`
+     excludes the track from EVERY renderer — `composeClipsAtPlayhead` in both the
+     preview and the injected frame script, and the FFmpeg mixer treats a hidden
+     track exactly like a muted one (it also feeds no ducking sidechain).
+     `VideoOutput.markers` (optional-additive v7) are editor-only ruler state —
+     no renderer reads them.
+   - Clip transitions (`transitionIn`/`transitionOut`): `cut`, `fade`
+     (fade-through-black — each clip owns half the window), `dissolve` (plain
+     cross-fade), `slide`, `wipe` (incoming slides over a STATIC outgoing clip),
+     `zoom` (scale about the centre), `blur` (gaussian ramp inversely to opacity,
+     max 24 px). ALL of the per-frame maths lives in ONE shared module,
+     `media/designer-doc/transitions.ts` (`transitionAdjustment` /
+     `applyTransitionAdjustment`); the preview imports it and the frame page is
+     handed it as source (`transitionsSource()`, injected like
+     `keyframesSource`) — a frame-renderer spec pins the injected copy to the
+     module. Blur rides the canvas/CSS filter pipeline in both renderers (merged
+     into `ctx.filter` with the clip's own filters); in the Konva preview it
+     applies to image/video/sticker clips (the FilteredClipImage offscreen
+     path) — text/shape/caption clips show the opacity ramp only.
+   - `RenderVideoDesignDto.scale` is any multiplier in 0.25–4 (the 720p/1080p/4K
+     shorthands and platform presets resolve to one) and `normalizeLoudness`
+     (default off) appends `loudnorm=I=-14:TP=-1.5` to the FINAL `amix` leg of
+     the audio filtergraph (single-pass), riding the payload +
+     `DesignRenderJobSpec.options` like scale/fps/bitrate.
    - Clip `volume` is keyframable: keyframes REPLACE the base volume where they span
      (both sides evaluate the shared `volumeAtClipTime`), and the mixer bakes the
      eased curve into `volume='<expr>':eval=frame` sampled at 100 ms steps

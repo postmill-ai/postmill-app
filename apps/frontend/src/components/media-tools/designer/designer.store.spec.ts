@@ -997,3 +997,116 @@ describe('speed-ramped clips in the store', () => {
     expect(pasted.speedCurve).toEqual(RAMP);
   });
 });
+
+describe('track lock / hide, markers, and timeline view prefs', () => {
+  const videoStore = () => {
+    const store = createDesignerStore();
+    store.getState().setMode('video');
+    return store;
+  };
+  const vo = (store: ReturnType<typeof createDesignerStore>) =>
+    store.getState().doc.outputs[0] as import('./designer.store').VideoOutput;
+
+  it('setTrackLocked / setTrackHidden persist the flags and are undoable', () => {
+    const store = videoStore();
+    const trackId = vo(store).tracks[0].id;
+
+    store.getState().setTrackLocked(0, trackId, true);
+    store.getState().setTrackHidden(0, trackId, true);
+    expect(vo(store).tracks[0].locked).toBe(true);
+    expect(vo(store).tracks[0].hidden).toBe(true);
+
+    store.getState().undo();
+    expect(vo(store).tracks[0].hidden).toBeUndefined();
+    store.getState().undo();
+    expect(vo(store).tracks[0].locked).toBeUndefined();
+  });
+
+  it('a locked track refuses delete and split, an unlocked one accepts them', () => {
+    const store = videoStore();
+    const trackId = vo(store).tracks[0].id;
+    store.getState().addClip(0, trackId, { id: 'c1', startMs: 0, endMs: 4000, src: 'v.mp4' } as never);
+    store.getState().setTrackLocked(0, trackId, true);
+    const historyBefore = store.getState().historyIndex;
+
+    store.getState().removeClip(0, trackId, 'c1');
+    expect(vo(store).tracks[0].clips).toHaveLength(1);
+    store.getState().splitClip(0, trackId, 'c1', 2000);
+    expect(vo(store).tracks[0].clips).toHaveLength(1);
+    // A refused edit must not leave an empty undo step.
+    expect(store.getState().historyIndex).toBe(historyBefore);
+
+    store.getState().rippleDeleteClip(0, trackId, 'c1');
+    expect(vo(store).tracks[0].clips).toHaveLength(1);
+
+    store.getState().setTrackLocked(0, trackId, false);
+    store.getState().splitClip(0, trackId, 'c1', 2000);
+    expect(vo(store).tracks[0].clips).toHaveLength(2);
+    store.getState().removeClips(0, [{ trackId, clipId: vo(store).tracks[0].clips[0].id }]);
+    expect(vo(store).tracks[0].clips).toHaveLength(1);
+  });
+
+  it('removeClips skips only the locked-track refs in a mixed selection', () => {
+    const store = videoStore();
+    const t1 = vo(store).tracks[0].id;
+    store.getState().addTrack(0, 'video');
+    const t2 = vo(store).tracks[1].id;
+    store.getState().addClip(0, t1, { id: 'a', startMs: 0, endMs: 2000, src: 'v.mp4' } as never);
+    store.getState().addClip(0, t2, { id: 'b', startMs: 0, endMs: 2000, src: 'v2.mp4' } as never);
+    store.getState().setTrackLocked(0, t1, true);
+
+    store.getState().removeClips(0, [
+      { trackId: t1, clipId: 'a' },
+      { trackId: t2, clipId: 'b' },
+    ]);
+    expect(vo(store).tracks[0].clips).toHaveLength(1);
+    expect(vo(store).tracks[1].clips).toHaveLength(0);
+  });
+
+  it('markers add (sorted, clamped), rename, delete — each undoable', () => {
+    const store = videoStore();
+
+    const id1 = store.getState().addMarker(0, 5000, 'Hook')!;
+    const id2 = store.getState().addMarker(0, 1000)!;
+    expect(vo(store).markers?.map((m) => m.id)).toEqual([id2, id1]);
+    expect(vo(store).markers?.[1].name).toBe('Hook');
+
+    // Clamped into the timeline.
+    const id3 = store.getState().addMarker(0, 999999)!;
+    expect(vo(store).markers?.find((m) => m.id === id3)?.tMs).toBe(vo(store).durationMs);
+
+    store.getState().renameMarker(0, id2, 'Intro');
+    expect(vo(store).markers?.find((m) => m.id === id2)?.name).toBe('Intro');
+    store.getState().renameMarker(0, id2, '   ');
+    expect(vo(store).markers?.find((m) => m.id === id2)?.name).toBeUndefined();
+
+    store.getState().removeMarker(0, id1);
+    expect(vo(store).markers?.some((m) => m.id === id1)).toBe(false);
+
+    store.getState().undo();
+    expect(vo(store).markers?.some((m) => m.id === id1)).toBe(true);
+  });
+
+  it('removing the last marker clears the field (doc stays additive-clean)', () => {
+    const store = videoStore();
+    const id = store.getState().addMarker(0, 1000)!;
+    store.getState().removeMarker(0, id);
+    expect(vo(store).markers).toBeUndefined();
+  });
+
+  it('timelineSnap toggles and timelineHeight clamps, without touching history', () => {
+    const store = videoStore();
+    const historyBefore = store.getState().historyIndex;
+
+    expect(store.getState().timelineSnap).toBe(true);
+    store.getState().setTimelineSnap(false);
+    expect(store.getState().timelineSnap).toBe(false);
+
+    store.getState().setTimelineHeight(20);
+    expect(store.getState().timelineHeight).toBe(120);
+    store.getState().setTimelineHeight(9999);
+    expect(store.getState().timelineHeight).toBe(600);
+
+    expect(store.getState().historyIndex).toBe(historyBefore);
+  });
+});

@@ -26,6 +26,8 @@ import type {
   VideoOutput,
   VideoTrack,
   VideoClip,
+  VideoMarker,
+  ClipTransition,
   DesignerBackground,
   DesignerGradient,
   DesignerTexture,
@@ -50,6 +52,8 @@ export type {
   VideoOutput,
   VideoTrack,
   VideoClip,
+  VideoMarker,
+  ClipTransition,
   DesignerBackground,
   DesignerGradient,
   DesignerTexture,
@@ -124,6 +128,10 @@ export interface DesignerState {
   linkedUpdateFlash: Record<number, number>;
   // View prefs / canvas requests (menu-driven)
   snapEnabled: boolean;
+  /** Timeline clip/marker snapping — a view pref like `snapEnabled`, not document content. */
+  timelineSnap: boolean;
+  /** Video timeline panel height in px (drag-resized); view pref, clamped on write. */
+  timelineHeight: number;
   /** Grid overlay — a view pref, like snapping, not part of the document. */
   showGrid: boolean;
   gridSize: number;
@@ -225,6 +233,8 @@ export interface DesignerActions {
   setZoom: (zoom: number) => void;
   setViewport: (x: number, y: number) => void;
   setSnapEnabled: (v: boolean) => void;
+  setTimelineSnap: (v: boolean) => void;
+  setTimelineHeight: (px: number) => void;
   setShowGrid: (v: boolean) => void;
   setGridSize: (n: number) => void;
   setSnapToGrid: (v: boolean) => void;
@@ -277,6 +287,15 @@ export interface DesignerActions {
   renameTrack: (outputIndex: number, trackId: string, name: string) => void;
   /** Muted audio tracks contribute nothing to preview or export. */
   setTrackMuted: (outputIndex: number, trackId: string, muted: boolean) => void;
+  /** Locked tracks refuse clip edits (drag/trim/split/delete skip their clips). */
+  setTrackLocked: (outputIndex: number, trackId: string, locked: boolean) => void;
+  /** Hidden tracks are excluded from the preview AND the export renderers. */
+  setTrackHidden: (outputIndex: number, trackId: string, hidden: boolean) => void;
+  /** Add a marker at `tMs` on the output's ruler. Returns the new marker id. */
+  addMarker: (outputIndex: number, tMs: number, name?: string) => string | null;
+  /** Rename a marker (empty/whitespace clears the custom name). */
+  renameMarker: (outputIndex: number, markerId: string, name: string) => void;
+  removeMarker: (outputIndex: number, markerId: string) => void;
   /**
    * Copy a clip onto the same track right after the source clip (extending the
    * output duration when it would overflow, like an insert). Returns the new
@@ -397,6 +416,8 @@ export const createDesignerStore = (
       keyframeClipboard: null,
       linkedUpdateFlash: {},
       snapEnabled: true,
+      timelineSnap: true,
+      timelineHeight: 240,
       showGrid: false,
       gridSize: 50,
       snapToGrid: false,
@@ -984,6 +1005,8 @@ export const createDesignerStore = (
       setZoom: (zoom) => set({ zoom: Math.max(0.1, Math.min(5, zoom)) }),
       setViewport: (x, y) => set({ viewportX: x, viewportY: y }),
       setSnapEnabled: (v) => set({ snapEnabled: v }),
+      setTimelineSnap: (v) => set({ timelineSnap: v }),
+      setTimelineHeight: (px) => set({ timelineHeight: Math.max(120, Math.min(600, Math.round(px))) }),
       setShowGrid: (v) => set({ showGrid: v }),
       setGridSize: (n) => set({ gridSize: Math.max(2, Math.min(500, Math.round(n))) }),
       setSnapToGrid: (v) => set({ snapToGrid: v }),
@@ -1233,7 +1256,12 @@ export const createDesignerStore = (
         const { doc, selectedClip, selectedClips } = get();
         const vo = doc.outputs[outputIndex] as VideoOutput | undefined;
         if (!vo || doc.mode !== 'video' || !refs.length) return;
-        const doomed = new Set(refs.map((r) => `${r.trackId}:${r.clipId}`));
+        // Clips on locked tracks refuse deletion — filter them out before the
+        // doomed-set is built (drag/trim are blocked at the gesture level).
+        const lockedTracks = new Set(vo.tracks.filter((t) => t.locked).map((t) => t.id));
+        const editable = refs.filter((r) => !lockedTracks.has(r.trackId));
+        if (!editable.length) return;
+        const doomed = new Set(editable.map((r) => `${r.trackId}:${r.clipId}`));
         const isDoomed = (trackId: string, clipId: string) => doomed.has(`${trackId}:${clipId}`);
         const updated: VideoOutput = {
           ...vo,
@@ -1310,6 +1338,8 @@ export const createDesignerStore = (
         const { doc } = get();
         const vo = doc.outputs[outputIndex] as VideoOutput | undefined;
         if (!vo || doc.mode !== 'video') return;
+        // A locked track refuses the split, same as it refuses deletion.
+        if (vo.tracks.find((t) => t.id === trackId)?.locked) return;
         const updated: VideoOutput = {
           ...vo,
           tracks: vo.tracks.map((t) => {
@@ -1500,6 +1530,76 @@ export const createDesignerStore = (
         get().pushHistory(muted ? 'Mute track' : 'Unmute track');
       },
 
+      setTrackLocked: (outputIndex, trackId, locked) => {
+        const { doc } = get();
+        const vo = doc.outputs[outputIndex] as VideoOutput | undefined;
+        if (!vo || doc.mode !== 'video') return;
+        const updated: VideoOutput = {
+          ...vo,
+          tracks: vo.tracks.map((t) => t.id === trackId ? { ...t, locked } : t),
+        };
+        const outs = [...doc.outputs];
+        outs[outputIndex] = updated;
+        set({ doc: { ...doc, outputs: outs }, isDirty: true });
+        get().pushHistory(locked ? 'Lock track' : 'Unlock track');
+      },
+
+      setTrackHidden: (outputIndex, trackId, hidden) => {
+        const { doc } = get();
+        const vo = doc.outputs[outputIndex] as VideoOutput | undefined;
+        if (!vo || doc.mode !== 'video') return;
+        const updated: VideoOutput = {
+          ...vo,
+          tracks: vo.tracks.map((t) => t.id === trackId ? { ...t, hidden } : t),
+        };
+        const outs = [...doc.outputs];
+        outs[outputIndex] = updated;
+        set({ doc: { ...doc, outputs: outs }, isDirty: true });
+        get().pushHistory(hidden ? 'Hide track' : 'Show track');
+      },
+
+      addMarker: (outputIndex, tMs, name) => {
+        const { doc } = get();
+        const vo = doc.outputs[outputIndex] as VideoOutput | undefined;
+        if (!vo || doc.mode !== 'video') return null;
+        const marker = {
+          id: genId(),
+          tMs: Math.max(0, Math.min(vo.durationMs, Math.round(tMs))),
+          ...(name?.trim() ? { name: name.trim() } : {}),
+        };
+        const markers = [...(vo.markers || []), marker].sort((a, b) => a.tMs - b.tMs);
+        const outs = [...doc.outputs];
+        outs[outputIndex] = { ...vo, markers };
+        set({ doc: { ...doc, outputs: outs }, isDirty: true });
+        get().pushHistory('Add marker');
+        return marker.id;
+      },
+
+      renameMarker: (outputIndex, markerId, name) => {
+        const { doc } = get();
+        const vo = doc.outputs[outputIndex] as VideoOutput | undefined;
+        if (!vo || doc.mode !== 'video' || !vo.markers?.some((m) => m.id === markerId)) return;
+        const trimmed = name.trim();
+        const markers = vo.markers.map((m) =>
+          m.id === markerId ? { ...m, name: trimmed || undefined } : m
+        );
+        const outs = [...doc.outputs];
+        outs[outputIndex] = { ...vo, markers };
+        set({ doc: { ...doc, outputs: outs }, isDirty: true });
+        get().pushHistory('Rename marker');
+      },
+
+      removeMarker: (outputIndex, markerId) => {
+        const { doc } = get();
+        const vo = doc.outputs[outputIndex] as VideoOutput | undefined;
+        if (!vo || doc.mode !== 'video' || !vo.markers?.some((m) => m.id === markerId)) return;
+        const markers = vo.markers.filter((m) => m.id !== markerId);
+        const outs = [...doc.outputs];
+        outs[outputIndex] = { ...vo, markers: markers.length ? markers : undefined };
+        set({ doc: { ...doc, outputs: outs }, isDirty: true });
+        get().pushHistory('Delete marker');
+      },
+
       duplicateClip: (outputIndex, trackId, clipId) => {
         const { doc } = get();
         const vo = doc.outputs[outputIndex] as VideoOutput | undefined;
@@ -1549,7 +1649,8 @@ export const createDesignerStore = (
         if (!vo || doc.mode !== 'video') return;
         const track = vo.tracks.find((t) => t.id === trackId);
         const clip = track?.clips.find((c) => c.id === clipId);
-        if (!track || !clip) return;
+        // A locked track refuses deletion, same as removeClips/splitClip.
+        if (!track || !clip || track.locked) return;
 
         // The gap a ripple closes is the clip's VISUAL length — a freeze hold
         // occupies timeline space past endMs and must collapse with the clip.
@@ -1593,7 +1694,11 @@ export const createDesignerStore = (
         const { doc, selectedClip, selectedClips } = get();
         const vo = doc.outputs[outputIndex] as VideoOutput | undefined;
         if (!vo || doc.mode !== 'video' || !refs.length) return;
-        const doomed = new Set(refs.map((r) => `${r.trackId}:${r.clipId}`));
+        // Locked tracks refuse deletion, same as removeClips.
+        const lockedTracks = new Set(vo.tracks.filter((t) => t.locked).map((t) => t.id));
+        const editable = refs.filter((r) => !lockedTracks.has(r.trackId));
+        if (!editable.length) return;
+        const doomed = new Set(editable.map((r) => `${r.trackId}:${r.clipId}`));
         const isDoomed = (trackId: string, clipId: string) => doomed.has(`${trackId}:${clipId}`);
         const updated: VideoOutput = {
           ...vo,

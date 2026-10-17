@@ -352,3 +352,108 @@ describe('speed ramping in the preview', () => {
     engine.destroy();
   });
 });
+
+describe('composeClipsAtPlayhead — hidden tracks and transition semantics', () => {
+  const transitionVo = (
+    type: 'fade' | 'dissolve' | 'wipe' | 'blur' | 'zoom',
+    durationMs = 1000
+  ): VideoOutput =>
+    ({
+      id: 'o1',
+      formatId: 'square',
+      name: 'Out',
+      width: 1080,
+      height: 1080,
+      fps: 30,
+      durationMs: 10000,
+      tracks: [
+        {
+          id: 't1',
+          type: 'video',
+          clips: [
+            clip({ id: 'a', startMs: 0, endMs: 4000, width: 200, height: 100, transitionOut: { type, durationMs } }),
+            clip({ id: 'b', startMs: 4000, endMs: 8000, width: 200, height: 100, transitionIn: { type, durationMs } }),
+          ],
+        },
+      ],
+    }) as VideoOutput;
+
+  const propsOf = (vo: VideoOutput, ms: number, id: string) =>
+    composeClipsAtPlayhead(vo, ms).find((c) => c.clip.id === id)?.props;
+
+  it('a hidden track composes nothing (mirrors the frame renderer)', () => {
+    const vo = voWith([clip()]) as VideoOutput & { tracks: VideoTrack[] };
+    vo.tracks[0].hidden = true;
+    expect(composeClipsAtPlayhead(vo, 1000)).toHaveLength(0);
+  });
+
+  it('fade goes THROUGH BLACK — both clips are invisible at the window midpoint', () => {
+    const vo = transitionVo('fade');
+    expect(propsOf(vo, 3500, 'a')?.opacity).toBe(0);
+    expect(propsOf(vo, 3500, 'b')?.opacity).toBe(0);
+    // First half belongs to the outgoing clip, second half to the incoming.
+    expect(propsOf(vo, 3250, 'a')?.opacity).toBeCloseTo(0.5, 6);
+    expect(propsOf(vo, 3250, 'b')?.opacity).toBe(0);
+    expect(propsOf(vo, 3750, 'a')?.opacity).toBe(0);
+    expect(propsOf(vo, 3750, 'b')?.opacity).toBeCloseTo(0.5, 6);
+  });
+
+  it('dissolve cross-mixes at the midpoint (the ramp fade used to share)', () => {
+    const vo = transitionVo('dissolve');
+    expect(propsOf(vo, 3500, 'a')?.opacity).toBeCloseTo(0.5, 6);
+    expect(propsOf(vo, 3500, 'b')?.opacity).toBeCloseTo(0.5, 6);
+  });
+
+  it('wipe keeps both clips fully opaque and slides only the incoming one', () => {
+    const vo = transitionVo('wipe');
+    const out = propsOf(vo, 3500, 'a');
+    expect(out?.opacity).toBe(1);
+    expect(out?.x).toBeCloseTo(0, 6);
+    const inc = propsOf(vo, 3500, 'b');
+    expect(inc?.opacity).toBe(1);
+    // Halfway in from the left: -((1 - 0.5) * 200).
+    expect(inc?.x).toBeCloseTo(-100, 6);
+  });
+
+  it('blur ramps blurPx inversely to each clip\'s opacity', () => {
+    const vo = transitionVo('blur');
+    expect(propsOf(vo, 3000, 'a')?.blurPx ?? 0).toBeCloseTo(0, 6);
+    expect(propsOf(vo, 4000, 'a')?.blurPx).toBeCloseTo(24, 6);
+    expect(propsOf(vo, 3000, 'b')?.blurPx).toBeCloseTo(24, 6);
+    expect(propsOf(vo, 4000, 'b')?.blurPx ?? 0).toBeCloseTo(0, 6);
+  });
+
+  it('zoom scales the incoming clip up into place', () => {
+    const vo = transitionVo('zoom');
+    const inc = propsOf(vo, 3000, 'b');
+    expect(inc?.width).toBeCloseTo(120, 6); // 200 × 0.6
+    const out = propsOf(vo, 4000, 'a');
+    expect(out?.width).toBeCloseTo(280, 6); // 200 × 1.4
+  });
+});
+
+describe('VideoPreviewEngine — hidden tracks', () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it('a hidden audio track never spins up a media element (like a muted one)', () => {
+    const store = createDesignerStore();
+    store.getState().setMode('video');
+    store.getState().addTrack(0, 'audio');
+    const vo = store.getState().doc.outputs[0] as VideoOutput;
+    const audioTrack = vo.tracks.find((t) => t.type === 'audio')!;
+    store.getState().addClip(0, audioTrack.id, {
+      id: 'a1',
+      startMs: 0,
+      endMs: 2000,
+      src: 'https://example.com/a.mp3',
+    } as VideoClip);
+    store.getState().setTrackHidden(0, audioTrack.id, true);
+
+    const engine = new VideoPreviewEngine(store);
+    engine.seek(1000);
+    expect((engine as any).audioElements.size).toBe(0);
+    engine.destroy();
+  });
+});

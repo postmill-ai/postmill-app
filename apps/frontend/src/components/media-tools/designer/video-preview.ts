@@ -10,6 +10,10 @@ import {
   sourceTimeForPlayhead as sharedSourceTimeForPlayhead,
   speedAt,
 } from '@postmill-ai/nestjs-libraries/media/designer-doc/speed-curve';
+import {
+  applyTransitionAdjustment,
+  transitionAdjustment,
+} from '@postmill-ai/nestjs-libraries/media/designer-doc/transitions';
 
 interface PlayOptions {
   onTick: (ms: number) => void;
@@ -122,13 +126,20 @@ export interface ComposedClip {
   /** Needed to write back through `updateClip`, which is keyed by track. */
   trackId: string;
   trackType: VideoTrack['type'];
-  props: ReturnType<typeof interpolateKeyframes>;
+  /**
+   * Interpolated keyframe props with any transition adjustment folded in.
+   * `blurPx` (from a blur transition) is an extra key the renderers read;
+   * absent on clips outside a transition window.
+   */
+  props: ReturnType<typeof interpolateKeyframes> & { blurPx?: number };
 }
 
 export function composeClipsAtPlayhead(vo: VideoOutput, playheadMs: number): ComposedClip[] {
   const result: ComposedClip[] = [];
   for (const track of vo.tracks) {
-    if (track.type === 'audio') continue;
+    // Hidden tracks render nothing — the frame-renderer script skips them the
+    // same way, so the export matches what the editor showed.
+    if (track.type === 'audio' || track.hidden) continue;
     const sorted = [...track.clips].sort((a, b) => a.startMs - b.startMs);
     const windows = findTransitionWindows(track);
     for (let i = 0; i < sorted.length; i++) {
@@ -170,23 +181,16 @@ export function composeClipsAtPlayhead(vo: VideoOutput, playheadMs: number): Com
         const type = isIncoming
           ? clip.transitionIn?.type
           : clip.transitionOut?.type;
-        if (type === 'cut') {
-          // 'cut' should not create a visible overlap, but if it does, keep hard switch.
-          if (!isIncoming) props.opacity = 0;
-        } else if (type === 'fade' || type === 'dissolve') {
-          props.opacity *= isIncoming ? transitionProgress : (1 - transitionProgress);
-        } else if (type === 'slide') {
-          props.opacity *= isIncoming ? transitionProgress : (1 - transitionProgress);
-          const direction = isIncoming
-            ? (clip.transitionIn?.direction ?? 'left')
-            : (clip.transitionOut?.direction ?? 'left');
-          const offset = (isIncoming ? 1 - transitionProgress : transitionProgress) * (props.width || 1);
-          if (direction === 'left') props.x -= offset;
-          else if (direction === 'right') props.x += offset;
-          else if (direction === 'up') props.y -= offset;
-          else if (direction === 'down') props.y += offset;
-        }
-        props.opacity = Math.max(0, Math.min(1, props.opacity));
+        const direction = isIncoming
+          ? clip.transitionIn?.direction
+          : clip.transitionOut?.direction;
+        // The transition maths live in the shared designer-doc/transitions
+        // module — the same code the injected frame renderer is handed as
+        // source, so the preview and an exported mp4 cannot drift.
+        props = applyTransitionAdjustment(
+          props,
+          transitionAdjustment(type, direction, transitionProgress, isIncoming, props.width, props.height)
+        );
       }
 
       result.push({ clip, trackId: track.id, trackType: track.type, props });
@@ -263,8 +267,10 @@ export class VideoPreviewEngine {
   private seekMediaElements(ms: number, vo: VideoOutput) {
     const activeIds = new Set<string>();
     for (const track of vo.tracks) {
-      // A muted audio track contributes nothing — its clips don't play and they
-      // don't count as voice for ducking (mirrors the server mixer).
+      // A muted (or hidden) audio track contributes nothing — its clips don't
+      // play and they don't count as voice for ducking (mirrors the server
+      // mixer). A hidden VISUAL track's clips must not sound either.
+      if (track.hidden) continue;
       if (track.type === 'audio' && track.muted) continue;
       const trackGain = track.gain ?? 1;
       const activeVoice = track.type === 'audio' && track.autoDuck
@@ -342,7 +348,7 @@ export class VideoPreviewEngine {
 
   private voiceActiveAt(vo: VideoOutput, ms: number): boolean {
     for (const track of vo.tracks) {
-      if (track.type !== 'audio' || track.muted) continue;
+      if (track.type !== 'audio' || track.muted || track.hidden) continue;
       for (const clip of track.clips) {
         // Voice clips: not on a ducking track and have actual audio content.
         if (track.autoDuck) continue;

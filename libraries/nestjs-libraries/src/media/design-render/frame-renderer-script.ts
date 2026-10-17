@@ -27,6 +27,7 @@ import { speedCurveSource } from '../designer-doc/speed-curve';
 import { motionBlurSource } from '../designer-doc/motion-blur';
 import { captionStylesSource } from '../designer-doc/caption-styles';
 import { backgroundTextureSource } from '../designer-doc/background-texture';
+import { transitionsSource } from '../designer-doc/transitions';
 
 /**
  * The ...Source() helpers serialize functions with String(fn). The backend runs
@@ -48,6 +49,7 @@ ${stripExportsNamespace(speedCurveSource())}
 ${stripExportsNamespace(motionBlurSource())}
 ${stripExportsNamespace(captionStylesSource())}
 ${stripExportsNamespace(backgroundTextureSource())}
+${stripExportsNamespace(transitionsSource())}
 
   const output = window.__DATA.output;
   const baseUrl = window.__DATA.baseUrl || '';
@@ -145,9 +147,12 @@ ${stripExportsNamespace(backgroundTextureSource())}
     }
   }
 
-  function applyFilters(ctx, filters) {
-    if (!filters || filters.length === 0) return;
-    const str = filters.map(mapFilterToken).filter(Boolean).join(' ');
+  function applyFilters(ctx, filters, extraBlurPx) {
+    const parts = (filters || []).map(mapFilterToken).filter(Boolean);
+    // Transition blur rides the same canvas filter pipeline as clip filters —
+    // one ctx.filter string, so the two never clobber each other.
+    if (extraBlurPx > 0) parts.push('blur(' + extraBlurPx.toFixed(1) + 'px)');
+    const str = parts.join(' ');
     if (str) ctx.filter = str;
   }
 
@@ -240,7 +245,9 @@ ${stripExportsNamespace(backgroundTextureSource())}
   function composeClipsAtPlayhead(vo, playheadMs) {
     const result = [];
     for (const track of vo.tracks) {
-      if (track.type === 'audio') continue;
+      // Hidden tracks are excluded from the render, exactly as the preview
+      // engine's composer skips them.
+      if (track.type === 'audio' || track.hidden) continue;
       const sorted = [...track.clips].sort((a, b) => a.startMs - b.startMs);
       const windows = findTransitionWindows(track);
       for (const clip of sorted) {
@@ -266,20 +273,13 @@ ${stripExportsNamespace(backgroundTextureSource())}
         if (fadeState) props = fadeState.props;
         if (transitionProgress !== undefined) {
           const type = isIncoming ? clip.transitionIn?.type : clip.transitionOut?.type;
-          if (type === 'cut') {
-            if (!isIncoming) props.opacity = 0;
-          } else if (type === 'fade' || type === 'dissolve') {
-            props.opacity *= isIncoming ? transitionProgress : (1 - transitionProgress);
-          } else if (type === 'slide') {
-            props.opacity *= isIncoming ? transitionProgress : (1 - transitionProgress);
-            const direction = isIncoming ? (clip.transitionIn?.direction || 'left') : (clip.transitionOut?.direction || 'left');
-            const offset = (isIncoming ? 1 - transitionProgress : transitionProgress) * (props.width || 1);
-            if (direction === 'left') props.x -= offset;
-            else if (direction === 'right') props.x += offset;
-            else if (direction === 'up') props.y -= offset;
-            else if (direction === 'down') props.y += offset;
-          }
-          props.opacity = Math.max(0, Math.min(1, props.opacity));
+          const direction = isIncoming ? clip.transitionIn?.direction : clip.transitionOut?.direction;
+          // The transition maths are INJECTED from designer-doc/transitions (see
+          // transitionsSource) — the same implementation the preview runs.
+          props = applyTransitionAdjustment(
+            props,
+            transitionAdjustment(type, direction, transitionProgress, isIncoming, props.width, props.height)
+          );
         }
         result.push({ clip, trackType: track.type, props });
       }
@@ -315,7 +315,7 @@ ${stripExportsNamespace(backgroundTextureSource())}
     const fitMode = clip.fitMode || 'fill';
 
     ctx.save();
-    applyFilters(ctx, clip.filters);
+    applyFilters(ctx, clip.filters, props.blurPx);
     ctx.globalAlpha = props.opacity;
 
     if (clip.crop) {
@@ -484,6 +484,10 @@ ${stripExportsNamespace(backgroundTextureSource())}
     // hands the previous composite op back to the next clip, so transitions
     // (opacity/offset compositing in composeClipsAtPlayhead) are unaffected.
     ctx.globalCompositeOperation = clipCompositeOp(clip.blendMode);
+    // Transition blur for the draw types that never touch ctx.filter (shape /
+    // text / caption). The image/video path merges it into applyFilters
+    // instead, which overrides this with the combined string — same pixels.
+    if (props.blurPx > 0) ctx.filter = 'blur(' + props.blurPx.toFixed(1) + 'px)';
     const cx = props.x + props.width / 2;
     const cy = props.y + props.height / 2;
     ctx.translate(cx, cy);
@@ -505,7 +509,7 @@ ${stripExportsNamespace(backgroundTextureSource())}
   async function preload() {
     const promises = [];
     for (const track of output.tracks) {
-      if (track.type === 'audio') continue;
+      if (track.type === 'audio' || track.hidden) continue;
       for (const clip of track.clips) {
         if (!clip.src) continue;
         const isVideo = clip.type === 'video' || /\\.(mp4|webm|mov|mkv|avi)(\\?.*)?$/i.test(clip.src);
