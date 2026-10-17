@@ -3290,6 +3290,27 @@ paths:
           description: ""
       tags:
         - Media
+  /media/video-segment-transform:
+    post:
+      operationId: MediaController_videoSegmentTransform
+      parameters: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/VideoSegmentTransformDto"
+      responses:
+        "201":
+          description: ""
+      summary: |-
+        Trim-aware video-to-video: extracts [trimStartMs, trimEndMs] from the
+        source (re-encoding ffmpeg trim), stores the segment in tenant storage and
+        runs the standard video-to-video flow on it. Same billing policy, budget
+        ledger entry and job lifecycle as /media/video-to-video — the response is
+        the same { id, status: 'pending' } pair polled via GET /media/jobs/:id.
+      tags:
+        - Media
   /media/generate-music:
     post:
       operationId: MediaController_generateMusic
@@ -10708,6 +10729,25 @@ components:
       required:
         - videoUrl
         - prompt
+    VideoSegmentTransformDto:
+      type: object
+      properties:
+        videoUrl:
+          type: string
+          format: uri
+        prompt:
+          type: string
+        trimStartMs:
+          type: number
+          minimum: 0
+        trimEndMs:
+          type: number
+          minimum: 1
+      required:
+        - videoUrl
+        - prompt
+        - trimStartMs
+        - trimEndMs
     GenerateMusicDto:
       type: object
       properties:

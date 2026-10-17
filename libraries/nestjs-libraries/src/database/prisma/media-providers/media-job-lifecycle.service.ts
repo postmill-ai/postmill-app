@@ -486,6 +486,33 @@ export class MediaJobLifecycleService {
 
   // ── Artifact / transcript storage (§11.5) ──
 
+  // Store an intermediate INPUT artifact (e.g. an ffmpeg-trimmed segment that a
+  // video-to-video provider must fetch by URL) in tenant storage. No AIMediaJob
+  // row and no notification — the transform itself creates its own job. Lands
+  // under the org's local/default storage (no provider binding exists yet) as a
+  // media-library File so the URL is fetchable exactly like a clip src.
+  async storeInputArtifact(params: {
+    organizationId: string;
+    buffer: Buffer;
+    mime: string;
+    baseName: string;
+    operation?: string;
+  }): Promise<StoredArtifact> {
+    return this._writeToTenantStorage({
+      organizationId: params.organizationId,
+      provider: 'segment-input',
+      operation: params.operation ?? 'video',
+      baseName: params.baseName,
+      buffer: params.buffer,
+      mime: params.mime,
+      metadata: {
+        provider: 'segment-input',
+        mime: params.mime,
+        source: 'ai-media-input',
+      },
+    });
+  }
+
   async storeArtifact(params: {
     organizationId: string;
     provider: string;

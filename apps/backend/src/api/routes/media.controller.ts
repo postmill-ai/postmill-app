@@ -33,6 +33,8 @@ import { UpscaleVideoDto } from '@postmill-ai/nestjs-libraries/dtos/ai/upscale-v
 import { RemoveVideoBackgroundDto } from '@postmill-ai/nestjs-libraries/dtos/ai/remove-video-background.dto';
 import { GenerateMusicDto } from '@postmill-ai/nestjs-libraries/dtos/ai/generate-music.dto';
 import { VideoToVideoDto } from '@postmill-ai/nestjs-libraries/dtos/ai/video-to-video.dto';
+import { VideoSegmentTransformDto } from '@postmill-ai/nestjs-libraries/dtos/ai/video-segment-transform.dto';
+import { VideoSegmentTransformService } from '@postmill-ai/nestjs-libraries/media/segment/video-segment-transform.service';
 import { GenerateAvatarDto } from '@postmill-ai/nestjs-libraries/dtos/ai/generate-avatar.dto';
 import { GenerateSlideDto } from '@postmill-ai/nestjs-libraries/dtos/ai/generate-slide.dto';
 import { GenerateVideoDto } from '@postmill-ai/backend/dtos/media/generate-video.dto';
@@ -58,7 +60,8 @@ export class MediaController {
     private _fileService: FileService,
     private _storageService: StorageService,
     private _stockMediaService: StockMediaService,
-    private _brandsService: BrandsService
+    private _brandsService: BrandsService,
+    private _videoSegmentTransform: VideoSegmentTransformService
   ) {}
 
   @Post('/generate-video')
@@ -338,6 +341,31 @@ export class MediaController {
   ) {
     try {
       const result = await this._aiDefaults.videoToVideo(org.id, body.prompt, body.videoUrl);
+      return { id: result, status: 'pending' };
+    } catch (err) {
+      if (err instanceof DefaultNotConfiguredError) {
+        throw new HttpException({ error: err.message, category: err.category }, HttpStatus.CONFLICT);
+      }
+      throw err;
+    }
+  }
+
+  /**
+   * Trim-aware video-to-video: extracts [trimStartMs, trimEndMs] from the
+   * source (re-encoding ffmpeg trim), stores the segment in tenant storage and
+   * runs the standard video-to-video flow on it. Same billing policy, budget
+   * ledger entry and job lifecycle as /media/video-to-video — the response is
+   * the same { id, status: 'pending' } pair polled via GET /media/jobs/:id.
+   */
+  @Post('/video-segment-transform')
+  @CheckPolicies([AuthorizationActions.Create, Sections.MEDIA])
+  @RequirePermission('media', 'create')
+  async videoSegmentTransform(
+    @GetOrgFromRequest() org: Organization,
+    @Body() body: VideoSegmentTransformDto
+  ) {
+    try {
+      const result = await this._videoSegmentTransform.transformSegment(org.id, body);
       return { id: result, status: 'pending' };
     } catch (err) {
       if (err instanceof DefaultNotConfiguredError) {

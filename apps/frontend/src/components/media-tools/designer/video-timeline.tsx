@@ -8,6 +8,15 @@ import { useToaster } from '@postmill-ai/react/toaster/toaster';
 import { useModals, usePromptModal } from '@postmill-ai/frontend/components/layout/new-modal';
 import { useMediaToolsStatus } from '@postmill-ai/frontend/components/layout/use-media-tools-status';
 import { VoiceoverDialog } from './voiceover-dialog';
+import { SegmentRegenerateDialog } from './segment-regenerate-dialog';
+import {
+  defaultSegmentWindow,
+  findMiddleClipId,
+  isWholeClipWindow,
+  planSegmentSplits,
+  segmentSourceTrim,
+  type SegmentWindow,
+} from './segment-regenerate';
 import { Stepper } from './controls';
 import { addMediaToTimeline, probeAudioDuration, probeVideoMetadata } from './add-media-to-timeline';
 import { clipEdgeUpdate } from './clip-geometry';
@@ -1824,6 +1833,160 @@ export const VideoTimeline: FC<VideoTimelineProps> = ({ store, sendTimelineAware
     }
   }, [clipMenu, fetch, store, toaster, translate]);
 
+  /**
+   * Trim-aware AI regenerate: split the clip around the chosen window (each
+   * split is its own undo step), POST the source-time bounds to
+   * /media/video-segment-transform, then swap the middle segment's src to the
+   * transformed artifact on completion (a second undo step). The middle clip's
+   * endMs is reset to the probed result duration — when it differs from the
+   * segment span, nothing ripple-shifts: later clips stay put, so a longer
+   * result overlaps them and a shorter one leaves a gap (and the output
+   * duration grows if the segment now runs past it).
+   */
+  const runSegmentTransform = useCallback(async (
+    menu: { outputIndex: number; trackId: string; clipId: string },
+    window: SegmentWindow,
+    prompt: string
+  ) => {
+    const state = store.getState();
+    const vo = state.doc.outputs[menu.outputIndex] as VideoOutput;
+    const track = vo.tracks.find((t) => t.id === menu.trackId);
+    const clip = track?.clips.find((c) => c.id === menu.clipId);
+    if (!clip?.src) {
+      toaster.show(translate('clip_has_no_source', 'Selected clip has no source'), 'warning');
+      return;
+    }
+    const clipDurationMs = clip.endMs - clip.startMs;
+    const wholeClip = isWholeClipWindow(window, clipDurationMs);
+    const trim = segmentSourceTrim(clip, window);
+    const plan = planSegmentSplits(clip, window);
+
+    let targetClipId = menu.clipId;
+    if (!wholeClip) {
+      // Split at the start bound first: splitClip re-ids both halves, so the
+      // end split must target the freshly-read right part.
+      if (plan.startSplitMs !== null) {
+        state.splitClip(menu.outputIndex, menu.trackId, menu.clipId, plan.startSplitMs);
+      }
+      if (plan.endSplitMs !== null) {
+        const t1 = (store.getState().doc.outputs[menu.outputIndex] as VideoOutput).tracks
+          .find((t) => t.id === menu.trackId);
+        const right = plan.startSplitMs !== null
+          ? t1?.clips.find((c) => c.startMs === plan.startSplitMs)
+          : t1?.clips.find((c) => c.id === menu.clipId);
+        if (right) {
+          store.getState().splitClip(menu.outputIndex, menu.trackId, right.id, plan.endSplitMs);
+        }
+      }
+      const t2 = (store.getState().doc.outputs[menu.outputIndex] as VideoOutput).tracks
+        .find((t) => t.id === menu.trackId);
+      const middleId = t2 ? findMiddleClipId(t2.clips, plan) : null;
+      if (!middleId) {
+        toaster.show(translate('segment_isolate_failed', 'Could not isolate the segment'), 'warning');
+        return;
+      }
+      targetClipId = middleId;
+    }
+
+    const finish = async (artifactUrl: string) => {
+      // Whole-clip window: identical to the existing whole-clip transform (src
+      // swap only, timing untouched).
+      if (wholeClip) {
+        const cur = store.getState();
+        cur.updateClipSilent(menu.outputIndex, menu.trackId, targetClipId, {
+          src: artifactUrl,
+          fileId: undefined,
+        });
+        cur.pushHistory();
+        return;
+      }
+      // The transform output duration may differ slightly from the segment —
+      // the clip is re-timed to the probed result (no ripple).
+      const { durationMs } = await probeVideoMetadata(artifactUrl);
+      const cur = store.getState();
+      const curVo = cur.doc.outputs[menu.outputIndex] as VideoOutput;
+      const middle = curVo.tracks
+        .find((t) => t.id === menu.trackId)
+        ?.clips.find((c) => c.id === targetClipId);
+      if (!middle || !mountedRef.current) return;
+      const endMs = middle.startMs + durationMs;
+      if (endMs > curVo.durationMs) {
+        cur.setVideoDuration(menu.outputIndex, endMs);
+      }
+      cur.updateClipSilent(menu.outputIndex, menu.trackId, targetClipId, {
+        src: artifactUrl,
+        fileId: undefined,
+        trimInMs: 0,
+        endMs,
+      });
+      cur.pushHistory();
+    };
+
+    try {
+      const res = await fetch(
+        wholeClip ? '/media/video-to-video' : '/media/video-segment-transform',
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(
+            wholeClip
+              ? { videoUrl: clip.src, prompt }
+              : { videoUrl: clip.src, prompt, trimStartMs: trim.trimStartMs, trimEndMs: trim.trimEndMs }
+          ),
+        }
+      );
+      if (!res.ok) throw new Error(translate('transform_failed', 'Transform failed'));
+      const { id } = await res.json();
+      if (isArtifactPath(id)) {
+        await finish(id);
+        return;
+      }
+      let polls = 0;
+      while (polls < MAX_POLLS) {
+        if (!mountedRef.current) return; // timeline unmounted — stop polling
+        const jobRes = await fetch(`/media/jobs/${id}`);
+        if (!jobRes.ok) throw new Error(translate('failed_to_check_transform_status', 'Failed to check transform status'));
+        const job = await jobRes.json();
+        if (job.status === 'completed') {
+          if (!job.artifactUrl) throw new Error(translate('no_artifact', 'No artifact'));
+          await finish(job.artifactUrl);
+          break;
+        }
+        if (job.status === 'failed') throw new Error(job.error || translate('transform_failed', 'Transform failed'));
+        polls++;
+        await new Promise((r) => setTimeout(r, POLL_INTERVAL_MS));
+      }
+    } catch (e) {
+      if (mountedRef.current) toaster.show((e as Error).message || translate('transform_failed', 'Transform failed'), 'warning');
+    }
+  }, [store, fetch, toaster, translate]);
+
+  const handleRegenerateSegment = useCallback(() => {
+    if (!clipMenu) return;
+    const state = store.getState();
+    const vo = state.doc.outputs[clipMenu.outputIndex] as VideoOutput;
+    const track = vo.tracks.find((t) => t.id === clipMenu.trackId);
+    const clip = track?.clips.find((c) => c.id === clipMenu.clipId);
+    if (!clip?.src) return;
+    const menu = { outputIndex: clipMenu.outputIndex, trackId: clipMenu.trackId, clipId: clipMenu.clipId };
+    const clipDurationMs = clip.endMs - clip.startMs;
+    const playheadOffset = Math.max(0, Math.min(playheadMs - clip.startMs, clipDurationMs));
+    const def = defaultSegmentWindow(clipDurationMs, playheadOffset);
+    setClipMenu(null);
+    modals.openModal({
+      title: translate('regenerate_segment_with_ai', 'Regenerate segment with AI'),
+      children: (
+        <SegmentRegenerateDialog
+          clipDurationMs={clipDurationMs}
+          defaultStartMs={def.startMs}
+          defaultEndMs={def.endMs}
+          onClose={() => modals.closeAll()}
+          onConfirm={(window, prompt) => runSegmentTransform(menu, window, prompt)}
+        />
+      ),
+    });
+  }, [clipMenu, store, playheadMs, modals, translate, runSegmentTransform]);
+
   const handleGenerateVideo = useCallback(() => {
     modals.openModal({
       title: translate('ai_video_label', 'AI Video'),
@@ -2763,6 +2926,16 @@ export const VideoTimeline: FC<VideoTimelineProps> = ({ store, sendTimelineAware
                       >
                         {translate('transform_with_prompt', 'Transform with prompt')}
                       </button>
+                      {playheadMs > clip.startMs && playheadMs < clip.endMs && clip.speed !== 0 && (
+                        <button
+                          onClick={handleRegenerateSegment}
+                          disabled={!videoToVideoAvailable}
+                          title={translate('regenerate_segment_hint', 'Split at the bounds and transform only that segment')}
+                          className="w-full text-left px-2 py-1 rounded-sm text-[12px] hover:bg-studioBorder/30 text-textColor disabled:opacity-40 disabled:cursor-not-allowed"
+                        >
+                          {translate('regenerate_segment_with_ai', 'Regenerate segment with AI…')}
+                        </button>
+                      )}
                     </>
                   )}
                   <div className="border-t border-studioBorder my-1" />

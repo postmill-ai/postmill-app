@@ -21,6 +21,7 @@ import { DefaultsSettingsValidator } from './defaults/defaults-settings.validato
 import { MediaDefaultsService } from './defaults/media-defaults.service';
 import { SlideService } from '@postmill-ai/nestjs-libraries/media/slide/slide.service';
 import { CaptionService } from '@postmill-ai/nestjs-libraries/media/caption/caption.service';
+import { VideoSegmentTransformService } from '@postmill-ai/nestjs-libraries/media/segment/video-segment-transform.service';
 
 @Global()
 @Module({
@@ -47,6 +48,7 @@ import { CaptionService } from '@postmill-ai/nestjs-libraries/media/caption/capt
     DefaultsSettingsValidator,
     SlideService,
     CaptionService,
+    VideoSegmentTransformService,
   ],
   exports: [
     AIModelProvider,
@@ -71,6 +73,7 @@ import { CaptionService } from '@postmill-ai/nestjs-libraries/media/caption/capt
     DefaultsSettingsValidator,
     SlideService,
     CaptionService,
+    VideoSegmentTransformService,
   ],
 })
 // AI provider adapters are registered into the ProviderKernel by
