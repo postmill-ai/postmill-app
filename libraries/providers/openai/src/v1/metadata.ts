@@ -658,6 +658,6 @@ export const metadata: ProviderMetadata = {
   },
   "website": "https://openai.com",
   "description": {
-    "en": "OpenAI's GPT models for writing, reasoning and vision — plus gpt-image-1 and Sora for image and video generation."
+    "en": "OpenAI's GPT models for writing, reasoning and vision — plus gpt-image-1 and Sora for image and video generation, and natural-sounding TTS voices."
   }
 };
