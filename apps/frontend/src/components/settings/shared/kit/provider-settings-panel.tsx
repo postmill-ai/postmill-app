@@ -93,6 +93,15 @@ export function ProviderSettingsPanel<Meta = any>({
     return m;
   }, [catalog]);
 
+  // Free-tier providers (manifest flag) — beginner guidance badge.
+  const freeTierById = useMemo(() => {
+    const s = new Set<string>();
+    for (const e of catalog ?? []) {
+      if (e.freeTier) s.add(e.providerId);
+    }
+    return s;
+  }, [catalog]);
+
   const matchesCap = useCallback(
     (row: ProviderRow<Meta>, key: string) =>
       descriptor.rowMatchesCapability
@@ -223,6 +232,8 @@ export function ProviderSettingsPanel<Meta = any>({
             initialVersion={row?.version}
             meta={row?.meta}
             website={configEntry?.website}
+            docsUrl={configEntry?.docsUrl ?? undefined}
+            keysUrl={configEntry?.keysUrl ?? undefined}
             onClose={close}
             onSaved={() => {
               close();
@@ -309,16 +320,32 @@ export function ProviderSettingsPanel<Meta = any>({
         onRowClick={(item) => openConfig(item.identifier)}
         renderBadges={(item) => {
           const row = item.meta as ProviderRow<Meta>;
+          // Beginner guidance: nudge first-timers toward the curated featured
+          // providers and the ones with a free tier (manifest flag).
+          const showEasiest = !row?.isConfigured && featuredById.has(item.identifier);
+          const showFreeTier = freeTierById.has(item.identifier);
           return (
             <CapabilityBadges
               keys={item.capabilities ?? []}
               meta={descriptor.capabilityMeta}
               leading={
-                primaryEnabled && row?.isPrimary ? (
-                  <span className="text-[10px] rounded-[4px] px-[6px] py-[2px] bg-green-900/20 text-green-900 dark:text-green-400">
-                    {t('primary', 'Primary')}
-                  </span>
-                ) : undefined
+                <>
+                  {primaryEnabled && row?.isPrimary && (
+                    <span className="text-[10px] rounded-[4px] px-[6px] py-[2px] bg-green-900/20 text-green-900 dark:text-green-400">
+                      {t('primary', 'Primary')}
+                    </span>
+                  )}
+                  {showEasiest && (
+                    <span className="text-[10px] rounded-[4px] px-[6px] py-[2px] bg-amber-500/20 text-amber-800 dark:text-amber-400">
+                      {t('badge_easiest_start', 'Easiest to start')}
+                    </span>
+                  )}
+                  {showFreeTier && (
+                    <span className="text-[10px] rounded-[4px] px-[6px] py-[2px] bg-emerald-500/20 text-emerald-800 dark:text-emerald-400">
+                      {t('badge_free_tier', 'Free tier available')}
+                    </span>
+                  )}
+                </>
               }
             />
           );

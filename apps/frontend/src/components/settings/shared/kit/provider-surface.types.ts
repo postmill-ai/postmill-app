@@ -99,6 +99,12 @@ export interface ProviderFormState {
   extra: Record<string, any>;
 }
 
+/** Result of a Test Connection call — carries the adapter's reason on failure. */
+export interface SurfaceTestResult {
+  ok: boolean;
+  error?: string;
+}
+
 /** Catalog-style credential field shape (text/password/select/textarea). */
 export interface KitCredentialField {
   key: string;
@@ -120,6 +126,10 @@ export interface ProviderSurfaceFeatures {
   /** Default true. */
   remove?: boolean;
   test?: boolean;
+  /** Run Test automatically on Save; a failed test blocks saving (with a
+   *  "save anyway" escape). Used by the AI surface so garbage keys can't be
+   *  saved silently. */
+  testOnSave?: boolean;
   /** shortlinks/storage/channels — keyed by row id, not identifier. */
   multiInstance?: boolean;
 }

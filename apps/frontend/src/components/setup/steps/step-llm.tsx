@@ -64,7 +64,7 @@ export function StepLlm({
       title={t('setup_llm_title', 'Connect an LLM provider')}
       subtitle={t(
         'setup_llm_subtitle',
-        'Pick a Large Language Model provider to power AI features. This step is required before you can finish setup.'
+        'Postmill uses AI to help you write posts, replies and media descriptions. To turn it on you need an API key — think of it as a password that lets Postmill use the AI provider on your behalf; you get it from the provider\'s website and we store it encrypted. This step is required, but you can change or remove the provider anytime in Settings.'
       )}
     >
       <ProviderSettingsPanel

@@ -118,6 +118,8 @@ export const mistralAiModule: ProviderModule<any, any> = {
     status: 'active',
     credentialFields: (adapter as any).credentialFields || [],
     capabilities: (adapter as any).capabilities,
+    docsUrl: 'https://docs.mistral.ai',
+    keysUrl: 'https://console.mistral.ai/api-keys',
   },
   create: (ctx) => {
     adapter.setSafeFetch(ctx.fetch);

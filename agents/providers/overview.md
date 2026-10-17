@@ -63,8 +63,9 @@ export interface ProviderModule<Caps = unknown, Capability = unknown> {
 - `ProviderManifest` fields: `domain`, `providerId`, `version`, `displayName`, `status`,
   `credentialFields: CredentialField[]` (`key/label/type/required`, type ∈
   `string|text|password|textarea|json|select`), `capabilities`, plus optional `deprecatedAt`,
-  `sunsetAt`, `universalCredentialFrom`, `icon`, `docsUrl`, `setupNotes`,
-  `authType: 'none'|'apiKey'|'oauth2'`, `defaultDomain`.
+  `sunsetAt`, `universalCredentialFrom`, `icon`, `docsUrl`, `keysUrl` (API-keys page —
+  beginner "where do I get my key?" link), `freeTier` (badge in the settings UI),
+  `setupNotes`, `authType: 'none'|'apiKey'|'oauth2'`, `defaultDomain`.
 - `tombstone(manifest)` (`module.ts`) builds a module whose `create()` always throws retired —
   use it for retired versions that must stay addressable.
 

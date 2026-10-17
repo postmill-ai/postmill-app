@@ -8,7 +8,7 @@ export const openaiDescriptor: StudioDescriptor = {
   landing: {
     "website": "https://openai.com",
     "tagline": "The image model that powers ChatGPT",
-    "description": "OpenAI's image generation via gpt-image-1 — the natively multimodal model behind ChatGPT — delivering versatile styles, strong world knowledge, accurate text, and prompt-driven edits.",
+    "description": "OpenAI's GPT models for writing, reasoning and vision — plus gpt-image-1 and Sora for image and video generation, and natural-sounding TTS voices.",
     "badges": [
       "Image",
       "Audio"

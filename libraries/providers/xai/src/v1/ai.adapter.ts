@@ -116,6 +116,8 @@ export const xaiAiModule: ProviderModule<any, any> = {
     status: 'active',
     credentialFields: (adapter as any).credentialFields || [],
     capabilities: (adapter as any).capabilities,
+    docsUrl: 'https://docs.x.ai',
+    keysUrl: 'https://console.x.ai/',
   },
   create: (ctx) => {
     adapter.setSafeFetch(ctx.fetch);

@@ -37,6 +37,12 @@ export interface ProviderCatalogEntry {
   featuredSortOrder?: number | null;
   /** Official provider homepage (for the info modal "Visit website" link). */
   website?: string;
+  /** Manifest docs link (rendered in the config modal, comms precedent). */
+  docsUrl?: string | null;
+  /** Direct link to the provider's API-key page (beginner help). */
+  keysUrl?: string | null;
+  /** Manifest flag: the provider offers a usable free tier (badge in the UI). */
+  freeTier?: boolean;
   /** Localized one-line provider description (keyed by language code, `en` required). */
   description?: Partial<Record<string, string>>;
 }
