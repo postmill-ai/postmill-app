@@ -32,6 +32,11 @@ export const UPLOAD_ALLOWED_MIME_TYPES = new Set([
   'image/bmp',
   'image/tiff',
   'video/mp4',
+  // MediaRecorder output (mic voiceover recordings): Chrome/Firefox produce
+  // webm; file-type sniffs an audio-only webm/opus blob as video/webm, so both
+  // spellings must be whitelisted for the upload to survive the pipe.
+  'video/webm',
+  'audio/webm',
   'audio/mpeg',
   'audio/mp4',
   'audio/wav',

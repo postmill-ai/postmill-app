@@ -182,7 +182,8 @@ describe('AiDesignerConductorService delivery state machine', () => {
         expect.objectContaining({ variantId: 'v1' }),
         expect.objectContaining({ variantId: 'v2' }),
         expect.objectContaining({ variantId: 'v3' }),
-      ])
+      ]),
+      'image'
     );
 
     // 2. Delivery appends NO form message — it ends with a conversational
@@ -783,5 +784,132 @@ describe('AiDesignerConductorService deterministic delivered accept', () => {
     await conductor.handleMessage(SESSION_ID, ctx, 'looks good', emitter);
     expect(designService.createTemplate).toHaveBeenCalledTimes(1);
     expect(designService.getDesign).toHaveBeenCalledWith(ORG_ID, 'design-A2');
+  });
+});
+
+describe('video session delivery conversion', () => {
+  const imageDoc = {
+    version: 7,
+    mode: 'image',
+    outputs: [
+      {
+        id: 'out-1',
+        formatId: 'reel',
+        name: 'Instagram Reel (Video)',
+        width: 1080,
+        height: 1920,
+        background: '#112233',
+        children: [
+          {
+            id: 'e1',
+            type: 'text',
+            x: 10,
+            y: 20,
+            width: 300,
+            height: 80,
+            rotation: 0,
+            opacity: 1,
+            locked: false,
+            hidden: false,
+            text: 'Hello',
+          },
+        ],
+      },
+    ],
+  };
+
+  const makeResult = () => ({
+    designId: 'design-v1',
+    variantId: 'v1',
+    outputPreviews: [
+      { formatId: 'reel', fileId: 'file-v1', url: 'https://example.com/p.png' },
+    ],
+  });
+
+  it('persists a video-mode doc on the same Design row, non-fatally per variant', async () => {
+    const designService = {
+      getDesign: vi.fn().mockResolvedValue({ id: 'design-v1', doc: imageDoc }),
+      updateDesign: vi.fn().mockResolvedValue(undefined),
+      createTemplate: vi.fn(),
+    };
+    const { conductor } = makeConductor({ designService });
+
+    const notes: string[] = [];
+    await (conductor as any)._convertResultsToVideoDocs(
+      ctx,
+      [makeResult()],
+      notes,
+      [1]
+    );
+
+    expect(designService.updateDesign).toHaveBeenCalledTimes(1);
+    const [, designId, update] = designService.updateDesign.mock.calls[0];
+    expect(designId).toBe('design-v1');
+    expect(update.doc.mode).toBe('video');
+    expect(update.doc.outputs[0].tracks.length).toBeGreaterThan(0);
+    expect(update.doc.outputs[0].fps).toBe(30);
+    // No re-render: the PNG previews already minted stay the delivery artifact.
+    expect(update.previewFileId).toBeUndefined();
+    expect(notes).toHaveLength(0);
+  });
+
+  it('degrades to the image doc with a note when conversion fails', async () => {
+    const designService = {
+      getDesign: vi.fn().mockRejectedValue(new Error('db down')),
+      updateDesign: vi.fn(),
+      createTemplate: vi.fn(),
+    };
+    const { conductor } = makeConductor({ designService });
+
+    const notes: string[] = [];
+    await (conductor as any)._convertResultsToVideoDocs(
+      ctx,
+      [makeResult()],
+      notes,
+      [2]
+    );
+
+    expect(designService.updateDesign).not.toHaveBeenCalled();
+    expect(notes[0]).toContain('variant 2');
+    expect(notes[0]).toContain('static design');
+  });
+
+  it('marks delivered media items as video drafts for video sessions', async () => {
+    const { conductor, service } = makeConductor();
+    const emitter = makeEmitter();
+
+    await (conductor as any)._emitDelivery(
+      SESSION_ID,
+      ctx,
+      emitter,
+      [makeResult()],
+      [],
+      [1],
+      'video'
+    );
+
+    const mediaCall = (service.appendMessage as ReturnType<typeof vi.fn>).mock
+      .calls.find((call) => call[0].kind === 'media');
+    expect(mediaCall[0].content.items[0].videoDraft).toBe(true);
+    // Static PNG preview, not a <video> tile.
+    expect(mediaCall[0].content.items[0].type).toBe('image');
+  });
+
+  it('leaves items unmarked for image sessions', async () => {
+    const { conductor, service } = makeConductor();
+    const emitter = makeEmitter();
+
+    await (conductor as any)._emitDelivery(
+      SESSION_ID,
+      ctx,
+      emitter,
+      [makeResult()],
+      [],
+      [1]
+    );
+
+    const mediaCall = (service.appendMessage as ReturnType<typeof vi.fn>).mock
+      .calls.find((call) => call[0].kind === 'media');
+    expect(mediaCall[0].content.items[0].videoDraft).toBeUndefined();
   });
 });

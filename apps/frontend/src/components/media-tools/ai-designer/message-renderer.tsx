@@ -195,6 +195,9 @@ const MediaMessage: React.FC<{
       {groups.map(([designId, groupItems]) => {
         // 'Variant 1 · ig-post' → 'Variant 1'
         const title = groupItems[0].caption?.split(' · ')[0];
+        // Video-session delivery: the tiles are static PNG previews of a
+        // video-mode design — say so, and where the animation happens.
+        const isVideoDraft = groupItems.some((item) => item.videoDraft);
         return (
           <div
             key={designId}
@@ -204,6 +207,14 @@ const MediaMessage: React.FC<{
               <div className="text-[13px] font-medium text-textColor">{title}</div>
             )}
             <div className="flex flex-wrap gap-3">{groupItems.map(tile)}</div>
+            {isVideoDraft && (
+              <div className="text-[12px] text-textColor/60">
+                {t(
+                  'video_draft_open_in_designer',
+                  'Video draft — open in Designer to animate & export'
+                )}
+              </div>
+            )}
             <Button
               type="button"
               onClick={() => openDesignerModal(modal, t, designId)}

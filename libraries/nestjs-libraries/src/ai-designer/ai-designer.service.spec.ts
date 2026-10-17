@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { AiDesignerService } from './ai-designer.service';
+import { BadRequestException } from '@nestjs/common';
+import { AiDesignerService, deriveSessionFormat } from './ai-designer.service';
 
 const ORG_ID = 'org-1';
 const USER_ID = 'user-1';
@@ -11,6 +12,7 @@ const makeService = (overrides: {
   purgeError?: Error;
 } = {}) => {
   const sessionRepo = {
+    create: vi.fn().mockImplementation(async (data: any) => ({ id: SESSION_ID, ...data })),
     findByIdForOrgAndUser: vi
       .fn()
       .mockResolvedValue(
@@ -113,5 +115,95 @@ describe('AiDesignerService.deleteSession intermediate purge', () => {
       SESSION_ID,
       { referenceFileIds: [], keepFileIds: new Set() }
     );
+  });
+});
+
+describe('deriveSessionFormat', () => {
+  const base = { variants: 1 };
+
+  it('is image for image presets and custom sizes', () => {
+    expect(
+      deriveSessionFormat({ ...base, channels: ['ig-post', 'fb-post'] })
+    ).toBe('image');
+    expect(
+      deriveSessionFormat({
+        ...base,
+        channels: [],
+        customSizes: [{ width: 500, height: 500 }],
+      })
+    ).toBe('image');
+    // ig-reel/tiktok are category 'story' (image surfaces) — only the
+    // category 'video' presets make a video session.
+    expect(deriveSessionFormat({ ...base, channels: ['ig-reel'] })).toBe(
+      'image'
+    );
+  });
+
+  it('is video when every channel is a video preset', () => {
+    expect(
+      deriveSessionFormat({ ...base, channels: ['reel', 'short'] })
+    ).toBe('video');
+    expect(deriveSessionFormat({ ...base, channels: ['tiktok-video'] })).toBe(
+      'video'
+    );
+  });
+
+  it('rejects mixed image+video selections', () => {
+    expect(() =>
+      deriveSessionFormat({ ...base, channels: ['ig-post', 'reel'] })
+    ).toThrow(BadRequestException);
+    expect(() =>
+      deriveSessionFormat({
+        ...base,
+        channels: ['reel'],
+        customSizes: [{ width: 500, height: 500 }],
+      })
+    ).toThrow(BadRequestException);
+  });
+});
+
+describe('AiDesignerService.createSession format', () => {
+  it('persists the derived format on the session row', async () => {
+    const { service, sessionRepo } = makeService();
+
+    await service.createSession({
+      organizationId: ORG_ID,
+      userId: USER_ID,
+      mode: 'prompt',
+      config: { channels: ['reel'], variants: 1 },
+    });
+
+    expect(sessionRepo.create).toHaveBeenCalledWith(
+      expect.objectContaining({ format: 'video' })
+    );
+  });
+
+  it('defaults to image for non-video selections', async () => {
+    const { service, sessionRepo } = makeService();
+
+    await service.createSession({
+      organizationId: ORG_ID,
+      userId: USER_ID,
+      mode: 'prompt',
+      config: { channels: ['ig-post'], variants: 1 },
+    });
+
+    expect(sessionRepo.create).toHaveBeenCalledWith(
+      expect.objectContaining({ format: 'image' })
+    );
+  });
+
+  it('rejects a mixed selection before a row is created', async () => {
+    const { service, sessionRepo } = makeService();
+
+    await expect(
+      service.createSession({
+        organizationId: ORG_ID,
+        userId: USER_ID,
+        mode: 'prompt',
+        config: { channels: ['ig-post', 'reel'], variants: 1 },
+      })
+    ).rejects.toThrow(BadRequestException);
+    expect(sessionRepo.create).not.toHaveBeenCalled();
   });
 });

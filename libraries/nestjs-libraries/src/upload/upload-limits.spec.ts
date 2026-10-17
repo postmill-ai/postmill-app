@@ -24,6 +24,20 @@ describe('checkUploadLimit', () => {
     ).toBe(true);
   });
 
+  it('accepts webm in both spellings (MediaRecorder voiceover uploads)', () => {
+    // file-type sniffs an audio-only webm/opus blob as video/webm.
+    expect(
+      checkUploadLimit({ size: 2 * MB, mimetype: 'video/webm' }, limits).ok,
+    ).toBe(true);
+    expect(
+      checkUploadLimit({ size: 2 * MB, mimetype: 'audio/webm' }, limits).ok,
+    ).toBe(true);
+    // video/webm rides the video size cap, audio/webm the audio cap.
+    expect(
+      checkUploadLimit({ size: 60 * MB, mimetype: 'audio/webm' }, limits).ok,
+    ).toBe(false);
+  });
+
   it('rejects unsupported document/archive MIME types', () => {
     for (const mimetype of [
       'application/pdf',

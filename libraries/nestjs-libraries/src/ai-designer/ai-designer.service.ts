@@ -1,4 +1,6 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { BadRequestException, Injectable, Logger } from '@nestjs/common';
+import { CHANNEL_PRESETS } from '@postmill-ai/nestjs-libraries/integrations/social/channel-presets';
+import type { AiDesignerFormat } from './ai-designer.types';
 import { AiDesignerSessionRepository } from '@postmill-ai/nestjs-libraries/database/prisma/ai-designer/ai-designer-session.repository';
 import { AiDesignerMessageRepository } from '@postmill-ai/nestjs-libraries/database/prisma/ai-designer/ai-designer-message.repository';
 import { GuardrailService } from '@postmill-ai/nestjs-libraries/ai/governance/guardrail.service';
@@ -15,6 +17,32 @@ import type {
   AiDesignerSessionState,
   DesignBrief,
 } from './ai-designer.types';
+
+const VIDEO_PRESET_IDS = new Set(
+  CHANNEL_PRESETS.filter((p) => p.category === 'video').map((p) => p.id)
+);
+
+/**
+ * Derive the session's delivery format from the requested outputs. Sessions
+ * are single-mode: a selection is either all video presets (a 'video'
+ * session — the delivered Design is a timeline doc) or image presets/custom
+ * sizes ('image'). A mixed selection is rejected here (400) even though the
+ * start UI already refuses it, because the payload is websocket-borne.
+ */
+export function deriveSessionFormat(config: AiDesignerConfig): AiDesignerFormat {
+  const channels = config.channels ?? [];
+  const videoCount = channels.filter((id) => VIDEO_PRESET_IDS.has(id)).length;
+  // Custom sizes are image outputs — there is no custom video size on the
+  // start form.
+  const imageCount =
+    channels.length - videoCount + (config.customSizes?.length ? 1 : 0);
+  if (videoCount > 0 && imageCount > 0) {
+    throw new BadRequestException(
+      'AI Designer sessions are single-mode: pick either video formats or image formats, not both.'
+    );
+  }
+  return videoCount > 0 ? 'video' : 'image';
+}
 
 @Injectable()
 export class AiDesignerService {
@@ -40,7 +68,7 @@ export class AiDesignerService {
       organizationId: data.organizationId,
       userId: data.userId,
       mode: data.mode,
-      format: 'image',
+      format: deriveSessionFormat(data.config),
       config: data.config,
       brief: data.brief ?? null,
       state: data.state ?? 'intake',

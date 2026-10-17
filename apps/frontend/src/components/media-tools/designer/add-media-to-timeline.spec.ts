@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, afterEach } from 'vitest';
 import { createDesignerStore } from './designer.store';
-import { addImageClipToTimeline, addMediaToTimeline } from './add-media-to-timeline';
+import { addImageClipToTimeline, addMediaToTimeline, addVoiceoverToTimeline } from './add-media-to-timeline';
 import { DEFAULT_CLIP_MS } from './add-text';
 import type { VideoOutput } from './designer.store';
 
@@ -164,5 +164,131 @@ describe('addImageClipToTimeline', () => {
     const imageTracks = vo.tracks.filter((t) => t.type === 'image');
     expect(imageTracks).toHaveLength(1);
     expect(imageTracks[0].clips).toHaveLength(2);
+  });
+});
+
+describe('addVoiceoverToTimeline — shared TTS/recording landing', () => {
+  afterEach(() => vi.restoreAllMocks());
+
+  /** Same probe stub as the video variant, for the audio element. */
+  const stubAudioProbe = (durationSec: number | null) => {
+    const original = document.createElement.bind(document);
+    vi.spyOn(document, 'createElement').mockImplementation((tag: string, ...rest: any[]) => {
+      const el = original(tag, ...(rest as []));
+      if (tag === 'audio') {
+        if (durationSec !== null) {
+          Object.defineProperty(el, 'duration', { value: durationSec });
+          Object.defineProperty(el, 'src', {
+            set: () => setTimeout(() => el.onloadedmetadata?.(new Event('loadedmetadata')), 0),
+          });
+        } else {
+          Object.defineProperty(el, 'src', {
+            set: () => setTimeout(() => el.onerror?.(new Event('error')), 0),
+          });
+        }
+      }
+      return el;
+    });
+  };
+
+  const toVideoMode = (store: ReturnType<typeof createDesignerStore>) => {
+    store.getState().setMode('video');
+    return store.getState().doc.outputs[0] as VideoOutput;
+  };
+
+  const firstAudioClip = (store: ReturnType<typeof createDesignerStore>) => {
+    const vo = store.getState().doc.outputs[0] as VideoOutput;
+    const track = vo.tracks.find((t) => t.type === 'audio');
+    return { vo, track, clip: track?.clips[0] };
+  };
+
+  it('does nothing in an image document', async () => {
+    const store = createDesignerStore();
+    expect(store.getState().doc.mode).toBe('image');
+    const landed = await addVoiceoverToTimeline(store, {
+      url: 'https://example.com/v.webm',
+      fileId: 'file-v',
+      durationMs: 3000,
+    });
+    expect(landed).toBe(false);
+    const vo = store.getState().doc.outputs[0] as VideoOutput;
+    expect(vo.tracks ?? []).toHaveLength(0);
+  });
+
+  it('creates the audio track and clips in at the playhead at volume 1', async () => {
+    const store = createDesignerStore();
+    const vo = toVideoMode(store);
+    store.getState().setPlayhead(1500);
+
+    const landed = await addVoiceoverToTimeline(store, {
+      url: 'https://example.com/v.webm',
+      fileId: 'file-v',
+      durationMs: 4000,
+    });
+
+    expect(landed).toBe(true);
+    const { track, clip } = firstAudioClip(store);
+    expect(track).toBeDefined();
+    expect(clip).toBeDefined();
+    expect(clip!.startMs).toBe(1500);
+    expect(clip!.endMs).toBe(5500);
+    expect(clip!.src).toBe('https://example.com/v.webm');
+    // fileId keeps the doc-file-refs reference (purge scans keep it).
+    expect(clip!.fileId).toBe('file-v');
+    expect(clip!.volume).toBe(1);
+  });
+
+  it('probes the real duration when none is given', async () => {
+    stubAudioProbe(7.25);
+    const store = createDesignerStore();
+    toVideoMode(store);
+
+    await addVoiceoverToTimeline(store, { url: 'https://example.com/tts.mp3' });
+
+    const { clip } = firstAudioClip(store);
+    expect(clip!.endMs - clip!.startMs).toBe(7250);
+  });
+
+  it('clamps the clip at the output duration instead of extending', async () => {
+    const store = createDesignerStore();
+    const vo = toVideoMode(store);
+    store.getState().setPlayhead(vo.durationMs - 1000);
+
+    const landed = await addVoiceoverToTimeline(store, {
+      url: 'https://example.com/v.webm',
+      durationMs: 5000,
+    });
+
+    expect(landed).toBe(true);
+    const { clip } = firstAudioClip(store);
+    expect(clip!.endMs).toBe(vo.durationMs);
+  });
+
+  it('returns false when the playhead is at the very end', async () => {
+    const store = createDesignerStore();
+    const vo = toVideoMode(store);
+    store.getState().setPlayhead(vo.durationMs);
+
+    const landed = await addVoiceoverToTimeline(store, {
+      url: 'https://example.com/v.webm',
+      durationMs: 5000,
+    });
+
+    expect(landed).toBe(false);
+    const { track } = firstAudioClip(store);
+    expect(track?.clips ?? []).toHaveLength(0);
+  });
+
+  it('reuses an existing audio track', async () => {
+    const store = createDesignerStore();
+    toVideoMode(store);
+
+    await addVoiceoverToTimeline(store, { url: 'https://example.com/a.webm', durationMs: 1000 });
+    await addVoiceoverToTimeline(store, { url: 'https://example.com/b.webm', durationMs: 1000 });
+
+    const vo = store.getState().doc.outputs[0] as VideoOutput;
+    const audioTracks = vo.tracks.filter((t) => t.type === 'audio');
+    expect(audioTracks).toHaveLength(1);
+    expect(audioTracks[0].clips).toHaveLength(2);
   });
 });

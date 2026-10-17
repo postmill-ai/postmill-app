@@ -170,7 +170,7 @@ export interface DesignerState {
    * opens its own dialog, then clears this. Same request/consume shape as
    * `renamingId`.
    */
-  generateRequest: 'video' | 'music' | 'voiceover' | null;
+  generateRequest: 'video' | 'music' | 'voiceover' | 'record-voiceover' | null;
 }
 
 export interface DesignerActions {
@@ -249,7 +249,7 @@ export interface DesignerActions {
   setToolOption: (toolId: string, key: string, value: unknown) => void;
   /** Replace the pixel selection. Remembers the outgoing one for Reselect. */
   setSelection: (mask: SelectionMask | null) => void;
-  requestGenerate: (kind: 'video' | 'music' | 'voiceover' | null) => void;
+  requestGenerate: (kind: 'video' | 'music' | 'voiceover' | 'record-voiceover' | null) => void;
   /** Arm a layer's mask as the paint target (null = paint the pixels). */
   setMaskTarget: (id: string | null) => void;
   undo: () => void; redo: () => void; pushHistory: (label?: string) => void;

@@ -321,7 +321,8 @@ describe('AiDesignerConductorService plan acceptance', () => {
       expect.arrayContaining([
         expect.objectContaining({ variantId: 'v1' }),
         expect.objectContaining({ variantId: 'v2' }),
-      ])
+      ]),
+      'image'
     );
   });
 

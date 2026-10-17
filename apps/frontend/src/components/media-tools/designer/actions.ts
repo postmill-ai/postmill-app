@@ -449,6 +449,8 @@ export const useDesignerActions = (
       { id: 'gen-video', label: 'Generate Video…', menu: 'tools', group: 'gen', keywords: ['ai', 'generate', 'video'], enabled: () => isVideoDoc() && mediaTool('text-to-video'), run: () => store.getState().requestGenerate('video') },
       { id: 'gen-audio-music', label: 'Music…', menu: 'tools', submenuPath: ['Generate Audio'], group: 'gen', keywords: ['ai', 'generate', 'audio', 'music', 'soundtrack'], enabled: () => isVideoDoc() && mediaTool('text-to-music'), run: () => store.getState().requestGenerate('music') },
       { id: 'gen-audio-voiceover', label: 'Voiceover…', menu: 'tools', submenuPath: ['Generate Audio'], group: 'gen', keywords: ['ai', 'generate', 'audio', 'voiceover', 'speech', 'tts'], enabled: () => isVideoDoc() && mediaOp('tts'), run: () => store.getState().requestGenerate('voiceover') },
+      // Mic recording needs no provider — only a browser with MediaRecorder.
+      { id: 'record-voiceover', label: 'Record Voiceover…', menu: 'tools', submenuPath: ['Generate Audio'], group: 'gen', keywords: ['record', 'microphone', 'mic', 'audio', 'voiceover'], enabled: () => isVideoDoc() && typeof MediaRecorder !== 'undefined', run: () => store.getState().requestGenerate('record-voiceover') },
       // The one vector operation that cannot happen in the browser: glyph
       // contours come from the font file, which only the server has.
       { id: 'text-to-outlines', label: 'Convert Text to Outlines', menu: 'tools', group: 'vector', keywords: ['outline', 'vector', 'text', 'convert', 'curves'], enabled: () => live().singleTextSelected, run: ctx.onTextToOutlines },

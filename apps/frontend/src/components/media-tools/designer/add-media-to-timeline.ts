@@ -201,6 +201,58 @@ export function addImageClipToTimeline(
   return landed.id;
 }
 
+export interface AddVoiceoverOptions {
+  url: string;
+  /** Media-library File id — keeps the doc-file-refs reference so library
+   *  purge scans never reap a clip's audio out from under a saved design. */
+  fileId?: string;
+  /** Known duration (skips the metadata probe). */
+  durationMs?: number;
+}
+
+/**
+ * Land a voiceover artifact (TTS output or a mic recording) on the timeline:
+ * probe the real duration (with the probe's own fallback), find-or-create the
+ * audio track, and clip it in at the playhead at full volume — identical for
+ * the TTS dialog and the record dialog.
+ *
+ * Returns false when the document has no room (playhead at/past the end) or
+ * the track could not be created. addTrack/addClip push their own history.
+ */
+export async function addVoiceoverToTimeline(
+  store: StoreApi,
+  options: AddVoiceoverOptions
+): Promise<boolean> {
+  const state = store.getState();
+  if (state.doc.mode !== 'video') return false;
+
+  const out = state.currentOutput;
+  const track = findOrCreateTrack(store, out, 'audio');
+  if (!track) return false;
+
+  const probedMs =
+    options.durationMs ?? (await probeAudioDuration(options.url));
+
+  const current = store.getState();
+  const vo = current.doc.outputs[out] as VideoOutput;
+  const startMs = current.playheadMs;
+  const endMs = Math.min(startMs + probedMs, vo.durationMs);
+  if (endMs <= startMs) return false;
+
+  const clip: VideoClip = {
+    id: `clip-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+    startMs,
+    endMs,
+    src: options.url,
+    fileId: options.fileId,
+    volume: 1,
+    fadeInMs: 0,
+    fadeOutMs: 0,
+  };
+  current.addClip(out, track.id, clip);
+  return true;
+}
+
 /**
  * Land a video or audio artifact onto the current video timeline.
  *

@@ -1897,7 +1897,7 @@ model AiDesignerSession {
   organizationId  String
   userId          String
   mode            String   // 'chat' | 'prompt'
-  format          String   @default("image") // 'image' in this plan; 'video' reserved
+  format          String   @default("image") // 'image' | 'video' — derived server-side from the channel selection (video presets ⇒ video session; mixed selections rejected)
   config          Json     // { channels[], customSizes[], savePath, brandProfileId?, variants, referenceFileIds[] }
   brief           Json?    // Design Brief (partial during intake, accepted after) + questionsAsked[]
   state           String   @default("intake") // intake|planning|awaiting_plan|executing|delivered|revising

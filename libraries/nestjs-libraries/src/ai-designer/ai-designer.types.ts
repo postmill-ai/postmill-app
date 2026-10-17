@@ -591,6 +591,12 @@ export interface AiDesignerMediaItem {
   caption?: string;
   designId?: string;
   fileId?: string;
+  /**
+   * Set on video-session deliveries: the preview is a static PNG (the
+   * pre-conversion render), but the saved Design is a video-mode doc — the
+   * renderer captions it "open in Designer to animate & export".
+   */
+  videoDraft?: boolean;
 }
 
 export interface AiDesignerMediaMsg {

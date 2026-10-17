@@ -8,6 +8,7 @@ import { useToaster } from '@postmill-ai/react/toaster/toaster';
 import { useModals, usePromptModal } from '@postmill-ai/frontend/components/layout/new-modal';
 import { useMediaToolsStatus } from '@postmill-ai/frontend/components/layout/use-media-tools-status';
 import { VoiceoverDialog } from './voiceover-dialog';
+import { VoiceoverRecordDialog } from './voiceover-record-dialog';
 import { SegmentRegenerateDialog } from './segment-regenerate-dialog';
 import {
   defaultSegmentWindow,
@@ -18,7 +19,7 @@ import {
   type SegmentWindow,
 } from './segment-regenerate';
 import { Stepper } from './controls';
-import { addMediaToTimeline, probeAudioDuration, probeVideoMetadata } from './add-media-to-timeline';
+import { addMediaToTimeline, addVoiceoverToTimeline, probeAudioDuration, probeVideoMetadata } from './add-media-to-timeline';
 import { clipEdgeUpdate, canDropClipOnTrack } from './clip-geometry';
 import { isMarqueeClick, marqueeHitClips, normalizeMarquee, type MarqueeRect } from './timeline-marquee';
 import { KeyframeLane } from './keyframe-lane';
@@ -2358,37 +2359,67 @@ export const VideoTimeline: FC<VideoTimelineProps> = ({ store, sendTimelineAware
           return;
         }
         const { id, path } = await res.json();
-        // Size the clip to the REAL audio: the old hardcoded 5s left a tail of
-        // silence on short lines and cut long ones off mid-word. The probe has
-        // its own fallback when metadata never arrives.
-        const probedMs = await probeAudioDuration(path);
+        // Landing (probe → audio track → clip at the playhead) is shared with
+        // the mic-recording dialog — see addVoiceoverToTimeline.
+        const landed = await addVoiceoverToTimeline(store, { url: path, fileId: id });
         if (!mountedRef.current) return;
-        const state = store.getState();
-        const currentVo = state.doc.outputs[currentOutput] as VideoOutput;
-        let audioTrack = currentVo.tracks.find((t) => t.type === 'audio');
-        if (!audioTrack) {
-          state.addTrack(currentOutput, 'audio');
-          audioTrack = (store.getState().doc.outputs[currentOutput] as VideoOutput).tracks.find((t) => t.type === 'audio');
+        if (!landed) {
+          toaster.show(translate('voiceover_generation_failed', 'Voiceover generation failed'), 'warning');
+          return;
         }
-        if (!audioTrack) return;
-        const clip: VideoClip = {
-          id: `clip-${Date.now()}`,
-          startMs: state.playheadMs,
-          endMs: Math.min(state.playheadMs + probedMs, vo.durationMs),
-          src: path,
-          fileId: id,
-          volume: 1,
-        } as VideoClip;
-        store.getState().addClip(currentOutput, audioTrack.id, clip);
-        // addClip (and addTrack) already pushed history — a further push would
-        // add a no-op undo step.
         toaster.show(translate('voiceover_added_to_timeline', 'Voiceover added to timeline'), 'success');
       } catch {
         toaster.show(translate('voiceover_generation_failed', 'Voiceover generation failed'), 'warning');
       }
     },
-    [vo, currentOutput, store, fetch, toaster, translate]
+    [vo, store, fetch, toaster, translate]
   );
+
+  // Mic recording → upload as a visible media-library File (same as TTS
+  // output) → land via the shared helper.
+  const recordVoiceover = useCallback(
+    async (blob: Blob, mimeType: string) => {
+      if (!vo) return;
+      try {
+        const ext = mimeType.includes('mp4') ? 'mp4' : mimeType.includes('ogg') ? 'ogg' : 'webm';
+        const form = new FormData();
+        form.append('file', blob, `voiceover-${Date.now()}.${ext}`);
+        const uploadRes = await fetch('/files/upload-simple', { method: 'POST', body: form });
+        if (!uploadRes.ok) {
+          toaster.show(translate('voiceover_generation_failed', 'Voiceover generation failed'), 'warning');
+          return;
+        }
+        const uploaded = await uploadRes.json();
+        const landed = await addVoiceoverToTimeline(store, {
+          url: uploaded.path,
+          fileId: uploaded.id,
+        });
+        if (!mountedRef.current) return;
+        if (!landed) {
+          toaster.show(translate('voiceover_generation_failed', 'Voiceover generation failed'), 'warning');
+          return;
+        }
+        toaster.show(translate('voiceover_added_to_timeline', 'Voiceover added to timeline'), 'success');
+      } catch {
+        toaster.show(translate('voiceover_generation_failed', 'Voiceover generation failed'), 'warning');
+      }
+    },
+    [vo, store, fetch, toaster, translate]
+  );
+
+  const mediaRecorderSupported = typeof MediaRecorder !== 'undefined';
+
+  const handleRecordVoiceover = useCallback(() => {
+    if (!vo || !mediaRecorderSupported) return;
+    modals.openModal({
+      children: (
+        <VoiceoverRecordDialog
+          onClose={() => modals.closeAll()}
+          onAdd={recordVoiceover}
+        />
+      ),
+    });
+  }, [vo, modals, recordVoiceover, mediaRecorderSupported]);
 
   const handleGenerateVoiceover = useCallback(() => {
     if (!vo) return;
@@ -2886,8 +2917,9 @@ export const VideoTimeline: FC<VideoTimelineProps> = ({ store, sendTimelineAware
       if (kind === 'video') handleGenerateVideo();
       else if (kind === 'music') handleGenerateMusic();
       else if (kind === 'voiceover') handleGenerateVoiceover();
+      else if (kind === 'record-voiceover') handleRecordVoiceover();
     };
-  }, [handleGenerateVideo, handleGenerateMusic, handleGenerateVoiceover]);
+  }, [handleGenerateVideo, handleGenerateMusic, handleGenerateVoiceover, handleRecordVoiceover]);
   useEffect(() => {
     if (!generateRequest) return;
     openRequested.current?.(generateRequest);
@@ -3023,6 +3055,20 @@ export const VideoTimeline: FC<VideoTimelineProps> = ({ store, sendTimelineAware
           }
         >
           {translate('voiceover', 'Voiceover')}
+        </button>
+        {/* Mic recording is browser-capability-gated only — no provider needed,
+            unlike the TTS button above. */}
+        <button
+          onClick={handleRecordVoiceover}
+          disabled={!mediaRecorderSupported}
+          className="px-2 py-0.5 rounded-sm text-[10px] border border-studioBorder text-textColor/60 hover:text-textColor disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:text-textColor/60"
+          title={
+            mediaRecorderSupported
+              ? translate('record_voiceover_title', 'Record a voiceover with your microphone')
+              : translate('recording_not_supported', 'Recording is not supported in this browser')
+          }
+        >
+          {translate('record_voiceover', '● Record')}
         </button>
         <button
           onClick={(e) => {

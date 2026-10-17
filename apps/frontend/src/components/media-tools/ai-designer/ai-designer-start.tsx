@@ -136,24 +136,69 @@ export const AiDesignerStart: React.FC<AiDesignerStartProps> = ({
   // `custom` is excluded: it isn't a size, it's the toggle for the custom-size
   // panel (mirrors designer/start-dialog.tsx). Selecting it as a preset used to
   // silently add a hardcoded 1080×1080 duplicate of Instagram Post.
+  // Mirrors start-dialog.tsx's isVideoSurface split: `ig-reel`/`tiktok` are
+  // tagged category 'story' but are video surfaces (they have category 'video'
+  // twins), so they stay out of BOTH lists — the photo list keeps static
+  // surfaces only, the video list is exactly the category 'video' presets.
+  const isVideoSurfaceId = (id: string) => {
+    const preset = CHANNEL_PRESETS.find((p) => p.id === id);
+    return preset?.category === 'video';
+  };
   const imagePresets = useMemo(
     () =>
       CHANNEL_PRESETS.filter(
-        (p) => p.category !== 'video' && p.category !== 'custom'
+        (p) =>
+          p.category !== 'video' &&
+          p.category !== 'custom' &&
+          p.id !== 'ig-reel' &&
+          p.id !== 'tiktok'
       ),
     []
   );
+  const videoPresets = useMemo(
+    () => CHANNEL_PRESETS.filter((p) => p.category === 'video'),
+    []
+  );
 
+  // Sessions are single-mode: image-only or video-only. A cross-mode toggle is
+  // refused with an explanation (the server rejects mixed selections too).
   const toggleChannel = (id: string) => {
-    setSelectedChannels((prev) =>
-      prev.includes(id) ? prev.filter((c) => c !== id) : [...prev, id]
-    );
+    setSelectedChannels((prev) => {
+      if (prev.includes(id)) return prev.filter((c) => c !== id);
+      const video = isVideoSurfaceId(id);
+      const conflicts = video
+        ? prev.some((c) => !isVideoSurfaceId(c)) || customSizes.length > 0
+        : prev.some((c) => isVideoSurfaceId(c));
+      if (conflicts) {
+        toaster.show(
+          t(
+            'ai_designer_single_mode_formats',
+            'Pick either image formats or video formats — not both in one session'
+          ),
+          'warning'
+        );
+        return prev;
+      }
+      return [...prev, id];
+    });
   };
 
   const addCustomSize = () => {
     const w = parseInt(customW, 10);
     const h = parseInt(customH, 10);
     if (!(w > 0 && h > 0)) return;
+    // Custom sizes are image outputs — a video selection makes the session
+    // single-mode video, so a custom size would mix modes.
+    if (selectedChannels.some((id) => isVideoSurfaceId(id))) {
+      toaster.show(
+        t(
+          'ai_designer_single_mode_formats',
+          'Pick either image formats or video formats — not both in one session'
+        ),
+        'warning'
+      );
+      return;
+    }
     // Match the server bounds (ai-designer.schemas.ts) — out-of-range values
     // used to pass the client and get rejected over the socket with no context.
     if (w < MIN_CUSTOM_SIZE || w > MAX_CUSTOM_SIZE || h < MIN_CUSTOM_SIZE || h > MAX_CUSTOM_SIZE) {
@@ -225,6 +270,21 @@ export const AiDesignerStart: React.FC<AiDesignerStartProps> = ({
       );
       return;
     }
+    // Server-enforced as well; belt-and-braces against a stale selection.
+    const hasVideo = selectedChannels.some((id) => isVideoSurfaceId(id));
+    const hasImage =
+      selectedChannels.some((id) => !isVideoSurfaceId(id)) ||
+      customSizes.length > 0;
+    if (hasVideo && hasImage) {
+      toaster.show(
+        t(
+          'ai_designer_single_mode_formats',
+          'Pick either image formats or video formats — not both in one session'
+        ),
+        'warning'
+      );
+      return;
+    }
     if (mode === 'prompt' && !prompt.trim()) {
       toaster.show(t('enter_a_prompt_to_start', 'Enter a prompt to start'), 'warning');
       return;
@@ -257,6 +317,50 @@ export const AiDesignerStart: React.FC<AiDesignerStartProps> = ({
       config,
       prompt: prompt.trim() || undefined,
     });
+  };
+
+  const renderPresetCard = (preset: (typeof CHANNEL_PRESETS)[number]) => {
+    const active = selectedChannels.includes(preset.id);
+    return (
+      <button
+        key={preset.id}
+        type="button"
+        onClick={() => toggleChannel(preset.id)}
+        aria-pressed={active}
+        className={`group relative flex items-center gap-2.5 p-3 rounded-xl border text-left transition-colors ${
+          active
+            ? 'border-designerAccent bg-designerAccent/10'
+            : 'border-studioBorder hover:border-designerAccent/60 hover:bg-boxHover'
+        }`}
+      >
+        {preset.provider && (
+          <PlatformIcon
+            identifier={preset.provider}
+            name={preset.name}
+            size={26}
+            className="shrink-0"
+          />
+        )}
+        <span className="min-w-0 flex flex-col">
+          <span className="text-[13px] font-medium text-textColor truncate">
+            {preset.name}
+          </span>
+          <span className="text-[11px] text-newTableText tabular-nums">
+            {preset.width} × {preset.height}
+          </span>
+        </span>
+        {active && (
+          <span
+            aria-hidden="true"
+            className="absolute top-1.5 end-1.5 w-[16px] h-[16px] rounded-full bg-designerAccent flex items-center justify-center"
+          >
+            <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="3.5" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M20 6 9 17l-5-5" />
+            </svg>
+          </span>
+        )}
+      </button>
+    );
   };
 
   return (
@@ -342,49 +446,7 @@ export const AiDesignerStart: React.FC<AiDesignerStartProps> = ({
               )}
             </div>
             <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2">
-              {imagePresets.map((preset) => {
-                const active = selectedChannels.includes(preset.id);
-                return (
-                  <button
-                    key={preset.id}
-                    type="button"
-                    onClick={() => toggleChannel(preset.id)}
-                    aria-pressed={active}
-                    className={`group relative flex items-center gap-2.5 p-3 rounded-xl border text-left transition-colors ${
-                      active
-                        ? 'border-designerAccent bg-designerAccent/10'
-                        : 'border-studioBorder hover:border-designerAccent/60 hover:bg-boxHover'
-                    }`}
-                  >
-                    {preset.provider && (
-                      <PlatformIcon
-                        identifier={preset.provider}
-                        name={preset.name}
-                        size={26}
-                        className="shrink-0"
-                      />
-                    )}
-                    <span className="min-w-0 flex flex-col">
-                      <span className="text-[13px] font-medium text-textColor truncate">
-                        {preset.name}
-                      </span>
-                      <span className="text-[11px] text-newTableText tabular-nums">
-                        {preset.width} × {preset.height}
-                      </span>
-                    </span>
-                    {active && (
-                      <span
-                        aria-hidden="true"
-                        className="absolute top-1.5 end-1.5 w-[16px] h-[16px] rounded-full bg-designerAccent flex items-center justify-center"
-                      >
-                        <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="3.5" strokeLinecap="round" strokeLinejoin="round">
-                          <path d="M20 6 9 17l-5-5" />
-                        </svg>
-                      </span>
-                    )}
-                  </button>
-                );
-              })}
+              {imagePresets.map(renderPresetCard)}
 
               {/* Not a size — a toggle for the custom-size panel below. It used to
                   be a `custom` preset that silently added a hardcoded 1080×1080. */}
@@ -415,6 +477,25 @@ export const AiDesignerStart: React.FC<AiDesignerStartProps> = ({
                   </span>
                 </span>
               </button>
+            </div>
+          </section>
+
+          {/* Video formats — single-mode: selecting one refuses a mix with the
+              image formats above (and vice versa), enforced server-side too. */}
+          <section className="space-y-3">
+            <div>
+              <h2 className="text-[14px] font-semibold text-textColor">
+                {t('video_formats', 'Video formats')}
+              </h2>
+              <p className="text-[12px] text-textColor/60">
+                {t(
+                  'video_formats_hint',
+                  'Delivered as a video draft you can animate and export in the Designer. Video sessions are video-only.'
+                )}
+              </p>
+            </div>
+            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2">
+              {videoPresets.map(renderPresetCard)}
             </div>
           </section>
 

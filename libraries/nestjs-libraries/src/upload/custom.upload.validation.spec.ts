@@ -87,6 +87,41 @@ describe('CustomFileValidationPipe', () => {
     await expect(pipe.transform(value)).rejects.toThrow(BadRequestException);
   });
 
+  it('accepts a MediaRecorder webm/opus voiceover (detected as video/webm)', async () => {
+    // file-type has no audio-only webm signature — an opus-in-webm recording
+    // sniffs as video/webm, and both spellings are whitelisted.
+    vi.mocked(fromBuffer).mockResolvedValue({ ext: 'webm', mime: 'video/webm' });
+
+    const value = {
+      buffer: Buffer.from('fake-webm'),
+      mimetype: 'audio/webm;codecs=opus',
+      fieldname: 'file',
+      originalname: 'voiceover.webm',
+      size: 512_000,
+    };
+
+    const result = await pipe.transform(value);
+
+    expect(result.mimetype).toBe('video/webm');
+    expect(result.originalname).toMatch(/\.webm$/);
+  });
+
+  it('accepts audio/webm when the detector sniffs it as such', async () => {
+    vi.mocked(fromBuffer).mockResolvedValue({ ext: 'webm', mime: 'audio/webm' });
+
+    const value = {
+      buffer: Buffer.from('fake-webm-audio'),
+      mimetype: 'audio/webm',
+      fieldname: 'file',
+      originalname: 'voiceover.webm',
+      size: 512_000,
+    };
+
+    const result = await pipe.transform(value);
+
+    expect(result.mimetype).toBe('audio/webm');
+  });
+
   it('throws BadRequestException when detected is null', async () => {
     vi.mocked(fromBuffer).mockResolvedValue(null);
 

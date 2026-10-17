@@ -36,10 +36,12 @@ import { matchSlotTexts, normalizeSlotText } from '../util/slot-keys';
 import { applyReferenceGeometry } from '../util/apply-reference-geometry';
 import { isDeliveredAccept } from '../util/accept-phrases';
 import { collectDocFileIds } from '@postmill-ai/nestjs-libraries/media/designer-doc/doc-file-refs';
+import { imageDocToVideoDoc } from '../util/image-doc-to-video';
 import { mapWithConcurrency } from '@postmill-ai/nestjs-libraries/utils/concurrency';
 import type {
   AiDesignerAgentContext,
   AiDesignerConfig,
+  AiDesignerFormat,
   AiDesignerRenderResult,
   AiDesignerRevisePayload,
   AiDesignerSessionState,
@@ -660,7 +662,8 @@ export class AiDesignerConductorService {
         config,
         editedBrief ?? brief,
         emitter,
-        acceptedPlans.length > 0 ? acceptedPlans : undefined
+        acceptedPlans.length > 0 ? acceptedPlans : undefined,
+        (session.format as AiDesignerFormat) ?? 'image'
       );
 
       // One consolidated degradation note, posted with the delivery below.
@@ -684,7 +687,15 @@ export class AiDesignerConductorService {
         },
       });
 
-      await this._emitDelivery(sessionId, ctx, emitter, results, notes, ordinals);
+      await this._emitDelivery(
+        sessionId,
+        ctx,
+        emitter,
+        results,
+        notes,
+        ordinals,
+        (session.format as AiDesignerFormat) ?? 'image'
+      );
 
       // Explicit plan-level opt-in (the conversational accept flow handles
       // the default auto-save with its own opt-out).
@@ -972,7 +983,7 @@ export class AiDesignerConductorService {
       });
       await this._emitDelivery(sessionId, ctx, emitter, results, reviseNotes, [
         sourceOrdinal,
-      ]);
+      ], (session.format as AiDesignerFormat) ?? 'image');
     } catch (err) {
       if (this._wasCancelled(err)) {
         this._logger.log(`AI Designer revise cancelled for session ${sessionId}`);
@@ -1399,7 +1410,13 @@ export class AiDesignerConductorService {
     config: AiDesignerConfig,
     brief: DesignBrief,
     emitter: AiDesignerEmitter,
-    presetPlans?: DesignPlan[]
+    presetPlans?: DesignPlan[],
+    /**
+     * Session delivery format. 'video' sessions compose and QC with the IMAGE
+     * pipeline unchanged, then convert each delivered doc to a video-mode doc
+     * at the end (see `_convertResultsToVideoDocs`).
+     */
+    format: AiDesignerFormat = 'image'
   ): Promise<AiDesignerRenderResult[]> {
     let plans = presetPlans;
     if (!plans || plans.length === 0) {
@@ -2359,6 +2376,13 @@ export class AiDesignerConductorService {
         );
       }
     }
+
+    // Video sessions: swap each delivered doc for its video-mode counterpart
+    // AFTER the final image previews are minted — the critic/QC loop above ran
+    // entirely on the image doc, and delivery keeps those PNG previews.
+    if (format === 'video') {
+      await this._convertResultsToVideoDocs(ctx, results, notes, ordinals);
+    }
     // Delivery captions ride the same numbers the QC notes used.
     this._deliveryOrdinals.set(sessionId, ordinals);
 
@@ -2369,6 +2393,40 @@ export class AiDesignerConductorService {
     }
 
     return results;
+  }
+
+  /**
+   * Video-session delivery: convert each variant's final (image-mode) doc into
+   * a video-mode doc via `imageDocToVideoDoc` and persist it on the SAME
+   * Design row. Deliberately NOT routed through the saver: the saver re-renders
+   * on every write, and the delivered previews must stay the PNG pages already
+   * rendered from the pre-conversion image doc (the critic judged them, and
+   * delivery displays them). Non-fatal per variant — a conversion failure
+   * delivers the image doc with a note rather than rolling the run back.
+   */
+  private async _convertResultsToVideoDocs(
+    ctx: AiDesignerAgentContext,
+    results: AiDesignerRenderResult[],
+    notes: string[],
+    ordinals: number[]
+  ) {
+    for (let i = 0; i < results.length; i++) {
+      try {
+        const doc = await this._loadDesignDoc(ctx.orgId, results[i].designId);
+        const videoDoc = imageDocToVideoDoc(doc);
+        await this._designService.updateDesign(ctx.orgId, results[i].designId, {
+          doc: videoDoc,
+        });
+      } catch (err) {
+        this._logger.warn(
+          `Video conversion failed for ${results[i].variantId}: ${(err as Error).message} — delivering the image design.`,
+          AiDesignerConductorService.name
+        );
+        notes.push(
+          `variant ${ordinals[i] ?? i + 1} could not be converted to a video draft — it was saved as a static design`
+        );
+      }
+    }
   }
 
   /**
@@ -3523,7 +3581,9 @@ export class AiDesignerConductorService {
      * path delivers a one-element `results`, so the hardcoded index captioned
      * a revised variant 3 as "Variant 1".
      */
-    ordinals?: number[]
+    ordinals?: number[],
+    /** Session format — video deliveries mark their items `videoDraft`. */
+    format: AiDesignerFormat = 'image'
   ) {
     // One honest heads-up for everything that degraded during the pipeline —
     // never a message per note.
@@ -3550,6 +3610,7 @@ export class AiDesignerConductorService {
         caption: `Variant ${ordinals?.[index] ?? index + 1} · ${o.formatId}`,
         designId: r.designId,
         fileId: o.fileId,
+        ...(format === 'video' ? { videoDraft: true } : {}),
       }))
     );
 
