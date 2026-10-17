@@ -1,7 +1,7 @@
 'use client';
 
 import React, { FC, useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import type { VideoClip, VideoTrack, VideoOutput, DesignerElement } from './designer.store';
+import type { VideoClip, VideoTrack, VideoOutput, DesignerElement, ClipTransition } from './designer.store';
 import { VideoPreviewEngine } from './video-preview';
 import { useFetch } from '@postmill-ai/helpers/utils/custom.fetch';
 import { useToaster } from '@postmill-ai/react/toaster/toaster';
@@ -243,6 +243,125 @@ const WaveformBars = React.memo(function WaveformBars({ src, width }: { src: str
   );
 });
 
+// Filmstrip thumbnails for video clips — a horizontal strip of frames captured
+// from a hidden <video>, cached per src OUTSIDE React (same discipline as the
+// peaks cache above), so ClipRow's memoization never re-captures and a re-render
+// only reads the finished dataURL. `null` is the failure sentinel (CORS-tainted
+// or unloadable source): cached too, so a bad source is never retried per mount.
+const FILMSTRIP_THUMBS = 6;
+const FILMSTRIP_HEIGHT = 24;
+const FILMSTRIP_CACHE_MAX = 50;
+const filmstripCache = new Map<string, string | null>();
+const filmstripInflight = new Map<string, Promise<string | null>>();
+
+async function captureFilmstrip(src: string): Promise<string | null> {
+  if (filmstripCache.has(src)) {
+    const hit = filmstripCache.get(src)!;
+    filmstripCache.delete(src);
+    filmstripCache.set(src, hit);
+    return hit;
+  }
+  const inflight = filmstripInflight.get(src);
+  if (inflight) return inflight;
+
+  const p = (async (): Promise<string | null> => {
+    const video = document.createElement('video');
+    try {
+      video.crossOrigin = 'anonymous';
+      video.muted = true;
+      video.playsInline = true;
+      video.preload = 'auto';
+      video.src = src;
+      await new Promise<void>((resolve, reject) => {
+        video.onloadeddata = () => resolve();
+        video.onerror = () => reject(new Error('filmstrip: video load failed'));
+        setTimeout(() => reject(new Error('filmstrip: load timeout')), 10000);
+      });
+      const vw = video.videoWidth;
+      const vh = video.videoHeight;
+      const aspect = vw > 0 && vh > 0 ? vw / vh : 16 / 9;
+      const thumbW = Math.max(8, Math.round(FILMSTRIP_HEIGHT * aspect));
+      const canvas = document.createElement('canvas');
+      canvas.width = thumbW * FILMSTRIP_THUMBS;
+      canvas.height = FILMSTRIP_HEIGHT;
+      const ctx = canvas.getContext('2d');
+      if (!ctx) throw new Error('filmstrip: no 2d context');
+      const duration = Number.isFinite(video.duration) && video.duration > 0 ? video.duration : 0;
+      for (let i = 0; i < FILMSTRIP_THUMBS; i++) {
+        const t = duration > 0 ? Math.max(0, Math.min(duration - 0.05, (duration * (i + 0.5)) / FILMSTRIP_THUMBS)) : 0;
+        if (t > 0) {
+          video.currentTime = t;
+          await new Promise<void>((resolve) => {
+            video.onseeked = () => resolve();
+            setTimeout(resolve, 2000);
+          });
+        }
+        // Cover-crop each frame into its cell (same rule as fitMode 'cover').
+        const scale = Math.max(thumbW / Math.max(1, vw), FILMSTRIP_HEIGHT / Math.max(1, vh));
+        const sw = thumbW / scale;
+        const sh = FILMSTRIP_HEIGHT / scale;
+        ctx.drawImage(video, (vw - sw) / 2, (vh - sh) / 2, sw, sh, i * thumbW, 0, thumbW, FILMSTRIP_HEIGHT);
+      }
+      // toDataURL throws on a CORS-tainted canvas — the catch below records
+      // the failure sentinel and the clip keeps its flat color bar.
+      const url = canvas.toDataURL('image/jpeg', 0.6);
+      filmstripCache.set(src, url);
+      if (filmstripCache.size > FILMSTRIP_CACHE_MAX) {
+        const oldest = filmstripCache.keys().next().value;
+        if (oldest !== undefined) filmstripCache.delete(oldest);
+      }
+      return url;
+    } catch {
+      filmstripCache.set(src, null);
+      return null;
+    } finally {
+      video.removeAttribute('src');
+      video.load();
+      filmstripInflight.delete(src);
+    }
+  })();
+
+  filmstripInflight.set(src, p);
+  return p;
+}
+
+const ClipFilmstrip = React.memo(function ClipFilmstrip({ src }: { src: string | undefined }) {
+  const [strip, setStrip] = useState<string | null>(() => (src ? filmstripCache.get(src) ?? null : null));
+  useEffect(() => {
+    if (!src) return;
+    let cancelled = false;
+    captureFilmstrip(src).then((url) => {
+      if (!cancelled && url) setStrip(url);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [src]);
+  if (!src || !strip) return null;
+  return (
+    <div
+      className="absolute inset-0 rounded-[4px] opacity-70 pointer-events-none"
+      style={{
+        backgroundImage: `url(${strip})`,
+        backgroundRepeat: 'repeat-x',
+        backgroundSize: 'auto 100%',
+      }}
+    />
+  );
+});
+
+/** The source file's basename, for the clip label — undefined for data: URLs. */
+const clipFileName = (src?: string): string | undefined => {
+  if (!src || src.startsWith('data:') || src.startsWith('blob:')) return undefined;
+  const tail = src.split('?')[0].split('/').pop() || '';
+  if (!tail) return undefined;
+  try {
+    return decodeURIComponent(tail);
+  } catch {
+    return tail;
+  }
+};
+
 // The playhead ticks per rAF during playback/scrubbing. Its subscribers are
 // confined to these small components (and the canvas's video overlay); the
 // timeline itself reads the playhead imperatively so a 60fps tick never
@@ -286,6 +405,7 @@ interface ClipRowProps {
   pixelsPerMs: number;
   selected: boolean;
   primary: boolean;
+  locked: boolean;
   translate: ReturnType<typeof useT>;
   dragMovedRef: { current: boolean };
   onSelectClip: (trackId: string, clipId: string) => void;
@@ -315,6 +435,7 @@ const ClipRow = React.memo(function ClipRow({
   pixelsPerMs,
   selected,
   primary,
+  locked,
   translate,
   dragMovedRef,
   onSelectClip,
@@ -327,6 +448,12 @@ const ClipRow = React.memo(function ClipRow({
   const left = clip.startMs * pixelsPerMs;
   const effectiveEnd = clip.endMs + (clip.freezeAtMs || 0);
   const width = Math.max(4, (effectiveEnd - clip.startMs) * pixelsPerMs);
+  // The source filename identifies the clip in a dense timeline; narrow clips
+  // fall back to the emoji + duration label.
+  const fileName = clipFileName(clip.src);
+  const showFileName =
+    !!fileName && width >= 96 &&
+    (trackType === 'video' || trackType === 'image' || trackType === 'audio');
 
   return (
     <div
@@ -338,7 +465,9 @@ const ClipRow = React.memo(function ClipRow({
       aria-valuemax={Math.round(durationMs - (clip.endMs - clip.startMs))}
       aria-valuetext={translate('clip_start_time', 'Start {{time}}', { time: formatTime(clip.startMs) })}
       tabIndex={0}
-      className={`absolute top-1 rounded-[4px] cursor-pointer group ${
+      className={`absolute top-1 rounded-[4px] group ${
+        locked ? 'cursor-not-allowed' : 'cursor-pointer'
+      } ${
         // The primary (inspector target) keeps the white ring;
         // other selected clips get the accent ring.
         primary ? 'ring-2 ring-white/60 z-10' : selected ? 'ring-2 ring-designerAccent/80 z-10' : ''
@@ -367,12 +496,22 @@ const ClipRow = React.memo(function ClipRow({
       onMouseDown={(e) => onClipMouseDown(e, trackId, trackType, clip, 'move')}
       onContextMenu={(e) => onClipContextMenu(e, trackId, clip.id)}
     >
-      <div className="text-[9px] text-white/90 px-1.5 truncate leading-[28px] select-none">
-        {trackType === 'video' && '\uD83C\uDFAC'}
-        {trackType === 'image' && '\uD83D\uDDBC'}
-        {trackType === 'text' && (clip.text?.substring(0, 10) || translate('clip_label_text_fallback', 'T'))}
-        {trackType === 'caption' && (clip.text?.substring(0, 10) || translate('clip_label_caption_fallback', 'CC'))}
-        {trackType === 'audio' && '\uD83D\uDD0A'}
+      {trackType === 'video' && <ClipFilmstrip src={clip.src} />}
+      <div
+        className="relative text-[9px] text-white/90 px-1.5 truncate leading-[28px] select-none"
+        style={showFileName ? { textShadow: '0 1px 2px rgba(0,0,0,0.8)' } : undefined}
+      >
+        {showFileName ? (
+          fileName
+        ) : (
+          <>
+            {trackType === 'video' && '\uD83C\uDFAC'}
+            {trackType === 'image' && '\uD83D\uDDBC'}
+            {trackType === 'text' && (clip.text?.substring(0, 10) || translate('clip_label_text_fallback', 'T'))}
+            {trackType === 'caption' && (clip.text?.substring(0, 10) || translate('clip_label_caption_fallback', 'CC'))}
+            {trackType === 'audio' && '\uD83D\uDD0A'}
+          </>
+        )}
         {clip.speed !== undefined && clip.speed !== 1 && ` ${clip.speed}x`}
         {clip.reverse && ' \u21A9'}
         {clip.freezeAtMs && clip.freezeAtMs > 0 && ' \u2744'}
@@ -458,6 +597,8 @@ interface TrackRowProps {
   onClipMouseDown: ClipRowProps['onClipMouseDown'];
   onClipContextMenu: (e: React.MouseEvent, trackId: string, clipId: string) => void;
   onEdgeKeyDown: ClipRowProps['onEdgeKeyDown'];
+  onToggleLock: (trackId: string) => void;
+  onToggleHidden: (trackId: string) => void;
   setTrackSettings: React.Dispatch<
     React.SetStateAction<{ trackId: string; x: number; y: number } | null>
   >;
@@ -491,6 +632,8 @@ const TrackRow = React.memo(function TrackRow({
   onClipMouseDown,
   onClipContextMenu,
   onEdgeKeyDown,
+  onToggleLock,
+  onToggleHidden,
   setTrackSettings,
   setTransitionPopover,
 }: TrackRowProps) {
@@ -514,23 +657,43 @@ const TrackRow = React.memo(function TrackRow({
           {track.name || trackTypeLabel(track.type)}
           {track.type === 'audio' && track.muted ? ' \uD83D\uDD07' : ''}
         </span>
-        <button
-          className="text-[9px] text-textColor/40 hover:text-textColor"
-          title={translate('track_settings', 'Track settings')}
-          aria-label={translate('track_settings_for', 'Track settings: {{name}}', { name: track.name || trackTypeLabel(track.type) })}
-          aria-haspopup="menu"
-          onClick={(e) => {
-            const rect = (e.target as HTMLElement).getBoundingClientRect();
-            setTrackSettings({ trackId: track.id, x: rect.left + rect.width / 2, y: rect.top });
-          }}
-        >
-          ⋮
-        </button>
+        <div className="flex items-center gap-1">
+          <button
+            className={`text-[9px] ${track.locked ? 'text-designerAccent' : 'text-textColor/40 hover:text-textColor'}`}
+            title={track.locked ? translate('unlock_track', 'Unlock track') : translate('lock_track', 'Lock track')}
+            aria-label={track.locked ? translate('unlock_track', 'Unlock track') : translate('lock_track', 'Lock track')}
+            aria-pressed={!!track.locked}
+            onClick={() => onToggleLock(track.id)}
+          >
+            {track.locked ? '🔒' : '🔓'}
+          </button>
+          <button
+            className={`text-[9px] ${track.hidden ? 'text-designerAccent' : 'text-textColor/40 hover:text-textColor'}`}
+            title={track.hidden ? translate('show_track', 'Show track') : translate('hide_track', 'Hide track')}
+            aria-label={track.hidden ? translate('show_track', 'Show track') : translate('hide_track', 'Hide track')}
+            aria-pressed={!!track.hidden}
+            onClick={() => onToggleHidden(track.id)}
+          >
+            👁
+          </button>
+          <button
+            className="text-[9px] text-textColor/40 hover:text-textColor"
+            title={translate('track_settings', 'Track settings')}
+            aria-label={translate('track_settings_for', 'Track settings: {{name}}', { name: track.name || trackTypeLabel(track.type) })}
+            aria-haspopup="menu"
+            onClick={(e) => {
+              const rect = (e.target as HTMLElement).getBoundingClientRect();
+              setTrackSettings({ trackId: track.id, x: rect.left + rect.width / 2, y: rect.top });
+            }}
+          >
+            ⋮
+          </button>
+        </div>
       </div>
 
       {/* Track content area */}
       <div
-        className="relative flex-1"
+        className={`relative flex-1 ${track.hidden ? 'opacity-40' : ''}`}
         style={{ width: totalPixels + 40 }}
       >
         {track.clips.map((clip) => (
@@ -543,6 +706,7 @@ const TrackRow = React.memo(function TrackRow({
             pixelsPerMs={pixelsPerMs}
             selected={isSelected(track.id, clip.id)}
             primary={isPrimary(track.id, clip.id)}
+            locked={!!track.locked}
             translate={translate}
             dragMovedRef={dragMovedRef}
             onSelectClip={onSelectClip}
@@ -905,6 +1069,9 @@ const transitionKeys: Record<string, [string, string]> = {
   fade: ['transition_fade', 'Fade'],
   dissolve: ['transition_dissolve', 'Dissolve'],
   slide: ['transition_slide', 'Slide'],
+  wipe: ['transition_wipe', 'Wipe'],
+  zoom: ['transition_zoom', 'Zoom'],
+  blur: ['transition_blur', 'Blur'],
 };
 
 const directionKeys: Record<'left' | 'right' | 'up' | 'down', [string, string]> = {
@@ -954,6 +1121,8 @@ export const VideoTimeline: FC<VideoTimelineProps> = ({ store, sendTimelineAware
   const selectedClips = store((s) => s.selectedClips);
   const selectedIds = store((s) => s.selectedIds);
   const hasKeyframeClipboard = store((s) => !!s.keyframeClipboard?.length);
+  const timelineSnap = store((s) => s.timelineSnap);
+  const timelineHeight = store((s) => s.timelineHeight);
   const setPlayhead = useCallback(
     (ms: number) => store.getState().setPlayhead(ms),
     [store],
@@ -1016,6 +1185,9 @@ export const VideoTimeline: FC<VideoTimelineProps> = ({ store, sendTimelineAware
   } | null>(null);
   const [addTrackMenu, setAddTrackMenu] = useState<{ x: number; y: number } | null>(null);
   const [captionsMenu, setCaptionsMenu] = useState<{ x: number; y: number } | null>(null);
+  // Ruler right-click: add a marker at the clicked time, or rename/delete the
+  // marker already within snap range of it.
+  const [rulerMenu, setRulerMenu] = useState<{ x: number; y: number; ms: number; markerId: string | null } | null>(null);
   const captionFileRef = useRef<HTMLInputElement>(null);
   const [dragOverTrackId, setDragOverTrackId] = useState<string | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -1092,11 +1264,26 @@ export const VideoTimeline: FC<VideoTimelineProps> = ({ store, sendTimelineAware
     return marks;
   }, [isVideo, vo, pixelsPerMs]);
 
+  // CapCut-style scroll follow: during playback the view only chases the
+  // playhead once it LEAVES the visible window, and any user scroll detaches
+  // the follow until the next seek or play. `programmaticScrollRef` tells the
+  // scroll listener that the next scroll event came from us, not the user.
+  const followPlaybackRef = useRef(true);
+  const programmaticScrollRef = useRef(false);
+
+  const setScrollLeft = useCallback((px: number) => {
+    const el = scrollRef.current;
+    if (!el) return;
+    programmaticScrollRef.current = true;
+    el.scrollLeft = Math.max(0, px);
+  }, []);
+
   const scrollToPlayhead = useCallback(() => {
     if (!scrollRef.current) return;
+    followPlaybackRef.current = true;
     const playheadPx = store.getState().playheadMs * pixelsPerMs - 200;
-    scrollRef.current.scrollLeft = Math.max(0, playheadPx);
-  }, [store, pixelsPerMs]);
+    setScrollLeft(playheadPx);
+  }, [store, pixelsPerMs, setScrollLeft]);
 
   const handlePlayPause = useCallback(() => {
     if (!isVideo || !vo) return;
@@ -1142,9 +1329,38 @@ export const VideoTimeline: FC<VideoTimelineProps> = ({ store, sendTimelineAware
     return store.subscribe((state) => {
       if (state.playheadMs === prev) return;
       prev = state.playheadMs;
-      scrollToPlayhead();
+      if (!followPlaybackRef.current) return;
+      const el = scrollRef.current;
+      if (!el) return;
+      const playheadPx = LABEL_WIDTH + state.playheadMs * pixelsPerMs;
+      // Chase only when the playhead leaves the visible window (with a small
+      // margin so it doesn't hug the edge); otherwise the user's scroll wins.
+      const margin = 60;
+      const viewStart = el.scrollLeft + LABEL_WIDTH;
+      const viewEnd = el.scrollLeft + el.clientWidth;
+      if (playheadPx < viewStart + margin || playheadPx > viewEnd - margin) {
+        setScrollLeft(playheadPx - LABEL_WIDTH - 200);
+      }
     });
-  }, [isPlaying, scrollToPlayhead, store]);
+  }, [isPlaying, scrollToPlayhead, store, pixelsPerMs, setScrollLeft]);
+
+  // A scroll NOT caused by our own follow/anchor writes detaches the follow
+  // for the rest of this playback run (seeking or pressing play re-arms it).
+  useEffect(() => {
+    const el = scrollRef.current;
+    if (!el) return;
+    const onScroll = () => {
+      if (programmaticScrollRef.current) {
+        programmaticScrollRef.current = false;
+        return;
+      }
+      if (isPlaying) followPlaybackRef.current = false;
+    };
+    el.addEventListener('scroll', onScroll, { passive: true });
+    return () => el.removeEventListener('scroll', onScroll);
+    // isVideo: the scroll container only exists once video mode renders, so
+    // re-attach when it appears (the component stays mounted across modes).
+  }, [isVideo, isPlaying]);
 
   // The ruler's aria value tracks the playhead imperatively — re-rendering
   // the ruler per tick would repaint every tick mark for an attribute change.
@@ -1162,11 +1378,26 @@ export const VideoTimeline: FC<VideoTimelineProps> = ({ store, sendTimelineAware
       if (!scrollRef.current) return;
       const rect = scrollRef.current.getBoundingClientRect();
       const x = clientX - rect.left + scrollRef.current.scrollLeft - LABEL_WIDTH;
-      const ms = Math.max(0, Math.min(vo?.durationMs ?? MAX_VIDEO_DURATION_MS, x / pixelsPerMs));
+      let ms = Math.max(0, Math.min(vo?.durationMs ?? MAX_VIDEO_DURATION_MS, x / pixelsPerMs));
+      // Scrubbing snaps to markers while timeline snapping is on (same
+      // threshold a clip edge snaps with).
+      const state = store.getState();
+      if (state.timelineSnap) {
+        const markers = (state.doc.outputs[currentOutput] as VideoOutput | undefined)?.markers || [];
+        const threshold = SNAP_THRESHOLD_MS / pixelsPerMs;
+        for (const m of markers) {
+          if (Math.abs(m.tMs - ms) <= threshold) {
+            ms = m.tMs;
+            break;
+          }
+        }
+      }
+      // A deliberate seek re-arms the playback scroll follow.
+      followPlaybackRef.current = true;
       setPlayhead(ms);
       if (previewRef.current) previewRef.current.seek(ms);
     },
-    [pixelsPerMs, setPlayhead, vo?.durationMs],
+    [pixelsPerMs, setPlayhead, vo?.durationMs, store, currentOutput],
   );
 
   // Ruler drag-scrub: mousedown seeks, mousemove-while-down keeps scrubbing
@@ -1218,6 +1449,40 @@ export const VideoTimeline: FC<VideoTimelineProps> = ({ store, sendTimelineAware
     setZoomPxPerMs((z) => Math.max(z / 1.5, 0.01));
   }, []);
 
+  // Zoom so the whole composition fits the visible track area.
+  const handleZoomToFit = useCallback(() => {
+    const el = scrollRef.current;
+    if (!el || !vo) return;
+    const available = el.clientWidth - LABEL_WIDTH - 40;
+    setZoomPxPerMs(Math.max(0.01, Math.min(4, available / vo.durationMs)));
+    setScrollLeft(0);
+  }, [vo, setScrollLeft]);
+
+  // Ctrl/Cmd+wheel zooms anchored at the cursor: the time under the pointer
+  // stays put across the zoom (standard NLE behavior). Attached natively —
+  // React's wheel listener is passive and could not preventDefault the scroll.
+  useEffect(() => {
+    const el = scrollRef.current;
+    if (!el) return;
+    const onWheel = (e: WheelEvent) => {
+      if (!e.ctrlKey && !e.metaKey) return;
+      e.preventDefault();
+      const rect = el.getBoundingClientRect();
+      const msAtCursor = Math.max(0, (e.clientX - rect.left + el.scrollLeft - LABEL_WIDTH) / pixelsPerMs);
+      const factor = e.deltaY < 0 ? 1.2 : 1 / 1.2;
+      const next = Math.max(0.01, Math.min(4, pixelsPerMs * factor));
+      if (next === pixelsPerMs) return;
+      setZoomPxPerMs(next);
+      // Re-anchor after the zoom re-render has applied the new content width.
+      requestAnimationFrame(() => {
+        setScrollLeft(LABEL_WIDTH + msAtCursor * next - (e.clientX - rect.left));
+      });
+    };
+    el.addEventListener('wheel', onWheel, { passive: false });
+    return () => el.removeEventListener('wheel', onWheel);
+    // isVideo: the scroll container only exists once video mode renders.
+  }, [isVideo, pixelsPerMs, setScrollLeft]);
+
   const SLIDER_STEP_MS = 100;
   const SLIDER_BIG_STEP_MS = 1000;
 
@@ -1243,6 +1508,7 @@ export const VideoTimeline: FC<VideoTimelineProps> = ({ store, sendTimelineAware
       else if (e.key === 'PageUp') next -= step * 5;
       else if (e.key === 'PageDown') next += step * 5;
       next = Math.max(0, Math.min(max, next));
+      followPlaybackRef.current = true;
       setPlayhead(next);
       previewRef.current?.seek(next);
     },
@@ -1261,6 +1527,8 @@ export const VideoTimeline: FC<VideoTimelineProps> = ({ store, sendTimelineAware
       e.stopPropagation();
       const state = store.getState();
       const vo = state.doc.outputs[currentOutput] as VideoOutput | undefined;
+      // Keyboard moves are edits too — a locked track refuses them.
+      if (vo?.tracks.find((t) => t.id === trackId)?.locked) return;
       const max = vo?.durationMs ?? 0;
       const step =
         (e.shiftKey ? SLIDER_BIG_STEP_MS : SLIDER_STEP_MS) *
@@ -1291,6 +1559,8 @@ export const VideoTimeline: FC<VideoTimelineProps> = ({ store, sendTimelineAware
       const vo = state.doc.outputs[currentOutput] as VideoOutput | undefined;
       if (!vo) return;
       const track = vo.tracks.find((t) => t.id === trackId);
+      // Keyboard trims are edits too — a locked track refuses them.
+      if (track?.locked) return;
       const step =
         (e.shiftKey ? SLIDER_BIG_STEP_MS : SLIDER_STEP_MS) *
         (e.key === 'ArrowLeft' ? -1 : 1);
@@ -1349,6 +1619,11 @@ export const VideoTimeline: FC<VideoTimelineProps> = ({ store, sendTimelineAware
       if (!inSelection) {
         setSelectedClip({ outputIndex: currentOutput, trackId, clipId: clip.id });
       }
+      // A locked track refuses drags/trims (selection still works, so the clip
+      // stays inspectable); delete and split are refused in the store actions.
+      const downState = store.getState();
+      const downVo = downState.doc.outputs[currentOutput] as VideoOutput | undefined;
+      if (downVo?.tracks.find((t) => t.id === trackId)?.locked) return;
       // Multi-clip move: snapshot every selected clip's geometry at mousedown
       // so mousemove can apply one dx to all of them (silent writes, one
       // history entry on mouseup — the same discipline as a single drag).
@@ -1357,9 +1632,10 @@ export const VideoTimeline: FC<VideoTimelineProps> = ({ store, sendTimelineAware
         const state = store.getState();
         const groupVo = state.doc.outputs[currentOutput] as VideoOutput | undefined;
         const snapshot = state.selectedClips.flatMap((ref) => {
-          const member = groupVo?.tracks
-            .find((t) => t.id === ref.trackId)
-            ?.clips.find((c) => c.id === ref.clipId);
+          const memberTrack = groupVo?.tracks.find((t) => t.id === ref.trackId);
+          // Locked-track members stay put when the group moves.
+          if (memberTrack?.locked) return [];
+          const member = memberTrack?.clips.find((c) => c.id === ref.clipId);
           return member
             ? [{ trackId: ref.trackId, clipId: ref.clipId, origStart: member.startMs, origEnd: member.endMs }]
             : [];
@@ -1399,6 +1675,9 @@ export const VideoTimeline: FC<VideoTimelineProps> = ({ store, sendTimelineAware
     };
 
     const snapEdges = (value: number, excludeClipId: string): number => {
+      // The snapping toggle (toolbar magnet) turns every snap target off at
+      // once — drag, trim and scrub all read this one pref.
+      if (!store.getState().timelineSnap) return value;
       const snapCandidates: number[] = [0, vo.durationMs];
       for (const t of vo.tracks) {
         for (const c of t.clips) {
@@ -1409,6 +1688,8 @@ export const VideoTimeline: FC<VideoTimelineProps> = ({ store, sendTimelineAware
       // Beats join the clip edges as snap targets, so a cut lands on the music
       // rather than near it. Empty until an audio clip has been analysed.
       snapCandidates.push(...timelineBeats(vo.tracks));
+      // Markers are snap targets too (CapCut parity).
+      for (const m of vo.markers || []) snapCandidates.push(m.tMs);
       const threshold = SNAP_THRESHOLD_MS / pixelsPerMs;
       let best = value;
       let bestDelta = threshold;
@@ -1427,7 +1708,8 @@ export const VideoTimeline: FC<VideoTimelineProps> = ({ store, sendTimelineAware
       // Cross-track drop is single-clip only, and only onto a SAME-TYPE track —
       // a video clip dropped on a caption track would render as a caption (the
       // renderers route by track type), effectively vanishing from the export.
-      const compatible = hovered && canDropClipOnTrack(dragging.trackType, hovered.type);
+      // A locked track refuses drops the same way it refuses drags.
+      const compatible = hovered && !hovered.locked && canDropClipOnTrack(dragging.trackType, hovered.type);
       setDragOverTrackId(dragging.group || !compatible ? null : hovered.id);
 
       // dx is measured from the gesture's mousedown and applied to the values
@@ -1488,6 +1770,7 @@ export const VideoTimeline: FC<VideoTimelineProps> = ({ store, sendTimelineAware
       if (
         !dragging.group &&
         hovered &&
+        !hovered.locked &&
         hovered.id !== dragging.trackId &&
         canDropClipOnTrack(dragging.trackType, hovered.type)
       ) {
@@ -1729,6 +2012,14 @@ export const VideoTimeline: FC<VideoTimelineProps> = ({ store, sendTimelineAware
         );
         setPlayhead(next);
         previewRef.current?.seek(next);
+      } else if (
+        e.key.toLowerCase() === 'm' &&
+        !e.ctrlKey && !e.metaKey && !e.altKey &&
+        !editingText
+      ) {
+        // M drops a marker at the playhead (CapCut muscle memory).
+        e.preventDefault();
+        store.getState().addMarker(currentOutput, store.getState().playheadMs);
       } else if (e.key === ' ' && !(e.target as HTMLElement)?.matches?.('input,textarea')) {
         e.preventDefault();
         handlePlayPause();
@@ -1819,7 +2110,7 @@ export const VideoTimeline: FC<VideoTimelineProps> = ({ store, sendTimelineAware
   );
 
   const handleSetTransition = useCallback(
-    (trackId: string, fromClipId: string, toClipId: string, type: 'cut' | 'fade' | 'dissolve' | 'slide', direction?: 'left' | 'right' | 'up' | 'down') => {
+    (trackId: string, fromClipId: string, toClipId: string, type: ClipTransition['type'], direction?: 'left' | 'right' | 'up' | 'down') => {
       const state = store.getState();
       const vo = state.doc.outputs[currentOutput] as VideoOutput | undefined;
       const track = vo?.tracks.find((t) => t.id === trackId);
@@ -1894,6 +2185,92 @@ export const VideoTimeline: FC<VideoTimelineProps> = ({ store, sendTimelineAware
       store.getState().removeTrack(currentOutput, trackId);
     },
     [store, currentOutput],
+  );
+
+  const handleToggleTrackLock = useCallback(
+    (trackId: string) => {
+      const state = store.getState();
+      const vo = state.doc.outputs[currentOutput] as VideoOutput | undefined;
+      const track = vo?.tracks.find((t) => t.id === trackId);
+      if (!track) return;
+      state.setTrackLocked(currentOutput, trackId, !track.locked);
+    },
+    [store, currentOutput],
+  );
+
+  const handleToggleTrackHidden = useCallback(
+    (trackId: string) => {
+      const state = store.getState();
+      const vo = state.doc.outputs[currentOutput] as VideoOutput | undefined;
+      const track = vo?.tracks.find((t) => t.id === trackId);
+      if (!track) return;
+      state.setTrackHidden(currentOutput, trackId, !track.hidden);
+    },
+    [store, currentOutput],
+  );
+
+  // Ruler right-click: the marker within snap range of the click (if any) is
+  // the menu's rename/delete target; otherwise the menu adds one there.
+  const handleRulerContextMenu = useCallback(
+    (e: React.MouseEvent) => {
+      e.preventDefault();
+      if (!scrollRef.current) return;
+      const rect = scrollRef.current.getBoundingClientRect();
+      const x = e.clientX - rect.left + scrollRef.current.scrollLeft - LABEL_WIDTH;
+      const ms = Math.max(0, Math.min(vo?.durationMs ?? MAX_VIDEO_DURATION_MS, x / pixelsPerMs));
+      const threshold = SNAP_THRESHOLD_MS / pixelsPerMs;
+      const near = (vo?.markers || []).find((m) => Math.abs(m.tMs - ms) <= threshold);
+      setRulerMenu({ x: e.clientX, y: e.clientY, ms: near ? near.tMs : Math.round(ms), markerId: near?.id ?? null });
+    },
+    [vo, pixelsPerMs],
+  );
+
+  const handleRulerMenuAddMarker = useCallback(() => {
+    if (!rulerMenu) return;
+    store.getState().addMarker(currentOutput, rulerMenu.ms);
+    setRulerMenu(null);
+  }, [rulerMenu, store, currentOutput]);
+
+  const handleRulerMenuRenameMarker = useCallback(async () => {
+    if (!rulerMenu?.markerId) return;
+    const markerId = rulerMenu.markerId;
+    const state = store.getState();
+    const vo = state.doc.outputs[currentOutput] as VideoOutput | undefined;
+    const marker = vo?.markers?.find((m) => m.id === markerId);
+    setRulerMenu(null);
+    if (!marker) return;
+    const name = await promptModal.open({
+      title: translate('rename_marker', 'Rename marker'),
+      label: translate('marker_name', 'Marker name'),
+      initialValue: marker.name ?? '',
+    });
+    if (name === null) return;
+    store.getState().renameMarker(currentOutput, markerId, name);
+  }, [rulerMenu, store, currentOutput, promptModal, translate]);
+
+  const handleRulerMenuDeleteMarker = useCallback(() => {
+    if (!rulerMenu?.markerId) return;
+    store.getState().removeMarker(currentOutput, rulerMenu.markerId);
+    setRulerMenu(null);
+  }, [rulerMenu, store, currentOutput]);
+
+  // Timeline height drag-splitter (the panel grows upward from the bottom).
+  const handleSplitterMouseDown = useCallback(
+    (e: React.MouseEvent) => {
+      e.preventDefault();
+      const startY = e.clientY;
+      const startHeight = store.getState().timelineHeight;
+      const onMove = (ev: MouseEvent) => {
+        store.getState().setTimelineHeight(startHeight + (startY - ev.clientY));
+      };
+      const onUp = () => {
+        window.removeEventListener('mousemove', onMove);
+        window.removeEventListener('mouseup', onUp);
+      };
+      window.addEventListener('mousemove', onMove);
+      window.addEventListener('mouseup', onUp);
+    },
+    [store],
   );
 
   const handleAddTrack = useCallback(
@@ -2530,6 +2907,14 @@ export const VideoTimeline: FC<VideoTimelineProps> = ({ store, sendTimelineAware
       aria-label={translate('video_timeline', 'Video timeline')}
       onKeyDown={handleKeyDown}
     >
+      {/* Height splitter — drag to resize the timeline panel (persisted). */}
+      <div
+        role="separator"
+        aria-orientation="horizontal"
+        aria-label={translate('resize_timeline', 'Resize timeline')}
+        className="h-1 shrink-0 cursor-row-resize bg-studioBorder/40 hover:bg-designerAccent/60"
+        onMouseDown={handleSplitterMouseDown}
+      />
       {/* Caption import picker — opened from the Captions menu. */}
       <input
         ref={captionFileRef}
@@ -2565,6 +2950,25 @@ export const VideoTimeline: FC<VideoTimelineProps> = ({ store, sendTimelineAware
           / {formatTime(vo.durationMs)}
         </span>
         <div className="flex-1" />
+        <button
+          onClick={() => store.getState().setTimelineSnap(!timelineSnap)}
+          aria-pressed={timelineSnap}
+          className={`w-6 h-6 flex items-center justify-center rounded-sm text-[12px] ${
+            timelineSnap ? 'bg-designerAccent/20 text-textColor' : 'text-textColor/60 hover:text-textColor hover:bg-studioBorder/30'
+          }`}
+          title={translate('toggle_snapping', 'Snapping')}
+          aria-label={translate('toggle_snapping', 'Snapping')}
+        >
+          🧲
+        </button>
+        <button
+          onClick={handleZoomToFit}
+          className="w-6 h-6 flex items-center justify-center rounded-sm text-textColor/60 hover:text-textColor text-[12px]"
+          title={translate('zoom_to_fit', 'Zoom to fit')}
+          aria-label={translate('zoom_to_fit', 'Zoom to fit')}
+        >
+          ⛶
+        </button>
         <button
           onClick={handleZoomOut}
           className="w-6 h-6 flex items-center justify-center rounded-sm text-textColor/60 hover:text-textColor text-[13px]"
@@ -2690,7 +3094,7 @@ export const VideoTimeline: FC<VideoTimelineProps> = ({ store, sendTimelineAware
       <div
         ref={scrollRef}
         className="flex-1 overflow-auto"
-        style={{ maxHeight: 240 }}
+        style={{ height: timelineHeight }}
       >
         <div style={{ position: 'relative', width: LABEL_WIDTH + totalPixels + 40, minWidth: '100%' }}>
           {/* Ruler */}
@@ -2709,6 +3113,7 @@ export const VideoTimeline: FC<VideoTimelineProps> = ({ store, sendTimelineAware
             onMouseDown={handleRulerMouseDown}
             onKeyDown={handleRulerKeyDown}
             onKeyUp={handleSliderKeyUp}
+            onContextMenu={handleRulerContextMenu}
           >
             <div className="relative h-full pointer-events-none">
               {rulerMarks.map((m) => (
@@ -2721,6 +3126,22 @@ export const VideoTimeline: FC<VideoTimelineProps> = ({ store, sendTimelineAware
                   {m.label && (
                     <div className="text-[9px] text-textColor/40 mt-0.5 -translate-x-1/2 select-none">
                       {m.label}
+                    </div>
+                  )}
+                </div>
+              ))}
+              {/* Markers — document state, rendered as diamonds on the ruler. */}
+              {(vo.markers || []).map((m) => (
+                <div
+                  key={m.id}
+                  className="absolute top-0 h-full"
+                  style={{ left: m.tMs * pixelsPerMs }}
+                  title={m.name || formatTime(m.tMs)}
+                >
+                  <div className="w-2 h-2 rotate-45 bg-cyan-400 -translate-x-1/2 mt-0.5" />
+                  {m.name && (
+                    <div className="text-[8px] text-cyan-300 -translate-x-1/2 mt-0.5 whitespace-nowrap select-none">
+                      {m.name}
                     </div>
                   )}
                 </div>
@@ -2750,6 +3171,8 @@ export const VideoTimeline: FC<VideoTimelineProps> = ({ store, sendTimelineAware
               onClipMouseDown={handleClipMouseDown}
               onClipContextMenu={handleClipContextMenu}
               onEdgeKeyDown={handleEdgeKeyDown}
+              onToggleLock={handleToggleTrackLock}
+              onToggleHidden={handleToggleTrackHidden}
               setTrackSettings={setTrackSettings}
               setTransitionPopover={setTransitionPopover}
             />
@@ -2894,7 +3317,7 @@ export const VideoTimeline: FC<VideoTimelineProps> = ({ store, sendTimelineAware
               transform: 'translateX(-50%)',
             }}
           >
-            {(['video', 'image', 'text', 'audio'] as const).map((type) => (
+            {(['video', 'image', 'text', 'audio', 'caption', 'sticker'] as const).map((type) => (
               <button
                 key={type}
                 role="menuitem"
@@ -2960,6 +3383,53 @@ export const VideoTimeline: FC<VideoTimelineProps> = ({ store, sendTimelineAware
         </>
       )}
 
+      {/* Ruler marker menu: add / rename / delete */}
+      {rulerMenu && (
+        <>
+          <button
+            type="button"
+            aria-label={translate('close', 'Close')}
+            className="fixed inset-0 z-50"
+            onClick={() => setRulerMenu(null)}
+          />
+          <div
+            role="menu"
+            className="fixed z-60 bg-newBgColor border border-studioBorder rounded-lg p-1.5 shadow-xl min-w-[170px]"
+            style={{
+              left: rulerMenu.x,
+              top: rulerMenu.y + 4,
+              transform: 'translateX(-50%)',
+            }}
+          >
+            <button
+              role="menuitem"
+              onClick={handleRulerMenuAddMarker}
+              className="w-full text-left px-2 py-1 rounded-sm text-[12px] hover:bg-studioBorder/30 text-textColor"
+            >
+              {translate('add_marker_at_time', 'Add marker at {{time}}', { time: formatTime(rulerMenu.ms) })}
+            </button>
+            {rulerMenu.markerId && (
+              <>
+                <button
+                  role="menuitem"
+                  onClick={() => void handleRulerMenuRenameMarker()}
+                  className="w-full text-left px-2 py-1 rounded-sm text-[12px] hover:bg-studioBorder/30 text-textColor"
+                >
+                  {translate('rename_marker', 'Rename marker')}
+                </button>
+                <button
+                  role="menuitem"
+                  onClick={handleRulerMenuDeleteMarker}
+                  className="w-full text-left px-2 py-1 rounded-sm text-[12px] hover:bg-studioBorder/30 text-dangerText"
+                >
+                  {translate('delete_marker', 'Delete marker')}
+                </button>
+              </>
+            )}
+          </div>
+        </>
+      )}
+
       {/* Transition popover */}
       {transitionPopover && (
         <>
@@ -2978,7 +3448,7 @@ export const VideoTimeline: FC<VideoTimelineProps> = ({ store, sendTimelineAware
             }}
           >
             <div className="text-[11px] font-medium text-textColor/60 mb-1.5 px-1">{translate('transition', 'Transition')}</div>
-            {(['cut', 'fade', 'dissolve', 'slide'] as const).map((type) => (
+            {(['cut', 'fade', 'dissolve', 'wipe', 'zoom', 'blur', 'slide'] as const).map((type) => (
               <button
                 key={type}
                 onClick={() => handleSetTransition(transitionPopover.trackId, transitionPopover.fromClipId, transitionPopover.toClipId, type)}
@@ -3019,22 +3489,30 @@ export const VideoTimeline: FC<VideoTimelineProps> = ({ store, sendTimelineAware
                 </div>
               );
             })()}
-            {transitionPopover.trackId && (
-              <div className="mt-1.5 pt-1.5 border-t border-studioBorder">
-                <div className="text-[10px] text-textColor/40 mb-1 px-1">{translate('slide_direction', 'Slide direction')}</div>
-                <div className="grid grid-cols-2 gap-1">
-                  {(['left', 'right', 'up', 'down'] as const).map((dir) => (
-                    <button
-                      key={dir}
-                      onClick={() => handleSetTransition(transitionPopover.trackId, transitionPopover.fromClipId, transitionPopover.toClipId, 'slide', dir)}
-                      className="px-1.5 py-0.5 rounded-sm text-[10px] border border-studioBorder text-textColor/60 hover:text-textColor hover:border-newTextColor/40 capitalize"
-                    >
-                      {directionLabel(dir)}
-                    </button>
-                  ))}
+            {(() => {
+              const track = vo.tracks.find((t) => t.id === transitionPopover.trackId);
+              const from = track?.clips.find((c) => c.id === transitionPopover.fromClipId);
+              const to = track?.clips.find((c) => c.id === transitionPopover.toClipId);
+              const currentType = from?.transitionOut?.type || to?.transitionIn?.type || 'cut';
+              // Direction only means something to the geometry transitions.
+              if (currentType !== 'slide' && currentType !== 'wipe') return null;
+              return (
+                <div className="mt-1.5 pt-1.5 border-t border-studioBorder">
+                  <div className="text-[10px] text-textColor/40 mb-1 px-1">{translate('transition_direction', 'Direction')}</div>
+                  <div className="grid grid-cols-2 gap-1">
+                    {(['left', 'right', 'up', 'down'] as const).map((dir) => (
+                      <button
+                        key={dir}
+                        onClick={() => handleSetTransition(transitionPopover.trackId, transitionPopover.fromClipId, transitionPopover.toClipId, currentType, dir)}
+                        className="px-1.5 py-0.5 rounded-sm text-[10px] border border-studioBorder text-textColor/60 hover:text-textColor hover:border-newTextColor/40 capitalize"
+                      >
+                        {directionLabel(dir)}
+                      </button>
+                    ))}
+                  </div>
                 </div>
-              </div>
-            )}
+              );
+            })()}
           </div>
         </>
       )}

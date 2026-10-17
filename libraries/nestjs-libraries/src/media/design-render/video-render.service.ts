@@ -185,10 +185,12 @@ export class VideoRenderService {
       format?: string;
       quality?: number;
       bitrateKbps?: number;
-      /** Resolution multiplier over the canvas size (0.5 | 1 | 2); default 1. */
+      /** Resolution multiplier over the canvas size (0.25–4); default 1. */
       scale?: number;
       /** Frame-rate override (24 | 30 | 60); default = composition.fps. */
       fps?: number;
+      /** loudnorm on the final audio mix (-14 LUFS / -1.5 dBTP); default off. */
+      normalizeLoudness?: boolean;
       posterUrl?: string;
       folderId?: string;
     },
@@ -228,6 +230,7 @@ export class VideoRenderService {
       bitrateKbps: body.bitrateKbps,
       scale: body.scale,
       fps: body.fps,
+      normalizeLoudness: body.normalizeLoudness === true,
       posterUrl: body.posterUrl,
       folderId: body.folderId,
       enqueuedAt: new Date().toISOString(),
@@ -443,6 +446,7 @@ export class VideoRenderService {
         bitrateKbps: input.bitrateKbps || composition.bitrateKbps || 8000,
         format: format as DesignRenderJobSpec['options']['format'],
         quality: input.quality,
+        normalizeLoudness: input.normalizeLoudness === true,
         jobId,
         orgId: job.organizationId,
         renderToken,

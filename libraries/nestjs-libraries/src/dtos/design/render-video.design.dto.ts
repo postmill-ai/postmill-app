@@ -1,10 +1,12 @@
 import {
+  IsBoolean,
   IsIn,
   IsInt,
   IsNumber,
   IsObject,
   IsOptional,
   IsString,
+  Max,
   Min,
 } from 'class-validator';
 
@@ -30,13 +32,16 @@ export class RenderVideoDesignDto {
   bitrateKbps?: number;
 
   /**
-   * Output resolution as a multiple of the canvas size (0.5×/1×/2×). Absent =
-   * render at canvas size. Applied to the Chromium viewport and frame canvas,
-   * not as a post-scale, so 2× is a true supersample.
+   * Output resolution as a multiple of the canvas size. Absent = render at
+   * canvas size. Applied to the Chromium viewport and frame canvas, not as a
+   * post-scale, so >1 is a true supersample. The shorthand buttons (0.5×/1×/2×)
+   * and the 720p/1080p/4K + platform presets all resolve to a multiplier in
+   * this range.
    */
   @IsOptional()
   @IsNumber()
-  @IsIn([0.5, 1, 2])
+  @Min(0.25)
+  @Max(4)
   scale?: number;
 
   /** Frame-rate override (24/30/60). Absent = the composition's own fps. */
@@ -44,6 +49,11 @@ export class RenderVideoDesignDto {
   @IsInt()
   @IsIn([24, 30, 60])
   fps?: number;
+
+  /** Normalize the final audio mix to -14 LUFS / -1.5 dBTP (ffmpeg loudnorm). */
+  @IsOptional()
+  @IsBoolean()
+  normalizeLoudness?: boolean;
 
   @IsOptional()
   @IsString()

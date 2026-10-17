@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest';
 import { escapeForScriptTag, FRAME_RENDERER_SCRIPT } from './frame-renderer-script';
 import { interpolateClipKeyframes } from '../designer-doc/keyframes';
 import { sourceTimeForPlayhead } from '../designer-doc/speed-curve';
+import { transitionAdjustment } from '../designer-doc/transitions';
 
 describe('escapeForScriptTag (0.2 </script> breakout)', () => {
   it('neutralizes a </script> breakout in a user-controlled composition value', () => {
@@ -279,5 +280,118 @@ describe('FRAME_RENDERER_SCRIPT', () => {
     await api.renderFrame(500);
     expect(gcoWrites[0]).toBe('source-over');
     expect(gcoWrites).toContain('multiply');
+  });
+});
+
+describe('FRAME_RENDERER_SCRIPT — transitions and hidden tracks', () => {
+  // Same stub page as the main block above (scoped there, so re-declared).
+  const stubContext = () =>
+    new Proxy(
+      {},
+      {
+        get: (_t, prop) => {
+          if (prop === 'canvas') return { width: 10, height: 10 };
+          return () => undefined;
+        },
+        set: () => true,
+      }
+    );
+
+  it('composes transitions with the SHARED module, not a hand-mirrored copy', () => {
+    // Same parity pin as keyframes/speed-curve: the injected source must BE
+    // designer-doc/transitions, so the export cannot drift from the preview.
+    expect(FRAME_RENDERER_SCRIPT).toContain('transitionAdjustment');
+    expect(FRAME_RENDERER_SCRIPT).toContain('applyTransitionAdjustment');
+    expect(FRAME_RENDERER_SCRIPT).toContain('TRANSITION_MAX_BLUR_PX');
+
+    const fn = new Function(
+      `${FRAME_RENDERER_SCRIPT.slice(
+        FRAME_RENDERER_SCRIPT.indexOf('(function () {') + '(function () {'.length,
+        FRAME_RENDERER_SCRIPT.indexOf('const output = window.__DATA.output')
+      )}
+      return transitionAdjustment;`
+    ) as () => typeof transitionAdjustment;
+
+    const injected = fn();
+    const types = ['cut', 'fade', 'dissolve', 'slide', 'wipe', 'zoom', 'blur'] as const;
+    for (const type of types) {
+      for (const p of [0, 0.25, 0.5, 0.75, 1]) {
+        for (const isIncoming of [true, false]) {
+          expect(injected(type, 'left', p, isIncoming, 200, 100)).toEqual(
+            transitionAdjustment(type, 'left', p, isIncoming, 200, 100)
+          );
+        }
+      }
+    }
+  });
+
+  it('renders a frame with wipe/zoom/blur transitions and a hidden track without throwing', async () => {
+    const canvas = { width: 0, height: 0, getContext: () => stubContext() };
+    const win: Record<string, unknown> = {
+      __DATA: { output: null, baseUrl: 'https://example.test' },
+    };
+    const doc = {
+      getElementById: () => canvas,
+      createElement: () => ({ width: 0, height: 0, getContext: () => stubContext() }),
+    };
+    win.__DATA = {
+      output: {
+        id: 'o',
+        width: 100,
+        height: 100,
+        fps: 30,
+        durationMs: 2000,
+        background: '#000000',
+        tracks: [
+          {
+            id: 'tr1',
+            type: 'shape',
+            clips: [
+              {
+                id: 'a',
+                startMs: 0,
+                endMs: 1000,
+                shape: 'rect',
+                fill: '#ff0000',
+                x: 0, y: 0, width: 50, height: 50,
+                transitionOut: { type: 'wipe', durationMs: 400, direction: 'left' },
+              },
+              {
+                id: 'b',
+                startMs: 1000,
+                endMs: 2000,
+                shape: 'rect',
+                fill: '#00ff00',
+                x: 0, y: 0, width: 50, height: 50,
+                transitionIn: { type: 'wipe', durationMs: 400, direction: 'left' },
+              },
+              {
+                id: 'c',
+                startMs: 600,
+                endMs: 1400,
+                shape: 'ellipse',
+                fill: '#0000ff',
+                x: 10, y: 10, width: 30, height: 30,
+                transitionIn: { type: 'blur', durationMs: 300 },
+              },
+            ],
+          },
+          {
+            id: 'tr2',
+            type: 'shape',
+            hidden: true,
+            clips: [
+              { id: 'h', startMs: 0, endMs: 2000, shape: 'rect', fill: '#ffffff', x: 0, y: 0, width: 20, height: 20 },
+            ],
+          },
+        ],
+      },
+      baseUrl: 'https://example.test',
+    };
+    const fn = new Function('window', 'document', 'Image', FRAME_RENDERER_SCRIPT);
+    fn(win, doc, class {});
+    const api = win.__FRAME_API as { renderFrame: (ms: number) => Promise<void> };
+    // Inside the wipe window (800-1000) and the blur window (600-900).
+    await expect(api.renderFrame(850)).resolves.toBeUndefined();
   });
 });

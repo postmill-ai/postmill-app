@@ -203,9 +203,11 @@ interface FilteredClipImageProps {
   height: number;
   tick: number;
   playheadMs: number;
+  /** Transition blur ramp (designer-doc/transitions) — merged into the CSS filter chain. */
+  blurPx?: number;
 }
 
-const FilteredClipImage: FC<FilteredClipImageProps> = ({ clip, width, height, tick, playheadMs }) => {
+const FilteredClipImage: FC<FilteredClipImageProps> = ({ clip, width, height, tick, playheadMs, blurPx }) => {
   const [canvasId] = useState(() => getNextCanvasId());
   const canvas = filterCanvasCache.get(canvasId) ?? null;
   const store = useMemo(() => getCanvasStore(canvasId), [canvasId]);
@@ -227,7 +229,18 @@ const FilteredClipImage: FC<FilteredClipImageProps> = ({ clip, width, height, ti
     : isVideoClip
       ? getOrCreateVideo(clip)
       : getOrCreateImage(stickerFrameUrl ?? clip.src);
-  const filterString = useMemo(() => mapFiltersToCss(clip.filters), [clip.filters]);
+  const filterString = useMemo(
+    () => {
+      const base = mapFiltersToCss(clip.filters);
+      // Transition blur rides the same CSS filter pipeline as clip filters —
+      // the frame renderer merges it into ctx.filter exactly the same way.
+      if (blurPx && blurPx > 0.1) {
+        return (base ? base + ' ' : '') + `blur(${blurPx.toFixed(1)}px)`;
+      }
+      return base;
+    },
+    [clip.filters, blurPx]
+  );
 
   useEffect(() => {
     if (!source || !filterString) return;
@@ -475,10 +488,12 @@ export const VideoCanvasOverlay: FC<VideoCanvasOverlayProps> = ({
     () =>
       isVideo &&
       clipsAtPlayhead.some(
-        ({ clip, trackType }) =>
+        ({ clip, trackType, props }) =>
           trackType === 'video' ||
           trackType === 'sticker' ||
-          (clip.filters?.length ?? 0) > 0
+          (clip.filters?.length ?? 0) > 0 ||
+          // A blur transition animates the CSS filter per frame.
+          (props.blurPx ?? 0) > 0
       ),
     [isVideo, clipsAtPlayhead]
   );
@@ -721,6 +736,7 @@ export const VideoCanvasOverlay: FC<VideoCanvasOverlayProps> = ({
               height={props.height}
               tick={tick}
               playheadMs={playheadMs}
+              blurPx={props.blurPx}
             />
           </Group>
         );

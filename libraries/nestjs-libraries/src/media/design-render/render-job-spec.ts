@@ -21,6 +21,8 @@ export interface DesignRenderJobSpec {
     bitrateKbps: number;
     format: 'mp4' | 'webm' | 'gif' | 'webp-animated';
     quality?: number;
+    /** loudnorm on the final audio mix (-14 LUFS / -1.5 dBTP); default off. */
+    normalizeLoudness?: boolean;
     jobId: string;
     orgId: string;
     renderToken: string;
