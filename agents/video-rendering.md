@@ -95,8 +95,9 @@ with one `video_export` credit charged. Sibling docs: `agents/backend.md`,
    - **Parallel frame capture** (`ChromiumFrameCaptureService.captureFrames`): when
      `totalFrames > PARALLEL_CAPTURE_MIN_FRAMES` (300), capture runs on N pages inside
      ONE Chromium instance — N = `getCapturePageCount()` = `VIDEO_RENDER_CAPTURE_PAGES`
-     if set (1 forces sequential), else `min(3, os.availableParallelism())`, hard-capped
-     at `MAX_CAPTURE_PAGES` (8). Page i renders the frames where `frameIndex % N === i`;
+     if set (1 forces sequential), else **1 — parallel is opt-in while a multi-page stall
+     (one stride completes, then the CDP socket dies) is investigated**. Hard cap
+     `MAX_CAPTURE_PAGES` (8). Page i renders the frames where `frameIndex % N === i`;
      files are written under their GLOBAL index (`frame-%05d.png`), so the ffmpeg image2
      pattern sees one contiguous sequence. Each page navigates/preloads independently
      (per-document caches in the frame-renderer script make page state isolated by
@@ -166,7 +167,7 @@ with one `video_export` credit charged. Sibling docs: `agents/backend.md`,
 | `VIDEO_RENDER_CONCURRENCY` | `3` | Inngest function concurrency cap |
 | `VIDEO_RENDER_PODMAN_ENABLED` | off | truthy → container path |
 | `VIDEO_RENDER_TIMEOUT_MS` | `120000` | Render wall-clock floor (both paths); scaled up with frame count |
-| `VIDEO_RENDER_CAPTURE_PAGES` | auto = `min(3, parallelism)` | Parallel capture pages (one browser) when frames > 300; `1` = force sequential; hard cap 8. Passed through to the render container. |
+| `VIDEO_RENDER_CAPTURE_PAGES` | `1` (sequential; parallel opt-in while a stall is investigated) | Parallel capture pages (one browser) when frames > 300; `1` = force sequential; hard cap 8. Passed through to the render container. |
 | `VIDEO_RENDER_PODMAN_BIN` | `podman` | Binary |
 | `VIDEO_RENDER_IMAGE` | `localhost/postmill-render:latest` | Worker image |
 | `VIDEO_RENDER_POD` | `postmill-render` | Shared pod (aggregate cgroup) |

@@ -40,11 +40,9 @@ describe('render-config (2.3 network isolation)', () => {
       expect(getCapturePageCount(PARALLEL_CAPTURE_MIN_FRAMES)).toBe(1);
     });
 
-    it('defaults to min(3, available parallelism) above the threshold', () => {
+    it('defaults to sequential above the threshold (parallel is opt-in while the multi-page stall is unresolved)', () => {
       delete process.env.VIDEO_RENDER_CAPTURE_PAGES;
-      const pages = getCapturePageCount(MANY_FRAMES);
-      expect(pages).toBeGreaterThanOrEqual(1);
-      expect(pages).toBeLessThanOrEqual(3);
+      expect(getCapturePageCount(MANY_FRAMES)).toBe(1);
     });
 
     it('honours VIDEO_RENDER_CAPTURE_PAGES, with 1 forcing sequential', () => {
@@ -58,9 +56,9 @@ describe('render-config (2.3 network isolation)', () => {
       process.env.VIDEO_RENDER_CAPTURE_PAGES = '100';
       expect(getCapturePageCount(MANY_FRAMES)).toBe(MAX_CAPTURE_PAGES);
       process.env.VIDEO_RENDER_CAPTURE_PAGES = 'banana';
-      expect(getCapturePageCount(MANY_FRAMES)).toBeLessThanOrEqual(3);
+      expect(getCapturePageCount(MANY_FRAMES)).toBe(1);
       process.env.VIDEO_RENDER_CAPTURE_PAGES = '-2';
-      expect(getCapturePageCount(MANY_FRAMES)).toBeLessThanOrEqual(3);
+      expect(getCapturePageCount(MANY_FRAMES)).toBe(1);
     });
   });
 });
