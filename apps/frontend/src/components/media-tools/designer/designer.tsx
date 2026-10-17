@@ -620,7 +620,7 @@ export const Designer: FC<DesignerProps> = ({
       }
       const payload: Record<string, unknown> = {
         name: s.designName,
-        category: s.doc.outputs[0]?.formatId || 'custom',
+        category: s.doc.mode === 'video' ? 'Video' : s.doc.outputs[0]?.formatId || 'custom',
         doc: s.doc,
       };
       if (thumbnailFileId) payload.thumbnailFileId = thumbnailFileId;

@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest';
 import {
   ALL_CATEGORIES_KEY,
   OTHER_CATEGORY_KEY,
+  VIDEO_CATEGORY_KEY,
   filterTemplatesByCategory,
   groupTemplatesByCategory,
 } from './template-categories';
@@ -9,9 +10,15 @@ import {
 interface Template {
   id: string;
   category?: string | null;
+  doc?: { mode?: string | null } | null;
 }
 
 const tmpl = (id: string, category?: string | null): Template => ({ id, category });
+const videoTmpl = (id: string, category?: string | null): Template => ({
+  id,
+  category,
+  doc: { mode: 'video' },
+});
 
 describe('groupTemplatesByCategory', () => {
   it('orders system categories in seed order regardless of input order', () => {
@@ -89,6 +96,40 @@ describe('groupTemplatesByCategory', () => {
   it('returns no sections for an empty gallery', () => {
     expect(groupTemplatesByCategory([])).toEqual([]);
   });
+
+  it('buckets uncategorized video templates under Video, labeled Video', () => {
+    const sections = groupTemplatesByCategory([videoTmpl('v1'), videoTmpl('v2', '  ')]);
+    expect(sections).toHaveLength(1);
+    expect(sections[0].key).toBe(VIDEO_CATEGORY_KEY);
+    expect(sections[0].label).toBe('Video');
+    expect(sections[0].templates.map((t) => t.id)).toEqual(['v1', 'v2']);
+  });
+
+  it('keeps an explicit category on a video template', () => {
+    const sections = groupTemplatesByCategory([videoTmpl('v1', 'Promo Reels')]);
+    expect(sections[0].key).toBe('promo reels');
+    expect(sections[0].label).toBe('Promo Reels');
+  });
+
+  it('still buckets uncategorized image templates as Other', () => {
+    const sections = groupTemplatesByCategory([tmpl('i1')]);
+    expect(sections[0].key).toBe(OTHER_CATEGORY_KEY);
+  });
+
+  it('ranks Video with the system categories, after Marketing', () => {
+    const sections = groupTemplatesByCategory([
+      videoTmpl('v1'),
+      tmpl('m1', 'Marketing'),
+      tmpl('z1', 'zebra'),
+      tmpl('b1', 'Basic'),
+    ]);
+    expect(sections.map((s) => s.key)).toEqual([
+      'basic',
+      'marketing',
+      VIDEO_CATEGORY_KEY,
+      'zebra',
+    ]);
+  });
 });
 
 describe('filterTemplatesByCategory', () => {
@@ -116,5 +157,19 @@ describe('filterTemplatesByCategory', () => {
     expect(
       filterTemplatesByCategory(templates, OTHER_CATEGORY_KEY).map((t) => t.id)
     ).toEqual(['u1', 'u2']);
+  });
+
+  it('the Video filter keeps uncategorized video templates but not image ones', () => {
+    const mixed = [
+      videoTmpl('v1'),
+      videoTmpl('v2', 'Promo Reels'),
+      tmpl('u1'),
+    ];
+    expect(
+      filterTemplatesByCategory(mixed, VIDEO_CATEGORY_KEY).map((t) => t.id)
+    ).toEqual(['v1']);
+    expect(
+      filterTemplatesByCategory(mixed, OTHER_CATEGORY_KEY).map((t) => t.id)
+    ).toEqual(['u1']);
   });
 });

@@ -5,15 +5,19 @@ import useSWR from 'swr';
 import { useFetch } from '@postmill-ai/helpers/utils/custom.fetch';
 import { useUser } from '@postmill-ai/frontend/components/layout/user.context';
 import { useToaster } from '@postmill-ai/react/toaster/toaster';
-import { useModals } from '@postmill-ai/frontend/components/layout/new-modal';
+import { useModals, useDecisionModal } from '@postmill-ai/frontend/components/layout/new-modal';
 import { OverflowTabs } from '@postmill-ai/frontend/components/ui/overflow-tabs';
 import type { DesignerDoc } from '../designer.store';
 import { getThumbnailDataUrl } from '../designer';
 import { PanelSkeletonGrid, PanelError } from './panel-states';
 import {
   ALL_CATEGORIES_KEY,
+  VIDEO_CATEGORY_KEY,
+  VIDEO_CATEGORY_LABEL,
   groupTemplatesByCategory,
+  type TemplateSection,
 } from './template-categories';
+import { needsModeConfirm, templateModeOf } from './template-mode';
 import {
   UNFILED_FOLDER_KEY,
   filterTemplatesByFolder,
@@ -46,6 +50,7 @@ export const TemplatesPanel: FC<TemplatesPanelProps> = ({ store, onClose, guard 
   const user = useUser();
   const toaster = useToaster();
   const modal = useModals();
+  const decision = useDecisionModal();
   const t = useT();
 
   const { data, error, isLoading, mutate } = useSWR(
@@ -90,7 +95,25 @@ export const TemplatesPanel: FC<TemplatesPanelProps> = ({ store, onClose, guard 
   );
 
   const applyTemplate = useCallback(async (template: DesignTemplate) => {
-    if (guard && !(await guard())) return;
+    // Cross-mode applies swap the whole doc (loadDesign takes the template's
+    // mode), so they get their own confirm — which also covers the dirty
+    // guard's "replaces your design" warning, hence the else-if. An empty
+    // canvas converts without asking.
+    if (needsModeConfirm(template, store.getState().doc)) {
+      const target = templateModeOf(template);
+      const ok = await decision.open({
+        title:
+          target === 'video'
+            ? t('templates_panel_apply_video_template', 'Apply video template')
+            : t('templates_panel_apply_image_template', 'Apply image template'),
+        description:
+          target === 'video'
+            ? t('templates_panel_apply_video_template_confirm', 'This is a video template — applying it converts your design to video mode and replaces the current design.')
+            : t('templates_panel_apply_image_template_confirm', 'This is an image template — applying it converts your design to image mode and replaces the current design.'),
+        approveLabel: t('apply', 'Apply'),
+      });
+      if (!ok) return;
+    } else if (guard && !(await guard())) return;
     const res = await fetch('/media/designs', {
       method: 'POST',
       body: JSON.stringify({
@@ -105,7 +128,7 @@ export const TemplatesPanel: FC<TemplatesPanelProps> = ({ store, onClose, guard 
     const data = await res.json();
     store.getState().loadDesign(template.doc, data.id, template.name, template.id);
     onClose?.();
-  }, [store, onClose, fetch, toaster, guard, t]);
+  }, [store, onClose, fetch, toaster, guard, decision, t]);
 
   const persistTemplate = useCallback(async (category: string): Promise<boolean> => {
     const state = store.getState();
@@ -183,11 +206,16 @@ export const TemplatesPanel: FC<TemplatesPanelProps> = ({ store, onClose, guard 
 
   const saveAsTemplate = useCallback(() => {
     const state = store.getState();
-    // On update, pre-fill the template's current category; on first save keep
-    // the historical default (current output format, else 'custom').
+    // On update, pre-fill the template's current category; on first save the
+    // default is 'Video' for video docs, else the historical default (current
+    // output format, else 'custom').
     const currentCategory = state.templateId
       ? data?.find((template) => template.id === state.templateId)?.category?.trim()
       : undefined;
+    const fallbackCategory =
+      state.doc.mode === 'video'
+        ? VIDEO_CATEGORY_LABEL
+        : state.doc.outputs[0]?.formatId || 'custom';
     modal.openModal({
       title: state.templateId
         ? t('templates_panel_update_template', 'Update template')
@@ -196,7 +224,7 @@ export const TemplatesPanel: FC<TemplatesPanelProps> = ({ store, onClose, guard 
       children: (close) => (
         <SaveTemplateModal
           isUpdate={!!state.templateId}
-          defaultCategory={currentCategory || state.doc.outputs[0]?.formatId || 'custom'}
+          defaultCategory={currentCategory || fallbackCategory}
           categories={categoryLabels}
           onCancel={close}
           onSave={async (category) => {
@@ -208,6 +236,16 @@ export const TemplatesPanel: FC<TemplatesPanelProps> = ({ store, onClose, guard 
       ),
     });
   }, [store, data, modal, categoryLabels, persistTemplate, t]);
+
+  // Section labels: the video bucket and the uncategorized bucket get
+  // translated chrome labels; everything else is user/seed data shown as-is.
+  const sectionLabel = useCallback(
+    (section: TemplateSection<DesignTemplate>): string =>
+      section.key === VIDEO_CATEGORY_KEY
+        ? t('templates_panel_video_category', 'Video')
+        : section.label ?? t('other', 'Other'),
+    [t]
+  );
 
   return (
     <div className="flex flex-col gap-3">
@@ -243,7 +281,7 @@ export const TemplatesPanel: FC<TemplatesPanelProps> = ({ store, onClose, guard 
                 { key: ALL_CATEGORIES_KEY, label: t('all', 'All') },
                 ...sections.map((section) => ({
                   key: section.key,
-                  label: section.label ?? t('other', 'Other'),
+                  label: sectionLabel(section),
                 })),
               ]}
               activeKey={activeCategory}
@@ -264,7 +302,7 @@ export const TemplatesPanel: FC<TemplatesPanelProps> = ({ store, onClose, guard 
             visibleSections.map((section) => (
               <section key={section.key} className="flex flex-col gap-2">
                 <h3 className="text-[11px] font-[600] uppercase tracking-wide text-newTextColor/60">
-                  {section.label ?? t('other', 'Other')}
+                  {sectionLabel(section)}
                 </h3>
                 <div className="grid grid-cols-2 gap-2" role="list">
                   {section.templates.map((template) => (
@@ -291,6 +329,11 @@ export const TemplatesPanel: FC<TemplatesPanelProps> = ({ store, onClose, guard 
                           <img src={template.thumbnail} alt={template.name} className="w-full h-full object-cover" />
                         ) : (
                           template.isSystem ? '◧' : '▣'
+                        )}
+                        {templateModeOf(template) === 'video' && (
+                          <span className="absolute top-1 start-1 px-1.5 py-0.5 rounded-full bg-newBgColorInner/80 text-btnPrimaryAccent text-[9px] font-[500] leading-none">
+                            {t('templates_panel_video_badge', 'Video')}
+                          </span>
                         )}
                         {!template.isSystem && (
                           // Drag handle — drop onto a folder row in the tree to
@@ -327,7 +370,10 @@ export const TemplatesPanel: FC<TemplatesPanelProps> = ({ store, onClose, guard 
                             {template.isSystem ? t('system', 'System') : t('templates_panel_org', 'Org')}
                           </div>
                           <span className="px-1.5 py-0.5 rounded-full bg-btnPrimary/15 text-btnPrimaryAccent text-[9px] font-[500] truncate max-w-[90px]">
-                            {template.category?.trim() || t('other', 'Other')}
+                            {template.category?.trim() ||
+                              (templateModeOf(template) === 'video'
+                                ? t('templates_panel_video_category', 'Video')
+                                : t('other', 'Other'))}
                           </span>
                         </div>
                         <button
