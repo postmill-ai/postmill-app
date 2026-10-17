@@ -4499,5 +4499,11 @@
   "filter_priority": "Filter by priority",
   "comment_inbox.sort_priority_first": "High priority first",
   "comms": "Comunicações",
-  "comms_settings_description": "Converse com seu agente Postmill e receba notificações no Slack, Telegram, Discord, Matrix ou LINE."
+  "comms_settings_description": "Converse com seu agente Postmill e receba notificações no Slack, Telegram, Discord, Matrix ou LINE.",
+  "templates_panel_apply_video_template": "Apply video template",
+  "templates_panel_apply_image_template": "Apply image template",
+  "templates_panel_apply_video_template_confirm": "This is a video template — applying it converts your design to video mode and replaces the current design.",
+  "templates_panel_apply_image_template_confirm": "This is an image template — applying it converts your design to image mode and replaces the current design.",
+  "templates_panel_video_badge": "Video",
+  "templates_panel_video_category": "Video"
 }

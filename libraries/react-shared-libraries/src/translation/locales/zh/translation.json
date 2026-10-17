@@ -4499,5 +4499,11 @@
   "filter_priority": "Filter by priority",
   "comment_inbox.sort_priority_first": "High priority first",
   "comms": "通讯应用",
-  "comms_settings_description": "在 Slack、Telegram、Discord、Matrix 或 LINE 中与您的 Postmill 智能体聊天并接收通知。"
+  "comms_settings_description": "在 Slack、Telegram、Discord、Matrix 或 LINE 中与您的 Postmill 智能体聊天并接收通知。",
+  "templates_panel_apply_video_template": "Apply video template",
+  "templates_panel_apply_image_template": "Apply image template",
+  "templates_panel_apply_video_template_confirm": "This is a video template — applying it converts your design to video mode and replaces the current design.",
+  "templates_panel_apply_image_template_confirm": "This is an image template — applying it converts your design to image mode and replaces the current design.",
+  "templates_panel_video_badge": "Video",
+  "templates_panel_video_category": "Video"
 }

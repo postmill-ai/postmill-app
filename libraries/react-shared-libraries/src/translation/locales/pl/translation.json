@@ -4540,5 +4540,11 @@
   "filter_priority": "Filtruj według priorytetu",
   "comment_inbox.sort_priority_first": "Najpierw wysoki priorytet",
   "comms": "Komunikatory",
-  "comms_settings_description": "Rozmawiaj z agentem Postmill i otrzymuj powiadomienia w aplikacjach czatowych swojego zespołu."
+  "comms_settings_description": "Rozmawiaj z agentem Postmill i otrzymuj powiadomienia w aplikacjach czatowych swojego zespołu.",
+  "templates_panel_apply_video_template": "Apply video template",
+  "templates_panel_apply_image_template": "Apply image template",
+  "templates_panel_apply_video_template_confirm": "This is a video template — applying it converts your design to video mode and replaces the current design.",
+  "templates_panel_apply_image_template_confirm": "This is an image template — applying it converts your design to image mode and replaces the current design.",
+  "templates_panel_video_badge": "Video",
+  "templates_panel_video_category": "Video"
 }
