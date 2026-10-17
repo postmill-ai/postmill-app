@@ -2,7 +2,7 @@
 
 import React, { FC, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { createDesignerStore, migrateDoc, type DesignerStore, type DesignerDoc, type DesignerAttribution, type VideoOutput, type VideoClip, type DesignerOutput, type DesignerElement } from './designer.store';
-import { createDesignAutosave } from './designer-autosave';
+import { createAutosaveSubscription, createDesignAutosave } from './designer-autosave';
 import { useCollaboration } from './collaboration';
 import type { TimelineAwareness, ImageAwareness } from './collaboration';
 import { CollaborationCursors, type PeerTimelineState } from './collaboration-cursors';
@@ -546,33 +546,13 @@ export const Designer: FC<DesignerProps> = ({
     [store, fetch, uploadPreview]
   );
 
-  // Autosave runs on a store subscription, not on render: the 2s trailing
-  // debounce watches doc AND name (the PUT carries both, so a pure rename
-  // must wake the same pipeline), and a create landing its id re-fires the
-  // save so the PUT cycle picks up the latest doc (it no-ops on a clean
-  // store). Moving it out of React is what lets the root stop subscribing
-  // to `doc`.
-  useEffect(() => {
-    let timer: ReturnType<typeof setTimeout> | null = null;
-    let prev = store.getState();
-    const unsubscribe = store.subscribe((state) => {
-      if (state.doc !== prev.doc || state.designName !== prev.designName) {
-        if (timer) clearTimeout(timer);
-        timer = setTimeout(() => {
-          timer = null;
-          const s = store.getState();
-          if (s.isDirty) designAutosave.save(s.doc);
-        }, 2000);
-      } else if (state.designId !== prev.designId && state.designId) {
-        designAutosave.save(state.doc);
-      }
-      prev = state;
-    });
-    return () => {
-      unsubscribe();
-      if (timer) clearTimeout(timer);
-    };
-  }, [store, designAutosave]);
+  // Autosave runs on a store subscription, not on render (see
+  // createAutosaveSubscription): moving it out of React is what lets the root
+  // stop subscribing to `doc`.
+  useEffect(
+    () => createAutosaveSubscription(store, designAutosave),
+    [store, designAutosave]
+  );
 
   const openExportDialog = useCallback(
     (initialAction?: 'save' | 'create-post') => {

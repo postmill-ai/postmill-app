@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, afterEach } from 'vitest';
 import { createDesignerStore } from './designer.store';
-import { createDesignAutosave, type PreviewUpload } from './designer-autosave';
+import { createAutosaveSubscription, createDesignAutosave, type PreviewUpload } from './designer-autosave';
 
 /**
  * Covers the designer autosave pipeline (`designer-autosave.ts`) the way
@@ -328,5 +328,56 @@ describe('createDesignAutosave', () => {
     expect(callsTo(fetchMock, 'POST', '/media/designs')).toHaveLength(1);
     expect(callsTo(fetchMock, 'PUT', '/media/designs/design-4')).toHaveLength(1);
     expect(store.getState().isDirty).toBe(false);
+  });
+});
+
+describe('createAutosaveSubscription', () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it('does not recurse when the create lands its id mid-save (APP-18)', async () => {
+    const store = createDesignerStore(1080, 1080);
+    const fetchMock = vi.fn((url: string) => {
+      if (url === '/media/designs') return Promise.resolve(okJson({ id: 'design-r1' }));
+      return Promise.resolve(okJson({}));
+    });
+    const autosave = createDesignAutosave({
+      store,
+      fetchFn: fetchMock,
+      uploadPreview: vi.fn().mockResolvedValue({}),
+    });
+    const unsubscribe = createAutosaveSubscription(store, autosave, 5);
+
+    // First edit schedules the debounced save; the save POSTs, the id lands
+    // in the store, and the subscriber re-fires synchronously from inside
+    // save()'s setSaving(). With a stale prev that notification re-enters
+    // save() until the stack blows — the fixed subscriber advances prev
+    // first, so the id transition is observed exactly once.
+    addText(store, 'First edit');
+    await new Promise((resolve) => setTimeout(resolve, 60));
+    unsubscribe();
+
+    expect(store.getState().designId).toBe('design-r1');
+    expect(callsTo(fetchMock, 'POST', '/media/designs')).toHaveLength(1);
+    expect(callsTo(fetchMock, 'PUT', '/media/designs/design-r1')).toHaveLength(1);
+    expect(store.getState().isDirty).toBe(false);
+  });
+
+  it('stops scheduling after unsubscribe', async () => {
+    const store = createDesignerStore(1080, 1080);
+    const fetchMock = vi.fn(() => Promise.resolve(okJson({})));
+    const autosave = createDesignAutosave({
+      store,
+      fetchFn: fetchMock,
+      uploadPreview: vi.fn().mockResolvedValue({}),
+    });
+    const unsubscribe = createAutosaveSubscription(store, autosave, 5);
+
+    addText(store, 'First edit');
+    unsubscribe();
+    await new Promise((resolve) => setTimeout(resolve, 30));
+
+    expect(fetchMock).not.toHaveBeenCalled();
   });
 });

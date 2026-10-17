@@ -13,6 +13,45 @@ export interface DesignAutosaveDeps {
   uploadPreview: () => Promise<PreviewUpload>;
 }
 
+/**
+ * Autosave runs on a store subscription, not on render: a trailing debounce
+ * watches doc AND name (the PUT carries both, so a pure rename must wake the
+ * same pipeline), and a create landing its id re-fires the save so the PUT
+ * cycle picks up the latest doc (it no-ops on a clean store). Moving it out
+ * of React is what lets the root stop subscribing to `doc`.
+ *
+ * `prev` is advanced BEFORE any branch runs: the designId branch calls save()
+ * synchronously, and save()'s setSaving() re-fires this subscriber
+ * re-entrantly — a stale prev would see the same designId transition again
+ * and recurse until the stack blows (Sentry APP-18).
+ */
+export const createAutosaveSubscription = (
+  store: DesignerStoreApi,
+  designAutosave: DesignAutosave,
+  debounceMs = 2000
+): (() => void) => {
+  let timer: ReturnType<typeof setTimeout> | null = null;
+  let prev = store.getState();
+  const unsubscribe = store.subscribe((state) => {
+    const prevState = prev;
+    prev = state;
+    if (state.doc !== prevState.doc || state.designName !== prevState.designName) {
+      if (timer) clearTimeout(timer);
+      timer = setTimeout(() => {
+        timer = null;
+        const s = store.getState();
+        if (s.isDirty) designAutosave.save(s.doc);
+      }, debounceMs);
+    } else if (state.designId !== prevState.designId && state.designId) {
+      designAutosave.save(state.doc);
+    }
+  });
+  return () => {
+    unsubscribe();
+    if (timer) clearTimeout(timer);
+  };
+};
+
 export interface DesignAutosave {
   /**
    * Debounced-doc entry point. First edit on a brand-new design POSTs it once
