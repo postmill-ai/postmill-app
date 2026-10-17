@@ -601,6 +601,10 @@ export const ExportDialog: FC<ExportDialogProps> = ({ store, onClose, initialAct
     () => renderJobs.find((j) => j.error)?.error || '',
     [renderJobs]
   );
+  const completedRenderCount = useMemo(
+    () => renderJobs.filter((j) => j.status === 'completed' && j.artifactUrl).length,
+    [renderJobs]
+  );
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const doc: DesignerDoc = store((s: any) => s.doc);
@@ -862,13 +866,19 @@ export const ExportDialog: FC<ExportDialogProps> = ({ store, onClose, initialAct
     goToExport();
   }, [pickedChannelCount, goToExport]);
 
-  const startVideoRender = useCallback(async () => {
-    setRenderJobs([]);
+  const startVideoRender = useCallback(async (retryOutputs?: DesignerDoc['outputs']) => {
+    // A retry keeps the completed renders and re-enqueues only what failed (or
+    // never started) — re-rendering a completed output would charge a second
+    // video_export credit for an artifact the user already has.
+    const keptJobs = retryOutputs
+      ? renderJobsRef.current.filter((j) => j.status === 'completed')
+      : [];
+    if (!retryOutputs) setRenderJobs([]);
     setIsEnqueuing(true);
     try {
-      const outputsToRender = exportAll || forceAllOutputs
+      const outputsToRender = retryOutputs ?? (exportAll || forceAllOutputs
         ? doc.outputs.filter((o) => 'tracks' in o)
-        : [doc.outputs[store.getState().currentOutput || 0]];
+        : [doc.outputs[store.getState().currentOutput || 0]]);
       const jobs: RenderJob[] = [];
       for (let i = 0; i < outputsToRender.length; i++) {
         const composition = outputsToRender[i];
@@ -918,18 +928,36 @@ export const ExportDialog: FC<ExportDialogProps> = ({ store, onClose, initialAct
       }
 
       if (jobs.length === 0) {
+        if (keptJobs.length > 0) {
+          // Every retry failed to enqueue — keep the completed renders usable.
+          setRenderJobs(keptJobs);
+          setStep('video-rendering');
+          return;
+        }
         setRenderJobs([{ id: '', outputId: '', outputName: '', format: videoFormat, status: 'failed', progress: 0, artifactUrl: null, thumbnailUrl: null, error: t('designer_no_video_renders_could_be_enqueued', 'No video renders could be enqueued') }]);
         return;
       }
 
-      setRenderJobs(jobs);
+      setRenderJobs([...keptJobs, ...jobs]);
       setStep('video-rendering');
     } catch (err) {
-      setRenderJobs([{ id: '', outputId: '', outputName: '', format: videoFormat, status: 'failed', progress: 0, artifactUrl: null, thumbnailUrl: null, error: (err as Error).message || t('designer_failed_to_start_render', 'Failed to start render') }]);
+      setRenderJobs([...keptJobs, { id: '', outputId: '', outputName: '', format: videoFormat, status: 'failed', progress: 0, artifactUrl: null, thumbnailUrl: null, error: (err as Error).message || t('designer_failed_to_start_render', 'Failed to start render') }]);
     } finally {
       setIsEnqueuing(false);
     }
   }, [doc, store, exportAll, forceAllOutputs, outputFormats, videoFormat, videoQuality, videoBitrateKbps, videoFps, videoScale, posterUrl, selectedFolderId, fetch, toaster]);
+
+  const retryFailedRenders = useCallback(() => {
+    const candidates = exportAll || forceAllOutputs
+      ? doc.outputs.filter((o) => 'tracks' in o)
+      : [doc.outputs[store.getState().currentOutput || 0]];
+    startVideoRender(
+      candidates.filter((o) => {
+        const job = renderJobsRef.current.find((j) => j.outputId === o.id);
+        return !job || job.status === 'failed';
+      })
+    );
+  }, [doc, store, exportAll, forceAllOutputs, startVideoRender]);
 
   useEffect(() => {
     if (step !== 'video-rendering' || renderJobsRef.current.length === 0) {
@@ -1986,7 +2014,7 @@ export const ExportDialog: FC<ExportDialogProps> = ({ store, onClose, initialAct
               {t('back', 'Back')}
             </button>
             <button
-              onClick={startVideoRender}
+              onClick={() => startVideoRender()}
               disabled={isEnqueuing}
               className="px-4 h-[38px] rounded-[6px] bg-green-600 text-white text-[13px] font-medium hover:bg-green-700 disabled:opacity-50 transition-all"
             >
@@ -2147,6 +2175,14 @@ export const ExportDialog: FC<ExportDialogProps> = ({ store, onClose, initialAct
                 {renderError && (
                   <div className="text-[12px] text-newTextColor/60 text-center">{renderError}</div>
                 )}
+                {completedRenderCount > 0 && (
+                  <div className="text-[12px] text-newTextColor/60 text-center">
+                    {t('designer_n_of_m_renders_completed', '{{completed}} of {{total}} renders completed', {
+                      completed: completedRenderCount,
+                      total: renderJobs.length,
+                    })}
+                  </div>
+                )}
               </>
             )}
           </div>
@@ -2175,12 +2211,27 @@ export const ExportDialog: FC<ExportDialogProps> = ({ store, onClose, initialAct
               </button>
             )}
             {renderStatus === 'failed' && (
-              <button
-                onClick={startVideoRender}
-                className="px-4 h-[38px] rounded-[6px] bg-green-600 text-white text-[13px] font-medium hover:bg-green-700 transition-all"
-              >
-                {t('retry', 'Retry')}
-              </button>
+              <div className="flex gap-2">
+                {completedRenderCount > 0 && (
+                  <button
+                    onClick={handleVideoDone}
+                    disabled={creatingDrafts}
+                    className="px-4 h-[38px] rounded-[6px] bg-designerAccent text-white text-[13px] font-medium hover:bg-designerAccent/80 disabled:opacity-50 transition-all"
+                  >
+                    {creatingDrafts
+                      ? t('designer_creating_drafts_ellipsis', 'Creating drafts...')
+                      : isCreatePost
+                        ? t('designer_save_and_create_post', 'Save & Create Post')
+                        : t('designer_use_completed_renders', 'Use completed renders')}
+                  </button>
+                )}
+                <button
+                  onClick={retryFailedRenders}
+                  className="px-4 h-[38px] rounded-[6px] bg-green-600 text-white text-[13px] font-medium hover:bg-green-700 transition-all"
+                >
+                  {t('retry', 'Retry')}
+                </button>
+              </div>
             )}
           </div>
         </>

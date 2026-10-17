@@ -17,6 +17,13 @@ vi.mock('@sentry/nestjs', () => ({
   captureException: vi.fn(),
 }));
 
+const inngestClient = vi.hoisted(() => ({ enabled: false, send: vi.fn() }));
+
+vi.mock('@postmill-ai/nestjs-libraries/inngest/inngest.client', () => ({
+  inngest: { send: (...args: any[]) => inngestClient.send(...args) },
+  isInngestEnabled: () => inngestClient.enabled,
+}));
+
 vi.mock('@postmill-ai/nestjs-libraries/redis/redis.service', () => ({
   ioRedis: {
     set: vi.fn().mockResolvedValue('OK'),
@@ -37,6 +44,8 @@ describe('VideoRenderService', () => {
   const orgId = 'org-1';
 
   beforeEach(() => {
+    inngestClient.enabled = false;
+    inngestClient.send.mockReset();
     lifecycle = {
       createPendingJob: vi.fn().mockResolvedValue({
         id: 'job-1',
@@ -236,6 +245,7 @@ describe('VideoRenderService', () => {
         provider: 'chromium-ffmpeg',
       }),
       expect.any(Buffer),
+      undefined,
     );
     expect(aiSettings.updateMediaJob).not.toHaveBeenCalledWith(
       orgId,
@@ -324,6 +334,93 @@ describe('VideoRenderService', () => {
     expect(vi.mocked(ioRedis.del)).not.toHaveBeenCalled();
   });
 
+  it('breaks a stale claim with no live runner and re-dispatches instead of failing the job', async () => {
+    const composition = videoOutput(3000);
+    vi.mocked(ioRedis.get)
+      // Payload read — still present.
+      .mockResolvedValueOnce(JSON.stringify({ organizationId: orgId, composition }))
+      // Progress read — nothing reported, so no live runner holds the claim.
+      .mockResolvedValueOnce(null);
+    // The claim SET NX loses: a stale marker from a crashed runner is held.
+    vi.mocked(ioRedis.set).mockResolvedValueOnce(null);
+    // getMediaJobById keeps its default 'pending' mock.
+    inngestClient.enabled = true;
+
+    await service.processVideoRender('job-1');
+
+    expect(encoder.encode).not.toHaveBeenCalled();
+    // The stale claim + progress keys are broken — never the payload, which the
+    // re-dispatched render still needs.
+    expect(vi.mocked(ioRedis.del)).toHaveBeenCalledWith(
+      'video-render:claim:job-1',
+      'video-render:progress:job-1',
+    );
+    // The job is re-asserted pending and re-dispatched, NOT failed.
+    expect(aiSettings.updateMediaJob).toHaveBeenCalledWith(orgId, 'job-1', {
+      status: 'pending',
+    });
+    expect(inngestClient.send).toHaveBeenCalledWith(
+      expect.objectContaining({ name: 'media/render', data: { jobId: 'job-1', op: 'design' } }),
+    );
+    expect(aiSettings.updateMediaJob).not.toHaveBeenCalledWith(
+      orgId,
+      'job-1',
+      expect.objectContaining({ status: 'failed' }),
+    );
+    expect(vi.mocked(Sentry.captureException)).not.toHaveBeenCalled();
+  });
+
+  it('skips the duplicate when the claim holder is a live runner (fresh progress)', async () => {
+    const composition = videoOutput(3000);
+    vi.mocked(ioRedis.get)
+      .mockResolvedValueOnce(JSON.stringify({ organizationId: orgId, composition }))
+      .mockResolvedValueOnce(
+        JSON.stringify({ frame: 5, total: 100, updatedAt: Date.now() }),
+      );
+    vi.mocked(ioRedis.set).mockResolvedValueOnce(null);
+    inngestClient.enabled = true;
+
+    await service.processVideoRender('job-1');
+
+    expect(encoder.encode).not.toHaveBeenCalled();
+    // A live runner owns the claim: no key release, no re-dispatch, no failure.
+    expect(vi.mocked(ioRedis.del)).not.toHaveBeenCalled();
+    expect(inngestClient.send).not.toHaveBeenCalled();
+    expect(aiSettings.updateMediaJob).not.toHaveBeenCalledWith(
+      orgId,
+      'job-1',
+      expect.objectContaining({ status: 'failed' }),
+    );
+  });
+
+  it('files a plain export into the folderId carried by the payload', async () => {
+    const composition = videoOutput(3000);
+    vi.mocked(ioRedis.get).mockResolvedValueOnce(
+      JSON.stringify({ organizationId: orgId, composition, folderId: 'folder-9' }),
+    );
+
+    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'postmill-test-'));
+    const videoPath = path.join(tmpDir, 'output.mp4');
+    fs.writeFileSync(videoPath, Buffer.from('fake-video'));
+    vi.mocked(encoder.encode).mockResolvedValueOnce({
+      videoPath,
+      thumbnailPath: path.join(tmpDir, 'missing.jpg'),
+    });
+
+    await service.processVideoRender('job-1');
+
+    expect(lifecycle.completeJobWithBuffer).toHaveBeenCalledWith(
+      expect.objectContaining({ id: 'job-1' }),
+      expect.any(Buffer),
+      'video/mp4',
+      expect.objectContaining({ provider: 'chromium-ffmpeg' }),
+      undefined,
+      'folder-9',
+    );
+
+    encoder.cleanup(tmpDir);
+  });
+
   it('accepts a 2× scale on a 1080×1080 canvas @60fps and stores the overrides in the payload', async () => {
     const composition = { ...videoOutput(3000), height: 1080, fps: 30 };
     await service.enqueueRender(orgId, { composition, scale: 2, fps: 60 });
@@ -373,6 +470,7 @@ describe('VideoRenderService', () => {
       // Metadata records the EFFECTIVE (scaled) dimensions and overridden fps.
       expect.objectContaining({ width: 2160, height: 2160, fps: 60 }),
       expect.any(Buffer),
+      undefined,
     );
 
     encoder.cleanup(tmpDir);

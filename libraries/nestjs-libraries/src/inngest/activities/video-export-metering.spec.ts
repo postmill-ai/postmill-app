@@ -195,7 +195,7 @@ describe('MediaJobsActivity — video export metering', () => {
     expect(credits).toHaveLength(0);
   });
 
-  it('does not charge when the render does not reach completed status', async () => {
+  it('does not charge when the render ends terminal failed — and does NOT throw (no Inngest retry burn)', async () => {
     const { activity, subscriptionService, aiSettings, credits } = buildActivity();
     aiSettings.getMediaJobByIdUnscoped
       .mockResolvedValueOnce({
@@ -213,11 +213,39 @@ describe('MediaJobsActivity — video export metering', () => {
         status: 'failed',
       });
 
+    // Terminal-failed is already recorded by the render itself; throwing here
+    // would burn every Inngest retry re-reading the same failed status.
+    await expect(activity.processRenderJob(jobId)).resolves.toBeUndefined();
+
+    // No charge for an incomplete render — nothing to roll back because we never insert.
+    expect(subscriptionService.recordCredit).not.toHaveBeenCalled();
+    expect(credits).toHaveLength(0);
+  });
+
+  it('does not charge when the render does not reach a terminal status', async () => {
+    const { activity, subscriptionService, aiSettings, credits } = buildActivity();
+    aiSettings.getMediaJobByIdUnscoped
+      .mockResolvedValueOnce({
+        id: jobId,
+        organizationId: orgId,
+        provider: 'chromium-ffmpeg',
+        model: null,
+        status: 'pending',
+      })
+      .mockResolvedValueOnce({
+        id: jobId,
+        organizationId: orgId,
+        provider: 'chromium-ffmpeg',
+        model: null,
+        status: 'processing',
+      });
+
+    // Non-terminal (another runner may still be working): throw so Inngest
+    // retries and the eventual completed/failed state is observed.
     await expect(activity.processRenderJob(jobId)).rejects.toThrow(
       /did not complete/
     );
 
-    // No charge for an incomplete render — nothing to roll back because we never insert.
     expect(subscriptionService.recordCredit).not.toHaveBeenCalled();
     expect(credits).toHaveLength(0);
   });

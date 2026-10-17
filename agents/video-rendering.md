@@ -132,12 +132,18 @@ client already uploads. The flow reuses the `design` pipeline end-to-end:
    - After a **confirmed-completed** render, charges one credit:
      `SubscriptionService.recordCredit(org, 'video_export')` — a plain insert,
      deliberately **not** transaction-wrapped (a ~5 s interactive-transaction timeout
-     would abort a long render and silently skip metering). Failed renders throw before
-     this line.
+     would abort a long render and silently skip metering). A terminal-`failed` after-read
+     returns cleanly (the render recorded its own error; throwing would burn every
+     Inngest retry re-reading the same failed status); only a non-terminal after-read
+     throws, so a retry observes the eventual outcome. Neither path reaches the charge.
 4. **Process** — `VideoRenderService.processVideoRender` / `processMergeRender`:
    - Design renders claim via a non-destructive `GET` of the payload plus an atomic
      `SET NX EX` marker `video-render:claim:<jobId>` (single winner; a losing duplicate
-     runner skips silently and must **not** mark the job failed). The payload key must
+     runner skips silently and must **not** mark the job failed). A loser that finds the
+     job still `pending` checks for a live runner via the progress key: fresh progress →
+     skip; no/stale progress (`LIVE_RUNNER_PROGRESS_WINDOW_MS`, 60 s) → the holder
+     crashed, so the stale claim + progress keys are deleted and the job re-dispatched
+     instead of failed. The payload key must
      survive the render — the `render-frame` route serves it to headless Chromium —
      so it is only `DEL`eted (with the claim key) in `finally` after the encode
      concludes, and only by the claim winner. Merge payloads have no route reader and
@@ -189,7 +195,11 @@ client already uploads. The flow reuses the `design` pipeline end-to-end:
    renders (past `STALE_RENDER_MS`, so jobs merely queued behind the concurrency cap are
    left alone), fans out `media/poll-job` events for external-provider jobs, and — when
    Inngest is disabled — renders inline under a host semaphore holding the same 3-cap
-   with a per-job timeout.
+   with a per-job timeout. Local renders stuck in `processing` (a crashed runner never
+   ran its own fail path) are failed once they exceed their wall-clock budget — the same
+   `computeRenderTimeoutMs` the runner enforces, derived from the surviving Redis payload
+   (env floor when it is gone) — plus a 60 s grace, so the status poller stops waiting
+   and the user can retry.
 
 ## Podman worker path
 

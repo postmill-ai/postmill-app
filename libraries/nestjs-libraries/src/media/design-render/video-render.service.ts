@@ -86,6 +86,13 @@ function claimKey(jobId: string): string {
   return `video-render:claim:${jobId}`;
 }
 
+/**
+ * A claim holder counts as a live runner only if it reported render progress
+ * within this window (the throttled writer lands at least every 2 s while
+ * capturing). Past it, a held claim is treated as a crashed runner's leftover.
+ */
+const LIVE_RUNNER_PROGRESS_WINDOW_MS = 60_000;
+
 function mergePayloadKey(jobId: string): string {
   return `video-render:merge:${jobId}`;
 }
@@ -382,7 +389,25 @@ export class VideoRenderService {
         if (!raw) {
           throw new Error(`No pending composition found for job ${jobId}`);
         }
-        throw new Error(`Render claim for job ${jobId} is held while the job is still pending`);
+        // The claim marker is held but the job is still pending: either a live
+        // runner owns it (fresh progress) or the holder crashed without
+        // rendering. A live runner → skip the duplicate; a stale claim →
+        // break it and re-dispatch rather than failing a job nothing is
+        // rendering.
+        const progress = await readRenderProgress(jobId);
+        if (progress && Date.now() - progress.updatedAt < LIVE_RUNNER_PROGRESS_WINDOW_MS) {
+          this.logger.log(
+            `Render ${jobId} claim held by a live runner; skipping duplicate`,
+          );
+          return;
+        }
+        this.logger.warn(
+          `Render ${jobId}: breaking a stale claim with no live runner and re-dispatching`,
+        );
+        await ioRedis.del(claimKey(jobId), renderProgressKey(jobId));
+        await this._aiSettings.updateMediaJob(orgId, jobId, { status: 'pending' });
+        await this.dispatch(jobId, 'design');
+        return;
       }
       // Re-store the payload for the render's duration: the headless page loads
       // the composition from `GET /media/designs/render-frame/:jobId` (token-
@@ -478,8 +503,8 @@ export class VideoRenderService {
       // A template preview (payload.templateId) IS the thumbnail — skip the
       // extra JPEG thumbnail artifact, mark the file internal so it stays out
       // of the media library listing, and don't notify the org about a
-      // background render it never asked for. The plain-export call shape is
-      // unchanged (folderId/options only ride the preview path).
+      // background render it never asked for. A plain export files the
+      // artifact into the folder the user picked in the export dialog.
       const isTemplatePreview = typeof input.templateId === 'string' && !!input.templateId;
       const metadata = {
         width: Math.round((composition.width || 0) * scale),
@@ -505,6 +530,7 @@ export class VideoRenderService {
             mimeType,
             metadata,
             thumbnailBuffer,
+            input.folderId ?? undefined,
           );
 
       if (!ok) {

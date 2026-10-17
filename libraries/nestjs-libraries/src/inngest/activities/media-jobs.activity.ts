@@ -1,11 +1,13 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { MediaJobLifecycleService } from '@postmill-ai/nestjs-libraries/database/prisma/media-providers/media-job-lifecycle.service';
 import { AiSettingsService } from '@postmill-ai/nestjs-libraries/database/prisma/ai-settings/ai-settings.service';
-import { VideoRenderService, NO_CREDIT } from '@postmill-ai/nestjs-libraries/media/design-render/video-render.service';
+import { VideoRenderService, NO_CREDIT, computeRenderTimeoutMs } from '@postmill-ai/nestjs-libraries/media/design-render/video-render.service';
 import { SubscriptionService } from '@postmill-ai/nestjs-libraries/database/prisma/subscriptions/subscription.service';
 import { OrganizationService } from '@postmill-ai/nestjs-libraries/database/prisma/organizations/organization.service';
 import { inngest, isInngestEnabled } from '@postmill-ai/nestjs-libraries/inngest/inngest.client';
-import { getRenderConcurrency } from '@postmill-ai/nestjs-libraries/media/design-render/render-config';
+import { getRenderConcurrency, getRenderTimeoutMs } from '@postmill-ai/nestjs-libraries/media/design-render/render-config';
+import { renderPayloadKey } from '@postmill-ai/nestjs-libraries/media/design-render/render-progress';
+import { ioRedis } from '@postmill-ai/nestjs-libraries/redis/redis.service';
 import { mapWithConcurrency } from '@postmill-ai/nestjs-libraries/utils/concurrency';
 
 // Polling fallback for async media generations (§11.2): the sweep selects pending
@@ -36,6 +38,9 @@ export class MediaJobsActivity {
   /** Cap the inline fallback so one hanging render cannot freeze the sweep. */
   private static readonly INLINE_RENDER_TIMEOUT_MS = 5 * 60 * 1000;
 
+  /** Grace on top of a render's own wall-clock budget before a stuck `processing` job is declared dead. */
+  private static readonly STUCK_PROCESSING_GRACE_MS = 60_000;
+
   /** True for the two local-compute render kinds (design timeline render + clip merge). */
   private isLocalRender(job: { provider: string; model?: string | null }): boolean {
     return job.provider === 'chromium-ffmpeg' || job.model === 'local/ffmpeg-merge';
@@ -45,6 +50,31 @@ export class MediaJobsActivity {
     const ts = job.updatedAt ?? job.createdAt;
     if (!ts) return true;
     return Date.now() - new Date(ts).getTime() > MediaJobsActivity.STALE_RENDER_MS;
+  }
+
+  /**
+   * Wall-clock budget for a local render sitting in `processing`: the same
+   * computeRenderTimeoutMs the runner enforces (derived from the surviving
+   * Redis payload), or the env floor when the payload is already gone.
+   */
+  private async stuckRenderBudgetMs(job: { id: string; model?: string | null }): Promise<number> {
+    if (job.model !== 'local/ffmpeg-merge') {
+      try {
+        const raw = await ioRedis.get(renderPayloadKey(job.id));
+        if (raw) {
+          const input = JSON.parse(raw);
+          const composition = input.composition || {};
+          return computeRenderTimeoutMs(
+            composition.durationMs || 10000,
+            input.fps || composition.fps || 30,
+            typeof input.scale === 'number' && input.scale > 0 ? input.scale : 1,
+          );
+        }
+      } catch {
+        /* fall through to the env floor */
+      }
+    }
+    return getRenderTimeoutMs();
   }
 
   /**
@@ -90,6 +120,12 @@ export class MediaJobsActivity {
     }
 
     const after = await this._aiSettings.getMediaJobByIdUnscoped(jobId);
+    // Already terminal-failed (the render recorded its own error): return
+    // cleanly. Throwing here would burn every Inngest retry on a job whose
+    // retry no-ops at the pending guard and lands right back at this line.
+    if (after?.status === 'failed') {
+      return;
+    }
     if (!after || after.status !== 'completed') {
       throw new Error(
         `Render ${jobId} did not complete (status: ${after?.status ?? 'missing'})`
@@ -125,14 +161,45 @@ export class MediaJobsActivity {
       const pending = await this._aiSettings.getPendingMediaJobs(100);
       const localJobs: typeof pending = [];
       const pollJobs: typeof pending = [];
+      const stuckJobs: typeof pending = [];
 
       for (const job of pending) {
         if (this.isLocalRender(job)) {
-          if (this.isStaleRender(job)) {
+          if (job.status === 'processing') {
+            stuckJobs.push(job);
+          } else if (this.isStaleRender(job)) {
             localJobs.push(job);
           }
         } else {
           pollJobs.push(job);
+        }
+      }
+
+      // A runner that crashed mid-render leaves the job `processing` forever —
+      // its own catch never ran to fail it, and processRenderJob only renders
+      // `pending` jobs, so the status poller would wait indefinitely. The
+      // render itself is wall-clock capped, so anything past that budget +
+      // grace is dead: fail it so the user sees the failure and can retry.
+      for (const job of stuckJobs) {
+        const since = new Date(job.updatedAt ?? job.createdAt ?? 0).getTime();
+        const budgetMs =
+          (await this.stuckRenderBudgetMs(job)) +
+          MediaJobsActivity.STUCK_PROCESSING_GRACE_MS;
+        if (Date.now() - since <= budgetMs) continue;
+        try {
+          await this._aiSettings.updateMediaJob(job.organizationId, job.id, {
+            status: 'failed',
+            error: 'Render exceeded its wall-clock budget with no live runner',
+          });
+          result.processed++;
+          result.failed++;
+          this.logger.warn(
+            `Render ${job.id} failed: stuck in processing beyond ${budgetMs}ms`,
+          );
+        } catch (err) {
+          this.logger.warn(
+            `Failing stuck render ${job.id} failed: ${(err as Error).message}`,
+          );
         }
       }
 
