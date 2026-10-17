@@ -4,7 +4,8 @@ import React, { FC, useCallback, useEffect, useMemo, useRef, useState } from 're
 import { ColorSwatch, Slider, Stepper } from '../controls';
 import type { VideoClip } from '../designer.store';
 import { TEXT_ANIMATION_PRESETS } from '../text-animation-presets';
-import { GraphEditor } from '../graph-editor';
+import { GraphEditor, GRAPH_PROPS } from '../graph-editor';
+import { PROP_DOT_COLORS } from '../keyframe-props';
 import { SmartFilterList } from './smart-filter-list';
 import { analyseBeats } from '../beat-sync';
 import { estimateBpm } from '@postmill-ai/nestjs-libraries/media/designer-doc/beat-detect';
@@ -203,6 +204,35 @@ const MiniKeyframeTimeline: FC<{
           }}
         />
       ))}
+      {/* At-a-glance prop dots: one per keyframed property at each keyframe,
+          coloured by property. Click jumps to that property's row below.
+          tabIndex -1: the bars above stay the keyboard path; the dots are a
+          pointer convenience, or the tab order would gain 7 stops per frame. */}
+      {keyframes.flatMap((kf) =>
+        GRAPH_PROPS.filter((p) => kf.props[p] !== undefined).map((p) => (
+          <button
+            key={`dot-${kf.tMs}-${p}`}
+            type="button"
+            tabIndex={-1}
+            aria-label={t('designer_jump_to_prop_keyframes', 'Jump to {{prop}} keyframes', { prop: p })}
+            title={t('designer_jump_to_prop_keyframes', 'Jump to {{prop}} keyframes', { prop: p })}
+            className="absolute w-[5px] h-[5px] rounded-full hover:scale-150 transition-transform"
+            style={{
+              // Offset by the prop's CANONICAL index, so a given property's
+              // dot sits at the same offset on every keyframe.
+              left: `calc(${(kf.tMs / totalMs) * 100}% + ${GRAPH_PROPS.indexOf(p) * 6 - 2}px)`,
+              bottom: 1,
+              backgroundColor: PROP_DOT_COLORS[p],
+            }}
+            onClick={(e) => {
+              e.stopPropagation();
+              document
+                .getElementById(`clip-kf-row-${p}`)
+                ?.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+            }}
+          />
+        ))
+      )}
     </div>
   );
 };
@@ -235,7 +265,7 @@ const KeyframePropRow: FC<{
   const step = Math.max(1, Math.round(totalMs * 0.01));
 
   return (
-    <div className="space-y-1">
+    <div className="space-y-1" id={`clip-kf-row-${prop}`}>
       <div className="flex items-center justify-between">
         <span className="text-[10px] text-textColor/50 capitalize">{prop}</span>
         <span className="text-[10px] text-textColor/30">
@@ -332,6 +362,7 @@ export const ClipInspector: FC<ClipInspectorProps> = ({ store, outputIndex, trac
   // Named `translate` (not `t`) — this component already uses `t` as a `.find()` callback var.
   const translate = useT();
   const doc = store((s: any) => s.doc);
+  const hasKeyframeClipboard = store((s: any) => !!s.keyframeClipboard?.length);
   const vo = doc.outputs[outputIndex];
 
   const clip: VideoClip | undefined = useMemo(() => {
@@ -1077,7 +1108,30 @@ export const ClipInspector: FC<ClipInspectorProps> = ({ store, outputIndex, trac
       <div className="pt-1 border-t border-studioBorder space-y-2">
         <div className="flex items-center justify-between">
           <div className="text-[11px] text-textColor/50">{translate('designer_label_keyframes', 'Keyframes')}</div>
-          <span className="text-[10px] text-textColor/30">{keyframes.length}</span>
+          <div className="flex items-center gap-1">
+            <button
+              type="button"
+              disabled={!keyframes.length}
+              onClick={() => store.getState().copyClipKeyframes(outputIndex, trackId, clipId)}
+              className="px-1.5 h-[18px] rounded-sm text-[10px] border border-studioBorder text-textColor/60 hover:text-textColor hover:bg-boxHover disabled:opacity-40 disabled:cursor-not-allowed"
+            >
+              {translate('designer_copy_keyframes', 'Copy')}
+            </button>
+            <button
+              type="button"
+              disabled={!hasKeyframeClipboard}
+              title={translate('designer_paste_keyframes_hint', 'Merge the copied keyframes onto this clip')}
+              onClick={() => {
+                // The paste targets the primary selection — make it this clip.
+                store.getState().setSelectedClip({ outputIndex, trackId, clipId });
+                store.getState().pasteClipKeyframes();
+              }}
+              className="px-1.5 h-[18px] rounded-sm text-[10px] border border-studioBorder text-textColor/60 hover:text-textColor hover:bg-boxHover disabled:opacity-40 disabled:cursor-not-allowed"
+            >
+              {translate('designer_paste_keyframes', 'Paste')}
+            </button>
+            <span className="text-[10px] text-textColor/30">{keyframes.length}</span>
+          </div>
         </div>
 
         {(clipTrackType === 'image' || clipTrackType === 'text') && (

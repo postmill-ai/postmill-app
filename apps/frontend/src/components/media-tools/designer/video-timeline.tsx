@@ -12,6 +12,7 @@ import { Stepper } from './controls';
 import { addMediaToTimeline, probeAudioDuration, probeVideoMetadata } from './add-media-to-timeline';
 import { clipEdgeUpdate } from './clip-geometry';
 import { isMarqueeClick, marqueeHitClips, normalizeMarquee, type MarqueeRect } from './timeline-marquee';
+import { KeyframeLane } from './keyframe-lane';
 import { timelineBeats } from './beat-sync';
 import { isArtifactPath } from '@postmill-ai/frontend/components/launches/ai.video';
 import { MAX_VIDEO_DURATION_MS } from '@postmill-ai/nestjs-libraries/media/designer-doc/designer-doc.limits';
@@ -572,6 +573,7 @@ export const VideoTimeline: FC<VideoTimelineProps> = ({ store, sendTimelineAware
   const selectedClip = store((s) => s.selectedClip);
   const selectedClips = store((s) => s.selectedClips);
   const selectedIds = store((s) => s.selectedIds);
+  const hasKeyframeClipboard = store((s) => !!s.keyframeClipboard?.length);
   const setPlayhead = useCallback(
     (ms: number) => store.getState().setPlayhead(ms),
     [store],
@@ -583,6 +585,7 @@ export const VideoTimeline: FC<VideoTimelineProps> = ({ store, sendTimelineAware
   );
 
   const [zoomPxPerMs, setZoomPxPerMs] = useState(1 / MS_PER_PIXEL_DEFAULT);
+  const [keyframeLaneOpen, setKeyframeLaneOpen] = useState(false);
   const [isPlaying, setIsPlaying] = useState(false);
   const [loopPlayback, setLoopPlayback] = useState(false);
   const [dragging, setDragging] = useState<{
@@ -1482,6 +1485,22 @@ export const VideoTimeline: FC<VideoTimelineProps> = ({ store, sendTimelineAware
     setClipMenu(null);
   }, [store]);
 
+  const handleCopyClipKeyframes = useCallback(() => {
+    if (!clipMenu) return;
+    store.getState().copyClipKeyframes(clipMenu.outputIndex, clipMenu.trackId, clipMenu.clipId);
+    setClipMenu(null);
+  }, [clipMenu, store]);
+
+  const handlePasteClipKeyframes = useCallback(() => {
+    if (!clipMenu) return;
+    // The paste targets the primary selection — make the menu's clip primary
+    // first, so "Paste keyframes" on THIS clip lands on this clip even when it
+    // was right-clicked inside a multi-selection.
+    store.getState().setSelectedClip({ outputIndex: clipMenu.outputIndex, trackId: clipMenu.trackId, clipId: clipMenu.clipId });
+    store.getState().pasteClipKeyframes();
+    setClipMenu(null);
+  }, [clipMenu, store]);
+
   const handleRippleDeleteClip = useCallback(() => {
     if (!clipMenu) return;
     store.getState().rippleDeleteClip(clipMenu.outputIndex, clipMenu.trackId, clipMenu.clipId);
@@ -1949,6 +1968,21 @@ export const VideoTimeline: FC<VideoTimelineProps> = ({ store, sendTimelineAware
         >
           +
         </button>
+        {/* Keyframe lane under the tracks — one row per animated property of
+            the selected clip. Editor-only view state, never persisted. */}
+        <button
+          onClick={() => setKeyframeLaneOpen((v) => !v)}
+          aria-pressed={keyframeLaneOpen}
+          className={`w-6 h-6 flex items-center justify-center rounded-sm text-[11px] ${
+            keyframeLaneOpen
+              ? 'bg-designerAccent/20 text-textColor'
+              : 'text-textColor/60 hover:text-textColor hover:bg-studioBorder/30'
+          }`}
+          title={translate('toggle_keyframe_lane', 'Keyframe lane')}
+          aria-label={translate('toggle_keyframe_lane', 'Keyframe lane')}
+        >
+          ◇
+        </button>
         <button
           onClick={(e) => {
             const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
@@ -2285,6 +2319,17 @@ export const VideoTimeline: FC<VideoTimelineProps> = ({ store, sendTimelineAware
               </div>
             </div>
           )})}
+
+          {/* Keyframe lane — inside the same scroll container and on the same
+              pixelsPerMs as the tracks, so alignment needs no syncing. */}
+          {keyframeLaneOpen && (
+            <KeyframeLane
+              store={store}
+              pixelsPerMs={pixelsPerMs}
+              labelWidth={LABEL_WIDTH}
+              contentWidth={totalPixels + 40}
+            />
+          )}
 
           {/* Marquee selection rect (scroll-content coordinates) */}
           {marquee && (
@@ -2671,6 +2716,21 @@ export const VideoTimeline: FC<VideoTimelineProps> = ({ store, sendTimelineAware
                     className="w-full text-left px-2 py-1 rounded-sm text-[12px] hover:bg-studioBorder/30 text-textColor"
                   >
                     {translate('copy_clips', 'Copy')}
+                  </button>
+                  <button
+                    onClick={handleCopyClipKeyframes}
+                    disabled={!clip.keyframes?.length}
+                    className="w-full text-left px-2 py-1 rounded-sm text-[12px] hover:bg-studioBorder/30 text-textColor disabled:opacity-40 disabled:cursor-not-allowed"
+                  >
+                    {translate('copy_keyframes', 'Copy keyframes')}
+                  </button>
+                  <button
+                    onClick={handlePasteClipKeyframes}
+                    disabled={!hasKeyframeClipboard}
+                    title={translate('paste_keyframes_hint', 'Merge the copied keyframes onto this clip')}
+                    className="w-full text-left px-2 py-1 rounded-sm text-[12px] hover:bg-studioBorder/30 text-textColor disabled:opacity-40 disabled:cursor-not-allowed"
+                  >
+                    {translate('paste_keyframes', 'Paste keyframes')}
                   </button>
                   <button
                     onClick={handleRippleDeleteClip}
