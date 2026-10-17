@@ -147,6 +147,9 @@ export const googleAiModule: ProviderModule<any, any> = {
     status: 'active',
     credentialFields: (adapter as any).credentialFields || [],
     capabilities: (adapter as any).capabilities,
+    docsUrl: 'https://ai.google.dev/gemini-api/docs',
+    keysUrl: 'https://aistudio.google.com/apikey',
+    freeTier: true,
   },
   create: (ctx) => {
     adapter.setSafeFetch(ctx.fetch);

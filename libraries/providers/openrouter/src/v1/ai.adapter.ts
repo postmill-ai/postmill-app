@@ -136,6 +136,9 @@ export const openrouterAiModule: ProviderModule<any, any> = {
     status: 'active',
     credentialFields: (adapter as any).credentialFields || [],
     capabilities: (adapter as any).capabilities,
+    docsUrl: 'https://openrouter.ai/docs',
+    keysUrl: 'https://openrouter.ai/keys',
+    freeTier: true,
   },
   create: (ctx) => {
     adapter.setSafeFetch(ctx.fetch);

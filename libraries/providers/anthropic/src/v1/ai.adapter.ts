@@ -135,6 +135,8 @@ export const anthropicAiModule: ProviderModule<any, any> = {
     status: 'active',
     credentialFields: (adapter as any).credentialFields || [],
     capabilities: (adapter as any).capabilities,
+    docsUrl: 'https://docs.anthropic.com',
+    keysUrl: 'https://console.anthropic.com/settings/keys',
   },
   create: (ctx) => {
     adapter.setSafeFetch(ctx.fetch);

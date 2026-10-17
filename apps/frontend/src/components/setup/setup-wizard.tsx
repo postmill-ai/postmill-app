@@ -140,7 +140,7 @@ export function SetupWizard() {
       const res = await fetch('/settings/setup/complete', { method: 'POST' });
       if (!res.ok) {
         const body = await res.json().catch(() => ({}));
-        throw new Error(body.message || t('setup_complete_failed', 'Could not complete setup'));
+        throw new Error(body.message || t('setup_complete_failed', 'Could not complete setup. Please try again — if it keeps failing, contact support@postmill.ai.'));
       }
       // CRITICAL: update the /user/self cache BEFORE navigating, otherwise the
       // LayoutComponent gate on /dashboard sees the stale setupCompleted:false
@@ -157,7 +157,7 @@ export function SetupWizard() {
     } catch (err) {
       setFinishing(false);
       setFinishError(
-        err instanceof Error ? err.message : t('setup_complete_failed', 'Could not complete setup')
+        err instanceof Error ? err.message : t('setup_complete_failed', 'Could not complete setup. Please try again — if it keeps failing, contact support@postmill.ai.')
       );
     }
   }, [canFinish, fetch, globalMutate, router, t]);
@@ -180,7 +180,7 @@ export function SetupWizard() {
           </span>{' '}
           {t(
             'setup_intro_2',
-            'step is required — connect an AI provider to continue. Everything else is optional: skip any step and change it later in Settings.'
+            'step is required — Postmill uses AI to help write posts, replies and media, so connect an AI provider to continue. Everything else is optional: skip any step and change it later in Settings.'
           )}
         </p>
       </div>
@@ -207,14 +207,32 @@ export function SetupWizard() {
       )}
 
       <div className="shrink-0 h-[64px] px-[24px] border-t border-newBorder flex items-center justify-between bg-primary">
-        <Button
-          type="button"
-          onClick={handleBack}
-          disabled={currentStep === 0}
-          className="bg-transparent! border border-newTableBorder text-textColor"
-        >
-          {t('back', 'Back')}
-        </Button>
+        <div className="flex items-center gap-[20px]">
+          <Button
+            type="button"
+            onClick={handleBack}
+            disabled={currentStep === 0}
+            className="bg-transparent! border border-newTableBorder text-textColor"
+          >
+            {t('back', 'Back')}
+          </Button>
+          <div className="flex items-center gap-[16px] text-[12px]">
+            <a
+              href="https://docs.postmill.ai/user-guide/first-run-setup"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-btnPrimaryAccent hover:underline"
+            >
+              {t('setup_help_guide', 'Need help? Read the setup guide')} ↗
+            </a>
+            <a
+              href="mailto:support@postmill.ai"
+              className="text-btnPrimaryAccent hover:underline"
+            >
+              {t('setup_help_support', 'Contact support')}
+            </a>
+          </div>
+        </div>
 
         <div className="flex items-center gap-[12px]">
           {currentStep !== 0 && !isLastStep && (

@@ -24,6 +24,12 @@ export interface CatalogEntry {
   sunsetAt: Date | null;
   description: Partial<Record<LanguageCode, string>> | null;
   website: string | null;
+  /** Manifest docs link (rendered in the config modal, comms precedent). */
+  docsUrl: string | null;
+  /** Manifest link to the provider's API-key page (beginner help). */
+  keysUrl: string | null;
+  /** Manifest flag: the provider offers a usable free tier (badge in the UI). */
+  freeTier: boolean;
   mediaCategories: unknown;
   /** Metadata kind: direct | hub | action (null when the module ships no metadata). */
   kind: 'direct' | 'hub' | 'action' | null;
@@ -66,6 +72,9 @@ export class ProviderCatalogService {
         // Localized provider description + website for the media-defaults surface.
         description: m.metadata?.description,
         website: m.metadata?.website,
+        docsUrl: m.docsUrl ?? null,
+        keysUrl: m.keysUrl ?? null,
+        freeTier: m.freeTier === true,
         mediaCategories: m.metadata?.mediaCategories,
         kind: m.metadata?.kind ?? null,
         // Platform-curated "featured" flag + order (super-admin managed).

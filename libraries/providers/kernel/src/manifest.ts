@@ -31,6 +31,10 @@ export interface ProviderManifest<Caps = unknown> {
   universalCredentialFrom?: string;
   icon?: string;
   docsUrl?: string;
+  /** Direct link to the provider's API-key management page (beginner help). */
+  keysUrl?: string;
+  /** Provider offers a usable free tier — surfaced as a badge in the settings UI. */
+  freeTier?: boolean;
   /** Domain-specific UI hints. */
   setupNotes?: string;
   authType?: 'none' | 'apiKey' | 'oauth2';

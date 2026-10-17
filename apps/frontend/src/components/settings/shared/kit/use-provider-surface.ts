@@ -6,7 +6,7 @@ import { useToaster } from '@postmill-ai/react/toaster/toaster';
 import { useT } from '@postmill-ai/react/translation/get.transation.service.client';
 import { useDecisionModal } from '@postmill-ai/frontend/components/layout/new-modal';
 import useSWR from 'swr';
-import { ProviderSurfaceDescriptor } from './provider-surface.types';
+import { ProviderSurfaceDescriptor, SurfaceTestResult } from './provider-surface.types';
 
 /**
  * One hook per surface (plan §1.3) — satisfies `react-hooks/rules-of-hooks` and
@@ -111,7 +111,7 @@ export function useProviderSurface<Meta = any>(
   );
 
   const test = useCallback(
-    async (id: string, body: any) => {
+    async (id: string, body: any): Promise<SurfaceTestResult> => {
       try {
         const res = await fetch(`${base}/config/${id}/test`, {
           method: 'POST',
@@ -119,25 +119,39 @@ export function useProviderSurface<Meta = any>(
         });
         // Some surfaces (media, content-packs) return HTTP 200 with `{ ok: false }`
         // on a failed connection; others throw a non-2xx. Honor both: a non-2xx
-        // OR an explicit `ok === false` in the body is a failure.
+        // OR an explicit `ok === false` in the body is a failure. Either way,
+        // thread the adapter's reason (`error` / NestJS `message`) through so the
+        // UI can show "Invalid API key" instead of a generic failure.
         let ok = res.ok;
-        if (ok) {
+        let error: string | undefined;
+        try {
+          const data = await res.clone().json();
+          if (data && data.ok === false) ok = false;
+          if (data && typeof data.error === 'string' && data.error) {
+            error = data.error;
+          } else if (!res.ok && data && typeof data.message === 'string' && data.message) {
+            error = data.message;
+          }
+        } catch {
+          /* non-JSON body — fall through to the text read below */
+        }
+        if (!ok && !error) {
           try {
-            const data = await res.clone().json();
-            if (data && data.ok === false) ok = false;
+            const text = (await res.text()).trim();
+            if (text && !text.startsWith('<')) error = text;
           } catch {
-            /* non-JSON success body — treat 2xx as success */
+            /* unreadable body — keep the generic message */
           }
         }
         if (ok) {
           toaster.show(t('connection_successful', 'Connection successful!'), 'success');
-          return true;
+        } else {
+          toaster.show(error || t('connection_failed', 'Connection failed'), 'warning');
         }
-        toaster.show(t('connection_failed', 'Connection failed'), 'warning');
-        return false;
+        return { ok, error };
       } catch {
         toaster.show(t('connection_failed', 'Connection failed'), 'warning');
-        return false;
+        return { ok: false };
       }
     },
     [fetch, base, toaster, t],

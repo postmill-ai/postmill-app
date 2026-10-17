@@ -111,6 +111,8 @@ export const deepseekAiModule: ProviderModule<any, any> = {
     status: 'active',
     credentialFields: (adapter as any).credentialFields || [],
     capabilities: (adapter as any).capabilities,
+    docsUrl: 'https://api-docs.deepseek.com',
+    keysUrl: 'https://platform.deepseek.com/api_keys',
   },
   create: (ctx) => {
     adapter.setSafeFetch(ctx.fetch);

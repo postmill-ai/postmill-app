@@ -130,7 +130,7 @@ export const aiDescriptor: ProviderSurfaceDescriptor<AiMeta> = {
     return { rows };
   },
 
-  features: { toggle: true, primary: true, remove: true, test: true },
+  features: { toggle: true, primary: true, remove: true, test: true, testOnSave: true },
 
   filter: {
     search: true,

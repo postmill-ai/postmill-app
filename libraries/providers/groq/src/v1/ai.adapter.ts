@@ -126,6 +126,9 @@ export const groqAiModule: ProviderModule<any, any> = {
     status: 'active',
     credentialFields: (adapter as any).credentialFields || [],
     capabilities: (adapter as any).capabilities,
+    docsUrl: 'https://console.groq.com/docs',
+    keysUrl: 'https://console.groq.com/keys',
+    freeTier: true,
   },
   create: (ctx) => {
     adapter.setSafeFetch(ctx.fetch);

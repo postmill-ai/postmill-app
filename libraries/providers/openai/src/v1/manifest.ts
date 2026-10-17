@@ -23,4 +23,5 @@ export const openaiAiManifest: ProviderManifest<AiCapabilities> = {
   capabilities: OPENAI_CAPABILITIES,
   universalCredentialFrom: 'ai',
   docsUrl: 'https://platform.openai.com/docs',
+  keysUrl: 'https://platform.openai.com/api-keys',
 };

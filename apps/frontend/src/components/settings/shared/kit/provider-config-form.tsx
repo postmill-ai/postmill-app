@@ -10,6 +10,7 @@ import {
   KitCredentialField,
   ProviderFormState,
   ProviderSurfaceDescriptor,
+  SurfaceTestResult,
 } from './provider-surface.types';
 import { ExtraField } from './fields';
 
@@ -29,11 +30,15 @@ export interface ProviderConfigFormProps<Meta = any> {
   meta: Meta;
   /** Provider homepage — surfaces a "where to get your keys" info hint. */
   website?: string;
+  /** Provider docs (rendered as a "Docs" link, comms precedent). */
+  docsUrl?: string;
+  /** Direct link to the provider's API-key page — preferred "get your key" target. */
+  keysUrl?: string;
   onClose: () => void;
   onSaved: () => void;
   onRemoved?: () => void;
   save: (id: string, body: any) => Promise<boolean>;
-  test: (id: string, body: any) => Promise<boolean>;
+  test: (id: string, body: any) => Promise<SurfaceTestResult>;
   remove: (id: string) => Promise<boolean>;
 }
 
@@ -44,6 +49,8 @@ export function ProviderConfigForm<Meta = any>({
   initialVersion,
   meta,
   website,
+  docsUrl,
+  keysUrl,
   onClose,
   onSaved,
   onRemoved,
@@ -79,8 +86,13 @@ export function ProviderConfigForm<Meta = any>({
   });
   const [visibleFields, setVisibleFields] = useState<Record<string, boolean>>({});
   const [testing, setTesting] = useState(false);
-  const [testResult, setTestResult] = useState<'success' | 'failure' | null>(null);
+  const [testResult, setTestResult] = useState<SurfaceTestResult | null>(null);
   const [saving, setSaving] = useState(false);
+  // Auto-test-on-save: a failed test blocks the save and offers a "save anyway"
+  // escape; a pasted key that doesn't match the manifest's placeholder prefix
+  // (e.g. OpenAI `sk-…`) raises a non-blocking format warning.
+  const [saveBlock, setSaveBlock] = useState<SurfaceTestResult | null>(null);
+  const [formatWarnings, setFormatWarnings] = useState<string[]>([]);
 
   const setName = (value: string) => setState((s) => ({ ...s, name: value }));
   const setCred = (key: string, value: string) =>
@@ -110,26 +122,80 @@ export function ProviderConfigForm<Meta = any>({
     basePath: descriptor.basePath,
   };
 
-  const handleSave = async () => {
+  // Expected key prefix derived from the field placeholder ("sk-..." → "sk-").
+  // Only meaningful prefixes (2+ chars, not a URL) are checked.
+  const keyPrefixOf = (field: KitCredentialField): string | undefined => {
+    const ph = field.placeholder ?? '';
+    if (!ph.endsWith('...')) return undefined;
+    const prefix = ph.slice(0, -3);
+    if (prefix.length < 2 || prefix.includes('/') || prefix.includes('://')) {
+      return undefined;
+    }
+    return prefix;
+  };
+
+  const computeFormatWarnings = (): string[] => {
+    const warnings: string[] = [];
+    for (const field of fields) {
+      const prefix = keyPrefixOf(field);
+      const value = (state.credentials[field.key] ?? '').trim();
+      if (prefix && value && !value.startsWith(prefix)) {
+        warnings.push(
+          t(
+            'key_format_warning',
+            '"{{label}}" doesn\'t look like a typical key for this provider — it usually starts with "{{prefix}}". Double-check what you pasted.',
+            { label: t('provider_field_' + field.key, field.label), prefix },
+          ) as unknown as string,
+        );
+      }
+    }
+    return warnings;
+  };
+
+  const runTest = async (): Promise<SurfaceTestResult> => {
+    const body = descriptor.form.buildTestBody
+      ? descriptor.form.buildTestBody(stateWithVersion, meta)
+      : { credentials: state.credentials };
+    return test(identifier, body);
+  };
+
+  const doSave = async () => {
     setSaving(true);
     try {
       const body = descriptor.form.buildBody(stateWithVersion, meta);
       const ok = await save(identifier, body);
-      if (ok) onSaved();
+      if (ok) {
+        setSaveBlock(null);
+        onSaved();
+      }
     } finally {
       setSaving(false);
     }
   };
 
+  const handleSave = async () => {
+    setFormatWarnings(computeFormatWarnings());
+    if (descriptor.features.test !== false && descriptor.features.testOnSave) {
+      setSaving(true);
+      try {
+        const result = await runTest();
+        if (!result.ok) {
+          setSaveBlock(result);
+          return;
+        }
+      } finally {
+        setSaving(false);
+      }
+    }
+    await doSave();
+  };
+
   const handleTest = async () => {
     setTesting(true);
     setTestResult(null);
+    setFormatWarnings(computeFormatWarnings());
     try {
-      const body = descriptor.form.buildTestBody
-        ? descriptor.form.buildTestBody(stateWithVersion, meta)
-        : { credentials: state.credentials };
-      const ok = await test(identifier, body);
-      setTestResult(ok ? 'success' : 'failure');
+      setTestResult(await runTest());
     } finally {
       setTesting(false);
     }
@@ -142,12 +208,16 @@ export function ProviderConfigForm<Meta = any>({
 
   const setupNotes = (meta as any)?.setupNotes as string | undefined;
 
+  // "Where do I get my key?" points at the provider's API-keys page when the
+  // manifest knows it, falling back to the docs page, then the homepage.
+  const keysHref = keysUrl ?? docsUrl ?? website;
+
   // Chromeless: the shared modal frame supplies the border, padding, header
   // (`<icon> <name> Setup|Edit` via ProviderModalTitle) and the close button.
   return (
     <div className="flex flex-col gap-[24px] w-[520px] max-w-full">
 
-      {website && (
+      {keysHref && (
         <div className="text-[13px] leading-[1.5] text-textColor bg-btnPrimary/10 border border-btnPrimary/30 rounded-[8px] p-[12px] flex items-start gap-[10px]">
           <svg
             viewBox="0 0 20 20"
@@ -165,13 +235,29 @@ export function ProviderConfigForm<Meta = any>({
               'New here? Create an account and get your API key from the provider, then paste it below.',
             )}{' '}
             <a
-              href={website}
+              href={keysHref}
               target="_blank"
               rel="noopener noreferrer"
               className="text-btnPrimaryAccent hover:underline whitespace-nowrap"
             >
-              {t('visit_website', 'Visit website')} ↗
+              {keysUrl || docsUrl
+                ? t('config_keys_link', 'Where do I get my API key?')
+                : t('visit_website', 'Visit website')}{' '}
+              ↗
             </a>
+            {keysUrl && docsUrl && (
+              <>
+                {' · '}
+                <a
+                  href={docsUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-btnPrimaryAccent hover:underline whitespace-nowrap"
+                >
+                  {t('config_docs_link', 'Docs')} ↗
+                </a>
+              </>
+            )}
           </span>
         </div>
       )}
@@ -265,17 +351,46 @@ export function ProviderConfigForm<Meta = any>({
         </div>
       )}
 
+      {formatWarnings.length > 0 && (
+        <div className="text-[13px] leading-[1.5] px-[12px] py-[8px] rounded-[4px] bg-amber-500/10 border border-amber-500/30 text-amber-800 dark:text-amber-400 flex flex-col gap-[4px]">
+          {formatWarnings.map((w, i) => (
+            <span key={i}>{w}</span>
+          ))}
+        </div>
+      )}
+
       {testResult && (
         <div
           className={`text-[13px] px-[12px] py-[8px] rounded-[4px] ${
-            testResult === 'success'
+            testResult.ok
               ? 'bg-green-900/20 text-green-900 dark:text-green-400'
               : 'bg-red-900/20 text-dangerText'
           }`}
         >
-          {testResult === 'success'
+          {testResult.ok
             ? t('test_success', 'Connection successful')
-            : t('test_failure', 'Connection failed — check your credentials')}
+            : testResult.error ||
+              t('test_failure', 'Connection failed — check your credentials')}
+        </div>
+      )}
+
+      {saveBlock && (
+        <div className="text-[13px] leading-[1.5] px-[12px] py-[8px] rounded-[4px] bg-red-900/20 text-dangerText flex flex-col gap-[6px]">
+          <span>
+            {t(
+              'save_test_failed',
+              'The connection test failed, so nothing was saved.',
+            )}{' '}
+            {saveBlock.error ||
+              t('test_failure', 'Connection failed — check your credentials')}
+          </span>
+          <button
+            type="button"
+            className="self-start text-btnPrimaryAccent hover:underline"
+            onClick={() => doSave()}
+          >
+            {t('save_anyway', 'Save anyway')}
+          </button>
         </div>
       )}
 
