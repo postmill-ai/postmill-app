@@ -42,7 +42,7 @@ describe('createThrottledProgressWriter', () => {
 
   it('honours custom stride/interval', async () => {
     const write = vi.fn();
-    let now = 0;
+    const now = 0;
     const reporter = createThrottledProgressWriter(write, {
       frameStride: 2,
       intervalMs: 1000,

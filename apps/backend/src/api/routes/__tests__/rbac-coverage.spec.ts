@@ -205,6 +205,10 @@ const INTENTIONALLY_UNGATED = new Set<string>([
   // Stateless outbound fetch triggered by the UI; no org config is mutated.
   'AutopostController.sendWebhook',
 
+  // Render-worker progress sink: token-gated (verifyMediaJobWebhookToken against the
+  // job's org from the Redis payload), writes only an ephemeral progress key.
+  'DesignRenderFrameController.renderProgress',
+
   // Billing self-service endpoints (subscribe, cancel, trial finish, etc.). These are
   // intentionally open to any authenticated org member managing their own subscription;
   // privileged billing operations (refunds, charge list, admin cancel) are gated below.
