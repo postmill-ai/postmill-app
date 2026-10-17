@@ -27,13 +27,25 @@ import { motionBlurSource } from '../designer-doc/motion-blur';
 import { captionStylesSource } from '../designer-doc/caption-styles';
 import { backgroundTextureSource } from '../designer-doc/background-texture';
 
+/**
+ * The ...Source() helpers serialize functions with String(fn). The backend runs
+ * the CJS-compiled build, where tsc rewrites references to exported bindings as
+ * `exports.X` — but `exports` does not exist in the frame page, so any leaked
+ * reference throws ReferenceError the first time that code path runs (shapes,
+ * easing helpers hit by keyframes/caption word-pop, …). Every `exports.X` name
+ * is one of the module's own helpers, all declared locally in the injected
+ * block, so stripping the prefix restores the intended reference.
+ */
+const stripExportsNamespace = (source: string): string =>
+  source.replace(/\bexports\./g, '');
+
 export const FRAME_RENDERER_SCRIPT = /* js */ `
 (function () {
-${shapeGeometrySource()}
-${keyframesSource()}
-${motionBlurSource()}
-${captionStylesSource()}
-${backgroundTextureSource()}
+${stripExportsNamespace(shapeGeometrySource())}
+${stripExportsNamespace(keyframesSource())}
+${stripExportsNamespace(motionBlurSource())}
+${stripExportsNamespace(captionStylesSource())}
+${stripExportsNamespace(backgroundTextureSource())}
 
   const output = window.__DATA.output;
   const baseUrl = window.__DATA.baseUrl || '';

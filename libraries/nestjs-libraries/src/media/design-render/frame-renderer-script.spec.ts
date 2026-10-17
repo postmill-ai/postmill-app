@@ -105,6 +105,41 @@ describe('FRAME_RENDERER_SCRIPT', () => {
     expect(typeof api.preload).toBe('function');
   });
 
+  it('contains no CJS `exports.` references — the browser page has no module namespace', () => {
+    // The ...Source() injectors serialize functions with String(fn) over the
+    // CJS-compiled build, where tsc rewrites references to exported bindings
+    // as `exports.X`. Any leak throws ReferenceError in the render page the
+    // first time that code path runs (keyframe easing defaults, shape
+    // geometry, caption karaoke). Guard the assembled script.
+    expect(FRAME_RENDERER_SCRIPT).not.toMatch(/\bexports\./);
+    expect(FRAME_RENDERER_SCRIPT).not.toMatch(/\brequire\(/);
+  });
+
+  it('eases keyframes that carry NO explicit ease (default-handle path)', async () => {
+    // Regression: default ease handles are the compiled-CJS `exports.*` path.
+    // A clip keyframed by a canvas drag has no ease handles at all.
+    const bare = {
+      ...output,
+      tracks: [
+        {
+          id: 'tr',
+          type: 'shape',
+          clips: [
+            {
+              ...output.tracks[0].clips[0],
+              keyframes: [
+                { tMs: 0, props: { x: 0 } },
+                { tMs: 1000, props: { x: 80 } },
+              ],
+            },
+          ],
+        },
+      ],
+    };
+    const api = run(bare);
+    await expect(api.renderFrame(500)).resolves.toBeUndefined();
+  });
+
   it('renders a frame without throwing', async () => {
     const api = run(output);
     await expect(api.renderFrame(500)).resolves.toBeUndefined();
