@@ -15,6 +15,10 @@ import { isMarqueeClick, marqueeHitClips, normalizeMarquee, type MarqueeRect } f
 import { timelineBeats } from './beat-sync';
 import { isArtifactPath } from '@postmill-ai/frontend/components/launches/ai.video';
 import { MAX_VIDEO_DURATION_MS } from '@postmill-ai/nestjs-libraries/media/designer-doc/designer-doc.limits';
+import {
+  sourceTimeForClipTime,
+  splitSpeedCurveForClip,
+} from '@postmill-ai/nestjs-libraries/media/designer-doc/speed-curve';
 import { useMediaPicker } from '@postmill-ai/frontend/components/media-tools/use-media-picker';
 import { useT } from '@postmill-ai/react/translation/get.transation.service.client';
 import { genId } from '@postmill-ai/nestjs-libraries/media/designer-doc/designer-doc.migrate';
@@ -1196,13 +1200,21 @@ export const VideoTimeline: FC<VideoTimelineProps> = ({ store, sendTimelineAware
       const ctr = (globalThis as any)._clipCounter;
 
       // Source time of the frame under the playhead — the frozen frame, and the
-      // point the second half resumes from.
-      const frozenSourceMs = (original.trimInMs ?? 0) + (splitPoint - original.startMs);
+      // point the second half resumes from. For a ramped clip that is the
+      // INTEGRATED mapping (the legacy sum only holds at constant speed), and
+      // the two outer clips split the curve at the cut, re-based per side.
+      const curveSplit = splitSpeedCurveForClip(original, splitPoint - original.startMs);
+      const frozenSourceMs = curveSplit
+        ? sourceTimeForClipTime(original, splitPoint - original.startMs)
+        : (original.trimInMs ?? 0) + (splitPoint - original.startMs);
 
       const first: VideoClip = {
         ...original,
         id: `el-${Date.now()}-${ctr}`,
         endMs: splitPoint,
+        ...(curveSplit
+          ? { speedCurve: curveSplit.first.speedCurve, trimInMs: curveSplit.first.trimInMs }
+          : {}),
       };
       const freeze: VideoClip = {
         id: `el-${Date.now()}-${ctr + 1}`,
@@ -1228,8 +1240,12 @@ export const VideoTimeline: FC<VideoTimelineProps> = ({ store, sendTimelineAware
         id: `el-${Date.now()}-${ctr + 2}`,
         startMs: splitPoint + freezeDuration,
         // Resume from the split point, not the source start (always offset, even
-        // when the original had no trimIn).
-        trimInMs: frozenSourceMs,
+        // when the original had no trimIn). For a ramped clip the curve split
+        // already carries the correct per-side trim-in (reversed clips keep the
+        // original trim-in on the second half — the freeze holds the cut frame).
+        ...(curveSplit
+          ? { speedCurve: curveSplit.second.speedCurve, trimInMs: curveSplit.second.trimInMs }
+          : { trimInMs: frozenSourceMs }),
       };
 
       const clips = [...track.clips];

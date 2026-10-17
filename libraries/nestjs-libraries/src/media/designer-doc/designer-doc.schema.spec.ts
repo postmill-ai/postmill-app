@@ -229,6 +229,36 @@ describe('DesignerDoc schema', () => {
     }
   });
 
+  it('round-trips a clip speedCurve through migrateDoc and BOTH parsers (v7)', () => {
+    // Optional-additive, like blendMode: docs saved before ramps existed carry
+    // nothing and keep validating (the fixture above); docs carrying a curve
+    // must keep the points through load normalisation.
+    const curve = [
+      { atMs: 0, speed: 1 },
+      { atMs: 1000, speed: 3 },
+    ];
+    const doc = JSON.parse(JSON.stringify(videoDocFixture));
+    doc.outputs[0].tracks[0].clips[0].speedCurve = curve;
+    const strict = DesignerDocStrictSchema.parse(migrateDoc(doc));
+    expect(strict.outputs[0].tracks[0].clips[0].speedCurve).toEqual(curve);
+    const lenient = DesignerDocLenientSchema.parse(migrateDoc(doc));
+    expect(lenient.outputs[0].tracks[0].clips[0].speedCurve).toEqual(curve);
+  });
+
+  it('rejects an out-of-range speedCurve point strictly, clamps it leniently', () => {
+    const doc = JSON.parse(JSON.stringify(videoDocFixture));
+    doc.outputs[0].tracks[0].clips[0].speedCurve = [
+      { atMs: 0, speed: 40 },
+      { atMs: 1000, speed: 0.01 },
+    ];
+    expect(DesignerDocStrictSchema.safeParse(migrateDoc(doc)).success).toBe(false);
+    const lenient = DesignerDocLenientSchema.parse(migrateDoc(doc));
+    expect(lenient.outputs[0].tracks[0].clips[0].speedCurve).toEqual([
+      { atMs: 0, speed: 10 },
+      { atMs: 1000, speed: 0.1 },
+    ]);
+  });
+
   it('round-trips a background texture through both parsers (v7)', () => {
     const doc = JSON.parse(JSON.stringify(imageDocFixture));
     doc.outputs[0].bg.texture = { type: 'grain', intensity: 0.4, scale: 2, seed: 1234 };

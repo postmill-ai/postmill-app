@@ -48,6 +48,32 @@ with one `video_export` credit charged. Sibling docs: `agents/backend.md`,
    - Speed (`clip.speed`) is pitch-preserving on both sides: the preview sets
      `playbackRate` with `preservesPitch`/`webkitPreservesPitch`, and the mixer's
      `atempo` is likewise pitch-preserving, so preview and export audio match.
+   - Speed ramping (`clip.speedCurve`, optional-additive on doc v7): ≥2
+     piecewise-linear `{atMs, speed}` points (atMs relative to the clip's
+     TIMELINE start, speeds 0.1–10) REPLACE the constant `speed` in the
+     playhead→source mapping — the source time is the integral of the curve
+     (trapezoid areas), evaluated by ONE shared module,
+     `media/designer-doc/speed-curve.ts` (`sourceTimeForClipTime` /
+     `clipTimeForSourceTime` / `sourceTimeForPlayhead`). The preview imports
+     it; the frame page is handed it as source (`speedCurveSource()`, injected
+     like `keyframesSource`) — a spec pins the injected copy to the module and
+     forbids a hand-written `sourceTimeForPlayhead` in the frame script (the
+     old mirror had drifted: it never froze a `speed:0` clip). Reverse consumes
+     the window from the tail (mirror of the curve time), `speed:0` freeze
+     clips ignore the curve. In the editor the clip's timeline length is
+     DERIVED from the curve — editing points keeps the consumed source window
+     fixed and recomputes `endMs` through the inverse mapping, clamped inside
+     the composition (never extends the output). Splitting a ramped clip
+     splits the curve at the cut (`splitSpeedCurveForClip`): each side keeps
+     the points for the source window it plays, re-based, with trim-in fixed
+     for continuity (reversed clips mirror — the second half keeps the
+     original trim-in).
+   - Ramped AUDIO is approximated: `mixAudio` keeps the constant-rate
+     atrim/atempo chain but feeds it the curve's integrated source window and
+     the clip's AVERAGE speed (`averageSpeedForClip`), logging a warn per
+     ramped clip; the preview plays ramped audio elements at the same average.
+     Variable-tempo audio is a separate project; the inspector notes the
+     approximation next to the curve editor.
    - Clip `blendMode` (native canvas modes only — the schema's
      `CLIP_BLEND_MODES`) is honored by both renderers: the preview sets it as
      `globalCompositeOperation` on the clip's Konva node and the frame script

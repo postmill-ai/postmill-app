@@ -8,6 +8,11 @@ import { ChromiumFrameCaptureService } from './chromium-frame-capture.service';
 import type { FrameCaptureProgress } from './chromium-frame-capture.service';
 import { hasVolumeKeyframes } from '../designer-doc/keyframes';
 import {
+  averageSpeedForClip,
+  hasSpeedCurve,
+  sourceTimeForClipTime,
+} from '../designer-doc/speed-curve';
+import {
   sampleVolumeEnvelope,
   volumeEnvelopeExpr,
 } from './volume-envelope';
@@ -309,6 +314,20 @@ export class FfmpegVideoEncoderService {
       // Source trim: respect trimInMs and the portion consumed by speed/reverse.
       let sourceTrimLengthMs = timelineDuration;
       if (clip.speed) sourceTrimLengthMs = timelineDuration * clip.speed;
+      // A speed ramp collapses to the clip's AVERAGE speed for audio: this
+      // chain (atrim + atempo) is constant-rate, so the source window becomes
+      // the curve's INTEGRATED consumption (what the per-frame video mapping
+      // actually reads) and the tempo its average. Variable-tempo audio is a
+      // separate project; the picture still ramps per frame.
+      let tempo = clip.speed;
+      if (hasSpeedCurve(clip) && clip.speed !== 0) {
+        sourceTrimLengthMs =
+          sourceTimeForClipTime(clip, timelineDuration) - (clip.trimInMs || 0);
+        tempo = averageSpeedForClip(clip);
+        this._logger.warn(
+          `Clip ${clip.id} has a speedCurve: mixing its audio at the average speed (${tempo.toFixed(3)}x), not a variable tempo`,
+        );
+      }
       const trimInMs = clip.trimInMs || 0;
       const trimOutMs = Math.min(
         trimInMs + sourceTrimLengthMs,
@@ -321,9 +340,8 @@ export class FfmpegVideoEncoderService {
       );
 
       if (clip.reverse) filterParts.push('areverse');
-      if (clip.speed && clip.speed !== 1) {
+      if (tempo && tempo !== 1) {
         // atempo range is 0.5-2.0; chain if needed.
-        const tempo = clip.speed;
         if (tempo >= 0.5 && tempo <= 2) {
           filterParts.push(`atempo=${tempo}`);
         } else {

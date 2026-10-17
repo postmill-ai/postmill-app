@@ -9,6 +9,7 @@ import {
 import { DEFAULT_TOOL_ID, getTool } from './tools';
 import type { SelectionMask } from './selection-mask';
 import { DESIGNER_DOC_VERSION, MAX_VIDEO_DURATION_MS } from '@postmill-ai/nestjs-libraries/media/designer-doc/designer-doc.limits';
+import { splitSpeedCurveForClip } from '@postmill-ai/nestjs-libraries/media/designer-doc/speed-curve';
 import {
   migrateDoc,
   genId,
@@ -1247,12 +1248,30 @@ export const createDesignerStore = (
             const original = t.clips[idx];
             const splitPoint = Math.max(original.startMs + 100, Math.min(original.endMs - 100, atMs));
             if (splitPoint <= original.startMs || splitPoint >= original.endMs) return t;
-            const first: VideoClip = { ...original, id: genId(), endMs: splitPoint };
+            // A ramped clip splits its CURVE at the cut: each side keeps the
+            // points for the source window it plays, re-based to its own
+            // start, with trim-in fixed so the source stays continuous (see
+            // splitSpeedCurveForClip — it also handles the reverse mirror).
+            // Without a curve the legacy trim advance applies unchanged.
+            const curveSplit = splitSpeedCurveForClip(original, splitPoint - original.startMs);
+            const first: VideoClip = {
+              ...original,
+              id: genId(),
+              endMs: splitPoint,
+              ...(curveSplit ? { speedCurve: curveSplit.first.speedCurve, trimInMs: curveSplit.first.trimInMs } : {}),
+            };
             // The second half must advance its source trim-in so it continues from
             // where the first half ended, otherwise it replays the source from 0
             // (sourceTimeForPlayhead adds trimInMs). Applies even when the original
             // had no trimIn.
-            const second: VideoClip = { ...original, id: genId(), startMs: splitPoint, trimInMs: (original.trimInMs ?? 0) + (splitPoint - original.startMs) };
+            const second: VideoClip = {
+              ...original,
+              id: genId(),
+              startMs: splitPoint,
+              ...(curveSplit
+                ? { speedCurve: curveSplit.second.speedCurve, trimInMs: curveSplit.second.trimInMs }
+                : { trimInMs: (original.trimInMs ?? 0) + (splitPoint - original.startMs) }),
+            };
             const clips = [...t.clips];
             clips.splice(idx, 1, first, second);
             return { ...t, clips };

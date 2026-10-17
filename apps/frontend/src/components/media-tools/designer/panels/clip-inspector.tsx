@@ -22,6 +22,15 @@ import type { EaseType } from '../video-preview';
 import type { KeyframeEase } from '@postmill-ai/nestjs-libraries/media/designer-doc/keyframes';
 import { NATIVE_BLEND_ORDER } from '@postmill-ai/nestjs-libraries/media/designer-doc/pixel-ops';
 import {
+  clipTimeForSourceTime,
+  hasSpeedCurve,
+  sourceTimeForClipTime,
+  speedAt,
+  MAX_SPEED,
+  MIN_SPEED,
+  type SpeedCurvePoint,
+} from '@postmill-ai/nestjs-libraries/media/designer-doc/speed-curve';
+import {
   CLIP_LOOK_PRESETS,
   activeLookForFilters,
   lookCssFilter,
@@ -365,6 +374,104 @@ export const ClipInspector: FC<ClipInspectorProps> = ({ store, outputIndex, trac
     store.getState().pushHistory();
   }, [store]);
 
+  // --- Speed ramp -----------------------------------------------------------
+  const ramped = !!clip && hasSpeedCurve(clip);
+  const clipDurationMs = clip ? clip.endMs - clip.startMs : 0;
+
+  /**
+   * Write a speed curve and recompute the clip's TIMELINE end from it.
+   * CapCut-style: the consumed SOURCE window stays fixed across the edit, so
+   * the clip shrinks/grows to whatever the new integral implies — recomputed
+   * through the inverse mapping and clamped inside the composition (the store
+   * rejects an endMs past the output duration; we clamp instead of extending
+   * the output, so a curve edit can never silently re-time other tracks).
+   */
+  const applySpeedCurve = useCallback(
+    (curve: SpeedCurvePoint[] | undefined) => {
+      if (!clip) return;
+      const updates: Partial<VideoClip> = { speedCurve: curve };
+      if (curve && curve.length >= 2 && clip.speed !== 0) {
+        const trimIn = clip.trimInMs || 0;
+        // The consumed source window is direction-independent (a reversed clip
+        // plays the same span backwards), so both the integral and its inverse
+        // are evaluated on the UNMIRRORED mapping.
+        const forward = { ...clip, reverse: false };
+        const consumed = sourceTimeForClipTime(forward, clipDurationMs) - trimIn;
+        const newDuration = clipTimeForSourceTime({ ...forward, speedCurve: curve }, trimIn + consumed);
+        updates.endMs = Math.min(
+          vo.durationMs,
+          clip.startMs + Math.max(100, Math.round(newDuration)),
+        );
+      }
+      updateClip(updates);
+    },
+    [clip, clipDurationMs, vo, updateClip],
+  );
+
+  const toggleRamp = useCallback(() => {
+    if (!clip) return;
+    if (ramped) {
+      // Removing the ramp returns the clip to its stored constant speed.
+      updateClip({ speedCurve: undefined });
+      return;
+    }
+    // Seed a flat curve at the current speed: two endpoints consume exactly
+    // what `clip.speed` did, so enabling the ramp never re-times the clip.
+    const s = clip.speed ?? 1;
+    updateClip({
+      speedCurve: [
+        { atMs: 0, speed: s },
+        { atMs: Math.max(1, clipDurationMs), speed: s },
+      ],
+    });
+  }, [clip, ramped, clipDurationMs, updateClip]);
+
+  const setCurvePoint = useCallback(
+    (idx: number, patch: Partial<SpeedCurvePoint>) => {
+      if (!clip?.speedCurve) return;
+      const next = clip.speedCurve
+        .map((p, i) => (i === idx ? { ...p, ...patch } : p))
+        .map((p) => ({
+          atMs: Math.min(Math.max(0, Math.round(p.atMs)), clipDurationMs),
+          speed: Math.min(MAX_SPEED, Math.max(MIN_SPEED, Math.round(p.speed * 100) / 100)),
+        }))
+        .sort((a, b) => a.atMs - b.atMs);
+      applySpeedCurve(next);
+    },
+    [clip, clipDurationMs, applySpeedCurve],
+  );
+
+  const addCurvePoint = useCallback(() => {
+    if (!clip?.speedCurve || clip.speedCurve.length >= 100) return;
+    const curve = clip.speedCurve;
+    // The widest gap gets the new point, mid-time at the interpolated speed.
+    let gapIdx = 0;
+    let gap = 0;
+    for (let i = 0; i < curve.length - 1; i++) {
+      const g = curve[i + 1].atMs - curve[i].atMs;
+      if (g > gap) {
+        gap = g;
+        gapIdx = i;
+      }
+    }
+    if (gap < 2) return;
+    const mid = Math.round((curve[gapIdx].atMs + curve[gapIdx + 1].atMs) / 2);
+    applySpeedCurve(
+      [...curve, { atMs: mid, speed: Math.round(speedAt(curve, mid) * 100) / 100 }].sort(
+        (a, b) => a.atMs - b.atMs,
+      ),
+    );
+  }, [clip, applySpeedCurve]);
+
+  const removeCurvePoint = useCallback(
+    (idx: number) => {
+      // A ramp needs two endpoints — removing below that is "ramp off".
+      if (!clip?.speedCurve || clip.speedCurve.length <= 2) return;
+      applySpeedCurve(clip.speedCurve.filter((_, i) => i !== idx));
+    },
+    [clip, applySpeedCurve],
+  );
+
   const hasFilter = useCallback(
     (prefix: string) => filters.some((f) => f === prefix || f.startsWith(prefix + ':')),
     [filters],
@@ -677,9 +784,9 @@ export const ClipInspector: FC<ClipInspectorProps> = ({ store, outputIndex, trac
           {PRESET_STEPS.map((s) => (
             <button
               key={s}
-              onClick={() => updateClip({ speed: s, reverse: false })}
+              onClick={() => updateClip({ speed: s, reverse: false, ...(ramped ? { speedCurve: undefined } : {}) })}
               className={`flex-1 h-7 rounded text-[11px] font-medium transition-all ${
-                clip.speed === s && !clip.reverse
+                clip.speed === s && !clip.reverse && !ramped
                   ? 'bg-designerAccent text-white'
                   : 'border border-studioBorder text-textColor hover:bg-boxHover'
               }`}
@@ -690,15 +797,100 @@ export const ClipInspector: FC<ClipInspectorProps> = ({ store, outputIndex, trac
         </div>
         {/* Arbitrary speed within the schema's 0.1–10 range — the presets above
             are just the common stops. Preview honours it via playbackRate and
-            the server seeks/mixes with the same multiplier. */}
+            the server seeks/mixes with the same multiplier. Constant speed and
+            the ramp below are exclusive: editing one clears the other. */}
         <Stepper
           label={translate('designer_label_custom_speed', 'Custom speed (x)')}
           min={0.1}
           max={10}
           step={0.05}
           value={Math.round((clip.speed ?? 1) * 100) / 100}
-          onChange={(n) => updateClip({ speed: Math.min(10, Math.max(0.1, Math.round(n * 100) / 100)) })}
+          onChange={(n) => updateClip({ speed: Math.min(10, Math.max(0.1, Math.round(n * 100) / 100)), ...(ramped ? { speedCurve: undefined } : {}) })}
         />
+
+        {/* Speed ramp — CapCut-style variable speed within the clip. A simple
+            point list (time + speed steppers, min 2 points), not a bezier
+            editor. While a curve is present it REPLACES the constant speed in
+            the source-time mapping, and the clip's timeline length is derived
+            from the curve (fixed source window). */}
+        <div className="flex items-center justify-between">
+          <span className="text-[11px] text-textColor/70">{translate('designer_label_speed_ramp', 'Speed ramp')}</span>
+          <button
+            type="button"
+            role="switch"
+            aria-checked={ramped}
+            onClick={toggleRamp}
+            className={`relative w-[40px] h-[22px] rounded-full transition-colors ${
+              ramped ? 'bg-designerAccent' : 'bg-studioBorder'
+            }`}
+          >
+            <span
+              className={`absolute top-[2px] left-[2px] w-[18px] h-[18px] rounded-full bg-white transition-transform ${
+                ramped ? 'translate-x-[18px]' : ''
+              }`}
+            />
+          </button>
+        </div>
+        {ramped && clip.speedCurve && (
+          <div className="space-y-1.5">
+            {clip.speedCurve.map((p, i) => (
+              <div key={i} className="flex items-end gap-1">
+                <div className="flex-1">
+                  <Stepper
+                    label={translate('designer_label_ramp_point_time', 'At (ms)')}
+                    min={0}
+                    max={clipDurationMs}
+                    step={100}
+                    value={Math.round(p.atMs)}
+                    onChange={(n) => setCurvePoint(i, { atMs: n })}
+                  />
+                </div>
+                <div className="flex-1">
+                  <Stepper
+                    label={translate('designer_label_ramp_point_speed', 'Speed (x)')}
+                    min={MIN_SPEED}
+                    max={MAX_SPEED}
+                    step={0.05}
+                    value={Math.round(p.speed * 100) / 100}
+                    onChange={(n) => setCurvePoint(i, { speed: n })}
+                  />
+                </div>
+                <button
+                  type="button"
+                  aria-label={translate('designer_ramp_remove_point', 'Remove point')}
+                  disabled={clip.speedCurve!.length <= 2}
+                  onClick={() => removeCurvePoint(i)}
+                  className="h-[26px] w-[26px] rounded-md border border-studioBorder text-[13px] text-textColor/70 hover:bg-boxHover disabled:opacity-40 disabled:hover:bg-transparent"
+                >
+                  ×
+                </button>
+              </div>
+            ))}
+            <button
+              type="button"
+              onClick={addCurvePoint}
+              className="w-full h-7 rounded border border-studioBorder text-[11px] text-textColor hover:bg-boxHover"
+            >
+              {translate('designer_ramp_add_point', '+ Add point')}
+            </button>
+            {/* The clip's timeline length is DERIVED from the curve (the source
+                window stays fixed), so show it read-only. */}
+            <p className="text-[10px] text-textColor/40">
+              {translate('designer_ramp_effective_duration', 'Effective duration: {{duration}}s', {
+                duration: ((clip.endMs - clip.startMs) / 1000).toFixed(2),
+              })}
+            </p>
+            {/* Audio cannot follow a variable tempo — the export mixes the
+                clip at its average speed (the preview does the same for
+                audio-only clips). */}
+            <p className="text-[10px] text-textColor/40">
+              {translate(
+                'designer_ramp_audio_note',
+                'Audio exports at the clip’s average speed while the picture ramps.'
+              )}
+            </p>
+          </div>
+        )}
 
         <div className="flex items-center justify-between pt-1">
           <span className="text-[11px] text-textColor/70">{translate('designer_label_reverse', 'Reverse')}</span>

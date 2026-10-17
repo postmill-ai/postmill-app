@@ -23,6 +23,7 @@ export function escapeForScriptTag(value: unknown): string {
 
 import { shapeGeometrySource } from '../designer-doc/shape-geometry';
 import { keyframesSource } from '../designer-doc/keyframes';
+import { speedCurveSource } from '../designer-doc/speed-curve';
 import { motionBlurSource } from '../designer-doc/motion-blur';
 import { captionStylesSource } from '../designer-doc/caption-styles';
 import { backgroundTextureSource } from '../designer-doc/background-texture';
@@ -43,6 +44,7 @@ export const FRAME_RENDERER_SCRIPT = /* js */ `
 (function () {
 ${stripExportsNamespace(shapeGeometrySource())}
 ${stripExportsNamespace(keyframesSource())}
+${stripExportsNamespace(speedCurveSource())}
 ${stripExportsNamespace(motionBlurSource())}
 ${stripExportsNamespace(captionStylesSource())}
 ${stripExportsNamespace(backgroundTextureSource())}
@@ -197,17 +199,12 @@ ${stripExportsNamespace(backgroundTextureSource())}
   function getClipDuration(clip) { return clip.endMs - clip.startMs; }
   function getEffectiveEnd(clip) { return clip.endMs + (clip.freezeAtMs || 0); }
 
-  function sourceTimeForPlayhead(clip, playheadMs) {
-    const effectiveEnd = getEffectiveEnd(clip);
-    if (playheadMs < clip.startMs || playheadMs > effectiveEnd) return null;
-    if (clip.freezeAtMs && playheadMs > clip.endMs) {
-      return getClipDuration(clip) + (clip.trimInMs || 0);
-    }
-    let relativeMs = playheadMs - clip.startMs;
-    if (clip.reverse) relativeMs = getClipDuration(clip) - relativeMs;
-    if (clip.speed) relativeMs = relativeMs * clip.speed;
-    return relativeMs + (clip.trimInMs || 0);
-  }
+  // The playhead→source mapping (constant speed, speed ramps, reverse,
+  // freeze) is INJECTED from designer-doc/speed-curve (see speedCurveSource)
+  // — the same implementation the preview engine runs, so an exported frame
+  // seeks to exactly the source time the canvas showed. The former
+  // hand-mirrored copy here had already drifted (it never froze a speed:0
+  // clip); a spec pins the injected copy to the module.
 
   function getClipVisualState(clip, playheadMs) {
     const effectiveEnd = getEffectiveEnd(clip);

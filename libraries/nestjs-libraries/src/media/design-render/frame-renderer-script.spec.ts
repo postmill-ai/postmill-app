@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { escapeForScriptTag, FRAME_RENDERER_SCRIPT } from './frame-renderer-script';
 import { interpolateClipKeyframes } from '../designer-doc/keyframes';
+import { sourceTimeForPlayhead } from '../designer-doc/speed-curve';
 
 describe('escapeForScriptTag (0.2 </script> breakout)', () => {
   it('neutralizes a </script> breakout in a user-controlled composition value', () => {
@@ -179,6 +180,47 @@ describe('FRAME_RENDERER_SCRIPT', () => {
     const clip = output.tracks[0].clips[0] as never;
     for (const ms of [0, 250, 500, 750, 1000]) {
       expect(injected(clip, ms).x).toBeCloseTo(interpolateClipKeyframes(clip, ms).x, 6);
+    }
+  });
+
+  it('seeks frames with the SHARED speed mapping, not a hand-mirrored copy', async () => {
+    // The injected speed-curve source is the parity mechanism; the previous
+    // hand-written copy here had already drifted (it never froze a speed:0
+    // clip), so the script must not grow one again.
+    expect(FRAME_RENDERER_SCRIPT).toContain('sourceTimeForClipTime');
+    expect(FRAME_RENDERER_SCRIPT).toContain('curveIntegratedMs');
+    expect(FRAME_RENDERER_SCRIPT).not.toContain('function sourceTimeForPlayhead');
+
+    const fn = new Function(
+      `${FRAME_RENDERER_SCRIPT.slice(
+        FRAME_RENDERER_SCRIPT.indexOf('(function () {') + '(function () {'.length,
+        FRAME_RENDERER_SCRIPT.indexOf('const output = window.__DATA.output')
+      )}
+      return sourceTimeForPlayhead;`
+    ) as () => typeof sourceTimeForPlayhead;
+
+    const injected = fn();
+    const ramp = [
+      { atMs: 0, speed: 1 },
+      { atMs: 1000, speed: 3 },
+    ];
+    const cases = [
+      { startMs: 0, endMs: 4000 },
+      { startMs: 0, endMs: 4000, speed: 2, trimInMs: 100 },
+      { startMs: 0, endMs: 4000, speed: 0, trimInMs: 250 },
+      { startMs: 0, endMs: 4000, reverse: true, speed: 0.5 },
+      { startMs: 0, endMs: 4000, freezeAtMs: 500, speed: 2 },
+      { startMs: 0, endMs: 4000, speedCurve: ramp },
+      { startMs: 0, endMs: 4000, speedCurve: ramp, reverse: true, trimInMs: 300 },
+      { startMs: 0, endMs: 4000, speedCurve: ramp, freezeAtMs: 500 },
+    ];
+    for (const c of cases) {
+      for (const ms of [-1, 0, 500, 1000, 2500, 4000, 4500, 5000]) {
+        const a = sourceTimeForPlayhead(c, ms);
+        const b = injected(c, ms);
+        if (a === null || b === null) expect(b).toBe(a);
+        else expect(b).toBeCloseTo(a, 9);
+      }
     }
   });
 

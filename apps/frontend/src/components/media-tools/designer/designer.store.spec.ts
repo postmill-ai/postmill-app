@@ -7,6 +7,10 @@ import {
   seedBufferFromImage,
 } from './raster-layers';
 import { DESIGNER_DOC_VERSION, MAX_VIDEO_DURATION_MS } from '@postmill-ai/nestjs-libraries/media/designer-doc/designer-doc.limits';
+import {
+  hasSpeedCurve,
+  sourceTimeForClipTime,
+} from '@postmill-ai/nestjs-libraries/media/designer-doc/speed-curve';
 
 /**
  * Simulates the designer export flow as implemented in Designer.tsx:
@@ -903,5 +907,93 @@ describe('clip copy/paste', () => {
     store.getState().pasteClips(MAX_VIDEO_DURATION_MS - 100);
     expect(vo(store).tracks[0].clips.length).toBe(count);
     expect(store.getState().history.length).toBe(depth);
+  });
+});
+
+
+describe('speed-ramped clips in the store', () => {
+  const videoStore = () => {
+    const store = createDesignerStore();
+    store.getState().setMode('video');
+    return store;
+  };
+  const vo = (store: ReturnType<typeof createDesignerStore>) =>
+    store.getState().doc.outputs[0] as import('./designer.store').VideoOutput;
+
+  // 1× ramping to 3× by 1000ms, then holding 3× (mirrors the module's RAMP).
+  const RAMP = [
+    { atMs: 0, speed: 1 },
+    { atMs: 1000, speed: 3 },
+  ];
+
+  it('splitClip splits the curve at the cut and keeps the source continuous', () => {
+    const store = videoStore();
+    const trackId = vo(store).tracks[0].id;
+    store.getState().addClip(0, trackId, {
+      id: 'c1', startMs: 0, endMs: 4000, src: 'v.mp4', trimInMs: 300, speedCurve: RAMP,
+    } as never);
+    const depth = store.getState().history.length;
+
+    store.getState().splitClip(0, trackId, 'c1', 1500);
+
+    const clips = vo(store).tracks[0].clips;
+    expect(clips).toHaveLength(2);
+    const [first, second] = clips;
+    expect(first.endMs).toBe(1500);
+    expect(second.startMs).toBe(1500);
+    // Each side carries its own re-based curve…
+    expect(hasSpeedCurve(first)).toBe(true);
+    expect(hasSpeedCurve(second)).toBe(true);
+    // …and the two halves compose to the original mapping exactly.
+    const original = { startMs: 0, endMs: 4000, trimInMs: 300, speedCurve: RAMP };
+    for (const l of [0, 500, 1000, 1500]) {
+      expect(sourceTimeForClipTime(first, l)).toBeCloseTo(sourceTimeForClipTime(original, l), 9);
+    }
+    expect(second.trimInMs).toBeCloseTo(sourceTimeForClipTime(original, 1500), 9);
+    for (const l of [0, 1000, 2500]) {
+      expect(sourceTimeForClipTime(second, l)).toBeCloseTo(sourceTimeForClipTime(original, 1500 + l), 9);
+    }
+    // One undo step restores the unsplit clip.
+    expect(store.getState().history.length).toBe(depth + 1);
+    store.getState().undo();
+    expect(vo(store).tracks[0].clips).toHaveLength(1);
+    expect(vo(store).tracks[0].clips[0].speedCurve).toEqual(RAMP);
+  });
+
+  it('splitClip on a reversed ramp keeps the second half on the original trim-in', () => {
+    const store = videoStore();
+    const trackId = vo(store).tracks[0].id;
+    store.getState().addClip(0, trackId, {
+      id: 'c1', startMs: 0, endMs: 4000, src: 'v.mp4', trimInMs: 300, reverse: true, speedCurve: RAMP,
+    } as never);
+
+    store.getState().splitClip(0, trackId, 'c1', 1500);
+
+    const [first, second] = vo(store).tracks[0].clips;
+    const original = { startMs: 0, endMs: 4000, trimInMs: 300, reverse: true, speedCurve: RAMP };
+    for (const l of [0, 700, 1500]) {
+      expect(sourceTimeForClipTime(first, l)).toBeCloseTo(sourceTimeForClipTime(original, l), 9);
+    }
+    expect(second.trimInMs).toBe(300);
+    for (const l of [0, 1250, 2500]) {
+      expect(sourceTimeForClipTime(second, l)).toBeCloseTo(sourceTimeForClipTime(original, 1500 + l), 9);
+    }
+  });
+
+  it('duplicateClip and pasteClips carry the curve', () => {
+    const store = videoStore();
+    const trackId = vo(store).tracks[0].id;
+    store.getState().addClip(0, trackId, {
+      id: 'src', startMs: 0, endMs: 2000, src: 'v.mp4', speedCurve: RAMP,
+    } as never);
+
+    const newId = store.getState().duplicateClip(0, trackId, 'src')!;
+    expect(vo(store).tracks[0].clips.find((c) => c.id === newId)!.speedCurve).toEqual(RAMP);
+
+    store.getState().setSelectedClip({ outputIndex: 0, trackId, clipId: 'src' });
+    store.getState().copySelectedClips();
+    store.getState().pasteClips(6000);
+    const pasted = vo(store).tracks[0].clips.find((c) => c.id !== 'src' && c.id !== newId)!;
+    expect(pasted.speedCurve).toEqual(RAMP);
   });
 });

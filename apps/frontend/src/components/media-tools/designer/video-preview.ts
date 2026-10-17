@@ -4,6 +4,12 @@ import {
   volumeAtClipTime,
   type EasePreset,
 } from '@postmill-ai/nestjs-libraries/media/designer-doc/keyframes';
+import {
+  averageSpeedForClip,
+  hasSpeedCurve,
+  sourceTimeForPlayhead as sharedSourceTimeForPlayhead,
+  speedAt,
+} from '@postmill-ai/nestjs-libraries/media/designer-doc/speed-curve';
 
 interface PlayOptions {
   onTick: (ms: number) => void;
@@ -50,35 +56,14 @@ function getEffectiveClipEnd(clip: VideoClip): number {
   return clip.endMs + (clip.freezeAtMs || 0);
 }
 
-function getClipDuration(clip: VideoClip): number {
-  return clip.endMs - clip.startMs;
-}
-
-export function sourceTimeForPlayhead(clip: VideoClip, playheadMs: number): number | null {
-  const effectiveEnd = getEffectiveClipEnd(clip);
-  if (playheadMs < clip.startMs || playheadMs > effectiveEnd) return null;
-
-  // A speed:0 clip is a held (freeze) frame — always the source time at its
-  // trim-in, never advancing with the playhead.
-  if (clip.speed === 0) return clip.trimInMs || 0;
-
-  const isInFreeze = clip.freezeAtMs ? playheadMs > clip.endMs : false;
-  if (isInFreeze) {
-    return getClipDuration(clip) + (clip.trimInMs || 0);
-  }
-
-  let relativeMs = playheadMs - clip.startMs;
-
-  if (clip.reverse) {
-    relativeMs = getClipDuration(clip) - relativeMs;
-  }
-
-  if (clip.speed !== undefined && clip.speed !== 0) {
-    relativeMs = relativeMs * clip.speed;
-  }
-
-  return relativeMs + (clip.trimInMs || 0);
-}
+/**
+ * The playhead→source mapping lives in the shared `designer-doc/speed-curve`
+ * module — the same code the injected frame renderer is handed as source, so
+ * the preview and an exported mp4 seek identically. It covers the legacy
+ * constant-speed path (unchanged), speed ramps (integrated curve), reverse
+ * and freeze frames. Re-exported here so existing callers keep their import.
+ */
+export const sourceTimeForPlayhead = sharedSourceTimeForPlayhead;
 
 export function getClipVisualState(
   clip: VideoClip,
@@ -299,6 +284,14 @@ export class VideoPreviewEngine {
           const el = this.getOrCreateVideo(clip);
           if (el) {
             activeIds.add(clip.id);
+            // Ramped clip: the picture must track the integrated curve, so the
+            // rate follows the curve's instantaneous speed per tick and the
+            // drift-correction seek below (already computed from the shared
+            // integrated mapping) does the rest. Constant-speed clips are
+            // untouched — their playbackRate was set once at creation.
+            if (hasSpeedCurve(clip)) {
+              applySpeed(el, speedAt(clip.speedCurve, Math.max(0, ms - clip.startMs)));
+            }
             const seekTime = sourceTime / 1000;
             if (Math.abs(el.currentTime - seekTime) > 0.1) {
               el.currentTime = seekTime;
@@ -318,6 +311,13 @@ export class VideoPreviewEngine {
           const el = this.getOrCreateAudio(clip);
           if (el) {
             activeIds.add(clip.id);
+            // Ramped audio is approximated at the clip's AVERAGE speed — the
+            // same collapse the export's mixer does (variable-tempo audio is
+            // out of scope). The drift-correction seek below still uses the
+            // integrated mapping, so the window stays aligned.
+            if (hasSpeedCurve(clip)) {
+              applySpeed(el, averageSpeedForClip(clip));
+            }
             const seekTime = sourceTime / 1000;
             if (Math.abs(el.currentTime - seekTime) > 0.1) {
               el.currentTime = seekTime;
@@ -353,12 +353,21 @@ export class VideoPreviewEngine {
     return false;
   }
 
+  // The rate a clip's element starts at: the curve's average for a ramp (the
+  // per-tick path refines video elements to the instantaneous speed), else the
+  // constant speed as before.
+  private initialRateFor(clip: VideoClip): number | null {
+    if (hasSpeedCurve(clip)) return averageSpeedForClip(clip);
+    return clip.speed !== undefined && clip.speed > 0 ? clip.speed : null;
+  }
+
   private getOrCreateVideo(clip: VideoClip): HTMLVideoElement | null {
     if (!clip.src) return null;
     if (this.videoElements.has(clip.id)) {
       const el = this.videoElements.get(clip.id)!;
-      if (clip.speed !== undefined && clip.speed > 0) {
-        applySpeed(el, clip.speed);
+      const rate = this.initialRateFor(clip);
+      if (rate !== null) {
+        applySpeed(el, rate);
       }
       return el;
     }
@@ -370,8 +379,9 @@ export class VideoPreviewEngine {
     // keyframed volume overrides this on the next tick (see seekMediaElements).
     el.muted = volumeAtClipTime(clip, 0) <= 0;
     el.volume = clampVolume(volumeAtClipTime(clip, 0));
-    if (clip.speed !== undefined && clip.speed > 0) {
-      applySpeed(el, clip.speed);
+    const rate = this.initialRateFor(clip);
+    if (rate !== null) {
+      applySpeed(el, rate);
     }
     el.style.position = 'fixed';
     el.style.left = '-10000px';
@@ -386,8 +396,9 @@ export class VideoPreviewEngine {
     if (!clip.src) return null;
     if (this.audioElements.has(clip.id)) {
       const el = this.audioElements.get(clip.id)!;
-      if (clip.speed !== undefined && clip.speed > 0) {
-        applySpeed(el, clip.speed);
+      const rate = this.initialRateFor(clip);
+      if (rate !== null) {
+        applySpeed(el, rate);
       }
       return el;
     }
@@ -395,8 +406,9 @@ export class VideoPreviewEngine {
     const el = document.createElement('audio');
     el.src = clip.src;
     el.volume = clampVolume(volumeAtClipTime(clip, 0));
-    if (clip.speed !== undefined && clip.speed > 0) {
-      applySpeed(el, clip.speed);
+    const rate = this.initialRateFor(clip);
+    if (rate !== null) {
+      applySpeed(el, rate);
     }
     el.style.position = 'fixed';
     el.style.left = '-10000px';

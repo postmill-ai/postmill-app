@@ -245,6 +245,13 @@ function syncClipMap(
     deleteIfPresent(m, 'frames');
   }
 
+  // A speed curve is a small point list — JSON like frames/words.
+  if (clip.speedCurve) {
+    setIfChanged(m, 'speedCurve', JSON.stringify(clip.speedCurve));
+  } else {
+    deleteIfPresent(m, 'speedCurve');
+  }
+
   if (clip.words) {
     setIfChanged(m, 'words', JSON.stringify(clip.words));
   } else {
@@ -377,6 +384,12 @@ function yToVideoClip(m: Y.Map<any>): VideoClip {
   if (m.has('frames')) {
     try {
       clip.frames = JSON.parse(m.get('frames'));
+    } catch {}
+  }
+
+  if (m.has('speedCurve')) {
+    try {
+      clip.speedCurve = JSON.parse(m.get('speedCurve'));
     } catch {}
   }
 

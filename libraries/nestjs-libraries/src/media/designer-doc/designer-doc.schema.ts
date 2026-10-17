@@ -229,6 +229,7 @@ export interface DesignerTextStroke {
 // designer-doc.drift.spec.ts).
 export type { DesignerPathNode } from './path-geometry';
 export type { KeyframeEase, EaseHandles, EasePreset } from './keyframes';
+export type { SpeedCurvePoint } from './speed-curve';
 export type { MotionBlur } from './motion-blur';
 export type { StrokeStyle, ArrowHead, LineCap, LineJoin } from './stroke-style';
 export type { CaptionStyle, CaptionPreset } from './caption-styles';
@@ -239,6 +240,7 @@ import type { StrokeStyle } from './stroke-style';
 import type { MotionBlur } from './motion-blur';
 import type { KeyframeEase } from './keyframes';
 import type { DesignerPathNode } from './path-geometry';
+import type { SpeedCurvePoint } from './speed-curve';
 
 export interface DesignerCrop {
   x: number;
@@ -708,6 +710,15 @@ export interface VideoClip {
     direction?: 'left' | 'right' | 'up' | 'down';
   };
   speed?: number;
+  /**
+   * CapCut-style speed ramp (optional-additive on v7): piecewise-linear speed
+   * points, `atMs` relative to the clip's TIMELINE start. When present with ≥2
+   * points it REPLACES the constant `speed` in the source-time mapping — the
+   * source time is the integral of the curve (see `designer-doc/speed-curve`,
+   * the single implementation both renderers evaluate). Audio export
+   * approximates a ramp with the clip's average speed.
+   */
+  speedCurve?: SpeedCurvePoint[];
   reverse?: boolean;
   freezeAtMs?: number;
   filters?: string[];
@@ -1501,6 +1512,21 @@ const { strict: StrictKeyframeSchema, lenient: LenientKeyframeSchema } =
   );
 
 // ---------------------------------------------------------------------------
+// SpeedCurvePoint
+// ---------------------------------------------------------------------------
+const { strict: StrictSpeedCurvePointSchema, lenient: LenientSpeedCurvePointSchema } =
+  dualObject(
+    {
+      atMs: strictNum(0, MAX_VIDEO_DURATION_MS),
+      speed: strictNum(0.1, 10),
+    },
+    {
+      atMs: lenientNum(0, MAX_VIDEO_DURATION_MS, 0),
+      speed: lenientNum(0.1, 10, 1),
+    }
+  );
+
+// ---------------------------------------------------------------------------
 // VideoClip
 // ---------------------------------------------------------------------------
 const clipCommon = {
@@ -1616,6 +1642,8 @@ const clipStrictNested = {
   crop: StrictDesignerCropSchema.optional(),
   focalPoint: StrictFocalPointSchema.optional(),
   keyframes: z.array(StrictKeyframeSchema).max(1000).optional(),
+  // Speed ramp points (doc v7) — additive, so earlier clips keep validating.
+  speedCurve: z.array(StrictSpeedCurvePointSchema).max(100).optional(),
   transitionIn: StrictTransitionSchema.optional(),
   transitionOut: StrictTransitionSchema.optional(),
   filters: FiltersSchema,
@@ -1629,6 +1657,7 @@ const clipLenientNested = {
   crop: LenientDesignerCropSchema.optional(),
   focalPoint: LenientFocalPointSchema.optional(),
   keyframes: z.array(LenientKeyframeSchema).max(1000).optional(),
+  speedCurve: z.array(LenientSpeedCurvePointSchema).max(100).optional(),
   transitionIn: LenientTransitionSchema.optional(),
   transitionOut: LenientTransitionSchema.optional(),
   filters: FiltersSchema,
@@ -1815,6 +1844,7 @@ export { StrictStickerFrameSchema, LenientStickerFrameSchema };
 export { StrictCaptionWordSchema, LenientCaptionWordSchema };
 export { StrictTransitionSchema, LenientTransitionSchema };
 export { StrictKeyframeSchema, LenientKeyframeSchema };
+export { StrictSpeedCurvePointSchema, LenientSpeedCurvePointSchema };
 export { StrictVideoClipSchema, LenientVideoClipSchema };
 export { StrictVideoTrackSchema, LenientVideoTrackSchema };
 export { StrictVideoOutputSchema, LenientVideoOutputSchema };

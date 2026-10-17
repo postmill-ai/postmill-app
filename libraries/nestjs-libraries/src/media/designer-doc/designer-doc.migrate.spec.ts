@@ -51,3 +51,35 @@ describe('zero legacy support', () => {
     expect(migrateDoc(null)).toBeNull();
   });
 });
+
+
+describe('clip speed curves (v7, optional-additive)', () => {
+  it('leaves a ramped clip untouched by load normalisation', () => {
+    // migrateDoc only re-stamps the root; the outputs pass through by
+    // reference, so a speedCurve must survive verbatim.
+    const speedCurve = [
+      { atMs: 0, speed: 1 },
+      { atMs: 1000, speed: 3 },
+    ];
+    const raw = {
+      version: 7,
+      mode: 'video',
+      outputs: [
+        {
+          id: 'o',
+          formatId: 'square',
+          name: 'S',
+          width: 100,
+          height: 100,
+          fps: 30,
+          durationMs: 5000,
+          tracks: [
+            { id: 't', type: 'video', clips: [{ id: 'c', startMs: 0, endMs: 4000, speedCurve }] },
+          ],
+        },
+      ],
+    };
+    const migrated = migrateDoc(raw);
+    expect((migrated.outputs[0] as any).tracks[0].clips[0].speedCurve).toEqual(speedCurve);
+  });
+});
