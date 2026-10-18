@@ -251,6 +251,24 @@ interface CritiqueRequest {
       height: number;
       z: number;
     }[];
+    /**
+     * Present on VIDEO outputs: the timeline the poster frame was projected
+     * from. The critic judges the t=0 frame WITH this motion context —
+     * durations, per-clip timing windows and transitions — not as a static
+     * image.
+     */
+    motion?: {
+      durationMs: number;
+      fps: number;
+      clips: {
+        clipId: string;
+        track: string;
+        startMs: number;
+        endMs: number;
+        transitionIn?: string;
+        transitionOut?: string;
+      }[];
+    };
   }[];
 }
 
@@ -614,6 +632,7 @@ export class AiDesignerVisionCriticService implements OnModuleInit {
     // must still apply, or the whole critique dies reading `.criteria` of
     // undefined and the variant ships unreviewed (observed live).
     const rubricCriteria = payload.rubric?.criteria ?? [];
+    const hasMotion = (payload.docSummary ?? []).some((out) => out.motion);
     const criteria = [
       ...rubricCriteria,
       ...BASE_CRITERIA.filter(
@@ -661,6 +680,19 @@ export class AiDesignerVisionCriticService implements OnModuleInit {
               name: 'plan_conformance',
               description:
                 "The render exhibits the plan's stated art direction (the plan spec is below): the named composition actually manifests (a full-bleed composition bleeds imagery to every edge; a split panel shows a panel), the background kind matches (an image background shows imagery, a gradient shows a gradient), every declared decor mark is present and purposeful, and the palette family is honored. A near-empty canvas under a plan that declared decor or imagery is a finding under this criterion. Layout-level misses pair with a \"recompose\" fix; a missing decor/background is a \"note\".",
+              weight: 1,
+            },
+          ]
+        : []),
+      // Motion context only exists for VIDEO outputs (the revise re-check on
+      // a converted video doc) — the poster frame alone cannot be judged for
+      // pacing, so the timeline rides along.
+      ...(hasMotion
+        ? [
+            {
+              name: 'motion_craft',
+              description:
+                'VIDEO outputs (marked below, judged from their t=0 poster frame PLUS the timeline context): the design works as a motion piece — on-screen text stays up long enough to read (a headline under ~1500ms fails), transitions serve the cuts instead of decorating them, and the OPENING frame establishes the design (a poster frame that is empty because everything enters later fails). An element absent from the frame whose clip starts after t=0 is intentional, not missing. Fix motion issues with a "note" (the revise path can retime clips and re-set transitions); geometry/style/text fixes apply to the poster frame as usual.',
               weight: 1,
             },
           ]
@@ -762,7 +794,21 @@ export class AiDesignerVisionCriticService implements OnModuleInit {
               .join(' ')
           )
           .join('\n');
-        return `  - ${out.formatId} (${out.width}x${out.height}):\n${lines}`;
+        // Video outputs: the render under review is the t=0 POSTER FRAME —
+        // the timeline below is what moves. The elements above are the clips
+        // active at t=0.
+        const motion = out.motion
+          ? [
+              `    VIDEO (${out.motion.durationMs}ms @ ${out.motion.fps}fps) — timeline:`,
+              ...out.motion.clips.map(
+                (clip) =>
+                  `    - ${clip.track} clip ${clip.clipId}: ${clip.startMs}–${clip.endMs}ms${
+                    clip.transitionIn ? `, in:${clip.transitionIn}` : ''
+                  }${clip.transitionOut ? `, out:${clip.transitionOut}` : ''}`
+              ),
+            ].join('\n')
+          : undefined;
+        return `  - ${out.formatId} (${out.width}x${out.height})${out.motion ? ' [VIDEO — poster frame + timeline]' : ''}:\n${lines}${motion ? `\n${motion}` : ''}`;
       })
       .join('\n');
 
@@ -816,6 +862,8 @@ ${expectedCopy ? `Expected copy (the render must show exactly this text; letter 
 ${payload.briefIntent ? `The user's brief (their own words — offer_fidelity is judged against THIS, not against the plan's reading of it):\n"${payload.briefIntent}"` : ''}
 
 ${docSummary ? `Design doc elements (authoritative geometry/colors per output — use them to catch low-contrast fills and overlapping/occluding elements the pixels may hide):\n${docSummary}` : ''}
+
+${hasMotion ? 'Outputs marked [VIDEO] are motion designs: the contact sheet shows their t=0 POSTER FRAME, and their timeline is listed above. Judge them against the motion_craft criterion WITH that context — never flag a later-entering clip as missing from the frame, and never judge the frame as a finished static image.' : ''}
 
 ${payload.referenceCues?.length ? `Reference cues (the user's attached reference image(s), interpreted — the target for reference_fidelity):\n${payload.referenceCues.map((c) => `  - ${c}`).join('\n')}` : ''}
 

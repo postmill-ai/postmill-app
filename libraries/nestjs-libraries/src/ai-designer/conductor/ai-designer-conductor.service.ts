@@ -8,6 +8,8 @@ import { FileService } from '@postmill-ai/nestjs-libraries/database/prisma/file/
 import type {
   DesignerDoc,
   DesignerOutput,
+  VideoClip,
+  VideoOutput,
 } from '@postmill-ai/nestjs-libraries/media/designer-doc/designer-doc.schema';
 import { DesignerDocService } from '@postmill-ai/nestjs-libraries/media/designer-doc/designer-doc.service';
 import type { DesignerDocOp } from '@postmill-ai/nestjs-libraries/media/designer-doc/designer-doc-ops.schema';
@@ -3331,6 +3333,30 @@ export class AiDesignerConductorService {
       plan?.background?.kind === 'image' &&
       plan.background.ref === `asset:${slotId}`;
     for (const out of doc.outputs) {
+      if ('tracks' in out) {
+        // Video output: the bg image, a slot-matched media clip, or the clip
+        // functioning as the background all count.
+        if (
+          bgIsSlot &&
+          out.bg?.type === 'image' &&
+          (out.bg.src || out.bg.fileId)
+        ) {
+          return true;
+        }
+        for (const track of out.tracks) {
+          if (track.type !== 'image' && track.type !== 'video') continue;
+          for (const clip of track.clips) {
+            if (
+              (clip.originId === slotId || clip.id === slotId) &&
+              (clip.src || clip.fileId)
+            ) {
+              return true;
+            }
+          }
+        }
+        if (bgIsSlot && this._videoBackgroundClip(out)) return true;
+        continue;
+      }
       if (!('children' in out)) continue;
       if (
         bgIsSlot &&
@@ -3375,6 +3401,28 @@ export class AiDesignerConductorService {
     // old fileIds so seeded copies match even without the originId.
     const oldFileIds = new Set<string>();
     for (const out of doc.outputs) {
+      if ('tracks' in out) {
+        // Video output: bg image fileId, slot-matched clips, and — when the
+        // PLAN's background is the slot — the clip functioning as the
+        // background (converted clips carry no originId, so identity matters).
+        if (bgIsSlot && out.bg?.type === 'image' && out.bg.fileId) {
+          oldFileIds.add(out.bg.fileId);
+        }
+        const bgClip = bgIsSlot ? this._videoBackgroundClip(out) : undefined;
+        if (bgClip?.fileId) oldFileIds.add(bgClip.fileId);
+        for (const track of out.tracks) {
+          if (track.type !== 'image' && track.type !== 'video') continue;
+          for (const clip of track.clips) {
+            if (
+              (clip.originId === slotId || clip.id === slotId) &&
+              clip.fileId
+            ) {
+              oldFileIds.add(clip.fileId);
+            }
+          }
+        }
+        continue;
+      }
       if (!('children' in out)) continue;
       if (bgIsSlot && out.bg?.type === 'image' && out.bg.fileId) {
         oldFileIds.add(out.bg.fileId);
@@ -3392,6 +3440,58 @@ export class AiDesignerConductorService {
 
     const ops: DesignerDocOp[] = [];
     doc.outputs.forEach((out, outputIndex) => {
+      if ('tracks' in out) {
+        // Video output. The background image lives on `out.bg` (color/gradient
+        // conversions) or in the z-lowest full-bleed clip (image background
+        // conversions); slot imagery lives in image/video clips. Swaps ride
+        // the video-capable ops — setOutputBackground and replaceClipMedia.
+        // Scrim invalidation is element-based and has no clip counterpart
+        // (there is no removeClip op), so video scrims are left alone.
+        if (
+          out.bg?.type === 'image' &&
+          (bgIsSlot || (out.bg.fileId && oldFileIds.has(out.bg.fileId)))
+        ) {
+          ops.push({
+            op: 'setOutputBackground',
+            outputIndex,
+            background: {
+              type: 'image',
+              src: asset.path,
+              fileId: asset.fileId,
+              focalPoint:
+                asset.focalPoint ?? out.bg.focalPoint ?? { x: 0.5, y: 0.5 },
+            },
+          });
+        }
+        const bgClip = bgIsSlot ? this._videoBackgroundClip(out) : undefined;
+        for (const track of out.tracks) {
+          if (track.type !== 'image' && track.type !== 'video') continue;
+          for (const clip of track.clips) {
+            const isSlot =
+              clip.originId === slotId ||
+              clip.id === slotId ||
+              !!(clip.fileId && oldFileIds.has(clip.fileId)) ||
+              (!!bgClip && clip.id === bgClip.id);
+            if (!isSlot) continue;
+            ops.push({
+              op: 'replaceClipMedia',
+              outputIndex,
+              trackId: track.id,
+              clipId: clip.id,
+              src: asset.path,
+              fileId: asset.fileId,
+              ...(asset.focalPoint ? { focalPoint: asset.focalPoint } : {}),
+              ...(asset.naturalWidth && asset.naturalHeight
+                ? {
+                    naturalWidth: asset.naturalWidth,
+                    naturalHeight: asset.naturalHeight,
+                  }
+                : {}),
+            });
+          }
+        }
+        return;
+      }
       if (!('children' in out)) return;
       // The imagery this swap repaints on THIS output — the scrims judged
       // against the old photo are the ones overlapping it.
@@ -3875,14 +3975,56 @@ export class AiDesignerConductorService {
     if (revision.kind === 'imagery') return true;
     if (revision.kind === 'edit') return false;
     if (!this._isBackgroundImageryWording(revision.instruction)) return false;
-    return doc.outputs.some(
-      (out) =>
-        'children' in out &&
-        (out.bg?.type === 'image' ||
+    return doc.outputs.some((out) => {
+      if ('children' in out) {
+        return (
+          out.bg?.type === 'image' ||
           out.children.some(
             (el) => el.type === 'image' && (el.src || el.fileId)
-          ))
-    );
+          )
+        );
+      }
+      // Video output: the imagery lives in the output's `bg` or in
+      // image/video clips (imageDocToVideoDoc converts the image background
+      // and every image element to clips).
+      if ('tracks' in out) {
+        return (
+          out.bg?.type === 'image' ||
+          out.tracks.some(
+            (track) =>
+              (track.type === 'image' || track.type === 'video') &&
+              track.clips.some((clip) => clip.src || clip.fileId)
+          )
+        );
+      }
+      return false;
+    });
+  }
+
+  /**
+   * The clip functioning as a VIDEO output's background imagery: the first
+   * (z-lowest) image/video clip that covers the canvas — a box-less clip
+   * renders fullscreen, an explicit box must cover ≥90%. This is where
+   * `imageDocToVideoDoc` parks the converted image background (the bottom
+   * clip of the first image track).
+   */
+  private _videoBackgroundClip(out: VideoOutput): VideoClip | undefined {
+    const canvasArea = Math.max(1, out.width * out.height);
+    for (const track of out.tracks) {
+      if (track.type !== 'image' && track.type !== 'video') continue;
+      for (const clip of track.clips) {
+        if (!clip.src && !clip.fileId) continue;
+        const boxless =
+          typeof clip.x !== 'number' ||
+          typeof clip.y !== 'number' ||
+          typeof clip.width !== 'number' ||
+          typeof clip.height !== 'number';
+        if (boxless) return clip;
+        const area = (clip.width ?? 0) * (clip.height ?? 0);
+        if (area >= canvasArea * 0.9) return clip;
+      }
+    }
+    return undefined;
   }
 
   /**
@@ -3981,6 +4123,9 @@ export class AiDesignerConductorService {
    *    primary output's image elements instead: the first covering ≥90% of
    *    the canvas, else the largest. Empty only when the design carries no
    *    image element at all — the honest "no image background" case.
+   * 3. VIDEO docs: the same rule applied to image/video CLIPS — the clip
+   *    functioning as the background (full-bleed or box-less, z-lowest), else
+   *    the largest boxed one.
    */
   private _backgroundSlotForRevise(
     doc: DesignerDoc,
@@ -3990,7 +4135,29 @@ export class AiDesignerConductorService {
       return (plan.background.ref || '').replace(/^asset:/, '');
     }
     const primary = doc.outputs[0];
-    if (!primary || !('children' in primary)) return '';
+    if (!primary) return '';
+    if (!('children' in primary)) {
+      // Video output: imagery sits in clips. The clip functioning as the
+      // background (full-bleed/box-less, z-lowest) wins; otherwise the
+      // largest explicitly-boxed image clip — the same rule the image path
+      // applies to elements.
+      if (!('tracks' in primary)) return '';
+      const bgClip = this._videoBackgroundClip(primary);
+      if (bgClip) return bgClip.originId || bgClip.id || '';
+      let largest: VideoClip | undefined;
+      for (const track of primary.tracks) {
+        if (track.type !== 'image' && track.type !== 'video') continue;
+        for (const clip of track.clips) {
+          if (!clip.src && !clip.fileId) continue;
+          const area = (clip.width ?? 0) * (clip.height ?? 0);
+          const best = largest
+            ? (largest.width ?? 0) * (largest.height ?? 0)
+            : -1;
+          if (area > best) largest = clip;
+        }
+      }
+      return largest ? largest.originId || largest.id || '' : '';
+    }
     const images = primary.children.filter(
       (el) => el.type === 'image' && (el.src || el.fileId)
     );
@@ -4875,40 +5042,118 @@ export class AiDesignerConductorService {
    * with the critique dispatch — the critic uses it to catch low-contrast or
    * occluded elements the rendered pixels (or a downscaled contact sheet)
    * hide. `formatIds` scopes the summary to specific outputs.
+   *
+   * VIDEO outputs contribute their CLIPS (the render the critic judges is
+   * the t=0 poster frame) plus a `motion` block — durations, timing windows
+   * and transitions — so the rubric judges the frame WITH the motion context
+   * instead of as a static image.
    */
   private _critiqueDocSummary(doc: DesignerDoc, formatIds?: string[]) {
     const wanted = formatIds?.length ? new Set(formatIds) : undefined;
-    return ((doc.outputs ?? []) as DesignerOutput[])
-      .filter(
-        (out) =>
-          Array.isArray(out.children) &&
-          (!wanted || wanted.has(out.formatId))
-      )
-      .map((out) => ({
-        formatId: out.formatId,
-        width: out.width,
-        height: out.height,
-        elements: out.children.map((el, z) => ({
-          originId: el.originId,
-          type: el.type,
-          // Imagery carries no copy: a corrupted doc (text patched onto an
-          // image by an old fix loop) must never echo marker strings back
-          // into the critique prompt.
-          text:
-            el.type !== 'image' &&
-            el.type !== 'icon' &&
-            typeof el.text === 'string' &&
-            el.text.trim()
-              ? el.text.slice(0, 80)
-              : undefined,
-          fill: el.fill,
-          x: el.x,
-          y: el.y,
-          width: el.width,
-          height: el.height,
-          z,
-        })),
-      }));
+    return (doc.outputs ?? [])
+      .filter((out) => !wanted || wanted.has(out.formatId))
+      .map((out) => {
+        if ('tracks' in out) {
+          let z = 0;
+          const elements: {
+            originId?: string;
+            type: string;
+            text?: string;
+            fill?: string;
+            x: number;
+            y: number;
+            width: number;
+            height: number;
+            z: number;
+          }[] = [];
+          const clips: {
+            clipId: string;
+            track: string;
+            startMs: number;
+            endMs: number;
+            transitionIn?: string;
+            transitionOut?: string;
+          }[] = [];
+          for (const track of out.tracks) {
+            if (track.hidden) continue;
+            for (const clip of track.clips) {
+              // Cap the motion context so a dense timeline cannot blow the
+              // critique prompt's token budget.
+              if (clips.length < 60) {
+                clips.push({
+                  clipId: clip.id,
+                  track: track.type,
+                  startMs: clip.startMs,
+                  endMs: clip.endMs,
+                  transitionIn: clip.transitionIn?.type,
+                  transitionOut: clip.transitionOut?.type,
+                });
+              }
+              if (track.type === 'audio') continue;
+              // `elements` mirrors what the POSTER FRAME (t=0) actually
+              // paints — clips entering later exist only in the motion
+              // block, or the critic would flag them as missing/occluded.
+              if (clip.startMs > 0 || clip.endMs <= 0) continue;
+              elements.push({
+                originId: clip.originId,
+                type: track.type,
+                // Same rule as image elements: imagery carries no copy.
+                text:
+                  (track.type === 'text' || track.type === 'caption') &&
+                  typeof clip.text === 'string' &&
+                  clip.text.trim()
+                    ? clip.text.slice(0, 80)
+                    : undefined,
+                fill: clip.fill,
+                x: clip.x ?? 0,
+                y: clip.y ?? 0,
+                width: clip.width ?? out.width,
+                height: clip.height ?? out.height,
+                z: z++,
+              });
+            }
+          }
+          return {
+            formatId: out.formatId,
+            width: out.width,
+            height: out.height,
+            elements,
+            motion: {
+              durationMs: out.durationMs,
+              fps: out.fps,
+              clips,
+            },
+          };
+        }
+        if (!Array.isArray((out as DesignerOutput).children)) return undefined;
+        const imageOut = out as DesignerOutput;
+        return {
+          formatId: imageOut.formatId,
+          width: imageOut.width,
+          height: imageOut.height,
+          elements: imageOut.children.map((el, z) => ({
+            originId: el.originId,
+            type: el.type,
+            // Imagery carries no copy: a corrupted doc (text patched onto an
+            // image by an old fix loop) must never echo marker strings back
+            // into the critique prompt.
+            text:
+              el.type !== 'image' &&
+              el.type !== 'icon' &&
+              typeof el.text === 'string' &&
+              el.text.trim()
+                ? el.text.slice(0, 80)
+                : undefined,
+            fill: el.fill,
+            x: el.x,
+            y: el.y,
+            width: el.width,
+            height: el.height,
+            z,
+          })),
+        };
+      })
+      .filter((entry): entry is NonNullable<typeof entry> => !!entry);
   }
 
   private async _emitText(

@@ -231,6 +231,63 @@ describe('AiDesignerSaverService file naming', () => {
 
     expect(result).not.toHaveProperty('contrastViolations');
   });
+
+  it('renders a VIDEO doc through the t=0 poster projection (video outputs become image outputs)', async () => {
+    const videoDoc = {
+      version: 8,
+      mode: 'video',
+      outputs: [
+        {
+          id: 'out-v1',
+          formatId: 'reels',
+          name: 'Reels',
+          width: 1080,
+          height: 1920,
+          fps: 30,
+          durationMs: 10000,
+          tracks: [
+            {
+              id: 'trk-text',
+              type: 'text',
+              clips: [
+                {
+                  id: 'clip-1',
+                  startMs: 0,
+                  endMs: 10000,
+                  text: 'Headline',
+                  x: 40,
+                  y: 200,
+                  width: 1000,
+                  height: 200,
+                  fontSize: 96,
+                },
+              ],
+            },
+          ],
+        },
+      ],
+    } as any;
+
+    const result = await service.saveDesign('org1', 'user1', 'v1', videoDoc, {
+      name: 'announcement-v1',
+    });
+
+    // renderPage rejects video outputs — the saver must have projected the
+    // doc, so the renderer only ever sees image outputs…
+    const renderedDoc = renderService.renderAllPages.mock.calls[0][0] as any;
+    expect('children' in renderedDoc.outputs[0]).toBe(true);
+    expect(renderedDoc.outputs[0].children[0]).toMatchObject({
+      id: 'clip-1',
+      type: 'text',
+      text: 'Headline',
+    });
+    // …while the PERSISTED doc stays the video doc.
+    expect(designService.createDesign.mock.calls[0][2].doc.mode).toBe('video');
+    // The preview is still named after the video output's format.
+    expect(result.outputPreviews[0].formatId).toBe('reels');
+    const sheetDoc = renderService.renderContactSheet.mock.calls[0][0] as any;
+    expect('children' in sheetDoc.outputs[0]).toBe(true);
+  });
 });
 
 describe('AiDesignerSaverService deferred preview registration', () => {

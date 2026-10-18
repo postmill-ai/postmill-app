@@ -343,11 +343,101 @@ export class DesignerDocService {
       }
 
       case 'setOutputBackground': {
-        const outputs = doc.outputs.map((out, i) => {
-          if (i !== op.outputIndex || !isImageOutput(out)) return out;
-          return { ...out, bg: op.background };
-        });
+        // Video-capable: VideoOutput carries `bg` (the frame renderer paints
+        // it under the tracks), so the op applies to both output kinds. No
+        // IMAGE_ONLY_OPS pre-check runs for this op — validate the target here.
+        const target = doc.outputs[op.outputIndex];
+        if (!target) {
+          throw new DesignerDocOpError(
+            'DESIGNER_OP_INDEX_OOB',
+            op.op,
+            `outputIndex ${op.outputIndex} out of range`
+          );
+        }
+        const outputs = doc.outputs.map((out, i) =>
+          i === op.outputIndex ? { ...out, bg: op.background } : out
+        );
         return { ...doc, outputs } as DesignerDoc;
+      }
+
+      case 'updateClip':
+      case 'replaceClipMedia':
+      case 'updateTransition': {
+        const { output, track, clip } = this._resolveVideoClip(doc, op);
+
+        if (op.op === 'updateClip') {
+          const startMs = op.patch.startMs ?? clip.startMs;
+          const endMs = op.patch.endMs ?? clip.endMs;
+          // Same duration-cap rule the editor store enforces: timing may not
+          // cross the output duration or invert. REJECTED, not clamped — the
+          // model must see the failure rather than ship a silent clamp.
+          // Overlaps with sibling clips on the same track are NOT rejected:
+          // visual tracks legitimately stack (imageDocToVideoDoc layers
+          // full-duration clips on one track), so overlap is normal.
+          if (endMs <= startMs) {
+            throw new DesignerDocOpError(
+              'DESIGNER_OP_CLIP_TIMING',
+              op.op,
+              `clip ${clip.id}: endMs ${endMs} must be after startMs ${startMs}`
+            );
+          }
+          if (endMs > output.durationMs || startMs >= output.durationMs) {
+            throw new DesignerDocOpError(
+              'DESIGNER_OP_CLIP_TIMING',
+              op.op,
+              `clip ${clip.id}: [${startMs}, ${endMs}) exceeds the output duration ${output.durationMs}ms`
+            );
+          }
+          return this._patchVideoClip(doc, op.outputIndex, track.id, clip.id, {
+            ...op.patch,
+            startMs,
+            endMs,
+          });
+        }
+
+        if (op.op === 'replaceClipMedia') {
+          // Only media-carrying clips have pixels to swap; a text/shape/audio
+          // clip has no `src` semantics.
+          if (
+            track.type !== 'video' &&
+            track.type !== 'image' &&
+            track.type !== 'sticker' &&
+            track.type !== 'raster'
+          ) {
+            throw new DesignerDocOpError(
+              'DESIGNER_OP_MODE_MISMATCH',
+              op.op,
+              `clip ${clip.id} sits on a ${track.type} track — no media to replace`
+            );
+          }
+          // The source geometry describes the MEDIA, so it travels with the
+          // swap (same contract as the image-element swap in the conductor's
+          // _replaceSlotImagery).
+          const patch: Partial<VideoClip> = { src: op.src };
+          if (op.fileId !== undefined) patch.fileId = op.fileId;
+          if (op.focalPoint !== undefined) patch.focalPoint = op.focalPoint;
+          if (op.naturalWidth !== undefined) patch.naturalWidth = op.naturalWidth;
+          if (op.naturalHeight !== undefined) patch.naturalHeight = op.naturalHeight;
+          return this._patchVideoClip(doc, op.outputIndex, track.id, clip.id, patch);
+        }
+
+        // updateTransition — the transition's overlap can never outlast the
+        // clip itself, so durationMs clamps to the clip's own duration (the
+        // frame renderer clamps the same way at draw time).
+        const clipDuration = clip.endMs - clip.startMs;
+        const transition = op.transition
+          ? {
+              ...op.transition,
+              durationMs: Math.min(op.transition.durationMs, clipDuration),
+            }
+          : undefined;
+        return op.edge === 'in'
+          ? this._patchVideoClip(doc, op.outputIndex, track.id, clip.id, {
+              transitionIn: transition,
+            })
+          : this._patchVideoClip(doc, op.outputIndex, track.id, clip.id, {
+              transitionOut: transition,
+            });
       }
 
       case 'addElement': {
@@ -466,6 +556,77 @@ export class DesignerDocService {
         // Exhaustiveness guard; every op is handled above.
         return doc;
     }
+  }
+
+  /**
+   * Resolve the clip a clip-op addresses. `trackId` (optional) narrows the
+   * search; without it the FIRST clip with the id wins (clip ids are
+   * normalized unique per output, so collisions only occur on hand-built
+   * docs). Throws on a missing/non-video target.
+   */
+  private _resolveVideoClip(
+    doc: DesignerDoc,
+    op: { op: string; outputIndex: number; trackId?: string; clipId: string }
+  ): { output: VideoOutput; track: VideoTrack; clip: VideoClip } {
+    const out = doc.outputs[op.outputIndex];
+    if (!out) {
+      throw new DesignerDocOpError(
+        'DESIGNER_OP_INDEX_OOB',
+        op.op,
+        `outputIndex ${op.outputIndex} out of range`
+      );
+    }
+    if (!isVideoOutput(out)) {
+      throw new DesignerDocOpError(
+        'DESIGNER_OP_MODE_MISMATCH',
+        op.op,
+        `op ${op.op} targets an image output`
+      );
+    }
+    const tracks = op.trackId
+      ? out.tracks.filter((t) => t.id === op.trackId)
+      : out.tracks;
+    for (const track of tracks) {
+      const clip = track.clips.find((c) => c.id === op.clipId);
+      if (clip) return { output: out, track, clip };
+    }
+    throw new DesignerDocOpError(
+      'DESIGNER_OP_CLIP_NOT_FOUND',
+      op.op,
+      `clip ${op.clipId} not found on output ${op.outputIndex}`
+    );
+  }
+
+  /**
+   * Apply a clip patch FORMAT-LOCALLY — only the addressed output changes.
+   * Clips link variants by `originId` and the interactive editor propagates
+   * content/style across them (`applyLinkedVideoClip`), but headless revise
+   * ops make no cross-output propagation in v1 (see designer-doc-ops.schema).
+   */
+  private _patchVideoClip(
+    doc: DesignerDoc,
+    outputIndex: number,
+    trackId: string,
+    clipId: string,
+    patch: Partial<VideoClip>
+  ): DesignerDoc {
+    const outputs = doc.outputs.map((out, i) => {
+      if (i !== outputIndex || !isVideoOutput(out)) return out;
+      return {
+        ...out,
+        tracks: out.tracks.map((track) =>
+          track.id !== trackId
+            ? track
+            : {
+                ...track,
+                clips: track.clips.map((clip) =>
+                  clip.id === clipId ? ({ ...clip, ...patch } as VideoClip) : clip
+                ),
+              }
+        ),
+      };
+    });
+    return { ...doc, outputs } as DesignerDoc;
   }
 
   assignIdsAndNormalize(doc: DesignerDoc): DesignerDoc {

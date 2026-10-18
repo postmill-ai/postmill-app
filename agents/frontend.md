@@ -217,7 +217,13 @@ Layer semantics that are easy to get wrong, and that the renderers must agree on
   `smartReflow` — timing, fps and durationMs are invariant). `originId` on `VideoClip` links sibling
   clips across variants: content/style edits propagate through `applyLinkedVideoClip`
   (`apply-linked.ts`), geometry and timing stay local (`VIDEO_CLIP_LOCAL_KEYS`). The same branches
-  serve the backend `addOutput`/`resizeOutput` ops, so agent-driven edits match the UI.
+  serve the backend `addOutput`/`resizeOutput` ops, so agent-driven edits match the UI. The backend
+  ops vocabulary adds clip ops (`updateClip`/`replaceClipMedia`/`updateTransition` in
+  `designer-doc-ops.schema.ts`) which are FORMAT-LOCAL — no originId propagation on the headless
+  path. Server-side previews of a video output (AI Designer saver, contact sheets, critic re-check)
+  render the t=0 POSTER projection `designer-doc/video-poster.ts` — a render-only synthetic image
+  output (clips→elements; `video`-track clips are skipped: no ffmpeg outside the render container).
+  `renderPage` still rejects video outputs.
 - **Video clips are canvas objects too.** The tool palette applies to both document kinds: a clip
   carries the same geometry an element does, and a drag writes back through `clip-geometry.ts` as a
   DELTA — writing absolute values would collapse a keyframed clip's animation onto whichever frame

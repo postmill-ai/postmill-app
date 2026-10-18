@@ -1,9 +1,13 @@
 import { z } from 'zod';
 import {
   MAX_DIMENSION,
+  MAX_FONT_SIZE,
   MAX_OPS_PER_REQUEST,
+  MAX_TEXT_LEN,
+  MAX_VIDEO_DURATION_MS,
 } from './designer-doc.limits';
 import {
+  ColorSchema,
   DesignerDocStrictSchema,
   StrictDesignerBackgroundSchema,
   StrictDesignerElementBaseSchema,
@@ -172,6 +176,92 @@ const PlaceImageOpSchema = z
   })
   .strict();
 
+// ---------------------------------------------------------------------------
+// Clip ops (video outputs)
+//
+// SCOPE RULE: clip ops are FORMAT-LOCAL — they apply only to the addressed
+// `outputIndex`, with no cross-output propagation. Clips DO carry `originId`
+// (video variants link through it and the interactive editor propagates
+// content/style across them — see `designer-doc/apply-linked`), but the
+// headless/AI revise path deliberately stays single-output in v1: a revise
+// asks for one visible change and the format-local result is what the
+// vision re-check judges. Geometry and timing never propagate even in the
+// editor (`VIDEO_CLIP_LOCAL_KEYS`), and keyframe-level animation edits are
+// NOT expressible here at all — those remain an honest "unsupported change".
+// ---------------------------------------------------------------------------
+
+/**
+ * Whitelisted clip patch. Content (`text`), style (`fill`, `font*`),
+ * geometry (`x`/`y`/`width`/`height` — the BASE box; keyframes are never
+ * rewritten), `opacity` and timing (`startMs`/`endMs`, bounds-checked against
+ * the output's `durationMs` at apply time). `src`/`fileId` are deliberately
+ * absent — media swaps go through `replaceClipMedia`.
+ */
+const UpdateClipPatchSchema = z
+  .object({
+    text: z.string().max(MAX_TEXT_LEN).optional(),
+    fill: ColorSchema.optional(),
+    fontFamily: z.string().max(200).optional(),
+    fontSize: strictNum(1, MAX_FONT_SIZE).optional(),
+    fontWeight: strictNum(1, 1000).optional(),
+    x: strictNum(-MAX_DIMENSION, MAX_DIMENSION).optional(),
+    y: strictNum(-MAX_DIMENSION, MAX_DIMENSION).optional(),
+    width: strictNum(0, MAX_DIMENSION).optional(),
+    height: strictNum(0, MAX_DIMENSION).optional(),
+    opacity: strictNum(0, 1).optional(),
+    startMs: strictNum(0, MAX_VIDEO_DURATION_MS).optional(),
+    endMs: strictNum(0, MAX_VIDEO_DURATION_MS).optional(),
+  })
+  .strict();
+
+const clipAddress = {
+  outputIndex,
+  /** Narrows the search when clip ids collide across tracks. */
+  trackId: z.string().max(200).optional(),
+  clipId: z.string().max(200),
+};
+
+const UpdateClipOpSchema = z
+  .object({
+    op: z.literal('updateClip'),
+    ...clipAddress,
+    patch: UpdateClipPatchSchema,
+  })
+  .strict();
+
+const ReplaceClipMediaOpSchema = z
+  .object({
+    op: z.literal('replaceClipMedia'),
+    ...clipAddress,
+    src: SrcSchema,
+    fileId: z.string().max(200).optional(),
+    focalPoint: z
+      .object({ x: z.number().finite(), y: z.number().finite() })
+      .strict()
+      .optional(),
+    naturalWidth: strictNum(0, MAX_DIMENSION).optional(),
+    naturalHeight: strictNum(0, MAX_DIMENSION).optional(),
+  })
+  .strict();
+
+const ClipTransitionInputSchema = z
+  .object({
+    type: z.enum(['cut', 'fade', 'dissolve', 'slide', 'wipe', 'zoom', 'blur']),
+    durationMs: strictNum(0, MAX_VIDEO_DURATION_MS),
+    direction: z.enum(['left', 'right', 'up', 'down']).optional(),
+  })
+  .strict();
+
+const UpdateTransitionOpSchema = z
+  .object({
+    op: z.literal('updateTransition'),
+    ...clipAddress,
+    edge: z.enum(['in', 'out']),
+    /** `null` removes the transition on that edge. */
+    transition: ClipTransitionInputSchema.nullable(),
+  })
+  .strict();
+
 export const DesignerDocOpSchema = z.discriminatedUnion('op', [
   SetDocOpSchema,
   RemoveOutputOpSchema,
@@ -187,6 +277,9 @@ export const DesignerDocOpSchema = z.discriminatedUnion('op', [
   RemoveElementOpSchema,
   ReorderElementOpSchema,
   PlaceImageOpSchema,
+  UpdateClipOpSchema,
+  ReplaceClipMediaOpSchema,
+  UpdateTransitionOpSchema,
 ]);
 
 export type DesignerDocOp = z.infer<typeof DesignerDocOpSchema>;
@@ -195,8 +288,10 @@ export type DesignerDocOp = z.infer<typeof DesignerDocOpSchema>;
 // addOutput/resizeOutput are deliberately NOT here: both are video-aware
 // (see DesignerDocService._applyOp — a video doc gets a cloned+reflowed
 // VideoOutput variant), so mode gating happens per-branch, not per-op.
+// setOutputBackground is not here either: VideoOutput carries `bg`, so the
+// op works on both output kinds. The clip ops above are the video-side
+// vocabulary; they gate on the target being a VIDEO output in _applyOp.
 export const IMAGE_ONLY_OPS = new Set([
-  'setOutputBackground',
   'addPage',
   'removePage',
   'duplicatePage',

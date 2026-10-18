@@ -191,9 +191,9 @@ describe('DesignerDocService', () => {
     expect(() =>
       service.applyOps(doc, [
         {
-          op: 'setOutputBackground',
+          op: 'placeImage',
           outputIndex: 0,
-          background: { type: 'color' as const, color: '#000000' },
+          src: 'https://example.com/a.png',
         },
       ])
     ).toThrow(DesignerDocOpError);
@@ -1108,5 +1108,272 @@ describe('DesignerDocService', () => {
     expect(() =>
       service.applyOps(doc, [{ op: 'addPage', outputIndex: 0 }])
     ).toThrow(DesignerDocOpError);
+  });
+});
+
+describe('DesignerDocService clip ops (video outputs)', () => {
+  const videoDoc = () =>
+    makeService().validate({
+      version: 5,
+      mode: 'video',
+      outputs: [
+        {
+          id: 'out-v1',
+          formatId: 'custom-wide',
+          name: 'Wide',
+          width: 1920,
+          height: 1080,
+          fps: 30,
+          durationMs: 10000,
+          tracks: [
+            {
+              id: 'trk-text',
+              type: 'text',
+              clips: [
+                {
+                  id: 'clip-1',
+                  startMs: 500,
+                  endMs: 4000,
+                  text: 'Headline',
+                  x: 460,
+                  y: 900,
+                  width: 1000,
+                  height: 140,
+                  fontSize: 64,
+                  fill: '#ffffff',
+                  transitionIn: { type: 'fade', durationMs: 400 },
+                },
+              ],
+            },
+            {
+              id: 'trk-img',
+              type: 'image',
+              clips: [
+                {
+                  id: 'clip-2',
+                  startMs: 0,
+                  endMs: 10000,
+                  src: 'https://example.com/bg.png',
+                  fileId: 'file-1',
+                },
+              ],
+            },
+          ],
+        },
+      ],
+    });
+
+  it('applies updateClip text/style/geometry patches', () => {
+    const result = makeService().applyOps(videoDoc(), [
+      {
+        op: 'updateClip',
+        outputIndex: 0,
+        clipId: 'clip-1',
+        patch: { text: 'New headline', fill: '#ff0000', fontSize: 80, y: 700 },
+      },
+    ]);
+    const clip = (result.outputs[0] as any).tracks[0].clips[0];
+    expect(clip.text).toBe('New headline');
+    expect(clip.fill).toBe('#ff0000');
+    expect(clip.fontSize).toBe(80);
+    expect(clip.y).toBe(700);
+    expect(clip.startMs).toBe(500); // timing untouched
+    expect(clip.id).toBe('clip-1');
+  });
+
+  it('applies updateClip timing within the output duration', () => {
+    const result = makeService().applyOps(videoDoc(), [
+      {
+        op: 'updateClip',
+        outputIndex: 0,
+        clipId: 'clip-1',
+        patch: { startMs: 1000, endMs: 6000 },
+      },
+    ]);
+    const clip = (result.outputs[0] as any).tracks[0].clips[0];
+    expect(clip.startMs).toBe(1000);
+    expect(clip.endMs).toBe(6000);
+  });
+
+  it('rejects updateClip timing past the output duration or inverted', () => {
+    const doc = videoDoc();
+    expect(() =>
+      makeService().applyOps(doc, [
+        {
+          op: 'updateClip',
+          outputIndex: 0,
+          clipId: 'clip-1',
+          patch: { endMs: 12000 },
+        },
+      ])
+    ).toThrow(/exceeds the output duration/);
+    expect(() =>
+      makeService().applyOps(doc, [
+        {
+          op: 'updateClip',
+          outputIndex: 0,
+          clipId: 'clip-1',
+          patch: { startMs: 5000, endMs: 4000 },
+        },
+      ])
+    ).toThrow(/must be after startMs/);
+  });
+
+  it('updateClip rejects an unknown clip and an image output target', () => {
+    const doc = videoDoc();
+    expect(() =>
+      makeService().applyOps(doc, [
+        { op: 'updateClip', outputIndex: 0, clipId: 'nope', patch: { fill: '#000' } },
+      ])
+    ).toThrow(/not found/);
+
+    const imageDoc = createBlankDoc();
+    expect(() =>
+      makeService().applyOps(imageDoc, [
+        { op: 'updateClip', outputIndex: 0, clipId: 'clip-1', patch: { fill: '#000' } },
+      ])
+    ).toThrow(/targets an image output/);
+  });
+
+  it('updateClip patch rejects non-whitelisted keys', () => {
+    expect(() =>
+      makeService().applyOps(videoDoc(), [
+        {
+          op: 'updateClip',
+          outputIndex: 0,
+          clipId: 'clip-1',
+          patch: { src: 'https://evil.example/x.png' } as any,
+        },
+      ])
+    ).toThrow(BadRequestException);
+  });
+
+  it('applies replaceClipMedia on an image clip', () => {
+    const result = makeService().applyOps(videoDoc(), [
+      {
+        op: 'replaceClipMedia',
+        outputIndex: 0,
+        clipId: 'clip-2',
+        src: 'https://example.com/new.png',
+        fileId: 'file-2',
+        naturalWidth: 800,
+        naturalHeight: 600,
+      },
+    ]);
+    const clip = (result.outputs[0] as any).tracks[1].clips[0];
+    expect(clip.src).toBe('https://example.com/new.png');
+    expect(clip.fileId).toBe('file-2');
+    expect(clip.naturalWidth).toBe(800);
+  });
+
+  it('replaceClipMedia rejects clips on non-media tracks', () => {
+    expect(() =>
+      makeService().applyOps(videoDoc(), [
+        {
+          op: 'replaceClipMedia',
+          outputIndex: 0,
+          clipId: 'clip-1',
+          src: 'https://example.com/new.png',
+        },
+      ])
+    ).toThrow(/no media to replace/);
+  });
+
+  it('applies and removes transitions via updateTransition', () => {
+    const service = makeService();
+    let doc = videoDoc();
+    doc = service.applyOps(doc, [
+      {
+        op: 'updateTransition',
+        outputIndex: 0,
+        clipId: 'clip-1',
+        edge: 'out',
+        transition: { type: 'dissolve', durationMs: 600 },
+      },
+    ]);
+    let clip = (doc.outputs[0] as any).tracks[0].clips[0];
+    expect(clip.transitionOut).toEqual({ type: 'dissolve', durationMs: 600 });
+    expect(clip.transitionIn).toEqual({ type: 'fade', durationMs: 400 });
+
+    // A transition longer than the clip clamps to the clip duration
+    // (clip-1 runs 500–4000ms → 3500ms).
+    doc = service.applyOps(doc, [
+      {
+        op: 'updateTransition',
+        outputIndex: 0,
+        clipId: 'clip-1',
+        edge: 'out',
+        transition: { type: 'dissolve', durationMs: 99999 },
+      },
+    ]);
+    clip = (doc.outputs[0] as any).tracks[0].clips[0];
+    expect(clip.transitionOut.durationMs).toBe(3500);
+
+    // null removes the transition on that edge.
+    doc = service.applyOps(doc, [
+      {
+        op: 'updateTransition',
+        outputIndex: 0,
+        clipId: 'clip-1',
+        edge: 'out',
+        transition: null,
+      },
+    ]);
+    clip = (doc.outputs[0] as any).tracks[0].clips[0];
+    expect(clip.transitionOut).toBeUndefined();
+  });
+
+  it('applies setOutputBackground on a video output', () => {
+    const result = makeService().applyOps(videoDoc(), [
+      {
+        op: 'setOutputBackground',
+        outputIndex: 0,
+        background: {
+          type: 'gradient',
+          gradient: {
+            type: 'linear',
+            angle: 180,
+            stops: [
+              { color: '#000000', offset: 0 },
+              { color: '#123456', offset: 1 },
+            ],
+          },
+        },
+      },
+    ]);
+    expect((result.outputs[0] as any).bg).toEqual({
+      type: 'gradient',
+      gradient: {
+        type: 'linear',
+        angle: 180,
+        stops: [
+          { color: '#000000', offset: 0 },
+          { color: '#123456', offset: 1 },
+        ],
+      },
+    });
+  });
+
+  it('clip ops are format-local: a second output is untouched', () => {
+    const service = makeService();
+    let doc = videoDoc();
+    doc = service.applyOps(doc, [
+      {
+        op: 'addOutput',
+        preset: { formatId: 'custom-tall', name: 'Tall', width: 1080, height: 1920 },
+      },
+    ]);
+    const result = service.applyOps(doc, [
+      {
+        op: 'updateClip',
+        outputIndex: 0,
+        clipId: 'clip-1',
+        patch: { text: 'Only here' },
+      },
+    ]);
+    const other = (result.outputs[1] as any).tracks
+      .find((t: any) => t.type === 'text')
+      .clips.find((c: any) => c.originId === 'clip-1' || c.text);
+    expect(other.text).toBe('Headline');
   });
 });

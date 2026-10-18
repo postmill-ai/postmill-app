@@ -6301,6 +6301,113 @@ describe('AiDesignerConductorService replaced-asset cleanup', () => {
     expect(result.replacedFileIds).toEqual([]);
   });
 
+  // Video docs: the imagery lives in clips (and possibly the output bg), so
+  // the swap rides replaceClipMedia / setOutputBackground instead of
+  // updateElement.
+  const videoDocWithImageClip = (fileId: string) => ({
+    mode: 'video',
+    outputs: [
+      {
+        width: 1080,
+        height: 1920,
+        formatId: 'reels',
+        fps: 30,
+        durationMs: 10000,
+        tracks: [
+          {
+            id: 'trk-img',
+            type: 'image',
+            clips: [
+              {
+                id: 'clip-bg',
+                startMs: 0,
+                endMs: 10000,
+                fileId,
+                src: `/uploads/${fileId}.png`,
+              },
+            ],
+          },
+        ],
+      },
+    ],
+  });
+
+  it('_replaceSlotImagery swaps a video doc background clip via replaceClipMedia', () => {
+    const docService = { applyOps: vi.fn().mockReturnValue({ patched: true }) };
+    const conductor = makeCleanupConductor(null, docService);
+
+    const result = (conductor as any)._replaceSlotImagery(
+      videoDocWithImageClip('old-file'),
+      { variantId: 'v1', concept: 'c', background: { kind: 'image', ref: 'asset:img' } },
+      'img',
+      { fileId: 'new-file', path: '/uploads/new-file.png' }
+    );
+
+    expect(result.replacedFileIds).toEqual(['old-file']);
+    const ops = docService.applyOps.mock.calls[0][1];
+    expect(ops).toEqual([
+      expect.objectContaining({
+        op: 'replaceClipMedia',
+        outputIndex: 0,
+        trackId: 'trk-img',
+        clipId: 'clip-bg',
+        src: '/uploads/new-file.png',
+        fileId: 'new-file',
+      }),
+    ]);
+  });
+
+  it('_replaceSlotImagery swaps a video output image bg via setOutputBackground', () => {
+    const docService = { applyOps: vi.fn().mockReturnValue({ patched: true }) };
+    const conductor = makeCleanupConductor(null, docService);
+    const doc = videoDocWithImageClip('clip-file') as any;
+    doc.outputs[0].bg = { type: 'image', fileId: 'bg-file', src: '/uploads/bg-file.png' };
+    // The bg is not the plan's slot here — the clip is, addressed directly.
+    const result = (conductor as any)._replaceSlotImagery(
+      doc,
+      { variantId: 'v1', concept: 'c' },
+      'clip-bg',
+      { fileId: 'new-file', path: '/uploads/new-file.png' }
+    );
+
+    const ops = docService.applyOps.mock.calls[0][1];
+    expect(ops.some((op: any) => op.op === 'setOutputBackground')).toBe(false);
+    expect(ops).toEqual([
+      expect.objectContaining({ op: 'replaceClipMedia', clipId: 'clip-bg' }),
+    ]);
+    expect(result.replacedFileIds).toEqual(['clip-file']);
+  });
+
+  it('_isImageryRevision detects imagery on video outputs', () => {
+    const conductor = makeCleanupConductor(null, null);
+    expect(
+      (conductor as any)._isImageryRevision(
+        { instruction: 'change the background image' },
+        videoDocWithImageClip('f1')
+      )
+    ).toBe(true);
+    // A color-only video doc keeps the doc-op (recolor) path.
+    const colorOnly = videoDocWithImageClip('f1') as any;
+    colorOnly.outputs[0].tracks = [];
+    colorOnly.outputs[0].bg = { type: 'color', color: '#101010' };
+    expect(
+      (conductor as any)._isImageryRevision(
+        { instruction: 'change the background image' },
+        colorOnly
+      )
+    ).toBe(false);
+  });
+
+  it('_backgroundSlotForRevise resolves the full-bleed clip on a video doc', () => {
+    const conductor = makeCleanupConductor(null, null);
+    const slot = (conductor as any)._backgroundSlotForRevise(
+      videoDocWithImageClip('f1'),
+      undefined
+    );
+    expect(slot).toBe('clip-bg');
+  });
+
+
   it('_softDeleteReplacedAssets soft-deletes stamped intermediates no longer on the doc', async () => {
     const fileService = {
       getFileById: vi.fn().mockResolvedValue({

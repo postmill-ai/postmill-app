@@ -4,6 +4,7 @@ import { FileService } from '@postmill-ai/nestjs-libraries/database/prisma/file/
 import { DesignService } from '@postmill-ai/nestjs-libraries/database/prisma/design/design.service';
 import { DesignRenderService } from '@postmill-ai/nestjs-libraries/media/design-render/design-render.service';
 import type { DesignerDoc } from '@postmill-ai/nestjs-libraries/media/designer-doc/designer-doc.schema';
+import { docWithVideoPosters } from '@postmill-ai/nestjs-libraries/media/designer-doc/video-poster';
 import type { AiDesignerRenderResult } from './ai-designer.types';
 
 interface SaveOptions {
@@ -162,8 +163,14 @@ export class AiDesignerSaverService {
   ): Promise<Omit<AiDesignerRenderResult, 'designId' | 'variantId'>> {
     // Render every output once; the contact sheet composites the same buffers
     // (rendering twice would double CPU and re-fetch every image element).
-    const pages = await this._renderService.renderAllPages(doc, { orgId });
-    const contactSheet = await this._renderService.renderContactSheet(doc, {
+    // VIDEO outputs render through their t=0 POSTER projection (synthetic
+    // image output, `designer-doc/video-poster`) — previews, the contact
+    // sheet and the critic's re-check keep working on video docs without the
+    // render container. The projection preserves output count and order, so
+    // `doc.outputs[pageIndex]` below still names the right preview.
+    const renderDoc = docWithVideoPosters(doc);
+    const pages = await this._renderService.renderAllPages(renderDoc, { orgId });
+    const contactSheet = await this._renderService.renderContactSheet(renderDoc, {
       orgId,
       pages,
     });

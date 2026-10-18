@@ -124,6 +124,63 @@ describe('AiDesignerVisionCriticService', () => {
     expect(aiDefaults.vision.mock.calls[0][1]).toBe(publicUrl);
   });
 
+  it('judges a video output WITH motion context (poster frame + timeline rubric)', async () => {
+    aiDefaults.vision.mockResolvedValue('{"findings": []}');
+
+    await handler(
+      makeRequest({
+        docSummary: [
+          {
+            formatId: 'reels',
+            width: 1080,
+            height: 1920,
+            elements: [
+              {
+                originId: 'headline',
+                type: 'text',
+                text: 'Grand opening',
+                x: 40,
+                y: 200,
+                width: 1000,
+                height: 200,
+                z: 0,
+              },
+            ],
+            motion: {
+              durationMs: 10000,
+              fps: 30,
+              clips: [
+                {
+                  clipId: 'clip-1',
+                  track: 'text',
+                  startMs: 0,
+                  endMs: 10000,
+                  transitionIn: 'fade',
+                },
+              ],
+            },
+          },
+        ],
+      }),
+      'org1'
+    );
+
+    const prompt = aiDefaults.vision.mock.calls[0][2] as string;
+    expect(prompt).toContain('motion_craft');
+    expect(prompt).toContain('[VIDEO — poster frame + timeline]');
+    expect(prompt).toContain('clip clip-1: 0–10000ms');
+    expect(prompt).toContain('POSTER FRAME');
+  });
+
+  it('omits the motion rubric when no output carries a timeline', async () => {
+    aiDefaults.vision.mockResolvedValue('{"findings": []}');
+
+    await handler(makeRequest(), 'org1');
+
+    const prompt = aiDefaults.vision.mock.calls[0][2] as string;
+    expect(prompt).not.toContain('motion_craft');
+  });
+
   it('does no billable work when the dispatch signal is already aborted', async () => {
     await expect(
       (service as any)._handler({

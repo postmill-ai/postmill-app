@@ -2474,6 +2474,272 @@ describe('AiDesignerComposerService.reviseByInstruction', () => {
   });
 });
 
+// ---------------------------------------------------------------------------
+// reviseByInstruction on VIDEO docs (clip ops)
+// ---------------------------------------------------------------------------
+
+const makeVideoDoc = () =>
+  ({
+    version: 8,
+    mode: 'video',
+    outputs: [
+      {
+        id: 'out-v1',
+        formatId: 'reels',
+        name: 'Reels',
+        width: 1080,
+        height: 1920,
+        fps: 30,
+        durationMs: 10000,
+        bg: { type: 'color', color: '#101010' },
+        tracks: [
+          {
+            id: 'trk-text',
+            type: 'text',
+            clips: [
+              {
+                id: 'clip-headline',
+                originId: 'headline',
+                startMs: 0,
+                endMs: 10000,
+                text: 'Grand opening',
+                x: 40,
+                y: 200,
+                width: 1000,
+                height: 200,
+                fontSize: 96,
+                fill: '#ffffff',
+              },
+            ],
+          },
+          {
+            id: 'trk-img',
+            type: 'image',
+            clips: [
+              {
+                id: 'clip-bg',
+                startMs: 0,
+                endMs: 10000,
+                src: 'https://example.com/bg.png',
+                fileId: 'file-1',
+              },
+            ],
+          },
+        ],
+      },
+    ],
+  } as any);
+
+describe('AiDesignerComposerService.reviseByInstruction on video docs', () => {
+  let model: { generateText: ReturnType<typeof vi.fn> };
+  let service: AiDesignerComposerService;
+
+  beforeEach(() => {
+    model = { generateText: vi.fn() };
+    service = new AiDesignerComposerService(
+      new DesignerDocService() as any,
+      model as any
+    );
+  });
+
+  it('summarizes video outputs as tracks+clips and offers the clip ops', async () => {
+    model.generateText.mockResolvedValue('[]');
+
+    await service.reviseByInstruction(
+      makeVideoDoc(),
+      'make the headline red',
+      'shared',
+      'org1'
+    );
+
+    const prompt = model.generateText.mock.calls[0][1] as string;
+    expect(prompt).toContain('"clipId":"clip-headline"');
+    expect(prompt).toContain('"trackId":"trk-text"');
+    expect(prompt).toContain('"startMs":0');
+    expect(prompt).toContain('updateClip');
+    expect(prompt).toContain('updateTransition');
+    expect(prompt).toContain('setOutputBackground');
+    // The element-op vocabulary is NOT offered for a video doc.
+    expect(prompt).not.toContain('"op":"updateElement"');
+  });
+
+  it('applies an updateClip op end-to-end and reports changed:true', async () => {
+    model.generateText.mockResolvedValue(
+      JSON.stringify([
+        {
+          op: 'updateClip',
+          outputIndex: 0,
+          clipId: 'clip-headline',
+          patch: { fill: '#ff0000', text: 'Grand re-opening' },
+        },
+      ])
+    );
+
+    const result = await service.reviseByInstructionWithResult(
+      makeVideoDoc(),
+      'make the headline red and say grand re-opening',
+      'shared',
+      'org1'
+    );
+
+    expect(result.changed).toBe(true);
+    const clip = (result.doc.outputs[0] as any).tracks[0].clips[0];
+    expect(clip.fill).toBe('#ff0000');
+    expect(clip.text).toBe('Grand re-opening');
+  });
+
+  it('applies a setOutputBackground op on a video output (color bg)', async () => {
+    model.generateText.mockResolvedValue(
+      JSON.stringify([
+        {
+          op: 'setOutputBackground',
+          outputIndex: 0,
+          background: { type: 'color', color: '#0B3D2E' },
+        },
+      ])
+    );
+
+    const result = await service.reviseByInstructionWithResult(
+      makeVideoDoc(),
+      'change the background to dark green',
+      'shared',
+      'org1'
+    );
+
+    expect(result.changed).toBe(true);
+    expect((result.doc.outputs[0] as any).bg).toEqual({
+      type: 'color',
+      color: '#0B3D2E',
+    });
+  });
+
+  it('drops replaceClipMedia (imagery is protected) and reports changed:false', async () => {
+    model.generateText.mockResolvedValue(
+      JSON.stringify([
+        {
+          op: 'replaceClipMedia',
+          outputIndex: 0,
+          clipId: 'clip-bg',
+          src: 'https://evil.example/swap.png',
+        },
+      ])
+    );
+
+    const doc = makeVideoDoc();
+    const result = await service.reviseByInstructionWithResult(
+      doc,
+      'swap the background photo',
+      'shared',
+      'org1'
+    );
+
+    expect(result.changed).toBe(false);
+    expect(result.doc).toBe(doc);
+  });
+
+  it('strips opacity:0 and text patches on imagery clips', async () => {
+    model.generateText.mockResolvedValue(
+      JSON.stringify([
+        {
+          op: 'updateClip',
+          outputIndex: 0,
+          clipId: 'clip-bg',
+          patch: { opacity: 0, text: 'Baked-in', x: 100 },
+        },
+      ])
+    );
+
+    const result = await service.reviseByInstructionWithResult(
+      makeVideoDoc(),
+      'hide the photo',
+      'shared',
+      'org1'
+    );
+
+    expect(result.changed).toBe(true); // the geometry half still lands
+    const clip = (result.doc.outputs[0] as any).tracks[1].clips[0];
+    expect(clip.opacity).toBeUndefined();
+    expect(clip.text).toBeUndefined();
+    expect(clip.x).toBe(100);
+  });
+
+  it('drops clip ops addressing unknown clips and returns the doc unchanged', async () => {
+    model.generateText.mockResolvedValue(
+      JSON.stringify([
+        {
+          op: 'updateClip',
+          outputIndex: 0,
+          clipId: 'clip-invented',
+          patch: { fill: '#ff0000' },
+        },
+      ])
+    );
+
+    const doc = makeVideoDoc();
+    const result = await service.reviseByInstructionWithResult(
+      doc,
+      'recolor something',
+      'shared',
+      'org1'
+    );
+
+    expect(result.changed).toBe(false);
+    expect(result.doc).toBe(doc);
+  });
+
+  it('keeps locked plan copy over an LLM clip rewrite', async () => {
+    model.generateText.mockResolvedValue(
+      JSON.stringify([
+        {
+          op: 'updateClip',
+          outputIndex: 0,
+          clipId: 'clip-headline',
+          patch: { text: 'LLM rewrite', fill: '#00ff00' },
+        },
+      ])
+    );
+
+    const result = await service.reviseByInstructionWithResult(
+      makeVideoDoc(),
+      'make the headline green',
+      'shared',
+      'org1',
+      undefined,
+      undefined,
+      undefined,
+      { headline: 'Grand opening' }
+    );
+
+    const clip = (result.doc.outputs[0] as any).tracks[0].clips[0];
+    expect(clip.text).toBe('Grand opening');
+    expect(clip.fill).toBe('#00ff00');
+  });
+
+  it('protects an image video-bg from setOutputBackground', async () => {
+    const doc = makeVideoDoc();
+    doc.outputs[0].bg = { type: 'image', src: 'https://example.com/bg.png' };
+    model.generateText.mockResolvedValue(
+      JSON.stringify([
+        {
+          op: 'setOutputBackground',
+          outputIndex: 0,
+          background: { type: 'color', color: '#000000' },
+        },
+      ])
+    );
+
+    const result = await service.reviseByInstructionWithResult(
+      doc,
+      'make the background black',
+      'shared',
+      'org1'
+    );
+
+    expect(result.changed).toBe(false);
+    expect((result.doc.outputs[0] as any).bg.type).toBe('image');
+  });
+});
+
 
 // ---------------------------------------------------------------------------
 // Layout framing, type floors, badge fit, overlap guard

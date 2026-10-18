@@ -17,7 +17,9 @@ import type {
   DesignerOutput,
   DesignerTextShadow,
   DesignerTextStroke,
+  VideoClip,
   VideoOutput,
+  VideoTrack,
 } from '@postmill-ai/nestjs-libraries/media/designer-doc/designer-doc.schema';
 import { BLEND_MODES } from '@postmill-ai/nestjs-libraries/media/designer-doc/designer-doc.schema';
 import {
@@ -119,6 +121,9 @@ const MEASURE_HEADROOM = 1.08;
 /** An instruction that actually asks for something to be taken off the design. */
 const REMOVAL_INTENT_RE =
   /\b(remove|delete|drop|get rid of|take (it |them )?(out|off)|without the|no more)\b/i;
+
+/** Clips per track the revise prompt's doc summary carries (ellipsis note past it). */
+const MAX_REVISE_CLIPS_PER_TRACK = 40;
 
 /** Whether a critic-supplied blend name is one the renderer composites. */
 const isDesignerBlendMode = (
@@ -2060,6 +2065,22 @@ export class AiDesignerComposerService implements OnModuleInit {
   }
 
   /**
+   * The video-output twin of `_describeBackground` — a VideoOutput has no
+   * legacy flat `background` string; absent `bg` the frame renderer's base
+   * is black.
+   */
+  private _describeVideoBackground(out: VideoOutput): string {
+    const bg = out.bg;
+    if (!bg) return 'color #000000 (default)';
+    if (bg.type === 'image') return 'image';
+    if (bg.type === 'gradient') {
+      const stops = bg.gradient?.stops?.map((s) => s.color).join(' → ');
+      return stops ? `gradient ${stops}` : 'gradient';
+    }
+    return `color ${bg.color ?? '#000000'}`;
+  }
+
+  /**
    * Conservative text-overflow clamp after a revise/auto-fix pass: the
    * renderer's own shrink-to-fit (`fitFlatText`) is canvas-bound, so this
    * estimates the wrapped line count (≈0.55 × fontSize average glyph
@@ -2852,7 +2873,51 @@ export class AiDesignerComposerService implements OnModuleInit {
   ): Promise<DesignerDoc> {
     const summary = doc.outputs
       .map((out, outputIndex) => {
-        if (!('children' in out)) return null;
+        if (!('children' in out)) {
+          if (!('tracks' in out)) return null;
+          // Video output: the model must see the TIMELINE — tracks, clips,
+          // timing and transitions — or every revise op it emits addresses
+          // nothing. Clip count is capped so a dense timeline cannot blow
+          // the prompt budget.
+          return {
+            outputIndex,
+            formatId: out.formatId,
+            width: out.width,
+            height: out.height,
+            kind: 'video',
+            durationMs: out.durationMs,
+            fps: out.fps,
+            background: this._describeVideoBackground(out),
+            tracks: out.tracks.map((track) => ({
+              trackId: track.id,
+              type: track.type,
+              clips: track.clips
+                .slice(0, MAX_REVISE_CLIPS_PER_TRACK)
+                .map((clip) => ({
+                  clipId: clip.id,
+                  originId: clip.originId,
+                  text: clip.text,
+                  fill: clip.fill,
+                  fontFamily: clip.fontFamily,
+                  fontSize: clip.fontSize,
+                  startMs: clip.startMs,
+                  endMs: clip.endMs,
+                  x: clip.x,
+                  y: clip.y,
+                  width: clip.width,
+                  height: clip.height,
+                  hasMedia: !!(clip.src || clip.fileId),
+                  transitionIn: clip.transitionIn?.type,
+                  transitionOut: clip.transitionOut?.type,
+                })),
+              ...(track.clips.length > MAX_REVISE_CLIPS_PER_TRACK
+                ? {
+                    truncated: `…and ${track.clips.length - MAX_REVISE_CLIPS_PER_TRACK} more clips`,
+                  }
+                : {}),
+            })),
+          };
+        }
         return {
           outputIndex,
           formatId: out.formatId,
@@ -2875,23 +2940,45 @@ export class AiDesignerComposerService implements OnModuleInit {
       })
       .filter(Boolean);
 
-    const scopeHint =
-      scope === 'shared'
-        ? 'Apply the change to every output that shares the element; set "scope":"shared".'
-        : 'Apply the change only to the specified output(s); set "scope":"format-only".';
+    const isVideoDoc = doc.mode === 'video';
+
+    // Clip ops are format-local (see designer-doc-ops.schema) — there is no
+    // shared propagation for clips, so on a video doc the scope only picks
+    // WHICH outputs the ops address.
+    const scopeHint = isVideoDoc
+      ? scope === 'shared'
+        ? 'Apply the change to every output that has the clip; emit one op per output.'
+        : 'Apply the change only to the specified output(s).'
+      : scope === 'shared'
+      ? 'Apply the change to every output that shares the element; set "scope":"shared".'
+      : 'Apply the change only to the specified output(s); set "scope":"format-only".';
+
+    const videoOpLines = [
+      'This design is a VIDEO: each output is a timeline of tracks and clips (see the JSON). The element ops below do NOT apply — use the clip ops.',
+      `Return ONLY a JSON array of ops. The main op is {"op":"updateClip","outputIndex":<n>,"clipId":"<existing clipId>","patch":{...}}.`,
+      'patch may set text, fill, fontFamily, fontSize, fontWeight, x, y, width, height, opacity (0-1), startMs, endMs. Timing must stay within [0, durationMs) and endMs after startMs. Never invent clip ids or patch keys; keyframes/animation curves cannot be edited — if the ask needs one, return [].',
+      'You may also emit {"op":"updateTransition","outputIndex":<n>,"clipId":"<id>","edge":"in"|"out","transition":{"type":"cut"|"fade"|"dissolve"|"slide"|"wipe"|"zoom"|"blur","durationMs":<n>,"direction":"left"|"right"|"up"|"down"}} — or "transition":null to remove one.',
+      'To change an output\'s background, emit {"op":"setOutputBackground","outputIndex":<n>,"background":{"type":"color","color":"#rrggbb"}} — or {"type":"gradient","gradient":{"type":"linear","angle":<deg>,"stops":[{"color":"#rrggbb","offset":0},{"color":"#rrggbb","offset":1}]}}. Never use it on an output whose background is an image — image backgrounds are protected. Never swap a clip\'s media (src/fileId) — imagery replacements are handled outside this path.',
+    ];
+
+    const imageOpLines = [
+      `Return ONLY a JSON array of ops. Each op is {"op":"updateElement","outputIndex":<n>,"elementId":"<existing id>","scope":"${scope}","patch":{...}}.`,
+      'patch may set x, y, width, height, fontSize, text, fill, opacity, fontFamily, align, verticalAlign, letterSpacing (px tracking, -2..20), lineHeight (1.0-1.6), textScaleX (0.5-1.25 — condense display type instead of shrinking it), textTransform ("none"|"uppercase"|"lowercase"|"capitalize" — case as a style, never retype the copy), curve (degrees, -60..60 — arc an accent line), fillGradient ({type:"linear"|"radial", angle?, stops:[{color,offset}]}), blendMode (e.g. "multiply"), textStroke ({color,width}), textShadow ({color,blur,offsetX,offsetY}). Never invent element ids or patch keys.',
+      'You may also emit {"op":"addElement","outputIndex":<n>,"element":{...}} with a constrained TEXT element (type:"text", x, y, width, height, rotation: 0, opacity: 1, locked: false, hidden: false, plus text, fontSize, fill, align, textStroke, textShadow, originId), or {"op":"removeElement","outputIndex":<n>,"elementId":"<existing id>"} to delete an element. Do NOT add shape elements: scrims, plates and bands behind copy are rejected. When text is hard to read over imagery, patch the TEXT — set its fill and give it a textShadow.',
+      'To change an output\'s background, emit {"op":"setOutputBackground","outputIndex":<n>,"background":{"type":"color","color":"#rrggbb"}} — or {"type":"gradient","gradient":{"type":"linear","angle":<deg>,"stops":[{"color":"#rrggbb","offset":0},{"color":"#rrggbb","offset":1}]}}. Use it when the instruction asks for a background color or gradient. Never use it on an output whose background is an image — image backgrounds are protected.',
+    ];
 
     const prompt = [
       'You revise a multi-output social-media design by emitting ops against the current doc.',
-      'Current outputs and elements (JSON):',
+      isVideoDoc
+        ? 'Current outputs and their timelines (JSON):'
+        : 'Current outputs and elements (JSON):',
       JSON.stringify(summary),
       targetOutputs?.length ? `Target outputs (formatId): ${targetOutputs.join(', ')}` : '',
       targetSlots?.length ? `Target slots (originId): ${targetSlots.join(', ')}` : '',
       `Instruction: ${instruction}`,
       scopeHint,
-      `Return ONLY a JSON array of ops. Each op is {"op":"updateElement","outputIndex":<n>,"elementId":"<existing id>","scope":"${scope}","patch":{...}}.`,
-      'patch may set x, y, width, height, fontSize, text, fill, opacity, fontFamily, align, verticalAlign, letterSpacing (px tracking, -2..20), lineHeight (1.0-1.6), textScaleX (0.5-1.25 — condense display type instead of shrinking it), textTransform ("none"|"uppercase"|"lowercase"|"capitalize" — case as a style, never retype the copy), curve (degrees, -60..60 — arc an accent line), fillGradient ({type:"linear"|"radial", angle?, stops:[{color,offset}]}), blendMode (e.g. "multiply"), textStroke ({color,width}), textShadow ({color,blur,offsetX,offsetY}). Never invent element ids or patch keys.',
-      'You may also emit {"op":"addElement","outputIndex":<n>,"element":{...}} with a constrained TEXT element (type:"text", x, y, width, height, rotation: 0, opacity: 1, locked: false, hidden: false, plus text, fontSize, fill, align, textStroke, textShadow, originId), or {"op":"removeElement","outputIndex":<n>,"elementId":"<existing id>"} to delete an element. Do NOT add shape elements: scrims, plates and bands behind copy are rejected. When text is hard to read over imagery, patch the TEXT — set its fill and give it a textShadow.',
-      'To change an output\'s background, emit {"op":"setOutputBackground","outputIndex":<n>,"background":{"type":"color","color":"#rrggbb"}} — or {"type":"gradient","gradient":{"type":"linear","angle":<deg>,"stops":[{"color":"#rrggbb","offset":0},{"color":"#rrggbb","offset":1}]}}. Use it when the instruction asks for a background color or gradient. Never use it on an output whose background is an image — image backgrounds are protected.',
+      ...(isVideoDoc ? videoOpLines : imageOpLines),
     ]
       .filter(Boolean)
       .join('\n');
@@ -2979,6 +3066,22 @@ export class AiDesignerComposerService implements OnModuleInit {
       if (!out || !('children' in out)) return undefined;
       return out.children.find((el) => el.id === elementId);
     };
+    // Clip twin of findElement — resolves clipId (optionally narrowed by
+    // trackId) against the output's timeline.
+    const findClip = (
+      outputIndex: number,
+      clipId: string,
+      trackId?: string
+    ): { track: VideoTrack; clip: VideoClip } | undefined => {
+      const out = doc.outputs[outputIndex];
+      if (!out || !('tracks' in out)) return undefined;
+      for (const track of out.tracks) {
+        if (trackId && track.id !== trackId) continue;
+        const clip = track.clips.find((c) => c.id === clipId);
+        if (clip) return { track, clip };
+      }
+      return undefined;
+    };
     const allowedIndexes = targetOutputs?.length
       ? new Set(
           targetOutputs
@@ -3001,7 +3104,10 @@ export class AiDesignerComposerService implements OnModuleInit {
         op.op !== 'updateElement' &&
         op.op !== 'addElement' &&
         op.op !== 'removeElement' &&
-        op.op !== 'setOutputBackground'
+        op.op !== 'setOutputBackground' &&
+        op.op !== 'updateClip' &&
+        op.op !== 'updateTransition' &&
+        op.op !== 'replaceClipMedia'
       ) {
         this._logger.warn(
           `Dropping revise op "${op.op}" — not a sanctioned revise op.`,
@@ -3024,13 +3130,93 @@ export class AiDesignerComposerService implements OnModuleInit {
 
       if (op.op === 'setOutputBackground') {
         const out = doc.outputs[op.outputIndex];
-        if (out && 'children' in out && out.bg?.type === 'image') {
+        // Image backgrounds are protected on BOTH output kinds (a video
+        // output's `bg` can be an image since the video-conversion fidelity
+        // work) — a background-image swap must go through the conductor's
+        // deterministic regeneration path.
+        if (out && out.bg?.type === 'image') {
           this._logger.warn(
             `Dropping setOutputBackground for outputIndex ${op.outputIndex} — the image background is protected.`,
             AiDesignerComposerService.name
           );
           continue;
         }
+      }
+
+      // Clip ops (video outputs). The same fail-closed imagery/copy rules as
+      // for elements apply: media swaps and LLM-invented text on imagery are
+      // never LLM ops, and locked plan copy always wins.
+      if (op.op === 'replaceClipMedia') {
+        this._logger.warn(
+          `Dropping replaceClipMedia on clip "${op.clipId}" — imagery is protected; media swaps go through the regeneration path.`,
+          AiDesignerComposerService.name
+        );
+        continue;
+      }
+
+      if (op.op === 'updateTransition') {
+        const resolved = findClip(op.outputIndex, op.clipId, op.trackId);
+        if (!resolved) {
+          this._logger.warn(
+            `Dropping updateTransition on unknown clip "${op.clipId}".`,
+            AiDesignerComposerService.name
+          );
+          continue;
+        }
+        filtered.push(op);
+        continue;
+      }
+
+      if (op.op === 'updateClip') {
+        const resolved = findClip(op.outputIndex, op.clipId, op.trackId);
+        if (!resolved) {
+          this._logger.warn(
+            `Dropping updateClip on unknown clip "${op.clipId}".`,
+            AiDesignerComposerService.name
+          );
+          continue;
+        }
+        const { track, clip } = resolved;
+        const patch = { ...op.patch };
+        const isImagery =
+          track.type === 'image' ||
+          track.type === 'video' ||
+          track.type === 'sticker' ||
+          track.type === 'raster';
+        // Imagery is protected from fix/revise loops: a clip that carries the
+        // photo must not be faded to nothing, and copy never rides imagery
+        // (it would ship a baked-in marker string).
+        if (isImagery && patch.opacity === 0) {
+          this._logger.warn(
+            `Refusing to zero-out imagery clip "${clip.originId || clip.id}" — imagery is protected.`,
+            AiDesignerComposerService.name
+          );
+          delete patch.opacity;
+        }
+        if (isImagery && patch.text !== undefined) {
+          this._logger.warn(
+            `Dropping text patch on ${track.type} clip "${clip.originId || clip.id}" — imagery is protected.`,
+            AiDesignerComposerService.name
+          );
+          delete patch.text;
+        }
+        if (lockedTexts && typeof patch.text === 'string') {
+          const locked =
+            (clip.originId ? lockedTexts[clip.originId] : undefined) ??
+            lockedTexts[clip.id];
+          if (locked !== undefined) {
+            if (locked !== patch.text) {
+              this._logger.log(
+                `Locked copy for clip "${clip.originId || clip.id}" kept over the LLM rewrite.`,
+                AiDesignerComposerService.name
+              );
+            }
+            patch.text = locked;
+          }
+        }
+        if (Object.keys(patch).length === 0) continue;
+        filtered.push({ ...op, patch } as DesignerDocOp);
+        continue;
       }
 
       if (op.op === 'removeElement') {
